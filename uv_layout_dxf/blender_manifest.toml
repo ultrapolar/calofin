@@ -1,0 +1,17 @@
+schema_version = "1.0.0"
+
+id = "uv_layout_dxf"
+version = "1.0.0"
+name = "Export UV Layout to DXF (AutoCAD)"
+tagline = "Export UV island outlines as an AutoCAD-compatible DXF file"
+maintainer = "Calofin"
+type = "add-on"
+website = "https://github.com/ultrapolar/calofin"
+tags = ["Import-Export", "UV"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+files = "Write the exported DXF file to disk"
