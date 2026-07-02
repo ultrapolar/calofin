@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+
+id = "dxf_cloud_mesher"
+version = "1.0.0"
+name = "DXF Point Cloud Mesher"
+tagline = "Automatically build meshes from imported DXF point-cloud objects"
+maintainer = "Calofin"
+type = "add-on"
+website = "https://github.com/ultrapolar/calofin"
+tags = ["Object", "Mesh"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]

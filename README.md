@@ -1,13 +1,35 @@
-# Export UV Layout to DXF (AutoCAD) — Blender add-on
+# calofin — Blender DXF add-ons
 
-A Blender add-on (Blender 4.2+ including 5.0) that exports the UV layout
-of the active mesh object as an **AutoCAD-compatible DXF** (R12 /
-AC1009) file, aimed at flat-pattern work: leather, upholstery, sheet
-metal, CNC/laser cutting.
+Two independent Blender add-ons (Blender 4.2+ including 5.0) for
+working between Blender and CAD:
 
-## Features
+| Add-on | Folder | What it does |
+| --- | --- | --- |
+| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
+| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
 
-### 1. Mirroring & rotation fixing
+## Installation (either add-on)
+
+Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
+or `dxf_cloud_mesher`) either:
+
+* **As an extension (Blender 4.2+):** zip the folder's *contents*
+  (`cd uv_layout_dxf && zip -r ../uv_layout_dxf-1.0.0.zip .`) and in
+  Blender go to *Edit → Preferences → Get Extensions → ⌄ (top-right)
+  → Install from Disk…* and pick the zip.
+* **As a legacy add-on:** zip the folder itself
+  (`zip -r uv_layout_dxf.zip uv_layout_dxf`) and use *Edit →
+  Preferences → Add-ons → Install…*, then enable the add-on.
+
+---
+
+# 1. Export UV Layout to DXF (AutoCAD)
+
+Exports the UV layout of the active mesh object as an **AutoCAD-
+compatible DXF** (R12 / AC1009) file, aimed at flat-pattern work:
+leather, upholstery, sheet metal, CNC/laser cutting.
+
+### Mirroring & rotation fixing
 Unwrapped islands often end up flipped or arbitrarily rotated in UV
 space. On export the add-on re-orients them to match the 3D viewport:
 
@@ -29,14 +51,14 @@ Because re-orientation rotates islands in place (about their centroid),
 pieces *can* end up overlapping in the drawing. Enable **Re-pack
 Islands** to lay them out in non-overlapping rows instead.
 
-### 2. Perimeter-only export
+### Perimeter-only export
 Only the boundary of each UV island is written — one closed `POLYLINE`
 per boundary loop. Interior lines (the mesh topology inside the
 perimeter) are never exported. Interior *holes* in an island are real
 cut lines and are included by default; untick **Include Holes** to
 export strictly the outermost perimeter of each island.
 
-### 3. Auto scaling from a Freestyle edge
+### Auto scaling from a Freestyle edge
 Mark one edge as a Freestyle edge (*Edit Mode → select an edge → Edge
 menu → Mark Freestyle Edge*) to use it as the scale reference. On
 export, the add-on measures that edge's real 3D length (world space,
@@ -47,20 +69,7 @@ pick (millimeters by default). If several edges are marked, a
 length-weighted average is used. If none is marked, the **Manual
 Scale** factor is used instead and a warning is shown.
 
-## Installation
-
-Grab/clone this repository, then either:
-
-* **As an extension (Blender 4.2+):** zip the `uv_layout_dxf` folder
-  (`cd uv_layout_dxf && zip -r ../uv_layout_dxf-1.0.0.zip .`) and in
-  Blender go to *Edit → Preferences → Get Extensions → ⌄ (top-right)
-  → Install from Disk…* and pick the zip.
-* **As a legacy add-on:** zip the folder itself
-  (`zip -r uv_layout_dxf.zip uv_layout_dxf`) and use *Edit →
-  Preferences → Add-ons → Install…*, then enable *Export UV Layout to
-  DXF (AutoCAD)*.
-
-## Usage
+### Usage
 
 1. Unwrap your object and lay out its UVs as usual.
 2. In Edit Mode, select one edge whose real length you trust and mark
@@ -68,8 +77,6 @@ Grab/clone this repository, then either:
 3. Select the object and run *File → Export → UV Layout (.dxf)* (also
    available in the UV editor under *UV → Export UV Layout to DXF*).
 4. Adjust the options in the file browser sidebar and export.
-
-### Options
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -82,15 +89,14 @@ Grab/clone this repository, then either:
 | Layer Per Island | off | One DXF layer per island (`ISLAND_001`, …) instead of a single `UVLAYOUT` layer |
 | Move to Origin | on | Shift the layout so its lower-left corner is at the DXF origin |
 
-## Output format
+### Output format
 
 DXF R12 (AC1009) with classic closed `POLYLINE`/`VERTEX` entities — the
 most widely readable DXF flavour: every AutoCAD release since 1992,
 LibreCAD, QCAD, Inkscape, and most laser/CNC toolchains open it
-directly. The file contains a proper header (version + extents), a
-layer table, and one closed polyline per island boundary loop.
+directly.
 
-## Notes & limitations
+### Notes & limitations
 
 * Exports the **active object** only; join meshes first if you need
   several objects in one drawing.
@@ -99,22 +105,77 @@ layer table, and one closed polyline per island boundary loop.
 * Islands connected in a closed ring (every island touching two or
   more others) have no natural base island; the largest island of the
   ring is used as the base instead.
-* UVs are exported from the active UV map.
+
+---
+
+# 2. DXF Point Cloud Mesher
+
+Imported DXFs often arrive broken up into many objects containing
+nothing but vertices. This add-on analyses those objects and
+automatically fills the ones that qualify with faces.
+
+### Which objects get filled
+
+* Objects whose points vary by no more than **Max Height Variation**
+  on the Z axis (default **4 inches**, world space) are filled — flat
+  pads, slabs, footprints.
+* An object exceeding the tolerance is *still* filled when it is the
+  **lowest object** of the group (its lowest point is below every other
+  object's): that one is treated as the ground.
+* Everything else is skipped and listed in the system console.
+
+### How objects get filled
+
+Triangulation is avoided: the add-on builds the boundary of the point
+cloud (its 2D outline, keeping points that sit exactly on boundary
+segments as corners) and creates **one n-gon face**. Only when that
+face would overlap vertices lying *inside* it does the add-on switch to
+a Delaunay **triangulation** of all the points, so every vertex becomes
+part of the surface — for ground clouds this produces a standard TIN
+(triangulated irregular network). Original Z values are always kept.
+
+Note: because a raw point cloud carries no ordering information, a
+concave outline cannot be distinguished from interior points; such
+objects are triangulated (their reflex corners lie inside the cloud's
+convex boundary).
+
+### Usage
+
+1. Import your DXF (point clouds arrive as vertex-only mesh objects).
+2. Run *Object menu → Fill DXF Point Clouds*, or use the button in the
+   3D Viewport sidebar (N) under the **DXF Cloud** tab.
+3. Tune the options in the redo panel (bottom-left) if needed:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Max Height Variation | 4″ (0.1016 m) | Z tolerance below which an object counts as flat and fillable |
+| Always Fill Lowest Object | on | Treat the lowest object as ground and fill it even beyond the tolerance |
+| Selected Objects Only | off | Restrict the analysis to the current selection instead of the whole scene |
+
+Only vertex-only meshes (no edges, no faces, at least 3 vertices) are
+touched; every other object is ignored. A per-object breakdown (filled
+as n-gon / filled as TIN / skipped and why) is printed to the system
+console.
+
+---
 
 ## Development
 
-The geometry pipeline (`uv_layout_dxf/uv_layout.py`) and the DXF writer
-are pure Python with no `bpy` dependency, so they are unit-testable
-outside Blender:
+Both add-ons keep their geometry logic in `bpy`-free modules
+(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`), so
+they are unit-testable outside Blender:
 
 ```
-python3 tests/test_addon.py
+python3 tests/test_addon.py          # UV layout exporter
+python3 tests/test_cloud_mesher.py   # point cloud mesher
 ```
 
-The tests mock the bmesh structures, verify island detection, mirror
-detection, base-island selection, seam alignment, perimeter/hole
-extraction, Freestyle scaling and repacking, and validate the emitted
-DXF with [ezdxf](https://ezdxf.mozman.at/) when it is installed.
+The exporter tests mock the bmesh structures and validate the emitted
+DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
+tests exercise boundary building, interior-point detection, Delaunay
+triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
+built-in `mathutils.geometry.delaunay_2d_cdt`), and the
+height/lowest-object classification rules.
 
 ## License
 
