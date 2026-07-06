@@ -1,0 +1,17 @@
+schema_version = "1.0.0"
+
+id = "cad_mesh_dxf"
+version = "1.0.0"
+name = "Export CAD Mesh to DXF (Layered)"
+tagline = "Export mesh edges as a layered AutoCAD DXF split by material"
+maintainer = "Calofin"
+type = "add-on"
+website = "https://github.com/ultrapolar/calofin"
+tags = ["Import-Export", "Mesh"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+files = "Write the exported DXF file to disk"

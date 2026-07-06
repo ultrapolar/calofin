@@ -1,14 +1,15 @@
 # calofin — Blender DXF add-ons
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
+Three independent Blender add-ons (Blender 4.2+ including 5.0) for
 working between Blender and CAD:
 
 | Add-on | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| Export CAD Mesh to DXF (Layered) | `cad_mesh_dxf/` | Exports mesh edges as a layered AutoCAD DXF split by material into FLOOR/WALL/STEPS objects, with edge markings routed to WIRES/BASELINE/SLICE/PERIMETER layers |
 
-## Installation (either add-on)
+## Installation (any add-on)
 
 Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
 or `dxf_cloud_mesher`) either:
@@ -159,15 +160,80 @@ console.
 
 ---
 
+# 3. Export CAD Mesh to DXF (Layered)
+
+Exports mesh edges as an **AutoCAD-compatible DXF** (R12 / AC1009)
+formatted for a layer-based CAD design process: the mesh is split by
+material into separate CAD objects, and every edge lands on a fixed
+layer according to its Blender edge marking.
+
+### Objects from materials
+
+Faces are grouped by their material name (case-insensitive substring
+match, first hit in this order wins):
+
+| Material name contains | Export group |
+| --- | --- |
+| `floor` | `FLOOR` |
+| `wall` | `WALL` |
+| `step` | `STEPS` |
+
+Each group is written as a DXF **BLOCK** with a single **INSERT**, so
+it arrives in AutoCAD as one selectable object named `FLOOR`, `WALL`
+or `STEPS`. Any other material becomes its own block named after the
+material (a warning lists them on export), and faces with no material
+go to an `UNGROUPED` block — nothing is silently dropped. An edge
+shared between two groups (e.g. where a wall meets the floor) is
+written into both objects. Untick **Group as Objects (Blocks)** to
+write plain lines on the marking layers with no object grouping.
+
+### Layers from edge markings
+
+| DXF layer | Blender marking | How to mark |
+| --- | --- | --- |
+| `PERIMETER` | Sharp | *Edge menu → Mark Sharp* |
+| `SLICE` | Freestyle | *Edge menu → Mark Freestyle Edge* |
+| `BASELINE` | Seam | *Edge menu → Mark Seam* |
+| `WIRES` | (none) | every unmarked edge |
+
+When an edge carries several markings the highest layer in the table
+wins (sharp beats Freestyle beats seam). All four layers are always
+present in the exported drawing, even when empty, so the layer set is
+stable across exports.
+
+### Usage
+
+1. Assign materials named *floor*, *wall* and *steps* (or containing
+   those words) to the corresponding faces.
+2. In Edit Mode, mark the edges: *Mark Sharp* for the perimeter,
+   *Mark Freestyle Edge* for slices, *Mark Seam* for baselines;
+   everything left unmarked exports as wireframe.
+3. Select the object(s) and run *File → Export → CAD Mesh (.dxf)*.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Selected Objects Only | on | Export the selected mesh objects (all scene meshes when off) |
+| Apply Modifiers | on | Export the evaluated mesh instead of the raw mesh data |
+| Group as Objects (Blocks) | on | One BLOCK + INSERT per group instead of loose lines |
+| Unit | Inches | Real-world unit of one DXF unit (scene unit scale is applied) |
+
+Geometry is exported in world space as 3D `LINE` entities, so the
+drawing keeps real elevations; coordinates are converted from
+Blender's meters to the chosen unit.
+
+---
+
 ## Development
 
-Both add-ons keep their geometry logic in `bpy`-free modules
-(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`), so
-they are unit-testable outside Blender:
+All add-ons keep their geometry logic in `bpy`-free modules
+(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`,
+`cad_mesh_dxf/mesh_layers.py`), so they are unit-testable outside
+Blender:
 
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_cad_mesh.py       # layered CAD mesh exporter
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
@@ -175,7 +241,9 @@ DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
 tests exercise boundary building, interior-point detection, Delaunay
 triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
 built-in `mathutils.geometry.delaunay_2d_cdt`), and the
-height/lowest-object classification rules.
+height/lowest-object classification rules. The CAD mesh tests cover
+the marking→layer precedence, material-to-group mapping and the
+block/insert DXF structure (also ezdxf-validated when available).
 
 ## License
 
