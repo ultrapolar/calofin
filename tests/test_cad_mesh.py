@@ -29,7 +29,7 @@ dxf_writer = _load("dxf_writer")
 
 def test_layer_precedence():
     cases = (
-        (dict(), "WIRE"),
+        (dict(), "WIRES"),
         (dict(seam=True), "BASELINE"),
         (dict(freestyle=True), "SLICE"),
         (dict(sharp=True), "PERIMETER"),
@@ -67,7 +67,7 @@ def _sample_records():
     """Six edges spread over the three groups and four layers."""
     a, b, c, d = (0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 1)
     return [
-        (a, b, False, False, False, {"FLOOR"}),          # WIRE
+        (a, b, False, False, False, {"FLOOR"}),          # WIRES
         (b, c, True, False, False, {"FLOOR"}),           # BASELINE
         (c, d, False, True, False, {"WALL"}),            # SLICE
         (d, a, False, False, True, {"WALL"}),            # PERIMETER
@@ -86,7 +86,7 @@ def test_collect_segments():
     # The shared floor/wall edge must land in both groups.
     assert len(floor["BASELINE"]) == 2, floor
     assert len(wall["BASELINE"]) == 1, wall
-    assert len(floor["WIRE"]) == 1
+    assert len(floor["WIRES"]) == 1
     assert len(wall["SLICE"]) == 1
     assert len(wall["PERIMETER"]) == 1
     assert len(grouped["STEPS"]["PERIMETER"]) == 1
@@ -138,7 +138,7 @@ def test_dxf_blocks_output():
         assert len(lines) == expected_lines, (
             "block %s: expected %d lines, got %d"
             % (block_name, expected_lines, len(lines)))
-    assert {"WIRE", "BASELINE", "SLICE", "PERIMETER"} <= {
+    assert {"WIRES", "BASELINE", "SLICE", "PERIMETER"} <= {
         layer.dxf.name for layer in doc.layers}
     auditor = doc.audit()
     assert not auditor.has_errors, auditor.errors

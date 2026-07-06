@@ -14,7 +14,7 @@ DXF layer      Blender marking     Meaning in the CAD process
 PERIMETER      Mark Sharp          outer boundary of a piece
 SLICE          Mark Freestyle Edge cut lines
 BASELINE       Mark Seam           fold / reference lines
-WIRE           (no marking)        plain wireframe geometry
+WIRES           (no marking)        plain wireframe geometry
 =============  ==================  ============================
 
 When an edge carries several markings the highest layer in the table
@@ -27,7 +27,7 @@ from collections import OrderedDict
 LAYER_PERIMETER = "PERIMETER"
 LAYER_SLICE = "SLICE"
 LAYER_BASELINE = "BASELINE"
-LAYER_WIRE = "WIRE"
+LAYER_WIRE = "WIRES"
 
 LAYERS = (
     (LAYER_PERIMETER, 3),   # green
@@ -67,7 +67,7 @@ def layer_for_edge(seam=False, freestyle=False, sharp=False):
     """DXF layer name for an edge given its Blender markings.
 
     Precedence: sharp (PERIMETER) > freestyle (SLICE) > seam (BASELINE);
-    an unmarked edge lands on WIRE.
+    an unmarked edge lands on WIRES.
     """
     if sharp:
         return LAYER_PERIMETER

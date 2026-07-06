@@ -8,7 +8,7 @@ layer-based CAD design process:
   *floor*, *wall* and *step* map to FLOOR / WALL / STEPS -- and each
   group becomes its own AutoCAD object (a BLOCK + INSERT).
 * Every edge is routed onto a fixed layer by its Blender marking:
-  unmarked edges go to WIRE, seams to BASELINE, Freestyle-marked edges
+  unmarked edges go to WIRES, seams to BASELINE, Freestyle-marked edges
   to SLICE and sharp edges to PERIMETER.
 """
 
@@ -19,7 +19,7 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "File > Export > CAD Mesh (.dxf)",
     "description": "Export mesh edges as an AutoCAD DXF split into "
-                   "FLOOR/WALL/STEPS objects with WIRE, BASELINE, SLICE "
+                   "FLOOR/WALL/STEPS objects with WIRES, BASELINE, SLICE "
                    "and PERIMETER layers from edge markings",
     "doc_url": "https://github.com/ultrapolar/calofin",
     "category": "Import-Export",
@@ -93,7 +93,7 @@ def _collect_edge_records(obj, mesh, scale):
 
 class EXPORT_OT_cad_mesh_dxf(bpy.types.Operator, ExportHelper):
     """Export mesh edges as a layered AutoCAD DXF (FLOOR/WALL/STEPS """ \
-        """objects; WIRE, BASELINE, SLICE and PERIMETER layers)"""
+        """objects; WIRES, BASELINE, SLICE and PERIMETER layers)"""
 
     bl_idname = "export_mesh.cad_layers_dxf"
     bl_label = "Export CAD Mesh to DXF"

@@ -7,7 +7,7 @@ working between Blender and CAD:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| Export CAD Mesh to DXF (Layered) | `cad_mesh_dxf/` | Exports mesh edges as a layered AutoCAD DXF split by material into FLOOR/WALL/STEPS objects, with edge markings routed to WIRE/BASELINE/SLICE/PERIMETER layers |
+| Export CAD Mesh to DXF (Layered) | `cad_mesh_dxf/` | Exports mesh edges as a layered AutoCAD DXF split by material into FLOOR/WALL/STEPS objects, with edge markings routed to WIRES/BASELINE/SLICE/PERIMETER layers |
 
 ## Installation (any add-on)
 
@@ -194,7 +194,7 @@ write plain lines on the marking layers with no object grouping.
 | `PERIMETER` | Sharp | *Edge menu → Mark Sharp* |
 | `SLICE` | Freestyle | *Edge menu → Mark Freestyle Edge* |
 | `BASELINE` | Seam | *Edge menu → Mark Seam* |
-| `WIRE` | (none) | every unmarked edge |
+| `WIRES` | (none) | every unmarked edge |
 
 When an edge carries several markings the highest layer in the table
 wins (sharp beats Freestyle beats seam). All four layers are always
