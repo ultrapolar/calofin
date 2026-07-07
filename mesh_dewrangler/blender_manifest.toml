@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+
+id = "mesh_dewrangler"
+version = "1.0.0"
+name = "Mesh Dewrangler"
+tagline = "Clean up and simplify messy meshes with one detail-preservation control"
+maintainer = "Calofin"
+type = "add-on"
+website = "https://github.com/ultrapolar/calofin"
+tags = ["Mesh", "Object"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]

@@ -1,17 +1,18 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender add-ons
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Independent Blender add-ons (Blender 4.2+ including 5.0) for working
+between Blender and CAD, and for cleaning up imported geometry:
 
 | Add-on | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| Mesh Dewrangler | `mesh_dewrangler/` | Cleans up and simplifies messy meshes with a single detail-preservation control |
 
-## Installation (either add-on)
+## Installation (any add-on)
 
-Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
-or `dxf_cloud_mesher`) either:
+Grab/clone this repository, then for the add-on you want
+(`uv_layout_dxf`, `dxf_cloud_mesher` or `mesh_dewrangler`) either:
 
 * **As an extension (Blender 4.2+):** zip the folder's *contents*
   (`cd uv_layout_dxf && zip -r ../uv_layout_dxf-1.0.0.zip .`) and in
@@ -159,15 +160,97 @@ console.
 
 ---
 
+# 3. Mesh Dewrangler
+
+Turns *wrangled* meshes — dense triangle soup from 3D scans,
+photogrammetry, imports, booleans or bad exports — into clean,
+simplified geometry that looks like it was modelled by hand. One
+operator runs the whole pipeline, and a single **Detail Preservation**
+slider decides how much of the original detail survives.
+
+### The pipeline
+
+1. **Dewrangle (cleanup).** Duplicate vertices are welded (threshold
+   automatically scaled to 0.01 % of the mesh's bounding-box diagonal),
+   degenerate faces/edges are dissolved, loose wire edges and isolated
+   vertices are deleted, small holes are filled, and all face normals
+   are recalculated to point consistently outside.
+2. **Denoise.** Surface jitter is ironed out with volume-preserving
+   **Taubin smoothing** (a positive smoothing step followed by a
+   slightly larger negative one), so the mesh gets smoother without the
+   deflation plain Laplacian smoothing causes. Boundary vertices of
+   open meshes are locked by default so the outline doesn't creep
+   inwards.
+3. **Simplify.** A quadric edge-collapse decimation reduces the
+   triangle count, then a **planar dissolve** merges near-coplanar
+   triangles into the clean quads and n-gons a human would have
+   modelled.
+
+### The preservation slider
+
+Every simplification strength hangs off the one slider:
+
+| Preservation | Smoothing passes | Triangles kept | Planar dissolve |
+| --- | --- | --- | --- |
+| 100 % | 0 (cleanup only) | 100 % | off |
+| 75 % | 2 | ~32 % | 3.75° |
+| 50 % | 5 | 10 % | 7.5° |
+| 25 % | 8 | ~3 % | 11.25° |
+| 0 % | 10 | 1 % | 15° |
+
+The triangle ratio decays exponentially, so the slider feels linear:
+every half of the slider is roughly one order of magnitude of
+reduction. At **100 %** the operator is a pure repair tool — weld,
+fix, fill, recalculate — and geometry detail is untouched.
+
+### Usage
+
+1. Select one or more mesh objects (works on multi-selections).
+2. Run *Object menu → Dewrangle & Simplify Mesh*, or use the button in
+   the 3D Viewport sidebar (N) under the **Dewrangle** tab.
+3. Drag **Detail Preservation** in the redo panel (bottom-left) until
+   the result looks right — the operator re-runs live.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Detail Preservation | 50 % | How much original detail survives; 100 % = cleanup only |
+| Weld Duplicates | on | Merge vertices closer than the weld distance |
+| Auto Weld Distance | on | Derive the threshold from the mesh size (0.01 % of bbox diagonal) |
+| Weld Distance | 0.0001 m | Manual threshold used when auto is off |
+| Delete Loose Geometry | on | Remove wire edges and unattached vertices |
+| Fill Small Holes | on | Close boundary loops up to the hole size limit |
+| Hole Size Limit | 8 | Biggest hole (sides) that gets filled; 0 = every hole |
+| Recalculate Normals | on | Make normals point consistently outside |
+| Denoise (Smooth) | on | Taubin-smooth surface jitter before simplifying |
+| Preserve Boundary | on | Lock boundary vertices of open meshes while denoising |
+| Collapse Decimate | on | Reduce triangle count by quadric edge collapse |
+| Planar Dissolve | on | Merge coplanar triangles into quads/n-gons |
+
+A per-object before/after breakdown (verts / faces) is printed to the
+system console, and the header bar reports the total face reduction.
+
+### Notes & limitations
+
+* Works on the mesh data directly (modifiers are neither applied nor
+  considered), and UV/vertex-color data on collapsed geometry is
+  discarded by decimation — run it before unwrapping/texturing.
+* Aggressive settings on closed organic shapes can produce slivers;
+  raise the preservation, or disable **Collapse Decimate** and let the
+  planar dissolve do the simplifying on hard-surface/terrain meshes.
+
+---
+
 ## Development
 
-Both add-ons keep their geometry logic in `bpy`-free modules
-(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`), so
-they are unit-testable outside Blender:
+All add-ons keep their core logic in `bpy`-free modules
+(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`,
+`mesh_dewrangler/refine.py`), so they are unit-testable outside
+Blender:
 
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_dewrangler.py     # mesh dewrangler
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
@@ -175,7 +258,10 @@ DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
 tests exercise boundary building, interior-point detection, Delaunay
 triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
 built-in `mathutils.geometry.delaunay_2d_cdt`), and the
-height/lowest-object classification rules.
+height/lowest-object classification rules. The dewrangler tests cover
+the preservation-slider mapping, the size-relative weld threshold and
+the Taubin smoother (noise reduction, boundary locking and
+volume preservation vs. plain Laplacian).
 
 ## License
 
