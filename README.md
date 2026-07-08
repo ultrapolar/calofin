@@ -1,17 +1,18 @@
 # calofin — Blender DXF add-ons
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Blender add-ons (Blender 4.2+ including 5.0) for working between
+Blender and CAD:
 
 | Add-on | Folder | What it does |
 | --- | --- | --- |
-| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
-| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| **Merlin Import/Export** | `merlin_import_export/` | Single package: imports AutoCAD DXFs (one object per layer, auto parent/scale/position) and exports UV layouts as DXF, behind one *File → Merlin Import/Export* UI |
+| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling (standalone version of Merlin's export half) |
+| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects (not part of the Merlin package yet) |
 
-## Installation (either add-on)
+## Installation (any add-on)
 
-Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
-or `dxf_cloud_mesher`) either:
+Grab/clone this repository, then for the add-on you want
+(`merlin_import_export`, `uv_layout_dxf` or `dxf_cloud_mesher`) either:
 
 * **As an extension (Blender 4.2+):** zip the folder's *contents*
   (`cd uv_layout_dxf && zip -r ../uv_layout_dxf-1.0.0.zip .`) and in
@@ -20,6 +21,58 @@ or `dxf_cloud_mesher`) either:
 * **As a legacy add-on:** zip the folder itself
   (`zip -r uv_layout_dxf.zip uv_layout_dxf`) and use *Edit →
   Preferences → Add-ons → Install…*, then enable the add-on.
+
+*Merlin Import/Export* and the standalone *Export UV Layout to DXF*
+can be enabled side by side (they register different operators), but
+the exporter is included in both, so enabling just Merlin is enough.
+
+---
+
+# Merlin Import/Export
+
+One package bundling the Merlin CAD round-trip. **File → Merlin
+Import/Export** (bottom of the File menu) opens a dialog with two
+buttons:
+
+* **Import** — imports an AutoCAD DXF (see below).
+* **Export** — exports the active mesh's UV layout as an AutoCAD DXF
+  (identical to the standalone exporter documented in the next
+  section; greyed out until a mesh object is active).
+
+Both operators are also available directly under the regular menus:
+*File → Import → Merlin AutoCAD DXF (.dxf)* and *File → Export →
+Merlin UV Layout (.dxf)*. (Blender only lets add-ons append to the
+end of the File menu, so the Merlin entry sits at the bottom rather
+than immediately below Import/Export.)
+
+### What the importer does
+
+1. Reads an **ASCII DXF** (AutoCAD R12 and newer). Supported entities:
+   `POINT`, `LINE`, `LWPOLYLINE` (incl. bulge arcs), `POLYLINE`
+   (2D/3D, polyface and polygon meshes), `3DFACE`, `SOLID`, `CIRCLE`,
+   `ARC`, `ELLIPSE`, `SPLINE` (sampled). Text, dimensions, hatches and
+   block inserts are skipped and reported.
+2. Creates **one mesh object per DXF layer** (named after the layer),
+   grouped in a new collection named after the file.
+3. The object with the **most points** becomes the **parent** of the
+   other imported objects.
+4. The parent's **origin is set to its centre of mass** and **snapped
+   to the world origin** — the rest of the drawing keeps its position
+   relative to the parent.
+5. The parent is **scaled by 0.0254** (AutoCAD inches → Blender
+   meters); children inherit the scale through the parenting.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Parent to Largest Object | on | Parent every imported object to the one with the most points |
+| Snap to World Origin | on | Origin of the parent to its centre of mass, snapped to the world origin |
+| Scale | 0.0254 | Object scale applied to the parent (children inherit); 0.0254 = inches → meters |
+| Curve Resolution | 32 | Straight segments per full circle when sampling arcs/circles/ellipses/splines/bulges |
+
+Binary DXF files are rejected with a message — re-save as ASCII DXF
+in AutoCAD (`SAVEAS` → DXF). The point-cloud *dewrangling* step (the
+DXF Point Cloud Mesher below) is intentionally **not** part of this
+package yet; run it separately after importing if needed.
 
 ---
 
@@ -161,13 +214,15 @@ console.
 
 ## Development
 
-Both add-ons keep their geometry logic in `bpy`-free modules
-(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`), so
-they are unit-testable outside Blender:
+The add-ons keep their geometry logic in `bpy`-free modules
+(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`,
+`merlin_import_export/dxf_reader.py`), so they are unit-testable
+outside Blender:
 
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_dxf_reader.py     # Merlin DXF importer parser
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
