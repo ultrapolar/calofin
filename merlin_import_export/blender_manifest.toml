@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "merlin_import_export"
-version = "1.0.0"
+version = "1.0.1"
 name = "Merlin Import/Export"
 tagline = "Import AutoCAD DXFs with auto scale/position and export mesh edges as a layered DXF"
 maintainer = "Calofin"

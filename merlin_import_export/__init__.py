@@ -20,7 +20,7 @@ reachable from the regular File > Import and File > Export menus.
 bl_info = {
     "name": "Merlin Import/Export",
     "author": "Calofin",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "blender": (4, 2, 0),
     "location": "File > Merlin Import/Export, File > Import > "
                 "Merlin AutoCAD DXF, File > Export > Merlin CAD Mesh",
