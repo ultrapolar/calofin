@@ -1,34 +1,50 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Minimal DXF R12 (AC1009) writer.
+"""Minimal DXF R12 (AC1009) writer with block support.
 
-R12 with classic POLYLINE/VERTEX entities is the most widely supported
-DXF flavour: every AutoCAD release since 1992 reads it, as do LibreCAD,
-QCAD, Inkscape and most laser/CNC toolchains.  Only what AutoCAD needs
-is emitted: a HEADER with the version and drawing extents, an LTYPE and
-LAYER table, and closed 2D polylines in the ENTITIES section.
+R12 is the most widely supported DXF flavour: every AutoCAD release
+since 1992 reads it.  This writer emits a HEADER with the version and
+drawing extents, an LTYPE and LAYER table, one BLOCK per export group
+(FLOOR, WALL, STEPS, ...) containing 3D LINE entities on the marking
+layers, and one INSERT per block so the groups arrive in AutoCAD as
+three separate, selectable objects.  With ``use_blocks=False`` the
+lines are written straight into ENTITIES instead (layers only, no
+grouping).
 """
 
-_LAYER_NAME_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-$")
+_NAME_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-$")
 
 
-def sanitize_layer_name(name, fallback="UVLAYOUT"):
-    """Restrict a layer name to what DXF R12 allows (31 chars, A-Z 0-9 _-$)."""
+def sanitize_name(name, fallback="LAYER"):
+    """Restrict a symbol name to what DXF R12 allows (31 chars, A-Z 0-9 _-$)."""
     cleaned = "".join(
-        ch if ch in _LAYER_NAME_CHARS else "_" for ch in name.upper()
+        ch if ch in _NAME_CHARS else "_" for ch in str(name).upper()
     )
     return cleaned[:31] or fallback
 
 
-def write_dxf(filepath, layers):
-    """Write closed outlines to an AutoCAD R12 DXF file.
+def write_dxf(filepath, layers, groups, use_blocks=True):
+    """Write grouped 3D line segments to an AutoCAD R12 DXF file.
 
-    ``layers`` is a sequence of ``(layer_name, aci_color, outlines)``
-    tuples, where each outline is a sequence of ``(x, y)`` points
-    describing one closed polygon.
+    ``layers``
+        Sequence of ``(layer_name, aci_color)`` tuples; every layer is
+        written to the LAYER table even when it has no entities, so the
+        receiving drawing always shows the full layer set.
+    ``groups``
+        Sequence of ``(block_name, segments_by_layer)`` tuples where
+        ``segments_by_layer`` maps a layer name to a list of
+        ``((x, y, z), (x, y, z))`` line segments.
+    ``use_blocks``
+        When True each group becomes a BLOCK definition plus an INSERT
+        (one AutoCAD object per group); when False all lines are
+        written directly into the ENTITIES section.
     """
-    layers = [
-        (sanitize_layer_name(name), int(color), [list(o) for o in outlines])
-        for name, color, outlines in layers
+    layers = [(sanitize_name(name), int(color)) for name, color in layers]
+    groups = [
+        (sanitize_name(name, fallback="GROUP"),
+         {sanitize_name(layer): [
+             (tuple(a), tuple(b)) for a, b in segments]
+          for layer, segments in by_layer.items()})
+        for name, by_layer in groups
     ]
 
     rows = []
@@ -40,11 +56,21 @@ def write_dxf(filepath, layers):
     def coord(value):
         return "%.6f" % value
 
-    points = [p for _n, _c, outlines in layers for o in outlines for p in o]
-    min_x = min((p[0] for p in points), default=0.0)
-    min_y = min((p[1] for p in points), default=0.0)
-    max_x = max((p[0] for p in points), default=0.0)
-    max_y = max((p[1] for p in points), default=0.0)
+    def line(layer, a, b):
+        tag(0, "LINE")
+        tag(8, layer)
+        tag(10, coord(a[0]))
+        tag(20, coord(a[1]))
+        tag(30, coord(a[2]))
+        tag(11, coord(b[0]))
+        tag(21, coord(b[1]))
+        tag(31, coord(b[2]))
+
+    points = [p for _n, by_layer in groups
+              for segments in by_layer.values()
+              for segment in segments for p in segment]
+    extmin = [min((p[i] for p in points), default=0.0) for i in range(3)]
+    extmax = [max((p[i] for p in points), default=0.0) for i in range(3)]
 
     # HEADER
     tag(0, "SECTION")
@@ -52,16 +78,16 @@ def write_dxf(filepath, layers):
     tag(9, "$ACADVER")
     tag(1, "AC1009")
     tag(9, "$EXTMIN")
-    tag(10, coord(min_x))
-    tag(20, coord(min_y))
-    tag(30, coord(0.0))
+    tag(10, coord(extmin[0]))
+    tag(20, coord(extmin[1]))
+    tag(30, coord(extmin[2]))
     tag(9, "$EXTMAX")
-    tag(10, coord(max_x))
-    tag(20, coord(max_y))
-    tag(30, coord(0.0))
+    tag(10, coord(extmax[0]))
+    tag(20, coord(extmax[1]))
+    tag(30, coord(extmax[2]))
     tag(0, "ENDSEC")
 
-    # TABLES: one linetype, one layer per entry in `layers`
+    # TABLES: one linetype, the full layer set
     tag(0, "SECTION")
     tag(2, "TABLES")
 
@@ -80,7 +106,7 @@ def write_dxf(filepath, layers):
     tag(0, "TABLE")
     tag(2, "LAYER")
     tag(70, len(layers))
-    for name, color, _outlines in layers:
+    for name, color in layers:
         tag(0, "LAYER")
         tag(2, name)
         tag(70, 64)
@@ -90,23 +116,42 @@ def write_dxf(filepath, layers):
 
     tag(0, "ENDSEC")
 
-    # ENTITIES: one closed POLYLINE per outline
+    # BLOCKS: one block per group
+    if use_blocks:
+        tag(0, "SECTION")
+        tag(2, "BLOCKS")
+        for name, by_layer in groups:
+            tag(0, "BLOCK")
+            tag(8, "0")
+            tag(2, name)
+            tag(70, 0)
+            tag(10, coord(0.0))
+            tag(20, coord(0.0))
+            tag(30, coord(0.0))
+            tag(3, name)
+            for layer, segments in by_layer.items():
+                for a, b in segments:
+                    line(layer, a, b)
+            tag(0, "ENDBLK")
+            tag(8, "0")
+        tag(0, "ENDSEC")
+
+    # ENTITIES: one INSERT per block, or the raw lines
     tag(0, "SECTION")
     tag(2, "ENTITIES")
-    for name, _color, outlines in layers:
-        for outline in outlines:
-            tag(0, "POLYLINE")
-            tag(8, name)
-            tag(66, 1)  # vertices follow
-            tag(70, 1)  # closed polyline
-            for x, y in outline:
-                tag(0, "VERTEX")
-                tag(8, name)
-                tag(10, coord(x))
-                tag(20, coord(y))
-                tag(30, coord(0.0))
-            tag(0, "SEQEND")
-            tag(8, name)
+    if use_blocks:
+        for name, _by_layer in groups:
+            tag(0, "INSERT")
+            tag(8, "0")
+            tag(2, name)
+            tag(10, coord(0.0))
+            tag(20, coord(0.0))
+            tag(30, coord(0.0))
+    else:
+        for _name, by_layer in groups:
+            for layer, segments in by_layer.items():
+                for a, b in segments:
+                    line(layer, a, b)
     tag(0, "ENDSEC")
 
     tag(0, "EOF")
