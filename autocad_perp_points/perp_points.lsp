@@ -22,7 +22,7 @@
 ;;; ---------------------------------------------------------------------
 
 (defun c:PERPPTS (/ *error* os ent edata p1 p2 pStart pFinish n click
-                    dx dy dlen ux uy px py cross nx ny i t base bx by
+                    dx dy dlen ux uy px py cross nx ny i tt base bx by
                     len np npx npy basePts newPts pline)
 
   (defun *error* (msg)
@@ -76,9 +76,9 @@
   ;; --- build the base points (START..FINISH, equally spaced) ----------
   (setq basePts '() i 0)
   (while (< i n)
-    (setq t  (/ (float i) (float (1- n)))
-          bx (+ (car pStart)  (* t (- (car pFinish)  (car pStart))))
-          by (+ (cadr pStart) (* t (- (cadr pFinish) (cadr pStart)))))
+    (setq tt (/ (float i) (float (1- n)))
+          bx (+ (car pStart)  (* tt (- (car pFinish)  (car pStart))))
+          by (+ (cadr pStart) (* tt (- (cadr pFinish) (cadr pStart)))))
     (setq basePts (cons (list bx by (caddr pStart)) basePts))
     (setq i (1+ i)))
   (setq basePts (reverse basePts))
