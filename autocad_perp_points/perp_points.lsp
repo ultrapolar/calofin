@@ -22,7 +22,7 @@
 ;;; ---------------------------------------------------------------------
 
 (defun c:PERPPTS (/ *error* os ent edata p1 p2 pStart pFinish n click
-                    dx dy dlen ux uy px py cross nx ny i tt base bx by
+                    dx dy dlen ux uy px py cross nx ny i tt base bx by hx sz
                     len np npx npy basePts newPts pline)
 
   (defun *error* (msg)
@@ -64,6 +64,17 @@
     (progn (princ "\nLine has zero length.") (exit)))
   (setq ux (/ dx dlen)
         uy (/ dy dlen))
+
+  ;; --- mark the START end with a white X ------------------------------
+  (setq hx (* dlen 0.03))                   ; half-size of the X
+  (if (< hx 1e-6) (setq hx 1.0))
+  (setq sz (caddr pStart))
+  (entmake (list '(0 . "LINE") '(62 . 7)
+                 (list 10 (- (car pStart) hx) (- (cadr pStart) hx) sz)
+                 (list 11 (+ (car pStart) hx) (+ (cadr pStart) hx) sz)))
+  (entmake (list '(0 . "LINE") '(62 . 7)
+                 (list 10 (- (car pStart) hx) (+ (cadr pStart) hx) sz)
+                 (list 11 (+ (car pStart) hx) (- (cadr pStart) hx) sz)))
 
   ;; perpendicular unit vector, chosen toward the clicked side.
   ;; cross = ux*(cy-sy) - uy*(cx-sx); >0 => click is on the left.

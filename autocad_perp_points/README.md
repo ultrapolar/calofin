@@ -22,6 +22,9 @@ off a reference line.
 4. **Enter a length for each point**, in order START → FINISH. Each
    division point gets a new point that far perpendicular to the line.
 
+A **white X** is drawn at the **START** end when you pick the direction,
+so the order is clear at a glance.
+
 The routine then:
 
 * creates a `POINT` node at each new (offset) location,
