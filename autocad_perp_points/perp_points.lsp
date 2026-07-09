@@ -24,6 +24,7 @@
 (defun c:PERPPTS (/ *error* os ent edata p1 p2 pStart pFinish n click
                     dx dy dlen ux uy px py cross nx ny i tt base bx by sz
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
+                    tmpEnts e
                     len np npx npy basePts newPts pline)
 
   (defun *error* (msg)
@@ -84,17 +85,23 @@
         b1y (+ (cadr pStart) (* hlen (+ (* bkx sa) (* bky ca))))
         b2x (+ (car pStart)  (* hlen (+ (* bkx ca) (* bky sa))))
         b2y (+ (cadr pStart) (* hlen (+ (* (- bkx) sa) (* bky ca)))))
+  ;; temporary guide entities are collected here and erased once the
+  ;; polyline exists.
+  (setq tmpEnts '())
   ;; shaft
   (entmake (list '(0 . "LINE") '(62 . 1)
                  (list 10 tailx taily sz)
                  (list 11 (car pStart) (cadr pStart) sz)))
+  (setq tmpEnts (cons (entlast) tmpEnts))
   ;; two arrowhead barbs meeting at the tip (START)
   (entmake (list '(0 . "LINE") '(62 . 1)
                  (list 10 (car pStart) (cadr pStart) sz)
                  (list 11 b1x b1y sz)))
+  (setq tmpEnts (cons (entlast) tmpEnts))
   (entmake (list '(0 . "LINE") '(62 . 1)
                  (list 10 (car pStart) (cadr pStart) sz)
                  (list 11 b2x b2y sz)))
+  (setq tmpEnts (cons (entlast) tmpEnts))
 
   ;; perpendicular unit vector, chosen toward the clicked side.
   ;; cross = ux*(cy-sy) - uy*(cx-sx); >0 => click is on the left.
@@ -128,8 +135,9 @@
           npy (+ by (* len ny))
           np  (list npx npy (caddr base)))
     (setq newPts (cons np newPts))
-    ;; create a POINT node at the new location
+    ;; create a temporary POINT node at the new location as a guide
     (command "._POINT" np)
+    (setq tmpEnts (cons (entlast) tmpEnts))
     (setq i (1+ i)))
   (setq newPts (reverse newPts))
 
@@ -137,6 +145,9 @@
   (command "._PLINE")
   (foreach p newPts (command p))
   (command "")
+
+  ;; --- erase the temporary guides (arrow + point markers) -------------
+  (foreach e tmpEnts (if e (entdel e)))
 
   ;; --- aligned dimension from each new point to its base point --------
   (setq i 0)

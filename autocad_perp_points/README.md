@@ -27,10 +27,12 @@ direction, so the order is clear at a glance.
 
 The routine then:
 
-* creates a `POINT` node at each new (offset) location,
 * draws a `POLYLINE` connecting the new points in order, and
 * adds an aligned `DIMENSION` from every new point back to its
   corresponding base point on the line.
+
+The START arrow and the temporary point markers are only visual guides
+— they are erased automatically once the polyline is drawn.
 
 ## Install / run
 
