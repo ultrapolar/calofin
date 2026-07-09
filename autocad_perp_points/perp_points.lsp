@@ -22,7 +22,8 @@
 ;;; ---------------------------------------------------------------------
 
 (defun c:PERPPTS (/ *error* os ent edata p1 p2 pStart pFinish n click
-                    dx dy dlen ux uy px py cross nx ny i tt base bx by hx sz
+                    dx dy dlen ux uy px py cross nx ny i tt base bx by sz
+                    arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     len np npx npy basePts newPts pline)
 
   (defun *error* (msg)
@@ -65,16 +66,35 @@
   (setq ux (/ dx dlen)
         uy (/ dy dlen))
 
-  ;; --- mark the START end with a white X ------------------------------
-  (setq hx (* dlen 0.03))                   ; half-size of the X
-  (if (< hx 1e-6) (setq hx 1.0))
+  ;; --- draw an arrow pointing at the START end ------------------------
+  ;; The arrow comes in from outside the line (along the FINISH->START
+  ;; extension) with its tip on the START point.  Drawn in red so it is
+  ;; visible on any background.
   (setq sz (caddr pStart))
-  (entmake (list '(0 . "LINE") '(62 . 7)
-                 (list 10 (- (car pStart) hx) (- (cadr pStart) hx) sz)
-                 (list 11 (+ (car pStart) hx) (+ (cadr pStart) hx) sz)))
-  (entmake (list '(0 . "LINE") '(62 . 7)
-                 (list 10 (- (car pStart) hx) (+ (cadr pStart) hx) sz)
-                 (list 11 (+ (car pStart) hx) (- (cadr pStart) hx) sz)))
+  (setq arlen (* dlen 0.15))                ; shaft length
+  (if (< arlen 1e-6) (setq arlen 1.0))
+  (setq hlen (* arlen 0.35))                ; arrowhead barb length
+  ;; tail = START minus (shaft along the line direction), tip = START
+  (setq tailx (- (car pStart)  (* ux arlen))
+        taily (- (cadr pStart) (* uy arlen)))
+  ;; barbs: rotate the "back" vector b = (-ux,-uy) by +/-25 degrees
+  (setq ca 0.9063 sa 0.4226                 ; cos/sin 25 deg
+        bkx (- ux) bky (- uy))
+  (setq b1x (+ (car pStart)  (* hlen (- (* bkx ca) (* bky sa))))
+        b1y (+ (cadr pStart) (* hlen (+ (* bkx sa) (* bky ca))))
+        b2x (+ (car pStart)  (* hlen (+ (* bkx ca) (* bky sa))))
+        b2y (+ (cadr pStart) (* hlen (+ (* (- bkx) sa) (* bky ca)))))
+  ;; shaft
+  (entmake (list '(0 . "LINE") '(62 . 1)
+                 (list 10 tailx taily sz)
+                 (list 11 (car pStart) (cadr pStart) sz)))
+  ;; two arrowhead barbs meeting at the tip (START)
+  (entmake (list '(0 . "LINE") '(62 . 1)
+                 (list 10 (car pStart) (cadr pStart) sz)
+                 (list 11 b1x b1y sz)))
+  (entmake (list '(0 . "LINE") '(62 . 1)
+                 (list 10 (car pStart) (cadr pStart) sz)
+                 (list 11 b2x b2y sz)))
 
   ;; perpendicular unit vector, chosen toward the clicked side.
   ;; cross = ux*(cy-sy) - uy*(cx-sx); >0 => click is on the left.
