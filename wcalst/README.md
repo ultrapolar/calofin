@@ -76,7 +76,19 @@ that rise temporarily and come back — is preserved: every outline
 vertex of the band (outline segments are the ones drawn once; mesh
 interiors always appear twice) is developed and included in the bottom
 line, so notches and steps come through square instead of being
-rounded off. Windowing the section at the STAIR prompt goes further
+rounded off.
+
+### Stair sections
+
+After the tile-height prompt, WCALST asks *Window the STAIR section(s)
+if any* (Enter = none). A windowed section is developed as **one rigid
+piece**: the whole outline path is rotated by the chord of the
+straightened side across the section and anchored where the section
+begins. Treads come out level with their exact lengths, every riser
+keeps its exact rise, and matching steps up/down stay equal — the
+bottom line wraps the stairs with zero length distortion (validated
+segment-by-segment against a hand-drawn example). Several separate
+stair sections can be windowed in one selection. Windowing the section at the STAIR prompt goes further
 and redraws it as ideal treads and risers.
 
 To the right of the finished band a four-line summary is written

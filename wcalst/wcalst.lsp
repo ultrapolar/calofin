@@ -308,71 +308,31 @@
   (list (reverse feats) fsum)
 )
 
-(defun wc:stairsnap (devpts stairkeys w / out run dp thresh mintread
-                     clusters c cm cn merged prev best keep)
-  ;; inside user-designated stair sections, turn the developed bottom
-  ;; line into clean steps: cluster consecutive points into treads
-  ;; (split where the depth jumps), absorb slivers narrower than a real
-  ;; tread, then level each tread and keep only its two corners; the
-  ;; connectors between treads become the (short) risers
-  (setq thresh (max 2.5 (* 0.07 w))
-        mintread (max 3.0 (* 0.08 w))
-        out nil
-        run nil
+(defun wc:mult (sgm paircnt / f)
+  ;; how many times this segment is drawn (2 = mesh interior, 1 = outline)
+  (setq f (assoc (strcat (wc:key (car sgm)) "|" (wc:key (cadr sgm)))
+                 paircnt))
+  (if (not f)
+    (setq f (assoc (strcat (wc:key (cadr sgm)) "|" (wc:key (car sgm)))
+                   paircnt))
   )
-  (defun wc:flushrun (/ clusters c cm i dp2 merged prev spans best)
-    ;; RUN holds a reversed list of consecutive stair points
-    (setq run (reverse run) clusters nil c nil)
-    (foreach dp2 run
-      (if (and c (> (abs (- (cadr dp2) (cadr (car c)))) thresh))
-        (setq clusters (cons (reverse c) clusters) c nil)
-      )
-      (setq c (cons dp2 c))
-    )
-    (if c (setq clusters (cons (reverse c) clusters)))
-    (setq clusters (reverse clusters))
-    ;; absorb clusters narrower than a tread into the closer neighbour
-    (setq merged nil)
-    (foreach c clusters
-      (if (and merged
-               (< (- (car (last c)) (car (car c))) mintread)
-               (cdr clusters)
-          )
-        ;; too narrow: append to the previous cluster
-        (setq merged (cons (append (car merged) c) (cdr merged)))
-        (setq merged (cons c merged))
-      )
-    )
-    (setq clusters (reverse merged))
-    ;; level each tread and keep its two corners
-    (foreach c clusters
-      (setq cm 0.0)
-      (foreach dp2 c (setq cm (+ cm (cadr dp2))))
-      (setq cm (/ cm (length c)))
-      (setq dp2 (car c))
-      (setq out (cons (list (car dp2) cm (caddr dp2) (cadddr dp2)
-                            (nth 4 dp2)) out))
-      (if (cdr c)
-        (progn
-          (setq dp2 (last c))
-          (setq out (cons (list (car dp2) cm (caddr dp2) (cadddr dp2)
-                                (nth 4 dp2)) out))
-        )
-      )
-    )
-    (setq run nil)
+  (if f (cdr f) 0)
+)
+
+(defun wc:chain-at (sv pts s / k n t0 sa sb A B)
+  ;; point on the chosen chain at arc position SV
+  (setq k 0 n (1- (length pts)))
+  (while (and (< k (1- n)) (> sv (nth (1+ k) s)))
+    (setq k (1+ k))
   )
-  (foreach dp devpts
-    (if (member (wc:key (nth 4 dp)) stairkeys)
-      (setq run (cons dp run))
-      (progn
-        (if run (wc:flushrun))
-        (setq out (cons dp out))
-      )
-    )
+  (setq sa (nth k s) sb (nth (1+ k) s)
+        A (nth k pts) B (nth (1+ k) pts)
+        t0 (if (> (- sb sa) 1.0e-9) (/ (- sv sa) (- sb sa)) 0.0)
+        t0 (max 0.0 (min 1.0 t0))
   )
-  (if run (wc:flushrun))
-  (reverse out)
+  (list (+ (car A) (* t0 (- (car B) (car A))))
+        (+ (cadr A) (* t0 (- (cadr B) (cadr A))))
+  )
 )
 
 (defun wc:text (pt height str lay)
@@ -411,7 +371,10 @@
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
                  bandlays tileh toplen botb bota tx th pass stop
                  resid featsb residb paircnt bndpts vy vfeats vresid
-                 vlab ssstairs stairkeys)
+                 vlab ssstairs stsegs stkeys synth comp compkeys grow
+                 strest nodes2 endpts dpa stentry stpath usedj stpt stgo
+                 stcand se pA pB stang stca stsn sttot stlen stprev stdx
+                 stdy)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -581,21 +544,12 @@
   ;; only come up to (width - tile height - 1") from the far edge
   (setq tileh (getreal "\nTile height along the straightened edge <none>: "))
   (if (and tileh (< tileh 0.0)) (setq tileh nil))
-  ;; stair sections wrap around steps: inside them the bottom line is
-  ;; drawn as clean treads and risers instead of the smoothed curve
+  ;; stair sections: the bottom line wraps around steps there; each
+  ;; windowed section is developed rigidly as one piece so every tread
+  ;; length and riser rise is kept exactly (treads come out level,
+  ;; equal steps up and down stay equal)
   (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
-  (setq ssstairs (ssget)
-        stairkeys nil
-  )
-  (if ssstairs
-    (foreach sgm segs
-      (if (ssmemb (cadddr sgm) ssstairs)
-        (setq stairkeys (cons (wc:key (car sgm))
-                              (cons (wc:key (cadr sgm)) stairkeys))
-        )
-      )
-    )
-  )
+  (setq ssstairs (ssget))
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -703,9 +657,141 @@
     (progn (princ "\nCould not develop the opposite side.") (exit))
   )
 
-  ;; snap stair sections to clean treads + risers
-  (if stairkeys
-    (setq devpts (wc:stairsnap devpts stairkeys w))
+  ;; ---- 8s. stair sections ----------------------------------------------
+  ;; each windowed stair section is developed as one rigid piece: the
+  ;; whole outline path is rotated by the chord direction of the chosen
+  ;; chain across the section and anchored at the section entry, so
+  ;; treads come out level with their exact lengths and every riser
+  ;; keeps its exact rise (validated against a hand-drawn example:
+  ;; every segment length is preserved to the hundredth)
+  (setq synth nil stkeys nil)
+  (if ssstairs
+    (progn
+      ;; candidate segments: in the window, on the far side's layer,
+      ;; outline (drawn once), touching neither end of the chain
+      (setq stsegs nil)
+      (foreach sgm segs
+        (if (and (ssmemb (cadddr sgm) ssstairs)
+                 (equal (caddr sgm) farlay)
+                 (= 1 (wc:mult sgm paircnt))
+                 (not (wc:member-key (car sgm) chainkeys))
+                 (not (wc:member-key (cadr sgm) chainkeys)))
+          (setq stsegs (cons (list (car sgm) (cadr sgm)) stsegs))
+        )
+      )
+      ;; process each connected stair path
+      (while stsegs
+        ;; flood-fill one connected component
+        (setq comp (list (car stsegs))
+              compkeys (list (wc:key (car (car stsegs)))
+                             (wc:key (cadr (car stsegs))))
+              stsegs (cdr stsegs)
+              grow T
+        )
+        (while grow
+          (setq grow nil strest nil)
+          (foreach sgm stsegs
+            (if (or (member (wc:key (car sgm)) compkeys)
+                    (member (wc:key (cadr sgm)) compkeys))
+              (setq comp (cons sgm comp)
+                    compkeys (cons (wc:key (car sgm))
+                                   (cons (wc:key (cadr sgm)) compkeys))
+                    grow T
+              )
+              (setq strest (cons sgm strest))
+            )
+          )
+          (setq stsegs (reverse strest))
+        )
+        ;; open ends of the path = nodes with a single incident segment
+        (setq nodes2 (wc:build-nodes comp) endpts nil)
+        (foreach e nodes2
+          (if (= 2 (length e))               ; (key idx) -> one segment
+            (progn
+              (setq sgm (nth (cadr e) comp))
+              (setq endpts (cons (if (equal (wc:key (car sgm)) (car e))
+                                   (car sgm)
+                                   (cadr sgm))
+                                 endpts))
+            )
+          )
+        )
+        (if (>= (length endpts) 2)
+          (progn
+            ;; entry = the end nearest the chain start (smaller proj-s)
+            (setq endpts (vl-sort endpts
+                           '(lambda (a b) (< (caddr (wc:dev-point a pts s))
+                                             (caddr (wc:dev-point b pts s))))))
+            (setq stentry (car endpts)
+                  dpa (wc:dev-point stentry pts s)
+            )
+            ;; walk the path from the entry
+            (setq stpath (list stentry) usedj nil stpt stentry stgo T)
+            (while stgo
+              (setq stcand nil)
+              (foreach j (cdr (assoc (wc:key stpt) nodes2))
+                (if (not (member j usedj)) (setq stcand j))
+              )
+              (if stcand
+                (setq usedj (cons stcand usedj)
+                      stpt (wc:other-end (nth stcand comp) stpt)
+                      stpath (cons stpt stpath)
+                )
+                (setq stgo nil)
+              )
+            )
+            (setq stpath (reverse stpath)
+                  se (caddr (wc:dev-point (car (reverse stpath)) pts s))
+                  pA (wc:chain-at (caddr dpa) pts s)
+                  pB (wc:chain-at se pts s)
+            )
+            (if (> (distance pA pB) 1.0e-6)
+              (progn
+                ;; rotate the section by the chain chord, anchor at entry
+                (setq stang (- (wc:dir pA pB))
+                      stca (cos stang)
+                      stsn (sin stang)
+                      sttot 0.0
+                      stprev (car stpath)
+                )
+                (foreach stq (cdr stpath)
+                  (setq sttot (+ sttot (distance stprev stq)) stprev stq)
+                )
+                (setq stlen 0.0 stprev (car stpath))
+                (foreach stq stpath
+                  (setq stlen (+ stlen (distance stprev stq))
+                        stprev stq
+                        stdx (- (car stq) (car stentry))
+                        stdy (- (cadr stq) (cadr stentry))
+                  )
+                  (setq synth
+                    (cons (list (+ (car dpa) (- (* stdx stca) (* stdy stsn)))
+                                (+ (cadr dpa) (+ (* stdx stsn) (* stdy stca)))
+                                (+ (caddr dpa)
+                                   (if (> sttot 1.0e-9)
+                                     (* (- se (caddr dpa)) (/ stlen sttot))
+                                     0.0))
+                                0.0
+                                stq)
+                          synth)
+                        stkeys (cons (wc:key stq) stkeys)
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+      ;; splice: synthesized stair points replace their projected twins
+      (if synth
+        (setq devpts (vl-remove-if
+                       '(lambda (dp) (member (wc:key (nth 4 dp)) stkeys))
+                       devpts)
+              devpts (vl-sort (append devpts synth)
+                              '(lambda (a b) (< (caddr a) (caddr b))))
+        )
+      )
+    )
   )
 
   ;; bottom line lengths: along the original curve vs as developed
