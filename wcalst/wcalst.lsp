@@ -335,6 +335,55 @@
   )
 )
 
+(defun wc:depth-at (xv dps / a b res found)
+  ;; linear interpolation of developed depth (cadr) at developed-x XV
+  ;; over DPS (a list of dev-points sorted ascending by car); used to
+  ;; land dart feet exactly on the bottom line
+  (setq res (cadr (car dps)) found nil)
+  (while (and (cdr dps) (not found))
+    (setq a (car dps) b (cadr dps))
+    (if (and (<= (car a) xv) (<= xv (car b)))
+      (setq res (if (> (- (car b) (car a)) 1.0e-9)
+                  (+ (cadr a) (* (- (cadr b) (cadr a))
+                                 (/ (- xv (car a)) (- (car b) (car a)))))
+                  (cadr a))
+            found T
+      )
+    )
+    (setq dps (cdr dps))
+  )
+  res
+)
+
+(defun wc:notch (dps dfeats / runs run dp dd lx rx curr)
+  ;; split the bottom line into runs at each dart mouth so no segment
+  ;; spans the mouth (the base under the dart is erased); the run ends
+  ;; land on the bottom line at the dart feet.
+  ;; DFEATS: darts (cx cw) sorted ascending by cx.
+  ;; -> list of runs, each a list of local (x y) points
+  (setq runs nil run nil curr -1.0e18)
+  (foreach dp dps
+    (while (and dfeats
+                (<= (- (car (car dfeats)) (/ (cadr (car dfeats)) 2.0))
+                    (car dp)))
+      (setq dd (car dfeats) dfeats (cdr dfeats)
+            lx (- (car dd) (/ (cadr dd) 2.0))
+            rx (+ (car dd) (/ (cadr dd) 2.0))
+            run (cons (list lx (wc:depth-at lx dps)) run)   ; close at L foot
+      )
+      (if (cdr run) (setq runs (cons (reverse run) runs)))
+      (setq run (list (list rx (wc:depth-at rx dps)))       ; reopen at R foot
+            curr (max curr rx)
+      )
+    )
+    (if (> (car dp) curr)
+      (setq run (cons (list (car dp) (cadr dp)) run))
+    )
+  )
+  (if (cdr run) (setq runs (cons (reverse run) runs)))
+  (reverse runs)
+)
+
 (defun wc:text (pt height str lay)
   (entmake
     (list '(0 . "TEXT") (cons 8 lay)
@@ -374,7 +423,7 @@
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy)
+                 stdy dfeats run)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -878,15 +927,31 @@
     )
     (wc:line sgp wpt lay2)
 
-    ;; far edge as one polyline (world coords)
-    (setq farpts (mapcar '(lambda (dp) (list (+ x0 (car dp))
-                                             (+ vy (cadr dp))))
-                         devpts)
+    ;; darts of this variant as (center-x mouth-width), sorted by x
+    (setq dfeats nil)
+    (foreach f vfeats
+      (if (= 1 (caddr f))
+        (setq dfeats (cons (list (car f) (cadr f)) dfeats))
+      )
     )
-    (if (> (length farpts) 1) (wc:pline farpts farlay nil))
+    (setq dfeats (vl-sort dfeats '(lambda (a b) (< (car a) (car b)))))
+
+    ;; far edge: bottom line split at each dart mouth so no segment spans
+    ;; the mouth (the base under the dart is erased); the dart legs drawn
+    ;; below close each gap, tied to the bottom line at the feet
+    (foreach run (wc:notch devpts dfeats)
+      (if (> (length run) 1)
+        (wc:pline (mapcar '(lambda (p) (list (+ x0 (car p)) (+ vy (cadr p))))
+                          run)
+                  farlay nil)
+      )
+    )
 
     ;; band ends (vertical closing lines)
-    (setq enda (car farpts) endb (car (reverse farpts)))
+    (setq enda (list (+ x0 (car (car devpts))) (+ vy (cadr (car devpts))))
+          endb (list (+ x0 (car (car (reverse devpts))))
+                     (+ vy (cadr (car (reverse devpts)))))
+    )
     (wc:line (list (car enda) vy) enda lay2)
     (wc:line (list (car endb) vy) endb lay2)
 
@@ -902,9 +967,17 @@
             yb (- vy ld)                          ; local far edge
       )
       (if (= 1 (caddr f))
-        (progn                                    ; DART: V cutout
-          (wc:line (list x (- vy hz)) (list (- x (/ cw 2.0)) yb) lay2)
-          (wc:line (list x (- vy hz)) (list (+ x (/ cw 2.0)) yb) lay2)
+        (progn                                    ; DART: V legs, feet on
+          ;; the bottom line, apex at the stop line; the mouth base was
+          ;; erased by splitting the far-edge polyline there
+          (wc:line (list x (- vy hz))
+                   (list (- x (/ cw 2.0))
+                         (+ vy (wc:depth-at (- (car f) (/ cw 2.0)) devpts)))
+                   lay2)
+          (wc:line (list x (- vy hz))
+                   (list (+ x (/ cw 2.0))
+                         (+ vy (wc:depth-at (+ (car f) (/ cw 2.0)) devpts)))
+                   lay2)
         )
         (progn                                    ; INSERT: slit + sliver below
           (wc:line (list x yb) (list x (- vy hz)) lay2)
