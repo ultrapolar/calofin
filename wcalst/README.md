@@ -91,6 +91,14 @@ segment-by-segment against a hand-drawn example). Several separate
 stair sections can be windowed in one selection. Windowing the section at the STAIR prompt goes further
 and redraws it as ideal treads and risers.
 
+**Darts are not placed inside a windowed stair section** — the stairs
+are laid out rigidly and their darts are meant to be added by hand
+afterward, so WCALST leaves that region alone (inserts are still
+placed). Because the skipped darts no longer take up their share of the
+excess, the AFTER CUTS residual for a run with stairs will usually read
+`** OVER TARGET **`; that is expected and accounts for the by-hand work
+still to do.
+
 To the right of the finished band a four-line summary is written
 (layer `DIMENSION`), each value in drawing units and architectural
 feet-inches:

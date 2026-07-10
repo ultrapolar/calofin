@@ -355,6 +355,15 @@
   res
 )
 
+(defun wc:instair (xv rngs / hit)
+  ;; T if arc position XV falls inside any (lo hi) stair range
+  (setq hit nil)
+  (foreach r rngs
+    (if (and (>= xv (car r)) (<= xv (cadr r))) (setq hit T))
+  )
+  hit
+)
+
 (defun wc:notch (dps dfeats / runs run dp dd lx rx curr)
   ;; split the bottom line into runs at each dart mouth so no segment
   ;; spans the mouth (the base under the dart is erased); the run ends
@@ -423,7 +432,7 @@
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy dfeats run)
+                 stdy dfeats run stairrng)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -713,7 +722,7 @@
   ;; treads come out level with their exact lengths and every riser
   ;; keeps its exact rise (validated against a hand-drawn example:
   ;; every segment length is preserved to the hundredth)
-  (setq synth nil stkeys nil)
+  (setq synth nil stkeys nil stairrng nil)
   (if ssstairs
     (progn
       ;; candidate segments: in the window, on the far side's layer,
@@ -793,6 +802,11 @@
                   se (caddr (wc:dev-point (car (reverse stpath)) pts s))
                   pA (wc:chain-at (caddr dpa) pts s)
                   pB (wc:chain-at se pts s)
+                  ;; arc-length span this stair section covers, so darts
+                  ;; are not placed on it (handled by hand afterward)
+                  stairrng (cons (list (min (caddr dpa) se)
+                                       (max (caddr dpa) se))
+                                 stairrng)
             )
             (if (> (distance pA pB) 1.0e-6)
               (progn
@@ -883,6 +897,32 @@
         )
       (setq stop T)
       (setq wmin (max (* 0.04 w) (* wmin 0.6)))    ; more, smaller features
+    )
+  )
+
+  ;; darts landing inside a windowed stair section are dropped (the
+  ;; stairs are developed rigidly and get their darts added by hand);
+  ;; inserts are left in place
+  (if stairrng
+    (progn
+      (setq feats  (vl-remove-if
+                     '(lambda (f) (and (= 1 (caddr f))
+                                       (wc:instair (car f) stairrng)))
+                     feats)
+            featsb (vl-remove-if
+                     '(lambda (f) (and (= 1 (caddr f))
+                                       (wc:instair (car f) stairrng)))
+                     featsb)
+            fsum 0.0
+      )
+      (foreach f feats
+        (setq fsum (+ fsum (if (= 1 (caddr f)) (- (cadr f)) (cadr f))))
+      )
+      (setq resid (+ (- bota botb) fsum) fsum 0.0)
+      (foreach f featsb
+        (setq fsum (+ fsum (if (= 1 (caddr f)) (- (cadr f)) (cadr f))))
+      )
+      (setq residb (+ (- bota botb) fsum))
     )
   )
 
