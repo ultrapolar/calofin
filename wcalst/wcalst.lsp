@@ -959,11 +959,15 @@
     (foreach f vfeats
       (setq x (+ x0 (car f))
             cw (cadr f)
-            ld (max (cadddr f) (* 0.2 w))
-            ;; cut stop line, measured down from the straightened edge:
-            ;; keep the tile zone (tile height + 1") uncut when given,
-            ;; otherwise the default 42% of the local band depth
-            hz (if tileh (min (+ tileh 1.0) (* 0.8 ld)) (* 0.42 ld))
+            ;; local band depth = the actual bottom line at this feature
+            ld (max (- (wc:depth-at (car f) devpts)) (* 0.2 w))
+            ;; apex/slit stop line, measured down from the straightened
+            ;; edge.  With a tile height, tile+1" is the HIGHEST the apex
+            ;; may rise (closest it may come to the straight edge); the
+            ;; apex sits on that line, dropping lower only where the band
+            ;; is too shallow to reach it (kept 1" above the foot).
+            ;; Without a tile height, the default 42% of the local depth.
+            hz (if tileh (min (+ tileh 1.0) (- ld 1.0)) (* 0.42 ld))
             yb (- vy ld)                          ; local far edge
       )
       (if (= 1 (caddr f))
