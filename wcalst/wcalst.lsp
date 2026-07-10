@@ -292,9 +292,10 @@
                  d2c i r ids pts chainkeys s n p0 p1 dch j far ang rungs
                  widths w mid side cross ni f k turns d0 d1 idebt i0 i1
                  tsum total wmin maxfeat acc feats fdev farlay fseed
-                 fsegs cands rfar rr farpts fk seen ordered devpts
+                 fsegs cands rfar rr farpts farids fk seen ordered devpts
                  minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
-                 dl dr yb enda endb lay2 inundo)
+                 dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
+                 bandlays)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -364,7 +365,10 @@
   )
 
   ;; ---- 4. rungs -------------------------------------------------------
-  (setq rungs nil ni 0)
+  ;; conns records every segment hanging off the chosen chain (rungs,
+  ;; diagonal braces, chords) so none of them is later mistaken for a
+  ;; free-standing reference mark
+  (setq rungs nil conns nil ni 0)
   (foreach p pts
     (setq p0 (nth (max 0 (1- ni)) pts)
           p1 (nth (min (1- n) (1+ ni)) pts)
@@ -373,7 +377,9 @@
     (foreach j (cdr (assoc (wc:key p) nodes))
       (if (not (member j ids))
         (progn
-          (setq far (wc:other-end (nth j segs) p))
+          (setq conns (cons j conns)
+                far (wc:other-end (nth j segs) p)
+          )
           (if (not (wc:member-key far chainkeys))
             (progn
               (setq ang (abs (wc:turn dch (wc:dir p far)))
@@ -492,16 +498,29 @@
       (setq fsegs (cons j fsegs))
     )
   )
-  (setq farpts nil farlay nil)
+  (setq farpts nil farlay nil farids nil)
   (if fsegs
     (progn
       (setq rr (wc:full-chain segs nodes (car fsegs))
+            farids (car rr)
             farpts (cdr rr)
             farlay (caddr (nth (car fsegs) segs))
       )
     )
   )
   (if (not farlay) (setq farlay (caddr (nth seed segs))))
+  ;; layers the band structure itself lives on: bands may be full
+  ;; triangulated meshes (interior vertices, doubled edges), so segment
+  ;; bookkeeping cannot tell structure from reference marks — layers can
+  (setq bandlays (list (caddr (nth seed segs))))
+  (if (and farlay (not (member farlay bandlays)))
+    (setq bandlays (cons farlay bandlays))
+  )
+  (foreach k conns
+    (if (not (member (caddr (nth k segs)) bandlays))
+      (setq bandlays (cons (caddr (nth k segs)) bandlays))
+    )
+  )
 
   ;; merge + dedupe far points, order by projected arc length
   (setq seen nil ordered nil)
@@ -596,6 +615,34 @@
     )
   )
 
+  ;; carry-along marks: selected segments on OTHER layers than the band
+  ;; structure (reference crosses, datum lines, existing cut marks) are
+  ;; developed point-by-point onto their own layer
+  (setq nmk 0 k 0)
+  (foreach sgm segs
+    (if (and (not (member (caddr sgm) bandlays))
+             (not (member k ids))
+             (not (member k farids))
+             (not (member k conns)))
+      (progn
+        (setq dp1 (wc:dev-point (car sgm) pts s)
+              dp2 (wc:dev-point (cadr sgm) pts s)
+        )
+        ;; keep only marks that actually sit on/near the band
+        (if (and (<= (cadddr dp1) (* 1.75 w))
+                 (<= (cadddr dp2) (* 1.75 w)))
+          (progn
+            (wc:line (list (+ x0 (car dp1)) (+ y0 (cadr dp1)))
+                     (list (+ x0 (car dp2)) (+ y0 (cadr dp2)))
+                     (caddr sgm))
+            (setq nmk (1+ nmk))
+          )
+        )
+      )
+    )
+    (setq k (1+ k))
+  )
+
   ;; height dimensions at both ends
   (wc:vdim (list (car enda) y0) enda (- (car enda) (* 1.2 w)) "DIMENSION")
   (wc:vdim (list (car endb) y0) endb (+ (car endb) (* 1.2 w)) "DIMENSION")
@@ -612,6 +659,9 @@
                  ", band width " (rtos w 2 2)
                  " -> " (itoa dl) " dart(s), " (itoa dr) " insert(s)"
                  " (max " (itoa maxfeat) ")."))
+  (if (> nmk 0)
+    (princ (strcat " " (itoa nmk) " reference mark(s) carried along."))
+  )
   (princ)
 )
 

@@ -44,7 +44,17 @@ output.
 | Straightened side (one straight line) + band end lines | `AIR-B` (red, created if missing) |
 | Opposite side, unrolled (slightly wavy polyline) | same layer as the source lines |
 | Dart V-cutouts, insert slits, insert slivers | `AIR-B` |
+| Reference marks carried along (see below) | their own source layer |
 | Band-height dimension at each end | `DIMENSION` (created if missing) |
+
+### Reference marks
+
+Anything in the selection that sits on a **different layer** than the
+band structure itself — datum crosses, given points, existing cut
+marks — is carried into the developed band: each endpoint is mapped
+through the same development as the band, so the mark lands at the
+correct position on the flattened strip (marks further than about 1.75×
+the band width from the straightened side are dropped as unrelated).
 
 Darts and insert slits stop at 42 % of the local band depth below the
 straightened edge, so a solid hinge of material always remains along
@@ -73,8 +83,11 @@ the straight side (matches shop practice for this kind of piece).
 
 ## Limitations
 
-* The band must be an open strip (not a closed ring) with reasonably
-  perpendicular rungs.
+* The band must be an open strip (not a closed ring). Plain ladder
+  rungs, diagonal bracing and full triangulated (mesh-style) strips
+  all work — connectors are told apart from the long sides by
+  direction, so the sides just need to be traceable as the
+  "straightest" path through the network.
 * Arcs/circles are not accepted — the band must be drawn from straight
   segments (as ladder bands produced by field measurement normally
   are). Curved sides made of many short segments are exactly what the
