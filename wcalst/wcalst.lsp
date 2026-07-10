@@ -202,7 +202,7 @@
 (defun wc:dev-point (fp pts s / k n A B ax ay L2 tt cx cy d2 bk bt bd
                      d c sn dx dy)
   ;; project FP on the chain, develop it with the transform of the
-  ;; nearest chain segment -> (devx devy proj-s proj-dist)
+  ;; nearest chain segment -> (devx devy proj-s proj-dist original-pt)
   (setq k 0 n (1- (length pts)) bd 1.0e18 bk 0 bt 0.0)
   (while (< k n)
     (setq A (nth k pts) B (nth (1+ k) pts)
@@ -231,6 +231,7 @@
     (+ (* dx sn) (* dy c))
     (+ (nth bk s) (* bt (- (nth (1+ bk) s) (nth bk s))))
     (sqrt bd)
+    fp
   )
 )
 
@@ -270,6 +271,15 @@
   )
 )
 
+(defun wc:text (pt height str lay)
+  (entmake
+    (list '(0 . "TEXT") (cons 8 lay)
+          (list 10 (car pt) (cadr pt) 0.0)
+          (cons 40 height) (cons 1 str)
+    )
+  )
+)
+
 (defun wc:vdim (p1 p2 xline lay)
   ;; vertical rotated dimension between P1 and P2, dim line at X=XLINE
   (entmake
@@ -295,7 +305,7 @@
                  fsegs cands rfar rr farpts farids fk seen ordered devpts
                  minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
-                 bandlays)
+                 bandlays tileh toplen botb bota tx th)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -461,6 +471,10 @@
   ;; ---- 7. feature threshold (conservative, capped) ---------------------
   (setq maxfeat (getint "\nMaximum darts + inserts <20>: "))
   (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat 20))
+  ;; a tile of this height sits along the straightened edge: cuts may
+  ;; only come up to (width - tile height - 1") from the far edge
+  (setq tileh (getreal "\nTile height along the straightened edge <none>: "))
+  (if (and tileh (< tileh 0.0)) (setq tileh nil))
   (setq wmin (max (* 0.04 w) (/ total maxfeat)))   ; never below 4% of width
 
   (setq acc 0.0 feats nil k 0)
@@ -591,7 +605,10 @@
     (setq x (+ x0 (car f))
           cw (cadr f)
           ld (max (cadddr f) (* 0.2 w))
-          hz (* 0.42 ld)                       ; cut stops here (from top)
+          ;; cut stop line, measured down from the straightened edge:
+          ;; keep the tile zone (tile height + 1") uncut when given,
+          ;; otherwise the default 42% of the local band depth
+          hz (if tileh (min (+ tileh 1.0) (* 0.8 ld)) (* 0.42 ld))
           yb (- y0 ld)                          ; local far edge
     )
     (if (= 1 (caddr f))
@@ -647,6 +664,42 @@
   (wc:vdim (list (car enda) y0) enda (- (car enda) (* 1.2 w)) "DIMENSION")
   (wc:vdim (list (car endb) y0) endb (+ (car endb) (* 1.2 w)) "DIMENSION")
 
+  ;; length summary to the right of the drawing: top line, bottom line
+  ;; before (along the original curve) and after (as drawn), and the
+  ;; delta the flattened bottom line is off by
+  (setq toplen (car (reverse s))
+        botb 0.0
+        bota 0.0
+        dp1 (car devpts)
+  )
+  (foreach dp2 (cdr devpts)
+    (setq botb (+ botb (distance (nth 4 dp1) (nth 4 dp2)))
+          bota (+ bota (distance (list (car dp1) (cadr dp1))
+                                 (list (car dp2) (cadr dp2))))
+          dp1 dp2
+    )
+  )
+  (setq tx (+ (car endb) (* 2.0 w))
+        th (* 0.35 w)
+  )
+  (wc:text (list tx y0) th
+           (strcat "TOP LINE:      " (rtos toplen 2 2)
+                   "  (" (rtos toplen 4 8) ")")
+           "DIMENSION")
+  (wc:text (list tx (- y0 (* 0.55 w))) th
+           (strcat "BOTTOM BEFORE: " (rtos botb 2 2)
+                   "  (" (rtos botb 4 8) ")")
+           "DIMENSION")
+  (wc:text (list tx (- y0 (* 1.10 w))) th
+           (strcat "BOTTOM AFTER:  " (rtos bota 2 2)
+                   "  (" (rtos bota 4 8) ")")
+           "DIMENSION")
+  (wc:text (list tx (- y0 (* 1.65 w))) th
+           (strcat "DELTA:         " (rtos (- bota botb) 2 2)
+                   "  (" (rtos (abs (- bota botb)) 4 8)
+                   (if (< bota botb) " short)" " long)"))
+           "DIMENSION")
+
   (command "_.UNDO" "_End")
   (setq inundo nil)
   (setvar "CLAYER" oldlay)
@@ -655,10 +708,14 @@
   (setq dl 0 dr 0)
   (foreach f feats (if (= 1 (caddr f)) (setq dl (1+ dl)) (setq dr (1+ dr))))
   (princ (strcat "\nWCALST: developed length "
-                 (rtos (car (reverse s)) 2 2)
+                 (rtos toplen 2 2)
                  ", band width " (rtos w 2 2)
                  " -> " (itoa dl) " dart(s), " (itoa dr) " insert(s)"
                  " (max " (itoa maxfeat) ")."))
+  (princ (strcat "\n  top line " (rtos toplen 2 2)
+                 ", bottom before " (rtos botb 2 2)
+                 ", bottom after " (rtos bota 2 2)
+                 ", delta " (rtos (- bota botb) 2 2) "."))
   (if (> nmk 0)
     (princ (strcat " " (itoa nmk) " reference mark(s) carried along."))
   )

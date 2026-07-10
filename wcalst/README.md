@@ -31,11 +31,34 @@ reaches a minimum useful width, and the total is capped (default
 4. *Click the long side to STRAIGHTEN* — click directly on one of the
    two long sides.
 5. *Maximum darts + inserts <20>* — Enter to accept.
+6. *Tile height along the straightened edge <none>* — height (in
+   drawing units/inches) of the tile that will sit along the
+   straightened edge. Darts and inserts then only come up the width to
+   `width − (tile height + 1")`, i.e. they stop 1" clear of the tile.
+   Enter skips the rule and uses the default stop line (42 % of the
+   local band depth below the straightened edge). Where the band is
+   locally too shallow for the tile zone, the cut is clamped to the
+   deepest 20 % of the local depth so it stays a valid cut.
 
 The developed band is drawn **below the lowest point of the
 selection**, and the command reports the developed length, band width
 and how many darts/inserts were placed. One `U` undoes the whole
 output.
+
+To the right of the finished band a four-line summary is written
+(layer `DIMENSION`), each value in drawing units and architectural
+feet-inches:
+
+```
+TOP LINE:      1286.01  (107'-2")     <- straightened side, as drawn
+BOTTOM BEFORE: 1271.04  (105'-11")    <- opposite side along the original curve
+BOTTOM AFTER:  1294.74  (107'-10 3/4")<- opposite side as drawn, flattened
+DELTA:         23.70  (1'-11 3/4" long)
+```
+
+The delta is how far the flattened bottom line is off from its original
+length — the amount the darts (long) or inserts (short) have to absorb
+when the piece is fitted.
 
 ## What is drawn, and where
 
