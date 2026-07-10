@@ -1,30 +1,36 @@
 # PADDLE — perimeter pad placer (AutoLISP)
 
-`PADDLE` scans the perimeter of a drawing (a closed polyline) for
-concave features that require pads and inserts 24″ × 24″ pad blocks
-(`Pad24x24`, from `24inpad.dwg`) to cover the affected areas.
+`PADDLE` scans the perimeter of a drawing for concave features that
+require pads and inserts 24″ × 24″ pad blocks (`Pad24x24`, from
+`24inpad.dwg`) centered on the affected areas.
+
+The perimeter can be a single closed polyline, but PADDLE is generous
+about input: loose LINEs and ARCs (or a mix of polylines, lines and
+arcs) are chained end-to-end into closed loops automatically, so it
+still works when someone forgot to join the outermost perimeter into
+a polyline.
 
 ## Pad specification
 
 | Perimeter feature | Pads? |
 | --- | --- |
 | Concave arc / inside fillet with radius **4′-6″ (54″) or less** — all the way down to a sharp corner | **Yes** — pads spaced every ≤ 24″ along the arc |
-| Concave intersection of straight segments (inside corner, e.g. 90°) | **Yes** — one pad nestled into the corner |
+| Concave intersection of straight segments (inside corner, e.g. 90°) | **Yes** — one pad centered on the corner |
 | Concave arc with radius **greater than 4′-6″** | No |
 | Convex corners and convex arcs | No |
 
-"Concave" is judged from the interior of the closed polyline, so it
+"Concave" is judged from the interior of the closed loop, so it
 works the same whether the perimeter was drawn clockwise or
-counter-clockwise, and arcs are read straight from the polyline's
-bulge values.
+counter-clockwise, and arc geometry is read straight from polyline
+bulges or ARC entities.
 
 ## Usage
 
 1. Load `PADDLE.lsp` (`APPLOAD`, or drag it into the drawing).
 2. Type `PADDLE`.
-3. Select the perimeter polyline(s) — or just press **Enter** and
-   PADDLE auto-detects the perimeter as the largest closed polyline
-   in the current tab.
+3. Select the perimeter geometry (polylines, lines, arcs — any mix)
+   — or just press **Enter** and PADDLE auto-detects the perimeter
+   as the largest closed loop it can find in the current tab.
 
 PADDLE reports what it found, e.g.:
 
@@ -36,17 +42,25 @@ Everything inserted in one run is a single undo step.
 
 ## Pad placement details
 
-* **Inside corners:** the pad is nestled into the corner — for a 90°
-  corner it sits exactly in the corner with its sides against both
-  edges.
+* **Inside corners:** the pad is centered on the corner vertex.
 * **Concave arcs:** pads are distributed evenly along the arc
-  (`ceil(arc length / 24″)` of them) with each pad centered 12″
-  inside the perimeter so it covers the material band along the arc.
+  (`ceil(arc length / 24″)` of them), each centered on the arc
+  itself.
 * Pads rotate to follow the perimeter edge. Set `*paddle-align*` to
   `nil` at the top of the lisp if you want every pad inserted at 0°.
 * Pads land on layer **PADS** (created if missing).
 * Corners flatter than 1° are treated as straight-through (so the
   tangent joints of a fillet don't double-count as corners).
+
+## Loose-geometry chaining
+
+Segment ends are considered connected when they are within
+`*paddle-fuzz*` (default 0.05″) of each other, in any order and
+regardless of which way each line/arc was drawn. Chains that never
+close back on themselves are skipped with a warning — if that
+happens, check the perimeter for gaps (or bump `*paddle-fuzz*`).
+When several closed loops are selected, each one is processed;
+auto-detect (Enter) uses only the largest loop.
 
 ## The Pad24x24 block
 
@@ -73,7 +87,9 @@ constants at the top of `PADDLE.lsp` are easy to change:
 (setq *paddle-padsize* 24.0)       ; pad size
 (setq *paddle-layer*   "PADS")     ; insertion layer
 (setq *paddle-align*   T)          ; rotate pads with the perimeter
+(setq *paddle-fuzz*    0.05)       ; gap tolerance when chaining
 ```
 
-The perimeter must be a **closed LWPOLYLINE** (lines and arc
-segments are both fine). Open polylines are skipped with a warning.
+Supported perimeter geometry: **LWPOLYLINE, 2D POLYLINE, LINE, ARC**
+in any combination — the loop just has to close. (3D/mesh polylines
+are ignored.)
