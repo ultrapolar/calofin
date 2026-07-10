@@ -2,8 +2,10 @@
 ;;; PADDLE.lsp
 ;;;
 ;;; Scans the perimeter of a drawing for concave features that require
-;;; pads, and inserts 24" x 24" pad blocks ("Pad24x24") centered on
-;;; the affected areas.
+;;; pads, and inserts pad blocks centered on the affected areas.
+;;; Pads come in two sizes -- 24" x 24" ("Pad24x24") for normal work
+;;; and 36" x 36" ("Pad36x36") for bigger locations -- chosen at the
+;;; prompt. Pads are always inserted parallel to the X/Y axes.
 ;;;
 ;;; Pad specification:
 ;;;   * Any CONCAVE arc / fillet with a radius of 4'-6" (54") or less
@@ -24,14 +26,14 @@
 ;;;   Select the perimeter geometry, or press Enter to auto-detect
 ;;;   the perimeter (the largest closed loop found in the drawing).
 ;;;
-;;; Block resolution order for "Pad24x24":
+;;; Block resolution order for the chosen pad block:
 ;;;   1. A block definition already in the drawing.
 ;;;   2. Imported from "24inpad.dwg" found on the AutoCAD support
 ;;;      path (ships alongside this lisp -- add its folder to the
 ;;;      support file search path, or drop the dwg next to the
 ;;;      current drawing).
-;;;   3. As a last resort a plain 24x24 square block is created so
-;;;      the command always works.
+;;;   3. As a last resort a plain square block of the right size is
+;;;      created so the command always works.
 ;;;
 ;;; Assumes drawing units are INCHES (architectural). Adjust the
 ;;; constants below for other setups.
@@ -40,13 +42,14 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-blkname* "Pad24x24") ; pad block name
-(setq *paddle-blkfile* "24inpad.dwg") ; dwg holding the pad block
+;; available pad sizes: (inches . block-name); PADDLE asks which one
+(setq *paddle-sizes* '((24 . "Pad24x24")   ; standard 2'x2' pad
+                       (36 . "Pad36x36"))) ; bigger 3'x3' pad
+(setq *paddle-blkfile* "24inpad.dwg") ; dwg holding the pad blocks
 (setq *paddle-maxrad* 54.0)  ; 4'-6" : largest concave radius needing pads
-(setq *paddle-padsize* 24.0) ; pad is 24" x 24"
 (setq *paddle-layer* "PADS") ; layer pads are inserted on
-(setq *paddle-align* T)      ; T = rotate pads with the perimeter edge,
-                             ; nil = insert all pads at 0 rotation
+(setq *paddle-align* nil)    ; nil = pads stay parallel to the X/Y axes,
+                             ; T = rotate pads with the perimeter edge
 (setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
                              ; chaining loose lines/arcs into a loop
 (setq *paddle-angtol* (/ pi 180.0)) ; 1 deg: corners flatter than this
@@ -214,7 +217,8 @@
 
 ;; ------------------------ feature detection ------------------------
 ;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
-(defun paddle--features (vts / s n i a b c blg pads din dout turn
+;; PADSIZE controls the spacing of pads along concave arcs.
+(defun paddle--features (vts padsize / s n i a b c blg pads din dout turn
                              seg theta r cen sa npads k f pang ctr tang)
   (setq s (if (< (paddle--area vts) 0.0) -1 1) ; -1 = clockwise
         n (length vts)
@@ -246,7 +250,7 @@
           (if (<= r (+ *paddle-maxrad* 1e-6))
               (progn
                 (setq sa    (angle cen (paddle--2d a))
-                      npads (max 1 (fix (+ 0.999999 (/ (* r (abs theta)) *paddle-padsize*))))
+                      npads (max 1 (fix (+ 0.999999 (/ (* r (abs theta)) padsize))))
                       k     0)
                 (repeat npads
                   (setq f    (/ (+ k 0.5) npads)
@@ -259,42 +263,48 @@
   (reverse pads))
 
 ;; ------------------------- block handling --------------------------
-;; Make sure *paddle-blkname* is defined in the drawing. Returns T.
-(defun paddle--ensure-block (/ path oldcmd oldatt)
+;; Make sure block NAME (a SIZE-inch pad) is defined in the drawing.
+;; Returns T.
+(defun paddle--ensure-block (doc name size / path oldcmd oldatt tmpname)
   (cond
-    ((tblsearch "BLOCK" *paddle-blkname*) T)
-    ;; import the definition from 24inpad.dwg if it can be found
+    ((tblsearch "BLOCK" name) T)
+    ;; pull the definitions in from the pad dwg if it can be found --
+    ;; inserting the file (under a throwaway name, then cancelling)
+    ;; imports every block definition it contains
     ((setq path (findfile *paddle-blkfile*))
-     (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ"))
+     (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
+           tmpname "PADDLE-TEMP-IMPORT")
      (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
-     (command "_.-INSERT" (strcat *paddle-blkname* "=" path))
-     (command) ; cancel the insert -- the definition stays behind
+     (command "_.-INSERT" (strcat tmpname "=" path))
+     (command) ; cancel the insert -- the definitions stay behind
      (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
-     (if (tblsearch "BLOCK" *paddle-blkname*)
+     (vl-catch-all-apply ; drop the unused throwaway definition
+       '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))))
+     (if (tblsearch "BLOCK" name)
          T
-         (paddle--make-fallback-block)))
-    (T (paddle--make-fallback-block))))
+         (paddle--make-fallback-block name size)))
+    (T (paddle--make-fallback-block name size))))
 
-;; Last-resort pad: a plain 24x24 square block, base point at center.
-(defun paddle--make-fallback-block (/ h)
-  (setq h (/ *paddle-padsize* 2.0))
-  (entmake (list '(0 . "BLOCK") (cons 2 *paddle-blkname*)
+;; Last-resort pad: a plain size x size square block, base at center.
+(defun paddle--make-fallback-block (name size / h)
+  (setq h (/ size 2.0))
+  (entmake (list '(0 . "BLOCK") (cons 2 name)
                  '(10 0.0 0.0 0.0) '(70 . 0)))
   (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") '(8 . "0")
                  '(100 . "AcDbPolyline") '(90 . 4) '(70 . 1)
                  (list 10 (- h) (- h)) (list 10 h (- h))
                  (list 10 h h) (list 10 (- h) h)))
   (entmake '((0 . "ENDBLK")))
-  (princ (strcat "\nPADDLE: block \"" *paddle-blkname*
-                 "\" not found; created a plain 24x24 square block instead."))
-  (tblsearch "BLOCK" *paddle-blkname*))
+  (princ (strcat "\nPADDLE: block \"" name "\" not found; created a plain "
+                 (rtos size 2 0) "x" (rtos size 2 0) " square block instead."))
+  (tblsearch "BLOCK" name))
 
 ;; Offset from the block's insertion point to the center of its extents
 ;; (measured at 0 rotation), so pads land centered no matter where the
 ;; block's base point was drawn.
-(defun paddle--block-delta (space / tmp mn mx d)
+(defun paddle--block-delta (space name / tmp mn mx d)
   (setq tmp (vla-InsertBlock space (vlax-3d-point 0.0 0.0 0.0)
-                             *paddle-blkname* 1.0 1.0 1.0 0.0))
+                             name 1.0 1.0 1.0 0.0))
   (vla-GetBoundingBox tmp 'mn 'mx)
   (setq mn (vlax-safearray->list mn)
         mx (vlax-safearray->list mx)
@@ -306,13 +316,14 @@
 (defun paddle--ensure-layer (doc)
   (vla-Add (vla-get-Layers doc) *paddle-layer*))
 
-;; Insert one pad so that its extents are centered on CTR at rotation ROT.
-(defun paddle--insert-pad (space ctr rot delta / ip obj)
+;; Insert one pad so that its extents are centered on CTR. Pads stay
+;; parallel to the X/Y axes unless *paddle-align* is set.
+(defun paddle--insert-pad (space name ctr rot delta / ip obj)
   (if (not *paddle-align*) (setq rot 0.0))
   (setq ip  (paddle--sub ctr (paddle--rot delta rot))
         obj (vla-InsertBlock space
               (vlax-3d-point (car ip) (cadr ip) 0.0)
-              *paddle-blkname* 1.0 1.0 1.0 rot))
+              name 1.0 1.0 1.0 rot))
   (vla-put-Layer obj *paddle-layer*)
   obj)
 
@@ -352,8 +363,8 @@
             loops))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space ss perims vts allpads delta
-                   ncorner narc)
+(defun c:PADDLE (/ *error* doc space kw padsize blkname ss perims vts
+                   allpads delta ncorner narc)
   (defun *error* (msg)
     (if doc (vla-EndUndoMark doc))
     (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
@@ -365,6 +376,13 @@
 
   (princ (strcat "\nPADDLE - pads at concave perimeter features (R <= "
                  (rtos *paddle-maxrad* 4 0) " and inside corners)."))
+
+  ;; which pad? 2'x2' for normal work, 3'x3' for bigger locations
+  (initget "24 36")
+  (setq kw      (cond ((getkword "\nPad size in inches [24/36] <24>: ")) ("24"))
+        padsize (atof kw)
+        blkname (cdr (assoc (atoi kw) *paddle-sizes*)))
+
   (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
   (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
   (setq perims (paddle--perimeters ss))
@@ -373,24 +391,24 @@
       (princ "\nPADDLE: no closed perimeter loop found.")
       (progn
         (vla-StartUndoMark doc)
-        (paddle--ensure-block)
+        (paddle--ensure-block doc blkname padsize)
         (paddle--ensure-layer doc)
-        (setq delta (paddle--block-delta space))
+        (setq delta (paddle--block-delta space blkname))
         (foreach vts perims
           (if (> (length vts) 1)
-              (setq allpads (append allpads (paddle--features vts)))))
+              (setq allpads (append allpads (paddle--features vts padsize)))))
         (setq ncorner 0 narc 0)
         (foreach pad allpads
-          (paddle--insert-pad space (car pad) (cadr pad) delta)
+          (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
         (vla-EndUndoMark doc)
         (if allpads
             (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
-                           " pad(s) on layer \"" *paddle-layer* "\" ("
+                           " " kw "\" pad(s) on layer \"" *paddle-layer* "\" ("
                            (itoa ncorner) " centered on inside corners, "
                            (itoa narc) " centered along concave arcs)."))
             (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
   (princ))
 
-(princ "\nPADDLE.lsp loaded. Type PADDLE to place 24\" pads at concave perimeter features.")
+(princ "\nPADDLE.lsp loaded. Type PADDLE to place 24\" or 36\" pads at concave perimeter features.")
 (princ)
