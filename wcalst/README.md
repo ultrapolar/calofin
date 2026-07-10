@@ -21,6 +21,19 @@ correction is accumulated along the band and only released once it
 reaches a minimum useful width, and the total is capped (default
 **20**, prompt lets you change it per run).
 
+Sizing rules:
+
+* **Darts are at most 4" wide on the bottom line** — a larger
+  correction is split into several ≤ 4" darts at consecutive rungs.
+* **Insert slivers are 1" wide at the top**, the gap width at the
+  bottom, and their sides are about 1" longer than the slit they go
+  into (extra to trim on fitting).
+* The release threshold auto-refines (never exceeding the feature cap)
+  until the after-cuts residual — bottom line as drawn, minus dart
+  widths, plus insert gaps, versus the original bottom line — is
+  **under 1 %**. If the cap is too low to get there, the summary flags
+  `** OVER TARGET **`; allow more darts+inserts and rerun.
+
 ## Usage
 
 1. `APPLOAD` → select `wcalst.lsp` (or drag-drop it into the drawing).
@@ -50,15 +63,18 @@ To the right of the finished band a four-line summary is written
 feet-inches:
 
 ```
-TOP LINE:      1286.01  (107'-2")     <- straightened side, as drawn
-BOTTOM BEFORE: 1271.04  (105'-11")    <- opposite side along the original curve
-BOTTOM AFTER:  1294.74  (107'-10 3/4")<- opposite side as drawn, flattened
-DELTA:         23.70  (1'-11 3/4" long)
+TOP LINE:      1286.01  (107'-2")   <- straightened side, as drawn
+BOTTOM BEFORE: 1271.04  (105'-11")  <- opposite side along the original curve
+BOTTOM AFTER:  1294.74  (107'-10")  <- opposite side as drawn, flattened
+DELTA:         23.70  (1.86% long)
+AFTER CUTS:    -4.24  (0.33%)  [target <1%]
 ```
 
 The delta is how far the flattened bottom line is off from its original
 length — the amount the darts (long) or inserts (short) have to absorb
-when the piece is fitted.
+when the piece is fitted. AFTER CUTS is the residual once every dart
+closes and every insert is filled; the command aims it under 1 % of the
+original bottom length and flags it when the feature cap prevents that.
 
 ## What is drawn, and where
 

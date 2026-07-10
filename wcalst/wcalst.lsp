@@ -305,7 +305,8 @@
                  fsegs cands rfar rr farpts farids fk seen ordered devpts
                  minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
-                 bandlays tileh toplen botb bota tx th)
+                 bandlays tileh toplen botb bota tx th pass stop fsum
+                 resid)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -475,28 +476,6 @@
   ;; only come up to (width - tile height - 1") from the far edge
   (setq tileh (getreal "\nTile height along the straightened edge <none>: "))
   (if (and tileh (< tileh 0.0)) (setq tileh nil))
-  (setq wmin (max (* 0.04 w) (/ total maxfeat)))   ; never below 4% of width
-
-  (setq acc 0.0 feats nil k 0)
-  (while (< k (length idebt))
-    (setq acc (+ acc (nth k idebt)))
-    (if (>= (abs acc) wmin)
-      (progn
-        (setq f (nth (1+ k) rungs)
-              fdev (wc:dev-point (caddr f) pts s)
-        )
-        ;; (x  width  type  local-depth); turn towards far side = dart
-        (setq feats (cons (list (nth (car f) s) (abs acc)
-                                (if (< acc 0) 1 -1)
-                                (- (cadr fdev)))
-                          feats)
-              acc 0.0
-        )
-      )
-    )
-    (setq k (1+ k))
-  )
-  (setq feats (reverse feats))
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -564,6 +543,62 @@
     (progn (princ "\nCould not develop the opposite side.") (exit))
   )
 
+  ;; bottom line lengths: along the original curve vs as developed
+  (setq botb 0.0 bota 0.0 dp1 (car devpts))
+  (foreach dp2 (cdr devpts)
+    (setq botb (+ botb (distance (nth 4 dp1) (nth 4 dp2)))
+          bota (+ bota (distance (list (car dp1) (cadr dp1))
+                                 (list (car dp2) (cadr dp2))))
+          dp1 dp2
+    )
+  )
+
+  ;; ---- 8b. feature emission -------------------------------------------
+  ;; conservative and capped; dart mouths are capped at 4" on the bottom
+  ;; line (larger corrections split across consecutive rungs); the
+  ;; release threshold is refined until the after-cuts residual
+  ;; (bottom-after - darts + inserts vs bottom-before) aims under 1%
+  (setq wmin (max (* 0.04 w) (/ total maxfeat))
+        pass 0
+        stop nil
+  )
+  (while (not stop)
+    (setq feats nil acc 0.0 k 0 fsum 0.0)
+    (while (< k (length idebt))
+      (setq acc (+ acc (nth k idebt)))
+      (if (and (>= (abs acc) wmin) (< (length feats) maxfeat))
+        (progn
+          (setq cw (abs acc))
+          (if (< acc 0) (setq cw (min cw 4.0)))    ; dart mouth cap
+          (setq f (nth (1+ k) rungs)
+                fdev (wc:dev-point (caddr f) pts s)
+          )
+          ;; (x  width  type  local-depth); turn towards far side = dart
+          (setq feats (cons (list (nth (car f) s) cw
+                                  (if (< acc 0) 1 -1)
+                                  (- (cadr fdev)))
+                            feats)
+                fsum (+ fsum (if (< acc 0) (- cw) cw))
+                acc (if (< acc 0) (+ acc cw) (- acc cw))
+          )
+        )
+      )
+      (setq k (1+ k))
+    )
+    (setq resid (+ (- bota botb) fsum)
+          pass (1+ pass)
+    )
+    (if (or (<= (abs resid) (* 0.01 botb))         ; under the 1% target
+            (>= (length feats) maxfeat)            ; no room for more
+            (<= wmin (* 0.0401 w))                 ; threshold bottomed out
+            (>= pass 10)
+        )
+      (setq stop T)
+      (setq wmin (max (* 0.04 w) (* wmin 0.6)))    ; more, smaller features
+    )
+  )
+  (setq feats (reverse feats))
+
   ;; ---- 9. placement below the selection --------------------------------
   (setq minx 1.0e18 miny 1.0e18 maxx -1.0e18 maxy -1.0e18)
   (foreach sg segs
@@ -618,13 +653,16 @@
       )
       (progn                                    ; INSERT: slit + sliver below
         (wc:line (list x yb) (list x (- y0 hz)) lay2)
-        (setq dl (- ld hz)                      ; cut length
+        ;; sliver piece: 1" wide at the top, the gap width at the
+        ;; bottom, sides about 1" longer than the slit it goes into
+        (setq dl (+ (- ld hz) 1.0)              ; slit length + 1"
+              cw (max cw 1.0)
               yb (- y0 ld (* 0.2 w))            ; sliver top
               dr (- yb dl)                      ; sliver bottom
         )
         (wc:pline
           (list (list (- x (/ cw 2.0)) dr) (list (+ x (/ cw 2.0)) dr)
-                (list (+ x (/ cw 4.0)) yb) (list (- x (/ cw 4.0)) yb)
+                (list (+ x 0.5) yb) (list (- x 0.5) yb)
           )
           lay2 T
         )
@@ -665,21 +703,11 @@
   (wc:vdim (list (car endb) y0) endb (+ (car endb) (* 1.2 w)) "DIMENSION")
 
   ;; length summary to the right of the drawing: top line, bottom line
-  ;; before (along the original curve) and after (as drawn), and the
-  ;; delta the flattened bottom line is off by
+  ;; before (along the original curve) and after (as drawn), the delta
+  ;; the flattened bottom line is off by, and the residual once the
+  ;; darts close / inserts fill (target: under 1%)
   (setq toplen (car (reverse s))
-        botb 0.0
-        bota 0.0
-        dp1 (car devpts)
-  )
-  (foreach dp2 (cdr devpts)
-    (setq botb (+ botb (distance (nth 4 dp1) (nth 4 dp2)))
-          bota (+ bota (distance (list (car dp1) (cadr dp1))
-                                 (list (car dp2) (cadr dp2))))
-          dp1 dp2
-    )
-  )
-  (setq tx (+ (car endb) (* 2.0 w))
+        tx (+ (car endb) (* 2.0 w))
         th (* 0.35 w)
   )
   (wc:text (list tx y0) th
@@ -696,8 +724,14 @@
            "DIMENSION")
   (wc:text (list tx (- y0 (* 1.65 w))) th
            (strcat "DELTA:         " (rtos (- bota botb) 2 2)
-                   "  (" (rtos (abs (- bota botb)) 4 8)
-                   (if (< bota botb) " short)" " long)"))
+                   "  (" (rtos (* 100.0 (/ (abs (- bota botb)) botb)) 2 2)
+                   "%" (if (< bota botb) " short)" " long)"))
+           "DIMENSION")
+  (wc:text (list tx (- y0 (* 2.20 w))) th
+           (strcat "AFTER CUTS:    " (rtos resid 2 2)
+                   "  (" (rtos (* 100.0 (/ (abs resid) botb)) 2 2)
+                   "%)  [target <1%]"
+                   (if (> (abs resid) (* 0.01 botb)) "  ** OVER TARGET **" ""))
            "DIMENSION")
 
   (command "_.UNDO" "_End")
@@ -715,7 +749,13 @@
   (princ (strcat "\n  top line " (rtos toplen 2 2)
                  ", bottom before " (rtos botb 2 2)
                  ", bottom after " (rtos bota 2 2)
-                 ", delta " (rtos (- bota botb) 2 2) "."))
+                 ", delta " (rtos (- bota botb) 2 2)
+                 " (" (rtos (* 100.0 (/ (abs (- bota botb)) botb)) 2 2)
+                 "%), after cuts " (rtos resid 2 2)
+                 " (" (rtos (* 100.0 (/ (abs resid) botb)) 2 2) "%)."))
+  (if (> (abs resid) (* 0.01 botb))
+    (princ "\n  Residual over the 1% target - consider allowing more darts+inserts.")
+  )
   (if (> nmk 0)
     (princ (strcat " " (itoa nmk) " reference mark(s) carried along."))
   )
