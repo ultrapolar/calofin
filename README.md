@@ -1,14 +1,16 @@
-# calofin — Blender DXF add-ons
+# calofin — CAD tools (Blender DXF add-ons + AutoCAD LISP)
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Independent tools for working between Blender and CAD:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
-| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
-| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Blender add-on: exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
+| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Blender add-on: automatically builds meshes from imported DXF point-cloud objects |
+| WCALST band straightener | `wcalst/` | AutoCAD 2018+ AutoLISP command: unrolls a curved constant-width "ladder" band into a straight strip, placing darts and inserts (max 20) on the non-straightened side — see `wcalst/README.md` |
 
-## Installation (either add-on)
+The two Blender add-ons target Blender 4.2+ (including 5.0).
+
+## Installation (either Blender add-on)
 
 Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
 or `dxf_cloud_mesher`) either:

@@ -1,0 +1,619 @@
+;;; ===================================================================
+;;; WCALST.lsp — straighten a curved constant-width "ladder" band
+;;; -------------------------------------------------------------------
+;;; Command: WCALST
+;;;
+;;; Select a band drawn as two long curved sides connected by rungs,
+;;; click the side that must come out straight, and the command draws
+;;; the developed (unrolled) band below the selection:
+;;;
+;;;   * the chosen side as one straight line (layer AIR-B, red)
+;;;   * the opposite side as its rigidly unrolled, slightly wavy chain
+;;;     (kept on its original layer)
+;;;   * DARTS  — V cutouts where unrolling creates excess material
+;;;   * INSERTS — straight slits plus a loose sliver piece drawn below
+;;;     the band where unrolling opens a gap
+;;;   * band-height dimensions at both ends (layer DIMENSION)
+;;;
+;;; Darts + inserts are capped (default 20): the required correction is
+;;; accumulated along the band and only released when it reaches a
+;;; minimum useful width, so the cut count stays conservative.
+;;;
+;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
+;;; Load with APPLOAD, then run WCALST.
+;;; ===================================================================
+
+;;; ------------------------ small math helpers ----------------------
+
+(defun wc:key (p)
+  ;; fuzzy node key so touching endpoints share one node
+  (strcat (rtos (car p) 2 3) "," (rtos (cadr p) 2 3))
+)
+
+(defun wc:d2 (a b)
+  ;; squared 2D distance
+  (+ (expt (- (car a) (car b)) 2) (expt (- (cadr a) (cadr b)) 2))
+)
+
+(defun wc:turn (d0 d1 / d)
+  ;; signed turn angle normalized to (-pi, pi]
+  (setq d (- d1 d0))
+  (while (> d pi) (setq d (- d pi pi)))
+  (while (<= d (- pi)) (setq d (+ d pi pi)))
+  d
+)
+
+(defun wc:dir (a b)
+  ;; direction angle of a->b
+  (atan (- (cadr b) (cadr a)) (- (car b) (car a)))
+)
+
+;;; ------------------------- segment soup ---------------------------
+
+(defun wc:ent-points (en / ed et pts sub sd closed)
+  ;; ordered vertex list of a LINE / LWPOLYLINE / POLYLINE
+  (setq ed (entget en)
+        et (cdr (assoc 0 ed))
+        pts nil
+  )
+  (cond
+    ((= et "LINE")
+     (setq pts (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
+    )
+    ((= et "LWPOLYLINE")
+     (foreach g ed
+       (if (= (car g) 10) (setq pts (cons (cdr g) pts)))
+     )
+     (setq pts (reverse pts))
+     (if (= 1 (logand 1 (if (assoc 70 ed) (cdr (assoc 70 ed)) 0)))
+       (setq pts (append pts (list (car pts))))
+     )
+    )
+    ((= et "POLYLINE")
+     (setq closed (= 1 (logand 1 (if (assoc 70 ed) (cdr (assoc 70 ed)) 0)))
+           sub (entnext en)
+     )
+     (while (and sub (= "VERTEX" (cdr (assoc 0 (setq sd (entget sub))))))
+       ;; keep on-curve vertices, skip spline frame control points
+       (if (= 0 (logand 16 (cdr (assoc 70 sd))))
+         (setq pts (cons (cdr (assoc 10 sd)) pts))
+       )
+       (setq sub (entnext sub))
+     )
+     (setq pts (reverse pts))
+     (if (and closed pts) (setq pts (append pts (list (car pts)))))
+    )
+  )
+  ;; force 2D
+  (mapcar '(lambda (p) (list (car p) (cadr p))) pts)
+)
+
+(defun wc:build-segs (ss / i en pts a segs lay)
+  ;; -> list of (ptA ptB layer ename), one entry per 2-point segment
+  (setq i 0 segs nil)
+  (while (< i (sslength ss))
+    (setq en  (ssname ss i)
+          lay (cdr (assoc 8 (entget en)))
+          pts (wc:ent-points en)
+    )
+    (while (cdr pts)
+      (setq a (car pts) pts (cdr pts))
+      (if (> (distance a (car pts)) 1.0e-6)
+        (setq segs (cons (list a (car pts) lay en) segs))
+      )
+    )
+    (setq i (1+ i))
+  )
+  (reverse segs)
+)
+
+(defun wc:build-nodes (segs / nodes i k e)
+  ;; -> assoc list (key . (segidx ...))
+  (setq nodes nil i 0)
+  (foreach sg segs
+    (foreach p (list (car sg) (cadr sg))
+      (setq k (wc:key p)
+            e (assoc k nodes)
+      )
+      (if e
+        (setq nodes (subst (cons k (cons i (cdr e))) e nodes))
+        (setq nodes (cons (list k i) nodes))
+      )
+    )
+    (setq i (1+ i))
+  )
+  nodes
+)
+
+(defun wc:other-end (sg p)
+  ;; endpoint of segment sg that is not (fuzzy-)equal to p
+  (if (equal (wc:key (car sg)) (wc:key p))
+    (cadr sg)
+    (car sg)
+  )
+)
+
+;;; -------------------------- chain tracing -------------------------
+
+(defun wc:trace (segs nodes seed toward / cur p q ids pts cands best
+                 bestang j sg r ang d0 stop)
+  ;; walk from segment SEED through endpoint TOWARD, always taking the
+  ;; straightest continuation; stop when the best turn exceeds 60 deg.
+  ;; -> (ids . pts)  ids = seg indices walked (seed first),
+  ;;                 pts = nodes visited (start node first)
+  (setq cur seed
+        p   (wc:other-end (nth seed segs) toward)
+        q   toward
+        ids (list seed)
+        pts (list q p)                  ; reversed order, start last
+        stop nil
+  )
+  (while (not stop)
+    (setq d0 (wc:dir p q)
+          cands (cdr (assoc (wc:key q) nodes))
+          best nil
+          bestang nil
+    )
+    (foreach j cands
+      (if (/= j cur)
+        (progn
+          (setq sg (nth j segs)
+                r (wc:other-end sg q)
+                ang (abs (wc:turn d0 (wc:dir q r)))
+          )
+          (if (or (not bestang) (< ang bestang))
+            (setq bestang ang best j)
+          )
+        )
+      )
+    )
+    (if (or (not best) (> bestang 1.0472) (> (length ids) 5000)) ; 60 deg
+      (setq stop T)
+      (setq ids (cons best ids)
+            p q
+            cur best
+            q (wc:other-end (nth best segs) q)
+            pts (cons q pts)
+      )
+    )
+  )
+  (cons (reverse ids) (reverse pts))
+)
+
+(defun wc:full-chain (segs nodes seed / sg r1 r2)
+  ;; trace both directions from SEED -> (ids . pts) covering the whole side
+  (setq sg (nth seed segs)
+        r1 (wc:trace segs nodes seed (car sg))   ; towards first endpoint
+        r2 (wc:trace segs nodes seed (cadr sg))  ; towards second endpoint
+  )
+  ;; r1 pts = (B A ...towards a-side); r2 pts = (A B ...towards b-side)
+  (cons
+    (append (reverse (cdr (car r1))) (car r2))       ; ids, seed once
+    (append (reverse (cdr r1)) (cddr (cdr r2)))      ; pts, join at A B
+  )
+)
+
+;;; --------------------------- development --------------------------
+
+(defun wc:member-key (p keys)
+  (member (wc:key p) keys)
+)
+
+(defun wc:dev-point (fp pts s / k n A B ax ay L2 tt cx cy d2 bk bt bd
+                     d c sn dx dy)
+  ;; project FP on the chain, develop it with the transform of the
+  ;; nearest chain segment -> (devx devy proj-s proj-dist)
+  (setq k 0 n (1- (length pts)) bd 1.0e18 bk 0 bt 0.0)
+  (while (< k n)
+    (setq A (nth k pts) B (nth (1+ k) pts)
+          ax (- (car B) (car A)) ay (- (cadr B) (cadr A))
+          L2 (+ (* ax ax) (* ay ay))
+          tt (if (< L2 1.0e-12)
+               0.0
+               (/ (+ (* (- (car fp) (car A)) ax)
+                     (* (- (cadr fp) (cadr A)) ay))
+                  L2)
+             )
+          tt (max 0.0 (min 1.0 tt))
+          cx (+ (car A) (* tt ax)) cy (+ (cadr A) (* tt ay))
+          d2 (+ (expt (- (car fp) cx) 2) (expt (- (cadr fp) cy) 2))
+    )
+    (if (< d2 bd) (setq bd d2 bk k bt tt))
+    (setq k (1+ k))
+  )
+  (setq A (nth bk pts) B (nth (1+ bk) pts)
+        d (wc:dir A B)
+        c (cos (- d)) sn (sin (- d))
+        dx (- (car fp) (car A)) dy (- (cadr fp) (cadr A))
+  )
+  (list
+    (+ (nth bk s) (- (* dx c) (* dy sn)))
+    (+ (* dx sn) (* dy c))
+    (+ (nth bk s) (* bt (- (nth (1+ bk) s) (nth bk s))))
+    (sqrt bd)
+  )
+)
+
+;;; ---------------------------- drawing -----------------------------
+
+(defun wc:ensure-layer (name color)
+  (if (not (tblsearch "LAYER" name))
+    (entmake
+      (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+            '(100 . "AcDbLayerTableRecord")
+            (cons 2 name) '(70 . 0) (cons 62 color)
+            '(6 . "Continuous")
+      )
+    )
+  )
+  name
+)
+
+(defun wc:line (a b lay)
+  (entmake
+    (list '(0 . "LINE") (cons 8 lay)
+          (list 10 (car a) (cadr a) 0.0)
+          (list 11 (car b) (cadr b) 0.0)
+    )
+  )
+)
+
+(defun wc:pline (pts lay closed)
+  (entmake
+    (append
+      (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
+            '(100 . "AcDbPolyline") (cons 90 (length pts))
+            (cons 70 (if closed 1 0))
+      )
+      (mapcar '(lambda (p) (cons 10 (list (car p) (cadr p)))) pts)
+    )
+  )
+)
+
+(defun wc:vdim (p1 p2 xline lay)
+  ;; vertical rotated dimension between P1 and P2, dim line at X=XLINE
+  (entmake
+    (list '(0 . "DIMENSION") '(100 . "AcDbEntity") (cons 8 lay)
+          '(100 . "AcDbDimension")
+          (list 10 xline (/ (+ (cadr p1) (cadr p2)) 2.0) 0.0)
+          '(70 . 32) '(1 . "")
+          '(100 . "AcDbAlignedDimension")
+          (list 13 (car p1) (cadr p1) 0.0)
+          (list 14 (car p2) (cadr p2) 0.0)
+          '(100 . "AcDbRotatedDimension")
+          (cons 50 (/ pi 2))
+    )
+  )
+)
+
+;;; ------------------------------ main ------------------------------
+
+(defun c:WCALST (/ *error* oldlay ss segs nodes pick en pk seed sg d2min
+                 d2c i r ids pts chainkeys s n p0 p1 dch j far ang rungs
+                 widths w mid side cross ni f k turns d0 d1 idebt i0 i1
+                 tsum total wmin maxfeat acc feats fdev farlay fseed
+                 fsegs cands rfar rr farpts fk seen ordered devpts
+                 minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
+                 dl dr yb enda endb lay2 inundo)
+
+  (defun *error* (msg)
+    (if inundo (command "_.UNDO" "_End"))
+    (if oldlay (setvar "CLAYER" oldlay))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+      (princ (strcat "\nWCALST error: " msg))
+    )
+    (princ)
+  )
+  (setq oldlay (getvar "CLAYER"))
+
+  ;; ---- 1. selection --------------------------------------------------
+  (princ "\nSelect the band of lines (two long sides + rungs): ")
+  (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+  (if (not ss) (progn (princ "\nNothing selected.") (exit)))
+
+  (setq segs (wc:build-segs ss))
+  (if (< (length segs) 6)
+    (progn (princ "\nToo few segments to form a band.") (exit))
+  )
+  (setq nodes (wc:build-nodes segs))
+
+  ;; ---- 2. pick the side to straighten -------------------------------
+  (setq pick nil)
+  (while (not pick)
+    (setq pick (entsel "\nClick the long side to STRAIGHTEN: "))
+    (if (and pick (not (ssmemb (car pick) ss)))
+      (progn (princ "  (that entity is not in the selection)") (setq pick nil))
+    )
+  )
+  (setq en (car pick) pk (cadr pick))
+
+  ;; seed = the segment of the picked entity nearest the pick point
+  (setq seed nil d2min 1.0e18 i 0)
+  (foreach sg segs
+    (if (eq (cadddr sg) en)
+      (progn
+        (setq d2c (wc:d2 pk (mapcar '(lambda (u v) (/ (+ u v) 2.0))
+                                    (car sg) (cadr sg))))
+        (if (< d2c d2min) (setq d2min d2c seed i))
+      )
+    )
+    (setq i (1+ i))
+  )
+  (if (not seed)
+    (progn (princ "\nCould not locate a segment at that pick.") (exit))
+  )
+
+  ;; ---- 3. trace the chosen chain -------------------------------------
+  (setq r (wc:full-chain segs nodes seed)
+        ids (car r)
+        pts (cdr r)
+  )
+  (if (< (length ids) 3)
+    (progn (princ "\nCould not trace a long side from that pick.") (exit))
+  )
+  (setq chainkeys (mapcar 'wc:key pts))
+
+  ;; arc length of each chain node
+  (setq s (list 0.0))
+  (setq p0 (car pts))
+  (foreach p1 (cdr pts)
+    (setq s (cons (+ (car s) (distance p0 p1)) s) p0 p1)
+  )
+  (setq s (reverse s)
+        n (length pts)
+  )
+
+  ;; ---- 4. rungs -------------------------------------------------------
+  (setq rungs nil ni 0)
+  (foreach p pts
+    (setq p0 (nth (max 0 (1- ni)) pts)
+          p1 (nth (min (1- n) (1+ ni)) pts)
+          dch (wc:dir p0 p1)
+    )
+    (foreach j (cdr (assoc (wc:key p) nodes))
+      (if (not (member j ids))
+        (progn
+          (setq far (wc:other-end (nth j segs) p))
+          (if (not (wc:member-key far chainkeys))
+            (progn
+              (setq ang (abs (wc:turn dch (wc:dir p far)))
+                    ang (min ang (- pi ang))
+              )
+              (if (> ang 0.7854)                 ; > 45 deg off the chain
+                (setq rungs (cons (list ni p far) rungs))
+              )
+            )
+          )
+        )
+      )
+    )
+    (setq ni (1+ ni))
+  )
+  (setq rungs (reverse rungs))
+  (if (< (length rungs) 2)
+    (progn (princ "\nCould not find the rungs between the two sides.") (exit))
+  )
+
+  ;; band width = median rung length
+  (setq widths (vl-sort (mapcar '(lambda (r) (distance (cadr r) (caddr r)))
+                                rungs)
+                        '<)
+        w (nth (/ (length widths) 2) widths)
+  )
+
+  ;; ---- 5. normalize orientation: far side below the travel direction --
+  (setq side 0)
+  (foreach f rungs
+    (setq ni (car f) p (cadr f) far (caddr f)
+          p0 (nth (max 0 (1- ni)) pts)
+          p1 (nth (min (1- n) (1+ ni)) pts)
+          cross (- (* (- (car p1) (car p0)) (- (cadr far) (cadr p)))
+                   (* (- (cadr p1) (cadr p0)) (- (car far) (car p))))
+    )
+    (setq side (+ side (if (> cross 0) 1 -1)))
+  )
+  (if (> side 0)                       ; far side is left -> walk the other way
+    (progn
+      (setq pts (reverse pts)
+            mid (car (reverse s))
+            s (reverse (mapcar '(lambda (v) (- mid v)) s))
+            chainkeys (reverse chainkeys)
+            rungs (mapcar '(lambda (f) (list (- n 1 (car f)) (cadr f) (caddr f)))
+                          rungs)
+            rungs (reverse rungs)
+      )
+    )
+  )
+
+  ;; ---- 6. turn angles and per-interval correction debt ----------------
+  (setq turns (list 0.0) k 1)
+  (while (< k (1- n))
+    (setq d0 (wc:dir (nth (1- k) pts) (nth k pts))
+          d1 (wc:dir (nth k pts) (nth (1+ k) pts))
+          turns (cons (wc:turn d0 d1) turns)
+          k (1+ k)
+    )
+  )
+  (setq turns (reverse (cons 0.0 turns)))
+
+  (setq idebt nil k 0)
+  (while (< k (1- (length rungs)))
+    (setq i0 (car (nth k rungs))
+          i1 (car (nth (1+ k) rungs))
+          tsum 0.0
+          j (1+ i0)
+    )
+    (while (<= j i1)
+      (setq tsum (+ tsum (nth j turns)) j (1+ j))
+    )
+    (setq idebt (cons (* tsum w) idebt) k (1+ k))
+  )
+  (setq idebt (reverse idebt)
+        total (apply '+ (mapcar 'abs idebt))
+  )
+
+  ;; ---- 7. feature threshold (conservative, capped) ---------------------
+  (setq maxfeat (getint "\nMaximum darts + inserts <20>: "))
+  (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat 20))
+  (setq wmin (max (* 0.04 w) (/ total maxfeat)))   ; never below 4% of width
+
+  (setq acc 0.0 feats nil k 0)
+  (while (< k (length idebt))
+    (setq acc (+ acc (nth k idebt)))
+    (if (>= (abs acc) wmin)
+      (progn
+        (setq f (nth (1+ k) rungs)
+              fdev (wc:dev-point (caddr f) pts s)
+        )
+        ;; (x  width  type  local-depth); turn towards far side = dart
+        (setq feats (cons (list (nth (car f) s) (abs acc)
+                                (if (< acc 0) 1 -1)
+                                (- (cadr fdev)))
+                          feats)
+              acc 0.0
+        )
+      )
+    )
+    (setq k (1+ k))
+  )
+  (setq feats (reverse feats))
+
+  ;; ---- 8. develop the far edge ----------------------------------------
+  ;; far side points = every rung far foot + the far chain traced from a
+  ;; middle rung (feet alone already outline the edge if the chain breaks)
+  (setq fseed (caddr (nth (/ (length rungs) 2) rungs))
+        cands (cdr (assoc (wc:key fseed) nodes))
+        fsegs nil
+  )
+  (foreach j cands
+    (setq far (wc:other-end (nth j segs) fseed))
+    (if (and (not (member j ids))
+             (not (wc:member-key far chainkeys)))
+      (setq fsegs (cons j fsegs))
+    )
+  )
+  (setq farpts nil farlay nil)
+  (if fsegs
+    (progn
+      (setq rr (wc:full-chain segs nodes (car fsegs))
+            farpts (cdr rr)
+            farlay (caddr (nth (car fsegs) segs))
+      )
+    )
+  )
+  (if (not farlay) (setq farlay (caddr (nth seed segs))))
+
+  ;; merge + dedupe far points, order by projected arc length
+  (setq seen nil ordered nil)
+  (foreach f (append farpts (mapcar 'caddr rungs))
+    (setq fk (wc:key f))
+    (if (not (member fk seen))
+      (setq seen (cons fk seen)
+            ordered (cons f ordered)
+      )
+    )
+  )
+  (setq devpts (mapcar '(lambda (f) (wc:dev-point f pts s)) ordered)
+        ;; drop points projecting far off the chain (past the band ends,
+        ;; end blocks, unrelated marks caught in the selection) and points
+        ;; developing at/above the straight edge (end-clamp artifacts —
+        ;; the far side always lies below the straightened edge)
+        devpts (vl-remove-if
+                 '(lambda (dp)
+                    (or (> (cadddr dp) (* 1.75 w))
+                        (> (cadr dp) (* -0.05 w))
+                        (< (car dp) (* -0.25 w))
+                        (> (car dp) (+ (car (reverse s)) (* 0.25 w)))))
+                 devpts)
+        devpts (vl-sort devpts '(lambda (a b) (< (caddr a) (caddr b))))
+  )
+  (if (< (length devpts) 2)
+    (progn (princ "\nCould not develop the opposite side.") (exit))
+  )
+
+  ;; ---- 9. placement below the selection --------------------------------
+  (setq minx 1.0e18 miny 1.0e18 maxx -1.0e18 maxy -1.0e18)
+  (foreach sg segs
+    (foreach wpt (list (car sg) (cadr sg))
+      (setq minx (min minx (car wpt)) miny (min miny (cadr wpt))
+            maxx (max maxx (car wpt)) maxy (max maxy (cadr wpt))
+      )
+    )
+  )
+  (setq x0 minx
+        y0 (- miny (* 1.5 w))          ; straight edge sits here
+  )
+
+  ;; ---- 10. draw ----------------------------------------------------------
+  (command "_.UNDO" "_Begin")
+  (setq inundo T)
+  (setq lay2 (wc:ensure-layer "AIR-B" 1))
+  (wc:ensure-layer "DIMENSION" 3)
+
+  ;; straight (chosen) edge
+  (setq sgp (list (+ x0 (car s)) y0)
+        wpt (list (+ x0 (car (reverse s))) y0)
+  )
+  (wc:line sgp wpt lay2)
+
+  ;; far edge as one polyline (world coords)
+  (setq farpts (mapcar '(lambda (dp) (list (+ x0 (car dp)) (+ y0 (cadr dp))))
+                       devpts)
+  )
+  (if (> (length farpts) 1) (wc:pline farpts farlay nil))
+
+  ;; band ends (vertical closing lines)
+  (setq enda (car farpts) endb (car (reverse farpts)))
+  (wc:line (list (car enda) y0) enda lay2)
+  (wc:line (list (car endb) y0) endb lay2)
+
+  ;; darts and inserts
+  (foreach f feats
+    (setq x (+ x0 (car f))
+          cw (cadr f)
+          ld (max (cadddr f) (* 0.2 w))
+          hz (* 0.42 ld)                       ; cut stops here (from top)
+          yb (- y0 ld)                          ; local far edge
+    )
+    (if (= 1 (caddr f))
+      (progn                                    ; DART: V cutout
+        (wc:line (list x (- y0 hz)) (list (- x (/ cw 2.0)) yb) lay2)
+        (wc:line (list x (- y0 hz)) (list (+ x (/ cw 2.0)) yb) lay2)
+      )
+      (progn                                    ; INSERT: slit + sliver below
+        (wc:line (list x yb) (list x (- y0 hz)) lay2)
+        (setq dl (- ld hz)                      ; cut length
+              yb (- y0 ld (* 0.2 w))            ; sliver top
+              dr (- yb dl)                      ; sliver bottom
+        )
+        (wc:pline
+          (list (list (- x (/ cw 2.0)) dr) (list (+ x (/ cw 2.0)) dr)
+                (list (+ x (/ cw 4.0)) yb) (list (- x (/ cw 4.0)) yb)
+          )
+          lay2 T
+        )
+      )
+    )
+  )
+
+  ;; height dimensions at both ends
+  (wc:vdim (list (car enda) y0) enda (- (car enda) (* 1.2 w)) "DIMENSION")
+  (wc:vdim (list (car endb) y0) endb (+ (car endb) (* 1.2 w)) "DIMENSION")
+
+  (command "_.UNDO" "_End")
+  (setq inundo nil)
+  (setvar "CLAYER" oldlay)
+
+  ;; ---- 11. report ---------------------------------------------------------
+  (setq dl 0 dr 0)
+  (foreach f feats (if (= 1 (caddr f)) (setq dl (1+ dl)) (setq dr (1+ dr))))
+  (princ (strcat "\nWCALST: developed length "
+                 (rtos (car (reverse s)) 2 2)
+                 ", band width " (rtos w 2 2)
+                 " -> " (itoa dl) " dart(s), " (itoa dr) " insert(s)"
+                 " (max " (itoa maxfeat) ")."))
+  (princ)
+)
+
+(princ "\nWCALST loaded — select the band, pick the side to straighten.")
+(princ)
