@@ -53,10 +53,24 @@ Sizing rules:
    locally too shallow for the tile zone, the cut is clamped to the
    deepest 20 % of the local depth so it stays a valid cut.
 
-The developed band is drawn **below the lowest point of the
-selection**, and the command reports the developed length, band width
-and how many darts/inserts were placed. One `U` undoes the whole
-output.
+**Two developed drawings** are placed below the lowest point of the
+selection, one under the other, each labelled and with its own summary:
+
+* **TARGET <1%** — the release threshold is refined and large
+  corrections split into several ≤ 4" darts until the after-cuts
+  residual is under 1 %.
+* **MINIMUM DARTS+INSERTS** — one conservative pass, fewest cuts;
+  its summary flags `** OVER TARGET **` when the residual exceeds 1 %.
+
+The command reports both variants' counts and residuals. One `U`
+undoes the whole output.
+
+Sharp local detail on the non-straightened side — steps of roughly 90°
+that rise temporarily and come back — is preserved: every outline
+vertex of the band (outline segments are the ones drawn once; mesh
+interiors always appear twice) is developed and included in the bottom
+line, so notches and steps come through square instead of being
+rounded off.
 
 To the right of the finished band a four-line summary is written
 (layer `DIMENSION`), each value in drawing units and architectural
