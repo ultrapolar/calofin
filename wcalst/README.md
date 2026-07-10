@@ -52,6 +52,12 @@ Sizing rules:
    local band depth below the straightened edge). Where the band is
    locally too shallow for the tile zone, the cut is clamped to the
    deepest 20 % of the local depth so it stays a valid cut.
+7. *Window the STAIR section(s) if any <none>* — window-select the part
+   of the band that wraps around stairs (Enter if there are none).
+   Inside that section the developed bottom line is drawn as clean
+   steps: consecutive points are grouped into level treads (split
+   where the depth jumps, slivers narrower than a real tread absorbed)
+   joined by short risers — instead of the smoothed curve.
 
 **Two developed drawings** are placed below the lowest point of the
 selection, one under the other, each labelled and with its own summary:
@@ -70,7 +76,8 @@ that rise temporarily and come back — is preserved: every outline
 vertex of the band (outline segments are the ones drawn once; mesh
 interiors always appear twice) is developed and included in the bottom
 line, so notches and steps come through square instead of being
-rounded off.
+rounded off. Windowing the section at the STAIR prompt goes further
+and redraws it as ideal treads and risers.
 
 To the right of the finished band a four-line summary is written
 (layer `DIMENSION`), each value in drawing units and architectural

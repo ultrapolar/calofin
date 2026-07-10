@@ -308,6 +308,73 @@
   (list (reverse feats) fsum)
 )
 
+(defun wc:stairsnap (devpts stairkeys w / out run dp thresh mintread
+                     clusters c cm cn merged prev best keep)
+  ;; inside user-designated stair sections, turn the developed bottom
+  ;; line into clean steps: cluster consecutive points into treads
+  ;; (split where the depth jumps), absorb slivers narrower than a real
+  ;; tread, then level each tread and keep only its two corners; the
+  ;; connectors between treads become the (short) risers
+  (setq thresh (max 2.5 (* 0.07 w))
+        mintread (max 3.0 (* 0.08 w))
+        out nil
+        run nil
+  )
+  (defun wc:flushrun (/ clusters c cm i dp2 merged prev spans best)
+    ;; RUN holds a reversed list of consecutive stair points
+    (setq run (reverse run) clusters nil c nil)
+    (foreach dp2 run
+      (if (and c (> (abs (- (cadr dp2) (cadr (car c)))) thresh))
+        (setq clusters (cons (reverse c) clusters) c nil)
+      )
+      (setq c (cons dp2 c))
+    )
+    (if c (setq clusters (cons (reverse c) clusters)))
+    (setq clusters (reverse clusters))
+    ;; absorb clusters narrower than a tread into the closer neighbour
+    (setq merged nil)
+    (foreach c clusters
+      (if (and merged
+               (< (- (car (last c)) (car (car c))) mintread)
+               (cdr clusters)
+          )
+        ;; too narrow: append to the previous cluster
+        (setq merged (cons (append (car merged) c) (cdr merged)))
+        (setq merged (cons c merged))
+      )
+    )
+    (setq clusters (reverse merged))
+    ;; level each tread and keep its two corners
+    (foreach c clusters
+      (setq cm 0.0)
+      (foreach dp2 c (setq cm (+ cm (cadr dp2))))
+      (setq cm (/ cm (length c)))
+      (setq dp2 (car c))
+      (setq out (cons (list (car dp2) cm (caddr dp2) (cadddr dp2)
+                            (nth 4 dp2)) out))
+      (if (cdr c)
+        (progn
+          (setq dp2 (last c))
+          (setq out (cons (list (car dp2) cm (caddr dp2) (cadddr dp2)
+                                (nth 4 dp2)) out))
+        )
+      )
+    )
+    (setq run nil)
+  )
+  (foreach dp devpts
+    (if (member (wc:key (nth 4 dp)) stairkeys)
+      (setq run (cons dp run))
+      (progn
+        (if run (wc:flushrun))
+        (setq out (cons dp out))
+      )
+    )
+  )
+  (if run (wc:flushrun))
+  (reverse out)
+)
+
 (defun wc:text (pt height str lay)
   (entmake
     (list '(0 . "TEXT") (cons 8 lay)
@@ -344,7 +411,7 @@
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
                  bandlays tileh toplen botb bota tx th pass stop
                  resid featsb residb paircnt bndpts vy vfeats vresid
-                 vlab)
+                 vlab ssstairs stairkeys)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -514,6 +581,21 @@
   ;; only come up to (width - tile height - 1") from the far edge
   (setq tileh (getreal "\nTile height along the straightened edge <none>: "))
   (if (and tileh (< tileh 0.0)) (setq tileh nil))
+  ;; stair sections wrap around steps: inside them the bottom line is
+  ;; drawn as clean treads and risers instead of the smoothed curve
+  (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
+  (setq ssstairs (ssget)
+        stairkeys nil
+  )
+  (if ssstairs
+    (foreach sgm segs
+      (if (ssmemb (cadddr sgm) ssstairs)
+        (setq stairkeys (cons (wc:key (car sgm))
+                              (cons (wc:key (cadr sgm)) stairkeys))
+        )
+      )
+    )
+  )
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -619,6 +701,11 @@
   )
   (if (< (length devpts) 2)
     (progn (princ "\nCould not develop the opposite side.") (exit))
+  )
+
+  ;; snap stair sections to clean treads + risers
+  (if stairkeys
+    (setq devpts (wc:stairsnap devpts stairkeys w))
   )
 
   ;; bottom line lengths: along the original curve vs as developed
