@@ -1,12 +1,13 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender DXF add-ons & AutoCAD lisps
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+CAD tooling: two independent Blender add-ons (Blender 4.2+ including
+5.0) for working between Blender and CAD, and an AutoCAD lisp:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
-| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
-| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Blender add-on: exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
+| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Blender add-on: automatically builds meshes from imported DXF point-cloud objects |
+| PADDLE | `paddle/` | AutoLISP: scans a drawing's perimeter for concave features (fillets ≤ 4′-6″ radius, inside corners) and inserts 24″ pads to cover them — see [`paddle/README.md`](paddle/README.md) |
 
 ## Installation (either add-on)
 
