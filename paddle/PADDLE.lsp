@@ -68,6 +68,8 @@
   (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))
         (+ (* (car v) (sin a)) (* (cadr v) (cos a)))))
 (defun paddle--2d (p) (list (car p) (cadr p)))
+(defun paddle--cheb (v) (max (abs (car v)) (abs (cadr v)))) ; Chebyshev norm
+(defun paddle--arcpt (cen r ang) (paddle--add cen (paddle--scl (paddle--dir ang) r)))
 
 ;; Segment data for vertex A -> B with bulge b (b /= 0):
 ;; returns (theta radius center start-tangent end-tangent)
@@ -99,6 +101,34 @@
                                 0.5 r r (- theta (sin theta)))))))
     (setq i (1+ i)))
   area)
+
+;; Next pad along an arc row: starting from arc-parameter CUR (pad
+;; center PREV), find the parameter where the pad center is exactly
+;; PADSIZE away from PREV in Chebyshev distance -- axis-aligned pads
+;; of that size then sit flush (touching, never overlapping); on a
+;; straight run this is exactly PADSIZE on center. Returns
+;; (parameter center) or nil when the rest of the arc is too short.
+(defun paddle--next-flush (cen r sa sgn cur sweep prev padsize
+                           / ds d p hit lo hi mid)
+  (setq ds (/ padsize r 8.0))                ; ~1/8 pad per probe step
+  (if (> ds (/ sweep 4.0)) (setq ds (/ sweep 4.0)))
+  (setq d cur hit nil)
+  (while (and (not hit) (< d (- sweep 1e-9))) ; walk until pads separate
+    (setq lo d
+          d  (min sweep (+ d ds))
+          p  (paddle--arcpt cen r (+ sa (* sgn d))))
+    (if (>= (paddle--cheb (paddle--sub p prev)) padsize)
+        (setq hit T)))
+  (if hit
+      (progn ; tighten the crossing between lo and d by bisection
+        (setq hi d)
+        (repeat 45
+          (setq mid (/ (+ lo hi) 2.0)
+                p   (paddle--arcpt cen r (+ sa (* sgn mid))))
+          (if (>= (paddle--cheb (paddle--sub p prev)) padsize)
+              (setq hi mid)
+              (setq lo mid)))
+        (list hi (paddle--arcpt cen r (+ sa (* sgn hi)))))))
 
 ;; Direction (unit vector) of travel at the START / END of segment a->b.
 (defun paddle--tan-start (a b blg)
@@ -217,9 +247,10 @@
 
 ;; ------------------------ feature detection ------------------------
 ;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
-;; PADSIZE controls the spacing of pads along concave arcs.
+;; PADSIZE controls the flush spacing of pad rows along concave arcs.
 (defun paddle--features (vts padsize / s n i a b c blg pads din dout turn
-                             seg theta r cen sa npads k f pang ctr tang)
+                             seg theta r cen sa sgn sweep pstart pend
+                             cur prev nxt)
   (setq s (if (< (paddle--area vts) 0.0) -1 1) ; -1 = clockwise
         n (length vts)
         i 0)
@@ -249,16 +280,26 @@
                 cen   (caddr seg))
           (if (<= r (+ *paddle-maxrad* 1e-6))
               (progn
-                (setq sa    (angle cen (paddle--2d a))
-                      npads (max 1 (fix (+ 0.999999 (/ (* r (abs theta)) padsize))))
-                      k     0)
-                (repeat npads
-                  (setq f    (/ (+ k 0.5) npads)
-                        pang (+ sa (* theta f))
-                        ctr  (paddle--add cen (paddle--scl (paddle--dir pang) r)) ; on the arc
-                        tang (+ pang (if (> theta 0.0) (/ pi 2.0) (/ pi -2.0))))
-                  (setq pads (cons (list ctr tang "arc") pads))
-                  (setq k (1+ k)))))))
+                (setq sa     (angle cen (paddle--2d a))
+                      sgn    (if (> theta 0.0) 1.0 -1.0)
+                      sweep  (abs theta)
+                      pstart (paddle--arcpt cen r sa)
+                      pend   (paddle--arcpt cen r (+ sa (* sgn sweep))))
+                (if (<= (paddle--cheb (paddle--sub pend pstart)) padsize)
+                    ;; short arc: a single pad centered on the arc
+                    (setq pads (cons (list (paddle--arcpt cen r (+ sa (* sgn sweep 0.5)))
+                                           0.0 "arc")
+                                     pads))
+                    ;; longer arc: a flush row of pads -- consecutive
+                    ;; centers exactly one pad apart, starting where
+                    ;; the arc leaves the wall
+                    (progn
+                      (setq cur 0.0 prev pstart)
+                      (setq pads (cons (list prev 0.0 "arc") pads))
+                      (while (setq nxt (paddle--next-flush cen r sa sgn cur sweep prev padsize))
+                        (setq cur  (car nxt)
+                              prev (cadr nxt))
+                        (setq pads (cons (list prev 0.0 "arc") pads)))))))))
     (setq i (1+ i)))
   (reverse pads))
 

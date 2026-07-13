@@ -47,9 +47,13 @@ Everything inserted in one run is a single undo step.
 ## Pad placement details
 
 * **Inside corners:** the pad is centered on the corner vertex.
-* **Concave arcs:** pads are distributed evenly along the arc
-  (`ceil(arc length / pad size)` of them), each centered on the arc
-  itself.
+* **Concave arcs:** a short arc gets one pad centered on it. A longer
+  arc gets a **flush row** of pads: the first pad sits where the arc
+  leaves the wall, and each following pad is exactly one pad-size
+  away on center, so neighboring pads touch edge-to-edge and never
+  overlap. On a straight run that's 36″ o.c. for the 3′ pad (24″
+  o.c. for the 2′ pad); around a curve the row stair-steps while
+  staying flush. Every pad center stays on the arc.
 * Pads are inserted at 0° — parallel to the X/Y axes. (Set
   `*paddle-align*` to `T` at the top of the lisp if you ever want
   them rotated to follow the perimeter edge instead.)
