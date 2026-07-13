@@ -1,12 +1,14 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender DXF add-ons & AutoCAD tools
 
 Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+working between Blender and CAD, plus an AutoLISP drawing checker
+for AutoCAD:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| CHECK drawing audit (AutoLISP) | `autolisp/` | AutoCAD command that verifies dimensions are attached to objects and arc ends sit on object ends, auto-fixes strays and flags them by color |
 
 ## Installation (either add-on)
 
@@ -156,6 +158,26 @@ Only vertex-only meshes (no edges, no faces, at least 3 vertices) are
 touched; every other object is ignored. A per-object breakdown (filled
 as n-gon / filled as TIN / skipped and why) is printed to the system
 console.
+
+---
+
+# 3. CHECK drawing audit (AutoLISP for AutoCAD)
+
+Load `autolisp/check_drawing.lsp` (drag-and-drop or `APPLOAD`), type
+`CHECK`, and highlight the drawing when prompted. Two audits run over
+the selection:
+
+1. **Dimension attachment** — linear/aligned dimensions whose
+   definition points don't lie on any object get a construction line
+   drawn through their two dimmed points, the stray point shifted onto
+   the closest object, and the dimension recolored red.
+2. **Arc endpoint attachment** — arc ends that sit partway along an
+   object are moved to that object's closest end; arc ends attached to
+   nothing are moved to the closest object endpoint. Snapped arcs are
+   recolored magenta.
+
+One `U` undoes an entire run. Tolerances, colors and details are in
+[`autolisp/README.md`](autolisp/README.md).
 
 ---
 
