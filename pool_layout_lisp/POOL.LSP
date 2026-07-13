@@ -291,6 +291,12 @@
   (pool:line p1 p2 "POOL-NOTES")
   (pool:setcol (entlast) pool:*pv-col*))
 
+;; Dashed guide line -- used for the cross dims so they read apart
+;; from the pool outline at a glance.
+(defun pool:pvlined (p1 p2)
+  (pool:lined p1 p2)
+  (pool:setcol (entlast) pool:*pv-col*))
+
 ;; Ask for a distance while the matching guide elements glow red.
 (defun pool:askh (msg ents / v)
   (foreach e ents (pool:setcol e pool:*hi-col*))
@@ -327,28 +333,28 @@
         ebc (pool:pvline b c)
         ecd (pool:pvline d c)
         eda (pool:pvline d a)
-        eac (pool:pvline a c)
-        ebd (pool:pvline b d)
+        eac (pool:pvlined a c)
+        ebd (pool:pvlined b d)
         all (list eab ebc ecd eda eac ebd)
         pv (list (cons 'ab (list eab)) (cons 'bc (list ebc))
                  (cons 'dc (list ecd)) (cons 'da (list eda))
                  (cons 'ac (list eac)) (cons 'bd (list ebd))))
   (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
     (pool:text (pool:v+ (car pr)
-                        (pool:v* (pool:unit (pool:v- (car pr) cen)) 14.0))
-               10.0 (cadr pr) "POOL-NOTES")
+                        (pool:v* (pool:unit (pool:v- (car pr) cen)) 20.0))
+               12.0 (cadr pr) "POOL-NOTES")
     (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)))
   (cond
     ((= ptype "Oval")
      (setq midl (list 0.0 (* 0.5 ph)) tipl (list -80.0 (* 0.5 ph))
            midr (list pw (* 0.5 ph)) tipr (list (+ pw 80.0) (* 0.5 ph))
-           elrad (pool:pvline midl tipl)
-           errad (pool:pvline midr tipr))
+           elrad (pool:pvlined midl tipl)
+           errad (pool:pvlined midr tipr))
      (pool:arc3p a tipl d "POOL-NOTES")
      (setq elarc (pool:setcol (entlast) pool:*pv-col*))
      (pool:arc3p b tipr c "POOL-NOTES")
      (setq erarc (pool:setcol (entlast) pool:*pv-col*))
-     (setq etot (pool:pvline tipl tipr)
+     (setq etot (pool:pvlined tipl tipr)
            all (append all (list elrad errad elarc erarc etot))
            pv (append pv (list (cons 'lrad (list elrad elarc))
                                (cons 'rrad (list errad erarc))
@@ -723,14 +729,24 @@
       (setq n (pool:v* n -1.0)))
   (pool:v+ m (pool:v* n dist)))
 
-;; Gray guide for the L shapes: nominal body, corner labels, and all
-;; six cross diagonals so every prompt can highlight its element.
+;; Corner-label position: away from the centroid, but flipped when
+;; that lands inside the shape (the inner corner of an L).
+(defun pool:lbloff (p cen poly dist / dir cand)
+  (setq dir (pool:unit (pool:v- p cen))
+        cand (pool:v+ p (pool:v* dir dist)))
+  (if (pool:inpoly cand poly)
+      (pool:v+ p (pool:v* dir (- dist)))
+      cand))
+
+;; Gray guide for the L shapes: nominal body (solid), the six cross
+;; diagonals (DASHED, so outline and cross dims read apart), and
+;; corner labels kept clear of the linework.
 (defun pool:hexpreview (lazy / pts cen p pr k keys ent all pv lbls)
   (setq pts (if lazy
-                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 140.0)
-                      (list 220.0 140.0) (list 120.0 240.0) (list 0.0 240.0))
-                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 140.0)
-                      (list 160.0 140.0) (list 160.0 260.0) (list 0.0 260.0)))
+                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 150.0)
+                      (list 240.0 150.0) (list 140.0 250.0) (list 0.0 250.0))
+                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 150.0)
+                      (list 200.0 150.0) (list 200.0 300.0) (list 0.0 300.0)))
         cen (list 0.0 0.0))
   (foreach p pts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 6.0))
@@ -743,14 +759,13 @@
           k (1+ k)))
   (setq keys (list 'ac 'bd 'ce 'df 'ae 'bf) k 0)
   (foreach pr pool:*hexdiags*
-    (setq ent (pool:pvline (nth (car pr) pts) (nth (cadr pr) pts))
+    (setq ent (pool:pvlined (nth (car pr) pts) (nth (cadr pr) pts))
           pv (cons (cons (nth k keys) (list ent)) pv)
           all (cons ent all)
           k (1+ k)))
   (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
   (foreach p pts
-    (pool:text (pool:v+ p (pool:v* (pool:unit (pool:v- p cen)) 14.0))
-               10.0 (nth k lbls) "POOL-NOTES")
+    (pool:text (pool:lbloff p cen pts 20.0) 12.0 (nth k lbls) "POOL-NOTES")
     (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)
           k (1+ k)))
   (setq pool:*pvents* all)
@@ -764,7 +779,7 @@
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
   (command "_.ZOOM" "_Window"
-           (pool:wp (list -80.0 -70.0)) (pool:wp (list 520.0 330.0)))
+           (pool:wp (list -80.0 -70.0)) (pool:wp (list 520.0 370.0)))
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C right end top, D inner corner, E wing corner, F top-left.")
   (setq sides
@@ -829,11 +844,10 @@
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
-  ;; corner labels
+  ;; corner labels (kept outside the shape -- D is a reflex corner)
   (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
   (foreach p pts
-    (pool:text (pool:v+ p (pool:v* (pool:unit (pool:v- p cen)) (* 1.5 th)))
-               th (nth k lbls) "POOL-NOTES")
+    (pool:text (pool:lbloff p cen pts (* 2.0 th)) th (nth k lbls) "POOL-NOTES")
     (setq k (1+ k)))
 
   ;; report table
@@ -1153,6 +1167,11 @@
   (pool:layer "POOL-TRIANGLES" 1)
   (pool:layer "DIMENSION" 2)
   (pool:layer "POOL-NOTES" 3)
+
+  ;; dashed linetype up front so the guide's cross dims draw dashed
+  ;; (the flows re-scale pool:*lts* to the real pool size later)
+  (setq pool:*dashlt* (pool:ltload "DASHED")
+        pool:*lts* 12.0)
 
   (cond
     ((= ptype "L") (pool:hexflow nil))

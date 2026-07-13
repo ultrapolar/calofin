@@ -69,13 +69,16 @@ for L pools.
 
 As soon as the shape is chosen, a gray nominal "guide" pool of that
 shape (with corner labels) is drawn at the base point and the view
-zooms to it. While each measurement is prompted for, the matching
-element of the guide glows **red** so there is never any doubt which
-dimension is being asked for — including the cross diagonals, oval
-radius/arc and total-length line, and the Grecian corner diagonals and
-end widths. Once the last dimension is entered the guide deletes
-itself and the true out-of-square pool is drawn in its place (the
-guide is also cleaned up if the command is cancelled part-way).
+zooms to it. The pool outline is drawn solid while all **cross dims
+are dashed**, so the shape and the diagonals read apart at a glance
+even on the L pools where six diagonals cross the body. While each
+measurement is prompted for, the matching element of the guide glows
+**red** so there is never any doubt which dimension is being asked
+for — including the cross diagonals, oval radius/arc and total-length
+line, and the Grecian corner diagonals and end widths. Once the last
+dimension is entered the guide deletes itself and the true
+out-of-square pool is drawn in its place (the guide is also cleaned
+up if the command is cancelled part-way).
 
 ## What it draws
 
