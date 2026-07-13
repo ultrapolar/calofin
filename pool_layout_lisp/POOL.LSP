@@ -6,6 +6,11 @@
 ;;;  Draws a pool plan (Rectangle, Oval or Grecian) from field
 ;;;  measurements:
 ;;;
+;;;    * A gray nominal "guide" pool appears as soon as the shape is
+;;;      chosen; while each measurement is prompted for, the matching
+;;;      element of the guide turns red so you can see which dimension
+;;;      is being asked for.  Once every dimension is in, the guide
+;;;      deletes itself and is replaced by the true out-of-square pool.
 ;;;    * A best-fit "parametric" quadrilateral on layer POOL-OUTLINE.
 ;;;      Field measurements carry human error, so side lengths may be
 ;;;      held within +/-1" and cross dimensions within +/-2" of the
@@ -195,6 +200,95 @@
 (defun pool:ask (msg)
   (initget 7)                           ; no null, no zero, no negative
   (getdist (strcat "\n" msg ": ")))
+
+;;; -------------------- guide preview ----------------------------------
+;;; A gray nominal pool of the chosen shape is drawn as soon as the
+;;; shape is picked.  While each measurement is prompted for, the
+;;; matching element of the guide turns red so the user can see exactly
+;;; which dimension is being asked for.  Once all inputs are in, the
+;;; guide deletes itself and is replaced by the true out-of-square pool.
+
+(setq pool:*pv-col* 8)                  ; guide color (gray)
+(setq pool:*hi-col* 1)                  ; highlight color (red)
+
+;; Override (or set) the color of an entity, refresh it, return it.
+(defun pool:setcol (e col / ed old)
+  (if (and e (setq ed (entget e)))
+      (progn
+        (setq old (assoc 62 ed))
+        (if old
+            (setq ed (subst (cons 62 col) old ed))
+            (setq ed (append ed (list (cons 62 col)))))
+        (entmod ed)
+        (entupd e)))
+  e)
+
+(defun pool:pvline (p1 p2)
+  (pool:line p1 p2 "POOL-NOTES")
+  (pool:setcol (entlast) pool:*pv-col*))
+
+;; Ask for a distance while the matching guide elements glow red.
+(defun pool:askh (msg ents / v)
+  (foreach e ents (pool:setcol e pool:*hi-col*))
+  (setq v (pool:ask msg))
+  (foreach e ents (pool:setcol e pool:*pv-col*))
+  v)
+
+;; Draw the nominal guide pool for the chosen shape (fixed 360 x 180
+;; body).  Returns an assoc list mapping each input key to the list of
+;; guide entities to highlight, plus an ALL entry with every guide
+;; entity for later deletion.
+(defun pool:preview (ptype / pw ph a b c d cen pr all pv
+                             eab ebc ecd eda eac ebd
+                             midl midr tipl tipr elrad errad elarc erarc etot
+                             lp1 lp2 rp1 rp2 elt elb elw ert erb erw)
+  (setq pw 360.0 ph 180.0
+        a (list 0.0 0.0) b (list pw 0.0) c (list pw ph) d (list 0.0 ph)
+        cen (list (* 0.5 pw) (* 0.5 ph))
+        eab (pool:pvline a b)
+        ebc (pool:pvline b c)
+        ecd (pool:pvline d c)
+        eda (pool:pvline d a)
+        eac (pool:pvline a c)
+        ebd (pool:pvline b d)
+        all (list eab ebc ecd eda eac ebd)
+        pv (list (cons 'ab (list eab)) (cons 'bc (list ebc))
+                 (cons 'dc (list ecd)) (cons 'da (list eda))
+                 (cons 'ac (list eac)) (cons 'bd (list ebd))))
+  (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
+    (pool:text (pool:v+ (car pr)
+                        (pool:v* (pool:unit (pool:v- (car pr) cen)) 14.0))
+               10.0 (cadr pr) "POOL-NOTES")
+    (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)))
+  (cond
+    ((= ptype "Oval")
+     (setq midl (list 0.0 (* 0.5 ph)) tipl (list -80.0 (* 0.5 ph))
+           midr (list pw (* 0.5 ph)) tipr (list (+ pw 80.0) (* 0.5 ph))
+           elrad (pool:pvline midl tipl)
+           errad (pool:pvline midr tipr))
+     (pool:arc3p a tipl d "POOL-NOTES")
+     (setq elarc (pool:setcol (entlast) pool:*pv-col*))
+     (pool:arc3p b tipr c "POOL-NOTES")
+     (setq erarc (pool:setcol (entlast) pool:*pv-col*))
+     (setq etot (pool:pvline tipl tipr)
+           all (append all (list elrad errad elarc erarc etot))
+           pv (append pv (list (cons 'lrad (list elrad elarc))
+                               (cons 'rrad (list errad erarc))
+                               (cons 'tot (list etot))))))
+    ((= ptype "Grecian")
+     (setq lp1 (list -42.0 (- ph 42.0)) lp2 (list -42.0 42.0)
+           rp1 (list (+ pw 42.0) (- ph 42.0)) rp2 (list (+ pw 42.0) 42.0)
+           elt (pool:pvline d lp1)
+           elb (pool:pvline a lp2)
+           elw (pool:pvline lp1 lp2)
+           ert (pool:pvline c rp1)
+           erb (pool:pvline b rp2)
+           erw (pool:pvline rp1 rp2)
+           all (append all (list elt elb elw ert erb erw))
+           pv (append pv (list (cons 'lt (list elt)) (cons 'lb (list elb))
+                               (cons 'lw (list elw)) (cons 'rt (list ert))
+                               (cons 'rb (list erb)) (cons 'rw (list erw)))))))
+  (cons (cons 'all all) pv))
 
 ;;; -------------------- quadrilateral fitting --------------------------
 
@@ -455,7 +549,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* oldcmd oldos oldclay ptype base r2d
+(defun c:POOL ( / *error* oldcmd oldos oldclay ptype base r2d pv pvall
                   tp bo le ri dac dbd totl lrad rrad
                   ltd lbd lew rtd rbd rew
                   fitres quad failed a b c d cen meas notes tri
@@ -469,6 +563,7 @@
              (/= (strcase msg t) "function cancelled")
              (/= (strcase msg t) "quit / exit abort"))
         (princ (strcat "\nPOOL error: " msg)))
+    (foreach e pvall (if (and e (entget e)) (entdel e)))
     (if oldclay (setvar "CLAYER" oldclay))
     (if oldos (setvar "OSMODE" oldos))
     (command "_.UNDO" "_End")
@@ -487,29 +582,46 @@
   (initget 1 "Rectangle Oval Grecian")
   (setq ptype (getkword "\nPool shape [Rectangle/Oval/Grecian]: "))
 
-  (princ "\nRectangle body -- corners: A bottom-left, B bottom-right, C top-right, D top-left.")
-  (setq tp  (pool:ask "Side length TOP (D-C)")
-        bo  (pool:ask "Side length BOTTOM (A-B)")
-        le  (pool:ask "End length LEFT (A-D)")
-        ri  (pool:ask "End length RIGHT (B-C)")
-        dac (pool:ask "Cross dim bottom-left to top-right (A-C)")
-        dbd (pool:ask "Cross dim bottom-right to top-left (B-D)"))
+  (setq base (getpoint "\nInsertion base point <0,0>: ")
+        pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+
+  ;; ------------------------------------------------ layers
+  (pool:layer "POOL-OUTLINE" 4)
+  (pool:layer "POOL-TRIANGLES" 1)
+  (pool:layer "POOL-DIMS" 2)
+  (pool:layer "POOL-NOTES" 3)
+
+  ;; -------------------------------------- guide preview + input
+  (setq pv (pool:preview ptype)
+        pvall (cdr (assoc 'all pv)))
+  (command "_.ZOOM" "_Window"
+           (pool:wp (list -170.0 -60.0)) (pool:wp (list 530.0 240.0)))
+  (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
+  (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
+
+  (setq tp  (pool:askh "Side length TOP (D-C)" (cdr (assoc 'dc pv)))
+        bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
+        le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
+        ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv)))
+        dac (pool:askh "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
+        dbd (pool:askh "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv))))
 
   (cond
     ((= ptype "Oval")
-     (setq totl (pool:ask "Total pool length (arc tip to arc tip)")
-           lrad (pool:ask "LEFT oval end radius")
-           rrad (pool:ask "RIGHT oval end radius")))
+     (setq totl (pool:askh "Total pool length (arc tip to arc tip)" (cdr (assoc 'tot pv)))
+           lrad (pool:askh "LEFT oval end radius" (cdr (assoc 'lrad pv)))
+           rrad (pool:askh "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
     ((= ptype "Grecian")
-     (setq ltd (pool:ask "LEFT end diagonal TOP")
-           lbd (pool:ask "LEFT end diagonal BOTTOM")
-           lew (pool:ask "LEFT end width (between diagonal end points)")
-           rtd (pool:ask "RIGHT end diagonal TOP")
-           rbd (pool:ask "RIGHT end diagonal BOTTOM")
-           rew (pool:ask "RIGHT end width (between diagonal end points)"))))
+     (setq ltd (pool:askh "LEFT end diagonal TOP" (cdr (assoc 'lt pv)))
+           lbd (pool:askh "LEFT end diagonal BOTTOM" (cdr (assoc 'lb pv)))
+           lew (pool:askh "LEFT end width (between diagonal end points)" (cdr (assoc 'lw pv)))
+           rtd (pool:askh "RIGHT end diagonal TOP" (cdr (assoc 'rt pv)))
+           rbd (pool:askh "RIGHT end diagonal BOTTOM" (cdr (assoc 'rb pv)))
+           rew (pool:askh "RIGHT end width (between diagonal end points)" (cdr (assoc 'rw pv))))))
 
-  (setq base (getpoint "\nInsertion base point <0,0>: ")
-        pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  ;; the guide has served its purpose -- replace it with the true pool
+  (foreach e pvall (if (entget e) (entdel e)))
+  (setq pvall nil)
 
   ;; ------------------------------------------------ fit the body
   (princ "\nFitting pool body to the measurements ...")
@@ -520,12 +632,6 @@
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         meas (pool:quadmeas quad)
         notes nil)
-
-  ;; ------------------------------------------------ layers
-  (pool:layer "POOL-OUTLINE" 4)
-  (pool:layer "POOL-TRIANGLES" 1)
-  (pool:layer "POOL-DIMS" 2)
-  (pool:layer "POOL-NOTES" 3)
 
   ;; ------------------------------------------------ pool body
   (pool:line a b "POOL-OUTLINE")

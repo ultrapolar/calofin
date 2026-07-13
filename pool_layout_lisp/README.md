@@ -28,13 +28,25 @@ A ---------- B        cross:  A-C and B-D
 ```
 
 1. Pool shape: `Rectangle` / `Oval` / `Grecian`.
-2. Side lengths, top then bottom.
-3. End lengths, left then right.
-4. Cross dimensions A-C and B-D.
-5. **Oval only:** total pool length, left end radius, right end radius.
-6. **Grecian only:** for each end — diagonal top, diagonal bottom, end
+2. Insertion base point.
+3. Side lengths, top then bottom.
+4. End lengths, left then right.
+5. Cross dimensions A-C and B-D.
+6. **Oval only:** total pool length, left end radius, right end radius.
+7. **Grecian only:** for each end — diagonal top, diagonal bottom, end
    width between the diagonal end points.
-7. Insertion base point.
+
+### Guided input
+
+As soon as the shape is chosen, a gray nominal "guide" pool of that
+shape (with corner labels) is drawn at the base point and the view
+zooms to it. While each measurement is prompted for, the matching
+element of the guide glows **red** so there is never any doubt which
+dimension is being asked for — including the cross diagonals, oval
+radius/arc and total-length line, and the Grecian corner diagonals and
+end widths. Once the last dimension is entered the guide deletes
+itself and the true out-of-square pool is drawn in its place (the
+guide is also cleaned up if the command is cancelled part-way).
 
 ## What it draws
 
