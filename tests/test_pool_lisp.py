@@ -1,0 +1,251 @@
+"""Python mirror of the pool_layout_lisp/POOL.LSP geometry.
+
+AutoLISP cannot be executed outside AutoCAD, so the fitting algorithms
+(four-bar side-true fit, banded relaxation, exact triangle build,
+Grecian end solver) are reimplemented here 1:1 and exercised against
+known-good and known-bad measurement sets.  Run: python3 tests/test_pool_lisp.py
+"""
+import math
+
+D2R = math.pi / 180.0
+
+def dist(p, q):
+    return math.hypot(p[0] - q[0], p[1] - q[1])
+
+def circint(c1, r1, c2, r2, side):
+    d = dist(c1, c2)
+    if d <= 1e-9:
+        return None
+    ux = (c2[0] - c1[0]) / d
+    uy = (c2[1] - c1[1]) / d
+    a = (d * d + r1 * r1 - r2 * r2) / (2.0 * d)
+    h2 = r1 * r1 - a * a
+    if h2 <= -1e-6:
+        return None
+    h = math.sqrt(max(h2, 0.0))
+    bx = c1[0] + a * ux
+    by = c1[1] + a * uy
+    return (bx + side * h * (-uy), by + side * h * ux)
+
+def quadmeas(q):
+    a, b, c, d = q
+    return (dist(a, b), dist(d, c), dist(a, d), dist(b, c), dist(a, c), dist(b, d))
+
+def diagerr(q, dac, dbd):
+    e1 = dist(q[0], q[2]) - dac
+    e2 = dist(q[1], q[3]) - dbd
+    return e1 * e1 + e2 * e2
+
+def fourbar(bo, tp, le, ri, alfa):
+    a = (0.0, 0.0)
+    b = (bo, 0.0)
+    d = (le * math.cos(alfa), le * math.sin(alfa))
+    c1 = circint(b, ri, d, tp, 1.0)
+    c2 = circint(b, ri, d, tp, -1.0)
+    if c1 and c2:
+        c = c1 if dist(a, c1) > dist(a, c2) else c2
+    else:
+        c = c1 or c2
+    return (a, b, c, d) if c else None
+
+def scanalfa(bo, tp, le, ri, dac, dbd, a0, a1, step):
+    best, bestq = 1e30, None
+    alfa = a0
+    while alfa <= a1:
+        q = fourbar(bo, tp, le, ri, alfa)
+        if q:
+            e = diagerr(q, dac, dbd)
+            if e < best:
+                best, bestq = e, (q, alfa)
+        alfa += step
+    return bestq
+
+def fitsides(bo, tp, le, ri, dac, dbd):
+    r1 = scanalfa(bo, tp, le, ri, dac, dbd, 15 * D2R, 165 * D2R, 0.25 * D2R)
+    if not r1:
+        return None
+    alfa = r1[1]
+    r2 = scanalfa(bo, tp, le, ri, dac, dbd, alfa - 0.3 * D2R, alfa + 0.3 * D2R, 0.005 * D2R)
+    return (r2 or r1)[0]
+
+def relax1(pts, i, j, lo, hi, w):
+    p, q = pts[i], pts[j]
+    d = dist(p, q)
+    if d > 1e-9:
+        des = min(max(d, lo), hi)
+        err = d - des
+        if err != 0.0:
+            ux = (q[0] - p[0]) / d
+            uy = (q[1] - p[1]) / d
+            e2 = 0.5 * w * err
+            pts[i] = (p[0] + e2 * ux, p[1] + e2 * uy)
+            pts[j] = (q[0] - e2 * ux, q[1] - e2 * uy)
+    return pts
+
+def normquad(pts):
+    ax, ay = pts[0]
+    pts = [(x - ax, y - ay) for x, y in pts]
+    ang = -math.atan2(pts[1][1], pts[1][0])
+    ca, sa = math.cos(ang), math.sin(ang)
+    pts = [(x * ca - y * sa, x * sa + y * ca) for x, y in pts]
+    if pts[3][1] < 0:
+        pts = [(x, -y) for x, y in pts]
+    return pts
+
+def relaxquad(pts, bo, tp, le, ri, dac, dbd, stol, niter):
+    pts = list(pts)
+    cons = [(0, 2, dac, dac, 0.5),
+            (1, 3, dbd, dbd, 0.5),
+            (0, 1, bo - stol, bo + stol, 1.0),
+            (3, 2, tp - stol, tp + stol, 1.0),
+            (0, 3, le - stol, le + stol, 1.0),
+            (1, 2, ri - stol, ri + stol, 1.0)]
+    for _ in range(niter):
+        for c in cons:
+            pts = relax1(pts, *c)
+    return normquad(pts)
+
+def fitquad(bo, tp, le, ri, dac, dbd, stol=1.0, xtol=2.0):
+    q1 = fitsides(bo, tp, le, ri, dac, dbd)
+    if q1 is None:
+        q1 = [(0, 0), (bo, 0), (bo, 0.5 * (le + ri)), (0, le)]
+    m1 = quadmeas(q1)
+    if abs(m1[4] - dac) <= xtol and abs(m1[5] - dbd) <= xtol:
+        return q1, False
+    q2 = relaxquad(q1, bo, tp, le, ri, dac, dbd, stol, 2000)
+    m2 = quadmeas(q2)
+    sok = (abs(m2[0] - bo) <= stol + 0.05 and abs(m2[1] - tp) <= stol + 0.05
+           and abs(m2[2] - le) <= stol + 0.05 and abs(m2[3] - ri) <= stol + 0.05)
+    xok = abs(m2[4] - dac) <= xtol + 0.05 and abs(m2[5] - dbd) <= xtol + 0.05
+    if sok and xok:
+        return q2, False
+    return q1, True
+
+def triquad(bo, tp, le, ri, dac):
+    a = (0.0, 0.0)
+    b = (bo, 0.0)
+    c = circint(a, dac, b, ri, 1.0)
+    if not c:
+        return None
+    d = circint(a, le, c, tp, 1.0)
+    return (a, b, c, d) if d else None
+
+def grecf(w, lt, lb, th):
+    return math.hypot(w - (lt + lb) * math.sin(th), (lt - lb) * math.cos(th))
+
+def grecth(w, lt, lb, e):
+    best, berr = 0.7854, 1e30
+    th = 0.0175
+    while th < 1.5533:
+        dd = abs(grecf(w, lt, lb, th) - e)
+        if dd < berr:
+            berr, best = dd, th
+        th += 0.00087
+    return best, berr
+
+def grecfit(w, lt, lb, e, step=0.125, n=4):
+    for s in range(0, 2 * n + 1):
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                if abs(i) + abs(j) != s:
+                    continue
+                lt2, lb2 = lt + step * i, lb + step * j
+                if lt2 <= 0 or lb2 <= 0:
+                    continue
+                th, err = grecth(w, lt2, lb2, e)
+                if err <= 0.0625:
+                    return lt2, lb2, th
+    return None
+
+def report(name, q, targets):
+    m = quadmeas(q)
+    labels = ("BOT", "TOP", "LEFT", "RIGHT", "AC", "BD")
+    print(f"  {name}: " + "  ".join(f"{l}={v:.3f}({v-t:+.3f})"
+                                    for l, v, t in zip(labels, m, targets)))
+
+# ---------------- tests ----------------
+print("== 1. perfect 240x120 rectangle ==")
+diag = math.hypot(240, 120)
+q, failed = fitquad(240, 240, 120, 120, diag, diag)
+report("fit", q, (240, 240, 120, 120, diag, diag))
+assert not failed
+m = quadmeas(q)
+assert all(abs(m[i] - t) < 0.01 for i, t in enumerate((240, 240, 120, 120, diag, diag)))
+
+print("== 2. slightly out-of-square (consistent-ish field dims) ==")
+# true quad: A=(0,0) B=(240.5,0) C=(239.8,120.4) D=(1.2,119.9)
+A, B, C, D = (0, 0), (240.5, 0), (239.8, 120.4), (1.2, 119.9)
+t = quadmeas((A, B, C, D))
+# round to nearest 1/4" as a field crew would
+t = tuple(round(v * 4) / 4 for v in t)
+q, failed = fitquad(*t)
+report("fit", q, t)
+assert not failed, "should fit within tolerance"
+m = quadmeas(q)
+assert all(abs(m[i] - t[i]) < 1.02 for i in range(4)), "sides"
+assert all(abs(m[i] - t[i]) < 2.02 for i in (4, 5)), "diags"
+
+print("== 3. bad cross dims (impossible) -> CROSS DIMS FAILED ==")
+# both diagonals 6" long in the same direction: even growing all sides
+# by the full 1" band only buys ~1.5" of diagonal -> must fail
+q, failed = fitquad(240, 240, 120, 120, diag + 6, diag + 6)
+report("fit", q, (240, 240, 120, 120, diag + 6, diag + 6))
+assert failed, "must flag failure"
+m = quadmeas(q)
+# sides must be held true in the failure case
+assert all(abs(m[i] - t) < 0.01 for i, t in enumerate((240, 240, 120, 120)))
+
+print("== 4. cross dims off but recoverable inside the 2\" band ==")
+q, failed = fitquad(240, 240, 120, 120, diag - 1.5, diag + 1.5)
+report("fit", q, (240, 240, 120, 120, diag - 1.5, diag + 1.5))
+assert not failed
+m = quadmeas(q)
+assert abs(m[4] - (diag - 1.5)) <= 2.02 and abs(m[5] - (diag + 1.5)) <= 2.02
+
+print("== 5. cross dims needing the side band (relax phase) ==")
+# skew both diagonals the same way: impossible with exact sides,
+# check the relax phase respects the 1" side band
+q, failed = fitquad(240, 240, 120, 120, diag + 2.4, diag + 2.4)
+report("fit", q, (240, 240, 120, 120, diag + 2.4, diag + 2.4))
+m = quadmeas(q)
+if not failed:
+    assert all(abs(m[i] - t) <= 1.06 for i, t in enumerate((240, 240, 120, 120))), "side band"
+    assert abs(m[4] - (diag + 2.4)) <= 2.06 and abs(m[5] - (diag + 2.4)) <= 2.06
+print("   failed flag:", failed)
+
+print("== 6. exact triangles ==")
+tq = triquad(240, 240, 120, 120, diag)
+report("tri", tq, (240, 240, 120, 120, diag, diag))
+m = quadmeas(tq)
+for i, t in zip((0, 1, 2, 3, 4), (240, 240, 120, 120, diag)):
+    assert abs(m[i] - t) < 1e-6, "triangles must hold lengths exactly"
+
+print("== 7. grecian: fits by angle only ==")
+r = grecfit(120.0, 40.0, 40.0, 63.0)
+assert r, "should fit"
+lt2, lb2, th = r
+print(f"   lt={lt2} lb={lb2} theta={th/D2R:.2f} deg  width={grecf(120, lt2, lb2, th):.3f}")
+assert lt2 == 40.0 and lb2 == 40.0, "no length adjustment needed"
+assert abs(grecf(120, lt2, lb2, th) - 63.0) <= 0.0625
+
+print("== 8. grecian: needs 1/8\" length adjustments ==")
+# W=120, lt=lb=28, e=63 -> need (W-e)/(lt+lb)=57/56>1: angle alone can't
+r = grecfit(120.0, 28.0, 28.0, 63.0)
+print("   result:", r)
+assert r, "should fit after adjusting lengths within 1/2\""
+lt2, lb2, th = r
+assert abs(lt2 - 28.0) <= 0.5 + 1e-9 and abs(lb2 - 28.0) <= 0.5 + 1e-9
+assert abs(grecf(120, lt2, lb2, th) - 63.0) <= 0.0625
+
+print("== 9. grecian: impossible -> end failed ==")
+r = grecfit(120.0, 28.0, 28.0, 40.0)   # needs (120-40)/56 = 1.43 > 1 even at +1/2"
+print("   result:", r)
+assert r is None
+
+print("== 10. grecian: asymmetric diagonals ==")
+r = grecfit(120.0, 42.0, 38.0, 62.5)
+assert r
+lt2, lb2, th = r
+print(f"   lt={lt2} lb={lb2} theta={th/D2R:.2f} deg  width={grecf(120, lt2, lb2, th):.3f}")
+
+print("\nALL CHECKS PASSED")
