@@ -34,8 +34,11 @@
 ;;;     point). Arcs whose endpoints changed are recoloured MAGENTA.
 ;;;
 ;;;  4. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer DIMCHECK-REPORT listing every dimension and
-;;;     arc that was checked and what happened to it, plus totals.
+;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
+;;;     with its measured distance (in the drawing's units; angular
+;;;     dims show their angle) — and every arc that was checked and
+;;;     what happened to it, plus totals. The report text is sized
+;;;     from the drawing's extents so it sits to scale next to it.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions and magenta moved arcs, which stay
@@ -285,6 +288,34 @@
 
 ;; --- dimension review ----------------------------------------------
 
+(defun dchk:dim-meas (ent / ed dtype p13 p14 ang v meas)
+  ;; the dimension's current measurement as display text, formatted
+  ;; with the drawing's unit settings (LUNITS/AUNITS); nil if unknown.
+  ;; Linear/aligned dims are recomputed from their definition points
+  ;; so the value reflects any point that was just moved.
+  (setq ed    (entget ent)
+        dtype (logand 7 (cdr (assoc 70 ed)))
+        meas  (cdr (assoc 42 ed)))            ; stored actual measurement
+  (cond
+    ((= dtype 1)                              ; aligned: point-to-point
+     (setq p13 (cdr (assoc 13 ed))
+           p14 (cdr (assoc 14 ed)))
+     (if (and p13 p14) (rtos (distance p13 p14))))
+    ((= dtype 0)                              ; rotated/linear: project the
+     (setq p13 (cdr (assoc 13 ed))            ; points onto the dim direction
+           p14 (cdr (assoc 14 ed))
+           ang (cdr (assoc 50 ed)))
+     (if (and p13 p14)
+       (progn
+         (if (null ang) (setq ang 0.0))
+         (setq v (mapcar '- p14 p13))
+         (rtos (abs (+ (* (car v) (cos ang))
+                       (* (cadr v) (sin ang))))))))
+    ((member dtype '(2 5))                    ; angular: show the angle
+     (if (and meas (>= meas 0.0)) (angtos meas)))
+    (t                                        ; radius/diameter/ordinate
+     (if (and meas (>= meas 0.0)) (rtos meas)))))
+
 (defun dchk:audit-dim-point (ent gcode label cands / ed pt near final newp)
   ;; audits one definition point: off-object points are moved onto the
   ;; closest object, then the user confirms (Enter) or re-picks (N).
@@ -313,9 +344,9 @@
           (redraw)
           (list pt final (if newp 'user 'auto)))))))
 
-(defun dchk:review-dim (ent cands num total / ed dtype h p13 p14 r1 r2 moved ok note)
+(defun dchk:review-dim (ent cands num total / ed dtype h p13 p14 r1 r2 moved ok note meas)
   ;; interactive review of one dimension.
-  ;; Returns (handle ok-flag report-note moved-point-count).
+  ;; Returns (handle ok-flag report-note moved-point-count measurement).
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         dtype (logand 7 (cdr (assoc 70 ed))))
@@ -332,6 +363,8 @@
       (if (or r1 r2)
         (dchk:make-xline p13 p14))))          ; through the ORIGINAL points
   (setq moved (append (if r1 (list r1)) (if r2 (list r2))))
+  (setq meas (dchk:dim-meas ent))             ; after any point moves
+  (if meas (princ (strcat "\n  Measures " meas ".")))
   (redraw ent 3)
   (setq ok (dchk:ask-yn "\n  Is this dimension correct?"))
   (redraw ent 4)
@@ -345,7 +378,7 @@
                         " point(s) adjusted)"))
                (t "FLAGGED to fix (red)")))
   (if (not ok) (dchk:set-color ent *dchk-flag-color*))
-  (list h ok note (length moved)))
+  (list h ok note (length moved) meas))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -450,7 +483,7 @@
 (defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
                       cands dims arcs saved keep res n total lines
                       ndok ndflag ndmoved naok namoved nasnap
-                      minx miny maxx maxy bb h m ins txt)
+                      minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -532,7 +565,12 @@
                    (dchk:set-color e *dchk-grey-color*)) ; done: back to grey
             (progn (setq ndflag (1+ ndflag))
                    (setq keep (cons e keep))))           ; flagged: stays red
-          (setq lines (cons (strcat "Dim " (car res) ": " (caddr res)) lines)))
+          (setq lines (cons (strcat "Dim " (car res)
+                                    (if (nth 4 res)
+                                      (strcat " = " (nth 4 res))
+                                      "")
+                                    ": " (caddr res))
+                            lines)))
 
         ;; --- arcs, one endpoint at a time --------------------------
         (if arcs
@@ -556,11 +594,21 @@
           (if (and (not (member (car pair) keep)) (entget (car pair)))
             (dchk:set-color (car pair) (cdr pair))))
 
-        ;; --- report on the right side -------------------------------
-        (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-        (if (and (or (null h) (<= h 0.0)) minx)
-          (setq h (/ (max (- maxx minx) (- maxy miny)) 60.0)))
-        (if (or (null h) (<= h 0.0)) (setq h 2.5))
+        ;; --- report on the right side, to scale with the drawing ----
+        ;; text height picked from the drawing's extents so the whole
+        ;; report roughly matches the drawing's height (MTEXT line
+        ;; spacing is ~1.66 x text height), clamped so a short report
+        ;; is not gigantic nor a long one unreadably small
+        (setq nlin (+ 4 (length lines)))
+        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+          (progn
+            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
+                  h   (/ ref (* 1.66 nlin)))
+            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
+            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+          (progn
+            (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
+            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
         (setq ins (if minx
                     (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                     (list 0.0 0.0 0.0)))
