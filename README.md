@@ -1,12 +1,13 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender DXF add-ons & AutoCAD tools
 
 Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+working between Blender and CAD, plus an AutoCAD AutoLISP QA tool:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| DIMCHECK (AutoCAD LISP) | `dimcheck/` | Interactive one-at-a-time review of dimensions & arc endpoints with an on-drawing report — see `dimcheck/dimcheck.lsp` header for the full workflow (load with `APPLOAD`, run `DIMCHECK`) |
 
 ## Installation (either add-on)
 
