@@ -32,8 +32,8 @@ def quadmeas(q):
     return (dist(a, b), dist(d, c), dist(a, d), dist(b, c), dist(a, c), dist(b, d))
 
 def diagerr(q, dac, dbd):
-    e1 = dist(q[0], q[2]) - dac
-    e2 = dist(q[1], q[3]) - dbd
+    e1 = (dist(q[0], q[2]) - dac) if dac else 0.0
+    e2 = (dist(q[1], q[3]) - dbd) if dbd else 0.0
     return e1 * e1 + e2 * e2
 
 def fourbar(bo, tp, le, ri, alfa):
@@ -61,6 +61,8 @@ def scanalfa(bo, tp, le, ri, dac, dbd, a0, a1, step):
     return bestq
 
 def fitsides(bo, tp, le, ri, dac, dbd):
+    if dac is None and dbd is None:
+        return fourbar(bo, tp, le, ri, 90 * D2R)
     r1 = scanalfa(bo, tp, le, ri, dac, dbd, 15 * D2R, 165 * D2R, 0.25 * D2R)
     if not r1:
         return None
@@ -94,9 +96,10 @@ def normquad(pts):
 
 def relaxquad(pts, bo, tp, le, ri, dac, dbd, stol, niter):
     pts = list(pts)
-    cons = [(0, 2, dac, dac, 0.5),
-            (1, 3, dbd, dbd, 0.5),
-            (0, 1, bo - stol, bo + stol, 1.0),
+    cons = []
+    if dac: cons.append((0, 2, dac, dac, 0.5))
+    if dbd: cons.append((1, 3, dbd, dbd, 0.5))
+    cons += [(0, 1, bo - stol, bo + stol, 1.0),
             (3, 2, tp - stol, tp + stol, 1.0),
             (0, 3, le - stol, le + stol, 1.0),
             (1, 2, ri - stol, ri + stol, 1.0)]
@@ -110,13 +113,15 @@ def fitquad(bo, tp, le, ri, dac, dbd, stol=1.0, xtol=2.0):
     if q1 is None:
         q1 = [(0, 0), (bo, 0), (bo, 0.5 * (le + ri)), (0, le)]
     m1 = quadmeas(q1)
-    if abs(m1[4] - dac) <= xtol and abs(m1[5] - dbd) <= xtol:
+    if ((dac is None or abs(m1[4] - dac) <= xtol)
+            and (dbd is None or abs(m1[5] - dbd) <= xtol)):
         return q1, False
     q2 = relaxquad(q1, bo, tp, le, ri, dac, dbd, stol, 2000)
     m2 = quadmeas(q2)
     sok = (abs(m2[0] - bo) <= stol + 0.05 and abs(m2[1] - tp) <= stol + 0.05
            and abs(m2[2] - le) <= stol + 0.05 and abs(m2[3] - ri) <= stol + 0.05)
-    xok = abs(m2[4] - dac) <= xtol + 0.05 and abs(m2[5] - dbd) <= xtol + 0.05
+    xok = ((dac is None or abs(m2[4] - dac) <= xtol + 0.05)
+           and (dbd is None or abs(m2[5] - dbd) <= xtol + 0.05))
     if sok and xok:
         return q2, False
     return q1, True
@@ -247,5 +252,147 @@ r = grecfit(120.0, 42.0, 38.0, 62.5)
 assert r
 lt2, lb2, th = r
 print(f"   lt={lt2} lb={lb2} theta={th/D2R:.2f} deg  width={grecf(120, lt2, lb2, th):.3f}")
+
+
+# ---------------- hexagon (L / Lazy L) mirror ----------------
+HEXSIDES = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)]
+HEXDIAGS = [(0, 2), (1, 3), (2, 4), (3, 5), (0, 4), (1, 5)]
+
+def normpoly(pts):
+    ax, ay = pts[0]
+    pts = [(x - ax, y - ay) for x, y in pts]
+    ang = -math.atan2(pts[1][1], pts[1][0])
+    ca, sa = math.cos(ang), math.sin(ang)
+    pts = [(x * ca - y * sa, x * sa + y * ca) for x, y in pts]
+    if sum(p[1] for p in pts) < 0:
+        pts = [(x, -y) for x, y in pts]
+    return pts
+
+def relaxn(pts, cons, niter):
+    pts = list(pts)
+    for _ in range(niter):
+        for c in cons:
+            pts = relax1(pts, *c)
+    return normpoly(pts)
+
+def hexguess(sides, lazy):
+    ab, bc, cd, de, ef, fa = sides
+    a, b, c = (0.0, 0.0), (ab, 0.0), (ab, bc)
+    d = (ab - cd, bc)
+    if lazy:
+        e = (d[0] - de * 0.7071067812, d[1] + de * 0.7071067812)
+    else:
+        e = (d[0], d[1] + de)
+    f = (e[0] - ef, e[1])
+    return [a, b, c, d, e, f]
+
+def hexsidecon(sides, band, w):
+    return [(i, j, sides[k] - band, sides[k] + band, w)
+            for k, (i, j) in enumerate(HEXSIDES)]
+
+def hexdiagcon(diags, w):
+    return [(i, j, diags[k], diags[k], w)
+            for k, (i, j) in enumerate(HEXDIAGS) if diags[k] is not None]
+
+def hexerr(pts, sides, diags):
+    smax = max(abs(dist(pts[i], pts[j]) - sides[k])
+               for k, (i, j) in enumerate(HEXSIDES))
+    xds = [abs(dist(pts[i], pts[j]) - diags[k])
+           for k, (i, j) in enumerate(HEXDIAGS) if diags[k] is not None]
+    return smax, max(xds) if xds else 0.0
+
+def fithex(sides, diags, lazy, stol=1.0, xtol=2.0):
+    p1 = relaxn(hexguess(sides, lazy),
+                hexdiagcon(diags, 0.4) + hexsidecon(sides, 0.0, 1.0), 3000)
+    p1 = relaxn(p1, hexsidecon(sides, 0.0, 1.0), 400)
+    e1 = hexerr(p1, sides, diags)
+    if e1[1] <= xtol:
+        return p1, False
+    p2 = relaxn(p1, hexdiagcon(diags, 0.5) + hexsidecon(sides, stol, 1.0), 3000)
+    e2 = hexerr(p2, sides, diags)
+    if e2[0] <= stol + 0.05 and e2[1] <= xtol + 0.05:
+        return p2, False
+    return p1, True
+
+def inpoly(p, poly):
+    x, y = p
+    n = len(poly)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        if ((yi > y) != (yj > y)) and x < xi + (xj - xi) * (y - yi) / (yj - yi):
+            inside = not inside
+        j = i
+    return inside
+
+def hexmeas(pts):
+    sides = [dist(pts[i], pts[j]) for i, j in HEXSIDES]
+    diags = [dist(pts[i], pts[j]) for i, j in HEXDIAGS]
+    return sides, diags
+
+print("== 11. quad with both cross dims NA -> squares up, no failure ==")
+q, failed = fitquad(240, 240, 120, 120, None, None)
+report("fit", q, (240, 240, 120, 120, dist(q[0], q[2]), dist(q[1], q[3])))
+assert not failed
+m = quadmeas(q)
+assert all(abs(m[i] - t) < 0.01 for i, t in enumerate((240, 240, 120, 120)))
+assert abs(m[4] - m[5]) < 0.01, "no cross dims -> symmetric (square) quad"
+
+print("== 12. quad with one cross dim NA -> skews to match the other ==")
+diag = math.hypot(240, 120)
+q, failed = fitquad(240, 240, 120, 120, diag + 1.2, None)
+assert not failed
+m = quadmeas(q)
+assert abs(m[4] - (diag + 1.2)) <= 2.0, "provided cross dim honoured"
+
+print("== 13. perfect true L ==")
+TRUE_L = [(0, 0), (360, 0), (360, 140), (160, 140), (160, 260), (0, 260)]
+sides, diags = hexmeas(TRUE_L)
+pts, failed = fithex(sides, diags, lazy=False)
+s, x = hexerr(pts, sides, diags)
+print(f"   max side delta {s:.4f}, max cross delta {x:.4f}")
+assert not failed and s < 0.05 and x < 0.1
+
+print("== 14. out-of-square true L (field dims, 1/4\" rounding) ==")
+SKEW_L = [(0, 0), (360.7, 0.3), (359.9, 140.6), (160.4, 141.1), (159.6, 260.8), (-0.5, 259.9)]
+sides, diags = hexmeas(SKEW_L)
+sides = [round(v * 4) / 4 for v in sides]
+diags = [round(v * 4) / 4 for v in diags]
+pts, failed = fithex(sides, diags, lazy=False)
+s, x = hexerr(pts, sides, diags)
+print(f"   max side delta {s:.3f}, max cross delta {x:.3f}, failed={failed}")
+assert not failed and s <= 1.05 and x <= 2.05
+
+print("== 15. true L with half the cross dims NA ==")
+sides, diags = hexmeas(SKEW_L)
+diags = [diags[0], None, diags[2], None, diags[4], None]
+pts, failed = fithex(sides, diags, lazy=False)
+s, x = hexerr(pts, sides, diags)
+print(f"   max side delta {s:.3f}, max cross delta {x:.3f}")
+assert not failed and x <= 2.05
+
+print("== 16. impossible L cross dims -> CROSS DIMS FAILED, sides true ==")
+sides, diags = hexmeas(TRUE_L)
+diags = [d + 8.0 for d in diags]      # every diagonal 8\" long: hopeless
+pts, failed = fithex(sides, diags, lazy=False)
+s, x = hexerr(pts, sides, diags)
+print(f"   max side delta {s:.4f}, max cross delta {x:.3f}, failed={failed}")
+assert failed and s < 0.05, "failure path must hold sides true"
+
+print("== 17. perfect lazy L ==")
+LAZY_L = [(0, 0), (360, 0), (360, 140), (220, 140), (120, 240), (0, 240)]
+sides, diags = hexmeas(LAZY_L)
+pts, failed = fithex(sides, diags, lazy=True)
+s, x = hexerr(pts, sides, diags)
+print(f"   max side delta {s:.4f}, max cross delta {x:.4f}")
+assert not failed and s < 0.05 and x < 0.1
+
+print("== 18. point-in-polygon (dim placement) ==")
+assert inpoly((180, 70), TRUE_L)          # main body
+assert inpoly((80, 200), TRUE_L)          # wing
+assert not inpoly((260, 200), TRUE_L)     # the notch
+assert not inpoly((-10, 70), TRUE_L)      # outside left
 
 print("\nALL CHECKS PASSED")

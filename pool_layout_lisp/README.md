@@ -1,8 +1,9 @@
 # POOL.LSP — swimming-pool as-built layout for AutoCAD
 
-AutoLISP routine that draws a pool plan (**Rectangle**, **Oval** or
-**Grecian**) from real-world field measurements, dimensions it, and
-writes a target / actual / delta report next to the drawing.
+AutoLISP routine that draws a pool plan (**Rectangle**, **Oval**,
+**Grecian**, **L** or **Lazy L**) from real-world field measurements,
+dimensions it, and writes a target / actual / delta report next to
+the drawing.
 
 Written in plain AutoLISP (`entmake` + classic commands only — no
 ActiveX/VLA), so it loads in **AutoCAD 2018** and older releases alike
@@ -27,7 +28,8 @@ D ---------- C        sides:  top D-C, bottom A-B
 A ---------- B        cross:  A-C and B-D
 ```
 
-1. Pool shape: `Rectangle` / `Oval` / `Grecian`.
+1. Pool shape: `Rectangle` / `Oval` / `Grecian` / `L` / `LAzyl`
+   (type `L` for a true L, `LA` for a lazy L).
 2. Insertion base point.
 3. Side lengths, top then bottom.
 4. End lengths, left then right.
@@ -35,6 +37,33 @@ A ---------- B        cross:  A-C and B-D
 6. **Oval only:** total pool length, left end radius, right end radius.
 7. **Grecian only:** for each end — diagonal top, diagonal bottom, end
    width between the diagonal end points.
+
+Any **cross dimension** prompt also accepts `NA` when that measurement
+wasn't taken in the field: the fitter simply skips it and the report
+shows `N/A` for its target/delta (the as-drawn value is still listed).
+
+### L / Lazy L pools
+
+Six-corner pools with one wing; a **true L** has a square step joint,
+a **lazy L** an angled one:
+
+```
+F -------- E
+|           \\             sides:  A-B, B-C, C-D, D-E (joint),
+|            D ------- C           E-F, F-A
+|                      |   cross:  A-C, B-D, C-E, D-F, A-E, B-F
+A -------------------- B           (any of them may be NA)
+```
+
+The routine asks for the six side lengths and up to six cross dims,
+then best-fits the six corners the same way as the rectangle: sides
+held true first; if the provided cross dims don't land within 2" the
+sides may flex inside their ±1" band; and if they still can't be met
+the sides are held true and **`CROSS DIMS FAILED`** is reported. The
+more cross dims you provide, the better the out-of-square shape is
+pinned down — with none at all you simply get the perfect right-angle
+(or 45°-jointed) shape. The two-triangle check figure is not drawn
+for L pools.
 
 ### Guided input
 
@@ -55,7 +84,7 @@ guide is also cleaned up if the command is cancelled part-way).
 | `POOL` | The full pool **perimeter**, running around the whole shape — including the oval end arcs and Grecian corner cuts (individual lines/arcs, i.e. an exploded polyline). Best-fit body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). |
 | `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under oval/Grecian ends, the oval radius construction lines), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
 | `POOL-TRIANGLES` | Exact as-measured check figure built from two triangles (bottom + right end + cross A-C, and top + left end + cross A-C). **No tolerance** — lengths held exactly. Overlaid on the outline so the two can be compared; freeze one layer to view the other. |
-| `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. The two cross dims (A-C, B-D) are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. |
+| `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
 
 ### Fitting logic
 

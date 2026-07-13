@@ -3,8 +3,8 @@
 ;;;
 ;;;  Command:  POOL
 ;;;
-;;;  Draws a pool plan (Rectangle, Oval or Grecian) from field
-;;;  measurements:
+;;;  Draws a pool plan (Rectangle, Oval, Grecian, L or Lazy L) from
+;;;  field measurements:
 ;;;
 ;;;    * A gray nominal "guide" pool appears as soon as the shape is
 ;;;      chosen; while each measurement is prompted for, the matching
@@ -47,6 +47,13 @@
 ;;;           between the diagonal end points, and if it cannot fit
 ;;;           the diagonal lengths are adjusted in 1/8" increments up
 ;;;           to +/-1/2" of the given lengths.
+;;;  L/LazyL: six-corner pools with one wing (square step joint for
+;;;           the true L, angled joint for the lazy L); six sides plus
+;;;           up to six cross dims, best-fit the same way.
+;;;
+;;;  Every cross-dim prompt also accepts NA when that measurement was
+;;;  not taken in the field: the fitter skips it and the report shows
+;;;  N/A for its target and delta.
 ;;;
 ;;;  Drawing units are assumed to be INCHES (tolerances: 1" sides,
 ;;;  2" cross dims, 1/2" max Grecian diagonal adjustment in 1/8"
@@ -67,6 +74,7 @@
 (setq pool:*base*      (list 0.0 0.0))
 (setq pool:*dashlt*    "CONTINUOUS")  ; resolved to DASHED per run
 (setq pool:*lts*       1.0)           ; linetype scale for dashed refs
+(setq pool:*pvents*    nil)           ; live guide-preview entities
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -222,6 +230,19 @@
 (defun pool:dimalg (p1 p2 pt)
   (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt)))
 
+;; Switch to the CROSS DIMENSION dim style when the drawing has one.
+;; Returns the previous style name (for pool:dimxend), or nil.
+(defun pool:dimxbegin ( / odim)
+  (if (tblsearch "DIMSTYLE" "CROSS DIMENSION")
+      (progn
+        (setq odim (getvar "DIMSTYLE"))
+        (command "_.-DIMSTYLE" "_Restore" "CROSS DIMENSION")
+        odim)))
+
+(defun pool:dimxend (odim)
+  (if (and odim (tblsearch "DIMSTYLE" odim))
+      (command "_.-DIMSTYLE" "_Restore" odim)))
+
 ;; Point offset outward (away from cen) from the midpoint of p->q.
 ;; A negative dist offsets inward instead.
 (defun pool:outoff (p q cen dist / m n)
@@ -236,6 +257,13 @@
 (defun pool:ask (msg)
   (initget 7)                           ; no null, no zero, no negative
   (getdist (strcat "\n" msg ": ")))
+
+;; Cross-dim prompt: also accepts NA when the measurement was not
+;; taken in the field.  Returns a distance or nil for NA.
+(defun pool:askx (msg / v)
+  (initget 7 "NA")
+  (setq v (getdist (strcat "\n" msg " (or NA if not measured): ")))
+  (if (= (type v) 'STR) nil v))
 
 ;;; -------------------- guide preview ----------------------------------
 ;;; A gray nominal pool of the chosen shape is drawn as soon as the
@@ -269,6 +297,20 @@
   (setq v (pool:ask msg))
   (foreach e ents (pool:setcol e pool:*pv-col*))
   v)
+
+;; Same, for cross dims: NA allowed, returns nil when not measured.
+(defun pool:askhx (msg ents / v)
+  (foreach e ents (pool:setcol e pool:*hi-col*))
+  (setq v (pool:askx msg))
+  (foreach e ents (pool:setcol e pool:*pv-col*))
+  v)
+
+;; Delete all guide entities (tracked globally so the *error* handler
+;; can clean up after a cancel mid-prompt).
+(defun pool:pvkill ()
+  (foreach e pool:*pvents*
+    (if (and e (entget e)) (entdel e)))
+  (setq pool:*pvents* nil))
 
 ;; Draw the nominal guide pool for the chosen shape (fixed 360 x 180
 ;; body).  Returns an assoc list mapping each input key to the list of
@@ -324,7 +366,8 @@
            pv (append pv (list (cons 'lt (list elt)) (cons 'lb (list elb))
                                (cons 'lw (list elw)) (cons 'rt (list ert))
                                (cons 'rb (list erb)) (cons 'rw (list erw)))))))
-  (cons (cons 'all all) pv))
+  (setq pool:*pvents* all)
+  pv)
 
 ;;; -------------------- quadrilateral fitting --------------------------
 
@@ -335,9 +378,10 @@
   (list (distance a b) (distance d c) (distance a d) (distance b c)
         (distance a c) (distance b d)))
 
+;; Cross-dim error of a quad; a nil target (NA) contributes nothing.
 (defun pool:diagerr (q dac dbd / e1 e2)
-  (setq e1 (- (distance (car q) (caddr q)) dac)
-        e2 (- (distance (cadr q) (cadddr q)) dbd))
+  (setq e1 (if dac (- (distance (car q) (caddr q)) dac) 0.0)
+        e2 (if dbd (- (distance (cadr q) (cadddr q)) dbd) 0.0))
   (+ (* e1 e1) (* e2 e2)))
 
 ;; Quad with all four sides EXACT, parameterised by the interior angle
@@ -370,16 +414,20 @@
 
 ;; Best quad with sides held EXACTLY true, cross dims as close as
 ;; possible.  Coarse scan then fine refine.  Returns quad or nil.
+;; With both cross dims NA there is nothing to skew for: square up.
 (defun pool:fitsides (bo tp le ri dac dbd / r1 r2 alfa)
-  (setq r1 (pool:scanalfa bo tp le ri dac dbd
-                          (pool:d2r 15.0) (pool:d2r 165.0) (pool:d2r 0.25)))
-  (if r1
+  (if (and (null dac) (null dbd))
+      (pool:4bar bo tp le ri (pool:d2r 90.0))
       (progn
-        (setq alfa (cadr r1)
-              r2 (pool:scanalfa bo tp le ri dac dbd
-                                (- alfa (pool:d2r 0.3)) (+ alfa (pool:d2r 0.3))
-                                (pool:d2r 0.005)))
-        (car (if r2 r2 r1)))))
+        (setq r1 (pool:scanalfa bo tp le ri dac dbd
+                                (pool:d2r 15.0) (pool:d2r 165.0) (pool:d2r 0.25)))
+        (if r1
+            (progn
+              (setq alfa (cadr r1)
+                    r2 (pool:scanalfa bo tp le ri dac dbd
+                                      (- alfa (pool:d2r 0.3)) (+ alfa (pool:d2r 0.3))
+                                      (pool:d2r 0.005)))
+              (car (if r2 r2 r1)))))))
 
 (defun pool:setnth (lst i val / k out)
   (setq k 0 out nil)
@@ -413,33 +461,42 @@
   (list (- (* (car p) (cos ang)) (* (cadr p) (sin ang)))
         (+ (* (car p) (sin ang)) (* (cadr p) (cos ang)))))
 
-;; Re-gauge a quad: A at the origin, B on the +X axis, D above.
-(defun pool:normquad (pts / a ang)
+;; Re-gauge a polygon: first point at the origin, second on the +X
+;; axis, bulk of the shape above the axis.  Works for any point count.
+(defun pool:normpoly (pts / a ang my)
   (setq a (car pts)
         pts (mapcar '(lambda (p) (pool:v- p a)) pts)
         ang (- (angle (list 0.0 0.0) (cadr pts)))
-        pts (mapcar '(lambda (p) (pool:rot p ang)) pts))
-  (if (< (cadr (cadddr pts)) 0.0)
+        pts (mapcar '(lambda (p) (pool:rot p ang)) pts)
+        my 0.0)
+  (foreach a pts (setq my (+ my (cadr a))))
+  (if (< my 0.0)
       (setq pts (mapcar '(lambda (p) (list (car p) (- (cadr p)))) pts)))
   pts)
 
-;; Iterative relaxation: sides banded to +/-stol, cross dims pulled to
-;; their exact targets.
-(defun pool:relaxquad (pts bo tp le ri dac dbd stol niter / conlst k c)
-  ;; cross dims pull first, side bands clamp last so each sweep ends
-  ;; with the sides back inside their +/-stol band
-  (setq conlst (list (list 0 2 dac dac 0.5)
-                     (list 1 3 dbd dbd 0.5)
-                     (list 0 1 (- bo stol) (+ bo stol) 1.0)
-                     (list 3 2 (- tp stol) (+ tp stol) 1.0)
-                     (list 0 3 (- le stol) (+ le stol) 1.0)
-                     (list 1 2 (- ri stol) (+ ri stol) 1.0))
-        k 0)
+;; Iterative relaxation of an arbitrary point list against distance
+;; constraints (i j lo hi weight); lo = hi -> exact pull.
+(defun pool:relaxn (pts conlst niter / k c)
+  (setq k 0)
   (while (< k niter)
     (foreach c conlst
       (setq pts (pool:relax1 pts (car c) (cadr c) (caddr c) (cadddr c) (nth 4 c))))
     (setq k (1+ k)))
-  (pool:normquad pts))
+  (pool:normpoly pts))
+
+;; Quad relaxation: sides banded to +/-stol, provided cross dims
+;; pulled to their exact targets.  Cross dims pull first, side bands
+;; clamp last so each sweep ends with the sides inside their band.
+(defun pool:relaxquad (pts bo tp le ri dac dbd stol niter / conlst)
+  (setq conlst nil)
+  (if dbd (setq conlst (cons (list 1 3 dbd dbd 0.5) conlst)))
+  (if dac (setq conlst (cons (list 0 2 dac dac 0.5) conlst)))
+  (setq conlst (append conlst
+                       (list (list 0 1 (- bo stol) (+ bo stol) 1.0)
+                             (list 3 2 (- tp stol) (+ tp stol) 1.0)
+                             (list 0 3 (- le stol) (+ le stol) 1.0)
+                             (list 1 2 (- ri stol) (+ ri stol) 1.0))))
+  (pool:relaxn pts conlst niter))
 
 ;; Fit the parametric quad.  Returns (quad failedflag):
 ;;  1. hold sides exact, pick the angle whose cross dims are closest;
@@ -454,8 +511,8 @@
       (setq q1 (list (list 0.0 0.0) (list bo 0.0)
                      (list bo (* 0.5 (+ le ri))) (list 0.0 le))))
   (setq m1 (pool:quadmeas q1))
-  (if (and (<= (abs (- (nth 4 m1) dac)) xtol)
-           (<= (abs (- (nth 5 m1) dbd)) xtol))
+  (if (and (or (null dac) (<= (abs (- (nth 4 m1) dac)) xtol))
+           (or (null dbd) (<= (abs (- (nth 5 m1) dbd)) xtol)))
       (list q1 nil)
       (progn
         (setq q2 (pool:relaxquad q1 bo tp le ri dac dbd stol 2000)
@@ -464,8 +521,8 @@
                        (<= (abs (- (cadr m2) tp)) (+ stol 0.05))
                        (<= (abs (- (caddr m2) le)) (+ stol 0.05))
                        (<= (abs (- (cadddr m2) ri)) (+ stol 0.05)))
-              xok (and (<= (abs (- (nth 4 m2) dac)) (+ xtol 0.05))
-                       (<= (abs (- (nth 5 m2) dbd)) (+ xtol 0.05))))
+              xok (and (or (null dac) (<= (abs (- (nth 4 m2) dac)) (+ xtol 0.05)))
+                       (or (null dbd) (<= (abs (- (nth 5 m2) dbd)) (+ xtol 0.05)))))
         (if (and sok xok)
             (list q2 nil)
             (list q1 t)))))
@@ -546,6 +603,262 @@
   (pool:line p2 pbot lay)
   (list p1 p2 lt2 lb2 th ok))
 
+;;; -------------------- L / Lazy L pools --------------------------------
+;;;
+;;;  Six-corner pools, one wing:      F -------- E
+;;;                                   |           \
+;;;    True L: joint D-E is a         |            D ------- C
+;;;    square step; Lazy L: D-E       |                      |
+;;;    is an angled joint.            A -------------------- B
+;;;
+;;;  Sides A-B, B-C, C-D, D-E, E-F, F-A plus up to six cross dims
+;;;  (A-C, B-D, C-E, D-F, A-E, B-F -- any of them may be NA).
+
+(setq pool:*hexsides* (list '(0 1) '(1 2) '(2 3) '(3 4) '(4 5) '(5 0)))
+(setq pool:*hexsidenames* (list "A-B" "B-C" "C-D" "D-E" "E-F" "F-A"))
+(setq pool:*hexdiags* (list '(0 2) '(1 3) '(2 4) '(3 5) '(0 4) '(1 5)))
+(setq pool:*hexdiagnames* (list "A-C" "B-D" "C-E" "D-F" "A-E" "B-F"))
+
+;; Nominal right-angle (or 45-degree jointed) L built from the given
+;; side lengths -- the starting shape for the relaxation fit.
+(defun pool:hexguess (sides lazy / ab bc cd de a b c d e f)
+  (setq ab (nth 0 sides) bc (nth 1 sides) cd (nth 2 sides) de (nth 3 sides)
+        a (list 0.0 0.0)
+        b (list ab 0.0)
+        c (list ab bc)
+        d (list (- ab cd) bc)
+        e (if lazy
+              (pool:v+ d (list (* de -0.7071067812) (* de 0.7071067812)))
+              (pool:v+ d (list 0.0 de)))
+        f (pool:v- e (list (nth 4 sides) 0.0)))
+  (list a b c d e f))
+
+;; Side constraints (banded by +/-band) for the hexagon.
+(defun pool:hexsidecon (sides band w / k out pr)
+  (setq k 0 out nil)
+  (foreach pr pool:*hexsides*
+    (setq out (cons (list (car pr) (cadr pr)
+                          (- (nth k sides) band) (+ (nth k sides) band) w)
+                    out)
+          k (1+ k)))
+  (reverse out))
+
+;; Exact-pull constraints for the provided (non-NA) cross dims.
+(defun pool:hexdiagcon (diags w / k out pr tgt)
+  (setq k 0 out nil)
+  (foreach pr pool:*hexdiags*
+    (setq tgt (nth k diags))
+    (if tgt
+        (setq out (cons (list (car pr) (cadr pr) tgt tgt w) out)))
+    (setq k (1+ k)))
+  (reverse out))
+
+;; (max-side-delta max-cross-delta) of a fitted hexagon; NA cross dims
+;; are ignored.
+(defun pool:hexerr (pts sides diags / k pr smax xmax d)
+  (setq smax 0.0 xmax 0.0 k 0)
+  (foreach pr pool:*hexsides*
+    (setq d (abs (- (distance (nth (car pr) pts) (nth (cadr pr) pts))
+                    (nth k sides)))
+          smax (max smax d)
+          k (1+ k)))
+  (setq k 0)
+  (foreach pr pool:*hexdiags*
+    (if (nth k diags)
+        (setq d (abs (- (distance (nth (car pr) pts) (nth (cadr pr) pts))
+                        (nth k diags)))
+              xmax (max xmax d)))
+    (setq k (1+ k)))
+  (list smax xmax))
+
+;; Fit the L hexagon (same policy as the quad):
+;;  1. sides held true, provided cross dims pulled as close as they
+;;     will come; inside tolerance -> done
+;;  2. sides may flex inside +/-stol to pull the cross dims in
+;;  3. otherwise sides held true, cross dims as close as possible,
+;;     failure flag set
+;; Returns (pts failed).
+(defun pool:fithex (sides diags lazy stol xtol / guess p1 e1 p2 e2)
+  (setq guess (pool:hexguess sides lazy)
+        p1 (pool:relaxn guess
+                        (append (pool:hexdiagcon diags 0.4)
+                                (pool:hexsidecon sides 0.0 1.0))
+                        3000))
+  ;; polish: a sides-only pass so the sides land exactly true
+  (setq p1 (pool:relaxn p1 (pool:hexsidecon sides 0.0 1.0) 400)
+        e1 (pool:hexerr p1 sides diags))
+  (if (<= (cadr e1) xtol)
+      (list p1 nil)
+      (progn
+        (setq p2 (pool:relaxn p1
+                              (append (pool:hexdiagcon diags 0.5)
+                                      (pool:hexsidecon sides stol 1.0))
+                              3000)
+              e2 (pool:hexerr p2 sides diags))
+        (if (and (<= (car e2) (+ stol 0.05)) (<= (cadr e2) (+ xtol 0.05)))
+            (list p2 nil)
+            (list p1 t)))))
+
+;; Point-in-polygon (ray casting) -- the L is not convex, so side
+;; dimensions find "outward" by testing against the actual shape.
+(defun pool:inpoly (p poly / n i j xi yi xj yj in x y)
+  (setq x (car p) y (cadr p)
+        n (length poly)
+        i 0 j (1- n) in nil)
+  (while (< i n)
+    (setq xi (car (nth i poly)) yi (cadr (nth i poly))
+          xj (car (nth j poly)) yj (cadr (nth j poly)))
+    (if (and (or (and (> yi y) (<= yj y))
+                 (and (> yj y) (<= yi y)))
+             (< x (+ xi (* (- xj xi) (/ (- y yi) (- yj yi))))))
+        (setq in (not in)))
+    (setq j i i (1+ i)))
+  in)
+
+;; Midpoint of p->q offset by dist to the side that lies OUTSIDE poly.
+(defun pool:outoffp (p q poly dist / m n)
+  (setq m (pool:mid p q)
+        n (pool:unit (pool:perp (pool:v- q p))))
+  (if (pool:inpoly (pool:v+ m (pool:v* n 1.0)) poly)
+      (setq n (pool:v* n -1.0)))
+  (pool:v+ m (pool:v* n dist)))
+
+;; Gray guide for the L shapes: nominal body, corner labels, and all
+;; six cross diagonals so every prompt can highlight its element.
+(defun pool:hexpreview (lazy / pts cen p pr k keys ent all pv lbls)
+  (setq pts (if lazy
+                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 140.0)
+                      (list 220.0 140.0) (list 120.0 240.0) (list 0.0 240.0))
+                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 140.0)
+                      (list 160.0 140.0) (list 160.0 260.0) (list 0.0 260.0)))
+        cen (list 0.0 0.0))
+  (foreach p pts (setq cen (pool:v+ cen p)))
+  (setq cen (pool:v* cen (/ 1.0 6.0))
+        all nil pv nil)
+  (setq keys (list 'ab 'bc 'cd 'de 'ef 'fa) k 0)
+  (foreach pr pool:*hexsides*
+    (setq ent (pool:pvline (nth (car pr) pts) (nth (cadr pr) pts))
+          pv (cons (cons (nth k keys) (list ent)) pv)
+          all (cons ent all)
+          k (1+ k)))
+  (setq keys (list 'ac 'bd 'ce 'df 'ae 'bf) k 0)
+  (foreach pr pool:*hexdiags*
+    (setq ent (pool:pvline (nth (car pr) pts) (nth (cadr pr) pts))
+          pv (cons (cons (nth k keys) (list ent)) pv)
+          all (cons ent all)
+          k (1+ k)))
+  (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
+  (foreach p pts
+    (pool:text (pool:v+ p (pool:v* (pool:unit (pool:v- p cen)) 14.0))
+               10.0 (nth k lbls) "POOL-NOTES")
+    (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)
+          k (1+ k)))
+  (setq pool:*pvents* all)
+  pv)
+
+;; Full guided flow for L / Lazy L pools: preview, prompts, fit, draw,
+;; dimension and report.  Caller handles sysvars / undo / zoom-extents.
+(defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes
+                            cen p pr k w hh xmin xmax ymax ymin doff th
+                            odim rows lbls)
+  (setq oldclay (getvar "CLAYER"))
+  (setq pv (pool:hexpreview lazy))
+  (command "_.ZOOM" "_Window"
+           (pool:wp (list -80.0 -70.0)) (pool:wp (list 520.0 330.0)))
+  (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
+  (princ "\nCorners: A bottom-left, B bottom-right, C right end top, D inner corner, E wing corner, F top-left.")
+  (setq sides
+        (list (pool:askh "Side A-B (main side, bottom)" (cdr (assoc 'ab pv)))
+              (pool:askh "End B-C (right end)" (cdr (assoc 'bc pv)))
+              (pool:askh "Side C-D (top of main section)" (cdr (assoc 'cd pv)))
+              (pool:askh (if lazy "Angled joint D-E" "Joint D-E (step)")
+                         (cdr (assoc 'de pv)))
+              (pool:askh "End E-F (end of wing)" (cdr (assoc 'ef pv)))
+              (pool:askh "Side F-A (left side)" (cdr (assoc 'fa pv)))))
+  (setq diags
+        (list (pool:askhx "Cross dim A-C" (cdr (assoc 'ac pv)))
+              (pool:askhx "Cross dim B-D" (cdr (assoc 'bd pv)))
+              (pool:askhx "Cross dim C-E" (cdr (assoc 'ce pv)))
+              (pool:askhx "Cross dim D-F" (cdr (assoc 'df pv)))
+              (pool:askhx "Cross dim A-E" (cdr (assoc 'ae pv)))
+              (pool:askhx "Cross dim B-F" (cdr (assoc 'bf pv)))))
+  (pool:pvkill)
+
+  (princ "\nFitting pool body to the measurements ...")
+  (setq res (pool:fithex sides diags lazy pool:*side-tol* pool:*cross-tol*)
+        pts (car res)
+        failed (cadr res)
+        notes nil
+        xmin (apply 'min (mapcar 'car pts))
+        xmax (apply 'max (mapcar 'car pts))
+        ymin (apply 'min (mapcar 'cadr pts))
+        ymax (apply 'max (mapcar 'cadr pts))
+        w (- xmax xmin)
+        hh (- ymax ymin)
+        doff (max 12.0 (/ (max w hh) 18.0))
+        th (max 3.0 (/ (max w hh) 70.0))
+        pool:*dashlt* (pool:ltload "DASHED")
+        pool:*lts* (max 1.0 (/ (max w hh) 15.0))
+        cen (list 0.0 0.0))
+  (foreach p pts (setq cen (pool:v+ cen p)))
+  (setq cen (pool:v* cen (/ 1.0 6.0)))
+
+  ;; perimeter (layer POOL)
+  (foreach pr pool:*hexsides*
+    (pool:line (nth (car pr) pts) (nth (cadr pr) pts) "POOL"))
+
+  ;; dimensions (layer DIMENSION)
+  (setvar "CLAYER" "DIMENSION")
+  (foreach pr pool:*hexsides*
+    (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
+                 (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
+                               pts doff)))
+  ;; provided cross dims, in the CROSS DIMENSION style when available
+  (setq odim (pool:dimxbegin) k 0)
+  (foreach pr pool:*hexdiags*
+    (if (nth k diags)
+        (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
+                     (pool:v+ (pool:mid (nth (car pr) pts) (nth (cadr pr) pts))
+                              (pool:v* (pool:unit
+                                         (pool:perp
+                                           (pool:v- (nth (cadr pr) pts)
+                                                    (nth (car pr) pts))))
+                                       (* (if (= 0 (rem k 2)) 0.15 -0.15)
+                                          doff)))))
+    (setq k (1+ k)))
+  (pool:dimxend odim)
+  (setvar "CLAYER" oldclay)
+
+  ;; corner labels
+  (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
+  (foreach p pts
+    (pool:text (pool:v+ p (pool:v* (pool:unit (pool:v- p cen)) (* 1.5 th)))
+               th (nth k lbls) "POOL-NOTES")
+    (setq k (1+ k)))
+
+  ;; report table
+  (setq rows nil k 0)
+  (foreach pr pool:*hexsides*
+    (setq rows (cons (list (strcat "SIDE " (nth k pool:*hexsidenames*))
+                           (nth k sides)
+                           (distance (nth (car pr) pts) (nth (cadr pr) pts)))
+                     rows)
+          k (1+ k)))
+  (setq k 0)
+  (foreach pr pool:*hexdiags*
+    (setq rows (cons (list (strcat "CROSS " (nth k pool:*hexdiagnames*))
+                           (nth k diags)
+                           (distance (nth (car pr) pts) (nth (cadr pr) pts)))
+                     rows)
+          k (1+ k)))
+  (setq rows (reverse rows))
+  (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (if failed
+      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
+      (princ "\nPool layout complete -- see the report table."))
+  (princ))
+
 ;;; -------------------- report table -----------------------------------
 
 ;; rows  = list of (label target actual)
@@ -565,13 +878,19 @@
   (foreach r rows
     (setq y (- y lh)
           tgt (cadr r)
-          act (caddr r)
-          dl (- act tgt)
-          ds (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
+          act (caddr r))
     (pool:text (list x y) h (car r) lay)
-    (pool:text (list (+ x (* 20.0 h)) y) h (rtos tgt 2 2) lay)
-    (pool:text (list (+ x (* 29.0 h)) y) h (rtos act 2 2) lay)
-    (pool:text (list (+ x (* 38.0 h)) y) h ds lay))
+    (if tgt
+        (progn
+          (setq dl (- act tgt)
+                ds (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
+          (pool:text (list (+ x (* 20.0 h)) y) h (rtos tgt 2 2) lay)
+          (pool:text (list (+ x (* 38.0 h)) y) h ds lay))
+        ;; NA target: measurement was not taken in the field
+        (progn
+          (pool:text (list (+ x (* 20.0 h)) y) h "N/A" lay)
+          (pool:text (list (+ x (* 38.0 h)) y) h "-" lay)))
+    (pool:text (list (+ x (* 29.0 h)) y) h (rtos act 2 2) lay))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
     (pool:textc (list x y) (* 1.4 h) n lay 1))
@@ -583,54 +902,24 @@
   (pool:line (list (- x h) ytop) (list (- x h) y0) lay)
   (princ))
 
-;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* oldcmd oldos oldclay ptype base r2d pv pvall
-                  odim xsty
-                  tp bo le ri dac dbd totl lrad rrad
-                  ltd lbd lew rtd rbd rew
-                  fitres quad failed a b c d cen meas notes tri
-                  doff th endoff pr
-                  midl midr ml mr tipl tipr
-                  lend rend lp1 lp2 rp1 rp2
-                  allpts xmax ymax ymin rows)
+;;; -------------------- rectangle / oval / grecian flow ----------------
 
-  (defun *error* (msg)
-    (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
-        (princ (strcat "\nPOOL error: " msg)))
-    (foreach e pvall (if (and e (entget e)) (entdel e)))
-    (if oldclay (setvar "CLAYER" oldclay))
-    (if oldos (setvar "OSMODE" oldos))
-    (command "_.UNDO" "_End")
-    (if oldcmd (setvar "CMDECHO" oldcmd))
-    (princ))
-
-  (setq oldcmd (getvar "CMDECHO")
-        oldos (getvar "OSMODE")
-        oldclay (getvar "CLAYER")
+;; Full guided flow for the quad-based pools: preview, prompts, fit,
+;; draw, dimension and report.  Caller handles sysvars/undo/zoom.
+(defun pool:quadflow (ptype / oldclay r2d pv
+                             tp bo le ri dac dbd totl lrad rrad
+                             ltd lbd lew rtd rbd rew
+                             fitres quad failed a b c d cen meas notes tri
+                             doff th endoff pr odim
+                             midl midr ml mr tipl tipr
+                             lend rend lp1 lp2 rp1 rp2
+                             allpts xmax ymax ymin rows)
+  (setq oldclay (getvar "CLAYER")
         r2d (/ 180.0 pi))
-  (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setvar "OSMODE" 0)
-
-  ;; ------------------------------------------------ user input
-  (initget 1 "Rectangle Oval Grecian")
-  (setq ptype (getkword "\nPool shape [Rectangle/Oval/Grecian]: "))
-
-  (setq base (getpoint "\nInsertion base point <0,0>: ")
-        pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
-
-  ;; ------------------------------------------------ layers
-  (pool:layer "POOL" 4)
-  (pool:layer "POOL-TRIANGLES" 1)
-  (pool:layer "DIMENSION" 2)
-  (pool:layer "POOL-NOTES" 3)
 
   ;; -------------------------------------- guide preview + input
-  (setq pv (pool:preview ptype)
-        pvall (cdr (assoc 'all pv)))
+  (setq pv (pool:preview ptype))
   (command "_.ZOOM" "_Window"
            (pool:wp (list -170.0 -60.0)) (pool:wp (list 530.0 240.0)))
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
@@ -640,8 +929,8 @@
         bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
         le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
         ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv)))
-        dac (pool:askh "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
-        dbd (pool:askh "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv))))
+        dac (pool:askhx "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
+        dbd (pool:askhx "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv))))
 
   (cond
     ((= ptype "Oval")
@@ -657,8 +946,7 @@
            rew (pool:askh "RIGHT end width (between diagonal end points)" (cdr (assoc 'rw pv))))))
 
   ;; the guide has served its purpose -- replace it with the true pool
-  (foreach e pvall (if (entget e) (entdel e)))
-  (setq pvall nil)
+  (pool:pvkill)
 
   ;; ------------------------------------------------ fit the body
   (princ "\nFitting pool body to the measurements ...")
@@ -689,15 +977,19 @@
         (pool:lined d a)))
 
   ;; -------------------------------------- exact two-triangle figure
-  (setq tri (pool:triquad bo tp le ri dac))
-  (if tri
-      (progn
-        (pool:line (car tri) (cadr tri) "POOL-TRIANGLES")
-        (pool:line (cadr tri) (caddr tri) "POOL-TRIANGLES")
-        (pool:line (car tri) (caddr tri) "POOL-TRIANGLES") ; shared A-C
-        (pool:line (caddr tri) (cadddr tri) "POOL-TRIANGLES")
-        (pool:line (cadddr tri) (car tri) "POOL-TRIANGLES"))
-      (setq notes (cons "TRIANGLE CHECK IMPOSSIBLE - VERIFY MEASUREMENTS" notes)))
+  ;; (needs the A-C cross dim -- skipped when it was NA)
+  (setq tri (if dac (pool:triquad bo tp le ri dac) nil))
+  (cond
+    (tri
+     (pool:line (car tri) (cadr tri) "POOL-TRIANGLES")
+     (pool:line (cadr tri) (caddr tri) "POOL-TRIANGLES")
+     (pool:line (car tri) (caddr tri) "POOL-TRIANGLES") ; shared A-C
+     (pool:line (caddr tri) (cadddr tri) "POOL-TRIANGLES")
+     (pool:line (cadddr tri) (car tri) "POOL-TRIANGLES"))
+    (dac
+     (setq notes (cons "TRIANGLE CHECK IMPOSSIBLE - VERIFY MEASUREMENTS" notes)))
+    (t
+     (princ "\nCross A-C not measured -- triangle check figure skipped.")))
 
   (setq doff (max 12.0 (/ (max bo tp le ri) 18.0))
         th (max 3.0 (/ (max bo tp le ri) 70.0)))
@@ -775,19 +1067,18 @@
         (pool:dimalg c rp1 (pool:outoff c rp1 cen doff))
         (pool:dimalg rp1 rp2 (pool:outoff rp1 rp2 cen doff))
         (pool:dimalg rp2 b (pool:outoff rp2 b cen doff))))
-  ;; cross dims last, in the CROSS DIMENSION style when the drawing
-  ;; has one (current style restored afterwards)
-  (setq odim (getvar "DIMSTYLE")
-        xsty (if (tblsearch "DIMSTYLE" "CROSS DIMENSION") t nil))
-  (if xsty (command "_.-DIMSTYLE" "_Restore" "CROSS DIMENSION"))
-  (pool:dimalg a c (pool:v+ (pool:mid a c)
-                            (pool:v* (pool:unit (pool:perp (pool:v- c a)))
-                                     (* 0.2 doff))))
-  (pool:dimalg b d (pool:v+ (pool:mid b d)
-                            (pool:v* (pool:unit (pool:perp (pool:v- d b)))
-                                     (* 0.2 doff))))
-  (if (and xsty odim (tblsearch "DIMSTYLE" odim))
-      (command "_.-DIMSTYLE" "_Restore" odim))
+  ;; provided cross dims last, in the CROSS DIMENSION style when the
+  ;; drawing has one (current style restored afterwards)
+  (setq odim (pool:dimxbegin))
+  (if dac
+      (pool:dimalg a c (pool:v+ (pool:mid a c)
+                                (pool:v* (pool:unit (pool:perp (pool:v- c a)))
+                                         (* 0.2 doff)))))
+  (if dbd
+      (pool:dimalg b d (pool:v+ (pool:mid b d)
+                                (pool:v* (pool:unit (pool:perp (pool:v- d b)))
+                                         (* -0.2 doff)))))
+  (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
   ;; ------------------------------------------------ corner labels
@@ -822,16 +1113,59 @@
                                (list "R DIAG ANGLE" 45.0 (* (nth 4 rend) r2d))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (if failed
+      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
+      (princ "\nPool layout complete -- see the report table."))
+  (princ))
+
+;;; -------------------- main command -----------------------------------
+
+(defun c:POOL ( / *error* oldcmd oldos oldclay ptype base)
+
+  (defun *error* (msg)
+    (if (and msg
+             (/= (strcase msg t) "function cancelled")
+             (/= (strcase msg t) "quit / exit abort"))
+        (princ (strcat "\nPOOL error: " msg)))
+    (pool:pvkill)
+    (if oldclay (setvar "CLAYER" oldclay))
+    (if oldos (setvar "OSMODE" oldos))
+    (command "_.UNDO" "_End")
+    (if oldcmd (setvar "CMDECHO" oldcmd))
+    (princ))
+
+  (setq oldcmd (getvar "CMDECHO")
+        oldos (getvar "OSMODE")
+        oldclay (getvar "CLAYER"))
+  (setvar "CMDECHO" 0)
+  (command "_.UNDO" "_Begin")
+  (setvar "OSMODE" 0)
+
+  ;; L = true L; LAzyl = lazy L (type LA to select it)
+  (initget 1 "Rectangle Oval Grecian L LAzyl")
+  (setq ptype (getkword "\nPool shape [Rectangle/Oval/Grecian/L/LAzyl]: "))
+
+  (setq base (getpoint "\nInsertion base point <0,0>: ")
+        pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+
+  ;; ------------------------------------------------ layers
+  (pool:layer "POOL" 4)
+  (pool:layer "POOL-TRIANGLES" 1)
+  (pool:layer "DIMENSION" 2)
+  (pool:layer "POOL-NOTES" 3)
+
+  (cond
+    ((= ptype "L") (pool:hexflow nil))
+    ((= ptype "LAzyl") (pool:hexflow t))
+    (t (pool:quadflow ptype)))
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
   (setvar "OSMODE" oldos)
   (command "_.UNDO" "_End")
   (setvar "CMDECHO" oldcmd)
-  (if failed
-      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
-      (princ "\nPool layout complete -- see the report table."))
   (princ))
+
 
 (princ "\nPOOL.LSP loaded.  Type POOL to lay out a pool.")
 (princ)
