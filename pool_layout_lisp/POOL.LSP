@@ -11,15 +11,23 @@
 ;;;      element of the guide turns red so you can see which dimension
 ;;;      is being asked for.  Once every dimension is in, the guide
 ;;;      deletes itself and is replaced by the true out-of-square pool.
-;;;    * A best-fit "parametric" quadrilateral on layer POOL-OUTLINE.
+;;;    * The full pool PERIMETER on layer POOL -- around the whole
+;;;      shape including the Grecian corner cuts and oval end arcs
+;;;      (drawn as individual lines/arcs, i.e. an exploded polyline).
 ;;;      Field measurements carry human error, so side lengths may be
 ;;;      held within +/-1" and cross dimensions within +/-2" of the
 ;;;      given values.
+;;;    * Reference lines that are not part of the perimeter (the body
+;;;      end lines under oval/Grecian ends, the oval radius
+;;;      construction lines) go on POOL-NOTES with a DASHED linetype
+;;;      (when acad.lin / acadiso.lin can be found).
 ;;;    * An exact as-measured check figure built from two triangles
 ;;;      (each triangle uses one side, one end and the shared A-C
 ;;;      cross dimension -- held EXACTLY, no tolerance) on its own
 ;;;      layer POOL-TRIANGLES.
-;;;    * Aligned dimensions for all sides and cross dims on POOL-DIMS.
+;;;    * Aligned dimensions for all sides and cross dims on layer
+;;;      DIMENSION.  The two cross dims are drawn in the "CROSS
+;;;      DIMENSION" dimension style when the drawing has one.
 ;;;    * A target / actual / delta report table to the right of the
 ;;;      drawing on POOL-NOTES.  When the cross dimensions cannot be
 ;;;      met within tolerance the sides are held true, the cross dims
@@ -57,6 +65,8 @@
 (setq pool:*grec-step* 0.125)   ; Grecian diagonal adjustment increment
 (setq pool:*grec-max*  4)       ; max increments each way (4 * 1/8 = 1/2)
 (setq pool:*base*      (list 0.0 0.0))
+(setq pool:*dashlt*    "CONTINUOUS")  ; resolved to DASHED per run
+(setq pool:*lts*       1.0)           ; linetype scale for dashed refs
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -144,6 +154,32 @@
                  (cons 8 lay)
                  (cons 10 (pool:wp p1))
                  (cons 11 (pool:wp p2)))))
+
+;; Make sure a linetype is loaded (from acad.lin / acadiso.lin).
+;; Returns the linetype name when available, else "CONTINUOUS".
+(defun pool:ltload (name / f fd)
+  (if (not (tblsearch "LTYPE" name))
+      (progn
+        (setq f (findfile "acad.lin"))
+        (if (null f) (setq f (findfile "acadiso.lin")))
+        (if f
+            (progn
+              (setq fd (getvar "FILEDIA"))
+              (setvar "FILEDIA" 0)
+              (command "_.-LINETYPE" "_Load" name f "")
+              (setvar "FILEDIA" fd)))))
+  (if (tblsearch "LTYPE" name) name "CONTINUOUS"))
+
+;; Dashed reference line on POOL-NOTES (falls back to continuous when
+;; no DASHED linetype could be loaded).
+(defun pool:lined (p1 p2)
+  (entmake (append (list '(0 . "LINE")
+                         (cons 8 "POOL-NOTES")
+                         (cons 10 (pool:wp p1))
+                         (cons 11 (pool:wp p2)))
+                   (if (/= pool:*dashlt* "CONTINUOUS")
+                       (list (cons 6 pool:*dashlt*)
+                             (cons 48 pool:*lts*))))))
 
 (defun pool:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
@@ -550,6 +586,7 @@
 ;;; -------------------- main command -----------------------------------
 
 (defun c:POOL ( / *error* oldcmd oldos oldclay ptype base r2d pv pvall
+                  odim xsty
                   tp bo le ri dac dbd totl lrad rrad
                   ltd lbd lew rtd rbd rew
                   fitres quad failed a b c d cen meas notes tri
@@ -586,9 +623,9 @@
         pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
 
   ;; ------------------------------------------------ layers
-  (pool:layer "POOL-OUTLINE" 4)
+  (pool:layer "POOL" 4)
   (pool:layer "POOL-TRIANGLES" 1)
-  (pool:layer "POOL-DIMS" 2)
+  (pool:layer "DIMENSION" 2)
   (pool:layer "POOL-NOTES" 3)
 
   ;; -------------------------------------- guide preview + input
@@ -633,11 +670,23 @@
         meas (pool:quadmeas quad)
         notes nil)
 
-  ;; ------------------------------------------------ pool body
-  (pool:line a b "POOL-OUTLINE")
-  (pool:line b c "POOL-OUTLINE")
-  (pool:line c d "POOL-OUTLINE")
-  (pool:line d a "POOL-OUTLINE")
+  ;; dashed linetype + scale for the reference lines
+  (setq pool:*dashlt* (pool:ltload "DASHED")
+        pool:*lts* (max 1.0 (/ (max bo tp le ri) 15.0)))
+
+  ;; -------------------------------- pool body / perimeter (layer POOL)
+  ;; The perimeter runs around the WHOLE pool: for ovals and Grecians
+  ;; the body end lines are reference only (dashed, POOL-NOTES) and the
+  ;; perimeter closes through the arcs / corner cuts instead.
+  (pool:line a b "POOL")
+  (pool:line c d "POOL")
+  (if (= ptype "Rectangle")
+      (progn
+        (pool:line b c "POOL")
+        (pool:line d a "POOL"))
+      (progn
+        (pool:lined b c)
+        (pool:lined d a)))
 
   ;; -------------------------------------- exact two-triangle figure
   (setq tri (pool:triquad bo tp le ri dac))
@@ -661,15 +710,15 @@
         (if (< (pool:dot (pool:v- midl cen) ml) 0.0)
             (setq ml (pool:v* ml -1.0)))
         (setq tipl (pool:v+ midl (pool:v* ml lrad)))
-        (pool:line midl tipl "POOL-OUTLINE")
-        (pool:arc3p a tipl d "POOL-OUTLINE")
+        (pool:lined midl tipl)
+        (pool:arc3p a tipl d "POOL")
         (setq midr (pool:mid b c)
               mr (pool:unit (pool:perp (pool:v- c b))))
         (if (< (pool:dot (pool:v- midr cen) mr) 0.0)
             (setq mr (pool:v* mr -1.0)))
         (setq tipr (pool:v+ midr (pool:v* mr rrad)))
-        (pool:line midr tipr "POOL-OUTLINE")
-        (pool:arc3p b tipr c "POOL-OUTLINE")))
+        (pool:lined midr tipr)
+        (pool:arc3p b tipr c "POOL")))
 
   ;; ------------------------------------------------ grecian ends
   (if (= ptype "Grecian")
@@ -677,7 +726,7 @@
         (setq ml (pool:unit (pool:perp (pool:v- d a))))
         (if (< (pool:dot (pool:v- (pool:mid a d) cen) ml) 0.0)
             (setq ml (pool:v* ml -1.0)))
-        (setq lend (pool:grecend a d ml ltd lbd lew "POOL-OUTLINE")
+        (setq lend (pool:grecend a d ml ltd lbd lew "POOL")
               lp1 (car lend)
               lp2 (cadr lend))
         (if (not (nth 5 lend))
@@ -685,7 +734,7 @@
         (setq mr (pool:unit (pool:perp (pool:v- c b))))
         (if (< (pool:dot (pool:v- (pool:mid b c) cen) mr) 0.0)
             (setq mr (pool:v* mr -1.0)))
-        (setq rend (pool:grecend b c mr rtd rbd rew "POOL-OUTLINE")
+        (setq rend (pool:grecend b c mr rtd rbd rew "POOL")
               rp1 (car rend)
               rp2 (cadr rend))
         (if (not (nth 5 rend))
@@ -702,18 +751,12 @@
         ymin (apply 'min (mapcar 'cadr allpts)))
 
   ;; ------------------------------------------------ dimensions
-  (setvar "CLAYER" "POOL-DIMS")
+  (setvar "CLAYER" "DIMENSION")
   (setq endoff (if (= ptype "Rectangle") doff (* -0.6 doff)))
   (pool:dimalg a b (pool:outoff a b cen doff))
   (pool:dimalg d c (pool:outoff d c cen doff))
   (pool:dimalg a d (pool:outoff a d cen endoff))
   (pool:dimalg b c (pool:outoff b c cen endoff))
-  (pool:dimalg a c (pool:v+ (pool:mid a c)
-                            (pool:v* (pool:unit (pool:perp (pool:v- c a)))
-                                     (* 0.2 doff))))
-  (pool:dimalg b d (pool:v+ (pool:mid b d)
-                            (pool:v* (pool:unit (pool:perp (pool:v- d b)))
-                                     (* 0.2 doff))))
   (if (= ptype "Oval")
       (progn
         (pool:dimalg midl tipl (pool:v+ (pool:mid midl tipl)
@@ -732,6 +775,19 @@
         (pool:dimalg c rp1 (pool:outoff c rp1 cen doff))
         (pool:dimalg rp1 rp2 (pool:outoff rp1 rp2 cen doff))
         (pool:dimalg rp2 b (pool:outoff rp2 b cen doff))))
+  ;; cross dims last, in the CROSS DIMENSION style when the drawing
+  ;; has one (current style restored afterwards)
+  (setq odim (getvar "DIMSTYLE")
+        xsty (if (tblsearch "DIMSTYLE" "CROSS DIMENSION") t nil))
+  (if xsty (command "_.-DIMSTYLE" "_Restore" "CROSS DIMENSION"))
+  (pool:dimalg a c (pool:v+ (pool:mid a c)
+                            (pool:v* (pool:unit (pool:perp (pool:v- c a)))
+                                     (* 0.2 doff))))
+  (pool:dimalg b d (pool:v+ (pool:mid b d)
+                            (pool:v* (pool:unit (pool:perp (pool:v- d b)))
+                                     (* 0.2 doff))))
+  (if (and xsty odim (tblsearch "DIMSTYLE" odim))
+      (command "_.-DIMSTYLE" "_Restore" odim))
   (setvar "CLAYER" oldclay)
 
   ;; ------------------------------------------------ corner labels

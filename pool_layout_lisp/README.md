@@ -52,10 +52,10 @@ guide is also cleaned up if the command is cancelled part-way).
 
 | Layer | Content |
 | --- | --- |
-| `POOL-OUTLINE` | Best-fit "parametric" body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). Plus oval arcs / Grecian ends. |
+| `POOL` | The full pool **perimeter**, running around the whole shape — including the oval end arcs and Grecian corner cuts (individual lines/arcs, i.e. an exploded polyline). Best-fit body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). |
+| `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under oval/Grecian ends, the oval radius construction lines), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
 | `POOL-TRIANGLES` | Exact as-measured check figure built from two triangles (bottom + right end + cross A-C, and top + left end + cross A-C). **No tolerance** — lengths held exactly. Overlaid on the outline so the two can be compared; freeze one layer to view the other. |
-| `POOL-DIMS` | Aligned dimensions for all sides, cross dims and shape extras (uses the current dimension style). |
-| `POOL-NOTES` | Corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. |
+| `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. The two cross dims (A-C, B-D) are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. |
 
 ### Fitting logic
 
