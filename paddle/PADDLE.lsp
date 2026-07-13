@@ -50,9 +50,6 @@
 (setq *paddle-layer* "PADS") ; layer pads are inserted on
 (setq *paddle-align* nil)    ; nil = pads stay parallel to the X/Y axes,
                              ; T = rotate pads with the perimeter edge
-(setq *paddle-leeway* 3.0)   ; pads sit on the perimeter, but the pad
-                             ; grid may shift up to this far off it
-                             ; for a tighter fit
 (setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
                              ; chaining loose lines/arcs into a loop
 (setq *paddle-angtol* (/ pi 180.0)) ; 1 deg: corners flatter than this
@@ -72,7 +69,7 @@
         (+ (* (car v) (sin a)) (* (cadr v) (cos a)))))
 (defun paddle--2d (p) (list (car p) (cadr p)))
 (defun paddle--arcpt (cen r ang) (paddle--add cen (paddle--scl (paddle--dir ang) r)))
-(defun paddle--round (x) (fix (if (< x 0.0) (- x 0.5) (+ x 0.5))))
+(defun paddle--cheb (v) (max (abs (car v)) (abs (cadr v)))) ; Chebyshev norm
 
 ;; Segment data for vertex A -> B with bulge b (b /= 0):
 ;; returns (theta radius center start-tangent end-tangent)
@@ -105,54 +102,56 @@
     (setq i (1+ i)))
   area)
 
-;; Cells of a SIZE-inch pad grid that the arc passes through. The grid
-;; has a cell centered at ANCHOR+OFF; the arc is sampled every STEP
-;; inches along its length. Returns the cell centers in the order the
-;; arc first enters each cell -- by construction every sampled arc
-;; point lies inside one of the returned cells, and distinct cells are
-;; flush (edge-to-edge, never overlapping).
-(defun paddle--grid-cells (cen r sa sgn sweep anchor off size step
-                           / dphi n k ang p ix iy key seen out)
-  (setq dphi (/ step r)
-        n    (max 1 (fix (+ 1.0 (/ sweep dphi))))
-        k    0)
-  (while (<= k n)
-    (setq ang (+ sa (* sgn (min sweep (* k dphi))))
-          p   (paddle--arcpt cen r ang)
-          ix  (paddle--round (/ (- (car p) (car anchor) (car off)) size))
-          iy  (paddle--round (/ (- (cadr p) (cadr anchor) (cadr off)) size))
-          key (strcat (itoa ix) "," (itoa iy)))
-    (if (not (member key seen))
-        (setq seen (cons key seen)
-              out  (cons (list (+ (car anchor) (car off) (* ix size))
-                               (+ (cadr anchor) (cadr off) (* iy size)))
-                         out)))
-    (setq k (1+ k)))
-  (reverse out))
+;; Next pad along an arc: starting from arc-parameter CUR (previous
+;; pad center PREV), find the parameter where the pad center is
+;; exactly PADSIZE away from PREV in Chebyshev distance -- axis-
+;; aligned pads of that size then touch edge-to-edge without ever
+;; overlapping. Returns (parameter center), or nil when the rest of
+;; the arc is too short for another flush pad.
+(defun paddle--next-flush (cen r sa sgn cur sweep prev padsize
+                           / ds d p hit lo hi mid)
+  (setq ds (/ padsize r 8.0))                ; ~1/8 pad per probe step
+  (if (> ds (/ sweep 4.0)) (setq ds (/ sweep 4.0)))
+  (setq d cur hit nil)
+  (while (and (not hit) (< d (- sweep 1e-9))) ; walk until pads separate
+    (setq lo d
+          d  (min sweep (+ d ds))
+          p  (paddle--arcpt cen r (+ sa (* sgn d))))
+    (if (>= (paddle--cheb (paddle--sub p prev)) padsize)
+        (setq hit T)))
+  (if hit
+      (progn ; tighten the crossing between lo and d by bisection
+        (setq hi d)
+        (repeat 45
+          (setq mid (/ (+ lo hi) 2.0)
+                p   (paddle--arcpt cen r (+ sa (* sgn mid))))
+          (if (>= (paddle--cheb (paddle--sub p prev)) padsize)
+              (setq hi mid)
+              (setq lo mid)))
+        (list hi (paddle--arcpt cen r (+ sa (* sgn hi)))))))
 
-;; Pad centers covering one concave arc entirely. Pads tile a pad-size
-;; grid anchored where the arc leaves the wall, so the row is flush
-;; (pad-size on center) and the whole arc is inside the pads. The grid
-;; may slide up to *paddle-leeway* off its on-perimeter anchor when
-;; that covers the arc with fewer pads.
+;; Pad centers for one concave arc: the fewest pads that matter most.
+;; The first pad is centered on the MIDDLE of the arc (the part that
+;; must be covered); further pads march outward toward both ends, each
+;; exactly one pad-size on center from the last, so the row touches
+;; edge-to-edge and stair-steps into a blocky representation of the
+;; curve. Marching stops when the leftover end of the arc is too short
+;; for another flush pad -- the extreme ends of the radius are allowed
+;; to stay uncovered.
 (defun paddle--arc-pads (cen r sa sgn sweep padsize
-                         / anchor ox oy cells n score bestn bestscore bestoff)
-  (setq anchor (paddle--arcpt cen r sa)
-        ox     (- *paddle-leeway*))
-  (while (<= ox (+ *paddle-leeway* 1e-9))
-    (setq oy (- *paddle-leeway*))
-    (while (<= oy (+ *paddle-leeway* 1e-9))
-      (setq cells (paddle--grid-cells cen r sa sgn sweep anchor (list ox oy) padsize 0.5)
-            n     (length cells)
-            score (+ (abs ox) (abs oy))) ; prefer staying on the anchor
-      (if (or (not bestn)
-              (< n bestn)
-              (and (= n bestn) (< score bestscore)))
-          (setq bestn n bestscore score bestoff (list ox oy)))
-      (setq oy (+ oy 1.0)))
-    (setq ox (+ ox 1.0)))
-  ;; fine re-sample with the winning offset locks in full coverage
-  (paddle--grid-cells cen r sa sgn sweep anchor bestoff padsize 0.1))
+                         / mid amid pmid fwd bwd cur prev nxt)
+  (setq mid  (/ sweep 2.0)
+        amid (+ sa (* sgn mid))
+        pmid (paddle--arcpt cen r amid))
+  ;; march from the middle toward the arc's end...
+  (setq cur 0.0 prev pmid fwd nil)
+  (while (setq nxt (paddle--next-flush cen r amid sgn cur (- sweep mid) prev padsize))
+    (setq cur (car nxt) prev (cadr nxt) fwd (cons prev fwd)))
+  ;; ...and from the middle back toward the arc's start
+  (setq cur 0.0 prev pmid bwd nil)
+  (while (setq nxt (paddle--next-flush cen r amid (- sgn) cur mid prev padsize))
+    (setq cur (car nxt) prev (cadr nxt) bwd (cons prev bwd)))
+  (append bwd (list pmid) (reverse fwd)))
 
 ;; Direction (unit vector) of travel at the START / END of segment a->b.
 (defun paddle--tan-start (a b blg)

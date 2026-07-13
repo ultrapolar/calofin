@@ -47,17 +47,16 @@ Everything inserted in one run is a single undo step.
 ## Pad placement details
 
 * **Inside corners:** the pad is centered on the corner vertex.
-* **Concave arcs:** the affected arc is **covered entirely** — the
-  pads tile a pad-size grid anchored where the arc leaves the wall,
-  and every grid square the arc passes through gets a pad. That
-  guarantees three things at once: the whole arc is inside the pads,
-  neighboring pads are flush (exactly one pad-size on center — 36″
-  o.c. for the 3′ pad, 24″ o.c. for the 2′ pad — never overlapping),
-  and every pad sits on the perimeter (the arc runs through each
-  one). Around a curve the row stair-steps while staying flush.
-* **3″ leeway:** the pad grid is allowed to slide up to 3″ off its
-  on-perimeter anchor (`*paddle-leeway*`) when that covers the same
-  arc with fewer pads — coverage is never traded away for it.
+* **Concave arcs:** as few pads as possible, placed where they
+  matter most. The first pad is centered on the **middle of the
+  radius** — that part is always covered. More pads then march
+  outward toward both ends of the arc, each exactly one pad-size on
+  center from the last (36″ o.c. for the 3′ pad, 24″ o.c. for the
+  2′), so the row touches edge-to-edge without overlapping and
+  stair-steps into a blocky representation of the curve. Marching
+  stops when the leftover end of the arc is too short for another
+  flush pad — the extreme ends of the radius are allowed to stay
+  uncovered. Every pad center sits on the perimeter.
 * Pads are inserted at 0° — parallel to the X/Y axes. (Set
   `*paddle-align*` to `T` at the top of the lisp if you ever want
   them rotated to follow the perimeter edge instead.)
@@ -107,8 +106,6 @@ constants at the top of `PADDLE.lsp` are easy to change:
 (setq *paddle-maxrad* 54.0)        ; 4'-6" concave-radius threshold
 (setq *paddle-layer*  "PADS")      ; insertion layer
 (setq *paddle-align*  nil)         ; nil = pads parallel to X/Y axes
-(setq *paddle-leeway* 3.0)         ; max slide of the pad grid off
-                                   ; the perimeter for a tighter fit
 (setq *paddle-fuzz*   0.05)        ; gap tolerance when chaining
 ```
 
