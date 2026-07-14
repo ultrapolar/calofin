@@ -812,17 +812,32 @@
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A/B bottom, C/D top, LT/LB left tips, RT/RB right tips.")
 
-  ;; -------- body + ends
-  (setq bo  (pool:askh "Side BOTTOM (A-B)" (cdr (assoc 'ab pv)))
-        tp  (pool:askh "Side TOP (D-C)" (cdr (assoc 'cd pv)))
-        le  (pool:askh "End LEFT (A-D)" (cdr (assoc 'ad pv)))
-        ri  (pool:askh "End RIGHT (B-C)" (cdr (assoc 'bc pv)))
-        ltd (pool:askh "LEFT end diagonal TOP (D-LT)" (cdr (assoc 'ltd pv)))
-        lbd (pool:askh "LEFT end diagonal BOTTOM (A-LB)" (cdr (assoc 'lbd pv)))
-        lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
-        rtd (pool:askh "RIGHT end diagonal TOP (C-RT)" (cdr (assoc 'rtd pv)))
-        rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)" (cdr (assoc 'rbd pv)))
-        rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv))))
+  ;; -------- body + ends (in-square: mirrored pairs asked once)
+  (if pool:*insq*
+      (setq bo  (pool:askh "Side (top & bottom)"
+                           (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))))
+            tp  bo
+            le  (pool:askh "Body end (left & right, A-D / B-C)"
+                           (append (cdr (assoc 'ad pv)) (cdr (assoc 'bc pv))))
+            ri  le
+            ltd (pool:askh "LEFT end diagonals (top & bottom)"
+                           (append (cdr (assoc 'ltd pv)) (cdr (assoc 'lbd pv))))
+            lbd ltd
+            lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
+            rtd (pool:askh "RIGHT end diagonals (top & bottom)"
+                           (append (cdr (assoc 'rtd pv)) (cdr (assoc 'rbd pv))))
+            rbd rtd
+            rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv))))
+      (setq bo  (pool:askh "Side BOTTOM (A-B)" (cdr (assoc 'ab pv)))
+            tp  (pool:askh "Side TOP (D-C)" (cdr (assoc 'cd pv)))
+            le  (pool:askh "End LEFT (A-D)" (cdr (assoc 'ad pv)))
+            ri  (pool:askh "End RIGHT (B-C)" (cdr (assoc 'bc pv)))
+            ltd (pool:askh "LEFT end diagonal TOP (D-LT)" (cdr (assoc 'ltd pv)))
+            lbd (pool:askh "LEFT end diagonal BOTTOM (A-LB)" (cdr (assoc 'lbd pv)))
+            lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
+            rtd (pool:askh "RIGHT end diagonal TOP (C-RT)" (cdr (assoc 'rtd pv)))
+            rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)" (cdr (assoc 'rbd pv)))
+            rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv)))))
 
   ;; -------- cross dims for the chosen mode (NA allowed on each)
   (setq crosscons nil)
@@ -1944,10 +1959,18 @@
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
 
-  (setq tp  (pool:askh "Side length TOP (D-C)" (cdr (assoc 'dc pv)))
-        bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
-        le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
-        ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv))))
+  ;; in-square: opposing sides are equal, ask each pair once
+  (if pool:*insq*
+      (setq tp (pool:askh "Side length (top & bottom)"
+                          (append (cdr (assoc 'dc pv)) (cdr (assoc 'ab pv))))
+            bo tp
+            le (pool:askh "End length (left & right)"
+                          (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))))
+            ri le)
+      (setq tp  (pool:askh "Side length TOP (D-C)" (cdr (assoc 'dc pv)))
+            bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
+            le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
+            ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv)))))
 
   ;; -------- corner treatments (rectangle only; side lengths are to
   ;; the TRUE corner, treatments cut inward)
@@ -2182,7 +2205,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* oldcmd oldos oldclay ptype base)
+(defun c:POOL ( / *error* oldcmd oldos oldclay oldlun ptype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -2192,6 +2215,7 @@
     (pool:pvkill)
     (if oldclay (setvar "CLAYER" oldclay))
     (if oldos (setvar "OSMODE" oldos))
+    (if oldlun (setvar "LUNITS" oldlun))
     (command "_.UNDO" "_End")
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if *pop-error-mode* (*pop-error-mode*))
@@ -2203,10 +2227,15 @@
 
   (setq oldcmd (getvar "CMDECHO")
         oldos (getvar "OSMODE")
-        oldclay (getvar "CLAYER"))
+        oldclay (getvar "CLAYER")
+        oldlun (getvar "LUNITS"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setvar "OSMODE" 0)
+  ;; architectural units while prompting so every distance can be
+  ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
+  (setvar "LUNITS" 4)
+  (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
 
   ;; In-square pools are built true to the side measurements and need
   ;; no diagonals; out-of-square pools take the usual cross-dim route.
@@ -2243,6 +2272,7 @@
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
   (setvar "OSMODE" oldos)
+  (setvar "LUNITS" oldlun)
   (command "_.UNDO" "_End")
   (setvar "CMDECHO" oldcmd)
   (if *pop-error-mode* (*pop-error-mode*))

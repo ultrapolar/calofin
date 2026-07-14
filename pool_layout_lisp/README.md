@@ -15,8 +15,12 @@ ActiveX/VLA), so it loads in **AutoCAD 2018** and older releases alike
 2. Type `POOL` and answer the prompts.
 
 Drawing units are assumed to be **inches** — all tolerances below are
-in inches. Values can be typed in the current input format (e.g.
-`20'6-1/2"` when units are Architectural).
+in inches. The command switches to Architectural units while it runs
+(restored afterwards), so **every distance prompt** accepts feet-inch
+entry regardless of the drawing's unit setting: `25'6"`,
+`25'-6-1/2"`, `25'6.5`, or plain numbers as inches (`306.5`). Note
+that AutoCAD treats a space as Enter, so type fractions with a dash
+(`25'-6-1/2"`, not `25'-6 1/2"`).
 
 ## What it asks
 
@@ -54,6 +58,10 @@ end lengths are always measured to the **true (sharp) corner**; the
 treatment cuts inward from there.
 
 * **In-square:** one corner question, applied to all four corners.
+  In-square pools also ask each **pair of opposing sides once** —
+  side length (top & bottom together), end length (left & right
+  together), and on a Grecian each end's two diagonals together —
+  since a true pool's opposing sides are equal.
 * **Out-of-square:** asked per corner (A, B, C, D); press **Enter** to
   reuse the previous corner's answer, so four identical corners is
   three quick Enters.
