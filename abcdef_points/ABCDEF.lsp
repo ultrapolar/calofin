@@ -634,10 +634,13 @@
       (setq W (abcdef:getdim "Dimension A-B (width across the top)"))
       (setq H (abcdef:getdim "Dimension A-D (height down the side)"))
       ;; ---- where does corner A land? -------------------------------------
+      ;; take the pick in WCS so the rectangle is built square to the world
+      ;; axes even when the current UCS is rotated (entmake writes WCS).
       (setq base (getpoint "\nInsertion point for corner A <0,0>: "))
-      (if (null base) (setq base '(0.0 0.0 0.0)))
+      (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
       (setq bx (car base) by (cadr base))
-      ;; corner coordinates: A top-left, clockwise, Y up (A-D goes down)
+      ;; corner coordinates: A top-left, clockwise, Y up (A-D goes down).
+      ;; A-B is horizontal, A-D is vertical -> all four corners are 90 degrees.
       (setq Ax bx        Ay by
             Bx (+ bx W)  By by
             Cx (+ bx W)  Cy (- by H)
@@ -715,6 +718,19 @@
           (princ (strcat "\n  Fit err (RMS) is the leftover rounding error shared"
                          "\n  across the given distances - typically < 0.10\" for"
                          "\n  quarter-inch data.  A large value means a bad reading."))
+          ;; ---- confirm the frame is a true rectangle ----------------------
+          ;; A-B is horizontal and A-D is vertical, so every corner is exactly
+          ;; 90 deg.  If it looked like a parallelogram, the view was a tilted
+          ;; 3D orbit (a flat rectangle foreshortens) - reset to plan so it
+          ;; reads square.  Geometry is unchanged.
+          (princ (strcat "\n\n  Frame A-B-C-D: true rectangle "
+                         (rtos W 2 2) "\" (A-B) x " (rtos H 2 2)
+                         "\" (A-D), all corners 90.00 deg."))
+          (vl-catch-all-apply
+            '(lambda ()
+               (vl-cmdf "_.plan" "_World")
+               (vl-cmdf "_.zoom" "_Extents")))
+          (princ "\n  View reset to plan (top) so the rectangle shows square.")
           (princ)))))
   (princ))
 

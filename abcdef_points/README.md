@@ -119,6 +119,14 @@ The command draws:
 then prints a results table with each point's coordinates, how many
 distances were used, and its fit error.
 
+The **frame is always a true rectangle** — `A-B` is drawn horizontal and
+`A-D` vertical, so every corner is exactly 90°, and it is built square to the
+world axes even if your current UCS is rotated. When it's finished the command
+resets the view to plan (top) and zooms to the drawing, because a flat
+rectangle looks like a *parallelogram* in a tilted 3D view — if yours looked
+skewed, the view was orbited off plan, not the geometry. (This only changes
+the view, never the geometry; type `PLAN` or orbit back any time.)
+
 ## Units
 
 Everything is created in **inches** — one drawing unit = one inch. Set
