@@ -1,12 +1,14 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender & AutoCAD CAD tools
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Independent tools for working between Blender, AutoCAD and the field.
+The two Blender add-ons target Blender 4.2+ (including 5.0); the AutoCAD
+tool is an AutoLISP command for desktop AutoCAD.
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| ABCDEF — plot points from Excel (AutoLISP) | `abcdef_points/` | Reads a spreadsheet of points measured off the four corners of a rectangle and least-squares-plots them into AutoCAD |
 
 ## Installation (either add-on)
 
@@ -156,6 +158,46 @@ Only vertex-only meshes (no edges, no faces, at least 3 vertices) are
 touched; every other object is ignored. A per-object breakdown (filled
 as n-gon / filled as TIN / skipped and why) is printed to the system
 console.
+
+---
+
+# 3. ABCDEF — plot points from Excel into AutoCAD (AutoLISP)
+
+`abcdef_points/ABCDEF.lsp` is an AutoLISP command for desktop AutoCAD
+that reads a spreadsheet of points, each located by its distance from the
+four corners **A B C D** of a rectangle, and plots them.
+
+`A` is the top-left corner, and the rest run clockwise (`B` top-right,
+`C` bottom-right, `D` bottom-left). You supply the two rectangle
+dimensions — `A-B` (width) and `A-D` (height) — and a sheet with the
+columns:
+
+```
+POINT NAME | DIST FROM A | DIST FROM B | DIST FROM C | DIST FROM D
+```
+
+Distances are architectural feet-inches (`12'-3 1/2"`, `0'-6"`,
+`3 1/2"`). Because they are rounded to the nearest quarter inch, the four
+distance circles never quite meet at one point, so the command does a
+**least-squares fit** — placing each point where its distances best match
+*all* the given measurements, spreading the leftover rounding error evenly
+rather than forcing some distances to be exact. Each point's remaining
+**fit error (RMS)** is reported so bad readings stand out.
+
+### Usage
+
+1. `APPLOAD` → load `ABCDEF.lsp` (add it to the Startup Suite to keep it
+   loaded).
+2. Run `ABCDEF`, pick the spreadsheet, enter the `A-B` and `A-D`
+   dimensions, and pick where corner `A` goes (Enter = `0,0`).
+
+It draws the labelled rectangle, a point + marker at each computed
+location, the point names, and prints a coordinate/fit-error table. All
+geometry is in inches (1 unit = 1"). See `abcdef_points/README.md` for the
+full write-up and a `template.csv` to fill in.
+
+Requires full AutoCAD with Excel installed (the sheet is read via Excel
+COM automation) — it does not run in AutoCAD LT.
 
 ---
 
