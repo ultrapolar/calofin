@@ -97,14 +97,27 @@
         (setq i (1+ i)))
       ok)))
 
+;; Return the 1-character string for Unicode code point N, but ONLY when this
+;; AutoCAD's (chr)/(ascii) round-trip cleanly to that exact point.  On builds
+;; where (chr) wraps code points > 255 modulo 256 (some pre-2019 releases),
+;; e.g. (chr 8242) -> "2", the round-trip fails and we return nil rather than
+;; corrupt real digits.  Everything is caught so it can never raise on load/run.
+(defun abcdef:safechr (n / r a)
+  (setq r (vl-catch-all-apply 'chr (list n)))
+  (if (or (vl-catch-all-error-p r) (/= (type r) 'STR) (/= (strlen r) 1))
+    nil
+    (progn
+      (setq a (vl-catch-all-apply 'ascii (list r)))
+      (if (and (not (vl-catch-all-error-p a)) (= a n)) r nil))))
+
 ;; Character-level scrub of a raw cell: letter/underscore look-alikes and the
 ;; "smart quote" glyphs Excel/Word inserts.  Returns the cleaned string and
 ;; sets abcdef:*dirty* if anything actually changed.  No non-ASCII bytes are
 ;; embedded in this source (some AutoCAD builds refuse to load such files);
-;; the smart-quote glyphs are built with (chr):
+;; the smart-quote glyphs are resolved through abcdef:safechr:
 ;;   U+2019 right single quote / U+2032 prime      ->  '
 ;;   U+201D right double quote  / U+2033 dbl prime  ->  "
-(defun abcdef:scrub (raw / s)
+(defun abcdef:scrub (raw / s q)
   (setq s raw)
   (setq s (abcdef:replace s "_" "-"))    ; underscore read for a dash
   (setq s (abcdef:replace s "O" "0"))    ; letter O -> zero
@@ -112,10 +125,10 @@
   (setq s (abcdef:replace s "I" "1"))    ; letter I / l / bar -> one
   (setq s (abcdef:replace s "l" "1"))
   (setq s (abcdef:replace s "|" "1"))
-  (setq s (abcdef:replace s (chr 8217) "'"))
-  (setq s (abcdef:replace s (chr 8242) "'"))
-  (setq s (abcdef:replace s (chr 8221) "\""))
-  (setq s (abcdef:replace s (chr 8243) "\""))
+  (if (setq q (abcdef:safechr 8217)) (setq s (abcdef:replace s q "'")))
+  (if (setq q (abcdef:safechr 8242)) (setq s (abcdef:replace s q "'")))
+  (if (setq q (abcdef:safechr 8221)) (setq s (abcdef:replace s q "\"")))
+  (if (setq q (abcdef:safechr 8243)) (setq s (abcdef:replace s q "\"")))
   (if (/= s raw) (setq abcdef:*dirty* T))
   s)
 

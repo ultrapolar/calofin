@@ -107,6 +107,16 @@ Everything is created in **inches** — one drawing unit = one inch. Set
 your drawing's units to Architectural (or Decimal inches) to read the
 coordinates back out in feet-inches.
 
+## Compatibility
+
+Written and kept to **AutoCAD 2018-safe AutoLISP** (full AutoCAD, not LT).
+Only long-standing `vl`/`vlax` and core functions are used — nothing added
+after 2018. The smart-quote cleanup probes `chr`/`ascii` at runtime and only
+applies when they round-trip Unicode cleanly (they do on 2018); on any build
+that can't, the step is skipped rather than risking a bad substitution, so
+the rest of the tool is unaffected. Should work unchanged on 2018 through the
+current release.
+
 ## Notes & limitations
 
 * Requires desktop AutoCAD with Microsoft Excel installed (the sheet is
