@@ -35,9 +35,10 @@
 ;;;         - The tread depth is ALWAYS held exactly.
 ;;;         - If the wall opening at that depth is within 1/8" of the
 ;;;           requested width, the step is trimmed to the walls.
-;;;         - Otherwise the requested width is held (centered on the
-;;;           bisector) and the step breaks away from the walls to hold
-;;;           the given dimensions.
+;;;         - Otherwise the requested width is held, centered between
+;;;           the two wall lines so the step runs EQUALLY past (or
+;;;           equally short of) both walls, and the step breaks away
+;;;           from the walls to hold the given dimensions.
 ;;;         - Enter at the width prompt fits that one step to the walls.
 ;;;   6.  Enter at the depth prompt means no more depths/widths are
 ;;;       required; the routine finishes with what it was given.
@@ -109,7 +110,7 @@
 (defun c:CORNERSTP ( / *error* undoflag ss i ed lines arcs diag arcd
                        cand o1 o2 score best j k tmp w1 w2 corner
                        c r a1 a2 mid key start d1 d2 bis perp
-                       dist n drawn dep wid p h1 h2 nat e1 e2
+                       dist n drawn dep wid p h1 h2 nat cen e1 e2
                        prevL prevR)
 
   (defun *error* (msg)
@@ -275,8 +276,16 @@
                       " - fitted to walls.")))
       ;; otherwise hold the exact width; the step breaks from the walls
       (T
-       (setq e1 (cs-add p (cs-scl perp (* 0.5 wid)))
-             e2 (cs-add p (cs-scl perp (* -0.5 wid))))
+       (if nat
+         ;; center the step on the wall opening so it runs equally
+         ;; past (or equally short of) BOTH wall lines
+         (setq tmp (cs-unit (cs-vec h2 h1))
+               cen (mapcar '(lambda (x y) (* 0.5 (+ x y))) h1 h2)
+               e1  (cs-add cen (cs-scl tmp (* 0.5 wid)))
+               e2  (cs-add cen (cs-scl tmp (* -0.5 wid))))
+         ;; no wall opening here - fall back to the measuring ray
+         (setq e1 (cs-add p (cs-scl perp (* 0.5 wid)))
+               e2 (cs-add p (cs-scl perp (* -0.5 wid)))))
        (princ (strcat "\n  Step " (itoa n) ": width " (rtos wid) " held"
                       (if nat (strcat " (wall opening " (rtos nat) ")") "")
                       " - step breaks from the walls."))))
