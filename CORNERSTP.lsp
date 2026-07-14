@@ -23,11 +23,13 @@
 ;;;       from the True corner.  The true corner is found by extending
 ;;;       the two wall lines surrounding the diagonal/arc to their
 ;;;       apparent intersection.
-;;;   4.  Tread depths are measured from that starting point toward the
-;;;       pool, along the direction that makes an EQUAL ANGLE with both
-;;;       wall lines (the corner bisector).  Every step edge is drawn
-;;;       perpendicular to that direction, so all steps are parallel to
-;;;       each other.
+;;;   4.  If a diagonal LINE was selected you are also asked whether the
+;;;       treads run Parallel to the diagonal, or perpendicular to the
+;;;       bisector of the TRUE ANGLE the walls make (equal angle from
+;;;       both wall lines).  With no diagonal the true-angle bisector is
+;;;       always used.  Tread depths are measured from the starting
+;;;       point toward the pool, square to the treads, so all steps are
+;;;       parallel to each other either way.
 ;;;   5.  For each step you are prompted for the tread depth, then the
 ;;;       step width:
 ;;;         - The tread depth is ALWAYS held exactly.
@@ -193,7 +195,9 @@
       (setq start (if (= key "True") corner mid)))
     (setq start corner))
 
-  ;; ---- 6. equal-angle (bisector) direction toward the pool -----------
+  ;; ---- 6. tread orientation / measuring direction toward the pool ----
+  ;; BIS  = direction the tread depths are measured along
+  ;; PERP = direction the step edges run (treads are drawn along PERP)
   (setq d1  (cs-unit (cs-vec corner (cs-far w1 corner)))
         d2  (cs-unit (cs-vec corner (cs-far w2 corner)))
         bis (cs-unit (mapcar '+ d1 d2)))
@@ -202,7 +206,21 @@
            (exit)))
   (if (and mid (< (cs-dot bis (cs-vec corner mid)) 0.0))
     (setq bis (cs-scl bis -1.0)))
-  (setq perp (cs-unit (cs-perp90 bis)))
+  (if diag
+    (progn
+      (initget "Parallel True")
+      (setq key (getkword
+        "\nTreads [Parallel to diagonal/True angle] <Parallel>: "))
+      (if (/= key "True")
+        (progn
+          ;; treads parallel to the diagonal; depths measured square to it
+          (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
+                bis  (cs-perp90 perp))
+          (if (< (cs-dot bis (cs-vec corner mid)) 0.0)
+            (setq bis (cs-scl bis -1.0)))))))
+  (if (null perp)
+    ;; treads perpendicular to the true-angle (equal-angle) bisector
+    (setq perp (cs-unit (cs-perp90 bis))))
 
   (princ (strcat "\nMeasuring from "
                  (if (equal start corner 1e-9)
