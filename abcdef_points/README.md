@@ -40,6 +40,32 @@ doesn't matter — the columns are found by their headers):
 * `.xlsx`, `.xls`, `.xlsm` and `.csv` all work (`.csv` is opened through
   Excel as well). A ready-to-fill `template.csv` sits next to this file.
 
+## Cleaning up dirty / OCR'd data
+
+Field numbers that were scanned or re-typed often come back garbled. Before
+anything is parsed, each distance cell is scrubbed deterministically:
+
+| Comes in as | Read as | What happened |
+| --- | --- | --- |
+| `20'_114"` | `20'-1/4"` | `_` misread for `-`; `114` is `1/4` with the `/` scanned as a `1` |
+| `1 1'-IO 1/2"` | `11'-10 1/2"` | stray space split the feet; `IO` is `10` (`I`→`1`, `O`→`0`) |
+| `39'- 8 314"` | `39'-8 3/4"` | `314` is `3/4` (again `/` scanned as `1`) |
+
+The fixes applied:
+
+* **Look-alike characters** — `O`/`o`→`0`, `I`/`l`/`|`→`1`, `_`→`-`, and the
+  curly "smart quotes" Word/Excel insert (`’ ′`→`'`, `” ″`→`"`).
+* **Stray spaces in the feet** — `1 1'` is collapsed to `11'`.
+* **A `/` scanned as `1` inside a fraction** — a slash-less run of digits like
+  `114`, `314` or `1116` is rebuilt into the one valid inch fraction it could
+  be (`1/4`, `3/4`, `1/16`). This is unambiguous because the misread keeps the
+  same length, so `1116`→`1/16` while `11116`→`11/16`.
+
+Every cell that had to be cleaned (or that couldn't be read at all) is listed
+on the command line **before** the points are plotted, showing the raw text
+and how it was interpreted (e.g. `* P1 / FROM A: "20'_114"" -> 0'-1/4"`), so
+you can eyeball the repairs. Clean values are never touched or reported.
+
 ## Sharing the rounding error
 
 The distances are rounded to the nearest **quarter inch**, so no single

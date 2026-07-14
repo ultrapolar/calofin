@@ -72,24 +72,85 @@
   (reverse out))
 
 ;;; --------------------------------------------------------------------------
-;;;  Feet-inch parser  ->  inches (real).  Returns nil on an empty cell.
+;;;  Dirty-data cleanup helpers (OCR / hand-transcription noise)
 ;;;
-;;;  Accepts, e.g.:  12'-3 1/2"   3 1/2"   0'-6"   5'-0 3/4"   1/2"   18   6.25
-;;;  Feet/inch marks (' ") are optional; the whole-inch and fraction may be
-;;;  separated by a space or a dash.
+;;;  Field measurements often come back mangled by scanning or re-typing:
+;;;    20'_114"      really 20'-1/4"    ( _->-,  114 is 1/4 with / read as 1 )
+;;;    1 1'-IO 1/2"  really 11'-10 1/2" ( stray space, I->1, O->0 )
+;;;    39'- 8 314"   really 39'-8 3/4"  ( 314 is 3/4 with / read as 1 )
+;;;  These helpers repair that noise deterministically before parsing, and
+;;;  flag abcdef:*dirty* so the import can report what it changed.
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:ftin->in (raw / s neg feet rest inch p tok num den slash)
-  (setq s (abcdef:trim raw))
-  ;; normalise the "smart quote" glyphs Excel/Word sometimes substitute for
-  ;; the plain foot (') and inch (") marks, without embedding any non-ASCII
-  ;; bytes in this source file (which some AutoCAD builds refuse to load):
-  ;;   right single quote U+2019 and prime U+2032  ->  '
-  ;;   right double quote U+201D and double prime U+2033  ->  "
+(setq abcdef:*dirty* nil)   ; set T whenever a value needed cleaning
+(setq abcdef:*fixes* nil)   ; running list of cleanup / warning messages
+
+;; True if S is one or more chars and every char is a digit 0-9.
+(defun abcdef:alldigits (s / ok i a)
+  (if (= (strlen s) 0)
+    nil
+    (progn
+      (setq ok T i 1)
+      (repeat (strlen s)
+        (setq a (ascii (substr s i 1)))
+        (if (or (< a 48) (> a 57)) (setq ok nil))
+        (setq i (1+ i)))
+      ok)))
+
+;; Character-level scrub of a raw cell: letter/underscore look-alikes and the
+;; "smart quote" glyphs Excel/Word inserts.  Returns the cleaned string and
+;; sets abcdef:*dirty* if anything actually changed.  No non-ASCII bytes are
+;; embedded in this source (some AutoCAD builds refuse to load such files);
+;; the smart-quote glyphs are built with (chr):
+;;   U+2019 right single quote / U+2032 prime      ->  '
+;;   U+201D right double quote  / U+2033 dbl prime  ->  "
+(defun abcdef:scrub (raw / s)
+  (setq s raw)
+  (setq s (abcdef:replace s "_" "-"))    ; underscore read for a dash
+  (setq s (abcdef:replace s "O" "0"))    ; letter O -> zero
+  (setq s (abcdef:replace s "o" "0"))
+  (setq s (abcdef:replace s "I" "1"))    ; letter I / l / bar -> one
+  (setq s (abcdef:replace s "l" "1"))
+  (setq s (abcdef:replace s "|" "1"))
   (setq s (abcdef:replace s (chr 8217) "'"))
   (setq s (abcdef:replace s (chr 8242) "'"))
   (setq s (abcdef:replace s (chr 8221) "\""))
   (setq s (abcdef:replace s (chr 8243) "\""))
+  (if (/= s raw) (setq abcdef:*dirty* T))
+  s)
+
+;; TOK is an all-digit run with no slash.  A fraction like 3/4 whose slash was
+;; scanned as a 1 becomes 314; because that substitution keeps the length, a
+;; valid inch fraction (den in 2..32, 0<num<den) has exactly one reconstruction.
+;; Return "num/den" if one is found (scanning candidate slash positions left to
+;; right), else nil.
+(defun abcdef:defrac (tok / len k num den ni di best)
+  (setq len (strlen tok) k 1 best nil)
+  (while (and (<= k len) (null best))
+    (if (= (substr tok k 1) "1")
+      (progn
+        (setq num (substr tok 1 (1- k))
+              den (substr tok (1+ k)))
+        (if (and (> (strlen num) 0) (> (strlen den) 0)
+                 (abcdef:alldigits num) (abcdef:alldigits den))
+          (progn
+            (setq ni (atoi num) di (atoi den))
+            (if (and (member di '(2 4 8 16 32)) (> ni 0) (< ni di))
+              (setq best (strcat num "/" den)))))))
+    (setq k (1+ k)))
+  best)
+
+;;; --------------------------------------------------------------------------
+;;;  Feet-inch parser  ->  inches (real).  Returns nil on an empty cell.
+;;;
+;;;  Accepts, e.g.:  12'-3 1/2"   3 1/2"   0'-6"   5'-0 3/4"   1/2"   18   6.25
+;;;  Feet/inch marks (' ") are optional; the whole-inch and fraction may be
+;;;  separated by a space or a dash.  Runs abcdef:scrub / abcdef:defrac first
+;;;  so OCR-mangled input is repaired transparently.
+;;; --------------------------------------------------------------------------
+
+(defun abcdef:ftin->in (raw / s neg feet ftstr rest inch p tok num den slash df)
+  (setq s (abcdef:scrub (abcdef:trim raw)))
   (if (= s "")
     nil
     (progn
@@ -100,7 +161,11 @@
       (setq p (vl-string-search "'" s))
       (if p
         (progn
-          (setq feet (atof (abcdef:trim (substr s 1 p))))
+          ;; feet must be a single number: kill any stray spaces (e.g. the
+          ;; mis-split "1 1'" -> 11') before reading it.
+          (setq ftstr (abcdef:trim (substr s 1 p)))
+          (if (vl-string-search " " ftstr) (setq abcdef:*dirty* T))
+          (setq feet (atof (abcdef:strip ftstr " ")))
           (setq rest (abcdef:trim (substr s (+ p 2)))))
         (setq feet 0.0 rest s))
       ;; between feet and inches there is often a '-' separator: drop a
@@ -113,6 +178,13 @@
       ;; --- inches: sum whole-number and fraction tokens ------------------
       (setq inch 0.0)
       (foreach tok (abcdef:tokens rest)
+        ;; a slash-less all-digit run of 3+ digits is very likely a fraction
+        ;; whose "/" was scanned as a "1" (114 -> 1/4); reconstruct it.
+        (if (and (not (vl-string-search "/" tok))
+                 (>= (strlen tok) 3)
+                 (abcdef:alldigits tok)
+                 (setq df (abcdef:defrac tok)))
+          (setq tok df abcdef:*dirty* T))
         (setq slash (vl-string-search "/" tok))
         (if slash
           (progn
@@ -122,6 +194,25 @@
           (setq inch (+ inch (atof tok)))))
       (setq inch (+ (* feet 12.0) inch))
       (if neg (- inch) inch))))
+
+;;; --------------------------------------------------------------------------
+;;;  Format inches back to a feet-inch string (for the correction log), to the
+;;;  nearest 1/32", reduced.  e.g. 476.75 -> 39'-8 3/4"
+;;; --------------------------------------------------------------------------
+
+(defun abcdef:in->ftin (v / neg feet whole frac n den ft s)
+  (setq neg (< v 0.0) v (abs v))
+  (setq n (fix (+ (* v 32.0) 0.5)))      ; total 1/32" units, rounded
+  (setq feet (fix (/ n 384)))            ; 384 = 32*12
+  (setq n (- n (* feet 384)))
+  (setq whole (fix (/ n 32)))
+  (setq n (- n (* whole 32)))            ; leftover 1/32 units, 0..31
+  (setq den 32)
+  (while (and (> n 0) (= (rem n 2) 0)) (setq n (/ n 2) den (/ den 2)))
+  (setq s (strcat (itoa feet) "'-" (itoa whole)))
+  (if (> n 0) (setq s (strcat s " " (itoa n) "/" (itoa den))))
+  (setq s (strcat s "\""))
+  (if neg (strcat "-" s) s))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Multilateration
@@ -253,9 +344,32 @@
                      "Text")))))
   (if (vl-catch-all-error-p res) "" (abcdef:cellstr res)))
 
+;; Parse RAW to inches, logging into abcdef:*fixes* if the value had to be
+;; cleaned up (OCR repair) or could not be read at all.  LABEL identifies the
+;; cell in the log, e.g. "P3 / FROM C".
+(defun abcdef:parse-log (raw label / clean v)
+  (setq clean (abcdef:trim raw))
+  (if (= clean "")
+    nil                                     ; blank cell: not measured
+    (progn
+      (setq abcdef:*dirty* nil)
+      (setq v (abcdef:ftin->in raw))
+      (cond
+        ((null v)                           ; nonblank but unreadable
+         (setq abcdef:*fixes*
+               (cons (strcat "  ? " label ": \"" clean
+                             "\"  could not be read - left blank")
+                     abcdef:*fixes*)))
+        (abcdef:*dirty*                     ; cleaned something up
+         (setq abcdef:*fixes*
+               (cons (strcat "  * " label ": \"" clean "\"  ->  "
+                             (abcdef:in->ftin v))
+                     abcdef:*fixes*))))
+      v)))
+
 (defun abcdef:read-excel (file / xl created wbs wb sheet used rng nrows ncols
                                   hdr r c txt up name-c a-c b-c d-c c-c
-                                  rows nm da db dc dd err)
+                                  rows nm da db dc dd err m)
   ;; connect to an existing Excel, else start one
   (setq xl (vl-catch-all-apply 'vlax-get-object (list "Excel.Application")))
   (if (vl-catch-all-error-p xl)
@@ -302,18 +416,28 @@
             (setq c (1+ c)))
           (if (null name-c) (setq name-c 1))   ; fall back to first column
           ;; --- read the data rows ----------------------------------------
-          (setq rows '() r 2)
+          (setq rows '() abcdef:*fixes* '() r 2)
           (while (<= r nrows)
             (setq nm (abcdef:xl-cell sheet r name-c))
             (if (/= nm "")
               (setq rows
                 (cons (list nm
-                            (if a-c (abcdef:ftin->in (abcdef:xl-cell sheet r a-c)))
-                            (if b-c (abcdef:ftin->in (abcdef:xl-cell sheet r b-c)))
-                            (if c-c (abcdef:ftin->in (abcdef:xl-cell sheet r c-c)))
-                            (if d-c (abcdef:ftin->in (abcdef:xl-cell sheet r d-c))))
+                            (if a-c (abcdef:parse-log (abcdef:xl-cell sheet r a-c)
+                                                      (strcat nm " / FROM A")))
+                            (if b-c (abcdef:parse-log (abcdef:xl-cell sheet r b-c)
+                                                      (strcat nm " / FROM B")))
+                            (if c-c (abcdef:parse-log (abcdef:xl-cell sheet r c-c)
+                                                      (strcat nm " / FROM C")))
+                            (if d-c (abcdef:parse-log (abcdef:xl-cell sheet r d-c)
+                                                      (strcat nm " / FROM D"))))
                       rows)))
             (setq r (1+ r)))
+          ;; --- report any cleanups ---------------------------------------
+          (if abcdef:*fixes*
+            (progn
+              (princ "\n\n--- dirty values cleaned before import ---")
+              (foreach m (reverse abcdef:*fixes*) (princ (strcat "\n" m)))
+              (princ "\n  ( * = auto-corrected, ? = unreadable. Verify these! )")))
           ;; --- close up --------------------------------------------------
           (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))

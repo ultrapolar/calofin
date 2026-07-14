@@ -177,7 +177,11 @@ POINT NAME | DIST FROM A | DIST FROM B | DIST FROM C | DIST FROM D
 ```
 
 Distances are architectural feet-inches (`12'-3 1/2"`, `0'-6"`,
-`3 1/2"`). Because they are rounded to the nearest quarter inch, the four
+`3 1/2"`). Scanned or re-typed sheets are messy, so each value is scrubbed
+first — `O`→`0`, `I`→`1`, `_`→`-`, stray feet-spaces, and a `/` that OCR read
+as a `1` inside a fraction (`20'_114"`→`20'-1/4"`, `39'- 8 314"`→`39'-8 3/4"`).
+Every auto-correction is printed before plotting so you can verify it. Because
+the distances are rounded to the nearest quarter inch, the four
 distance circles never quite meet at one point, so the command does a
 **least-squares fit** — placing each point where its distances best match
 *all* the given measurements, spreading the leftover rounding error evenly
