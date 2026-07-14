@@ -28,20 +28,34 @@ D ---------- C        sides:  top D-C, bottom A-B
 A ---------- B        cross:  A-C and B-D
 ```
 
-1. Pool shape: `Rectangle` / `Oval` / `Grecian` / `L` / `LAzyl`
+1. **In-square or out-of-square?** An **in-square** pool is built true
+   to the side/end measurements — no diagonals are asked for or drawn.
+   An **out-of-square** pool takes the full cross-dim route below.
+2. Pool shape: `Rectangle` / `Oval` / `Grecian` / `L` / `LAzyl`
    (type `L` for a true L, `LA` for a lazy L).
-2. Insertion base point.
-3. Side lengths, top then bottom.
-4. End lengths, left then right.
-5. Cross dimensions A-C and B-D.
-6. **Oval only:** total pool length, left end radius, right end radius.
-7. **Grecian only:** a cross-dim detail level (see below), then for
+3. Insertion base point.
+4. Side lengths, top then bottom.
+5. End lengths, left then right.
+6. Cross dimensions A-C and B-D. *(out-of-square only)*
+7. **Oval only:** total pool length, left end radius, right end radius.
+8. **Grecian only:** a cross-dim detail level (see below), then for
    each end — diagonal top, diagonal bottom, end width — followed by
    the cross dims for the chosen level.
 
 Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
 shows `N/A` for its target/delta (the as-drawn value is still listed).
+
+### In-square vs out-of-square
+
+The very first prompt asks whether the pool is in-square. **In-square**
+skips every cross dim (and the guide's diagonals): the shape is built
+true to the side, end, diagonal and width measurements — a perfect
+rectangle, oval, Grecian or L. Use it when the pool was formed square
+and you only need the outline dimensioned. **Out-of-square** is the
+full workflow: cross dims are prompted, the shape is best-fit to them
+within tolerance, and the target/actual/delta report and (for a
+rectangle) the exact triangle check figure are produced.
 
 ### Grecian cross-dim detail (Simple / Center / Complex)
 

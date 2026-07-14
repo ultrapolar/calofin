@@ -520,4 +520,18 @@ em=edgemax(pts,edges)
 print(f"   edgemax {em:.3f}, failed={failed}")
 assert failed and em<=0.06   # sides/edges held true on failure
 
+
+print("== 25. L in-square (no diags) squares up ==")
+sides,_=hexmeas(TRUE_L)
+pts,failed=fithex(sides,[None]*6,lazy=False)
+s,x=hexerr(pts,sides,[None]*6)
+print(f"   max side delta {s:.4f}, failed={failed}")
+assert not failed and s<0.05
+
+print("== 26. Grecian in-square (no cross dims) builds from sides ==")
+pts,failed,edges,cc=grec_fit(TRUE_G, [], {}, 'Simple')
+em=edgemax(pts,edges)
+print(f"   edgemax {em:.3f} (<=0 in band), n cross rows {len(cc)}, failed={failed}")
+assert not failed and em<=0.06 and len(cc)==0
+
 print("\nALL CHECKS PASSED")

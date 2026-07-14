@@ -4,7 +4,14 @@
 ;;;  Command:  POOL
 ;;;
 ;;;  Draws a pool plan (Rectangle, Oval, Grecian, L or Lazy L) from
-;;;  field measurements:
+;;;  field measurements.
+;;;
+;;;  First asks whether the pool is IN-SQUARE or OUT-OF-SQUARE.  An
+;;;  in-square pool is built true to the side/end measurements and no
+;;;  cross dims (diagonals) are asked for or drawn.  An out-of-square
+;;;  pool takes the full cross-dim route described below.
+;;;
+;;;  Out-of-square details:
 ;;;
 ;;;    * A gray nominal "guide" pool appears as soon as the shape is
 ;;;      chosen; while each measurement is prompted for, the matching
@@ -80,6 +87,7 @@
 (setq pool:*dashlt*    "CONTINUOUS")  ; resolved to DASHED per run
 (setq pool:*lts*       1.0)           ; linetype scale for dashed refs
 (setq pool:*pvents*    nil)           ; live guide-preview entities
+(setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -337,12 +345,15 @@
         ebc (pool:pvline b c)
         ecd (pool:pvline d c)
         eda (pool:pvline d a)
-        eac (pool:pvlined a c)
-        ebd (pool:pvlined b d)
-        all (list eab ebc ecd eda eac ebd)
+        all (list eab ebc ecd eda)
         pv (list (cons 'ab (list eab)) (cons 'bc (list ebc))
-                 (cons 'dc (list ecd)) (cons 'da (list eda))
-                 (cons 'ac (list eac)) (cons 'bd (list ebd))))
+                 (cons 'dc (list ecd)) (cons 'da (list eda))))
+  ;; body diagonals only when out-of-square
+  (if (not pool:*insq*)
+      (setq eac (pool:pvlined a c)
+            ebd (pool:pvlined b d)
+            all (append all (list eac ebd))
+            pv (append pv (list (cons 'ac (list eac)) (cons 'bd (list ebd))))))
   (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
     (pool:text (pool:v+ (car pr)
                         (pool:v* (pool:unit (pool:v- (car pr) cen)) 20.0))
@@ -760,9 +771,14 @@
                        e p qq cc nm tgt act rows k)
   (setq oldclay (getvar "CLAYER"))
 
-  (initget 1 "Simple Center Complex")
-  (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
-        crosses (pool:grecmode mode))
+  ;; in-square Grecians skip cross dims entirely; out-of-square pick a
+  ;; cross-dim detail level
+  (if pool:*insq*
+      (setq mode "Simple" crosses nil)
+      (progn
+        (initget 1 "Simple Center Complex")
+        (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
+              crosses (pool:grecmode mode))))
 
   (setq pv (pool:grecpreview crosses))
   (command "_.ZOOM" "_Window"
@@ -1046,12 +1062,15 @@
           pv (cons (cons (nth k keys) (list ent)) pv)
           all (cons ent all)
           k (1+ k)))
-  (setq keys (list 'ac 'bd 'ce 'df 'ae 'bf) k 0)
-  (foreach pr pool:*hexdiags*
-    (setq ent (pool:pvlined (nth (car pr) pts) (nth (cadr pr) pts))
-          pv (cons (cons (nth k keys) (list ent)) pv)
-          all (cons ent all)
-          k (1+ k)))
+  ;; cross diagonals only when out-of-square
+  (if (not pool:*insq*)
+      (progn
+        (setq keys (list 'ac 'bd 'ce 'df 'ae 'bf) k 0)
+        (foreach pr pool:*hexdiags*
+          (setq ent (pool:pvlined (nth (car pr) pts) (nth (cadr pr) pts))
+                pv (cons (cons (nth k keys) (list ent)) pv)
+                all (cons ent all)
+                k (1+ k)))))
   (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
   (foreach p pts
     (pool:text (pool:lbloff p cen pts 20.0) 12.0 (nth k lbls) "POOL-NOTES")
@@ -1079,13 +1098,16 @@
                          (cdr (assoc 'de pv)))
               (pool:askh "End E-F (end of wing)" (cdr (assoc 'ef pv)))
               (pool:askh "Side F-A (left side)" (cdr (assoc 'fa pv)))))
+  ;; cross dims only when out-of-square; in-square squares up to sides
   (setq diags
-        (list (pool:askhx "Cross dim A-C" (cdr (assoc 'ac pv)))
-              (pool:askhx "Cross dim B-D" (cdr (assoc 'bd pv)))
-              (pool:askhx "Cross dim C-E" (cdr (assoc 'ce pv)))
-              (pool:askhx "Cross dim D-F" (cdr (assoc 'df pv)))
-              (pool:askhx "Cross dim A-E" (cdr (assoc 'ae pv)))
-              (pool:askhx "Cross dim B-F" (cdr (assoc 'bf pv)))))
+        (if pool:*insq*
+            (list nil nil nil nil nil nil)
+            (list (pool:askhx "Cross dim A-C" (cdr (assoc 'ac pv)))
+                  (pool:askhx "Cross dim B-D" (cdr (assoc 'bd pv)))
+                  (pool:askhx "Cross dim C-E" (cdr (assoc 'ce pv)))
+                  (pool:askhx "Cross dim D-F" (cdr (assoc 'df pv)))
+                  (pool:askhx "Cross dim A-E" (cdr (assoc 'ae pv)))
+                  (pool:askhx "Cross dim B-F" (cdr (assoc 'bf pv))))))
   (pool:pvkill)
 
   (princ "\nFitting pool body to the measurements ...")
@@ -1147,13 +1169,15 @@
                            (distance (nth (car pr) pts) (nth (cadr pr) pts)))
                      rows)
           k (1+ k)))
-  (setq k 0)
-  (foreach pr pool:*hexdiags*
-    (setq rows (cons (list (strcat "CROSS " (nth k pool:*hexdiagnames*))
-                           (nth k diags)
-                           (distance (nth (car pr) pts) (nth (cadr pr) pts)))
-                     rows)
-          k (1+ k)))
+  (if (not pool:*insq*)
+      (progn
+        (setq k 0)
+        (foreach pr pool:*hexdiags*
+          (setq rows (cons (list (strcat "CROSS " (nth k pool:*hexdiagnames*))
+                                 (nth k diags)
+                                 (distance (nth (car pr) pts) (nth (cadr pr) pts)))
+                           rows)
+                k (1+ k)))))
   (setq rows (reverse rows))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
@@ -1228,9 +1252,12 @@
   (setq tp  (pool:askh "Side length TOP (D-C)" (cdr (assoc 'dc pv)))
         bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
         le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
-        ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv)))
-        dac (pool:askhx "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
-        dbd (pool:askhx "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv))))
+        ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv))))
+  ;; cross dims only when out-of-square (in-square squares up to sides)
+  (if pool:*insq*
+      (setq dac nil dbd nil)
+      (setq dac (pool:askhx "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
+            dbd (pool:askhx "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv)))))
 
   (if (= ptype "Oval")
       (setq totl (pool:askh "Total pool length (arc tip to arc tip)" (cdr (assoc 'tot pv)))
@@ -1353,9 +1380,11 @@
   (setq rows (list (list "TOP SIDE (D-C)" tp (cadr meas))
                    (list "BOTTOM SIDE (A-B)" bo (car meas))
                    (list "LEFT END (A-D)" le (caddr meas))
-                   (list "RIGHT END (B-C)" ri (cadddr meas))
-                   (list "CROSS A-C" dac (nth 4 meas))
-                   (list "CROSS B-D" dbd (nth 5 meas))))
+                   (list "RIGHT END (B-C)" ri (cadddr meas))))
+  (if (not pool:*insq*)
+      (setq rows (append rows
+                         (list (list "CROSS A-C" dac (nth 4 meas))
+                               (list "CROSS B-D" dbd (nth 5 meas))))))
   (if tri
       (setq rows (append rows
                          (list (list "TRI CHECK B-D" dbd
@@ -1392,6 +1421,14 @@
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setvar "OSMODE" 0)
+
+  ;; In-square pools are built true to the side measurements and need
+  ;; no diagonals; out-of-square pools take the usual cross-dim route.
+  (initget 1 "Insquare Outofsquare")
+  (setq pool:*insq* (= "Insquare"
+                       (getkword "\nIs the pool in-square or out-of-square [Insquare/Outofsquare]: ")))
+  (if pool:*insq*
+      (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
   ;; L = true L; LAzyl = lazy L (type LA to select it)
   (initget 1 "Rectangle Oval Grecian L LAzyl")
