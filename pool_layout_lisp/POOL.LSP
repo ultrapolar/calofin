@@ -11,6 +11,15 @@
 ;;;  cross dims (diagonals) are asked for or drawn.  An out-of-square
 ;;;  pool takes the full cross-dim route described below.
 ;;;
+;;;  Rectangle corners may be Square, Rounded (radius) or Diag
+;;;  (chamfer, sized by its face length).  Side lengths are always to
+;;;  the TRUE corner; the treatment cuts inward.  In-square assumes all
+;;;  four corners identical; out-of-square asks per corner (Enter
+;;;  reuses the previous corner).  When corners are cut and the pool is
+;;;  out-of-square, the cross dims are measured from one of: the true
+;;;  Corner, the Middle of the cut/arc, or its Ends (both endpoints of
+;;;  each diagonal).  Square corners -> cross dims from the true corner.
+;;;
 ;;;  Out-of-square details:
 ;;;
 ;;;    * A gray nominal "guide" pool appears as soon as the shape is
@@ -1230,14 +1239,136 @@
   (princ))
 
 
-;;; -------------------- rectangle / oval / grecian flow ----------------
+;;; -------------------- rectangle corner treatments --------------------
+;;;
+;;;  A rectangle corner may be Square, Rounded (radius) or Diag
+;;;  (chamfer).  Side lengths are always measured to the TRUE (sharp)
+;;;  corner; the treatment cuts inward from there.  The size typed is:
+;;;    Rounded -> the corner RADIUS
+;;;    Diag    -> the CHAMFER FACE length (the cut itself)
+;;;  In-square pools assume all four corners identical; out-of-square
+;;;  pools ask per corner (Enter reuses the previous corner's answer).
+
+;; The two points where a corner's treatment meets the straight sides
+;; (toward the previous / next corner) plus, for Rounded, the arc mid.
+;; Returns (ePrev eNext arcMid|nil).  Square -> (P P nil).
+(defun pool:cornerends (p pp pn type size / uprev unext dp ang t bis cen)
+  (setq uprev (pool:unit (pool:v- pp p))
+        unext (pool:unit (pool:v- pn p))
+        dp (pool:dot uprev unext)
+        ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
+  (cond
+    ((= type "Diag")
+     (setq t (/ size (* 2.0 (sin (/ ang 2.0)))))            ; face -> edge setback
+     (list (pool:v+ p (pool:v* uprev t))
+           (pool:v+ p (pool:v* unext t)) nil))
+    ((= type "Rounded")
+     (setq t (/ (* size (cos (/ ang 2.0))) (sin (/ ang 2.0)))  ; r/tan(ang/2)
+           bis (pool:unit (pool:v+ uprev unext))
+           cen (pool:v+ p (pool:v* bis (/ size (sin (/ ang 2.0))))))
+     (list (pool:v+ p (pool:v* uprev t))
+           (pool:v+ p (pool:v* unext t))
+           (pool:v- cen (pool:v* bis size))))              ; arc point nearest corner
+    (t (list p p nil))))
+
+;; A reference point at corner i of quad q for a cross-dim measurement:
+;;   spec = 'true (sharp corner) | 'prev | 'next (treatment ends) |
+;;          'mid (chamfer/arc middle).
+(defun pool:cornerpoint (q corners i spec / ce)
+  (setq ce (pool:cornerends (nth i q)
+                            (nth (rem (+ i 3) 4) q)
+                            (nth (rem (+ i 1) 4) q)
+                            (car (nth i corners)) (cadr (nth i corners))))
+  (cond ((eq spec 'prev) (car ce))
+        ((eq spec 'next) (cadr ce))
+        ((eq spec 'mid) (if (caddr ce) (caddr ce) (pool:mid (car ce) (cadr ce))))
+        (t (nth i q))))
+
+;; Draw the rectangle perimeter with corner treatments on layer POOL.
+(defun pool:drawrect (q corners / ce i tyi)
+  (setq ce (mapcar '(lambda (i)
+                      (pool:cornerends (nth i q)
+                                       (nth (rem (+ i 3) 4) q)
+                                       (nth (rem (+ i 1) 4) q)
+                                       (car (nth i corners)) (cadr (nth i corners))))
+                   (list 0 1 2 3)))
+  (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
+    (pool:line (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce)) "POOL"))
+  (foreach i (list 0 1 2 3)             ; corner treatments
+    (setq tyi (car (nth i corners)))
+    (cond
+      ((= tyi "Diag") (pool:line (car (nth i ce)) (cadr (nth i ce)) "POOL"))
+      ((= tyi "Rounded")
+       (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) "POOL"))))
+  ce)
+
+;; Prompt one corner's treatment (Enter reuses prevty/prevsz).
+(defun pool:askcorner (label prevty prevsz / ty sz)
+  (if prevty (initget "Square Rounded Diag") (initget 1 "Square Rounded Diag"))
+  (setq ty (getkword (strcat "\n" label " [Square/Rounded/Diag]"
+                             (if prevty (strcat " <" prevty ">") "") ": ")))
+  (if (null ty) (setq ty prevty))
+  (if (= ty "Square")
+      (setq sz 0.0)
+      (progn
+        (initget (if (and prevsz (> prevsz 0.0)) 6 7))
+        (setq sz (getdist (strcat "\n" label
+                                  (if (= ty "Rounded") " corner radius" " chamfer face length")
+                                  (if (and prevsz (> prevsz 0.0))
+                                      (strcat " <" (rtos prevsz) ">") "")
+                                  ": ")))
+        (if (null sz) (setq sz prevsz))))
+  (list ty sz))
+
+;; Cross-dim measurement templates for the chosen reference mode.
+;; Each entry: (diagkey prompt rowlabel iA specA iC specC).  Ends uses
+;; both endpoints on each side of the diagonal.
+(defun pool:crosstemplate (cmode)
+  (cond
+    ((= cmode "Middle")
+     (list (list 'ac "Cross dim A-C (to corner middles)" "AC MID" 0 'mid 2 'mid)
+           (list 'bd "Cross dim B-D (to corner middles)" "BD MID" 1 'mid 3 'mid)))
+    ((= cmode "Ends")
+     (list (list 'ac "Cross A-C, B-side (A>B end to C>B end)" "AC B-END" 0 'next 2 'prev)
+           (list 'ac "Cross A-C, D-side (A>D end to C>D end)" "AC D-END" 0 'prev 2 'next)
+           (list 'bd "Cross B-D, A-side (B>A end to D>A end)" "BD A-END" 1 'prev 3 'next)
+           (list 'bd "Cross B-D, C-side (B>C end to D>C end)" "BD C-END" 1 'next 3 'prev)))
+    (t
+     (list (list 'ac "Cross dim bottom-left to top-right (A-C)" "CROSS A-C" 0 'true 2 'true)
+           (list 'bd "Cross dim bottom-right to top-left (B-D)" "CROSS B-D" 1 'true 3 'true)))))
+
+;; Average of a diagonal's raw measurements (bootstrap), or the
+;; corner-corrected effective true-corner target using estimate q.
+(defun pool:rawavg (xmeas diagkey / sum n)
+  (setq sum 0.0 n 0)
+  (foreach m xmeas
+    (if (and (eq (car m) diagkey) (nth 7 m))
+        (setq sum (+ sum (nth 7 m)) n (1+ n))))
+  (if (> n 0) (/ sum n) nil))
+
+(defun pool:effcross (q corners xmeas diagkey / sum n ra rc)
+  (setq sum 0.0 n 0)
+  (foreach m xmeas
+    (if (and (eq (car m) diagkey) (nth 7 m))
+        (progn
+          (setq ra (pool:cornerpoint q corners (nth 3 m) (nth 4 m))
+                rc (pool:cornerpoint q corners (nth 5 m) (nth 6 m))
+                sum (+ sum (+ (nth 7 m)
+                              (- (distance (nth (nth 3 m) q) (nth (nth 5 m) q))
+                                 (distance ra rc))))
+                n (1+ n)))))
+  (if (> n 0) (/ sum n) nil))
+
+;;; -------------------- rectangle / oval flow --------------------------
 
 ;; Full guided flow for the quad-based pools: preview, prompts, fit,
 ;; draw, dimension and report.  Caller handles sysvars/undo/zoom.
 (defun pool:quadflow (ptype / oldclay pv
                              tp bo le ri dac dbd totl lrad rrad
+                             corners cmode anycut cc prevty prevsz lbl
+                             xmeas tm hl val m rpa rpb pass
                              fitres quad failed a b c d cen meas notes tri
-                             doff th endoff pr odim
+                             doff th endoff pr odim k
                              midl midr ml mr tipl tipr
                              allpts xmax ymax ymin rows)
   (setq oldclay (getvar "CLAYER"))
@@ -1253,11 +1384,45 @@
         bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
         le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
         ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv))))
-  ;; cross dims only when out-of-square (in-square squares up to sides)
-  (if pool:*insq*
-      (setq dac nil dbd nil)
-      (setq dac (pool:askhx "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
-            dbd (pool:askhx "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv)))))
+
+  ;; -------- corner treatments (rectangle only; side lengths are to
+  ;; the TRUE corner, treatments cut inward)
+  (if (= ptype "Rectangle")
+      (if pool:*insq*
+          (progn                        ; in-square: one answer for all 4
+            (setq cc (pool:askcorner "All corners (assumed identical)" nil nil)
+                  corners (list cc cc cc cc)))
+          (progn                        ; out-of-square: per corner, Enter reuses
+            (princ "\n(per-corner treatment; press Enter to reuse the previous corner)")
+            (setq corners nil prevty nil prevsz nil)
+            (foreach lbl (list "A" "B" "C" "D")
+              (setq cc (pool:askcorner (strcat "Corner " lbl) prevty prevsz)
+                    prevty (car cc) prevsz (cadr cc)
+                    corners (cons cc corners)))
+            (setq corners (reverse corners))))
+      (setq corners (list (list "Square" 0.0) (list "Square" 0.0)
+                          (list "Square" 0.0) (list "Square" 0.0))))
+  (setq anycut nil)
+  (foreach cc corners (if (/= (car cc) "Square") (setq anycut t)))
+
+  ;; -------- cross-dim reference mode (only when corners are cut and
+  ;; the pool is out-of-square)
+  (setq cmode "Corner")
+  (if (and (not pool:*insq*) anycut)
+      (progn
+        (initget 1 "Corner Middle Ends")
+        (setq cmode (getkword
+                      "\nCut corners -- cross dims measured from [Corner/Middle/Ends]: "))))
+
+  ;; -------- cross dims (out-of-square only), per the reference mode
+  (setq xmeas nil)
+  (if (not pool:*insq*)
+      (foreach tm (pool:crosstemplate cmode)
+        (setq hl (cdr (assoc (car tm) pv))
+              val (pool:askhx (cadr tm) hl)
+              xmeas (cons (append tm (list val)) xmeas)))
+      (princ "\nIn-square: building true to the side measurements (no cross dims)."))
+  (setq xmeas (reverse xmeas))
 
   (if (= ptype "Oval")
       (setq totl (pool:askh "Total pool length (arc tip to arc tip)" (cdr (assoc 'tot pv)))
@@ -1268,11 +1433,26 @@
   (pool:pvkill)
 
   ;; ------------------------------------------------ fit the body
+  ;; bootstrap the true-corner cross targets from the raw measurements,
+  ;; then (for cut corners) refine them against the fitted corner
+  ;; reference points and re-fit.
   (princ "\nFitting pool body to the measurements ...")
-  (setq fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
+  (setq dac (pool:rawavg xmeas 'ac)
+        dbd (pool:rawavg xmeas 'bd)
+        fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
         quad (car fitres)
-        failed (cadr fitres)
-        a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
+        failed (cadr fitres))
+  (if (/= cmode "Corner")
+      (progn
+        (setq pass 0)
+        (while (< pass 2)
+          (setq dac (pool:effcross quad corners xmeas 'ac)
+                dbd (pool:effcross quad corners xmeas 'bd)
+                fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
+                quad (car fitres)
+                failed (cadr fitres)
+                pass (1+ pass)))))
+  (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         meas (pool:quadmeas quad)
         notes nil)
@@ -1282,16 +1462,14 @@
         pool:*lts* (max 1.0 (/ (max bo tp le ri) 15.0)))
 
   ;; -------------------------------- pool body / perimeter (layer POOL)
-  ;; The perimeter runs around the WHOLE pool: for the oval the body
-  ;; end lines are reference only (dashed, POOL-NOTES) and the
-  ;; perimeter closes through the arcs instead.
-  (pool:line a b "POOL")
-  (pool:line c d "POOL")
+  ;; Rectangle draws its perimeter with corner treatments; the oval
+  ;; body end lines are reference only (dashed) and the perimeter
+  ;; closes through the arcs instead.
   (if (= ptype "Rectangle")
+      (pool:drawrect quad corners)
       (progn
-        (pool:line b c "POOL")
-        (pool:line d a "POOL"))
-      (progn
+        (pool:line a b "POOL")
+        (pool:line c d "POOL")
         (pool:lined b c)
         (pool:lined d a)))
 
@@ -1356,17 +1534,19 @@
                                                  (* 0.3 doff))))
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))))
-  ;; provided cross dims last, in the CROSS DIMENSION style when the
-  ;; drawing has one (current style restored afterwards)
-  (setq odim (pool:dimxbegin))
-  (if dac
-      (pool:dimalg a c (pool:v+ (pool:mid a c)
-                                (pool:v* (pool:unit (pool:perp (pool:v- c a)))
-                                         (* 0.2 doff)))))
-  (if dbd
-      (pool:dimalg b d (pool:v+ (pool:mid b d)
-                                (pool:v* (pool:unit (pool:perp (pool:v- d b)))
-                                         (* -0.2 doff)))))
+  ;; provided cross dims, between their reference points, in the CROSS
+  ;; DIMENSION style when the drawing has one
+  (setq odim (pool:dimxbegin) k 0)
+  (foreach m xmeas
+    (if (nth 7 m)
+        (progn
+          (setq rpa (pool:cornerpoint quad corners (nth 3 m) (nth 4 m))
+                rpb (pool:cornerpoint quad corners (nth 5 m) (nth 6 m)))
+          (pool:dimalg rpa rpb
+                       (pool:v+ (pool:mid rpa rpb)
+                                (pool:v* (pool:unit (pool:perp (pool:v- rpb rpa)))
+                                         (* (if (= 0 (rem k 2)) 0.2 -0.2) doff))))))
+    (setq k (1+ k)))
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
@@ -1381,10 +1561,13 @@
                    (list "BOTTOM SIDE (A-B)" bo (car meas))
                    (list "LEFT END (A-D)" le (caddr meas))
                    (list "RIGHT END (B-C)" ri (cadddr meas))))
-  (if (not pool:*insq*)
-      (setq rows (append rows
-                         (list (list "CROSS A-C" dac (nth 4 meas))
-                               (list "CROSS B-D" dbd (nth 5 meas))))))
+  ;; each cross measurement vs the actual distance between its
+  ;; reference points in the fitted drawing
+  (foreach m xmeas
+    (setq rows (append rows
+                       (list (list (nth 2 m) (nth 7 m)
+                                   (distance (pool:cornerpoint quad corners (nth 3 m) (nth 4 m))
+                                             (pool:cornerpoint quad corners (nth 5 m) (nth 6 m))))))))
   (if tri
       (setq rows (append rows
                          (list (list "TRI CHECK B-D" dbd
@@ -1392,6 +1575,18 @@
   (if (= ptype "Oval")
       (setq rows (append rows
                          (list (list "TOTAL LENGTH" totl (distance tipl tipr))))))
+  ;; corner treatments
+  (if (and (= ptype "Rectangle") anycut)
+      (if pool:*insq*
+          (setq rows (append rows
+                             (list (list (strcat "CORNERS " (car (car corners)))
+                                         (cadr (car corners)) (cadr (car corners))))))
+          (foreach lbl (list (list "A" 0) (list "B" 1) (list "C" 2) (list "D" 3))
+            (if (/= (car (nth (cadr lbl) corners)) "Square")
+                (setq rows (append rows
+                                   (list (list (strcat "COR " (car lbl) " " (car (nth (cadr lbl) corners)))
+                                               (cadr (nth (cadr lbl) corners))
+                                               (cadr (nth (cadr lbl) corners))))))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
   (if failed

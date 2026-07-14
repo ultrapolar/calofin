@@ -46,6 +46,33 @@ Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
 shows `N/A` for its target/delta (the as-drawn value is still listed).
 
+### Rectangle corners (Square / Rounded / Diag)
+
+Rectangle corners can be **Square**, **Rounded** (a radius) or **Diag**
+(a chamfer, sized by its **face length** — the cut itself). Side and
+end lengths are always measured to the **true (sharp) corner**; the
+treatment cuts inward from there.
+
+* **In-square:** one corner question, applied to all four corners.
+* **Out-of-square:** asked per corner (A, B, C, D); press **Enter** to
+  reuse the previous corner's answer, so four identical corners is
+  three quick Enters.
+
+When corners are cut/rounded **and** the pool is out-of-square, you're
+asked where the cross dims were measured from:
+
+| Reference | Meaning | Cross prompts |
+| --- | --- | --- |
+| **Corner** | To the true (extended) sharp corner | A-C, B-D |
+| **Middle** | To the middle of each chamfer/arc | A-C, B-D |
+| **Ends** | To the treatment endpoints — **both** ends of each diagonal | A-C (B-side & D-side), B-D (A-side & C-side) |
+
+The measurements are converted to equivalent true-corner diagonals
+(corrected against the fitted corner geometry) so the body still
+best-fits correctly, and each cross measurement is dimensioned between
+its actual reference points and listed in the report. Square corners
+always use the true corner, so no reference question is asked.
+
 ### In-square vs out-of-square
 
 The very first prompt asks whether the pool is in-square. **In-square**

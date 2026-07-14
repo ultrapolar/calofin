@@ -534,4 +534,119 @@ em=edgemax(pts,edges)
 print(f"   edgemax {em:.3f} (<=0 in band), n cross rows {len(cc)}, failed={failed}")
 assert not failed and em<=0.06 and len(cc)==0
 
+
+# ---------------- rectangle corner treatments + cross-dim reference ----------------
+def _u(p,q):
+    d=math.hypot(q[0]-p[0],q[1]-p[1]); return ((q[0]-p[0])/d,(q[1]-p[1])/d) if d>1e-12 else (0,0)
+def _vadd(p,v,s): return (p[0]+v[0]*s, p[1]+v[1]*s)
+
+def cornerends(P,Pp,Pn,typ,size):
+    up=_u(P,Pp); un=_u(P,Pn)
+    dp=up[0]*un[0]+up[1]*un[1]
+    ang=math.atan2(math.sqrt(max(0.0,1-dp*dp)), dp)
+    if typ=="Diag":
+        t=size/(2.0*math.sin(ang/2.0))
+        return (_vadd(P,up,t), _vadd(P,un,t), None)
+    if typ=="Rounded":
+        t=size*math.cos(ang/2.0)/math.sin(ang/2.0)
+        bx,by=up[0]+un[0], up[1]+un[1]
+        bl=math.hypot(bx,by); bis=(bx/bl,by/bl)
+        cen=_vadd(P,bis, size/math.sin(ang/2.0))
+        return (_vadd(P,up,t), _vadd(P,un,t), _vadd(cen,bis,-size))
+    return (P,P,None)
+
+def cornerpoint(q,corners,i,spec):
+    ce=cornerends(q[i], q[(i+3)%4], q[(i+1)%4], corners[i][0], corners[i][1])
+    if spec=='prev': return ce[0]
+    if spec=='next': return ce[1]
+    if spec=='mid':  return ce[2] if ce[2] else ((ce[0][0]+ce[1][0])/2,(ce[0][1]+ce[1][1])/2)
+    return q[i]
+
+def crosstemplate(cmode):
+    if cmode=="Middle":
+        return [('ac',0,'mid',2,'mid'),('bd',1,'mid',3,'mid')]
+    if cmode=="Ends":
+        return [('ac',0,'next',2,'prev'),('ac',0,'prev',2,'next'),
+                ('bd',1,'prev',3,'next'),('bd',1,'next',3,'prev')]
+    return [('ac',0,'true',2,'true'),('bd',1,'true',3,'true')]
+
+def effcross(q,corners,xmeas,diag):
+    vals=[]
+    for (d,iA,sA,iC,sC,val) in xmeas:
+        if d==diag and val is not None:
+            ra=cornerpoint(q,corners,iA,sA); rc=cornerpoint(q,corners,iC,sC)
+            vals.append(val + (dist(q[iA],q[iC]) - dist(ra,rc)))
+    return sum(vals)/len(vals) if vals else None
+
+def rawavg(xmeas,diag):
+    vals=[val for (d,iA,sA,iC,sC,val) in xmeas if d==diag and val is not None]
+    return sum(vals)/len(vals) if vals else None
+
+def rect_fit(TRUE, corners, cmode):
+    # measure sides from true corners
+    A,B,C,D=TRUE
+    bo=dist(A,B); tp=dist(D,C); le=dist(A,D); ri=dist(B,C)
+    # build measurements from the true shape at the reference points
+    xmeas=[]
+    for (d,iA,sA,iC,sC) in crosstemplate(cmode):
+        pa=cornerpoint(TRUE,corners,iA,sA); pc=cornerpoint(TRUE,corners,iC,sC)
+        xmeas.append((d,iA,sA,iC,sC, dist(pa,pc)))
+    dac=rawavg(xmeas,'ac'); dbd=rawavg(xmeas,'bd')
+    q,failed=fitquad(bo,tp,le,ri,dac,dbd)
+    if cmode!="Corner":
+        for _ in range(2):
+            dac=effcross(q,corners,xmeas,'ac'); dbd=effcross(q,corners,xmeas,'bd')
+            q,failed=fitquad(bo,tp,le,ri,dac,dbd)
+    return q, xmeas, (bo,tp,le,ri)
+
+# a mildly out-of-square rectangle (true corners)
+RECT=[(0,0),(400.5,0),(399.0,239.6),(1.2,240.4)]
+def check(q, RECT, sides):
+    m=quadmeas(q)
+    for k,t in enumerate(sides):
+        assert abs(m[k]-t)<1.05, f"side {k} {m[k]} vs {t}"
+def refmatch(q, corners, xmeas):
+    mx=0.0
+    for (d,iA,sA,iC,sC,val) in xmeas:
+        act=dist(cornerpoint(q,corners,iA,sA), cornerpoint(q,corners,iC,sC))
+        mx=max(mx, abs(act-val))
+    return mx
+
+print("== 27. Rounded corners, reference = true CORNER ==")
+cor=[("Rounded",18.0)]*4
+q,xm,sides=rect_fit(RECT,cor,"Corner"); check(q,RECT,sides)
+print(f"   ref match {refmatch(q,cor,xm):.4f}")
+assert refmatch(q,cor,xm)<0.06
+
+print("== 28. Diag (chamfer face) corners, reference = MIDDLE ==")
+cor=[("Diag",24.0)]*4
+q,xm,sides=rect_fit(RECT,cor,"Middle"); check(q,RECT,sides)
+print(f"   ref match {refmatch(q,cor,xm):.4f}")
+assert refmatch(q,cor,xm)<0.10
+
+print("== 29. Rounded corners, reference = ENDS (4 ties) ==")
+cor=[("Rounded",20.0)]*4
+q,xm,sides=rect_fit(RECT,cor,"Ends"); check(q,RECT,sides)
+print(f"   {len(xm)} ties, ref match {refmatch(q,cor,xm):.4f}")
+assert len(xm)==4 and refmatch(q,cor,xm)<0.10
+
+print("== 30. Mixed corners (2 square, 1 diag, 1 rounded), ENDS ==")
+cor=[("Square",0.0),("Diag",22.0),("Rounded",16.0),("Square",0.0)]
+q,xm,sides=rect_fit(RECT,cor,"Ends"); check(q,RECT,sides)
+print(f"   ref match {refmatch(q,cor,xm):.4f}")
+assert refmatch(q,cor,xm)<0.12
+
+print("== 31. Chamfer face-length geometry sanity (90deg corner) ==")
+# square corner, face f -> setback f/sqrt2 along each edge
+ce=cornerends((0,0),(0,100),(100,0),"Diag",20.0)  # P origin, prev up, next right
+import math as _m
+assert abs(dist((0,0),ce[0]) - 20.0/_m.sqrt(2))<1e-6
+assert abs(dist(ce[0],ce[1]) - 20.0)<1e-6   # face length reproduced
+print("   setback = face/sqrt2 and face length reproduced")
+
+print("== 32. Rounded tangent geometry sanity (90deg corner) ==")
+ce=cornerends((0,0),(0,100),(100,0),"Rounded",15.0)
+assert abs(dist((0,0),ce[0]) - 15.0)<1e-6   # tangent dist = r on square corner
+print("   tangent dist = r on a square corner")
+
 print("\nALL CHECKS PASSED")
