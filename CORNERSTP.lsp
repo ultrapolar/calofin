@@ -40,7 +40,10 @@
 ;;;           equally short of) both walls, and the step breaks away
 ;;;           from the walls to hold the given dimensions.
 ;;;         - Enter at the width prompt fits that one step to the walls.
-;;;   6.  Enter at the depth prompt means no more depths/widths are
+;;;   6.  Every tread depth and step width is dimensioned with an
+;;;       aligned dimension in the current dimension style: the depth
+;;;       square to the treads, the width along the tread edge.
+;;;   7.  Enter at the depth prompt means no more depths/widths are
 ;;;       required; the routine finishes with what it was given.
 ;;;       Side (riser) lines are drawn between successive step ends
 ;;;       whenever the walls themselves do not already close that edge.
@@ -50,6 +53,8 @@
 ;;;     Change *CS-WIDTH-TOL* below if your drawings use another unit.
 ;;;   - Geometry is assumed to be drawn in plan view in the WCS.
 ;;;   - All new geometry is drawn as LINEs on the current layer.
+;;;   - Dimensions use the current DIMSTYLE (and DIMSCALE for their
+;;;     size); grab a dimension line to slide it if it lands awkwardly.
 ;;;   - One U / UNDO reverses the whole command.
 ;;; ======================================================================
 
@@ -94,6 +99,11 @@
   (entmake (list '(0 . "LINE")
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
+
+;; aligned dimension between A and B, dim line passing through THRU.
+;; "_non" disables running osnap for each fed point so nothing snaps.
+(defun cs-dim (a b thru)
+  (command "_.DIMALIGNED" "_non" a "_non" b "_non" thru))
 
 ;; Draw the side (riser) line A-B unless it is degenerate or both points
 ;; already lie along the same wall line (the wall provides that edge).
@@ -298,6 +308,16 @@
         (cs-mkline e1 e2)          ; the step (tread) edge
         (cs-conn prevL e1 w1 w2)   ; side lines where the walls
         (cs-conn prevR e2 w1 w2)   ; do not already close the step
+        ;; tread-depth dimension: along the ray from the previous tread
+        ;; position to this one, offset to the e1 side of the steps
+        (cs-dim (cs-add p (cs-scl bis (- dep))) p
+                (cs-add (cs-add p (cs-scl bis (* -0.5 dep)))
+                        (cs-scl perp (+ (* 0.5 (distance e1 e2)) dep))))
+        ;; step-width dimension: along the tread edge, offset toward
+        ;; the corner so it sits between this tread and the previous one
+        (cs-dim e1 e2
+                (cs-add (mapcar '(lambda (x y) (* 0.5 (+ x y))) e1 e2)
+                        (cs-scl bis (* -0.5 dep))))
         (setq prevL e1 prevR e2 drawn (1+ drawn))))
     (setq n (1+ n)))
 
