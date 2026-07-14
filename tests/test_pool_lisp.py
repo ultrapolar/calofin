@@ -649,4 +649,80 @@ ce=cornerends((0,0),(0,100),(100,0),"Rounded",15.0)
 assert abs(dist((0,0),ce[0]) - 15.0)<1e-6   # tangent dist = r on square corner
 print("   tangent dist = r on a square corner")
 
+
+# ---------------- pool bottom / hopper (rectangle pipeline) ----------------
+def linex(p1,d1,p2,d2):
+    den=d1[0]*d2[1]-d1[1]*d2[0]
+    if abs(den)<1e-9: return None
+    s=((p2[0]-p1[0])*d2[1]-(p2[1]-p1[1])*d2[0])/den
+    return (p1[0]+d1[0]*s, p1[1]+d1[1]*s)
+
+def offline(p,q,cen,d):
+    n=_unit(_perp(_sub(q,p)))
+    if _dot(_sub(_mid(p,q),cen),n)>0: n=_scl(n,-1.0)
+    return (_add(p,_scl(n,d)), _sub(q,p))
+
+def hopcalc(quad,corners,h,g,e,m,k):
+    a,b,c,d=quad
+    cen=((a[0]+b[0]+c[0]+d[0])/4.0,(a[1]+b[1]+c[1]+d[1])/4.0)
+    hl=offline(a,d,cen,h); hr=offline(a,d,cen,h+g)
+    ht=offline(d,c,cen,m); hb=offline(a,b,cen,k)
+    brk=offline(b,c,cen,e)
+    gg={}
+    gg['hbl']=linex(*hl,*hb); gg['htl']=linex(*hl,*ht)
+    gg['hbr']=linex(*hr,*hb); gg['htr']=linex(*hr,*ht)
+    gg['brkb']=linex(*brk,a,_sub(b,a)); gg['brkt']=linex(*brk,d,_sub(c,d))
+    gg['lab']=cornerpoint(quad,corners,0,'true' if corners[0][0]=="Square" else 'prev')
+    gg['lat']=cornerpoint(quad,corners,3,'true' if corners[3][0]=="Square" else 'next')
+    hc=tuple(sum(gg[kk][i] for kk in ('hbl','htl','hbr','htr'))/4.0 for i in (0,1))
+    hdir=_sub(b,a); vdir=_sub(d,a)
+    gg['pl']=linex(hc,hdir,a,_sub(d,a)); gg['phl']=linex(hc,hdir,*hl)
+    gg['phr']=linex(hc,hdir,*hr); gg['pbrk']=linex(hc,hdir,*brk)
+    gg['pr']=linex(hc,hdir,b,_sub(c,b))
+    gg['pb']=linex(hc,vdir,a,_sub(b,a)); gg['phb']=linex(hc,vdir,*hb)
+    gg['pht']=linex(hc,vdir,*ht); gg['pt']=linex(hc,vdir,d,_sub(c,d))
+    return gg
+
+def ptlinedist(p, lp, ld):
+    n=_unit(_perp(ld))
+    return abs((p[0]-lp[0])*n[0]+(p[1]-lp[1])*n[1])
+
+print("== 33. hopper on axis-aligned 400x240, square corners ==")
+Q=[(0,0),(400,0),(400,240),(0,240)]
+SQ=[("Square",0.0)]*4
+gg=hopcalc(Q,SQ,30,60,100,45,50)
+assert gg['hbl']==(30,50) and gg['htl']==(30,195)
+assert gg['hbr']==(90,50) and gg['htr']==(90,195)
+assert gg['brkb']==(300,0) and gg['brkt']==(300,240)
+assert gg['lab']==(0,0) and gg['lat']==(0,240)
+# chain checks
+assert abs(dist(gg['pl'],gg['phl'])-30)<1e-9      # H
+assert abs(dist(gg['phl'],gg['phr'])-60)<1e-9     # G
+assert abs(dist(gg['phr'],gg['pbrk'])-210)<1e-9   # F check
+assert abs(dist(gg['pbrk'],gg['pr'])-100)<1e-9    # E
+assert abs(dist(gg['pht'],gg['pt'])-45)<1e-9      # M
+assert abs(dist(gg['phb'],gg['pht'])-145)<1e-9    # L check
+assert abs(dist(gg['pb'],gg['phb'])-50)<1e-9      # K
+print("   all seven chain values exact")
+
+print("== 34. hopper ties honor rounded/diag corner end-wall points ==")
+COR=[("Rounded",20.0),("Square",0.0),("Square",0.0),("Diag",24.0)]
+gg=hopcalc(Q,COR,30,60,100,45,50)
+assert abs(gg['lab'][0]-0)<1e-9 and abs(gg['lab'][1]-20.0)<1e-9   # tangent point on end wall
+dsb=24.0/math.sqrt(2)
+assert abs(gg['lat'][0]-0)<1e-9 and abs(gg['lat'][1]-(240-dsb))<1e-6  # chamfer end on end wall
+print(f"   lab=(0,20) lat=(0,{240-dsb:.3f}) -- both on the left end wall")
+
+print("== 35. hopper offsets stay perpendicular on an out-of-square quad ==")
+Q2=[(0,0),(400.5,0),(399.0,239.6),(1.2,240.4)]
+gg=hopcalc(Q2,SQ,30,60,100,45,50)
+a,b,c,d=Q2
+# each hopper edge point sits at the exact offset from its wall
+assert abs(ptlinedist(gg['hbl'],a,_sub(d,a))-30)<1e-6    # H from left end
+assert abs(ptlinedist(gg['htr'],a,_sub(d,a))-90)<1e-6    # H+G
+assert abs(ptlinedist(gg['htl'],d,_sub(c,d))-45)<1e-6    # M from top
+assert abs(ptlinedist(gg['hbr'],a,_sub(b,a))-50)<1e-6    # K from bottom
+assert abs(ptlinedist(gg['brkb'],b,_sub(c,b))-100)<1e-6  # E from right end
+print("   perpendicular offsets exact on the skewed quad")
+
 print("\nALL CHECKS PASSED")

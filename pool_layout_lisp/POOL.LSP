@@ -1411,6 +1411,180 @@
                 n (1+ n)))))
   (if (> n 0) (/ sum n) nil))
 
+;;; -------------------- pool bottom / hopper (rectangle) ---------------
+;;;
+;;;  Field-sheet letters (plan view):
+;;;
+;;;      D ------------------------------------ C
+;;;      |\        M                           /|
+;;;      | htl --------- htr                 /  |
+;;;      |  |   hopper    |  \            brkt  |
+;;;      |H |G    (G x L) |     \           |   |
+;;;      | hbl --------- hbr       \        | E |
+;;;      |/        K          \       \   brkb  |
+;;;      A ------------------------------------ B
+;;;
+;;;  H = left end -> hopper, G = hopper length, F = hopper -> slope
+;;;  break (CHECK), E = slope break -> right end, M = top -> hopper,
+;;;  L = hopper width (CHECK), K = hopper -> bottom.  The primary dims
+;;;  are perimeter OFFSETS (H, E, M, K) plus the hopper size G; F and
+;;;  L are redundant and reported as checks with their deltas.
+;;;  The hopper's left corners tie to the pool's left corners -- to the
+;;;  end-wall end of the corner treatment when that corner is cut or
+;;;  rounded -- and its right corners tie to the slope-break ends.
+
+;; Intersection of two infinite lines (p1 along d1, p2 along d2).
+(defun pool:linex (p1 d1 p2 d2 / den s)
+  (setq den (- (* (car d1) (cadr d2)) (* (cadr d1) (car d2))))
+  (if (> (abs den) 1.0e-9)
+      (progn
+        (setq s (/ (- (* (- (car p2) (car p1)) (cadr d2))
+                      (* (- (cadr p2) (cadr p1)) (car d2)))
+                   den))
+        (pool:v+ p1 (pool:v* d1 s)))))
+
+;; The side p->q offset inward (toward cen) by dist, as (point dir).
+(defun pool:offline (p q cen dist / n)
+  (setq n (pool:unit (pool:perp (pool:v- q p))))
+  (if (> (pool:dot (pool:v- (pool:mid p q) cen) n) 0.0)
+      (setq n (pool:v* n -1.0)))
+  (list (pool:v+ p (pool:v* n dist)) (pool:v- q p)))
+
+;; All hopper geometry for quad + corner treatments + the primary
+;; offsets.  Returns an assoc list of named points: hopper corners
+;; (hbl htl hbr htr), slope-break ends (brkb brkt), left tie anchors
+;; (lab lat), and the measuring-chain points -- horizontal pl phl phr
+;; pbrk pr, vertical pb phb pht pt (through the hopper centre).
+(defun pool:hopcalc (quad corners h g e m k / a b c d cen hl hr ht hb brk
+                                              hbl htl hbr htr brkb brkt
+                                              lab lat hc hdir vdir)
+  (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
+        cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
+        hl (pool:offline a d cen h)
+        hr (pool:offline a d cen (+ h g))
+        ht (pool:offline d c cen m)
+        hb (pool:offline a b cen k)
+        brk (pool:offline b c cen e)
+        hbl (pool:linex (car hl) (cadr hl) (car hb) (cadr hb))
+        htl (pool:linex (car hl) (cadr hl) (car ht) (cadr ht))
+        hbr (pool:linex (car hr) (cadr hr) (car hb) (cadr hb))
+        htr (pool:linex (car hr) (cadr hr) (car ht) (cadr ht))
+        brkb (pool:linex (car brk) (cadr brk) a (pool:v- b a))
+        brkt (pool:linex (car brk) (cadr brk) d (pool:v- c d))
+        lab (pool:cornerpoint quad corners 0
+                              (if (= (car (nth 0 corners)) "Square") 'true 'prev))
+        lat (pool:cornerpoint quad corners 3
+                              (if (= (car (nth 3 corners)) "Square") 'true 'next))
+        hc (pool:v* (pool:v+ (pool:v+ hbl htl) (pool:v+ hbr htr)) 0.25)
+        hdir (pool:v- b a)
+        vdir (pool:v- d a))
+  (list (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
+        (list 'brkb brkb) (list 'brkt brkt) (list 'lab lab) (list 'lat lat)
+        (list 'pl (pool:linex hc hdir a (pool:v- d a)))
+        (list 'phl (pool:linex hc hdir (car hl) (cadr hl)))
+        (list 'phr (pool:linex hc hdir (car hr) (cadr hr)))
+        (list 'pbrk (pool:linex hc hdir (car brk) (cadr brk)))
+        (list 'pr (pool:linex hc hdir b (pool:v- c b)))
+        (list 'pb (pool:linex hc vdir a (pool:v- b a)))
+        (list 'phb (pool:linex hc vdir (car hb) (cadr hb)))
+        (list 'pht (pool:linex hc vdir (car ht) (cadr ht)))
+        (list 'pt (pool:linex hc vdir d (pool:v- c d)))))
+
+;; Draw the hopper, slope break and corner ties on layer lay.
+(defun pool:hopdraw (gg lay / hbl htl hbr htr brkb brkt lab lat)
+  (setq hbl (cadr (assoc 'hbl gg)) htl (cadr (assoc 'htl gg))
+        hbr (cadr (assoc 'hbr gg)) htr (cadr (assoc 'htr gg))
+        brkb (cadr (assoc 'brkb gg)) brkt (cadr (assoc 'brkt gg))
+        lab (cadr (assoc 'lab gg)) lat (cadr (assoc 'lat gg)))
+  (pool:line hbl htl lay)
+  (pool:line htl htr lay)
+  (pool:line htr hbr lay)
+  (pool:line hbr hbl lay)
+  (pool:line brkb brkt lay)
+  (pool:line lab hbl lay)
+  (pool:line lat htl lay)
+  (pool:line htr brkt lay)
+  (pool:line hbr brkb lay))
+
+;; Gray field-sheet guide inside the fitted pool: nominal hopper,
+;; break line and ties (solid), plus a dashed lettered measuring tie
+;; per input.  Returns the highlight assoc keyed by letter.
+(defun pool:hopguide (quad corners th / len wid gg pr tl e pv)
+  (setq len (distance (car quad) (cadr quad))
+        wid (distance (car quad) (cadddr quad))
+        gg (pool:hopcalc quad corners
+                         (* 0.12 len) (* 0.20 len) (* 0.40 len)
+                         (* 0.25 wid) (* 0.25 wid)))
+  (foreach pr (list (list 'hbl 'htl) (list 'htl 'htr) (list 'htr 'hbr)
+                    (list 'hbr 'hbl) (list 'brkb 'brkt) (list 'lab 'hbl)
+                    (list 'lat 'htl) (list 'htr 'brkt) (list 'hbr 'brkb))
+    (pool:pvadd (pool:pvline (cadr (assoc (car pr) gg))
+                             (cadr (assoc (cadr pr) gg)))))
+  (setq pv nil)
+  (foreach tl (list (list "H" 'pl 'phl) (list "G" 'phl 'phr)
+                    (list "F" 'phr 'pbrk) (list "E" 'pbrk 'pr)
+                    (list "M" 'pht 'pt) (list "L" 'phb 'pht)
+                    (list "K" 'pb 'phb))
+    (setq e (pool:pvadd (pool:pvlined (cadr (assoc (cadr tl) gg))
+                                      (cadr (assoc (caddr tl) gg))))
+          pv (cons (cons (car tl) (list e)) pv))
+    (pool:text (pool:v+ (pool:mid (cadr (assoc (cadr tl) gg))
+                                  (cadr (assoc (caddr tl) gg)))
+                        (list (* 0.5 th) (* 0.5 th)))
+               (* 1.2 th) (car tl) "POOL-NOTES")
+    (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+  pv)
+
+;; Guided pool-bottom phase (rectangle pipeline).  Shows the lettered
+;; guide, prompts H G F E M L K, draws the real bottom on POOL-BOTTOM
+;; and chain-dimensions it.  Returns the report rows (nil if skipped).
+(defun pool:hopper (quad corners doff th / pv h g f e m l k gg rows tl
+                                           xmin xmax ymin ymax odl)
+  (initget "Yes No")
+  (if (= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
+      nil
+      (progn
+        ;; make sure the whole pool is in view for the guide
+        (setq xmin (apply 'min (mapcar 'car quad))
+              xmax (apply 'max (mapcar 'car quad))
+              ymin (apply 'min (mapcar 'cadr quad))
+              ymax (apply 'max (mapcar 'cadr quad)))
+        (command "_.ZOOM" "_Window"
+                 (pool:wp (list (- xmin doff) (- ymin doff)))
+                 (pool:wp (list (+ xmax doff) (+ ymax doff))))
+        (setq pv (pool:hopguide quad corners th))
+        (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
+        (setq h (pool:askh "H - left end to hopper" (cdr (assoc "H" pv)))
+              g (pool:askh "G - hopper length" (cdr (assoc "G" pv)))
+              f (pool:askh "F - hopper to slope break (check)" (cdr (assoc "F" pv)))
+              e (pool:askh "E - slope break to right end" (cdr (assoc "E" pv)))
+              m (pool:askh "M - top side to hopper" (cdr (assoc "M" pv)))
+              l (pool:askh "L - hopper width (check)" (cdr (assoc "L" pv)))
+              k (pool:askh "K - hopper to bottom side" (cdr (assoc "K" pv))))
+        (pool:pvkill)
+        (pool:layer "POOL-BOTTOM" 5)
+        (setq gg (pool:hopcalc quad corners h g e m k))
+        (pool:hopdraw gg "POOL-BOTTOM")
+        ;; chain dimensions along the two centerlines, like the sheet
+        (setq odl (getvar "CLAYER"))
+        (setvar "CLAYER" "DIMENSION")
+        (foreach tl (list (list 'pl 'phl) (list 'phl 'phr) (list 'phr 'pbrk)
+                          (list 'pbrk 'pr) (list 'pht 'pt) (list 'phb 'pht)
+                          (list 'pb 'phb))
+          (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
+                       (pool:mid (cadr (assoc (car tl) gg))
+                                 (cadr (assoc (cadr tl) gg)))))
+        (setvar "CLAYER" odl)
+        (setq rows (list
+          (list "HOP H" h (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
+          (list "HOP G" g (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
+          (list "HOP F CHECK" f (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
+          (list "HOP E" e (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
+          (list "HOP M" m (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
+          (list "HOP L CHECK" l (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
+          (list "HOP K" k (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
+        rows)))
+
 ;;; -------------------- rectangle / oval flow --------------------------
 
 ;; Full guided flow for the quad-based pools: preview, prompts, fit,
@@ -1643,6 +1817,9 @@
   (if (= ptype "Oval")
       (setq rows (append rows
                          (list (list "TOTAL LENGTH" totl (distance tipl tipr))))))
+  ;; -------------------------------- pool bottom (rectangle pipeline)
+  (if (= ptype "Rectangle")
+      (setq rows (append rows (pool:hopper quad corners doff th))))
   ;; corner treatments
   (if (and (= ptype "Rectangle") anycut)
       (if pool:*insq*

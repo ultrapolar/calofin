@@ -80,6 +80,35 @@ the dashed cross-dim guide lines are re-drawn between the actual
 reference points for the chosen mode — in Ends mode each of the four
 ties is its own line, highlighted individually as it's prompted.
 
+### Pool bottom / hopper (rectangle)
+
+After a rectangle's perimeter is drawn and dimensioned, the routine
+offers a **pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A
+lettered field-sheet guide appears inside the fitted pool and each
+dashed tie highlights as its letter is prompted:
+
+```
+D ------------------------------ C     H  left end -> hopper
+|\      M                       /|     G  hopper length
+| +--------+                  /  |     F  hopper -> slope break (CHECK)
+|H|G hopper|  \            break |     E  slope break -> right end
+| +--------+     \           | E |     M  top side -> hopper
+|/      K            \       |   |     L  hopper width (CHECK)
+A ------------------------------ B     K  hopper -> bottom side
+```
+
+All primary dims are **offsets from the perimeter** (H, E, M, K) plus
+the hopper length G, so they anchor the geometry exactly even on an
+out-of-square pool (offsets stay perpendicular to each wall). F and L
+are redundant and reported as **checks** with target/actual/delta.
+The hopper's left corners tie to the pool's left corners — when those
+corners are Diag/Rounded, to the **end of the treatment on the end
+wall** instead of the true corner — and its right corners tie to the
+ends of the slope-break line. Everything draws on layer
+**`POOL-BOTTOM`** and is chain-dimensioned along the two centerlines
+like the field sheet; all seven letters get report rows. The same
+offset logic will extend to the other shapes later.
+
 ### In-square vs out-of-square
 
 The very first prompt asks whether the pool is in-square. **In-square**
