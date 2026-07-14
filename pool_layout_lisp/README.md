@@ -80,12 +80,13 @@ the dashed cross-dim guide lines are re-drawn between the actual
 reference points for the chosen mode — in Ends mode each of the four
 ties is its own line, highlighted individually as it's prompted.
 
-### Pool bottom / hopper (rectangle)
+### Pool bottom / hopper (rectangle, oval, Grecian)
 
-After a rectangle's perimeter is drawn and dimensioned, the routine
-offers a **pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A
-lettered field-sheet guide appears inside the fitted pool and each
-dashed tie highlights as its letter is prompted:
+After the perimeter is drawn and dimensioned, the routine offers a
+**pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A lettered
+field-sheet guide appears inside the fitted pool and each dashed tie
+highlights as its letter is prompted. The interior draws on the
+**`POOL`** layer. For the rectangle:
 
 ```
 D ------------------------------ C     H  left end -> hopper
@@ -101,13 +102,28 @@ All primary dims are **offsets from the perimeter** (H, E, M, K) plus
 the hopper length G, so they anchor the geometry exactly even on an
 out-of-square pool (offsets stay perpendicular to each wall). F and L
 are redundant and reported as **checks** with target/actual/delta.
-The hopper's left corners tie to the pool's left corners — when those
-corners are Diag/Rounded, to the **end of the treatment on the end
-wall** instead of the true corner — and its right corners tie to the
-ends of the slope-break line. Everything draws on layer
-**`POOL-BOTTOM`** and is chain-dimensioned along the two centerlines
-like the field sheet; all seven letters get report rows. The same
-offset logic will extend to the other shapes later.
+The hopper's left corners tie to the pool's left corners — when a
+corner is Diag/Rounded, **to both ends of the treatment** (one line
+per end) — and its right corners tie to the ends of the slope-break
+line. Everything is chain-dimensioned along the two centerlines like
+the field sheet, and every letter gets a report row.
+
+**Oval (True Oval sheet):** same phase, prompting the interior letters
+only (A, B, R1, R2 come from the perimeter). The hopper is a box with
+a radius **R3** left end set out along the pool axis (arc tip to arc
+tip): `H` tip→hopper tip, `G` hopper length, `R3` end radius, `E`
+break→right tip, `M`/`K` top/bottom offsets, with `W` (flat top,
+= G−R3), `F`, `L` and `T` (straight side) reported as checks. No left
+ties — the radius is the end; the right corners tie to the break ends.
+
+**Grecian:** first asks **`Hopper type [Square/SIX-sided]`**, interior
+letters only (A, B, S, S1, S2, T, V come from the perimeter). Both
+anchor `H`/`E` off the end walls and `M`/`K` off the sides. The square
+hopper is the rectangle letter set; each hopper left corner ties to
+**both ends of its pool corner cut** (to D and LT, and to A and LB).
+The 6-sided hopper adds cut left corners — `W` (setback along the
+top/bottom edges), `L1` (setback down the left edge), `X` (cut face,
+check) — and the pool cut ends tie to the matching hopper cut ends.
 
 ### In-square vs out-of-square
 

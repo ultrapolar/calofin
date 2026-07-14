@@ -725,4 +725,97 @@ assert abs(ptlinedist(gg['hbr'],a,_sub(b,a))-50)<1e-6    # K from bottom
 assert abs(ptlinedist(gg['brkb'],b,_sub(c,b))-100)<1e-6  # E from right end
 print("   perpendicular offsets exact on the skewed quad")
 
+
+# ---------------- oval + grecian hopper geometry ----------------
+def hopovalc(quad,tipl,tipr,h,g,e,m,k,r3):
+    a,b,c,d=quad
+    cen=((a[0]+b[0]+c[0]+d[0])/4.0,(a[1]+b[1]+c[1]+d[1])/4.0)
+    u=_unit(_sub(tipr,tipl)); v=_perp(u)
+    ht=offline(d,c,cen,m); hb=offline(a,b,cen,k)
+    lt=(_add(tipl,_scl(u,h)),v); re=(_add(tipl,_scl(u,h+g)),v)
+    tan=(_add(tipl,_scl(u,h+r3)),v); brk=(_sub(tipr,_scl(u,e)),v)
+    tt=linex(*tan,*ht); tb=linex(*tan,*hb)
+    tip=_mid(linex(*lt,*ht), linex(*lt,*hb))
+    vc=_add(tipl,_scl(u,h+0.5*(r3+g)))
+    gg={'tip':tip,'ttop':tt,'tbot':tb,
+        'htr':linex(*re,*ht),'hbr':linex(*re,*hb),
+        'brkb':linex(*brk,a,_sub(b,a)),'brkt':linex(*brk,d,_sub(c,d)),
+        'ptan':linex(tip,u,*tan),
+        'pl':linex(tip,u,tipl,v),'phl':tip,'phr':linex(tip,u,*re),
+        'pbrk':linex(tip,u,*brk),'pr':linex(tip,u,tipr,v),
+        'pb':linex(vc,v,a,_sub(b,a)),'phb':linex(vc,v,*hb),
+        'pht':linex(vc,v,*ht),'pt':linex(vc,v,d,_sub(c,d))}
+    return gg
+
+def hopgrecc(pts,h,g,e,m,k,w=None,l1=None):
+    aa,bb,rb,rt,cc,dd,ltp,lbp=pts
+    cen=(sum(p[0] for p in pts)/8.0, sum(p[1] for p in pts)/8.0)
+    hl=offline(lbp,ltp,cen,h); hr=offline(lbp,ltp,cen,h+g)
+    ht=offline(dd,cc,cen,m); hb=offline(aa,bb,cen,k)
+    brk=offline(rb,rt,cen,e)
+    hbl=linex(*hl,*hb); htl=linex(*hl,*ht); hbr=linex(*hr,*hb); htr=linex(*hr,*ht)
+    hc=tuple(sum(p[i] for p in (hbl,htl,hbr,htr))/4.0 for i in (0,1))
+    u=_sub(bb,aa); v=_sub(dd,aa)
+    gg={'hbl':hbl,'htl':htl,'hbr':hbr,'htr':htr,
+        'brkb':linex(*brk,aa,_sub(bb,aa)),'brkt':linex(*brk,dd,_sub(cc,dd)),
+        'pl':linex(hc,u,lbp,_sub(ltp,lbp)),'phl':linex(hc,u,*hl),
+        'phr':linex(hc,u,*hr),'pbrk':linex(hc,u,*brk),
+        'pr':linex(hc,u,rb,_sub(rt,rb)),
+        'pb':linex(hc,v,aa,_sub(bb,aa)),'phb':linex(hc,v,*hb),
+        'pht':linex(hc,v,*ht),'pt':linex(hc,v,dd,_sub(cc,dd))}
+    if w is not None:
+        hlw=offline(lbp,ltp,cen,h+w); htl1=offline(dd,cc,cen,m+l1); hbl1=offline(aa,bb,cen,k+l1)
+        gg['ct1']=linex(*hlw,*ht); gg['ct2']=linex(*hl,*htl1)
+        gg['cb1']=linex(*hlw,*hb); gg['cb2']=linex(*hl,*hbl1)
+    return gg
+
+print("== 36. oval hopper on symmetric 400x240 oval ==")
+QO=[(0,0),(400,0),(400,240),(0,240)]
+gg=hopovalc(QO,(-80,120),(480,120),40,100,120,50,60,65)
+assert gg['tip']==(-40.0,125.0)
+assert gg['ttop']==(25.0,190.0) and gg['tbot']==(25.0,60.0)
+assert gg['htr']==(60.0,190.0) and gg['hbr']==(60.0,60.0)
+assert gg['brkb']==(360.0,0.0) and gg['brkt']==(360.0,240.0)
+assert abs(dist(gg['pl'],gg['phl'])-40)<1e-9      # H
+assert abs(dist(gg['phl'],gg['phr'])-100)<1e-9    # G
+assert abs(dist(gg['phr'],gg['pbrk'])-300)<1e-9   # F check
+assert abs(dist(gg['pbrk'],gg['pr'])-120)<1e-9    # E
+assert abs(dist(gg['phl'],gg['ptan'])-65)<1e-9    # R3 setback
+assert abs(dist(gg['ttop'],gg['htr'])-35)<1e-9    # W check = G - R3
+assert abs(dist(gg['pht'],gg['pt'])-50)<1e-9      # M
+assert abs(dist(gg['phb'],gg['pht'])-130)<1e-9    # L check
+assert abs(dist(gg['pb'],gg['phb'])-60)<1e-9      # K
+# with R3 = half hopper width the 3-point arc radius equals R3
+import math as _mm
+ax,ay=gg['ttop']; bx,by=gg['tip']; cx,cy=gg['tbot']
+dd2=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by))
+ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/dd2
+uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/dd2
+assert abs(dist((ux,uy),gg['tip'])-65)<1e-6
+print("   tip/tangents/corners/chains and arc radius all exact")
+
+print("== 37. grecian square hopper on symmetric 8-corner pool ==")
+PG=[(0,0),(400,0),(450,50),(450,150),(400,200),(0,200),(-50,150),(-50,50)]
+gg=hopgrecc(PG,30,80,110,50,45)
+assert gg['hbl']==(-20.0,45.0) and gg['htl']==(-20.0,150.0)
+assert gg['hbr']==(60.0,45.0) and gg['htr']==(60.0,150.0)
+assert gg['brkb']==(340.0,0.0) and gg['brkt']==(340.0,200.0)
+assert abs(dist(gg['pl'],gg['phl'])-30)<1e-9      # H from end wall
+assert abs(dist(gg['phl'],gg['phr'])-80)<1e-9     # G
+assert abs(dist(gg['phr'],gg['pbrk'])-280)<1e-9   # F check
+assert abs(dist(gg['pbrk'],gg['pr'])-110)<1e-9    # E from end wall
+assert abs(dist(gg['pht'],gg['pt'])-50)<1e-9      # M
+assert abs(dist(gg['phb'],gg['pht'])-105)<1e-9    # L check
+assert abs(dist(gg['pb'],gg['phb'])-45)<1e-9      # K
+print("   square hopper chains exact, ties go to D/LT and A/LB ends")
+
+print("== 38. grecian 6-sided hopper cuts (W, L1, X check) ==")
+gg=hopgrecc(PG,30,80,110,50,45,w=25,l1=20)
+assert gg['ct1']==(5.0,150.0) and gg['cb1']==(5.0,45.0)
+assert gg['ct2']==(-20.0,130.0) and gg['cb2']==(-20.0,65.0)
+assert abs(dist(gg['htl'],gg['ct1'])-25)<1e-9     # W
+assert abs(dist(gg['htl'],gg['ct2'])-20)<1e-9     # L1
+assert abs(dist(gg['ct2'],gg['ct1'])-math.sqrt(25*25+20*20))<1e-9  # X check
+print(f"   cut corners exact; X = sqrt(W^2+L1^2) = {math.sqrt(1025):.4f}")
+
 print("\nALL CHECKS PASSED")
