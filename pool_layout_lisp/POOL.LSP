@@ -1269,22 +1269,22 @@
 ;; The two points where a corner's treatment meets the straight sides
 ;; (toward the previous / next corner) plus, for Rounded, the arc mid.
 ;; Returns (ePrev eNext arcMid|nil).  Square -> (P P nil).
-(defun pool:cornerends (p pp pn type size / uprev unext dp ang t bis cen)
+(defun pool:cornerends (p pp pn ctype size / uprev unext dp ang sb bis cen)
   (setq uprev (pool:unit (pool:v- pp p))
         unext (pool:unit (pool:v- pn p))
         dp (pool:dot uprev unext)
         ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
   (cond
-    ((= type "Diag")
-     (setq t (/ size (* 2.0 (sin (/ ang 2.0)))))            ; face -> edge setback
-     (list (pool:v+ p (pool:v* uprev t))
-           (pool:v+ p (pool:v* unext t)) nil))
-    ((= type "Rounded")
-     (setq t (/ (* size (cos (/ ang 2.0))) (sin (/ ang 2.0)))  ; r/tan(ang/2)
+    ((= ctype "Diag")
+     (setq sb (/ size (* 2.0 (sin (/ ang 2.0)))))           ; face -> edge setback
+     (list (pool:v+ p (pool:v* uprev sb))
+           (pool:v+ p (pool:v* unext sb)) nil))
+    ((= ctype "Rounded")
+     (setq sb (/ (* size (cos (/ ang 2.0))) (sin (/ ang 2.0)))  ; r/tan(ang/2)
            bis (pool:unit (pool:v+ uprev unext))
            cen (pool:v+ p (pool:v* bis (/ size (sin (/ ang 2.0))))))
-     (list (pool:v+ p (pool:v* uprev t))
-           (pool:v+ p (pool:v* unext t))
+     (list (pool:v+ p (pool:v* uprev sb))
+           (pool:v+ p (pool:v* unext sb))
            (pool:v- cen (pool:v* bis size))))              ; arc point nearest corner
     (t (list p p nil))))
 
@@ -1853,7 +1853,12 @@
     (if oldos (setvar "OSMODE" oldos))
     (command "_.UNDO" "_End")
     (if oldcmd (setvar "CMDECHO" oldcmd))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command);
+  ;; harmless no-op guard on older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oldcmd (getvar "CMDECHO")
         oldos (getvar "OSMODE")
@@ -1899,6 +1904,7 @@
   (setvar "OSMODE" oldos)
   (command "_.UNDO" "_End")
   (setvar "CMDECHO" oldcmd)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 
