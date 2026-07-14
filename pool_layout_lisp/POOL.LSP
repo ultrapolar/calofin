@@ -340,6 +340,23 @@
     (if (and e (entget e)) (entdel e)))
   (setq pool:*pvents* nil))
 
+;; Remove an item (by equality) from a list.
+(defun pool:lremove (x lst / out i)
+  (foreach i lst (if (not (equal i x)) (setq out (cons i out))))
+  (reverse out))
+
+;; Track a freshly made guide entity so pool:pvkill / *error* find it.
+(defun pool:pvadd (e)
+  (setq pool:*pvents* (cons e pool:*pvents*))
+  e)
+
+;; Delete specific guide entities mid-flow and untrack them (used when
+;; part of the guide is redrawn, e.g. corner treatments).
+(defun pool:pvdel (ents / e)
+  (foreach e ents
+    (if (and e (entget e)) (entdel e))
+    (setq pool:*pvents* (pool:lremove e pool:*pvents*))))
+
 ;; Draw the nominal guide pool for the chosen shape (fixed 360 x 180
 ;; body).  Returns an assoc list mapping each input key to the list of
 ;; guide entities to highlight, plus an ALL entry with every guide
@@ -1302,6 +1319,41 @@
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) "POOL"))))
   ce)
 
+;; Re-draw the guide rectangle's corners with the chosen treatments so
+;; the visual matches what will be built.  gq = the guide quad,
+;; corners = per-corner (type size), sizes already clamped for display.
+;; The four full-length guide sides are replaced by shortened sides
+;; plus gray chamfer lines / fillet arcs; the pv assoc side keys are
+;; re-pointed at the new side entities.  Returns the updated pv.
+(defun pool:pvcorners (pv gq corners / ce i k cc ent)
+  (foreach k (list 'ab 'bc 'dc 'da)
+    (pool:pvdel (cdr (assoc k pv))))
+  (setq ce (mapcar '(lambda (i)
+                      (pool:cornerends (nth i gq)
+                                       (nth (rem (+ i 3) 4) gq)
+                                       (nth (rem (+ i 1) 4) gq)
+                                       (car (nth i corners)) (cadr (nth i corners))))
+                   (list 0 1 2 3)))
+  ;; shortened straight sides (side i runs corner i -> corner i+1)
+  (setq i 0)
+  (foreach k (list 'ab 'bc 'dc 'da)
+    (setq ent (pool:pvadd (pool:pvline (cadr (nth i ce))
+                                       (car (nth (rem (+ i 1) 4) ce))))
+          pv (subst (cons k (list ent)) (assoc k pv) pv)
+          i (1+ i)))
+  ;; the corner treatments themselves
+  (setq i 0)
+  (foreach cc corners
+    (cond
+      ((= (car cc) "Diag")
+       (pool:pvadd (pool:pvline (car (nth i ce)) (cadr (nth i ce)))))
+      ((= (car cc) "Rounded")
+       (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
+                   "POOL-NOTES")
+       (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
+    (setq i (1+ i)))
+  pv)
+
 ;; Prompt one corner's treatment (Enter reuses prevty/prevsz).
 (defun pool:askcorner (label prevty prevsz / ty sz)
   (if prevty (initget "Square Rounded Diag") (initget 1 "Square Rounded Diag"))
@@ -1366,7 +1418,7 @@
 (defun pool:quadflow (ptype / oldclay pv
                              tp bo le ri dac dbd totl lrad rrad
                              corners cmode anycut cc prevty prevsz lbl
-                             xmeas tm hl val m rpa rpb pass
+                             gq gcorners xmeas tm hl val m rpa rpb pass
                              fitres quad failed a b c d cen meas notes tri
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
@@ -1405,6 +1457,14 @@
   (setq anycut nil)
   (foreach cc corners (if (/= (car cc) "Square") (setq anycut t)))
 
+  ;; update the guide so the corners look like what will be built
+  ;; (display sizes clamped so oversized inputs can't fold the guide)
+  (setq gq (list (list 0.0 0.0) (list 360.0 0.0)
+                 (list 360.0 180.0) (list 0.0 180.0))
+        gcorners (mapcar '(lambda (cc) (list (car cc) (min (cadr cc) 60.0)))
+                         corners))
+  (if anycut (setq pv (pool:pvcorners pv gq gcorners)))
+
   ;; -------- cross-dim reference mode (only when corners are cut and
   ;; the pool is out-of-square)
   (setq cmode "Corner")
@@ -1414,13 +1474,21 @@
         (setq cmode (getkword
                       "\nCut corners -- cross dims measured from [Corner/Middle/Ends]: "))))
 
-  ;; -------- cross dims (out-of-square only), per the reference mode
+  ;; -------- cross dims (out-of-square only), per the reference mode.
+  ;; The corner-to-corner guide diagonals are retired and one dashed
+  ;; guide line is drawn per measurement between its actual reference
+  ;; points, so Middle/Ends prompts highlight exactly what gets taped.
   (setq xmeas nil)
   (if (not pool:*insq*)
-      (foreach tm (pool:crosstemplate cmode)
-        (setq hl (cdr (assoc (car tm) pv))
-              val (pool:askhx (cadr tm) hl)
-              xmeas (cons (append tm (list val)) xmeas)))
+      (progn
+        (pool:pvdel (cdr (assoc 'ac pv)))
+        (pool:pvdel (cdr (assoc 'bd pv)))
+        (foreach tm (pool:crosstemplate cmode)
+          (setq rpa (pool:cornerpoint gq gcorners (nth 3 tm) (nth 4 tm))
+                rpb (pool:cornerpoint gq gcorners (nth 5 tm) (nth 6 tm))
+                hl (pool:pvadd (pool:pvlined rpa rpb))
+                val (pool:askhx (cadr tm) (list hl))
+                xmeas (cons (append tm (list val)) xmeas))))
       (princ "\nIn-square: building true to the side measurements (no cross dims)."))
   (setq xmeas (reverse xmeas))
 

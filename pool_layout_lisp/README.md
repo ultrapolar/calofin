@@ -73,6 +73,13 @@ best-fits correctly, and each cross measurement is dimensioned between
 its actual reference points and listed in the report. Square corners
 always use the true corner, so no reference question is asked.
 
+The **guide updates live**: as soon as the corner answers are in, the
+gray guide redraws its corners with the chamfers/fillets (display
+sizes capped so oversized inputs can't fold the nominal shape), and
+the dashed cross-dim guide lines are re-drawn between the actual
+reference points for the chosen mode — in Ends mode each of the four
+ties is its own line, highlighted individually as it's prompted.
+
 ### In-square vs out-of-square
 
 The very first prompt asks whether the pool is in-square. **In-square**
