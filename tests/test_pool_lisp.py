@@ -395,4 +395,129 @@ assert inpoly((80, 200), TRUE_L)          # wing
 assert not inpoly((260, 200), TRUE_L)     # the notch
 assert not inpoly((-10, 70), TRUE_L)      # outside left
 
+
+# ---------------- Grecian 8-vertex mirror (Simple/Center/Complex) ----------------
+def _sub(p,q): return (p[0]-q[0], p[1]-q[1])
+def _add(p,q): return (p[0]+q[0], p[1]+q[1])
+def _scl(p,s): return (p[0]*s, p[1]*s)
+def _dot(p,q): return p[0]*q[0]+p[1]*q[1]
+def _perp(p): return (-p[1], p[0])
+def _mid(p,q): return ((p[0]+q[0])/2.0, (p[1]+q[1])/2.0)
+def _unit(p):
+    d=math.hypot(p[0],p[1]); return (p[0]/d, p[1]/d) if d>1e-12 else (0.0,0.0)
+
+# index order: 0=A 1=B 2=RB 3=RT 4=C 5=D 6=LT 7=LB
+GRECEDGES=[(0,1,1.0),(1,2,0.5),(2,3,0.1),(3,4,0.5),(4,5,1.0),
+           (5,6,0.5),(6,7,0.1),(7,0,0.5),(0,5,1.0),(1,4,1.0)]
+GREC_SIMPLE=[(0,4),(1,5)]
+GREC_CENTER=[(0,4),(1,5),(7,3),(6,2)]
+GREC_COMPLEX=[(0,2),(0,3),(0,4),(0,6),(1,3),(1,5),(1,6),(1,7),
+              (2,4),(2,5),(2,6),(2,7),(3,5),(3,6),(3,7),(4,6),(4,7),(5,7)]
+
+def grecendp(pbot, ptop, mdir, lt, lb, e):
+    u=_unit(_sub(ptop,pbot))
+    fit=grecfit(dist(pbot,ptop), lt, lb, e)
+    if fit: lt2,lb2,th=fit; ok=True
+    else:   lt2,lb2,th=lt,lb,math.radians(45); ok=False
+    dtop=_sub(_scl(mdir,math.cos(th)), _scl(u,math.sin(th)))
+    dbot=_add(_scl(mdir,math.cos(th)), _scl(u,math.sin(th)))
+    return (_add(ptop,_scl(dtop,lt2)), _add(pbot,_scl(dbot,lb2)), lt2, lb2, th, ok)
+
+def crossmax(pts, crosscons):
+    mx=0.0
+    for (i,j,t) in crosscons:
+        if t is not None: mx=max(mx, abs(dist(pts[i],pts[j])-t))
+    return mx
+def edgemax(pts, edgecons):
+    mx=-1e30
+    for (i,j,t,b) in edgecons: mx=max(mx, abs(dist(pts[i],pts[j])-t)-b)
+    return mx
+def fitpoly(seed, edgecons, crosscons, xtol=2.0):
+    xcon=[(i,j,t,t,0.5) for (i,j,t) in crosscons if t is not None]
+    e0=[(i,j,t,t,1.0) for (i,j,t,b) in edgecons]
+    eb=[(i,j,t-b,t+b,1.0) for (i,j,t,b) in edgecons]
+    p1=relaxn(seed, xcon+e0, 3000); p1=relaxn(p1, e0, 400)
+    if crossmax(p1,crosscons)<=xtol: return p1,False
+    p2=relaxn(p1, xcon+eb, 3000)
+    if edgemax(p2,edgecons)<=0.05 and crossmax(p2,crosscons)<=xtol+0.05:
+        return p2,False
+    return p1,True
+
+def grec_body(P):
+    d=lambda i,j: dist(P[i],P[j])
+    edges=[(i,j,d(i,j),b) for (i,j,b) in GRECEDGES]
+    body=(d(0,1),d(4,5),d(0,5),d(1,4),  # bo tp le ri
+          d(5,6),d(7,0),d(6,7),d(3,4),d(1,2),d(2,3))  # ltd lbd lew rtd rbd rew
+    return edges, body
+
+def grec_fit(P, pairs, crossvals, mode):
+    edges, body = grec_body(P)
+    bo,tp,le,ri,ltd,lbd,lew,rtd,rbd,rew = body
+    dac=crossvals.get((0,4)); dbd=crossvals.get((1,5))
+    q,failed0 = fitquad(bo,tp,le,ri,dac,dbd)
+    a,b,c,d=q
+    cen0=((a[0]+b[0]+c[0]+d[0])/4.0,(a[1]+b[1]+c[1]+d[1])/4.0)
+    ml=_unit(_perp(_sub(d,a)))
+    if _dot(_sub(_mid(a,d),cen0),ml)<0: ml=_scl(ml,-1.0)
+    mr=_unit(_perp(_sub(c,b)))
+    if _dot(_sub(_mid(b,c),cen0),mr)<0: mr=_scl(mr,-1.0)
+    lend=grecendp(a,d,ml,ltd,lbd,lew)
+    rend=grecendp(b,c,mr,rtd,rbd,rew)
+    seed=[a,b,rend[1],rend[0],c,d,lend[0],lend[1]]
+    crosscons=[(i,j,crossvals.get((i,j))) for (i,j) in pairs]
+    if mode=='Simple':
+        return seed, failed0, edges, crosscons
+    pts,failed=fitpoly(seed,edges,crosscons,2.0)
+    return pts, failed, edges, crosscons
+
+# a plausible slightly-out-of-square true Grecian, index order A B RB RT C D LT LB
+TRUE_G=[(0,0),(400,0),(450,52),(452,148),(398,200),(2,201),(-48,150),(-50,55)]
+
+def full_cross(P, pairs):
+    return {(i,j): dist(P[i],P[j]) for (i,j) in pairs}
+
+print("== 19. Grecian SIMPLE reproduces the shape ==")
+pts,failed,edges,cc = grec_fit(TRUE_G, GREC_SIMPLE, full_cross(TRUE_G,GREC_SIMPLE), 'Simple')
+em=edgemax(pts,edges); xm=crossmax(pts,cc)
+print(f"   edgemax {em:.3f} (<=0 in band), crossmax {xm:.3f}, failed={failed}")
+assert not failed and em<=0.06 and xm<=2.05
+
+print("== 20. Grecian CENTER (adds long tip X) ==")
+pts,failed,edges,cc = grec_fit(TRUE_G, GREC_CENTER, full_cross(TRUE_G,GREC_CENTER), 'Center')
+em=edgemax(pts,edges); xm=crossmax(pts,cc)
+print(f"   edgemax {em:.3f}, crossmax {xm:.3f}, failed={failed}")
+assert not failed and em<=0.06 and xm<=2.05
+
+print("== 21. Grecian COMPLEX (all 18 diagonals) ==")
+cv=full_cross(TRUE_G,GREC_COMPLEX)
+pts,failed,edges,cc = grec_fit(TRUE_G, GREC_COMPLEX, cv, 'Complex')
+em=edgemax(pts,edges); xm=crossmax(pts,cc)
+print(f"   edgemax {em:.3f}, crossmax {xm:.3f}, failed={failed}")
+assert not failed and em<=0.06 and xm<=2.05
+
+print("== 22. Grecian COMPLEX with field rounding (1/4\") still fits ==")
+cv2={k: round(v*4)/4 for k,v in cv.items()}
+Pr=[(round(x*4)/4, round(y*4)/4) for (x,y) in TRUE_G]  # rounded edges too
+pts,failed,edges,cc = grec_fit(Pr, GREC_COMPLEX, cv2, 'Complex')
+em=edgemax(pts,edges); xm=crossmax(pts,cc)
+print(f"   edgemax {em:.3f}, crossmax {xm:.3f}, failed={failed}")
+assert not failed and xm<=2.05
+
+print("== 23. Grecian COMPLEX with some NA cross dims ==")
+cv3=dict(cv)
+for k in [(0,2),(2,7),(3,6),(4,7),(5,7)]: cv3[k]=None
+pairs=GREC_COMPLEX
+crossvals={p:(cv3[p] if cv3.get(p) is not None else None) for p in pairs}
+pts,failed,edges,cc = grec_fit(TRUE_G, pairs, crossvals, 'Complex')
+xm=crossmax(pts,cc)
+print(f"   crossmax(provided) {xm:.3f}, failed={failed}, NA count={sum(1 for _,_,t in cc if t is None)}")
+assert not failed and xm<=2.05
+
+print("== 24. Grecian CENTER impossible cross -> CROSS DIMS FAILED, edges true ==")
+cv4=full_cross(TRUE_G,GREC_CENTER); cv4[(7,3)]=cv4[(7,3)]+25.0   # tip diagonal 25\" off
+pts,failed,edges,cc = grec_fit(TRUE_G, GREC_CENTER, cv4, 'Center')
+em=edgemax(pts,edges)
+print(f"   edgemax {em:.3f}, failed={failed}")
+assert failed and em<=0.06   # sides/edges held true on failure
+
 print("\nALL CHECKS PASSED")

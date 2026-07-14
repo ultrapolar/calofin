@@ -42,11 +42,16 @@
 ;;;  Oval:    adds a radius line perpendicular to each end and a
 ;;;           three-point arc (end corner -> radius tip -> other end
 ;;;           corner) on both ends, plus a total-length check.
-;;;  Grecian: adds 45-degree corner diagonals on both ends; the
-;;;           diagonal angle is adjusted so the given end width fits
-;;;           between the diagonal end points, and if it cannot fit
-;;;           the diagonal lengths are adjusted in 1/8" increments up
-;;;           to +/-1/2" of the given lengths.
+;;;  Grecian: 8-corner pool (body A/B/C/D plus angled-end tips
+;;;           LT/LB left and RT/RB right).  Prompts for the six body
+;;;           sides/ends, the four end diagonals and two end widths,
+;;;           then cross dims at one of three detail levels:
+;;;             Simple  = A-C, B-D            (2)
+;;;             Center  = + LB-RT, LT-RB      (4, long tip-to-tip X)
+;;;             Complex = every diagonal      (18, all pairs; NA any)
+;;;           All 8 corners are best-fit against every provided cross
+;;;           dim, so more cross dims pin the out-of-square shape down
+;;;           more tightly.
 ;;;  L/LazyL: six-corner pools with one wing (square step joint for
 ;;;           the true L, angled joint for the lazy L); six sides plus
 ;;;           up to six cross dims, best-fit the same way.
@@ -324,8 +329,7 @@
 ;; entity for later deletion.
 (defun pool:preview (ptype / pw ph a b c d cen pr all pv
                              eab ebc ecd eda eac ebd
-                             midl midr tipl tipr elrad errad elarc erarc etot
-                             lp1 lp2 rp1 rp2 elt elb elw ert erb erw)
+                             midl midr tipl tipr elrad errad elarc erarc etot)
   (setq pw 360.0 ph 180.0
         a (list 0.0 0.0) b (list pw 0.0) c (list pw ph) d (list 0.0 ph)
         cen (list (* 0.5 pw) (* 0.5 ph))
@@ -358,20 +362,7 @@
            all (append all (list elrad errad elarc erarc etot))
            pv (append pv (list (cons 'lrad (list elrad elarc))
                                (cons 'rrad (list errad erarc))
-                               (cons 'tot (list etot))))))
-    ((= ptype "Grecian")
-     (setq lp1 (list -42.0 (- ph 42.0)) lp2 (list -42.0 42.0)
-           rp1 (list (+ pw 42.0) (- ph 42.0)) rp2 (list (+ pw 42.0) 42.0)
-           elt (pool:pvline d lp1)
-           elb (pool:pvline a lp2)
-           elw (pool:pvline lp1 lp2)
-           ert (pool:pvline c rp1)
-           erb (pool:pvline b rp2)
-           erw (pool:pvline rp1 rp2)
-           all (append all (list elt elb elw ert erb erw))
-           pv (append pv (list (cons 'lt (list elt)) (cons 'lb (list elb))
-                               (cons 'lw (list elw)) (cons 'rt (list ert))
-                               (cons 'rb (list erb)) (cons 'rw (list erw)))))))
+                               (cons 'tot (list etot)))))))
   (setq pool:*pvents* all)
   pv)
 
@@ -589,25 +580,323 @@
     (setq s (1+ s)))
   out)
 
-;; Build and draw one Grecian end.  pbot/ptop = end line corners,
-;; mdir = unit normal pointing away from the pool body.
+;; Compute one Grecian end (no drawing).  pbot/ptop = end line
+;; corners, mdir = unit normal pointing away from the pool body.
 ;; Returns (p1 p2 ltUsed lbUsed theta okflag); p1 joins ptop, p2 joins
-;; pbot.  When the fit fails the end is still drawn at 45 degrees with
-;; the given lengths, okflag nil.
-(defun pool:grecend (pbot ptop mdir lt lb e lay / u fit lt2 lb2 th ok dtop dbot p1 p2)
+;; pbot.  When the fit fails the end falls back to 45 degrees with the
+;; given lengths, okflag nil.
+(defun pool:grecendp (pbot ptop mdir lt lb e / u fit lt2 lb2 th ok dtop dbot)
   (setq u (pool:unit (pool:v- ptop pbot))
         fit (pool:grecfit (distance pbot ptop) lt lb e))
   (if fit
       (setq lt2 (car fit) lb2 (cadr fit) th (caddr fit) ok t)
       (setq lt2 lt lb2 lb th (pool:d2r 45.0) ok nil))
   (setq dtop (pool:v- (pool:v* mdir (cos th)) (pool:v* u (sin th)))
-        dbot (pool:v+ (pool:v* mdir (cos th)) (pool:v* u (sin th)))
-        p1 (pool:v+ ptop (pool:v* dtop lt2))
-        p2 (pool:v+ pbot (pool:v* dbot lb2)))
-  (pool:line ptop p1 lay)
-  (pool:line p1 p2 lay)
-  (pool:line p2 pbot lay)
-  (list p1 p2 lt2 lb2 th ok))
+        dbot (pool:v+ (pool:v* mdir (cos th)) (pool:v* u (sin th))))
+  (list (pool:v+ ptop (pool:v* dtop lt2))
+        (pool:v+ pbot (pool:v* dbot lb2))
+        lt2 lb2 th ok))
+
+;; Compute + draw one Grecian end on layer lay.
+(defun pool:grecend (pbot ptop mdir lt lb e lay / r)
+  (setq r (pool:grecendp pbot ptop mdir lt lb e))
+  (pool:line ptop (car r) lay)
+  (pool:line (car r) (cadr r) lay)
+  (pool:line (cadr r) pbot lay)
+  r)
+
+;;; -------------------- grecian cross-dim modes -------------------------
+;;;
+;;;  A Grecian pool has 8 corners; from the bottom-left, clockwise:
+;;;
+;;;         D ------------------ C          body:  A B C D
+;;;        /                      \         left tips:  LT (off D), LB (off A)
+;;;      LT                        RT       right tips: RT (off C), RB (off B)
+;;;        \                      /
+;;;         LB                  RB          index order used below:
+;;;           \                /             0=A 1=B 2=RB 3=RT 4=C 5=D 6=LT 7=LB
+;;;            A ------------ B
+;;;
+;;;  Cross-dim modes (how many diagonals the user is asked for):
+;;;    Simple  = A-C, B-D                       (2, the body diagonals)
+;;;    Center  = Simple + LB-RT, LT-RB          (4, adds the long tip X)
+;;;    Complex = every possible diagonal        (18, all pairs; NA any)
+;;;  More provided cross dims -> the out-of-square shape is pinned down
+;;;  more tightly.  Any cross dim may be answered NA.
+
+(setq pool:*grecnames*
+      (list "A" "B" "RB" "RT" "C" "D" "LT" "LB"))
+
+;; perimeter edges + the two body-end chords as (i j prompt-key band):
+;; body sides loose (1"), end diagonals held near the given 1/2", end
+;; widths near-exact.  The prompt-key ties each edge to its guide
+;; highlight and prompt.
+(setq pool:*grecedges*
+      (list '(0 1 ab  1.0)     ; A-B  bottom side
+            '(1 2 rbd 0.5)     ; B-RB right diag bottom
+            '(2 3 rew 0.1)     ; RB-RT right end width
+            '(3 4 rtd 0.5)     ; RT-C right diag top
+            '(4 5 cd  1.0)     ; C-D  top side
+            '(5 6 ltd 0.5)     ; D-LT left diag top
+            '(6 7 lew 0.1)     ; LT-LB left end width
+            '(7 0 lbd 0.5)     ; LB-A left diag bottom
+            '(0 5 ad  1.0)     ; A-D  left end (internal chord)
+            '(1 4 bc  1.0)))   ; B-C  right end (internal chord)
+
+(setq pool:*grec-simple*
+      (list '(0 4 "A-C") '(1 5 "B-D")))
+(setq pool:*grec-center*
+      (list '(0 4 "A-C") '(1 5 "B-D") '(7 3 "LB-RT") '(6 2 "LT-RB")))
+(setq pool:*grec-complex*
+      (list '(0 2 "A-RB") '(0 3 "A-RT") '(0 4 "A-C")  '(0 6 "A-LT")
+            '(1 3 "B-RT") '(1 5 "B-D")  '(1 6 "B-LT") '(1 7 "B-LB")
+            '(2 4 "RB-C") '(2 5 "RB-D") '(2 6 "RB-LT") '(2 7 "RB-LB")
+            '(3 5 "RT-D") '(3 6 "RT-LT") '(3 7 "RT-LB")
+            '(4 6 "C-LT") '(4 7 "C-LB")
+            '(5 7 "D-LB")))
+
+(defun pool:grecmode (m)
+  (cond ((= m "Center")  pool:*grec-center*)
+        ((= m "Complex") pool:*grec-complex*)
+        (t               pool:*grec-simple*)))
+
+;; Worst cross-dim miss over the provided (non-nil) targets.
+(defun pool:crossmax (pts crosscons / mx d)
+  (setq mx 0.0)
+  (foreach c crosscons
+    (if (caddr c)
+        (setq d (abs (- (distance (nth (car c) pts) (nth (cadr c) pts)) (caddr c)))
+              mx (max mx d))))
+  mx)
+
+;; Worst amount any edge sits OUTSIDE its band (<=0 means all in band).
+(defun pool:edgemax (pts edgecons / mx d)
+  (setq mx -1.0e30)
+  (foreach e edgecons
+    (setq d (- (abs (- (distance (nth (car e) pts) (nth (cadr e) pts)) (caddr e)))
+               (cadddr e))
+          mx (max mx d)))
+  mx)
+
+;; Generic two-phase best fit of a point list:
+;;   edgecons  = (i j target band)   crosscons = (i j target)
+;;   1. pull crosses while holding edges EXACT; if crosses land inside
+;;      xtol -> done, no failure.
+;;   2. let edges flex within their bands and pull crosses; if edges
+;;      stay in band and crosses land inside xtol -> done.
+;;   3. otherwise edges held true (step-1 result), crosses as close as
+;;      possible, failure flag set.
+;; Returns (pts failed).
+(defun pool:fitpoly (seed edgecons crosscons xtol / xcon e0 eb p1 p2)
+  (setq xcon nil)
+  (foreach c crosscons                  ; provided (non-NA) crosses only
+    (if (caddr c)
+        (setq xcon (cons (list (car c) (cadr c) (caddr c) (caddr c) 0.5) xcon))))
+  (setq e0 (mapcar '(lambda (e) (list (car e) (cadr e) (caddr e) (caddr e) 1.0))
+                   edgecons)
+        eb (mapcar '(lambda (e) (list (car e) (cadr e)
+                                      (- (caddr e) (cadddr e))
+                                      (+ (caddr e) (cadddr e)) 1.0))
+                   edgecons))
+  (setq p1 (pool:relaxn seed (append xcon e0) 3000)
+        p1 (pool:relaxn p1 e0 400))
+  (if (<= (pool:crossmax p1 crosscons) xtol)
+      (list p1 nil)
+      (progn
+        (setq p2 (pool:relaxn p1 (append xcon eb) 3000))
+        (if (and (<= (pool:edgemax p2 edgecons) 0.05)
+                 (<= (pool:crossmax p2 crosscons) (+ xtol 0.05)))
+            (list p2 nil)
+            (list p1 t)))))
+
+;; Look up a provided cross target for corner pair (i j); nil if NA or
+;; not in the active set.
+(defun pool:crossget (crosscons i j / out)
+  (foreach c crosscons
+    (if (or (and (= (car c) i) (= (cadr c) j))
+            (and (= (car c) j) (= (cadr c) i)))
+        (setq out (caddr c))))
+  out)
+
+(defun pool:grecnm (i j)
+  (strcat (nth i pool:*grecnames*) "-" (nth j pool:*grecnames*)))
+
+;; Gray guide for a Grecian: 8-corner nominal body (solid perimeter,
+;; dashed internal end chords), corner labels clear of the linework,
+;; and the active mode's cross diagonals (dashed).  Returns the
+;; highlight assoc (edge prompt-keys + one entry per cross name).
+(defun pool:grecpreview (crosses / npts cen p q e c ent all pv k)
+  (setq npts (list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0)
+                   (list 410.0 125.0) (list 360.0 180.0) (list 0.0 180.0)
+                   (list -50.0 125.0) (list -50.0 55.0))
+        cen (list 0.0 0.0) all nil pv nil)
+  (foreach p npts (setq cen (pool:v+ cen p)))
+  (setq cen (pool:v* cen (/ 1.0 8.0)))
+  (foreach e pool:*grecedges*
+    (setq p (nth (car e) npts) q (nth (cadr e) npts)
+          ent (if (member (caddr e) '(ad bc)) (pool:pvlined p q) (pool:pvline p q))
+          pv (cons (cons (caddr e) (list ent)) pv)
+          all (cons ent all)))
+  (foreach c crosses
+    (setq ent (pool:pvlined (nth (car c) npts) (nth (cadr c) npts))
+          pv (cons (cons (caddr c) (list ent)) pv)
+          all (cons ent all)))
+  (setq k 0)
+  (foreach p npts
+    (pool:text (pool:lbloff p cen npts 22.0) 12.0 (nth k pool:*grecnames*) "POOL-NOTES")
+    (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)
+          k (1+ k)))
+  (setq pool:*pvents* all)
+  pv)
+
+;; Full guided flow for a Grecian pool (all three cross-dim modes).
+;; Caller handles sysvars / undo / zoom-extents.
+(defun pool:grecflow ( / oldclay mode crosses pv
+                       tp bo le ri ltd lbd lew rtd rbd rew
+                       evals edgecons crosscons dac dbd fq q
+                       a b c d cen0 ml mr lend rend seed
+                       res pts failed notes
+                       xmin xmax ymin ymax w hh doff th cen odim
+                       e p qq cc nm tgt act rows k)
+  (setq oldclay (getvar "CLAYER"))
+
+  (initget 1 "Simple Center Complex")
+  (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
+        crosses (pool:grecmode mode))
+
+  (setq pv (pool:grecpreview crosses))
+  (command "_.ZOOM" "_Window"
+           (pool:wp (list -110.0 -80.0)) (pool:wp (list 470.0 300.0)))
+  (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
+  (princ "\nCorners: A/B bottom, C/D top, LT/LB left tips, RT/RB right tips.")
+
+  ;; -------- body + ends
+  (setq bo  (pool:askh "Side BOTTOM (A-B)" (cdr (assoc 'ab pv)))
+        tp  (pool:askh "Side TOP (D-C)" (cdr (assoc 'cd pv)))
+        le  (pool:askh "End LEFT (A-D)" (cdr (assoc 'ad pv)))
+        ri  (pool:askh "End RIGHT (B-C)" (cdr (assoc 'bc pv)))
+        ltd (pool:askh "LEFT end diagonal TOP (D-LT)" (cdr (assoc 'ltd pv)))
+        lbd (pool:askh "LEFT end diagonal BOTTOM (A-LB)" (cdr (assoc 'lbd pv)))
+        lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
+        rtd (pool:askh "RIGHT end diagonal TOP (C-RT)" (cdr (assoc 'rtd pv)))
+        rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)" (cdr (assoc 'rbd pv)))
+        rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv))))
+
+  ;; -------- cross dims for the chosen mode (NA allowed on each)
+  (setq crosscons nil)
+  (foreach e crosses
+    (setq tgt (pool:askhx (strcat "Cross dim " (caddr e)) (cdr (assoc (caddr e) pv)))
+          crosscons (cons (list (car e) (cadr e) tgt) crosscons)))
+  (setq crosscons (reverse crosscons))
+  (pool:pvkill)
+
+  ;; -------- seed: fit the body quad, project nominal ends
+  (setq evals (list (cons 'ab bo) (cons 'cd tp) (cons 'ad le) (cons 'bc ri)
+                    (cons 'rbd rbd) (cons 'rew rew) (cons 'rtd rtd)
+                    (cons 'ltd ltd) (cons 'lew lew) (cons 'lbd lbd))
+        edgecons (mapcar '(lambda (e)
+                            (list (car e) (cadr e) (cdr (assoc (caddr e) evals)) (cadddr e)))
+                         pool:*grecedges*)
+        dac (pool:crossget crosscons 0 4)
+        dbd (pool:crossget crosscons 1 5)
+        fq (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
+        q (car fq)
+        a (car q) b (cadr q) c (caddr q) d (cadddr q)
+        cen0 (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
+        ml (pool:unit (pool:perp (pool:v- d a))))
+  (if (< (pool:dot (pool:v- (pool:mid a d) cen0) ml) 0.0)
+      (setq ml (pool:v* ml -1.0)))
+  (setq mr (pool:unit (pool:perp (pool:v- c b))))
+  (if (< (pool:dot (pool:v- (pool:mid b c) cen0) mr) 0.0)
+      (setq mr (pool:v* mr -1.0)))
+  (setq lend (pool:grecendp a d ml ltd lbd lew)
+        rend (pool:grecendp b c mr rtd rbd rew)
+        seed (list a b (cadr rend) (car rend) c d (car lend) (cadr lend))
+        notes nil)
+  (if (not (nth 5 lend))
+      (setq notes (cons "LEFT END: diagonals/width did not fit -- 45 seed used" notes)))
+  (if (not (nth 5 rend))
+      (setq notes (cons "RIGHT END: diagonals/width did not fit -- 45 seed used" notes)))
+
+  ;; -------- fit: Simple keeps the validated seed; Center/Complex
+  ;; best-fit all 8 corners against every provided cross dim
+  (if (= mode "Simple")
+      (setq pts seed failed (cadr fq))
+      (progn
+        (setq res (pool:fitpoly seed edgecons crosscons pool:*cross-tol*)
+              pts (car res)
+              failed (cadr res))))
+
+  ;; -------- extents / scale
+  (setq xmin (apply 'min (mapcar 'car pts))
+        xmax (apply 'max (mapcar 'car pts))
+        ymin (apply 'min (mapcar 'cadr pts))
+        ymax (apply 'max (mapcar 'cadr pts))
+        w (- xmax xmin) hh (- ymax ymin)
+        doff (max 12.0 (/ (max w hh) 18.0))
+        th (max 3.0 (/ (max w hh) 70.0))
+        pool:*dashlt* (pool:ltload "DASHED")
+        pool:*lts* (max 1.0 (/ (max w hh) 15.0))
+        cen (list 0.0 0.0))
+  (foreach p pts (setq cen (pool:v+ cen p)))
+  (setq cen (pool:v* cen (/ 1.0 8.0)))
+
+  ;; -------- perimeter (POOL) + internal end chords (dashed, POOL-NOTES)
+  (foreach e pool:*grecedges*
+    (setq p (nth (car e) pts) qq (nth (cadr e) pts))
+    (if (member (caddr e) '(ad bc))
+        (pool:lined p qq)
+        (pool:line p qq "POOL")))
+
+  ;; -------- dimensions (DIMENSION)
+  (setvar "CLAYER" "DIMENSION")
+  (foreach e pool:*grecedges*
+    (setq p (nth (car e) pts) qq (nth (cadr e) pts))
+    (cond
+      ((= (caddr e) 'ad)                ; left end chord -> outboard left
+       (pool:dimalg p qq (list (- xmin (* 0.6 doff)) (cadr (pool:mid p qq)))))
+      ((= (caddr e) 'bc)                ; right end chord -> outboard right
+       (pool:dimalg p qq (list (+ xmax (* 0.6 doff)) (cadr (pool:mid p qq)))))
+      (t
+       (pool:dimalg p qq (pool:outoffp p qq pts doff)))))
+  ;; provided cross dims, in the CROSS DIMENSION style when available
+  (setq odim (pool:dimxbegin) k 0)
+  (foreach cc crosscons
+    (if (caddr cc)
+        (pool:dimalg (nth (car cc) pts) (nth (cadr cc) pts)
+                     (pool:v+ (pool:mid (nth (car cc) pts) (nth (cadr cc) pts))
+                              (pool:v* (pool:unit
+                                         (pool:perp (pool:v- (nth (cadr cc) pts)
+                                                             (nth (car cc) pts))))
+                                       (* (if (= 0 (rem k 2)) 0.12 -0.12) doff)))))
+    (setq k (1+ k)))
+  (pool:dimxend odim)
+  (setvar "CLAYER" oldclay)
+
+  ;; -------- corner labels (kept outside the shape)
+  (setq k 0)
+  (foreach p pts
+    (pool:text (pool:lbloff p cen pts (* 2.0 th)) th (nth k pool:*grecnames*) "POOL-NOTES")
+    (setq k (1+ k)))
+
+  ;; -------- report table
+  (setq rows nil)
+  (foreach e pool:*grecedges*
+    (setq nm (pool:grecnm (car e) (cadr e))
+          tgt (cdr (assoc (caddr e) evals))
+          act (distance (nth (car e) pts) (nth (cadr e) pts))
+          rows (cons (list nm tgt act) rows)))
+  (foreach cc crosscons
+    (setq nm (pool:grecnm (car cc) (cadr cc))
+          act (distance (nth (car cc) pts) (nth (cadr cc) pts))
+          rows (cons (list (strcat "X " nm) (caddr cc) act) rows)))
+  (setq rows (reverse rows))
+  (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (if failed
+      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
+      (princ "\nPool layout complete -- see the report table."))
+  (princ))
 
 ;;; -------------------- L / Lazy L pools --------------------------------
 ;;;
@@ -921,16 +1210,13 @@
 
 ;; Full guided flow for the quad-based pools: preview, prompts, fit,
 ;; draw, dimension and report.  Caller handles sysvars/undo/zoom.
-(defun pool:quadflow (ptype / oldclay r2d pv
+(defun pool:quadflow (ptype / oldclay pv
                              tp bo le ri dac dbd totl lrad rrad
-                             ltd lbd lew rtd rbd rew
                              fitres quad failed a b c d cen meas notes tri
                              doff th endoff pr odim
                              midl midr ml mr tipl tipr
-                             lend rend lp1 lp2 rp1 rp2
                              allpts xmax ymax ymin rows)
-  (setq oldclay (getvar "CLAYER")
-        r2d (/ 180.0 pi))
+  (setq oldclay (getvar "CLAYER"))
 
   ;; -------------------------------------- guide preview + input
   (setq pv (pool:preview ptype))
@@ -946,18 +1232,10 @@
         dac (pool:askhx "Cross dim bottom-left to top-right (A-C)" (cdr (assoc 'ac pv)))
         dbd (pool:askhx "Cross dim bottom-right to top-left (B-D)" (cdr (assoc 'bd pv))))
 
-  (cond
-    ((= ptype "Oval")
-     (setq totl (pool:askh "Total pool length (arc tip to arc tip)" (cdr (assoc 'tot pv)))
-           lrad (pool:askh "LEFT oval end radius" (cdr (assoc 'lrad pv)))
-           rrad (pool:askh "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
-    ((= ptype "Grecian")
-     (setq ltd (pool:askh "LEFT end diagonal TOP" (cdr (assoc 'lt pv)))
-           lbd (pool:askh "LEFT end diagonal BOTTOM" (cdr (assoc 'lb pv)))
-           lew (pool:askh "LEFT end width (between diagonal end points)" (cdr (assoc 'lw pv)))
-           rtd (pool:askh "RIGHT end diagonal TOP" (cdr (assoc 'rt pv)))
-           rbd (pool:askh "RIGHT end diagonal BOTTOM" (cdr (assoc 'rb pv)))
-           rew (pool:askh "RIGHT end width (between diagonal end points)" (cdr (assoc 'rw pv))))))
+  (if (= ptype "Oval")
+      (setq totl (pool:askh "Total pool length (arc tip to arc tip)" (cdr (assoc 'tot pv)))
+            lrad (pool:askh "LEFT oval end radius" (cdr (assoc 'lrad pv)))
+            rrad (pool:askh "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
 
   ;; the guide has served its purpose -- replace it with the true pool
   (pool:pvkill)
@@ -977,9 +1255,9 @@
         pool:*lts* (max 1.0 (/ (max bo tp le ri) 15.0)))
 
   ;; -------------------------------- pool body / perimeter (layer POOL)
-  ;; The perimeter runs around the WHOLE pool: for ovals and Grecians
-  ;; the body end lines are reference only (dashed, POOL-NOTES) and the
-  ;; perimeter closes through the arcs / corner cuts instead.
+  ;; The perimeter runs around the WHOLE pool: for the oval the body
+  ;; end lines are reference only (dashed, POOL-NOTES) and the
+  ;; perimeter closes through the arcs instead.
   (pool:line a b "POOL")
   (pool:line c d "POOL")
   (if (= ptype "Rectangle")
@@ -1026,32 +1304,10 @@
         (pool:lined midr tipr)
         (pool:arc3p b tipr c "POOL")))
 
-  ;; ------------------------------------------------ grecian ends
-  (if (= ptype "Grecian")
-      (progn
-        (setq ml (pool:unit (pool:perp (pool:v- d a))))
-        (if (< (pool:dot (pool:v- (pool:mid a d) cen) ml) 0.0)
-            (setq ml (pool:v* ml -1.0)))
-        (setq lend (pool:grecend a d ml ltd lbd lew "POOL")
-              lp1 (car lend)
-              lp2 (cadr lend))
-        (if (not (nth 5 lend))
-            (setq notes (cons "LEFT END FAILED - DIAGONALS/WIDTH DO NOT FIT" notes)))
-        (setq mr (pool:unit (pool:perp (pool:v- c b))))
-        (if (< (pool:dot (pool:v- (pool:mid b c) cen) mr) 0.0)
-            (setq mr (pool:v* mr -1.0)))
-        (setq rend (pool:grecend b c mr rtd rbd rew "POOL")
-              rp1 (car rend)
-              rp2 (cadr rend))
-        (if (not (nth 5 rend))
-            (setq notes (cons "RIGHT END FAILED - DIAGONALS/WIDTH DO NOT FIT" notes)))))
-
   ;; ------------------------------------------------ extents
   (setq allpts (append quad
                        (if tri tri nil)
-                       (if tipl (list tipl tipr) nil)
-                       (if lp1 (list lp1 lp2) nil)
-                       (if rp1 (list rp1 rp2) nil))
+                       (if tipl (list tipl tipr) nil))
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
@@ -1073,14 +1329,6 @@
                                                  (* 0.3 doff))))
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))))
-  (if (= ptype "Grecian")
-      (progn
-        (pool:dimalg d lp1 (pool:outoff d lp1 cen doff))
-        (pool:dimalg lp1 lp2 (pool:outoff lp1 lp2 cen doff))
-        (pool:dimalg lp2 a (pool:outoff lp2 a cen doff))
-        (pool:dimalg c rp1 (pool:outoff c rp1 cen doff))
-        (pool:dimalg rp1 rp2 (pool:outoff rp1 rp2 cen doff))
-        (pool:dimalg rp2 b (pool:outoff rp2 b cen doff))))
   ;; provided cross dims last, in the CROSS DIMENSION style when the
   ;; drawing has one (current style restored afterwards)
   (setq odim (pool:dimxbegin))
@@ -1115,16 +1363,6 @@
   (if (= ptype "Oval")
       (setq rows (append rows
                          (list (list "TOTAL LENGTH" totl (distance tipl tipr))))))
-  (if (= ptype "Grecian")
-      (setq rows (append rows
-                         (list (list "L DIAG TOP" ltd (nth 2 lend))
-                               (list "L DIAG BOTTOM" lbd (nth 3 lend))
-                               (list "L END WIDTH" lew (distance lp1 lp2))
-                               (list "L DIAG ANGLE" 45.0 (* (nth 4 lend) r2d))
-                               (list "R DIAG TOP" rtd (nth 2 rend))
-                               (list "R DIAG BOTTOM" rbd (nth 3 rend))
-                               (list "R END WIDTH" rew (distance rp1 rp2))
-                               (list "R DIAG ANGLE" 45.0 (* (nth 4 rend) r2d))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
   (if failed
@@ -1176,6 +1414,7 @@
   (cond
     ((= ptype "L") (pool:hexflow nil))
     ((= ptype "LAzyl") (pool:hexflow t))
+    ((= ptype "Grecian") (pool:grecflow))
     (t (pool:quadflow ptype)))
 
   ;; ------------------------------------------------ finish

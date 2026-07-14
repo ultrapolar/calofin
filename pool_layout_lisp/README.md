@@ -35,12 +35,35 @@ A ---------- B        cross:  A-C and B-D
 4. End lengths, left then right.
 5. Cross dimensions A-C and B-D.
 6. **Oval only:** total pool length, left end radius, right end radius.
-7. **Grecian only:** for each end — diagonal top, diagonal bottom, end
-   width between the diagonal end points.
+7. **Grecian only:** a cross-dim detail level (see below), then for
+   each end — diagonal top, diagonal bottom, end width — followed by
+   the cross dims for the chosen level.
 
 Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
 shows `N/A` for its target/delta (the as-drawn value is still listed).
+
+### Grecian cross-dim detail (Simple / Center / Complex)
+
+A Grecian has **8 corners**: the body A/B/C/D plus the angled-end tips
+**LT/LB** (left-top, left-bottom) and **RT/RB** (right-top,
+right-bottom). After choosing Grecian you pick how many cross dims to
+supply — the more you give, the more tightly the out-of-square shape
+is pinned down. Any cross dim may be answered `NA`.
+
+| Level | Cross dims | What it adds |
+| --- | --- | --- |
+| **Simple** | A-C, B-D | The two body diagonals (the original behaviour). |
+| **Center** | + LB-RT, LT-RB | The two long tip-to-tip diagonals that cross near the pool centre. |
+| **Complex** | all 18 diagonals | Every possible diagonal among the 8 corners. Supply what you measured and `NA` the rest. |
+
+All 8 corners are then **best-fit** against every provided cross dim
+(sides/ends held within 1", end diagonals within ½", end widths near
+exact, cross dims pulled to target within 2"). If the cross dims
+can't be met the edges are held true and **`CROSS DIMS FAILED`** is
+reported — same policy as the rectangle. Every cross dim is
+dimensioned (in the `CROSS DIMENSION` style when present) and listed
+in the report table (`X A-C`, `X LB-RT`, …) with target/actual/delta.
 
 ### L / Lazy L pools
 
