@@ -200,8 +200,10 @@ location, the point names, and prints a coordinate/fit-error table. All
 geometry is in inches (1 unit = 1"). See `abcdef_points/README.md` for the
 full write-up and a `template.csv` to fill in.
 
-Requires full AutoCAD with Excel installed (the sheet is read via Excel
-COM automation) — it does not run in AutoCAD LT.
+CSV files are read natively (no Excel, and no date-mangling of values like
+`28-11`), so **CSV is the recommended format**. `.xlsx`/`.xls`/`.xlsm` are
+read via Excel COM automation, which needs full AutoCAD with Excel installed
+(not AutoCAD LT).
 
 ---
 

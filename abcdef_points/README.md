@@ -37,34 +37,52 @@ doesn't matter — the columns are found by their headers):
 * A blank distance cell just means "not measured from that corner" — the
   point is still plotted as long as **at least two** distances are given
   (three or four give a stronger, unambiguous fix).
-* `.xlsx`, `.xls`, `.xlsm` and `.csv` all work (`.csv` is opened through
-  Excel as well). A ready-to-fill `template.csv` sits next to this file.
+* `.csv` is read **natively** (no Excel needed, and it avoids Excel silently
+  turning entries like `28-11` or `7-0` into dates). `.xlsx`, `.xls` and
+  `.xlsm` are read through Excel COM automation. A ready-to-fill
+  `template.csv` sits next to this file — **CSV is the recommended format.**
 
 ## Cleaning up dirty / OCR'd data
 
-Field numbers that were scanned or re-typed often come back garbled. Before
+Field numbers that were scanned or re-typed come back badly garbled. Before
 anything is parsed, each distance cell is scrubbed deterministically:
 
 | Comes in as | Read as | What happened |
 | --- | --- | --- |
-| `20'_114"` | `20'-1/4"` | `_` misread for `-`; `114` is `1/4` with the `/` scanned as a `1` |
+| `28-7"` | `28'-7"` | missing foot mark — the dash still separates feet from inches |
+| `101-10"` | `10'-10"` | the foot mark `'` was scanned as a `1` |
+| `20'-7 114"` | `20'-7 1/4"` | `114` is `1/4` with the `/` scanned as a `1` |
 | `1 1'-IO 1/2"` | `11'-10 1/2"` | stray space split the feet; `IO` is `10` (`I`→`1`, `O`→`0`) |
-| `39'- 8 314"` | `39'-8 3/4"` | `314` is `3/4` (again `/` scanned as `1`) |
+| `201—4` | `20'-4"` | em-dash for the separator **and** foot mark as `1` |
 
 The fixes applied:
 
-* **Look-alike characters** — `O`/`o`→`0`, `I`/`l`/`|`→`1`, `_`→`-`, and the
-  curly "smart quotes" Word/Excel insert (`’ ′`→`'`, `” ″`→`"`).
-* **Stray spaces in the feet** — `1 1'` is collapsed to `11'`.
+* **Look-alike characters** — `O`/`o`→`0`, `I`/`l`/`|`→`1`, `_`→`-`, en/em
+  dashes and the curly "smart quotes" Word/Excel insert (`’ ′`→`'`, `” ″`→`"`).
+* **Missing foot mark** — a bare `28-7` is read as `28'-7"` (the dash marks the
+  feet/inch split). A trailing `'` used where a `"` belongs is handled too.
+* **Stray spaces in the feet** — `1 1'` or `21 1-` collapse to `11'` / `21'`.
 * **A `/` scanned as `1` inside a fraction** — a slash-less run of digits like
   `114`, `314` or `1116` is rebuilt into the one valid inch fraction it could
   be (`1/4`, `3/4`, `1/16`). This is unambiguous because the misread keeps the
   same length, so `1116`→`1/16` while `11116`→`11/16`.
+* **A foot mark `'` scanned as a `1`** — `101-10` could be `10'-10"` or `101'`;
+  the tool uses the rectangle you entered to decide. Any reading longer than
+  the rectangle's diagonal is impossible, so when the feet end in a `1` and the
+  value blows past the diagonal, that `1` was the apostrophe and is dropped
+  (`101-10`→`10'-10"`). Values that are still impossible after that are marked
+  unreadable rather than guessed at.
 
 Every cell that had to be cleaned (or that couldn't be read at all) is listed
 on the command line **before** the points are plotted, showing the raw text
-and how it was interpreted (e.g. `* P1 / FROM A: "20'_114"" -> 0'-1/4"`), so
-you can eyeball the repairs. Clean values are never touched or reported.
+and how it was interpreted (e.g. `* P11 / FROM A: "101-10"" -> 10'-10"`), so
+you can eyeball the repairs. Obvious fixes (a stray letter, a missing foot
+mark) are applied quietly; only the judgement calls are reported.
+
+> This cleanup was tuned against a real 23-point field sheet: 21 of 23 points
+> reconstructed to within the ¼" rounding limit, and the 2 that didn't were
+> genuinely broken in the source (a distance typed as just `3/4"`, and an
+> ambiguous `20'-1 1"`) — exactly the outliers the fit-error report flags.
 
 ## Sharing the rounding error
 
@@ -119,8 +137,10 @@ current release.
 
 ## Notes & limitations
 
-* Requires desktop AutoCAD with Microsoft Excel installed (the sheet is
-  read through Excel COM automation). It won't run in AutoCAD LT.
+* **CSV files need only AutoCAD** — they are parsed natively. Only `.xlsx` /
+  `.xls` / `.xlsm` require desktop AutoCAD with Microsoft Excel installed (read
+  through Excel COM automation, which won't run in AutoCAD LT). If a spreadsheet
+  won't load, export it to CSV and use that.
 * Points are placed relative to corner A using the A-B and A-D dimensions
   you enter; the sheet's distances are never assumed to agree with those
   dimensions, only with each other.
