@@ -60,14 +60,20 @@
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
                                     ; points by more than this, split it
                                     ; into several arcs that hit exactly
-(setq *PF-STRAIGHT-ANG* (/ pi 180.0)) ; points-only mode: a span whose
+(setq *PF-STRAIGHT-ANG* (/ pi 60.0)) ; points-only mode: a span whose
                                     ; both end tangents are within this
-                                    ; angle (1 deg) of its chord becomes
-                                    ; a straight LINE segment
-(setq *PF-CORNER-ANG*   (/ pi 6.0)) ; points-only mode: minimum turn
-                                    ; (30 deg) for a point to qualify as
-                                    ; a sharp corner; it must also turn
-                                    ; much harder than its neighbours
+                                    ; angle (3 deg) of its chord becomes
+                                    ; a straight LINE segment - so gently
+                                    ; wandering / noisy straight runs come
+                                    ; out as lines, not a string of arcs
+(setq *PF-CORNER-ANG*   (/ pi 8.0)) ; points-only mode: a point that turns
+                                    ; more than this (22.5 deg) is treated
+                                    ; as a sharp corner (straight lines on
+                                    ; both sides).  Lower it for more
+                                    ; corners/lines, raise it for smoother
+                                    ; curves.  A shape defined by just its
+                                    ; corner points therefore comes out as
+                                    ; plain lines, not arcs.
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
 (if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
@@ -480,34 +486,23 @@
 
 ;; Tangent directions per tour point, as (in . out) pairs (radians).
 ;; Smooth points get the tangent of the circumcircle through them and
-;; their two neighbours (in = out).  A point is kept as a SHARP CORNER
-;; (in/out follow the chords) only where the path both turns hard
-;; (more than *PF-CORNER-ANG*) and turns much harder than at its
-;; neighbours - a spike, not a trend - so real wall corners survive
-;; while tight curves that are merely sampled sparsely stay smooth.
-(defun pf:vertex-tangents (tour / n i prev cur next cin cout turns turn
-                                  tprev tnext c tc chord tangs)
-  ;; chord-to-chord turning angle at every tour point
-  (setq n (length tour) i 0 turns nil)
-  (repeat n
-    (setq turns (cons (pf:signed-dang
-                        (angle (nth (rem (+ i n -1) n) tour) (nth i tour))
-                        (angle (nth i tour) (nth (rem (1+ i) n) tour)))
-                      turns)
-          i (1+ i)))
-  (setq turns (reverse turns) i 0)
+;; their two neighbours (in = out).  A point that turns more than
+;; *PF-CORNER-ANG* is kept as a SHARP CORNER (in/out follow the chords)
+;; so straight lines meet at it - this is what keeps a shape defined by
+;; just its corner points from being rounded into a mess of arcs, while
+;; gently sampled curves (small per-point turns) still come out smooth.
+(defun pf:vertex-tangents (tour / n i prev cur next cin cout turn
+                                  c tc chord tangs)
+  (setq n (length tour) i 0)
   (repeat n
     (setq prev  (nth (rem (+ i n -1) n) tour)
           cur   (nth i tour)
           next  (nth (rem (1+ i) n) tour)
           cin   (angle prev cur)
           cout  (angle cur next)
-          turn  (nth i turns)
-          tprev (abs (nth (rem (+ i n -1) n) turns))
-          tnext (abs (nth (rem (1+ i) n) turns))
+          turn  (pf:signed-dang cin cout)
           chord (angle prev next))
-    (if (and (> (abs turn) *PF-CORNER-ANG*)
-             (> (abs turn) (* 0.8 (+ tprev tnext)))) ; 1.6 x neighbour avg
+    (if (> (abs turn) *PF-CORNER-ANG*)
       (setq tangs (cons (cons cin cout) tangs))
       (progn
         (setq c (pf:circumcenter prev cur next))

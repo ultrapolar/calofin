@@ -22,14 +22,25 @@ by a rough connect-the-dots sketch, or from the points alone.
 In the ordering-sketch and points-only modes the polyline passes
 **exactly through every point**: each point gets a tangent from the
 circle through it and its two neighbours, and consecutive points are
-joined by a line, a single arc, or a G1 (tangent-continuous) biarc —
-so the loop is smooth everywhere. Runs of points that line up within
-`*PF-STRAIGHT-ANG*` (1°) become true `LINE` segments, and a point
-where the path turns hard (more than `*PF-CORNER-ANG*`, 30°) *and*
-much harder than at its neighbours is kept as a sharp corner instead
-of being rounded over — so rectangles keep their corners while tight
-curves merely sampled sparsely stay smooth. Give each straight wall at
-least one point between its corners so it registers as straight.
+joined by a line, a single arc, or a G1 (tangent-continuous) biarc.
+Straight geometry is preferred over arcs so the result isn't cluttered
+with unnecessary curves:
+
+* A point that turns more than `*PF-CORNER-ANG*` (**22.5°**) is treated
+  as a **sharp corner** — straight lines meet at it. So a shape given
+  as just its corner points (a triangle, a rectangle, any polygon)
+  comes out as plain `LINE` segments, not arcs.
+* A span whose ends run within `*PF-STRAIGHT-ANG*` (**3°**) of its
+  chord becomes a straight `LINE`, so gently wandering or slightly
+  noisy straight runs don't turn into a string of tiny arcs.
+* Only genuinely curved stretches — points that turn gradually, each by
+  less than the corner angle — are rendered as smooth arcs.
+
+Both thresholds are constants at the top of `abhd.lsp`: lower
+`*PF-CORNER-ANG*` (or raise `*PF-STRAIGHT-ANG*`) for even fewer arcs
+and more straight lines; raise `*PF-CORNER-ANG*` for smoother, rounder
+curves. Sample real curves densely enough that each point turns by less
+than the corner angle and they stay smooth.
 
 Layer names can be changed at the top of `abhd.lsp`
 (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
