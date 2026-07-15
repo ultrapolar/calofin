@@ -1,15 +1,35 @@
 # POOLFIT — AutoLISP pool-perimeter fitter (AutoCAD 2018+)
 
-Rebuilds a hand-drawn pool perimeter as a single smooth closed
-polyline (lines + arcs only) that passes through as many surveyed
-points as possible.
+Builds a single smooth closed polyline (lines + arcs only) through
+points surveyed on a pool edge — guided by a hand-drawn perimeter,
+by a rough connect-the-dots sketch, or from the points alone.
 
 ## Setup expected in the drawing
 
 | Layer | Contents |
 | --- | --- |
-| `POOL` | The drawn perimeter: one closed polyline, **or** the same shape exploded into `LINE`s and `ARC`s |
+| `POOL` | *(optional)* The drawn perimeter: one closed polyline or the same shape exploded into `LINE`s and `ARC`s — **or** a rough lines-only sketch that just connects the points in order |
 | `POINTS` | `POINT` entities surveyed on the real pool edge |
+
+## Three modes, picked automatically from what you select
+
+| Selection contains | Mode | Behaviour |
+| --- | --- | --- |
+| POOL geometry **with arcs** + points | **Guided** | The drawn shape is trusted and re-fitted through the points (vertices snap, arcs re-fit/subdivide, straight walls stay straight) |
+| POOL geometry that is **lines only** + points | **Ordering sketch** | The sketch is treated as connect-the-dots: it only tells the program the *order* of the points; the actual shape is built from the points themselves |
+| **Points only** (no POOL geometry) | **Points-only** | The program orders the points into a closed loop itself (nearest-neighbour tour + 2-opt uncrossing) and builds the shape from them |
+
+In the ordering-sketch and points-only modes the polyline passes
+**exactly through every point**: each point gets a tangent from the
+circle through it and its two neighbours, and consecutive points are
+joined by a line, a single arc, or a G1 (tangent-continuous) biarc —
+so the loop is smooth everywhere. Runs of points that line up within
+`*PF-STRAIGHT-ANG*` (1°) become true `LINE` segments, and a point
+where the path turns hard (more than `*PF-CORNER-ANG*`, 30°) *and*
+much harder than at its neighbours is kept as a sharp corner instead
+of being rounded over — so rectangles keep their corners while tight
+curves merely sampled sparsely stay smooth. Give each straight wall at
+least one point between its corners so it registers as straight.
 
 Layer names can be changed at the top of `poolfit.lsp`
 (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
@@ -20,15 +40,16 @@ Layer names can be changed at the top of `poolfit.lsp`
 2. Type `POOLFIT`.
 3. Accept or change the tolerance (default `1.0` drawing unit — one
    inch in an inch-based drawing; the value is remembered for the
-   session).
-4. Window-select the area containing the perimeter and the points.
+   session). It is used by the guided mode and for the hit report.
+4. Window-select the area: points plus (optionally) the perimeter or
+   ordering sketch — what you include picks the mode.
 
 A new closed `LWPOLYLINE` is created on layer `POOL-FIT` (green,
 created if missing). The original geometry is left untouched, so the
 result is easy to compare and the command can be re-run with a
 different tolerance.
 
-## What it does
+## What the guided mode does
 
 * **Chains** exploded `LINE`/`ARC` segments back into one closed loop
   (closed `LWPOLYLINE`s and old-style `POLYLINE`s are read directly).

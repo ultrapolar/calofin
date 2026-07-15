@@ -6,10 +6,24 @@
 ;;; Command:  POOLFIT
 ;;;
 ;;; The user window-selects an area containing:
-;;;   * On layer "POOL"   : a closed perimeter drawn as ONE closed
-;;;                         polyline OR an exploded set of LINEs/ARCs.
+;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
+;;;                         closed polyline OR an exploded set of
+;;;                         LINEs/ARCs.
 ;;;   * On layer "POINTS" : POINT entities surveyed on the real pool
 ;;;                         edge.
+;;;
+;;; TWO MODES, chosen automatically from the selection:
+;;;   * GUIDED  - the selection contains POOL geometry: the drawn
+;;;               shape is used as the guide and re-fitted through the
+;;;               points (described below).
+;;;   * POINTS-ONLY - the selection contains no POOL geometry: the
+;;;               program orders the points into a closed loop by
+;;;               itself (nearest-neighbour tour + 2-opt uncrossing)
+;;;               and draws a smooth closed polyline through EVERY
+;;;               point exactly, using a tangent per point and a
+;;;               G1-continuous biarc between consecutive points.
+;;;               Runs of points that line up straight become LINE
+;;;               segments.
 ;;;
 ;;; The command rebuilds the perimeter as a single closed LWPOLYLINE
 ;;; (lines + arcs only, no splines) on layer "POOL-FIT":
@@ -43,6 +57,14 @@
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
                                     ; points by more than this, split it
                                     ; into several arcs that hit exactly
+(setq *PF-STRAIGHT-ANG* (/ pi 180.0)) ; points-only mode: a span whose
+                                    ; both end tangents are within this
+                                    ; angle (1 deg) of its chord becomes
+                                    ; a straight LINE segment
+(setq *PF-CORNER-ANG*   (/ pi 6.0)) ; points-only mode: minimum turn
+                                    ; (30 deg) for a point to qualify as
+                                    ; a sharp corner; it must also turn
+                                    ; much harder than its neighbours
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
 (if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
@@ -350,6 +372,180 @@
           (setq nb (pf:cap-bulge (pf:tangent-bulge prev tang p2)))
           (reverse (cons (list prev p2 nb) segs)))))))
 
+;; ---- points-only / ordering-sketch mode -------------------------------
+
+(defun pf:dedupe (pts / out q p dup)
+  (foreach q pts
+    (setq dup nil)
+    (foreach p out
+      (if (< (pf:dist p q) *PF-EXACT-EPS*) (setq dup T)))
+    (if (not dup) (setq out (cons q out))))
+  (reverse out))
+
+;; T when the chained loop contains at least one curved segment
+(defun pf:has-arcs (loop / r)
+  (foreach s loop (if (>= (abs (caddr s)) 1.0e-9) (setq r T)))
+  r)
+
+;; Order points into a closed tour: nearest-neighbour walk from the
+;; leftmost point, then 2-opt passes to remove crossings.
+(defun pf:order-points (pts / start cur tour rest best bd q d n i j k
+                              pass improved ti ti1 tj tj1 delta head midl
+                              taill)
+  (setq start (car pts))
+  (foreach q (cdr pts)
+    (if (or (< (car q) (car start))
+            (and (= (car q) (car start)) (< (cadr q) (cadr start))))
+      (setq start q)))
+  (setq cur  start
+        rest (vl-remove start pts)
+        tour (list start))
+  (while rest
+    (setq best nil bd nil)
+    (foreach q rest
+      (setq d (pf:dist cur q))
+      (if (or (null bd) (< d bd)) (setq best q bd d)))
+    (setq tour (cons best tour)
+          cur  best
+          rest (vl-remove best rest)))
+  (setq tour (reverse tour)
+        n    (length tour)
+        pass 0
+        improved T)
+  (while (and improved (< pass 40))
+    (setq improved nil pass (1+ pass) i 0)
+    (while (< i (1- n))
+      (setq j (1+ i))
+      (while (< j n)
+        (if (not (and (= i 0) (= j (1- n))))
+          (progn
+            (setq ti    (nth i tour)
+                  ti1   (nth (1+ i) tour)
+                  tj    (nth j tour)
+                  tj1   (nth (rem (1+ j) n) tour)
+                  delta (- (+ (pf:dist ti tj) (pf:dist ti1 tj1))
+                           (+ (pf:dist ti ti1) (pf:dist tj tj1))))
+            (if (< delta -1.0e-9)
+              (progn                    ; reverse tour[i+1 .. j]
+                (setq head nil midl nil taill nil k 0)
+                (foreach q tour
+                  (cond ((<= k i) (setq head (cons q head)))
+                        ((<= k j) (setq midl (cons q midl)))
+                        (T        (setq taill (cons q taill))))
+                  (setq k (1+ k)))
+                (setq tour     (append (reverse head) midl (reverse taill))
+                      improved T)))))
+        (setq j (1+ j)))
+      (setq i (1+ i))))
+  tour)
+
+;; Order points by their position along a user-drawn ordering sketch
+;; (the chained loop): each point keys on segment-index + parameter.
+(defun pf:loop-order (loop pts / keyed q best bd d i s tp)
+  (foreach q pts
+    (setq best 0 bd nil i 0)
+    (foreach s loop
+      (setq d (pf:seg-dist q s))
+      (if (or (null bd) (< d bd)) (setq bd d best i))
+      (setq i (1+ i)))
+    (setq tp (pf:seg-param q (nth best loop)))
+    (if (< tp 0.0) (setq tp 0.0))
+    (if (> tp 1.0) (setq tp 1.0))
+    (setq keyed (cons (cons (+ best tp) q) keyed)))
+  (mapcar 'cdr (vl-sort keyed '(lambda (a b) (< (car a) (car b))))))
+
+;; Tangent directions per tour point, as (in . out) pairs (radians).
+;; Smooth points get the tangent of the circumcircle through them and
+;; their two neighbours (in = out).  A point is kept as a SHARP CORNER
+;; (in/out follow the chords) only where the path both turns hard
+;; (more than *PF-CORNER-ANG*) and turns much harder than at its
+;; neighbours - a spike, not a trend - so real wall corners survive
+;; while tight curves that are merely sampled sparsely stay smooth.
+(defun pf:vertex-tangents (tour / n i prev cur next cin cout turns turn
+                                  tprev tnext c tc chord tangs)
+  ;; chord-to-chord turning angle at every tour point
+  (setq n (length tour) i 0 turns nil)
+  (repeat n
+    (setq turns (cons (pf:signed-dang
+                        (angle (nth (rem (+ i n -1) n) tour) (nth i tour))
+                        (angle (nth i tour) (nth (rem (1+ i) n) tour)))
+                      turns)
+          i (1+ i)))
+  (setq turns (reverse turns) i 0)
+  (repeat n
+    (setq prev  (nth (rem (+ i n -1) n) tour)
+          cur   (nth i tour)
+          next  (nth (rem (1+ i) n) tour)
+          cin   (angle prev cur)
+          cout  (angle cur next)
+          turn  (nth i turns)
+          tprev (abs (nth (rem (+ i n -1) n) turns))
+          tnext (abs (nth (rem (1+ i) n) turns))
+          chord (angle prev next))
+    (if (and (> (abs turn) *PF-CORNER-ANG*)
+             (> (abs turn) (* 0.8 (+ tprev tnext)))) ; 1.6 x neighbour avg
+      (setq tangs (cons (cons cin cout) tangs))
+      (progn
+        (setq c (pf:circumcenter prev cur next))
+        (if c
+          (progn
+            (setq tc (+ (angle c cur) (/ pi 2.0)))
+            (if (> (abs (pf:signed-dang tc chord)) (/ pi 2.0))
+              (setq tc (+ tc pi)))
+            (setq tc (pf:norm-ang tc)))
+          (setq tc chord))
+        (setq tangs (cons (cons tc tc) tangs))))
+    (setq i (1+ i)))
+  (reverse tangs))
+
+;; One span from A (leaving tangent TA) to B (arriving tangent TB):
+;; a LINE when both tangents line up with the chord, one arc when a
+;; single arc matches both tangents, otherwise a G1 biarc (two arcs
+;; meeting tangentially at an equal-chord joint).
+(defun pf:biarc (a ta b tb / phi aa bb d tt psi1 lj j)
+  (setq phi (angle a b)
+        aa  (pf:signed-dang ta phi)
+        bb  (pf:signed-dang phi tb)
+        d   (pf:dist a b))
+  (cond
+    ((and (< (abs aa) *PF-STRAIGHT-ANG*) (< (abs bb) *PF-STRAIGHT-ANG*))
+     (list (list a b 0.0)))                    ; straight wall
+    ((< (abs (- aa bb)) 1.0e-6)
+     (list (list a b (pf:tan (/ aa 2.0)))))    ; one arc fits both ends
+    (T
+     (setq tt (+ aa bb))                       ; total turning
+     (if (> (abs tt) (* 1.9 pi))
+       ;; tangents nearly U-turn: give up on G1 for this span
+       (list (list a b (pf:cap-bulge (pf:tan (/ aa 2.0)))))
+       (progn
+         (setq psi1 (- phi (/ tt 4.0))
+               lj   (if (< (abs (sin (/ tt 2.0))) 1.0e-9)
+                      (/ d 2.0)
+                      (/ (* d (sin (/ tt 4.0))) (sin (/ tt 2.0))))
+               j    (list (+ (car a)  (* lj (cos psi1)))
+                          (+ (cadr a) (* lj (sin psi1)))))
+         (if (or (< (pf:dist a j) *PF-EXACT-EPS*)
+                 (< (pf:dist j b) *PF-EXACT-EPS*))
+           (list (list a b (pf:cap-bulge (pf:tan (/ aa 2.0)))))
+           (list (list a j (pf:tan (/ (pf:signed-dang ta psi1) 2.0)))
+                 (list j b (pf:tan (/ (pf:signed-dang (angle j b) tb)
+                                      2.0))))))))))
+
+;; Build the smooth closed segment list through the ordered TOUR.
+(defun pf:points-loop (tour / tangs n i sub segs s)
+  (setq tangs (pf:vertex-tangents tour)
+        n     (length tour)
+        i     0)
+  (repeat n
+    (setq sub (pf:biarc (nth i tour)
+                        (cdr (nth i tangs))               ; leaving tangent
+                        (nth (rem (1+ i) n) tour)
+                        (car (nth (rem (1+ i) n) tangs))  ; arriving tangent
+              ))
+    (foreach s sub (setq segs (cons s segs)))
+    (setq i (1+ i)))
+  (reverse segs))
+
 ;; ---- output helpers --------------------------------------------------
 (defun pf:ensure-layer (name)
   (if (not (tblsearch "LAYER" name))
@@ -367,10 +563,34 @@
     (setq dxf (append dxf (list (cons 10 (car v)) (cons 42 (cadr v))))))
   (entmakex dxf))
 
+;; Draw the fitted polyline and print the hit report.
+(defun pf:finish (newsegs pts tol / hitex hitok miss q s d dmin)
+  (pf:ensure-layer *PF-OUT-LAYER*)
+  (pf:make-pline
+    (mapcar '(lambda (s) (list (car s) (caddr s))) newsegs)
+    *PF-OUT-LAYER*)
+  (setq hitex 0 hitok 0 miss 0)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s newsegs
+      (setq d (pf:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (cond
+      ((<= dmin *PF-EXACT-EPS*) (setq hitex (1+ hitex)))
+      ((<= dmin tol)            (setq hitok (1+ hitok)))
+      (T                        (setq miss  (1+ miss)))))
+  (princ (strcat "\nPOOLFIT: " (itoa (length newsegs))
+                 " segments written to layer " *PF-OUT-LAYER* "."
+                 "\n  Points ON the perimeter:      " (itoa hitex)
+                 "\n  Points within tolerance:      " (itoa hitok)
+                 "\n  Points beyond tolerance:      " (itoa miss)))
+  (if (> miss 0)
+    (princ "\n  (points beyond tolerance were left where the drawn shape disagrees with them)"))
+  (princ))
+
 ;; ---- the command -----------------------------------------------------
 (defun c:POOLFIT ( / tol ss i en ed lay typ segs pts loop n verts used
-                    v vp best bd d q p1 p2 b cands clean ns
-                    newsegs hitex hitok miss dmin s)
+                    v best bd d q p1 p2 b cands clean ns newsegs s)
   ;; tolerance (drawing units; 1 = 1 inch in an inch drawing)
   (setq tol (getdist (strcat "\nTolerance <" (rtos *PF-TOL* 2 3) ">: ")))
   (if tol (setq *PF-TOL* tol) (setq tol *PF-TOL*))
@@ -394,11 +614,23 @@
           ((and (= lay (strcase *PF-POINT-LAYER*)) (= typ "POINT"))
            (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))))
       (cond
-        ((null segs)
-         (princ (strcat "\nNo perimeter found on layer " *PF-POOL-LAYER* ".")))
         ((null pts)
          (princ (strcat "\nNo POINT entities found on layer " *PF-POINT-LAYER* ".")))
+        ((and (null segs) (< (length (pf:dedupe pts)) 3))
+         (princ "\nPoints-only mode needs at least 3 distinct points."))
+        ((null segs)
+         ;; ---- POINTS-ONLY mode: order the points ourselves ---------
+         (princ "\nNo POOL geometry selected - ordering the points automatically.")
+         (pf:finish (pf:points-loop (pf:order-points (pf:dedupe pts)))
+                    pts tol))
         ((null (setq loop (pf:chain segs))) nil)
+        ((not (pf:has-arcs loop))
+         ;; ---- ORDERING-SKETCH mode: the drawn loop is all straight
+         ;; lines, so treat it as connect-the-dots that only tells us
+         ;; the ORDER of the points; the shape comes from the points
+         (princ "\nPOOL sketch is lines only - using it just to order the points.")
+         (pf:finish (pf:points-loop (pf:loop-order loop (pf:dedupe pts)))
+                    pts tol))
         (T
          ;; -- 1. snap each vertex to its nearest point within tol ----
          ;; vertex list from the loop's segment start points
@@ -449,29 +681,8 @@
                  (setq newsegs (cons ns newsegs)))))
            (setq n (1+ n)))
          (setq newsegs (reverse newsegs))
-         ;; -- 3. draw the fitted polyline -----------------------------
-         (pf:ensure-layer *PF-OUT-LAYER*)
-         (pf:make-pline
-           (mapcar '(lambda (s) (list (car s) (caddr s))) newsegs)
-           *PF-OUT-LAYER*)
-         ;; -- 4. hit report -------------------------------------------
-         (setq hitex 0 hitok 0 miss 0)
-         (foreach q pts
-           (setq dmin nil)
-           (foreach s newsegs
-             (setq d (pf:seg-dist q s))
-             (if (or (null dmin) (< d dmin)) (setq dmin d)))
-           (cond
-             ((<= dmin *PF-EXACT-EPS*) (setq hitex (1+ hitex)))
-             ((<= dmin tol)            (setq hitok (1+ hitok)))
-             (T                        (setq miss  (1+ miss)))))
-         (princ (strcat "\nPOOLFIT: " (itoa (length newsegs))
-                        " segments written to layer " *PF-OUT-LAYER* "."
-                        "\n  Points ON the perimeter:      " (itoa hitex)
-                        "\n  Points within tolerance:      " (itoa hitok)
-                        "\n  Points beyond tolerance:      " (itoa miss)))
-         (if (> miss 0)
-           (princ "\n  (points beyond tolerance were left where the drawn shape disagrees with them)"))))))
+         ;; -- 3. draw the fitted polyline and report ------------------
+         (pf:finish newsegs pts tol)))))
   (princ))
 
 (princ "\nPOOLFIT loaded.  Type POOLFIT to fit the pool perimeter through its points.")
