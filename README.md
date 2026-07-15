@@ -1,12 +1,13 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender & AutoCAD DXF/CAD tools
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Two independent Blender add-ons (Blender 4.2+ including 5.0) and one
+AutoCAD AutoLISP routine for working between Blender and CAD:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| POOLFIT (AutoLISP, AutoCAD 2018+) | `pool_fit_lisp/` | Re-fits a hand-drawn pool perimeter into a smooth closed polyline (lines + arcs) that passes through the surveyed points — see `pool_fit_lisp/README.md` |
 
 ## Installation (either add-on)
 
