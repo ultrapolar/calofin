@@ -226,7 +226,7 @@
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
 
-(defun pf:lw-segs (ed / pts bls last item pt segs n closed)
+(defun pf:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
   (foreach item ed
@@ -377,6 +377,27 @@
 
 ;; ---- points-only / ordering-sketch mode -------------------------------
 
+;; Pure-AutoLISP list helpers (no Visual LISP / vl-* dependency, so the
+;; command works even when (vl-load-com) has not been run).
+
+;; Remove every element equal (within fuzz) to VAL from LST.
+(defun pf:remove (val lst / out x)
+  (foreach x lst
+    (if (not (equal x val 1.0e-9)) (setq out (cons x out))))
+  (reverse out))
+
+;; Insert (key . val) pair X into the already-sorted list LST, keeping
+;; ascending order by the pair's car (key).
+(defun pf:ins-car (x lst)
+  (cond ((null lst) (list x))
+        ((< (car x) (car (car lst))) (cons x lst))
+        (T (cons (car lst) (pf:ins-car x (cdr lst))))))
+
+;; Insertion-sort a list of (key . val) pairs ascending by key.
+(defun pf:sort-car (lst / out x)
+  (foreach x lst (setq out (pf:ins-car x out)))
+  out)
+
 (defun pf:dedupe (pts / out q p dup)
   (foreach q pts
     (setq dup nil)
@@ -401,7 +422,7 @@
             (and (= (car q) (car start)) (< (cadr q) (cadr start))))
       (setq start q)))
   (setq cur  start
-        rest (vl-remove start pts)
+        rest (pf:remove start pts)
         tour (list start))
   (while rest
     (setq best nil bd nil)
@@ -410,7 +431,7 @@
       (if (or (null bd) (< d bd)) (setq best q bd d)))
     (setq tour (cons best tour)
           cur  best
-          rest (vl-remove best rest)))
+          rest (pf:remove best rest)))
   (setq tour (reverse tour)
         n    (length tour)
         pass 0
@@ -455,7 +476,7 @@
     (if (< tp 0.0) (setq tp 0.0))
     (if (> tp 1.0) (setq tp 1.0))
     (setq keyed (cons (cons (+ best tp) q) keyed)))
-  (mapcar 'cdr (vl-sort keyed '(lambda (a b) (< (car a) (car b))))))
+  (mapcar 'cdr (pf:sort-car keyed)))
 
 ;; Tangent directions per tour point, as (in . out) pairs (radians).
 ;; Smooth points get the tangent of the circumcircle through them and
@@ -593,17 +614,32 @@
 
 ;; ---- the command -----------------------------------------------------
 (defun c:ABHD ( / tol ss i en ed lay typ segs pts loop n verts used
-                    v best bd d q p1 p2 b cands clean ns newsegs s)
+                    v best bd d q p1 p2 b cands clean ns newsegs s
+                    *error* pf-old-err pf-phase)
+  ;; report which step failed if anything goes wrong, then restore
+  (setq pf-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m (/= m "Function cancelled") (/= m "quit / exit abort"))
+              (princ (strcat "\nABHD stopped while "
+                             (if pf-phase pf-phase "starting up")
+                             " -- " m)))
+            (setq *error* pf-old-err)
+            (princ)))
+
   ;; tolerance (drawing units; 1 = 1 inch in an inch drawing)
+  (setq pf-phase "reading the tolerance")
   (setq tol (getdist (strcat "\nTolerance <" (rtos *PF-TOL* 2 3) ">: ")))
   (if tol (setq *PF-TOL* tol) (setq tol *PF-TOL*))
 
   (princ "\nSelect the points (POINTS layer or ab_pt blocks) and, optionally, the POOL perimeter/sketch: ")
+  (setq pf-phase "waiting for the selection")
   (setq ss (ssget))
   (if (null ss)
     (princ "\nNothing selected.")
     (progn
       ;; -- sort the selection into perimeter segments and points -----
+      (setq pf-phase "reading the selected entities")
       (setq segs nil pts nil i 0)
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
@@ -612,19 +648,22 @@
               typ (cdr (assoc 0 ed))
               i   (1+ i))
         (cond
+          ;; survey points stored as block references (e.g. "ab_pt"):
+          ;; a block with this name is ALWAYS a point, on any layer, and
+          ;; its insertion point is taken as the location (the blocks are
+          ;; never exploded - non-destructive).  Checked first so such
+          ;; blocks are never mistaken for perimeter geometry.
+          ((and (= typ "INSERT")
+                (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
+           (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))
           ;; perimeter / ordering sketch on the POOL layer
           ((= lay (strcase *PF-POOL-LAYER*))
            (setq segs (append segs (pf:ent-segs en))))
           ;; plain POINT entities on the POINTS layer
           ((and (= lay (strcase *PF-POINT-LAYER*)) (= typ "POINT"))
            (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))
-          ;; survey points stored as block references (e.g. "ab_pt"):
-          ;; take the block's insertion point as the point location.
-          ;; Non-destructive - the blocks are never exploded.
-          ((and (= typ "INSERT")
-                (or (= (strcase (cdr (assoc 2 ed)))
-                       (strcase *PF-POINT-BLOCK*))
-                    (= lay (strcase *PF-POINT-LAYER*))))
+          ;; any other block dropped on the POINTS layer -> a point too
+          ((and (= typ "INSERT") (= lay (strcase *PF-POINT-LAYER*)))
            (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))))
       (cond
         ((null pts)
@@ -636,6 +675,7 @@
         ((null segs)
          ;; ---- POINTS-ONLY mode: order the points ourselves ---------
          (princ "\nNo POOL geometry selected - ordering the points automatically.")
+         (setq pf-phase "ordering the points and building the polyline")
          (pf:finish (pf:points-loop (pf:order-points (pf:dedupe pts)))
                     pts tol))
         ((null (setq loop (pf:chain segs))) nil)
@@ -644,9 +684,11 @@
          ;; lines, so treat it as connect-the-dots that only tells us
          ;; the ORDER of the points; the shape comes from the points
          (princ "\nPOOL sketch is lines only - using it just to order the points.")
+         (setq pf-phase "following the sketch order and building the polyline")
          (pf:finish (pf:points-loop (pf:loop-order loop (pf:dedupe pts)))
                     pts tol))
         (T
+         (setq pf-phase "fitting the drawn perimeter through the points")
          ;; -- 1. snap each vertex to its nearest point within tol ----
          ;; vertex list from the loop's segment start points
          (setq verts (mapcar '(lambda (s) (car s)) loop)
@@ -684,9 +726,7 @@
                           (> (pf:dist q p1) *PF-EXACT-EPS*)
                           (> (pf:dist q p2) *PF-EXACT-EPS*))
                    (setq cands (cons (cons (pf:seg-param q s) q) cands))))
-               (setq cands (mapcar 'cdr
-                             (vl-sort cands
-                               '(lambda (a b) (< (car a) (car b))))))
+               (setq cands (mapcar 'cdr (pf:sort-car cands)))
                (setq clean nil)
                (foreach q cands
                  (if (or (null clean)
@@ -698,6 +738,7 @@
          (setq newsegs (reverse newsegs))
          ;; -- 3. draw the fitted polyline and report ------------------
          (pf:finish newsegs pts tol)))))
+  (setq *error* pf-old-err)   ; restore the previous error handler
   (princ))
 
 (princ "\nABHD loaded.  Type ABHD to fit the pool perimeter through its points.")
