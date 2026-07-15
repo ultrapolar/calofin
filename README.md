@@ -8,6 +8,12 @@ working between Blender and CAD:
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
 
+There is also a companion AutoCAD-side tool:
+
+| Tool | Folder | What it does |
+| --- | --- | --- |
+| DIMCONTEND (AutoLISP) | `autocad_dim_continue/` | Continues a linear/aligned dimension across a highlighted drawing, out to the end, inheriting the seed dimension's properties — see [`autocad_dim_continue/README.md`](autocad_dim_continue/README.md) |
+
 ## Installation (either add-on)
 
 Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
