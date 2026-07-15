@@ -1,11 +1,12 @@
 # ABHD — AutoLISP pool-perimeter fitter (AutoCAD 2018+)
 
-Builds a single closed polyline (lines + arcs only) through points
-surveyed on a pool edge — guided by a hand-drawn perimeter, by a rough
-connect-the-dots sketch, or from the points alone — using as **few
-curves as possible**. Up to 15% of the points (rounded up) are allowed
-to sit about an inch off the result, and you can cap the number of
-curves outright.
+Builds a single closed polyline of **long, overarching arcs** through
+points surveyed on a pool edge — guided by a hand-drawn perimeter, by
+a rough connect-the-dots sketch, or from the points alone — using as
+**few curves as possible**, each with a **friendly radius** (whole
+feet, half feet, or whole inches) whenever one fits. Up to 15% of the
+points (rounded up) are allowed to sit about an inch off the result,
+and you can cap the number of curves outright.
 
 ## Setup expected in the drawing
 
@@ -31,37 +32,51 @@ nearest whole point, may sit off the result by up to the tolerance
 on it (within `*PF-ON-EPS*`, default **0.25**). That slack is spent
 where it buys the most — longer spans, fewer segments, fewer curves.
 
-In the ordering-sketch and points-only modes the loop is covered
-greedily with as few segments as possible:
+In the ordering-sketch and points-only modes the loop is covered with
+long, overarching arcs — **no straight lines**:
 
-* Each span is grown point by point until neither a straight line nor
-  a single arc can hold its points within the tolerance (and the miss
-  allowance).
-* A straight `LINE` is preferred; an arc is only used when it covers
-  at least **2 more points** than the best line — a curve has to earn
-  its keep.
+* Each arc is grown point by point for as long as a single arc can
+  hold every covered point within the tolerance (and the miss
+  allowance) — the longest arc that fits the most points wins.
 * A point that turns more than `*PF-CORNER-ANG*` (**45°**) is a
   **sharp corner**: it can start or end a span but is never buried
   inside one, so a shape given as just its corner points (a triangle,
-  a rectangle, any polygon) comes out as plain `LINE` segments, not
-  arcs. Sample real tight curves with at least ~3 points per quarter
-  turn so they stay under the threshold.
+  a rectangle, any polygon) keeps its corners. Sample real tight
+  curves with at least ~3 points per quarter turn so they stay under
+  the threshold.
+* The only places a straight segment can appear are between two sharp
+  corners with no points in between (where a curve would be pure
+  invention) and where the surveyed points are exactly collinear. A
+  closing stitch with no interior points instead continues the
+  previous arc's tangent, so the loop stays curved.
+
+## Nice radii — feet, half feet, inches
+
+Before a free-fit ("weird") radius is accepted, each arc's radius is
+snapped to the first friendly increment that still holds every one of
+its points: **whole feet** first, then **half feet**, then **whole
+inches** (`*PF-NICE-RADII*`, drawing units are inches — e.g. `24` =
+2′-0″ before `23.71`). The arc's endpoints never move, so the loop
+stays closed; only the bulge changes. A snapped radius is preferred
+even over an exact free fit — the miss allowance absorbs the small
+differences.
 
 ## The curve cap
 
 The command asks for a **maximum number of curves** (`None` =
 unlimited; the answer is remembered for the session). When a fit needs
-more curves than allowed, adjacent segments are merged and arcs are
-flattened into lines — the operation with the smallest worst-case
-deviation is applied each time — until the cap holds. `0` is a valid
-cap: the result is then pure lines (a polygonized outline). The cap
-**wins over the tolerance**; whatever error it forces is visible in
-the hit report. In guided mode the drawn walls are trusted, so the cap
-is reported rather than enforced there.
+more curves than allowed, adjacent segments are merged — the pair
+whose single replacement arc deviates least goes first, and merged
+arcs still prefer nice radii — until the cap holds (a closed loop
+keeps at least 2 segments). The cap **wins over the tolerance**;
+whatever error it forces is visible in the hit report. In guided mode
+the drawn walls are trusted, so the cap is reported rather than
+enforced there.
 
 All thresholds are constants at the top of `abhd.lsp`
-(`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-CORNER-ANG*`), as are the layer
-names (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
+(`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-CORNER-ANG*`,
+`*PF-NICE-RADII*`), as are the layer names (`*PF-POOL-LAYER*`,
+`*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
 
 ## Usage
 
@@ -72,7 +87,7 @@ names (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
    session). Points may sit up to this far off the result, within the
    15% allowance.
 4. Accept or change the max number of curves (`Enter` keeps the
-   current setting, `None` removes the cap, `0` forces lines only).
+   current setting, `None` removes the cap).
 5. Window-select the area: points plus (optionally) the perimeter or
    ordering sketch — what you include picks the mode.
 
@@ -94,7 +109,9 @@ different tolerance.
   within tolerance of it are collected and a single replacement arc is
   tried first (the best of the exact 3-point arcs through the two
   snapped endpoints and the points, plus their average — a circular
-  fit constrained through both endpoints).
+  fit constrained through both endpoints), with its radius snapped to
+  a nice increment (feet / half feet / inches) when one still holds
+  the points.
 * **Keeps one arc when it's close enough**: if the single arc holds
   every point within the tolerance and the 15% miss allowance can
   absorb the off ones, that one arc is kept — fewer curves beats

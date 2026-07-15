@@ -19,23 +19,33 @@
 ;;;   * POINTS-ONLY - the selection contains no POOL geometry: the
 ;;;               program orders the points into a closed loop by
 ;;;               itself (nearest-neighbour tour + 2-opt uncrossing)
-;;;               and covers them with as FEW segments as possible:
-;;;               straight LINEs wherever they fit, arcs only where
-;;;               the points genuinely curve, and an arc only when it
-;;;               covers more points than a line could.
+;;;               and covers them with as FEW long, overarching ARCS
+;;;               as possible - each arc is grown to take in as many
+;;;               consecutive points as it can hold.  No straight
+;;;               lines are drawn (organic shapes have none); the only
+;;;               exception is a stretch between two sharp corners
+;;;               with no points in between, where an arc would be
+;;;               pure invention.
+;;;
+;;; NICE RADII: arc radii are snapped to friendly increments before a
+;;; free ("weird") number is accepted - whole feet first, then half
+;;; feet, then whole inches (*PF-NICE-RADII*, drawing units = inches).
+;;; A snapped radius is only used when the arc still holds every one
+;;; of its points; the arc's endpoints stay exactly where they were.
 ;;;
 ;;; THE MISS ALLOWANCE: the perimeter no longer has to thread every
 ;;; point exactly.  Up to *PF-MISS-PCT* (15%) of the points, rounded
 ;;; UP to the nearest whole point, may sit off the result by up to the
 ;;; tolerance (default 1 unit = about an inch); every other point
 ;;; stays on it (within *PF-ON-EPS*).  That slack is spent where it
-;;; buys the most: longer spans, fewer curves.
+;;; buys the most: longer arcs, fewer curves, nicer radii.
 ;;;
 ;;; THE CURVE CAP: the command also asks for a maximum number of
 ;;; curves ("None" = unlimited).  When a fit needs more, adjacent
-;;; segments are merged and arcs flattened into lines - cheapest
-;;; deviation first - until the cap holds.  The cap wins over the
-;;; tolerance; whatever error it forces is shown in the hit report.
+;;; segments are merged - cheapest worst-case deviation first - until
+;;; the cap holds (a closed loop keeps at least 2 segments).  The cap
+;;; wins over the tolerance; whatever error it forces is shown in the
+;;; hit report.
 ;;;
 ;;; The command rebuilds the perimeter as a single closed LWPOLYLINE
 ;;; (lines + arcs only, no splines) on layer "POOL-FIT":
@@ -46,7 +56,8 @@
 ;;;     passes through the surveyed points lying along it.  A single
 ;;;     replacement arc is tried first (the best of the exact 3-point
 ;;;     arcs through the two snapped endpoints and the points, plus
-;;;     their average); if it keeps every point within the tolerance
+;;;     their average), with its radius snapped to a nice increment
+;;;     when possible; if it keeps every point within the tolerance
 ;;;     and the miss allowance can absorb the off ones, that ONE arc
 ;;;     is kept.  Only when that fails is the segment SUBDIVIDED into
 ;;;     a tangent-continuous chain of arcs through every point.
@@ -93,6 +104,14 @@
                                     ; real tight curves with at least ~3
                                     ; points per quarter turn to stay
                                     ; under it.
+(setq *PF-NICE-RADII* '(12.0 6.0 1.0)) ; preferred arc-radius increments,
+                                    ; tried in order: whole feet, half
+                                    ; feet, whole inches (drawing units
+                                    ; are inches).  A radius is snapped
+                                    ; to the first increment whose arc
+                                    ; still holds the points; only when
+                                    ; none does is the free-fit ("weird")
+                                    ; radius kept.
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
 (if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
@@ -415,15 +434,73 @@
     (if (or (null bd) (< d bd)) (setq best bl bd d)))
   (cons best bd))
 
+;; Radius of the arc (A B bulge); nil for a straight segment.
+(defun pf:bulge-radius (a b bl / h)
+  (if (< (abs bl) 1.0e-9)
+    nil
+    (progn
+      (setq h (/ (pf:dist a b) 2.0))
+      (/ (* h (1+ (* bl bl))) (* 2.0 (abs bl))))))
+
+;; Bulge of the arc from A to B with radius R, on the same side and
+;; with the same minor/major-arc character as reference bulge BREF.
+;; nil when R is too small to span the chord.
+(defun pf:radius-bulge (a b r bref / h s bl)
+  (setq h (/ (pf:dist a b) 2.0))
+  (if (or (< r h) (< h 1.0e-9))
+    nil
+    (progn
+      (setq s  (sqrt (- (* r r) (* h h)))
+            bl (if (> (abs bref) 1.0)
+                 (/ (+ r s) h)              ; major arc
+                 (/ (- r s) h)))            ; minor arc
+      (if (< bref 0.0) (- bl) bl))))
+
+;; Try to snap the arc A->B (free-fit bulge BL over points QS) to a
+;; "nice" radius - whole feet first, then half feet, then whole inches
+;; (*PF-NICE-RADII*) - keeping every point within TOL and at most LEFT
+;; of them off by more than *PF-ON-EPS*.  The nearer multiple on each
+;; tier is tried first; the arc's endpoints never move.  Returns
+;; (bulge . misses) of the snapped arc, or nil when no nice radius
+;; holds the points.
+(defun pf:snap-arc (a b bl qs tol left / r0 h best tier lo hi cands r
+                                          bl2 mis)
+  (setq r0   (pf:bulge-radius a b bl)
+        h    (/ (pf:dist a b) 2.0)
+        best nil)
+  (if (and r0 (< r0 1.0e6))       ; a huge radius is basically straight
+    (foreach tier *PF-NICE-RADII*
+      (if (null best)
+        (progn
+          (setq lo    (* tier (fix (/ r0 tier)))
+                hi    (+ lo tier)
+                cands (if (< (- r0 lo) (- hi r0))
+                        (list lo hi)
+                        (list hi lo)))
+          (foreach r cands
+            (if (and (null best) (>= r h) (> r 0.0))
+              (progn
+                (setq bl2 (pf:radius-bulge a b r bl))
+                (if (and bl2
+                         (<= (pf:span-dev a b bl2 qs) tol)
+                         (<= (setq mis (pf:span-misses a b bl2 qs))
+                             left))
+                  (setq best (cons bl2 mis))))))))))
+  best)
+
 ;; ---- arc segment re-fitting ------------------------------------------
 ;; Re-fit one curved segment from P1 to P2 (original bulge B) through
 ;; CANDS, its nearby survey points sorted along the segment.  Returns a
 ;; list of one or more segments (p1 p2 bulge):
 ;;   * no candidates          -> the original arc, endpoints updated
+;;   * a nice-radius (foot / half-foot / inch) arc holds every point
+;;     within TOL and the miss allowance (pf-miss-left, set by the
+;;     command) can absorb the off points
+;;                            -> that single snapped arc, preferred
+;;                               even over an exact free fit
 ;;   * one arc holds them all -> that single arc
-;;   * one arc keeps every point within TOL and the miss allowance
-;;     (pf-miss-left, set by the command) can absorb the off points
-;;                            -> that single arc; fewer curves beats
+;;   * one free arc keeps every point within TOL and the allowance
+;;     covers it              -> that single arc; fewer curves beats
 ;;                               exactness, by design
 ;;   * otherwise              -> a tangent-continuous chain of arcs
 ;;                               passing exactly through every point
@@ -431,15 +508,20 @@
   (cond ((> b 5.0) 5.0) ((< b -5.0) -5.0) (T b)))
 
 (defun pf:fit-arc-seg (p1 p2 b cands tol / ar bavg maxres mis nb q segs
-                                            prev tang)
+                                            prev tang sn)
   (if (null cands)
     (list (list p1 p2 b))
     (progn
       (setq ar     (pf:span-arc p1 p2 cands)
             bavg   (car ar)
-            maxres (cdr ar))
+            maxres (cdr ar)
+            sn     (pf:snap-arc p1 p2 bavg cands tol pf-miss-left))
       (cond
-        ;; a single arc genuinely holds every point
+        ;; a nice-radius arc holds every point: take it first
+        (sn
+         (setq pf-miss-left (- pf-miss-left (cdr sn)))
+         (list (list p1 p2 (car sn))))
+        ;; a single free arc genuinely holds every point
         ((<= maxres *PF-FIT-EPS*)
          (list (list p1 p2 bavg)))
         ;; a single arc is close enough and the allowance covers it
@@ -589,86 +671,102 @@
   (foreach sp spans (if (>= (abs (caddr sp)) 1.0e-9) (setq c (1+ c))))
   c)
 
-;; Enforce the curve cap: while more than MAXARCS spans are curved,
-;; apply the cheapest (smallest worst-deviation) operation that lowers
-;; the arc count -
-;;   * flatten one arc span into a straight line, or
-;;   * merge two adjacent spans (at least one curved) into one line,
-;;     or into one arc when both were arcs.
-;; The cap deliberately wins over the tolerance here; whatever error it
-;; forces shows up in the final hit report.  SPANS are (i j bulge)
-;; index ranges over TOUR (J may equal N = back to the start point).
-(defun pf:cap-spans (spans tour n maxarcs / best bdev i sp sp2 arc1 arc2
-                                            a b qs d ar out k)
-  (while (> (pf:arc-count spans) maxarcs)
+;; Enforce the curve cap: merge adjacent spans - the pair whose single
+;; replacement arc has the smallest worst-case deviation goes first -
+;; until at most MAXARCS spans are curved.  Merged arcs still prefer a
+;; nice radius when it costs (nearly) nothing extra.  The cap
+;; deliberately wins over the tolerance here; whatever error it forces
+;; shows up in the final hit report.  SPANS are (i j bulge) index
+;; ranges over TOUR (J may equal N = back to the start point).  A
+;; closed loop keeps at least 2 segments.
+(defun pf:cap-spans (spans tour n maxarcs / go best bdev i sp sp2 a b qs
+                                            ar abul adev sn out k)
+  (setq go T)
+  (while (and go
+              (> (pf:arc-count spans) maxarcs)
+              (> (length spans) 2))
     (setq best nil bdev nil i 0)
-    (while (< i (length spans))
-      (setq sp   (nth i spans)
-            arc1 (>= (abs (caddr sp)) 1.0e-9))
-      ;; flatten this arc into a line
-      (if arc1
+    (while (< i (1- (length spans)))   ; never across the start point
+      (setq sp  (nth i spans)
+            sp2 (nth (1+ i) spans)
+            a   (nth (car sp) tour)
+            b   (nth (rem (cadr sp2) n) tour)
+            qs  (pf:sublist tour (1+ (car sp))
+                            (- (cadr sp2) (car sp) 1)))
+      (if qs
         (progn
-          (setq a  (nth (car sp) tour)
-                b  (nth (rem (cadr sp) n) tour)
-                qs (pf:sublist tour (1+ (car sp))
-                               (- (cadr sp) (car sp) 1))
-                d  (pf:span-dev a b 0.0 qs))
-          (if (or (null bdev) (< d bdev))
-            (setq bdev d best (list i i 0.0)))))
-      ;; merge with the next span (never across the start point)
-      (if (< i (1- (length spans)))
-        (progn
-          (setq sp2  (nth (1+ i) spans)
-                arc2 (>= (abs (caddr sp2)) 1.0e-9))
-          (if (or arc1 arc2)
-            (progn
-              (setq a  (nth (car sp) tour)
-                    b  (nth (rem (cadr sp2) n) tour)
-                    qs (pf:sublist tour (1+ (car sp))
-                                   (- (cadr sp2) (car sp) 1)))
-              ;; merged into one straight line: always drops an arc
-              (setq d (pf:span-dev a b 0.0 qs))
-              (if (or (null bdev) (< d bdev))
-                (setq bdev d best (list i (1+ i) 0.0)))
-              ;; merged into one arc: only helps when both were arcs
-              (if (and arc1 arc2 qs)
-                (progn
-                  (setq ar (pf:span-arc a b qs))
-                  (if (and (>= (abs (car ar)) 1.0e-9)
-                           (or (null bdev) (< (cdr ar) bdev)))
-                    (setq bdev (cdr ar)
-                          best (list i (1+ i) (car ar))))))))))
+          (setq ar   (pf:span-arc a b qs)
+                abul (car ar)
+                adev (cdr ar))
+          ;; cap-forced arcs still prefer a nice radius when it costs
+          ;; (nearly) nothing; the miss allowance no longer applies
+          (setq sn (pf:snap-arc a b abul qs
+                                (+ (* adev 1.05) 0.1) 1000000))
+          (if sn
+            (setq abul (car sn)
+                  adev (pf:span-dev a b abul qs)))
+          (if (or (null bdev) (< adev bdev))
+            (setq bdev adev best (list i abul)))))
       (setq i (1+ i)))
-    ;; apply the winning operation
-    (setq out nil k 0)
-    (foreach sp spans
-      (cond
-        ((and (= k (car best)) (= (car best) (cadr best)))  ; flatten
-         (setq out (cons (list (car sp) (cadr sp) 0.0) out)))
-        ((= k (car best))                                   ; merge head
-         (setq out (cons (list (car sp)
-                               (cadr (nth (cadr best) spans))
-                               (caddr best))
-                         out)))
-        ((= k (cadr best)) nil)                             ; swallowed
-        (T (setq out (cons sp out))))
-      (setq k (1+ k)))
-    (setq spans (reverse out)))
+    (if (null best)
+      (setq go nil)
+      (progn                           ; apply the winning merge
+        (setq out nil k 0)
+        (foreach sp spans
+          (cond
+            ((= k (car best))
+             (setq out (cons (list (car sp)
+                                   (cadr (nth (1+ k) spans))
+                                   (cadr best))
+                             out)))
+            ((= k (1+ (car best))) nil)             ; swallowed
+            (T (setq out (cons sp out))))
+          (setq k (1+ k)))
+        (setq spans (reverse out)))))
   spans)
 
-;; Build the closed segment list through the ordered TOUR with as few
-;; curves as possible.  Spans are grown greedily one point at a time;
-;; every covered point must stay within TOL of the span, and only as
-;; many points as the miss allowance (pf-miss-left, set by the command)
-;; has left may sit farther off than *PF-ON-EPS*.  A straight LINE is
-;; preferred unless an arc covers at least 2 more points; sharp corners
-;; are never swallowed as span interiors.  When MAXARCS is a number the
-;; result is then merged down to at most that many curves.
+;; A span with no interior points carries no curvature evidence: give
+;; it the bulge that continues the previous segment's end tangent (a
+;; G1 blend, clamped to a semicircle), so the closing stitches of the
+;; loop stay curved too.  A stub whose either end is a sharp corner is
+;; an intentional kink and stays straight.
+(defun pf:stub-arcs (spans tour n sharp / out i sp prev pa pb tang a b
+                                          bl)
+  (setq out nil i 0)
+  (foreach sp spans
+    (if (and (= (1+ (car sp)) (cadr sp))
+             (< (abs (caddr sp)) 1.0e-9)
+             (not (nth (rem (car sp) n) sharp))
+             (not (nth (rem (cadr sp) n) sharp)))
+      (progn
+        (setq prev (if (> i 0) (car out) (last spans))
+              pa   (nth (car prev) tour)
+              pb   (nth (rem (cadr prev) n) tour)
+              tang (pf:end-tangent pa pb (caddr prev))
+              a    (nth (car sp) tour)
+              b    (nth (rem (cadr sp) n) tour)
+              bl   (pf:tangent-bulge a tang b))
+        (if (> bl 1.0) (setq bl 1.0))
+        (if (< bl -1.0) (setq bl -1.0))
+        (setq out (cons (list (car sp) (cadr sp) bl) out)))
+      (setq out (cons sp out)))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; Build the closed segment list through the ordered TOUR from long,
+;; overarching ARCS: each span is grown greedily one point at a time
+;; for as long as a single arc holds every covered point within TOL
+;; (with at most the miss allowance - pf-miss-left, set by the
+;; command - of them off by more than *PF-ON-EPS*).  The arc's radius
+;; is then snapped to a nice increment (whole feet / half feet /
+;; inches) when one still holds the points.  No straight lines are
+;; produced except between two sharp corners; sharp corners are never
+;; swallowed as span interiors.  When MAXARCS is a number the result
+;; is then merged down to at most that many curves.
 (defun pf:coarse-loop (tour tol maxarcs / n sharp i prev cur next turn
                                           pos spans lim a b qs len go
-                                          ldev lmis lok ar abul adev
-                                          amis aok bll blm bal bam bab
-                                          sp)
+                                          ar abul adev amis
+                                          bal bam bab sn sp)
   (setq tour (pf:rotate-to-corner tour)
         n    (length tour))
   ;; flag the sharp corners (may only ever be span ENDPOINTS)
@@ -681,13 +779,12 @@
     (setq sharp (cons (> turn *PF-CORNER-ANG*) sharp)
           i     (1+ i)))
   (setq sharp (reverse sharp))
-  ;; greedy forward cover of the loop
+  ;; greedy forward cover: grow each arc as far as it will reach
   (setq pos 0 spans nil)
   (while (< pos n)
     (setq lim (- n pos)
           a   (nth pos tour)
           len 2
-          bll 1 blm 0                ; best line: length, misses
           bal 1 bam 0 bab 0.0        ; best arc: length, misses, bulge
           go  T)
     (while (and go (<= len lim))
@@ -696,28 +793,27 @@
         (progn
           (setq b    (nth (rem (+ pos len) n) tour)
                 qs   (pf:sublist tour (1+ pos) (1- len))
-                ldev (pf:span-dev a b 0.0 qs)
-                lmis (pf:span-misses a b 0.0 qs)
-                lok  (and (<= ldev tol) (<= lmis pf-miss-left))
                 ar   (pf:span-arc a b qs)
                 abul (car ar)
                 adev (cdr ar)
-                amis (pf:span-misses a b abul qs)
-                aok  (and (<= adev tol) (<= amis pf-miss-left)))
-          (if lok (setq bll len blm lmis))
-          (if aok (setq bal len bam amis bab abul))
-          (if (and (not lok) (not aok)) (setq go nil))
+                amis (pf:span-misses a b abul qs))
+          (if (and (<= adev tol) (<= amis pf-miss-left))
+            (setq bal len bam amis bab abul)
+            (setq go nil))
           (setq len (1+ len)))))
-    ;; a curve has to earn its keep: only take the arc when it covers
-    ;; at least 2 more points than the best straight line
-    (if (>= (1+ bll) bal)
-      (setq spans        (cons (list pos (+ pos bll) 0.0) spans)
-            pf-miss-left (- pf-miss-left blm)
-            pos          (+ pos bll))
-      (setq spans        (cons (list pos (+ pos bal) bab) spans)
-            pf-miss-left (- pf-miss-left bam)
-            pos          (+ pos bal))))
-  (setq spans (reverse spans))
+    ;; prefer a nice (foot / half-foot / inch) radius when one still
+    ;; holds every covered point
+    (setq qs (pf:sublist tour (1+ pos) (1- bal)))
+    (if qs
+      (progn
+        (setq sn (pf:snap-arc a (nth (rem (+ pos bal) n) tour)
+                              bab qs tol pf-miss-left))
+        (if sn (setq bab (car sn) bam (cdr sn)))))
+    (setq spans        (cons (list pos (+ pos bal) bab) spans)
+          pf-miss-left (- pf-miss-left bam)
+          pos          (+ pos bal)))
+  ;; spans with no interior points continue the previous arc's tangent
+  (setq spans (pf:stub-arcs (reverse spans) tour n sharp))
   (if maxarcs (setq spans (pf:cap-spans spans tour n maxarcs)))
   (mapcar '(lambda (sp) (list (nth (car sp) tour)
                               (nth (rem (cadr sp) n) tour)
@@ -772,8 +868,9 @@
                  "\n  Points beyond tolerance:      " (itoa miss)))
   (if (and *PF-MAX-ARCS* (> na *PF-MAX-ARCS*))
     (princ (strcat "\n  (the curve cap is " (itoa *PF-MAX-ARCS*)
-                   " but the drawn perimeter needed " (itoa na)
-                   " - guided mode keeps the walls you drew)")))
+                   " but " (itoa na) " curves was the fewest this run"
+                   " could do: drawn walls are trusted and a closed"
+                   " loop needs at least 2 segments)")))
   (if (> miss 0)
     (princ "\n  (points beyond tolerance: the curve cap and/or the drawn shape overruled them)"))
   (princ))
