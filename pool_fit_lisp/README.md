@@ -38,10 +38,16 @@ different tolerance.
   points whenever one is close enough (each point is used at most
   once).
 * **Re-fits arcs**: for each curved segment, the surveyed points lying
-  within tolerance of it are collected, the exact circular arc through
-  the two (snapped) endpoints and each such point is computed, and the
-  new bulge is their average — a circular fit constrained through both
-  endpoints, so the loop stays closed and smooth.
+  within tolerance of it are collected and a single replacement arc is
+  tried first (the average of the exact 3-point arcs through the two
+  snapped endpoints and each point — a circular fit constrained through
+  both endpoints).
+* **Splits arcs when needed**: if that single arc still misses any of
+  its points by more than `*PF-FIT-EPS*` (default 0.01), the segment is
+  subdivided into a chain of arcs that passes **exactly through every
+  point**, with each new arc starting tangent to the previous one, so
+  the subdivided run stays perfectly smooth (G1-continuous) and the
+  loop stays closed.
 * **Trusts straight walls**: segments the user drew straight stay
   straight; only their endpoints snap. Where the user decided a wall
   exists, the fitted perimeter keeps it.
@@ -52,7 +58,8 @@ different tolerance.
 
 ## Notes & limitations
 
-* Everything is fitted in plan (XY); Z values are ignored.
+* Everything is fitted purely on the 2D plane (XY); Z values are
+  ignored on read and the output polyline is flat.
 * Splined or fit-smoothed heavy polylines are not supported — use a
   plain polyline (or explode to lines/arcs) for the perimeter.
 * Survey points must be `POINT` entities; if yours are blocks, use

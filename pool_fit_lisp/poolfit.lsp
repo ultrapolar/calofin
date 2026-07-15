@@ -17,12 +17,16 @@
 ;;;     within the tolerance (default 1 unit = 1 inch), so corners land
 ;;;     exactly on points whenever one is close enough.
 ;;;   * Every curved (arc/bulge) segment is re-fitted so that the arc
-;;;     passes through the surveyed points lying along it - the new
-;;;     bulge is the average of the exact 3-point arcs through the two
-;;;     (snapped) endpoints and each nearby survey point.
+;;;     passes through the surveyed points lying along it.  A single
+;;;     replacement arc is tried first (the average of the exact
+;;;     3-point arcs through the two snapped endpoints and each nearby
+;;;     point); when that single arc cannot hold every point, the
+;;;     segment is SUBDIVIDED into a tangent-continuous chain of arcs
+;;;     that passes exactly through every one of its points.
 ;;;   * Straight segments the user drew are trusted and kept straight
 ;;;     (only their endpoints snap to points); where the user found a
 ;;;     straight wall, the result has a straight wall.
+;;; Everything is fitted on the 2D plane - Z coordinates are ignored.
 ;;; Because every segment still shares its endpoints with its
 ;;; neighbours and arcs are true circular fits through the points, the
 ;;; result stays smooth and closed.
@@ -36,6 +40,9 @@
 (setq *PF-POINT-LAYER*  "POINTS")   ; layer holding the survey points
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the fitted polyline goes on
 (setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units)
+(setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
+                                    ; points by more than this, split it
+                                    ; into several arcs that hit exactly
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
 (if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
@@ -56,6 +63,11 @@
   (while (< a 0.0) (setq a (+ a (* 2.0 pi))))
   (while (>= a (* 2.0 pi)) (setq a (- a (* 2.0 pi))))
   a)
+
+;; smallest signed angular difference (to - from), in (-pi, pi]
+(defun pf:signed-dang (from to / d)
+  (setq d (pf:norm-ang (- to from)))
+  (if (> d pi) (- d (* 2.0 pi)) d))
 
 ;; ---- circle / arc geometry -----------------------------------------
 
@@ -104,9 +116,10 @@
             p2   (pf:2d p2)
             ch   (pf:dist p1 p2)
             dir  (pf:scl (pf:sub p2 p1) (/ 1.0 ch))
-            ;; sagitta = (chord/2)*bulge, to the left of p1->p2
+            ;; sagitta = (chord/2)*bulge; a positive (CCW) bulge apex
+            ;; lies to the RIGHT of the p1->p2 chord direction
             apex (pf:add (pf:mid p1 p2)
-                         (pf:scl (pf:perp dir) (* 0.5 ch b)))
+                         (pf:scl (pf:perp dir) (* -0.5 ch b)))
             c    (pf:circumcenter p1 apex p2))
       (if (null c)
         nil
@@ -147,6 +160,43 @@
           (if (<= rel sweep)
             (abs (- (pf:dist p c) r))
             (min (pf:dist p p1) (pf:dist p p2))))))))
+
+;; Bulge of the arc that starts at A with tangent direction TANG
+;; (radians) and ends at B.  The angle between a chord and the tangent
+;; at its end is half the included angle, so delta = 2*phi.
+(defun pf:tangent-bulge (a tang b / phi)
+  (setq phi (pf:signed-dang tang (angle (pf:2d a) (pf:2d b))))
+  (pf:tan (/ phi 2.0)))
+
+;; Tangent direction (radians) at the END of the arc from A to B with
+;; the given bulge: chord direction + delta/2, delta = 4*atan(bulge).
+(defun pf:end-tangent (a b bulge)
+  (+ (angle (pf:2d a) (pf:2d b)) (* 2.0 (atan bulge))))
+
+;; Position of P along segment (p1 p2 bulge) as a 0..1 parameter,
+;; used only to ORDER candidate points along the segment.
+(defun pf:seg-param (p seg / p1 p2 b v w len2 g c a1 a2 ap sweep rel)
+  (setq p  (pf:2d p)
+        p1 (pf:2d (car seg))
+        p2 (pf:2d (cadr seg))
+        b  (caddr seg))
+  (if (< (abs b) 1.0e-9)
+    (progn
+      (setq v (pf:sub p2 p1) w (pf:sub p p1) len2 (pf:dot v v))
+      (if (< len2 1.0e-20) 0.0 (/ (pf:dot w v) len2)))
+    (progn
+      (setq g (pf:arc-geom p1 p2 b))
+      (if (null g)
+        0.0
+        (progn
+          (setq c (car g) a1 (caddr g) a2 (cadddr g) ap (angle c p))
+          (if (> b 0.0)
+            (setq sweep (pf:norm-ang (- a2 a1))
+                  rel   (pf:norm-ang (- ap a1)))
+            (setq sweep (pf:norm-ang (- a1 a2))
+                  rel   (- (pf:norm-ang (- a1 a2))
+                           (pf:norm-ang (- ap a2)))))
+          (if (< sweep 1.0e-10) 0.0 (/ rel sweep)))))))
 
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
@@ -255,6 +305,51 @@
                           " POOL segment(s) not part of the closed loop were ignored.")))
          (reverse loop))))))
 
+;; ---- arc segment re-fitting ------------------------------------------
+;; Re-fit one curved segment from P1 to P2 (original bulge B) through
+;; CANDS, its nearby survey points sorted along the segment.  Returns a
+;; list of one or more segments (p1 p2 bulge):
+;;   * no candidates          -> the original arc, endpoints updated
+;;   * one arc holds them all -> a single averaged arc
+;;   * otherwise              -> a tangent-continuous chain of arcs
+;;                               passing exactly through every point
+(defun pf:cap-bulge (b)
+  (cond ((> b 5.0) 5.0) ((< b -5.0) -5.0) (T b)))
+
+(defun pf:fit-arc-seg (p1 p2 b cands / blist sum nb bavg maxres d q segs
+                                        prev tang)
+  (if (null cands)
+    (list (list p1 p2 b))
+    (progn
+      ;; try a single arc: average of the exact 3-point bulges
+      (setq blist (mapcar '(lambda (q) (pf:bulge-3pt p1 q p2)) cands)
+            sum   0.0)
+      (foreach nb blist (setq sum (+ sum nb)))
+      (setq bavg   (/ sum (length blist))
+            maxres 0.0)
+      (foreach q cands
+        (setq d (pf:seg-dist q (list p1 p2 bavg)))
+        (if (> d maxres) (setq maxres d)))
+      (if (<= maxres *PF-FIT-EPS*)
+        (list (list p1 p2 bavg))
+        ;; single arc can't hold every point: subdivide.  First arc runs
+        ;; from P1 through the 1st point to the 2nd; every further arc
+        ;; starts tangent to the previous one and lands exactly on the
+        ;; next point; the last lands on P2.  All points are hit exactly
+        ;; and every internal joint is tangent-continuous (smooth).
+        (progn
+          (setq nb   (pf:bulge-3pt p1 (car cands) (cadr cands))
+                segs (list (list p1 (cadr cands) nb))
+                tang (pf:end-tangent p1 (cadr cands) nb)
+                prev (cadr cands))
+          (foreach q (cddr cands)
+            (setq nb   (pf:cap-bulge (pf:tangent-bulge prev tang q))
+                  segs (cons (list prev q nb) segs)
+                  tang (pf:end-tangent prev q nb)
+                  prev q))
+          (setq nb (pf:cap-bulge (pf:tangent-bulge prev tang p2)))
+          (reverse (cons (list prev p2 nb) segs)))))))
+
 ;; ---- output helpers --------------------------------------------------
 (defun pf:ensure-layer (name)
   (if (not (tblsearch "LAYER" name))
@@ -274,7 +369,7 @@
 
 ;; ---- the command -----------------------------------------------------
 (defun c:POOLFIT ( / tol ss i en ed lay typ segs pts loop n verts used
-                    v vp best bd d q p1 p2 b cands blist sum newb
+                    v vp best bd d q p1 p2 b cands clean ns
                     newsegs hitex hitok miss dmin s)
   ;; tolerance (drawing units; 1 = 1 inch in an inch drawing)
   (setq tol (getdist (strcat "\nTolerance <" (rtos *PF-TOL* 2 3) ">: ")))
@@ -321,33 +416,38 @@
                 (if best (progn (setq used (cons best used)) best) v))
              verts))
          ;; -- 2. re-fit every arc segment through nearby points ------
+         ;; (splitting into several arcs when one arc can't hold them)
          (setq newsegs nil n 0)
          (repeat (length loop)
            (setq s  (nth n loop)
                  p1 (nth n verts)
                  p2 (nth (rem (1+ n) (length verts)) verts)
                  b  (caddr s))
-           (if (>= (abs b) 1.0e-9)
+           (if (< (abs b) 1.0e-9)
+             ;; straight wall: trust the user, keep it straight
+             (setq newsegs (cons (list p1 p2 0.0) newsegs))
              (progn
                ;; survey points lying near the ORIGINAL arc, excluding
-               ;; the ones already consumed as vertices
+               ;; the ones already consumed as vertices, sorted along
+               ;; the arc and de-duplicated
                (setq cands nil)
                (foreach q pts
                  (if (and (not (member q used))
                           (<= (pf:seg-dist q s) tol)
                           (> (pf:dist q p1) *PF-EXACT-EPS*)
                           (> (pf:dist q p2) *PF-EXACT-EPS*))
-                   (setq cands (cons q cands))))
-               ;; average the exact 3-point bulges through each point
-               (if cands
-                 (progn
-                   (setq blist (mapcar '(lambda (q) (pf:bulge-3pt p1 q p2))
-                                       cands)
-                         sum 0.0)
-                   (foreach newb blist (setq sum (+ sum newb)))
-                   (setq b (/ sum (length blist)))))))
-           (setq newsegs (cons (list p1 p2 b) newsegs)
-                 n (1+ n)))
+                   (setq cands (cons (cons (pf:seg-param q s) q) cands))))
+               (setq cands (mapcar 'cdr
+                             (vl-sort cands
+                               '(lambda (a b) (< (car a) (car b))))))
+               (setq clean nil)
+               (foreach q cands
+                 (if (or (null clean)
+                         (> (pf:dist q (car clean)) *PF-EXACT-EPS*))
+                   (setq clean (cons q clean))))
+               (foreach ns (pf:fit-arc-seg p1 p2 b (reverse clean))
+                 (setq newsegs (cons ns newsegs)))))
+           (setq n (1+ n)))
          (setq newsegs (reverse newsegs))
          ;; -- 3. draw the fitted polyline -----------------------------
          (pf:ensure-layer *PF-OUT-LAYER*)
