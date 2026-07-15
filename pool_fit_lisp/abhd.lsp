@@ -27,6 +27,17 @@
 ;;;               with no points in between, where an arc would be
 ;;;               pure invention.
 ;;;
+;;; SMOOTH (G1) EVERYWHERE: the result is built as a TANGENT CHAIN -
+;;; every arc starts exactly where the previous one ended, WITH its
+;;; end tangent, so consecutive arcs are always tangent to each other
+;;; and the perimeter has no kinks.  The only intentional kinks are
+;;; sharp corners (over *PF-CORNER-ANG*).  A fully smooth loop is
+;;; sealed with a G1 biarc, so even the closing seam is tangent-
+;;; continuous.  Because tangency pins each arc down, the chain's
+;;; joints are allowed to float off the survey points - the points
+;;; themselves still govern the fit through the tolerance and the
+;;; miss allowance below.
+;;;
 ;;; NICE RADII: arc radii are snapped to friendly increments before a
 ;;; free ("weird") number is accepted - whole feet first, then half
 ;;; feet, then whole inches (*PF-NICE-RADII*, drawing units = inches).
@@ -41,11 +52,11 @@
 ;;; buys the most: longer arcs, fewer curves, nicer radii.
 ;;;
 ;;; THE CURVE CAP: the command also asks for a maximum number of
-;;; curves ("None" = unlimited).  When a fit needs more, adjacent
-;;; segments are merged - cheapest worst-case deviation first - until
-;;; the cap holds (a closed loop keeps at least 2 segments).  The cap
-;;; wins over the tolerance; whatever error it forces is shown in the
-;;; hit report.
+;;; curves ("None" = unlimited).  When a fit needs more, the whole
+;;; loop is refitted with a progressively relaxed tolerance until the
+;;; cap holds - merging arcs would break their tangency, so the chain
+;;; is rebuilt instead and stays smooth.  The cap wins over the
+;;; tolerance; whatever error it forces is shown in the hit report.
 ;;;
 ;;; The command rebuilds the perimeter as a single closed LWPOLYLINE
 ;;; (lines + arcs only, no splines) on layer "POOL-FIT":
@@ -86,9 +97,10 @@
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
                                     ; points by more than this, split it
                                     ; into several arcs that hit exactly
-(setq *PF-ON-EPS*       0.25)       ; a point within this of the result
-                                    ; counts as ON it; only points off by
-                                    ; more than this eat into the miss
+(setq *PF-ON-EPS*       0.5)        ; a point within this of the result
+                                    ; counts as ON it (half the default
+                                    ; tolerance); only points off by more
+                                    ; than this eat into the miss
                                     ; allowance below
 (setq *PF-MISS-PCT*     0.15)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
@@ -112,6 +124,13 @@
                                     ; still holds the points; only when
                                     ; none does is the free-fit ("weird")
                                     ; radius kept.
+(setq *PF-TANG-W*       20.0)       ; how much the fitter values an arc
+                                    ; whose EXIT tangent stays aimed
+                                    ; along the data (inches of point
+                                    ; deviation traded per radian of
+                                    ; tangent error).  Higher = longer,
+                                    ; steadier arcs; this is what keeps
+                                    ; the tangent chain from wobbling.
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
 (if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
@@ -671,105 +690,261 @@
   (foreach sp spans (if (>= (abs (caddr sp)) 1.0e-9) (setq c (1+ c))))
   c)
 
-;; Enforce the curve cap: merge adjacent spans - the pair whose single
-;; replacement arc has the smallest worst-case deviation goes first -
-;; until at most MAXARCS spans are curved.  Merged arcs still prefer a
-;; nice radius when it costs (nearly) nothing extra.  The cap
-;; deliberately wins over the tolerance here; whatever error it forces
-;; shows up in the final hit report.  SPANS are (i j bulge) index
-;; ranges over TOUR (J may equal N = back to the start point).  A
-;; closed loop keeps at least 2 segments.
-(defun pf:cap-spans (spans tour n maxarcs / go best bdev i sp sp2 a b qs
-                                            ar abul adev sn out k)
-  (setq go T)
-  (while (and go
-              (> (pf:arc-count spans) maxarcs)
-              (> (length spans) 2))
-    (setq best nil bdev nil i 0)
-    (while (< i (1- (length spans)))   ; never across the start point
-      (setq sp  (nth i spans)
-            sp2 (nth (1+ i) spans)
-            a   (nth (car sp) tour)
-            b   (nth (rem (cadr sp2) n) tour)
-            qs  (pf:sublist tour (1+ (car sp))
-                            (- (cadr sp2) (car sp) 1)))
-      (if qs
+;; ---- tangent-chain fitting (G1 everywhere) ----------------------------
+;; The points-only / ordering-sketch result is built as a CHAIN: every
+;; element starts exactly where the previous one ended, WITH ITS
+;; TANGENT, so consecutive arcs are always tangent to each other and
+;; the perimeter is smooth.  An element is described by its signed
+;; center offset S: the circle's center sits S to the left of the
+;; running tangent (negative = right); S = nil means a straight
+;; continuation (only happens on dead-straight data).
+
+;; Signed center offset of the circle through Q that leaves J with
+;; tangent TG.  nil when Q lies (nearly) dead ahead - straight.
+(defun pf:tan-circle-s (j tg q / nx ny dx dy dn d2)
+  (setq nx (- (sin tg)) ny (cos tg)
+        dx (- (car q) (car j)) dy (- (cadr q) (cadr j))
+        dn (+ (* dx nx) (* dy ny))
+        d2 (+ (* dx dx) (* dy dy)))
+  (if (or (< (abs dn) 1.0e-12)
+          (> (abs (/ d2 (* 2.0 dn))) 1.0e6))
+    nil
+    (/ d2 (* 2.0 dn))))
+
+;; Worst deviation and miss count of QS against the element (J TG S).
+;; Returns (maxdev . misses).
+(defun pf:chain-eval (j tg s qs / mx c d dx dy nx ny cen r q)
+  (setq mx 0.0 c 0)
+  (if (null s)
+    (progn
+      (setq dx (cos tg) dy (sin tg))
+      (foreach q qs
+        (setq d (abs (- (* (- (cadr q) (cadr j)) dx)
+                        (* (- (car q) (car j)) dy))))
+        (if (> d mx) (setq mx d))
+        (if (> d *PF-ON-EPS*) (setq c (1+ c)))))
+    (progn
+      (setq nx  (- (sin tg)) ny (cos tg)
+            cen (list (+ (car j) (* s nx)) (+ (cadr j) (* s ny)))
+            r   (abs s))
+      (foreach q qs
+        (setq d (abs (- (distance cen (pf:2d q)) r)))
+        (if (> d mx) (setq mx d))
+        (if (> d *PF-ON-EPS*) (setq c (1+ c))))))
+  (cons mx c))
+
+;; Snap the element's radius |S| to a nice increment (whole feet, half
+;; feet, whole inches) that still holds QS within TOL and LEFT misses.
+;; Returns (s . misses) or nil.
+(defun pf:snap-s (j tg s qs tol left / r0 best tier lo hi cands r s2 ev)
+  (setq r0 (abs s) best nil)
+  (if (<= r0 1.0e6)
+    (foreach tier *PF-NICE-RADII*
+      (if (null best)
         (progn
-          (setq ar   (pf:span-arc a b qs)
-                abul (car ar)
-                adev (cdr ar))
-          ;; cap-forced arcs still prefer a nice radius when it costs
-          ;; (nearly) nothing; the miss allowance no longer applies
-          (setq sn (pf:snap-arc a b abul qs
-                                (+ (* adev 1.05) 0.1) 1000000))
-          (if sn
-            (setq abul (car sn)
-                  adev (pf:span-dev a b abul qs)))
-          (if (or (null bdev) (< adev bdev))
-            (setq bdev adev best (list i abul)))))
-      (setq i (1+ i)))
-    (if (null best)
-      (setq go nil)
-      (progn                           ; apply the winning merge
-        (setq out nil k 0)
-        (foreach sp spans
-          (cond
-            ((= k (car best))
-             (setq out (cons (list (car sp)
-                                   (cadr (nth (1+ k) spans))
-                                   (cadr best))
-                             out)))
-            ((= k (1+ (car best))) nil)             ; swallowed
-            (T (setq out (cons sp out))))
-          (setq k (1+ k)))
-        (setq spans (reverse out)))))
-  spans)
+          (setq lo    (* tier (fix (/ r0 tier)))
+                hi    (+ lo tier)
+                cands (if (< (- r0 lo) (- hi r0))
+                        (list lo hi)
+                        (list hi lo)))
+          (foreach r cands
+            (if (and (null best) (> r 0.0))
+              (progn
+                (setq s2 (if (> s 0.0) r (- r))
+                      ev (pf:chain-eval j tg s2 qs))
+                (if (and (<= (car ev) tol) (<= (cdr ev) left))
+                  (setq best (cons s2 (cdr ev)))))))))))
+  best)
 
-;; A span with no interior points carries no curvature evidence: give
-;; it the bulge that continues the previous segment's end tangent (a
-;; G1 blend, clamped to a semicircle), so the closing stitches of the
-;; loop stay curved too.  A stub whose either end is a sharp corner is
-;; an intentional kink and stays straight.
-(defun pf:stub-arcs (spans tour n sharp / out i sp prev pa pb tang a b
-                                          bl)
-  (setq out nil i 0)
-  (foreach sp spans
-    (if (and (= (1+ (car sp)) (cadr sp))
-             (< (abs (caddr sp)) 1.0e-9)
-             (not (nth (rem (car sp) n) sharp))
-             (not (nth (rem (cadr sp) n) sharp)))
-      (progn
-        (setq prev (if (> i 0) (car out) (last spans))
-              pa   (nth (car prev) tour)
-              pb   (nth (rem (cadr prev) n) tour)
-              tang (pf:end-tangent pa pb (caddr prev))
-              a    (nth (car sp) tour)
-              b    (nth (rem (cadr sp) n) tour)
-              bl   (pf:tangent-bulge a tang b))
-        (if (> bl 1.0) (setq bl 1.0))
-        (if (< bl -1.0) (setq bl -1.0))
-        (setq out (cons (list (car sp) (cadr sp) bl) out)))
-      (setq out (cons sp out)))
-    (setq i (1+ i)))
-  (reverse out))
+;; Angle between the element's tangent at its end (the projection of
+;; QLAST) and the direction of travel toward AIM.
+(defun pf:exit-mism (j tg s qlast aim / nx ny cen tout)
+  (if (null s)
+    (setq tout tg)
+    (progn
+      (setq nx   (- (sin tg)) ny (cos tg)
+            cen  (list (+ (car j) (* s nx)) (+ (cadr j) (* s ny)))
+            tout (if (> s 0.0)
+                   (+ (angle cen qlast) (/ pi 2.0))
+                   (- (angle cen qlast) (/ pi 2.0))))))
+  (abs (pf:signed-dang tout (angle qlast aim))))
 
-;; Build the closed segment list through the ordered TOUR from long,
-;; overarching ARCS: each span is grown greedily one point at a time
-;; for as long as a single arc holds every covered point within TOL
-;; (with at most the miss allowance - pf-miss-left, set by the
-;; command - of them off by more than *PF-ON-EPS*).  The arc's radius
-;; is then snapped to a nice increment (whole feet / half feet /
-;; inches) when one still holds the points.  No straight lines are
-;; produced except between two sharp corners; sharp corners are never
-;; swallowed as span interiors.  When MAXARCS is a number the result
-;; is then merged down to at most that many curves.
-(defun pf:coarse-loop (tour tol maxarcs / n sharp i prev cur next turn
-                                          pos spans lim a b qs len go
-                                          ar abul adev amis
-                                          bal bam bab sn sp)
-  (setq tour (pf:rotate-to-corner tour)
-        n    (length tour))
-  ;; flag the sharp corners (may only ever be span ENDPOINTS)
+;; Feasibility-gated goodness of element S over QS aiming at AIM:
+;; deviation plus *PF-TANG-W* times the exit-tangent error.  Returns
+;; (blend . misses); blend is 1e18 when the element can't hold QS.
+(defun pf:chain-blend (j tg s qs aim tol left / ev)
+  (setq ev (pf:chain-eval j tg s qs))
+  (if (or (> (car ev) tol) (> (cdr ev) left))
+    (cons 1.0e18 (cdr ev))
+    (cons (+ (car ev)
+             (* *PF-TANG-W* (pf:exit-mism j tg s (last qs) aim)))
+          (cdr ev))))
+
+;; Best feasible offset for the first M points of AHEAD, or nil.
+;; Candidates pass exactly through sampled points, then a small
+;; multiplicative hill-climb refines the winner.  Returns
+;; (s . misses); a car of nil means a straight element.
+(defun pf:chain-opt (j tg m ahead tol left aim / qs idx k s bs bb bmis b
+                                                 step improved s2)
+  (setq qs  (pf:sublist ahead 0 m)
+        bs  nil bb 1.0e18 bmis 0
+        idx (list 0 (/ m 4) (/ m 2) (/ (* 3 m) 4) (1- m)))
+  (foreach k idx
+    (setq s (pf:tan-circle-s j tg (nth k qs))
+          b (pf:chain-blend j tg s qs aim tol left))
+    (if (< (car b) bb)
+      (setq bs s bb (car b) bmis (cdr b))))
+  (if (and bs (< bb 1.0e17))
+    (foreach step '(1.3 1.1 1.03 1.01)
+      (setq improved T)
+      (while improved
+        (setq improved nil)
+        (foreach s2 (list (* bs step) (/ bs step))
+          (setq b (pf:chain-blend j tg s2 qs aim tol left))
+          (if (< (car b) bb)
+            (setq bs s2 bb (car b) bmis (cdr b) improved T))))))
+  (if (< bb 1.0e17) (cons bs bmis)))
+
+;; Longest prefix of AHEAD held by one tangent element at (J TG),
+;; preferring elements whose exit tangent stays aimed along the data -
+;; that keeps the chain from oscillating.  AIMPT is where the chain
+;; heads after AHEAD runs out (the section corner or the loop seam).
+;; Returns (m s misses); m >= 1 always.
+(defun pf:grow-arc (j tg ahead tol left aimpt / nn best m go got aim qs
+                                                base sn)
+  (setq nn   (length ahead)
+        best (list 1 (pf:tan-circle-s j tg (car ahead)) 0)
+        m    1
+        go   T)
+  (while (and go (<= m nn))
+    (setq aim (if (< m nn) (nth m ahead) aimpt)
+          got (pf:chain-opt j tg m ahead tol left aim))
+    (if got
+      (setq best (list m (car got) (cdr got))
+            m    (1+ m))
+      (setq go nil)))
+  ;; prefer a nice radius that still holds the covered points and
+  ;; doesn't throw the exit tangent noticeably off aim
+  (setq m (car best))
+  (if (cadr best)
+    (progn
+      (setq qs   (pf:sublist ahead 0 m)
+            aim  (if (< m nn) (nth m ahead) aimpt)
+            base (pf:exit-mism j tg (cadr best) (nth (1- m) ahead) aim)
+            sn   (pf:snap-s j tg (cadr best) qs tol left))
+      (if (and sn
+               (<= (pf:exit-mism j tg (car sn) (nth (1- m) ahead) aim)
+                   (+ base 0.05)))
+        (setq best (list m (car sn) (cdr sn))))))
+  best)
+
+;; Emit the element from (J TG) - circle offset S (nil = straight) -
+;; ending at the projection of QLAST.  Returns ((p1 p2 bulge) . tang),
+;; the drawn segment and the tangent handed to the next element.
+(defun pf:emit-chain (j tg s qlast / dx dy u e nx ny cen r ae a0 delta
+                                     bl)
+  (if (null s)
+    (progn
+      (setq dx (cos tg) dy (sin tg)
+            u  (max 1.0e-6 (+ (* (- (car qlast) (car j)) dx)
+                              (* (- (cadr qlast) (cadr j)) dy)))
+            e  (list (+ (car j) (* u dx)) (+ (cadr j) (* u dy))))
+      (cons (list j e 0.0) tg))
+    (progn
+      (setq nx    (- (sin tg)) ny (cos tg)
+            cen   (list (+ (car j) (* s nx)) (+ (cadr j) (* s ny)))
+            r     (abs s)
+            ae    (angle cen qlast)
+            e     (list (+ (car cen) (* r (cos ae)))
+                        (+ (cadr cen) (* r (sin ae))))
+            a0    (angle cen j)
+            delta (if (> s 0.0)
+                    (pf:norm-ang (- ae a0))
+                    (pf:norm-ang (- a0 ae)))
+            bl    (pf:tan (/ delta 4.0)))
+      (if (< s 0.0) (setq bl (- bl)))
+      (cons (list j e bl) (+ (angle j e) (* 2.0 (atan bl)))))))
+
+;; Single element from (J TG) ending EXACTLY at C (a sharp corner),
+;; covering all of AHEAD within TOL and LEFT misses.  Returns
+;; (seg misses tang) or nil.
+(defun pf:finish-arc (j tg c ahead tol left / s nx ny cen a0 ae delta bl
+                                              seg mx mis d q)
+  (setq s (pf:tan-circle-s j tg c))
+  (if (null s)
+    (setq bl 0.0)
+    (progn
+      (setq nx    (- (sin tg)) ny (cos tg)
+            cen   (list (+ (car j) (* s nx)) (+ (cadr j) (* s ny)))
+            a0    (angle cen j)
+            ae    (angle cen c)
+            delta (if (> s 0.0)
+                    (pf:norm-ang (- ae a0))
+                    (pf:norm-ang (- a0 ae)))
+            bl    (pf:tan (/ delta 4.0)))
+      (if (< s 0.0) (setq bl (- bl)))))
+  (setq seg (list j c bl) mx 0.0 mis 0)
+  (foreach q ahead
+    (setq d (pf:seg-dist q seg))
+    (if (> d mx) (setq mx d))
+    (if (> d *PF-ON-EPS*) (setq mis (1+ mis))))
+  (if (and (<= mx tol) (<= mis left))
+    (list seg mis (+ (angle j c) (* 2.0 (atan bl))))))
+
+;; G1 pair of arcs from A (tangent TA) to B (tangent TB); falls back
+;; to a single arc when the geometry degenerates.  Seals the smooth
+;; closed loop - its radii are whatever the closure demands.
+(defun pf:biarc (a ta b tb / phi aa bb d tt psi1 lj jp)
+  (setq phi (angle a b)
+        aa  (pf:signed-dang ta phi)
+        bb  (pf:signed-dang phi tb)
+        d   (pf:dist a b))
+  (cond
+    ((and (< (abs aa) 1.0e-9) (< (abs bb) 1.0e-9))
+     (list (list a b 0.0)))
+    ((< (abs (- aa bb)) 1.0e-6)
+     (list (list a b (pf:tan (/ aa 2.0)))))
+    (T
+     (setq tt (+ aa bb))
+     (if (> (abs tt) (* 1.9 pi))
+       ;; tangents nearly U-turn: give up on G1 for this seam
+       (list (list a b (pf:cap-bulge (pf:tan (/ aa 2.0)))))
+       (progn
+         (setq psi1 (- phi (/ tt 4.0))
+               lj   (if (< (abs (sin (/ tt 2.0))) 1.0e-9)
+                      (/ d 2.0)
+                      (/ (* d (sin (/ tt 4.0))) (sin (/ tt 2.0))))
+               jp   (list (+ (car a) (* lj (cos psi1)))
+                          (+ (cadr a) (* lj (sin psi1)))))
+         (if (or (< (pf:dist a jp) 1.0e-3) (< (pf:dist jp b) 1.0e-3))
+           (list (list a b (pf:cap-bulge (pf:tan (/ aa 2.0)))))
+           (list (list a jp (pf:tan (/ (pf:signed-dang ta psi1) 2.0)))
+                 (list jp b (pf:tan (/ (pf:signed-dang (angle jp b) tb)
+                                       2.0))))))))))
+
+;; Tangent at P0 of the circle through P0 P1 P2 (chord direction when
+;; collinear), oriented toward P1.
+(defun pf:start-tang (p0 p1 p2 / c tc)
+  (setq c (pf:circumcenter (pf:2d p0) (pf:2d p1) (pf:2d p2)))
+  (if (null c)
+    (angle p0 p1)
+    (progn
+      (setq tc (+ (angle c p0) (/ pi 2.0)))
+      (if (> (abs (pf:signed-dang tc (angle p0 p1))) (/ pi 2.0))
+        (setq tc (+ tc pi)))
+      (pf:norm-ang tc))))
+
+;; Cover the rotated closed TOUR with a G1 tangent chain of arcs.
+;; Sharp corners split the loop into sections: each section starts and
+;; ends exactly ON its corner points and is chained smoothly between
+;; them; a loop with no corners is one chain sealed by a G1 biarc.
+;; LEFT is the miss allowance for this pass.  Returns the segments.
+(defun pf:smooth-loop (tour tol left / n sharp i prev cur next turn
+                                       corners segs ends cs ce pts j tg
+                                       cpt ahead go fin got m em j0 t0
+                                       bi mx mis d dd q seg)
+  (setq n (length tour))
+  ;; flag the sharp corners (intentional kinks, chain break points)
   (setq sharp nil i 0)
   (repeat n
     (setq prev (nth (rem (+ i n -1) n) tour)
@@ -779,46 +954,100 @@
     (setq sharp (cons (> turn *PF-CORNER-ANG*) sharp)
           i     (1+ i)))
   (setq sharp (reverse sharp))
-  ;; greedy forward cover: grow each arc as far as it will reach
-  (setq pos 0 spans nil)
-  (while (< pos n)
-    (setq lim (- n pos)
-          a   (nth pos tour)
-          len 2
-          bal 1 bam 0 bab 0.0        ; best arc: length, misses, bulge
-          go  T)
-    (while (and go (<= len lim))
-      (if (nth (rem (+ pos len -1) n) sharp)
-        (setq go nil)                ; would swallow a corner
-        (progn
-          (setq b    (nth (rem (+ pos len) n) tour)
-                qs   (pf:sublist tour (1+ pos) (1- len))
-                ar   (pf:span-arc a b qs)
-                abul (car ar)
-                adev (cdr ar)
-                amis (pf:span-misses a b abul qs))
-          (if (and (<= adev tol) (<= amis pf-miss-left))
-            (setq bal len bam amis bab abul)
-            (setq go nil))
-          (setq len (1+ len)))))
-    ;; prefer a nice (foot / half-foot / inch) radius when one still
-    ;; holds every covered point
-    (setq qs (pf:sublist tour (1+ pos) (1- bal)))
-    (if qs
-      (progn
-        (setq sn (pf:snap-arc a (nth (rem (+ pos bal) n) tour)
-                              bab qs tol pf-miss-left))
-        (if sn (setq bab (car sn) bam (cdr sn)))))
-    (setq spans        (cons (list pos (+ pos bal) bab) spans)
-          pf-miss-left (- pf-miss-left bam)
-          pos          (+ pos bal)))
-  ;; spans with no interior points continue the previous arc's tangent
-  (setq spans (pf:stub-arcs (reverse spans) tour n sharp))
-  (if maxarcs (setq spans (pf:cap-spans spans tour n maxarcs)))
-  (mapcar '(lambda (sp) (list (nth (car sp) tour)
-                              (nth (rem (cadr sp) n) tour)
-                              (caddr sp)))
-          spans))
+  (setq corners nil i 0)
+  (repeat n
+    (if (nth i sharp) (setq corners (cons i corners)))
+    (setq i (1+ i)))
+  (setq corners (reverse corners) segs nil)
+  (if corners
+    (progn
+      ;; the tour is rotated so index 0 is the sharpest corner
+      (setq ends (append (cdr corners) (list n))
+            cs   (car corners))
+      (foreach ce ends
+        (setq pts nil i cs)
+        (while (<= i ce)
+          (setq pts (cons (nth (rem i n) tour) pts)
+                i   (1+ i)))
+        (setq pts   (reverse pts)
+              j     (car pts)
+              tg    (if (> (length pts) 2)
+                      (pf:start-tang (car pts) (cadr pts) (caddr pts))
+                      (angle (car pts) (cadr pts)))
+              cpt   (last pts)
+              ahead (reverse (cdr (reverse (cdr pts))))
+              go    T)
+        (while go
+          (setq fin (pf:finish-arc j tg cpt ahead tol left))
+          (if fin
+            (setq segs (cons (car fin) segs)
+                  left (- left (cadr fin))
+                  go   nil)
+            (progn
+              (setq got (pf:grow-arc j tg ahead tol left cpt)
+                    m   (car got)
+                    em  (pf:emit-chain j tg (cadr got)
+                                       (nth (1- m) ahead)))
+              (setq segs  (cons (car em) segs)
+                    j     (cadr (car em))
+                    tg    (cdr em)
+                    left  (- left (caddr got))
+                    ahead (pf:nthcdr m ahead)))))
+        (setq cs ce)))
+    (progn
+      ;; no corners: one smooth chain, sealed with a G1 biarc
+      (setq j0    (car tour)
+            t0    (pf:start-tang (car tour) (cadr tour) (caddr tour))
+            j     j0
+            tg    t0
+            ahead (cdr tour)
+            go    T)
+      (while go
+        (setq fin nil)
+        (if (> (pf:dist j j0) 1.0e-9)
+          (progn
+            (setq bi (pf:biarc j tg j0 t0) mx 0.0 mis 0)
+            (foreach q ahead
+              (setq d nil)
+              (foreach seg bi
+                (setq dd (pf:seg-dist q seg))
+                (if (or (null d) (< dd d)) (setq d dd)))
+              (if (> d mx) (setq mx d))
+              (if (> d *PF-ON-EPS*) (setq mis (1+ mis))))
+            (if (and (<= mx tol) (<= mis left))
+              (setq fin T))))
+        (if fin
+          (progn
+            (foreach seg bi (setq segs (cons seg segs)))
+            (setq left (- left mis)
+                  go   nil))
+          (progn
+            (setq got (pf:grow-arc j tg ahead tol left j0)
+                  m   (car got)
+                  em  (pf:emit-chain j tg (cadr got)
+                                     (nth (1- m) ahead)))
+            (setq segs  (cons (car em) segs)
+                  j     (cadr (car em))
+                  tg    (cdr em)
+                  left  (- left (caddr got))
+                  ahead (pf:nthcdr m ahead)))))))
+  (reverse segs))
+
+;; Points-only / ordering-sketch fit: a G1 tangent chain with nice
+;; radii.  The curve cap is enforced by refitting the whole loop with
+;; a progressively relaxed tolerance - merging arcs would break their
+;; tangency, so the chain is rebuilt instead and stays smooth.
+(defun pf:coarse-loop (tour tol maxarcs / segs tol2 tries)
+  (setq tour (pf:rotate-to-corner tour)
+        segs (pf:smooth-loop tour tol pf-miss-left))
+  (if maxarcs
+    (progn
+      (setq tol2 tol tries 0)
+      (while (and (> (pf:arc-count segs) maxarcs) (< tries 40))
+        (setq tol2  (* tol2 1.25)
+              tries (1+ tries)
+              segs  (pf:smooth-loop tour tol2 1000000)))))
+  segs)
 
 ;; ---- output helpers --------------------------------------------------
 (defun pf:ensure-layer (name)
