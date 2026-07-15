@@ -1,4 +1,4 @@
-# AVHD — AutoLISP pool-perimeter fitter (AutoCAD 2018+)
+# ABHD — AutoLISP pool-perimeter fitter (AutoCAD 2018+)
 
 Builds a single smooth closed polyline (lines + arcs only) through
 points surveyed on a pool edge — guided by a hand-drawn perimeter,
@@ -9,7 +9,7 @@ by a rough connect-the-dots sketch, or from the points alone.
 | Layer | Contents |
 | --- | --- |
 | `POOL` | *(optional)* The drawn perimeter: one closed polyline or the same shape exploded into `LINE`s and `ARC`s — **or** a rough lines-only sketch that just connects the points in order |
-| `POINTS` | `POINT` entities surveyed on the real pool edge |
+| `POINTS` | The survey points on the real pool edge — either plain `POINT` entities on this layer, **or** `ab_pt` block insertions (the block's insertion point is used as the point) |
 
 ## Three modes, picked automatically from what you select
 
@@ -31,13 +31,13 @@ of being rounded over — so rectangles keep their corners while tight
 curves merely sampled sparsely stay smooth. Give each straight wall at
 least one point between its corners so it registers as straight.
 
-Layer names can be changed at the top of `avhd.lsp`
+Layer names can be changed at the top of `abhd.lsp`
 (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
 
 ## Usage
 
-1. `APPLOAD` → pick `avhd.lsp` (or drag it into the drawing).
-2. Type `AVHD`.
+1. `APPLOAD` → pick `abhd.lsp` (or drag it into the drawing).
+2. Type `ABHD`.
 3. Accept or change the tolerance (default `1.0` drawing unit — one
    inch in an inch-based drawing; the value is remembered for the
    session). It is used by the guided mode and for the hit report.
@@ -83,6 +83,10 @@ different tolerance.
   ignored on read and the output polyline is flat.
 * Splined or fit-smoothed heavy polylines are not supported — use a
   plain polyline (or explode to lines/arcs) for the perimeter.
-* Survey points must be `POINT` entities; if yours are blocks, use
-  a quick `PDMODE`-visible conversion (or explode the blocks' point)
-  first.
+* Survey points may be plain `POINT` entities on the `POINTS` layer or
+  `ab_pt` block insertions (any layer). Block references are read
+  non-destructively — their insertion point is used as the point
+  location, so nothing is exploded and your blocks stay intact. Change
+  the block name at the top of `abhd.lsp` (`*PF-POINT-BLOCK*`). If a
+  block's marker geometry is offset from its insertion base, tell me
+  and I'll add copy-and-explode extraction instead.

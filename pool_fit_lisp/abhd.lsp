@@ -1,9 +1,9 @@
 ;;; ===================================================================
-;;; AVHD.LSP  --  Fit a pool perimeter through surveyed points
+;;; ABHD.LSP  --  Fit a pool perimeter through surveyed points
 ;;; -------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
-;;; Command:  AVHD
+;;; Command:  ABHD
 ;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
@@ -52,6 +52,9 @@
 ;; ---- configuration -------------------------------------------------
 (setq *PF-POOL-LAYER*   "POOL")     ; layer holding the drawn perimeter
 (setq *PF-POINT-LAYER*  "POINTS")   ; layer holding the survey points
+(setq *PF-POINT-BLOCK*  "ab_pt")    ; block name whose INSERTs mark survey
+                                    ; points; the block's insertion point
+                                    ; is taken as the point location
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the fitted polyline goes on
 (setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units)
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
@@ -315,14 +318,14 @@
           (setq segs nil end nil)))  ; gap -> bail out
       (cond
         ((null end)
-         (princ "\nAVHD: gap in the POOL perimeter - could not close the loop.")
+         (princ "\nABHD: gap in the POOL perimeter - could not close the loop.")
          nil)
         ((>= (pf:dist end start) *PF-CHAIN-FUZZ*)
-         (princ "\nAVHD: the POOL perimeter does not close.")
+         (princ "\nABHD: the POOL perimeter does not close.")
          nil)
         (T
          (if segs
-           (princ (strcat "\nAVHD: warning - "
+           (princ (strcat "\nABHD: warning - "
                           (itoa (length segs))
                           " POOL segment(s) not part of the closed loop were ignored.")))
          (reverse loop))))))
@@ -579,7 +582,7 @@
       ((<= dmin *PF-EXACT-EPS*) (setq hitex (1+ hitex)))
       ((<= dmin tol)            (setq hitok (1+ hitok)))
       (T                        (setq miss  (1+ miss)))))
-  (princ (strcat "\nAVHD: " (itoa (length newsegs))
+  (princ (strcat "\nABHD: " (itoa (length newsegs))
                  " segments written to layer " *PF-OUT-LAYER* "."
                  "\n  Points ON the perimeter:      " (itoa hitex)
                  "\n  Points within tolerance:      " (itoa hitok)
@@ -589,13 +592,13 @@
   (princ))
 
 ;; ---- the command -----------------------------------------------------
-(defun c:AVHD ( / tol ss i en ed lay typ segs pts loop n verts used
+(defun c:ABHD ( / tol ss i en ed lay typ segs pts loop n verts used
                     v best bd d q p1 p2 b cands clean ns newsegs s)
   ;; tolerance (drawing units; 1 = 1 inch in an inch drawing)
   (setq tol (getdist (strcat "\nTolerance <" (rtos *PF-TOL* 2 3) ">: ")))
   (if tol (setq *PF-TOL* tol) (setq tol *PF-TOL*))
 
-  (princ "\nSelect the pool perimeter (POOL layer) and its points (POINTS layer): ")
+  (princ "\nSelect the points (POINTS layer or ab_pt blocks) and, optionally, the POOL perimeter/sketch: ")
   (setq ss (ssget))
   (if (null ss)
     (princ "\nNothing selected.")
@@ -609,13 +612,25 @@
               typ (cdr (assoc 0 ed))
               i   (1+ i))
         (cond
+          ;; perimeter / ordering sketch on the POOL layer
           ((= lay (strcase *PF-POOL-LAYER*))
            (setq segs (append segs (pf:ent-segs en))))
+          ;; plain POINT entities on the POINTS layer
           ((and (= lay (strcase *PF-POINT-LAYER*)) (= typ "POINT"))
+           (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))
+          ;; survey points stored as block references (e.g. "ab_pt"):
+          ;; take the block's insertion point as the point location.
+          ;; Non-destructive - the blocks are never exploded.
+          ((and (= typ "INSERT")
+                (or (= (strcase (cdr (assoc 2 ed)))
+                       (strcase *PF-POINT-BLOCK*))
+                    (= lay (strcase *PF-POINT-LAYER*))))
            (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))))
       (cond
         ((null pts)
-         (princ (strcat "\nNo POINT entities found on layer " *PF-POINT-LAYER* ".")))
+         (princ (strcat "\nNo survey points found (looked for POINT entities on layer "
+                        *PF-POINT-LAYER* " and \"" *PF-POINT-BLOCK*
+                        "\" block insertions).")))
         ((and (null segs) (< (length (pf:dedupe pts)) 3))
          (princ "\nPoints-only mode needs at least 3 distinct points."))
         ((null segs)
@@ -685,5 +700,5 @@
          (pf:finish newsegs pts tol)))))
   (princ))
 
-(princ "\nAVHD loaded.  Type AVHD to fit the pool perimeter through its points.")
+(princ "\nABHD loaded.  Type ABHD to fit the pool perimeter through its points.")
 (princ)
