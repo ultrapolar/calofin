@@ -7,7 +7,7 @@ AutoCAD AutoLISP routine for working between Blender and CAD:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| POOLFIT (AutoLISP, AutoCAD 2018+) | `pool_fit_lisp/` | Builds a smooth closed polyline (lines + arcs) through pool-edge survey points — guided by a drawn perimeter, a connect-the-dots sketch, or the points alone — see `pool_fit_lisp/README.md` |
+| AVHD (AutoLISP, AutoCAD 2018+) | `pool_fit_lisp/` | Builds a smooth closed polyline (lines + arcs) through pool-edge survey points — guided by a drawn perimeter, a connect-the-dots sketch, or the points alone — see `pool_fit_lisp/README.md` |
 
 ## Installation (either add-on)
 

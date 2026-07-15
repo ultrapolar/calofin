@@ -1,4 +1,4 @@
-# POOLFIT — AutoLISP pool-perimeter fitter (AutoCAD 2018+)
+# AVHD — AutoLISP pool-perimeter fitter (AutoCAD 2018+)
 
 Builds a single smooth closed polyline (lines + arcs only) through
 points surveyed on a pool edge — guided by a hand-drawn perimeter,
@@ -31,13 +31,13 @@ of being rounded over — so rectangles keep their corners while tight
 curves merely sampled sparsely stay smooth. Give each straight wall at
 least one point between its corners so it registers as straight.
 
-Layer names can be changed at the top of `poolfit.lsp`
+Layer names can be changed at the top of `avhd.lsp`
 (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`).
 
 ## Usage
 
-1. `APPLOAD` → pick `poolfit.lsp` (or drag it into the drawing).
-2. Type `POOLFIT`.
+1. `APPLOAD` → pick `avhd.lsp` (or drag it into the drawing).
+2. Type `AVHD`.
 3. Accept or change the tolerance (default `1.0` drawing unit — one
    inch in an inch-based drawing; the value is remembered for the
    session). It is used by the guided mode and for the hit report.
