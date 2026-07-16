@@ -6,7 +6,7 @@
 ;;; Prompts the user to select POOL lines to "bead", then to click the side to
 ;;; bead toward.  For every selected line a companion line is created at a 2"
 ;;; offset toward the clicked side.  The bead lines are placed on the
-;;; BEADTRACK layer.  Where adjacent bead offsets overshoot and cross one
+;;; "Bead Track" layer.  Where adjacent bead offsets overshoot and cross one
 ;;; another (e.g. at corners), the excess stubs are trimmed back to the
 ;;; intersection point.
 ;;; ==========================================================================
@@ -103,7 +103,7 @@
 (defun c:AUTOBEAD ( / beadoff layname ss dirpt beads i ent edata
                       p1 p2 dir nrm side unit np1 np2 b )
   (setq beadoff 2.0            ; bead offset distance (drawing units / inches)
-        layname "BEADTRACK")
+        layname "Bead Track")
 
   (autobead-ensure-layer layname)
 
