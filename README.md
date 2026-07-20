@@ -8,6 +8,12 @@ working between Blender and CAD:
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
 
+There is also a standalone AutoCAD AutoLISP tool that isn't a Blender add-on:
+
+| Tool | Folder | What it does |
+| --- | --- | --- |
+| LINTXTCHK — Liner Text Checklist | `lintxtchk/` | AutoCAD command that stamps the vinyl pool-liner drawing checklist into a drawing as individual 12" TEXT lines at a picked point (see `lintxtchk/README.md`) |
+
 ## Installation (either add-on)
 
 Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
