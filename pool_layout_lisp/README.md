@@ -108,8 +108,19 @@ A ------------------------------ B     K  hopper -> bottom side
 
 All primary dims are **offsets from the perimeter** (H, E, M, K) plus
 the hopper length G, so they anchor the geometry exactly even on an
-out-of-square pool (offsets stay perpendicular to each wall). F and L
-are redundant and reported as **checks** with target/actual/delta.
+out-of-square pool (offsets stay perpendicular to each wall).
+
+**Every bottom length accepts `NA`** ("no answer"), and each chain is
+reconciled against the pool before drawing:
+
+* one `NA` in a chain → it takes the **remainder**;
+* several `NA`s → the remainder is **split evenly** among them;
+* everything provided but the chain doesn't close against the pool →
+  **G** (horizontal) / **L** (vertical) absorb the difference; the
+  no-pad sport bottom has no G, so its residual splits across F2/F1.
+
+The report shows what you *entered* (or `N/A`) against what was
+*drawn*, so any fill or absorption is visible in the delta column.
 The hopper's left corners tie to the pool's left corners — when a
 corner is Diag/Rounded, **to both ends of the treatment** (one line
 per end) — and its right corners tie to the ends of the slope-break

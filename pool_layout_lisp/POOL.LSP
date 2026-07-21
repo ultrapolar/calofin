@@ -1607,20 +1607,59 @@
     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
   pv)
 
+;; Resolve a bottom measurement chain against the pool total:
+;;   * NA (nil) entries take the remainder -- split evenly when there
+;;     is more than one
+;;   * when every value is provided but the sum misses the total, the
+;;     slack member at index islack (G on the horizontal chain, L on
+;;     the vertical) absorbs the difference; islack -1 = nobody (the
+;;     caller handles the residual itself)
+;; Returns the resolved list.
+(defun pool:chainfix (vals total islack / sum n share out k v)
+  (setq sum 0.0 n 0)
+  (foreach v vals (if v (setq sum (+ sum v)) (setq n (1+ n))))
+  (setq out nil k 0)
+  (if (> n 0)
+      (progn
+        (setq share (/ (- total sum) n))
+        (foreach v vals (setq out (cons (if v v share) out))))
+      (foreach v vals
+        (setq out (cons (if (and (= k islack)
+                                 (> (abs (- sum total)) 1.0e-6))
+                            (+ v (- total sum))
+                            v)
+                        out)
+              k (1+ k))))
+  (reverse out))
+
 ;; Normal (hopper pad) bottom for the rectangle: lettered guide,
 ;; prompts H G F E M L K, plan hopper + chain dims, then the side
 ;; profile below (asks wall height C and hopper depth D).
-(defun pool:hopnormal (quad corners doff th / pv h g f e m l k gg tl odl)
+(defun pool:hopnormal (quad corners doff th / pv h g f e m l k gg tl odl
+                                              hraw graw fraw eraw mraw lraw kraw
+                                              a b c d cen toth totv hres vres)
   (setq pv (pool:hopguide quad corners th))
   (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
-  (setq h (pool:askh "H - left end to hopper" (cdr (assoc "H" pv)))
-        g (pool:askh "G - hopper length" (cdr (assoc "G" pv)))
-        f (pool:askh "F - hopper to slope break (check)" (cdr (assoc "F" pv)))
-        e (pool:askh "E - slope break to right end" (cdr (assoc "E" pv)))
-        m (pool:askh "M - top side to hopper" (cdr (assoc "M" pv)))
-        l (pool:askh "L - hopper width (check)" (cdr (assoc "L" pv)))
-        k (pool:askh "K - hopper to bottom side" (cdr (assoc "K" pv))))
+  (setq hraw (pool:askhx "H - left end to hopper" (cdr (assoc "H" pv)))
+        graw (pool:askhx "G - hopper length" (cdr (assoc "G" pv)))
+        fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
+        eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))
+        mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
+        lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
+        kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv))))
   (pool:pvkill)
+  ;; resolve the chains against the wall-to-wall totals: NA takes the
+  ;; remainder (split when several); G / L absorb any leftover
+  (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
+        cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
+        toth (distance (pool:linex cen (pool:v- b a) a (pool:v- d a))
+                       (pool:linex cen (pool:v- b a) b (pool:v- c b)))
+        totv (distance (pool:linex cen (pool:v- d a) a (pool:v- b a))
+                       (pool:linex cen (pool:v- d a) d (pool:v- c d)))
+        hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
+        vres (pool:chainfix (list mraw lraw kraw) totv 1)
+        h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
+        m (car vres) l (cadr vres) k (caddr vres))
   (setq gg (pool:hopcalc quad corners h g e m k))
   (pool:hopdraw gg "POOL")
   ;; chain dimensions along the two centerlines, like the sheet
@@ -1634,13 +1673,13 @@
                            (cadr (assoc (cadr tl) gg)))))
   (setvar "CLAYER" odl)
   (list
-    (list "HOP H" h (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-    (list "HOP G" g (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
-    (list "HOP F CHECK" f (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-    (list "HOP E" e (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
-    (list "HOP M" m (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
-    (list "HOP L CHECK" l (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
-    (list "HOP K" k (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
+    (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
+    (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
+    (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
+    (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
+    (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
+    (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
+    (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
 
 ;; Sport bottoms (per the field sheet, which IS a side profile):
 ;; letters E2 F2 [G] F1 E1 along the bottom plus wall height C and
@@ -1649,6 +1688,7 @@
 ;; plan view gets a full-width break line at every slope change.
 (defun pool:hopsport (total wid x0 y0 ymax nopad doff th / whn hdn pv
                                            e2 f2 g f1 e1 wh hd brks xs xd
+                                           e2r f2r gr f1r e1r res resid
                                            rows odl prev xi)
   (setq whn (* 0.25 wid)
         hdn (* 0.55 wid))
@@ -1690,17 +1730,29 @@
            (pool:wp (list (- x0 doff) (- y0 hdn (* 3.0 doff))))
            (pool:wp (list (+ x0 total (* 3.0 doff)) (+ ymax doff))))
   (princ "\nSport bottom -- profile letters per the sheet; the RED tie is being asked for.")
-  (setq e2 (pool:askh "E2 - left end shallow flat" (cdr (assoc "E2" pv)))
-        f2 (pool:askh "F2 - left slope" (cdr (assoc "F2" pv))))
+  (setq e2r (pool:askhx "E2 - left end shallow flat" (cdr (assoc "E2" pv)))
+        f2r (pool:askhx "F2 - left slope" (cdr (assoc "F2" pv))))
   (if (not nopad)
-      (setq g (pool:askh "G - deep flat length (check)" (cdr (assoc "G" pv)))))
-  (setq f1 (pool:askh (if nopad "F1 - right slope (check)" "F1 - right slope")
-                      (cdr (assoc "F1" pv)))
-        e1 (pool:askh "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
+      (setq gr (pool:askhx "G - deep flat length" (cdr (assoc "G" pv)))))
+  (setq f1r (pool:askhx "F1 - right slope" (cdr (assoc "F1" pv)))
+        e1r (pool:askhx "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
         wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
         hd (pool:askh "D - deep depth" (cdr (assoc "D" pv))))
   (pool:pvkill)
-  ;; real profile: anchors from each end; the middle closes the check
+  ;; resolve the bottom chain: NA takes the remainder (split evenly);
+  ;; leftover slack goes to G, or is split across F2/F1 when there is
+  ;; no hopper pad
+  (if nopad
+      (progn
+        (setq res (pool:chainfix (list e2r f2r f1r e1r) total -1)
+              e2 (car res) f2 (cadr res) f1 (caddr res) e1 (cadddr res)
+              resid (- total e2 f2 f1 e1))
+        (if (> (abs resid) 1.0e-6)
+            (setq f2 (+ f2 (* 0.5 resid))
+                  f1 (+ f1 (* 0.5 resid)))))
+      (setq res (pool:chainfix (list e2r f2r gr f1r e1r) total 2)
+            e2 (car res) f2 (cadr res) g (caddr res)
+            f1 (cadddr res) e1 (nth 4 res)))
   (setq brks (if nopad
                  (list (cons e2 wh) (cons (+ e2 f2) hd) (cons (- total e1) wh))
                  (list (cons e2 wh) (cons (+ e2 f2) hd)
@@ -1722,16 +1774,16 @@
                (list (+ xd (* 0.3 doff)) (- y0 (* 0.5 hd))))
   (setvar "CLAYER" odl)
   (setq rows (list
-    (list "SPT E2" e2 e2)
-    (list "SPT F2" f2 f2)))
+    (list "SPT E2" e2r e2)
+    (list "SPT F2" f2r f2)))
   (if nopad
       (setq rows (append rows (list
-        (list "SPT F1 CHECK" f1 (- total e1 (+ e2 f2)))
-        (list "SPT E1" e1 e1))))
+        (list "SPT F1" f1r f1)
+        (list "SPT E1" e1r e1))))
       (setq rows (append rows (list
-        (list "SPT G CHECK" g (- total e2 f2 f1 e1))
-        (list "SPT F1" f1 f1)
-        (list "SPT E1" e1 e1)))))
+        (list "SPT G" gr g)
+        (list "SPT F1" f1r f1)
+        (list "SPT E1" e1r e1)))))
   (list (append rows (list (list "WALL HT C" wh wh) (list "DEPTH D" hd hd)))
         xs))
 
@@ -1876,6 +1928,8 @@
 ;; Guided oval bottom phase.  Returns report rows (nil if skipped).
 (defun pool:hopoval (quad tipl tipr doff th / len wid ggn pv gg rows tl odl
                                               h g f e m l k r3 w tt o
+                                              hraw graw fraw eraw mraw lraw kraw
+                                              totv hres vres
                                               xmin xmax ymin ymax)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
@@ -1905,17 +1959,29 @@
           (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'phb ggn)) "K" th)
           (pool:pvtie (cadddr quad) (caddr quad) "T" th)))
         (princ "\nPool bottom -- offsets along the pool axis; the RED tie is being asked for.")
-        (setq h (pool:askh "H - pool left tip to hopper tip" (cdr (assoc "H" pv)))
-              g (pool:askh "G - hopper length (tip to right edge)" (cdr (assoc "G" pv)))
+        (setq hraw (pool:askhx "H - pool left tip to hopper tip" (cdr (assoc "H" pv)))
+              graw (pool:askhx "G - hopper length (tip to right edge)" (cdr (assoc "G" pv)))
               r3 (pool:askh "R3 - hopper end radius" (cdr (assoc "R3" pv)))
-              w (pool:askh "W - hopper flat top (check)" (cdr (assoc "W" pv)))
-              f (pool:askh "F - hopper to slope break (check)" (cdr (assoc "F" pv)))
-              e (pool:askh "E - slope break to pool right tip" (cdr (assoc "E" pv)))
-              m (pool:askh "M - top side to hopper" (cdr (assoc "M" pv)))
-              l (pool:askh "L - hopper width (check)" (cdr (assoc "L" pv)))
-              k (pool:askh "K - hopper to bottom side" (cdr (assoc "K" pv)))
-              tt (pool:askh "T - straight side length (check)" (cdr (assoc "T" pv))))
+              w (pool:askhx "W - hopper flat top (check)" (cdr (assoc "W" pv)))
+              fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
+              eraw (pool:askhx "E - slope break to pool right tip" (cdr (assoc "E" pv)))
+              mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
+              lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
+              kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv)))
+              tt (pool:askhx "T - straight side length (check)" (cdr (assoc "T" pv))))
         (pool:pvkill)
+        ;; resolve against tip-to-tip length and side-to-side width
+        (setq totv (distance
+                     (pool:linex (pool:mid (car quad) (caddr quad))
+                                 (pool:v- (cadddr quad) (car quad))
+                                 (car quad) (pool:v- (cadr quad) (car quad)))
+                     (pool:linex (pool:mid (car quad) (caddr quad))
+                                 (pool:v- (cadddr quad) (car quad))
+                                 (cadddr quad) (pool:v- (caddr quad) (cadddr quad))))
+              hres (pool:chainfix (list hraw graw fraw eraw) (distance tipl tipr) 1)
+              vres (pool:chainfix (list mraw lraw kraw) totv 1)
+              h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
+              m (car vres) l (cadr vres) k (caddr vres))
         (setq gg (pool:hopovalc quad tipl tipr h g e m k r3))
         (pool:hopovaldraw gg "POOL" nil)
         (setq odl (getvar "CLAYER"))
@@ -1931,16 +1997,16 @@
         (setq o (pool:circum (cadr (assoc 'ttop gg)) (cadr (assoc 'tip gg))
                              (cadr (assoc 'tbot gg)))
               rows (list
-          (list "HOP H" h (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-          (list "HOP G" g (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
+          (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
+          (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
           (list "HOP R3" r3 (if o (distance o (cadr (assoc 'tip gg))) r3))
-          (list "HOP W CHECK" w (distance (cadr (assoc 'ttop gg)) (cadr (assoc 'htr gg))))
-          (list "HOP F CHECK" f (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-          (list "HOP E" e (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
-          (list "HOP M" m (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
-          (list "HOP L CHECK" l (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
-          (list "HOP K" k (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))
-          (list "HOP T CHECK" tt (distance (cadddr quad) (caddr quad)))))
+          (list "HOP W" w (distance (cadr (assoc 'ttop gg)) (cadr (assoc 'htr gg))))
+          (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
+          (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
+          (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
+          (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
+          (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))
+          (list "HOP T" tt (distance (cadddr quad) (caddr quad)))))
         rows)))
 
 ;;; ---------------- grecian pool bottom (Square / 6-sided) -------------
@@ -2034,6 +2100,8 @@
 ;; Guided grecian bottom phase.  Returns report rows (nil if skipped).
 (defun pool:hopgrec (pts doff th / htype six len wid ggn pv gg rows tl odl
                                    h g f e m l k w l1 x wp
+                                   hraw graw fraw eraw mraw lraw kraw
+                                   cen p u vv toth totv hres vres
                                    xmin xmax ymin ymax)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
@@ -2070,18 +2138,35 @@
                     (pool:pvtie wp (cadr (assoc 'ct2 ggn)) "L1" th)
                     (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn)) "X" th)))))
         (princ "\nPool bottom -- offsets from the end walls; the RED tie is being asked for.")
-        (setq h (pool:askh "H - left end to hopper" (cdr (assoc "H" pv)))
-              g (pool:askh "G - hopper length" (cdr (assoc "G" pv))))
+        (setq hraw (pool:askhx "H - left end to hopper" (cdr (assoc "H" pv)))
+              graw (pool:askhx "G - hopper length" (cdr (assoc "G" pv))))
         (if six
             (setq w (pool:askh "W - hopper cut along top/bottom edges" (cdr (assoc "W" pv)))
                   l1 (pool:askh "L1 - hopper cut down the left edge" (cdr (assoc "L1" pv)))
-                  x (pool:askh "X - hopper cut face length (check)" (cdr (assoc "X" pv)))))
-        (setq f (pool:askh "F - hopper to slope break (check)" (cdr (assoc "F" pv)))
-              e (pool:askh "E - slope break to right end" (cdr (assoc "E" pv)))
-              m (pool:askh "M - top side to hopper" (cdr (assoc "M" pv)))
-              l (pool:askh "L - hopper width (check)" (cdr (assoc "L" pv)))
-              k (pool:askh "K - hopper to bottom side" (cdr (assoc "K" pv))))
+                  x (pool:askhx "X - hopper cut face length (check)" (cdr (assoc "X" pv)))))
+        (setq fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
+              eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))
+              mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
+              lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
+              kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv))))
         (pool:pvkill)
+        ;; resolve against wall-to-wall totals (end wall to end wall,
+        ;; side to side) through the pool centre
+        (setq cen (list 0.0 0.0))
+        (foreach p pts (setq cen (pool:v+ cen p)))
+        (setq cen (pool:v* cen 0.125)
+              u (pool:v- (nth 1 pts) (nth 0 pts))
+              vv (pool:v- (nth 5 pts) (nth 0 pts))
+              toth (distance
+                     (pool:linex cen u (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
+                     (pool:linex cen u (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts))))
+              totv (distance
+                     (pool:linex cen vv (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
+                     (pool:linex cen vv (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts))))
+              hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
+              vres (pool:chainfix (list mraw lraw kraw) totv 1)
+              h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
+              m (car vres) l (cadr vres) k (caddr vres))
         (setq gg (pool:hopgrecc pts h g e m k (if six w nil) (if six l1 nil)))
         (pool:hopgrecdraw gg "POOL" six nil)
         (setq odl (getvar "CLAYER"))
@@ -2102,18 +2187,18 @@
                            (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))
         (setvar "CLAYER" odl)
         (setq rows (list
-          (list "HOP H" h (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-          (list "HOP G" g (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
-          (list "HOP F CHECK" f (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-          (list "HOP E" e (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
-          (list "HOP M" m (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
-          (list "HOP L CHECK" l (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
-          (list "HOP K" k (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
+          (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
+          (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
+          (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
+          (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
+          (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
+          (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
+          (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
         (if six
             (setq rows (append rows (list
               (list "HOP W" w (distance (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))))
               (list "HOP L1" l1 (distance (cadr (assoc 'htl gg)) (cadr (assoc 'ct2 gg))))
-              (list "HOP X CHECK" x (distance (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))))
+              (list "HOP X" x (distance (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))))
         rows)))
 
 ;; Bottom-type dispatchers: Normal / Sport / NOhopper for oval and

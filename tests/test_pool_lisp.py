@@ -857,4 +857,36 @@ assert abs(dist(gg['pl'],gg['phl'])-40)<1e-9
 assert abs(dist(gg['pht'],gg['pt'])-30)<1e-9
 print("   D'=(0,150); hopper anchors and break confined to the main section")
 
+
+print("== 41. bottom chain resolution (NA fill / even split / G-L absorb) ==")
+def chainfix(vals,total,islack):
+    s=sum(v for v in vals if v is not None)
+    n=sum(1 for v in vals if v is None)
+    if n>0:
+        share=(total-s)/n
+        return [v if v is not None else share for v in vals]
+    if abs(s-total)>1e-6:
+        return [v+(total-s) if i==islack else v for i,v in enumerate(vals)]
+    return list(vals)
+
+# one NA -> takes the remainder
+assert chainfix([40.0,None,210.0,100.0],400.0,1)==[40.0,50.0,210.0,100.0]
+# several NA -> split evenly
+r=chainfix([40.0,None,None,100.0],400.0,1)
+assert r[1]==r[2]==130.0
+# all NA -> even split
+assert chainfix([None,None,None],240.0,1)==[80.0,80.0,80.0]
+# all provided, over the whole -> G absorbs (index 1)
+assert chainfix([40.0,60.0,210.0,100.0],400.0,1)==[40.0,50.0,210.0,100.0]
+# all provided, under the whole -> G grows
+assert chainfix([40.0,50.0,200.0,100.0],400.0,1)==[40.0,60.0,200.0,100.0]
+# vertical: L absorbs (index 1 of M L K)
+assert chainfix([45.0,150.0,50.0],240.0,1)==[45.0,145.0,50.0]
+# no-pad sport: islack -1 leaves values; residual split across F2/F1
+vals=chainfix([60.0,140.0,148.0,50.0],400.0,-1)
+resid=400.0-sum(vals)
+f2,f1=vals[1]+resid/2, vals[2]+resid/2
+assert abs(f2-141.0)<1e-9 and abs(f1-149.0)<1e-9
+print("   remainder, even split, and G/L absorption all verified")
+
 print("\nALL CHECKS PASSED")
