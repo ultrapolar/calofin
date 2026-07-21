@@ -88,7 +88,11 @@
 ;;;     pair (with its overlap length), every step pattern, the Step
 ;;;     Attachment verdict and the Liner Material verdict, plus
 ;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it.
+;;;     so it sits to scale next to it. Any line describing something
+;;;     questionable or that needs looking over (a flagged/wrong
+;;;     item, a missing block, a "NOT" find, an "add ..." note, a
+;;;     skipped check) is coloured RED in the report; everything
+;;;     that checked out stays the report's normal colour.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -168,7 +172,7 @@
   (setq res (vl-catch-all-apply 'vlax-curve-getClosestPointTo (list ent pt)))
   (if (vl-catch-all-error-p res) nil res))
 
-(defun dchk:nearest-curve (pt exclude cands / best bestd cp d)
+(defun dchk:nearest-curve (pt exclude cands / best bestd cp d e)
   ;; (ent closest-point distance) for the candidate closest to pt
   (foreach e cands
     (if (and (not (eq e exclude)) (setq cp (dchk:closest-on e pt)))
@@ -191,13 +195,13 @@
         nil
         (list sp ep)))))
 
-(defun dchk:closest-of (pt pts / best bestd d)
+(defun dchk:closest-of (pt pts / best bestd d q)
   (foreach q pts
     (setq d (distance pt q))
     (if (or (null bestd) (< d bestd)) (setq bestd d best q)))
   best)
 
-(defun dchk:nearest-end (pt exclude cands / best bestd d)
+(defun dchk:nearest-end (pt exclude cands / best bestd d e q)
   ;; closest endpoint over every open candidate curve
   (foreach e cands
     (if (not (eq e exclude))
@@ -313,6 +317,17 @@
           text (substr text 251)))
   (entmake (append dxf (list (cons 1 text)))))
 
+(defun dchk:attn-p (s)
+  ;; T when a report line describes something questionable or that
+  ;; needs looking over / fixing, so the report renders it in red
+  (wcmatch (strcase s)
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,* ADD *"))
+
+(defun dchk:red (s)
+  ;; wrap an MTEXT run so it renders in the flag colour, reverting
+  ;; to the surrounding colour after (braces scope the change)
+  (strcat "{\\C" (itoa *dchk-flag-color*) ";" s "}"))
+
 ;; --- geometry ------------------------------------------------------
 
 (defun dchk:angnorm (a)
@@ -346,7 +361,7 @@
            (< (abs (cadr n)) 1e-9)
            (> (caddr n) 0.0))))
 
-(defun dchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed)
+(defun dchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
   (if (and (> (distance target fixed) 1e-8)
@@ -466,7 +481,7 @@
   out)
 
 (defun dchk:step-groups (lns / atol fams a placed recs pts p1 p2 dx dy
-                             off s1 s2 tmp cur chains gap groups)
+                             off s1 s2 tmp cur chains gap groups e fam r)
   ;; hunt for step-like patterns: *dchk-step-minlines* or more
   ;; parallel LINEs stacked less than *dchk-step-maxgap* apart, each
   ;; sideways-overlapping the one before it (like stair treads).
@@ -537,7 +552,7 @@
         (setq groups (append groups (reverse chains))))))
   groups)
 
-(defun dchk:pts-bbox (ents / xs ys pts)
+(defun dchk:pts-bbox (ents / xs ys pts e p)
   ;; ((minx miny) (maxx maxy)) over the endpoints of a list of LINEs
   (setq xs nil ys nil)
   (foreach e ents
@@ -559,7 +574,7 @@
        (<= (- (cadar b2) m) (cadadr b1))
        (<= (- (cadar b1) m) (cadadr b2))))
 
-(defun dchk:bead-near-p (gbb beadbbs / hit)
+(defun dchk:bead-near-p (gbb beadbbs / hit bb)
   ;; is any bead-track box within *dchk-bead-dist* of the group box?
   (setq hit nil)
   (foreach bb beadbbs
@@ -604,7 +619,7 @@
     (cdr (assoc 2 (entget ent)))
     res))
 
-(defun dchk:ins-texts (ent / ed lst e et)
+(defun dchk:ins-texts (ent / ed lst e et g)
   ;; every piece of text an INSERT shows: its attribute values plus
   ;; TEXT/MTEXT/ATTDEF inside the block definition (one level deep)
   (setq ed  (entget ent)
@@ -630,7 +645,7 @@
         (setq e (entnext e)))))
   lst)
 
-(defun dchk:ins-matches (ent phrase / pat found)
+(defun dchk:ins-matches (ent phrase / pat found s)
   ;; T when the INSERT's (effective) name or any text it shows
   ;; contains the phrase, ignoring case and punctuation
   (setq pat   (strcat "*" (dchk:norm-text phrase) "*")
@@ -640,7 +655,7 @@
       (setq found T)))
   found)
 
-(defun dchk:has-word-not (ent / found)
+(defun dchk:has-word-not (ent / found s)
   ;; T when any text the INSERT shows contains the standalone word
   ;; NOT ("Not Selected", "NOT INCLUDED", ... but never "NOTE")
   (setq found nil)
@@ -656,7 +671,7 @@
   (setq s (cdr (assoc 3 (entget ent))))
   (if s s ""))
 
-(defun dchk:style-rank (style / i r)
+(defun dchk:style-rank (style / i r s)
   ;; position of the style in *dchk-style-order* (exact name match,
   ;; case-blind); unlisted styles land after every listed one
   (setq style (strcase style)
@@ -687,7 +702,7 @@
     ((> (- (caddr r2) (caddr r1)) rowtol) nil) ; r2 sits a row above
     (t (< (cadr r1) (cadr r2)))))              ; same row: left first
 
-(defun dchk:sort-dims (dims rowtol / recs cen r out pre rest)
+(defun dchk:sort-dims (dims rowtol / recs cen r out pre rest e)
   ;; stable insertion sort into review order
   (setq recs nil)
   (foreach e dims
@@ -959,7 +974,7 @@
                       sgroups svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong liners linernot bn bh bp
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
-                      stepsum linersum rowtol sty
+                      stepsum linersum rowtol sty g b l pair hdr
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -1345,26 +1360,38 @@
         (setq ins (if minx
                     (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                     (list 0.0 0.0 0.0)))
-        (setq txt (strcat "DIMCHECK REPORT - " (dchk:datestr)
-                          "\\PDimensions checked: " (itoa (length dims))
+        ;; header dashboard: each line carries a "needs attention" flag
+        ;; so a category with anything to look over turns red
+        (setq hdr
+          (list
+            (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
-                          ", points adjusted: " (itoa ndmoved) ")"
-                          "\\PArcs checked: " (itoa (length arcs))
+                          ", points adjusted: " (itoa ndmoved) ")")
+                  (> ndflag 0))
+            (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
-                          ", endpoints moved in total: " (itoa nasnap) ")"
-                          "\\POverlapping line pairs: " (itoa (length olaps))
+                          ", endpoints moved in total: " (itoa nasnap) ")")
+                  (> namoved 0))
+            (cons (strcat "Overlapping line pairs: " (itoa (length olaps))
                           (if olaps
                             (strcat " (merged: " (itoa nomerged)
                                     ", flagged: " (itoa noflag)
                                     ", left as drawn: " (itoa noleft) ")")
-                            " - none found")
-                          "\\PSteps: " stepsum
-                          "\\PLiner Material: " linersum
-                          "\\P----------------------------------------"))
+                            " - none found"))
+                  (> noflag 0))
+            (cons (strcat "Steps: " stepsum)          (dchk:attn-p stepsum))
+            (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))))
+        (setq txt (strcat "DIMCHECK REPORT - " (dchk:datestr)
+                          "\\PItems needing attention are shown in "
+                          (dchk:red "red") "."))
+        (foreach pr hdr
+          (setq txt (strcat txt "\\P"
+                            (if (cdr pr) (dchk:red (car pr)) (car pr)))))
+        (setq txt (strcat txt "\\P----------------------------------------"))
         (foreach l (reverse lines)
-          (setq txt (strcat txt "\\P" l)))
+          (setq txt (strcat txt "\\P" (if (dchk:attn-p l) (dchk:red l) l))))
         (dchk:mtext ins h (* *dchk-report-chars* h) txt *dchk-report-layer*)
 
         ;; --- show the drawing plus the report -----------------------
