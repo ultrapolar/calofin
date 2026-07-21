@@ -62,6 +62,13 @@
 ;;;     attribute or text inside it). None -> the report tells you to
 ;;;     add one. Found -> it is zoomed to and you confirm the CORRECT
 ;;;     one is placed; answering No flags it red and reports it.
+;;;     When the attachment style is "BEAD Step Attachment", every
+;;;     plan-view step pattern must also have something drawn on
+;;;     layer "Bead Track" (tune *dchk-bead-layer*) within
+;;;     *dchk-bead-dist* of it. The whole drawing is searched, not
+;;;     just the selection. The side view itself is exempt — bead
+;;;     track is only demanded next to the plan-view steps. Patterns
+;;;     with nothing nearby are called out in the report.
 ;;;
 ;;;  6. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -98,6 +105,8 @@
 (setq *dchk-step-maxgap*  18.0)    ; steps: max tread spacing (drawing units; 18 = 18" when 1 unit = 1")
 (setq *dchk-step-minlines* 3)      ; steps: how many stacked parallel lines look like steps
 (setq *dchk-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
+(setq *dchk-bead-layer*   "Bead Track") ; layer bead track must be drawn on
+(setq *dchk-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
 (setq *dchk-constr-color* 2)       ; yellow
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -541,6 +550,14 @@
        (<= (- (cadar b2) m) (cadadr b1))
        (<= (- (cadar b1) m) (cadadr b2))))
 
+(defun dchk:bead-near-p (gbb beadbbs / hit)
+  ;; is any bead-track box within *dchk-bead-dist* of the group box?
+  (setq hit nil)
+  (foreach bb beadbbs
+    (if (dchk:boxes-touch gbb bb *dchk-bead-dist*)
+      (setq hit T)))
+  hit)
+
 (defun dchk:zoom-box (bb / p1 p2 m)
   ;; zoom the current view onto a ((minx miny)(maxx maxy)) box
   (if bb
@@ -874,6 +891,7 @@
                       nomerged noflag noleft
                       sgroups svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong liners linernot bn bh bp
+                      bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
@@ -1028,7 +1046,8 @@
               stepsp   nil
               svmode   nil
               satts    nil
-              attwrong nil)
+              attwrong nil
+              bgroups  nil)
         ;; a staircase side view reads as two step patterns at right
         ;; angles to each other (treads + risers) in the same spot
         (setq rest sgroups)
@@ -1046,8 +1065,9 @@
         (setq pgroups (vl-remove-if '(lambda (g) (member g svgroups)) sgroups))
         (cond
           (svgroups                           ; staircase drawing found
-           (setq stepsp T
-                 svmode 'auto)
+           (setq stepsp  T
+                 svmode  'auto
+                 bgroups pgroups)             ; plan-view patterns
            (princ "\n--- Step check: staircase side view detected in the selection ---")
            (setq lines (cons (strcat "Steps: staircase side view detected ("
                                      (itoa (length svgroups)) " step pattern(s))")
@@ -1073,7 +1093,9 @@
              (foreach e (cdr g) (if (entget e) (redraw e 4)))
              (foreach e (cdr g) (dchk:unstage e keep))
              (redraw)
-             (if ans (setq stepsp T))
+             (if ans
+               (setq stepsp  T
+                     bgroups (cons g bgroups)))
              (setq lines (cons (strcat "Steps: pattern of " (itoa (length (cdr g)))
                                        " parallel lines - "
                                        (if ans "CONFIRMED as steps" "not steps"))
@@ -1125,6 +1147,46 @@
                                                   ": WRONG ONE - flagged to fix (red)")
                                           lines))))))))))
 
+        ;; --- Bead Track check (bead step attachments only) ----------
+        ;; when the attachment style is "Bead Step Attachment", each
+        ;; plan-view step pattern needs bead track drawn nearby; the
+        ;; side view is exempt. The WHOLE drawing is searched, not
+        ;; just the selection.
+        (setq beadneed nil beadok 0 beadmiss 0)
+        (if (and satts
+                 bgroups
+                 (vl-some '(lambda (b) (dchk:ins-matches b "Bead Step Attachment"))
+                          satts))
+          (progn
+            (setq beadneed T)
+            (princ (strcat "\n--- Bead Track check: attachment style is 'Bead Step Attachment' ---"))
+            (setq beadss  (ssget "_X" (list (cons 8 *dchk-bead-layer*)))
+                  beadbbs nil
+                  i       0)
+            (if beadss
+              (repeat (sslength beadss)
+                (setq bb (dchk:bbox (ssname beadss i))
+                      i  (1+ i))
+                (if bb (setq beadbbs (cons bb beadbbs)))))
+            (foreach g bgroups
+              (setq gbb (dchk:pts-bbox (cdr g)))
+              (if (and gbb beadbbs (dchk:bead-near-p gbb beadbbs))
+                (progn
+                  (setq beadok (1+ beadok))
+                  (setq lines (cons (strcat "Bead Track: present near step pattern of "
+                                            (itoa (length (cdr g))) " lines")
+                                    lines)))
+                (progn
+                  (setq beadmiss (1+ beadmiss))
+                  (princ (strcat "\n  Note: nothing on layer '" *dchk-bead-layer*
+                                 "' near a step pattern - add bead track."))
+                  (setq lines (cons (strcat "Bead Track: NOTHING on layer '"
+                                            *dchk-bead-layer*
+                                            "' near step pattern of "
+                                            (itoa (length (cdr g)))
+                                            " lines - add bead track")
+                                    lines)))))))
+
         ;; --- Liner Material check -----------------------------------
         (setq liners   (vl-remove-if-not
                          '(lambda (b) (dchk:ins-matches b "Liner Material"))
@@ -1174,7 +1236,12 @@
                                 "; Step Attachment block MISSING - add one")
                                (attwrong
                                 "; Step Attachment flagged WRONG (red)")
-                               (t "; Step Attachment confirmed"))))))
+                               (t "; Step Attachment confirmed"))
+                         (cond ((not beadneed) "")
+                               ((> beadmiss 0)
+                                (strcat "; Bead Track MISSING near "
+                                        (itoa beadmiss) " pattern(s)"))
+                               (t "; Bead Track present"))))))
         (setq linersum
               (cond
                 ((null liners)
