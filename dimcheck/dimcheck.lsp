@@ -46,13 +46,38 @@
 ;;;         L          ->  LEAVE them as drawn (intentional)
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
-;;;  5. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;  5. STEP / STAIRCASE check. Groups of 3+ parallel lines stacked
+;;;     less than 18 units apart (18" in inch drawings — tune
+;;;     *dchk-step-maxgap*) look like steps. When such patterns are
+;;;     found, DIMCHECK first looks for a staircase SIDE VIEW in the
+;;;     selection (a side view reads as two step patterns at right
+;;;     angles to each other — treads + risers — in the same spot).
+;;;       - Side view found  -> steps are taken as real; skip ahead.
+;;;       - No side view     -> each pattern is highlighted and you
+;;;         are asked "Are these lines steps?". If any are, you are
+;;;         asked whether a side view is drawn somewhere; if not, the
+;;;         report tells you to ADD A SIDE VIEW.
+;;;     Whenever steps + side view are present, the selection must
+;;;     hold a block with the words "Step Attachment" (block name,
+;;;     attribute or text inside it). None -> the report tells you to
+;;;     add one. Found -> it is zoomed to and you confirm the CORRECT
+;;;     one is placed; answering No flags it red and reports it.
+;;;
+;;;  6. LINER MATERIAL check. The selection must hold a block named
+;;;     (or containing the words) "Liner Material" / "Liner Material
+;;;     with Step". Missing -> reported. Each one found is scanned
+;;;     for the standalone word "NOT" in its attributes and text
+;;;     (e.g. "Not Selected", "Not Included"); any hit is reported
+;;;     with the block's location so you can look at it.
+;;;
+;;;  7. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
 ;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc, and every overlapping
-;;;     line pair (with its overlap length) that was checked and what
-;;;     happened to it, plus totals. The report text is sized from
-;;;     the drawing's extents so it sits to scale next to it.
+;;;     dims show their angle) — every arc, every overlapping line
+;;;     pair (with its overlap length), every step pattern, the Step
+;;;     Attachment verdict and the Liner Material verdict, plus
+;;;     totals. The report text is sized from the drawing's extents
+;;;     so it sits to scale next to it.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -70,6 +95,9 @@
 (setq *dchk-arc-color*    6)       ; magenta: arcs whose endpoints were moved
 (setq *dchk-olap-color*   4)       ; cyan: merged or flagged overlapping lines
 (setq *dchk-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
+(setq *dchk-step-maxgap*  18.0)    ; steps: max tread spacing (drawing units; 18 = 18" when 1 unit = 1")
+(setq *dchk-step-minlines* 3)      ; steps: how many stacked parallel lines look like steps
+(setq *dchk-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
 (setq *dchk-constr-color* 2)       ; yellow
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -394,6 +422,207 @@
   (entupd la)
   (entdel lb))
 
+;; --- step pattern detection ----------------------------------------
+
+(defun dchk:line-dir-ang (ent / pts a)
+  ;; direction of a LINE folded into [0, pi)
+  (setq pts (dchk:line-pts ent)
+        a   (angle (car pts) (cadr pts)))
+  (if (>= a pi) (- a pi) a))
+
+(defun dchk:ang-diff (a b / d)
+  ;; distance between two folded directions, in [0, pi/2]
+  (setq d (abs (- a b)))
+  (min d (- pi d)))
+
+(defun dchk:sort-recs (recs / out r pre rest)
+  ;; stable insertion sort by (car rec); keeps equal elements
+  (setq out nil)
+  (foreach r recs
+    (setq pre  nil
+          rest out)
+    (while (and rest (>= (car r) (caar rest)))
+      (setq pre  (cons (car rest) pre)
+            rest (cdr rest)))
+    (setq out (append (reverse pre) (list r) rest)))
+  out)
+
+(defun dchk:step-groups (lns / atol fams a placed recs pts p1 p2 dx dy
+                             off s1 s2 tmp cur chains gap groups)
+  ;; hunt for step-like patterns: *dchk-step-minlines* or more
+  ;; parallel LINEs stacked less than *dchk-step-maxgap* apart, each
+  ;; sideways-overlapping the one before it (like stair treads).
+  ;; Returns a list of groups, each (direction-angle ent ent ...)
+  ;; ordered bottom tread to top.
+  (setq atol   (* *dchk-step-angtol* (/ pi 180.0))
+        fams   nil
+        groups nil)
+  ;; bucket the lines into parallel families
+  (foreach e lns
+    (if (entget e)
+      (progn
+        (setq a      (dchk:line-dir-ang e)
+              placed nil)
+        (foreach fam fams
+          (if (and (not placed) (<= (dchk:ang-diff a (car fam)) atol))
+            (setq fams   (subst (cons (car fam) (cons e (cdr fam))) fam fams)
+                  placed T)))
+        (if (not placed)
+          (setq fams (cons (list a e) fams))))))
+  ;; inside each family, sort by sideways offset and chain the stack
+  (foreach fam fams
+    (if (>= (length (cdr fam)) *dchk-step-minlines*)
+      (progn
+        (setq a    (car fam)
+              dx   (cos a)
+              dy   (sin a)
+              recs nil)
+        (foreach e (cdr fam)
+          (setq pts (dchk:line-pts e)
+                p1  (car pts)
+                p2  (cadr pts)
+                off (- (* (cadr p1) dx) (* (car p1) dy))
+                s1  (+ (* (car p1) dx) (* (cadr p1) dy))
+                s2  (+ (* (car p2) dx) (* (cadr p2) dy)))
+          (if (> s1 s2) (setq tmp s1 s1 s2 s2 tmp))
+          (setq recs (cons (list off s1 s2 e) recs)))
+        (setq recs (dchk:sort-recs recs))
+        ;; cur = (ents distinct-tread-count span-lo span-hi last-off)
+        (setq cur nil chains nil)
+        (foreach r recs
+          (cond
+            ((null cur)
+             (setq cur (list (list (cadddr r)) 1 (cadr r) (caddr r) (car r))))
+            (t
+             (setq gap (- (car r) (nth 4 cur)))
+             (cond
+               ((<= gap *dchk-tol*)           ; same tread drawn in pieces
+                (setq cur (list (cons (cadddr r) (car cur))
+                                (cadr cur)
+                                (min (nth 2 cur) (cadr r))
+                                (max (nth 3 cur) (caddr r))
+                                (car r))))
+               ((and (<= gap *dchk-step-maxgap*)
+                     (> (min (nth 3 cur) (caddr r))
+                        (max (nth 2 cur) (cadr r)))) ; sideways overlap
+                (setq cur (list (cons (cadddr r) (car cur))
+                                (1+ (cadr cur))
+                                (cadr r)
+                                (caddr r)
+                                (car r))))
+               (t                             ; stack broken
+                (if (>= (cadr cur) *dchk-step-minlines*)
+                  (setq chains (cons (cons a (reverse (car cur))) chains)))
+                (setq cur (list (list (cadddr r)) 1 (cadr r) (caddr r) (car r))))))))
+        (if (and cur (>= (cadr cur) *dchk-step-minlines*))
+          (setq chains (cons (cons a (reverse (car cur))) chains)))
+        (setq groups (append groups (reverse chains))))))
+  groups)
+
+(defun dchk:pts-bbox (ents / xs ys pts)
+  ;; ((minx miny) (maxx maxy)) over the endpoints of a list of LINEs
+  (setq xs nil ys nil)
+  (foreach e ents
+    (if (entget e)
+      (progn
+        (setq pts (dchk:line-pts e))
+        (foreach p pts
+          (setq xs (cons (car p) xs)
+                ys (cons (cadr p) ys))))))
+  (if xs
+    (list (list (apply 'min xs) (apply 'min ys))
+          (list (apply 'max xs) (apply 'max ys)))))
+
+(defun dchk:boxes-touch (b1 b2 m)
+  ;; do two ((minx miny)(maxx maxy)) boxes overlap once grown by m?
+  (and b1 b2
+       (<= (- (caar b2) m) (caadr b1))
+       (<= (- (caar b1) m) (caadr b2))
+       (<= (- (cadar b2) m) (cadadr b1))
+       (<= (- (cadar b1) m) (cadadr b2))))
+
+(defun dchk:zoom-box (bb / p1 p2 m)
+  ;; zoom the current view onto a ((minx miny)(maxx maxy)) box
+  (if bb
+    (progn
+      (setq p1 (car bb)
+            p2 (cadr bb)
+            m  (* *dchk-zoom-margin*
+                  (max (- (car p2) (car p1)) (- (cadr p2) (cadr p1)) 1e-6)))
+      (command "_.ZOOM" "_Window"
+               (trans (list (- (car p1) m) (- (cadr p1) m) 0.0) 0 1)
+               (trans (list (+ (car p2) m) (+ (cadr p2) m) 0.0) 0 1)))))
+
+;; --- block & text helpers ------------------------------------------
+
+(defun dchk:norm-text (s)
+  ;; uppercase, with every non-alphanumeric squashed to a space, so
+  ;; word searches ignore case, punctuation and MTEXT format codes
+  (if (null s)
+    ""
+    (vl-list->string
+      (mapcar '(lambda (c)
+                 (cond
+                   ((and (>= c 48) (<= c 57)) c)         ; 0-9
+                   ((and (>= c 65) (<= c 90)) c)         ; A-Z
+                   ((and (>= c 97) (<= c 122)) (- c 32)) ; a-z -> A-Z
+                   (t 32)))
+               (vl-string->list s)))))
+
+(defun dchk:block-name (ent / res)
+  ;; effective block name (sees through dynamic blocks)
+  (setq res (vl-catch-all-apply
+              'vla-get-EffectiveName
+              (list (vlax-ename->vla-object ent))))
+  (if (vl-catch-all-error-p res)
+    (cdr (assoc 2 (entget ent)))
+    res))
+
+(defun dchk:ins-texts (ent / ed lst e et)
+  ;; every piece of text an INSERT shows: its attribute values plus
+  ;; TEXT/MTEXT/ATTDEF inside the block definition (one level deep)
+  (setq ed  (entget ent)
+        lst nil)
+  (if (= 1 (cdr (assoc 66 ed)))               ; attributes follow
+    (progn
+      (setq e (entnext ent))
+      (while (and e (= "ATTRIB" (cdr (assoc 0 (entget e)))))
+        (setq lst (cons (cdr (assoc 1 (entget e))) lst)
+              e   (entnext e)))))
+  (setq e (tblobjname "BLOCK" (cdr (assoc 2 ed))))
+  (if e
+    (progn
+      (setq e (entnext e))
+      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (entget e))))))
+        (cond
+          ((member et '("TEXT" "ATTDEF"))
+           (setq lst (cons (cdr (assoc 1 (entget e))) lst)))
+          ((= et "MTEXT")
+           (foreach g (entget e)
+             (if (member (car g) '(1 3))
+               (setq lst (cons (cdr g) lst))))))
+        (setq e (entnext e)))))
+  lst)
+
+(defun dchk:ins-matches (ent phrase / pat found)
+  ;; T when the INSERT's (effective) name or any text it shows
+  ;; contains the phrase, ignoring case and punctuation
+  (setq pat   (strcat "*" (dchk:norm-text phrase) "*")
+        found (wcmatch (dchk:norm-text (dchk:block-name ent)) pat))
+  (foreach s (dchk:ins-texts ent)
+    (if (wcmatch (dchk:norm-text s) pat)
+      (setq found T)))
+  found)
+
+(defun dchk:has-word-not (ent / found)
+  ;; T when any text the INSERT shows contains the standalone word
+  ;; NOT ("Not Selected", "NOT INCLUDED", ... but never "NOTE")
+  (setq found nil)
+  (foreach s (dchk:ins-texts ent)
+    (if (wcmatch (strcat " " (dchk:norm-text s) " ") "* NOT *")
+      (setq found T)))
+  found)
+
 ;; --- dimension review ----------------------------------------------
 
 (defun dchk:dim-meas (ent / ed dtype p13 p14 ang v meas)
@@ -639,10 +868,13 @@
 ;; --- command -------------------------------------------------------
 
 (defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
-                      cands dims arcs lns olaps rest e1 e2 pr
-                      saved keep res n total lines
+                      cands dims arcs lns blks olaps rest e1 e2 pr
+                      saved keep res n total lines ans
                       ndok ndflag ndmoved naok namoved nasnap
                       nomerged noflag noleft
+                      sgroups svgroups pgroups g1 g2 stepsp svmode
+                      satts attwrong liners linernot bn bh bp
+                      stepsum linersum
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -665,7 +897,8 @@
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
     (t
-     (setq cands nil dims nil arcs nil lns nil saved nil keep nil lines nil i 0
+     (setq cands nil dims nil arcs nil lns nil blks nil
+           saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 naok 0 namoved 0 nasnap 0
            nomerged 0 noflag 0 noleft 0)
      (repeat (sslength ss)
@@ -675,14 +908,16 @@
        (if (= et "DIMENSION") (setq dims (cons e dims)))
        (if (= et "ARC") (setq arcs (cons e arcs)))
        (if (= et "LINE") (setq lns (cons e lns)))
+       (if (= et "INSERT") (setq blks (cons e blks)))
        (if (member et *dchk-curve-types*) (setq cands (cons e cands))))
      (setq dims  (reverse dims)
            arcs  (reverse arcs)
            lns   (reverse lns)
+           blks  (reverse blks)
            cands (reverse cands))
      (cond
-       ((and (null dims) (null arcs) (< (length lns) 2))
-        (prompt "\nSelection holds no dimensions, arcs, or lines to check - nothing to do."))
+       ((and (null dims) (null arcs) (< (length lns) 2) (null blks))
+        (prompt "\nSelection holds no dimensions, arcs, lines, or blocks to check - nothing to do."))
        (t
         (setq oldecho (getvar "CMDECHO"))
         (setvar "CMDECHO" 0)
@@ -787,17 +1022,174 @@
              (setq keep (append (cdddr res) keep))
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))))
 
+        ;; --- step / staircase check ---------------------------------
+        (setq sgroups  (dchk:step-groups lns)
+              svgroups nil
+              stepsp   nil
+              svmode   nil
+              satts    nil
+              attwrong nil)
+        ;; a staircase side view reads as two step patterns at right
+        ;; angles to each other (treads + risers) in the same spot
+        (setq rest sgroups)
+        (while rest
+          (setq g1 (car rest))
+          (foreach g2 (cdr rest)
+            (if (and (> (dchk:ang-diff (car g1) (car g2)) (- (* 0.5 pi) 0.09))
+                     (dchk:boxes-touch (dchk:pts-bbox (cdr g1))
+                                       (dchk:pts-bbox (cdr g2))
+                                       *dchk-step-maxgap*))
+              (progn
+                (if (not (member g1 svgroups)) (setq svgroups (cons g1 svgroups)))
+                (if (not (member g2 svgroups)) (setq svgroups (cons g2 svgroups))))))
+          (setq rest (cdr rest)))
+        (setq pgroups (vl-remove-if '(lambda (g) (member g svgroups)) sgroups))
+        (cond
+          (svgroups                           ; staircase drawing found
+           (setq stepsp T
+                 svmode 'auto)
+           (princ "\n--- Step check: staircase side view detected in the selection ---")
+           (setq lines (cons (strcat "Steps: staircase side view detected ("
+                                     (itoa (length svgroups)) " step pattern(s))")
+                             lines))
+           (foreach g pgroups
+             (setq lines (cons (strcat "Steps: pattern of " (itoa (length (cdr g)))
+                                       " parallel lines (side view already present)")
+                               lines))))
+          (pgroups                            ; possible steps, no staircase drawing
+           (princ (strcat "\n--- Step check: " (itoa (length pgroups))
+                          " possible step pattern(s), no staircase side view found ---"))
+           (setq n 0 total (length pgroups))
+           (foreach g pgroups
+             (setq n (1+ n))
+             (foreach e (cdr g) (dchk:stage e saved keep))
+             (dchk:zoom-box (dchk:pts-bbox (cdr g)))
+             (foreach e (cdr g) (if (entget e) (redraw e 3)))
+             (princ (strcat "\n\nStep pattern " (itoa n) " of " (itoa total) ": "
+                            (itoa (length (cdr g)))
+                            " parallel lines stacked less than "
+                            (rtos *dchk-step-maxgap*) " apart."))
+             (setq ans (dchk:ask-yn "\n  Are these lines steps?"))
+             (foreach e (cdr g) (if (entget e) (redraw e 4)))
+             (foreach e (cdr g) (dchk:unstage e keep))
+             (redraw)
+             (if ans (setq stepsp T))
+             (setq lines (cons (strcat "Steps: pattern of " (itoa (length (cdr g)))
+                                       " parallel lines - "
+                                       (if ans "CONFIRMED as steps" "not steps"))
+                               lines)))))
+        (if stepsp
+          (progn
+            (if (null svmode)                 ; steps confirmed, no side view seen
+              (progn
+                (princ "\n  Steps confirmed but no staircase side view was detected.")
+                (if (dchk:ask-yn "\n  Is a side view of the steps drawn somewhere?")
+                  (setq svmode 'user))))
+            (if (null svmode)
+              (progn
+                (princ "\n  Note: ADD A SIDE VIEW of the steps.")
+                (setq lines (cons "Steps: NO SIDE VIEW - add a side view of the steps"
+                                  lines)))
+              (progn                          ; side view present: demand the block
+                (setq satts (vl-remove-if-not
+                              '(lambda (b) (dchk:ins-matches b "Step Attachment"))
+                              blks))
+                (if (null satts)
+                  (progn
+                    (princ "\n  Note: no 'Step Attachment' block found - add one.")
+                    (setq lines (cons "Steps: side view present but NO 'Step Attachment' block - add one"
+                                      lines)))
+                  (foreach b satts
+                    (dchk:stage b saved keep)
+                    (dchk:zoom-ent b)
+                    (redraw b 3)
+                    (setq ans (dchk:ask-yn
+                                (strcat "\n  Step Attachment block "
+                                        (cdr (assoc 5 (entget b)))
+                                        " - is the correct one placed?")))
+                    (redraw b 4)
+                    (redraw)
+                    (if ans
+                      (progn
+                        (dchk:unstage b keep)
+                        (setq lines (cons (strcat "Step Attachment "
+                                                  (cdr (assoc 5 (entget b)))
+                                                  ": confirmed correct")
+                                          lines)))
+                      (progn
+                        (setq attwrong T)
+                        (dchk:set-color b *dchk-flag-color*)
+                        (setq keep (cons b keep))
+                        (setq lines (cons (strcat "Step Attachment "
+                                                  (cdr (assoc 5 (entget b)))
+                                                  ": WRONG ONE - flagged to fix (red)")
+                                          lines))))))))))
+
+        ;; --- Liner Material check -----------------------------------
+        (setq liners   (vl-remove-if-not
+                         '(lambda (b) (dchk:ins-matches b "Liner Material"))
+                         blks)
+              linernot nil)
+        (if (null liners)
+          (progn
+            (princ "\n--- Liner check: no 'Liner Material' block in the selection ---")
+            (setq lines (cons "Liner Material: NO block found - add 'Liner Material' or 'Liner Material with Step'"
+                              lines)))
+          (progn
+            (princ (strcat "\n--- Liner check: " (itoa (length liners))
+                           " 'Liner Material' block(s) found ---"))
+            (foreach b liners
+              (setq bn (dchk:block-name b)
+                    bh (cdr (assoc 5 (entget b)))
+                    bp (cdr (assoc 10 (entget b))))
+              (if (dchk:has-word-not b)
+                (progn
+                  (setq linernot T)
+                  (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                            (dchk:ptstr bp)
+                                            ": contains the word NOT - look at it")
+                                    lines)))
+                (setq lines (cons (strcat "Liner Material (" bn ") " bh ": OK")
+                                  lines))))))
+
         ;; --- restore colours (flagged/moved keep theirs) ------------
         (foreach pair saved
           (if (and (not (member (car pair) keep)) (entget (car pair)))
             (dchk:set-color (car pair) (cdr pair))))
+
+        ;; --- one-line verdicts for steps & liner --------------------
+        (setq stepsum
+              (cond
+                ((null sgroups) "no step patterns detected")
+                ((not stepsp)
+                 (strcat (itoa (length sgroups))
+                         " pattern(s) reviewed - none are steps"))
+                (t
+                 (strcat "steps present; side view "
+                         (cond ((eq svmode 'auto) "detected")
+                               ((eq svmode 'user) "confirmed by user")
+                               (t "MISSING - add one"))
+                         (cond ((null svmode) "")
+                               ((null satts)
+                                "; Step Attachment block MISSING - add one")
+                               (attwrong
+                                "; Step Attachment flagged WRONG (red)")
+                               (t "; Step Attachment confirmed"))))))
+        (setq linersum
+              (cond
+                ((null liners)
+                 "block MISSING - add 'Liner Material' (or 'with Step')")
+                (linernot
+                 (strcat (itoa (length liners))
+                         " block(s) found; word NOT found - review"))
+                (t (strcat (itoa (length liners)) " block(s) found - OK"))))
 
         ;; --- report on the right side, to scale with the drawing ----
         ;; text height picked from the drawing's extents so the whole
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        (setq nlin (+ 5 (length lines)))
+        (setq nlin (+ 7 (length lines)))
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -825,6 +1217,8 @@
                                     ", flagged: " (itoa noflag)
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found")
+                          "\\PSteps: " stepsum
+                          "\\PLiner Material: " linersum
                           "\\P----------------------------------------"))
         (foreach l (reverse lines)
           (setq txt (strcat txt "\\P" l)))
@@ -860,6 +1254,8 @@
                                  (itoa noflag) " flagged (cyan), "
                                  (itoa noleft) " left as drawn")
                          "")
+                       "\nSteps: " stepsum
+                       "\nLiner Material: " linersum
                        "\nReport placed on the right side of the drawing (layer "
                        *dchk-report-layer* ")."
                        (if (> ndmoved 0)
