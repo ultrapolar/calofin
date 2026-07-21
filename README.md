@@ -7,7 +7,7 @@ working between Blender and CAD, plus an AutoCAD AutoLISP QA tool:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| DIMCHECK (AutoCAD LISP) | `dimcheck/` | Interactive one-at-a-time review of dimensions & arc endpoints with an on-drawing report — see `dimcheck/dimcheck.lsp` header for the full workflow (load with `APPLOAD`, run `DIMCHECK`) |
+| DIMCHECK (AutoCAD LISP) | `dimcheck/` | Interactive one-at-a-time review of dimensions, arc endpoints & overlapping lines with an on-drawing report — see `dimcheck/dimcheck.lsp` header for the full workflow (load with `APPLOAD`, run `DIMCHECK`) |
 
 ## Installation (either add-on)
 

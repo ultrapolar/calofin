@@ -33,17 +33,32 @@
 ;;;     pick where it belongs (the arc is re-fitted through your
 ;;;     point). Arcs whose endpoints changed are recoloured MAGENTA.
 ;;;
-;;;  4. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
+;;;     that are collinear and run on top of each other (a leftover
+;;;     from drawing over an existing line to continue it and never
+;;;     cleaning it up). Each overlapping pair is zoomed to and
+;;;     highlighted, the overlapping stretch is marked with crosses,
+;;;     and you choose:
+;;;         Enter / M  ->  MERGE the two into one line spanning both
+;;;                        (only when they share a layer; the merged
+;;;                        line turns CYAN so you can see it changed)
+;;;         F          ->  FLAG both lines CYAN to fix by hand
+;;;         L          ->  LEAVE them as drawn (intentional)
+;;;     Lines that merely touch end-to-end are fine and not reported.
+;;;
+;;;  5. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
 ;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — and every arc that was checked and
-;;;     what happened to it, plus totals. The report text is sized
-;;;     from the drawing's extents so it sits to scale next to it.
+;;;     dims show their angle) — every arc, and every overlapping
+;;;     line pair (with its overlap length) that was checked and what
+;;;     happened to it, plus totals. The report text is sized from
+;;;     the drawing's extents so it sits to scale next to it.
 ;;;
 ;;;  All original colours are restored when the review ends — except
-;;;  the red "fix me" dimensions and magenta moved arcs, which stay
-;;;  marked on purpose. Everything (including the report) runs inside
-;;;  one UNDO group, so a single U reverts the whole review.
+;;;  the red "fix me" dimensions, magenta moved arcs and cyan
+;;;  merged/flagged lines, which stay marked on purpose. Everything
+;;;  (including the report) runs inside one UNDO group, so a single U
+;;;  reverts the whole review.
 ;;; ------------------------------------------------------------------
 
 (vl-load-com)
@@ -53,6 +68,8 @@
 (setq *dchk-grey-color*   8)       ; grey used to fade out everything not under review
 (setq *dchk-flag-color*   1)       ; red: dimensions you answered "No" to
 (setq *dchk-arc-color*    6)       ; magenta: arcs whose endpoints were moved
+(setq *dchk-olap-color*   4)       ; cyan: merged or flagged overlapping lines
+(setq *dchk-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
 (setq *dchk-constr-color* 2)       ; yellow
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -181,6 +198,35 @@
                (trans (list (- (car p1) m) (- (cadr p1) m) 0.0) 0 1)
                (trans (list (+ (car p2) m) (+ (cadr p2) m) 0.0) 0 1)))))
 
+(defun dchk:zoom-2ents (e1 e2 / b1 b2 p1 p2 m)
+  ;; zoom onto the combined box of two entities
+  (setq b1 (dchk:bbox e1)
+        b2 (dchk:bbox e2))
+  (cond
+    ((and b1 b2)
+     (setq p1 (list (min (caar b1) (caar b2))
+                    (min (cadar b1) (cadar b2)))
+           p2 (list (max (caadr b1) (caadr b2))
+                    (max (cadadr b1) (cadadr b2)))
+           m  (* *dchk-zoom-margin*
+                 (max (- (car p2) (car p1)) (- (cadr p2) (cadr p1)) 1e-6)))
+     (command "_.ZOOM" "_Window"
+              (trans (list (- (car p1) m) (- (cadr p1) m) 0.0) 0 1)
+              (trans (list (+ (car p2) m) (+ (cadr p2) m) 0.0) 0 1)))
+    (b1 (dchk:zoom-ent e1))
+    (b2 (dchk:zoom-ent e2))))
+
+(defun dchk:stage (ent saved keep)
+  ;; bring an entity back to its own colour for review — unless it
+  ;; already wears a DIMCHECK marker colour it must not lose
+  (if (and (entget ent) (not (member ent keep)))
+    (dchk:set-color ent (cdr (assoc ent saved)))))
+
+(defun dchk:unstage (ent keep)
+  ;; send a reviewed entity back into the grey background
+  (if (and (entget ent) (not (member ent keep)))
+    (dchk:set-color ent *dchk-grey-color*)))
+
 (defun dchk:mark-point (pt / p s)
   ;; temporary cross + X over the point under review (WCS in, screen out)
   (setq p (trans pt 0 1)
@@ -285,6 +331,68 @@
                 (vlax-curve-getEndPoint ent)
                 (vlax-curve-getStartPoint ent)))
   (dchk:rebuild-arc ent which other mid target))
+
+(defun dchk:line-pts (ent / ed)
+  ;; a LINE's two endpoints (WCS)
+  (setq ed (entget ent))
+  (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
+
+(defun dchk:unit (v / l)
+  ;; v scaled to length 1; nil for a (near-)zero vector
+  (setq l (distance '(0.0 0.0 0.0) v))
+  (if (> l 1e-12)
+    (mapcar '(lambda (x) (/ x l)) v)))
+
+(defun dchk:proj-param (p a u)
+  ;; signed distance of p along the axis through a with unit dir u
+  (apply '+ (mapcar '* (mapcar '- p a) u)))
+
+(defun dchk:axis-pt (a u s)
+  ;; the point at parameter s on that axis
+  (mapcar '+ a (mapcar '(lambda (x) (* x s)) u)))
+
+(defun dchk:pt-line-dist (p a u / s)
+  ;; distance from p to the infinite line through a with unit dir u
+  (setq s (dchk:proj-param p a u))
+  (distance p (dchk:axis-pt a u s)))
+
+(defun dchk:overlap-info (la lb / pa pb a1 a2 b1 b2 u lena s1 s2 tmp lo hi)
+  ;; when LINEs la and lb are collinear (within *dchk-olap-fuzz*) and
+  ;; run on top of each other for more than *dchk-tol*, returns
+  ;;   (ov-start ov-end ov-length union-start union-end)
+  ;; nil when they do not overlap (touching end-to-end is fine)
+  (setq pa (dchk:line-pts la)
+        a1 (car pa)
+        a2 (cadr pa)
+        pb (dchk:line-pts lb)
+        b1 (car pb)
+        b2 (cadr pb)
+        u  (dchk:unit (mapcar '- a2 a1)))
+  (if (and u
+           (<= (dchk:pt-line-dist b1 a1 u) *dchk-olap-fuzz*)
+           (<= (dchk:pt-line-dist b2 a1 u) *dchk-olap-fuzz*))
+    (progn
+      (setq lena (distance a1 a2)
+            s1   (dchk:proj-param b1 a1 u)
+            s2   (dchk:proj-param b2 a1 u))
+      (if (> s1 s2) (setq tmp s1 s1 s2 s2 tmp))
+      (setq lo (max 0.0 s1)
+            hi (min lena s2))
+      (if (> (- hi lo) *dchk-tol*)
+        (list (dchk:axis-pt a1 u lo)
+              (dchk:axis-pt a1 u hi)
+              (- hi lo)
+              (dchk:axis-pt a1 u (min 0.0 s1))
+              (dchk:axis-pt a1 u (max lena s2)))))))
+
+(defun dchk:merge-lines (la lb info / ed)
+  ;; stretch la over the union of both lines, delete lb
+  (setq ed (entget la)
+        ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
+        ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
+  (entmod ed)
+  (entupd la)
+  (entdel lb))
 
 ;; --- dimension review ----------------------------------------------
 
@@ -478,11 +586,63 @@
                (t "endpoints OK")))
   (list h (null moved) note (length moved)))
 
+;; --- overlapping line review ---------------------------------------
+
+(defun dchk:review-olap (la lb num total / info h1 h2 lay1 lay2 label ans)
+  ;; interactive review of one overlapping LINE pair.
+  ;; Returns nil when the pair no longer overlaps (an earlier merge
+  ;; absorbed it); otherwise (label report-note action ents...) where
+  ;; action is merged / flagged / left and ents keep their cyan.
+  (if (and (entget la) (entget lb) (setq info (dchk:overlap-info la lb)))
+    (progn
+      (setq h1    (cdr (assoc 5 (entget la)))
+            h2    (cdr (assoc 5 (entget lb)))
+            lay1  (cdr (assoc 8 (entget la)))
+            lay2  (cdr (assoc 8 (entget lb)))
+            label (strcat h1 "+" h2 " (overlap " (rtos (caddr info)) ")"))
+      (dchk:zoom-2ents la lb)
+      (redraw la 3)
+      (redraw lb 3)
+      (dchk:mark-point (car info))
+      (dchk:mark-point (cadr info))
+      (princ (strcat "\n\nOverlap " (itoa num) " of " (itoa total)
+                     ": lines " h1 " + " h2
+                     " run on top of each other for " (rtos (caddr info)) "."))
+      (initget "Merge Flag Leave")
+      (setq ans (getkword
+                  "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: "))
+      (if (null ans) (setq ans "Merge"))
+      (redraw la 4)
+      (redraw lb 4)
+      (redraw)
+      (cond
+        ((and (= ans "Merge") (= (strcase lay1) (strcase lay2)))
+         (dchk:merge-lines la lb info)
+         (dchk:set-color la *dchk-olap-color*)
+         (princ "\n  Merged into one line (cyan).")
+         (list label "merged into one line (cyan)" 'merged la))
+        ((= ans "Merge")
+         (dchk:set-color la *dchk-olap-color*)
+         (dchk:set-color lb *dchk-olap-color*)
+         (princ (strcat "\n  Lines sit on different layers (" lay1 " / " lay2
+                        ") - flagged to fix (cyan) instead of merging."))
+         (list label "different layers - flagged to fix (cyan)" 'flagged la lb))
+        ((= ans "Flag")
+         (dchk:set-color la *dchk-olap-color*)
+         (dchk:set-color lb *dchk-olap-color*)
+         (princ "\n  Flagged to fix (cyan).")
+         (list label "flagged to fix (cyan)" 'flagged la lb))
+        (t
+         (princ "\n  Left as drawn.")
+         (list label "left as drawn" 'left))))))
+
 ;; --- command -------------------------------------------------------
 
 (defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
-                      cands dims arcs saved keep res n total lines
+                      cands dims arcs lns olaps rest e1 e2 pr
+                      saved keep res n total lines
                       ndok ndflag ndmoved naok namoved nasnap
+                      nomerged noflag noleft
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -505,21 +665,24 @@
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
     (t
-     (setq cands nil dims nil arcs nil saved nil keep nil lines nil i 0
-           ndok 0 ndflag 0 ndmoved 0 naok 0 namoved 0 nasnap 0)
+     (setq cands nil dims nil arcs nil lns nil saved nil keep nil lines nil i 0
+           ndok 0 ndflag 0 ndmoved 0 naok 0 namoved 0 nasnap 0
+           nomerged 0 noflag 0 noleft 0)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
              et (cdr (assoc 0 (entget e))))
        (if (= et "DIMENSION") (setq dims (cons e dims)))
        (if (= et "ARC") (setq arcs (cons e arcs)))
+       (if (= et "LINE") (setq lns (cons e lns)))
        (if (member et *dchk-curve-types*) (setq cands (cons e cands))))
      (setq dims  (reverse dims)
            arcs  (reverse arcs)
+           lns   (reverse lns)
            cands (reverse cands))
      (cond
-       ((and (null dims) (null arcs))
-        (prompt "\nSelection holds no dimensions or arcs - nothing to check."))
+       ((and (null dims) (null arcs) (< (length lns) 2))
+        (prompt "\nSelection holds no dimensions, arcs, or lines to check - nothing to do."))
        (t
         (setq oldecho (getvar "CMDECHO"))
         (setvar "CMDECHO" 0)
@@ -589,6 +752,41 @@
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
+        ;; --- overlapping lines, one pair at a time ------------------
+        (setq olaps nil
+              rest  lns)
+        (while rest
+          (setq e1   (car rest)
+                rest (cdr rest))
+          (foreach e2 rest
+            (if (dchk:overlap-info e1 e2)
+              (setq olaps (cons (list e1 e2) olaps)))))
+        (setq olaps (reverse olaps))
+        (if olaps
+          (princ (strcat "\n--- Reviewing " (itoa (length olaps))
+                         " overlapping line pair(s): Enter = merge, F = flag, L = leave ---")))
+        (setq n 0 total (length olaps))
+        (foreach pr olaps
+          (setq n (1+ n))
+          (dchk:stage (car pr) saved keep)
+          (dchk:stage (cadr pr) saved keep)
+          (setq res (dchk:review-olap (car pr) (cadr pr) n total))
+          (cond
+            ((null res)                       ; absorbed by an earlier merge
+             (dchk:unstage (car pr) keep)
+             (dchk:unstage (cadr pr) keep))
+            ((eq (caddr res) 'left)
+             (setq noleft (1+ noleft))
+             (dchk:unstage (car pr) keep)
+             (dchk:unstage (cadr pr) keep)
+             (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
+            (t
+             (if (eq (caddr res) 'merged)
+               (setq nomerged (1+ nomerged))
+               (setq noflag (1+ noflag)))
+             (setq keep (append (cdddr res) keep))
+             (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))))
+
         ;; --- restore colours (flagged/moved keep theirs) ------------
         (foreach pair saved
           (if (and (not (member (car pair) keep)) (entget (car pair)))
@@ -599,7 +797,7 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        (setq nlin (+ 4 (length lines)))
+        (setq nlin (+ 5 (length lines)))
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -621,6 +819,12 @@
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
                           ", endpoints moved in total: " (itoa nasnap) ")"
+                          "\\POverlapping line pairs: " (itoa (length olaps))
+                          (if olaps
+                            (strcat " (merged: " (itoa nomerged)
+                                    ", flagged: " (itoa noflag)
+                                    ", left as drawn: " (itoa noleft) ")")
+                            " - none found")
                           "\\P----------------------------------------"))
         (foreach l (reverse lines)
           (setq txt (strcat txt "\\P" l)))
@@ -650,6 +854,12 @@
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), magenta)"
+                       "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
+                       (if olaps
+                         (strcat ", " (itoa nomerged) " merged, "
+                                 (itoa noflag) " flagged (cyan), "
+                                 (itoa noleft) " left as drawn")
+                         "")
                        "\nReport placed on the right side of the drawing (layer "
                        *dchk-report-layer* ")."
                        (if (> ndmoved 0)
