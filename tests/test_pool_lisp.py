@@ -818,4 +818,25 @@ assert abs(dist(gg['htl'],gg['ct2'])-20)<1e-9     # L1
 assert abs(dist(gg['ct2'],gg['ct1'])-math.sqrt(25*25+20*20))<1e-9  # X check
 print(f"   cut corners exact; X = sqrt(W^2+L1^2) = {math.sqrt(1025):.4f}")
 
+
+print("== 39. sport bottom profile arithmetic ==")
+# Sport: anchors E2,F2 from left, F1,E1 from right; G closes the check
+total=400.0; e2,f2,f1,e1=50.0,80.0,90.0,40.0
+g_check=total-e2-f2-f1-e1
+assert g_check==140.0
+brks=[(e2,'wh'),(e2+f2,'hd'),(total-e1-f1,'hd'),(total-e1,'wh')]
+assert [b[0] for b in brks]==[50.0,130.0,270.0,360.0]
+# No hopper pad: anchors E2,F2,E1; F1 closes the check at the V
+e2,f2,e1=60.0,140.0,50.0
+f1_check=total-e1-(e2+f2)
+assert f1_check==150.0
+brks=[(e2,'wh'),(e2+f2,'hd'),(total-e1,'wh')]
+assert [b[0] for b in brks]==[60.0,200.0,350.0]
+# Normal hopper profile: slope from left wall to hopper at H, flat to
+# H+G, slope up to the plan break at total-E
+h,g,e=30.0,60.0,100.0
+brks=[(h,'hd'),(h+g,'hd'),(total-e,'wh')]
+assert [b[0] for b in brks]==[30.0,90.0,300.0]
+print("   sport, no-pad and normal profile break chains verified")
+
 print("\nALL CHECKS PASSED")

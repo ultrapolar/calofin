@@ -133,6 +133,34 @@ The 6-sided hopper adds cut left corners — `W` (setback along the
 top/bottom edges), `L1` (setback down the left edge), `X` (cut face,
 check) — and the pool cut ends tie to the matching hopper cut ends.
 
+### Sport bottoms and the side profile
+
+The rectangle's bottom prompt is now **`Bottom type
+[Normal/Sport/NOhopper pad sport]`**:
+
+* **Sport** — no plan hopper; the bottom is a full-width profile:
+  shallow flats `E2`/`E1` at each end, slopes `F2`/`F1`, and a flat
+  deep section `G` (reported as a **check** = B − E2 − F2 − F1 − E1).
+* **NOhopper (pad)** — same but the two slopes meet at a point; `F1`
+  is the check.
+
+Sport bottoms draw a full-width **break line in the plan at every
+slope change** and the **side profile underneath** the plan, guided by
+lettered ties exactly like the sheet (E2/F2/G/F1/E1 along the bottom,
+`C` wall height at the right, `D` depth in the middle), with the
+profile chain, C and D dimensioned.
+
+**Every normal hopper (rectangle, oval, Grecian) also gets the side
+profile now**: after the plan letters, the routine asks `C — wall
+height` and `D — hopper depth` and draws the section under the plan
+(left wall → slope to the hopper → hopper flat → slope up to the plan
+break → shallow flat → right wall), dimensioning C and D. All profile
+values get report rows.
+
+**Cross dims are drawn dashed** in the final drawing (a linetype
+override on the dimension entities, on top of the `CROSS DIMENSION`
+style when present), matching the dashed guide convention.
+
 ### In-square vs out-of-square
 
 The very first prompt asks whether the pool is in-square. **In-square**
