@@ -8,9 +8,13 @@
 ;;;     Everything selected is greyed out so only the item under
 ;;;     review stands out.
 ;;;
-;;;  2. Dimensions are reviewed ONE AT A TIME. Each dimension is
-;;;     zoomed to, shown in its own colour and highlighted while the
-;;;     rest stays grey. For linear/aligned dimensions the two
+;;;  2. Dimensions are reviewed ONE AT A TIME, in a fixed marching
+;;;     order: grouped by dimension style — "STANDARD", then "SIDE
+;;;     STANDARD", then "STANDARD INCHES", then "CROSS DIMENSIONS",
+;;;     then whatever styles are left (tune *dchk-style-order*) —
+;;;     and inside each group left to right, top to bottom (row by
+;;;     row, like reading). Each dimension is zoomed to, shown in
+;;;     its own colour and highlighted while the rest stays grey. For linear/aligned dimensions the two
 ;;;     definition points are audited first: a point that does not
 ;;;     sit on any object is moved onto the closest object, marked
 ;;;     with a cross on screen, and you are asked — one point at a
@@ -107,6 +111,11 @@
 (setq *dchk-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
 (setq *dchk-bead-layer*   "Bead Track") ; layer bead track must be drawn on
 (setq *dchk-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
+
+;; dimension styles are reviewed in this order; styles not listed
+;; come afterwards ("whatever else is left"), still left-to-right
+(setq *dchk-style-order*
+      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
 (setq *dchk-constr-color* 2)       ; yellow
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -642,6 +651,61 @@
 
 ;; --- dimension review ----------------------------------------------
 
+(defun dchk:dim-style (ent / s)
+  ;; the dimension's style name, "" when it has none
+  (setq s (cdr (assoc 3 (entget ent))))
+  (if s s ""))
+
+(defun dchk:style-rank (style / i r)
+  ;; position of the style in *dchk-style-order* (exact name match,
+  ;; case-blind); unlisted styles land after every listed one
+  (setq style (strcase style)
+        i     0
+        r     nil)
+  (foreach s *dchk-style-order*
+    (if (and (null r) (= (strcase s) style)) (setq r i))
+    (setq i (1+ i)))
+  (if r r (length *dchk-style-order*)))
+
+(defun dchk:ent-center (ent / bb)
+  ;; (x y) centre of the entity's box; falls back to its group-10 point
+  (setq bb (dchk:bbox ent))
+  (if bb
+    (list (* 0.5 (+ (caar bb) (caadr bb)))
+          (* 0.5 (+ (cadar bb) (cadadr bb))))
+    (progn
+      (setq bb (cdr (assoc 10 (entget ent))))
+      (if bb (list (car bb) (cadr bb)) (list 0.0 0.0)))))
+
+(defun dchk:dim-order-p (r1 r2 rowtol)
+  ;; strict "r1 reviews before r2" for recs (rank cx cy ent):
+  ;; style rank first, then row (higher = earlier), then left first
+  (cond
+    ((< (car r1) (car r2)) T)
+    ((> (car r1) (car r2)) nil)
+    ((> (- (caddr r1) (caddr r2)) rowtol) T)   ; r1 sits a row above
+    ((> (- (caddr r2) (caddr r1)) rowtol) nil) ; r2 sits a row above
+    (t (< (cadr r1) (cadr r2)))))              ; same row: left first
+
+(defun dchk:sort-dims (dims rowtol / recs cen r out pre rest)
+  ;; stable insertion sort into review order
+  (setq recs nil)
+  (foreach e dims
+    (setq cen  (dchk:ent-center e)
+          recs (cons (list (dchk:style-rank (dchk:dim-style e))
+                           (car cen) (cadr cen) e)
+                     recs)))
+  (setq recs (reverse recs)
+        out  nil)
+  (foreach r recs
+    (setq pre  nil
+          rest out)
+    (while (and rest (not (dchk:dim-order-p r (car rest) rowtol)))
+      (setq pre  (cons (car rest) pre)
+            rest (cdr rest)))
+    (setq out (append (reverse pre) (list r) rest)))
+  (mapcar '(lambda (r) (nth 3 r)) out))
+
 (defun dchk:dim-meas (ent / ed dtype p13 p14 ang v meas)
   ;; the dimension's current measurement as display text, formatted
   ;; with the drawing's unit settings (LUNITS/AUNITS); nil if unknown.
@@ -698,16 +762,19 @@
           (redraw)
           (list pt final (if newp 'user 'auto)))))))
 
-(defun dchk:review-dim (ent cands num total / ed dtype h p13 p14 r1 r2 moved ok note meas)
+(defun dchk:review-dim (ent cands num total / ed dtype h sty p13 p14 r1 r2 moved ok note meas)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement).
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
+        sty   (dchk:dim-style ent)
         dtype (logand 7 (cdr (assoc 70 ed))))
   (dchk:zoom-ent ent)
   (redraw ent 3)
   (princ (strcat "\n\nDimension " (itoa num) " of " (itoa total)
-                 " (handle " h ")"))
+                 " (handle " h
+                 (if (= sty "") "" (strcat ", style " sty))
+                 ")"))
   (if (member dtype '(0 1))                   ; rotated/linear or aligned
     (progn
       (setq p13 (cdr (assoc 13 ed))           ; the two dimmed points
@@ -892,7 +959,7 @@
                       sgroups svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong liners linernot bn bh bp
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
-                      stepsum linersum
+                      stepsum linersum rowtol sty
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -958,6 +1025,13 @@
                   maxx (if maxx (max maxx (caadr bb)) (caadr bb))
                   maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
 
+        ;; march order for the dimensions: style groups first
+        ;; (*dchk-style-order*), then row by row, left to right
+        (setq rowtol (if (and miny maxy (> (- maxy miny) 1e-8))
+                       (* 0.05 (- maxy miny))
+                       1.0))
+        (setq dims (dchk:sort-dims dims rowtol))
+
         ;; grey out the whole selection so each item can take the stage
         (setq i 0)
         (repeat (sslength ss)
@@ -981,7 +1055,9 @@
                    (dchk:set-color e *dchk-grey-color*)) ; done: back to grey
             (progn (setq ndflag (1+ ndflag))
                    (setq keep (cons e keep))))           ; flagged: stays red
+          (setq sty (dchk:dim-style e))
           (setq lines (cons (strcat "Dim " (car res)
+                                    (if (= sty "") "" (strcat " [" sty "]"))
                                     (if (nth 4 res)
                                       (strcat " = " (nth 4 res))
                                       "")
