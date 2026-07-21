@@ -256,7 +256,7 @@ print(f"   lt={lt2} lb={lb2} theta={th/D2R:.2f} deg  width={grecf(120, lt2, lb2,
 
 # ---------------- hexagon (L / Lazy L) mirror ----------------
 HEXSIDES = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)]
-HEXDIAGS = [(0, 2), (1, 3), (2, 4), (3, 5), (0, 4), (1, 5)]
+HEXDIAGS = [(0, 2), (1, 3), (2, 4), (3, 5), (0, 4), (1, 5), (0, 3), (1, 4), (2, 5)]
 
 def normpoly(pts):
     ax, ay = pts[0]
@@ -367,7 +367,7 @@ assert not failed and s <= 1.05 and x <= 2.05
 
 print("== 15. true L with half the cross dims NA ==")
 sides, diags = hexmeas(SKEW_L)
-diags = [diags[0], None, diags[2], None, diags[4], None]
+diags = [diags[0], None, diags[2], None, diags[4], None, diags[6], None, diags[8]]
 pts, failed = fithex(sides, diags, lazy=False)
 s, x = hexerr(pts, sides, diags)
 print(f"   max side delta {s:.3f}, max cross delta {x:.3f}")
@@ -523,8 +523,8 @@ assert failed and em<=0.06   # sides/edges held true on failure
 
 print("== 25. L in-square (no diags) squares up ==")
 sides,_=hexmeas(TRUE_L)
-pts,failed=fithex(sides,[None]*6,lazy=False)
-s,x=hexerr(pts,sides,[None]*6)
+pts,failed=fithex(sides,[None]*9,lazy=False)
+s,x=hexerr(pts,sides,[None]*9)
 print(f"   max side delta {s:.4f}, failed={failed}")
 assert not failed and s<0.05
 
@@ -672,8 +672,10 @@ def hopcalc(quad,corners,h,g,e,m,k):
     gg['hbl']=linex(*hl,*hb); gg['htl']=linex(*hl,*ht)
     gg['hbr']=linex(*hr,*hb); gg['htr']=linex(*hr,*ht)
     gg['brkb']=linex(*brk,a,_sub(b,a)); gg['brkt']=linex(*brk,d,_sub(c,d))
-    gg['lab']=cornerpoint(quad,corners,0,'true' if corners[0][0]=="Square" else 'prev')
-    gg['lat']=cornerpoint(quad,corners,3,'true' if corners[3][0]=="Square" else 'next')
+    gg['lab1']=cornerpoint(quad,corners,0,'prev')
+    gg['lab2']=cornerpoint(quad,corners,0,'next')
+    gg['lat1']=cornerpoint(quad,corners,3,'next')
+    gg['lat2']=cornerpoint(quad,corners,3,'prev')
     hc=tuple(sum(gg[kk][i] for kk in ('hbl','htl','hbr','htr'))/4.0 for i in (0,1))
     hdir=_sub(b,a); vdir=_sub(d,a)
     gg['pl']=linex(hc,hdir,a,_sub(d,a)); gg['phl']=linex(hc,hdir,*hl)
@@ -694,7 +696,7 @@ gg=hopcalc(Q,SQ,30,60,100,45,50)
 assert gg['hbl']==(30,50) and gg['htl']==(30,195)
 assert gg['hbr']==(90,50) and gg['htr']==(90,195)
 assert gg['brkb']==(300,0) and gg['brkt']==(300,240)
-assert gg['lab']==(0,0) and gg['lat']==(0,240)
+assert gg['lab1']==(0,0) and gg['lat1']==(0,240)
 # chain checks
 assert abs(dist(gg['pl'],gg['phl'])-30)<1e-9      # H
 assert abs(dist(gg['phl'],gg['phr'])-60)<1e-9     # G
@@ -708,10 +710,10 @@ print("   all seven chain values exact")
 print("== 34. hopper ties honor rounded/diag corner end-wall points ==")
 COR=[("Rounded",20.0),("Square",0.0),("Square",0.0),("Diag",24.0)]
 gg=hopcalc(Q,COR,30,60,100,45,50)
-assert abs(gg['lab'][0]-0)<1e-9 and abs(gg['lab'][1]-20.0)<1e-9   # tangent point on end wall
+assert abs(gg['lab1'][0]-0)<1e-9 and abs(gg['lab1'][1]-20.0)<1e-9  # tangent point on end wall
 dsb=24.0/math.sqrt(2)
-assert abs(gg['lat'][0]-0)<1e-9 and abs(gg['lat'][1]-(240-dsb))<1e-6  # chamfer end on end wall
-print(f"   lab=(0,20) lat=(0,{240-dsb:.3f}) -- both on the left end wall")
+assert abs(gg['lat1'][0]-0)<1e-9 and abs(gg['lat1'][1]-(240-dsb))<1e-6  # chamfer end on end wall
+print(f"   lab1=(0,20) lat1=(0,{240-dsb:.3f}) -- both on the left end wall")
 
 print("== 35. hopper offsets stay perpendicular on an out-of-square quad ==")
 Q2=[(0,0),(400.5,0),(399.0,239.6),(1.2,240.4)]
@@ -838,5 +840,21 @@ h,g,e=30.0,60.0,100.0
 brks=[(h,'hd'),(h+g,'hd'),(total-e,'wh')]
 assert [b[0] for b in brks]==[30.0,90.0,300.0]
 print("   sport, no-pad and normal profile break chains verified")
+
+
+print("== 40. L main-section hopper quad (virtual corner D') ==")
+# true L: A(0,0) B(360,0) C(360,150) D(200,150) E(200,300) F(0,300)
+Lp=[(0,0),(360,0),(360,150),(200,150),(200,300),(0,300)]
+dv=linex(Lp[5],_sub(Lp[0],Lp[5]),Lp[3],_sub(Lp[2],Lp[3]))  # F-A line x D-C line
+assert dv==(0.0,150.0)
+mquad=[Lp[0],Lp[1],Lp[2],dv]
+SQ4=[("Square",0.0)]*4
+gg=hopcalc(mquad,SQ4,40,70,90,30,35)
+assert gg['hbl']==(40.0,35.0) and gg['htl']==(40.0,120.0)
+assert gg['brkb']==(270.0,0.0) and gg['brkt']==(270.0,150.0)  # break spans main section only
+assert gg['lab1']==(0,0) and gg['lat1']==(0.0,150.0)          # ties to A and D'
+assert abs(dist(gg['pl'],gg['phl'])-40)<1e-9
+assert abs(dist(gg['pht'],gg['pt'])-30)<1e-9
+print("   D'=(0,150); hopper anchors and break confined to the main section")
 
 print("\nALL CHECKS PASSED")

@@ -135,8 +135,9 @@ check) — and the pool cut ends tie to the matching hopper cut ends.
 
 ### Sport bottoms and the side profile
 
-The rectangle's bottom prompt is now **`Bottom type
-[Normal/Sport/NOhopper pad sport]`**:
+Rectangle, oval and Grecian pools ask **`Bottom type
+[Normal/Sport/NOhopper pad sport]`** (L / Lazy L pools are
+standard-hopper only):
 
 * **Sport** — no plan hopper; the bottom is a full-width profile:
   shallow flats `E2`/`E1` at each end, slopes `F2`/`F1`, and a flat
@@ -150,12 +151,16 @@ lettered ties exactly like the sheet (E2/F2/G/F1/E1 along the bottom,
 `C` wall height at the right, `D` depth in the middle), with the
 profile chain, C and D dimensioned.
 
-**Every normal hopper (rectangle, oval, Grecian) also gets the side
-profile now**: after the plan letters, the routine asks `C — wall
-height` and `D — hopper depth` and draws the section under the plan
-(left wall → slope to the hopper → hopper flat → slope up to the plan
-break → shallow flat → right wall), dimensioning C and D. All profile
-values get report rows.
+Standard (Normal) hoppers are **plan-only** — no heights are asked
+and no profile is drawn; the side profile (with `C` wall height and
+`D` depth) belongs to the Sport bottoms, whose field sheets are
+profiles.
+
+**L / Lazy L pools** get the standard hopper in the **main section**:
+the virtual corner D' (where the left side meets the main-top line)
+closes the main rectangle A-B-C-D', the usual H/G/F/E/M/L/K letters
+anchor off its walls, the slope break spans the main section only,
+and the hopper's left corners tie to A and D'.
 
 **Cross dims are drawn dashed** in the final drawing (a linetype
 override on the dimension entities, on top of the `CROSS DIMENSION`
