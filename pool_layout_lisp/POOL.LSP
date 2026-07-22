@@ -1518,7 +1518,8 @@
 ;; pbrk pr, vertical pb phb pht pt (through the hopper centre).
 (defun pool:hopcalc (quad corners h g e m k / a b c d cen hl hr ht hb brk
                                               hbl htl hbr htr brkb brkt
-                                              lab1 lab2 lat1 lat2 hc hdir vdir)
+                                              lab1 lab2 lat1 lat2 hc hdir vdir
+                                              hc2 rc)
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         hl (pool:offline a d cen h)
@@ -1540,20 +1541,26 @@
         lat2 (pool:cornerpoint quad corners 3 'prev)
         hc (pool:v* (pool:v+ (pool:v+ hbl htl) (pool:v+ hbr htr)) 0.25)
         hdir (pool:v- b a)
-        vdir (pool:v- d a))
+        vdir (pool:v- d a)
+        ;; H/G/F/E chain sits below the hopper centre by 12" or L/6
+        ;; (2/3 down from the top of L), whichever is closer; the
+        ;; M/L/K chain sits 12" right of the hopper's right edge
+        hc2 (pool:v- hc (pool:v* (pool:unit vdir)
+                                 (min 12.0 (/ (distance hbr htr) 6.0))))
+        rc (pool:offline a d cen (+ h g 12.0)))
   (list (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
         (list 'brkb brkb) (list 'brkt brkt)
         (list 'lab1 lab1) (list 'lab2 lab2)
         (list 'lat1 lat1) (list 'lat2 lat2)
-        (list 'pl (pool:linex hc hdir a (pool:v- d a)))
-        (list 'phl (pool:linex hc hdir (car hl) (cadr hl)))
-        (list 'phr (pool:linex hc hdir (car hr) (cadr hr)))
-        (list 'pbrk (pool:linex hc hdir (car brk) (cadr brk)))
-        (list 'pr (pool:linex hc hdir b (pool:v- c b)))
-        (list 'pb (pool:linex hc vdir a (pool:v- b a)))
-        (list 'phb (pool:linex hc vdir (car hb) (cadr hb)))
-        (list 'pht (pool:linex hc vdir (car ht) (cadr ht)))
-        (list 'pt (pool:linex hc vdir d (pool:v- c d)))))
+        (list 'pl (pool:linex hc2 hdir a (pool:v- d a)))
+        (list 'phl (pool:linex hc2 hdir (car hl) (cadr hl)))
+        (list 'phr (pool:linex hc2 hdir (car hr) (cadr hr)))
+        (list 'pbrk (pool:linex hc2 hdir (car brk) (cadr brk)))
+        (list 'pr (pool:linex hc2 hdir b (pool:v- c b)))
+        (list 'pb (pool:linex (car rc) (cadr rc) a (pool:v- b a)))
+        (list 'phb (pool:linex (car rc) (cadr rc) (car hb) (cadr hb)))
+        (list 'pht (pool:linex (car rc) (cadr rc) (car ht) (cadr ht)))
+        (list 'pt (pool:linex (car rc) (cadr rc) d (pool:v- c d)))))
 
 ;; Draw the hopper, slope break and corner ties on layer lay.  Each
 ;; hopper left corner ties to BOTH ends of its pool corner treatment
@@ -1880,7 +1887,8 @@
 ;;;  the slope-break ends as usual.
 
 (defun pool:hopovalc (quad tipl tipr h g e m k r3 / a b c d cen u v ht hb
-                                                    lt re tan brk tt tb tip vc)
+                                                    lt re tan brk tt tb tip vc
+                                                    tip2)
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         u (pool:unit (pool:v- tipr tipl))
@@ -1895,18 +1903,28 @@
         tb (pool:linex (car tan) (cadr tan) (car hb) (cadr hb))
         tip (pool:mid (pool:linex (car lt) (cadr lt) (car ht) (cadr ht))
                       (pool:linex (car lt) (cadr lt) (car hb) (cadr hb)))
-        vc (pool:v+ tipl (pool:v* u (+ h (* 0.5 (+ r3 g))))))
+        ;; M/L/K chain 12" right of the hopper's right edge
+        vc (pool:v+ tipl (pool:v* u (+ h g 12.0)))
+        ;; H/G/F/E chain below the hopper centre by 12" or L/6,
+        ;; whichever is closer
+        tip2 (pool:v- tip
+                      (pool:v* (pool:unit v)
+                               (min 12.0
+                                    (/ (distance
+                                         (pool:linex vc v (car hb) (cadr hb))
+                                         (pool:linex vc v (car ht) (cadr ht)))
+                                       6.0)))))
   (list (list 'tip tip) (list 'ttop tt) (list 'tbot tb)
         (list 'htr (pool:linex (car re) (cadr re) (car ht) (cadr ht)))
         (list 'hbr (pool:linex (car re) (cadr re) (car hb) (cadr hb)))
         (list 'brkb (pool:linex (car brk) (cadr brk) a (pool:v- b a)))
         (list 'brkt (pool:linex (car brk) (cadr brk) d (pool:v- c d)))
-        (list 'ptan (pool:linex tip u (car tan) v))
-        (list 'pl (pool:linex tip u tipl v))
-        (list 'phl tip)
-        (list 'phr (pool:linex tip u (car re) v))
-        (list 'pbrk (pool:linex tip u (car brk) v))
-        (list 'pr (pool:linex tip u tipr v))
+        (list 'ptan (pool:linex tip2 u (car tan) v))
+        (list 'pl (pool:linex tip2 u tipl v))
+        (list 'phl (pool:linex tip2 u (car lt) (cadr lt)))
+        (list 'phr (pool:linex tip2 u (car re) v))
+        (list 'pbrk (pool:linex tip2 u (car brk) v))
+        (list 'pr (pool:linex tip2 u tipr v))
         (list 'pb (pool:linex vc v a (pool:v- b a)))
         (list 'phb (pool:linex vc v (car hb) (cadr hb)))
         (list 'pht (pool:linex vc v (car ht) (cadr ht)))
@@ -2021,7 +2039,7 @@
 
 (defun pool:hopgrecc (pts h g e m k w l1 / aa bb rb rt cc dd ltp lbp cen p
                                            hl hr ht hb brk hbl htl hbr htr
-                                           hlw htl1 hbl1 hc u v out)
+                                           hlw htl1 hbl1 hc u v hc2 rc out)
   (setq aa (nth 0 pts) bb (nth 1 pts) rb (nth 2 pts) rt (nth 3 pts)
         cc (nth 4 pts) dd (nth 5 pts) ltp (nth 6 pts) lbp (nth 7 pts)
         cen (list 0.0 0.0))
@@ -2039,20 +2057,25 @@
         hc (pool:v* (pool:v+ (pool:v+ hbl htl) (pool:v+ hbr htr)) 0.25)
         u (pool:v- bb aa)
         v (pool:v- dd aa)
+        ;; chain placement: H/G/F/E below the hopper centre by 12" or
+        ;; L/6 (whichever is closer); M/L/K 12" right of the hopper
+        hc2 (pool:v- hc (pool:v* (pool:unit v)
+                                 (min 12.0 (/ (distance hbr htr) 6.0))))
+        rc (pool:offline lbp ltp cen (+ h g 12.0))
         out (list
           (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
           (list 'brkb (pool:linex (car brk) (cadr brk) aa (pool:v- bb aa)))
           (list 'brkt (pool:linex (car brk) (cadr brk) dd (pool:v- cc dd)))
           (list 'aa aa) (list 'dd dd) (list 'ltp ltp) (list 'lbp lbp)
-          (list 'pl (pool:linex hc u lbp (pool:v- ltp lbp)))
-          (list 'phl (pool:linex hc u (car hl) (cadr hl)))
-          (list 'phr (pool:linex hc u (car hr) (cadr hr)))
-          (list 'pbrk (pool:linex hc u (car brk) (cadr brk)))
-          (list 'pr (pool:linex hc u rb (pool:v- rt rb)))
-          (list 'pb (pool:linex hc v aa (pool:v- bb aa)))
-          (list 'phb (pool:linex hc v (car hb) (cadr hb)))
-          (list 'pht (pool:linex hc v (car ht) (cadr ht)))
-          (list 'pt (pool:linex hc v dd (pool:v- cc dd)))))
+          (list 'pl (pool:linex hc2 u lbp (pool:v- ltp lbp)))
+          (list 'phl (pool:linex hc2 u (car hl) (cadr hl)))
+          (list 'phr (pool:linex hc2 u (car hr) (cadr hr)))
+          (list 'pbrk (pool:linex hc2 u (car brk) (cadr brk)))
+          (list 'pr (pool:linex hc2 u rb (pool:v- rt rb)))
+          (list 'pb (pool:linex (car rc) (cadr rc) aa (pool:v- bb aa)))
+          (list 'phb (pool:linex (car rc) (cadr rc) (car hb) (cadr hb)))
+          (list 'pht (pool:linex (car rc) (cadr rc) (car ht) (cadr ht)))
+          (list 'pt (pool:linex (car rc) (cadr rc) dd (pool:v- cc dd)))))
   (if w
       (setq hlw (pool:offline lbp ltp cen (+ h w))
             htl1 (pool:offline dd cc cen (+ m l1))

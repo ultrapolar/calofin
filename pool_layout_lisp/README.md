@@ -121,6 +121,13 @@ reconciled against the pool before drawing:
 
 The report shows what you *entered* (or `N/A`) against what was
 *drawn*, so any fill or absorption is visible in the delta column.
+
+**Dim placement** (per the field sheet): the H/G/F/E chain runs
+below the hopper's vertical centre by **12" or L/6** (two-thirds down
+from the top of L), whichever is closer to centre; the M/L/K chain
+runs on a vertical line **12" to the right of the hopper's right
+edge** (G's right side), with extension lines reaching back to the
+hopper — on every shape's hopper.
 The hopper's left corners tie to the pool's left corners — when a
 corner is Diag/Rounded, **to both ends of the treatment** (one line
 per end) — and its right corners tie to the ends of the slope-break

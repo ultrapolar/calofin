@@ -678,11 +678,14 @@ def hopcalc(quad,corners,h,g,e,m,k):
     gg['lat2']=cornerpoint(quad,corners,3,'prev')
     hc=tuple(sum(gg[kk][i] for kk in ('hbl','htl','hbr','htr'))/4.0 for i in (0,1))
     hdir=_sub(b,a); vdir=_sub(d,a)
-    gg['pl']=linex(hc,hdir,a,_sub(d,a)); gg['phl']=linex(hc,hdir,*hl)
-    gg['phr']=linex(hc,hdir,*hr); gg['pbrk']=linex(hc,hdir,*brk)
-    gg['pr']=linex(hc,hdir,b,_sub(c,b))
-    gg['pb']=linex(hc,vdir,a,_sub(b,a)); gg['phb']=linex(hc,vdir,*hb)
-    gg['pht']=linex(hc,vdir,*ht); gg['pt']=linex(hc,vdir,d,_sub(c,d))
+    off=min(12.0, dist(gg['hbr'],gg['htr'])/6.0)
+    hc2=_sub(hc,_scl(_unit(vdir),off))
+    rc=offline(a,d,cen,h+g+12.0)
+    gg['pl']=linex(hc2,hdir,a,_sub(d,a)); gg['phl']=linex(hc2,hdir,*hl)
+    gg['phr']=linex(hc2,hdir,*hr); gg['pbrk']=linex(hc2,hdir,*brk)
+    gg['pr']=linex(hc2,hdir,b,_sub(c,b))
+    gg['pb']=linex(*rc,a,_sub(b,a)); gg['phb']=linex(*rc,*hb)
+    gg['pht']=linex(*rc,*ht); gg['pt']=linex(*rc,d,_sub(c,d))
     return gg
 
 def ptlinedist(p, lp, ld):
@@ -738,13 +741,15 @@ def hopovalc(quad,tipl,tipr,h,g,e,m,k,r3):
     tan=(_add(tipl,_scl(u,h+r3)),v); brk=(_sub(tipr,_scl(u,e)),v)
     tt=linex(*tan,*ht); tb=linex(*tan,*hb)
     tip=_mid(linex(*lt,*ht), linex(*lt,*hb))
-    vc=_add(tipl,_scl(u,h+0.5*(r3+g)))
+    vc=_add(tipl,_scl(u,h+g+12.0))
+    off=min(12.0, dist(linex(vc,v,*hb), linex(vc,v,*ht))/6.0)
+    tip2=_sub(tip,_scl(_unit(v),off))
     gg={'tip':tip,'ttop':tt,'tbot':tb,
         'htr':linex(*re,*ht),'hbr':linex(*re,*hb),
         'brkb':linex(*brk,a,_sub(b,a)),'brkt':linex(*brk,d,_sub(c,d)),
-        'ptan':linex(tip,u,*tan),
-        'pl':linex(tip,u,tipl,v),'phl':tip,'phr':linex(tip,u,*re),
-        'pbrk':linex(tip,u,*brk),'pr':linex(tip,u,tipr,v),
+        'ptan':linex(tip2,u,*tan),
+        'pl':linex(tip2,u,tipl,v),'phl':linex(tip2,u,*lt),'phr':linex(tip2,u,*re),
+        'pbrk':linex(tip2,u,*brk),'pr':linex(tip2,u,tipr,v),
         'pb':linex(vc,v,a,_sub(b,a)),'phb':linex(vc,v,*hb),
         'pht':linex(vc,v,*ht),'pt':linex(vc,v,d,_sub(c,d))}
     return gg
@@ -758,13 +763,16 @@ def hopgrecc(pts,h,g,e,m,k,w=None,l1=None):
     hbl=linex(*hl,*hb); htl=linex(*hl,*ht); hbr=linex(*hr,*hb); htr=linex(*hr,*ht)
     hc=tuple(sum(p[i] for p in (hbl,htl,hbr,htr))/4.0 for i in (0,1))
     u=_sub(bb,aa); v=_sub(dd,aa)
+    off=min(12.0, dist(hbr,htr)/6.0)
+    hc2=_sub(hc,_scl(_unit(v),off))
+    rc=offline(lbp,ltp,cen,h+g+12.0)
     gg={'hbl':hbl,'htl':htl,'hbr':hbr,'htr':htr,
         'brkb':linex(*brk,aa,_sub(bb,aa)),'brkt':linex(*brk,dd,_sub(cc,dd)),
-        'pl':linex(hc,u,lbp,_sub(ltp,lbp)),'phl':linex(hc,u,*hl),
-        'phr':linex(hc,u,*hr),'pbrk':linex(hc,u,*brk),
-        'pr':linex(hc,u,rb,_sub(rt,rb)),
-        'pb':linex(hc,v,aa,_sub(bb,aa)),'phb':linex(hc,v,*hb),
-        'pht':linex(hc,v,*ht),'pt':linex(hc,v,dd,_sub(cc,dd))}
+        'pl':linex(hc2,u,lbp,_sub(ltp,lbp)),'phl':linex(hc2,u,*hl),
+        'phr':linex(hc2,u,*hr),'pbrk':linex(hc2,u,*brk),
+        'pr':linex(hc2,u,rb,_sub(rt,rb)),
+        'pb':linex(*rc,aa,_sub(bb,aa)),'phb':linex(*rc,*hb),
+        'pht':linex(*rc,*ht),'pt':linex(*rc,dd,_sub(cc,dd))}
     if w is not None:
         hlw=offline(lbp,ltp,cen,h+w); htl1=offline(dd,cc,cen,m+l1); hbl1=offline(aa,bb,cen,k+l1)
         gg['ct1']=linex(*hlw,*ht); gg['ct2']=linex(*hl,*htl1)
@@ -888,5 +896,22 @@ resid=400.0-sum(vals)
 f2,f1=vals[1]+resid/2, vals[2]+resid/2
 assert abs(f2-141.0)<1e-9 and abs(f1-149.0)<1e-9
 print("   remainder, even split, and G/L absorption all verified")
+
+
+print("== 42. hopper dim-chain placement (below centre / right of G) ==")
+Q=[(0,0),(400,0),(400,240),(0,240)]
+SQ=[("Square",0.0)]*4
+gg=hopcalc(Q,SQ,30,60,100,45,50)
+# hopper spans y 50..195 -> L=145, centre 122.5; off=min(12,145/6)=12
+assert abs(gg['pl'][1]-110.5)<1e-9 and abs(gg['phr'][1]-110.5)<1e-9
+# M/L/K chain at x = H+G+12 = 102
+assert abs(gg['pb'][0]-102.0)<1e-9 and abs(gg['pht'][0]-102.0)<1e-9
+# small hopper: L=30 -> off = 30/6 = 5 (less than 12)
+gg2=hopcalc(Q,SQ,30,60,100,100,110)   # hopper y 110..140, centre 125
+assert abs(gg2['pl'][1]-120.0)<1e-9
+# distances unchanged by the shift (parallel walls)
+assert abs(dist(gg['pl'],gg['phl'])-30)<1e-9
+assert abs(dist(gg['pb'],gg['phb'])-50)<1e-9
+print("   chain at centre-12 (or centre-L/6) and at G-right+12; values intact")
 
 print("\nALL CHECKS PASSED")
