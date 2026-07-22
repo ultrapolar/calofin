@@ -82,6 +82,16 @@ best-fits correctly, and each cross measurement is dimensioned between
 its actual reference points and listed in the report. Square corners
 always use the true corner, so no reference question is asked.
 
+**Perimeter dims** (per the reference drawing): a rectangle gets
+just **two** perimeter dimensions — the **northern** dim (overall
+length) and the **western** dim (overall width) — drawn as rotated
+linear dims whose extension lines hook to **points on the object**:
+the top endpoints of the two side walls and the left endpoints of the
+top/bottom walls (the arc-tangent / chamfer ends when corners are
+cut). No floating true-corner extension lines. All four sides still
+appear in the report table. Other shapes keep their full dim sets,
+which already hook to drawn geometry.
+
 **Corner dimensions**: an **in-square** pool gets a single "Typ."
 callout at the bottom-right corner (B) — a radius dimension reading
 `R1'-6" Typ.`, a chamfer-face dimension reading `1'-8" Typ.`, or, for

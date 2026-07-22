@@ -252,6 +252,13 @@
 (defun pool:dimalg (p1 p2 pt)
   (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt)))
 
+;; Rotated linear dimension hooked to two OBJECT points: the ext-line
+;; origins land on drawn geometry (wall endpoints / arc tangents), and
+;; the rotation makes it read the full run regardless of the hooks.
+(defun pool:dimrot (p1 p2 ang loc)
+  (command "_.DIMLINEAR" (pool:wp p1) (pool:wp p2)
+           "_R" (angtos ang 0 6) (pool:wp loc)))
+
 ;; Switch to the CROSS DIMENSION dim style when the drawing has one.
 ;; Returns the previous style name (for pool:dimxend), or nil.
 (defun pool:dimxbegin ( / odim)
@@ -2630,11 +2637,25 @@
 
   ;; ------------------------------------------------ dimensions
   (setvar "CLAYER" "DIMENSION")
-  (setq endoff (if (= ptype "Rectangle") doff (* -0.6 doff)))
-  (pool:dimalg a b (pool:outoff a b cen doff))
-  (pool:dimalg d c (pool:outoff d c cen doff))
-  (pool:dimalg a d (pool:outoff a d cen endoff))
-  (pool:dimalg b c (pool:outoff b c cen endoff))
+  (if (= ptype "Rectangle")
+      ;; per the reference: only the northern and western perimeter
+      ;; dims, hooked to the wall endpoints (object-bounded) and
+      ;; rotated along the side directions
+      (progn
+        (pool:dimrot (pool:cornerpoint quad corners 3 'next)   ; left wall top
+                     (pool:cornerpoint quad corners 2 'prev)   ; right wall top
+                     (angle d c)
+                     (pool:outoff d c cen doff))
+        (pool:dimrot (pool:cornerpoint quad corners 0 'next)   ; bottom wall left
+                     (pool:cornerpoint quad corners 3 'prev)   ; top wall left
+                     (angle a d)
+                     (pool:outoff a d cen doff)))
+      (progn
+        (setq endoff (* -0.6 doff))
+        (pool:dimalg a b (pool:outoff a b cen doff))
+        (pool:dimalg d c (pool:outoff d c cen doff))
+        (pool:dimalg a d (pool:outoff a d cen endoff))
+        (pool:dimalg b c (pool:outoff b c cen endoff))))
   ;; corner annotations: one "Typ." at B when in-square, every corner
   ;; individually when out-of-square
   (if (= ptype "Rectangle")
