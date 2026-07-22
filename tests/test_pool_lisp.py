@@ -981,4 +981,49 @@ S=rimp-math.sqrt(rimp*rimp-180.0*180.0)
 assert abs(S-104.07)<0.01
 print(f"   springs on end line, implied R={rimp:.2f} matches the reference drawing")
 
+
+print("== 45. sport plan hopper (reference: 480x120, breaks + inset deep flat) ==")
+def offln(ln,cen,dist):
+    p,dv=ln
+    n=_unit(_perp(dv))
+    if _dot(_sub(p,cen),n)>0: n=_scl(n,-1.0)
+    return (_add(p,_scl(n,dist)),dv)
+def hopsportc(lline,rline,bline,tline,cen,e2,f2,g,f1,e1,m,k):
+    obl=offln(lline,cen,e2); dfl=offln(lline,cen,e2+f2)
+    dfr=offln(lline,cen,e2+f2+g); obr=offln(lline,cen,e2+f2+g+f1)
+    dfb=offln(bline,cen,k); dft=offln(tline,cen,m)
+    gg={}
+    gg['oblb']=linex(*obl,*bline); gg['oblt']=linex(*obl,*tline)
+    gg['obrb']=linex(*obr,*bline); gg['obrt']=linex(*obr,*tline)
+    gg['dbl']=linex(*dfl,*dfb); gg['dtl']=linex(*dfl,*dft)
+    gg['dbr']=linex(*dfr,*dfb); gg['dtr']=linex(*dfr,*dft)
+    hc=tuple(sum(gg[kk][i] for kk in ('dbl','dtl','dbr','dtr'))/4.0 for i in (0,1))
+    up=_unit(lline[1])
+    hc2=_sub(hc,_scl(up,min(12.0,dist(gg['dbr'],gg['dtr'])/6.0)))
+    vc=offln(lline,cen,e2+f2+g+12.0)
+    gg['pl']=linex(hc2,bline[1],*lline); gg['pobl']=linex(hc2,bline[1],*obl)
+    gg['pdfl']=linex(hc2,bline[1],*dfl); gg['pdfr']=linex(hc2,bline[1],*dfr)
+    gg['pobr']=linex(hc2,bline[1],*obr); gg['pr']=linex(hc2,bline[1],*rline)
+    gg['pb']=linex(*vc,*bline); gg['pdb']=linex(*vc,*dfb)
+    gg['pdt']=linex(*vc,*dft); gg['pt']=linex(*vc,*tline)
+    return gg
+A,B,C,D=(0,0),(480,0),(480,120),(0,120)
+cen=(240,60)
+gg=hopsportc(((0,0),(0,120)), ((480,0),(0,120)), ((0,0),(480,0)), ((0,120),(480,0)),
+             cen, 48,60,120,144,108, 24,24)
+# reference geometry: outer breaks full-width at 48 / 372, deep flat
+# x 108..228 inset 24 top and bottom
+assert gg['oblb']==(48.0,0.0) and gg['oblt']==(48.0,120.0)
+assert gg['obrb']==(372.0,0.0) and gg['obrt']==(372.0,120.0)
+assert gg['dbl']==(108.0,24.0) and gg['dtl']==(108.0,96.0)
+assert gg['dbr']==(228.0,24.0) and gg['dtr']==(228.0,96.0)
+# chain values and placement (below centre by min(12, 72/6)=12; MLK at +12)
+assert abs(gg['pl'][1]-48.0)<1e-9                     # 60 - 12
+assert abs(gg['pb'][0]-240.0)<1e-9                    # 228 + 12
+for pair,want in ((('pl','pobl'),48),(('pobl','pdfl'),60),(('pdfl','pdfr'),120),
+                  (('pdfr','pobr'),144),(('pobr','pr'),108),
+                  (('pb','pdb'),24),(('pdb','pdt'),72),(('pdt','pt'),24)):
+    assert abs(dist(gg[pair[0]],gg[pair[1]])-want)<1e-9
+print("   breaks, inset deep flat, and all eight chain values exact")
+
 print("\nALL CHECKS PASSED")

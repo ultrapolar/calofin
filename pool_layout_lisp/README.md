@@ -183,11 +183,18 @@ standard-hopper only):
 * **NOhopper (pad)** — same but the two slopes meet at a point; `F1`
   is the check.
 
-Sport bottoms draw a full-width **break line in the plan at every
-slope change** and the **side profile underneath** the plan, guided by
-lettered ties exactly like the sheet (E2/F2/G/F1/E1 along the bottom,
-`C` wall height at the right, `D` depth in the middle), with the
-profile chain, C and D dimensioned.
+Sport bottoms are drawn in the **plan like a standard hopper** (per
+the reference drawing): full-width break lines at the outer breaks,
+the **deep flat as a rectangle inset M/K from the side walls**, and
+corner diagonals tying the outer breaks to the deep-flat corners. The
+letters are dimmed **on the pool floor in the plan** with the
+standard-hopper placement rules — the E2/F2/G/F1/E1 chain below the
+deep flat's centre (12" or L/6), the M/L/K chain 12" right of its
+right edge — so sport prompts now include `M`, `L`, `K` (all NA-able;
+L absorbs against the width). The **side profile** still draws
+underneath, carrying only the `C` and `D` depth dims. The no-pad
+sport is identical with **G = 0** (the deep flat collapses to the V
+line; G isn't prompted).
 
 Standard (Normal) hoppers are **plan-only** — no heights are asked
 and no profile is drawn; the side profile (with `C` wall height and

@@ -1851,18 +1851,93 @@
     (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
     (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
 
-;; Sport bottoms (per the field sheet, which IS a side profile):
-;; letters E2 F2 [G] F1 E1 along the bottom plus wall height C and
-;; depth D.  Sport has a flat deep section G (reported as a check);
-;; NOhopper runs the two slopes to a point (F1 is the check).  The
-;; plan view gets a full-width break line at every slope change.
-(defun pool:hopsport (total wid x0 y0 ymax nopad doff th / whn hdn pv
-                                           e2 f2 g f1 e1 wh hd brks xs xd
-                                           e2r f2r gr f1r e1r res resid
-                                           rows odl prev xi)
-  (setq whn (* 0.25 wid)
+
+;; Offset an infinite line (pt dir) toward cen by dist -> (pt dir).
+(defun pool:offln (ln cen dist / n)
+  (setq n (pool:unit (pool:perp (cadr ln))))
+  (if (> (pool:dot (pool:v- (car ln) cen) n) 0.0)
+      (setq n (pool:v* n -1.0)))
+  (list (pool:v+ (car ln) (pool:v* n dist)) (cadr ln)))
+
+;; Sport bottom PLAN geometry (per the reference drawing): full-width
+;; break lines at the outer breaks, the deep flat drawn as a rectangle
+;; inset M/K from the side walls, and corner diagonals tying the outer
+;; breaks to the deep-flat corners -- the standard hopper language.
+;; Chain points follow the standard-hopper placement rules.
+(defun pool:hopsportc (lline rline bline tline cen e2 f2 g f1 e1 m k
+                       / obl dfl dfr obr dfb dft oblb oblt obrb obrt
+                         dbl dtl dbr dtr hc hc2 vc up)
+  (setq obl (pool:offln lline cen e2)
+        dfl (pool:offln lline cen (+ e2 f2))
+        dfr (pool:offln lline cen (+ e2 f2 g))
+        obr (pool:offln lline cen (+ e2 f2 g f1))
+        dfb (pool:offln bline cen k)
+        dft (pool:offln tline cen m)
+        oblb (pool:linex (car obl) (cadr obl) (car bline) (cadr bline))
+        oblt (pool:linex (car obl) (cadr obl) (car tline) (cadr tline))
+        obrb (pool:linex (car obr) (cadr obr) (car bline) (cadr bline))
+        obrt (pool:linex (car obr) (cadr obr) (car tline) (cadr tline))
+        dbl (pool:linex (car dfl) (cadr dfl) (car dfb) (cadr dfb))
+        dtl (pool:linex (car dfl) (cadr dfl) (car dft) (cadr dft))
+        dbr (pool:linex (car dfr) (cadr dfr) (car dfb) (cadr dfb))
+        dtr (pool:linex (car dfr) (cadr dfr) (car dft) (cadr dft))
+        hc (pool:v* (pool:v+ (pool:v+ dbl dtl) (pool:v+ dbr dtr)) 0.25)
+        up (pool:unit (cadr lline))
+        hc2 (pool:v- hc (pool:v* up (min 12.0 (/ (distance dbr dtr) 6.0))))
+        vc (pool:offln lline cen (+ e2 f2 g 12.0)))
+  (list (list 'oblb oblb) (list 'oblt oblt)
+        (list 'obrb obrb) (list 'obrt obrt)
+        (list 'dbl dbl) (list 'dtl dtl) (list 'dbr dbr) (list 'dtr dtr)
+        (list 'pl (pool:linex hc2 (cadr bline) (car lline) (cadr lline)))
+        (list 'pobl (pool:linex hc2 (cadr bline) (car obl) (cadr obl)))
+        (list 'pdfl (pool:linex hc2 (cadr bline) (car dfl) (cadr dfl)))
+        (list 'pdfr (pool:linex hc2 (cadr bline) (car dfr) (cadr dfr)))
+        (list 'pobr (pool:linex hc2 (cadr bline) (car obr) (cadr obr)))
+        (list 'pr (pool:linex hc2 (cadr bline) (car rline) (cadr rline)))
+        (list 'pb (pool:linex (car vc) (cadr vc) (car bline) (cadr bline)))
+        (list 'pdb (pool:linex (car vc) (cadr vc) (car dfb) (cadr dfb)))
+        (list 'pdt (pool:linex (car vc) (cadr vc) (car dft) (cadr dft)))
+        (list 'pt (pool:linex (car vc) (cadr vc) (car tline) (cadr tline)))))
+
+(defun pool:hopsportdraw (gg nopad lay pvflag / oblb oblt obrb obrt
+                                                dbl dtl dbr dtr)
+  (setq oblb (cadr (assoc 'oblb gg)) oblt (cadr (assoc 'oblt gg))
+        obrb (cadr (assoc 'obrb gg)) obrt (cadr (assoc 'obrt gg))
+        dbl (cadr (assoc 'dbl gg)) dtl (cadr (assoc 'dtl gg))
+        dbr (cadr (assoc 'dbr gg)) dtr (cadr (assoc 'dtr gg)))
+  (pool:hgl oblb oblt lay pvflag)
+  (pool:hgl obrb obrt lay pvflag)
+  (if nopad
+      (pool:hgl dbl dtl lay pvflag)     ; G = 0: the V line
+      (progn
+        (pool:hgl dbl dtl lay pvflag)
+        (pool:hgl dtl dtr lay pvflag)
+        (pool:hgl dtr dbr lay pvflag)
+        (pool:hgl dbr dbl lay pvflag)))
+  (pool:hgl oblb dbl lay pvflag)
+  (pool:hgl oblt dtl lay pvflag)
+  (pool:hgl obrb dbr lay pvflag)
+  (pool:hgl obrt dtr lay pvflag))
+
+;; Guided sport bottom: plan hopper (standard-hopper dim logic) plus
+;; the side profile below with C and D only.  Returns report rows.
+(defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax nopad doff th
+                      / wid whn hdn ggn pv e2r f2r gr f1r e1r mraw lraw kraw
+                        wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
+                        brks tl xd)
+  (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
+                      (pool:linex cen (cadr lline) (car tline) (cadr tline)))
+        whn (* 0.25 wid)
         hdn (* 0.55 wid))
-  ;; nominal gray profile guide below the plan
+  ;; nominal guide: plan + profile
+  (setq ggn (pool:hopsportc lline rline bline tline cen
+                            (* (if nopad 0.15 0.12) total)
+                            (* (if nopad 0.35 0.20) total)
+                            (if nopad 0.0 (* 0.30 total))
+                            (* (if nopad 0.35 0.26) total)
+                            (* (if nopad 0.15 0.12) total)
+                            (* 0.2 wid) (* 0.2 wid)))
+  (pool:hopsportdraw ggn nopad "POOL-NOTES" t)
   (pool:profdraw x0 y0 total whn
                  (if nopad
                      (list (cons (* 0.15 total) whn)
@@ -1870,52 +1945,47 @@
                            (cons (* 0.85 total) whn))
                      (list (cons (* 0.12 total) whn)
                            (cons (* 0.32 total) hdn)
-                           (cons (* 0.68 total) hdn)
+                           (cons (* 0.62 total) hdn)
                            (cons (* 0.88 total) whn)))
                  "POOL-NOTES" t)
   (setq pv (append
-    (list (pool:pvtie (list x0 (- y0 hdn (* 1.0 doff)))
-                      (list (+ x0 (* (if nopad 0.15 0.12) total)) (- y0 hdn (* 1.0 doff)))
-                      "E2" th)
-          (pool:pvtie (list (+ x0 (* (if nopad 0.15 0.12) total)) (- y0 hdn (* 1.0 doff)))
-                      (list (+ x0 (* (if nopad 0.50 0.32) total)) (- y0 hdn (* 1.0 doff)))
-                      "F2" th))
+    (list (pool:pvtie (cadr (assoc 'pl ggn)) (cadr (assoc 'pobl ggn)) "E2" th)
+          (pool:pvtie (cadr (assoc 'pobl ggn)) (cadr (assoc 'pdfl ggn)) "F2" th))
     (if nopad nil
-        (list (pool:pvtie (list (+ x0 (* 0.32 total)) (- y0 hdn (* 1.0 doff)))
-                          (list (+ x0 (* 0.68 total)) (- y0 hdn (* 1.0 doff)))
-                          "G" th)))
-    (list (pool:pvtie (list (+ x0 (* (if nopad 0.50 0.68) total)) (- y0 hdn (* 1.0 doff)))
-                      (list (+ x0 (* (if nopad 0.85 0.88) total)) (- y0 hdn (* 1.0 doff)))
-                      "F1" th)
-          (pool:pvtie (list (+ x0 (* (if nopad 0.85 0.88) total)) (- y0 hdn (* 1.0 doff)))
-                      (list (+ x0 total) (- y0 hdn (* 1.0 doff)))
-                      "E1" th)
+        (list (pool:pvtie (cadr (assoc 'pdfl ggn)) (cadr (assoc 'pdfr ggn)) "G" th)))
+    (list (pool:pvtie (cadr (assoc 'pdfr ggn)) (cadr (assoc 'pobr ggn)) "F1" th)
+          (pool:pvtie (cadr (assoc 'pobr ggn)) (cadr (assoc 'pr ggn)) "E1" th)
+          (pool:pvtie (cadr (assoc 'pdt ggn)) (cadr (assoc 'pt ggn)) "M" th)
+          (pool:pvtie (cadr (assoc 'pdb ggn)) (cadr (assoc 'pdt ggn)) "L" th)
+          (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'pdb ggn)) "K" th)
           (pool:pvtie (list (+ x0 total (* 0.6 doff)) y0)
-                      (list (+ x0 total (* 0.6 doff)) (- y0 whn))
-                      "C" th)
+                      (list (+ x0 total (* 0.6 doff)) (- y0 whn)) "C" th)
           (pool:pvtie (list (+ x0 (* 0.5 total)) y0)
-                      (list (+ x0 (* 0.5 total)) (- y0 hdn))
-                      "D" th))))
+                      (list (+ x0 (* 0.5 total)) (- y0 hdn)) "D" th))))
   (command "_.ZOOM" "_Window"
            (pool:wp (list (- x0 doff) (- y0 hdn (* 3.0 doff))))
            (pool:wp (list (+ x0 total (* 3.0 doff)) (+ ymax doff))))
-  (princ "\nSport bottom -- profile letters per the sheet; the RED tie is being asked for.")
+  (princ "\nSport bottom -- plan hopper letters; the RED tie is being asked for.")
   (setq e2r (pool:askhx "E2 - left end shallow flat" (cdr (assoc "E2" pv)))
         f2r (pool:askhx "F2 - left slope" (cdr (assoc "F2" pv))))
   (if (not nopad)
       (setq gr (pool:askhx "G - deep flat length" (cdr (assoc "G" pv)))))
   (setq f1r (pool:askhx "F1 - right slope" (cdr (assoc "F1" pv)))
         e1r (pool:askhx "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
+        mraw (pool:askhx "M - top side to deep flat" (cdr (assoc "M" pv)))
+        lraw (pool:askhx "L - deep flat width" (cdr (assoc "L" pv)))
+        kraw (pool:askhx "K - deep flat to bottom side" (cdr (assoc "K" pv)))
         wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
         hd (pool:askh "D - deep depth" (cdr (assoc "D" pv))))
   (pool:pvkill)
-  ;; resolve the bottom chain: NA takes the remainder (split evenly);
-  ;; leftover slack goes to G, or is split across F2/F1 when there is
-  ;; no hopper pad
+  ;; resolve: horizontal chain vs the pool length (G absorbs; the
+  ;; no-pad sport fixes G = 0 and splits its residual across F2/F1),
+  ;; vertical chain vs the width (L absorbs)
   (if nopad
       (progn
         (setq res (pool:chainfix (list e2r f2r f1r e1r) total -1)
               e2 (car res) f2 (cadr res) f1 (caddr res) e1 (cadddr res)
+              g 0.0
               resid (- total e2 f2 f1 e1))
         (if (> (abs resid) 1.0e-6)
             (setq f2 (+ f2 (* 0.5 resid))
@@ -1923,39 +1993,45 @@
       (setq res (pool:chainfix (list e2r f2r gr f1r e1r) total 2)
             e2 (car res) f2 (cadr res) g (caddr res)
             f1 (cadddr res) e1 (nth 4 res)))
+  (setq vres (pool:chainfix (list mraw lraw kraw) wid 1)
+        m (car vres) l (cadr vres) k (caddr vres)
+        gg (pool:hopsportc lline rline bline tline cen e2 f2 g f1 e1 m k))
+  (pool:hopsportdraw gg nopad "POOL" nil)
+  ;; profile below, with C and D dims only
   (setq brks (if nopad
                  (list (cons e2 wh) (cons (+ e2 f2) hd) (cons (- total e1) wh))
                  (list (cons e2 wh) (cons (+ e2 f2) hd)
-                       (cons (- total e1 f1) hd) (cons (- total e1) wh)))
-        xs (mapcar 'car brks))
+                       (cons (- total e1 f1) hd) (cons (- total e1) wh))))
   (pool:profdraw x0 y0 total wh brks "POOL" nil)
-  ;; dims: bottom chain + C + D, like the sheet
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
-  (setq prev 0.0)
-  (foreach xi (append xs (list total))
-    (pool:dimalg (list (+ x0 prev) (- y0 hd)) (list (+ x0 xi) (- y0 hd))
-                 (list (+ x0 (* 0.5 (+ prev xi))) (- y0 hd (* 1.0 doff))))
-    (setq prev xi))
+  ;; plan chains, standard-hopper style
+  (foreach tl (append (list (list 'pl 'pobl) (list 'pobl 'pdfl))
+                      (if nopad nil (list (list 'pdfl 'pdfr)))
+                      (list (list 'pdfr 'pobr) (list 'pobr 'pr)
+                            (list 'pdt 'pt) (list 'pdb 'pdt) (list 'pb 'pdb)))
+    (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
+                 (pool:mid (cadr (assoc (car tl) gg))
+                           (cadr (assoc (cadr tl) gg)))))
   (pool:dimalg (list (+ x0 total) y0) (list (+ x0 total) (- y0 wh))
                (list (+ x0 total (* 0.8 doff)) (- y0 (* 0.5 wh))))
-  (setq xd (if nopad (+ x0 e2 f2) (+ x0 (* 0.5 (+ (+ e2 f2) (- total e1 f1))))))
+  (setq xd (if nopad (+ x0 e2 f2) (+ x0 e2 f2 (* 0.5 g))))
   (pool:dimalg (list xd y0) (list xd (- y0 hd))
                (list (+ xd (* 0.3 doff)) (- y0 (* 0.5 hd))))
   (setvar "CLAYER" odl)
-  (setq rows (list
-    (list "SPT E2" e2r e2)
-    (list "SPT F2" f2r f2)))
-  (if nopad
-      (setq rows (append rows (list
-        (list "SPT F1" f1r f1)
-        (list "SPT E1" e1r e1))))
-      (setq rows (append rows (list
-        (list "SPT G" gr g)
-        (list "SPT F1" f1r f1)
-        (list "SPT E1" e1r e1)))))
-  (list (append rows (list (list "WALL HT C" wh wh) (list "DEPTH D" hd hd)))
-        xs))
+  (setq rows (append
+    (list (list "SPT E2" e2r (distance (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg))))
+          (list "SPT F2" f2r (distance (cadr (assoc 'pobl gg)) (cadr (assoc 'pdfl gg)))))
+    (if nopad nil
+        (list (list "SPT G" gr (distance (cadr (assoc 'pdfl gg)) (cadr (assoc 'pdfr gg))))))
+    (list (list "SPT F1" f1r (distance (cadr (assoc 'pdfr gg)) (cadr (assoc 'pobr gg))))
+          (list "SPT E1" e1r (distance (cadr (assoc 'pobr gg)) (cadr (assoc 'pr gg))))
+          (list "SPT M" mraw (distance (cadr (assoc 'pdt gg)) (cadr (assoc 'pt gg))))
+          (list "SPT L" lraw (distance (cadr (assoc 'pdb gg)) (cadr (assoc 'pdt gg))))
+          (list "SPT K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'pdb gg))))
+          (list "WALL HT C" wh wh)
+          (list "DEPTH D" hd hd))))
+  rows)
 
 ;; Pool-bottom dispatcher for the rectangle: Normal (hopper pad),
 ;; Sport (flat deep section) or Sport with no hopper pad (V bottom).
@@ -1979,17 +2055,12 @@
             (pool:hopnormal quad corners doff th)
             (progn
               (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
-                    cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
-                    sres (pool:hopsport (distance a b) (distance a d)
-                                        xmin (- ymin (* 2.2 doff)) ymax
-                                        (= btype "NOhopper") doff th))
-              ;; full-width plan break line at every slope change
-              (foreach xi (cadr sres)
-                (setq ln (pool:offline a d cen xi))
-                (pool:line (pool:linex (car ln) (cadr ln) a (pool:v- b a))
-                           (pool:linex (car ln) (cadr ln) d (pool:v- c d))
-                           "POOL"))
-              (car sres))))))
+                    cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25))
+              (pool:hopsport (list a (pool:v- d a)) (list b (pool:v- c b))
+                             (list a (pool:v- b a)) (list d (pool:v- c d))
+                             cen (distance a b)
+                             xmin (- ymin (* 2.2 doff)) ymax
+                             (= btype "NOhopper") doff th))))))
 
 ;;; -------------------- side profile -----------------------------------
 ;;;
@@ -2401,23 +2472,19 @@
             (pool:hopoval quad tipl tipr doff th)
             (progn
               (setq u (pool:unit (pool:v- tipr tipl))
-                    v (pool:perp u)
-                    sres (pool:hopsport (distance tipl tipr)
-                                        (distance (car quad) (cadddr quad))
-                                        (min (car tipl) (car tipr))
-                                        (- (apply 'min (mapcar 'cadr quad))
-                                           (* 2.2 doff))
-                                        (apply 'max (mapcar 'cadr quad))
-                                        (= btype "NOhopper") doff th))
-              ;; plan break line across the pool at every slope change
-              (foreach xi (cadr sres)
-                (setq p (pool:v+ tipl (pool:v* u xi)))
-                (pool:line (pool:linex p v (car quad)
-                                       (pool:v- (cadr quad) (car quad)))
-                           (pool:linex p v (cadddr quad)
-                                       (pool:v- (caddr quad) (cadddr quad)))
-                           "POOL"))
-              (car sres))))))
+                    v (pool:perp u))
+              (pool:hopsport (list tipl v) (list tipr v)
+                             (list (car quad) (pool:v- (cadr quad) (car quad)))
+                             (list (cadddr quad)
+                                   (pool:v- (caddr quad) (cadddr quad)))
+                             (pool:v* (pool:v+ (pool:v+ (car quad) (cadr quad))
+                                               (pool:v+ (caddr quad) (cadddr quad)))
+                                      0.25)
+                             (distance tipl tipr)
+                             (min (car tipl) (car tipr))
+                             (- (apply 'min (mapcar 'cadr quad)) (* 2.2 doff))
+                             (apply 'max (mapcar 'cadr quad))
+                             (= btype "NOhopper") doff th))))))
 
 (defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln)
   (initget "Yes No")
@@ -2436,22 +2503,16 @@
                     pl (pool:linex cen u (nth 7 pts)
                                    (pool:v- (nth 6 pts) (nth 7 pts)))
                     pr (pool:linex cen u (nth 2 pts)
-                                   (pool:v- (nth 3 pts) (nth 2 pts)))
-                    sres (pool:hopsport (distance pl pr)
-                                        (distance (nth 0 pts) (nth 5 pts))
-                                        (apply 'min (mapcar 'car pts))
-                                        (- (apply 'min (mapcar 'cadr pts))
-                                           (* 2.2 doff))
-                                        (apply 'max (mapcar 'cadr pts))
-                                        (= btype "NOhopper") doff th))
-              (foreach xi (cadr sres)
-                (setq ln (pool:offline (nth 7 pts) (nth 6 pts) cen xi))
-                (pool:line (pool:linex (car ln) (cadr ln) (nth 0 pts)
-                                       (pool:v- (nth 1 pts) (nth 0 pts)))
-                           (pool:linex (car ln) (cadr ln) (nth 5 pts)
-                                       (pool:v- (nth 4 pts) (nth 5 pts)))
-                           "POOL"))
-              (car sres))))))
+                                   (pool:v- (nth 3 pts) (nth 2 pts))))
+              (pool:hopsport (list (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
+                             (list (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts)))
+                             (list (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
+                             (list (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts)))
+                             cen (distance pl pr)
+                             (apply 'min (mapcar 'car pts))
+                             (- (apply 'min (mapcar 'cadr pts)) (* 2.2 doff))
+                             (apply 'max (mapcar 'cadr pts))
+                             (= btype "NOhopper") doff th))))))
 
 ;;; -------------------- rectangle / oval flow --------------------------
 
