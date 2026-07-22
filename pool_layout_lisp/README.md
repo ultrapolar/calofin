@@ -81,6 +81,15 @@ best-fits correctly, and each cross measurement is dimensioned between
 its actual reference points and listed in the report. Square corners
 always use the true corner, so no reference question is asked.
 
+**Corner dimensions**: an **in-square** pool gets a single "Typ."
+callout at the bottom-right corner (B) — a radius dimension reading
+`R1'-6" Typ.`, a chamfer-face dimension reading `1'-8" Typ.`, or, for
+square corners, a leader pointing at the corner reading `90° Typ.`
+An **out-of-square** pool dims **every corner individually**: radius
+dims on rounded corners, face dims on chamfers, and the **actual
+angular dimension** on square corners (showing the true fitted angle,
+e.g. `89.6°`).
+
 The **guide updates live**: as soon as the corner answers are in, the
 gray guide redraws its corners with the chamfers/fillets (display
 sizes capped so oversized inputs can't fold the nominal shape), and

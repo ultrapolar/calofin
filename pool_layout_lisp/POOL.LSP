@@ -1363,7 +1363,9 @@
         (t (nth i q))))
 
 ;; Draw the rectangle perimeter with corner treatments on layer POOL.
-(defun pool:drawrect (q corners / ce i tyi)
+;; Returns the list of fillet-arc entity names per corner (nil where
+;; the corner is square or chamfered) for the corner dimensions.
+(defun pool:drawrect (q corners / ce i tyi arcs)
   (setq ce (mapcar '(lambda (i)
                       (pool:cornerends (nth i q)
                                        (nth (rem (+ i 3) 4) q)
@@ -1372,13 +1374,66 @@
                    (list 0 1 2 3)))
   (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
     (pool:line (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce)) "POOL"))
+  (setq arcs nil)
   (foreach i (list 0 1 2 3)             ; corner treatments
     (setq tyi (car (nth i corners)))
     (cond
-      ((= tyi "Diag") (pool:line (car (nth i ce)) (cadr (nth i ce)) "POOL"))
+      ((= tyi "Diag")
+       (pool:line (car (nth i ce)) (cadr (nth i ce)) "POOL")
+       (setq arcs (cons nil arcs)))
       ((= tyi "Rounded")
-       (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) "POOL"))))
-  ce)
+       (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) "POOL")
+       (setq arcs (cons (entlast) arcs)))
+      (t (setq arcs (cons nil arcs)))))
+  (reverse arcs))
+
+;; Corner annotations for the rectangle.  In-square pools get a single
+;; "Typ." note at the bottom-right corner (B): the radius or chamfer
+;; measurement with a Typ. suffix, or a 90-degree leader for square
+;; corners.  Out-of-square pools dim every corner individually --
+;; radius dim, chamfer dim, or the ACTUAL angular dimension for a
+;; square corner.  Assumes CLAYER is already DIMENSION.
+(defun pool:dimcorners (quad corners arcs cen doff / ilist sfx i cc ce p pp pn
+                                                    ty outd am fm p1 p2)
+  (if pool:*insq*
+      (setq ilist (list 1) sfx " Typ.")
+      (setq ilist (list 0 1 2 3) sfx ""))
+  (foreach i ilist
+    (setq p (nth i quad)
+          pp (nth (rem (+ i 3) 4) quad)
+          pn (nth (rem (+ i 1) 4) quad)
+          cc (nth i corners)
+          ty (car cc)
+          ce (pool:cornerends p pp pn ty (cadr cc))
+          outd (pool:unit (pool:v- p cen)))
+    (cond
+      ((= ty "Rounded")
+       (setq am (caddr ce))
+       (if (= sfx "")
+           (command "_.DIMRADIUS" (list (nth i arcs) (pool:wp am))
+                    (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))
+           (command "_.DIMRADIUS" (list (nth i arcs) (pool:wp am))
+                    "_T" (strcat "<>" sfx)
+                    (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))))
+      ((= ty "Diag")
+       (setq fm (pool:mid (car ce) (cadr ce)))
+       (if (= sfx "")
+           (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
+                    (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))
+           (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
+                    "_T" (strcat "<>" sfx)
+                    (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))))
+      (t                                ; Square
+       (if (= sfx "")
+           (progn                       ; the actual corner angle
+             (setq p1 (pool:v+ p (pool:v* (pool:unit (pool:v- pp p)) (* 0.8 doff)))
+                   p2 (pool:v+ p (pool:v* (pool:unit (pool:v- pn p)) (* 0.8 doff)))
+                   fm (pool:v+ p (pool:v* (pool:unit (pool:v- cen p)) doff)))
+             (command "_.DIMANGULAR" ""
+                      (pool:wp p) (pool:wp p1) (pool:wp p2) (pool:wp fm)))
+           (command "_.LEADER" (pool:wp p)
+                    (pool:wp (pool:v+ p (pool:v* outd (* 1.2 doff))))
+                    "" "90%%d Typ." ""))))))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
 ;; the visual matches what will be built.  gq = the guide quad,
@@ -2294,7 +2349,7 @@
 
 ;; Full guided flow for the quad-based pools: preview, prompts, fit,
 ;; draw, dimension and report.  Caller handles sysvars/undo/zoom.
-(defun pool:quadflow (ptype / oldclay pv
+(defun pool:quadflow (ptype / oldclay pv arcs
                              tp bo le ri dac dbd totl lrad rrad
                              corners cmode anycut cc prevty prevsz lbl
                              gq gcorners xmeas tm hl val m rpa rpb pass
@@ -2421,7 +2476,7 @@
   ;; body end lines are reference only (dashed) and the perimeter
   ;; closes through the arcs instead.
   (if (= ptype "Rectangle")
-      (pool:drawrect quad corners)
+      (setq arcs (pool:drawrect quad corners))
       (progn
         (pool:line a b "POOL")
         (pool:line c d "POOL")
@@ -2479,6 +2534,10 @@
   (pool:dimalg d c (pool:outoff d c cen doff))
   (pool:dimalg a d (pool:outoff a d cen endoff))
   (pool:dimalg b c (pool:outoff b c cen endoff))
+  ;; corner annotations: one "Typ." at B when in-square, every corner
+  ;; individually when out-of-square
+  (if (= ptype "Rectangle")
+      (pool:dimcorners quad corners arcs cen doff))
   (if (= ptype "Oval")
       (progn
         (pool:dimalg midl tipl (pool:v+ (pool:mid midl tipl)
