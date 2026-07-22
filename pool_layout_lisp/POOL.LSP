@@ -2692,6 +2692,227 @@
       (princ "\nPool layout complete -- see the report table."))
   (princ))
 
+;;; -------------------- roman pools ------------------------------------
+;;;
+;;;  Rectangle body of side length T and width A, with a radius end
+;;;  behind corner drops at each side (per the Roman field sheet):
+;;;  B/A overalls, S = tip setback past the side ends, S1 = corner
+;;;  drop, V = end width between the arc springs, R1/R2 = end radii.
+;;;  Letters close against the overalls like the grecian sheet
+;;;  (S+T+S = B with T absorbing, S1+V+S1 = A with V absorbing).
+;;;  Interior = the True Oval hopper / sport bottoms.
+
+;; Per-end vertical resolution: returns (S1 V) against overall width.
+(defun pool:romres (aov s1raw vraw)
+  (cond
+    (s1raw (list s1raw (- aov (* 2.0 s1raw))))
+    (vraw (list (/ (- aov vraw) 2.0) vraw))
+    (t (list (/ aov 6.0) (* aov (/ 2.0 3.0))))))
+
+;; Build and draw one Roman end.  pbot/ptop = body end corners, m =
+;; outward unit normal, s = tip setback, v = end width, r = radius.
+;; Returns (tip springTop springBot arcEname rUsed note).
+(defun pool:romend (pbot ptop m s v r lay / u mide tip half inset st sb note sx)
+  (setq u (pool:unit (pool:v- ptop pbot))
+        mide (pool:mid pbot ptop)
+        tip (pool:v+ mide (pool:v* m s))
+        half (* 0.5 v))
+  (if (< r half)
+      (setq r half note "R SMALLER THAN V/2 -- SEMICIRCLE USED"))
+  (setq inset (- r (sqrt (max 0.0 (- (* r r) (* half half)))))
+        sx (pool:v+ mide (pool:v* m (- s inset)))
+        st (pool:v+ sx (pool:v* u half))
+        sb (pool:v- sx (pool:v* u half)))
+  (pool:line ptop st lay)
+  (pool:line pbot sb lay)
+  (pool:arc3p st tip sb lay)
+  (list tip st sb (entlast) r note))
+
+;; Gray nominal Roman guide with the sheet's lettered ties.
+(defun pool:romanpreview (needx / a b c d tl tr st1 sb1 st2 sb2 pv)
+  (setq a (list 0.0 0.0) b (list 360.0 0.0)
+        c (list 360.0 180.0) d (list 0.0 180.0)
+        tl (list -50.0 90.0) tr (list 410.0 90.0)
+        st1 (list -28.99 140.0) sb1 (list -28.99 40.0)
+        st2 (list 388.99 140.0) sb2 (list 388.99 40.0))
+  (pool:pvadd (pool:pvline a b))
+  (pool:pvadd (pool:pvline d c))
+  (pool:pvadd (pool:pvlined b c))
+  (pool:pvadd (pool:pvlined d a))
+  (pool:pvadd (pool:pvline d st1))
+  (pool:pvadd (pool:pvline a sb1))
+  (pool:pvadd (pool:pvline c st2))
+  (pool:pvadd (pool:pvline b sb2))
+  (pool:arc3p st1 tl sb1 "POOL-NOTES")
+  (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
+  (pool:arc3p st2 tr sb2 "POOL-NOTES")
+  (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
+  (setq pv (list
+    (pool:pvtie (list -50.0 240.0) (list 410.0 240.0) "B" 10.0)
+    (pool:pvtie (list 0.0 215.0) (list 360.0 215.0) "T" 10.0)
+    (pool:pvtie (list -50.0 215.0) (list 0.0 215.0) "SL" 10.0)
+    (pool:pvtie (list 360.0 215.0) (list 410.0 215.0) "SR" 10.0)
+    (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
+    (pool:pvtie (list -72.0 140.0) (list -72.0 180.0) "S1L" 10.0)
+    (pool:pvtie (list -72.0 40.0) (list -72.0 140.0) "VL" 10.0)
+    (pool:pvtie (list 432.0 140.0) (list 432.0 180.0) "S1R" 10.0)
+    (pool:pvtie (list 432.0 40.0) (list 432.0 140.0) "VR" 10.0)
+    (pool:pvtie tl (list 20.0 90.0) "R1" 10.0)
+    (pool:pvtie tr (list 340.0 90.0) "R2" 10.0)))
+  (if needx
+      (setq pv (append pv (list
+        (cons "XAC" (list (pool:pvadd (pool:pvlined a c))))
+        (cons "XBD" (list (pool:pvadd (pool:pvlined b d))))))))
+  pv)
+
+;; Full guided flow for Roman pools.
+(defun pool:romanflow ( / oldclay perfect pv braw araw traw
+                          slraw srraw s1lraw s1rraw vlraw vrraw r1 r2
+                          hres sl tv sr lres rres s1l vl s1r vr
+                          dac dbd fq quad failed a b c d cen meas notes
+                          ml mr lend rend tipl tipr doff th odim pr
+                          allpts xmax ymax ymin rows)
+  (setq oldclay (getvar "CLAYER"))
+  (if pool:*insq*
+      (setq perfect t)
+      (progn
+        (initget 1 "Yes No")
+        (setq perfect (= "Yes" (getkword "\nAre both ends perfect (identical) [Yes/No]: ")))))
+  (setq pv (pool:romanpreview (not pool:*insq*)))
+  (command "_.ZOOM" "_Window"
+           (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0)))
+  (princ "\nRoman sheet -- the RED tie is the dimension being asked for.")
+  (setq braw (pool:askh "B - overall length" (cdr (assoc "B" pv)))
+        araw (pool:askh "A - overall width" (cdr (assoc "A" pv)))
+        traw (pool:askhx "T - side length (top & bottom)" (cdr (assoc "T" pv))))
+  (if perfect
+      (setq slraw (pool:askhx "S - end setback (both ends)"
+                              (append (cdr (assoc "SL" pv)) (cdr (assoc "SR" pv))))
+            srraw slraw
+            s1lraw (pool:askhx "S1 - corner drop (all corners)"
+                               (append (cdr (assoc "S1L" pv)) (cdr (assoc "S1R" pv))))
+            s1rraw s1lraw
+            vlraw (pool:askhx "V - end width (both ends)"
+                              (append (cdr (assoc "VL" pv)) (cdr (assoc "VR" pv))))
+            vrraw vlraw
+            r1 (pool:askh "R - end radius (both ends)"
+                          (append (cdr (assoc "R1" pv)) (cdr (assoc "R2" pv))))
+            r2 r1)
+      (setq slraw (pool:askhx "S - LEFT end setback" (cdr (assoc "SL" pv)))
+            srraw (pool:askhx "S - RIGHT end setback" (cdr (assoc "SR" pv)))
+            s1lraw (pool:askhx "S1 - LEFT corner drop" (cdr (assoc "S1L" pv)))
+            s1rraw (pool:askhx "S1 - RIGHT corner drop" (cdr (assoc "S1R" pv)))
+            vlraw (pool:askhx "V - LEFT end width" (cdr (assoc "VL" pv)))
+            vrraw (pool:askhx "V - RIGHT end width" (cdr (assoc "VR" pv)))
+            r1 (pool:askh "R1 - LEFT end radius" (cdr (assoc "R1" pv)))
+            r2 (pool:askh "R2 - RIGHT end radius" (cdr (assoc "R2" pv)))))
+  (if (not pool:*insq*)
+      (setq dac (pool:askhx "Cross dim body A-C" (cdr (assoc "XAC" pv)))
+            dbd (pool:askhx "Cross dim body B-D" (cdr (assoc "XBD" pv)))))
+  (pool:pvkill)
+
+  ;; resolve: SL + T + SR = B (T absorbs); per end S1/V vs A (V absorbs)
+  (setq hres (pool:chainfix (list slraw traw srraw) braw 1)
+        sl (car hres) tv (cadr hres) sr (caddr hres)
+        lres (pool:romres araw s1lraw vlraw)
+        s1l (car lres) vl (cadr lres)
+        rres (pool:romres araw s1rraw vrraw)
+        s1r (car rres) vr (cadr rres))
+
+  ;; body fit (sides T, ends A) + roman ends
+  (princ "\nFitting pool body to the measurements ...")
+  (setq fq (pool:fitquad tv tv araw araw dac dbd pool:*side-tol* pool:*cross-tol*)
+        quad (car fq) failed (cadr fq)
+        a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
+        cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
+        meas (pool:quadmeas quad)
+        notes nil
+        doff (max 12.0 (/ (max tv araw) 18.0))
+        th (max 3.0 (/ (max tv araw) 70.0))
+        pool:*dashlt* (pool:ltload "DASHED")
+        pool:*lts* (max 1.0 (/ (max tv araw) 15.0)))
+  (pool:line a b "POOL")
+  (pool:line c d "POOL")
+  (pool:lined b c)
+  (pool:lined d a)
+  (setq ml (pool:unit (pool:perp (pool:v- d a))))
+  (if (< (pool:dot (pool:v- (pool:mid a d) cen) ml) 0.0)
+      (setq ml (pool:v* ml -1.0)))
+  (setq mr (pool:unit (pool:perp (pool:v- c b))))
+  (if (< (pool:dot (pool:v- (pool:mid b c) cen) mr) 0.0)
+      (setq mr (pool:v* mr -1.0)))
+  (setq lend (pool:romend a d ml sl vl r1 "POOL")
+        rend (pool:romend b c mr sr vr r2 "POOL")
+        tipl (car lend) tipr (car rend))
+  (if (nth 5 lend) (setq notes (cons (strcat "LEFT END: " (nth 5 lend)) notes)))
+  (if (nth 5 rend) (setq notes (cons (strcat "RIGHT END: " (nth 5 rend)) notes)))
+
+  ;; dims
+  (setq allpts (append quad (list tipl tipr (cadr lend) (caddr lend)
+                                  (cadr rend) (caddr rend)))
+        xmax (apply 'max (mapcar 'car allpts))
+        ymax (apply 'max (mapcar 'cadr allpts))
+        ymin (apply 'min (mapcar 'cadr allpts)))
+  (setvar "CLAYER" "DIMENSION")
+  (pool:dimalg a b (pool:outoff a b cen doff))
+  (pool:dimalg d c (pool:outoff d c cen doff))
+  (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr)) (- ymin (* 1.5 doff))))
+  (pool:dimalg a d (list (- (car tipl) (* 1.2 doff)) (cadr (pool:mid a d))))
+  (command "_.DIMRADIUS" (list (nth 3 lend) (pool:wp tipl))
+           (pool:wp (pool:v+ tipl (pool:v* ml (* 0.8 doff)))))
+  (command "_.DIMRADIUS" (list (nth 3 rend) (pool:wp tipr))
+           (pool:wp (pool:v+ tipr (pool:v* mr (* 0.8 doff)))))
+  (setq odim (pool:dimxbegin))
+  (if dac
+      (progn
+        (pool:dimalg a c (pool:v+ (pool:mid a c)
+                                  (pool:v* (pool:unit (pool:perp (pool:v- c a)))
+                                           (* 0.2 doff))))
+        (pool:dimdash)))
+  (if dbd
+      (progn
+        (pool:dimalg b d (pool:v+ (pool:mid b d)
+                                  (pool:v* (pool:unit (pool:perp (pool:v- d b)))
+                                           (* -0.2 doff))))
+        (pool:dimdash)))
+  (pool:dimxend odim)
+  (setvar "CLAYER" oldclay)
+
+  ;; body corner labels
+  (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
+    (pool:text (pool:v+ (car pr)
+                        (pool:v* (pool:unit (pool:v- (car pr) cen)) (* 1.5 th)))
+               th (cadr pr) "POOL-NOTES"))
+
+  ;; report
+  (setq rows (list
+    (list "OV B" braw (distance tipl tipr))
+    (list "OV A" araw (distance a d))
+    (list "T TOP" traw (distance d c))
+    (list "T BOT" traw (distance a b))
+    (list "S LEFT" slraw (distance tipl (pool:mid a d)))
+    (list "S RIGHT" srraw (distance tipr (pool:mid b c)))
+    (list "S1 LEFT" s1lraw (/ (- (distance a d)
+                                 (distance (cadr lend) (caddr lend))) 2.0))
+    (list "S1 RIGHT" s1rraw (/ (- (distance b c)
+                                  (distance (cadr rend) (caddr rend))) 2.0))
+    (list "V LEFT" vlraw (distance (cadr lend) (caddr lend)))
+    (list "V RIGHT" vrraw (distance (cadr rend) (caddr rend)))
+    (list "R1" r1 (nth 4 lend))
+    (list "R2" r2 (nth 4 rend))))
+  (if (not pool:*insq*)
+      (setq rows (append rows
+                         (list (list "CROSS A-C" dac (nth 4 meas))
+                               (list "CROSS B-D" dbd (nth 5 meas))))))
+  ;; interior: the True Oval hopper / sport bottoms
+  (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
+  (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (if failed
+      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
+      (princ "\nPool layout complete -- see the report table."))
+  (princ))
+
 ;;; -------------------- main command -----------------------------------
 
 (defun c:POOL ( / *error* oldcmd oldos oldclay oldlun ptype base)
@@ -2734,9 +2955,9 @@
   (if pool:*insq*
       (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
-  ;; L = true L; LAzyl = lazy L (type LA to select it)
-  (initget 1 "Rectangle Oval Grecian L LAzyl")
-  (setq ptype (getkword "\nPool shape [Rectangle/Oval/Grecian/L/LAzyl]: "))
+  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
+  (initget 1 "Rectangle Oval Grecian L LAzyl ROman")
+  (setq ptype (getkword "\nPool shape [Rectangle/Oval/Grecian/L/LAzyl/ROman]: "))
 
   (setq base (getpoint "\nInsertion base point <0,0>: ")
         pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
@@ -2756,6 +2977,7 @@
     ((= ptype "L") (pool:hexflow nil))
     ((= ptype "LAzyl") (pool:hexflow t))
     ((= ptype "Grecian") (pool:grecflow))
+    ((= ptype "ROman") (pool:romanflow))
     (t (pool:quadflow ptype)))
 
   ;; ------------------------------------------------ finish

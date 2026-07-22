@@ -1,9 +1,9 @@
 # POOL.LSP — swimming-pool as-built layout for AutoCAD
 
 AutoLISP routine that draws a pool plan (**Rectangle**, **Oval**,
-**Grecian**, **L** or **Lazy L**) from real-world field measurements,
-dimensions it, and writes a target / actual / delta report next to
-the drawing.
+**Grecian**, **L**, **Lazy L** or **Roman**) from real-world field
+measurements, dimensions it, and writes a target / actual / delta
+report next to the drawing.
 
 Written in plain AutoLISP (`entmake` + classic commands only — no
 ActiveX/VLA), so it loads in **AutoCAD 2018** and older releases alike
@@ -35,8 +35,9 @@ A ---------- B        cross:  A-C and B-D
 1. **In-square or out-of-square?** An **in-square** pool is built true
    to the side/end measurements — no diagonals are asked for or drawn.
    An **out-of-square** pool takes the full cross-dim route below.
-2. Pool shape: `Rectangle` / `Oval` / `Grecian` / `L` / `LAzyl`
-   (type `L` for a true L, `LA` for a lazy L).
+2. Pool shape: `Rectangle` / `Oval` / `Grecian` / `L` / `LAzyl` /
+   `ROman` (type `L` for a true L, `LA` for a lazy L, `RO` for a
+   Roman).
 3. Insertion base point.
 4. Side lengths, top then bottom.
 5. End lengths, left then right.
@@ -203,6 +204,30 @@ and you only need the outline dimensioned. **Out-of-square** is the
 full workflow: cross dims are prompted, the shape is best-fit to them
 within tolerance, and the target/actual/delta report and (for a
 rectangle) the exact triangle check figure are produced.
+
+### Roman pools
+
+A Roman is a rectangle body with a **radius end behind corner drops**
+at each side, entered from the Roman field sheet: `B`/`A` overalls
+(required), `T` side length, `S` tip setback past the side ends, `S1`
+corner drop, `V` end width between the arc springs, and the end radii.
+The letters close against the overalls exactly like the Grecian sheet
+(`S+T+S = B` with **T absorbing**, `S1+V+S1 = A` with **V absorbing**;
+`NA` derives from the partners).
+
+* **In-square** pools are **perfect**: one `S`/`S1`/`V` set and a
+  single radius `R` apply to both ends.
+* **Out-of-square** pools first ask **`Are both ends perfect?`** —
+  Yes keeps the single symmetric set; No asks each end's `S`, `S1`,
+  `V` and `R1`/`R2` separately. Body cross dims (A-C, B-D, NA-able,
+  drawn dashed) fit the out-of-squareness of the T×A body, and the
+  ends are built onto the fitted body.
+
+An end whose radius is smaller than `V/2` can't reach its springs;
+it's drawn as a semicircle and flagged in the notes. The ends get
+radius dimensions, the overalls B (tip to tip) and A are dimensioned
+like the sheet, and the interior is the **True Oval hopper / sport
+bottom** phase, tips and all.
 
 ### Grecian perimeter input (Measured / Overall)
 
