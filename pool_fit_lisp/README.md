@@ -6,7 +6,7 @@ perimeter, by a rough connect-the-dots sketch, or from the points
 alone — using as **few curves as possible**, each with a **friendly
 radius** (whole feet, half feet, or whole inches) whenever one fits.
 Every arc runs **from survey point to survey point** and meets its
-neighbour **within 5° of tangent**, so the outline reads as smooth
+neighbour **within 8° of tangent**, so the outline reads as smooth
 while the points stay in charge. Up to 15% of the points (rounded up)
 are allowed to sit about an inch off the result, and you can cap the
 number of curves outright.
@@ -43,11 +43,11 @@ long, overarching arcs that sit **on the points** and meet each other
   interior is fitted through the points it covers with exact
   **3-point arcs** — being on the points comes first.
 * At every joint the new arc must start within `*PF-TANG-TOL*`
-  (**5°**) of the previous arc's end tangent — close enough to look
+  (**8°**) of the previous arc's end tangent — close enough to look
   smooth, loose enough that the points stay in charge. The closing
-  seam of the loop is held to the same 5° (when the first pass closes
-  worse, the fit is re-run once with the arrival tangent seeded into
-  the first span).
+  seam of the loop is held to the same window (when the first pass
+  closes worse, the fit is re-run once with the arrival tangent
+  seeded into the first span).
 * Each arc is grown point by point for as long as one in-window arc
   can hold every covered point within the tolerance (and the miss
   allowance) — the longest arc that fits the most points wins.
@@ -69,7 +69,7 @@ its points: **whole feet** first, then **half feet**, then **whole
 inches** (`*PF-NICE-RADII*`, drawing units are inches — e.g. `24` =
 2′-0″ before `23.71`). The arc's endpoints never move (they are survey
 points) and a snap is only taken when the snapped bulge stays inside
-the 5° tangent window, so snapping never breaks the near-tangency.
+the 8° tangent window, so snapping never breaks the near-tangency.
 
 ## The curve cap
 
@@ -78,16 +78,20 @@ unlimited; the answer is remembered for the session). When a fit needs
 more curves than allowed, the whole loop is **refitted with a
 progressively relaxed tolerance** until the cap holds — the tangent
 windows stay in force, so capped results stay as smooth as the cap
-allows (a very tight cap may need more than 5° at a joint to close
+allows (a very tight cap may need more than 8° at a joint to close
 the loop; the hit report shows the cost). The cap **wins over the
 tolerance**. In guided mode the drawn walls are trusted, so the cap is
 reported rather than enforced there.
 
 All thresholds are constants at the top of `abhd.lsp`
-(`*PF-MISS-PCT*`, `*PF-ON-EPS*` — default 0.5, half the default
-tolerance — `*PF-CORNER-ANG*`, `*PF-NICE-RADII*`, `*PF-TANG-TOL*`),
-as are the layer names (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`,
-`*PF-OUT-LAYER*`).
+(`*PF-MISS-PCT*`, `*PF-ON-EPS*` — default 0.25, a quarter of the
+default tolerance — `*PF-CORNER-ANG*`, `*PF-NICE-RADII*`,
+`*PF-TANG-TOL*`), as are the layer names (`*PF-POOL-LAYER*`,
+`*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`). The defaults were calibrated
+against a real hand-drawn as-built trace (55 `ab_pt` points, 37×16 ft
+pool, ~20″ point spacing): with them the automatic fit stays within
+about an inch of the hand trace everywhere while using fewer arcs
+(20 vs 23).
 
 ## Usage
 

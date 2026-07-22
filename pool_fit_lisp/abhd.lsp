@@ -30,12 +30,12 @@
 ;;; NEAR-TANGENT SMOOTHNESS: every arc endpoint sits ON a survey
 ;;; point (spans run point-to-point; their interiors are fitted
 ;;; through the points with exact 3-point arcs).  At every joint the
-;;; new arc must start within *PF-TANG-TOL* (5 degrees) of the
+;;; new arc must start within *PF-TANG-TOL* (8 degrees) of the
 ;;; previous arc's end tangent - close enough to look smooth, loose
 ;;; enough that the points stay in charge.  Sharp corners (over
 ;;; *PF-CORNER-ANG*) stay free kinks; the closing seam is held to the
-;;; same 5 degrees (the fit is re-run once with a seeded start
-;;; tangent when the seam comes out worse).
+;;; same window (the fit is re-run once with a seeded start tangent
+;;; when the seam comes out worse).
 ;;;
 ;;; NICE RADII: arc radii are snapped to friendly increments before a
 ;;; free ("weird") number is accepted - whole feet first, then half
@@ -96,11 +96,12 @@
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
                                     ; points by more than this, split it
                                     ; into several arcs that hit exactly
-(setq *PF-ON-EPS*       0.5)        ; a point within this of the result
-                                    ; counts as ON it (half the default
-                                    ; tolerance); only points off by more
-                                    ; than this eat into the miss
-                                    ; allowance below
+(setq *PF-ON-EPS*       0.25)       ; a point within this of the result
+                                    ; counts as ON it; only points off by
+                                    ; more than this eat into the miss
+                                    ; allowance below.  Calibrated from a
+                                    ; hand-drawn reference trace: ~87% of
+                                    ; its points sat within a quarter inch
 (setq *PF-MISS-PCT*     0.15)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
                                     ; result by up to the tolerance
@@ -123,13 +124,19 @@
                                     ; still holds the points; only when
                                     ; none does is the free-fit ("weird")
                                     ; radius kept.
-(setq *PF-TANG-TOL* (/ pi 36.0))    ; wiggle room from perfect
+(setq *PF-TANG-TOL* (/ pi 22.5))    ; wiggle room from perfect
                                     ; tangency at each joint between two
-                                    ; arcs (5 degrees).  Being ON the
+                                    ; arcs (8 degrees).  Being ON the
                                     ; points matters more than perfect
                                     ; tangency; this slack is what lets
                                     ; every arc endpoint sit on a survey
                                     ; point and radii stay nice.
+                                    ; Calibrated from a hand-drawn
+                                    ; reference trace whose joints ran up
+                                    ; to 7.9 deg (median 3 deg); tighter
+                                    ; values shatter the fit into many
+                                    ; short arcs (5 deg is workable,
+                                    ; 6 deg and below is not).
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
 (if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
@@ -697,7 +704,7 @@
 ;; tour point and its interior is fitted through the points with exact
 ;; 3-point arcs.  Tangency is a WINDOW, not a chain: at each joint the
 ;; new arc's start tangent may differ from the previous arc's end
-;; tangent by at most *PF-TANG-TOL* (5 degrees), so the perimeter
+;; tangent by at most *PF-TANG-TOL* (8 degrees), so the perimeter
 ;; stays visually smooth while the points stay in charge.  A bulge
 ;; window is a cons (lo . hi); nil means unconstrained.
 
@@ -885,7 +892,7 @@
   segs)
 
 ;; Points-only / ordering-sketch fit: arcs on the points, joints
-;; within 5 degrees of tangent, nice radii.  The curve cap is enforced
+;; within *PF-TANG-TOL* of tangent, nice radii.  The curve cap is enforced
 ;; by refitting the whole loop with a progressively relaxed tolerance,
 ;; which keeps the tangent windows intact.
 (defun pf:coarse-loop (tour tol maxarcs / segs tol2 tries)
