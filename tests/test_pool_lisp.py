@@ -914,4 +914,40 @@ assert abs(dist(gg['pl'],gg['phl'])-30)<1e-9
 assert abs(dist(gg['pb'],gg['phb'])-50)<1e-9
 print("   chain at centre-12 (or centre-L/6) and at G-right+12; values intact")
 
+
+print("== 43. Grecian overall-sheet input (A/B/T/S/S1/V/S2) ==")
+def grecov(aov,bov,s,t,s1,v):
+    if s is not None: S,T = s, bov-2*s          # T absorbs
+    elif t is not None: S,T = (bov-t)/2.0, t
+    else: S,T = bov/8.0, 0.75*bov
+    if s1 is not None: S1,V = s1, aov-2*s1      # V absorbs
+    elif v is not None: S1,V = (aov-v)/2.0, v
+    else: S1,V = aov/6.0, aov*2.0/3.0
+    return S,T,S1,V
+# consistent sheet: B=500 A=200 T=400 S=50 S1=55 V=90
+S,T,S1,V = grecov(200,500,50,400,55,90)
+assert (S,T,S1,V)==(50,400,55,90)
+# T and V absorb when the given values don't close
+S,T,S1,V = grecov(200,500,50,398,55,88)
+assert (S,T,S1,V)==(50,400,55,90)
+# NA derivations
+S,T,S1,V = grecov(200,500,None,400,None,90)
+assert (S,T,S1,V)==(50.0,400,55.0,90)
+# derived edges feed the existing pipeline and reproduce the sheet
+hyp=math.hypot(50,55)
+q,failed=fitquad(400,400,200,200,None,None)
+a,b,c,d=q
+cen0=((a[0]+b[0]+c[0]+d[0])/4.0,(a[1]+b[1]+c[1]+d[1])/4.0)
+ml=_unit(_perp(_sub(d,a)))
+if _dot(_sub(_mid(a,d),cen0),ml)<0: ml=_scl(ml,-1.0)
+lend=grecendp(a,d,ml,hyp,hyp,90)
+LT,LB=lend[0],lend[1]
+# the end solver scans 0.05-degree steps with 1/16\" acceptance, so
+# the seed lands within ~1/32\" of the sheet -- well inside tolerance
+assert abs(LT[0]-(-50))<0.05 and abs(LT[1]-145)<0.05
+assert abs(LB[0]-(-50))<0.05 and abs(LB[1]-55)<0.05
+assert abs(dist(LT,LB)-90)<0.05                       # V
+assert abs(dist(d,LT)-hyp)<1e-6                       # S2 face exact
+print(f"   S/T/S1/V resolve + seed reproduces the sheet exactly (hyp={hyp:.3f})")
+
 print("\nALL CHECKS PASSED")

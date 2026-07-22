@@ -777,10 +777,13 @@
 ;; dashed internal end chords), corner labels clear of the linework,
 ;; and the active mode's cross diagonals (dashed).  Returns the
 ;; highlight assoc (edge prompt-keys + one entry per cross name).
+(setq pool:*grecnpts* (list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0)
+                            (list 410.0 125.0) (list 360.0 180.0)
+                            (list 0.0 180.0) (list -50.0 125.0)
+                            (list -50.0 55.0)))
+
 (defun pool:grecpreview (crosses / npts cen p q e c ent all pv k)
-  (setq npts (list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0)
-                   (list 410.0 125.0) (list 360.0 180.0) (list 0.0 180.0)
-                   (list -50.0 125.0) (list -50.0 55.0))
+  (setq npts pool:*grecnpts*
         cen (list 0.0 0.0) all nil pv nil)
   (foreach p npts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 8.0)))
@@ -803,7 +806,37 @@
 
 ;; Full guided flow for a Grecian pool (all three cross-dim modes).
 ;; Caller handles sysvars / undo / zoom-extents.
-(defun pool:grecflow ( / oldclay mode crosses pv
+;; Resolve the overall-sheet letters against the overalls: S/T close
+;; against B (T absorbs any difference), S1/V against A (V absorbs);
+;; NA entries are derived, and with a whole pair NA a nominal split is
+;; used.  Returns (S T S1 V).
+(defun pool:grecov (aov bov sraw traw s1raw vraw / s tv s1 v)
+  (cond
+    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
+    (traw (setq s (/ (- bov traw) 2.0) tv traw))
+    (t (setq s (/ bov 8.0) tv (* 0.75 bov))))
+  (cond
+    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
+    (vraw (setq s1 (/ (- aov vraw) 2.0) v vraw))
+    (t (setq s1 (/ aov 6.0) v (* aov (/ 2.0 3.0)))))
+  (list s tv s1 v))
+
+;; Overall-sheet guide ties (B T S A S1 V S2) laid around the nominal
+;; grecian guide like the field sheet.  Returns the highlight assoc.
+(defun pool:grecovties ( / pv)
+  (setq pv (list
+    (pool:pvtie (list -50.0 240.0) (list 410.0 240.0) "B" 10.0)
+    (pool:pvtie (list 0.0 215.0) (list 360.0 215.0) "T" 10.0)
+    (pool:pvtie (list -50.0 215.0) (list 0.0 215.0) "S" 10.0)
+    (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
+    (pool:pvtie (list -72.0 125.0) (list -72.0 180.0) "S1" 10.0)
+    (pool:pvtie (list -72.0 55.0) (list -72.0 125.0) "V" 10.0)
+    (pool:pvtie (list 375.0 -15.0) (list 425.0 40.0) "S2" 10.0)))
+  pv)
+
+(defun pool:grecflow ( / oldclay mode crosses pv imeth pvo
+                       braw araw traw sraw s1raw vraw s2raw
+                       ovres sv tv s1v vov hyp u2 vv2 bact aact sact s1act
                        tp bo le ri ltd lbd lew rtd rbd rew
                        evals edgecons crosscons dac dbd fq q
                        a b c d cen0 ml mr lend rend seed
@@ -821,14 +854,37 @@
         (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
               crosses (pool:grecmode mode))))
 
+  ;; perimeter input method: measure every edge, or the overall sheet
+  ;; (A/B overalls with the sides assumed symmetric)
+  (initget 1 "Measured Overall")
+  (setq imeth (getkword "\nGrecian perimeter input [Measured/Overall]: "))
+
   (setq pv (pool:grecpreview crosses))
+  (if (= imeth "Overall") (setq pvo (pool:grecovties)))
   (command "_.ZOOM" "_Window"
-           (pool:wp (list -110.0 -80.0)) (pool:wp (list 470.0 300.0)))
+           (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0)))
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A/B bottom, C/D top, LT/LB left tips, RT/RB right tips.")
 
-  ;; -------- body + ends (in-square: mirrored pairs asked once)
-  (if pool:*insq*
+  ;; -------- body + ends: measured edges, or the overall sheet
+  (if (= imeth "Overall")
+      (progn
+        (princ "\nOverall sheet -- symmetric grecian; the RED tie is being asked for.")
+        (setq braw (pool:askh "B - overall length" (cdr (assoc "B" pvo)))
+              araw (pool:askh "A - overall width" (cdr (assoc "A" pvo)))
+              traw (pool:askhx "T - top side length" (cdr (assoc "T" pvo)))
+              sraw (pool:askhx "S - corner cut along the side" (cdr (assoc "S" pvo)))
+              s1raw (pool:askhx "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
+              vraw (pool:askhx "V - end width" (cdr (assoc "V" pvo)))
+              s2raw (pool:askhx "S2 - corner cut face (check)" (cdr (assoc "S2" pvo)))
+              ovres (pool:grecov araw braw sraw traw s1raw vraw)
+              sv (car ovres) tv (cadr ovres)
+              s1v (caddr ovres) vov (cadddr ovres)
+              hyp (sqrt (+ (* sv sv) (* s1v s1v)))
+              bo tv tp tv le araw ri araw
+              ltd hyp lbd hyp rtd hyp rbd hyp
+              lew vov rew vov))
+      (if pool:*insq*
       (setq bo  (pool:askh "Side (top & bottom)"
                            (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))))
             tp  bo
@@ -852,7 +908,7 @@
             lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
             rtd (pool:askh "RIGHT end diagonal TOP (C-RT)" (cdr (assoc 'rtd pv)))
             rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)" (cdr (assoc 'rbd pv)))
-            rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv)))))
+            rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv))))))
 
   ;; -------- cross dims for the chosen mode (NA allowed on each)
   (setq crosscons nil)
@@ -965,6 +1021,27 @@
           act (distance (nth (car cc) pts) (nth (cadr cc) pts))
           rows (cons (list (strcat "X " nm) (caddr cc) act) rows)))
   (setq rows (reverse rows))
+  ;; overall-sheet letters vs the fitted shape
+  (if (= imeth "Overall")
+      (progn
+        (setq u2 (pool:v- (nth 1 pts) (nth 0 pts))
+              vv2 (pool:v- (nth 5 pts) (nth 0 pts))
+              bact (distance
+                     (pool:linex cen u2 (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
+                     (pool:linex cen u2 (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts))))
+              aact (distance
+                     (pool:linex cen vv2 (nth 0 pts) u2)
+                     (pool:linex cen vv2 (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts))))
+              sact (abs (pool:dot (pool:v- (nth 6 pts) (nth 5 pts)) (pool:unit u2)))
+              s1act (abs (pool:dot (pool:v- (nth 6 pts) (nth 5 pts)) (pool:unit vv2))))
+        (setq rows (append rows (list
+          (list "OV B" braw bact)
+          (list "OV A" araw aact)
+          (list "OV T" traw (distance (nth 5 pts) (nth 4 pts)))
+          (list "OV S" sraw sact)
+          (list "OV S1" s1raw s1act)
+          (list "OV V" vraw (distance (nth 6 pts) (nth 7 pts)))
+          (list "OV S2" s2raw (distance (nth 5 pts) (nth 6 pts))))))))
   ;; -------- pool bottom (interior pipeline)
   (setq rows (append rows (pool:hopgrecdsp pts doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))

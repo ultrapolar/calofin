@@ -204,6 +204,27 @@ full workflow: cross dims are prompted, the shape is best-fit to them
 within tolerance, and the target/actual/delta report and (for a
 rectangle) the exact triangle check figure are produced.
 
+### Grecian perimeter input (Measured / Overall)
+
+After the cross-dim level, the Grecian asks **`Perimeter input
+[Measured/Overall]`**:
+
+* **Measured** — the existing per-edge prompts (body sides, body
+  ends, each end's diagonals and width).
+* **Overall** — the overall field sheet, with the sides **assumed
+  symmetric**: `B` overall length and `A` overall width (required),
+  then `T` top side, `S` corner-cut run along the side, `S1`
+  corner-cut drop down the end, `V` end width, `S2` cut face — each
+  `NA`-able. The letters close against the overalls (`S+T+S = B`,
+  `S1+V+S1 = A`): an `NA` is derived from its partners, and when both
+  are given but don't close, the middle absorbs (`T` against B, `V`
+  against A). `S2` is a check against √(S²+S1²). The derived edge set
+  feeds the normal pipeline, so cross dims, fitting, hoppers and the
+  report all work as usual, with `OV` report rows showing each sheet
+  letter against the fitted shape. The guide shows the sheet's ties
+  (B/T/S across the top, A/S1/V down the left, S2 at a cut),
+  highlighted as prompted.
+
 ### Grecian cross-dim detail (Simple / Center / Complex)
 
 A Grecian has **8 corners**: the body A/B/C/D plus the angled-end tips
