@@ -1682,7 +1682,7 @@
 (defun pool:hopcalc (quad corners h g e m k / a b c d cen hl hr ht hb brk
                                               hbl htl hbr htr brkb brkt
                                               lab1 lab2 lat1 lat2 hc hdir vdir
-                                              hc2 rc)
+                                              hc2)
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         hl (pool:offline a d cen h)
@@ -1709,8 +1709,7 @@
         ;; (2/3 down from the top of L), whichever is closer; the
         ;; M/L/K chain sits 12" right of the hopper's right edge
         hc2 (pool:v- hc (pool:v* (pool:unit vdir)
-                                 (min 12.0 (/ (distance hbr htr) 6.0))))
-        rc (pool:offline a d cen (+ h g 12.0)))
+                                 (min 12.0 (/ (distance hbr htr) 6.0)))))
   (list (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
         (list 'brkb brkb) (list 'brkt brkt)
         (list 'lab1 lab1) (list 'lab2 lab2)
@@ -1720,10 +1719,13 @@
         (list 'phr (pool:linex hc2 hdir (car hr) (cadr hr)))
         (list 'pbrk (pool:linex hc2 hdir (car brk) (cadr brk)))
         (list 'pr (pool:linex hc2 hdir b (pool:v- c b)))
-        (list 'pb (pool:linex (car rc) (cadr rc) a (pool:v- b a)))
-        (list 'phb (pool:linex (car rc) (cadr rc) (car hb) (cadr hb)))
-        (list 'pht (pool:linex (car rc) (cadr rc) (car ht) (cadr ht)))
-        (list 'pt (pool:linex (car rc) (cadr rc) d (pool:v- c d)))))
+        ;; M/L/K attach to the hopper's right edge itself; the dim
+        ;; line floats 12" further right via 'voff
+        (list 'pb (pool:linex (car hr) (cadr hr) a (pool:v- b a)))
+        (list 'phb hbr)
+        (list 'pht htr)
+        (list 'pt (pool:linex (car hr) (cadr hr) d (pool:v- c d)))
+        (list 'voff (pool:v* (pool:unit hdir) 12.0))))
 
 ;; Draw the hopper, slope break and corner ties on layer lay.  Each
 ;; hopper left corner ties to BOTH ends of its pool corner treatment
@@ -1835,12 +1837,16 @@
   ;; chain dimensions along the two centerlines, like the sheet
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
-  (foreach tl (list (list 'pl 'phl) (list 'phl 'phr) (list 'phr 'pbrk)
-                    (list 'pbrk 'pr) (list 'pht 'pt) (list 'phb 'pht)
-                    (list 'pb 'phb))
+  ;; M/L/K def points sit on the hopper edge; their dim line floats
+  ;; 12" right via the 'voff vector
+  (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
+                    (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
+                    (list 'pht 'pt t) (list 'phb 'pht t) (list 'pb 'phb t))
     (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
-                 (pool:mid (cadr (assoc (car tl) gg))
-                           (cadr (assoc (cadr tl) gg)))))
+                 (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
+                                    (cadr (assoc (cadr tl) gg)))
+                          (if (caddr tl) (cadr (assoc 'voff gg))
+                              (list 0.0 0.0)))))
   (setvar "CLAYER" odl)
   (list
     (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
@@ -1866,7 +1872,7 @@
 ;; Chain points follow the standard-hopper placement rules.
 (defun pool:hopsportc (lline rline bline tline cen e2 f2 g f1 e1 m k
                        / obl dfl dfr obr dfb dft oblb oblt obrb obrt
-                         dbl dtl dbr dtr hc hc2 vc up)
+                         dbl dtl dbr dtr hc hc2 up)
   (setq obl (pool:offln lline cen e2)
         dfl (pool:offln lline cen (+ e2 f2))
         dfr (pool:offln lline cen (+ e2 f2 g))
@@ -1883,8 +1889,7 @@
         dtr (pool:linex (car dfr) (cadr dfr) (car dft) (cadr dft))
         hc (pool:v* (pool:v+ (pool:v+ dbl dtl) (pool:v+ dbr dtr)) 0.25)
         up (pool:unit (cadr lline))
-        hc2 (pool:v- hc (pool:v* up (min 12.0 (/ (distance dbr dtr) 6.0))))
-        vc (pool:offln lline cen (+ e2 f2 g 12.0)))
+        hc2 (pool:v- hc (pool:v* up (min 12.0 (/ (distance dbr dtr) 6.0)))))
   (list (list 'oblb oblb) (list 'oblt oblt)
         (list 'obrb obrb) (list 'obrt obrt)
         (list 'dbl dbl) (list 'dtl dtl) (list 'dbr dbr) (list 'dtr dtr)
@@ -1894,10 +1899,12 @@
         (list 'pdfr (pool:linex hc2 (cadr bline) (car dfr) (cadr dfr)))
         (list 'pobr (pool:linex hc2 (cadr bline) (car obr) (cadr obr)))
         (list 'pr (pool:linex hc2 (cadr bline) (car rline) (cadr rline)))
-        (list 'pb (pool:linex (car vc) (cadr vc) (car bline) (cadr bline)))
-        (list 'pdb (pool:linex (car vc) (cadr vc) (car dfb) (cadr dfb)))
-        (list 'pdt (pool:linex (car vc) (cadr vc) (car dft) (cadr dft)))
-        (list 'pt (pool:linex (car vc) (cadr vc) (car tline) (cadr tline)))))
+        ;; M/L/K attach to the deep flat's right edge; dim line +12"
+        (list 'pb (pool:linex (car dfr) (cadr dfr) (car bline) (cadr bline)))
+        (list 'pdb dbr)
+        (list 'pdt dtr)
+        (list 'pt (pool:linex (car dfr) (cadr dfr) (car tline) (cadr tline)))
+        (list 'voff (pool:v* (pool:unit (cadr bline)) 12.0))))
 
 (defun pool:hopsportdraw (gg nopad lay pvflag / oblb oblt obrb obrt
                                                 dbl dtl dbr dtr)
@@ -2006,13 +2013,16 @@
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
   ;; plan chains, standard-hopper style
-  (foreach tl (append (list (list 'pl 'pobl) (list 'pobl 'pdfl))
-                      (if nopad nil (list (list 'pdfl 'pdfr)))
-                      (list (list 'pdfr 'pobr) (list 'pobr 'pr)
-                            (list 'pdt 'pt) (list 'pdb 'pdt) (list 'pb 'pdb)))
+  (foreach tl (append (list (list 'pl 'pobl nil) (list 'pobl 'pdfl nil))
+                      (if nopad nil (list (list 'pdfl 'pdfr nil)))
+                      (list (list 'pdfr 'pobr nil) (list 'pobr 'pr nil)
+                            (list 'pdt 'pt t) (list 'pdb 'pdt t)
+                            (list 'pb 'pdb t)))
     (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
-                 (pool:mid (cadr (assoc (car tl) gg))
-                           (cadr (assoc (cadr tl) gg)))))
+                 (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
+                                    (cadr (assoc (cadr tl) gg)))
+                          (if (caddr tl) (cadr (assoc 'voff gg))
+                              (list 0.0 0.0)))))
   (pool:dimalg (list (+ x0 total) y0) (list (+ x0 total) (- y0 wh))
                (list (+ x0 total (* 0.8 doff)) (- y0 (* 0.5 wh))))
   (setq xd (if nopad (+ x0 e2 f2) (+ x0 e2 f2 (* 0.5 g))))
@@ -2137,8 +2147,8 @@
         tb (pool:linex (car tan) (cadr tan) (car hb) (cadr hb))
         tip (pool:mid (pool:linex (car lt) (cadr lt) (car ht) (cadr ht))
                       (pool:linex (car lt) (cadr lt) (car hb) (cadr hb)))
-        ;; M/L/K chain 12" right of the hopper's right edge
-        vc (pool:v+ tipl (pool:v* u (+ h g 12.0)))
+        ;; M/L/K attach to the hopper's right edge; dim line +12"
+        vc (pool:v+ tipl (pool:v* u (+ h g)))
         ;; H/G/F/E chain below the hopper centre by 12" or L/6,
         ;; whichever is closer
         tip2 (pool:v- tip
@@ -2162,7 +2172,8 @@
         (list 'pb (pool:linex vc v a (pool:v- b a)))
         (list 'phb (pool:linex vc v (car hb) (cadr hb)))
         (list 'pht (pool:linex vc v (car ht) (cadr ht)))
-        (list 'pt (pool:linex vc v d (pool:v- c d)))))
+        (list 'pt (pool:linex vc v d (pool:v- c d)))
+        (list 'voff (pool:v* u 12.0))))
 
 (defun pool:hopovaldraw (gg lay pvflag / tt tb tip htr hbr brkb brkt)
   (setq tt (cadr (assoc 'ttop gg)) tb (cadr (assoc 'tbot gg))
@@ -2238,13 +2249,16 @@
         (pool:hopovaldraw gg "POOL" nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
-        (foreach tl (list (list 'pl 'phl) (list 'phl 'phr) (list 'phr 'pbrk)
-                          (list 'pbrk 'pr) (list 'phl 'ptan)
-                          (list 'ttop 'htr) (list 'pht 'pt) (list 'phb 'pht)
-                          (list 'pb 'phb))
+        (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
+                          (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
+                          (list 'phl 'ptan nil) (list 'ttop 'htr nil)
+                          (list 'pht 'pt t) (list 'phb 'pht t)
+                          (list 'pb 'phb t))
           (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
-                       (pool:mid (cadr (assoc (car tl) gg))
-                                 (cadr (assoc (cadr tl) gg)))))
+                       (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
+                                          (cadr (assoc (cadr tl) gg)))
+                                (if (caddr tl) (cadr (assoc 'voff gg))
+                                    (list 0.0 0.0)))))
         (setvar "CLAYER" odl)
         (setq o (pool:circum (cadr (assoc 'ttop gg)) (cadr (assoc 'tip gg))
                              (cadr (assoc 'tbot gg)))
@@ -2273,7 +2287,7 @@
 
 (defun pool:hopgrecc (pts h g e m k w l1 / aa bb rb rt cc dd ltp lbp cen p
                                            hl hr ht hb brk hbl htl hbr htr
-                                           hlw htl1 hbl1 hc u v hc2 rc out)
+                                           hlw htl1 hbl1 hc u v hc2 out)
   (setq aa (nth 0 pts) bb (nth 1 pts) rb (nth 2 pts) rt (nth 3 pts)
         cc (nth 4 pts) dd (nth 5 pts) ltp (nth 6 pts) lbp (nth 7 pts)
         cen (list 0.0 0.0))
@@ -2295,7 +2309,6 @@
         ;; L/6 (whichever is closer); M/L/K 12" right of the hopper
         hc2 (pool:v- hc (pool:v* (pool:unit v)
                                  (min 12.0 (/ (distance hbr htr) 6.0))))
-        rc (pool:offline lbp ltp cen (+ h g 12.0))
         out (list
           (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
           (list 'brkb (pool:linex (car brk) (cadr brk) aa (pool:v- bb aa)))
@@ -2306,10 +2319,11 @@
           (list 'phr (pool:linex hc2 u (car hr) (cadr hr)))
           (list 'pbrk (pool:linex hc2 u (car brk) (cadr brk)))
           (list 'pr (pool:linex hc2 u rb (pool:v- rt rb)))
-          (list 'pb (pool:linex (car rc) (cadr rc) aa (pool:v- bb aa)))
-          (list 'phb (pool:linex (car rc) (cadr rc) (car hb) (cadr hb)))
-          (list 'pht (pool:linex (car rc) (cadr rc) (car ht) (cadr ht)))
-          (list 'pt (pool:linex (car rc) (cadr rc) dd (pool:v- cc dd)))))
+          (list 'pb (pool:linex (car hr) (cadr hr) aa (pool:v- bb aa)))
+          (list 'phb hbr)
+          (list 'pht htr)
+          (list 'pt (pool:linex (car hr) (cadr hr) dd (pool:v- cc dd)))
+          (list 'voff (pool:v* (pool:unit u) 12.0))))
   (if w
       (setq hlw (pool:offline lbp ltp cen (+ h w))
             htl1 (pool:offline dd cc cen (+ m l1))
@@ -2428,12 +2442,15 @@
         (pool:hopgrecdraw gg "POOL" six nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
-        (foreach tl (list (list 'pl 'phl) (list 'phl 'phr) (list 'phr 'pbrk)
-                          (list 'pbrk 'pr) (list 'pht 'pt) (list 'phb 'pht)
-                          (list 'pb 'phb))
+        (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
+                          (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
+                          (list 'pht 'pt t) (list 'phb 'pht t)
+                          (list 'pb 'phb t))
           (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
-                       (pool:mid (cadr (assoc (car tl) gg))
-                                 (cadr (assoc (cadr tl) gg)))))
+                       (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
+                                          (cadr (assoc (cadr tl) gg)))
+                                (if (caddr tl) (cadr (assoc 'voff gg))
+                                    (list 0.0 0.0)))))
         (if six
             (progn
               (pool:dimalg (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))

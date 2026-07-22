@@ -687,12 +687,12 @@ def hopcalc(quad,corners,h,g,e,m,k):
     hdir=_sub(b,a); vdir=_sub(d,a)
     off=min(12.0, dist(gg['hbr'],gg['htr'])/6.0)
     hc2=_sub(hc,_scl(_unit(vdir),off))
-    rc=offline(a,d,cen,h+g+12.0)
     gg['pl']=linex(hc2,hdir,a,_sub(d,a)); gg['phl']=linex(hc2,hdir,*hl)
     gg['phr']=linex(hc2,hdir,*hr); gg['pbrk']=linex(hc2,hdir,*brk)
     gg['pr']=linex(hc2,hdir,b,_sub(c,b))
-    gg['pb']=linex(*rc,a,_sub(b,a)); gg['phb']=linex(*rc,*hb)
-    gg['pht']=linex(*rc,*ht); gg['pt']=linex(*rc,d,_sub(c,d))
+    gg['pb']=linex(*hr,a,_sub(b,a)); gg['phb']=gg['hbr']
+    gg['pht']=gg['htr']; gg['pt']=linex(*hr,d,_sub(c,d))
+    gg['voff']=_scl(_unit(hdir),12.0)
     return gg
 
 def ptlinedist(p, lp, ld):
@@ -748,7 +748,7 @@ def hopovalc(quad,tipl,tipr,h,g,e,m,k,r3):
     tan=(_add(tipl,_scl(u,h+r3)),v); brk=(_sub(tipr,_scl(u,e)),v)
     tt=linex(*tan,*ht); tb=linex(*tan,*hb)
     tip=_mid(linex(*lt,*ht), linex(*lt,*hb))
-    vc=_add(tipl,_scl(u,h+g+12.0))
+    vc=_add(tipl,_scl(u,h+g))
     off=min(12.0, dist(linex(vc,v,*hb), linex(vc,v,*ht))/6.0)
     tip2=_sub(tip,_scl(_unit(v),off))
     gg={'tip':tip,'ttop':tt,'tbot':tb,
@@ -772,14 +772,13 @@ def hopgrecc(pts,h,g,e,m,k,w=None,l1=None):
     u=_sub(bb,aa); v=_sub(dd,aa)
     off=min(12.0, dist(hbr,htr)/6.0)
     hc2=_sub(hc,_scl(_unit(v),off))
-    rc=offline(lbp,ltp,cen,h+g+12.0)
     gg={'hbl':hbl,'htl':htl,'hbr':hbr,'htr':htr,
         'brkb':linex(*brk,aa,_sub(bb,aa)),'brkt':linex(*brk,dd,_sub(cc,dd)),
         'pl':linex(hc2,u,lbp,_sub(ltp,lbp)),'phl':linex(hc2,u,*hl),
         'phr':linex(hc2,u,*hr),'pbrk':linex(hc2,u,*brk),
         'pr':linex(hc2,u,rb,_sub(rt,rb)),
-        'pb':linex(*rc,aa,_sub(bb,aa)),'phb':linex(*rc,*hb),
-        'pht':linex(*rc,*ht),'pt':linex(*rc,dd,_sub(cc,dd))}
+        'pb':linex(*hr,aa,_sub(bb,aa)),'phb':hbr,
+        'pht':htr,'pt':linex(*hr,dd,_sub(cc,dd))}
     if w is not None:
         hlw=offline(lbp,ltp,cen,h+w); htl1=offline(dd,cc,cen,m+l1); hbl1=offline(aa,bb,cen,k+l1)
         gg['ct1']=linex(*hlw,*ht); gg['ct2']=linex(*hl,*htl1)
@@ -911,15 +910,16 @@ SQ=[("Square",0.0)]*4
 gg=hopcalc(Q,SQ,30,60,100,45,50)
 # hopper spans y 50..195 -> L=145, centre 122.5; off=min(12,145/6)=12
 assert abs(gg['pl'][1]-110.5)<1e-9 and abs(gg['phr'][1]-110.5)<1e-9
-# M/L/K chain at x = H+G+12 = 102
-assert abs(gg['pb'][0]-102.0)<1e-9 and abs(gg['pht'][0]-102.0)<1e-9
+# M/L/K def points attached to the hopper right edge (x = H+G = 90)
+assert abs(gg['pb'][0]-90.0)<1e-9 and abs(gg['pht'][0]-90.0)<1e-9
+assert gg['voff']==(12.0,0.0)                         # dim line offset
 # small hopper: L=30 -> off = 30/6 = 5 (less than 12)
 gg2=hopcalc(Q,SQ,30,60,100,100,110)   # hopper y 110..140, centre 125
 assert abs(gg2['pl'][1]-120.0)<1e-9
 # distances unchanged by the shift (parallel walls)
 assert abs(dist(gg['pl'],gg['phl'])-30)<1e-9
 assert abs(dist(gg['pb'],gg['phb'])-50)<1e-9
-print("   chain at centre-12 (or centre-L/6) and at G-right+12; values intact")
+print("   chain at centre-12 (or centre-L/6); M/L/K attached to the hopper edge")
 
 
 print("== 43. Grecian overall-sheet input (A/B/T/S/S1/V/S2) ==")
@@ -1000,12 +1000,11 @@ def hopsportc(lline,rline,bline,tline,cen,e2,f2,g,f1,e1,m,k):
     hc=tuple(sum(gg[kk][i] for kk in ('dbl','dtl','dbr','dtr'))/4.0 for i in (0,1))
     up=_unit(lline[1])
     hc2=_sub(hc,_scl(up,min(12.0,dist(gg['dbr'],gg['dtr'])/6.0)))
-    vc=offln(lline,cen,e2+f2+g+12.0)
     gg['pl']=linex(hc2,bline[1],*lline); gg['pobl']=linex(hc2,bline[1],*obl)
     gg['pdfl']=linex(hc2,bline[1],*dfl); gg['pdfr']=linex(hc2,bline[1],*dfr)
     gg['pobr']=linex(hc2,bline[1],*obr); gg['pr']=linex(hc2,bline[1],*rline)
-    gg['pb']=linex(*vc,*bline); gg['pdb']=linex(*vc,*dfb)
-    gg['pdt']=linex(*vc,*dft); gg['pt']=linex(*vc,*tline)
+    gg['pb']=linex(*dfr,*bline); gg['pdb']=gg['dbr']
+    gg['pdt']=gg['dtr']; gg['pt']=linex(*dfr,*tline)
     return gg
 A,B,C,D=(0,0),(480,0),(480,120),(0,120)
 cen=(240,60)
@@ -1019,7 +1018,7 @@ assert gg['dbl']==(108.0,24.0) and gg['dtl']==(108.0,96.0)
 assert gg['dbr']==(228.0,24.0) and gg['dtr']==(228.0,96.0)
 # chain values and placement (below centre by min(12, 72/6)=12; MLK at +12)
 assert abs(gg['pl'][1]-48.0)<1e-9                     # 60 - 12
-assert abs(gg['pb'][0]-240.0)<1e-9                    # 228 + 12
+assert abs(gg['pb'][0]-228.0)<1e-9                    # attached to the deep-flat edge
 for pair,want in ((('pl','pobl'),48),(('pobl','pdfl'),60),(('pdfl','pdfr'),120),
                   (('pdfr','pobr'),144),(('pobr','pr'),108),
                   (('pb','pdb'),24),(('pdb','pdt'),72),(('pdt','pt'),24)):
