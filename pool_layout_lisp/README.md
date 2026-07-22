@@ -207,13 +207,17 @@ rectangle) the exact triangle check figure are produced.
 
 ### Roman pools
 
-A Roman is a rectangle body with a **radius end behind corner drops**
-at each side, entered from the Roman field sheet: `B`/`A` overalls
-(required), `T` side length, `S` tip setback past the side ends, `S1`
-corner drop, `V` end width between the arc springs, and the end radii.
-The letters close against the overalls exactly like the Grecian sheet
-(`S+T+S = B` with **T absorbing**, `S1+V+S1 = A` with **V absorbing**;
-`NA` derives from the partners).
+A Roman (per the reference drawing) is a rectangle body with
+**full-length sides T**, vertical **S1 stubs down the end lines** to
+the arc springs (`V` apart), and an arc bulging **S** past each end
+line: `B`/`A` overalls (required), `T`, `S`, `S1`, `V` — and `R` is
+**implied** by S and V (`R = (S² + (V/2)²) / 2S`), so the radius
+prompt is a check (`NA`-able); with S unknown, a given R supplies it
+(sagitta). Letters close against the overalls exactly like the
+Grecian sheet (`S+T+S = B` with **T absorbing**, `S1+V+S1 = A` with
+**V absorbing**; `NA` derives from the partners). The guide shows the
+sheet with the dashed **tip-to-tip B centerline** through the middle,
+matching how B is taped.
 
 * **In-square** pools are **perfect**: one `S`/`S1`/`V` set and a
   single radius `R` apply to both ends.
@@ -274,8 +278,12 @@ in the report table (`X A-C`, `X LB-RT`, …) with target/actual/delta.
 
 ### L / Lazy L pools
 
-Six-corner pools with one wing; a **true L** has a square step joint,
-a **lazy L** an angled one:
+Both are six-corner pools. A **true L** is a rectangle with a
+square-step wing. A **lazy L** (per the reference drawing) is a
+constant-width pool **bent 45°**: main run A-B/E-F, bend sides B-C
+and D-E at 45°, far end C-D. The lazy L asks its own side names and
+**omits the B-E joint diagonal** (8 cross dims instead of 9); its
+hopper sits in the main run before the bend. The true L:
 
 ```
 F -------- E

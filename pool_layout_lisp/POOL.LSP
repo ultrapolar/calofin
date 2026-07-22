@@ -1071,16 +1071,22 @@
 
 ;; Nominal right-angle (or 45-degree jointed) L built from the given
 ;; side lengths -- the starting shape for the relaxation fit.
-(defun pool:hexguess (sides lazy / ab bc cd de a b c d e f)
-  (setq ab (nth 0 sides) bc (nth 1 sides) cd (nth 2 sides) de (nth 3 sides)
+(defun pool:hexguess (sides lazy / ab bc cd de fa a b c d e f)
+  (setq ab (nth 0 sides) bc (nth 1 sides) cd (nth 2 sides)
+        de (nth 3 sides) fa (nth 5 sides)
         a (list 0.0 0.0)
-        b (list ab 0.0)
-        c (list ab bc)
-        d (list (- ab cd) bc)
-        e (if lazy
-              (pool:v+ d (list (* de -0.7071067812) (* de 0.7071067812)))
-              (pool:v+ d (list 0.0 de)))
-        f (pool:v- e (list (nth 4 sides) 0.0)))
+        b (list ab 0.0))
+  (if lazy
+      ;; constant-width pool bent 45 degrees (per the reference):
+      ;; B-C and D-E are the bend sides, C-D the far end
+      (setq c (pool:v+ b (list (* bc 0.7071067812) (* bc 0.7071067812)))
+            d (pool:v+ c (list (* cd -0.7071067812) (* cd 0.7071067812)))
+            e (pool:v+ d (list (* de -0.7071067812) (* de -0.7071067812)))
+            f (list 0.0 fa))
+      (setq c (list ab bc)
+            d (list (- ab cd) bc)
+            e (pool:v+ d (list 0.0 de))
+            f (pool:v- e (list (nth 4 sides) 0.0))))
   (list a b c d e f))
 
 ;; Side constraints (banded by +/-band) for the hexagon.
@@ -1187,8 +1193,8 @@
 ;; corner labels kept clear of the linework.
 (defun pool:hexpreview (lazy / pts cen p pr k keys ent all pv lbls)
   (setq pts (if lazy
-                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 150.0)
-                      (list 240.0 150.0) (list 140.0 250.0) (list 0.0 250.0))
+                (list (list 0.0 0.0) (list 296.0 0.0) (list 414.0 119.0)
+                      (list 296.0 238.0) (list 226.0 168.0) (list 0.0 168.0))
                 (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 150.0)
                       (list 200.0 150.0) (list 200.0 300.0) (list 0.0 300.0)))
         cen (list 0.0 0.0))
@@ -1206,10 +1212,12 @@
       (progn
         (setq keys (list 'ac 'bd 'ce 'df 'ae 'bf 'ad 'be 'cf) k 0)
         (foreach pr pool:*hexdiags*
-          (setq ent (pool:pvlined (nth (car pr) pts) (nth (cadr pr) pts))
-                pv (cons (cons (nth k keys) (list ent)) pv)
-                all (cons ent all)
-                k (1+ k)))))
+          ;; the lazy L omits the B-E joint diagonal (per the reference)
+          (if (not (and lazy (equal pr (list 1 4))))
+              (setq ent (pool:pvlined (nth (car pr) pts) (nth (cadr pr) pts))
+                    pv (cons (cons (nth k keys) (list ent)) pv)
+                    all (cons ent all)))
+          (setq k (1+ k)))))
   (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
   (foreach p pts
     (pool:text (pool:lbloff p cen pts 20.0) 12.0 (nth k lbls) "POOL-NOTES")
@@ -1230,13 +1238,19 @@
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C right end top, D inner corner, E wing corner, F top-left.")
   (setq sides
-        (list (pool:askh "Side A-B (main side, bottom)" (cdr (assoc 'ab pv)))
-              (pool:askh "End B-C (right end)" (cdr (assoc 'bc pv)))
-              (pool:askh "Side C-D (top of main section)" (cdr (assoc 'cd pv)))
-              (pool:askh (if lazy "Angled joint D-E" "Joint D-E (step)")
-                         (cdr (assoc 'de pv)))
-              (pool:askh "End E-F (end of wing)" (cdr (assoc 'ef pv)))
-              (pool:askh "Side F-A (left side)" (cdr (assoc 'fa pv)))))
+        (if lazy
+            (list (pool:askh "Main side A-B (bottom)" (cdr (assoc 'ab pv)))
+                  (pool:askh "Lower bend side B-C (45 deg)" (cdr (assoc 'bc pv)))
+                  (pool:askh "Far end C-D" (cdr (assoc 'cd pv)))
+                  (pool:askh "Upper bend side D-E (45 deg)" (cdr (assoc 'de pv)))
+                  (pool:askh "Top side E-F" (cdr (assoc 'ef pv)))
+                  (pool:askh "Left end F-A" (cdr (assoc 'fa pv))))
+            (list (pool:askh "Side A-B (main side, bottom)" (cdr (assoc 'ab pv)))
+                  (pool:askh "End B-C (right end)" (cdr (assoc 'bc pv)))
+                  (pool:askh "Side C-D (top of main section)" (cdr (assoc 'cd pv)))
+                  (pool:askh "Joint D-E (step)" (cdr (assoc 'de pv)))
+                  (pool:askh "End E-F (end of wing)" (cdr (assoc 'ef pv)))
+                  (pool:askh "Side F-A (left side)" (cdr (assoc 'fa pv))))))
   ;; cross dims only when out-of-square; in-square squares up to sides
   (setq diags
         (if pool:*insq*
@@ -1248,7 +1262,8 @@
                   (pool:askhx "Cross dim A-E" (cdr (assoc 'ae pv)))
                   (pool:askhx "Cross dim B-F" (cdr (assoc 'bf pv)))
                   (pool:askhx "Cross dim A-D" (cdr (assoc 'ad pv)))
-                  (pool:askhx "Cross dim B-E" (cdr (assoc 'be pv)))
+                  (if lazy nil          ; the bend joint is not taped
+                      (pool:askhx "Cross dim B-E" (cdr (assoc 'be pv))))
                   (pool:askhx "Cross dim C-F" (cdr (assoc 'cf pv))))))
   (pool:pvkill)
 
@@ -1331,10 +1346,19 @@
   (initget "Yes No")
   (if (/= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
       (progn
-        (setq dv (pool:linex (nth 5 pts) (pool:v- (nth 0 pts) (nth 5 pts))
-                             (nth 3 pts) (pool:v- (nth 2 pts) (nth 3 pts)))
-              mquad (list (nth 0 pts) (nth 1 pts) (nth 2 pts) dv)
-              sq4 (list (list "Square" 0.0) (list "Square" 0.0)
+        (if lazy
+            ;; main rectangle before the bend: right boundary through B
+            ;; parallel to the left end, up to the top-side line
+            (setq mquad (list (nth 0 pts) (nth 1 pts)
+                              (pool:linex (nth 1 pts)
+                                          (pool:v- (nth 5 pts) (nth 0 pts))
+                                          (nth 5 pts)
+                                          (pool:v- (nth 4 pts) (nth 5 pts)))
+                              (nth 5 pts)))
+            (setq dv (pool:linex (nth 5 pts) (pool:v- (nth 0 pts) (nth 5 pts))
+                                 (nth 3 pts) (pool:v- (nth 2 pts) (nth 3 pts)))
+                  mquad (list (nth 0 pts) (nth 1 pts) (nth 2 pts) dv)))
+        (setq sq4 (list (list "Square" 0.0) (list "Square" 0.0)
                         (list "Square" 0.0) (list "Square" 0.0)))
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- (apply 'min (mapcar 'car mquad)) doff)
@@ -2709,36 +2733,34 @@
     (vraw (list (/ (- aov vraw) 2.0) vraw))
     (t (list (/ aov 6.0) (* aov (/ 2.0 3.0))))))
 
-;; Build and draw one Roman end.  pbot/ptop = body end corners, m =
-;; outward unit normal, s = tip setback, v = end width, r = radius.
-;; Returns (tip springTop springBot arcEname rUsed note).
-(defun pool:romend (pbot ptop m s v r lay / u mide tip half inset st sb note sx)
+;; Build and draw one Roman end (per the reference drawing: straight
+;; S1 stubs along the end line down to the arc springs, the arc
+;; bulging S past the end line).  R is implied by S and V:
+;; r = (S^2 + (V/2)^2) / 2S.  Returns (tip springT springB arcEname rImplied).
+(defun pool:romend (pbot ptop m s v lay / u mide tip half st sb)
   (setq u (pool:unit (pool:v- ptop pbot))
         mide (pool:mid pbot ptop)
         tip (pool:v+ mide (pool:v* m s))
-        half (* 0.5 v))
-  (if (< r half)
-      (setq r half note "R SMALLER THAN V/2 -- SEMICIRCLE USED"))
-  (setq inset (- r (sqrt (max 0.0 (- (* r r) (* half half)))))
-        sx (pool:v+ mide (pool:v* m (- s inset)))
-        st (pool:v+ sx (pool:v* u half))
-        sb (pool:v- sx (pool:v* u half)))
-  (pool:line ptop st lay)
-  (pool:line pbot sb lay)
+        half (* 0.5 v)
+        st (pool:v+ mide (pool:v* u half))
+        sb (pool:v- mide (pool:v* u half)))
+  (if (> (distance ptop st) 1.0e-6) (pool:line ptop st lay))
+  (if (> (distance pbot sb) 1.0e-6) (pool:line pbot sb lay))
   (pool:arc3p st tip sb lay)
-  (list tip st sb (entlast) r note))
+  (list tip st sb (entlast)
+        (/ (+ (* s s) (* half half)) (* 2.0 s))))
 
-;; Gray nominal Roman guide with the sheet's lettered ties.
+;; Gray nominal Roman guide, proportioned from the reference drawing:
+;; full-length sides, vertical S1 stubs on the end lines, near-half-
+;; round arcs, and the dashed tip-to-tip B centerline.
 (defun pool:romanpreview (needx / a b c d tl tr st1 sb1 st2 sb2 pv)
   (setq a (list 0.0 0.0) b (list 360.0 0.0)
-        c (list 360.0 180.0) d (list 0.0 180.0)
-        tl (list -50.0 90.0) tr (list 410.0 90.0)
-        st1 (list -28.99 140.0) sb1 (list -28.99 40.0)
-        st2 (list 388.99 140.0) sb2 (list 388.99 40.0))
+        c (list 360.0 300.0) d (list 0.0 300.0)
+        tl (list -52.0 150.0) tr (list 412.0 150.0)
+        st1 (list 0.0 240.0) sb1 (list 0.0 60.0)
+        st2 (list 360.0 240.0) sb2 (list 360.0 60.0))
   (pool:pvadd (pool:pvline a b))
   (pool:pvadd (pool:pvline d c))
-  (pool:pvadd (pool:pvlined b c))
-  (pool:pvadd (pool:pvlined d a))
   (pool:pvadd (pool:pvline d st1))
   (pool:pvadd (pool:pvline a sb1))
   (pool:pvadd (pool:pvline c st2))
@@ -2748,17 +2770,17 @@
   (pool:arc3p st2 tr sb2 "POOL-NOTES")
   (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
   (setq pv (list
-    (pool:pvtie (list -50.0 240.0) (list 410.0 240.0) "B" 10.0)
-    (pool:pvtie (list 0.0 215.0) (list 360.0 215.0) "T" 10.0)
-    (pool:pvtie (list -50.0 215.0) (list 0.0 215.0) "SL" 10.0)
-    (pool:pvtie (list 360.0 215.0) (list 410.0 215.0) "SR" 10.0)
-    (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
-    (pool:pvtie (list -72.0 140.0) (list -72.0 180.0) "S1L" 10.0)
-    (pool:pvtie (list -72.0 40.0) (list -72.0 140.0) "VL" 10.0)
-    (pool:pvtie (list 432.0 140.0) (list 432.0 180.0) "S1R" 10.0)
-    (pool:pvtie (list 432.0 40.0) (list 432.0 140.0) "VR" 10.0)
-    (pool:pvtie tl (list 20.0 90.0) "R1" 10.0)
-    (pool:pvtie tr (list 340.0 90.0) "R2" 10.0)))
+    (pool:pvtie tl tr "B" 10.0)          ; the tip-to-tip centerline tape
+    (pool:pvtie (list 0.0 330.0) (list 360.0 330.0) "T" 10.0)
+    (pool:pvtie (list -52.0 330.0) (list 0.0 330.0) "SL" 10.0)
+    (pool:pvtie (list 360.0 330.0) (list 412.0 330.0) "SR" 10.0)
+    (pool:pvtie (list -95.0 0.0) (list -95.0 300.0) "A" 10.0)
+    (pool:pvtie (list -72.0 240.0) (list -72.0 300.0) "S1L" 10.0)
+    (pool:pvtie (list -72.0 60.0) (list -72.0 240.0) "VL" 10.0)
+    (pool:pvtie (list 432.0 240.0) (list 432.0 300.0) "S1R" 10.0)
+    (pool:pvtie (list 432.0 60.0) (list 432.0 240.0) "VR" 10.0)
+    (pool:pvtie tl (list 40.0 210.0) "R1" 10.0)
+    (pool:pvtie tr (list 320.0 210.0) "R2" 10.0)))
   (if needx
       (setq pv (append pv (list
         (cons "XAC" (list (pool:pvadd (pool:pvlined a c))))
@@ -2780,7 +2802,7 @@
         (setq perfect (= "Yes" (getkword "\nAre both ends perfect (identical) [Yes/No]: ")))))
   (setq pv (pool:romanpreview (not pool:*insq*)))
   (command "_.ZOOM" "_Window"
-           (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0)))
+           (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 380.0)))
   (princ "\nRoman sheet -- the RED tie is the dimension being asked for.")
   (setq braw (pool:askh "B - overall length" (cdr (assoc "B" pv)))
         araw (pool:askh "A - overall width" (cdr (assoc "A" pv)))
@@ -2795,8 +2817,8 @@
             vlraw (pool:askhx "V - end width (both ends)"
                               (append (cdr (assoc "VL" pv)) (cdr (assoc "VR" pv))))
             vrraw vlraw
-            r1 (pool:askh "R - end radius (both ends)"
-                          (append (cdr (assoc "R1" pv)) (cdr (assoc "R2" pv))))
+            r1 (pool:askhx "R - end radius (both ends, check)"
+                           (append (cdr (assoc "R1" pv)) (cdr (assoc "R2" pv))))
             r2 r1)
       (setq slraw (pool:askhx "S - LEFT end setback" (cdr (assoc "SL" pv)))
             srraw (pool:askhx "S - RIGHT end setback" (cdr (assoc "SR" pv)))
@@ -2804,20 +2826,33 @@
             s1rraw (pool:askhx "S1 - RIGHT corner drop" (cdr (assoc "S1R" pv)))
             vlraw (pool:askhx "V - LEFT end width" (cdr (assoc "VL" pv)))
             vrraw (pool:askhx "V - RIGHT end width" (cdr (assoc "VR" pv)))
-            r1 (pool:askh "R1 - LEFT end radius" (cdr (assoc "R1" pv)))
-            r2 (pool:askh "R2 - RIGHT end radius" (cdr (assoc "R2" pv)))))
+            r1 (pool:askhx "R1 - LEFT end radius (check)" (cdr (assoc "R1" pv)))
+            r2 (pool:askhx "R2 - RIGHT end radius (check)" (cdr (assoc "R2" pv)))))
   (if (not pool:*insq*)
       (setq dac (pool:askhx "Cross dim body A-C" (cdr (assoc "XAC" pv)))
             dbd (pool:askhx "Cross dim body B-D" (cdr (assoc "XBD" pv)))))
   (pool:pvkill)
 
-  ;; resolve: SL + T + SR = B (T absorbs); per end S1/V vs A (V absorbs)
-  (setq hres (pool:chainfix (list slraw traw srraw) braw 1)
-        sl (car hres) tv (cadr hres) sr (caddr hres)
-        lres (pool:romres araw s1lraw vlraw)
+  ;; resolve: per end S1/V vs A (V absorbs); then S + T + S = B with
+  ;; T absorbing -- an NA S can come from the chain, or from the end
+  ;; radius (arc sagitta: S = R - sqrt(R^2 - (V/2)^2))
+  (setq lres (pool:romres araw s1lraw vlraw)
         s1l (car lres) vl (cadr lres)
         rres (pool:romres araw s1rraw vrraw)
-        s1r (car rres) vr (cadr rres))
+        s1r (car rres) vr (cadr rres)
+        sl (cond
+             (slraw slraw)
+             (traw (/ (- braw traw) 2.0))
+             ((and r1 (>= r1 (* 0.5 vl)))
+              (- r1 (sqrt (max 0.0 (- (* r1 r1) (* 0.25 vl vl))))))
+             (t (/ braw 8.0)))
+        sr (cond
+             (srraw srraw)
+             (traw (/ (- braw traw) 2.0))
+             ((and r2 (>= r2 (* 0.5 vr)))
+              (- r2 (sqrt (max 0.0 (- (* r2 r2) (* 0.25 vr vr))))))
+             (t (/ braw 8.0)))
+        tv (- braw sl sr))
 
   ;; body fit (sides T, ends A) + roman ends
   (princ "\nFitting pool body to the measurements ...")
@@ -2841,11 +2876,9 @@
   (setq mr (pool:unit (pool:perp (pool:v- c b))))
   (if (< (pool:dot (pool:v- (pool:mid b c) cen) mr) 0.0)
       (setq mr (pool:v* mr -1.0)))
-  (setq lend (pool:romend a d ml sl vl r1 "POOL")
-        rend (pool:romend b c mr sr vr r2 "POOL")
+  (setq lend (pool:romend a d ml sl vl "POOL")
+        rend (pool:romend b c mr sr vr "POOL")
         tipl (car lend) tipr (car rend))
-  (if (nth 5 lend) (setq notes (cons (strcat "LEFT END: " (nth 5 lend)) notes)))
-  (if (nth 5 rend) (setq notes (cons (strcat "RIGHT END: " (nth 5 rend)) notes)))
 
   ;; dims
   (setq allpts (append quad (list tipl tipr (cadr lend) (caddr lend)

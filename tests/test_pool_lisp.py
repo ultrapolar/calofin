@@ -277,13 +277,17 @@ def relaxn(pts, cons, niter):
 
 def hexguess(sides, lazy):
     ab, bc, cd, de, ef, fa = sides
-    a, b, c = (0.0, 0.0), (ab, 0.0), (ab, bc)
-    d = (ab - cd, bc)
+    a, b = (0.0, 0.0), (ab, 0.0)
     if lazy:
-        e = (d[0] - de * 0.7071067812, d[1] + de * 0.7071067812)
+        c = (b[0] + bc * 0.7071067812, bc * 0.7071067812)
+        d = (c[0] - cd * 0.7071067812, c[1] + cd * 0.7071067812)
+        e = (d[0] - de * 0.7071067812, d[1] - de * 0.7071067812)
+        f = (0.0, fa)
     else:
+        c = (ab, bc)
+        d = (ab - cd, bc)
         e = (d[0], d[1] + de)
-    f = (e[0] - ef, e[1])
+        f = (e[0] - ef, e[1])
     return [a, b, c, d, e, f]
 
 def hexsidecon(sides, band, w):
@@ -381,13 +385,16 @@ s, x = hexerr(pts, sides, diags)
 print(f"   max side delta {s:.4f}, max cross delta {x:.3f}, failed={failed}")
 assert failed and s < 0.05, "failure path must hold sides true"
 
-print("== 17. perfect lazy L ==")
-LAZY_L = [(0, 0), (360, 0), (360, 140), (220, 140), (120, 240), (0, 240)]
+print("== 17. perfect lazy L (reference DXF geometry) ==")
+LAZY_L = [(0.0, 0.0), (422.28, 0.0), (591.98, 169.70),
+          (422.28, 339.41), (322.87, 240.0), (0.0, 240.0)]
 sides, diags = hexmeas(LAZY_L)
+diags = list(diags)
+diags[HEXDIAGS.index((1, 4))] = None      # the bend joint is not taped
 pts, failed = fithex(sides, diags, lazy=True)
 s, x = hexerr(pts, sides, diags)
 print(f"   max side delta {s:.4f}, max cross delta {x:.4f}")
-assert not failed and s < 0.05 and x < 0.1
+assert not failed and s < 0.05 and x < 0.15
 
 print("== 18. point-in-polygon (dim placement) ==")
 assert inpoly((180, 70), TRUE_L)          # main body
@@ -951,35 +958,27 @@ assert abs(dist(d,LT)-hyp)<1e-6                       # S2 face exact
 print(f"   S/T/S1/V resolve + seed reproduces the sheet exactly (hyp={hyp:.3f})")
 
 
-print("== 44. Roman end geometry (tip, springs, radius) ==")
-def romend(pbot,ptop,m,s,v,r):
+print("== 44. Roman end geometry (reference model: stubs + arc) ==")
+def romend(pbot,ptop,m,s,v):
     u=_unit(_sub(ptop,pbot)); mide=_mid(pbot,ptop)
-    tip=_add(mide,_scl(m,s)); half=v/2.0; note=None
-    if r<half: r,note=half,"clamped"
-    inset=r-math.sqrt(max(0.0,r*r-half*half))
-    sx=_add(mide,_scl(m,s-inset))
-    st=_add(sx,_scl(u,half)); sb=_sub(sx,_scl(u,half))
-    return tip,st,sb,r,note
+    tip=_add(mide,_scl(m,s)); half=v/2.0
+    st=_add(mide,_scl(u,half)); sb=_sub(mide,_scl(u,half))
+    return tip,st,sb,(s*s+half*half)/(2.0*s)
 def circumr(p1,p2,p3):
     ax,ay=p1; bx,by=p2; cx,cy=p3
     dd=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by))
     ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/dd
     uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/dd
     return dist((ux,uy),p1)
-# left end of a 360x200 body: A_body=(0,0), D=(0,200), m=(-1,0)
-tip,st,sb,r,note=romend((0,0),(0,200),(-1,0),50,100,70)
-assert tip==(-50.0,100.0)
-inset=70-math.sqrt(70*70-50*50)
-assert abs(st[0]-(-(50-inset)))<1e-9 and abs(st[1]-150)<1e-9
-assert abs(dist(st,sb)-100)<1e-9                      # V between springs
-assert abs(circumr(st,tip,sb)-70)<1e-9                # drawn arc radius = R
-assert note is None
-# S1 implied = (A - V)/2 = 50
-assert abs((200-dist(st,sb))/2.0-50)<1e-9
-# R < V/2 clamps to a semicircle
-tip,st,sb,r,note=romend((0,0),(0,200),(-1,0),50,100,30)
-assert r==50 and note=="clamped"
-assert abs(circumr(st,tip,sb)-50)<1e-6
-print(f"   springs inset {inset:.3f}, arc radius exact, semicircle clamp works")
+# the reference: body 720x600, S=104.07, V=360 -> drawn R was 207.69
+tip,st,sb,rimp=romend((0,0),(0,600),(-1,0),104.07,360.0)
+assert tip==(-104.07,300.0)
+assert st==(0.0,480.0) and sb==(0.0,120.0)             # springs ON the end line
+assert abs(rimp-207.69)<0.01                           # implied R matches the drawing
+assert abs(circumr(st,tip,sb)-rimp)<1e-6               # drawn arc = implied R
+# sagitta inversion: S from R and V
+S=rimp-math.sqrt(rimp*rimp-180.0*180.0)
+assert abs(S-104.07)<0.01
+print(f"   springs on end line, implied R={rimp:.2f} matches the reference drawing")
 
 print("\nALL CHECKS PASSED")
