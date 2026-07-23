@@ -41,13 +41,17 @@
 ;;;           from the walls to hold the given dimensions.
 ;;;         - Enter at the width prompt fits that one step to the walls.
 ;;;   6.  You are asked whether to dimension the steps [Yes/No].  If
-;;;       Yes, aligned dimensions are added in the current dim style:
+;;;       Yes, aligned dimensions are added:
 ;;;         - Tread depths are chained along the bisector out from the
 ;;;           starting point (each link is one tread's depth, measured
-;;;           to where that tread crosses the bisector).
+;;;           to where that tread crosses the bisector), in dim style
+;;;           "STANDARD INCHES".
 ;;;         - Step widths are the full width of each tread edge, placed
 ;;;           just outside the corner and nested so the wider (deeper)
-;;;           steps sit progressively further out.
+;;;           steps sit progressively further out, in dim style
+;;;           "SIDE STANDARD".
+;;;       Both styles must already exist in the drawing; if one is
+;;;       missing the current style is used and a note is printed.
 ;;;   7.  Enter at the depth prompt means no more depths/widths are
 ;;;       required; the routine finishes with what it was given.
 ;;;       Side (riser) lines are drawn between successive step ends
@@ -58,12 +62,21 @@
 ;;;     Change *CS-WIDTH-TOL* below if your drawings use another unit.
 ;;;   - Geometry is assumed to be drawn in plan view in the WCS.
 ;;;   - All new geometry is drawn as LINEs on the current layer.
-;;;   - Dimensions use the current DIMSTYLE (and DIMSCALE for their
-;;;     size); grab a dimension line to slide it if it lands awkwardly.
+;;;   - Depth dims use dim style "STANDARD INCHES" and width dims use
+;;;     "SIDE STANDARD" (set *CS-DEPTH-DIMSTYLE* / *CS-WIDTH-DIMSTYLE*
+;;;     below to rename).  DIMSCALE sets their size; grab a dimension
+;;;     line to slide it if it lands awkwardly.
 ;;;   - One U / UNDO reverses the whole command.
 ;;; ======================================================================
 
 (setq *cs-width-tol* 0.125) ; step width tolerance: 1/8 inch
+
+;; Dimension styles the routine switches to (they must already exist in
+;; the drawing - if one is missing, the current style is used instead).
+(setq *cs-depth-dimstyle* "STANDARD INCHES") ; for tread-depth dims
+(setq *cs-width-dimstyle* "SIDE STANDARD")   ; for step-width dims
+
+(vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
 ;;; ------------------------- vector helpers ----------------------------
 
@@ -105,9 +118,24 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
-;; aligned dimension between A and B, dim line passing through THRU.
-;; "_non" disables running osnap for each fed point so nothing snaps.
-(defun cs-dim (a b thru)
+;; make dimension style NAME current, but only if it exists and is not
+;; already current (avoids needless work while alternating styles).
+;; Uses ActiveX so style names containing spaces are handled correctly
+;; (the -DIMSTYLE command would read a space as ENTER).
+(defun cs-setstyle (name / doc)
+  (if (and (tblsearch "DIMSTYLE" name)
+           (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    (vl-catch-all-apply
+      '(lambda ()
+         (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+         (vla-put-activedimstyle
+           doc (vla-item (vla-get-dimstyles doc) name))))))
+
+;; aligned dimension between A and B in dim style STYLE, dim line
+;; passing through THRU.  "_non" disables running osnap for each fed
+;; point so nothing snaps.
+(defun cs-dim (style a b thru)
+  (cs-setstyle style)
   (command "_.DIMALIGNED" "_non" a "_non" b "_non" thru))
 
 ;; Draw the side (riser) line A-B unless it is degenerate or both points
@@ -126,10 +154,12 @@
                        cand o1 o2 score best j k tmp w1 w2 corner
                        c r a1 a2 mid key start d1 d2 bis perp
                        dist n drawn dep wid p h1 h2 nat cen e1 e2
-                       prevL prevR dimflag txth w offd)
+                       prevL prevR dimflag txth w offd oldce oldstyle)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
+    (if oldstyle (cs-setstyle oldstyle))
+    (if oldce (setvar "CMDECHO" oldce))
     (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nCORNERSTP: " msg)))
     (princ))
@@ -260,10 +290,21 @@
   ;; annotation text height in drawing units, used to space the dims
   (setq txth (* (getvar "DIMTXT") (getvar "DIMSCALE")))
   (if (<= txth 0.0) (setq txth 1.0))
+  (if dimflag
+    (progn
+      (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
+      (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
+        (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
+                       "\" not found - tread depths use the current style.")))
+      (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
+        (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
+                       "\" not found - step widths use the current style.")))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
   (command "_.UNDO" "_Begin")
-  (setq undoflag T dist 0.0 n 1 drawn 0)
+  (setq undoflag T dist 0.0 n 1 drawn 0
+        oldce (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
   (while
     (progn
@@ -327,13 +368,15 @@
             (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
             ;; tread depth: link of a chain along the bisector, from the
             ;; previous tread crossing (p - bis*dep) to this one (p)
-            (cs-dim (cs-add p (cs-scl bis (- dep))) p
+            (cs-dim *cs-depth-dimstyle*
+                    (cs-add p (cs-scl bis (- dep))) p
                     (cs-add (cs-add p (cs-scl bis (* -0.5 dep)))
                             (cs-scl perp offd)))
             ;; step width: full tread edge, placed just outside the
             ;; corner and nested by half the tread's own width so the
             ;; wider (deeper) steps stack progressively further out
-            (cs-dim e1 e2
+            (cs-dim *cs-width-dimstyle*
+                    e1 e2
                     (cs-add corner
                             (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
         (setq prevL e1 prevR e2 drawn (1+ drawn))))
@@ -344,7 +387,9 @@
     (princ "\nNo steps drawn.")
     (princ (strcat "\n" (itoa drawn)
                    " step(s) drawn - tread depths held exactly.")))
+  (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
+  (if oldce (setvar "CMDECHO" oldce))
   (setq undoflag nil)
   (princ))
 
