@@ -18,19 +18,27 @@
 ;;;       same selection.
 ;;;   2.  If the two wall lines intersect at a point, that intersection
 ;;;       is the starting point.
-;;;   3.  If a diagonal/arc was selected, you are asked whether tread
+;;;   3.  Choose the draw direction [Inside out/Outside in]:
+;;;         INSIDE OUT (default) - steps are built from the corner out
+;;;         toward the pool from given tread depths and step widths.
+;;;         OUTSIDE IN - the furthest (outermost) step is placed first
+;;;         from its given width, bounded to the provided walls, and
+;;;         the remaining steps walk back in toward the corner.
+;;;
+;;;   INSIDE OUT:
+;;;   4a. If a diagonal/arc was selected, you are asked whether tread
 ;;;       depths are measured from the Middle of the diagonal/arc or
 ;;;       from the True corner.  The true corner is found by extending
 ;;;       the two wall lines surrounding the diagonal/arc to their
 ;;;       apparent intersection.
-;;;   4.  If a diagonal LINE was selected you are also asked whether the
+;;;   4b. If a diagonal LINE was selected you are also asked whether the
 ;;;       treads run Parallel to the diagonal, or perpendicular to the
 ;;;       bisector of the TRUE ANGLE the walls make (equal angle from
 ;;;       both wall lines).  With no diagonal the true-angle bisector is
 ;;;       always used.  Tread depths are measured from the starting
 ;;;       point toward the pool, square to the treads, so all steps are
 ;;;       parallel to each other either way.
-;;;   5.  For each step you are prompted for the tread depth, then the
+;;;   4c. For each step you are prompted for the tread depth, then the
 ;;;       step width:
 ;;;         - The tread depth is ALWAYS held exactly.
 ;;;         - If the wall opening at that depth is within 1/8" of the
@@ -40,6 +48,19 @@
 ;;;           equally short of) both walls, and the step breaks away
 ;;;           from the walls to hold the given dimensions.
 ;;;         - Enter at the width prompt fits that one step to the walls.
+;;;
+;;;   OUTSIDE IN:
+;;;   5a. If a diagonal LINE was selected you are asked whether the
+;;;       steps run Parallel to the diagonal, or with their endpoints
+;;;       Equidistant from the true corner (square to the true-angle
+;;;       bisector).  With no diagonal, equidistant is always used.
+;;;   5b. You give the width of the furthest (outermost) step.  Every
+;;;       step is bounded to the provided walls, so that width places
+;;;       the outermost step by itself.  Each tread depth you enter
+;;;       then walks one step back in toward the corner, each step
+;;;       trimmed wall-to-wall.  Drawing stops if the corner is
+;;;       reached.
+;;;
 ;;;   6.  You are asked whether to dimension the steps [Yes/No].  If
 ;;;       Yes, aligned dimensions are added:
 ;;;         - Tread depths are chained along the bisector out from the
@@ -154,7 +175,8 @@
                        cand o1 o2 score best j k tmp w1 w2 corner
                        c r a1 a2 mid key start d1 d2 bis perp
                        dist n drawn dep wid p h1 h2 nat cen e1 e2
-                       prevL prevR dimflag txth w offd oldce oldstyle)
+                       prevL prevR dimflag txth w offd oldce oldstyle
+                       outflag stopf op1 pprev tout)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -232,8 +254,17 @@
                             (car diag) (cadr diag))))
     (arcd (setq mid (cs-arcpt c r (* 0.5 (+ a1 a2))))))
 
-  ;; ---- 5. starting point ----------------------------------------------
-  (if mid
+  ;; ---- 5. draw direction ----------------------------------------------
+  ;; INSIDE OUT: build from the corner out toward the pool from given
+  ;;             tread depths and step widths.
+  ;; OUTSIDE IN: place the furthest step first from its given width
+  ;;             (bounded to the walls) and walk back in by tread depth.
+  (initget "Inside Outside")
+  (setq key     (getkword "\nDraw steps [Inside out/Outside in] <Inside out>: ")
+        outflag (= key "Outside"))
+
+  ;; ---- 5a. starting point (inside out only) ---------------------------
+  (if (and mid (not outflag))
     (progn
       (initget "Middle True")
       (setq key (getkword
@@ -254,10 +285,17 @@
     (setq bis (cs-scl bis -1.0)))
   (if diag
     (progn
-      (initget "Parallel True")
-      (setq key (getkword
-        "\nTreads [Parallel to diagonal/True angle] <Parallel>: "))
-      (if (/= key "True")
+      (if outflag
+        (progn
+          (initget "Parallel Equidistant")
+          (setq key (getkword (strcat
+            "\nSteps [Parallel to diagonal"
+            "/Equidistant from true corner] <Parallel>: "))))
+        (progn
+          (initget "Parallel True")
+          (setq key (getkword
+            "\nTreads [Parallel to diagonal/True angle] <Parallel>: "))))
+      (if (not (member key '("True" "Equidistant")))
         (progn
           ;; treads parallel to the diagonal; depths measured square to it
           (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
@@ -268,21 +306,28 @@
     ;; treads perpendicular to the true-angle (equal-angle) bisector
     (setq perp (cs-unit (cs-perp90 bis))))
 
-  (princ (strcat "\nMeasuring from "
-                 (if (equal start corner 1e-9)
-                   "the true corner"
-                   "the middle of the diagonal/arc")
-                 " toward the pool (direction "
-                 (angtos (angle '(0.0 0.0 0.0) bis)) ")."))
+  (if outflag
+    (princ (strcat "\nOutermost step is bounded to the walls; drawing"
+                   " back in toward the corner (direction "
+                   (angtos (angle '(0.0 0.0 0.0) bis)) ")."))
+    (princ (strcat "\nMeasuring from "
+                   (if (equal start corner 1e-9)
+                     "the true corner"
+                     "the middle of the diagonal/arc")
+                   " toward the pool (direction "
+                   (angtos (angle '(0.0 0.0 0.0) bis)) ").")))
 
-  ;; previous edge ends, used to close the step sides
-  (cond
-    (diag (setq prevL (car diag) prevR (cadr diag)))
-    (arcd (setq prevL (cs-arcpt c r a1) prevR (cs-arcpt c r a2)))
-    (T    (setq prevL corner prevR corner)))
-  (if (> (cs-dot (cs-vec start prevL) perp)
-         (cs-dot (cs-vec start prevR) perp))
-    (setq tmp prevL prevL prevR prevR tmp))
+  ;; previous edge ends, used to close the step sides (inside out only -
+  ;; outside-in steps are all wall-bounded, so the walls close them)
+  (if (not outflag)
+    (progn
+      (cond
+        (diag (setq prevL (car diag) prevR (cadr diag)))
+        (arcd (setq prevL (cs-arcpt c r a1) prevR (cs-arcpt c r a2)))
+        (T    (setq prevL corner prevR corner)))
+      (if (> (cs-dot (cs-vec start prevL) perp)
+             (cs-dot (cs-vec start prevR) perp))
+        (setq tmp prevL prevL prevR prevR tmp))))
 
   ;; ---- 7. dimension the steps? ---------------------------------------
   (initget "Yes No")
@@ -306,11 +351,82 @@
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
-  (while
+  (if outflag
+
+    ;; ========== OUTSIDE IN: outermost step first, then walk in ==========
     (progn
-      (initget 6) ; no zero, no negative; Enter = done
-      (setq dep (getdist (strcat "\nStep " (itoa n)
-                                 " - tread depth <Enter = done>: "))))
+      (initget 6)
+      (setq wid (getdist "\nWidth of the furthest (outermost) step: "))
+      (if (null wid)
+        (princ "\nNo width given - nothing drawn.")
+        (progn
+          ;; the wall opening grows linearly with distance from the
+          ;; corner, so the opening at distance 1 fixes where a step of
+          ;; the given width must sit to be bounded by both walls
+          (setq p   (cs-add corner bis)
+                h1  (inters p (cs-add p perp) (car w1) (cadr w1) nil)
+                h2  (inters p (cs-add p perp) (car w2) (cadr w2) nil)
+                op1 (if (and h1 h2) (distance h1 h2)))
+          (if (or (null op1) (<= op1 1e-10))
+            (princ "\nCannot measure the wall opening - nothing drawn.")
+            (progn
+              (setq tout (/ wid op1))    ; outermost step's ray distance
+              (while (and (not stopf) tout)
+                (setq p  (cs-add corner (cs-scl bis tout))
+                      h1 (inters p (cs-add p perp) (car w1) (cadr w1) nil)
+                      h2 (inters p (cs-add p perp) (car w2) (cadr w2) nil))
+                (if (and h1 h2)
+                  (progn
+                    (setq e1 h1 e2 h2 w (distance e1 e2))
+                    ;; keep a consistent left/right orientation
+                    (if (> (cs-dot (cs-vec corner e1) perp)
+                           (cs-dot (cs-vec corner e2) perp))
+                      (setq tmp e1 e1 e2 e2 tmp))
+                    (cs-mkline e1 e2)
+                    (princ (strcat "\n  Step " (itoa n)
+                                   ": bounded to walls, width = "
+                                   (rtos w) "."))
+                    (if dimflag
+                      (progn
+                        (if (null offd)
+                          (setq offd (max (* 2.0 txth) (* 0.2 w))))
+                        ;; step width: nested just outside the corner
+                        (cs-dim *cs-width-dimstyle* e1 e2
+                                (cs-add corner
+                                        (cs-scl bis
+                                                (- (+ (* 0.5 w)
+                                                      (* 1.5 txth))))))
+                        ;; tread depth: chain link back out to the
+                        ;; previous (next-further-out) tread
+                        (if pprev
+                          (cs-dim *cs-depth-dimstyle* p pprev
+                                  (cs-add (mapcar '(lambda (x y)
+                                                     (* 0.5 (+ x y)))
+                                                  p pprev)
+                                          (cs-scl perp offd))))))
+                    (setq pprev p drawn (1+ drawn)))
+                  (progn
+                    (princ "\nCannot reach both walls here - stopping.")
+                    (setq stopf T)))
+                (if (not stopf)
+                  (progn
+                    (setq n (1+ n))
+                    (initget 6)
+                    (setq dep (getdist (strcat "\nStep " (itoa n)
+                      " - tread depth (going in) <Enter = done>: ")))
+                    (cond
+                      ((null dep) (setq tout nil)) ; done
+                      ((<= (setq tout (- tout dep)) 1e-8)
+                       (princ (strcat "\nReached the corner - no room"
+                                      " for another step; stopping."))
+                       (setq stopf T)))))))))))
+
+    ;; ========== INSIDE OUT: from the corner out toward the pool =========
+    (while
+      (progn
+        (initget 6) ; no zero, no negative; Enter = done
+        (setq dep (getdist (strcat "\nStep " (itoa n)
+                                   " - tread depth <Enter = done>: "))))
     (initget 6)
     (setq wid (getdist (strcat "\nStep " (itoa n)
                                " - step width <Enter = fit to walls>: ")))
@@ -380,9 +496,9 @@
                     (cs-add corner
                             (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
         (setq prevL e1 prevR e2 drawn (1+ drawn))))
-    (setq n (1+ n)))
+    (setq n (1+ n))))
 
-  ;; ---- 8. done ---------------------------------------------------------
+  ;; ---- 9. done ---------------------------------------------------------
   (if (zerop drawn)
     (princ "\nNo steps drawn.")
     (princ (strcat "\n" (itoa drawn)
