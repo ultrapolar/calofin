@@ -73,6 +73,15 @@
 ;;;     just the selection. The side view itself is exempt — bead
 ;;;     track is only demanded next to the plan-view steps. Patterns
 ;;;     with nothing nearby are called out in the report.
+;;;     The OVERALL HEIGHT of the steps is confirmed too: measured
+;;;     from the side view's geometry (its total rise), or typed /
+;;;     picked as two points when the side view was not auto-found,
+;;;     and compared against the WallHt attribute of the "Tech
+;;;     Title" block (found space-insensitively, drawing-wide; tune
+;;;     *dchk-title-block* / *dchk-wallht-tag*). Heights written as
+;;;     40'', 3'-4'', 3' 4 1/2" or 40.5 are all understood; any
+;;;     difference beyond *dchk-height-tol* is reported in red as a
+;;;     MISMATCH.
 ;;;
 ;;;  6. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -115,6 +124,9 @@
 (setq *dchk-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
 (setq *dchk-bead-layer*   "Bead Track") ; layer bead track must be drawn on
 (setq *dchk-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
+(setq *dchk-title-block*  "Tech Title") ; title block holding the wall height (spaces optional)
+(setq *dchk-wallht-tag*   "WallHt")     ; attribute tag carrying the wall height
+(setq *dchk-height-tol*   0.25)    ; steps height vs WallHt: allowed difference (units)
 
 ;; dimension styles are reviewed in this order; styles not listed
 ;; come afterwards ("whatever else is left"), still left-to-right
@@ -321,7 +333,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,* ADD *"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,* ADD *,*MISMATCH*,*NOT CONFIRMED*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -535,9 +547,14 @@
                                 (min (nth 2 cur) (cadr r))
                                 (max (nth 3 cur) (caddr r))
                                 (car r))))
+               ;; next tread: plan-view treads overlap sideways, but in
+               ;; a side view consecutive risers only touch corner to
+               ;; corner (a zigzag), so allow a sideways gap up to one
+               ;; tread depth as well
                ((and (<= gap *dchk-step-maxgap*)
-                     (> (min (nth 3 cur) (caddr r))
-                        (max (nth 2 cur) (cadr r)))) ; sideways overlap
+                     (<= (- (max (nth 2 cur) (cadr r))
+                            (min (nth 3 cur) (caddr r)))
+                         *dchk-step-maxgap*))
                 (setq cur (list (cons (cadddr r) (car cur))
                                 (1+ (cadr cur))
                                 (cadr r)
@@ -663,6 +680,75 @@
     (if (wcmatch (strcat " " (dchk:norm-text s) " ") "* NOT *")
       (setq found T)))
   found)
+
+(defun dchk:squash (s)
+  ;; norm-text with the spaces removed too, so "Tech Title" finds a
+  ;; block that is actually named "TechTitle"
+  (vl-list->string (vl-remove 32 (vl-string->list (dchk:norm-text s)))))
+
+(defun dchk:ins-attrib (ent tag / e ed val)
+  ;; value of the attribute with the given tag on an INSERT; nil
+  ;; when the block has no such attribute
+  (setq tag (strcase tag))
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (null val) (= "ATTRIB" (cdr (assoc 0 (entget e)))))
+        (setq ed (entget e))
+        (if (= tag (strcase (cdr (assoc 2 ed))))
+          (setq val (cdr (assoc 1 ed))))
+        (setq e (entnext e)))))
+  val)
+
+(defun dchk:parse-num (s / p num den)
+  ;; "4", "4.5", "1/2" -> real
+  (setq p (vl-string-search "/" s))
+  (if p
+    (progn
+      (setq num (atof (substr s 1 p))
+            den (atof (substr s (+ p 2))))
+      (if (> den 0.0) (/ num den) 0.0))
+    (atof s)))
+
+(defun dchk:parse-len (s / lst i n c numstr toks unit total tok)
+  ;; parse a height text like 40'' / 3'-4'' / 3' 4 1/2" / 40.5 into
+  ;; inches (drawing units); nil when the text holds no number.
+  ;; ' = feet, '' or " = inches, a bare number counts as inches.
+  (setq lst  (vl-string->list s)
+        i    0
+        n    (length lst)
+        toks nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (if (or (and (>= c 48) (<= c 57)) (= c 46) (= c 47))  ; digit . /
+      (progn
+        (setq numstr "")
+        (while (and (< i n)
+                    (setq c (nth i lst))
+                    (or (and (>= c 48) (<= c 57)) (= c 46) (= c 47)))
+          (setq numstr (strcat numstr (chr c))
+                i      (1+ i)))
+        (setq unit nil)
+        (cond
+          ((and (< i n) (= (nth i lst) 34))               ; "
+           (setq unit 'in
+                 i    (1+ i)))
+          ((and (< i n) (= (nth i lst) 39))               ; '
+           (if (and (< (1+ i) n) (= (nth (1+ i) lst) 39))
+             (setq unit 'in                               ; ''
+                   i    (+ i 2))
+             (setq unit 'ft
+                   i    (1+ i)))))
+        (setq toks (append toks (list (cons (dchk:parse-num numstr) unit)))))
+      (setq i (1+ i))))
+  (if toks
+    (progn
+      (setq total 0.0)
+      (foreach tok toks
+        (if (eq (cdr tok) 'ft)
+          (setq total (+ total (* 12.0 (car tok))))
+          (setq total (+ total (car tok)))))
+      total)))
 
 ;; --- dimension review ----------------------------------------------
 
@@ -975,6 +1061,7 @@
                       satts attwrong liners linernot bn bh bp
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
+                      htsum stepht wallht wallraw tins tpat tss
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -1278,6 +1365,62 @@
                                             " lines - add bead track")
                                     lines)))))))
 
+        ;; --- overall height vs Tech Title WallHt --------------------
+        ;; the steps' total rise (side view) must match the WallHt
+        ;; attribute of the Tech Title block
+        (setq htsum nil stepht nil wallht nil wallraw nil tins nil)
+        (if stepsp
+          (progn
+            ;; overall height from the steps
+            (cond
+              ((eq svmode 'auto)               ; side view found: measure it
+               (setq bb (dchk:pts-bbox (apply 'append (mapcar 'cdr svgroups))))
+               (if bb (setq stepht (- (cadr (cadr bb)) (cadr (car bb))))))
+              ((eq svmode 'user)               ; user says it exists elsewhere
+               (princ "\n  Confirm the overall step height against the Tech Title.")
+               (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: "))))
+            ;; the Tech Title block: in the selection, else anywhere
+            (setq tpat (strcat "*" (dchk:squash *dchk-title-block*) "*"))
+            (foreach b blks
+              (if (and (null tins)
+                       (wcmatch (dchk:squash (dchk:block-name b)) tpat))
+                (setq tins b)))
+            (if (null tins)
+              (progn
+                (setq tss (ssget "_X" '((0 . "INSERT")))
+                      i   0)
+                (if tss
+                  (repeat (sslength tss)
+                    (setq b (ssname tss i)
+                          i (1+ i))
+                    (if (and (null tins)
+                             (wcmatch (dchk:squash (dchk:block-name b)) tpat))
+                      (setq tins b))))))
+            (if tins
+              (setq wallraw (dchk:ins-attrib tins *dchk-wallht-tag*)
+                    wallht  (if wallraw (dchk:parse-len wallraw))))
+            (setq htsum
+              (cond
+                ((null stepht)
+                 "steps present but their overall height was NOT CONFIRMED (no side view measured)")
+                ((null tins)
+                 (strcat "steps rise " (rtos stepht) " but no '"
+                         *dchk-title-block* "' block was found - NOT CONFIRMED"))
+                ((null wallht)
+                 (strcat "steps rise " (rtos stepht) " but the "
+                         *dchk-wallht-tag* " attribute "
+                         (if wallraw
+                           (strcat "'" wallraw "' is unreadable")
+                           "is missing")
+                         " - NOT CONFIRMED"))
+                ((<= (abs (- stepht wallht)) *dchk-height-tol*)
+                 (strcat "steps rise " (rtos stepht) " = WallHt '" wallraw
+                         "' - MATCHES"))
+                (t
+                 (strcat "steps rise " (rtos stepht) " but WallHt is '" wallraw
+                         "' (" (rtos wallht) ") - MISMATCH, look at it"))))
+            (princ (strcat "\n  Overall height: " htsum))))
+
         ;; --- Liner Material check -----------------------------------
         (setq liners   (vl-remove-if-not
                          '(lambda (b) (dchk:ins-matches b "Liner Material"))
@@ -1347,7 +1490,7 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        (setq nlin (+ 7 (length lines)))
+        (setq nlin (+ 8 (length lines)))
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -1383,6 +1526,9 @@
                   (> noflag 0))
             (cons (strcat "Steps: " stepsum)          (dchk:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))))
+        (if htsum
+          (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
+                                            (dchk:attn-p htsum))))))
         (setq txt (strcat "DIMCHECK REPORT - " (dchk:datestr)
                           "\\PItems needing attention are shown in "
                           (dchk:red "red") "."))
@@ -1425,6 +1571,7 @@
                                  (itoa noleft) " left as drawn")
                          "")
                        "\nSteps: " stepsum
+                       (if htsum (strcat "\nOverall height: " htsum) "")
                        "\nLiner Material: " linersum
                        "\nReport placed on the right side of the drawing (layer "
                        *dchk-report-layer* ")."
