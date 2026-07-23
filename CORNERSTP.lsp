@@ -54,12 +54,15 @@
 ;;;       steps run Parallel to the diagonal, or with their endpoints
 ;;;       Equidistant from the true corner (square to the true-angle
 ;;;       bisector).  With no diagonal, equidistant is always used.
-;;;   5b. You give the width of the furthest (outermost) step.  Every
-;;;       step is bounded to the provided walls, so that width places
-;;;       the outermost step by itself.  Each tread depth you enter
-;;;       then walks one step back in toward the corner, each step
-;;;       trimmed wall-to-wall.  Drawing stops if the corner is
-;;;       reached.
+;;;   5b. You give the width of the furthest (outermost) step.  That
+;;;       step is bounded to the provided walls, so its width alone
+;;;       places it - it is just the starting point.  Each following
+;;;       step asks for a tread depth (walking back in toward the
+;;;       corner), then a step width, under the same rules as inside
+;;;       out: Enter fits the step to the walls, a width within 1/8"
+;;;       of the wall opening is trimmed to the walls, and any other
+;;;       width is held, breaking the step away from the walls.
+;;;       Drawing stops if the corner is reached.
 ;;;
 ;;;   6.  You are asked whether to dimension the steps [Yes/No].  If
 ;;;       Yes, aligned dimensions are added:
@@ -169,12 +172,53 @@
                      (< (cs-ptline b (car w2) (cadr w2)) 1e-6))))
     (cs-mkline a b)))
 
+;; Resolve a step's endpoints from the requested width WID (nil = fit
+;; to the walls), the wall hits H1/H2 with opening NAT, the position P
+;; on the measuring ray, and the tread direction PERP.  Returns the
+;; list (e1 e2), or nil when the step must be skipped.  A width within
+;; the tolerance of the wall opening is trimmed to the walls; any
+;; other width is held, centered on the wall opening so the step runs
+;; equally past (or equally short of) both walls.
+(defun cs-resolve (wid nat h1 h2 p perp n / u cen e1 e2)
+  (cond
+    ;; Enter on width -> fit this step to the walls
+    ((null wid)
+     (if nat
+       (progn
+         (princ (strcat "\n  Step " (itoa n) ": fitted to walls, width = "
+                        (rtos nat) "."))
+         (list h1 h2))
+       (progn
+         (princ (strcat "\n  Step " (itoa n)
+                        ": cannot reach both walls here - step skipped."))
+         nil)))
+    ;; requested width within 1/8" of the wall opening -> trim to walls
+    ((and nat (<= (abs (- nat wid)) *cs-width-tol*))
+     (princ (strcat "\n  Step " (itoa n) ": wall opening " (rtos nat)
+                    " is within 1/8\" of " (rtos wid)
+                    " - fitted to walls."))
+     (list h1 h2))
+    ;; otherwise hold the exact width; the step breaks from the walls
+    (T
+     (if nat
+       (setq u   (cs-unit (cs-vec h2 h1))
+             cen (mapcar '(lambda (x y) (* 0.5 (+ x y))) h1 h2)
+             e1  (cs-add cen (cs-scl u (* 0.5 wid)))
+             e2  (cs-add cen (cs-scl u (* -0.5 wid))))
+       ;; no wall opening here - fall back to the measuring ray
+       (setq e1 (cs-add p (cs-scl perp (* 0.5 wid)))
+             e2 (cs-add p (cs-scl perp (* -0.5 wid)))))
+     (princ (strcat "\n  Step " (itoa n) ": width " (rtos wid) " held"
+                    (if nat (strcat " (wall opening " (rtos nat) ")") "")
+                    " - step breaks from the walls."))
+     (list e1 e2))))
+
 ;;; --------------------------- main command ----------------------------
 
 (defun c:CORNERSTP ( / *error* undoflag ss i ed lines arcs diag arcd
                        cand o1 o2 score best j k tmp w1 w2 corner
                        c r a1 a2 mid key start d1 d2 bis perp
-                       dist n drawn dep wid p h1 h2 nat cen e1 e2
+                       dist n drawn dep wid p h1 h2 nat e1 e2
                        prevL prevR dimflag txth w offd oldce oldstyle
                        outflag stopf op1 pprev tout)
 
@@ -370,22 +414,26 @@
           (if (or (null op1) (<= op1 1e-10))
             (princ "\nCannot measure the wall opening - nothing drawn.")
             (progn
-              (setq tout (/ wid op1))    ; outermost step's ray distance
+              (setq tout (/ wid op1)     ; outermost step's ray distance
+                    wid  nil)            ; the first step fits the walls
               (while (and (not stopf) tout)
-                (setq p  (cs-add corner (cs-scl bis tout))
-                      h1 (inters p (cs-add p perp) (car w1) (cadr w1) nil)
-                      h2 (inters p (cs-add p perp) (car w2) (cadr w2) nil))
-                (if (and h1 h2)
+                (setq p   (cs-add corner (cs-scl bis tout))
+                      h1  (inters p (cs-add p perp) (car w1) (cadr w1) nil)
+                      h2  (inters p (cs-add p perp) (car w2) (cadr w2) nil)
+                      nat (if (and h1 h2) (distance h1 h2))
+                      tmp (cs-resolve wid nat h1 h2 p perp n)
+                      e1  (car tmp)
+                      e2  (cadr tmp))
+                (if (and e1 e2)
                   (progn
-                    (setq e1 h1 e2 h2 w (distance e1 e2))
                     ;; keep a consistent left/right orientation
                     (if (> (cs-dot (cs-vec corner e1) perp)
                            (cs-dot (cs-vec corner e2) perp))
                       (setq tmp e1 e1 e2 e2 tmp))
-                    (cs-mkline e1 e2)
-                    (princ (strcat "\n  Step " (itoa n)
-                                   ": bounded to walls, width = "
-                                   (rtos w) "."))
+                    (cs-mkline e1 e2)          ; the step (tread) edge
+                    (cs-conn prevL e1 w1 w2)   ; side lines where the walls
+                    (cs-conn prevR e2 w1 w2)   ; do not already close them
+                    (setq w (distance e1 e2))
                     (if dimflag
                       (progn
                         (if (null offd)
@@ -404,10 +452,9 @@
                                                      (* 0.5 (+ x y)))
                                                   p pprev)
                                           (cs-scl perp offd))))))
-                    (setq pprev p drawn (1+ drawn)))
-                  (progn
-                    (princ "\nCannot reach both walls here - stopping.")
-                    (setq stopf T)))
+                    (setq prevL e1 prevR e2 pprev p drawn (1+ drawn))))
+                ;; next step inward: depth, then width - same rules as
+                ;; inside out (a held width breaks from the walls)
                 (if (not stopf)
                   (progn
                     (setq n (1+ n))
@@ -419,7 +466,11 @@
                       ((<= (setq tout (- tout dep)) 1e-8)
                        (princ (strcat "\nReached the corner - no room"
                                       " for another step; stopping."))
-                       (setq stopf T)))))))))))
+                       (setq stopf T))
+                      (T
+                       (initget 6)
+                       (setq wid (getdist (strcat "\nStep " (itoa n)
+                         " - step width <Enter = fit to walls>: ")))))))))))))
 
     ;; ========== INSIDE OUT: from the corner out toward the pool =========
     (while
@@ -435,39 +486,9 @@
           h1   (inters p (cs-add p perp) (car w1) (cadr w1) nil)
           h2   (inters p (cs-add p perp) (car w2) (cadr w2) nil)
           nat  (if (and h1 h2) (distance h1 h2))  ; wall opening at this depth
-          e1   nil
-          e2   nil)
-    (cond
-      ;; Enter on width -> fit this step to the walls
-      ((null wid)
-       (if nat
-         (progn
-           (setq e1 h1 e2 h2)
-           (princ (strcat "\n  Step " (itoa n) ": fitted to walls, width = "
-                          (rtos nat) ".")))
-         (princ (strcat "\n  Step " (itoa n)
-                        ": cannot reach both walls here - step skipped."))))
-      ;; requested width within 1/8" of the wall opening -> trim to walls
-      ((and nat (<= (abs (- nat wid)) *cs-width-tol*))
-       (setq e1 h1 e2 h2)
-       (princ (strcat "\n  Step " (itoa n) ": wall opening " (rtos nat)
-                      " is within 1/8\" of " (rtos wid)
-                      " - fitted to walls.")))
-      ;; otherwise hold the exact width; the step breaks from the walls
-      (T
-       (if nat
-         ;; center the step on the wall opening so it runs equally
-         ;; past (or equally short of) BOTH wall lines
-         (setq tmp (cs-unit (cs-vec h2 h1))
-               cen (mapcar '(lambda (x y) (* 0.5 (+ x y))) h1 h2)
-               e1  (cs-add cen (cs-scl tmp (* 0.5 wid)))
-               e2  (cs-add cen (cs-scl tmp (* -0.5 wid))))
-         ;; no wall opening here - fall back to the measuring ray
-         (setq e1 (cs-add p (cs-scl perp (* 0.5 wid)))
-               e2 (cs-add p (cs-scl perp (* -0.5 wid)))))
-       (princ (strcat "\n  Step " (itoa n) ": width " (rtos wid) " held"
-                      (if nat (strcat " (wall opening " (rtos nat) ")") "")
-                      " - step breaks from the walls."))))
+          tmp  (cs-resolve wid nat h1 h2 p perp n)
+          e1   (car tmp)
+          e2   (cadr tmp))
     (if (and e1 e2)
       (progn
         ;; keep a consistent left/right orientation for the side lines
