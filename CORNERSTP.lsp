@@ -41,9 +41,13 @@
 ;;;           from the walls to hold the given dimensions.
 ;;;         - Enter at the width prompt fits that one step to the walls.
 ;;;   6.  You are asked whether to dimension the steps [Yes/No].  If
-;;;       Yes, every tread depth and step width gets an aligned
-;;;       dimension in the current dimension style: the depth square to
-;;;       the treads, the width along the tread edge.
+;;;       Yes, aligned dimensions are added in the current dim style:
+;;;         - Tread depths are chained along the bisector out from the
+;;;           starting point (each link is one tread's depth, measured
+;;;           to where that tread crosses the bisector).
+;;;         - Step widths are the full width of each tread edge, placed
+;;;           just outside the corner and nested so the wider (deeper)
+;;;           steps sit progressively further out.
 ;;;   7.  Enter at the depth prompt means no more depths/widths are
 ;;;       required; the routine finishes with what it was given.
 ;;;       Side (riser) lines are drawn between successive step ends
@@ -122,7 +126,7 @@
                        cand o1 o2 score best j k tmp w1 w2 corner
                        c r a1 a2 mid key start d1 d2 bis perp
                        dist n drawn dep wid p h1 h2 nat cen e1 e2
-                       prevL prevR dimflag)
+                       prevL prevR dimflag txth w offd)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -253,6 +257,9 @@
   ;; ---- 7. dimension the steps? ---------------------------------------
   (initget "Yes No")
   (setq dimflag (/= "No" (getkword "\nDimension the steps? [Yes/No] <Yes>: ")))
+  ;; annotation text height in drawing units, used to space the dims
+  (setq txth (* (getvar "DIMTXT") (getvar "DIMSCALE")))
+  (if (<= txth 0.0) (setq txth 1.0))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
   (command "_.UNDO" "_Begin")
@@ -315,16 +322,20 @@
         (cs-conn prevR e2 w1 w2)   ; do not already close the step
         (if dimflag
           (progn
-            ;; tread-depth dimension: along the ray from the previous
-            ;; tread position to this one, offset to the e1 side
+            (setq w (distance e1 e2))
+            ;; fix the depth chain's side offset once, off the bisector
+            (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
+            ;; tread depth: link of a chain along the bisector, from the
+            ;; previous tread crossing (p - bis*dep) to this one (p)
             (cs-dim (cs-add p (cs-scl bis (- dep))) p
                     (cs-add (cs-add p (cs-scl bis (* -0.5 dep)))
-                            (cs-scl perp (+ (* 0.5 (distance e1 e2)) dep))))
-            ;; step-width dimension: along the tread edge, offset toward
-            ;; the corner so it sits between this tread and the last one
+                            (cs-scl perp offd)))
+            ;; step width: full tread edge, placed just outside the
+            ;; corner and nested by half the tread's own width so the
+            ;; wider (deeper) steps stack progressively further out
             (cs-dim e1 e2
-                    (cs-add (mapcar '(lambda (x y) (* 0.5 (+ x y))) e1 e2)
-                            (cs-scl bis (* -0.5 dep))))))
+                    (cs-add corner
+                            (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
         (setq prevL e1 prevR e2 drawn (1+ drawn))))
     (setq n (1+ n)))
 
