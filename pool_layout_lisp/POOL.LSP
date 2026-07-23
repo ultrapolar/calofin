@@ -316,7 +316,8 @@
 ;;; which dimension is being asked for.  Once all inputs are in, the
 ;;; guide deletes itself and is replaced by the true out-of-square pool.
 
-(setq pool:*pv-col* 8)                  ; guide color (gray)
+(setq pool:*pv-col* 8)                  ; guide outline color (dark gray)
+(setq pool:*pvx-col* 9)                 ; cross-dim / measuring line color (light gray)
 (setq pool:*hi-col* 1)                  ; highlight color (red)
 
 ;; Override (or set) the color of an entity, refresh it, return it.
@@ -331,28 +332,37 @@
         (entupd e)))
   e)
 
+;; Read an entity's current color (defaults to the outline gray).
+(defun pool:getcol (e / ed)
+  (if (and e (setq ed (entget e)) (assoc 62 ed))
+      (cdr (assoc 62 ed))
+      pool:*pv-col*))
+
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 "POOL-NOTES")
   (pool:setcol (entlast) pool:*pv-col*))
 
-;; Dashed guide line -- used for the cross dims so they read apart
-;; from the pool outline at a glance.
+;; Dashed guide line -- the cross dims and other measuring lines, in a
+;; lighter gray so they read apart from the darker pool outline.
 (defun pool:pvlined (p1 p2)
   (pool:lined p1 p2)
-  (pool:setcol (entlast) pool:*pv-col*))
+  (pool:setcol (entlast) pool:*pvx-col*))
 
-;; Ask for a distance while the matching guide elements glow red.
-(defun pool:askh (msg ents / v)
+;; Ask for a distance while the matching guide elements glow red, then
+;; restore each element to the color it had (outline vs cross-dim gray).
+(defun pool:askh (msg ents / v cols)
+  (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (setq v (pool:ask msg))
-  (foreach e ents (pool:setcol e pool:*pv-col*))
+  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   v)
 
 ;; Same, for cross dims: NA allowed, returns nil when not measured.
-(defun pool:askhx (msg ents / v)
+(defun pool:askhx (msg ents / v cols)
+  (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (setq v (pool:askx msg))
-  (foreach e ents (pool:setcol e pool:*pv-col*))
+  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   v)
 
 ;; Delete all guide entities (tracked globally so the *error* handler
