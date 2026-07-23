@@ -86,9 +86,12 @@
 ;;;  6. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
 ;;;     with Step". Missing -> reported. Each one found is scanned
-;;;     for the standalone word "NOT" in its attributes and text
-;;;     (e.g. "Not Selected", "Not Included"); any hit is reported
-;;;     with the block's location so you can look at it.
+;;;     for the standalone words "NOT" and "ERROR" in its attributes
+;;;     and text (e.g. "Not Selected", "Not Included", "#ERROR");
+;;;     any hit is reported with the block's location so you can
+;;;     look at it. And when steps are drawn, the liner pattern must
+;;;     cover them: if no liner block carries a "Step" section (the
+;;;     "Liner Material with Step" variant), that is reported too.
 ;;;
 ;;;  7. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
@@ -333,7 +336,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,* ADD *,*MISMATCH*,*NOT CONFIRMED*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -672,14 +675,24 @@
       (setq found T)))
   found)
 
-(defun dchk:has-word-not (ent / found s)
-  ;; T when any text the INSERT shows contains the standalone word
-  ;; NOT ("Not Selected", "NOT INCLUDED", ... but never "NOTE")
-  (setq found nil)
-  (foreach s (dchk:ins-texts ent)
-    (if (wcmatch (strcat " " (dchk:norm-text s) " ") "* NOT *")
+(defun dchk:ins-has-word (ent word / found s)
+  ;; T when the INSERT's (effective) name or any text it shows
+  ;; contains the given standalone word — "NOT" hits "Not Selected"
+  ;; but never "NOTE"; "STEP" hits "with Step" but never "Stepstone"
+  (setq word  (strcase word)
+        found nil)
+  (foreach s (cons (dchk:block-name ent) (dchk:ins-texts ent))
+    (if (and s
+             (wcmatch (strcat " " (dchk:norm-text s) " ")
+                      (strcat "* " word " *")))
       (setq found T)))
   found)
+
+(defun dchk:join (lst sep / out s)
+  ;; "A" + "B" + ... joined with sep
+  (foreach s lst
+    (setq out (if out (strcat out sep s) s)))
+  out)
 
 (defun dchk:squash (s)
   ;; norm-text with the spaces removed too, so "Tech Title" finds a
@@ -1058,7 +1071,7 @@
                       ndok ndflag ndmoved naok namoved nasnap
                       nomerged noflag noleft
                       sgroups svgroups pgroups g1 g2 stepsp svmode
-                      satts attwrong liners linernot bn bh bp
+                      satts attwrong liners linerbadw linernostep bad w bn bh bp
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
@@ -1422,10 +1435,11 @@
             (princ (strcat "\n  Overall height: " htsum))))
 
         ;; --- Liner Material check -----------------------------------
-        (setq liners   (vl-remove-if-not
-                         '(lambda (b) (dchk:ins-matches b "Liner Material"))
-                         blks)
-              linernot nil)
+        (setq liners      (vl-remove-if-not
+                            '(lambda (b) (dchk:ins-matches b "Liner Material"))
+                            blks)
+              linerbadw   nil
+              linernostep nil)
         (if (null liners)
           (progn
             (princ "\n--- Liner check: no 'Liner Material' block in the selection ---")
@@ -1435,17 +1449,36 @@
             (princ (strcat "\n--- Liner check: " (itoa (length liners))
                            " 'Liner Material' block(s) found ---"))
             (foreach b liners
-              (setq bn (dchk:block-name b)
-                    bh (cdr (assoc 5 (entget b)))
-                    bp (cdr (assoc 10 (entget b))))
-              (if (dchk:has-word-not b)
+              (setq bn  (dchk:block-name b)
+                    bh  (cdr (assoc 5 (entget b)))
+                    bp  (cdr (assoc 10 (entget b)))
+                    bad nil)
+              (foreach w '("NOT" "ERROR")
+                (if (dchk:ins-has-word b w)
+                  (setq bad (append bad (list w)))))
+              (foreach w bad
+                (if (not (member w linerbadw))
+                  (setq linerbadw (append linerbadw (list w)))))
+              (if bad
                 (progn
-                  (setq linernot T)
+                  (princ (strcat "\n  Note: '" bn "' contains the word "
+                                 (dchk:join bad " & ") " - look at it."))
                   (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
                                             (dchk:ptstr bp)
-                                            ": contains the word NOT - look at it")
+                                            ": contains the word "
+                                            (dchk:join bad " & ")
+                                            " - look at it")
                                     lines)))
                 (setq lines (cons (strcat "Liner Material (" bn ") " bh ": OK")
+                                  lines))))
+            ;; steps drawn -> the liner pattern must cover the step
+            (if (and stepsp
+                     (not (vl-some '(lambda (b) (dchk:ins-has-word b "STEP"))
+                                   liners)))
+              (progn
+                (setq linernostep T)
+                (princ "\n  Note: steps are drawn but the liner pattern is MISSING its Step.")
+                (setq lines (cons "Liner Material: steps are drawn but the liner pattern is MISSING its 'Step' - use 'Liner Material with Step'"
                                   lines))))))
 
         ;; --- restore colours (flagged/moved keep theirs) ------------
@@ -1480,10 +1513,18 @@
               (cond
                 ((null liners)
                  "block MISSING - add 'Liner Material' (or 'with Step')")
-                (linernot
-                 (strcat (itoa (length liners))
-                         " block(s) found; word NOT found - review"))
-                (t (strcat (itoa (length liners)) " block(s) found - OK"))))
+                (t
+                 (strcat (itoa (length liners)) " block(s) found"
+                         (if linerbadw
+                           (strcat "; word " (dchk:join linerbadw " & ")
+                                   " found - review")
+                           "")
+                         (if linernostep
+                           "; steps drawn but liner MISSING its Step"
+                           "")
+                         (if (and (null linerbadw) (not linernostep))
+                           " - OK"
+                           "")))))
 
         ;; --- report on the right side, to scale with the drawing ----
         ;; text height picked from the drawing's extents so the whole
