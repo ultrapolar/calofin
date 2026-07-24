@@ -24,17 +24,16 @@
 ;;;        - the side of the line the click lands on is the side the new
 ;;;          points are offset toward.
 ;;;   3. Enter how many values (points) are required  (>= 2).
-;;;   4. Accept the offset side, or Flip it to the other side of the
-;;;      original line.
-;;;   5. Enter a length for each point, in order START -> FINISH.
-;;;   6. Choose whether to repeat on the new polyline; if so, repeat from
-;;;      step 3 with the new polyline as the path (offsets and dimensions
-;;;      stay perpendicular to the original line whichever side you pick).
+;;;   4. Enter a length for each point, in order START -> FINISH.
+;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
+;;;      new point count and click which side of the ORIGINAL line the
+;;;      offsets should go, then repeat from step 4 with the new polyline
+;;;      as the path.
 ;;;
-;;; The offset side always lies along the original line's perpendicular;
-;;; Flip only swaps between its two directions, so every dimension stays
-;;; perpendicular to the original line.  The chosen side carries over as
-;;; the default for the next round.
+;;; Whichever side is clicked, the offset lies along the original line's
+;;; perpendicular, so every dimension stays perpendicular to the original
+;;; line.  The clicked side carries over as the default for the next
+;;; round (press Enter at the side prompt to keep it).
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
@@ -89,7 +88,7 @@
                     dx dy dlen ux uy cross nx ny sz
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     arrowEnts path n basePts newPts guideEnts
-                    len i base bx by np npx npy again iter p e dir)
+                    len i base bx by np npx npy again iter p e)
 
   (defun *error* (msg)
     (if os (setvar "OSMODE" os))
@@ -195,13 +194,21 @@
              (exit)))
 
     ;; --- offset side for this round ----------------------------------
-    ;; Both choices lie along the original line's perpendicular, so the
-    ;; dimensions stay perpendicular to the original line either way.
-    ;; Flip swaps to the other side; the pick carries over to the next
-    ;; round as the default.
-    (initget "Same Flip")
-    (setq dir (getkword "\nOffset direction [Same/Flip] <Same>: "))
-    (if (= dir "Flip") (setq nx (- nx) ny (- ny)))
+    ;; Round 1 uses the side picked with the direction click.  Later
+    ;; rounds let you click again to choose which side of the ORIGINAL
+    ;; line the offsets go; the clicked side sits on the original line's
+    ;; perpendicular, so dimensions stay perpendicular to the original
+    ;; line either way.  Press Enter to keep the current side.
+    (if (> iter 1)
+      (progn
+        (setq click (getpoint "\nClick the side of the line to offset toward <keep current>: "))
+        (if click
+          (progn
+            (setq cross (- (* ux (- (cadr click) (cadr pStart)))
+                           (* uy (- (car click)  (car pStart)))))
+            (if (>= cross 0.0)
+              (setq nx (- uy) ny ux)        ; left normal
+              (setq nx uy     ny (- ux))))))) ; right normal
 
     ;; base points, equally spaced along the current path
     (setq basePts (perp:sample path n))
