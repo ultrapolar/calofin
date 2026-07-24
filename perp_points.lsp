@@ -26,14 +26,12 @@
 ;;;   3. Enter how many values (points) are required  (>= 2).
 ;;;   4. Enter a length for each point, in order START -> FINISH.
 ;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
-;;;      new point count and click which side of the ORIGINAL line the
-;;;      offsets should go, then repeat from step 4 with the new polyline
-;;;      as the path.
+;;;      new point count and repeat from step 4 with the new polyline as
+;;;      the path.
 ;;;
-;;; Whichever side is clicked, the offset lies along the original line's
-;;; perpendicular, so every dimension stays perpendicular to the original
-;;; line.  The clicked side carries over as the default for the next
-;;; round (press Enter at the side prompt to keep it).
+;;; The offset side is fixed once from the direction click in step 2 and
+;;; reused for every round, so all offsets stay on the same side of the
+;;; original line and every dimension stays perpendicular to it.
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
@@ -193,24 +191,9 @@
              (setvar "OSMODE" os)
              (exit)))
 
-    ;; --- offset side for this round ----------------------------------
-    ;; Round 1 uses the side picked with the direction click.  Later
-    ;; rounds let you click again to choose which side of the ORIGINAL
-    ;; line the offsets go; the clicked side sits on the original line's
-    ;; perpendicular, so dimensions stay perpendicular to the original
-    ;; line either way.  Press Enter to keep the current side.
-    (if (> iter 1)
-      (progn
-        (setq click (getpoint "\nClick the side of the line to offset toward <keep current>: "))
-        (if click
-          (progn
-            (setq cross (- (* ux (- (cadr click) (cadr pStart)))
-                           (* uy (- (car click)  (car pStart)))))
-            (if (>= cross 0.0)
-              (setq nx (- uy) ny ux)        ; left normal
-              (setq nx uy     ny (- ux))))))) ; right normal
-
-    ;; base points, equally spaced along the current path
+    ;; base points, equally spaced along the current path.  The offset
+    ;; side (nx,ny) was fixed from the direction click and is reused for
+    ;; every round, so all rounds offset to the same side.
     (setq basePts (perp:sample path n))
 
     ;; --- length per point + build the new perpendicular points -------
