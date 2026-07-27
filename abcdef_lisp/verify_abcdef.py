@@ -160,6 +160,20 @@ def solve(corners, dists, seed):
     return x, y, rms
 
 
+def frame_check(A, B, C, D, w, h):
+    """Mirror of abcdef:frame-check - None when the corners form the W x H
+    rectangle, else a message naming the first bad side/diagonal."""
+    dg = math.hypot(w, h)
+    for name, p, q, want in (("A-B", A, B, w), ("C-D", C, D, w),
+                             ("A-C", A, C, h), ("B-D", B, D, h),
+                             ("A-D (diagonal)", A, D, dg),
+                             ("B-C (diagonal)", B, C, dg)):
+        d = math.hypot(q[0] - p[0], q[1] - p[1])
+        if abs(d - want) > 0.001:
+            return f'{name} measures {d:.2f}" but should be {want:.2f}"'
+    return None
+
+
 # ------------------------------------------------------------------ tests --
 
 def check(desc, cond):
@@ -234,6 +248,19 @@ def main():
     # a clockwise-labelled sheet = same data with C/D columns exchanged
     fire_cw = tot_cw > 0.5 * n3 and tot_z < 0.25 * tot_cw
     ok &= check("DOES fire on a clockwise-labelled sheet", fire_cw)
+
+    # ---- corner self-check ------------------------------------------------
+    # the two corner layouts seen in real failing runs must be rejected, the
+    # correct layout accepted.
+    print("\nframe self-check:")
+    ok &= check("accepts the documented corner layout",
+                frame_check(A, B, C, D, W, H) is None)
+    # failure 1: parallelogram (C = A+(2W,-H), D = A+(W,-H))
+    bad1 = frame_check(A, B, (2 * W, -H), (W, -H), W, H)
+    ok &= check(f"rejects the parallelogram layout ({bad1})", bad1 is not None)
+    # failure 2: zigzag (A shifted one width left of the base pick)
+    bad2 = frame_check((-W, 0.0), (0.0, 0.0), (0.0, -H), (W, -H), W, H)
+    ok &= check(f"rejects the zigzag layout ({bad2})", bad2 is not None)
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "*** FAILURES ***"))
     return 0 if ok else 1

@@ -36,6 +36,12 @@
 
 (vl-load-com)
 
+;; Revision stamp, shown on load and in every run's output.  When plotted
+;; points look wrong, FIRST check the drawing/command line shows the rev you
+;; think you loaded - two separate field failures turned out to be a stale or
+;; hand-edited copy of this file still loaded in AutoCAD.
+(setq abcdef:*version* "3")
+
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
 ;;; --------------------------------------------------------------------------
@@ -666,6 +672,28 @@
   (if (>= (length (car g)) 2)
     (caddr (abcdef:solve (car g) (cadr g) cx cy))))
 
+;; Verify the named corner variables really form the W x H rectangle they
+;; are documented to be: A-B and C-D horizontal sides of length W, A-C and
+;; B-D vertical sides of length H, and matching diagonals.  Returns nil when
+;; everything is right, else a message naming the first bad measurement.
+;; This exists because two field failures traced back to a stale or
+;; hand-edited copy of this file whose corner block no longer matched the
+;; solver's assumptions - cheap to test on every run, loud when wrong.
+(defun abcdef:frame-check (ax ay bx by cx cy dx dy w h / dg chk d bad)
+  (setq dg (sqrt (+ (* w w) (* h h))) bad nil)
+  (foreach chk (list (list "A-B" ax ay bx by w)
+                     (list "C-D" cx cy dx dy w)
+                     (list "A-C" ax ay cx cy h)
+                     (list "B-D" bx by dx dy h)
+                     (list "A-D (diagonal)" ax ay dx dy dg)
+                     (list "B-C (diagonal)" bx by cx cy dg))
+    (setq d (sqrt (+ (expt (- (nth 3 chk) (nth 1 chk)) 2)
+                     (expt (- (nth 4 chk) (nth 2 chk)) 2))))
+    (if (and (null bad) (> (abs (- d (nth 5 chk))) 0.001))
+      (setq bad (strcat (car chk) " measures " (rtos d 2 2)
+                        "\" but should be " (rtos (nth 5 chk) 2 2) "\""))))
+  bad)
+
 ;; Interior angle in degrees at corner (px py), looking toward (qx qy) and
 ;; (rx ry).  Measured from the coordinates, NOT assumed - this is what lets
 ;; the command report honestly that the frame it drew has square corners.
@@ -684,8 +712,9 @@
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r k rr nm din g corners dists
                     sol x y rms tags tg tx ty placed p flag
-                    totn tots n3 swapcd tmp angs)
+                    totn tots n3 swapcd tmp angs chk)
   (vl-load-com)
+  (princ (strcat "\nABCDEF rev " abcdef:*version*))
   ;; ---- get the spreadsheet ----------------------------------------------
   (setq file (getfiled "Select points spreadsheet"
                        "" "xlsx;xls;xlsm;csv" 16))
@@ -711,6 +740,21 @@
             Bx (+ bx W)  By by
             Cx bx        Cy (- by H)
             Dx (+ bx W)  Dy (- by H))
+      ;; ---- corner self-check ----------------------------------------------
+      ;; refuse to plot anything if the corner variables above no longer form
+      ;; the W x H rectangle (i.e. this file was edited or a stale copy is
+      ;; loaded) - a wrong frame silently poisons every solved point.
+      (setq chk (abcdef:frame-check Ax Ay Bx By Cx Cy Dx Dy W H))
+      (if chk
+        (progn
+          (alert (strcat "ABCDEF rev " abcdef:*version*
+                         " - corner layout self-check FAILED:\n\n" chk
+                         "\n\nThe loaded copy of abcdef.lsp appears stale or"
+                         "\nhand-edited.  Re-download abcdef_lisp/abcdef.lsp"
+                         "\nand APPLOAD it again.  Nothing was drawn."))
+          (princ (strcat "\n** ABORT - corner self-check failed: " chk))
+          (princ))
+        (progn
       ;; ---- read the sheet ------------------------------------------------
       ;; the rectangle diagonal is the largest distance any point can be from a
       ;; corner; pass it so the parser can spot a foot mark scanned as a digit
@@ -757,15 +801,25 @@
                 "\n     This sheet labels C = bottom-RIGHT and D = bottom-LEFT;"
                 "\n     C and D have been placed that way to match the data."))))
           (if (and (> n3 0) (> (if swapcd tots totn) (* 1.0 n3)))
-            (princ (strcat
-              "\n\n  ** WARNING: the distances fit the rectangle poorly (avg fit "
-              (rtos (/ (if swapcd tots totn) n3) 2 3)
-              "\").  Check the A-B / A-C dimensions and the sheet values;"
-              "\n     the **CHECK flags below mark the worst points.")))
+            (progn
+              (princ (strcat
+                "\n\n  ** WARNING: the distances fit the rectangle poorly (avg fit "
+                (rtos (/ (if swapcd tots totn) n3) 2 3)
+                "\").  Check the A-B / A-C dimensions and the sheet values;"
+                "\n     the **CHECK flags below mark the worst points."))
+              (alert (strcat
+                "ABCDEF rev " abcdef:*version*
+                ": the distances fit the rectangle POORLY\n(average fit error "
+                (rtos (/ (if swapcd tots totn) n3) 2 2)
+                "\" - quarter-inch data should fit under 0.10\").\n"
+                "\nCheck the A-B / A-C dimensions you entered and the"
+                "\nsheet's values.  Points ARE plotted, but every doubtful"
+                "\none is flagged CHECK in red in the drawing."))))
           ;; ---- layers & sizing --------------------------------------------
           (abcdef:layer "ABCDEF-FRAME"  1)     ; red
           (abcdef:layer "ABCDEF-POINTS" 2)     ; yellow
           (abcdef:layer "ABCDEF-LABELS" 3)     ; green
+          (abcdef:layer "ABCDEF-WARN"   1)     ; red - labels of doubtful fits
           (setq th (/ (max W H) 120.0))        ; text height
           (if (< th 0.5) (setq th 0.5))
           (setq mrad (* th 0.4))               ; marker radius
@@ -800,13 +854,18 @@
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
                 (abcdef:point  (list x y) "ABCDEF-POINTS")
                 (abcdef:circle (list x y) mrad "ABCDEF-POINTS")
-                (abcdef:text   (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
-                               th nm "ABCDEF-LABELS")
                 (setq flag "")
                 (if (> rms 0.25) (setq flag "  **CHECK"))
                 (if (or (< x (- bx 0.1)) (> x (+ bx W 0.1))
                         (> y (+ by 0.1)) (< y (- by H 0.1)))
                   (setq flag (strcat flag "  (outside frame)")))
+                ;; a doubtful fit gets its label in red so the problem is
+                ;; visible in the drawing, not only in this report
+                (if (> rms 0.25)
+                  (abcdef:text (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
+                               th (strcat nm " CHECK") "ABCDEF-WARN")
+                  (abcdef:text (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
+                               th nm "ABCDEF-LABELS"))
                 (setq placed (cons (list nm x y rms (length corners) flag)
                                    placed))
                 (setq good (1+ good)))
@@ -815,7 +874,8 @@
                                " : fewer than 2 distances given - skipped."))
                 (setq bad (1+ bad)))))
           ;; ---- report ------------------------------------------------------
-          (princ "\n\n===== ABCDEF results (all values in inches) =====")
+          (princ (strcat "\n\n===== ABCDEF rev " abcdef:*version*
+                         " results (all values in inches) ====="))
           (princ "\n  POINT            X          Y      #dims   fit err (RMS)")
           (foreach p (reverse placed)
             (princ (strcat "\n  " (abcdef:pad (nth 0 p) 14)
@@ -850,7 +910,7 @@
                (vl-cmdf "_.plan" "_World")
                (vl-cmdf "_.zoom" "_Extents")))
           (princ "\n  View reset to plan (top).")
-          (princ)))))
+          (princ)))))))
   (princ))
 
 ;; right-pad a string to WIDTH
@@ -864,5 +924,6 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ "\nABCDEF.lsp loaded.  Type ABCDEF to plot points from a spreadsheet.")
+(princ (strcat "\nABCDEF.lsp rev " abcdef:*version*
+               " loaded.  Type ABCDEF to plot points from a spreadsheet."))
 (princ)

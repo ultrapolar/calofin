@@ -46,7 +46,25 @@ repair so it can be verified): `O`/`I` for `0`/`1`, smart quotes,
 `20'-7 114"` (`/` scanned as `1`), and `34'-4 1 /4` (fraction split by a
 stray space).
 
-## Bugs fixed in this revision
+## If the points land in the wrong place
+
+**First check the revision banner.** The file prints `ABCDEF.lsp rev N
+loaded` when loaded and `ABCDEF rev N` when the command runs; the current
+revision is declared at the top of `abcdef.lsp` (`abcdef:*version*`). If
+the banner is missing or shows an older number, AutoCAD is running a stale
+or edited copy — re-download `abcdef.lsp` and `APPLOAD` it again.
+
+Both field failures so far were exactly this: a copy whose corner block no
+longer matched the repo file. Rev 3 therefore verifies itself on every
+run: it re-measures the A/B/C/D corner variables (four sides + both
+diagonals) before drawing and refuses to plot if they don't form the
+entered W x H rectangle, pops an alert dialog when the sheet's distances
+fit the rectangle poorly (average error over 1"), and draws the label of
+any point fitting worse than 0.25" in red as `NAME CHECK` on the
+`ABCDEF-WARN` layer so a bad solve is visible in the drawing itself, not
+just on the command line.
+
+## Bugs fixed
 
 The failing drawing (`ABCDEFAILSAD.dxf`) plotted A-B-C-D as a
 parallelogram with 31°/149° corners. Analysis of that DXF against the
