@@ -286,7 +286,7 @@ def hexguess(sides, lazy):
     else:
         c = (ab, bc)
         d = (ab - cd, bc)
-        e = (d[0], d[1] + de)
+        e = (d[0], d[1] - de)
         f = (e[0] - ef, e[1])
     return [a, b, c, d, e, f]
 
@@ -352,7 +352,7 @@ m = quadmeas(q)
 assert abs(m[4] - (diag + 1.2)) <= 2.0, "provided cross dim honoured"
 
 print("== 13. perfect true L ==")
-TRUE_L = [(0, 0), (360, 0), (360, 140), (160, 140), (160, 260), (0, 260)]
+TRUE_L = [(0, 0), (480, 0), (480, 420), (300, 420), (300, 240), (0, 240)]
 sides, diags = hexmeas(TRUE_L)
 pts, failed = fithex(sides, diags, lazy=False)
 s, x = hexerr(pts, sides, diags)
@@ -360,7 +360,7 @@ print(f"   max side delta {s:.4f}, max cross delta {x:.4f}")
 assert not failed and s < 0.05 and x < 0.1
 
 print("== 14. out-of-square true L (field dims, 1/4\" rounding) ==")
-SKEW_L = [(0, 0), (360.7, 0.3), (359.9, 140.6), (160.4, 141.1), (159.6, 260.8), (-0.5, 259.9)]
+SKEW_L = [(0, 0), (480.7, 0.3), (479.2, 420.6), (300.4, 421.1), (299.6, 240.8), (-0.5, 239.9)]
 sides, diags = hexmeas(SKEW_L)
 sides = [round(v * 4) / 4 for v in sides]
 diags = [round(v * 4) / 4 for v in diags]
@@ -398,8 +398,8 @@ assert not failed and s < 0.05 and x < 0.15
 
 print("== 18. point-in-polygon (dim placement) ==")
 assert inpoly((180, 70), TRUE_L)          # main body
-assert inpoly((80, 200), TRUE_L)          # wing
-assert not inpoly((260, 200), TRUE_L)     # the notch
+assert inpoly((400, 350), TRUE_L)         # wing (top right)
+assert not inpoly((150, 350), TRUE_L)     # the notch (top left)
 assert not inpoly((-10, 70), TRUE_L)      # outside left
 
 
@@ -856,21 +856,25 @@ assert [b[0] for b in brks]==[30.0,90.0,300.0]
 print("   sport, no-pad and normal profile break chains verified")
 
 
-print("== 40. L main-section hopper quad (virtual corner D') ==")
-# true L: A(0,0) B(360,0) C(360,150) D(200,150) E(200,300) F(0,300)
-Lp=[(0,0),(360,0),(360,150),(200,150),(200,300),(0,300)]
-dv=linex(Lp[5],_sub(Lp[0],Lp[5]),Lp[3],_sub(Lp[2],Lp[3]))  # F-A line x D-C line
-assert dv==(0.0,150.0)
-mquad=[Lp[0],Lp[1],Lp[2],dv]
-SQ4=[("Square",0.0)]*4
-gg=hopcalc(mquad,SQ4,40,70,90,30,35)
-assert gg['hbl']==(40.0,35.0) and gg['htl']==(40.0,120.0)
-assert gg['brkb']==(270.0,0.0) and gg['brkt']==(270.0,150.0)  # break spans main section only
-assert gg['lab1']==(0,0) and gg['lat1']==(0.0,150.0)          # ties to A and D'
-assert abs(dist(gg['pl'],gg['phl'])-40)<1e-9
-assert abs(dist(gg['pht'],gg['pt'])-30)<1e-9
-print("   D'=(0,150); hopper anchors and break confined to the main section")
-
+print("== 40. L main-section hopper quad (break drops from inner corner E) ==")
+# reference true L and lazy L both: break line from E down to the bottom
+for name,Lp,wantB1,wantV1 in (("true L",TRUE_L,300.0,240.0),
+                              ("lazy L",[(0,0),(296,0),(414,119),(296,238),(226,168),(0,168)],
+                               226.0,168.0)):
+    bb=linex(Lp[4],_sub(Lp[5],Lp[0]),Lp[0],_sub(Lp[1],Lp[0]))   # break bottom
+    mquad=[Lp[0],bb,Lp[4],Lp[5]]
+    b1=dist(mquad[0],mquad[1]); v1=dist(mquad[0],mquad[3])
+    assert abs(b1-wantB1)<1e-6 and abs(v1-wantV1)<1e-6, name
+    # the reference hopper chains sum exactly to B1 -> E is not needed
+    if name=="true L": h,g,f=60.0,90.0,150.0
+    else:              h,g,f=48.0,72.0,106.0
+    assert abs(h+g+f-b1)<1e-6, name
+    gg=hopcalc(mquad,[("Square",0.0)]*4,h,g,0.0,30.0,35.0)
+    assert abs(dist(gg['pl'],gg['phl'])-h)<1e-9
+    assert abs(dist(gg['phl'],gg['phr'])-g)<1e-9
+    # E = 0 -> the break coincides with the main section's right edge
+    assert abs(gg['brkb'][0]-bb[0])<1e-6 and abs(gg['brkt'][0]-Lp[4][0])<1e-6
+    print(f"   {name}: B1={b1:.0f} V1={v1:.0f}, H+G+F=B1 so E skipped, break on E")
 
 print("== 41. bottom chain resolution (NA fill / even split / G-L absorb) ==")
 def chainfix(vals,total,islack):
@@ -1024,5 +1028,20 @@ for pair,want in ((('pl','pobl'),48),(('pobl','pdfl'),60),(('pdfl','pdfr'),120),
                   (('pb','pdb'),24),(('pdb','pdt'),72),(('pdt','pt'),24)):
     assert abs(dist(gg[pair[0]],gg[pair[1]])-want)<1e-9
 print("   breaks, inset deep flat, and all eight chain values exact")
+
+
+print("== 46. hopper E-skip rule (L pools) ==")
+def needs_e(h,g,f,b1,tol=0.5):
+    if h is None or g is None or f is None: return True
+    return abs(h+g+f-b1)>tol
+assert not needs_e(60.0,90.0,150.0,300.0)      # exact -> skip E
+assert not needs_e(60.0,90.0,150.3,300.0)      # within 1/2" -> skip E
+assert needs_e(60.0,90.0,120.0,300.0)          # short -> ask E
+assert needs_e(60.0,None,150.0,300.0)          # an NA -> ask E
+assert needs_e(60.0,90.0,190.0,300.0)          # long -> ask E
+# when E is asked the 4-chain still resolves against B1 (G absorbs)
+r=chainfix([60.0,90.0,120.0,20.0],300.0,1)
+assert r==[60.0,100.0,120.0,20.0]
+print("   skip when H+G+F == B1 (1/2\" tol), otherwise E is prompted")
 
 print("\nALL CHECKS PASSED")

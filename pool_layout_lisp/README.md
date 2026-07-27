@@ -297,12 +297,34 @@ in the report table (`X A-C`, `X LB-RT`, …) with target/actual/delta.
 
 ### L / Lazy L pools
 
-Both are six-corner pools. A **true L** is a rectangle with a
-square-step wing. A **lazy L** (per the reference drawing) is a
-constant-width pool **bent 45°**: main run A-B/E-F, bend sides B-C
-and D-E at 45°, far end C-D. The lazy L asks its own side names and
-**omits the B-E joint diagonal** (8 cross dims instead of 9); its
-hopper sits in the main run before the bend. The true L:
+Both are six-corner pools, drawn in the reference orientation: the
+**main section on the left, the wing/bend on the right**. A **true L**
+has a full-height right end (B-C), the wing top-right and the notch
+top-left. A **lazy L** is a constant-width pool **bent 45°**: main run
+A-B/E-F, bend sides B-C and D-E at 45°, far end C-D; it asks its own
+side names and **omits the B-E joint diagonal** (8 cross dims instead
+of 9).
+
+**Hopper (both variants, per the reference):** the **break line drops
+from the inner corner E straight to the bottom side**, and the hopper
+sits in the main section bounded by the left end, the bottom, that
+break line and the top (`A – breakBottom – E – F`). Its left corners
+tie to A and F, its right corners to the break line's ends. `B1` is
+the main-section length and `V1` its width.
+
+**E is only asked when it's needed:** give H, G and F and if they sum
+to **B1** (within ½"), the break lands on the inner corner and the
+`E` prompt is skipped entirely. If any of them is `NA`, or the sum
+doesn't reach B1, `E` is prompted and the four-part chain resolves
+against B1 as usual (G absorbing, NA taking the remainder).
+
+**Mirroring:** once every dimension is in, the L pools ask
+**`Mirror the pool [Yes/No]`** — answering Yes mirrors the finished
+pool, its dimensions and its hopper about the pool's vertical
+centreline (text stays readable; the report table is written
+afterwards, unmirrored).
+
+The true L:
 
 ```
 F -------- E

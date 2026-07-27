@@ -389,6 +389,28 @@
     (if (and e (entget e)) (entdel e))
     (setq pool:*pvents* (pool:lremove e pool:*pvents*))))
 
+;; Every entity created after `after` (nil = the whole drawing), as a
+;; selection set.
+(defun pool:newents (after / e ss)
+  (setq ss (ssadd)
+        e (if after (entnext after) (entnext)))
+  (while e
+    (ssadd e ss)
+    (setq e (entnext e)))
+  ss)
+
+;; Mirror everything drawn since `after` about the vertical line at
+;; world x = x0, keeping text readable.
+(defun pool:mirror (after x0 / ss mt)
+  (setq ss (pool:newents after))
+  (if (> (sslength ss) 0)
+      (progn
+        (setq mt (getvar "MIRRTEXT"))
+        (setvar "MIRRTEXT" 0)
+        (command "_.MIRROR" ss "" (list x0 0.0 0.0) (list x0 1.0 0.0) "_Y")
+        (setvar "MIRRTEXT" mt)))
+  (princ))
+
 ;; Draw the nominal guide pool for the chosen shape (fixed 360 x 180
 ;; body).  Returns an assoc list mapping each input key to the list of
 ;; guide entities to highlight, plus an ALL entry with every guide
@@ -1100,9 +1122,11 @@
             d (pool:v+ c (list (* cd -0.7071067812) (* cd 0.7071067812)))
             e (pool:v+ d (list (* de -0.7071067812) (* de -0.7071067812)))
             f (list 0.0 fa))
+      ;; true L (per the reference): B-C is the full right end, the
+      ;; wing sits top-right and the notch top-left
       (setq c (list ab bc)
             d (list (- ab cd) bc)
-            e (pool:v+ d (list 0.0 de))
+            e (pool:v- d (list 0.0 de))
             f (pool:v- e (list (nth 4 sides) 0.0))))
   (list a b c d e f))
 
@@ -1212,8 +1236,8 @@
   (setq pts (if lazy
                 (list (list 0.0 0.0) (list 296.0 0.0) (list 414.0 119.0)
                       (list 296.0 238.0) (list 226.0 168.0) (list 0.0 168.0))
-                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 150.0)
-                      (list 200.0 150.0) (list 200.0 300.0) (list 0.0 300.0)))
+                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 315.0)
+                      (list 225.0 315.0) (list 225.0 180.0) (list 0.0 180.0)))
         cen (list 0.0 0.0))
   (foreach p pts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 6.0))
@@ -1247,7 +1271,7 @@
 ;; dimension and report.  Caller handles sysvars / undo / zoom-extents.
 (defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes
                             cen p pr k w hh xmin xmax ymax ymin doff th
-                            odim rows lbls dv mquad sq4)
+                            odim rows lbls dv mquad sq4 elast)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
   (command "_.ZOOM" "_Window"
@@ -1262,12 +1286,12 @@
                   (pool:askh "Upper bend side D-E (45 deg)" (cdr (assoc 'de pv)))
                   (pool:askh "Top side E-F" (cdr (assoc 'ef pv)))
                   (pool:askh "Left end F-A" (cdr (assoc 'fa pv))))
-            (list (pool:askh "Side A-B (main side, bottom)" (cdr (assoc 'ab pv)))
-                  (pool:askh "End B-C (right end)" (cdr (assoc 'bc pv)))
-                  (pool:askh "Side C-D (top of main section)" (cdr (assoc 'cd pv)))
-                  (pool:askh "Joint D-E (step)" (cdr (assoc 'de pv)))
-                  (pool:askh "End E-F (end of wing)" (cdr (assoc 'ef pv)))
-                  (pool:askh "Side F-A (left side)" (cdr (assoc 'fa pv))))))
+            (list (pool:askh "Side A-B (bottom, full length)" (cdr (assoc 'ab pv)))
+                  (pool:askh "End B-C (right end, full height)" (cdr (assoc 'bc pv)))
+                  (pool:askh "Side C-D (top of wing)" (cdr (assoc 'cd pv)))
+                  (pool:askh "Step D-E (down to the inner corner)" (cdr (assoc 'de pv)))
+                  (pool:askh "Side E-F (top of main section)" (cdr (assoc 'ef pv)))
+                  (pool:askh "End F-A (left end)" (cdr (assoc 'fa pv))))))
   ;; cross dims only when out-of-square; in-square squares up to sides
   (setq diags
         (if pool:*insq*
@@ -1303,7 +1327,9 @@
   (foreach p pts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 6.0)))
 
-  ;; perimeter (layer POOL)
+  ;; perimeter (layer POOL) -- mark the drawing so the whole pool can
+  ;; be mirrored later if the user asks
+  (setq elast (entlast))
   (foreach pr pool:*hexsides*
     (pool:line (nth (car pr) pts) (nth (cadr pr) pts) "POOL"))
 
@@ -1363,26 +1389,27 @@
   (initget "Yes No")
   (if (/= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
       (progn
-        (if lazy
-            ;; main rectangle before the bend: right boundary through B
-            ;; parallel to the left end, up to the top-side line
-            (setq mquad (list (nth 0 pts) (nth 1 pts)
-                              (pool:linex (nth 1 pts)
-                                          (pool:v- (nth 5 pts) (nth 0 pts))
-                                          (nth 5 pts)
-                                          (pool:v- (nth 4 pts) (nth 5 pts)))
-                              (nth 5 pts)))
-            (setq dv (pool:linex (nth 5 pts) (pool:v- (nth 0 pts) (nth 5 pts))
-                                 (nth 3 pts) (pool:v- (nth 2 pts) (nth 3 pts)))
-                  mquad (list (nth 0 pts) (nth 1 pts) (nth 2 pts) dv)))
-        (setq sq4 (list (list "Square" 0.0) (list "Square" 0.0)
+        ;; per the reference: the break line drops from the inner
+        ;; corner E to the bottom side, and the hopper lives in the
+        ;; main section A - breakBottom - E - F
+        (setq dv (pool:linex (nth 4 pts) (pool:v- (nth 5 pts) (nth 0 pts))
+                             (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
+              mquad (list (nth 0 pts) dv (nth 4 pts) (nth 5 pts))
+              sq4 (list (list "Square" 0.0) (list "Square" 0.0)
                         (list "Square" 0.0) (list "Square" 0.0)))
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- (apply 'min (mapcar 'car mquad)) doff)
                                 (- (apply 'min (mapcar 'cadr mquad)) doff)))
                  (pool:wp (list (+ (apply 'max (mapcar 'car mquad)) doff)
                                 (+ (apply 'max (mapcar 'cadr mquad)) doff))))
-        (setq rows (append rows (pool:hopnormal mquad sq4 doff th)))))
+        (setq rows (append rows (pool:hopnormal mquad sq4 doff th t)))))
+
+  ;; -------- all dimensions are in: offer to mirror the pool
+  (initget "Yes No")
+  (if (= "Yes" (getkword "\nMirror the pool [Yes/No] <No>: "))
+      (progn
+        (pool:mirror elast (car (pool:wp (list (* 0.5 (+ xmin xmax)) 0.0))))
+        (princ "\nPool mirrored.")))
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
@@ -1817,28 +1844,38 @@
 ;; Normal (hopper pad) bottom for the rectangle: lettered guide,
 ;; prompts H G F E M L K, plan hopper + chain dims, then the side
 ;; profile below (asks wall height C and hopper depth D).
-(defun pool:hopnormal (quad corners doff th / pv h g f e m l k gg tl odl
+(defun pool:hopnormal (quad corners doff th lmode / pv h g f e m l k gg tl odl
                                               hraw graw fraw eraw mraw lraw kraw
-                                              a b c d cen toth totv hres vres)
-  (setq pv (pool:hopguide quad corners th))
-  (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
-  (setq hraw (pool:askhx "H - left end to hopper" (cdr (assoc "H" pv)))
-        graw (pool:askhx "G - hopper length" (cdr (assoc "G" pv)))
-        fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
-        eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))
-        mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
-        lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
-        kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv))))
-  (pool:pvkill)
-  ;; resolve the chains against the wall-to-wall totals: NA takes the
-  ;; remainder (split when several); G / L absorb any leftover
+                                              a b c d cen toth totv hres vres
+                                              skipe)
+  ;; wall-to-wall totals through the pool centre: B1 along the run,
+  ;; V1 across it
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         toth (distance (pool:linex cen (pool:v- b a) a (pool:v- d a))
                        (pool:linex cen (pool:v- b a) b (pool:v- c b)))
         totv (distance (pool:linex cen (pool:v- d a) a (pool:v- b a))
-                       (pool:linex cen (pool:v- d a) d (pool:v- c d)))
-        hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
+                       (pool:linex cen (pool:v- d a) d (pool:v- c d))))
+  (setq pv (pool:hopguide quad corners th))
+  (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
+  (setq hraw (pool:askhx "H - left end to hopper" (cdr (assoc "H" pv)))
+        graw (pool:askhx "G - hopper length" (cdr (assoc "G" pv)))
+        fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv))))
+  ;; L pools: when H+G+F are all given and already span the main
+  ;; section (B1), the break lands on the inner corner and E is moot
+  (if (and lmode hraw graw fraw
+           (<= (abs (- (+ hraw graw fraw) toth)) 0.5))
+      (progn
+        (setq eraw 0.0 skipe t)
+        (princ "\nH + G + F span the main section -- E not needed."))
+      (setq eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))))
+  (setq mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
+        lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
+        kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv))))
+  (pool:pvkill)
+  ;; resolve the chains: NA takes the remainder (split when several);
+  ;; G / L absorb any leftover
+  (setq hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
         vres (pool:chainfix (list mraw lraw kraw) totv 1)
         h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
         m (car vres) l (cadr vres) k (caddr vres))
@@ -1862,7 +1899,8 @@
     (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
     (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
     (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-    (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
+    (list "HOP E" (if skipe nil eraw)
+          (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
     (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
     (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
     (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
@@ -2072,7 +2110,7 @@
         (initget 1 "Normal Sport NOhopper")
         (setq btype (getkword "\nBottom type [Normal/Sport/NOhopper pad sport]: "))
         (if (= btype "Normal")
-            (pool:hopnormal quad corners doff th)
+            (pool:hopnormal quad corners doff th nil)
             (progn
               (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
                     cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25))
