@@ -37,10 +37,11 @@
 ;;;      end lines under oval/Grecian ends, the oval radius
 ;;;      construction lines) go on POOL-NOTES with a DASHED linetype
 ;;;      (when acad.lin / acadiso.lin can be found).
-;;;    * An exact as-measured check figure built from two triangles
-;;;      (each triangle uses one side, one end and the shared A-C
-;;;      cross dimension -- held EXACTLY, no tolerance) on its own
-;;;      layer POOL-TRIANGLES.
+;;;    * An exact as-measured two-triangle check (each triangle uses
+;;;      one side, one end and the shared A-C cross dimension -- held
+;;;      EXACTLY, no tolerance) is computed and reported as the
+;;;      TRI CHECK B-D report row; the check figure itself is not
+;;;      drawn, so out-of-square pools leave a clean drawing.
 ;;;    * Aligned dimensions for all sides and cross dims on layer
 ;;;      DIMENSION.  The two cross dims are drawn in the "CROSS
 ;;;      DIMENSION" dimension style when the drawing has one.
@@ -659,7 +660,7 @@
             (list q2 nil)
             (list q1 t)))))
 
-;; Exact two-triangle check figure:
+;; Exact two-triangle check (report only, nothing is drawn from it):
 ;;   triangle 1 = A B C  (bottom side, right end, cross A-C)
 ;;   triangle 2 = A C D  (top side, left end, shared cross A-C)
 ;; All lengths held exactly.  Returns (A B C D) or nil when the given
@@ -2814,20 +2815,14 @@
         (pool:lined b c)
         (pool:lined d a)))
 
-  ;; -------------------------------------- exact two-triangle figure
-  ;; (needs the A-C cross dim -- skipped when it was NA)
+  ;; -------------------------------------- exact two-triangle check
+  ;; Computed only (needs the A-C cross dim -- skipped when it was NA);
+  ;; the result feeds the TRI CHECK B-D report row.  The check figure
+  ;; itself is no longer drawn so out-of-square pools leave a clean
+  ;; drawing behind.
   (setq tri (if dac (pool:triquad bo tp le ri dac) nil))
-  (cond
-    (tri
-     (pool:line (car tri) (cadr tri) "POOL-TRIANGLES")
-     (pool:line (cadr tri) (caddr tri) "POOL-TRIANGLES")
-     (pool:line (car tri) (caddr tri) "POOL-TRIANGLES") ; shared A-C
-     (pool:line (caddr tri) (cadddr tri) "POOL-TRIANGLES")
-     (pool:line (cadddr tri) (car tri) "POOL-TRIANGLES"))
-    (dac
-     (setq notes (cons "TRIANGLE CHECK IMPOSSIBLE - VERIFY MEASUREMENTS" notes)))
-    (t
-     (princ "\nCross A-C not measured -- triangle check figure skipped.")))
+  (if (and dac (not tri))
+      (setq notes (cons "TRIANGLE CHECK IMPOSSIBLE - VERIFY MEASUREMENTS" notes)))
 
   (setq doff (max 12.0 (/ (max bo tp le ri) 18.0))
         th (max 3.0 (/ (max bo tp le ri) 70.0)))
@@ -2852,7 +2847,6 @@
 
   ;; ------------------------------------------------ extents
   (setq allpts (append quad
-                       (if tri tri nil)
                        (if tipl (list tipl tipr) nil))
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
@@ -3240,7 +3234,6 @@
 
   ;; ------------------------------------------------ layers
   (pool:layer "POOL" 4)
-  (pool:layer "POOL-TRIANGLES" 1)
   (pool:layer "DIMENSION" 2)
   (pool:layer "POOL-NOTES" 3)
 

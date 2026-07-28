@@ -222,8 +222,8 @@ true to the side, end, diagonal and width measurements — a perfect
 rectangle, oval, Grecian or L. Use it when the pool was formed square
 and you only need the outline dimensioned. **Out-of-square** is the
 full workflow: cross dims are prompted, the shape is best-fit to them
-within tolerance, and the target/actual/delta report and (for a
-rectangle) the exact triangle check figure are produced.
+within tolerance, and the target/actual/delta report (including, for a
+rectangle, the exact `TRI CHECK B-D` row) is produced.
 
 ### Roman pools
 
@@ -342,8 +342,8 @@ sides may flex inside their ±1" band; and if they still can't be met
 the sides are held true and **`CROSS DIMS FAILED`** is reported. The
 more cross dims you provide, the better the out-of-square shape is
 pinned down — with none at all you simply get the perfect right-angle
-(or 45°-jointed) shape. The two-triangle check figure is not drawn
-for L pools.
+(or 45°-jointed) shape. The two-triangle check is a rectangle-only
+computation and is not made for L pools.
 
 ### Guided input
 
@@ -375,7 +375,6 @@ up if the command is cancelled part-way).
 | --- | --- |
 | `POOL` | The full pool **perimeter**, running around the whole shape — including the oval end arcs and Grecian corner cuts (individual lines/arcs, i.e. an exploded polyline). Best-fit body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). |
 | `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under oval/Grecian ends, the oval radius construction lines), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
-| `POOL-TRIANGLES` | Exact as-measured check figure built from two triangles (bottom + right end + cross A-C, and top + left end + cross A-C). **No tolerance** — lengths held exactly. Overlaid on the outline so the two can be compared; freeze one layer to view the other. |
 | `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
 
 ### Fitting logic
