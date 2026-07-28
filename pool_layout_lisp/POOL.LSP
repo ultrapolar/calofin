@@ -286,6 +286,14 @@
 (defun pool:dimalg (p1 p2 pt)
   (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt)))
 
+;; Radius dimension ON the arc, read from OUTSIDE it: the arc is picked
+;; at its far point and the dimension line is dragged further out along
+;; the same direction, so the leader comes in from outside instead of
+;; running back to the circle centre.
+(defun pool:dimrad (ent tip outd doff)
+  (command "_.DIMRADIUS" (list ent (pool:wp tip))
+           (pool:wp (pool:v+ tip (pool:v* outd (* 0.9 doff))))))
+
 ;; Rotated linear dimension hooked to two OBJECT points: the ext-line
 ;; origins land on drawn geometry (wall endpoints / arc tangents), and
 ;; the rotation makes it read the full run regardless of the hooks.
@@ -500,10 +508,12 @@
           pv (cons (cons (pool:lblkey (cadr pr)) (list ent)) pv)))
   (cond
     ((= ptype "Oval")
+     ;; the guide's radius lines run from each end arc's CENTRE to its
+     ;; tip, so they read as the true radius that is being asked for
      (setq midl (list 0.0 (* 0.5 ph)) tipl (list -80.0 (* 0.5 ph))
            midr (list pw (* 0.5 ph)) tipr (list (+ pw 80.0) (* 0.5 ph))
-           elrad (pool:pvlined midl tipl)
-           errad (pool:pvlined midr tipr))
+           elrad (pool:pvlined (pool:circum a tipl d) tipl)
+           errad (pool:pvlined (pool:circum b tipr c) tipr))
      (pool:arc3p a tipl d "POOL-NOTES")
      (setq elarc (pool:setcol (entlast) pool:*pv-col*))
      (pool:arc3p b tipr c "POOL-NOTES")
@@ -2682,6 +2692,63 @@
                              (apply 'max (mapcar 'cadr pts))
                              doff th))))))
 
+;;; -------------------- oval ends --------------------------------------
+;;;
+;;;  R1/R2 are TRUE arc radii: each end arc springs from the two end
+;;;  corners (chord c = the end length) and bulges past them by the
+;;;  sagitta  s = R - sqrt(R^2 - (c/2)^2).  Dimensioning the drawn arc
+;;;  therefore reads back the radius that was typed in.
+
+;; Bulge of an arc of radius r spanning a chord c.  An r smaller than
+;; the chord's half cannot reach across it, so it is clamped to the
+;; semicircle (the tightest arc that end can have).
+(defun pool:sag (r c / half)
+  (setq half (* 0.5 c))
+  (if (<= r half) half (- r (sqrt (- (* r r) (* half half))))))
+
+;; The inverse: radius of the arc that bulges s past a chord c.
+(defun pool:sagr (s c / half)
+  (setq half (* 0.5 c))
+  (if (<= s 1.0e-9) nil (/ (+ (* s s) (* half half)) (* 2.0 s))))
+
+;; Resolve the two end arcs against the overall length.  The overall
+;; closes the chain  s_left + axis + s_right = TOTAL, so any one of
+;; TOTAL / R1 / R2 may be NA:
+;;   * both radii NA -> the remainder splits evenly between the ends,
+;;     i.e. both arcs the same -- exactly what an in-square oval is;
+;;   * one radius NA -> it takes the remainder;
+;;   * TOTAL NA      -> it is computed from the two radii.
+;; lc/rc are the end lengths (chords).  Returns (lrad rrad sl sr total notes).
+(defun pool:ovalends (totl lraw rraw axis lc rc / sl sr left notes lr rr)
+  (if (and lraw rraw)
+      (setq sl (pool:sag lraw lc)
+            sr (pool:sag rraw rc))
+      (progn
+        (setq left (- totl axis))       ; length left over for the ends
+        (cond
+          ((and (null lraw) (null rraw))
+           (setq sl (* 0.5 left) sr (* 0.5 left)))
+          ((null lraw)
+           (setq sr (pool:sag rraw rc) sl (- left sr)))
+          (t
+           (setq sl (pool:sag lraw lc) sr (- left sl))))))
+  ;; a bulge that came out at or below zero means the overall and the
+  ;; body disagree; fall back to the semicircle and say so
+  (if (<= sl 1.0e-6)
+      (setq sl (* 0.5 lc)
+            notes (cons "LEFT END DOES NOT FIT THE TOTAL LENGTH - SEMICIRCLE USED" notes)))
+  (if (<= sr 1.0e-6)
+      (setq sr (* 0.5 rc)
+            notes (cons "RIGHT END DOES NOT FIT THE TOTAL LENGTH - SEMICIRCLE USED" notes)))
+  ;; a radius tighter than the end is half its width was clamped above
+  (if (and lraw (< lraw (- (* 0.5 lc) 1.0e-6)))
+      (setq notes (cons "LEFT RADIUS SMALLER THAN HALF THE END - SEMICIRCLE USED" notes)))
+  (if (and rraw (< rraw (- (* 0.5 rc) 1.0e-6)))
+      (setq notes (cons "RIGHT RADIUS SMALLER THAN HALF THE END - SEMICIRCLE USED" notes)))
+  (setq lr (pool:sagr sl lc)
+        rr (pool:sagr sr rc))
+  (list lr rr sl sr (+ sl axis sr) notes))
+
 ;;; -------------------- rectangle / oval flow --------------------------
 
 ;; Full guided flow for the quad-based pools: preview, prompts, fit,
@@ -2693,6 +2760,7 @@
                              fitres quad failed a b c d cen meas notes tri
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
+                             ores lrfit rrfit larc rarc
                              allpts xmax ymax ymin rows)
   (setq oldclay (getvar "CLAYER"))
 
@@ -2782,10 +2850,21 @@
       (princ "\nIn-square: building true to the side measurements (no cross dims)."))
   (setq xmeas (reverse xmeas))
 
+  ;; -------- oval ends.  Any ONE of total / left radius / right radius
+  ;; may be NA -- the overall closes the chain against the body, and
+  ;; with both radii NA the two ends come out the same (the in-square
+  ;; oval).  Only the total is re-asked when too much is missing.
   (if (= ptype "Oval")
-      (setq totl (pool:askh "Total pool length (arc tip to arc tip)" (cdr (assoc 'tot pv)))
-            lrad (pool:askh "LEFT oval end radius" (cdr (assoc 'lrad pv)))
-            rrad (pool:askh "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
+      (progn
+        (setq totl (pool:askhx "Total pool length (arc tip to arc tip)"
+                               (cdr (assoc 'tot pv)))
+              lrad (pool:askhx "LEFT oval end radius" (cdr (assoc 'lrad pv)))
+              rrad (pool:askhx "RIGHT oval end radius" (cdr (assoc 'rrad pv))))
+        (if (and (null totl) (or (null lrad) (null rrad)))
+            (progn
+              (princ "\nThe total length is needed when an end radius is NA.")
+              (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
+                                    (cdr (assoc 'tot pv))))))))
 
   ;; the guide has served its purpose -- replace it with the true pool
   (pool:pvkill)
@@ -2819,16 +2898,14 @@
   (setq pool:*dashlt* (pool:ltload "DASHED"))
 
   ;; -------------------------------- pool body / perimeter (layer POOL)
-  ;; Rectangle draws its perimeter with corner treatments; the oval
-  ;; body end lines are reference only (dashed) and the perimeter
-  ;; closes through the arcs instead.
+  ;; Rectangle draws its perimeter with corner treatments.  The oval's
+  ;; end chords are construction, not pool, so only the two sides are
+  ;; drawn and the perimeter closes through the end arcs.
   (if (= ptype "Rectangle")
       (setq arcs (pool:drawrect quad corners))
       (progn
         (pool:line a b "POOL")
-        (pool:line c d "POOL")
-        (pool:lined b c)
-        (pool:lined d a)))
+        (pool:line c d "POOL")))
 
   ;; -------------------------------------- exact two-triangle check
   ;; Computed only (needs the A-C cross dim -- skipped when it was NA);
@@ -2843,22 +2920,28 @@
         th (max 3.0 (/ (max bo tp le ri) 70.0)))
 
   ;; ------------------------------------------------ oval ends
+  ;; The arcs are built from the resolved radii (sagitta off each end
+  ;; chord), so dimensioning them reads back the radius that was typed.
   (if (= ptype "Oval")
       (progn
         (setq midl (pool:mid a d)
               ml (pool:unit (pool:perp (pool:v- d a))))
         (if (< (pool:dot (pool:v- midl cen) ml) 0.0)
             (setq ml (pool:v* ml -1.0)))
-        (setq tipl (pool:v+ midl (pool:v* ml lrad)))
-        (pool:lined midl tipl)
-        (pool:arc3p a tipl d "POOL")
         (setq midr (pool:mid b c)
               mr (pool:unit (pool:perp (pool:v- c b))))
         (if (< (pool:dot (pool:v- midr cen) mr) 0.0)
             (setq mr (pool:v* mr -1.0)))
-        (setq tipr (pool:v+ midr (pool:v* mr rrad)))
-        (pool:lined midr tipr)
-        (pool:arc3p b tipr c "POOL")))
+        (setq ores (pool:ovalends totl lrad rrad (distance midl midr)
+                                  (distance a d) (distance b c))
+              lrfit (car ores) rrfit (cadr ores)
+              notes (append (nth 5 ores) notes)
+              tipl (pool:v+ midl (pool:v* ml (caddr ores)))
+              tipr (pool:v+ midr (pool:v* mr (cadddr ores))))
+        (pool:arc3p a tipl d "POOL")
+        (setq larc (entlast))
+        (pool:arc3p b tipr c "POOL")
+        (setq rarc (entlast))))
 
   ;; ------------------------------------------------ extents
   (setq allpts (append quad
@@ -2892,14 +2975,12 @@
   ;; individually when out-of-square
   (if (= ptype "Rectangle")
       (pool:dimcorners quad corners arcs cen doff))
+  ;; oval: radius dims read on the ARC from outside it (no line back to
+  ;; the circle centre), plus the tip-to-tip overall
   (if (= ptype "Oval")
       (progn
-        (pool:dimalg midl tipl (pool:v+ (pool:mid midl tipl)
-                                        (pool:v* (pool:unit (pool:perp ml))
-                                                 (* 0.3 doff))))
-        (pool:dimalg midr tipr (pool:v+ (pool:mid midr tipr)
-                                        (pool:v* (pool:unit (pool:perp mr))
-                                                 (* 0.3 doff))))
+        (pool:dimrad larc tipl ml doff)
+        (pool:dimrad rarc tipr mr doff)
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))))
   ;; provided cross dims, between their reference points, in the CROSS
@@ -2943,7 +3024,9 @@
                                      (distance (cadr tri) (cadddr tri)))))))
   (if (= ptype "Oval")
       (setq rows (append rows
-                         (list (list "TOTAL LENGTH" totl (distance tipl tipr))))))
+                         (list (list "TOTAL LENGTH" totl (distance tipl tipr))
+                               (list "LEFT RADIUS" lrad lrfit)
+                               (list "RIGHT RADIUS" rrad rrfit)))))
   ;; -------------------------------- pool bottom (interior pipeline)
   (cond
     ((= ptype "Rectangle")
@@ -3143,10 +3226,8 @@
   (pool:dimalg d c (pool:outoff d c cen doff))
   (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr)) (- ymin (* 1.5 doff))))
   (pool:dimalg a d (list (- (car tipl) (* 1.2 doff)) (cadr (pool:mid a d))))
-  (command "_.DIMRADIUS" (list (nth 3 lend) (pool:wp tipl))
-           (pool:wp (pool:v+ tipl (pool:v* ml (* 0.8 doff)))))
-  (command "_.DIMRADIUS" (list (nth 3 rend) (pool:wp tipr))
-           (pool:wp (pool:v+ tipr (pool:v* mr (* 0.8 doff)))))
+  (pool:dimrad (nth 3 lend) tipl ml doff)
+  (pool:dimrad (nth 3 rend) tipr mr doff)
   (setq odim (pool:dimxbegin))
   (if dac
       (progn

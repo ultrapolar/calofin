@@ -1106,4 +1106,53 @@ run_pool(ac)                         # and stays correct thereafter
 assert ac.vars["OSMODE"]==4133 and ac.vars["CMDECHO"]==1
 print("   crash between save and restore no longer wipes the user's snaps")
 
+print("== 49. oval ends: true radii, NA chain, both-arcs-equal in-square ==")
+def sag(r,c):
+    half=c/2.0
+    return half if r<=half else r-math.sqrt(r*r-half*half)
+def sagr(s,c):
+    half=c/2.0
+    return None if s<=1e-9 else (s*s+half*half)/(2.0*s)
+def ovalends(totl,lraw,rraw,axis,lc,rc):
+    notes=[]
+    if lraw is not None and rraw is not None:
+        sl,sr = sag(lraw,lc), sag(rraw,rc)
+    else:
+        rem = totl-axis
+        if lraw is None and rraw is None:
+            sl=sr=rem/2.0
+        elif lraw is None:
+            sr=sag(rraw,rc); sl=rem-sr
+        else:
+            sl=sag(lraw,lc); sr=rem-sl
+    if sl<=1e-6: sl=lc/2.0; notes.append("left")
+    if sr<=1e-6: sr=rc/2.0; notes.append("right")
+    return sagr(sl,lc), sagr(sr,rc), sl, sr, sl+axis+sr, notes
+
+# sagitta round-trip: a drawn arc reads back the radius that was typed
+for r,c in ((90.0,120.0),(200.0,144.0),(72.0,144.0)):
+    s=sag(r,c)
+    assert abs(sagr(s,c)-max(r,c/2.0))<1e-9
+# in-square oval, both radii NA: total closes the chain, ends identical
+lr,rr,sl,sr,tot,notes = ovalends(480.0,None,None,360.0,120.0,120.0)
+assert not notes and abs(sl-60.0)<1e-9 and abs(sr-60.0)<1e-9
+assert abs(lr-rr)<1e-9 and abs(lr-60.0)<1e-9      # 60 bulge on a 120 chord = semicircle
+assert abs(tot-480.0)<1e-9
+# one radius NA: it takes the remainder of the overall
+lr,rr,sl,sr,tot,notes = ovalends(480.0,150.0,None,360.0,120.0,120.0)
+assert abs(sl-sag(150.0,120.0))<1e-9
+assert abs(sl+sr-120.0)<1e-9 and abs(lr-150.0)<1e-9
+# total NA: computed from the two radii, both ends kept as measured
+lr,rr,sl,sr,tot,notes = ovalends(None,150.0,90.0,360.0,120.0,120.0)
+assert abs(lr-150.0)<1e-9 and abs(rr-90.0)<1e-9
+assert abs(tot-(sag(150.0,120.0)+360.0+sag(90.0,120.0)))<1e-9
+# out-of-square: both NA still splits the bulge evenly, so unequal end
+# widths give unequal radii (same bulge) rather than a bogus fit
+lr,rr,sl,sr,tot,notes = ovalends(480.0,None,None,360.0,120.0,132.0)
+assert abs(sl-sr)<1e-9 and lr!=rr and not notes
+# an overall too short for the body falls back to semicircles + a note
+lr,rr,sl,sr,tot,notes = ovalends(360.0,None,None,360.0,120.0,120.0)
+assert notes and abs(lr-60.0)<1e-9 and abs(rr-60.0)<1e-9
+print("   radii round-trip through the arc; NA closes on the overall")
+
 print("\nALL CHECKS PASSED")

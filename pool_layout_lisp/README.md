@@ -42,7 +42,8 @@ A ---------- B        cross:  A-C and B-D
 4. Side lengths, top then bottom.
 5. End lengths, left then right.
 6. Cross dimensions A-C and B-D. *(out-of-square only)*
-7. **Oval only:** total pool length, left end radius, right end radius.
+7. **Oval only:** total pool length, left end radius, right end radius
+   — any one of the three may be `NA` (see *Oval ends*).
 8. **Grecian only:** a cross-dim detail level (see below), then for
    each end — diagonal top, diagonal bottom, end width — followed by
    the cross dims for the chosen level.
@@ -385,7 +386,7 @@ zeroed state as your preference.
 | Layer | Content |
 | --- | --- |
 | `POOL` | The full pool **perimeter**, running around the whole shape — including the oval end arcs and Grecian corner cuts (individual lines/arcs, i.e. an exploded polyline). Best-fit body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). |
-| `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under oval/Grecian ends, the oval radius construction lines), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
+| `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under Grecian ends; ovals draw none — see *Oval ends*), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
 | `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
 
 ### Fitting logic
@@ -401,11 +402,31 @@ zeroed state as your preference.
 
 ### Oval ends
 
-A construction line is drawn perpendicular to each end from its
-midpoint, with the given end radius as its length; a three-point arc
-runs from one end corner, through the tip of that line, to the other
-end corner. The total pool length (arc tip to arc tip) is reported
-against the given target.
+`R1`/`R2` are **true arc radii**: each end arc springs from that end's
+two corners (the chord) and bulges past them by the sagitta
+`s = R − √(R² − (c/2)²)`, so the radius dimension on the drawn arc
+reads back exactly the radius that was typed. An `R` tighter than half
+its end width can't span the end, so it is drawn as a semicircle and
+flagged in the report.
+
+**Any one of the three end answers may be `NA`.** They close the chain
+`s_left + body + s_right = TOTAL`:
+
+* **both radii `NA`** → the leftover splits evenly, i.e. **both ends
+  get the same arc** — which is exactly what an in-square oval is, so
+  the overall plus the side length is enough on its own;
+* **one radius `NA`** → it takes the remainder of the overall;
+* **`TOTAL` `NA`** → it is computed from the two radii and reported as
+  `N/A` target.
+
+(The total is re-asked, without `NA`, if a radius is `NA` too —
+something has to close the chain.) The radii and the overall each get
+a report row, so any derived or clamped value is visible.
+
+Nothing is drawn but the pool: the end chords and the old radius
+construction lines are gone, so an oval is two side lines plus the two
+end arcs. The radius is dimensioned **on the arc, read from outside**
+— no dimension running back to the circle centre.
 
 ### Grecian ends
 
