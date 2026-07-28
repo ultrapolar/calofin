@@ -49,8 +49,14 @@
 ;;;       step depth (measured from the previous step edge - from the
 ;;;       start of the axis for the first step).  The step is drawn
 ;;;       once both are given, so the last input is always a depth.
-;;;   5.  Enter (or 0) at a width prompt means the steps are done and
-;;;       the command finishes.
+;;;   5.  Enter (or 0) at a width prompt means the steps are done.
+;;;   6.  In LINE-only mode you are then asked for one last depth,
+;;;       from the last step to the back of the curve, and the curve
+;;;       itself is drawn: a polyline of arc segments through each end
+;;;       of each step, bulging out to that crown point (the last
+;;;       depth also gets the final link of the depth-dim chain).
+;;;       Enter skips the crown and the polyline just chains the step
+;;;       ends.  The arc modes skip this - their curve was selected.
 ;;;
 ;;; NOTES
 ;;;   - The 1/8" width tolerance assumes the drawing unit is INCHES.
@@ -129,6 +135,84 @@
             ((> t2 1.0) (distance p b))
             (T (distance p (hs-add a (hs-scl d t2))))))))
 
+(defun hs-cross (a b) (- (* (car a) (cadr b)) (* (cadr a) (car b))))
+
+;; center of the circle through three points, nil if collinear
+(defun hs-circum (a b q / ax ay bx by qx qy d)
+  (setq ax (car a) ay (cadr a)
+        bx (car b) by (cadr b)
+        qx (car q) qy (cadr q)
+        d  (* 2.0 (+ (* ax (- by qy)) (* bx (- qy ay)) (* qx (- ay by)))))
+  (if (> (abs d) 1e-12)
+    (list (/ (+ (* (+ (* ax ax) (* ay ay)) (- by qy))
+                (* (+ (* bx bx) (* by by)) (- qy ay))
+                (* (+ (* qx qx) (* qy qy)) (- ay by)))
+             d)
+          (/ (+ (* (+ (* ax ax) (* ay ay)) (- qx bx))
+                (* (+ (* bx bx) (* by by)) (- ax qx))
+                (* (+ (* qx qx) (* qy qy)) (- bx ax)))
+             d)
+          0.0)))
+
+;; polyline bulge for the arc A->B on the circle centered O, going
+;; counterclockwise when CCW is T (bulge = tan of a quarter of the
+;; included angle, negative for clockwise)
+(defun hs-segb (a b o ccw / t1 t2 th)
+  (setq t1 (angle o a)
+        t2 (angle o b)
+        th (if ccw (- t2 t1) (- t1 t2)))
+  (if (< th 0.0) (setq th (+ th pi pi)))
+  (* (if ccw 1.0 -1.0) (/ (sin (/ th 4.0)) (cos (/ th 4.0)))))
+
+;; Bulges for a polyline through PTS, one per segment, built by fitting
+;; a circle through each consecutive triple of points (the same way a
+;; chain of 3-point arcs is drawn).  Straight (0) where collinear.
+(defun hs-blgs (pts / m i p q s o ccw out)
+  (setq m (1- (length pts)) i 0)
+  (while (< i m)
+    (cond
+      ;; a full triple ahead: this circle carries the next two segments
+      ((<= (+ i 2) m)
+       (setq p (nth i pts) q (nth (1+ i) pts) s (nth (+ i 2) pts)
+             o (hs-circum p q s))
+       (if o
+         (progn
+           (setq ccw (> (hs-cross (hs-vec p q) (hs-vec p s)) 0.0))
+           (setq out (append out (list (hs-segb p q o ccw)
+                                       (hs-segb q s o ccw)))))
+         (setq out (append out (list 0.0 0.0))))
+       (setq i (+ i 2)))
+      ;; one leftover segment: reuse the circle of the last triple
+      ((> i 0)
+       (setq p (nth (1- i) pts) q (nth i pts) s (nth (1+ i) pts)
+             o (hs-circum p q s))
+       (if o
+         (progn
+           (setq ccw (> (hs-cross (hs-vec p q) (hs-vec p s)) 0.0))
+           (setq out (append out (list (hs-segb q s o ccw)))))
+         (setq out (append out (list 0.0))))
+       (setq i (1+ i)))
+      ;; a two-point polyline: just a straight segment
+      (T
+       (setq out (append out (list 0.0)))
+       (setq i (1+ i)))))
+  out)
+
+;; open LWPOLYLINE through PTS with one bulge per segment
+(defun hs-mkpoly (pts blgs)
+  (entmake (append
+             (list '(0 . "LWPOLYLINE")
+                   '(100 . "AcDbEntity")
+                   '(100 . "AcDbPolyline")
+                   (cons 90 (length pts))
+                   '(70 . 0))
+             (apply 'append
+                    (mapcar '(lambda (p b)
+                               (list (cons 10 (list (car p) (cadr p)))
+                                     (cons 42 b)))
+                            pts
+                            (append blgs '(0.0)))))))
+
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -152,7 +236,8 @@
 (defun c:HEMISTEP ( / *error* undoflag ss i ed lin lp1 lp2 arcd amode
                       c r a1 a2 m sp dir u dchk cand best bscr q q1 q2
                       side pt stopf cum n wid dep p nat cen e1 e2 drawn
-                      dimflag txth offd pprev oldce oldstyle)
+                      dimflag txth offd pprev oldce oldstyle
+                      ea eb crown pts)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -325,6 +410,9 @@
         (if (and e1 e2)
           (progn
             (hs-mkline e1 e2)                  ; the chord (step edge)
+            (if (not amode)                    ; remember the ends for the
+              (setq ea (append ea (list e1))   ; boundary polyline
+                    eb (append eb (list e2))))
             (if dimflag
               (progn
                 ;; step width: across the chord, nested behind the
@@ -342,7 +430,31 @@
             (setq pprev p drawn (1+ drawn))))
         (setq n (1+ n)))))
 
-  ;; ---- 5. done ---------------------------------------------------------
+  ;; ---- 5. boundary curve through the step ends (line mode only) -------
+  ;; In the arc modes the curve already exists (it was selected); in
+  ;; the base-line mode the curve is drawn as a polyline of arc
+  ;; segments through each end of each step, bulging out to a crown
+  ;; point set by one last depth.
+  (if (and (not amode) (> drawn 0))
+    (progn
+      (initget 6)
+      (setq dep (getdist (strcat "\nDepth from the last step to the back"
+                                 " of the curve <Enter = none>: ")))
+      (if dep
+        (progn
+          (setq crown (hs-add sp (hs-scl dir (+ cum dep))))
+          (if dimflag                        ; last link of the depth chain
+            (hs-dim *cs-depth-dimstyle* pprev crown
+                    (hs-add (hs-mid2 pprev crown) (hs-scl u offd))))))
+      (setq pts (append ea
+                        (if crown (list crown))
+                        (reverse eb)))
+      (if (> (length pts) 1)
+        (progn
+          (hs-mkpoly pts (hs-blgs pts))
+          (princ "\nBoundary polyline drawn through the step ends.")))))
+
+  ;; ---- 6. done ---------------------------------------------------------
   (if (zerop drawn)
     (princ "\nNo steps drawn.")
     (princ (strcat "\n" (itoa drawn)
