@@ -369,6 +369,17 @@ dimension is entered the guide deletes itself and the true
 out-of-square pool is drawn in its place (the guide is also cleaned
 up if the command is cancelled part-way).
 
+### Your settings come back
+
+The command turns object snaps off (`OSMODE 0`) and forces
+architectural units while it runs, then puts **your** values back —
+`OSMODE`, `LUNITS`, `CMDECHO` and the current layer — whether it
+finishes, errors or is cancelled. The snapshot of your settings is
+kept globally and only taken when no snapshot is pending, so even if
+a run is killed hard (crash, Esc at the worst moment) the *next* run
+still restores your original snaps instead of accidentally saving the
+zeroed state as your preference.
+
 ## What it draws
 
 | Layer | Content |

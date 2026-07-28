@@ -1075,4 +1075,35 @@ e2,f2,g,f1,e1,nopad = sport_resolve(60.0,150.0,None,140.0,50.0,400.0)
 assert nopad and g==0.0
 print("   G=0 and G-resolves-to-0 both draw the V bottom; G>0 keeps the pad")
 
+print("== 48. sysvar snapshot survives a dead run (snap restore) ==")
+class Acad:
+    def __init__(self): self.vars={"OSMODE":4133,"LUNITS":2,"CMDECHO":1,"CLAYER":"0"}
+snapshot=[None]
+def syssave(ac):
+    # mirror of pool:syssave: only save when no snapshot is pending --
+    # a stale one from a crashed run holds the user's TRUE settings
+    if snapshot[0] is None:
+        snapshot[0]=dict(ac.vars)
+def sysrestore(ac):
+    if snapshot[0] is not None:
+        ac.vars.update(snapshot[0])
+    snapshot[0]=None
+def run_pool(ac, crash_before_restore=False):
+    syssave(ac)
+    ac.vars.update(OSMODE=0, LUNITS=4, CMDECHO=0)
+    if crash_before_restore:
+        return                       # died: settings left zeroed
+    sysrestore(ac)
+ac=Acad()
+run_pool(ac)                         # clean run round-trips
+assert ac.vars["OSMODE"]==4133 and ac.vars["LUNITS"]==2
+run_pool(ac, crash_before_restore=True)
+assert ac.vars["OSMODE"]==0          # crash leaves snaps off...
+run_pool(ac)                         # ...but the NEXT run must not
+assert ac.vars["OSMODE"]==4133       # save the zeroed state: prefs return
+assert snapshot[0] is None
+run_pool(ac)                         # and stays correct thereafter
+assert ac.vars["OSMODE"]==4133 and ac.vars["CMDECHO"]==1
+print("   crash between save and restore no longer wipes the user's snaps")
+
 print("\nALL CHECKS PASSED")

@@ -3198,21 +3198,43 @@
       (princ "\nPool layout complete -- see the report table."))
   (princ))
 
+;;; -------------------- sysvar save / restore --------------------------
+;;; The snapshot of the user's settings lives in a GLOBAL and is taken
+;;; only when no snapshot is already pending: if a previous run died
+;;; before restoring (hard crash, failure inside the error handler),
+;;; the stale snapshot still holds the user's TRUE settings.  Saving
+;;; again at that point would capture the zeroed OSMODE and every
+;;; later run would faithfully "restore" 0 -- the user's object snaps
+;;; would look permanently wiped by the command.  Restoring clears the
+;;; snapshot so the next run saves fresh.
+
+(defun pool:syssave ()
+  (if (not pool:*sysold*)
+      (setq pool:*sysold*
+            (mapcar '(lambda (v) (cons v (getvar v)))
+                    '("OSMODE" "LUNITS" "CMDECHO" "CLAYER")))))
+
+(defun pool:sysrestore ( / v p)
+  ;; OSMODE first -- object snaps are the setting the user misses most
+  ;; if a cleanup is ever cut short partway
+  (foreach v '("OSMODE" "LUNITS" "CMDECHO" "CLAYER")
+    (setq p (assoc v pool:*sysold*))
+    (if p (setvar v (cdr p))))
+  (setq pool:*sysold* nil))
+
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* oldcmd oldos oldclay oldlun ptype base)
+(defun c:POOL ( / *error* ptype base)
 
   (defun *error* (msg)
     (if (and msg
              (/= (strcase msg t) "function cancelled")
              (/= (strcase msg t) "quit / exit abort"))
         (princ (strcat "\nPOOL error: " msg)))
+    ;; user settings come back FIRST so nothing below can skip them
+    (pool:sysrestore)
     (pool:pvkill)
-    (if oldclay (setvar "CLAYER" oldclay))
-    (if oldos (setvar "OSMODE" oldos))
-    (if oldlun (setvar "LUNITS" oldlun))
     (command "_.UNDO" "_End")
-    (if oldcmd (setvar "CMDECHO" oldcmd))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -3220,10 +3242,7 @@
   ;; harmless no-op guard on older releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
-  (setq oldcmd (getvar "CMDECHO")
-        oldos (getvar "OSMODE")
-        oldclay (getvar "CLAYER")
-        oldlun (getvar "LUNITS"))
+  (pool:syssave)
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setvar "OSMODE" 0)
@@ -3267,10 +3286,8 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (setvar "OSMODE" oldos)
-  (setvar "LUNITS" oldlun)
   (command "_.UNDO" "_End")
-  (setvar "CMDECHO" oldcmd)
+  (pool:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
