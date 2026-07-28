@@ -112,8 +112,8 @@ ties is its own line, highlighted individually as it's prompted.
 
 After the perimeter is drawn and dimensioned, the routine offers a
 **pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A lettered
-field-sheet guide appears inside the fitted pool and each dashed tie
-highlights as its letter is prompted. The interior draws on the
+field-sheet guide appears inside the fitted pool; each tie **and its
+letter** turn red as that letter is prompted. The interior draws on the
 **`POOL`** layer. For the rectangle:
 
 ```

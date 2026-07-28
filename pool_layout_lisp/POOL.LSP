@@ -1873,7 +1873,7 @@
 ;; Gray field-sheet guide inside the fitted pool: nominal hopper,
 ;; break line and ties (solid), plus a dashed lettered measuring tie
 ;; per input.  Returns the highlight assoc keyed by letter.
-(defun pool:hopguide (quad corners th / len wid gg pr tl e pv)
+(defun pool:hopguide (quad corners th / len wid gg pr tl e et pv)
   (setq len (distance (car quad) (cadr quad))
         wid (distance (car quad) (cadddr quad))
         gg (pool:hopcalc quad corners
@@ -1892,13 +1892,13 @@
                     (list "M" 'pht 'pt) (list "L" 'phb 'pht)
                     (list "K" 'pb 'phb))
     (setq e (pool:pvadd (pool:pvlined (cadr (assoc (cadr tl) gg))
-                                      (cadr (assoc (caddr tl) gg))))
-          pv (cons (cons (car tl) (list e)) pv))
+                                      (cadr (assoc (caddr tl) gg)))))
     (pool:text (pool:v+ (pool:mid (cadr (assoc (cadr tl) gg))
                                   (cadr (assoc (caddr tl) gg)))
                         (list (* 0.5 th) (* 0.5 th)))
                (* 1.2 th) (car tl) "POOL-NOTES")
-    (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+    (setq et (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
+          pv (cons (cons (car tl) (list e et)) pv)))
   pv)
 
 ;; Resolve a bottom measurement chain against the pool total:
@@ -2230,12 +2230,13 @@
 
 ;; Dashed lettered guide tie from p to q; returns the (lbl ent...)
 ;; highlight assoc entry.
-(defun pool:pvtie (p q lbl th / e)
+(defun pool:pvtie (p q lbl th / e et)
   (setq e (pool:pvadd (pool:pvlined p q)))
   (pool:text (pool:v+ (pool:mid p q) (list (* 0.5 th) (* 0.5 th)))
              (* 1.2 th) lbl "POOL-NOTES")
-  (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
-  (cons lbl (list e)))
+  (setq et (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+  ;; the tie AND its letter highlight together while it is prompted
+  (cons lbl (list e et)))
 
 ;; Line/arc makers used by the shape-specific hopper draws: when
 ;; pvflag is set they draw tracked gray guide entities instead.
