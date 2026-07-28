@@ -137,7 +137,8 @@ reconciled against the pool before drawing:
 * several `NA`s → the remainder is **split evenly** among them;
 * everything provided but the chain doesn't close against the pool →
   **G** (horizontal) / **L** (vertical) absorb the difference; the
-  no-pad sport bottom has no G, so its residual splits across F2/F1.
+  no-pad sport bottom (G = 0) keeps G at zero, so its residual splits
+  across F2/F1 instead.
 
 The report shows what you *entered* (or `N/A`) against what was
 *drawn*, so any fill or absorption is visible in the delta column.
@@ -177,14 +178,12 @@ check) — and the pool cut ends tie to the matching hopper cut ends.
 ### Sport bottoms and the side profile
 
 Rectangle, oval and Grecian pools ask **`Bottom type
-[Normal/Sport/NOhopper pad sport]`** (L / Lazy L pools are
-standard-hopper only):
-
-* **Sport** — no plan hopper; the bottom is a full-width profile:
-  shallow flats `E2`/`E1` at each end, slopes `F2`/`F1`, and a flat
-  deep section `G` (reported as a **check** = B − E2 − F2 − F1 − E1).
-* **NOhopper (pad)** — same but the two slopes meet at a point; `F1`
-  is the check.
+[Normal/Sport]`** (L / Lazy L pools are standard-hopper only). A
+Sport bottom is a full-width profile: shallow flats `E2`/`E1` at each
+end, slopes `F2`/`F1`, and a flat deep section `G`. **Answering `0`
+at the G prompt draws the sport with no hopper pad** — the two slopes
+meet at a point (the V bottom) — so there is no separate NOhopper
+bottom type anymore; it's just a zero G.
 
 Sport bottoms are drawn in the **plan like a standard hopper** (per
 the reference drawing): full-width break lines at the outer breaks,
@@ -195,9 +194,10 @@ standard-hopper placement rules — the E2/F2/G/F1/E1 chain below the
 deep flat's centre (12" or L/6), the M/L/K chain 12" right of its
 right edge — so sport prompts now include `M`, `L`, `K` (all NA-able;
 L absorbs against the width). The **side profile** still draws
-underneath, carrying only the `C` and `D` depth dims. The no-pad
-sport is identical with **G = 0** (the deep flat collapses to the V
-line; G isn't prompted).
+underneath, carrying only the `C` and `D` depth dims. With **G = 0**
+(typed, or a `NA` G whose remainder comes out to nothing) the deep
+flat collapses to the single V line and the G dim/report row are
+skipped — the no-pad drawing.
 
 Standard (Normal) hoppers are **plan-only** — no heights are asked
 and no profile is drawn; the side profile (with `C` wall height and

@@ -408,6 +408,20 @@
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   v)
 
+;; NA allowed AND zero allowed -- for chain letters that may
+;; legitimately be absent (the sport G: 0 = no hopper pad).
+(defun pool:askz (msg / v)
+  (initget 5 "NA")                      ; no null, no negative; zero OK
+  (setq v (getdist (strcat "\n" msg " (or NA if not measured): ")))
+  (if (= (type v) 'STR) nil v))
+
+(defun pool:askhz (msg ents / v cols)
+  (setq cols (mapcar 'pool:getcol ents))
+  (foreach e ents (pool:setcol e pool:*hi-col*))
+  (setq v (pool:askz msg))
+  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
+  v)
+
 ;; Delete all guide entities (tracked globally so the *error* handler
 ;; can clean up after a cancel mid-prompt).
 (defun pool:pvkill ()
@@ -2063,39 +2077,36 @@
 
 ;; Guided sport bottom: plan hopper (standard-hopper dim logic) plus
 ;; the side profile below with C and D only.  Returns report rows.
-(defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax nopad doff th
+;; G = 0 means no hopper pad (V bottom): the deep flat collapses to
+;; the single V line, its residual splits across F2/F1, and the G
+;; dim/report row are skipped -- the old NOhopper variant, now just a
+;; zero answer at the G prompt.
+(defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax doff th
                       / wid whn hdn ggn pv e2r f2r gr f1r e1r mraw lraw kraw
                         wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
-                        brks tl xd)
+                        brks tl xd nopad)
   (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
                       (pool:linex cen (cadr lline) (car tline) (cadr tline)))
         whn (* 0.25 wid)
         hdn (* 0.55 wid))
-  ;; nominal guide: plan + profile
+  ;; nominal guide: plan + profile (padded proportions -- whether the
+  ;; pool has a pad is only known once G is answered)
   (setq ggn (pool:hopsportc lline rline bline tline cen
-                            (* (if nopad 0.15 0.12) total)
-                            (* (if nopad 0.35 0.20) total)
-                            (if nopad 0.0 (* 0.30 total))
-                            (* (if nopad 0.35 0.26) total)
-                            (* (if nopad 0.15 0.12) total)
+                            (* 0.12 total) (* 0.20 total) (* 0.30 total)
+                            (* 0.26 total) (* 0.12 total)
                             (* 0.2 wid) (* 0.2 wid)))
-  (pool:hopsportdraw ggn nopad "POOL-NOTES" t)
+  (pool:hopsportdraw ggn nil "POOL-NOTES" t)
   (pool:profdraw x0 y0 total whn
-                 (if nopad
-                     (list (cons (* 0.15 total) whn)
-                           (cons (* 0.50 total) hdn)
-                           (cons (* 0.85 total) whn))
-                     (list (cons (* 0.12 total) whn)
-                           (cons (* 0.32 total) hdn)
-                           (cons (* 0.62 total) hdn)
-                           (cons (* 0.88 total) whn)))
+                 (list (cons (* 0.12 total) whn)
+                       (cons (* 0.32 total) hdn)
+                       (cons (* 0.62 total) hdn)
+                       (cons (* 0.88 total) whn))
                  "POOL-NOTES" t)
   (setq pv (append
     (list (pool:pvtie (cadr (assoc 'pl ggn)) (cadr (assoc 'pobl ggn)) "E2" th)
-          (pool:pvtie (cadr (assoc 'pobl ggn)) (cadr (assoc 'pdfl ggn)) "F2" th))
-    (if nopad nil
-        (list (pool:pvtie (cadr (assoc 'pdfl ggn)) (cadr (assoc 'pdfr ggn)) "G" th)))
-    (list (pool:pvtie (cadr (assoc 'pdfr ggn)) (cadr (assoc 'pobr ggn)) "F1" th)
+          (pool:pvtie (cadr (assoc 'pobl ggn)) (cadr (assoc 'pdfl ggn)) "F2" th)
+          (pool:pvtie (cadr (assoc 'pdfl ggn)) (cadr (assoc 'pdfr ggn)) "G" th)
+          (pool:pvtie (cadr (assoc 'pdfr ggn)) (cadr (assoc 'pobr ggn)) "F1" th)
           (pool:pvtie (cadr (assoc 'pobr ggn)) (cadr (assoc 'pr ggn)) "E1" th)
           (pool:pvtie (cadr (assoc 'pdt ggn)) (cadr (assoc 'pt ggn)) "M" th)
           (pool:pvtie (cadr (assoc 'pdb ggn)) (cadr (assoc 'pdt ggn)) "L" th)
@@ -2109,10 +2120,11 @@
            (pool:wp (list (+ x0 total (* 3.0 doff)) (+ ymax doff))))
   (princ "\nSport bottom -- plan hopper letters; the RED tie is being asked for.")
   (setq e2r (pool:askhx "E2 - left end shallow flat" (cdr (assoc "E2" pv)))
-        f2r (pool:askhx "F2 - left slope" (cdr (assoc "F2" pv))))
-  (if (not nopad)
-      (setq gr (pool:askhx "G - deep flat length" (cdr (assoc "G" pv)))))
-  (setq f1r (pool:askhx "F1 - right slope" (cdr (assoc "F1" pv)))
+        f2r (pool:askhx "F2 - left slope" (cdr (assoc "F2" pv)))
+        gr (pool:askhz "G - deep flat length, 0 = no hopper pad"
+                       (cdr (assoc "G" pv)))
+        nopad (and gr (< gr 1.0e-6))
+        f1r (pool:askhx "F1 - right slope" (cdr (assoc "F1" pv)))
         e1r (pool:askhx "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
         mraw (pool:askhx "M - top side to deep flat" (cdr (assoc "M" pv)))
         lraw (pool:askhx "L - deep flat width" (cdr (assoc "L" pv)))
@@ -2135,6 +2147,9 @@
       (setq res (pool:chainfix (list e2r f2r gr f1r e1r) total 2)
             e2 (car res) f2 (cadr res) g (caddr res)
             f1 (cadddr res) e1 (nth 4 res)))
+  ;; a G that resolves away (NA with the rest filling the length, or
+  ;; absorbed to nothing) also collapses to the no-pad V bottom
+  (if (< g 1.0e-6) (setq nopad t g 0.0))
   (setq vres (pool:chainfix (list mraw lraw kraw) wid 1)
         m (car vres) l (cadr vres) k (caddr vres)
         gg (pool:hopsportc lline rline bline tline cen e2 f2 g f1 e1 m k))
@@ -2178,8 +2193,8 @@
           (list "DEPTH D" hd hd))))
   rows)
 
-;; Pool-bottom dispatcher for the rectangle: Normal (hopper pad),
-;; Sport (flat deep section) or Sport with no hopper pad (V bottom).
+;; Pool-bottom dispatcher for the rectangle: Normal (hopper pad) or
+;; Sport (flat deep section; G = 0 gives the no-hopper-pad V bottom).
 ;; Returns the report rows (nil if skipped).
 (defun pool:hopper (quad corners doff th / btype xmin xmax ymin ymax
                                            a b c d cen sres ln xi)
@@ -2194,8 +2209,8 @@
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- xmin doff) (- ymin doff)))
                  (pool:wp (list (+ xmax doff) (+ ymax doff))))
-        (initget 1 "Normal Sport NOhopper")
-        (setq btype (getkword "\nBottom type [Normal/Sport/NOhopper pad sport]: "))
+        (initget 1 "Normal Sport")
+        (setq btype (getkword "\nBottom type [Normal/Sport] (sport with G = 0 has no hopper pad): "))
         (if (= btype "Normal")
             (pool:hopnormal quad corners doff th nil)
             (progn
@@ -2205,7 +2220,7 @@
                              (list a (pool:v- b a)) (list d (pool:v- c d))
                              cen (distance a b)
                              xmin (- ymin (* 2.2 doff)) ymax
-                             (= btype "NOhopper") doff th))))))
+                             doff th))))))
 
 ;;; -------------------- side profile -----------------------------------
 ;;;
@@ -2611,16 +2626,16 @@
               (list "HOP X" x (distance (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))))
         rows)))
 
-;; Bottom-type dispatchers: Normal / Sport / NOhopper for oval and
-;; grecian pools (L pools are standard-hopper only).
+;; Bottom-type dispatchers: Normal / Sport for oval and grecian pools
+;; (L pools are standard-hopper only; sport G = 0 = no hopper pad).
 
 (defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi)
   (initget "Yes No")
   (if (= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
       nil
       (progn
-        (initget 1 "Normal Sport NOhopper")
-        (setq btype (getkword "\nBottom type [Normal/Sport/NOhopper pad sport]: "))
+        (initget 1 "Normal Sport")
+        (setq btype (getkword "\nBottom type [Normal/Sport] (sport with G = 0 has no hopper pad): "))
         (if (= btype "Normal")
             (pool:hopoval quad tipl tipr doff th)
             (progn
@@ -2637,15 +2652,15 @@
                              (min (car tipl) (car tipr))
                              (- (apply 'min (mapcar 'cadr quad)) (* 2.2 doff))
                              (apply 'max (mapcar 'cadr quad))
-                             (= btype "NOhopper") doff th))))))
+                             doff th))))))
 
 (defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln)
   (initget "Yes No")
   (if (= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
       nil
       (progn
-        (initget 1 "Normal Sport NOhopper")
-        (setq btype (getkword "\nBottom type [Normal/Sport/NOhopper pad sport]: "))
+        (initget 1 "Normal Sport")
+        (setq btype (getkword "\nBottom type [Normal/Sport] (sport with G = 0 has no hopper pad): "))
         (if (= btype "Normal")
             (pool:hopgrec pts doff th)
             (progn
@@ -2665,7 +2680,7 @@
                              (apply 'min (mapcar 'car pts))
                              (- (apply 'min (mapcar 'cadr pts)) (* 2.2 doff))
                              (apply 'max (mapcar 'cadr pts))
-                             (= btype "NOhopper") doff th))))))
+                             doff th))))))
 
 ;;; -------------------- rectangle / oval flow --------------------------
 

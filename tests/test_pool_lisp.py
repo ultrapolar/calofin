@@ -1044,4 +1044,35 @@ r=chainfix([60.0,90.0,120.0,20.0],300.0,1)
 assert r==[60.0,100.0,120.0,20.0]
 print("   skip when H+G+F == B1 (1/2\" tol), otherwise E is prompted")
 
+print("== 47. consolidated sport: G = 0 collapses to the no-pad V bottom ==")
+def sport_resolve(e2r,f2r,gr,f1r,e1r,total):
+    """Mirror of pool:hopsport's chain resolution: G=0 (or a G that
+    resolves away) switches to the no-pad path."""
+    nopad = gr is not None and gr < 1e-6
+    if nopad:
+        vals = chainfix([e2r,f2r,f1r,e1r], total, -1)
+        e2,f2,f1,e1 = vals
+        g = 0.0
+        resid = total-e2-f2-f1-e1
+        if abs(resid) > 1e-6:
+            f2 += resid/2; f1 += resid/2
+    else:
+        e2,f2,g,f1,e1 = chainfix([e2r,f2r,gr,f1r,e1r], total, 2)
+    if g < 1e-6:
+        nopad, g = True, 0.0
+    return e2,f2,g,f1,e1,nopad
+# explicit 0 -> no-pad, residual split across F2/F1
+e2,f2,g,f1,e1,nopad = sport_resolve(60.0,140.0,0.0,148.0,50.0,400.0)
+assert nopad and g==0.0
+assert abs(f2-141.0)<1e-9 and abs(f1-149.0)<1e-9
+# positive G -> padded sport, G absorbs the mismatch as before
+e2,f2,g,f1,e1,nopad = sport_resolve(40.0,60.0,220.0,90.0,50.0,400.0)
+assert not nopad and abs(g-160.0)<1e-9
+e2,f2,g,f1,e1,nopad = sport_resolve(40.0,60.0,None,90.0,50.0,400.0)
+assert not nopad and abs(g-160.0)<1e-9        # NA G takes the remainder
+# NA G with the other letters filling the length -> collapses to no-pad
+e2,f2,g,f1,e1,nopad = sport_resolve(60.0,150.0,None,140.0,50.0,400.0)
+assert nopad and g==0.0
+print("   G=0 and G-resolves-to-0 both draw the V bottom; G>0 keeps the pad")
+
 print("\nALL CHECKS PASSED")
