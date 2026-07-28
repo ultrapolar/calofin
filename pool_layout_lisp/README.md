@@ -348,11 +348,18 @@ for L pools.
 
 As soon as the shape is chosen, a gray nominal "guide" pool of that
 shape (with corner labels) is drawn at the base point and the view
-zooms to it. The pool outline is drawn solid in a **darker gray**,
-while all **cross dims (and other measuring lines) are dashed in a
-lighter gray**, so the diagonals read clearly apart from the shape at
-a glance even on the L pools where nine diagonals cross the body.
-While each
+zooms to it. The pool outline is drawn solid in **gray**, while all
+**cross dims (and other measuring lines) are WHITE and DOTTED**, so
+the diagonals read clearly over the shape even on the L pools where
+nine diagonals cross the body. The dot pattern is defined in inches
+by the routine itself and scaled to cancel the drawing's `LTSCALE`,
+so it looks the same in any drawing (no dependency on `acad.lin`
+being found, which used to make the pattern silently fall back to
+continuous).
+
+When a prompt names corners — a side "A-B", a cross dim "A-C", or a
+rectangle corner treatment — **the corner letters turn red too**,
+alongside the line being measured. While each
 measurement is prompted for, the matching element of the guide glows
 **red** so there is never any doubt which dimension is being asked
 for — including the cross diagonals, oval radius/arc and total-length

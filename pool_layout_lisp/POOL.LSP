@@ -94,7 +94,8 @@
 (setq pool:*grec-max*  4)       ; max increments each way (4 * 1/8 = 1/2)
 (setq pool:*base*      (list 0.0 0.0))
 (setq pool:*dashlt*    "CONTINUOUS")  ; resolved to DASHED per run
-(setq pool:*lts*       1.0)           ; linetype scale for dashed refs
+(setq pool:*dotlt*     "CONTINUOUS")  ; resolved to POOLDOT per run
+(setq pool:*lts*       1.0)           ; (legacy, unused: see pool:ltsc)
 (setq pool:*pvents*    nil)           ; live guide-preview entities
 (setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
 
@@ -185,23 +186,42 @@
                  (cons 10 (pool:wp p1))
                  (cons 11 (pool:wp p2)))))
 
-;; Make sure a linetype is loaded (from acad.lin / acadiso.lin).
-;; Returns the linetype name when available, else "CONTINUOUS".
-(defun pool:ltload (name / f fd)
+;; Build a linetype from an explicit pattern (positive = dash length,
+;; 0 = dot, negative = gap), all in drawing units (inches).  Done with
+;; entmake rather than loading acad.lin: a failed load used to fall
+;; back to CONTINUOUS silently, which is why dashes could vanish.
+;; Returns the linetype name.
+(defun pool:ltmake (name descr pat / lst x)
   (if (not (tblsearch "LTYPE" name))
       (progn
-        (setq f (findfile "acad.lin"))
-        (if (null f) (setq f (findfile "acadiso.lin")))
-        (if f
-            (progn
-              (setq fd (getvar "FILEDIA"))
-              (setvar "FILEDIA" 0)
-              (command "_.-LINETYPE" "_Load" name f "")
-              (setvar "FILEDIA" fd)))))
+        (setq lst (list '(0 . "LTYPE")
+                        '(100 . "AcDbSymbolTableRecord")
+                        '(100 . "AcDbLinetypeTableRecord")
+                        (cons 2 name)
+                        '(70 . 0)
+                        (cons 3 descr)
+                        '(72 . 65)
+                        (cons 73 (length pat))
+                        (cons 40 (apply '+ (mapcar 'abs pat)))))
+        (foreach x pat
+          (setq lst (append lst (list (cons 49 x) '(74 . 0)))))
+        (entmake lst)))
   (if (tblsearch "LTYPE" name) name "CONTINUOUS"))
 
-;; Dashed reference line on POOL-NOTES (falls back to continuous when
-;; no DASHED linetype could be loaded).
+;; Per-entity linetype scale that cancels the drawing's LTSCALE, so a
+;; pattern defined in inches always plots at that size no matter how
+;; the host drawing is set up.
+(defun pool:ltsc ( / s)
+  (setq s (getvar "LTSCALE"))
+  (if (or (null s) (<= s 0.0)) 1.0 (/ 1.0 s)))
+
+;; Kept for compatibility: our patterns are self-defined now.
+(defun pool:ltload (name)
+  (if (= name "DOT")
+      (pool:ltmake "POOLDOT" "Pool guide dot . . . . . . . ." '(0.0 -12.0))
+      (pool:ltmake "POOLDASH" "Pool dashed __ __ __ __" '(12.0 -12.0))))
+
+;; Dashed reference line on POOL-NOTES.
 (defun pool:lined (p1 p2)
   (entmake (append (list '(0 . "LINE")
                          (cons 8 "POOL-NOTES")
@@ -209,7 +229,19 @@
                          (cons 11 (pool:wp p2)))
                    (if (/= pool:*dashlt* "CONTINUOUS")
                        (list (cons 6 pool:*dashlt*)
-                             (cons 48 pool:*lts*))))))
+                             (cons 48 (pool:ltsc)))))))
+
+;; Dotted WHITE guide line -- the cross dims and other measuring lines
+;; on the input screen, so they read clearly over the pool outline.
+(defun pool:linedot (p1 p2)
+  (entmake (append (list '(0 . "LINE")
+                         (cons 8 "POOL-NOTES")
+                         (cons 62 pool:*pvx-col*)
+                         (cons 10 (pool:wp p1))
+                         (cons 11 (pool:wp p2)))
+                   (if (/= pool:*dotlt* "CONTINUOUS")
+                       (list (cons 6 pool:*dotlt*)
+                             (cons 48 (pool:ltsc)))))))
 
 (defun pool:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
@@ -282,8 +314,8 @@
                      (subst (cons 6 pool:*dashlt*) (assoc 6 ed) ed)
                      (append ed (list (cons 6 pool:*dashlt*)))))
         (setq ed (if (assoc 48 ed)
-                     (subst (cons 48 pool:*lts*) (assoc 48 ed) ed)
-                     (append ed (list (cons 48 pool:*lts*)))))
+                     (subst (cons 48 (pool:ltsc)) (assoc 48 ed) ed)
+                     (append ed (list (cons 48 (pool:ltsc))))))
         (entmod ed)
         (entupd e))))
 
@@ -317,7 +349,7 @@
 ;;; guide deletes itself and is replaced by the true out-of-square pool.
 
 (setq pool:*pv-col* 8)                  ; guide outline color (dark gray)
-(setq pool:*pvx-col* 9)                 ; cross-dim / measuring line color (light gray)
+(setq pool:*pvx-col* 7)                 ; cross-dim / measuring line color (white)
 (setq pool:*hi-col* 1)                  ; highlight color (red)
 
 ;; Override (or set) the color of an entity, refresh it, return it.
@@ -338,15 +370,24 @@
       (cdr (assoc 62 ed))
       pool:*pv-col*))
 
+;; Guide entities for a list of corner-label keys, e.g. '(lA lB), so a
+;; prompt can light up the letters it names as well as the line.
+(defun pool:lbl (pv keys / out k)
+  (foreach k keys (setq out (append out (cdr (assoc k pv)))))
+  out)
+
+;; The guide's corner-label key for a letter string ("A" -> 'lA).
+(defun pool:lblkey (s) (read (strcat "l" s)))
+
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 "POOL-NOTES")
   (pool:setcol (entlast) pool:*pv-col*))
 
-;; Dashed guide line -- the cross dims and other measuring lines, in a
-;; lighter gray so they read apart from the darker pool outline.
+;; Guide measuring line -- the cross dims and other ties, drawn WHITE
+;; and DOTTED so they stand out from the gray pool outline.
 (defun pool:pvlined (p1 p2)
-  (pool:lined p1 p2)
-  (pool:setcol (entlast) pool:*pvx-col*))
+  (pool:linedot p1 p2)
+  (entlast))
 
 ;; Ask for a distance while the matching guide elements glow red, then
 ;; restore each element to the color it had (outline vs cross-dim gray).
@@ -415,7 +456,7 @@
 ;; body).  Returns an assoc list mapping each input key to the list of
 ;; guide entities to highlight, plus an ALL entry with every guide
 ;; entity for later deletion.
-(defun pool:preview (ptype / pw ph a b c d cen pr all pv
+(defun pool:preview (ptype / pw ph a b c d cen pr all pv ent
                              eab ebc ecd eda eac ebd
                              midl midr tipl tipr elrad errad elarc erarc etot)
   (setq pw 360.0 ph 180.0
@@ -438,7 +479,9 @@
     (pool:text (pool:v+ (car pr)
                         (pool:v* (pool:unit (pool:v- (car pr) cen)) 20.0))
                12.0 (cadr pr) "POOL-NOTES")
-    (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)))
+    (setq ent (pool:setcol (entlast) pool:*pv-col*)
+          all (cons ent all)
+          pv (cons (cons (pool:lblkey (cadr pr)) (list ent)) pv)))
   (cond
     ((= ptype "Oval")
      (setq midl (list 0.0 (* 0.5 ph)) tipl (list -80.0 (* 0.5 ph))
@@ -838,7 +881,9 @@
   (setq k 0)
   (foreach p npts
     (pool:text (pool:lbloff p cen npts 22.0) 12.0 (nth k pool:*grecnames*) "POOL-NOTES")
-    (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)
+    (setq ent (pool:setcol (entlast) pool:*pv-col*)
+          all (cons ent all)
+          pv (cons (cons (pool:lblkey (nth k pool:*grecnames*)) (list ent)) pv)
           k (1+ k)))
   (setq pool:*pvents* all)
   pv)
@@ -933,26 +978,42 @@
             ltd (pool:askh "LEFT end diagonals (top & bottom)"
                            (append (cdr (assoc 'ltd pv)) (cdr (assoc 'lbd pv))))
             lbd ltd
-            lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
+            lew (pool:askh "LEFT end width (LT-LB)"
+                           (append (cdr (assoc 'lew pv)) (pool:lbl pv '(lLT lLB))))
             rtd (pool:askh "RIGHT end diagonals (top & bottom)"
                            (append (cdr (assoc 'rtd pv)) (cdr (assoc 'rbd pv))))
             rbd rtd
-            rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv))))
-      (setq bo  (pool:askh "Side BOTTOM (A-B)" (cdr (assoc 'ab pv)))
-            tp  (pool:askh "Side TOP (D-C)" (cdr (assoc 'cd pv)))
-            le  (pool:askh "End LEFT (A-D)" (cdr (assoc 'ad pv)))
-            ri  (pool:askh "End RIGHT (B-C)" (cdr (assoc 'bc pv)))
-            ltd (pool:askh "LEFT end diagonal TOP (D-LT)" (cdr (assoc 'ltd pv)))
-            lbd (pool:askh "LEFT end diagonal BOTTOM (A-LB)" (cdr (assoc 'lbd pv)))
-            lew (pool:askh "LEFT end width (LT-LB)" (cdr (assoc 'lew pv)))
-            rtd (pool:askh "RIGHT end diagonal TOP (C-RT)" (cdr (assoc 'rtd pv)))
-            rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)" (cdr (assoc 'rbd pv)))
-            rew (pool:askh "RIGHT end width (RT-RB)" (cdr (assoc 'rew pv))))))
+            rew (pool:askh "RIGHT end width (RT-RB)"
+                           (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))
+      (setq bo  (pool:askh "Side BOTTOM (A-B)"
+                           (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
+            tp  (pool:askh "Side TOP (D-C)"
+                           (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lD lC))))
+            le  (pool:askh "End LEFT (A-D)"
+                           (append (cdr (assoc 'ad pv)) (pool:lbl pv '(lA lD))))
+            ri  (pool:askh "End RIGHT (B-C)"
+                           (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
+            ltd (pool:askh "LEFT end diagonal TOP (D-LT)"
+                           (append (cdr (assoc 'ltd pv)) (pool:lbl pv '(lD lLT))))
+            lbd (pool:askh "LEFT end diagonal BOTTOM (A-LB)"
+                           (append (cdr (assoc 'lbd pv)) (pool:lbl pv '(lA lLB))))
+            lew (pool:askh "LEFT end width (LT-LB)"
+                           (append (cdr (assoc 'lew pv)) (pool:lbl pv '(lLT lLB))))
+            rtd (pool:askh "RIGHT end diagonal TOP (C-RT)"
+                           (append (cdr (assoc 'rtd pv)) (pool:lbl pv '(lC lRT))))
+            rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)"
+                           (append (cdr (assoc 'rbd pv)) (pool:lbl pv '(lB lRB))))
+            rew (pool:askh "RIGHT end width (RT-RB)"
+                           (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))))
 
   ;; -------- cross dims for the chosen mode (NA allowed on each)
   (setq crosscons nil)
   (foreach e crosses
-    (setq tgt (pool:askhx (strcat "Cross dim " (caddr e)) (cdr (assoc (caddr e) pv)))
+    (setq tgt (pool:askhx (strcat "Cross dim " (caddr e))
+                          (append (cdr (assoc (caddr e) pv))
+                                  (pool:lbl pv
+                                    (list (pool:lblkey (nth (car e) pool:*grecnames*))
+                                          (pool:lblkey (nth (cadr e) pool:*grecnames*))))))
           crosscons (cons (list (car e) (cadr e) tgt) crosscons)))
   (setq crosscons (reverse crosscons))
   (pool:pvkill)
@@ -1003,7 +1064,6 @@
         doff (max 12.0 (/ (max w hh) 18.0))
         th (max 3.0 (/ (max w hh) 70.0))
         pool:*dashlt* (pool:ltload "DASHED")
-        pool:*lts* (max 1.0 (/ (max w hh) 15.0))
         cen (list 0.0 0.0))
   (foreach p pts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 8.0)))
@@ -1262,7 +1322,9 @@
   (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
   (foreach p pts
     (pool:text (pool:lbloff p cen pts 20.0) 12.0 (nth k lbls) "POOL-NOTES")
-    (setq all (cons (pool:setcol (entlast) pool:*pv-col*) all)
+    (setq ent (pool:setcol (entlast) pool:*pv-col*)
+          all (cons ent all)
+          pv (cons (cons (pool:lblkey (nth k lbls)) (list ent)) pv)
           k (1+ k)))
   (setq pool:*pvents* all)
   pv)
@@ -1280,32 +1342,53 @@
   (princ "\nCorners: A bottom-left, B bottom-right, C right end top, D inner corner, E wing corner, F top-left.")
   (setq sides
         (if lazy
-            (list (pool:askh "Main side A-B (bottom)" (cdr (assoc 'ab pv)))
-                  (pool:askh "Lower bend side B-C (45 deg)" (cdr (assoc 'bc pv)))
-                  (pool:askh "Far end C-D" (cdr (assoc 'cd pv)))
-                  (pool:askh "Upper bend side D-E (45 deg)" (cdr (assoc 'de pv)))
-                  (pool:askh "Top side E-F" (cdr (assoc 'ef pv)))
-                  (pool:askh "Left end F-A" (cdr (assoc 'fa pv))))
-            (list (pool:askh "Side A-B (bottom, full length)" (cdr (assoc 'ab pv)))
-                  (pool:askh "End B-C (right end, full height)" (cdr (assoc 'bc pv)))
-                  (pool:askh "Side C-D (top of wing)" (cdr (assoc 'cd pv)))
-                  (pool:askh "Step D-E (down to the inner corner)" (cdr (assoc 'de pv)))
-                  (pool:askh "Side E-F (top of main section)" (cdr (assoc 'ef pv)))
-                  (pool:askh "End F-A (left end)" (cdr (assoc 'fa pv))))))
+            (list (pool:askh "Main side A-B (bottom)"
+                             (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
+                  (pool:askh "Lower bend side B-C (45 deg)"
+                             (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
+                  (pool:askh "Far end C-D"
+                             (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lC lD))))
+                  (pool:askh "Upper bend side D-E (45 deg)"
+                             (append (cdr (assoc 'de pv)) (pool:lbl pv '(lD lE))))
+                  (pool:askh "Top side E-F"
+                             (append (cdr (assoc 'ef pv)) (pool:lbl pv '(lE lF))))
+                  (pool:askh "Left end F-A"
+                             (append (cdr (assoc 'fa pv)) (pool:lbl pv '(lF lA)))))
+            (list (pool:askh "Side A-B (bottom, full length)"
+                             (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
+                  (pool:askh "End B-C (right end, full height)"
+                             (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
+                  (pool:askh "Side C-D (top of wing)"
+                             (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lC lD))))
+                  (pool:askh "Step D-E (down to the inner corner)"
+                             (append (cdr (assoc 'de pv)) (pool:lbl pv '(lD lE))))
+                  (pool:askh "Side E-F (top of main section)"
+                             (append (cdr (assoc 'ef pv)) (pool:lbl pv '(lE lF))))
+                  (pool:askh "End F-A (left end)"
+                             (append (cdr (assoc 'fa pv)) (pool:lbl pv '(lF lA)))))))
   ;; cross dims only when out-of-square; in-square squares up to sides
   (setq diags
         (if pool:*insq*
             (list nil nil nil nil nil nil nil nil nil)
-            (list (pool:askhx "Cross dim A-C" (cdr (assoc 'ac pv)))
-                  (pool:askhx "Cross dim B-D" (cdr (assoc 'bd pv)))
-                  (pool:askhx "Cross dim C-E" (cdr (assoc 'ce pv)))
-                  (pool:askhx "Cross dim D-F" (cdr (assoc 'df pv)))
-                  (pool:askhx "Cross dim A-E" (cdr (assoc 'ae pv)))
-                  (pool:askhx "Cross dim B-F" (cdr (assoc 'bf pv)))
-                  (pool:askhx "Cross dim A-D" (cdr (assoc 'ad pv)))
+            (list (pool:askhx "Cross dim A-C"
+                              (append (cdr (assoc 'ac pv)) (pool:lbl pv '(lA lC))))
+                  (pool:askhx "Cross dim B-D"
+                              (append (cdr (assoc 'bd pv)) (pool:lbl pv '(lB lD))))
+                  (pool:askhx "Cross dim C-E"
+                              (append (cdr (assoc 'ce pv)) (pool:lbl pv '(lC lE))))
+                  (pool:askhx "Cross dim D-F"
+                              (append (cdr (assoc 'df pv)) (pool:lbl pv '(lD lF))))
+                  (pool:askhx "Cross dim A-E"
+                              (append (cdr (assoc 'ae pv)) (pool:lbl pv '(lA lE))))
+                  (pool:askhx "Cross dim B-F"
+                              (append (cdr (assoc 'bf pv)) (pool:lbl pv '(lB lF))))
+                  (pool:askhx "Cross dim A-D"
+                              (append (cdr (assoc 'ad pv)) (pool:lbl pv '(lA lD))))
                   (if lazy nil          ; the bend joint is not taped
-                      (pool:askhx "Cross dim B-E" (cdr (assoc 'be pv))))
-                  (pool:askhx "Cross dim C-F" (cdr (assoc 'cf pv))))))
+                      (pool:askhx "Cross dim B-E"
+                                  (append (cdr (assoc 'be pv)) (pool:lbl pv '(lB lE)))))
+                  (pool:askhx "Cross dim C-F"
+                              (append (cdr (assoc 'cf pv)) (pool:lbl pv '(lC lF)))))))
   (pool:pvkill)
 
   (princ "\nFitting pool body to the measurements ...")
@@ -1322,7 +1405,6 @@
         doff (max 12.0 (/ (max w hh) 18.0))
         th (max 3.0 (/ (max w hh) 70.0))
         pool:*dashlt* (pool:ltload "DASHED")
-        pool:*lts* (max 1.0 (/ (max w hh) 15.0))
         cen (list 0.0 0.0))
   (foreach p pts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 6.0)))
@@ -1616,7 +1698,9 @@
   pv)
 
 ;; Prompt one corner's treatment (Enter reuses prevty/prevsz).
-(defun pool:askcorner (label prevty prevsz / ty sz)
+(defun pool:askcorner (label prevty prevsz ents / ty sz cols)
+  (setq cols (mapcar 'pool:getcol ents))
+  (foreach e ents (pool:setcol e pool:*hi-col*))
   (if prevty (initget "Square Rounded Diag") (initget 1 "Square Rounded Diag"))
   (setq ty (getkword (strcat "\n" label " [Square/Rounded/Diag]"
                              (if prevty (strcat " <" prevty ">") "") ": ")))
@@ -1631,6 +1715,7 @@
                                       (strcat " <" (rtos prevsz) ">") "")
                                   ": ")))
         (if (null sz) (setq sz prevsz))))
+  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (list ty sz))
 
 ;; Cross-dim measurement templates for the chosen reference mode.
@@ -2603,28 +2688,36 @@
   ;; in-square: opposing sides are equal, ask each pair once
   (if pool:*insq*
       (setq tp (pool:askh "Side length (top & bottom)"
-                          (append (cdr (assoc 'dc pv)) (cdr (assoc 'ab pv))))
+                          (append (cdr (assoc 'dc pv)) (cdr (assoc 'ab pv))
+                                  (pool:lbl pv '(lA lB lC lD))))
             bo tp
             le (pool:askh "End length (left & right)"
-                          (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))))
+                          (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))
+                                  (pool:lbl pv '(lA lB lC lD))))
             ri le)
-      (setq tp  (pool:askh "Side length TOP (D-C)" (cdr (assoc 'dc pv)))
-            bo  (pool:askh "Side length BOTTOM (A-B)" (cdr (assoc 'ab pv)))
-            le  (pool:askh "End length LEFT (A-D)" (cdr (assoc 'da pv)))
-            ri  (pool:askh "End length RIGHT (B-C)" (cdr (assoc 'bc pv)))))
+      (setq tp  (pool:askh "Side length TOP (D-C)"
+                           (append (cdr (assoc 'dc pv)) (pool:lbl pv '(lD lC))))
+            bo  (pool:askh "Side length BOTTOM (A-B)"
+                           (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
+            le  (pool:askh "End length LEFT (A-D)"
+                           (append (cdr (assoc 'da pv)) (pool:lbl pv '(lA lD))))
+            ri  (pool:askh "End length RIGHT (B-C)"
+                           (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))))
 
   ;; -------- corner treatments (rectangle only; side lengths are to
   ;; the TRUE corner, treatments cut inward)
   (if (= ptype "Rectangle")
       (if pool:*insq*
           (progn                        ; in-square: one answer for all 4
-            (setq cc (pool:askcorner "All corners (assumed identical)" nil nil)
+            (setq cc (pool:askcorner "All corners (assumed identical)" nil nil
+                                     (pool:lbl pv '(lA lB lC lD)))
                   corners (list cc cc cc cc)))
           (progn                        ; out-of-square: per corner, Enter reuses
             (princ "\n(per-corner treatment; press Enter to reuse the previous corner)")
             (setq corners nil prevty nil prevsz nil)
             (foreach lbl (list "A" "B" "C" "D")
-              (setq cc (pool:askcorner (strcat "Corner " lbl) prevty prevsz)
+              (setq cc (pool:askcorner (strcat "Corner " lbl) prevty prevsz
+                                       (pool:lbl pv (list (pool:lblkey lbl))))
                     prevty (car cc) prevsz (cadr cc)
                     corners (cons cc corners)))
             (setq corners (reverse corners))))
@@ -2663,7 +2756,10 @@
           (setq rpa (pool:cornerpoint gq gcorners (nth 3 tm) (nth 4 tm))
                 rpb (pool:cornerpoint gq gcorners (nth 5 tm) (nth 6 tm))
                 hl (pool:pvadd (pool:pvlined rpa rpb))
-                val (pool:askhx (cadr tm) (list hl))
+                val (pool:askhx (cadr tm)
+                                (cons hl (pool:lbl pv
+                                           (list (pool:lblkey (nth (nth 3 tm) '("A" "B" "C" "D")))
+                                                 (pool:lblkey (nth (nth 5 tm) '("A" "B" "C" "D")))))))
                 xmeas (cons (append tm (list val)) xmeas))))
       (princ "\nIn-square: building true to the side measurements (no cross dims)."))
   (setq xmeas (reverse xmeas))
@@ -2702,8 +2798,7 @@
         notes nil)
 
   ;; dashed linetype + scale for the reference lines
-  (setq pool:*dashlt* (pool:ltload "DASHED")
-        pool:*lts* (max 1.0 (/ (max bo tp le ri) 15.0)))
+  (setq pool:*dashlt* (pool:ltload "DASHED"))
 
   ;; -------------------------------- pool body / perimeter (layer POOL)
   ;; Rectangle draws its perimeter with corner treatments; the oval
@@ -3011,8 +3106,7 @@
         notes nil
         doff (max 12.0 (/ (max tv araw) 18.0))
         th (max 3.0 (/ (max tv araw) 70.0))
-        pool:*dashlt* (pool:ltload "DASHED")
-        pool:*lts* (max 1.0 (/ (max tv araw) 15.0)))
+        pool:*dashlt* (pool:ltload "DASHED"))
   (pool:line a b "POOL")
   (pool:line c d "POOL")
   (pool:lined b c)
@@ -3149,9 +3243,10 @@
   (pool:layer "POOL-NOTES" 3)
 
   ;; dashed linetype up front so the guide's cross dims draw dashed
-  ;; (the flows re-scale pool:*lts* to the real pool size later)
+  ;; patterns are defined in inches and scaled to cancel LTSCALE, so
+  ;; they show the same in any drawing
   (setq pool:*dashlt* (pool:ltload "DASHED")
-        pool:*lts* 12.0)
+        pool:*dotlt* (pool:ltload "DOT"))
 
   (cond
     ((= ptype "L") (pool:hexflow nil))
