@@ -147,9 +147,10 @@ below the hopper's vertical centre by **12" or L/6** (two-thirds down
 from the top of L), whichever is closer to centre. The M/L/K dims
 **attach to the hopper lines themselves** — extension-line origins on
 the hopper's right-edge corners and the wall points directly
-above/below — with only the dimension **line** floating **12" to the
-right** of the hopper's right edge. Applies to every shape's hopper
-and to the sport deep flat.
+above/below — with only the dimension **line** floating **30" to the
+right** of the hopper's right edge, clear of the hopper linework
+(`pool:*mlkoff*` if you want to retune it). Applies to every shape's
+hopper and to the sport deep flat.
 The hopper's left corners tie to the pool's left corners — when a
 corner is Diag/Rounded, **to both ends of the treatment** (one line
 per end) — and its right corners tie to the ends of the slope-break

@@ -96,6 +96,7 @@
 (setq pool:*dashlt*    "CONTINUOUS")  ; resolved to DASHED per run
 (setq pool:*dotlt*     "CONTINUOUS")  ; resolved to POOLDOT per run
 (setq pool:*lts*       1.0)           ; (legacy, unused: see pool:ltsc)
+(setq pool:*mlkoff*    30.0)          ; M/L/K dim line offset right of the hopper
 (setq pool:*pvents*    nil)           ; live guide-preview entities
 (setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
 
@@ -218,7 +219,7 @@
 ;; Kept for compatibility: our patterns are self-defined now.
 (defun pool:ltload (name)
   (if (= name "DOT")
-      (pool:ltmake "POOLDOT" "Pool guide dot . . . . . . . ." '(0.0 -6.0))
+      (pool:ltmake "POOLDOT" "Pool guide dot . . . . . . . ." '(0.0 -1.0))
       (pool:ltmake "POOLDASH" "Pool dashed __ __ __ __" '(12.0 -12.0))))
 
 ;; Dashed reference line on POOL-NOTES.
@@ -1847,7 +1848,7 @@
         (list 'phb hbr)
         (list 'pht htr)
         (list 'pt (pool:linex (car hr) (cadr hr) d (pool:v- c d)))
-        (list 'voff (pool:v* (pool:unit hdir) 12.0))))
+        (list 'voff (pool:v* (pool:unit hdir) pool:*mlkoff*))))
 
 ;; Draw the hopper, slope break and corner ties on layer lay.  Each
 ;; hopper left corner ties to BOTH ends of its pool corner treatment
@@ -2037,7 +2038,7 @@
         (list 'pdb dbr)
         (list 'pdt dtr)
         (list 'pt (pool:linex (car dfr) (cadr dfr) (car tline) (cadr tline)))
-        (list 'voff (pool:v* (pool:unit (cadr bline)) 12.0))))
+        (list 'voff (pool:v* (pool:unit (cadr bline)) pool:*mlkoff*))))
 
 (defun pool:hopsportdraw (gg nopad lay pvflag / oblb oblt obrb obrt
                                                 dbl dtl dbr dtr)
@@ -2307,7 +2308,7 @@
         (list 'phb (pool:linex vc v (car hb) (cadr hb)))
         (list 'pht (pool:linex vc v (car ht) (cadr ht)))
         (list 'pt (pool:linex vc v d (pool:v- c d)))
-        (list 'voff (pool:v* u 12.0))))
+        (list 'voff (pool:v* u pool:*mlkoff*))))
 
 (defun pool:hopovaldraw (gg lay pvflag / tt tb tip htr hbr brkb brkt)
   (setq tt (cadr (assoc 'ttop gg)) tb (cadr (assoc 'tbot gg))
@@ -2457,7 +2458,7 @@
           (list 'phb hbr)
           (list 'pht htr)
           (list 'pt (pool:linex (car hr) (cadr hr) dd (pool:v- cc dd)))
-          (list 'voff (pool:v* (pool:unit u) 12.0))))
+          (list 'voff (pool:v* (pool:unit u) pool:*mlkoff*))))
   (if w
       (setq hlw (pool:offline lbp ltp cen (+ h w))
             htl1 (pool:offline dd cc cen (+ m l1))
