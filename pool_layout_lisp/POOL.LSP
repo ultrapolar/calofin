@@ -218,7 +218,7 @@
 ;; Kept for compatibility: our patterns are self-defined now.
 (defun pool:ltload (name)
   (if (= name "DOT")
-      (pool:ltmake "POOLDOT" "Pool guide dot . . . . . . . ." '(0.0 -12.0))
+      (pool:ltmake "POOLDOT" "Pool guide dot . . . . . . . ." '(0.0 -6.0))
       (pool:ltmake "POOLDASH" "Pool dashed __ __ __ __" '(12.0 -12.0))))
 
 ;; Dashed reference line on POOL-NOTES.
