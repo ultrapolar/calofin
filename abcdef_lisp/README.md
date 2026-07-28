@@ -36,9 +36,13 @@ POINT NAME | DIST FROM A | DIST FROM B | DIST FROM C | DIST FROM D
 Values are architectural feet-inches (`12'-3 1/2"`, `9'`, `3 1/2"`).
 Blank cells mean "not measured"; a point needs at least 2 distances
 (3–4 give a unique, error-averaged fix). Because taped values are rounded
-to the nearest 1/4", each point is solved by least squares so the rounding
-error is spread across all its distances; the leftover RMS error is
-reported per point, and anything worse than 0.25" is flagged `**CHECK`.
+to the nearest 1/4", **no single distance is trusted exactly**: each point
+is solved by least squares so the rounding slop is shared across all the
+distances given for it, instead of two tapes being honoured exactly and
+the rest eating all the error. The report prints, for every point, the
+signed leftover error against each corner (`err vs A B C D`) plus the RMS;
+anything worse than 0.25" is flagged `**CHECK`, and the err columns show
+which tape to re-measure.
 
 The parser also repairs common scan/transcription noise (and logs every
 repair so it can be verified): `O`/`I` for `0`/`1`, smart quotes,

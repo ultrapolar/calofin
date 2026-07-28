@@ -712,7 +712,7 @@
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r k rr nm din g corners dists
                     sol x y rms tags tg tx ty placed p flag
-                    totn tots n3 swapcd tmp angs chk)
+                    totn tots n3 swapcd tmp angs chk rlist rstr)
   (vl-load-com)
   (princ (strcat "\nABCDEF rev " abcdef:*version*))
   ;; ---- get the spreadsheet ----------------------------------------------
@@ -852,6 +852,16 @@
                 (setq sol (abcdef:solve corners dists
                                         (+ bx (/ W 2.0)) (- by (/ H 2.0))))
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
+                ;; signed leftover error against each supplied distance, in
+                ;; sheet order A B C D ("--" = not measured) - shows how the
+                ;; quarter-inch rounding slop was shared out over the tapes
+                (setq rlist (cdddr sol) rstr "")
+                (foreach d din
+                  (if d
+                    (setq rstr (strcat rstr
+                                 (abcdef:pad (abcdef:signres (car rlist)) 7))
+                          rlist (cdr rlist))
+                    (setq rstr (strcat rstr (abcdef:pad "  --" 7)))))
                 (abcdef:point  (list x y) "ABCDEF-POINTS")
                 (abcdef:circle (list x y) mrad "ABCDEF-POINTS")
                 (setq flag "")
@@ -866,7 +876,7 @@
                                th (strcat nm " CHECK") "ABCDEF-WARN")
                   (abcdef:text (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
                                th nm "ABCDEF-LABELS"))
-                (setq placed (cons (list nm x y rms (length corners) flag)
+                (setq placed (cons (list nm x y rms (length corners) flag rstr)
                                    placed))
                 (setq good (1+ good)))
               (progn
@@ -876,21 +886,25 @@
           ;; ---- report ------------------------------------------------------
           (princ (strcat "\n\n===== ABCDEF rev " abcdef:*version*
                          " results (all values in inches) ====="))
-          (princ "\n  POINT            X          Y      #dims   fit err (RMS)")
+          (princ (strcat "\n  POINT            X          Y      #dims"
+                         "   fit err (RMS)   err vs A      B      C      D"))
           (foreach p (reverse placed)
             (princ (strcat "\n  " (abcdef:pad (nth 0 p) 14)
                            (abcdef:padnum (nth 1 p) 10)
                            (abcdef:padnum (nth 2 p) 11)
                            "    " (itoa (nth 4 p))
-                           "      " (rtos (nth 3 p) 2 4) "\"" (nth 5 p))))
+                           "      " (rtos (nth 3 p) 2 4) "\""
+                           "     " (nth 6 p) (nth 5 p))))
           (princ (strcat "\n-------------------------------------------------"
                          "\n  " (itoa good) " point(s) plotted"
                          (if (> bad 0) (strcat ", " (itoa bad) " skipped") "")
                          "."))
-          (princ (strcat "\n  Fit err (RMS) is the leftover rounding error shared"
-                         "\n  across the given distances - typically < 0.10\" for"
-                         "\n  quarter-inch data.  Anything worse than 0.25\" is"
-                         "\n  flagged **CHECK - verify that reading."))
+          (princ (strcat "\n  No single tape is trusted: each point is placed so"
+                         "\n  the leftover error is SHARED across all its given"
+                         "\n  distances (the signed err columns above).  Rounded"
+                         "\n  quarter-inch data typically fits < 0.10\" RMS;"
+                         "\n  anything worse than 0.25\" is flagged **CHECK -"
+                         "\n  the err columns point at the tape to re-check."))
           ;; ---- confirm the frame really is a rectangle --------------------
           ;; measure the corner angles from the coordinates that were drawn,
           ;; rather than asserting them - so a future corner-math regression
@@ -917,6 +931,10 @@
 (defun abcdef:pad (s width)
   (while (< (strlen s) width) (setq s (strcat s " ")))
   s)
+
+;; format a signed inches value like "+0.08" (sign always shown, 2 decimals)
+(defun abcdef:signres (v)
+  (strcat (if (< v 0.0) "-" "+") (rtos (abs v) 2 2)))
 
 ;; format a real to 3 decimals, left-padded into WIDTH
 (defun abcdef:padnum (v width / s)

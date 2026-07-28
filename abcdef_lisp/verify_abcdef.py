@@ -223,14 +223,23 @@ def main():
                 all(d is not None for _, ds in rows for d in ds))
     tot_z = tot_cw = 0.0
     pts = {}
+    worst_res = 0.0
     for nm, ds in rows:
         x, y, rms = solve([A, B, C, D], ds, seed)
         pts[nm] = (x, y)
         tot_z += rms
         _, _, rms_cw = solve([A, B, D, C], ds, seed)
         tot_cw += rms_cw
-        ok &= check(f"{nm:3s} at ({x:8.2f},{y:8.2f})  rms {rms:.3f}\"",
+        res = [math.hypot(x - cx, y - cy) - d
+               for (cx, cy), d in zip([A, B, C, D], ds)]
+        worst_res = max(worst_res, max(abs(r) for r in res))
+        ok &= check(f"{nm:3s} at ({x:8.2f},{y:8.2f})  rms {rms:.3f}\""
+                    "  err " + " ".join(f"{r:+.2f}" for r in res),
                     rms < 0.15)
+    # the whole design intent: no tape is forced exact, the rounding slop is
+    # shared - so no single distance may eat a big residual
+    ok &= check(f"error shared: worst single-tape residual {worst_res:.3f}\""
+                " (within quarter-inch rounding)", worst_res < 0.15)
 
     # T and U are the same offsets measured from mirrored corners, so they
     # must land mirror-symmetric about the rectangle's vertical centreline.
