@@ -456,6 +456,21 @@
   (setq ans (getkword (strcat msg " [Yes/No] <Yes>: ")))
   (or (null ans) (= ans "Yes")))
 
+(defun dchk:ask-yn-nav (msg / ans)
+  ;; the reviewing question, with a way out of a mis-press:
+  ;; 'yes 'no 'back (redo the previous item) 'skip (stop asking,
+  ;; finish the run and still write the report)
+  (initget "Yes No Back Skip")
+  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
+  (cond ((null ans)      'yes)
+        ((= ans "Yes")   'yes)
+        ((= ans "No")    'no)
+        ((= ans "Back")  'back)
+        (t               'skip)))
+
+(defun dchk:progress (what n total)
+  (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
+
 (defun dchk:confirm-point (label pt / newp)
   ;; marks pt (WCS), asks whether the location is correct; returns the
   ;; user's replacement point (in the CURRENT UCS) or nil to keep pt
@@ -1416,21 +1431,25 @@
   (setq meas (dchk:dim-meas ent))             ; after any point moves
   (if meas (princ (strcat "\n  Measures " meas ".")))
   (redraw ent 3)
-  (setq ok (dchk:ask-yn "\n  Is this dimension correct?"))
+  (setq ok (dchk:ask-yn-nav "\n  Is this dimension correct?"))
   (redraw ent 4)
   (redraw)
-  (setq note (strcat
-               (cond
-                 ((and ok moved)
-                  (strcat "OK (" (itoa (length moved)) " point(s) adjusted)"))
-                 (ok "OK")
-                 (moved
-                  (strcat "FLAGGED to fix (red, " (itoa (length moved))
-                          " point(s) adjusted)"))
-                 (t "FLAGGED to fix (red)"))
-               (if assocnote assocnote "")))
-  (if (not ok) (dchk:set-color ent *dchk-flag-color*))
-  (list h ok note (length moved) meas))
+  (if (member ok '(back skip))
+    (list h ok nil (length moved) meas)       ; navigation: caller handles it
+    (progn
+      (setq ok (eq ok 'yes))
+      (setq note (strcat
+                   (cond
+                     ((and ok moved)
+                      (strcat "OK (" (itoa (length moved)) " point(s) adjusted)"))
+                     (ok "OK")
+                     (moved
+                      (strcat "FLAGGED to fix (red, " (itoa (length moved))
+                              " point(s) adjusted)"))
+                     (t "FLAGGED to fix (red)"))
+                   (if assocnote assocnote "")))
+      (if (not ok) (dchk:set-color ent *dchk-flag-color*))
+      (list h ok note (length moved) meas))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -1616,6 +1635,7 @@
                       svbb hdim dimht htval htbad
                       wallvals wallvar wallmany htskip
                       laylist locked relock lay tlist tbest cx cy tvals s d
+                      dlines skiprest
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -1735,26 +1755,66 @@
         ;; --- dimensions, one at a time -----------------------------
         (if dims
           (princ (strcat "\n--- Reviewing " (itoa (length dims))
-                         " dimension(s): Enter = correct, N = flag to fix ---")))
-        (setq n 0 total (length dims))
-        (foreach e dims
-          (setq n (1+ n))
+                         " dimension(s): Enter = correct, N = flag to fix, "
+                         "B = back one, S = skip the rest ---")))
+        ;; index-based so Back can step to the previous dimension and
+        ;; Skip can leave the rest unreviewed without losing the report
+        (setq n 0 total (length dims) dlines nil skiprest nil)
+        (while (and (< n total) (not skiprest))
+          (setq e   (nth n dims)
+                res nil)
           (dchk:set-color e (cdr (assoc e saved)))       ; step into the light
-          (setq res (dchk:review-dim e cands n total))
+          (setq res (dchk:review-dim e cands (1+ n) total))
+          ;; points already moved count however the prompt was answered
           (setq ndmoved (+ ndmoved (cadddr res)))
-          (if (cadr res)
-            (progn (setq ndok (1+ ndok))
-                   (dchk:set-color e *dchk-grey-color*)) ; done: back to grey
-            (progn (setq ndflag (1+ ndflag))
-                   (setq keep (cons e keep))))           ; flagged: stays red
-          (setq sty (dchk:dim-style e))
-          (setq lines (cons (strcat "Dim " (car res)
-                                    (if (= sty "") "" (strcat " [" sty "]"))
-                                    (if (nth 4 res)
-                                      (strcat " = " (nth 4 res))
-                                      "")
-                                    ": " (caddr res))
+          (cond
+            ((eq (cadr res) 'skip)
+             (dchk:set-color e *dchk-grey-color*)
+             (setq skiprest T)
+             (princ (strcat "\n  Skipping the remaining "
+                            (itoa (- total n)) " dimension(s).")))
+            ((eq (cadr res) 'back)
+             ;; undo what the previous item recorded, then redo it
+             (dchk:set-color e *dchk-grey-color*)
+             (if (> n 0)
+               (progn
+                 (setq n  (1- n)
+                       e1 (nth n dims))
+                 (if (car dlines)                        ; roll back its tally
+                   (progn
+                     (if (cadr (car dlines))
+                       (setq ndok (1- ndok))
+                       (setq ndflag (1- ndflag)))
+                     (setq ndmoved (- ndmoved (caddr (car dlines)))
+                           dlines  (cdr dlines))))
+                 (setq keep (vl-remove e1 keep))
+                 (dchk:set-color e1 *dchk-grey-color*)
+                 (princ "\n  Stepping back one dimension."))
+               (princ "\n  Already at the first dimension."))
+             (setq n (1- n)))                            ; loop's 1+ re-enters it
+            (t
+             (if (cadr res)
+               (progn (setq ndok (1+ ndok))
+                      (dchk:set-color e *dchk-grey-color*))
+               (progn (setq ndflag (1+ ndflag))
+                      (setq keep (cons e keep))))
+             (setq sty (dchk:dim-style e))
+             (setq dlines (cons (list (strcat "Dim " (car res)
+                                              (if (= sty "") "" (strcat " [" sty "]"))
+                                              (if (nth 4 res)
+                                                (strcat " = " (nth 4 res))
+                                                "")
+                                              ": " (caddr res))
+                                      (cadr res)
+                                      (cadddr res))
+                                dlines))))
+          (setq n (1+ n)))
+        (if skiprest
+          (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
+                                    " left UNREVIEWED (skipped by user)")
                             lines)))
+        (foreach pair (reverse dlines)
+          (setq lines (cons (car pair) lines)))
 
         ;; --- arcs, one endpoint at a time --------------------------
         (if arcs
@@ -2345,5 +2405,304 @@
                        "\nOne UNDO reverts everything DIMCHECK changed (including the report)."))))))
   (princ))
 
-(princ "\ndimcheck.lsp loaded - type DIMCHECK to review dimensions & arcs one at a time.")
+;; --- DIMSCAN: the read-only twin -----------------------------------
+;;  Runs every audit, asks nothing, and changes nothing in the drawing
+;;  except writing the report. Use it as a quick pre-flight, or when
+;;  you want the findings without touching a released sheet.
+
+(defun c:DIMSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
+                     blks lines olaps pr sgroups scand svgroups pgroups
+                     g g1 g2 rest svbb stepht satts liners fgstep linerstep
+                     beadss beadbbs bb gbb tlist tins bp cx cy d tbest
+                     wallraw wallvals wallvar wallmany wallht hdim dimht
+                     htval htbad htsum stepsum linersum bad wnd
+                     nd ndbad na nabad h m ins txt nlin ref hdr l
+                     minx miny maxx maxy p13 p14 near s b w)
+
+  (defun *error* (msg)
+    (if oldecho (setvar "CMDECHO" oldecho))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDIMSCAN error: " msg)))
+    (princ))
+
+  (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
+  (setq ss (ssget))
+  (if (null ss) (setq ss (ssget "_X")))
+  (cond
+    ((null ss) (prompt "\nNothing to scan."))
+    (t
+     (setq oldecho (getvar "CMDECHO"))
+     (setvar "CMDECHO" 0)
+     (setq i 0 nd 0 ndbad 0 na 0 nabad 0)
+     (repeat (sslength ss)
+       (setq e  (ssname ss i)
+             i  (1+ i)
+             et (cdr (assoc 0 (entget e))))
+       (if (= et "DIMENSION") (setq dims (cons e dims)))
+       (if (= et "ARC") (setq arcs (cons e arcs)))
+       (if (member et '("LINE" "LWPOLYLINE" "POLYLINE")) (setq plns (cons e plns)))
+       (if (= et "INSERT") (setq blks (cons e blks)))
+       (if (member et *dchk-curve-types*) (setq cands (cons e cands)))
+       (setq bb (dchk:bbox e))
+       (if bb
+         (setq minx (if minx (min minx (caar bb)) (caar bb))
+               miny (if miny (min miny (cadar bb)) (cadar bb))
+               maxx (if maxx (max maxx (caadr bb)) (caadr bb))
+               maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
+     (setq dims (reverse dims) arcs (reverse arcs)
+           plns (reverse plns) blks (reverse blks) cands (reverse cands)
+           segs (dchk:collect-segs plns))
+
+     ;; --- dimensions: report stray definition points, move nothing
+     (foreach e (dchk:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+       (setq ed  (entget e)
+             nd  (1+ nd)
+             p13 (cdr (assoc 13 ed))
+             p14 (cdr (assoc 14 ed))
+             bad nil)
+       (if (member (logand 7 (cdr (assoc 70 ed))) '(0 1))
+         (foreach s (list (cons "point 1" p13) (cons "point 2" p14))
+           (if (cdr s)
+             (progn
+               (setq near (dchk:nearest-curve (cdr s) nil cands))
+               (if (and near (> (caddr near) *dchk-tol*))
+                 (setq bad (append bad (list (strcat (car s) " off by "
+                                                     (rtos (caddr near) 2 4))))))))))
+       (if bad (setq ndbad (1+ ndbad)))
+       (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
+                                 (if (= (dchk:dim-style e) "") ""
+                                   (strcat " [" (dchk:dim-style e) "]"))
+                                 (if (dchk:dim-meas e)
+                                   (strcat " = " (dchk:dim-meas e)) "")
+                                 ": "
+                                 (if bad
+                                   (strcat "NOT attached - " (dchk:join bad ", "))
+                                   "OK")
+                                 (if (dchk:dim-assoc-p e) " (associative)" ""))
+                         lines)))
+
+     ;; --- arcs: report unattached endpoints, move nothing
+     (foreach e arcs
+       (setq na  (1+ na)
+             bad nil)
+       (if (dchk:planar-arc-p (entget e))
+         (foreach s '(("start" . start) ("end" . end))
+           (if (dchk:arc-end-target e (cdr s) cands)
+             (setq bad (append bad (list (car s)))))))
+       (if bad (setq nabad (1+ nabad)))
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+                                 (if bad
+                                   (strcat (dchk:join bad " & ")
+                                           " NOT attached to an object end")
+                                   "endpoints OK"))
+                         lines)))
+
+     ;; --- overlaps
+     (setq olaps (dchk:find-overlaps segs))
+     (foreach pr olaps
+       (setq lines (cons (strcat "Lines "
+                                 (cdr (assoc 5 (entget (dchk:seg-ent (car pr)))))
+                                 "+"
+                                 (cdr (assoc 5 (entget (dchk:seg-ent (cadr pr)))))
+                                 ": OVERLAP of "
+                                 (rtos (caddr (dchk:overlap-info (car pr) (cadr pr))))
+                                 " - flagged")
+                         lines)))
+
+     ;; --- steps / side view (detection only, nothing asked)
+     (setq sgroups (dchk:step-groups segs (min *dchk-step-minlines*
+                                               *dchk-bench-minlines*))
+           scand   (vl-remove-if-not 'dchk:staircase-p sgroups)
+           rest    scand)
+     (while rest
+       (setq g1 (car rest))
+       (foreach g2 (cdr rest)
+         (if (and (> (dchk:ang-diff (car g1) (car g2)) (- (* 0.5 pi) 0.09))
+                  (dchk:boxes-touch (dchk:pts-bbox (cdr g1))
+                                    (dchk:pts-bbox (cdr g2))
+                                    *dchk-step-maxgap*))
+           (progn
+             (if (not (member g1 svgroups)) (setq svgroups (cons g1 svgroups)))
+             (if (not (member g2 svgroups)) (setq svgroups (cons g2 svgroups))))))
+       (setq rest (cdr rest)))
+     (setq pgroups (vl-remove-if
+                     '(lambda (x) (or (member x svgroups)
+                                      (< (length (cdr x)) *dchk-step-minlines*)))
+                     sgroups))
+     (if svgroups
+       (setq svbb   (dchk:pts-bbox (apply 'append (mapcar 'cdr svgroups)))
+             stepht (- (cadr (cadr svbb)) (cadr (car svbb)))))
+     (setq satts (vl-remove-if-not
+                   '(lambda (x) (dchk:ins-matches x "Step Attachment")) blks))
+     (setq stepsum
+           (cond
+             ((and (null svgroups) (null pgroups)) "no step patterns detected")
+             (svgroups
+              (strcat "side view detected, rise " (rtos stepht)
+                      (if satts "; Step Attachment present"
+                        "; Step Attachment block MISSING - add one")))
+             (t (strcat (itoa (length pgroups))
+                        " possible step pattern(s) - run DIMCHECK to confirm"))))
+     (foreach g pgroups
+       (setq lines (cons (strcat "Steps: possible pattern of "
+                                 (itoa (length (cdr g))) " parallel lines")
+                         lines)))
+     ;; bead track when the attachment is a bead one
+     (if (and satts svgroups
+              (vl-some '(lambda (x) (dchk:ins-matches x "Bead Step Attachment"))
+                       satts))
+       (progn
+         (setq beadss (ssget "_X" (list (cons 8 *dchk-bead-layer*))) i 0)
+         (if beadss
+           (repeat (sslength beadss)
+             (setq bb (dchk:bbox (ssname beadss i)) i (1+ i))
+             (if bb (setq beadbbs (cons bb beadbbs)))))
+         (foreach g pgroups
+           (setq gbb (dchk:pts-bbox (cdr g)))
+           (if (not (and gbb beadbbs (dchk:bead-near-p gbb beadbbs)))
+             (setq lines (cons (strcat "Bead Track: NOTHING on layer '"
+                                       *dchk-bead-layer*
+                                       "' near a step pattern - add bead track")
+                               lines))))))
+
+     ;; --- wall height
+     (setq tlist (vl-remove-if-not
+                   '(lambda (x) (wcmatch (dchk:squash (dchk:block-name x))
+                                         (strcat "*" (dchk:squash *dchk-title-block*) "*")))
+                   blks))
+     (if (null tlist)
+       (progn
+         (setq beadss (ssget "_X" '((0 . "INSERT"))) i 0)
+         (if beadss
+           (repeat (sslength beadss)
+             (setq b (ssname beadss i) i (1+ i))
+             (if (wcmatch (dchk:squash (dchk:block-name b))
+                          (strcat "*" (dchk:squash *dchk-title-block*) "*"))
+               (setq tlist (cons b tlist)))))))
+     (setq cx (if minx (* 0.5 (+ minx maxx)) 0.0)
+           cy (if miny (* 0.5 (+ miny maxy)) 0.0))
+     (foreach b tlist
+       (setq bp (cdr (assoc 10 (entget b)))
+             d  (distance (list cx cy) (list (car bp) (cadr bp))))
+       (if (or (null tbest) (< d tbest)) (setq tbest d tins b)))
+     (if tins
+       (setq wallraw  (dchk:ins-attrib-deep tins *dchk-wallht-tag*)
+             wallvals (if wallraw (dchk:len-values wallraw))
+             wallvar  (and wallraw (dchk:varies-p wallraw))
+             wallmany (> (length wallvals) 1)
+             wallht   (if (and wallvals (not wallmany)) (car wallvals))))
+     (if (and svbb stepht (not (or wallvar wallmany)))
+       (setq hdim (dchk:height-dim dims svbb stepht)))
+     (if hdim (setq dimht (dchk:dim-stated hdim)))
+     (setq htval (if dimht dimht stepht)
+           htbad (and htval wallht (> (abs (- htval wallht)) *dchk-height-tol*)))
+     (setq htsum
+           (cond
+             ((null htval) nil)
+             ((null tins) (strcat "steps rise " (rtos htval) " but no '"
+                                  *dchk-title-block* "' block found - NOT CONFIRMED"))
+             (wallvar (strcat "steps rise " (rtos htval) " and " *dchk-wallht-tag*
+                              " reads '" wallraw "' - height varies, not checked"))
+             (wallmany (strcat "steps rise " (rtos htval) " but " *dchk-wallht-tag*
+                               " holds " (itoa (length wallvals)) " heights ('" wallraw
+                               "') - CHECK THE WALL HEIGHT in the " *dchk-title-block*))
+             ((null wallht) (strcat "steps rise " (rtos htval) " but "
+                                    *dchk-wallht-tag* " is unreadable - NOT CONFIRMED"))
+             ((not htbad) (strcat "steps rise " (rtos htval) " = WallHt '"
+                                  wallraw "' - MATCHES"))
+             (t (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
+                        "' (" (rtos wallht) ") - MISMATCH"))))
+
+     ;; --- liner
+     (setq liners (vl-remove-if-not
+                    '(lambda (x) (dchk:ins-matches x "Liner Material")) blks)
+           fgstep (dchk:fgstep-src ss blks))
+     (if liners
+       (setq linerstep (vl-some '(lambda (x) (dchk:ins-has-word x "STEP")) liners)))
+     (foreach b liners
+       (setq bad nil)
+       (foreach w '("NOT" "ERROR")
+         (if (dchk:ins-has-word b w)
+           (progn (setq bad (append bad (list w)))
+                  (if (not (member w wnd)) (setq wnd (append wnd (list w)))))))
+       (setq lines (cons (strcat "Liner Material (" (dchk:block-name b) ") "
+                                 (cdr (assoc 5 (entget b))) ": "
+                                 (if bad
+                                   (strcat "contains the word " (dchk:join bad " & ")
+                                           " - look at it")
+                                   "OK"))
+                         lines)))
+     (if (and fgstep linerstep)
+       (setq lines (cons (strcat "Liner Material: a Fiberglass Step (" fgstep
+                                 ") is in the drawing but the liner pattern HAS a Step - it should not")
+                         lines)))
+     (if (and (not fgstep) svgroups liners (not linerstep))
+       (setq lines (cons "Liner Material: steps are drawn but the liner pattern is MISSING its 'Step'"
+                         lines)))
+     (setq linersum
+           (cond
+             ((null liners) "block MISSING - add 'Liner Material' (or 'with Step')")
+             (t (strcat (itoa (length liners)) " block(s) found"
+                        (if wnd (strcat "; word " (dchk:join wnd " & ") " found - review") "")
+                        (if (and fgstep linerstep)
+                          "; Fiberglass Step in the drawing but the liner HAS a Step" "")
+                        (if (and (null wnd) (not (and fgstep linerstep))) " - OK" "")))))
+
+     ;; --- report (the only thing DIMSCAN writes) ------------------
+     (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
+     (dchk:clear-old)
+     (setq hdr (list
+                 (cons (strcat "Dimensions scanned: " (itoa nd) " ("
+                               (itoa ndbad) " with a stray definition point)")
+                       (> ndbad 0))
+                 (cons (strcat "Arcs scanned: " (itoa na) " ("
+                               (itoa nabad) " with an unattached end)")
+                       (> nabad 0))
+                 (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
+                       (> (length olaps) 0))
+                 (cons (strcat "Steps: " stepsum)           (dchk:attn-p stepsum))
+                 (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))))
+     (if htsum
+       (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
+                                         (dchk:attn-p htsum))))))
+     (setq nlin 3.0)
+     (foreach l lines
+       (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
+     (setq nlin (+ nlin (* 6.0 *dchk-green-scale*)))
+     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+       (progn
+         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
+               h   (/ ref (* 1.66 nlin)))
+         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
+         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+       (setq h 2.5))
+     (setq ins (if minx
+                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+                 (list 0.0 0.0 0.0)))
+     (setq txt (strcat "DIMSCAN REPORT - " (dchk:datestr)
+                       "\\P"
+                       (dchk:small (strcat "Read-only scan - nothing in the drawing was changed. "
+                                           "Items needing attention are shown in "
+                                           (dchk:red "red") "."))))
+     (foreach pr hdr
+       (setq txt (strcat txt "\\P" (if (cdr pr) (dchk:red (car pr))
+                                     (dchk:small (car pr))))))
+     (setq txt (strcat txt "\\P" (dchk:small "----------------------------------------")))
+     (foreach l (reverse lines)
+       (setq txt (strcat txt "\\P" (if (dchk:attn-p l) (dchk:red l) (dchk:small l)))))
+     (dchk:mtext ins h (* *dchk-report-chars* h) txt *dchk-report-layer*)
+     (setvar "CMDECHO" oldecho)
+     (princ (strcat "\n--- DIMSCAN complete (read-only) ---"
+                    "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
+                    "\nArcs: " (itoa na) " scanned, " (itoa nabad) " with an unattached end"
+                    "\nOverlapping line pairs: " (itoa (length olaps))
+                    "\nSteps: " stepsum
+                    "\nLiner Material: " linersum
+                    (if htsum (strcat "\nOverall height: " htsum) "")
+                    "\nReport written on layer " *dchk-report-layer*
+                    "; nothing else was changed."))))
+  (princ))
+
+(princ "\ndimcheck.lsp loaded - DIMCHECK reviews dimensions & arcs one at a time,")
+(princ "\n  DIMSCAN reports everything read-only, DIMCHECKRESCUE undoes DIMCHECK's marks.")
 (princ)
