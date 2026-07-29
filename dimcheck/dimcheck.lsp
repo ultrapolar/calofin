@@ -53,9 +53,16 @@
 ;;;  5. STEP / STAIRCASE check. Groups of 3+ parallel lines stacked
 ;;;     less than 18 units apart (18" in inch drawings — tune
 ;;;     *dchk-step-maxgap*) look like steps. When such patterns are
-;;;     found, DIMCHECK first looks for a staircase SIDE VIEW in the
-;;;     selection (a side view reads as two step patterns at right
-;;;     angles to each other — treads + risers — in the same spot).
+;;;     found, DIMCHECK first looks for a SIDE VIEW in the selection
+;;;     (a side view reads as two step patterns at right angles to
+;;;     each other — treads + risers — in the same spot, each one
+;;;     marching along like a profile rather than sitting stacked).
+;;;     Benches count: their profile is only two treads deep, so
+;;;     side-view halves are found down to *dchk-bench-minlines*
+;;;     while the "are these steps?" prompt still needs a full-size
+;;;     *dchk-step-minlines* pattern. Whatever the side view belongs
+;;;     to — stairs or a bench — its overall height is confirmed
+;;;     against the Finished Wall Ht (see below).
 ;;;       - Side view found  -> steps are taken as real; skip ahead.
 ;;;       - No side view     -> each pattern is highlighted and you
 ;;;         are asked "Are these lines steps?". If any are, you are
@@ -130,6 +137,7 @@
 (setq *dchk-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
 (setq *dchk-step-maxgap*  18.0)    ; steps: max tread spacing (drawing units; 18 = 18" when 1 unit = 1")
 (setq *dchk-step-minlines* 3)      ; steps: how many stacked parallel lines look like steps
+(setq *dchk-bench-minlines* 2)     ; side view: a bench profile is only two treads deep
 (setq *dchk-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
 (setq *dchk-bead-layer*   "Bead Track") ; layer bead track must be drawn on
 (setq *dchk-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
@@ -501,11 +509,11 @@
     (setq out (append (reverse pre) (list r) rest)))
   out)
 
-(defun dchk:step-groups (lns / atol fams a placed recs pts p1 p2 dx dy
+(defun dchk:step-groups (lns minlines / atol fams a placed recs pts p1 p2 dx dy
                              off s1 s2 tmp cur chains gap groups e fam r)
-  ;; hunt for step-like patterns: *dchk-step-minlines* or more
-  ;; parallel LINEs stacked less than *dchk-step-maxgap* apart, each
-  ;; sideways-overlapping the one before it (like stair treads).
+  ;; hunt for step-like patterns: minlines or more parallel LINEs
+  ;; stacked less than *dchk-step-maxgap* apart, each sideways-
+  ;; overlapping the one before it (like stair treads).
   ;; Returns a list of groups, each (direction-angle ent ent ...)
   ;; ordered bottom tread to top.
   (setq atol   (* *dchk-step-angtol* (/ pi 180.0))
@@ -525,7 +533,7 @@
           (setq fams (cons (list a e) fams))))))
   ;; inside each family, sort by sideways offset and chain the stack
   (foreach fam fams
-    (if (>= (length (cdr fam)) *dchk-step-minlines*)
+    (if (>= (length (cdr fam)) minlines)
       (progn
         (setq a    (car fam)
               dx   (cos a)
@@ -570,13 +578,65 @@
                                 (caddr r)
                                 (car r))))
                (t                             ; stack broken
-                (if (>= (cadr cur) *dchk-step-minlines*)
+                (if (>= (cadr cur) minlines)
                   (setq chains (cons (cons a (reverse (car cur))) chains)))
                 (setq cur (list (list (cadddr r)) 1 (cadr r) (caddr r) (car r))))))))
-        (if (and cur (>= (cadr cur) *dchk-step-minlines*))
+        (if (and cur (>= (cadr cur) minlines))
           (setq chains (cons (cons a (reverse (car cur))) chains)))
         (setq groups (append groups (reverse chains))))))
   groups)
+
+(defun dchk:staircase-p (g / a dx dy recs e pts p1 p2 off s1 s2 tmp
+                           merged r prev sign d ov shorter ok)
+  ;; T when the group's members march along like a stair or bench
+  ;; profile - each tread shifted to the next, touching or barely
+  ;; overlapping it - rather than sitting squarely on top of one
+  ;; another like the two long sides of a rectangle, or nested like
+  ;; plan-view step outlines. This is what separates a real side
+  ;; view from any two parallel lines that happen to be close.
+  (setq a    (car g)
+        dx   (cos a)
+        dy   (sin a)
+        recs nil)
+  (foreach e (cdr g)
+    (if (entget e)
+      (progn
+        (setq pts (dchk:line-pts e)
+              p1  (car pts)
+              p2  (cadr pts)
+              off (- (* (cadr p1) dx) (* (car p1) dy))
+              s1  (+ (* (car p1) dx) (* (cadr p1) dy))
+              s2  (+ (* (car p2) dx) (* (cadr p2) dy)))
+        (if (> s1 s2) (setq tmp s1 s1 s2 s2 tmp))
+        (setq recs (cons (list off s1 s2) recs)))))
+  (setq recs   (dchk:sort-recs recs)
+        merged nil)
+  (foreach r recs                              ; fuse pieces of one tread
+    (if (and merged (<= (abs (- (car r) (caar merged))) *dchk-tol*))
+      (setq merged (cons (list (caar merged)
+                               (min (cadar merged) (cadr r))
+                               (max (caddar merged) (caddr r)))
+                         (cdr merged)))
+      (setq merged (cons r merged))))
+  (setq merged (reverse merged)
+        ok     (> (length merged) 1)
+        sign   0
+        prev   nil)
+  (foreach r merged
+    (if (and ok prev)
+      (progn
+        (setq ov      (- (min (caddr prev) (caddr r))
+                         (max (cadr prev) (cadr r)))
+              shorter (min (- (caddr prev) (cadr prev))
+                           (- (caddr r) (cadr r)))
+              d       (- (cadr r) (cadr prev)))
+        (cond
+          ((> ov (* 0.5 shorter)) (setq ok nil))    ; stacked, not stepped
+          ((<= (abs d) *dchk-tol*) (setq ok nil))   ; no march along
+          ((= sign 0) (setq sign (if (> d 0.0) 1 -1)))
+          ((/= sign (if (> d 0.0) 1 -1)) (setq ok nil)))))  ; direction flipped
+    (setq prev r))
+  ok)
 
 (defun dchk:pts-bbox (ents / xs ys pts e p)
   ;; ((minx miny) (maxx maxy)) over the endpoints of a list of LINEs
@@ -1142,7 +1202,7 @@
                       saved keep res n total lines ans
                       ndok ndflag ndmoved naok namoved nasnap
                       nomerged noflag noleft
-                      sgroups svgroups pgroups g1 g2 stepsp svmode
+                      sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong liners linerbadw linernostep bad w bn bh bp
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
@@ -1305,7 +1365,12 @@
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))))
 
         ;; --- step / staircase check ---------------------------------
-        (setq sgroups  (dchk:step-groups lns)
+        ;; hunt down to the bench minimum so a two-tread bench profile
+        ;; is still found; the staircase test below keeps the extra
+        ;; short groups from being mistaken for side views
+        (setq sgroups  (dchk:step-groups
+                         lns
+                         (min *dchk-step-minlines* *dchk-bench-minlines*))
               svgroups nil
               stepsp   nil
               svmode   nil
@@ -1314,7 +1379,8 @@
               bgroups  nil)
         ;; a staircase side view reads as two step patterns at right
         ;; angles to each other (treads + risers) in the same spot
-        (setq rest sgroups)
+        (setq scand (vl-remove-if-not 'dchk:staircase-p sgroups))
+        (setq rest scand)
         (while rest
           (setq g1 (car rest))
           (foreach g2 (cdr rest)
@@ -1326,7 +1392,13 @@
                 (if (not (member g1 svgroups)) (setq svgroups (cons g1 svgroups)))
                 (if (not (member g2 svgroups)) (setq svgroups (cons g2 svgroups))))))
           (setq rest (cdr rest)))
-        (setq pgroups (vl-remove-if '(lambda (g) (member g svgroups)) sgroups))
+        ;; only full-size patterns are worth asking about; the short
+        ;; bench-sized ones matter solely as side-view halves
+        (setq pgroups (vl-remove-if
+                        '(lambda (g)
+                           (or (member g svgroups)
+                               (< (length (cdr g)) *dchk-step-minlines*)))
+                        sgroups))
         (cond
           (svgroups                           ; staircase drawing found
            (setq stepsp  T
