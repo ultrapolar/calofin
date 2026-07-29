@@ -185,6 +185,7 @@
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
 (setq *dchk-constr-color* 2)       ; yellow
 (setq *dchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
+(setq *dchk-block-depth*  3)       ; how many levels of nested blocks to search for names/text
 (setq *dchk-fgstep-words*          ; a fiberglass step shows up under any of these
       '("Fiberglass Step" "FG Step"))
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -562,11 +563,6 @@
                 (vlax-curve-getStartPoint ent)))
   (dchk:rebuild-arc ent which other mid target))
 
-(defun dchk:line-pts (ent / ed)
-  ;; a LINE's two endpoints (WCS)
-  (setq ed (entget ent))
-  (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
-
 (defun dchk:unit (v / l)
   ;; v scaled to length 1; nil for a (near-)zero vector
   (setq l (distance '(0.0 0.0 0.0) v))
@@ -586,17 +582,15 @@
   (setq s (dchk:proj-param p a u))
   (distance p (dchk:axis-pt a u s)))
 
-(defun dchk:overlap-info (la lb / pa pb a1 a2 b1 b2 u lena s1 s2 tmp lo hi)
-  ;; when LINEs la and lb are collinear (within *dchk-olap-fuzz*) and
-  ;; run on top of each other for more than *dchk-tol*, returns
+(defun dchk:overlap-info (la lb / a1 a2 b1 b2 u lena s1 s2 tmp lo hi)
+  ;; when segments la and lb are collinear (within *dchk-olap-fuzz*)
+  ;; and run on top of each other for more than *dchk-tol*, returns
   ;;   (ov-start ov-end ov-length union-start union-end)
   ;; nil when they do not overlap (touching end-to-end is fine)
-  (setq pa (dchk:line-pts la)
-        a1 (car pa)
-        a2 (cadr pa)
-        pb (dchk:line-pts lb)
-        b1 (car pb)
-        b2 (cadr pb)
+  (setq a1 (dchk:seg-p1 la)
+        a2 (dchk:seg-p2 la)
+        b1 (dchk:seg-p1 lb)
+        b2 (dchk:seg-p2 lb)
         u  (dchk:unit (mapcar '- a2 a1)))
   (if (and u
            (<= (dchk:pt-line-dist b1 a1 u) *dchk-olap-fuzz*)
@@ -616,20 +610,172 @@
               (dchk:axis-pt a1 u (max lena s2)))))))
 
 (defun dchk:merge-lines (la lb info / ed)
-  ;; stretch la over the union of both lines, delete lb
-  (setq ed (entget la)
+  ;; stretch la's LINE over the union of both, delete lb's LINE
+  (setq ed (entget (dchk:seg-ent la))
         ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
         ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
   (entmod ed)
-  (entupd la)
-  (entdel lb))
+  (entupd (dchk:seg-ent la))
+  (entdel (dchk:seg-ent lb)))
+
+(defun dchk:whole-line-p (s / ed)
+  ;; T when the segment IS its owner entity - only whole LINEs can be
+  ;; merged; a polyline edge has to be fixed by hand
+  (setq ed (entget (dchk:seg-ent s)))
+  (= "LINE" (cdr (assoc 0 ed))))
+
+(defun dchk:find-overlaps (segs / atol fams a placed fam recs e p1 p2 dx dy
+                                off s1 s2 tmp rest r q pairs seen key)
+  ;; every overlapping segment pair, without comparing all pairs:
+  ;; segments are bucketed by direction, then swept in offset order so
+  ;; only genuinely collinear neighbours are ever tested. Segments of
+  ;; the same entity are skipped (a polyline meeting itself is not a
+  ;; duplicate), as are pairs already found through another segment.
+  (setq atol  (* 0.5 (/ pi 180.0))              ; 0.5 deg is ample at this fuzz
+        fams  nil
+        pairs nil
+        seen  nil)
+  (foreach e segs
+    (setq a      (dchk:seg-dir-ang e)
+          placed nil)
+    (foreach fam fams
+      (if (and (not placed)
+               (or (<= (dchk:ang-diff a (car fam)) atol)))
+        (setq fams   (subst (cons (car fam) (cons e (cdr fam))) fam fams)
+              placed T)))
+    (if (not placed) (setq fams (cons (list a e) fams))))
+  (foreach fam fams
+    (if (cdr (cdr fam))                          ; two or more to compare
+      (progn
+        (setq a  (car fam)
+              dx (cos a)
+              dy (sin a)
+              recs nil)
+        (foreach e (cdr fam)
+          (setq p1  (dchk:seg-p1 e)
+                p2  (dchk:seg-p2 e)
+                off (- (* (cadr p1) dx) (* (car p1) dy))
+                s1  (+ (* (car p1) dx) (* (cadr p1) dy))
+                s2  (+ (* (car p2) dx) (* (cadr p2) dy)))
+          (if (> s1 s2) (setq tmp s1 s1 s2 s2 tmp))
+          (setq recs (cons (list off s1 s2 e) recs)))
+        (setq recs (dchk:sort-recs recs))
+        ;; sorted by offset: only sweep forward while still collinear
+        (while recs
+          (setq r    (car recs)
+                rest (cdr recs))
+          (while (and rest
+                      (<= (- (car (car rest)) (car r)) *dchk-olap-fuzz*))
+            (setq q (car rest))
+            (if (and (not (eq (dchk:seg-ent (cadddr r))
+                              (dchk:seg-ent (cadddr q))))
+                     ;; spans must actually meet before the exact test
+                     (> (min (caddr r) (caddr q)) (max (cadr r) (cadr q)))
+                     (dchk:overlap-info (cadddr r) (cadddr q)))
+              (progn
+                (setq key (list (dchk:seg-ent (cadddr r))
+                                (dchk:seg-ent (cadddr q))))
+                (if (not (member key seen))
+                  (setq seen  (cons key (cons (reverse key) seen))
+                        pairs (cons (list (cadddr r) (cadddr q)) pairs)))))
+            (setq rest (cdr rest)))
+          (setq recs (cdr recs))))))
+  (reverse pairs))
 
 ;; --- step pattern detection ----------------------------------------
 
-(defun dchk:line-dir-ang (ent / pts a)
-  ;; direction of a LINE folded into [0, pi)
-  (setq pts (dchk:line-pts ent)
-        a   (angle (car pts) (cadr pts)))
+;; --- segments: lines AND polyline edges ----------------------------
+;; Detection works on "segs" - (start end owner-entity) records - so a
+;; side view or a run of steps drawn as one polyline counts exactly
+;; like the same shape drawn as separate LINEs.
+
+(defun dchk:seg-p1 (s) (car s))
+(defun dchk:seg-p2 (s) (cadr s))
+(defun dchk:seg-ent (s) (caddr s))
+
+(defun dchk:ocs->wcs (p nz)
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1e-9))) (trans p nz 0) p))
+
+(defun dchk:lwpoly-segs (ent / ed nz elev vs bl cls n i segs g)
+  ;; straight edges of an LWPOLYLINE; bulged (arc) edges are skipped
+  (setq ed   (entget ent)
+        nz   (cdr (assoc 210 ed))
+        elev (cdr (assoc 38 ed))
+        cls  (= 1 (logand 1 (cdr (assoc 70 ed))))
+        vs   nil
+        bl   nil)
+  (if (null elev) (setq elev 0.0))
+  (foreach g ed
+    (cond
+      ((= 10 (car g))
+       (setq vs (cons (dchk:ocs->wcs (list (car (cdr g)) (cadr (cdr g)) elev) nz) vs)
+             bl (cons 0.0 bl)))
+      ((= 42 (car g))
+       (if bl (setq bl (cons (cdr g) (cdr bl)))))))
+  (setq vs (reverse vs)
+        bl (reverse bl)
+        n  (length vs)
+        i  0)
+  (while (< i (1- n))
+    (if (equal 0.0 (nth i bl) 1e-12)
+      (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
+    (setq i (1+ i)))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+    (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
+  segs)
+
+(defun dchk:heavy-poly-segs (ent / e ed vs bl cls n i segs)
+  ;; straight edges of an old-style POLYLINE (VERTEX entities)
+  (setq cls (= 1 (logand 1 (cdr (assoc 70 (entget ent)))))
+        e   (entnext ent)
+        vs  nil
+        bl  nil)
+  (while (and e (= "VERTEX" (cdr (assoc 0 (setq ed (entget e))))))
+    (if (zerop (logand 16 (cdr (assoc 70 ed))))    ; skip spline frame points
+      (setq vs (cons (cdr (assoc 10 ed)) vs)
+            bl (cons (if (assoc 42 ed) (cdr (assoc 42 ed)) 0.0) bl)))
+    (setq e (entnext e)))
+  (setq vs (reverse vs)
+        bl (reverse bl)
+        n  (length vs)
+        i  0)
+  (while (< i (1- n))
+    (if (equal 0.0 (nth i bl) 1e-12)
+      (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
+    (setq i (1+ i)))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+    (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
+  segs)
+
+(defun dchk:ent-segs (ent / ed et)
+  ;; every straight segment an entity contributes, in WCS
+  (setq ed (entget ent)
+        et (cdr (assoc 0 ed)))
+  (cond
+    ((= et "LINE")       (list (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) ent)))
+    ((= et "LWPOLYLINE") (dchk:lwpoly-segs ent))
+    ((= et "POLYLINE")   (dchk:heavy-poly-segs ent))))
+
+(defun dchk:collect-segs (ents / segs e s)
+  ;; all straight segments of a list of entities, longer than the
+  ;; attachment tolerance (zero-length stubs help nothing)
+  (foreach e ents
+    (if (entget e)
+      (foreach s (dchk:ent-segs e)
+        (if (> (distance (car s) (cadr s)) *dchk-tol*)
+          (setq segs (cons s segs))))))
+  (reverse segs))
+
+(defun dchk:group-ents (g / out e s)
+  ;; the distinct entities a group's segments belong to
+  (foreach s (cdr g)
+    (setq e (dchk:seg-ent s))
+    (if (not (member e out)) (setq out (cons e out))))
+  (reverse out))
+
+(defun dchk:seg-dir-ang (s / a)
+  ;; segment direction folded into [0, pi)
+  (setq a (angle (dchk:seg-p1 s) (dchk:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
 (defun dchk:ang-diff (a b / d)
@@ -659,18 +805,17 @@
   (setq atol   (* *dchk-step-angtol* (/ pi 180.0))
         fams   nil
         groups nil)
-  ;; bucket the lines into parallel families
+  ;; bucket the segments into parallel families
   (foreach e lns
-    (if (entget e)
-      (progn
-        (setq a      (dchk:line-dir-ang e)
-              placed nil)
-        (foreach fam fams
-          (if (and (not placed) (<= (dchk:ang-diff a (car fam)) atol))
-            (setq fams   (subst (cons (car fam) (cons e (cdr fam))) fam fams)
-                  placed T)))
-        (if (not placed)
-          (setq fams (cons (list a e) fams))))))
+    (progn
+      (setq a      (dchk:seg-dir-ang e)
+            placed nil)
+      (foreach fam fams
+        (if (and (not placed) (<= (dchk:ang-diff a (car fam)) atol))
+          (setq fams   (subst (cons (car fam) (cons e (cdr fam))) fam fams)
+                placed T)))
+      (if (not placed)
+        (setq fams (cons (list a e) fams)))))
   ;; inside each family, sort by sideways offset and chain the stack
   (foreach fam fams
     (if (>= (length (cdr fam)) minlines)
@@ -680,9 +825,8 @@
               dy   (sin a)
               recs nil)
         (foreach e (cdr fam)
-          (setq pts (dchk:line-pts e)
-                p1  (car pts)
-                p2  (cadr pts)
+          (setq p1  (dchk:seg-p1 e)
+                p2  (dchk:seg-p2 e)
                 off (- (* (cadr p1) dx) (* (car p1) dy))
                 s1  (+ (* (car p1) dx) (* (cadr p1) dy))
                 s2  (+ (* (car p2) dx) (* (cadr p2) dy)))
@@ -739,16 +883,13 @@
         dy   (sin a)
         recs nil)
   (foreach e (cdr g)
-    (if (entget e)
-      (progn
-        (setq pts (dchk:line-pts e)
-              p1  (car pts)
-              p2  (cadr pts)
-              off (- (* (cadr p1) dx) (* (car p1) dy))
-              s1  (+ (* (car p1) dx) (* (cadr p1) dy))
-              s2  (+ (* (car p2) dx) (* (cadr p2) dy)))
-        (if (> s1 s2) (setq tmp s1 s1 s2 s2 tmp))
-        (setq recs (cons (list off s1 s2) recs)))))
+    (setq p1  (dchk:seg-p1 e)
+          p2  (dchk:seg-p2 e)
+          off (- (* (cadr p1) dx) (* (car p1) dy))
+          s1  (+ (* (car p1) dx) (* (cadr p1) dy))
+          s2  (+ (* (car p2) dx) (* (cadr p2) dy)))
+    (if (> s1 s2) (setq tmp s1 s1 s2 s2 tmp))
+    (setq recs (cons (list off s1 s2) recs)))
   (setq recs   (dchk:sort-recs recs)
         merged nil)
   (foreach r recs                              ; fuse pieces of one tread
@@ -778,16 +919,13 @@
     (setq prev r))
   ok)
 
-(defun dchk:pts-bbox (ents / xs ys pts e p)
-  ;; ((minx miny) (maxx maxy)) over the endpoints of a list of LINEs
+(defun dchk:pts-bbox (segs / xs ys e p)
+  ;; ((minx miny) (maxx maxy)) over the endpoints of a list of segments
   (setq xs nil ys nil)
-  (foreach e ents
-    (if (entget e)
-      (progn
-        (setq pts (dchk:line-pts e))
-        (foreach p pts
-          (setq xs (cons (car p) xs)
-                ys (cons (cadr p) ys))))))
+  (foreach e segs
+    (foreach p (list (dchk:seg-p1 e) (dchk:seg-p2 e))
+      (setq xs (cons (car p) xs)
+            ys (cons (cadr p) ys))))
   (if xs
     (list (list (apply 'min xs) (apply 'min ys))
           (list (apply 'max xs) (apply 'max ys)))))
@@ -845,18 +983,10 @@
     (cdr (assoc 2 (entget ent)))
     res))
 
-(defun dchk:ins-texts (ent / ed lst e et g)
-  ;; every piece of text an INSERT shows: its attribute values plus
-  ;; TEXT/MTEXT/ATTDEF inside the block definition (one level deep)
-  (setq ed  (entget ent)
-        lst nil)
-  (if (= 1 (cdr (assoc 66 ed)))               ; attributes follow
-    (progn
-      (setq e (entnext ent))
-      (while (and e (= "ATTRIB" (cdr (assoc 0 (entget e)))))
-        (setq lst (cons (cdr (assoc 1 (entget e))) lst)
-              e   (entnext e)))))
-  (setq e (tblobjname "BLOCK" (cdr (assoc 2 ed))))
+(defun dchk:blockdef-texts (bname depth / lst e et g)
+  ;; TEXT/MTEXT/ATTDEF inside a block definition, following nested
+  ;; blocks down to depth so a title wrapped in a wrapper is found
+  (setq e (tblobjname "BLOCK" bname))
   (if e
     (progn
       (setq e (entnext e))
@@ -867,9 +997,55 @@
           ((= et "MTEXT")
            (foreach g (entget e)
              (if (member (car g) '(1 3))
-               (setq lst (cons (cdr g) lst))))))
+               (setq lst (cons (cdr g) lst)))))
+          ((and (= et "INSERT") (> depth 1))
+           (setq lst (cons (cdr (assoc 2 (entget e))) lst)  ; nested block NAME
+                 lst (append (dchk:blockdef-texts (cdr (assoc 2 (entget e)))
+                                                  (1- depth))
+                             lst))))
         (setq e (entnext e)))))
   lst)
+
+(defun dchk:ins-texts (ent / ed lst e)
+  ;; every piece of text an INSERT shows: its attribute values plus
+  ;; the text inside its block definition, nested blocks included
+  (setq ed  (entget ent)
+        lst nil)
+  (if (= 1 (cdr (assoc 66 ed)))               ; attributes follow
+    (progn
+      (setq e (entnext ent))
+      (while (and e (= "ATTRIB" (cdr (assoc 0 (entget e)))))
+        (setq lst (cons (cdr (assoc 1 (entget e))) lst)
+              e   (entnext e)))))
+  (append lst (dchk:blockdef-texts (cdr (assoc 2 ed)) *dchk-block-depth*)))
+
+(defun dchk:ins-attrib-deep (ent tag / val s)
+  ;; the tag's value on the INSERT, or on a block nested inside it
+  (setq val (dchk:ins-attrib ent tag))
+  (if val
+    val
+    (foreach s (dchk:blockdef-texts (cdr (assoc 2 (entget ent)))
+                                    *dchk-block-depth*)
+      (if (and (null val)
+               (wcmatch (dchk:squash s) (strcat "*" (dchk:squash tag) "*")))
+        (setq val s)))))
+
+(defun dchk:block-has-layer-p (bname layer depth / e et found)
+  ;; does the block definition (or a block it nests, down to depth)
+  ;; draw anything on the given layer?
+  (setq e (tblobjname "BLOCK" bname))
+  (if e
+    (progn
+      (setq e (entnext e))
+      (while (and e (not found)
+                  (/= "ENDBLK" (setq et (cdr (assoc 0 (entget e))))))
+        (if (= (strcase (cdr (assoc 8 (entget e)))) (strcase layer))
+          (setq found T))
+        (if (and (not found) (= et "INSERT") (> depth 1))
+          (if (dchk:block-has-layer-p (cdr (assoc 2 (entget e))) layer (1- depth))
+            (setq found T)))
+        (setq e (entnext e)))))
+  found)
 
 (defun dchk:ins-matches (ent phrase / pat found s)
   ;; T when the INSERT's (effective) name or any text it shows
@@ -1356,50 +1532,70 @@
 
 ;; --- overlapping line review ---------------------------------------
 
-(defun dchk:review-olap (la lb num total / info h1 h2 lay1 lay2 label ans)
-  ;; interactive review of one overlapping LINE pair.
+(defun dchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
+                                           ans mergeable kinds)
+  ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
   ;; action is merged / flagged / left and ents keep their cyan.
-  (if (and (entget la) (entget lb) (setq info (dchk:overlap-info la lb)))
+  (setq ea (dchk:seg-ent la)
+        eb (dchk:seg-ent lb))
+  (if (and (entget ea) (entget eb) (setq info (dchk:overlap-info la lb)))
     (progn
-      (setq h1    (cdr (assoc 5 (entget la)))
-            h2    (cdr (assoc 5 (entget lb)))
-            lay1  (cdr (assoc 8 (entget la)))
-            lay2  (cdr (assoc 8 (entget lb)))
-            label (strcat h1 "+" h2 " (overlap " (rtos (caddr info)) ")"))
-      (dchk:zoom-2ents la lb)
-      (redraw la 3)
-      (redraw lb 3)
+      (setq h1        (cdr (assoc 5 (entget ea)))
+            h2        (cdr (assoc 5 (entget eb)))
+            lay1      (cdr (assoc 8 (entget ea)))
+            lay2      (cdr (assoc 8 (entget eb)))
+            mergeable (and (dchk:whole-line-p la)
+                           (dchk:whole-line-p lb)
+                           (= (strcase lay1) (strcase lay2)))
+            kinds     (if (and (dchk:whole-line-p la) (dchk:whole-line-p lb))
+                        "lines"
+                        "segments")
+            label     (strcat h1 "+" h2 " (overlap " (rtos (caddr info)) ")"))
+      (dchk:zoom-2ents ea eb)
+      (redraw ea 3)
+      (redraw eb 3)
       (dchk:mark-point (car info))
       (dchk:mark-point (cadr info))
       (princ (strcat "\n\nOverlap " (itoa num) " of " (itoa total)
-                     ": lines " h1 " + " h2
+                     ": " kinds " " h1 " + " h2
                      " run on top of each other for " (rtos (caddr info)) "."))
-      (initget "Merge Flag Leave")
-      (setq ans (getkword
-                  "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: "))
-      (if (null ans) (setq ans "Merge"))
-      (redraw la 4)
-      (redraw lb 4)
+      (if mergeable
+        (progn
+          (initget "Merge Flag Leave")
+          (setq ans (getkword
+                      "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: "))
+          (if (null ans) (setq ans "Merge")))
+        (progn
+          (princ (if (= (strcase lay1) (strcase lay2))
+                   "\n  (Polyline edge - cannot be merged automatically.)"
+                   (strcat "\n  (Different layers: " lay1 " / " lay2
+                           " - cannot be merged automatically.)")))
+          (initget "Flag Leave")
+          (setq ans (getkword
+                      "\n  Flag to fix, or Leave as is? [Flag/Leave] <Flag>: "))
+          (if (null ans) (setq ans "Flag"))))
+      (redraw ea 4)
+      (redraw eb 4)
       (redraw)
       (cond
-        ((and (= ans "Merge") (= (strcase lay1) (strcase lay2)))
-         (dchk:merge-lines la lb info)
-         (dchk:set-color la *dchk-olap-color*)
-         (princ "\n  Merged into one line (cyan).")
-         (list label "merged into one line (cyan)" 'merged la))
         ((= ans "Merge")
-         (dchk:set-color la *dchk-olap-color*)
-         (dchk:set-color lb *dchk-olap-color*)
-         (princ (strcat "\n  Lines sit on different layers (" lay1 " / " lay2
-                        ") - flagged to fix (cyan) instead of merging."))
-         (list label "different layers - flagged to fix (cyan)" 'flagged la lb))
+         (dchk:merge-lines la lb info)
+         (dchk:set-color ea *dchk-olap-color*)
+         (princ "\n  Merged into one line (cyan).")
+         (list label "merged into one line (cyan)" 'merged ea))
         ((= ans "Flag")
-         (dchk:set-color la *dchk-olap-color*)
-         (dchk:set-color lb *dchk-olap-color*)
+         (dchk:set-color ea *dchk-olap-color*)
+         (dchk:set-color eb *dchk-olap-color*)
          (princ "\n  Flagged to fix (cyan).")
-         (list label "flagged to fix (cyan)" 'flagged la lb))
+         (list label
+               (if (dchk:whole-line-p la)
+                 (if (= (strcase lay1) (strcase lay2))
+                   "flagged to fix (cyan)"
+                   "different layers - flagged to fix (cyan)")
+                 "polyline edge - flagged to fix (cyan)")
+               'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
          (list label "left as drawn" 'left))))))
@@ -1407,7 +1603,7 @@
 ;; --- command -------------------------------------------------------
 
 (defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
-                      cands dims arcs lns blks olaps rest e1 e2 pr
+                      cands dims arcs lns plns segs blks olaps rest e1 e2 pr
                       saved keep res n total lines ans
                       ndok ndflag ndmoved naok namoved nasnap
                       nomerged noflag noleft
@@ -1443,7 +1639,7 @@
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
     (t
-     (setq cands nil dims nil arcs nil lns nil blks nil
+     (setq cands nil dims nil arcs nil lns nil blks nil segs nil
            saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 naok 0 namoved 0 nasnap 0
            nomerged 0 noflag 0 noleft 0)
@@ -1454,15 +1650,21 @@
        (if (= et "DIMENSION") (setq dims (cons e dims)))
        (if (= et "ARC") (setq arcs (cons e arcs)))
        (if (= et "LINE") (setq lns (cons e lns)))
+       (if (member et '("LINE" "LWPOLYLINE" "POLYLINE"))
+         (setq plns (cons e plns)))
        (if (= et "INSERT") (setq blks (cons e blks)))
        (if (member et *dchk-curve-types*) (setq cands (cons e cands))))
      (setq dims  (reverse dims)
            arcs  (reverse arcs)
            lns   (reverse lns)
+           plns  (reverse plns)
            blks  (reverse blks)
-           cands (reverse cands))
+           cands (reverse cands)
+           ;; detection runs on segments, so a run of steps or a side
+           ;; view drawn as one polyline counts like separate lines
+           segs  (dchk:collect-segs plns))
      (cond
-       ((and (null dims) (null arcs) (< (length lns) 2) (null blks))
+       ((and (null dims) (null arcs) (< (length segs) 2) (null blks))
         (prompt "\nSelection holds no dimensions, arcs, lines, or blocks to check - nothing to do."))
        (t
         (setq oldecho (getvar "CMDECHO"))
@@ -1572,32 +1774,26 @@
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
         ;; --- overlapping lines, one pair at a time ------------------
-        (setq olaps nil
-              rest  lns)
-        (while rest
-          (setq e1   (car rest)
-                rest (cdr rest))
-          (foreach e2 rest
-            (if (dchk:overlap-info e1 e2)
-              (setq olaps (cons (list e1 e2) olaps)))))
-        (setq olaps (reverse olaps))
+        (setq olaps (dchk:find-overlaps segs))
         (if olaps
           (princ (strcat "\n--- Reviewing " (itoa (length olaps))
                          " overlapping line pair(s): Enter = merge, F = flag, L = leave ---")))
         (setq n 0 total (length olaps))
         (foreach pr olaps
-          (setq n (1+ n))
-          (dchk:stage (car pr) saved keep)
-          (dchk:stage (cadr pr) saved keep)
+          (setq n  (1+ n)
+                e1 (dchk:seg-ent (car pr))
+                e2 (dchk:seg-ent (cadr pr)))
+          (dchk:stage e1 saved keep)
+          (dchk:stage e2 saved keep)
           (setq res (dchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (dchk:unstage (car pr) keep)
-             (dchk:unstage (cadr pr) keep))
+             (dchk:unstage e1 keep)
+             (dchk:unstage e2 keep))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (dchk:unstage (car pr) keep)
-             (dchk:unstage (cadr pr) keep)
+             (dchk:unstage e1 keep)
+             (dchk:unstage e2 keep)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -1611,7 +1807,7 @@
         ;; is still found; the staircase test below keeps the extra
         ;; short groups from being mistaken for side views
         (setq sgroups  (dchk:step-groups
-                         lns
+                         segs
                          (min *dchk-step-minlines* *dchk-bench-minlines*))
               svgroups nil
               stepsp   nil
@@ -1660,16 +1856,16 @@
            (setq n 0 total (length pgroups))
            (foreach g pgroups
              (setq n (1+ n))
-             (foreach e (cdr g) (dchk:stage e saved keep))
+             (foreach e (dchk:group-ents g) (dchk:stage e saved keep))
              (dchk:zoom-box (dchk:pts-bbox (cdr g)))
-             (foreach e (cdr g) (if (entget e) (redraw e 3)))
+             (foreach e (dchk:group-ents g) (if (entget e) (redraw e 3)))
              (princ (strcat "\n\nStep pattern " (itoa n) " of " (itoa total) ": "
                             (itoa (length (cdr g)))
                             " parallel lines stacked less than "
                             (rtos *dchk-step-maxgap*) " apart."))
              (setq ans (dchk:ask-yn "\n  Are these lines steps?"))
-             (foreach e (cdr g) (if (entget e) (redraw e 4)))
-             (foreach e (cdr g) (dchk:unstage e keep))
+             (foreach e (dchk:group-ents g) (if (entget e) (redraw e 4)))
+             (foreach e (dchk:group-ents g) (dchk:unstage e keep))
              (redraw)
              (if ans
                (setq stepsp  T
@@ -1746,6 +1942,20 @@
                 (setq bb (dchk:bbox (ssname beadss i))
                       i  (1+ i))
                 (if bb (setq beadbbs (cons bb beadbbs)))))
+            ;; bead track drawn INSIDE a block never lands in that
+            ;; layer filter, so take the box of any insert whose
+            ;; definition carries the layer
+            (setq beadss (ssget "_X" '((0 . "INSERT")))
+                  i      0)
+            (if beadss
+              (repeat (sslength beadss)
+                (setq b (ssname beadss i)
+                      i (1+ i))
+                (if (dchk:block-has-layer-p (cdr (assoc 2 (entget b)))
+                                            *dchk-bead-layer* 2)
+                  (progn
+                    (setq bb (dchk:bbox b))
+                    (if bb (setq beadbbs (cons bb beadbbs)))))))
             (foreach g bgroups
               (setq gbb (dchk:pts-bbox (cdr g)))
               (if (and gbb beadbbs (dchk:bead-near-p gbb beadbbs))
@@ -1830,7 +2040,7 @@
                                               " - CHECK THE WALL HEIGHT (nearest one used)")
                                       lines))))))
             (if tins
-              (setq wallraw  (dchk:ins-attrib tins *dchk-wallht-tag*)
+              (setq wallraw  (dchk:ins-attrib-deep tins *dchk-wallht-tag*)
                     wallvals (if wallraw (dchk:len-values wallraw))
                     wallvar  (and wallraw (dchk:varies-p wallraw))
                     wallmany (> (length wallvals) 1)
