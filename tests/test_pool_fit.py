@@ -845,8 +845,13 @@ def test_lisp_file_is_well_formed():
     called = set(re.findall(r"\((pf:[a-z0-9-]+)", src))
     missing = called - defined
     assert not missing, "abhd.lsp calls undefined: %s" % sorted(missing)
-    for cmd in ("c:ABHD", "c:ABHDTEST"):
-        assert cmd in defined, "abhd.lsp no longer defines %s" % cmd
+    dead = defined - called - {"c:ABHD"}
+    assert not dead, "abhd.lsp defines but never calls: %s" % sorted(dead)
+    assert "c:ABHD" in defined, "abhd.lsp no longer defines c:ABHD"
+    # the pieces the interactive flow depends on
+    for fn in ("pf:compare", "pf:build", "pf:guided-fit", "pf:unheld",
+               "pf:mark-unheld", "pf:report"):
+        assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
 

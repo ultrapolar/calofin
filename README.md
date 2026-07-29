@@ -7,7 +7,7 @@ AutoCAD AutoLISP routine for working between Blender and CAD:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| ABHD (AutoLISP, AutoCAD 2018+) | `pool_fit_lisp/` | Builds a smooth closed polyline of long arcs running point-to-point, joints within 8° of tangent, as few curves as possible, radii snapped to feet/half-feet/inches, optional curve cap — through pool-edge survey points, guided by a drawn perimeter, a connect-the-dots sketch, or the points alone — see `pool_fit_lisp/README.md` |
+| ABHD (AutoLISP, AutoCAD 2018+) | `pool_fit_lisp/` | Builds a smooth closed polyline of long arcs running point-to-point, joints within 8° of tangent, as few curves as possible, radii snapped to feet/half-feet/inches, optional curve cap — through pool-edge survey points, guided by a drawn perimeter, a connect-the-dots sketch, or the points alone. Offers three candidate fits in colour to pick from and rings the points it could not hold — see `pool_fit_lisp/README.md` |
 
 ## Installation (either add-on)
 
@@ -183,9 +183,8 @@ height/lowest-object classification rules.
 `pool_fit_lisp/abhd.lsp` (which itself only runs inside AutoCAD): same
 algorithm, same constants, so the geometry can be regression tested on
 a workstation. It also lints the LISP — parenthesis balance, undefined
-calls, and whether the tuning constants in both files still agree.
-Inside AutoCAD, the `ABHDTEST` command runs the equivalent checks
-against the real interpreter.
+or unused functions, and whether the tuning constants in both files
+still agree.
 
 ## License
 

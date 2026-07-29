@@ -102,6 +102,15 @@
                                     ; points; the block's insertion point
                                     ; is taken as the point location
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the fitted polyline goes on
+(setq *PF-MISS-LAYER*   "POOL-MISS"); layer the "could not hold this
+                                    ; point" markers go on
+(setq *PF-COMPARE*                  ; the three candidate fits offered:
+  '((0.5 1 "red"    "tighter - hugs the points")
+    (1.0 2 "yellow" "as asked")
+    (2.0 4 "cyan"   "looser - fewer curves")))
+                                    ; (tolerance factor, AutoCAD colour,
+                                    ; colour name, description).  Edit
+                                    ; the factors to change the spread.
 (setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units)
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
                                     ; points by more than this, split it
@@ -1108,11 +1117,11 @@
 ;; Create the output layer, or - when it already exists - make sure it
 ;; is on, thawed and unlocked.  Without this a successful run onto a
 ;; frozen or switched-off layer looks like the command did nothing.
-(defun pf:ensure-layer (name / rec ed flags col fixed)
+(defun pf:ensure-layer (name colour / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
     (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                     '(100 . "AcDbLayerTableRecord")
-                    (cons 2 name) '(70 . 0) '(62 . 3)
+                    (cons 2 name) '(70 . 0) (cons 62 colour)
                     '(6 . "Continuous")))
     (progn
       (setq rec   (tblobjname "LAYER" name)
@@ -1150,31 +1159,77 @@
       (if (< (abs (- q (fix (+ q 0.5)))) 1.0e-6) (setq found T))))
   found)
 
-(defun pf:make-pline (verts layer / dxf v)
-  ;; verts: list of (pt bulge) in order, closed
+;; verts: list of (pt bulge) in order, closed.  COL is an AutoCAD
+;; colour index, or nil for BYLAYER.
+(defun pf:make-pline (verts layer col / dxf v)
   (setq dxf (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
-                  (cons 8 layer) '(100 . "AcDbPolyline")
-                  (cons 90 (length verts)) '(70 . 1)))
+                  (cons 8 layer)))
+  (if col (setq dxf (append dxf (list (cons 62 col)))))
+  (setq dxf (append dxf (list '(100 . "AcDbPolyline")
+                              (cons 90 (length verts)) '(70 . 1))))
   (foreach v verts
     (setq dxf (append dxf (list (cons 10 (car v)) (cons 42 (cadr v))))))
   (entmakex dxf))
 
-;; Draw the fitted polyline and print the hit report.  ALLOW is the
-;; run's miss allowance (how many points were permitted to sit between
-;; *PF-ON-EPS* and the tolerance off the result).
-(defun pf:finish (newsegs pts tol allow / prior nl na hiton hitok miss
-                                          q s s2 d dmin worst nice
-                                          onpt inner ns i te ts kk mk
-                                          nk pf-on-eps)
-  ;; report against the same on-the-shape threshold the fit used
-  (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol))
-        prior     (pf:prior-fits))
-  (pf:ensure-layer *PF-OUT-LAYER*)
-  (if (null (pf:make-pline
-              (mapcar '(lambda (s) (list (car s) (caddr s))) newsegs)
-              *PF-OUT-LAYER*))
-    (princ "\nABHD: could not create the polyline - is the drawing read-only?")
+;; Put an entity's colour back to BYLAYER (used on the fit the user
+;; keeps, so the preview colours do not linger in the drawing).
+(defun pf:set-bylayer (en / ed)
+  (setq ed (entget en))
+  (if (assoc 62 ed) (entmod (subst '(62 . 256) (assoc 62 ed) ed))))
+
+;; Pad S with spaces to width W, for the comparison table.
+(defun pf:pad (s w)
+  (while (< (strlen s) w) (setq s (strcat s " ")))
+  s)
+
+;; The points SEGS fails to hold within TOL.
+(defun pf:unheld (segs pts tol / out q s d dmin)
+  (setq out nil)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (pf:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (> dmin tol) (setq out (cons q out))))
+  (reverse out))
+
+;; List membership by position, within the exact-point fuzz.
+(defun pf:memb (q lst / found p)
+  (setq found nil)
+  (foreach p lst
+    (if (< (pf:dist p q) *PF-EXACT-EPS*) (setq found T)))
+  found)
+
+(defun pf:isect (a b / out q)
+  (setq out nil)
+  (foreach q a
+    (if (pf:memb q b) (setq out (cons q out))))
+  (reverse out))
+
+;; Ring every point the chosen fit could not hold, on its own layer,
+;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
+;; a real feature the tolerance is too tight for.
+(defun pf:mark-unheld (bad tol / r q)
+  (if bad
     (progn
+      (pf:ensure-layer *PF-MISS-LAYER* 1)
+      (setq r (max (* 3.0 tol) 1.0))
+      (foreach q bad
+        (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                        (cons 8 *PF-MISS-LAYER*) '(100 . "AcDbCircle")
+                        (cons 10 (list (car q) (cadr q) 0.0))
+                        (cons 40 r)))))))
+
+;; Print the hit report for the fit the user kept.  ALLOW is the run's
+;; miss allowance (how many points were permitted to sit between the
+;; on-the-shape threshold and the tolerance off the result).
+(defun pf:report (newsegs pts tol allow prior / nl na hiton hitok miss
+                                                q s s2 d dmin worst nice
+                                                onpt inner ns i te ts kk
+                                                mk nk pf-on-eps)
+  ;; report against the same on-the-shape threshold the fit used
+  (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol)))
+  (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
       (foreach s newsegs
@@ -1253,16 +1308,187 @@
                        " select it too.")))
       (if (> prior 0)
         (princ (strcat "\n  (" (itoa prior)
-                       " earlier fit(s) are still on layer "
+                       " earlier fit(s) were already on layer "
                        *PF-OUT-LAYER* " - erase them if you only want"
-                       " the new one)")))))
+                       " the new one)"))))
+  (princ))
+
+;; ---- guided mode ------------------------------------------------------
+;; Re-fit the drawn perimeter LOOP through the survey points: every
+;; vertex snaps to the nearest point within TOL, every drawn arc is
+;; re-fitted through the points lying along it, and drawn straight
+;; walls stay straight.  If the result needs more curves than the cap
+;; allows, the fit falls back to the points-driven builder - the drawn
+;; loop still supplies the point order.
+(defun pf:guided-fit (loop pts dpts tol allow / verts used n s p1 p2 b
+                                                cands clean ns newsegs
+                                                q d)
+  ;; -- 1. snap each vertex to its nearest point within tol ----------
+  (setq verts (mapcar '(lambda (s) (car s)) loop)
+        used  nil)
+  (setq verts
+    (mapcar
+      '(lambda (v / best bd)
+         (setq best nil bd tol)
+         (foreach q pts
+           (setq d (pf:dist v q))
+           (if (and (<= d bd) (not (member q used)))
+             (setq best q bd d)))
+         (if best (progn (setq used (cons best used)) best) v))
+      verts))
+  ;; -- 2. re-fit every arc segment through the points near it -------
+  (setq newsegs nil n 0)
+  (repeat (length loop)
+    (setq s  (nth n loop)
+          p1 (nth n verts)
+          p2 (nth (rem (1+ n) (length verts)) verts)
+          b  (caddr s))
+    (if (< (abs b) 1.0e-9)
+      ;; straight wall: trust the user, keep it straight
+      (setq newsegs (cons (list p1 p2 0.0) newsegs))
+      (progn
+        ;; survey points lying near the ORIGINAL arc, excluding the
+        ;; ones already consumed as vertices, sorted along the arc and
+        ;; de-duplicated
+        (setq cands nil)
+        (foreach q pts
+          (if (and (not (member q used))
+                   (<= (pf:seg-dist q s) tol)
+                   (> (pf:dist q p1) *PF-EXACT-EPS*)
+                   (> (pf:dist q p2) *PF-EXACT-EPS*))
+            (setq cands (cons (cons (pf:seg-param q s) q) cands))))
+        (setq cands (mapcar 'cdr (pf:sort-car cands)))
+        (setq clean nil)
+        (foreach q cands
+          (if (or (null clean)
+                  (> (pf:dist q (car clean)) *PF-EXACT-EPS*))
+            (setq clean (cons q clean))))
+        (foreach ns (pf:fit-arc-seg p1 p2 b (reverse clean) tol)
+          (setq newsegs (cons ns newsegs)))))
+    (setq n (1+ n)))
+  (setq newsegs (reverse newsegs))
+  ;; -- 3. the drawn shape is trusted, but the curve cap still wins --
+  (if (and *PF-MAX-ARCS*
+           (> (pf:arc-count newsegs) *PF-MAX-ARCS*)
+           (>= (length dpts) 3))
+    (progn
+      (princ (strcat "\n  (the drawn perimeter needs "
+                     (itoa (pf:arc-count newsegs))
+                     " curves but the cap is " (itoa *PF-MAX-ARCS*)
+                     " - refitting from the points instead)"))
+      (setq pf-miss-left allow
+            newsegs (pf:coarse-loop (pf:loop-order loop dpts)
+                                    tol *PF-MAX-ARCS*))))
+  newsegs)
+
+;; Build one candidate fit at tolerance TOL.  A non-nil TOUR means the
+;; points drive the shape (points-only and ordering-sketch modes);
+;; otherwise the drawn LOOP is re-fitted (guided mode).  Each call gets
+;; its own miss allowance and on-the-shape threshold.
+(defun pf:build (tour loop pts dpts tol allow / pf-miss-left pf-on-eps)
+  (setq pf-miss-left allow
+        pf-on-eps    (max *PF-ON-EPS* (* 0.25 tol)))
+  (if tour
+    (pf:coarse-loop tour tol *PF-MAX-ARCS*)
+    (pf:guided-fit loop pts dpts tol allow)))
+
+;; Worst distance from any of PTS to the segment list.
+(defun pf:worst (segs pts / w q s d dmin)
+  (setq w 0.0)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (pf:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (> dmin w) (setq w dmin)))
+  w)
+
+;; ---- offer three fits and let the user pick ---------------------------
+;; Guessing the right tolerance up front is the hardest part of the
+;; command, so instead of asking the user to imagine it, draw three
+;; candidates - tighter, as asked, looser - in different colours, show
+;; what each one costs, and keep the one they point at.  Everything is
+;; judged against the tolerance the user actually typed, so the columns
+;; compare like for like.
+(defun pf:compare (tour loop pts dpts tol allow
+                   / prior vars v ent segs bad allbad first i pick idx
+                     keep ce)
+  (setq prior (pf:prior-fits))
+  (pf:ensure-layer *PF-OUT-LAYER* 3)
+  (setq pf-phase "building the three candidate fits"
+        vars     nil
+        allbad   nil
+        first    T)
+  (foreach v *PF-COMPARE*
+    (setq segs (pf:build tour loop pts dpts (* tol (car v)) allow)
+          ent  (pf:make-pline
+                 (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
+                 *PF-OUT-LAYER* (cadr v))
+          bad  (pf:unheld segs pts tol)
+          vars (cons (list segs ent bad v) vars))
+    (if first
+      (setq allbad bad first nil)
+      (setq allbad (pf:isect allbad bad))))
+  (setq vars (reverse vars))
+  (if (null (cadr (car vars)))
+    (princ "\nABHD: could not draw the result - is the drawing read-only?")
+    (progn
+      (princ (strcat "\n\nThree candidate fits are now drawn on layer "
+                     *PF-OUT-LAYER* ":\n"))
+      (princ "\n   #  colour  segs  curves  worst off  not held  ")
+      (princ "\n   -  ------  ----  ------  ---------  --------  ")
+      (setq i 1)
+      (foreach v vars
+        (setq segs (car v) bad (caddr v) ce (cadddr v))
+        (princ (strcat "\n   " (itoa i) "  "
+                       (pf:pad (caddr ce) 8)
+                       (pf:pad (itoa (length segs)) 6)
+                       (pf:pad (itoa (pf:arc-count segs)) 8)
+                       (pf:pad (rtos (pf:worst segs pts) 2 2) 11)
+                       (pf:pad (itoa (length bad)) 10)
+                       (cadddr ce)))
+        (setq i (1+ i)))
+      (princ (strcat "\n\n  \"not held\" = points further than "
+                     (rtos tol 2 3) " from that fit."))
+      (if allbad
+        (princ (strcat "\n  NOTE: " (itoa (length allbad))
+                       " point(s) could not be held by ANY of the three"
+                       " - likely a mis-shot, a duplicate, or a corner"
+                       " that needs more points around it.")))
+      ;; -- let the user choose ---------------------------------------
+      (setq pf-phase "waiting for the choice of fit")
+      (initget "1 2 3 All None")
+      (setq pick (getkword "\nKeep which fit [1/2/3/All/None] <2>: "))
+      (if (null pick) (setq pick "2"))
+      (cond
+        ((= pick "All")
+         (princ "\nKeeping all three, in their preview colours."))
+        ((= pick "None")
+         (foreach v vars (if (cadr v) (entdel (cadr v))))
+         (princ "\nAll three erased - nothing was added to the drawing."))
+        (T
+         (setq idx (atoi pick) i 1)
+         (foreach v vars
+           (if (= i idx)
+             (setq keep v)
+             (if (cadr v) (entdel (cadr v))))
+           (setq i (1+ i)))
+         (if (cadr keep) (pf:set-bylayer (cadr keep)))))
+      (if keep
+        (progn
+          (pf:mark-unheld (caddr keep) tol)
+          (pf:report (car keep) pts tol allow prior)
+          (if (caddr keep)
+            (princ (strcat "\n  " (itoa (length (caddr keep)))
+                           " point(s) beyond the tolerance are ringed on"
+                           " layer " *PF-MISS-LAYER*
+                           " - zoom to them to see why (delete that"
+                           " layer when you are done).")))))))
   (princ))
 
 ;; ---- the command -----------------------------------------------------
 (defun c:ABHD ( / tol mx ss i en ed lay typ ext nunsup nocs
-                    segs pts dpts allow
-                    pf-miss-left pf-on-eps loop n verts used
-                    v best bd d q p1 p2 b cands clean ns newsegs s
+                    segs pts dpts allow loop tour ok
                     *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, then restore
   (setq pf-old-err *error*
@@ -1278,28 +1504,39 @@
             (setq *error* pf-old-err)
             (princ)))
 
-  ;; tolerance (drawing units; 1 = 1 inch in an inch drawing).
+  (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
+
+  ;; -- step 1: how close must the line stay to the points? ----------
+  ;; This is the one prompt people misread, so it says in plain words
+  ;; what the number means and which way it moves the result.
   ;; initget 6 refuses zero and negative values - a zero tolerance
   ;; would silently collapse the fit into single-point stubs.
   (setq pf-phase "reading the tolerance")
+  (princ "\n\n  Step 1 of 3 - how far may the fitted line sit from a survey point?")
+  (princ "\n  Type a distance in drawing units (1 = one inch), or pick two")
+  (princ "\n  points in the drawing to measure one.")
+  (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
   (initget 6)
-  (setq tol (getdist (strcat "\nTolerance <" (rtos *PF-TOL* 2 3) ">: ")))
+  (setq tol (getdist (strcat "\n  Maximum distance from a point <"
+                             (rtos *PF-TOL* 2 3) ">: ")))
   (if tol (setq *PF-TOL* tol) (setq tol *PF-TOL*))
-  ;; the on-the-shape threshold tracks the tolerance for this run
-  ;; (pf:fit-pass rebinds it per pass when the curve cap relaxes tol)
-  (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol)))
 
-  ;; optional cap on the number of curves (arc segments) in the result
+  ;; -- step 2: optional cap on how many curves the result may use ---
   (setq pf-phase "reading the curve limit")
+  (princ "\n\n  Step 2 of 3 - limit how many curves the result may use?")
+  (princ "\n  Type a whole number, or None for no limit.")
   (initget 4 "None")
-  (setq mx (getint (strcat "\nMax curves, or None <"
+  (setq mx (getint (strcat "\n  Maximum curves <"
                            (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
                            ">: ")))
   (cond ((null mx) nil)                            ; Enter: keep as-is
         ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
         (T (setq *PF-MAX-ARCS* mx)))
 
-  (princ "\nSelect the points (POINTS layer or ab_pt blocks) and, optionally, the POOL perimeter/sketch: ")
+  ;; -- step 3: the selection ----------------------------------------
+  (princ "\n\n  Step 3 of 3 - select the survey points (POINTS layer or ab_pt")
+  (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
+  (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
   ;; only entity types this command can actually read, so a sloppy
   ;; crossing window over dimensions, hatches or text is harmless.
@@ -1361,8 +1598,7 @@
       ;; the miss allowance: this many points (*PF-MISS-PCT*, rounded
       ;; UP to a whole point) may sit off the result by up to TOL
       (setq dpts  (if pts (pf:dedupe pts))
-            allow (pf:ceil (* *PF-MISS-PCT* (length dpts)))
-            pf-miss-left allow)
+            allow (pf:ceil (* *PF-MISS-PCT* (length dpts))))
       (if (> (length dpts) 150)
         (princ (strcat "\nABHD: " (itoa (length dpts))
                        " points - ordering and fitting will take a"
@@ -1374,279 +1610,37 @@
                         "\" block insertions).")))
         ((and (null segs) (< (length dpts) 3))
          (princ "\nPoints-only mode needs at least 3 distinct points."))
-        ((null segs)
-         ;; ---- POINTS-ONLY mode: order the points ourselves ---------
-         (princ "\nNo POOL geometry selected - ordering the points automatically.")
-         (setq pf-phase "ordering the points and building the polyline")
-         (pf:finish (pf:coarse-loop (pf:order-points dpts) tol *PF-MAX-ARCS*)
-                    pts tol allow))
-        ((null (setq loop (pf:chain segs))) nil)
-        ((not (pf:has-arcs loop))
-         ;; ---- ORDERING-SKETCH mode: the drawn loop is all straight
-         ;; lines, so treat it as connect-the-dots that only tells us
-         ;; the ORDER of the points; the shape comes from the points
-         (if (< (length dpts) 3)
-           (princ (strcat "\nThe lines-only POOL sketch only orders the"
-                          " points, and at least 3 distinct points are"
-                          " needed to build a shape from them."))
-           (progn
-             (princ "\nPOOL sketch is lines only - using it just to order the points.")
-             (setq pf-phase "following the sketch order and building the polyline")
-             (pf:finish (pf:coarse-loop (pf:loop-order loop dpts) tol *PF-MAX-ARCS*)
-                        pts tol allow))))
         (T
-         (setq pf-phase "fitting the drawn perimeter through the points")
-         ;; -- 1. snap each vertex to its nearest point within tol ----
-         ;; vertex list from the loop's segment start points
-         (setq verts (mapcar '(lambda (s) (car s)) loop)
-               used  nil
-               n     0)
-         (setq verts
-           (mapcar
-             '(lambda (v / best bd)
-                (setq best nil bd tol)
-                (foreach q pts
-                  (setq d (pf:dist v q))
-                  (if (and (<= d bd) (not (member q used)))
-                    (setq best q bd d)))
-                (if best (progn (setq used (cons best used)) best) v))
-             verts))
-         ;; -- 2. re-fit every arc segment through nearby points ------
-         ;; (splitting into several arcs when one arc can't hold them)
-         (setq newsegs nil n 0)
-         (repeat (length loop)
-           (setq s  (nth n loop)
-                 p1 (nth n verts)
-                 p2 (nth (rem (1+ n) (length verts)) verts)
-                 b  (caddr s))
-           (if (< (abs b) 1.0e-9)
-             ;; straight wall: trust the user, keep it straight
-             (setq newsegs (cons (list p1 p2 0.0) newsegs))
-             (progn
-               ;; survey points lying near the ORIGINAL arc, excluding
-               ;; the ones already consumed as vertices, sorted along
-               ;; the arc and de-duplicated
-               (setq cands nil)
-               (foreach q pts
-                 (if (and (not (member q used))
-                          (<= (pf:seg-dist q s) tol)
-                          (> (pf:dist q p1) *PF-EXACT-EPS*)
-                          (> (pf:dist q p2) *PF-EXACT-EPS*))
-                   (setq cands (cons (cons (pf:seg-param q s) q) cands))))
-               (setq cands (mapcar 'cdr (pf:sort-car cands)))
-               (setq clean nil)
-               (foreach q cands
-                 (if (or (null clean)
-                         (> (pf:dist q (car clean)) *PF-EXACT-EPS*))
-                   (setq clean (cons q clean))))
-               (foreach ns (pf:fit-arc-seg p1 p2 b (reverse clean) tol)
-                 (setq newsegs (cons ns newsegs)))))
-           (setq n (1+ n)))
-         (setq newsegs (reverse newsegs))
-         ;; -- 3. the drawn shape is trusted, but the curve cap still
-         ;; wins: when the guided result needs more curves than
-         ;; allowed, refit from the points instead (the drawn loop
-         ;; still sets their order)
-         (if (and *PF-MAX-ARCS*
-                  (> (pf:arc-count newsegs) *PF-MAX-ARCS*)
-                  (>= (length dpts) 3))
-           (progn
-             (princ (strcat "\nABHD: the drawn perimeter needs "
-                            (itoa (pf:arc-count newsegs))
-                            " curves but the cap is "
-                            (itoa *PF-MAX-ARCS*)
-                            " - refitting from the points (the drawn shape still orders them)."))
-             (setq pf-miss-left allow
-                   newsegs (pf:coarse-loop (pf:loop-order loop dpts)
-                                           tol *PF-MAX-ARCS*))))
-         ;; -- 4. draw the fitted polyline and report ------------------
-         (pf:finish newsegs pts tol allow)))))
+         ;; work out the mode, then hand all three modes to the same
+         ;; compare-and-choose step
+         (setq tour nil loop nil ok T)
+         (cond
+           ((null segs)
+            ;; ---- POINTS-ONLY: order the points ourselves ----------
+            (princ "\nNo POOL geometry selected - ordering the points automatically.")
+            (setq pf-phase "ordering the points"
+                  tour     (pf:order-points dpts)))
+           ((null (setq loop (pf:chain segs)))
+            (setq ok nil))                     ; pf:chain said why
+           ((not (pf:has-arcs loop))
+            ;; ---- ORDERING SKETCH: the drawn loop is all straight
+            ;; lines, so it only tells us the ORDER of the points;
+            ;; the shape itself comes from the points
+            (if (< (length dpts) 3)
+              (progn
+                (princ (strcat "\nThe lines-only POOL sketch only orders"
+                               " the points, and at least 3 distinct"
+                               " points are needed to build a shape."))
+                (setq ok nil))
+              (progn
+                (princ "\nPOOL sketch is lines only - using it just to order the points.")
+                (setq pf-phase "following the sketch order"
+                      tour     (pf:loop-order loop dpts)))))
+           (T
+            (princ "\nUsing the drawn POOL perimeter as the guide.")))
+         (if ok (pf:compare tour loop pts dpts tol allow))))))
   (setq *error* pf-old-err)   ; restore the previous error handler
   (princ))
 
-;; ---- built-in self test ----------------------------------------------
-;; ABHDTEST runs the whole fitter over synthetic shapes inside AutoCAD
-;; and checks the results, so a bad load or a bad edit shows up on the
-;; spot instead of on a real survey.  It is non-destructive: the few
-;; entities it creates to exercise reading and writing are deleted
-;; again, and nothing on the POOL/POINTS layers is touched.
-
-(setq *PF-TEST-FAILS* 0)
-
-(defun pf:t-ok (name flag)
-  (if flag
-    (princ (strcat "\n  pass  " name))
-    (progn
-      (setq *PF-TEST-FAILS* (1+ *PF-TEST-FAILS*))
-      (princ (strcat "\n  FAIL  " name))))
-  flag)
-
-;; N points evenly spaced on a circle of radius R about the origin
-(defun pf:t-circle (n r / i out ang0)
-  (setq i 0 out nil)
-  (repeat n
-    (setq ang0 (/ (* 2.0 pi i) n)
-          out  (cons (list (* r (cos ang0)) (* r (sin ang0))) out)
-          i    (1+ i)))
-  (reverse out))
-
-;; A kidney-shaped organic blob sampled at N points (inches)
-(defun pf:t-blob (n / i out ang0 rr)
-  (setq i 0 out nil)
-  (repeat n
-    (setq ang0 (/ (* 2.0 pi i) n)
-          rr   (+ 110.0 (* 35.0 (cos ang0))
-                  (* 18.0 (sin (* 2.0 ang0)))
-                  (* -12.0 (cos (* 3.0 ang0))))
-          out  (cons (list (* rr (cos ang0) 1.15)
-                           (* rr (sin ang0) 0.8))
-                     out)
-          i    (1+ i)))
-  (reverse out))
-
-;; every segment must start exactly where the previous one ended
-(defun pf:t-closed (segs / ok n i s s2)
-  (setq ok T n (length segs) i 0)
-  (while (< i n)
-    (setq s  (nth i segs)
-          s2 (nth (rem (1+ i) n) segs))
-    (if (> (pf:dist (cadr s) (car s2)) 1.0e-6) (setq ok nil))
-    (setq i (1+ i)))
-  ok)
-
-;; worst distance from any surveyed point to the fitted loop
-(defun pf:t-worst (segs pts / worst q d dmin s)
-  (setq worst 0.0)
-  (foreach q pts
-    (setq dmin nil)
-    (foreach s segs
-      (setq d (pf:seg-dist q s))
-      (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (if (> dmin worst) (setq worst dmin)))
-  worst)
-
-;; Fit TOUR (already ordered) and check the invariants that matter.
-(defun pf:t-shape (name tour pts tol maxarcs expectmax
-                   / segs allow worst mn s d pf-miss-left pf-on-eps)
-  (setq allow        (pf:ceil (* *PF-MISS-PCT* (length pts)))
-        pf-miss-left allow
-        pf-on-eps    (max *PF-ON-EPS* (* 0.25 tol))
-        segs         (pf:coarse-loop tour tol maxarcs)
-        worst        (pf:t-worst segs pts))
-  (princ (strcat "\n" name ": " (itoa (length segs)) " segments ("
-                 (itoa (pf:arc-count segs)) " curves), worst "
-                 (rtos worst 2 3)))
-  (pf:t-ok (strcat name " - loop is closed") (pf:t-closed segs))
-  (pf:t-ok (strcat name " - has segments") (>= (length segs) 2))
-  ;; a zero-length segment means one span swallowed the whole loop
-  (setq mn nil)
-  (foreach s segs
-    (setq d (pf:dist (car s) (cadr s)))
-    (if (or (null mn) (< d mn)) (setq mn d)))
-  (pf:t-ok (strcat name " - no zero-length segment") (> mn 1.0e-6))
-  ;; a capped run trades accuracy for few curves on purpose, so only
-  ;; an uncapped fit has to hold the points
-  (if (null maxarcs)
-    (progn
-      (pf:t-ok (strcat name " - points held") (<= worst (* 1.5 tol)))
-      (pf:t-ok (strcat name " - does not cross itself")
-               (not (pf:self-crosses segs))))
-    (pf:t-ok (strcat name " - curve cap honoured")
-             (or (<= (pf:arc-count segs) maxarcs)
-                 (<= (length segs) 2))))
-  (if expectmax
-    (pf:t-ok (strcat name " - segment count sane")
-             (<= (length segs) expectmax)))
-  segs)
-
-;; degenerate inputs that used to divide by zero, plus round-trips
-(defun pf:t-math ( / b)
-  (pf:t-ok "tan never divides by zero"
-           (and (numberp (pf:tan (/ pi 2.0)))
-                (numberp (pf:tan (- (/ pi 2.0))))
-                (numberp (pf:tan 100.0))))
-  (pf:t-ok "collinear 3 points give a straight bulge"
-           (< (abs (pf:bulge-3pt '(0.0 0.0) '(5.0 0.0) '(10.0 0.0)))
-              1.0e-9))
-  (pf:t-ok "coincident end points are safe"
-           (numberp (pf:bulge-3pt '(0.0 0.0) '(5.0 5.0) '(0.0 0.0))))
-  (pf:t-ok "near-coincident end points are safe"
-           (numberp (pf:bulge-3pt '(0.0 0.0) '(5.0 5.0)
-                                  '(1.0e-11 0.0))))
-  (setq b (pf:bulge-3pt '(0.0 0.0) '(5.0 5.0) '(10.0 0.0)))
-  (pf:t-ok "a 3-point arc really passes through its middle point"
-           (< (pf:seg-dist '(5.0 5.0) (list '(0.0 0.0) '(10.0 0.0) b))
-              1.0e-6))
-  (pf:t-ok "radius and bulge round-trip"
-           (< (abs (- (pf:bulge-radius
-                        '(0.0 0.0) '(10.0 0.0)
-                        (pf:radius-bulge '(0.0 0.0) '(10.0 0.0) 13.0 0.5))
-                      13.0))
-              1.0e-6))
-  (pf:t-ok "a crossing loop is detected"
-           (pf:self-crosses (list (list '(0.0 0.0) '(10.0 10.0) 0.0)
-                                  (list '(10.0 10.0) '(10.0 0.0) 0.0)
-                                  (list '(10.0 0.0) '(0.0 10.0) 0.0)
-                                  (list '(0.0 10.0) '(0.0 0.0) 0.0))))
-  (pf:t-ok "a simple loop is not flagged"
-           (not (pf:self-crosses
-                  (list (list '(0.0 0.0) '(10.0 0.0) 0.0)
-                        (list '(10.0 0.0) '(10.0 10.0) 0.0)
-                        (list '(10.0 10.0) '(0.0 10.0) 0.0)
-                        (list '(0.0 10.0) '(0.0 0.0) 0.0))))))
-
-;; reading real entities and writing the result
-(defun pf:t-entities ( / en segs)
-  (pf:ensure-layer *PF-OUT-LAYER*)
-  (setq en (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                           '(8 . "0") '(100 . "AcDbCircle")
-                           '(10 0.0 0.0 0.0) '(40 . 50.0))))
-  (setq segs (if en (pf:ent-segs en)))
-  (pf:t-ok "a CIRCLE reads as a closed two-arc loop"
-           (and segs (= 2 (length segs)) (pf:t-closed segs)))
-  (if en (entdel en))
-  (setq en (entmakex (list '(0 . "ARC") '(100 . "AcDbEntity")
-                           '(8 . "0") '(100 . "AcDbCircle")
-                           '(10 0.0 0.0 0.0) '(40 . 50.0)
-                           '(100 . "AcDbArc") '(50 . 0.0)
-                           (cons 51 (* 1.9444 pi)))))
-  (setq segs (if en (pf:ent-segs en)))
-  (pf:t-ok "a 350 degree ARC reads as one arc segment"
-           (and segs (= 1 (length segs))
-                (> (abs (caddr (car segs))) 1.0)))
-  (if en (entdel en))
-  (setq en (pf:make-pline (list (list '(0.0 0.0) 0.0)
-                                (list '(10.0 0.0) 0.0)
-                                (list '(10.0 10.0) 0.0))
-                          *PF-OUT-LAYER*))
-  (pf:t-ok "the output polyline can be created" (/= en nil))
-  (if en (entdel en)))
-
-(defun c:ABHDTEST ( / pts tour)
-  (setq *PF-TEST-FAILS* 0)
-  (princ "\n--- ABHD self test ----------------------------------------")
-  (pf:t-math)
-  (pf:t-entities)
-  (setq pts  (pf:t-circle 24 150.0)
-        tour (pf:order-points (pf:dedupe pts)))
-  (pf:t-shape "circle-24" tour pts 1.0 nil 4)
-  (setq pts  (list '(0.0 0.0) '(120.0 0.0) '(120.0 120.0) '(0.0 120.0))
-        tour (pf:order-points (pf:dedupe pts)))
-  (pf:t-shape "square" tour pts 1.0 nil 4)
-  (setq pts  (pf:t-blob 40)
-        tour (pf:order-points (pf:dedupe pts)))
-  (pf:t-shape "blob-40" tour pts 1.0 nil 26)
-  (pf:t-shape "blob-40 capped at 5" tour pts 1.0 5 nil)
-  ;; a cap nothing can reach must still shrink the fit, not give up
-  ;; and return the full-size one
-  (pf:t-shape "blob-40 capped at 1" tour pts 1.0 1 6)
-  (princ (strcat "\n--- "
-                 (if (= 0 *PF-TEST-FAILS*)
-                   "ALL CHECKS PASSED"
-                   (strcat (itoa *PF-TEST-FAILS*) " CHECK(S) FAILED"))
-                 " ---------------------------------"))
-  (princ))
-
 (princ "\nABHD loaded.  Type ABHD to fit the pool perimeter through its points.")
-(princ "\n  (ABHDTEST runs a built-in self check.)")
 (princ)

@@ -117,21 +117,74 @@ radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
 ## Usage
 
 1. `APPLOAD` → pick `abhd.lsp` (or drag it into the drawing).
-2. Type `ABHD`.
-3. Accept or change the tolerance (default `1.0` drawing unit — one
-   inch in an inch-based drawing; the value is remembered for the
-   session). Points may sit up to this far off the result, within the
-   15% allowance.
-4. Accept or change the max number of curves (`Enter` keeps the
-   current setting, `None` removes the cap).
-5. Window-select the area: points plus (optionally) the perimeter or
-   ordering sketch — what you include picks the mode.
+2. Type `ABHD`. It asks three plainly-worded questions:
 
-A new closed `LWPOLYLINE` is created on layer `POOL-FIT` (green,
+```
+ABHD - fit a pool perimeter through the surveyed points.
+
+  Step 1 of 3 - how far may the fitted line sit from a survey point?
+  Type a distance in drawing units (1 = one inch), or pick two
+  points in the drawing to measure one.
+  Smaller = hugs the points.  Bigger = smoother, with fewer curves.
+  Maximum distance from a point <1.000>:
+
+  Step 2 of 3 - limit how many curves the result may use?
+  Type a whole number, or None for no limit.
+  Maximum curves <None>:
+
+  Step 3 of 3 - select the survey points (POINTS layer or ab_pt
+  blocks) and, if you have one, the POOL perimeter or ordering sketch.
+  Select objects:
+```
+
+Both answers are remembered for the session, so a second run is just
+`ABHD` + `Enter` + `Enter` + select.
+
+## Pick the one that looks right
+
+You do not have to guess the tolerance. ABHD draws **three candidate
+fits at once**, in different colours, and shows what each one costs:
+
+```
+Three candidate fits are now drawn on layer POOL-FIT:
+
+   #  colour  segs  curves  worst off  not held
+   -  ------  ----  ------  ---------  --------
+   1  red     20    20      0.49       0         tighter - hugs the points
+   2  yellow  19    19      0.87       0         as asked
+   3  cyan    16    16      1.88       3         looser - fewer curves
+
+  "not held" = points further than 1.000 from that fit.
+
+Keep which fit [1/2/3/All/None] <2>:
+```
+
+Look at them on screen, then type `1`, `2` or `3` — the other two are
+erased and the keeper reverts to the layer colour. `All` keeps all
+three (in their preview colours) to compare later; `None` erases all
+three and leaves the drawing untouched. Pressing `Enter` keeps **2**,
+the fit at exactly the tolerance you typed.
+
+The three tolerances are ½×, 1× and 2× what you asked for; change the
+spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.
+
+## Points it could not hold
+
+Every point further than your tolerance from the kept fit is **ringed
+with a circle on layer `POOL-MISS`** (red), so you can zoom straight
+to it and decide whether it is a bad shot, a duplicate, or a real
+feature that needs a tighter tolerance. Delete that layer when you are
+done with it.
+
+If a point is beyond tolerance in **all three** candidates, ABHD says
+so before you choose — that one is almost certainly a mis-shot, a
+duplicate, or a corner that needs more points around it, and no
+tolerance setting will rescue it.
+
+The kept fit is a closed `LWPOLYLINE` on layer `POOL-FIT` (green,
 created if missing; if the layer exists but is off, frozen or locked
-it is restored so the result is actually visible). The original
-geometry is left untouched, so the result is easy to compare and the
-command can be re-run with a different tolerance.
+it is restored so the result is actually visible). Your original
+geometry is never touched.
 
 ### What the report tells you
 
@@ -157,18 +210,12 @@ ordering sketch), and when earlier fits are still sitting on the
 
 ## Checking it still works
 
-* **`ABHDTEST`** — type it at the AutoCAD command line after loading
-  `abhd.lsp`. It runs the whole fitter over synthetic shapes (circle,
-  square, organic blob, capped variants), exercises the entity
-  reader/writer, checks the degenerate-input guards, and prints a
-  pass/fail line per check. It is non-destructive: the few entities it
-  creates are deleted again and nothing on `POOL`/`POINTS` is touched.
-  Run it after any edit to `abhd.lsp`.
-* **`python3 tests/test_pool_fit.py`** — a Python mirror of the same
-  geometry and fitting logic, so the algorithm can be regression
-  tested outside AutoCAD. It also parses `abhd.lsp` to verify the
-  parentheses balance, that no function is called undefined, and that
-  the tuning constants in both files still agree.
+Run **`python3 tests/test_pool_fit.py`** from the repository root. It
+is a Python mirror of the same geometry and fitting logic, so the
+algorithm can be regression tested outside AutoCAD, and it also parses
+`abhd.lsp` to verify the parentheses balance, that no function is
+called undefined or defined-but-unused, and that the tuning constants
+in both files still agree.
 
 ## Troubleshooting
 
@@ -179,8 +226,10 @@ ordering sketch), and when earlier fits are still sitting on the
 | "No survey points found" | The points are not `POINT` entities on `POINTS`, nor `ab_pt` blocks. Check the layer name and the block name at the top of `abhd.lsp`. |
 | "the result crosses itself" | The automatic ordering went the wrong way around a narrow waist. Draw a rough **lines-only** loop on `POOL` through the points in the right order and select it too. |
 | "not drawn in the world plane" | Geometry was drawn in a tilted UCS. Set UCS to World and flatten it; the fit is 2D. |
-| Nothing appears | The report says how many segments were written. If the layer was off/frozen/locked, ABHD restores it and says so; if the drawing is read-only the report says that instead. |
-| It feels slow | Ordering is O(n²); above ~150 points the command warns and takes a while. An ordering sketch skips the expensive search entirely. |
+| Nothing appears | The report says how many segments were written. If the layer was off/frozen/locked, ABHD restores it and says so; if the drawing is read-only it says that instead. |
+| Red circles in the drawing | Those are the points the kept fit could not hold, on layer `POOL-MISS`. Zoom to them, then delete the layer. |
+| Three coloured outlines left behind | You answered `All` at the choose prompt. Erase the two you don't want, or re-run and pick one. |
+| It feels slow | Three fits are built, and ordering is O(n²); above ~150 points the command warns and takes a while. An ordering sketch skips the expensive search entirely. |
 
 ## What the guided mode does
 
