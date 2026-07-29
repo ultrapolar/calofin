@@ -25,6 +25,7 @@
 ;;;          points are offset toward.
 ;;;   3. Enter how many values (points) are required  (>= 2).
 ;;;   4. Enter a length for each point, in order START -> FINISH.
+;;;      Press Enter to reuse the previous length when it repeats.
 ;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 4 with the new polyline as
 ;;;      the path.
@@ -86,7 +87,7 @@
                     dx dy dlen ux uy cross nx ny sz
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     arrowEnts path n basePts newPts guideEnts
-                    len i base bx by np npx npy again iter p e)
+                    len lastLen i base bx by np npx npy again iter p e)
 
   (defun *error* (msg)
     (if os (setvar "OSMODE" os))
@@ -197,15 +198,24 @@
     (setq basePts (perp:sample path n))
 
     ;; --- length per point + build the new perpendicular points -------
+    ;; Pressing Enter reuses the last length entered (shown as the
+    ;; prompt default), since runs of equal lengths are common.  The
+    ;; last value carries across rounds too.  Esc still cancels.
     (setq newPts '() guideEnts '() i 0)
     (foreach base basePts
       (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
-                                 " of " (itoa n) ": ")))
+                                 " of " (itoa n)
+                                 (if lastLen
+                                   (strcat " <" (rtos lastLen) ">")
+                                   "")
+                                 ": ")))
+      (if (null len) (setq len lastLen))   ; Enter = same as last time
       (if (null len)
         (progn (foreach e guideEnts (if e (entdel e)))
                (foreach e arrowEnts (if e (entdel e)))
                (setvar "OSMODE" os)
                (exit)))
+      (setq lastLen len)
       (setq bx  (car base)
             by  (cadr base)
             npx (+ bx (* len nx))
