@@ -95,6 +95,14 @@
 ;;;     overridden to disagree with the geometry it spans, it is
 ;;;     MARKED RED AUTOMATICALLY and reported. Any difference beyond
 ;;;     *dchk-height-tol* is reported in red as a MISMATCH.
+;;;     Two title-block answers give nothing to check against, so
+;;;     the side view is LEFT ALONE (never marked red) in both:
+;;;       - "Finished Wall Ht = Varies" — the height genuinely
+;;;         varies; the report just notes it.
+;;;       - several heights at once, e.g. "= 0'', 40'', 45''" — the
+;;;         report tells you to CHECK THE WALL HEIGHT in the title
+;;;         block. A compound height ( 3'-4'' ) is still one value,
+;;;         not several.
 ;;;
 ;;;  6. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -350,7 +358,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -796,11 +804,17 @@
     (setq s (substr s (+ p 2))))
   s)
 
-(defun dchk:parse-len (s / lst i n c numstr toks unit total tok)
-  ;; parse a height text like 40'' / 3'-4'' / 3' 4 1/2" / 40.5 into
-  ;; inches (drawing units); nil when the text holds no number.
-  ;; ' = feet, '' or " = inches, a bare number counts as inches.
-  ;; A leading label is ignored, so the attribute may read
+(defun dchk:len-values (s / lst i n c numstr toks unit vals cur tok)
+  ;; every length written in the text, as a list of numbers in inches
+  ;; (drawing units). ' = feet, '' or " = inches, a bare number counts
+  ;; as inches. Feet and bare numbers carry on into the same value, an
+  ;; inch mark closes it, so a compound height stays ONE value while a
+  ;; list stays several:
+  ;;   "40''"          -> (40.0)
+  ;;   "3'-4''"        -> (40.0)
+  ;;   "3' 4 1/2\""    -> (40.5)
+  ;;   "0'', 40'', 45''" -> (0.0 40.0 45.0)
+  ;; A label before the last "=" is ignored, so the attribute may read
   ;; "Finished Wall Ht = 40''" and still measure 40.
   (setq s    (dchk:after-eq s)
         lst  (vl-string->list s)
@@ -830,14 +844,25 @@
                    i    (1+ i)))))
         (setq toks (append toks (list (cons (dchk:parse-num numstr) unit)))))
       (setq i (1+ i))))
-  (if toks
-    (progn
-      (setq total 0.0)
-      (foreach tok toks
-        (if (eq (cdr tok) 'ft)
-          (setq total (+ total (* 12.0 (car tok))))
-          (setq total (+ total (car tok)))))
-      total)))
+  (setq vals nil
+        cur  nil)
+  (foreach tok toks
+    (setq cur (+ (if cur cur 0.0)
+                 (if (eq (cdr tok) 'ft) (* 12.0 (car tok)) (car tok))))
+    (if (eq (cdr tok) 'in)                     ; inches close the value
+      (setq vals (append vals (list cur))
+            cur  nil)))
+  (if cur (setq vals (append vals (list cur))))
+  vals)
+
+(defun dchk:parse-len (s)
+  ;; the first length written in the text, in inches; nil when none
+  (car (dchk:len-values s)))
+
+(defun dchk:varies-p (s)
+  ;; T when the height reads "Varies" instead of carrying a number
+  (wcmatch (strcat " " (dchk:norm-text (dchk:after-eq s)) " ")
+           "* VARIES *"))
 
 ;; --- dimension review ----------------------------------------------
 
@@ -1208,6 +1233,7 @@
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
                       svbb hdim dimht htval htbad
+                      wallvals wallvar wallmany htskip
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -1527,7 +1553,8 @@
         ;; the steps' total rise (side view) must match the WallHt
         ;; attribute of the Tech Title block
         (setq htsum nil stepht nil wallht nil wallraw nil tins nil
-              svbb nil hdim nil dimht nil htval nil htbad nil)
+              svbb nil hdim nil dimht nil htval nil htbad nil
+              wallvals nil wallvar nil wallmany nil htskip nil)
         (if stepsp
           (progn
             ;; overall height from the steps
@@ -1556,11 +1583,19 @@
                              (wcmatch (dchk:squash (dchk:block-name b)) tpat))
                       (setq tins b))))))
             (if tins
-              (setq wallraw (dchk:ins-attrib tins *dchk-wallht-tag*)
-                    wallht  (if wallraw (dchk:parse-len wallraw))))
+              (setq wallraw  (dchk:ins-attrib tins *dchk-wallht-tag*)
+                    wallvals (if wallraw (dchk:len-values wallraw))
+                    wallvar  (and wallraw (dchk:varies-p wallraw))
+                    wallmany (> (length wallvals) 1)
+                    wallht   (if (and wallvals (not wallmany))
+                               (car wallvals))))
+            ;; a height that Varies, or a title block holding several
+            ;; heights, gives nothing to check the side view against -
+            ;; leave it alone rather than marking it red
+            (setq htskip (or wallvar wallmany))
             ;; the side view's own overall-height dimension, and the
             ;; height it states - that dimension is what gets compared
-            (if (and svbb stepht)
+            (if (and svbb stepht (not htskip))
               (setq hdim (dchk:height-dim dims svbb stepht)))
             (if hdim (setq dimht (dchk:dim-stated hdim)))
             (setq htval (if dimht dimht stepht))
@@ -1603,6 +1638,15 @@
                 ((null tins)
                  (strcat "steps rise " (rtos htval) " but no '"
                          *dchk-title-block* "' block was found - NOT CONFIRMED"))
+                (wallvar
+                 (strcat "steps rise " (rtos htval) " and " *dchk-wallht-tag*
+                         " reads '" wallraw
+                         "' - height varies, side view left alone"))
+                (wallmany
+                 (strcat "steps rise " (rtos htval) " but " *dchk-wallht-tag*
+                         " holds " (itoa (length wallvals)) " heights ('"
+                         wallraw "') - CHECK THE WALL HEIGHT in the "
+                         *dchk-title-block* ", side view left alone"))
                 ((null wallht)
                  (strcat "steps rise " (rtos htval) " but the "
                          *dchk-wallht-tag* " attribute "
