@@ -39,9 +39,13 @@ In the ordering-sketch and points-only modes the loop is covered by
 long, overarching arcs that sit **on the points** and meet each other
 **near-tangent** — no straight lines:
 
-* Every span runs **from survey point to survey point**, and its
-  interior is fitted through the points it covers with exact
-  **3-point arcs** — being on the points comes first.
+* Every span runs **from survey point to survey point**, and each arc
+  is chosen so its **middle also passes exactly through one of its
+  interior points** — a true **3-point arc** — whenever such an arc
+  holds the span. Arcs that float *between* the points are a last
+  resort: one must cover at least 2 more points than the best exact
+  arc to be chosen, keeping floaters the rare exception (about 1 arc
+  in 10), not the rule.
 * At every joint the new arc must start within `*PF-TANG-TOL*`
   (**8°**) of the previous arc's end tangent — close enough to look
   smooth, loose enough that the points stay in charge. The closing
@@ -67,9 +71,12 @@ Before a free-fit ("weird") radius is accepted, each arc's radius is
 snapped to the first friendly increment that still holds every one of
 its points: **whole feet** first, then **half feet**, then **whole
 inches** (`*PF-NICE-RADII*`, drawing units are inches — e.g. `24` =
-2′-0″ before `23.71`). The arc's endpoints never move (they are survey
-points) and a snap is only taken when the snapped bulge stays inside
-the 8° tangent window, so snapping never breaks the near-tangency.
+2′-0″ before `23.71`). **The points outrank pretty radii**: a snap may
+move covered points at most `*PF-SNAP-EPS*` (default **0.02**) beyond
+where they already sat, may never pull an arc off its anchor point,
+must stay inside the 8° tangent window, and never moves the arc's
+endpoints. In practice roughly two-thirds of the arcs still land on
+nice radii — the snaps that survive are the ones that cost nothing.
 
 ## The curve cap
 
@@ -80,8 +87,14 @@ progressively relaxed tolerance** until the cap holds — the tangent
 windows stay in force, so capped results stay as smooth as the cap
 allows (a very tight cap may need more than 8° at a joint to close
 the loop; the hit report shows the cost). The cap **wins over the
-tolerance**. In guided mode the drawn walls are trusted, so the cap is
-reported rather than enforced there.
+tolerance** and **binds in every mode**:
+
+* In guided mode, if the drawn perimeter needs more curves than the
+  cap, the command falls back to fitting from the points — the drawn
+  shape still sets their order — and says so.
+* If the cap is unreachably small, you get the **fewest-curves fit
+  found** (a closed loop bottoms out around 2–3 arcs), never the
+  full-size fit.
 
 All thresholds are constants at the top of `abhd.lsp`
 (`*PF-MISS-PCT*`, `*PF-ON-EPS*` — default 0.25, a quarter of the
