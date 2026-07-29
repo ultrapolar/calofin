@@ -140,6 +140,23 @@
 ;;;  merged/flagged lines, which stay marked on purpose. Everything
 ;;;  (including the report) runs inside one UNDO group, so a single U
 ;;;  reverts the whole review.
+;;;
+;;;  SAFETY NETS
+;;;  - Locked layers in the selection are announced up front with an
+;;;    offer to unlock for the run (re-locked afterwards, even on
+;;;    error); left locked, their items are reported but untouched.
+;;;  - Object-associative dimensions are warned about before their
+;;;    points are moved — an associative point may re-anchor on its
+;;;    own — and their report line says so in red.
+;;;  - Rerunning DIMCHECK replaces the previous report and marker
+;;;    lines instead of stacking a second copy on top.
+;;;  - Original colours are stashed in xdata before greying. If a
+;;;    crash or kill ever leaves the drawing grey, DIMCHECKRESCUE
+;;;    restores every stashed colour and clears DIMCHECK's report
+;;;    and markers (flag colours included — it is the full reset).
+;;;  - With several Tech Title blocks on the sheet, the one nearest
+;;;    the checked area is used; titles disagreeing on WallHt are
+;;;    called out in red.
 ;;; ------------------------------------------------------------------
 
 (vl-load-com)
@@ -180,6 +197,101 @@
 (setq *dchk-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
 
+;; --- safety: xdata tags, colour stash, layer locks -----------------
+
+(defun dchk:regapp ()
+  (if (not (tblsearch "APPID" "DIMCHECK"))
+    (regapp "DIMCHECK")))
+
+(defun dchk:xd (ent / g)
+  ;; DIMCHECK's xdata groups on ent, nil when none
+  (setq g (assoc -3 (entget ent '("DIMCHECK"))))
+  (if g (cdadr g)))
+
+(defun dchk:tag (ent kind / ed)
+  ;; stamp a DIMCHECK-created entity (report, marker line) so a rerun
+  ;; or DIMCHECKRESCUE can find and clear it
+  (dchk:regapp)
+  (setq ed (entget ent '("DIMCHECK")))
+  (if (and ed (not (assoc -3 ed)))
+    (entmod (append ed (list (list -3 (list "DIMCHECK" (cons 1000 kind))))))))
+
+(defun dchk:stash-color (ent col / ed)
+  ;; remember the entity's own colour in xdata so DIMCHECKRESCUE can
+  ;; put it back even after a crash; an existing stash (from an
+  ;; interrupted run - the TRUE original) is never overwritten
+  (dchk:regapp)
+  (setq ed (entget ent '("DIMCHECK")))
+  (if (and ed (not (assoc -3 ed)))
+    (entmod (append ed (list (list -3 (list "DIMCHECK"
+                                            '(1000 . "COLOR")
+                                            (cons 1071 col))))))))
+
+(defun dchk:unstash (ent / ed)
+  ;; drop DIMCHECK's xdata once the run has restored things itself
+  (setq ed (entget ent '("DIMCHECK")))
+  (if (and ed (assoc -3 ed))
+    (entmod (subst (list -3 (list "DIMCHECK")) (assoc -3 ed) ed))))
+
+(defun dchk:clear-old (/ ss2 i e xd n)
+  ;; erase the report and marker lines left by an earlier DIMCHECK
+  ;; run, so a rerun replaces them instead of stacking on top
+  (setq ss2 (ssget "_X" '((-3 ("DIMCHECK")))) n 0 i 0)
+  (if ss2
+    (repeat (sslength ss2)
+      (setq e  (ssname ss2 i)
+            i  (1+ i)
+            xd (dchk:xd e))
+      (if (member (cdr (assoc 1000 xd)) '("REPORT" "XLINE"))
+        (progn (entdel e) (setq n (1+ n))))))
+  (if (> n 0)
+    (princ (strcat "\n(Removed " (itoa n)
+                   " report/marker item(s) from an earlier DIMCHECK run.)"))))
+
+(defun dchk:layer-locked-p (name / ld)
+  (setq ld (tblsearch "LAYER" name))
+  (and ld (= 4 (logand 4 (cdr (assoc 70 ld))))))
+
+(defun dchk:set-layer-lock (name lock / ed old new)
+  ;; set or clear a layer's locked flag; T when it actually changed
+  (setq ed  (entget (tblobjname "LAYER" name))
+        old (cdr (assoc 70 ed))
+        new (if lock (logior old 4) (logand old (~ 4))))
+  (if (/= old new)
+    (progn (entmod (subst (cons 70 new) (assoc 70 ed) ed)) T)))
+
+(defun dchk:dim-assoc-p (ent / found g)
+  ;; T when the dimension carries persistent reactors - the mark of
+  ;; an object-associative dim, whose definition points may re-anchor
+  ;; on their own after being moved
+  (foreach g (entget ent)
+    (if (and (= 102 (car g)) (= "{ACAD_REACTORS" (cdr g)))
+      (setq found T)))
+  found)
+
+(defun c:DIMCHECKRESCUE ( / ss i e xd n)
+  ;; the way out after a crash or interrupted run: puts back every
+  ;; colour DIMCHECK stashed (flag colours included) and removes its
+  ;; report and marker lines
+  (setq ss (ssget "_X" '((-3 ("DIMCHECK")))) n 0 i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            xd (dchk:xd e))
+      (cond
+        ((member (cdr (assoc 1000 xd)) '("REPORT" "XLINE"))
+         (entdel e)
+         (setq n (1+ n)))
+        ((assoc 1071 xd)
+         (dchk:set-color e (cdr (assoc 1071 xd)))
+         (dchk:unstash e)
+         (setq n (1+ n))))))
+  (if (> n 0)
+    (princ (strcat "\nDIMCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
+    (princ "\nDIMCHECKRESCUE: nothing to restore - no DIMCHECK markers in the drawing."))
+  (princ))
+
 ;; --- small helpers -------------------------------------------------
 
 (defun dchk:ensure-layer (name color)
@@ -205,15 +317,18 @@
   (entupd ent))
 
 (defun dchk:make-xline (p1 p2 / len)
-  ;; infinite construction line through p1-p2 on the check layer
+  ;; infinite construction line through p1-p2 on the check layer,
+  ;; tagged so reruns and DIMCHECKRESCUE can clear it
   (setq len (distance p1 p2))
-  (if (> len 1e-8)
-    (entmake (list '(0 . "XLINE")
-                   '(100 . "AcDbEntity")
-                   (cons 8 *dchk-constr-layer*)
-                   '(100 . "AcDbXline")
-                   (cons 10 p1)
-                   (cons 11 (mapcar '(lambda (x) (/ x len)) (mapcar '- p2 p1)))))))
+  (if (and (> len 1e-8)
+           (entmake (list '(0 . "XLINE")
+                          '(100 . "AcDbEntity")
+                          (cons 8 *dchk-constr-layer*)
+                          '(100 . "AcDbXline")
+                          (cons 10 p1)
+                          (cons 11 (mapcar '(lambda (x) (/ x len))
+                                           (mapcar '- p2 p1))))))
+    (dchk:tag (entlast) "XLINE")))
 
 (defun dchk:closest-on (ent pt / res)
   ;; closest point on ent to pt; nil when ent is not curve-like
@@ -363,13 +478,14 @@
   (while (> (strlen text) 250)
     (setq dxf  (append dxf (list (cons 3 (substr text 1 250))))
           text (substr text 251)))
-  (entmake (append dxf (list (cons 1 text)))))
+  (if (entmake (append dxf (list (cons 1 text))))
+    (dchk:tag (entlast) "REPORT")))
 
 (defun dchk:attn-p (s)
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1095,7 +1211,7 @@
           (redraw)
           (list pt final (if newp 'user 'auto)))))))
 
-(defun dchk:review-dim (ent cands num total / ed dtype h sty p13 p14 r1 r2 moved ok note meas)
+(defun dchk:review-dim (ent cands num total / ed dtype h sty p13 p14 r1 r2 moved ok note meas assocnote)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement).
   (setq ed    (entget ent)
@@ -1110,6 +1226,8 @@
                  ")"))
   (if (member dtype '(0 1))                   ; rotated/linear or aligned
     (progn
+      (if (dchk:dim-assoc-p ent)
+        (princ "\n  Note: this dimension is object-associative - a moved point may re-anchor on its own."))
       (setq p13 (cdr (assoc 13 ed))           ; the two dimmed points
             p14 (cdr (assoc 14 ed))
             r1  (dchk:audit-dim-point ent 13 "dimension point 1" cands)
@@ -1117,20 +1235,24 @@
       (if (or r1 r2)
         (dchk:make-xline p13 p14))))          ; through the ORIGINAL points
   (setq moved (append (if r1 (list r1)) (if r2 (list r2))))
+  (if (and moved (dchk:dim-assoc-p ent))
+    (setq assocnote " (ASSOCIATIVE - verify the moved point holds)"))
   (setq meas (dchk:dim-meas ent))             ; after any point moves
   (if meas (princ (strcat "\n  Measures " meas ".")))
   (redraw ent 3)
   (setq ok (dchk:ask-yn "\n  Is this dimension correct?"))
   (redraw ent 4)
   (redraw)
-  (setq note (cond
-               ((and ok moved)
-                (strcat "OK (" (itoa (length moved)) " point(s) adjusted)"))
-               (ok "OK")
-               (moved
-                (strcat "FLAGGED to fix (red, " (itoa (length moved))
-                        " point(s) adjusted)"))
-               (t "FLAGGED to fix (red)")))
+  (setq note (strcat
+               (cond
+                 ((and ok moved)
+                  (strcat "OK (" (itoa (length moved)) " point(s) adjusted)"))
+                 (ok "OK")
+                 (moved
+                  (strcat "FLAGGED to fix (red, " (itoa (length moved))
+                          " point(s) adjusted)"))
+                 (t "FLAGGED to fix (red)"))
+               (if assocnote assocnote "")))
   (if (not ok) (dchk:set-color ent *dchk-flag-color*))
   (list h ok note (length moved) meas))
 
@@ -1297,14 +1419,16 @@
                       htsum stepht wallht wallraw tins tpat tss
                       svbb hdim dimht htval htbad
                       wallvals wallvar wallmany htskip
+                      laylist locked relock lay tlist tbest cx cy tvals s d
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
-    ;; clear markers, close the undo group
+    ;; re-lock what we unlocked, clear markers, close the undo group
     (foreach pair saved
       (if (and (not (member (car pair) keep)) (entget (car pair)))
         (dchk:set-color (car pair) (cdr pair))))
+    (foreach l relock (dchk:set-layer-lock l T))
     (redraw)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
@@ -1350,6 +1474,30 @@
         (dchk:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
         (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
 
+        ;; a locked layer swallows every fix and recolour silently -
+        ;; surface that up front and offer to unlock for the run
+        (setq laylist nil relock nil i 0)
+        (repeat (sslength ss)
+          (setq lay (cdr (assoc 8 (entget (ssname ss i))))
+                i   (1+ i))
+          (if (and lay (not (member lay laylist)))
+            (setq laylist (cons lay laylist))))
+        (setq locked (vl-remove-if-not 'dchk:layer-locked-p laylist))
+        (if locked
+          (if (dchk:ask-yn
+                (strcat "\n" (itoa (length locked))
+                        " locked layer(s) in the selection ("
+                        (dchk:join locked ", ")
+                        ") - DIMCHECK cannot recolour or fix anything on them. Unlock for this run?"))
+            (progn
+              (foreach l locked (dchk:set-layer-lock l nil))
+              (setq relock locked)
+              (princ "\n  Unlocked; they will be re-locked when the run ends."))
+            (princ "\n  Locked layers stay locked - items on them are reported but left untouched.")))
+
+        ;; a rerun replaces the previous run's report and markers
+        (dchk:clear-old)
+
         ;; extents of the selection (report goes to the right of them)
         (setq i 0)
         (repeat (sslength ss)
@@ -1369,13 +1517,18 @@
                        1.0))
         (setq dims (dchk:sort-dims dims rowtol))
 
-        ;; grey out the whole selection so each item can take the stage
+        ;; grey out the whole selection so each item can take the
+        ;; stage, stashing every original colour in xdata first so
+        ;; DIMCHECKRESCUE can recover them even after a crash
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (setq saved (cons (cons e (dchk:ent-color e)) saved))
-          (dchk:set-color e *dchk-grey-color*))
+          (if (entget e)
+            (progn
+              (setq saved (cons (cons e (dchk:ent-color e)) saved))
+              (dchk:stash-color e (dchk:ent-color e))
+              (dchk:set-color e *dchk-grey-color*))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -1628,13 +1781,15 @@
               ((eq svmode 'user)               ; user says it exists elsewhere
                (princ "\n  Confirm the overall step height against the Tech Title.")
                (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: "))))
-            ;; the Tech Title block: in the selection, else anywhere
-            (setq tpat (strcat "*" (dchk:squash *dchk-title-block*) "*"))
+            ;; every Tech Title block: those in the selection, else
+            ;; drawing-wide; the one nearest the checked area wins,
+            ;; and titles that disagree on WallHt are called out
+            (setq tpat  (strcat "*" (dchk:squash *dchk-title-block*) "*")
+                  tlist nil)
             (foreach b blks
-              (if (and (null tins)
-                       (wcmatch (dchk:squash (dchk:block-name b)) tpat))
-                (setq tins b)))
-            (if (null tins)
+              (if (wcmatch (dchk:squash (dchk:block-name b)) tpat)
+                (setq tlist (cons b tlist))))
+            (if (null tlist)
               (progn
                 (setq tss (ssget "_X" '((0 . "INSERT")))
                       i   0)
@@ -1642,9 +1797,38 @@
                   (repeat (sslength tss)
                     (setq b (ssname tss i)
                           i (1+ i))
-                    (if (and (null tins)
-                             (wcmatch (dchk:squash (dchk:block-name b)) tpat))
-                      (setq tins b))))))
+                    (if (wcmatch (dchk:squash (dchk:block-name b)) tpat)
+                      (setq tlist (cons b tlist)))))))
+            (setq cx (if minx (* 0.5 (+ minx maxx)) 0.0)
+                  cy (if miny (* 0.5 (+ miny maxy)) 0.0)
+                  tbest nil)
+            (foreach b tlist
+              (setq bp (cdr (assoc 10 (entget b)))
+                    d  (distance (list cx cy) (list (car bp) (cadr bp))))
+              (if (or (null tbest) (< d tbest))
+                (setq tbest d
+                      tins  b)))
+            (if (> (length tlist) 1)
+              (progn
+                (setq tvals nil)
+                (foreach b tlist
+                  (setq s (dchk:ins-attrib b *dchk-wallht-tag*))
+                  (if s
+                    (progn
+                      (setq s (dchk:norm-text (dchk:after-eq s)))
+                      (if (not (member s tvals))
+                        (setq tvals (cons s tvals))))))
+                (if (> (length tvals) 1)
+                  (progn
+                    (princ (strcat "\n  Note: " (itoa (length tlist)) " '"
+                                   *dchk-title-block* "' blocks disagree on "
+                                   *dchk-wallht-tag* "; using the nearest one."))
+                    (setq lines (cons (strcat (itoa (length tlist)) " '"
+                                              *dchk-title-block*
+                                              "' blocks DISAGREE on "
+                                              *dchk-wallht-tag*
+                                              " - CHECK THE WALL HEIGHT (nearest one used)")
+                                      lines))))))
             (if tins
               (setq wallraw  (dchk:ins-attrib tins *dchk-wallht-tag*)
                     wallvals (if wallraw (dchk:len-values wallraw))
@@ -1791,9 +1975,15 @@
                                  lines))))))
 
         ;; --- restore colours (flagged/moved keep theirs) ------------
+        ;; restored entities drop their rescue stash; flagged/moved
+        ;; ones keep it so DIMCHECKRESCUE can clear the marks later
         (foreach pair saved
           (if (and (not (member (car pair) keep)) (entget (car pair)))
-            (dchk:set-color (car pair) (cdr pair))))
+            (progn
+              (dchk:set-color (car pair) (cdr pair))
+              (dchk:unstash (car pair)))))
+        (foreach l relock (dchk:set-layer-lock l T))
+        (setq relock nil)
 
         ;; --- one-line verdicts for steps & liner --------------------
         (setq stepsum
