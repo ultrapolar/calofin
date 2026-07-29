@@ -31,6 +31,7 @@ LISP_FILE = os.path.join(os.path.dirname(TESTS_DIR),
 
 ON_EPS = 0.25                      # *PF-ON-EPS*
 MISS_PCT = 0.15                    # *PF-MISS-PCT*
+TOL_MAX = 2.0                      # *PF-TOL-MAX*
 SNAP_EPS = 0.02                    # *PF-SNAP-EPS*
 FIT_EPS = 0.01                     # *PF-FIT-EPS*
 CORNER_ANG = math.pi / 4.0         # *PF-CORNER-ANG*
@@ -312,11 +313,25 @@ def rotate_to_corner(tour):
     return tour[bi:] + tour[:bi]
 
 
+def tour_index(p, tour):
+    for k, q in enumerate(tour):
+        if dist(p, q) < 1.0e-3:
+            return k
+    return None
+
+
+def rotate_to_point(tour, p):
+    """Start the walk at P, so a declared wall never straddles the
+    walk's origin."""
+    i = tour_index(p, tour)
+    return tour[i:] + tour[:i] if i else tour
+
+
 def arc_count(segs):
     return sum(1 for s in segs if abs(s[2]) >= 1.0e-9)
 
 
-def span_loop(tour, tol, left, te0=None, prorate=True):
+def span_loop(tour, tol, left, te0=None, prorate=True, walls=None):
     """Cover the closed TOUR with arcs anchored on its points.
 
     When PRORATE is set each span may spend only its own fair share of
@@ -324,19 +339,56 @@ def span_loop(tour, tol, left, te0=None, prorate=True):
     and starve the rest of the loop into single-point stubs.  The
     curve cap turns it off: there the whole point is to trade accuracy
     for few curves.
+
+    WALLS is the list of user-declared straight walls, as pairs of
+    tour points: each is emitted verbatim as a straight LINE span, and
+    ordinary spans may neither swallow nor cross them.
     """
     n = len(tour)
     sharp = sharp_flags(tour)
     start_sharp = sharp[0]
+    # map the declared walls onto tour indices, the short way around;
+    # the tour was rotated so none straddles index 0
+    wlist = []
+    for w in (walls or []):
+        i1, i2 = tour_index(w[0], tour), tour_index(w[1], tour)
+        if i1 is None or i2 is None or i1 == i2:
+            continue
+        fwd = (i2 - i1) % n
+        if 2 * fwd > n:
+            i1, fwd = i2, n - fwd
+        if i1 + fwd <= n:
+            wlist.append((i1, i1 + fwd))
+    nogrow = list(sharp)
+    for w in wlist:
+        for i in range(n):
+            if w[0] <= i <= w[1]:
+                nogrow[i] = True
+        if w[1] == n:
+            nogrow[0] = True
     segs = []
     pos = 0
     te = None if start_sharp else te0
     ts0 = None
     while pos < n:
+        a = tour[pos]
+        wrec = next((w for w in wlist if w[0] == pos), None)
+        if wrec:
+            # a declared straight wall starts here: emit it verbatim
+            b_end = tour[wrec[1] % n]
+            qs = tour[pos + 1:wrec[1]]
+            mis = span_misses(a, b_end, 0.0, qs)
+            segs.append((a, b_end, 0.0))
+            left = max(0, left - mis)
+            if ts0 is None and not start_sharp:
+                ts0 = ang(a, b_end)
+            pos = wrec[1]
+            te = (None if pos < n and sharp[pos % n]
+                  else ang(a, b_end))
+            continue
         # one span may never swallow the whole loop, or the result
         # would be a single zero-length segment
         lim = n - pos - (1 if pos == 0 else 0)
-        a = tour[pos]
         best = best_exact = None
         # first pass honours the tangent window; if nothing fits inside
         # it, retry without it rather than emitting a stub that
@@ -344,7 +396,7 @@ def span_loop(tour, tol, left, te0=None, prorate=True):
         for relaxed in (False, True):
             length = 2
             while length <= lim:
-                if sharp[(pos + length - 1) % n]:
+                if nogrow[(pos + length - 1) % n]:
                     break
                 b_end = tour[(pos + length) % n]
                 if relaxed:
@@ -414,17 +466,17 @@ def seam_kink(segs):
     return abs(signed_dang(te, ts))
 
 
-def fit_pass(tour, tol, left, prorate=True):
+def fit_pass(tour, tol, left, prorate=True, walls=None):
     """One full fit; the on-the-shape threshold tracks this tolerance."""
     global _ON_EPS
     saved, _ON_EPS = _ON_EPS, on_eps_for(tol)
     try:
-        segs, l1 = span_loop(tour, tol, left, None, prorate)
+        segs, l1 = span_loop(tour, tol, left, None, prorate, walls)
         k1 = seam_kink(segs)
         if k1 > TANG_TOL + 0.001:
             s_last = segs[-1]
             te0 = ang(s_last[0], s_last[1]) + 2.0 * math.atan(s_last[2])
-            segs2, l2 = span_loop(tour, tol, left, te0, prorate)
+            segs2, l2 = span_loop(tour, tol, left, te0, prorate, walls)
             if seam_kink(segs2) < k1:
                 return segs2, l2
         return segs, l1
@@ -432,10 +484,13 @@ def fit_pass(tour, tol, left, prorate=True):
         _ON_EPS = saved
 
 
-def coarse_loop(tour, tol, maxarcs, allowance):
+def coarse_loop(tour, tol, maxarcs, allowance, walls=None):
     """Full fit; the curve cap relaxes the tolerance and refits."""
-    tour = rotate_to_corner(tour)
-    segs, left = fit_pass(tour, tol, allowance)
+    # start the walk at a declared wall when there is one, so no wall
+    # straddles the walk's origin; otherwise at the sharpest turn
+    tour = (rotate_to_point(tour, walls[0][0]) if walls
+            else rotate_to_corner(tour))
+    segs, left = fit_pass(tour, tol, allowance, True, walls)
     # the cap buys few curves with accuracy, so its refits drop both
     # the miss allowance and the per-span fair share
     if maxarcs is not None:
@@ -444,7 +499,7 @@ def coarse_loop(tour, tol, maxarcs, allowance):
         while arc_count(segs) > maxarcs and tries < 40:
             tol2 *= 1.4
             tries += 1
-            segs2, _ = fit_pass(tour, tol2, 10 ** 9, False)
+            segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls)
             if arc_count(segs2) < arc_count(segs):
                 segs = segs2
     return segs, left
@@ -526,10 +581,10 @@ def self_crosses(segs):
 # ---- measurements used by the tests ----------------------------------
 
 
-def fit(pts, tol=1.0, maxarcs=None):
+def fit(pts, tol=1.0, maxarcs=None, walls=None):
     allowance = pf_ceil(MISS_PCT * len(pts))
     tour = order_points(list(pts))
-    return coarse_loop(tour, tol, maxarcs, allowance)
+    return coarse_loop(tour, tol, maxarcs, allowance, walls)
 
 
 def closed(segs):
@@ -791,6 +846,40 @@ def test_tolerance_scales_the_fit():
           + ", ".join("%.2f->%d" % c for c in counts))
 
 
+def test_declared_straight_walls():
+    """A user-declared wall comes out as exactly one straight segment
+    between its two survey points, whatever the arcs around it do."""
+    pts = blob_pts(56)
+    tour = order_points(list(pts))
+
+    def wall_in(segs, w):
+        return [s for s in segs if abs(s[2]) < 1.0e-9
+                and ((dist(s[0], w[0]) < 1.0e-9
+                      and dist(s[1], w[1]) < 1.0e-9)
+                     or (dist(s[0], w[1]) < 1.0e-9
+                         and dist(s[1], w[0]) < 1.0e-9))]
+
+    w1 = (tour[10], tour[14])
+    segs, _ = fit(pts, walls=[w1])
+    assert closed(segs)
+    assert len(wall_in(segs, w1)) == 1, "declared wall not one straight seg"
+    assert all(math.isfinite(s[2]) for s in segs)
+
+    # two walls at once, plus a curve cap on top
+    w2 = (tour[30], tour[33])
+    segs, _ = fit(pts, walls=[w1, w2])
+    assert closed(segs)
+    assert len(wall_in(segs, w1)) == 1
+    assert len(wall_in(segs, w2)) == 1
+    capped, _ = fit(pts, maxarcs=6, walls=[w1])
+    assert closed(capped)
+    assert len(wall_in(capped, w1)) == 1, "cap refit lost the wall"
+    # a degenerate wall (same point twice) is simply ignored
+    segs, _ = fit(pts, walls=[(tour[5], tour[5])])
+    assert closed(segs)
+    print("  declared straight walls survive fitting and the cap")
+
+
 def test_degenerate_point_sets():
     """Three points, duplicates and near-collinear runs must not blow up."""
     segs, _ = fit([(0.0, 0.0), (100.0, 0.0), (50.0, 40.0)])
@@ -816,6 +905,7 @@ def test_constants_match_lisp():
     assert float(setq_value("MISS-PCT")) == MISS_PCT
     assert float(setq_value("SNAP-EPS")) == SNAP_EPS
     assert float(setq_value("FIT-EPS")) == FIT_EPS
+    assert float(setq_value("TOL-MAX")) == TOL_MAX
     # angles are written as (/ pi N)
     for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL)):
         m = re.search(r"\(setq\s+\*PF-%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
@@ -868,6 +958,7 @@ def main():
     test_nice_radii_are_preferred()
     test_curve_cap()
     test_tolerance_scales_the_fit()
+    test_declared_straight_walls()
     test_degenerate_point_sets()
     print("\nall tests passed")
 

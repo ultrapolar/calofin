@@ -50,11 +50,18 @@
 ;;; pull an arc off its anchor point; endpoints never move.
 ;;;
 ;;; THE MISS ALLOWANCE: the perimeter no longer has to thread every
-;;; point exactly.  Up to *PF-MISS-PCT* (15%) of the points, rounded
-;;; UP to the nearest whole point, may sit off the result by up to the
-;;; tolerance (default 1 unit = about an inch); every other point
-;;; stays on it (within *PF-ON-EPS*).  That slack is spent where it
-;;; buys the most: longer arcs, fewer curves, nicer radii.
+;;; point exactly.  A share of the points - asked per run, standard
+;;; *PF-MISS-PCT* (15%), rounded UP to the nearest whole point - may
+;;; sit off the result by up to the max distance (default 1 unit =
+;;; about an inch, capped at *PF-TOL-MAX*); every other point stays on
+;;; it (within *PF-ON-EPS*).  That slack is spent where it buys the
+;;; most: longer arcs, fewer curves, nicer radii.
+;;;
+;;; DECLARED STRAIGHT WALLS: the user may declare dead-straight walls
+;;; up front by picking their two end points; each is marked with a
+;;; dashed line on *PF-WALL-LAYER* and comes out of the points-built
+;;; fit as a straight LINE between exactly those two survey points -
+;;; arcs never swallow or cross a declared wall.
 ;;;
 ;;; THE CURVE CAP: the command also asks for a maximum number of
 ;;; curves ("None" = unlimited).  When a fit needs more, the whole
@@ -104,6 +111,12 @@
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the fitted polyline goes on
 (setq *PF-MISS-LAYER*   "POOL-MISS"); layer the "could not hold this
                                     ; point" markers go on
+(setq *PF-WALL-LAYER*   "POOL-WALLS"); layer the dashed markers for
+                                    ; user-declared straight walls go on
+(setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
+                                    ; prompt (2 inches): further than
+                                    ; that and the line is no longer a
+                                    ; trace of the points
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
   '((0.5 1 "red"    "tighter - hugs the points")
     (1.0 2 "yellow" "as asked")
@@ -485,6 +498,11 @@
     (if (> d mx) (setq mx d)))
   mx)
 
+;; The miss percentage in force for the current run: the command binds
+;; pf-miss-pct from the user's answer; Enter keeps the standard value.
+(defun pf:misspct ()
+  (if pf-miss-pct pf-miss-pct *PF-MISS-PCT*))
+
 ;; The "on the shape" threshold in force for the current run.  It
 ;; scales with the tolerance (a quarter of it, never below
 ;; *PF-ON-EPS*): if the user accepts 4 inches of error, a point 1 inch
@@ -742,6 +760,30 @@
     (setq keyed (cons (cons (+ best tp) q) keyed)))
   (mapcar 'cdr (pf:sort-car keyed)))
 
+;; The member of LST nearest to P.
+(defun pf:nearest (p lst / best bd q d)
+  (setq best nil bd nil)
+  (foreach q lst
+    (setq d (pf:dist p q))
+    (if (or (null bd) (< d bd)) (setq best q bd d)))
+  best)
+
+;; Index of point P in TOUR (exact-point fuzz), or nil.
+(defun pf:tour-index (p tour / i k q)
+  (setq i nil k 0)
+  (foreach q tour
+    (if (and (null i) (< (pf:dist p q) *PF-EXACT-EPS*)) (setq i k))
+    (setq k (1+ k)))
+  i)
+
+;; Rotate the closed TOUR so it starts at point P (used so a declared
+;; straight wall never straddles the walk's origin).
+(defun pf:rotate-to-point (tour p / i)
+  (setq i (pf:tour-index p tour))
+  (if (and i (> i 0))
+    (append (pf:nthcdr i tour) (pf:sublist tour 0 i))
+    tour))
+
 ;; Rotate the closed TOUR so it starts at its sharpest turn: the fitter
 ;; walks the loop from there, so the most corner-like point is always a
 ;; span endpoint and never gets buried inside a span.
@@ -878,12 +920,16 @@
 ;; its own fair share of it, so one greedy span cannot exhaust the
 ;; budget and starve the rest of the loop (the curve cap turns PRO off
 ;; because there the whole point is to trade accuracy for few curves).
-;; Returns the segment list.
+;; Straight walls the user declared (pf-walls, bound by the command as
+;; snapped point pairs) are emitted verbatim as LINE spans; ordinary
+;; spans may neither swallow nor cross them.  Returns the segment list.
 (defun pf:span-loop (tour tol left te0 pro / n sharp i prev cur next
                                              turn strtshp segs pos te
                                              ts0 lim a best bstx len go
                                              bnd win qs fr bl mis sn
-                                             dev0 anch relax tries lm)
+                                             dev0 anch relax tries lm
+                                             walls w i1 i2 fwd nogrow f
+                                             wrec)
   (setq n (length tour))
   ;; flag the sharp corners (intentional kinks, window resets)
   (setq sharp nil i 0)
@@ -894,18 +940,60 @@
           turn (abs (pf:signed-dang (angle prev cur) (angle cur next))))
     (setq sharp (cons (> turn *PF-CORNER-ANG*) sharp)
           i     (1+ i)))
-  (setq sharp   (reverse sharp)
+  (setq sharp (reverse sharp))
+  ;; map the declared straight walls onto tour indices, walking the
+  ;; short way around; the tour was rotated so none straddles index 0
+  (setq walls nil)
+  (foreach w pf-walls
+    (setq i1 (pf:tour-index (car w) tour)
+          i2 (pf:tour-index (cadr w) tour))
+    (if (and i1 i2 (/= i1 i2))
+      (progn
+        (setq fwd (rem (+ (- i2 i1) n) n))
+        (if (> (* 2 fwd) n)
+          (setq i1 i2 fwd (- n fwd)))
+        (if (<= (+ i1 fwd) n)
+          (setq walls (cons (list i1 (+ i1 fwd)) walls))))))
+  ;; indices ordinary spans may not swallow: sharp corners plus every
+  ;; index a declared wall covers
+  (setq nogrow nil i 0)
+  (repeat n
+    (setq f (nth i sharp))
+    (foreach w walls
+      (if (and (>= i (car w)) (<= i (cadr w))) (setq f T))
+      (if (and (= (cadr w) n) (= i 0)) (setq f T)))
+    (setq nogrow (cons f nogrow)
+          i      (1+ i)))
+  (setq nogrow  (reverse nogrow)
         strtshp (car sharp)
         segs    nil
         pos     0
         te      (if strtshp nil te0)
         ts0     nil)
   (while (< pos n)
+    (setq a    (nth pos tour)
+          wrec (assoc pos walls))
+    (if wrec
+      ;; ---- a declared straight wall starts here: emit it verbatim --
+      (progn
+        (setq len  (- (cadr wrec) pos)
+              bnd  (nth (rem (cadr wrec) n) tour)
+              qs   (pf:sublist tour (1+ pos) (1- len))
+              mis  (pf:span-misses a bnd 0.0 qs)
+              segs (cons (list a bnd 0.0) segs)
+              left (max 0 (- left mis)))
+        (if (and (null ts0) (not strtshp))
+          (setq ts0 (angle a bnd)))
+        (setq pos (cadr wrec)
+              te  (if (and (< pos n) (nth (rem pos n) sharp))
+                    nil
+                    (angle a bnd))))
+      ;; ---- an ordinary span --------------------------------------
+      (progn
     ;; one span may never swallow the whole loop: the first span stops
     ;; one point short so the result always has at least two real
     ;; segments instead of a single zero-length one
     (setq lim  (if (= pos 0) (1- (- n pos)) (- n pos))
-          a    (nth pos tour)
           best nil                   ; longest feasible span of any kind
           bstx nil                   ; longest span through an interior point
           relax nil
@@ -917,8 +1005,8 @@
     (while (and (null best) (< tries 2))
       (setq len 2 go T)
       (while (and go (<= len lim))
-        (if (nth (rem (+ pos len -1) n) sharp)
-          (setq go nil)              ; never bury a corner in a span
+        (if (nth (rem (+ pos len -1) n) nogrow)
+          (setq go nil)         ; never bury a corner or a wall point
           (progn
             (setq bnd (nth (rem (+ pos len) n) tour))
             (if relax
@@ -932,7 +1020,7 @@
                                               (pf:end-window ts0 a bnd))))))
             (setq qs (pf:sublist tour (1+ pos) (1- len))
                   lm (if pro
-                       (min left (pf:ceil (* *PF-MISS-PCT* len)))
+                       (min left (pf:ceil (* (pf:misspct) len)))
                        left)
                   fr (pf:span-fit a bnd qs win tol lm))
             (if (and (<= (cadr fr) tol) (<= (caddr fr) lm))
@@ -996,7 +1084,7 @@
     (setq pos (+ pos len)
           te  (if (nth (rem pos n) sharp)
                 nil
-                (+ (angle a bnd) (* 2.0 (atan bl))))))
+                (+ (angle a bnd) (* 2.0 (atan bl))))))))
   (reverse segs))
 
 ;; Tangent mismatch at the loop's closing joint (radians).
@@ -1031,7 +1119,11 @@
 ;; fewest-curves result seen is kept, so an unreachably small cap
 ;; still returns the smallest fit possible - never the biggest.
 (defun pf:coarse-loop (tour tol maxarcs / segs segs2 tol2 tries)
-  (setq tour (pf:rotate-to-corner tour)
+  ;; start the walk at a declared wall when there is one, so no wall
+  ;; straddles the walk's origin; otherwise at the sharpest turn
+  (setq tour (if pf-walls
+               (pf:rotate-to-point tour (car (car pf-walls)))
+               (pf:rotate-to-corner tour))
         segs (pf:fit-pass tour tol pf-miss-left T))
   ;; the cap deliberately buys few curves with accuracy, so the refits
   ;; drop both the miss allowance and the per-span fair share
@@ -1206,6 +1298,29 @@
     (if (pf:memb q b) (setq out (cons q out))))
   (reverse out))
 
+;; Make sure the DASHED linetype exists (pure entmake, no command
+;; calls).  Dash lengths are in drawing units - sized for an inch
+;; drawing, so the dashes read at pool scale.
+(defun pf:ensure-dashed ()
+  (if (not (tblsearch "LTYPE" "DASHED"))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   '(2 . "DASHED") '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0)))))
+
+;; Draw the dashed marker for a user-declared straight wall.
+(defun pf:draw-wall-marker (p1 p2)
+  (pf:ensure-dashed)
+  (pf:ensure-layer *PF-WALL-LAYER* 8)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
+                  (cons 8 *PF-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbLine")
+                  (cons 10 (list (car p1) (cadr p1) 0.0))
+                  (cons 11 (list (car p2) (cadr p2) 0.0)))))
+
 ;; Ring every point the chosen fit could not hold, on its own layer,
 ;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
 ;; a real feature the tolerance is too tight for.
@@ -1292,6 +1407,9 @@
         (princ (strcat "\n  (" (itoa nk)
                        " joint(s) needed more than the tangent limit to"
                        " close the loop)")))
+      (if pf-walls
+        (princ (strcat "\n  (" (itoa (length pf-walls))
+                       " declared straight wall(s) kept dead straight)")))
       (if (and *PF-MAX-ARCS* (> na *PF-MAX-ARCS*))
         (princ (strcat "\n  (the curve cap is " (itoa *PF-MAX-ARCS*)
                        " but " (itoa na) " curves was the fewest"
@@ -1487,8 +1605,10 @@
   (princ))
 
 ;; ---- the command -----------------------------------------------------
-(defun c:ABHD ( / tol mx ss i en ed lay typ ext nunsup nocs
+(defun c:ABHD ( / tol mx pct ans go wp1 wp2 rawwalls w w1 w2
+                    ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok
+                    pf-miss-pct pf-walls
                     *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, then restore
   (setq pf-old-err *error*
@@ -1512,18 +1632,44 @@
   ;; initget 6 refuses zero and negative values - a zero tolerance
   ;; would silently collapse the fit into single-point stubs.
   (setq pf-phase "reading the tolerance")
-  (princ "\n\n  Step 1 of 3 - how far may the fitted line sit from a survey point?")
-  (princ "\n  Type a distance in drawing units (1 = one inch), or pick two")
-  (princ "\n  points in the drawing to measure one.")
+  (princ "\n\n  Step 1 of 5 - how far may the fitted line sit from a survey point?")
+  (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
+  (princ "\n  pick two points in the drawing to measure one.")
   (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
   (initget 6)
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *PF-TOL* 2 3) ">: ")))
-  (if tol (setq *PF-TOL* tol) (setq tol *PF-TOL*))
+  (if (null tol) (setq tol *PF-TOL*))
+  (if (> tol *PF-TOL-MAX*)
+    (progn
+      (princ (strcat "\n  (more than " (rtos *PF-TOL-MAX* 2 1)
+                     " and the line is no longer a trace of the points"
+                     " - using " (rtos *PF-TOL-MAX* 2 1) ")"))
+      (setq tol *PF-TOL-MAX*)))
+  (setq *PF-TOL* tol)
 
-  ;; -- step 2: optional cap on how many curves the result may use ---
+  ;; -- step 2: how many of the points may sit off the line? ---------
+  ;; Enter means the standard share; the answer is per run, on purpose.
+  (setq pf-phase "reading the miss percentage")
+  (princ "\n\n  Step 2 of 5 - what percent of the points may sit OFF the line")
+  (princ "\n  (off, but still within the distance above)?")
+  (princ (strcat "\n  Press Enter for the standard "
+                 (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                 " percent."))
+  (initget 4)
+  (setq pct (getint (strcat "\n  Percent of points allowed off <"
+                            (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                            ">: ")))
+  (cond
+    ((null pct) (setq pf-miss-pct *PF-MISS-PCT*))
+    ((> pct 100)
+     (princ "\n  (more than 100 makes no sense - using 100)")
+     (setq pf-miss-pct 1.0))
+    (T (setq pf-miss-pct (/ pct 100.0))))
+
+  ;; -- step 3: optional cap on how many curves the result may use ---
   (setq pf-phase "reading the curve limit")
-  (princ "\n\n  Step 2 of 3 - limit how many curves the result may use?")
+  (princ "\n\n  Step 3 of 5 - limit how many curves the result may use?")
   (princ "\n  Type a whole number, or None for no limit.")
   (initget 4 "None")
   (setq mx (getint (strcat "\n  Maximum curves <"
@@ -1533,8 +1679,45 @@
         ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
         (T (setq *PF-MAX-ARCS* mx)))
 
-  ;; -- step 3: the selection ----------------------------------------
-  (princ "\n\n  Step 3 of 3 - select the survey points (POINTS layer or ab_pt")
+  ;; -- step 4: any dead-straight walls to declare? ------------------
+  ;; Each declared wall is marked with a dashed line right away and
+  ;; comes out of the fit as a straight LINE between those two survey
+  ;; points, no matter what the arcs around it are doing.
+  (setq pf-phase "asking about straight lines")
+  (princ "\n\n  Step 4 of 5 - does the pool edge have any dead-straight walls?")
+  (princ "\n  If Yes you will pick the two end points of each (snap to the")
+  (princ "\n  survey points); a dashed line marks each declared wall.")
+  (initget "Yes No")
+  (setq ans      (getkword "\n  Any straight lines? [Yes/No] <No>: ")
+        rawwalls nil)
+  (if (= ans "Yes")
+    (progn
+      (setq go T)
+      (while go
+        (setq pf-phase "picking a straight wall"
+              wp1      (getpoint "\n  First end of the straight wall: "))
+        (if wp1
+          (progn
+            (setq wp2 (getpoint wp1 "\n  Second end: "))
+            (if wp2
+              (progn
+                (setq wp1 (pf:2d wp1) wp2 (pf:2d wp2))
+                (pf:draw-wall-marker wp1 wp2)
+                (setq rawwalls (cons (list wp1 wp2) rawwalls))
+                (initget "Yes No")
+                (if (/= (getkword "\n  Another straight line? [Yes/No] <No>: ")
+                        "Yes")
+                  (setq go nil)))
+              (setq go nil)))
+          (setq go nil)))
+      (setq rawwalls (reverse rawwalls))
+      (if rawwalls
+        (princ (strcat "\n  " (itoa (length rawwalls))
+                       " straight wall(s) noted - dashed markers on layer "
+                       *PF-WALL-LAYER* ".")))))
+
+  ;; -- step 5: the selection ----------------------------------------
+  (princ "\n\n  Step 5 of 5 - select the survey points (POINTS layer or ab_pt")
   (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
   (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
@@ -1595,10 +1778,27 @@
                        " selected object(s) are not drawn in the world"
                        " plane; the fit is flat (XY) and may be wrong."
                        "  Set UCS to World and flatten them first.")))
-      ;; the miss allowance: this many points (*PF-MISS-PCT*, rounded
-      ;; UP to a whole point) may sit off the result by up to TOL
+      ;; the miss allowance: this share of the points (the answer to
+      ;; step 2, rounded UP to a whole point) may sit off the result
+      ;; by up to TOL
       (setq dpts  (if pts (pf:dedupe pts))
-            allow (pf:ceil (* *PF-MISS-PCT* (length dpts))))
+            allow (pf:ceil (* (pf:misspct) (length dpts))))
+      ;; snap the declared straight-wall ends onto actual survey
+      ;; points - arc and wall endpoints always sit ON points
+      (setq pf-walls nil)
+      (foreach w rawwalls
+        (setq w1 (pf:nearest (car w) dpts)
+              w2 (pf:nearest (cadr w) dpts))
+        (cond
+          ((or (null w1) (null w2)) nil)
+          ((< (pf:dist w1 w2) *PF-EXACT-EPS*)
+           (princ "\n  (both ends of a declared wall landed on the same survey point - that wall is ignored)"))
+          (T
+           (if (or (> (pf:dist (car w) w1) (* 3.0 tol))
+                   (> (pf:dist (cadr w) w2) (* 3.0 tol)))
+             (princ "\n  (a declared wall end was picked well away from any survey point - snapped to the nearest one)"))
+           (setq pf-walls (cons (list w1 w2) pf-walls)))))
+      (setq pf-walls (reverse pf-walls))
       (if (> (length dpts) 150)
         (princ (strcat "\nABHD: " (itoa (length dpts))
                        " points - ordering and fitting will take a"
@@ -1637,7 +1837,11 @@
                 (setq pf-phase "following the sketch order"
                       tour     (pf:loop-order loop dpts)))))
            (T
-            (princ "\nUsing the drawn POOL perimeter as the guide.")))
+            (princ "\nUsing the drawn POOL perimeter as the guide.")
+            (if pf-walls
+              (princ (strcat "\n  (declared straight walls only steer"
+                             " the points-built fit; here your drawn"
+                             " straight segments are already kept)")))))
          (if ok (pf:compare tour loop pts dpts tol allow))))))
   (setq *error* pf-old-err)   ; restore the previous error handler
   (princ))

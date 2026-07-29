@@ -29,11 +29,11 @@ number of curves outright.
 ## The miss allowance — fewer curves instead of exactness
 
 The fitted perimeter does **not** have to thread every point exactly.
-Up to `*PF-MISS-PCT*` (**15%**) of the points, **rounded up** to the
-nearest whole point, may sit off the result by up to the tolerance
-(default `1.0` drawing unit — about an inch); every other point stays
-*on* it. That slack is spent where it buys the most — longer spans,
-fewer segments, fewer curves.
+A share of the points — **asked at step 2, standard 15%**
+(`*PF-MISS-PCT*`), **rounded up** to the nearest whole point — may sit
+off the result by up to the max distance (default `1.0` drawing unit —
+about an inch); every other point stays *on* it. That slack is spent
+where it buys the most — longer spans, fewer segments, fewer curves.
 
 "On it" means within `*PF-ON-EPS*` (**0.25**) or a quarter of the
 tolerance, whichever is larger — the threshold scales so that raising
@@ -117,28 +117,58 @@ radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
 ## Usage
 
 1. `APPLOAD` → pick `abhd.lsp` (or drag it into the drawing).
-2. Type `ABHD`. It asks three plainly-worded questions:
+2. Type `ABHD`. It asks five plainly-worded questions:
 
 ```
 ABHD - fit a pool perimeter through the surveyed points.
 
-  Step 1 of 3 - how far may the fitted line sit from a survey point?
-  Type a distance in drawing units (1 = one inch), or pick two
-  points in the drawing to measure one.
+  Step 1 of 5 - how far may the fitted line sit from a survey point?
+  Type a distance in drawing units (1 = one inch, 2 at most), or
+  pick two points in the drawing to measure one.
   Smaller = hugs the points.  Bigger = smoother, with fewer curves.
   Maximum distance from a point <1.000>:
 
-  Step 2 of 3 - limit how many curves the result may use?
+  Step 2 of 5 - what percent of the points may sit OFF the line
+  (off, but still within the distance above)?
+  Press Enter for the standard 15 percent.
+  Percent of points allowed off <15>:
+
+  Step 3 of 5 - limit how many curves the result may use?
   Type a whole number, or None for no limit.
   Maximum curves <None>:
 
-  Step 3 of 3 - select the survey points (POINTS layer or ab_pt
+  Step 4 of 5 - does the pool edge have any dead-straight walls?
+  If Yes you will pick the two end points of each (snap to the
+  survey points); a dashed line marks each declared wall.
+  Any straight lines? [Yes/No] <No>:
+
+  Step 5 of 5 - select the survey points (POINTS layer or ab_pt
   blocks) and, if you have one, the POOL perimeter or ordering sketch.
   Select objects:
 ```
 
-Both answers are remembered for the session, so a second run is just
-`ABHD` + `Enter` + `Enter` + select.
+The max distance is capped at **2 inches** — anything looser is no
+longer a trace of the points, so a bigger entry is pulled back to 2
+with a note. Distance and curve cap are remembered for the session;
+the percentage resets to the standard 15% each run (`Enter` keeps it).
+So a repeat run is just `ABHD` + `Enter` × 4 + select.
+
+### Declaring straight walls
+
+Real pools often have one truly straight wall in an otherwise curvy
+shape. Answer `y`/`Yes` at step 4, then click the wall's two end
+points (use osnap to land on the survey points — each pick snaps to
+the nearest one anyway). A **dashed marker line** appears immediately
+on layer `POOL-WALLS` so you can see what you declared. `Enter` at
+"Another straight line?" moves on; `Yes` lets you pick more walls.
+
+Declared walls are law: each comes out of the fit as a dead-straight
+`LINE` between exactly those two survey points, arcs never swallow or
+cross them, and the arc after a wall leaves it near-tangent. Points
+along the wall that disagree with it are flagged like any other
+unheld point. (In guided mode your drawn straight segments are already
+kept, so declared walls only steer the points-built fits.) Delete the
+`POOL-WALLS` layer whenever you are done with the markers.
 
 ## Pick the one that looks right
 
@@ -228,6 +258,7 @@ in both files still agree.
 | "not drawn in the world plane" | Geometry was drawn in a tilted UCS. Set UCS to World and flatten it; the fit is 2D. |
 | Nothing appears | The report says how many segments were written. If the layer was off/frozen/locked, ABHD restores it and says so; if the drawing is read-only it says that instead. |
 | Red circles in the drawing | Those are the points the kept fit could not hold, on layer `POOL-MISS`. Zoom to them, then delete the layer. |
+| Grey dashed lines in the drawing | Your declared straight walls, on layer `POOL-WALLS`. Delete the layer when you no longer need the markers. |
 | Three coloured outlines left behind | You answered `All` at the choose prompt. Erase the two you don't want, or re-run and pick one. |
 | It feels slow | Three fits are built, and ordering is O(n²); above ~150 points the command warns and takes a while. An ordering sketch skips the expensive search entirely. |
 
