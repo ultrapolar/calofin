@@ -786,9 +786,15 @@
   (vl-some '(lambda (w) (wcmatch sq (strcat "*" (dchk:squash w) "*")))
            *dchk-fgstep-words*))
 
-(defun dchk:fgstep-p (ss blks / found i e ed et g b)
-  ;; T when a fiberglass step shows up anywhere in the highlighted
-  ;; area - as text, as a block, or as the layer things sit on
+(defun dchk:clip (s n)
+  (if (> (strlen s) n) (strcat (substr s 1 n) "...") s))
+
+(defun dchk:fgstep-src (ss blks / found i e ed et g b s)
+  ;; what makes a fiberglass step show up in the highlighted area:
+  ;; a description of the first match ("block '8' Straight FG Step'",
+  ;; "layer 'FiberglassStep'", "text 'FG Step'"), nil when there is
+  ;; none. Blocks are matched on their name, their attributes and the
+  ;; text inside their definition.
   (setq found nil
         i     0)
   (repeat (sslength ss)
@@ -796,18 +802,26 @@
           i (1+ i))
     (if (and (not found) (setq ed (entget e)))
       (progn
-        (setq et (cdr (assoc 0 ed)))
-        (if (dchk:phrase-p (cdr (assoc 8 ed)))   ; the layer it sits on
-          (setq found T))
+        (setq et (cdr (assoc 0 ed))
+              s  (cdr (assoc 8 ed)))
+        (if (dchk:phrase-p s)                    ; the layer it sits on
+          (setq found (strcat "layer '" (dchk:clip s 40) "'")))
         (if (and (not found) (member et '("TEXT" "MTEXT")))
           (foreach g ed
-            (if (and (member (car g) '(1 3)) (dchk:phrase-p (cdr g)))
-              (setq found T)))))))
+            (if (and (not found)
+                     (member (car g) '(1 3))
+                     (dchk:phrase-p (cdr g)))
+              (setq found (strcat "text '" (dchk:clip (cdr g) 40) "'"))))))))
   (foreach b blks                                ; block names & their text
-    (if (and (not found)
-             (or (dchk:phrase-p (dchk:block-name b))
-                 (vl-some 'dchk:phrase-p (dchk:ins-texts b))))
-      (setq found T)))
+    (if (not found)
+      (progn
+        (setq s (dchk:block-name b))
+        (if (dchk:phrase-p s)
+          (setq found (strcat "block '" (dchk:clip s 40) "'")))
+        (if (not found)
+          (foreach s (dchk:ins-texts b)
+            (if (and (not found) (dchk:phrase-p s))
+              (setq found (strcat "block text '" (dchk:clip s 40) "'"))))))))
   found)
 
 (defun dchk:join (lst sep / out s)
@@ -1720,9 +1734,10 @@
               linernostep nil
               linerstep   nil
               linerfg     nil
-              fgstep      (dchk:fgstep-p ss blks))
+              fgstep      (dchk:fgstep-src ss blks))
         (if fgstep
-          (princ "\n--- Fiberglass Step found in the highlighted area ---"))
+          (princ (strcat "\n--- Fiberglass Step found in the highlighted area: "
+                         fgstep " ---")))
         (if (null liners)
           (progn
             (princ "\n--- Liner check: no 'Liner Material' block in the selection ---")
@@ -1764,7 +1779,9 @@
                  (progn
                    (setq linerfg T)
                    (princ "\n  Note: a Fiberglass Step is in the drawing but the liner pattern has a Step.")
-                   (setq lines (cons "Liner Material: a Fiberglass Step is in the drawing but the liner pattern HAS a Step - it should not"
+                   (setq lines (cons (strcat "Liner Material: a Fiberglass Step ("
+                                             fgstep
+                                             ") is in the drawing but the liner pattern HAS a Step - it should not")
                                      lines)))))
               ;; otherwise steps drawn -> the liner pattern must cover them
               ((and stepsp (not linerstep))
