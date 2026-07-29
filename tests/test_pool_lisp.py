@@ -1304,4 +1304,53 @@ r3,wd = hopoval_r3(40.0,None,G,L)
 assert r3==40.0 and wd==80.0
 print("   NA R3 gives the tangent semicircle; NA W follows from G - R3")
 
+print("== 55. chain validator: negative members floored, donor trimmed ==")
+def chainval(vals,total):
+    """Mirror of pool:chainval."""
+    n=len(vals); flo=min(12.0,abs(total)/(4.0*n))
+    out=list(vals); fixed=[]
+    for i in range(n):
+        v=out[i]
+        if v<-1e-6:
+            need=flo-v
+            big=-1e30; bigi=None
+            for j,w in enumerate(out):
+                if j!=i and w>big: big=w; bigi=j
+            out[i]=flo; out[bigi]=big-need
+            fixed+=[i,bigi]
+    return out,fixed
+# the user's example: a negative G is drawn 1' long, F pays for it
+vals,fixed = chainval([60.0,-20.0,380.0,60.0],480.0)
+assert vals[1]==12.0 and vals[2]==348.0
+assert fixed==[1,2]                      # G lifted, F the donor
+assert abs(sum(vals)-480.0)<1e-9         # the chain still closes
+# a clean chain is untouched
+vals,fixed = chainval([60.0,120.0,240.0,60.0],480.0)
+assert fixed==[] and vals==[60.0,120.0,240.0,60.0]
+# pinned zeros (wedge G=0 E=0) are legal and never flagged
+vals,fixed = chainval([60.0,0.0,420.0,0.0],480.0)
+assert fixed==[]
+# tiny pool: the floor shrinks so the lift can't dominate the chain
+vals,fixed = chainval([30.0,-5.0,11.0,0.0],36.0)
+assert fixed and vals[1]==36.0/16.0 and abs(sum(vals)-36.0)<1e-9
+# M/L/K: a width chain works the same way
+vals,fixed = chainval([200.0,-80.0,120.0],240.0)
+assert vals[1]==12.0 and fixed==[1,0] and abs(sum(vals)-240.0)<1e-9
+print("   floor+donor preserves the chain total; zeros stay pinned")
+
+print("== 56. corner-size cap and depth-order rules ==")
+def corner_setback(ty,sz): return sz if ty=="Rounded" else sz*0.70711
+# a 3' radius on a 5' wall: setback 36 > 30 -> re-asked
+assert corner_setback("Rounded",36.0) > 0.5*60.0
+assert corner_setback("Rounded",29.0) < 0.5*60.0
+# a diag face sets back f/sqrt(2): a 40" face fits where a 36" radius won't
+assert corner_setback("Diag",40.0) < 0.5*60.0
+assert abs(corner_setback("Diag",40.0)-40.0/math.sqrt(2.0))<1e-3
+# depth order: D must beat C, C2 must land between them
+def deep_ok(dp,wh): return dp>wh
+def c2_ok(c2,wh,dp): return wh<=c2<=dp
+assert not deep_ok(36.0,40.0) and deep_ok(96.0,40.0)
+assert c2_ok(45.0,40.0,96.0) and not c2_ok(30.0,40.0,96.0) and not c2_ok(100.0,40.0,96.0)
+print("   oversized corners re-asked; D > C and C <= C2 <= D enforced")
+
 print("\nALL CHECKS PASSED")

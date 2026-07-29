@@ -447,6 +447,44 @@ L, the chosen level's set on a Grecian, the two body diagonals on a
 Roman. A shape whose diagonals all appeared at once used to bury the
 side being asked for.
 
+### Validation: bad numbers can't fold the pool
+
+Field numbers get sanity-checked at every resolution step, and a
+value the routine had to adjust is impossible to miss — it warns on
+the command line the moment it happens, the affected **dimensions are
+drawn red**, the matching **report rows are red**, and a red note is
+written under the report table.
+
+* **A bottom chain member that resolves negative** (letters that
+  over-sum, an `NA` whose remainder is already spent) is drawn **1'
+  long** instead, and the difference comes out of the largest other
+  letter — e.g. a negative `G` is drawn at 1' and `F` gives up the
+  rest. Both letters' dims and report rows go red, and the report
+  says `BOTTOM LENGTHS FAILED`. The chain still closes against the
+  pool, so the drawing stays geometrically sane. (Applies to every
+  bottom: hopper `H/G/F/E` + `M/L/K`, sport `E2/F2/G/F1/E1`, oval
+  and Grecian hoppers.)
+* **Grecian Overall / Roman letters** that don't close positive
+  against the overalls (`S+T+S = B`, `S1+V+S1 = A`) are adjusted with
+  a warning **before** anything is drawn or the bottom letters are
+  asked, and the affected report rows are red.
+* **Corner treatments** are capped so two treatments can never
+  overlap along a shared wall (setback ≤ half the shorter adjacent
+  wall); an oversized radius/chamfer is re-asked with the maximum
+  shown.
+* **Depths**: `D` must be deeper than the wall height `C`, and the
+  sloping-shallow `C2` must land between `C` and `D` — out-of-order
+  answers are re-asked on the spot.
+* **Oval hopper closure**: when both `R3` and `W` are measured they
+  must close against `G` within ½"; a mismatch turns both red with a
+  note.
+* Degenerate geometry can't crash a run: parallel construction lines
+  fall back safely, and a flat (bulge-zero) end skips its radius dim
+  with a message instead of erroring.
+* The undo group opens only when the drawing's UNDO is enabled and is
+  only closed if it was opened, so `U` after a run — or after a
+  cancel — behaves in every drawing.
+
 ### Your settings come back
 
 The command turns object snaps off (`OSMODE 0`) and forces

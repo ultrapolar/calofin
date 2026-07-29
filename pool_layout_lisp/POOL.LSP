@@ -111,6 +111,8 @@
       "\nBottom type [Normal/Sport/Wedge/SLope/MOdflat/SHallow] <Normal>: ")
 (setq pool:*sq4* (list (list "Square" 0.0) (list "Square" 0.0)
                        (list "Square" 0.0) (list "Square" 0.0)))
+(setq pool:*valnotes* nil)            ; validation problems for the report
+(setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -302,8 +304,11 @@
 ;; the same direction, so the leader comes in from outside instead of
 ;; running back to the circle centre.
 (defun pool:dimrad (ent tip outd doff)
-  (command "_.DIMRADIUS" (list ent (pool:wp tip))
-           (pool:wp (pool:v+ tip (pool:v* outd (* 0.9 doff))))))
+  (if (and ent (entget ent) (= "ARC" (cdr (assoc 0 (entget ent)))))
+      (command "_.DIMRADIUS" (list ent (pool:wp tip))
+               (pool:wp (pool:v+ tip (pool:v* outd (* 0.9 doff)))))
+      ;; a degenerate end (bulge ~ 0) drew a straight line instead
+      (princ "\n(radius dim skipped -- the end came out flat, no arc)")))
 
 ;; Rotated linear dimension hooked to two OBJECT points: the ext-line
 ;; origins land on drawn geometry (wall endpoints / arc tangents), and
@@ -982,7 +987,7 @@
     (pool:pvtie (list 375.0 -15.0) (list 425.0 40.0) "S2" 10.0)))
   pv)
 
-(defun pool:grecflow ( / oldclay mode crosses pv imeth pvo
+(defun pool:grecflow ( / oldclay mode crosses pv imeth pvo ovbad
                        braw araw traw sraw s1raw vraw s2raw
                        ovres sv tv s1v vov hyp u2 vv2 bact aact sact s1act
                        tp bo le ri ltd lbd lew rtd rbd rew
@@ -1020,8 +1025,27 @@
               s2raw (pool:askhx "S2 - corner cut face (check)" (cdr (assoc "S2" pvo)))
               ovres (pool:grecov araw braw sraw traw s1raw vraw)
               sv (car ovres) tv (cadr ovres)
-              s1v (caddr ovres) vov (cadddr ovres)
-              hyp (sqrt (+ (* sv sv) (* s1v s1v)))
+              s1v (caddr ovres) vov (cadddr ovres))
+        ;; the sheet letters must close POSITIVE against the overalls;
+        ;; a letter that does not fit is adjusted, warned about now,
+        ;; and its report rows go red
+        (if (<= tv 1.0e-6)
+            (progn
+              (setq tv (min 12.0 (* 0.25 braw)) sv (/ (- braw tv) 2.0) ovbad t)
+              (pool:valnote "OVERALL SHEET FAILED - S + T + S DOES NOT FIT B, ADJUSTED")))
+        (if (<= sv 1.0e-6)
+            (progn
+              (setq sv (min 12.0 (* 0.125 braw)) tv (- braw sv sv) ovbad t)
+              (pool:valnote "OVERALL SHEET FAILED - T LONGER THAN B, ADJUSTED")))
+        (if (<= vov 1.0e-6)
+            (progn
+              (setq vov (min 12.0 (* 0.25 araw)) s1v (/ (- araw vov) 2.0) ovbad t)
+              (pool:valnote "OVERALL SHEET FAILED - S1 + V + S1 DOES NOT FIT A, ADJUSTED")))
+        (if (<= s1v 1.0e-6)
+            (progn
+              (setq s1v (min 12.0 (* 0.125 araw)) vov (- araw s1v s1v) ovbad t)
+              (pool:valnote "OVERALL SHEET FAILED - V LONGER THAN A, ADJUSTED")))
+        (setq hyp (sqrt (+ (* sv sv) (* s1v s1v)))
               bo tv tp tv le araw ri araw
               ltd hyp lbd hyp rtd hyp rbd hyp
               lew vov rew vov))
@@ -1200,14 +1224,17 @@
         (setq rows (append rows (list
           (list "OV B" braw bact)
           (list "OV A" araw aact)
-          (list "OV T" traw (distance (nth 5 pts) (nth 4 pts)))
-          (list "OV S" sraw sact)
-          (list "OV S1" s1raw s1act)
-          (list "OV V" vraw (distance (nth 6 pts) (nth 7 pts)))
+          (append (list "OV T" traw (distance (nth 5 pts) (nth 4 pts)))
+                  (if ovbad (list t) nil))
+          (append (list "OV S" sraw sact) (if ovbad (list t) nil))
+          (append (list "OV S1" s1raw s1act) (if ovbad (list t) nil))
+          (append (list "OV V" vraw (distance (nth 6 pts) (nth 7 pts)))
+                  (if ovbad (list t) nil))
           (list "OV S2" s2raw (distance (nth 5 pts) (nth 6 pts))))))))
   ;; -------- pool bottom (interior pipeline)
   (setq rows (append rows (pool:hopgrecdsp pts doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (setq notes (append notes pool:*valnotes*))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
@@ -1576,6 +1603,7 @@
         (princ "\nPool mirrored.")))
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (setq notes (append notes pool:*valnotes*))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
@@ -1584,7 +1612,11 @@
 
 ;;; -------------------- report table -----------------------------------
 
-;; rows  = list of (label target actual)
+;; Report cell: red when the row is flagged.
+(defun pool:rtext (pt h str lay red)
+  (if red (pool:textc pt h str lay 1) (pool:text pt h str lay)))
+
+;; rows  = list of (label target actual [red])
 ;; notes = list of failure strings (written big and red)
 (defun pool:report (rows notes x y h lay / lh ytop y0 xr r tgt act dl ds n)
   (setq lh (* 2.2 h)
@@ -1598,22 +1630,23 @@
   (pool:text (list (+ x (* 20.0 h)) y) h "TARGET" lay)
   (pool:text (list (+ x (* 29.0 h)) y) h "ACTUAL" lay)
   (pool:text (list (+ x (* 38.0 h)) y) h "DELTA" lay)
+  ;; a 4th row element flags the row RED: the validator adjusted it
   (foreach r rows
     (setq y (- y lh)
           tgt (cadr r)
           act (caddr r))
-    (pool:text (list x y) h (car r) lay)
+    (pool:rtext (list x y) h (car r) lay (nth 3 r))
     (if tgt
         (progn
           (setq dl (- act tgt)
                 ds (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
-          (pool:text (list (+ x (* 20.0 h)) y) h (rtos tgt 2 2) lay)
-          (pool:text (list (+ x (* 38.0 h)) y) h ds lay))
+          (pool:rtext (list (+ x (* 20.0 h)) y) h (rtos tgt 2 2) lay (nth 3 r))
+          (pool:rtext (list (+ x (* 38.0 h)) y) h ds lay (nth 3 r)))
         ;; NA target: measurement was not taken in the field
         (progn
-          (pool:text (list (+ x (* 20.0 h)) y) h "N/A" lay)
-          (pool:text (list (+ x (* 38.0 h)) y) h "-" lay)))
-    (pool:text (list (+ x (* 29.0 h)) y) h (rtos act 2 2) lay))
+          (pool:rtext (list (+ x (* 20.0 h)) y) h "N/A" lay (nth 3 r))
+          (pool:rtext (list (+ x (* 38.0 h)) y) h "-" lay (nth 3 r))))
+    (pool:rtext (list (+ x (* 29.0 h)) y) h (rtos act 2 2) lay (nth 3 r)))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
     (pool:textc (list x y) (* 1.4 h) n lay 1))
@@ -1787,7 +1820,10 @@
   pv)
 
 ;; Prompt one corner's treatment (Enter reuses prevty/prevsz).
-(defun pool:askcorner (label prevty prevsz ents / ty sz cols)
+;; maxsb caps the treatment's setback along the walls at half the
+;; shorter adjacent wall, so two treatments can never overlap and fold
+;; the perimeter; too-large answers are re-asked.
+(defun pool:askcorner (label prevty prevsz ents maxsb / ty sz cols sb)
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (if prevty (initget "Square Rounded Diag") (initget 1 "Square Rounded Diag"))
@@ -1803,7 +1839,20 @@
                                   (if (and prevsz (> prevsz 0.0))
                                       (strcat " <" (rtos prevsz) ">") "")
                                   ": ")))
-        (if (null sz) (setq sz prevsz))))
+        (if (null sz) (setq sz prevsz))
+        ;; Rounded sets back r along each wall; a Diag face f sets
+        ;; back f/sqrt(2) (90-degree corners)
+        (while (and maxsb
+                    (> (setq sb (if (= ty "Rounded") sz (* sz 0.70711)))
+                       maxsb))
+          (princ (strcat "\nToo large for this corner's walls -- max "
+                         (rtos (if (= ty "Rounded") maxsb (/ maxsb 0.70711)))
+                         ".  Re-enter."))
+          (initget 7)
+          (setq sz (getdist (strcat "\n" label
+                                    (if (= ty "Rounded") " corner radius"
+                                        " chamfer face length")
+                                    ": "))))))
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (list ty sz))
 
@@ -1876,7 +1925,11 @@
         (setq s (/ (- (* (- (car p2) (car p1)) (cadr d2))
                       (* (- (cadr p2) (cadr p1)) (car d2)))
                    den))
-        (pool:v+ p1 (pool:v* d1 s)))))
+        (pool:v+ p1 (pool:v* d1 s)))
+      ;; parallel lines never truly happen on sane input; a degenerate
+      ;; fit must not crash a caller with nil, so fall back to the
+      ;; midpoint of the two anchor points
+      (pool:mid p1 p2)))
 
 ;; The side p->q offset inward (toward cen) by dist, as (point dir).
 (defun pool:offline (p q cen dist / n)
@@ -2114,6 +2167,74 @@
               k (1+ k))))
   (reverse out))
 
+;; Post-check a resolved chain: no member may be negative.  A member
+;; that resolved below zero is lifted to a positive floor (12", or a
+;; share of the total on a small pool) and the deficit comes out of
+;; the LARGEST other member -- e.g. a G that went negative is drawn
+;; 1' long and F gives up the difference.  Returns (vals fixed):
+;; fixed holds the index of every member changed (the lifted one AND
+;; its donor) so the caller can flag their dims and report rows red.
+(defun pool:chainval (vals total / out fixed n i j v flo need big bigi w)
+  (setq n (length vals)
+        flo (min 12.0 (/ (abs total) (* 4.0 n)))
+        out vals fixed nil i 0)
+  (while (< i n)
+    (setq v (nth i out))
+    (if (< v -1.0e-6)
+        (progn
+          (setq need (- flo v) big -1.0e30 bigi nil j 0)
+          (foreach w out
+            (if (and (/= j i) (> w big)) (setq big w bigi j))
+            (setq j (1+ j)))
+          (setq out (pool:setnth (pool:setnth out i flo) bigi (- big need))
+                fixed (append fixed (list i bigi)))))
+    (setq i (1+ i)))
+  (list out fixed))
+
+;; Record a validation problem: an immediate command-line warning now,
+;; and a red note under the report table later.
+(defun pool:valnote (msg)
+  (setq pool:*valnotes* (append pool:*valnotes* (list msg)))
+  (princ (strcat "\n*** " msg " ***"))
+  (princ))
+
+;; The adjusted letters as "G/F" for a note.
+(defun pool:fixnames (fixed labels / out i)
+  (setq out "")
+  (foreach i fixed
+    (setq out (strcat out (if (= out "") "" "/") (nth i labels))))
+  out)
+
+;; Color the just-drawn dimension red (a measurement the validator had
+;; to adjust).
+(defun pool:dimred ( / e ed)
+  (setq e (entlast))
+  (if (and e (setq ed (entget e)))
+      (entmod (if (assoc 62 ed)
+                  (subst (cons 62 1) (assoc 62 ed) ed)
+                  (append ed (list (cons 62 1)))))))
+
+;; Report row, red-flagged when index i is among the adjusted ones.
+(defun pool:vrow (label tgt act i fixed)
+  (append (list label tgt act) (if (member i fixed) (list t) nil)))
+
+;; Deep depth must beat the wall height; C2 must land between them.
+(defun pool:askdeep (msg ents wh / dp)
+  (setq dp (pool:askh msg ents))
+  (while (<= dp wh)
+    (princ (strcat "\nD must be deeper than the wall height C ("
+                   (rtos wh) ") -- re-enter."))
+    (setq dp (pool:askh msg ents)))
+  dp)
+
+(defun pool:askc2 (msg ents wh dp / c2)
+  (setq c2 (pool:askh msg ents))
+  (while (or (< c2 wh) (> c2 dp))
+    (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
+                   (rtos dp) ") -- re-enter."))
+    (setq c2 (pool:askh msg ents)))
+  c2)
+
 ;; Hopper-language bottom: lettered guide, the H/G/F/E/M/L/K chain,
 ;; plan hopper + chain dims, and -- for every style but Normal -- the
 ;; side profile below with its depth dims.
@@ -2123,7 +2244,8 @@
 (defun pool:hopnormal (quad corners doff th lmode style x0 y0 tie
                        / pv h g f e m l k gg tl odl sp whn hdn nom
                          hraw graw fraw eraw mraw lraw kraw wh dp c2
-                         a b c d cen toth totv hres vres skipe rows)
+                         a b c d cen toth totv hres vres skipe rows
+                         cv hfx vfx)
   (setq sp (pool:btmspec style))
   ;; wall-to-wall totals through the pool centre: B1 along the run,
   ;; V1 across it
@@ -2192,10 +2314,10 @@
   ;; depths, while the nominal section is still on screen
   (if (caddr sp)
       (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
-            dp (pool:askh "D - deep end depth" (cdr (assoc "D" pv)))
+            dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh)
             c2 (if (cadddr sp)
-                   (pool:askh "C2 - depth where the shallow floor meets the break"
-                              (cdr (assoc "C2" pv)))
+                   (pool:askc2 "C2 - depth where the shallow floor meets the break"
+                               (cdr (assoc "C2" pv)) wh dp)
                    wh)))
   (pool:pvkill)
   ;; resolve the chains: NA takes the remainder (split when several);
@@ -2203,8 +2325,18 @@
   ;; leftover, and L does across the pool
   (setq hres (pool:chainfix (list hraw graw fraw eraw) toth (nth 4 sp))
         vres (pool:chainfix (list mraw lraw kraw) totv 1)
+        cv (pool:chainval hres toth) hres (car cv) hfx (cadr cv)
+        cv (pool:chainval vres totv) vres (car cv) vfx (cadr cv)
         h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
         m (car vres) l (cadr vres) k (caddr vres))
+  ;; a chain member that resolved negative was floored and its donor
+  ;; trimmed: both get RED dims and RED report rows below
+  (if hfx (pool:valnote (strcat "BOTTOM LENGTHS FAILED - "
+                                (pool:fixnames hfx '("H" "G" "F" "E"))
+                                " ADJUSTED, VERIFY")))
+  (if vfx (pool:valnote (strcat "BOTTOM WIDTHS FAILED - "
+                                (pool:fixnames vfx '("M" "L" "K"))
+                                " ADJUSTED, VERIFY")))
   ;; a G that came out at zero is a slope bottom whatever was asked
   ;; for, so the section comes along automatically
   (if (< g 1.0e-6) (setq g 0.0))
@@ -2212,7 +2344,7 @@
       (progn
         (princ "\nG = 0 -- that is a slope bottom, so a side view is drawn too.")
         (setq wh (pool:askh "C - wall height (shallow depth)" nil)
-              dp (pool:askh "D - deep end depth" nil)
+              dp (pool:askdeep "D - deep end depth" nil wh)
               c2 wh)))
   (setq gg (pool:hopcalc quad corners h g e m k))
   (pool:hopdraw gg "POOL" tie)
@@ -2227,18 +2359,24 @@
   (setvar "CLAYER" "DIMENSION")
   ;; M/L/K def points sit on the hopper edge; their dim line floats
   ;; 30" right via the 'voff vector
-  (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
-                    (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
-                    (list 'pht 'pt t) (list 'phb 'pht t) (list 'pb 'phb t))
+  (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
+                    (list 'phl 'phr nil (member 1 hfx))
+                    (list 'phr 'pbrk nil (member 2 hfx))
+                    (list 'pbrk 'pr nil (member 3 hfx))
+                    (list 'pht 'pt t (member 0 vfx))
+                    (list 'phb 'pht t (member 1 vfx))
+                    (list 'pb 'phb t (member 2 vfx)))
     ;; a pinned-out letter (G with no pad, E on the wall) has nothing
     ;; to dimension
     (if (> (distance (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg)))
            1.0e-6)
-        (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
-                     (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
-                                        (cadr (assoc (cadr tl) gg)))
-                              (if (caddr tl) (cadr (assoc 'voff gg))
-                                  (list 0.0 0.0))))))
+        (progn
+          (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
+                       (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
+                                          (cadr (assoc (cadr tl) gg)))
+                                (if (caddr tl) (cadr (assoc 'voff gg))
+                                    (list 0.0 0.0))))
+          (if (cadddr tl) (pool:dimred)))))
   ;; profile depths: C at the shallow wall, D at the deep end
   (if wh
       (progn
@@ -2251,15 +2389,15 @@
                          (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2)))))))
   (setvar "CLAYER" odl)
   (setq rows (list
-    (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-    (list "HOP G" (if (car sp) graw nil)
-          (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
-    (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-    (list "HOP E" (if (or skipe (not (cadr sp))) nil eraw)
-          (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
-    (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
-    (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
-    (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
+    (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
+    (pool:vrow "HOP G" (if (car sp) graw nil)
+               (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))) 1 hfx)
+    (pool:vrow "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))) 2 hfx)
+    (pool:vrow "HOP E" (if (or skipe (not (cadr sp))) nil eraw)
+               (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))) 3 hfx)
+    (pool:vrow "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))) 0 vfx)
+    (pool:vrow "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))) 1 vfx)
+    (pool:vrow "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))) 2 vfx)))
   (if wh
       (setq rows (append rows
                          (list (list "WALL HT C" wh wh)
@@ -2347,7 +2485,7 @@
 (defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax doff th
                       / wid whn hdn ggn pv e2r f2r gr f1r e1r mraw lraw kraw
                         wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
-                        brks tl xd nopad)
+                        brks tl xd nopad cv hfx vfx)
   (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
                       (pool:linex cen (cadr lline) (car tline) (cadr tline)))
         whn (* 0.25 wid)
@@ -2393,7 +2531,7 @@
         lraw (pool:askhx "L - deep flat width" (cdr (assoc "L" pv)))
         kraw (pool:askhd "K - deep flat to bottom side" (cdr (assoc "K" pv)) mraw)
         wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
-        hd (pool:askh "D - deep depth" (cdr (assoc "D" pv))))
+        hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh))
   (pool:pvkill)
   ;; resolve: horizontal chain vs the pool length (G absorbs; the
   ;; no-pad sport fixes G = 0 and splits its residual across F2/F1),
@@ -2410,12 +2548,25 @@
       (setq res (pool:chainfix (list e2r f2r gr f1r e1r) total 2)
             e2 (car res) f2 (cadr res) g (caddr res)
             f1 (cadddr res) e1 (nth 4 res)))
+  ;; no member of the resolved chain may be negative: floor it and
+  ;; trim the largest other member, marking both red below
+  (setq cv (pool:chainval (list e2 f2 g f1 e1) total)
+        hfx (cadr cv)
+        e2 (nth 0 (car cv)) f2 (nth 1 (car cv)) g (nth 2 (car cv))
+        f1 (nth 3 (car cv)) e1 (nth 4 (car cv)))
+  (if hfx (pool:valnote (strcat "SPORT LENGTHS FAILED - "
+                                (pool:fixnames hfx '("E2" "F2" "G" "F1" "E1"))
+                                " ADJUSTED, VERIFY")))
   ;; a G that resolves away (NA with the rest filling the length, or
   ;; absorbed to nothing) also collapses to the no-pad V bottom
   (if (< g 1.0e-6) (setq nopad t g 0.0))
   (setq vres (pool:chainfix (list mraw lraw kraw) wid 1)
+        cv (pool:chainval vres wid) vres (car cv) vfx (cadr cv)
         m (car vres) l (cadr vres) k (caddr vres)
         gg (pool:hopsportc lline rline bline tline cen e2 f2 g f1 e1 m k))
+  (if vfx (pool:valnote (strcat "SPORT WIDTHS FAILED - "
+                                (pool:fixnames vfx '("M" "L" "K"))
+                                " ADJUSTED, VERIFY")))
   (pool:hopsportdraw gg nopad "POOL" nil)
   ;; profile below, with C and D dims only
   (setq brks (if nopad
@@ -2426,16 +2577,20 @@
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
   ;; plan chains, standard-hopper style
-  (foreach tl (append (list (list 'pl 'pobl nil) (list 'pobl 'pdfl nil))
-                      (if nopad nil (list (list 'pdfl 'pdfr nil)))
-                      (list (list 'pdfr 'pobr nil) (list 'pobr 'pr nil)
-                            (list 'pdt 'pt t) (list 'pdb 'pdt t)
-                            (list 'pb 'pdb t)))
+  (foreach tl (append (list (list 'pl 'pobl nil (member 0 hfx))
+                            (list 'pobl 'pdfl nil (member 1 hfx)))
+                      (if nopad nil (list (list 'pdfl 'pdfr nil (member 2 hfx))))
+                      (list (list 'pdfr 'pobr nil (member 3 hfx))
+                            (list 'pobr 'pr nil (member 4 hfx))
+                            (list 'pdt 'pt t (member 0 vfx))
+                            (list 'pdb 'pdt t (member 1 vfx))
+                            (list 'pb 'pdb t (member 2 vfx))))
     (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
                  (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
                                     (cadr (assoc (cadr tl) gg)))
                           (if (caddr tl) (cadr (assoc 'voff gg))
-                              (list 0.0 0.0)))))
+                              (list 0.0 0.0))))
+    (if (cadddr tl) (pool:dimred)))
   (pool:dimalg (list (+ x0 total) y0) (list (+ x0 total) (- y0 wh))
                (list (+ x0 total (* 0.8 doff)) (- y0 (* 0.5 wh))))
   (setq xd (if nopad (+ x0 e2 f2) (+ x0 e2 f2 (* 0.5 g))))
@@ -2443,15 +2598,15 @@
                (list (+ xd (* 0.3 doff)) (- y0 (* 0.5 hd))))
   (setvar "CLAYER" odl)
   (setq rows (append
-    (list (list "SPT E2" e2r (distance (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg))))
-          (list "SPT F2" f2r (distance (cadr (assoc 'pobl gg)) (cadr (assoc 'pdfl gg)))))
+    (list (pool:vrow "SPT E2" e2r (distance (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg))) 0 hfx)
+          (pool:vrow "SPT F2" f2r (distance (cadr (assoc 'pobl gg)) (cadr (assoc 'pdfl gg))) 1 hfx))
     (if nopad nil
-        (list (list "SPT G" gr (distance (cadr (assoc 'pdfl gg)) (cadr (assoc 'pdfr gg))))))
-    (list (list "SPT F1" f1r (distance (cadr (assoc 'pdfr gg)) (cadr (assoc 'pobr gg))))
-          (list "SPT E1" e1r (distance (cadr (assoc 'pobr gg)) (cadr (assoc 'pr gg))))
-          (list "SPT M" mraw (distance (cadr (assoc 'pdt gg)) (cadr (assoc 'pt gg))))
-          (list "SPT L" lraw (distance (cadr (assoc 'pdb gg)) (cadr (assoc 'pdt gg))))
-          (list "SPT K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'pdb gg))))
+        (list (pool:vrow "SPT G" gr (distance (cadr (assoc 'pdfl gg)) (cadr (assoc 'pdfr gg))) 2 hfx)))
+    (list (pool:vrow "SPT F1" f1r (distance (cadr (assoc 'pdfr gg)) (cadr (assoc 'pobr gg))) 3 hfx)
+          (pool:vrow "SPT E1" e1r (distance (cadr (assoc 'pobr gg)) (cadr (assoc 'pr gg))) 4 hfx)
+          (pool:vrow "SPT M" mraw (distance (cadr (assoc 'pdt gg)) (cadr (assoc 'pt gg))) 0 vfx)
+          (pool:vrow "SPT L" lraw (distance (cadr (assoc 'pdb gg)) (cadr (assoc 'pdt gg))) 1 vfx)
+          (pool:vrow "SPT K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'pdb gg))) 2 vfx)
           (list "WALL HT C" wh wh)
           (list "DEPTH D" hd hd))))
   rows)
@@ -2608,7 +2763,7 @@
 (defun pool:hopoval (quad tipl tipr doff th / len wid ggn pv gg rows tl odl
                                               h g f e m l k r3 r3raw w tt o
                                               hraw graw fraw eraw mraw lraw kraw
-                                              totv hres vres
+                                              totv hres vres cv hfx vfx r3wbad
                                               xmin xmax ymin ymax)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
@@ -2660,8 +2815,17 @@
                                  (cadddr quad) (pool:v- (caddr quad) (cadddr quad))))
               hres (pool:chainfix (list hraw graw fraw eraw) (distance tipl tipr) 1)
               vres (pool:chainfix (list mraw lraw kraw) totv 1)
+              cv (pool:chainval hres (distance tipl tipr))
+              hres (car cv) hfx (cadr cv)
+              cv (pool:chainval vres totv) vres (car cv) vfx (cadr cv)
               h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
               m (car vres) l (cadr vres) k (caddr vres))
+        (if hfx (pool:valnote (strcat "BOTTOM LENGTHS FAILED - "
+                                      (pool:fixnames hfx '("H" "G" "F" "E"))
+                                      " ADJUSTED, VERIFY")))
+        (if vfx (pool:valnote (strcat "BOTTOM WIDTHS FAILED - "
+                                      (pool:fixnames vfx '("M" "L" "K"))
+                                      " ADJUSTED, VERIFY")))
         ;; The hopper's radius end and its flat top close against the
         ;; hopper length:  R3 + W = G.
         ;;   * R3 NA -> half the hopper width the offsets give (L/2),
@@ -2674,33 +2838,46 @@
                        (w (- g w))
                        (t (* 0.5 l))))
         (if (< r3 1.0e-6) (setq r3 (* 0.5 l)))
+        ;; when BOTH were measured they must close against the hopper
+        ;; length: R3 + W = G
+        (if (and r3raw w (> (abs (- (+ r3raw w) g)) 0.5))
+            (progn
+              (setq r3wbad t)
+              (pool:valnote "OVAL HOPPER R3 + W DOES NOT CLOSE AGAINST G - VERIFY")))
         (setq gg (pool:hopovalc quad tipl tipr h g e m k r3))
         (pool:hopovaldraw gg "POOL" nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
-        (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
-                          (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
-                          (list 'phl 'ptan nil) (list 'ttop 'htr nil)
-                          (list 'pht 'pt t) (list 'phb 'pht t)
-                          (list 'pb 'phb t))
+        (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
+                          (list 'phl 'phr nil (member 1 hfx))
+                          (list 'phr 'pbrk nil (member 2 hfx))
+                          (list 'pbrk 'pr nil (member 3 hfx))
+                          (list 'phl 'ptan nil r3wbad)
+                          (list 'ttop 'htr nil r3wbad)
+                          (list 'pht 'pt t (member 0 vfx))
+                          (list 'phb 'pht t (member 1 vfx))
+                          (list 'pb 'phb t (member 2 vfx)))
           (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
                        (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
                                           (cadr (assoc (cadr tl) gg)))
                                 (if (caddr tl) (cadr (assoc 'voff gg))
-                                    (list 0.0 0.0)))))
+                                    (list 0.0 0.0))))
+          (if (cadddr tl) (pool:dimred)))
         (setvar "CLAYER" odl)
         (setq o (pool:circum (cadr (assoc 'ttop gg)) (cadr (assoc 'tip gg))
                              (cadr (assoc 'tbot gg)))
               rows (list
-          (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-          (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
-          (list "HOP R3" r3raw (if o (distance o (cadr (assoc 'tip gg))) r3))
-          (list "HOP W" w (distance (cadr (assoc 'ttop gg)) (cadr (assoc 'htr gg))))
-          (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-          (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
-          (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
-          (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
-          (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))
+          (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
+          (pool:vrow "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))) 1 hfx)
+          (append (list "HOP R3" r3raw (if o (distance o (cadr (assoc 'tip gg))) r3))
+                  (if r3wbad (list t) nil))
+          (append (list "HOP W" w (distance (cadr (assoc 'ttop gg)) (cadr (assoc 'htr gg))))
+                  (if r3wbad (list t) nil))
+          (pool:vrow "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))) 2 hfx)
+          (pool:vrow "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))) 3 hfx)
+          (pool:vrow "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))) 0 vfx)
+          (pool:vrow "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))) 1 vfx)
+          (pool:vrow "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))) 2 vfx)
           (list "HOP T" tt (distance (cadddr quad) (caddr quad)))))
         rows)))
 
@@ -2801,7 +2978,7 @@
 (defun pool:hopgrec (pts doff th / htype six len wid ggn pv gg rows tl odl
                                    h g f e m l k w l1 x wp
                                    hraw graw fraw eraw mraw lraw kraw
-                                   cen p u vv toth totv hres vres
+                                   cen p u vv toth totv hres vres cv hfx vfx
                                    xmin xmax ymin ymax)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
@@ -2866,21 +3043,33 @@
                      (pool:linex cen vv (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts))))
               hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
               vres (pool:chainfix (list mraw lraw kraw) totv 1)
+              cv (pool:chainval hres toth) hres (car cv) hfx (cadr cv)
+              cv (pool:chainval vres totv) vres (car cv) vfx (cadr cv)
               h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
               m (car vres) l (cadr vres) k (caddr vres))
+        (if hfx (pool:valnote (strcat "BOTTOM LENGTHS FAILED - "
+                                      (pool:fixnames hfx '("H" "G" "F" "E"))
+                                      " ADJUSTED, VERIFY")))
+        (if vfx (pool:valnote (strcat "BOTTOM WIDTHS FAILED - "
+                                      (pool:fixnames vfx '("M" "L" "K"))
+                                      " ADJUSTED, VERIFY")))
         (setq gg (pool:hopgrecc pts h g e m k (if six w nil) (if six l1 nil)))
         (pool:hopgrecdraw gg "POOL" six nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
-        (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
-                          (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
-                          (list 'pht 'pt t) (list 'phb 'pht t)
-                          (list 'pb 'phb t))
+        (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
+                          (list 'phl 'phr nil (member 1 hfx))
+                          (list 'phr 'pbrk nil (member 2 hfx))
+                          (list 'pbrk 'pr nil (member 3 hfx))
+                          (list 'pht 'pt t (member 0 vfx))
+                          (list 'phb 'pht t (member 1 vfx))
+                          (list 'pb 'phb t (member 2 vfx)))
           (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
                        (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
                                           (cadr (assoc (cadr tl) gg)))
                                 (if (caddr tl) (cadr (assoc 'voff gg))
-                                    (list 0.0 0.0)))))
+                                    (list 0.0 0.0))))
+          (if (cadddr tl) (pool:dimred)))
         (if six
             (progn
               (pool:dimalg (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))
@@ -2891,13 +3080,13 @@
                            (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))
         (setvar "CLAYER" odl)
         (setq rows (list
-          (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-          (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
-          (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-          (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
-          (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
-          (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
-          (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
+          (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
+          (pool:vrow "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))) 1 hfx)
+          (pool:vrow "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))) 2 hfx)
+          (pool:vrow "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))) 3 hfx)
+          (pool:vrow "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))) 0 vfx)
+          (pool:vrow "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))) 1 vfx)
+          (pool:vrow "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))) 2 vfx)))
         (if six
             (setq rows (append rows (list
               (list "HOP W" w (distance (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))))
@@ -3126,14 +3315,17 @@
       (if pool:*insq*
           (progn                        ; in-square: one answer for all 4
             (setq cc (pool:askcorner "All corners (assumed identical)" nil nil
-                                     (pool:lbl pv '(lA lB lC lD)))
+                                     (pool:lbl pv '(lA lB lC lD))
+                                     (* 0.5 (min tp le)))
                   corners (list cc cc cc cc)))
           (progn                        ; out-of-square: per corner, Enter reuses
             (princ "\n(per-corner treatment; press Enter to reuse the previous corner)")
             (setq corners nil prevty nil prevsz nil)
-            (foreach lbl (list "A" "B" "C" "D")
-              (setq cc (pool:askcorner (strcat "Corner " lbl) prevty prevsz
-                                       (pool:lbl pv (list (pool:lblkey lbl))))
+            (foreach lbl (list (list "A" bo le) (list "B" bo ri)
+                               (list "C" tp ri) (list "D" tp le))
+              (setq cc (pool:askcorner (strcat "Corner " (car lbl)) prevty prevsz
+                                       (pool:lbl pv (list (pool:lblkey (car lbl))))
+                                       (* 0.5 (min (cadr lbl) (caddr lbl))))
                     prevty (car cc) prevsz (cadr cc)
                     corners (cons cc corners)))
             (setq corners (reverse corners))))
@@ -3361,6 +3553,7 @@
                                                (cadr (nth (cadr lbl) corners))
                                                (cadr (nth (cadr lbl) corners))))))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (setq notes (append notes pool:*valnotes*))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
@@ -3445,7 +3638,7 @@
   pv)
 
 ;; Full guided flow for Roman pools.
-(defun pool:romanflow ( / oldclay perfect pv braw araw traw
+(defun pool:romanflow ( / oldclay perfect pv braw araw traw rombad
                           slraw srraw s1lraw s1rraw vlraw vrraw r1 r2
                           hres sl tv sr lres rres s1l vl s1r vr
                           dac dbd fq quad failed a b c d cen meas notes
@@ -3513,6 +3706,33 @@
              (t (/ braw 8.0)))
         tv (- braw sl sr))
 
+  ;; every letter must close POSITIVE against the overalls -- warned
+  ;; NOW, before the pool is drawn or the bottom letters asked, and
+  ;; red in the report after
+  (if (<= s1l 1.0e-6)
+      (progn (setq s1l (min 12.0 (* 0.125 araw)) vl (- araw s1l s1l) rombad t)
+             (pool:valnote "ROMAN S1 LEFT NOT POSITIVE - ADJUSTED")))
+  (if (<= s1r 1.0e-6)
+      (progn (setq s1r (min 12.0 (* 0.125 araw)) vr (- araw s1r s1r) rombad t)
+             (pool:valnote "ROMAN S1 RIGHT NOT POSITIVE - ADJUSTED")))
+  (if (<= vl 1.0e-6)
+      (progn (setq vl (min 12.0 (* 0.5 araw)) s1l (/ (- araw vl) 2.0) rombad t)
+             (pool:valnote "ROMAN S1 + V + S1 LEFT DOES NOT FIT A - ADJUSTED")))
+  (if (<= vr 1.0e-6)
+      (progn (setq vr (min 12.0 (* 0.5 araw)) s1r (/ (- araw vr) 2.0) rombad t)
+             (pool:valnote "ROMAN S1 + V + S1 RIGHT DOES NOT FIT A - ADJUSTED")))
+  (if (<= sl 1.0e-6)
+      (progn (setq sl (min 12.0 (/ braw 8.0)) rombad t)
+             (pool:valnote "ROMAN S LEFT NOT POSITIVE - ADJUSTED")))
+  (if (<= sr 1.0e-6)
+      (progn (setq sr (min 12.0 (/ braw 8.0)) rombad t)
+             (pool:valnote "ROMAN S RIGHT NOT POSITIVE - ADJUSTED")))
+  (if (<= (setq tv (- braw sl sr)) 1.0e-6)
+      (progn
+        (setq tv (min 12.0 (* 0.25 braw))
+              sl (/ (- braw tv) 2.0) sr sl rombad t)
+        (pool:valnote "ROMAN S + T + S DOES NOT FIT B - ADJUSTED")))
+
   ;; body fit (sides T, ends A) + roman ends
   (princ "\nFitting pool body to the measurements ...")
   (setq fq (pool:fitquad tv tv araw araw dac dbd pool:*side-tol* pool:*cross-tol*)
@@ -3577,16 +3797,22 @@
   (setq rows (list
     (list "OV B" braw (distance tipl tipr))
     (list "OV A" araw (distance a d))
-    (list "T TOP" traw (distance d c))
-    (list "T BOT" traw (distance a b))
-    (list "S LEFT" slraw (distance tipl (pool:mid a d)))
-    (list "S RIGHT" srraw (distance tipr (pool:mid b c)))
-    (list "S1 LEFT" s1lraw (/ (- (distance a d)
-                                 (distance (cadr lend) (caddr lend))) 2.0))
-    (list "S1 RIGHT" s1rraw (/ (- (distance b c)
-                                  (distance (cadr rend) (caddr rend))) 2.0))
-    (list "V LEFT" vlraw (distance (cadr lend) (caddr lend)))
-    (list "V RIGHT" vrraw (distance (cadr rend) (caddr rend)))
+    (append (list "T TOP" traw (distance d c)) (if rombad (list t) nil))
+    (append (list "T BOT" traw (distance a b)) (if rombad (list t) nil))
+    (append (list "S LEFT" slraw (distance tipl (pool:mid a d)))
+            (if rombad (list t) nil))
+    (append (list "S RIGHT" srraw (distance tipr (pool:mid b c)))
+            (if rombad (list t) nil))
+    (append (list "S1 LEFT" s1lraw (/ (- (distance a d)
+                                         (distance (cadr lend) (caddr lend))) 2.0))
+            (if rombad (list t) nil))
+    (append (list "S1 RIGHT" s1rraw (/ (- (distance b c)
+                                          (distance (cadr rend) (caddr rend))) 2.0))
+            (if rombad (list t) nil))
+    (append (list "V LEFT" vlraw (distance (cadr lend) (caddr lend)))
+            (if rombad (list t) nil))
+    (append (list "V RIGHT" vrraw (distance (cadr rend) (caddr rend)))
+            (if rombad (list t) nil))
     (list "R1" r1 (nth 4 lend))
     (list "R2" r2 (nth 4 rend))))
   (if (not pool:*insq*)
@@ -3596,11 +3822,24 @@
   ;; interior: the True Oval hopper / sport bottoms
   (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (setq notes (append notes pool:*valnotes*))
   (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
   (princ))
+
+;; UNDO grouping that copes with drawings where undo is limited or
+;; off, and with an error firing before the group was ever opened.
+(defun pool:undobegin ()
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+      (progn
+        (command "_.UNDO" "_Begin")
+        (setq pool:*undogrp* t))))
+
+(defun pool:undoend ()
+  (if pool:*undogrp* (command "_.UNDO" "_End"))
+  (setq pool:*undogrp* nil))
 
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
@@ -3638,7 +3877,7 @@
     ;; user settings come back FIRST so nothing below can skip them
     (pool:sysrestore)
     (pool:pvkill)
-    (command "_.UNDO" "_End")
+    (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -3647,8 +3886,9 @@
   (if *push-error-using-command* (*push-error-using-command*))
 
   (pool:syssave)
+  (setq pool:*valnotes* nil)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
+  (pool:undobegin)
   (setvar "OSMODE" 0)
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
@@ -3690,7 +3930,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (command "_.UNDO" "_End")
+  (pool:undoend)
   (pool:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
