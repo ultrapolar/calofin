@@ -79,9 +79,15 @@
 ;;;     and compared against the WallHt attribute of the "Tech
 ;;;     Title" block (found space-insensitively, drawing-wide; tune
 ;;;     *dchk-title-block* / *dchk-wallht-tag*). Heights written as
-;;;     40'', 3'-4'', 3' 4 1/2" or 40.5 are all understood; any
-;;;     difference beyond *dchk-height-tol* is reported in red as a
-;;;     MISMATCH.
+;;;     40'', 3'-4'', 3' 4 1/2" or 40.5 are all understood, and a
+;;;     label is ignored, so the attribute may read "Finished Wall
+;;;     Ht = 40''" and still measure 40. When the side view carries
+;;;     its own overall-height dimension (the one whose definition
+;;;     points span the full rise), that dimension is what gets
+;;;     compared — and if it disagrees with WallHt, or its text was
+;;;     overridden to disagree with the geometry it spans, it is
+;;;     MARKED RED AUTOMATICALLY and reported. Any difference beyond
+;;;     *dchk-height-tol* is reported in red as a MISMATCH.
 ;;;
 ;;;  6. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -723,11 +729,21 @@
       (if (> den 0.0) (/ num den) 0.0))
     (atof s)))
 
+(defun dchk:after-eq (s / p)
+  ;; the part after the last "=", so a label never contributes its
+  ;; own digits: "Finished Wall Ht = 40''" -> " 40''"
+  (while (setq p (vl-string-search "=" s))
+    (setq s (substr s (+ p 2))))
+  s)
+
 (defun dchk:parse-len (s / lst i n c numstr toks unit total tok)
   ;; parse a height text like 40'' / 3'-4'' / 3' 4 1/2" / 40.5 into
   ;; inches (drawing units); nil when the text holds no number.
   ;; ' = feet, '' or " = inches, a bare number counts as inches.
-  (setq lst  (vl-string->list s)
+  ;; A leading label is ignored, so the attribute may read
+  ;; "Finished Wall Ht = 40''" and still measure 40.
+  (setq s    (dchk:after-eq s)
+        lst  (vl-string->list s)
         i    0
         n    (length lst)
         toks nil)
@@ -847,6 +863,62 @@
      (if (and meas (>= meas 0.0)) (angtos meas)))
     (t                                        ; radius/diameter/ordinate
      (if (and meas (>= meas 0.0)) (rtos meas)))))
+
+(defun dchk:dim-num (ent / ed dtype p13 p14 ang v)
+  ;; the dimension's linear measurement as a NUMBER, recomputed from
+  ;; its definition points; falls back to the stored measurement
+  (setq ed    (entget ent)
+        dtype (logand 7 (cdr (assoc 70 ed)))
+        p13   (cdr (assoc 13 ed))
+        p14   (cdr (assoc 14 ed)))
+  (cond
+    ((and (= dtype 1) p13 p14) (distance p13 p14))
+    ((and (= dtype 0) p13 p14)
+     (setq ang (cdr (assoc 50 ed)))
+     (if (null ang) (setq ang 0.0))
+     (setq v (mapcar '- p14 p13))
+     (abs (+ (* (car v) (cos ang)) (* (cadr v) (sin ang)))))
+    (t (cdr (assoc 42 ed)))))
+
+(defun dchk:dim-stated (ent / txt v)
+  ;; the value the dimension actually STATES: its text override when
+  ;; it carries a readable one, else what it measures
+  (setq txt (cdr (assoc 1 (entget ent))))
+  (if (and txt
+           (/= txt "")
+           (not (vl-string-search "<>" txt))    ; "<>" = show the measurement
+           (setq v (dchk:parse-len txt)))
+    v
+    (dchk:dim-num ent)))
+
+(defun dchk:pt-in-box (p bb m)
+  ;; is point p inside the ((minx miny)(maxx maxy)) box grown by m?
+  (and bb p
+       (>= (car p)  (- (caar bb) m))
+       (<= (car p)  (+ (caadr bb) m))
+       (>= (cadr p) (- (cadar bb) m))
+       (<= (cadr p) (+ (cadadr bb) m))))
+
+(defun dchk:height-dim (dims bb rise / best bestdy ed p13 p14 dy e)
+  ;; the side view's OVERALL-HEIGHT dimension: both definition points
+  ;; sit in the side view and span its full rise. The widest such
+  ;; dimension wins, so a single riser's dim is never mistaken for it.
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq ed  (entget e)
+              p13 (cdr (assoc 13 ed))
+              p14 (cdr (assoc 14 ed)))
+        (if (and p13 p14
+                 (dchk:pt-in-box p13 bb *dchk-height-tol*)
+                 (dchk:pt-in-box p14 bb *dchk-height-tol*))
+          (progn
+            (setq dy (abs (- (cadr p14) (cadr p13))))
+            (if (and (>= dy (- rise *dchk-height-tol*))
+                     (or (null bestdy) (> dy bestdy)))
+              (setq bestdy dy
+                    best   e)))))))
+  best)
 
 (defun dchk:audit-dim-point (ent gcode label cands / ed pt near final newp)
   ;; audits one definition point: off-object points are moved onto the
@@ -1075,6 +1147,7 @@
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
+                      svbb hdim dimht htval htbad
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -1381,14 +1454,15 @@
         ;; --- overall height vs Tech Title WallHt --------------------
         ;; the steps' total rise (side view) must match the WallHt
         ;; attribute of the Tech Title block
-        (setq htsum nil stepht nil wallht nil wallraw nil tins nil)
+        (setq htsum nil stepht nil wallht nil wallraw nil tins nil
+              svbb nil hdim nil dimht nil htval nil htbad nil)
         (if stepsp
           (progn
             ;; overall height from the steps
             (cond
               ((eq svmode 'auto)               ; side view found: measure it
-               (setq bb (dchk:pts-bbox (apply 'append (mapcar 'cdr svgroups))))
-               (if bb (setq stepht (- (cadr (cadr bb)) (cadr (car bb))))))
+               (setq svbb (dchk:pts-bbox (apply 'append (mapcar 'cdr svgroups))))
+               (if svbb (setq stepht (- (cadr (cadr svbb)) (cadr (car svbb))))))
               ((eq svmode 'user)               ; user says it exists elsewhere
                (princ "\n  Confirm the overall step height against the Tech Title.")
                (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: "))))
@@ -1412,26 +1486,65 @@
             (if tins
               (setq wallraw (dchk:ins-attrib tins *dchk-wallht-tag*)
                     wallht  (if wallraw (dchk:parse-len wallraw))))
+            ;; the side view's own overall-height dimension, and the
+            ;; height it states - that dimension is what gets compared
+            (if (and svbb stepht)
+              (setq hdim (dchk:height-dim dims svbb stepht)))
+            (if hdim (setq dimht (dchk:dim-stated hdim)))
+            (setq htval (if dimht dimht stepht))
+            (setq htbad (and htval wallht
+                             (> (abs (- htval wallht)) *dchk-height-tol*)))
+            ;; a dimension that disagrees with the title block is wrong:
+            ;; mark it red automatically and keep it red
+            (if (and htbad hdim)
+              (progn
+                (dchk:set-color hdim *dchk-flag-color*)
+                (if (not (member hdim keep)) (setq keep (cons hdim keep)))
+                (princ (strcat "\n  Side view height dimension "
+                               (cdr (assoc 5 (entget hdim)))
+                               " disagrees with " *dchk-wallht-tag*
+                               " - marked red."))
+                (setq lines (cons (strcat "Height dim "
+                                          (cdr (assoc 5 (entget hdim)))
+                                          " states " (rtos dimht)
+                                          " but " *dchk-wallht-tag* " is '"
+                                          wallraw "' - MISMATCH, marked red")
+                                  lines))))
+            ;; a dimension whose text was overridden to disagree with
+            ;; the geometry it spans is wrong too
+            (if (and hdim dimht stepht
+                     (> (abs (- dimht stepht)) *dchk-height-tol*))
+              (progn
+                (dchk:set-color hdim *dchk-flag-color*)
+                (if (not (member hdim keep)) (setq keep (cons hdim keep)))
+                (setq lines (cons (strcat "Height dim "
+                                          (cdr (assoc 5 (entget hdim)))
+                                          " states " (rtos dimht)
+                                          " but the side view is drawn "
+                                          (rtos stepht)
+                                          " tall - MISMATCH, marked red")
+                                  lines))))
             (setq htsum
               (cond
-                ((null stepht)
+                ((null htval)
                  "steps present but their overall height was NOT CONFIRMED (no side view measured)")
                 ((null tins)
-                 (strcat "steps rise " (rtos stepht) " but no '"
+                 (strcat "steps rise " (rtos htval) " but no '"
                          *dchk-title-block* "' block was found - NOT CONFIRMED"))
                 ((null wallht)
-                 (strcat "steps rise " (rtos stepht) " but the "
+                 (strcat "steps rise " (rtos htval) " but the "
                          *dchk-wallht-tag* " attribute "
                          (if wallraw
                            (strcat "'" wallraw "' is unreadable")
                            "is missing")
                          " - NOT CONFIRMED"))
-                ((<= (abs (- stepht wallht)) *dchk-height-tol*)
-                 (strcat "steps rise " (rtos stepht) " = WallHt '" wallraw
+                ((not htbad)
+                 (strcat "steps rise " (rtos htval) " = WallHt '" wallraw
                          "' - MATCHES"))
                 (t
-                 (strcat "steps rise " (rtos stepht) " but WallHt is '" wallraw
-                         "' (" (rtos wallht) ") - MISMATCH, look at it"))))
+                 (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
+                         "' (" (rtos wallht) ") - MISMATCH"
+                         (if hdim ", dimension marked red" ", look at it")))))
             (princ (strcat "\n  Overall height: " htsum))))
 
         ;; --- Liner Material check -----------------------------------
