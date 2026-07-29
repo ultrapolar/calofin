@@ -169,6 +169,7 @@ they are unit-testable outside Blender:
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_pool_fit.py       # ABHD pool-perimeter fitter
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
@@ -177,6 +178,14 @@ tests exercise boundary building, interior-point detection, Delaunay
 triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
 built-in `mathutils.geometry.delaunay_2d_cdt`), and the
 height/lowest-object classification rules.
+
+`test_pool_fit.py` is a Python mirror of the AutoLISP fitter in
+`pool_fit_lisp/abhd.lsp` (which itself only runs inside AutoCAD): same
+algorithm, same constants, so the geometry can be regression tested on
+a workstation. It also lints the LISP — parenthesis balance, undefined
+calls, and whether the tuning constants in both files still agree.
+Inside AutoCAD, the `ABHDTEST` command runs the equivalent checks
+against the real interpreter.
 
 ## License
 

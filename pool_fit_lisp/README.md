@@ -32,8 +32,15 @@ The fitted perimeter does **not** have to thread every point exactly.
 Up to `*PF-MISS-PCT*` (**15%**) of the points, **rounded up** to the
 nearest whole point, may sit off the result by up to the tolerance
 (default `1.0` drawing unit — about an inch); every other point stays
-on it (within `*PF-ON-EPS*`, default **0.25**). That slack is spent
-where it buys the most — longer spans, fewer segments, fewer curves.
+*on* it. That slack is spent where it buys the most — longer spans,
+fewer segments, fewer curves.
+
+"On it" means within `*PF-ON-EPS*` (**0.25**) or a quarter of the
+tolerance, whichever is larger — the threshold scales so that raising
+the tolerance genuinely loosens the fit. No single span may spend more
+than its own fair share of the allowance either, so one greedy arc
+cannot use up the whole budget and leave the rest of the loop with
+none.
 
 In the ordering-sketch and points-only modes the loop is covered by
 long, overarching arcs that sit **on the points** and meet each other
@@ -93,18 +100,19 @@ tolerance** and **binds in every mode**:
   cap, the command falls back to fitting from the points — the drawn
   shape still sets their order — and says so.
 * If the cap is unreachably small, you get the **fewest-curves fit
-  found** (a closed loop bottoms out around 2–3 arcs), never the
-  full-size fit.
+  found**, never the full-size fit. A closed loop cannot go below
+  **2 segments**, so that is the floor.
 
 All thresholds are constants at the top of `abhd.lsp`
-(`*PF-MISS-PCT*`, `*PF-ON-EPS*` — default 0.25, a quarter of the
-default tolerance — `*PF-CORNER-ANG*`, `*PF-NICE-RADII*`,
-`*PF-TANG-TOL*`), as are the layer names (`*PF-POOL-LAYER*`,
-`*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`). The defaults were calibrated
-against a real hand-drawn as-built trace (55 `ab_pt` points, 37×16 ft
-pool, ~20″ point spacing): with them the automatic fit stays within
-about an inch of the hand trace everywhere while using fewer arcs
-(20 vs 23).
+(`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-SNAP-EPS*`, `*PF-CORNER-ANG*`,
+`*PF-NICE-RADII*`, `*PF-TANG-TOL*`), as are the layer names
+(`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`). The
+defaults were calibrated against a real hand-drawn as-built trace
+(55 `ab_pt` points, 37×16 ft pool, ~20″ point spacing). On that
+survey the automatic fit uses **19 arcs where the hand trace used
+23**, stays within about an inch of it everywhere, puts **9 of 10
+arcs through a survey point**, and lands **three-quarters of its
+radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
 
 ## Usage
 
@@ -120,9 +128,59 @@ about an inch of the hand trace everywhere while using fewer arcs
    ordering sketch — what you include picks the mode.
 
 A new closed `LWPOLYLINE` is created on layer `POOL-FIT` (green,
-created if missing). The original geometry is left untouched, so the
-result is easy to compare and the command can be re-run with a
-different tolerance.
+created if missing; if the layer exists but is off, frozen or locked
+it is restored so the result is actually visible). The original
+geometry is left untouched, so the result is easy to compare and the
+command can be re-run with a different tolerance.
+
+### What the report tells you
+
+```
+ABHD: 19 segments (0 lines + 19 curves) written to layer POOL-FIT.
+  Points on the perimeter:      46
+  Points off within tolerance:   9  (allowance 9)
+  Points beyond tolerance:       0
+  Worst point deviation:        0.870
+  Curves through a point:       16 of 19
+  Curves on foot/half/inch radii:14 of 19
+  Largest joint kink:           8.0 deg  (limit 8.0)
+```
+
+*Curves through a point* is the one to watch: it counts arcs whose
+middle lands on a survey point rather than floating between them.
+*Largest joint kink* ignores intentional sharp corners; if any joint
+needed more than the tangent limit to close the loop, that is called
+out separately. The command also warns when the result **crosses
+itself** (almost always a wrong automatic point order — draw an
+ordering sketch), and when earlier fits are still sitting on the
+`POOL-FIT` layer.
+
+## Checking it still works
+
+* **`ABHDTEST`** — type it at the AutoCAD command line after loading
+  `abhd.lsp`. It runs the whole fitter over synthetic shapes (circle,
+  square, organic blob, capped variants), exercises the entity
+  reader/writer, checks the degenerate-input guards, and prints a
+  pass/fail line per check. It is non-destructive: the few entities it
+  creates are deleted again and nothing on `POOL`/`POINTS` is touched.
+  Run it after any edit to `abhd.lsp`.
+* **`python3 tests/test_pool_fit.py`** — a Python mirror of the same
+  geometry and fitting logic, so the algorithm can be regression
+  tested outside AutoCAD. It also parses `abhd.lsp` to verify the
+  parentheses balance, that no function is called undefined, and that
+  the tuning constants in both files still agree.
+
+## Troubleshooting
+
+| What you see | What it means |
+| --- | --- |
+| "gap in the POOL perimeter — could not close the loop" | The drawn perimeter has a break, or pieces of it were not selected. Zoom in on the ends, or select the whole shape. |
+| "SPLINE/ELLIPSE object(s) … were ignored" | Those curve types cannot be read. Explode or convert them to polylines/arcs first. |
+| "No survey points found" | The points are not `POINT` entities on `POINTS`, nor `ab_pt` blocks. Check the layer name and the block name at the top of `abhd.lsp`. |
+| "the result crosses itself" | The automatic ordering went the wrong way around a narrow waist. Draw a rough **lines-only** loop on `POOL` through the points in the right order and select it too. |
+| "not drawn in the world plane" | Geometry was drawn in a tilted UCS. Set UCS to World and flatten it; the fit is 2D. |
+| Nothing appears | The report says how many segments were written. If the layer was off/frozen/locked, ABHD restores it and says so; if the drawing is read-only the report says that instead. |
+| It feels slow | Ordering is O(n²); above ~150 points the command warns and takes a while. An ordering sketch skips the expensive search entirely. |
 
 ## What the guided mode does
 
