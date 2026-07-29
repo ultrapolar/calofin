@@ -14,28 +14,35 @@
 ;;;     then whatever styles are left (tune *dchk-style-order*) —
 ;;;     and inside each group left to right, top to bottom (row by
 ;;;     row, like reading). Each dimension is zoomed to, shown in
-;;;     its own colour and highlighted while the rest stays grey. For linear/aligned dimensions the two
-;;;     definition points are audited first: a point that does not
-;;;     sit on any object is moved onto the closest object, marked
-;;;     with a cross on screen, and you are asked — one point at a
-;;;     time — whether the moved location is correct:
-;;;         Enter / Y  ->  keep it there
-;;;         N          ->  you pick the correct location yourself
+;;;     its own colour and highlighted while the rest stays grey.
+;;;     For linear/aligned dimensions the two definition points are
+;;;     audited first: a point that does not sit on any object is
+;;;     shown where DIMCHECK thinks it belongs, with BOTH spots
+;;;     marked on screen and spelled out so there is no doubt which
+;;;     is which —
+;;;         a RED X   where you drew it,
+;;;         a GREEN + where we would move it, joined by a line.
+;;;     You then choose, one point at a time:
+;;;         Enter / M  ->  MOVE it onto the nearest object (green +)
+;;;         K          ->  KEEP it exactly where you drew it (red X);
+;;;                        the point is put back and nothing changes
+;;;         P          ->  PICK the spot yourself
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer DIMCHECK-CONSTRUCTION so you can see
-;;;     where it used to measure.
+;;;     where it used to measure — only when a point actually moved.
 ;;;     Then the overall question for every dimension:
 ;;;         "Is this dimension correct?"
 ;;;         Enter / Y  ->  correct, the dimension is left alone
 ;;;         N          ->  the dimension is recoloured RED so it is
 ;;;                        easy to find and fix afterwards
 ;;;
-;;;  3. Arcs are reviewed the same way, one endpoint at a time. An
-;;;     endpoint that is not attached to the end of another object is
-;;;     snapped there (same rules as CHECK), marked with a cross, and
-;;;     you confirm each moved point — Enter keeps it, N lets you
-;;;     pick where it belongs (the arc is re-fitted through your
-;;;     point). Arcs whose endpoints changed are recoloured MAGENTA.
+;;;  3. Arcs are reviewed the same way, one endpoint at a time, with
+;;;     the same Move / Keep / Pick choice. An endpoint not attached
+;;;     to the end of another object is snapped there and both spots
+;;;     are marked; Keep puts the arc back exactly as you drew it
+;;;     (its original shape is restored, not re-fitted), Pick re-fits
+;;;     it through your spot. Arcs whose endpoints actually changed
+;;;     are recoloured MAGENTA — an arc you kept is left alone.
 ;;;
 ;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
 ;;;     that are collinear and run on top of each other (a leftover
@@ -186,6 +193,8 @@
 (setq *dchk-constr-color* 2)       ; yellow
 (setq *dchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
 (setq *dchk-block-depth*  3)       ; how many levels of nested blocks to search for names/text
+(setq *dchk-orig-color*   1)       ; red X: where you drew the point
+(setq *dchk-sugg-color*   3)       ; green +: where DIMCHECK would move it
 (setq *dchk-fgstep-words*          ; a fiberglass step shows up under any of these
       '("Fiberglass Step" "FG Step"))
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -441,14 +450,24 @@
   (if (and (entget ent) (not (member ent keep)))
     (dchk:set-color ent *dchk-grey-color*)))
 
-(defun dchk:mark-point (pt / p s)
-  ;; temporary cross + X over the point under review (WCS in, screen out)
+(defun dchk:mark-x (pt col / p s)
+  ;; diagonal cross - marks WHERE YOU DREW IT
   (setq p (trans pt 0 1)
         s (* 0.02 (getvar "VIEWSIZE")))
-  (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) 2 1)
-  (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) 2 1)
-  (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) 2 1)
-  (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) 2 1))
+  (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) col 1)
+  (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) col 1))
+
+(defun dchk:mark-plus (pt col / p s)
+  ;; upright cross - marks WHERE DIMCHECK WOULD PUT IT
+  (setq p (trans pt 0 1)
+        s (* 0.02 (getvar "VIEWSIZE")))
+  (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
+  (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
+
+(defun dchk:mark-point (pt)
+  ;; both strokes, for a point that is simply being pointed out
+  (dchk:mark-x pt 2)
+  (dchk:mark-plus pt 2))
 
 (defun dchk:ask-yn (msg / ans)
   ;; T = yes (Enter or Y), nil = no (N)
@@ -471,15 +490,32 @@
 (defun dchk:progress (what n total)
   (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
 
-(defun dchk:confirm-point (label pt / newp)
-  ;; marks pt (WCS), asks whether the location is correct; returns the
-  ;; user's replacement point (in the CURRENT UCS) or nil to keep pt
-  (dchk:mark-point pt)
-  (if (dchk:ask-yn (strcat "\n  " label " is now at " (dchk:ptstr pt)
-                           ". Is this location correct?"))
-    nil
-    (getpoint (strcat "\n  Pick the correct location for " label
-                      " <keep current>: "))))
+(defun dchk:confirm-move (label orig sugg / ans newp)
+  ;; The point has been put where DIMCHECK thinks it belongs, but BOTH
+  ;; spots are marked and spelled out so there is no doubt which is
+  ;; which: a red X where you drew it, a green + where we would move
+  ;; it, joined by a line. Returns
+  ;;   'move - take our suggestion
+  ;;   'keep - put it back exactly where you drew it
+  ;;   <point> - a spot you picked yourself (current UCS)
+  (dchk:mark-x    orig *dchk-orig-color*)
+  (dchk:mark-plus sugg *dchk-sugg-color*)
+  (if (> (distance orig sugg) 1e-8)
+    (grdraw (trans orig 0 1) (trans sugg 0 1) *dchk-sugg-color* 1))
+  (princ (strcat "\n  " label " - which spot is right?"
+                 "\n    Keep = where you drew it   " (dchk:ptstr orig)
+                 "  (red X)"
+                 "\n    Move = onto nearest object " (dchk:ptstr sugg)
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+  (initget "Move Keep Pick")
+  (setq ans (getkword
+              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+  (cond
+    ((or (null ans) (= ans "Move")) 'move)
+    ((= ans "Keep") 'keep)
+    (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
+                                    " <Move to the green +>: ")))
+       (if newp newp 'move))))
 
 (defun dchk:mtext (ins height width text layer / dxf)
   ;; entmake an MTEXT, splitting text into 250-char DXF chunks
@@ -1374,10 +1410,12 @@
                     best   e)))))))
   best)
 
-(defun dchk:audit-dim-point (ent gcode label cands / ed pt near final newp)
-  ;; audits one definition point: off-object points are moved onto the
-  ;; closest object, then the user confirms (Enter) or re-picks (N).
-  ;; Returns (original final how) when the point moved, nil otherwise.
+(defun dchk:audit-dim-point (ent gcode label cands / ed pt near sugg ans final how)
+  ;; audits one definition point: an off-object point is put where it
+  ;; looks like it belongs, then you choose - Move (take it), Keep
+  ;; (put it back exactly where you drew it) or Pick your own spot.
+  ;; Returns (original final how) when the point was looked at, where
+  ;; how is 'auto / 'user / 'kept; nil when the point was already fine.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
@@ -1385,24 +1423,41 @@
       (setq near (dchk:nearest-curve pt nil cands))
       (if (and near (> (caddr near) *dchk-tol*))
         (progn
-          (setq final (cadr near))
-          (entmod (subst (cons gcode final) (assoc gcode ed) ed))
+          (setq sugg (cadr near))
+          ;; show the suggestion in place, but keep the original spot
+          ;; marked so both are on screen while the question is asked
+          (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
           (entupd ent)
-          (princ (strcat "\n  " label " was not on any object; moved "
-                         (rtos (caddr near) 2 4) " onto the nearest one."))
-          (setq newp (dchk:confirm-point label final))
-          (if newp
-            (progn
-              (setq final (trans newp 1 0)
-                    ed    (entget ent))
-              (entmod (subst (cons gcode final) (assoc gcode ed) ed))
-              (entupd ent)
-              (princ (strcat "\n  " label " moved to your point "
-                             (dchk:ptstr final) "."))))
+          (princ (strcat "\n  " label " is not on any object - nearest one is "
+                         (rtos (caddr near) 2 4) " away."))
+          (setq ans (dchk:confirm-move label pt sugg))
+          (cond
+            ((eq ans 'move)
+             (setq final sugg
+                   how   'auto)
+             (princ (strcat "\n  " label " MOVED onto the nearest object, "
+                            (dchk:ptstr final) ".")))
+            ((eq ans 'keep)
+             (setq ed    (entget ent)
+                   final pt
+                   how   'kept)
+             (entmod (subst (cons gcode pt) (assoc gcode ed) ed))
+             (entupd ent)
+             (princ (strcat "\n  " label " KEPT where you drew it, "
+                            (dchk:ptstr final) " - nothing changed.")))
+            (t
+             (setq final (trans ans 1 0)
+                   how   'user
+                   ed    (entget ent))
+             (entmod (subst (cons gcode final) (assoc gcode ed) ed))
+             (entupd ent)
+             (princ (strcat "\n  " label " moved to the spot you picked, "
+                            (dchk:ptstr final) "."))))
           (redraw)
-          (list pt final (if newp 'user 'auto)))))))
+          (list pt final how))))))
 
-(defun dchk:review-dim (ent cands num total / ed dtype h sty p13 p14 r1 r2 moved ok note meas assocnote)
+(defun dchk:review-dim (ent cands num total / ed dtype h sty p13 p14 r1 r2
+                                              looked moved kept ok note meas assocnote)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement).
   (setq ed    (entget ent)
@@ -1422,10 +1477,13 @@
       (setq p13 (cdr (assoc 13 ed))           ; the two dimmed points
             p14 (cdr (assoc 14 ed))
             r1  (dchk:audit-dim-point ent 13 "dimension point 1" cands)
-            r2  (dchk:audit-dim-point ent 14 "dimension point 2" cands))
-      (if (or r1 r2)
-        (dchk:make-xline p13 p14))))          ; through the ORIGINAL points
-  (setq moved (append (if r1 (list r1)) (if r2 (list r2))))
+            r2  (dchk:audit-dim-point ent 14 "dimension point 2" cands))))
+  (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
+        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
+  ;; only when something actually moved is there an old position worth
+  ;; drawing a construction line through
+  (if moved (dchk:make-xline p13 p14))        ; through the ORIGINAL points
   (if (and moved (dchk:dim-assoc-p ent))
     (setq assocnote " (ASSOCIATIVE - verify the moved point holds)"))
   (setq meas (dchk:dim-meas ent))             ; after any point moves
@@ -1439,14 +1497,15 @@
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
-                   (cond
-                     ((and ok moved)
-                      (strcat "OK (" (itoa (length moved)) " point(s) adjusted)"))
-                     (ok "OK")
-                     (moved
-                      (strcat "FLAGGED to fix (red, " (itoa (length moved))
-                              " point(s) adjusted)"))
-                     (t "FLAGGED to fix (red)"))
+                   (if ok "OK" "FLAGGED to fix (red)")
+                   (if moved
+                     (strcat " - " (itoa (length moved))
+                             " point(s) moved onto the nearest object")
+                     "")
+                   (if kept
+                     (strcat " - " (itoa (length kept))
+                             " point(s) kept where you drew them")
+                     "")
                    (if assocnote assocnote "")))
       (if (not ok) (dchk:set-color ent *dchk-flag-color*))
       (list h ok note (length moved) meas))))
@@ -1480,51 +1539,81 @@
        (cadr near)                            ; else closest point on closest object
        target))))
 
-(defun dchk:review-arc-end (ent which label cands / p target newp final)
-  ;; audits one arc endpoint, snaps it when detached, then lets the
-  ;; user confirm (Enter) or re-pick (N) the moved point.
-  ;; Returns (original final how) when the endpoint moved, nil otherwise.
+(defun dchk:arc-state (ent / ed)
+  ;; the groups that define an arc's shape, for an exact put-it-back
+  (setq ed (entget ent))
+  (list (assoc 10 ed) (assoc 40 ed) (assoc 50 ed) (assoc 51 ed)))
+
+(defun dchk:arc-restore (ent st / ed g)
+  ;; restore a saved shape exactly, rather than re-fitting back to it
+  (setq ed (entget ent))
+  (foreach g st (setq ed (subst g (assoc (car g) ed) ed)))
+  (entmod ed)
+  (entupd ent))
+
+(defun dchk:review-arc-end (ent which label cands / p target st ans final how)
+  ;; audits one arc endpoint: a detached end is snapped where it looks
+  ;; like it belongs, then you choose - Move (take it), Keep (put the
+  ;; arc back exactly as drawn) or Pick your own spot.
+  ;; Returns (original final how) when the end was looked at, where how
+  ;; is 'auto / 'user / 'kept; nil when the end was already fine.
   (setq p      (if (eq which 'start)
                  (vlax-curve-getStartPoint ent)
                  (vlax-curve-getEndPoint ent))
-        target (dchk:arc-end-target ent which cands))
+        target (dchk:arc-end-target ent which cands)
+        st     (dchk:arc-state ent))
   (cond
     (target
      (if (dchk:move-arc-end ent which target)
        (progn
-         (princ (strcat "\n  " label " was not attached to an object end; snapped "
-                        (rtos (distance p target) 2 4) "."))
-         (setq final target
-               newp  (dchk:confirm-point label target))
-         (if newp
-           (progn
-             (setq newp (trans newp 1 0))
-             (if (dchk:move-arc-end ent which newp)
-               (progn
-                 (setq final newp)
-                 (princ (strcat "\n  " label " moved to your point "
-                                (dchk:ptstr final) ".")))
-               (princ "\n  Could not re-fit the arc through that point (collinear?); kept the snapped position."))))
+         (princ (strcat "\n  " label " is not attached to an object end - nearest is "
+                        (rtos (distance p target) 2 4) " away."))
+         (setq ans (dchk:confirm-move label p target))
+         (cond
+           ((eq ans 'move)
+            (setq final target
+                  how   'auto)
+            (princ (strcat "\n  " label " SNAPPED to the object end, "
+                           (dchk:ptstr final) ".")))
+           ((eq ans 'keep)
+            (dchk:arc-restore ent st)
+            (setq final p
+                  how   'kept)
+            (princ (strcat "\n  " label " KEPT where you drew it, "
+                           (dchk:ptstr final) " - the arc is unchanged.")))
+           (t
+            (setq ans (trans ans 1 0))
+            (if (dchk:move-arc-end ent which ans)
+              (progn
+                (setq final ans
+                      how   'user)
+                (princ (strcat "\n  " label " moved to the spot you picked, "
+                               (dchk:ptstr final) ".")))
+              (progn
+                (setq final target
+                      how   'auto)
+                (princ "\n  Could not re-fit the arc through that spot (collinear?); left it on the object end.")))))
          (redraw)
-         (list p final (if newp 'user 'auto)))
+         (list p final how))
        (progn
          (princ (strcat "\n  " label " should attach at " (dchk:ptstr target)
                         " but the arc could not be re-fitted (points collinear?)."))
          nil)))
     (*dchk-ask-all-arc-ends*                  ; optional: confirm attached ends too
-     (setq newp (dchk:confirm-point label p))
+     (setq ans (dchk:confirm-move label p p))
      (redraw)
-     (if newp
+     (if (member ans '(move keep))
+       nil
        (progn
-         (setq newp (trans newp 1 0))
-         (if (dchk:move-arc-end ent which newp)
-           (list p newp 'user)
+         (setq ans (trans ans 1 0))
+         (if (dchk:move-arc-end ent which ans)
+           (list p ans 'user)
            (progn
-             (princ "\n  Could not re-fit the arc through that point (collinear?); unchanged.")
+             (princ "\n  Could not re-fit the arc through that spot (collinear?); unchanged.")
              nil)))))
     (t nil)))
 
-(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 moved note)
+(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -1540,12 +1629,19 @@
     (princ "\n  Arc is not in the world XY plane - endpoint audit skipped."))
   (redraw ent 4)
   (redraw)
-  (setq moved (append (if r1 (list r1)) (if r2 (list r2))))
+  (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
+        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   (if moved (dchk:set-color ent *dchk-arc-color*))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
+               ((and moved kept)
+                (strcat (itoa (length moved)) " endpoint(s) moved (magenta), "
+                        (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved (magenta)"))
+               (kept (strcat (itoa (length kept))
+                             " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
   (list h (null moved) note (length moved)))
 
