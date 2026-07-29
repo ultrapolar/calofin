@@ -47,6 +47,9 @@ A ---------- B        cross:  A-C and B-D
 8. **Grecian only:** a cross-dim detail level (see below), then for
    each end — diagonal top, diagonal bottom, end width — followed by
    the cross dims for the chosen level.
+9. The pool bottom: `Yes`/`No`, then a bottom type
+   (`Normal` / `Sport` / `Wedge` / `SLope` / `MOdflat` / `SHallow`)
+   and that type's letters.
 
 Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
@@ -109,7 +112,7 @@ the dashed cross-dim guide lines are re-drawn between the actual
 reference points for the chosen mode — in Ends mode each of the four
 ties is its own line, highlighted individually as it's prompted.
 
-### Pool bottom / hopper (rectangle, oval, Grecian)
+### Pool bottom / hopper (every shape)
 
 After the perimeter is drawn and dimensioned, the routine offers a
 **pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A lettered
@@ -176,15 +179,53 @@ The 6-sided hopper adds cut left corners — `W` (setback along the
 top/bottom edges), `L1` (setback down the left edge), `X` (cut face,
 check) — and the pool cut ends tie to the matching hopper cut ends.
 
+### Special bottoms: wedge, slope, modified flat, sloping shallow end
+
+Every shape asks **`Bottom type
+[Normal/Sport/Wedge/SLope/MOdflat/SHallow]`** (L / Lazy L pools get
+the same list without `Sport`). The four special bottoms are the
+**standard hopper's plan language** — the same `H`/`G`/`F`/`E` +
+`M`/`L`/`K` chain, deep-end line, slope break and corner ties — with
+`G` and/or `E` pinned to zero, plus the side profile the style
+implies. They work on rectangles, ovals, Grecians and L pools, in
+square and out of square, because the chain is measured off the walls
+the same way in every shape.
+
+| Style | Plan | Profile |
+| --- | --- | --- |
+| `Wedge` | `G` = 0, `E` = 0 — a deep **line** at `H`, corner ties to the pool corners, floor rising to the far wall | wall → deep at `H` → straight up to the far wall |
+| `SLope` | `G` = 0 — deep line at `H`, rising to a full-width break, then flat | wall → deep at `H` → back to wall depth at the break → flat |
+| `MOdflat` | `E` = 0 — one flat pad inset `H` / `G` / `F`, corner ties at **all four** corners, no shallow flat | wall → deep at `H` → flat for `G` → up to the far wall |
+| `SHallow` | the full hopper, unchanged | as the hopper, but the shallow floor slopes from `C2` at the break up to `C` at the wall |
+
+`Wedge` and `SLope` prompt `H F M L K`, `MOdflat` prompts `H G F M L
+K`, `SHallow` prompts the full `H G F E M L K`; the pinned letters are
+not asked, not dimensioned and not reported. The slack member that
+absorbs a chain mismatch follows the style: `G` where there is a pad,
+`F` where the deep end is a line. `NA` works throughout, as always.
+
+Each of these also asks its depths — `C` wall height and `D` deep
+depth, plus `C2` (depth where the shallow floor meets the break) for
+`SHallow` — with a nominal section drawn under the plan so the depth
+prompts highlight a tie just like the plan letters do. The finished
+section is drawn below the pool with its own `C` / `D` / `C2` dims.
+
+**A `Normal` hopper with `G` = 0 becomes a slope bottom automatically**
+— the G prompt accepts zero, and when it resolves to nothing you are
+asked for `C` and `D` and the side view is drawn. Selecting `SLope`
+explicitly does the same thing up front.
+
+The oval's ends are arcs rather than corners, so its special bottoms
+skip the left corner ties; a Grecian ties to **both ends of each
+corner cut**, the way its own hopper does.
+
 ### Sport bottoms and the side profile
 
-Rectangle, oval and Grecian pools ask **`Bottom type
-[Normal/Sport]`** (L / Lazy L pools are standard-hopper only). A
-Sport bottom is a full-width profile: shallow flats `E2`/`E1` at each
-end, slopes `F2`/`F1`, and a flat deep section `G`. **Answering `0`
-at the G prompt draws the sport with no hopper pad** — the two slopes
-meet at a point (the V bottom) — so there is no separate NOhopper
-bottom type anymore; it's just a zero G.
+A Sport bottom is a symmetric full-width profile: shallow flats
+`E2`/`E1` at each end, slopes `F2`/`F1`, and a flat deep section `G`.
+**Answering `0` at the G prompt draws the sport with no hopper pad** —
+the two slopes meet at a point (the V bottom) — so there is no
+separate NOhopper bottom type; it's just a zero G.
 
 Sport bottoms are drawn in the **plan like a standard hopper** (per
 the reference drawing): full-width break lines at the outer breaks,
@@ -200,10 +241,10 @@ underneath, carrying only the `C` and `D` depth dims. With **G = 0**
 flat collapses to the single V line and the G dim/report row are
 skipped — the no-pad drawing.
 
-Standard (Normal) hoppers are **plan-only** — no heights are asked
-and no profile is drawn; the side profile (with `C` wall height and
-`D` depth) belongs to the Sport bottoms, whose field sheets are
-profiles.
+`Normal` hoppers are **plan-only** — no heights are asked and no
+profile is drawn (unless `G` comes out at 0, see above). The side
+profile belongs to the Sport and special bottoms, whose field sheets
+are profiles.
 
 **L / Lazy L pools** get the standard hopper in the **main section**:
 the virtual corner D' (where the left side meets the main-top line)

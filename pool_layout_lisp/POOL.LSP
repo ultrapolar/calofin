@@ -101,6 +101,19 @@
 (setq pool:*pvents*    nil)           ; live guide-preview entities
 (setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
 
+;; Bottom-type keywords, shared by every shape's dispatcher.  Normal
+;; and the four special bottoms all run through pool:hopnormal (they
+;; are the same plan chain with G and/or E pinned); Sport is the
+;; symmetric full-width bottom, which the L pools do not take.
+(setq pool:*btypes*   "Normal Sport Wedge SLope MOdflat SHallow")
+(setq pool:*btprompt*
+      "\nBottom type [Normal/Sport/Wedge/SLope/MOdflat/SHallow] <Normal>: ")
+(setq pool:*btypes2*  "Normal Wedge SLope MOdflat SHallow")
+(setq pool:*btprompt2*
+      "\nBottom type [Normal/Wedge/SLope/MOdflat/SHallow] <Normal>: ")
+(setq pool:*sq4* (list (list "Square" 0.0) (list "Square" 0.0)
+                       (list "Square" 0.0) (list "Square" 0.0)))
+
 ;;; -------------------- small vector helpers --------------------------
 
 (defun pool:d2r (a) (* pi (/ a 180.0)))
@@ -1359,7 +1372,7 @@
 ;; dimension and report.  Caller handles sysvars / undo / zoom-extents.
 (defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes
                             cen p pr k w hh xmin xmax ymax ymin doff th
-                            odim rows lbls dv mquad sq4 elast)
+                            odim rows lbls dv mquad sq4 elast btype)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
   (command "_.ZOOM" "_Window"
@@ -1503,14 +1516,21 @@
         (setq dv (pool:linex (nth 4 pts) (pool:v- (nth 5 pts) (nth 0 pts))
                              (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
               mquad (list (nth 0 pts) dv (nth 4 pts) (nth 5 pts))
-              sq4 (list (list "Square" 0.0) (list "Square" 0.0)
-                        (list "Square" 0.0) (list "Square" 0.0)))
+              sq4 pool:*sq4*)
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- (apply 'min (mapcar 'car mquad)) doff)
                                 (- (apply 'min (mapcar 'cadr mquad)) doff)))
                  (pool:wp (list (+ (apply 'max (mapcar 'car mquad)) doff)
                                 (+ (apply 'max (mapcar 'cadr mquad)) doff))))
-        (setq rows (append rows (pool:hopnormal mquad sq4 doff th t)))))
+        (initget pool:*btypes2*)
+        (setq btype (getkword pool:*btprompt2*))
+        (if (not btype) (setq btype "Normal"))
+        (setq rows (append rows
+                           (pool:hopnormal mquad sq4 doff th t btype
+                                           (apply 'min (mapcar 'car pts))
+                                           (- (apply 'min (mapcar 'cadr pts))
+                                              (* 2.2 doff))
+                                           t)))))
 
   ;; -------- all dimensions are in: offer to mirror the pool
   (initget "Yes No")
@@ -1583,12 +1603,16 @@
 ;; The two points where a corner's treatment meets the straight sides
 ;; (toward the previous / next corner) plus, for Rounded, the arc mid.
 ;; Returns (ePrev eNext arcMid|nil).  Square -> (P P nil).
-(defun pool:cornerends (p pp pn ctype size / uprev unext dp ang sb bis cen)
+;; ctype "Ends" is the escape hatch for corners that are not a plain
+;; treatment of this quad's corner (a Grecian's angled cut, say): size
+;; and xtra ARE the two treatment ends, prev-side first.
+(defun pool:cornerends (p pp pn ctype size xtra / uprev unext dp ang sb bis cen)
   (setq uprev (pool:unit (pool:v- pp p))
         unext (pool:unit (pool:v- pn p))
         dp (pool:dot uprev unext)
         ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
   (cond
+    ((= ctype "Ends") (list size xtra nil))
     ((= ctype "Diag")
      (setq sb (/ size (* 2.0 (sin (/ ang 2.0)))))           ; face -> edge setback
      (list (pool:v+ p (pool:v* uprev sb))
@@ -1609,7 +1633,8 @@
   (setq ce (pool:cornerends (nth i q)
                             (nth (rem (+ i 3) 4) q)
                             (nth (rem (+ i 1) 4) q)
-                            (car (nth i corners)) (cadr (nth i corners))))
+                            (car (nth i corners)) (cadr (nth i corners))
+                            (caddr (nth i corners))))
   (cond ((eq spec 'prev) (car ce))
         ((eq spec 'next) (cadr ce))
         ((eq spec 'mid) (if (caddr ce) (caddr ce) (pool:mid (car ce) (cadr ce))))
@@ -1623,7 +1648,8 @@
                       (pool:cornerends (nth i q)
                                        (nth (rem (+ i 3) 4) q)
                                        (nth (rem (+ i 1) 4) q)
-                                       (car (nth i corners)) (cadr (nth i corners))))
+                                       (car (nth i corners)) (cadr (nth i corners))
+                                       (caddr (nth i corners))))
                    (list 0 1 2 3)))
   (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
     (pool:line (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce)) "POOL"))
@@ -1657,7 +1683,7 @@
           pn (nth (rem (+ i 1) 4) quad)
           cc (nth i corners)
           ty (car cc)
-          ce (pool:cornerends p pp pn ty (cadr cc))
+          ce (pool:cornerends p pp pn ty (cadr cc) (caddr cc))
           outd (pool:unit (pool:v- p cen)))
     (cond
       ((= ty "Rounded")
@@ -1701,7 +1727,8 @@
                       (pool:cornerends (nth i gq)
                                        (nth (rem (+ i 3) 4) gq)
                                        (nth (rem (+ i 1) 4) gq)
-                                       (car (nth i corners)) (cadr (nth i corners))))
+                                       (car (nth i corners)) (cadr (nth i corners))
+                                       (caddr (nth i corners))))
                    (list 0 1 2 3)))
   ;; shortened straight sides (side i runs corner i -> corner i+1)
   (setq i 0)
@@ -1873,50 +1900,123 @@
         (list 'phb hbr)
         (list 'pht htr)
         (list 'pt (pool:linex (car hr) (cadr hr) d (pool:v- c d)))
-        (list 'voff (pool:v* (pool:unit hdir) pool:*mlkoff*))))
+        (list 'voff (pool:v* (pool:unit hdir) pool:*mlkoff*))
+        ;; G = 0 collapses the pad to a single deep line; E = 0 puts the
+        ;; slope break on the end wall, which is already drawn
+        (list 'zg (< g 1.0e-6))
+        (list 'ze (< e 1.0e-6))))
 
 ;; Draw the hopper, slope break and corner ties on layer lay.  Each
 ;; hopper left corner ties to BOTH ends of its pool corner treatment
 ;; (one line when the corner is square and the ends coincide).
-(defun pool:hopdraw (gg lay / hbl htl hbr htr brkb brkt lab1 lab2 lat1 lat2)
+;; tie = draw the left corner ties (off for shapes whose "left end" is
+;; an arc rather than a pair of corners).
+(defun pool:hopdraw (gg lay tie / hbl htl hbr htr brkb brkt lab1 lab2 lat1 lat2)
   (setq hbl (cadr (assoc 'hbl gg)) htl (cadr (assoc 'htl gg))
         hbr (cadr (assoc 'hbr gg)) htr (cadr (assoc 'htr gg))
         brkb (cadr (assoc 'brkb gg)) brkt (cadr (assoc 'brkt gg))
         lab1 (cadr (assoc 'lab1 gg)) lab2 (cadr (assoc 'lab2 gg))
         lat1 (cadr (assoc 'lat1 gg)) lat2 (cadr (assoc 'lat2 gg)))
-  (pool:line hbl htl lay)
-  (pool:line htl htr lay)
-  (pool:line htr hbr lay)
-  (pool:line hbr hbl lay)
-  (pool:line brkb brkt lay)
-  (pool:line lab1 hbl lay)
-  (if (> (distance lab1 lab2) 1.0e-6) (pool:line lab2 hbl lay))
-  (pool:line lat1 htl lay)
-  (if (> (distance lat1 lat2) 1.0e-6) (pool:line lat2 htl lay))
+  (pool:line hbl htl lay)               ; deep-end line (the whole pad when G=0)
+  (if (not (cadr (assoc 'zg gg)))
+      (progn
+        (pool:line htl htr lay)
+        (pool:line htr hbr lay)
+        (pool:line hbr hbl lay)))
+  ;; with E = 0 the break line lands on the end wall itself
+  (if (not (cadr (assoc 'ze gg))) (pool:line brkb brkt lay))
+  (if tie
+      (progn
+        (pool:line lab1 hbl lay)
+        (if (> (distance lab1 lab2) 1.0e-6) (pool:line lab2 hbl lay))
+        (pool:line lat1 htl lay)
+        (if (> (distance lat1 lat2) 1.0e-6) (pool:line lat2 htl lay))))
   (pool:line htr brkt lay)
   (pool:line hbr brkb lay))
+
+;;; -------------------- bottom styles ----------------------------------
+;;;
+;;;  Every one of these is the standard hopper's plan language -- the
+;;;  same H/G/F/E/M/L/K chain, deep-end line, slope break and corner
+;;;  ties -- with G and/or E pinned to zero, plus the side profile the
+;;;  style implies (per the reference drawing):
+;;;
+;;;    Normal     full hopper, plan only.  A G of 0 turns it into a
+;;;               Slope bottom and the profile appears automatically.
+;;;    Wedge      G=0, E=0: a deep line at H, floor rising all the way
+;;;               to the far wall.
+;;;    SLope      G=0: a deep line at H, floor rising to a full-width
+;;;               break, then flat to the far wall.
+;;;    MOdflat    E=0: one flat pad inset H / G / F, sloping up to the
+;;;               walls all round, no shallow flat.
+;;;    SHallow    full hopper whose shallow floor is not flat -- it
+;;;               slopes from C2 at the break up to C at the wall.
+
+;; Per style: (ask-G ask-E has-profile ask-C2 slack-index).  The slack
+;; member absorbs any mismatch when the whole chain was given: G where
+;; there is a pad, F where the deep end is a line.
+(defun pool:btmspec (style)
+  (cond
+    ((= style "Wedge")   (list nil nil t   nil 2))
+    ((= style "SLope")   (list nil t   t   nil 2))
+    ((= style "MOdflat") (list t   nil t   nil 1))
+    ((= style "SHallow") (list t   t   t   t   1))
+    (t                   (list t   t   nil nil 1))))
+
+;; Nominal guide proportions (h g e) for the style's preview.
+(defun pool:btmnom (style len)
+  (cond
+    ((= style "Wedge")   (list (* 0.12 len) 0.0 0.0))
+    ((= style "SLope")   (list (* 0.12 len) 0.0 (* 0.30 len)))
+    ((= style "MOdflat") (list (* 0.10 len) (* 0.70 len) 0.0))
+    (t                   (list (* 0.12 len) (* 0.20 len) (* 0.40 len)))))
+
+;; Bottom vertices ((run . depth) ...) between the two wall bottoms,
+;; left (deep end) to right.  wh = wall height, dp = deep depth,
+;; c2 = depth where the shallow floor meets the slope break.
+(defun pool:btmbrks (style h g f wh dp c2)
+  (cond
+    ((= style "Wedge")   (list (cons h dp)))
+    ((= style "MOdflat") (list (cons h dp) (cons (+ h g) dp)))
+    ((= style "SHallow") (list (cons h dp) (cons (+ h g) dp)
+                               (cons (+ h g f) c2)))
+    ;; SLope, and a Normal hopper whose G came out at 0
+    (t                   (list (cons h dp) (cons (+ h g f) wh)))))
+
+;; Letters the style prompts for, in order, with their chain points.
+(defun pool:btmties (style / sp)
+  (setq sp (pool:btmspec style))
+  (append (list (list "H" 'pl 'phl))
+          (if (car sp) (list (list "G" 'phl 'phr)) nil)
+          (list (list "F" 'phr 'pbrk))
+          (if (cadr sp) (list (list "E" 'pbrk 'pr)) nil)
+          (list (list "M" 'pht 'pt) (list "L" 'phb 'pht)
+                (list "K" 'pb 'phb))))
 
 ;; Gray field-sheet guide inside the fitted pool: nominal hopper,
 ;; break line and ties (solid), plus a dashed lettered measuring tie
 ;; per input.  Returns the highlight assoc keyed by letter.
-(defun pool:hopguide (quad corners th / len wid gg pr tl e et pv)
+(defun pool:hopguide (quad corners th style tie / len wid nom gg pr tl e et pv)
   (setq len (distance (car quad) (cadr quad))
         wid (distance (car quad) (cadddr quad))
+        nom (pool:btmnom style len)
         gg (pool:hopcalc quad corners
-                         (* 0.12 len) (* 0.20 len) (* 0.40 len)
+                         (car nom) (cadr nom) (caddr nom)
                          (* 0.25 wid) (* 0.25 wid)))
-  (foreach pr (list (list 'hbl 'htl) (list 'htl 'htr) (list 'htr 'hbr)
-                    (list 'hbr 'hbl) (list 'brkb 'brkt)
-                    (list 'lab1 'hbl) (list 'lab2 'hbl)
-                    (list 'lat1 'htl) (list 'lat2 'htl)
-                    (list 'htr 'brkt) (list 'hbr 'brkb))
+  (foreach pr (append (list (list 'hbl 'htl))
+                      (if (cadr (assoc 'zg gg)) nil
+                          (list (list 'htl 'htr) (list 'htr 'hbr)
+                                (list 'hbr 'hbl)))
+                      (if (cadr (assoc 'ze gg)) nil (list (list 'brkb 'brkt)))
+                      (if tie
+                          (list (list 'lab1 'hbl) (list 'lab2 'hbl)
+                                (list 'lat1 'htl) (list 'lat2 'htl))
+                          nil)
+                      (list (list 'htr 'brkt) (list 'hbr 'brkb)))
     (pool:pvadd (pool:pvline (cadr (assoc (car pr) gg))
                              (cadr (assoc (cadr pr) gg)))))
   (setq pv nil)
-  (foreach tl (list (list "H" 'pl 'phl) (list "G" 'phl 'phr)
-                    (list "F" 'phr 'pbrk) (list "E" 'pbrk 'pr)
-                    (list "M" 'pht 'pt) (list "L" 'phb 'pht)
-                    (list "K" 'pb 'phb))
+  (foreach tl (pool:btmties style)
     (setq e (pool:pvadd (pool:pvlined (cadr (assoc (cadr tl) gg))
                                       (cadr (assoc (caddr tl) gg)))))
     (pool:text (pool:v+ (pool:mid (cadr (assoc (cadr tl) gg))
@@ -1952,13 +2052,17 @@
               k (1+ k))))
   (reverse out))
 
-;; Normal (hopper pad) bottom for the rectangle: lettered guide,
-;; prompts H G F E M L K, plan hopper + chain dims, then the side
-;; profile below (asks wall height C and hopper depth D).
-(defun pool:hopnormal (quad corners doff th lmode / pv h g f e m l k gg tl odl
-                                              hraw graw fraw eraw mraw lraw kraw
-                                              a b c d cen toth totv hres vres
-                                              skipe)
+;; Hopper-language bottom: lettered guide, the H/G/F/E/M/L/K chain,
+;; plan hopper + chain dims, and -- for every style but Normal -- the
+;; side profile below with its depth dims.
+;; style = Normal / Wedge / SLope / MOdflat / SHallow (see above);
+;; x0/y0 place the side profile below the pool; tie draws the left
+;; corner ties.
+(defun pool:hopnormal (quad corners doff th lmode style x0 y0 tie
+                       / pv h g f e m l k gg tl odl sp whn hdn nom
+                         hraw graw fraw eraw mraw lraw kraw wh dp c2
+                         a b c d cen toth totv hres vres skipe rows)
+  (setq sp (pool:btmspec style))
   ;; wall-to-wall totals through the pool centre: B1 along the run,
   ;; V1 across it
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
@@ -1967,54 +2071,138 @@
                        (pool:linex cen (pool:v- b a) b (pool:v- c b)))
         totv (distance (pool:linex cen (pool:v- d a) a (pool:v- b a))
                        (pool:linex cen (pool:v- d a) d (pool:v- c d))))
-  (setq pv (pool:hopguide quad corners th))
+  (setq pv (pool:hopguide quad corners th style tie))
+  ;; the profile styles get a nominal section under the plan, so the
+  ;; depth prompts highlight a tie the same way the plan letters do
+  (if (caddr sp)
+      (progn
+        (setq whn (* 0.25 totv) hdn (* 0.55 totv)
+              nom (pool:btmnom style toth))
+        (pool:profdraw x0 y0 toth whn
+                       (pool:btmbrks style (car nom) (cadr nom)
+                                     (- toth (car nom) (cadr nom) (caddr nom))
+                                     whn hdn (* 0.5 (+ whn hdn)))
+                       "POOL-NOTES" t)
+        (setq pv (append pv
+                   (list (pool:pvtie (list (+ x0 toth (* 0.6 doff)) y0)
+                                     (list (+ x0 toth (* 0.6 doff)) (- y0 whn))
+                                     "C" th)
+                         (pool:pvtie (list (+ x0 (car nom)) y0)
+                                     (list (+ x0 (car nom)) (- y0 hdn))
+                                     "D" th))
+                   (if (cadddr sp)
+                       (list (pool:pvtie
+                               (list (- (+ x0 toth) (caddr nom)) y0)
+                               (list (- (+ x0 toth) (caddr nom))
+                                     (- y0 (* 0.5 (+ whn hdn))))
+                               "C2" th))
+                       nil)))))
   (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
-  (setq hraw (pool:askhx "H - left end to hopper" (cdr (assoc "H" pv)))
-        graw (pool:askhx "G - hopper length" (cdr (assoc "G" pv)))
-        fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv))))
+  (setq hraw (pool:askhx "H - left end to deep end" (cdr (assoc "H" pv))))
+  ;; a Normal hopper accepts G = 0: that IS the slope bottom, and the
+  ;; side profile then comes along automatically
+  (if (car sp)
+      (setq graw (pool:askhz (if (= style "MOdflat")
+                                 "G - flat pad length"
+                                 "G - hopper length, 0 = slope bottom")
+                             (cdr (assoc "G" pv))))
+      (setq graw 0.0))
+  (setq fraw (pool:askhx (if (= style "MOdflat")
+                             "F - pad to right end"
+                             "F - deep end to slope break")
+                         (cdr (assoc "F" pv))))
   ;; L pools: when H+G+F are all given and already span the main
   ;; section (B1), the break lands on the inner corner and E is moot
-  (if (and lmode hraw graw fraw
-           (<= (abs (- (+ hraw graw fraw) toth)) 0.5))
-      (progn
-        (setq eraw 0.0 skipe t)
-        (princ "\nH + G + F span the main section -- E not needed."))
-      (setq eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))))
-  (setq mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
-        lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
-        kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv))))
+  (cond
+    ((not (cadr sp)) (setq eraw 0.0))
+    ((and lmode hraw graw fraw
+          (<= (abs (- (+ hraw graw fraw) toth)) 0.5))
+     (setq eraw 0.0 skipe t)
+     (princ "\nH + G + F span the main section -- E not needed."))
+    (t
+     (setq eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv))))))
+  (setq mraw (pool:askhx "M - top side to deep end" (cdr (assoc "M" pv)))
+        lraw (pool:askhx "L - deep end width" (cdr (assoc "L" pv)))
+        kraw (pool:askhx "K - deep end to bottom side" (cdr (assoc "K" pv))))
+  ;; depths, while the nominal section is still on screen
+  (if (caddr sp)
+      (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
+            dp (pool:askh "D - deep end depth" (cdr (assoc "D" pv)))
+            c2 (if (cadddr sp)
+                   (pool:askh "C2 - depth where the shallow floor meets the break"
+                              (cdr (assoc "C2" pv)))
+                   wh)))
   (pool:pvkill)
   ;; resolve the chains: NA takes the remainder (split when several);
-  ;; G / L absorb any leftover
-  (setq hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
+  ;; the style's slack member (G with a pad, F without) absorbs any
+  ;; leftover, and L does across the pool
+  (setq hres (pool:chainfix (list hraw graw fraw eraw) toth (nth 4 sp))
         vres (pool:chainfix (list mraw lraw kraw) totv 1)
         h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
         m (car vres) l (cadr vres) k (caddr vres))
+  ;; a G that came out at zero is a slope bottom whatever was asked
+  ;; for, so the section comes along automatically
+  (if (< g 1.0e-6) (setq g 0.0))
+  (if (and (= g 0.0) (not (caddr sp)))
+      (progn
+        (princ "\nG = 0 -- that is a slope bottom, so a side view is drawn too.")
+        (setq wh (pool:askh "C - wall height (shallow depth)" nil)
+              dp (pool:askh "D - deep end depth" nil)
+              c2 wh)))
   (setq gg (pool:hopcalc quad corners h g e m k))
-  (pool:hopdraw gg "POOL")
+  (pool:hopdraw gg "POOL" tie)
+  ;; side profile below the plan, per the style
+  (if wh
+      (pool:profdraw x0 y0 toth wh
+                     (pool:btmbrks (if (caddr sp) style "SLope")
+                                   h g f wh dp c2)
+                     "POOL" nil))
   ;; chain dimensions along the two centerlines, like the sheet
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
   ;; M/L/K def points sit on the hopper edge; their dim line floats
-  ;; 12" right via the 'voff vector
+  ;; 30" right via the 'voff vector
   (foreach tl (list (list 'pl 'phl nil) (list 'phl 'phr nil)
                     (list 'phr 'pbrk nil) (list 'pbrk 'pr nil)
                     (list 'pht 'pt t) (list 'phb 'pht t) (list 'pb 'phb t))
-    (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
-                 (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
-                                    (cadr (assoc (cadr tl) gg)))
-                          (if (caddr tl) (cadr (assoc 'voff gg))
-                              (list 0.0 0.0)))))
+    ;; a pinned-out letter (G with no pad, E on the wall) has nothing
+    ;; to dimension
+    (if (> (distance (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg)))
+           1.0e-6)
+        (pool:dimalg (cadr (assoc (car tl) gg)) (cadr (assoc (cadr tl) gg))
+                     (pool:v+ (pool:mid (cadr (assoc (car tl) gg))
+                                        (cadr (assoc (cadr tl) gg)))
+                              (if (caddr tl) (cadr (assoc 'voff gg))
+                                  (list 0.0 0.0))))))
+  ;; profile depths: C at the shallow wall, D at the deep end
+  (if wh
+      (progn
+        (pool:dimalg (list (+ x0 toth) y0) (list (+ x0 toth) (- y0 wh))
+                     (list (+ x0 toth (* 0.8 doff)) (- y0 (* 0.5 wh))))
+        (pool:dimalg (list (+ x0 h) y0) (list (+ x0 h) (- y0 dp))
+                     (list (+ x0 h (* -0.5 doff)) (- y0 (* 0.5 dp))))
+        (if (cadddr sp)
+            (pool:dimalg (list (+ x0 h g f) y0) (list (+ x0 h g f) (- y0 c2))
+                         (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2)))))))
   (setvar "CLAYER" odl)
-  (list
+  (setq rows (list
     (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
-    (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
+    (list "HOP G" (if (car sp) graw nil)
+          (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
     (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
-    (list "HOP E" (if skipe nil eraw)
+    (list "HOP E" (if (or skipe (not (cadr sp))) nil eraw)
           (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
     (list "HOP M" mraw (distance (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg))))
     (list "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))))
     (list "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))))))
+  (if wh
+      (setq rows (append rows
+                         (list (list "WALL HT C" wh wh)
+                               (list "DEPTH D" dp dp))
+                         (if (cadddr sp)
+                             (list (list "BRK DEPTH C2" c2 c2))
+                             nil))))
+  rows)
 
 
 ;; Offset an infinite line (pt dir) toward cen by dist -> (pt dir).
@@ -2203,8 +2391,7 @@
           (list "DEPTH D" hd hd))))
   rows)
 
-;; Pool-bottom dispatcher for the rectangle: Normal (hopper pad) or
-;; Sport (flat deep section; G = 0 gives the no-hopper-pad V bottom).
+;; Pool-bottom dispatcher for the rectangle.
 ;; Returns the report rows (nil if skipped).
 (defun pool:hopper (quad corners doff th / btype xmin xmax ymin ymax
                                            a b c d cen sres ln xi)
@@ -2219,10 +2406,12 @@
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- xmin doff) (- ymin doff)))
                  (pool:wp (list (+ xmax doff) (+ ymax doff))))
-        (initget 1 "Normal Sport")
-        (setq btype (getkword "\nBottom type [Normal/Sport] (sport with G = 0 has no hopper pad): "))
-        (if (= btype "Normal")
-            (pool:hopnormal quad corners doff th nil)
+        (initget pool:*btypes*)
+        (setq btype (getkword pool:*btprompt*))
+        (if (not btype) (setq btype "Normal"))
+        (if (/= btype "Sport")
+            (pool:hopnormal quad corners doff th nil btype
+                            xmin (- ymin (* 2.2 doff)) t)
             (progn
               (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
                     cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25))
@@ -2252,7 +2441,8 @@
                           (list x0 y0)))
         prev (car pts))
   (foreach p (cdr pts)
-    (pool:hgl prev p lay pvflag)
+    ;; a break sitting exactly on a wall bottom repeats that point
+    (if (> (distance prev p) 1.0e-6) (pool:hgl prev p lay pvflag))
     (setq prev p)))
 
 ;; Dashed lettered guide tie from p to q; returns the (lbl ent...)
@@ -2636,22 +2826,48 @@
               (list "HOP X" x (distance (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))))
         rows)))
 
-;; Bottom-type dispatchers: Normal / Sport for oval and grecian pools
-;; (L pools are standard-hopper only; sport G = 0 = no hopper pad).
+;; Body quad spanning two end lines and the two side lines: the frame
+;; the special bottoms measure their chain off for the shapes whose
+;; ends are not plain corners.
+(defun pool:bodyquad (lline rline bline tline)
+  (list (pool:linex (car lline) (cadr lline) (car bline) (cadr bline))
+        (pool:linex (car rline) (cadr rline) (car bline) (cadr bline))
+        (pool:linex (car rline) (cadr rline) (car tline) (cadr tline))
+        (pool:linex (car lline) (cadr lline) (car tline) (cadr tline))))
 
-(defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi)
+;; Bottom-type dispatchers for oval and grecian pools.  Normal keeps
+;; each shape's own field sheet (radius end / corner cuts); the four
+;; special bottoms are the standard chain measured off the body, so
+;; they work here too.
+
+(defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi
+                                                 lline rline bline tline)
   (initget "Yes No")
   (if (= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
       nil
       (progn
-        (initget 1 "Normal Sport")
-        (setq btype (getkword "\nBottom type [Normal/Sport] (sport with G = 0 has no hopper pad): "))
-        (if (= btype "Normal")
-            (pool:hopoval quad tipl tipr doff th)
-            (progn
-              (setq u (pool:unit (pool:v- tipr tipl))
-                    v (pool:perp u))
-              (pool:hopsport (list tipl v) (list tipr v)
+        (initget pool:*btypes*)
+        (setq btype (getkword pool:*btprompt*))
+        (if (not btype) (setq btype "Normal"))
+        (setq u (pool:unit (pool:v- tipr tipl))
+              v (pool:perp u)
+              lline (list tipl v)
+              rline (list tipr v)
+              bline (list (car quad) (pool:v- (cadr quad) (car quad)))
+              tline (list (cadddr quad)
+                          (pool:v- (caddr quad) (cadddr quad))))
+        (cond
+          ((= btype "Normal") (pool:hopoval quad tipl tipr doff th))
+          ;; the oval's ends are arcs, so there are no left corners to
+          ;; tie the deep end back to
+          ((/= btype "Sport")
+           (pool:hopnormal (pool:bodyquad lline rline bline tline)
+                           pool:*sq4* doff th nil btype
+                           (min (car tipl) (car tipr))
+                           (- (apply 'min (mapcar 'cadr quad)) (* 2.2 doff))
+                           nil))
+          (t
+            (pool:hopsport (list tipl v) (list tipr v)
                              (list (car quad) (pool:v- (cadr quad) (car quad)))
                              (list (cadddr quad)
                                    (pool:v- (caddr quad) (cadddr quad)))
@@ -2664,28 +2880,41 @@
                              (apply 'max (mapcar 'cadr quad))
                              doff th))))))
 
-(defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln)
+(defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln
+                                      lline rline bline tline)
   (initget "Yes No")
   (if (= "No" (getkword "\nAdd pool bottom (hopper) detail? [Yes/No] <Yes>: "))
       nil
       (progn
-        (initget 1 "Normal Sport")
-        (setq btype (getkword "\nBottom type [Normal/Sport] (sport with G = 0 has no hopper pad): "))
-        (if (= btype "Normal")
-            (pool:hopgrec pts doff th)
-            (progn
-              (setq cen (list 0.0 0.0))
-              (foreach p pts (setq cen (pool:v+ cen p)))
-              (setq cen (pool:v* cen 0.125)
-                    u (pool:v- (nth 1 pts) (nth 0 pts))
-                    pl (pool:linex cen u (nth 7 pts)
-                                   (pool:v- (nth 6 pts) (nth 7 pts)))
-                    pr (pool:linex cen u (nth 2 pts)
-                                   (pool:v- (nth 3 pts) (nth 2 pts))))
-              (pool:hopsport (list (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
-                             (list (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts)))
-                             (list (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
-                             (list (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts)))
+        (initget pool:*btypes*)
+        (setq btype (getkword pool:*btprompt*))
+        (if (not btype) (setq btype "Normal"))
+        (setq cen (list 0.0 0.0))
+        (foreach p pts (setq cen (pool:v+ cen p)))
+        (setq cen (pool:v* cen 0.125)
+              u (pool:v- (nth 1 pts) (nth 0 pts))
+              lline (list (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
+              rline (list (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts)))
+              bline (list (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
+              tline (list (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts)))
+              pl (pool:linex cen u (car lline) (cadr lline))
+              pr (pool:linex cen u (car rline) (cadr rline)))
+        (cond
+          ((= btype "Normal") (pool:hopgrec pts doff th))
+          ((/= btype "Sport")
+           ;; the deep end ties to BOTH ends of each left corner cut,
+           ;; exactly as the Grecian's own hopper does
+           (pool:hopnormal (pool:bodyquad lline rline bline tline)
+                           (list (list "Ends" (nth 7 pts) (nth 0 pts))
+                                 (list "Square" 0.0)
+                                 (list "Square" 0.0)
+                                 (list "Ends" (nth 5 pts) (nth 6 pts)))
+                           doff th nil btype
+                           (apply 'min (mapcar 'car pts))
+                           (- (apply 'min (mapcar 'cadr pts)) (* 2.2 doff))
+                           t))
+          (t
+            (pool:hopsport lline rline bline tline
                              cen (distance pl pr)
                              (apply 'min (mapcar 'car pts))
                              (- (apply 'min (mapcar 'cadr pts)) (* 2.2 doff))

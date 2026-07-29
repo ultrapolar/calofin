@@ -1155,4 +1155,86 @@ lr,rr,sl,sr,tot,notes = ovalends(360.0,None,None,360.0,120.0,120.0)
 assert notes and abs(lr-60.0)<1e-9 and abs(rr-60.0)<1e-9
 print("   radii round-trip through the arc; NA closes on the overall")
 
+print("== 50. special bottoms (wedge / modified flat / slope / sloping shallow) ==")
+# Mirrors of pool:btmspec / pool:btmbrks and the hopcalc plan points,
+# checked against the reference drawing: every pool 480 x 240, wall
+# height C = 40, deep D = 60.
+def btmspec(style):
+    return {"Wedge":   (False, False, True,  False, 2),
+            "SLope":   (False, True,  True,  False, 2),
+            "MOdflat": (True,  False, True,  False, 1),
+            "SHallow": (True,  True,  True,  True,  1)}.get(
+                style, (True, True, False, False, 1))
+def btmbrks(style,h,g,f,wh,dp,c2):
+    if style=="Wedge":   return [(h,dp)]
+    if style=="MOdflat": return [(h,dp),(h+g,dp)]
+    if style=="SHallow": return [(h,dp),(h+g,dp),(h+g+f,c2)]
+    return [(h,dp),(h+g+f,wh)]
+def hopplan(total,width,h,g,e,m,k):
+    """x of the deep-end edges and the break, and the deep line's ends."""
+    return dict(hl=h, hr=h+g, brk=total-e, top=width-m, bot=k)
+
+TOT, WID, C, D = 480.0, 240.0, 40.0, 60.0
+
+# -- wedge: G=0 E=0, deep line 60 in, slope to the far wall, M=K=60
+sp=btmspec("Wedge"); assert sp[:2]==(False,False) and sp[4]==2
+h,f = 60.0, 420.0
+vals=chainfix([h,0.0,None,0.0],TOT,2)         # F is the slack / NA member
+assert vals==[60.0,0.0,420.0,0.0]
+pl=hopplan(TOT,WID,60.0,0.0,0.0,60.0,60.0)
+assert pl['hl']==pl['hr']==60.0               # pad collapsed to one line
+assert pl['brk']==480.0                       # break sits on the far wall
+assert (pl['bot'],pl['top'])==(60.0,180.0)    # deep line spans y 60..180 (L=120)
+assert btmbrks("Wedge",60.0,0.0,420.0,C,D,C)==[(60.0,60.0)]
+
+# -- modified flat: E=0, pad inset 24 all round (H=24 G=432 F=24, M=K=24)
+sp=btmspec("MOdflat"); assert sp[1] is False and sp[4]==1
+vals=chainfix([24.0,None,24.0,0.0],TOT,1)
+assert vals==[24.0,432.0,24.0,0.0]
+pl=hopplan(TOT,WID,24.0,432.0,0.0,24.0,24.0)
+assert (pl['hl'],pl['hr'])==(24.0,456.0) and pl['brk']==480.0
+assert (pl['bot'],pl['top'])==(24.0,216.0)    # pad y 24..216 -> L=192
+assert btmbrks("MOdflat",24.0,432.0,24.0,C,D,C)==[(24.0,60.0),(456.0,60.0)]
+
+# -- slope bottom: G=0, deep line at 60, break at 360, flat to the wall
+sp=btmspec("SLope"); assert sp[0] is False and sp[4]==2
+vals=chainfix([60.0,0.0,None,120.0],TOT,2)
+assert vals==[60.0,0.0,300.0,120.0]
+pl=hopplan(TOT,WID,60.0,0.0,120.0,60.0,60.0)
+assert pl['hl']==pl['hr']==60.0 and pl['brk']==360.0
+assert btmbrks("SLope",60.0,0.0,300.0,C,D,C)==[(60.0,60.0),(360.0,40.0)]
+# a Normal hopper whose G resolves to 0 takes the same profile
+assert btmspec("Normal")[2] is False          # ... but only then
+assert btmbrks("SLope",60.0,0.0,300.0,C,D,C)[-1][1]==C
+
+# -- sloping shallow end: full hopper, shallow floor 45 at the break -> 40
+sp=btmspec("SHallow"); assert sp[2] and sp[3] and sp[4]==1
+vals=chainfix([60.0,60.0,240.0,120.0],TOT,1)
+assert vals==[60.0,60.0,240.0,120.0]          # closes exactly, nothing absorbed
+pl=hopplan(TOT,WID,60.0,60.0,120.0,60.0,60.0)
+assert (pl['hl'],pl['hr'],pl['brk'])==(60.0,120.0,360.0)
+assert btmbrks("SHallow",60.0,60.0,240.0,C,D,45.0)==[(60.0,60.0),(120.0,60.0),(360.0,45.0)]
+print("   all four match the reference plan breaks and profile vertices")
+
+print("== 51. explicit corner-tie ends (Grecian cuts under a special bottom) ==")
+def cornerends(p,pp,pn,ctype,size,xtra=None):
+    if ctype=="Ends": return (size,xtra,None)
+    up=_unit(_sub(pp,p)); un=_unit(_sub(pn,p))
+    dp=up[0]*un[0]+up[1]*un[1]
+    ang=math.atan2(math.sqrt(max(0.0,1-dp*dp)),dp)
+    if ctype=="Diag":
+        sb=size/(2*math.sin(ang/2))
+        return ((p[0]+up[0]*sb,p[1]+up[1]*sb),(p[0]+un[0]*sb,p[1]+un[1]*sb),None)
+    return (p,p,None)
+# a square corner still resolves to the corner itself
+assert cornerends((0,0),(0,10),(10,0),"Square",0.0)[:2]==((0,0),(0,0))
+# a 90-degree Diag of face 10 sets back 10/sqrt(2) on each edge
+e=cornerends((0,0),(0,100),(100,0),"Diag",10.0)
+assert abs(e[0][1]-10/math.sqrt(2))<1e-9 and abs(e[1][0]-10/math.sqrt(2))<1e-9
+# "Ends" hands back the two supplied points verbatim, prev side first --
+# a Grecian's bottom-left cut runs LB (on the end line) -> A (on the side)
+LB,A=(0.0,40.0),(40.0,0.0)
+assert cornerends((0,0),(0,100),(100,0),"Ends",LB,A)[:2]==(LB,A)
+print("   Square/Diag unchanged; Ends passes the cut's real endpoints through")
+
 print("\nALL CHECKS PASSED")
