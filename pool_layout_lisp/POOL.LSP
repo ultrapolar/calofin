@@ -356,16 +356,104 @@
 
 ;;; -------------------- user input -------------------------------------
 
-(defun pool:ask (msg)
-  (initget 7)                           ; no null, no zero, no negative
-  (getdist (strcat "\n" msg ": ")))
+;; The user's own object snaps stay LIVE during every measurement
+;; prompt (typed input is unaffected; a picked point can snap onto
+;; existing geometry).  OSMODE is zeroed only while the routine feeds
+;; points to commands, where a snap would grab the wrong geometry.
+(defun pool:osup ( / p)
+  (setq p (assoc "OSMODE" pool:*sysold*))
+  (if p (setvar "OSMODE" (cdr p))))
 
-;; Cross-dim prompt: also accepts NA when the measurement was not
-;; taken in the field.  Returns a distance or nil for NA.
-(defun pool:askx (msg / v)
-  (initget 7 "NA")
-  (setq v (getdist (strcat "\n" msg " (or NA if not measured): ")))
-  (if (= (type v) 'STR) nil v))
+(defun pool:osdown () (setvar "OSMODE" 0))
+
+(defun pool:ask (msg / v)
+  (pool:osup)
+  (initget 7)                           ; no null, no zero, no negative
+  (setq v (getdist (strcat "\n" msg ": ")))
+  (pool:osdown)
+  v)
+
+;;; -------------------- measurement sequences (Back) -------------------
+;;;
+;;;  A block of related measurements runs through pool:askseq so every
+;;;  prompt after the first also offers *Back*, which re-asks the
+;;;  previous question -- a typo no longer means Esc and start over.
+;;;  Each item: (key kind msg ents dflt skip skipmsg)
+;;;    key   symbol the answer is stored under
+;;;    kind  REQ  a value is required
+;;;          NAX  NA accepted (returns nil)
+;;;          ZER  NA accepted, zero accepted
+;;;          SUG  NA accepted, suggested default (Enter takes it)
+;;;    ents  guide entities highlighted while prompted
+;;;    dflt  for SUG: a number, or a list of keys -- the first of those
+;;;          keys with a non-nil answer supplies the suggestion
+;;;    skip  optional quoted expression; non-nil -> answered 0.0 unasked
+
+(defun pool:sq (ans key) (cdr (assoc key ans)))
+
+(defun pool:sqput (ans key v / out p)
+  (foreach p ans (if (not (eq (car p) key)) (setq out (cons p out))))
+  (reverse (cons (cons key v) out)))
+
+(defun pool:sqfirst (ans keys / out k)
+  (foreach k keys
+    (if (and (not out) (pool:sq ans k)) (setq out (pool:sq ans k))))
+  out)
+
+;; One prompt of a sequence.  Returns the value, nil for NA, or the
+;; symbol POOL-BACK.
+(defun pool:asks (kind msg ents dflt back / v cols kw)
+  (setq cols (mapcar 'pool:getcol ents))
+  (foreach e ents (pool:setcol e pool:*hi-col*))
+  (pool:osup)
+  (setq kw (cond ((eq kind 'REQ) (if back "Back" nil))
+                 (back "NA Back")
+                 (t "NA")))
+  (if kw
+      (initget (cond ((eq kind 'ZER) 5)
+                     ((and (eq kind 'SUG) dflt) 6)
+                     ((eq kind 'REQ) (if back 5 7))
+                     (t 7))
+               kw)
+      (initget 7))
+  (setq v (getdist
+            (strcat "\n" msg
+                    (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUG)
+                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                               " (or NA)"))
+                          (t " (or NA if not measured)"))
+                    (if back " [Back]" "")
+                    ": ")))
+  (pool:osdown)
+  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
+  (cond ((and (= (type v) 'STR) (= v "Back")) 'POOL-BACK)
+        ((= (type v) 'STR) nil)               ; NA
+        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        (t v)))
+
+;; Run a whole block; returns the answers as an assoc list.
+(defun pool:askseq (items / ans i n it v dflt asked)
+  (setq ans nil i 0 n (length items) asked nil)
+  (while (< i n)
+    (setq it (nth i items))
+    (if (and (nth 5 it) (eval (nth 5 it)))    ; auto-skip -> 0, unasked
+        (progn
+          (if (nth 6 it) (princ (nth 6 it)))
+          (setq ans (pool:sqput ans (car it) 0.0)
+                i (1+ i)))
+        (progn
+          (setq dflt (nth 4 it))
+          (if (and dflt (listp dflt))
+              (setq dflt (pool:sqfirst ans dflt)))
+          (setq v (pool:asks (cadr it) (caddr it) (cadddr it) dflt
+                             (if asked t nil)))
+          (if (eq v 'POOL-BACK)
+              (setq i (car asked) asked (cdr asked))
+              (setq ans (pool:sqput ans (car it) v)
+                    asked (cons i asked)
+                    i (1+ i))))))
+  ans)
 
 ;;; -------------------- guide preview ----------------------------------
 ;;; A gray nominal pool of the chosen shape is drawn as soon as the
@@ -421,48 +509,6 @@
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (setq v (pool:ask msg))
-  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  v)
-
-;; Same, for cross dims: NA allowed, returns nil when not measured.
-(defun pool:askhx (msg ents / v cols)
-  (setq cols (mapcar 'pool:getcol ents))
-  (foreach e ents (pool:setcol e pool:*hi-col*))
-  (setq v (pool:askx msg))
-  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  v)
-
-;; NA allowed, with a suggested value: Enter takes the suggestion.
-;; Used for the letters that are usually equal on a given pool (H, M
-;; and K), so the crew types the number once.
-(defun pool:askd (msg dflt / v)
-  (if (not dflt)
-      (pool:askx msg)
-      (progn
-        (initget 6 "NA")                ; null OK (= take the suggestion)
-        (setq v (getdist (strcat "\n" msg " <" (rtos dflt) "> (or NA): ")))
-        (cond ((= (type v) 'STR) nil)   ; NA
-              (v v)
-              (t dflt)))))
-
-(defun pool:askhd (msg ents dflt / v cols)
-  (setq cols (mapcar 'pool:getcol ents))
-  (foreach e ents (pool:setcol e pool:*hi-col*))
-  (setq v (pool:askd msg dflt))
-  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  v)
-
-;; NA allowed AND zero allowed -- for chain letters that may
-;; legitimately be absent (the sport G: 0 = no hopper pad).
-(defun pool:askz (msg / v)
-  (initget 5 "NA")                      ; no null, no negative; zero OK
-  (setq v (getdist (strcat "\n" msg " (or NA if not measured): ")))
-  (if (= (type v) 'STR) nil v))
-
-(defun pool:askhz (msg ents / v cols)
-  (setq cols (mapcar 'pool:getcol ents))
-  (foreach e ents (pool:setcol e pool:*hi-col*))
-  (setq v (pool:askz msg))
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   v)
 
@@ -789,14 +835,6 @@
         (pool:v+ pbot (pool:v* dbot lb2))
         lt2 lb2 th ok))
 
-;; Compute + draw one Grecian end on layer lay.
-(defun pool:grecend (pbot ptop mdir lt lb e lay / r)
-  (setq r (pool:grecendp pbot ptop mdir lt lb e))
-  (pool:line ptop (car r) lay)
-  (pool:line (car r) (cadr r) lay)
-  (pool:line (cadr r) pbot lay)
-  r)
-
 ;;; -------------------- grecian cross-dim modes -------------------------
 ;;;
 ;;;  A Grecian pool has 8 corners; from the bottom-left, clockwise:
@@ -987,7 +1025,7 @@
     (pool:pvtie (list 375.0 -15.0) (list 425.0 40.0) "S2" 10.0)))
   pv)
 
-(defun pool:grecflow ( / oldclay mode crosses pv imeth pvo ovbad
+(defun pool:grecflow ( / oldclay mode crosses pv imeth pvo ovbad ans xitems
                        braw araw traw sraw s1raw vraw s2raw
                        ovres sv tv s1v vov hyp u2 vv2 bact aact sact s1act
                        tp bo le ri ltd lbd lew rtd rbd rew
@@ -1016,13 +1054,19 @@
   (if (= imeth "Overall")
       (progn
         (princ "\nOverall sheet -- symmetric grecian; the RED tie is being asked for.")
-        (setq braw (pool:askh "B - overall length" (cdr (assoc "B" pvo)))
-              araw (pool:askh "A - overall width" (cdr (assoc "A" pvo)))
-              traw (pool:askhx "T - top side length" (cdr (assoc "T" pvo)))
-              sraw (pool:askhx "S - corner cut along the side" (cdr (assoc "S" pvo)))
-              s1raw (pool:askhx "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
-              vraw (pool:askhx "V - end width" (cdr (assoc "V" pvo)))
-              s2raw (pool:askhx "S2 - corner cut face (check)" (cdr (assoc "S2" pvo)))
+        (princ "\n(after the first answer, Back re-asks the previous one)")
+        (setq ans (pool:askseq
+                    (list (list 'b 'REQ "B - overall length" (cdr (assoc "B" pvo)))
+                          (list 'a 'REQ "A - overall width" (cdr (assoc "A" pvo)))
+                          (list 'tt 'NAX "T - top side length" (cdr (assoc "T" pvo)))
+                          (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
+                          (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
+                          (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
+                          (list 's2 'NAX "S2 - corner cut face (check)" (cdr (assoc "S2" pvo)))))
+              braw (pool:sq ans 'b) araw (pool:sq ans 'a)
+              traw (pool:sq ans 'tt) sraw (pool:sq ans 'ss)
+              s1raw (pool:sq ans 's1) vraw (pool:sq ans 'vv)
+              s2raw (pool:sq ans 's2)
               ovres (pool:grecov araw braw sraw traw s1raw vraw)
               sv (car ovres) tv (cadr ovres)
               s1v (caddr ovres) vov (cadddr ovres))
@@ -1049,43 +1093,55 @@
               bo tv tp tv le araw ri araw
               ltd hyp lbd hyp rtd hyp rbd hyp
               lew vov rew vov))
-      (if pool:*insq*
-      (setq bo  (pool:askh "Side (top & bottom)"
-                           (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))))
-            tp  bo
-            le  (pool:askh "Body end (left & right, A-D / B-C)"
-                           (append (cdr (assoc 'ad pv)) (cdr (assoc 'bc pv))))
-            ri  le
-            ltd (pool:askh "LEFT end diagonals (top & bottom)"
-                           (append (cdr (assoc 'ltd pv)) (cdr (assoc 'lbd pv))))
-            lbd ltd
-            lew (pool:askh "LEFT end width (LT-LB)"
-                           (append (cdr (assoc 'lew pv)) (pool:lbl pv '(lLT lLB))))
-            rtd (pool:askh "RIGHT end diagonals (top & bottom)"
-                           (append (cdr (assoc 'rtd pv)) (cdr (assoc 'rbd pv))))
-            rbd rtd
-            rew (pool:askh "RIGHT end width (RT-RB)"
-                           (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))
-      (setq bo  (pool:askh "Side BOTTOM (A-B)"
-                           (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
-            tp  (pool:askh "Side TOP (D-C)"
-                           (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lD lC))))
-            le  (pool:askh "End LEFT (A-D)"
-                           (append (cdr (assoc 'ad pv)) (pool:lbl pv '(lA lD))))
-            ri  (pool:askh "End RIGHT (B-C)"
-                           (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
-            ltd (pool:askh "LEFT end diagonal TOP (D-LT)"
-                           (append (cdr (assoc 'ltd pv)) (pool:lbl pv '(lD lLT))))
-            lbd (pool:askh "LEFT end diagonal BOTTOM (A-LB)"
-                           (append (cdr (assoc 'lbd pv)) (pool:lbl pv '(lA lLB))))
-            lew (pool:askh "LEFT end width (LT-LB)"
-                           (append (cdr (assoc 'lew pv)) (pool:lbl pv '(lLT lLB))))
-            rtd (pool:askh "RIGHT end diagonal TOP (C-RT)"
-                           (append (cdr (assoc 'rtd pv)) (pool:lbl pv '(lC lRT))))
-            rbd (pool:askh "RIGHT end diagonal BOTTOM (B-RB)"
-                           (append (cdr (assoc 'rbd pv)) (pool:lbl pv '(lB lRB))))
-            rew (pool:askh "RIGHT end width (RT-RB)"
-                           (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))))
+      (progn
+        (princ "\n(after the first answer, Back re-asks the previous one)")
+        (if pool:*insq*
+            (setq ans (pool:askseq
+                        (list (list 'bo 'REQ "Side (top & bottom)"
+                                    (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))))
+                              (list 'le 'REQ "Body end (left & right, A-D / B-C)"
+                                    (append (cdr (assoc 'ad pv)) (cdr (assoc 'bc pv))))
+                              (list 'ltd 'REQ "LEFT end diagonals (top & bottom)"
+                                    (append (cdr (assoc 'ltd pv)) (cdr (assoc 'lbd pv))))
+                              (list 'lew 'REQ "LEFT end width (LT-LB)"
+                                    (append (cdr (assoc 'lew pv)) (pool:lbl pv '(lLT lLB))))
+                              (list 'rtd 'REQ "RIGHT end diagonals (top & bottom)"
+                                    (append (cdr (assoc 'rtd pv)) (cdr (assoc 'rbd pv))))
+                              (list 'rew 'REQ "RIGHT end width (RT-RB)"
+                                    (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB))))))
+                  bo (pool:sq ans 'bo) tp bo
+                  le (pool:sq ans 'le) ri le
+                  ltd (pool:sq ans 'ltd) lbd ltd
+                  lew (pool:sq ans 'lew)
+                  rtd (pool:sq ans 'rtd) rbd rtd
+                  rew (pool:sq ans 'rew))
+            (setq ans (pool:askseq
+                        (list (list 'bo 'REQ "Side BOTTOM (A-B)"
+                                    (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
+                              (list 'tp 'REQ "Side TOP (D-C)"
+                                    (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lD lC))))
+                              (list 'le 'REQ "End LEFT (A-D)"
+                                    (append (cdr (assoc 'ad pv)) (pool:lbl pv '(lA lD))))
+                              (list 'ri 'REQ "End RIGHT (B-C)"
+                                    (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
+                              (list 'ltd 'REQ "LEFT end diagonal TOP (D-LT)"
+                                    (append (cdr (assoc 'ltd pv)) (pool:lbl pv '(lD lLT))))
+                              (list 'lbd 'REQ "LEFT end diagonal BOTTOM (A-LB)"
+                                    (append (cdr (assoc 'lbd pv)) (pool:lbl pv '(lA lLB))))
+                              (list 'lew 'REQ "LEFT end width (LT-LB)"
+                                    (append (cdr (assoc 'lew pv)) (pool:lbl pv '(lLT lLB))))
+                              (list 'rtd 'REQ "RIGHT end diagonal TOP (C-RT)"
+                                    (append (cdr (assoc 'rtd pv)) (pool:lbl pv '(lC lRT))))
+                              (list 'rbd 'REQ "RIGHT end diagonal BOTTOM (B-RB)"
+                                    (append (cdr (assoc 'rbd pv)) (pool:lbl pv '(lB lRB))))
+                              (list 'rew 'REQ "RIGHT end width (RT-RB)"
+                                    (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB))))))
+                  bo (pool:sq ans 'bo) tp (pool:sq ans 'tp)
+                  le (pool:sq ans 'le) ri (pool:sq ans 'ri)
+                  ltd (pool:sq ans 'ltd) lbd (pool:sq ans 'lbd)
+                  lew (pool:sq ans 'lew)
+                  rtd (pool:sq ans 'rtd) rbd (pool:sq ans 'rbd)
+                  rew (pool:sq ans 'rew)))))
 
   ;; -------- the perimeter is in: now pick the cross-dim detail level,
   ;; draw those diagonals on the guide, and measure them (NA allowed)
@@ -1095,14 +1151,22 @@
         (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
               crosses (pool:grecmode mode)
               pv (pool:greccross crosses pv))))
-  (setq crosscons nil)
+  (setq crosscons nil xitems nil k 0)
   (foreach e crosses
-    (setq tgt (pool:askhx (strcat "Cross dim " (caddr e))
-                          (append (cdr (assoc (caddr e) pv))
-                                  (pool:lbl pv
-                                    (list (pool:lblkey (nth (car e) pool:*grecnames*))
-                                          (pool:lblkey (nth (cadr e) pool:*grecnames*))))))
-          crosscons (cons (list (car e) (cadr e) tgt) crosscons)))
+    (setq xitems (cons (list (read (strcat "x" (itoa k))) 'NAX
+                             (strcat "Cross dim " (caddr e))
+                             (append (cdr (assoc (caddr e) pv))
+                                     (pool:lbl pv
+                                       (list (pool:lblkey (nth (car e) pool:*grecnames*))
+                                             (pool:lblkey (nth (cadr e) pool:*grecnames*))))))
+                       xitems)
+          k (1+ k)))
+  (setq ans (if xitems (pool:askseq (reverse xitems)) nil) k 0)
+  (foreach e crosses
+    (setq crosscons (cons (list (car e) (cadr e)
+                                (pool:sq ans (read (strcat "x" (itoa k)))))
+                          crosscons)
+          k (1+ k)))
   (setq crosscons (reverse crosscons))
   (pool:pvkill)
 
@@ -1433,7 +1497,7 @@
 
 ;; Full guided flow for L / Lazy L pools: preview, prompts, fit, draw,
 ;; dimension and report.  Caller handles sysvars / undo / zoom-extents.
-(defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes
+(defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes ans
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast)
   (setq oldclay (getvar "CLAYER"))
@@ -1442,57 +1506,54 @@
            (pool:wp (list -80.0 -70.0)) (pool:wp (list 520.0 370.0)))
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C right end top, D inner corner, E wing corner, F top-left.")
-  (setq sides
-        (if lazy
-            (list (pool:askh "Main side A-B (bottom)"
-                             (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
-                  (pool:askh "Lower bend side B-C (45 deg)"
-                             (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
-                  (pool:askh "Far end C-D"
-                             (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lC lD))))
-                  (pool:askh "Upper bend side D-E (45 deg)"
-                             (append (cdr (assoc 'de pv)) (pool:lbl pv '(lD lE))))
-                  (pool:askh "Top side E-F"
-                             (append (cdr (assoc 'ef pv)) (pool:lbl pv '(lE lF))))
-                  (pool:askh "Left end F-A"
-                             (append (cdr (assoc 'fa pv)) (pool:lbl pv '(lF lA)))))
-            (list (pool:askh "Side A-B (bottom, full length)"
-                             (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
-                  (pool:askh "End B-C (right end, full height)"
-                             (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))
-                  (pool:askh "Side C-D (top of wing)"
-                             (append (cdr (assoc 'cd pv)) (pool:lbl pv '(lC lD))))
-                  (pool:askh "Step D-E (down to the inner corner)"
-                             (append (cdr (assoc 'de pv)) (pool:lbl pv '(lD lE))))
-                  (pool:askh "Side E-F (top of main section)"
-                             (append (cdr (assoc 'ef pv)) (pool:lbl pv '(lE lF))))
-                  (pool:askh "End F-A (left end)"
-                             (append (cdr (assoc 'fa pv)) (pool:lbl pv '(lF lA)))))))
+  (princ "\n(after the first answer, Back re-asks the previous one)")
+  (setq ans (pool:askseq
+              (mapcar '(lambda (q)
+                         (list (car q) 'REQ (cadr q)
+                               (append (cdr (assoc (caddr q) pv))
+                                       (pool:lbl pv (cadddr q)))))
+                      (if lazy
+                          (list (list 'ab "Main side A-B (bottom)" 'ab '(lA lB))
+                                (list 'bc "Lower bend side B-C (45 deg)" 'bc '(lB lC))
+                                (list 'cd "Far end C-D" 'cd '(lC lD))
+                                (list 'de "Upper bend side D-E (45 deg)" 'de '(lD lE))
+                                (list 'ef "Top side E-F" 'ef '(lE lF))
+                                (list 'fa "Left end F-A" 'fa '(lF lA)))
+                          (list (list 'ab "Side A-B (bottom, full length)" 'ab '(lA lB))
+                                (list 'bc "End B-C (right end, full height)" 'bc '(lB lC))
+                                (list 'cd "Side C-D (top of wing)" 'cd '(lC lD))
+                                (list 'de "Step D-E (down to the inner corner)" 'de '(lD lE))
+                                (list 'ef "Side E-F (top of main section)" 'ef '(lE lF))
+                                (list 'fa "End F-A (left end)" 'fa '(lF lA))))))
+        sides (mapcar '(lambda (k) (pool:sq ans k)) '(ab bc cd de ef fa)))
   ;; cross dims only when out-of-square; in-square squares up to sides.
   ;; The diagonals join the guide now that the sides are all in.
   (if (not pool:*insq*) (setq pv (pool:hexcross lazy pv)))
   (setq diags
         (if pool:*insq*
             (list nil nil nil nil nil nil nil nil nil)
-            (list (pool:askhx "Cross dim A-C"
-                              (append (cdr (assoc 'ac pv)) (pool:lbl pv '(lA lC))))
-                  (pool:askhx "Cross dim B-D"
-                              (append (cdr (assoc 'bd pv)) (pool:lbl pv '(lB lD))))
-                  (pool:askhx "Cross dim C-E"
-                              (append (cdr (assoc 'ce pv)) (pool:lbl pv '(lC lE))))
-                  (pool:askhx "Cross dim D-F"
-                              (append (cdr (assoc 'df pv)) (pool:lbl pv '(lD lF))))
-                  (pool:askhx "Cross dim A-E"
-                              (append (cdr (assoc 'ae pv)) (pool:lbl pv '(lA lE))))
-                  (pool:askhx "Cross dim B-F"
-                              (append (cdr (assoc 'bf pv)) (pool:lbl pv '(lB lF))))
-                  (pool:askhx "Cross dim A-D"
-                              (append (cdr (assoc 'ad pv)) (pool:lbl pv '(lA lD))))
-                  (if lazy nil          ; the bend joint is not taped
-                      (pool:askhx "Cross dim B-E"
-                                  (append (cdr (assoc 'be pv)) (pool:lbl pv '(lB lE)))))
-                  (pool:askhx "Cross dim C-F"
-                              (append (cdr (assoc 'cf pv)) (pool:lbl pv '(lC lF)))))))
+            (progn
+              (setq ans (pool:askseq
+                          (mapcar '(lambda (q)
+                                     (list (car q) 'NAX
+                                           (strcat "Cross dim " (cadr q))
+                                           (append (cdr (assoc (car q) pv))
+                                                   (pool:lbl pv (caddr q)))))
+                                  (append
+                                    (list (list 'ac "A-C" '(lA lC))
+                                          (list 'bd "B-D" '(lB lD))
+                                          (list 'ce "C-E" '(lC lE))
+                                          (list 'df "D-F" '(lD lF))
+                                          (list 'ae "A-E" '(lA lE))
+                                          (list 'bf "B-F" '(lB lF))
+                                          (list 'ad "A-D" '(lA lD)))
+                                    ;; the lazy L's bend joint is not taped
+                                    (if lazy nil (list (list 'be "B-E" '(lB lE))))
+                                    (list (list 'cf "C-F" '(lC lF)))))))
+              (list (pool:sq ans 'ac) (pool:sq ans 'bd) (pool:sq ans 'ce)
+                    (pool:sq ans 'df) (pool:sq ans 'ae) (pool:sq ans 'bf)
+                    (pool:sq ans 'ad) (if lazy nil (pool:sq ans 'be))
+                    (pool:sq ans 'cf)))))
   (pool:pvkill)
 
   (princ "\nFitting pool body to the measurements ...")
@@ -2245,7 +2306,7 @@
                        / pv h g f e m l k gg tl odl sp whn hdn nom
                          hraw graw fraw eraw mraw lraw kraw wh dp c2
                          a b c d cen toth totv hres vres skipe rows
-                         cv hfx vfx)
+                         cv hfx vfx ans lmode2 toth2)
   (setq sp (pool:btmspec style))
   ;; wall-to-wall totals through the pool centre: B1 along the run,
   ;; V1 across it
@@ -2282,35 +2343,45 @@
                                "C2" th))
                        nil)))))
   (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
-  (setq hraw (pool:askhx "H - left end to deep end" (cdr (assoc "H" pv))))
-  ;; a Normal hopper accepts G = 0: that IS the slope bottom, and the
-  ;; side profile then comes along automatically
-  (if (car sp)
-      (setq graw (pool:askhz (if (= style "MOdflat")
-                                 "G - flat pad length"
-                                 "G - hopper length, 0 = slope bottom")
-                             (cdr (assoc "G" pv))))
-      (setq graw 0.0))
-  (setq fraw (pool:askhx (if (= style "MOdflat")
-                             "F - pad to right end"
-                             "F - deep end to slope break")
-                         (cdr (assoc "F" pv))))
+  (princ "\n(after the first answer, Back re-asks the previous one)")
   ;; L pools: when H+G+F are all given and already span the main
-  ;; section (B1), the break lands on the inner corner and E is moot
-  (cond
-    ((not (cadr sp)) (setq eraw 0.0))
-    ((and lmode hraw graw fraw
-          (<= (abs (- (+ hraw graw fraw) toth)) 0.5))
-     (setq eraw 0.0 skipe t)
-     (princ "\nH + G + F span the main section -- E not needed."))
-    (t
-     (setq eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv))))))
-  ;; H, M and K are usually the same offset, so each suggests the last
-  ;; one entered -- Enter accepts it
-  (setq mraw (pool:askhd "M - top side to deep end" (cdr (assoc "M" pv)) hraw)
-        lraw (pool:askhx "L - deep end width" (cdr (assoc "L" pv)))
-        kraw (pool:askhd "K - deep end to bottom side" (cdr (assoc "K" pv))
-                         (if mraw mraw hraw)))
+  ;; section (B1), the break lands on the inner corner and E is moot.
+  ;; H, M and K are usually the same offset, so M/K suggest the last
+  ;; one entered -- Enter accepts it.
+  (setq lmode2 lmode toth2 toth
+        ans (pool:askseq
+              (append
+                (list (list 'h 'NAX "H - left end to deep end" (cdr (assoc "H" pv))))
+                (if (car sp)
+                    (list (list 'g 'ZER (if (= style "MOdflat")
+                                            "G - flat pad length"
+                                            "G - hopper length, 0 = slope bottom")
+                                (cdr (assoc "G" pv))))
+                    (list (list 'g 'NAX "G" nil nil ''t)))
+                (list (list 'f 'NAX (if (= style "MOdflat")
+                                        "F - pad to right end"
+                                        "F - deep end to slope break")
+                            (cdr (assoc "F" pv)))
+                      (list 'e 'NAX "E - slope break to right end"
+                            (cdr (assoc "E" pv)) nil
+                            '(or (not (cadr sp))
+                                 (and lmode2 (pool:sq ans 'h) (pool:sq ans 'g)
+                                      (pool:sq ans 'f)
+                                      (<= (abs (- (+ (pool:sq ans 'h) (pool:sq ans 'g)
+                                                     (pool:sq ans 'f))
+                                                  toth2))
+                                          0.5)))
+                            "\nH + G + F span the main section -- E not needed.")
+                      (list 'm 'SUG "M - top side to deep end" (cdr (assoc "M" pv)) '(h))
+                      (list 'l 'NAX "L - deep end width" (cdr (assoc "L" pv)))
+                      (list 'k 'SUG "K - deep end to bottom side"
+                            (cdr (assoc "K" pv)) '(m h)))))
+        hraw (pool:sq ans 'h) graw (pool:sq ans 'g) fraw (pool:sq ans 'f)
+        eraw (pool:sq ans 'e) mraw (pool:sq ans 'm) lraw (pool:sq ans 'l)
+        kraw (pool:sq ans 'k)
+        skipe (and (cadr sp) (equal eraw 0.0)))
+  (if (not (car sp)) (setq graw 0.0))
+  (if (not (cadr sp)) (setq eraw 0.0))
   ;; depths, while the nominal section is still on screen
   (if (caddr sp)
       (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
@@ -2485,7 +2556,7 @@
 (defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax doff th
                       / wid whn hdn ggn pv e2r f2r gr f1r e1r mraw lraw kraw
                         wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
-                        brks tl xd nopad cv hfx vfx)
+                        brks tl xd nopad cv hfx vfx ans)
   (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
                       (pool:linex cen (cadr lline) (car tline) (cadr tline)))
         whn (* 0.25 wid)
@@ -2520,16 +2591,22 @@
            (pool:wp (list (- x0 doff) (- y0 hdn (* 3.0 doff))))
            (pool:wp (list (+ x0 total (* 3.0 doff)) (+ ymax doff))))
   (princ "\nSport bottom -- plan hopper letters; the RED tie is being asked for.")
-  (setq e2r (pool:askhx "E2 - left end shallow flat" (cdr (assoc "E2" pv)))
-        f2r (pool:askhx "F2 - left slope" (cdr (assoc "F2" pv)))
-        gr (pool:askhz "G - deep flat length, 0 = no hopper pad"
-                       (cdr (assoc "G" pv)))
+  (princ "\n(after the first answer, Back re-asks the previous one)")
+  (setq ans (pool:askseq
+              (list (list 'e2 'NAX "E2 - left end shallow flat" (cdr (assoc "E2" pv)))
+                    (list 'f2 'NAX "F2 - left slope" (cdr (assoc "F2" pv)))
+                    (list 'g 'ZER "G - deep flat length, 0 = no hopper pad"
+                          (cdr (assoc "G" pv)))
+                    (list 'f1 'NAX "F1 - right slope" (cdr (assoc "F1" pv)))
+                    (list 'e1 'NAX "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
+                    (list 'm 'NAX "M - top side to deep flat" (cdr (assoc "M" pv)))
+                    (list 'l 'NAX "L - deep flat width" (cdr (assoc "L" pv)))
+                    (list 'k 'SUG "K - deep flat to bottom side"
+                          (cdr (assoc "K" pv)) '(m))))
+        e2r (pool:sq ans 'e2) f2r (pool:sq ans 'f2) gr (pool:sq ans 'g)
+        f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
+        mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
         nopad (and gr (< gr 1.0e-6))
-        f1r (pool:askhx "F1 - right slope" (cdr (assoc "F1" pv)))
-        e1r (pool:askhx "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
-        mraw (pool:askhx "M - top side to deep flat" (cdr (assoc "M" pv)))
-        lraw (pool:askhx "L - deep flat width" (cdr (assoc "L" pv)))
-        kraw (pool:askhd "K - deep flat to bottom side" (cdr (assoc "K" pv)) mraw)
         wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
         hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh))
   (pool:pvkill)
@@ -2764,7 +2841,7 @@
                                               h g f e m l k r3 r3raw w tt o
                                               hraw graw fraw eraw mraw lraw kraw
                                               totv hres vres cv hfx vfx r3wbad
-                                              xmin xmax ymin ymax)
+                                              ans xmin xmax ymin ymax)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
@@ -2793,17 +2870,22 @@
           (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'phb ggn)) "K" th)
           (pool:pvtie (cadddr quad) (caddr quad) "T" th)))
         (princ "\nPool bottom -- offsets along the pool axis; the RED tie is being asked for.")
-        (setq hraw (pool:askhx "H - pool left tip to hopper tip" (cdr (assoc "H" pv)))
-              graw (pool:askhx "G - hopper length (tip to right edge)" (cdr (assoc "G" pv)))
-              r3raw (pool:askhx "R3 - hopper end radius" (cdr (assoc "R3" pv)))
-              w (pool:askhx "W - hopper flat top" (cdr (assoc "W" pv)))
-              fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
-              eraw (pool:askhx "E - slope break to pool right tip" (cdr (assoc "E" pv)))
-              mraw (pool:askhd "M - top side to hopper" (cdr (assoc "M" pv)) hraw)
-              lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
-              kraw (pool:askhd "K - hopper to bottom side" (cdr (assoc "K" pv))
-                               (if mraw mraw hraw))
-              tt (pool:askhx "T - straight side length (check)" (cdr (assoc "T" pv))))
+        (princ "\n(after the first answer, Back re-asks the previous one)")
+        (setq ans (pool:askseq
+                    (list (list 'h 'NAX "H - pool left tip to hopper tip" (cdr (assoc "H" pv)))
+                          (list 'g 'NAX "G - hopper length (tip to right edge)" (cdr (assoc "G" pv)))
+                          (list 'r3 'NAX "R3 - hopper end radius" (cdr (assoc "R3" pv)))
+                          (list 'w 'NAX "W - hopper flat top" (cdr (assoc "W" pv)))
+                          (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
+                          (list 'e 'NAX "E - slope break to pool right tip" (cdr (assoc "E" pv)))
+                          (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
+                          (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv)))
+                          (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h))
+                          (list 'tt 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
+              hraw (pool:sq ans 'h) graw (pool:sq ans 'g) r3raw (pool:sq ans 'r3)
+              w (pool:sq ans 'w) fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
+              mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
+              tt (pool:sq ans 'tt))
         (pool:pvkill)
         ;; resolve against tip-to-tip length and side-to-side width
         (setq totv (distance
@@ -2978,7 +3060,7 @@
 (defun pool:hopgrec (pts doff th / htype six len wid ggn pv gg rows tl odl
                                    h g f e m l k w l1 x wp
                                    hraw graw fraw eraw mraw lraw kraw
-                                   cen p u vv toth totv hres vres cv hfx vfx
+                                   cen p u vv toth totv hres vres cv hfx vfx ans
                                    xmin xmax ymin ymax)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
@@ -3015,18 +3097,29 @@
                     (pool:pvtie wp (cadr (assoc 'ct2 ggn)) "L1" th)
                     (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn)) "X" th)))))
         (princ "\nPool bottom -- offsets from the end walls; the RED tie is being asked for.")
-        (setq hraw (pool:askhx "H - left end to hopper" (cdr (assoc "H" pv)))
-              graw (pool:askhx "G - hopper length" (cdr (assoc "G" pv))))
-        (if six
-            (setq w (pool:askh "W - hopper cut along top/bottom edges" (cdr (assoc "W" pv)))
-                  l1 (pool:askh "L1 - hopper cut down the left edge" (cdr (assoc "L1" pv)))
-                  x (pool:askhx "X - hopper cut face length (check)" (cdr (assoc "X" pv)))))
-        (setq fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
-              eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))
-              mraw (pool:askhd "M - top side to hopper" (cdr (assoc "M" pv)) hraw)
-              lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
-              kraw (pool:askhd "K - hopper to bottom side" (cdr (assoc "K" pv))
-                               (if mraw mraw hraw)))
+        (princ "\n(after the first answer, Back re-asks the previous one)")
+        (setq ans (pool:askseq
+                    (append
+                      (list (list 'h 'NAX "H - left end to hopper" (cdr (assoc "H" pv)))
+                            (list 'g 'NAX "G - hopper length" (cdr (assoc "G" pv))))
+                      (if six
+                          (list (list 'w 'REQ "W - hopper cut along top/bottom edges"
+                                      (cdr (assoc "W" pv)))
+                                (list 'l1 'REQ "L1 - hopper cut down the left edge"
+                                      (cdr (assoc "L1" pv)))
+                                (list 'x 'NAX "X - hopper cut face length (check)"
+                                      (cdr (assoc "X" pv))))
+                          nil)
+                      (list (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
+                            (list 'e 'NAX "E - slope break to right end" (cdr (assoc "E" pv)))
+                            (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
+                            (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv)))
+                            (list 'k 'SUG "K - hopper to bottom side"
+                                  (cdr (assoc "K" pv)) '(m h)))))
+              hraw (pool:sq ans 'h) graw (pool:sq ans 'g)
+              w (pool:sq ans 'w) l1 (pool:sq ans 'l1) x (pool:sq ans 'x)
+              fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
+              mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k))
         (pool:pvkill)
         ;; resolve against wall-to-wall totals (end wall to end wall,
         ;; side to side) through the pool centre
@@ -3254,6 +3347,7 @@
                              tp bo le ri dac dbd totl lrad rrad
                              corners cmode anycut cc prevty prevsz lbl
                              gq gcorners xmeas tm hl val m rpa rpb pass
+                             ans xitems
                              fitres quad failed a b c d cen meas notes tri
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
@@ -3269,23 +3363,28 @@
   (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
 
   ;; in-square: opposing sides are equal, ask each pair once
+  (princ "\n(after the first answer, Back re-asks the previous one)")
   (if pool:*insq*
-      (setq tp (pool:askh "Side length (top & bottom)"
-                          (append (cdr (assoc 'dc pv)) (cdr (assoc 'ab pv))
-                                  (pool:lbl pv '(lA lB lC lD))))
-            bo tp
-            le (pool:askh "End length (left & right)"
-                          (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))
-                                  (pool:lbl pv '(lA lB lC lD))))
-            ri le)
-      (setq tp  (pool:askh "Side length TOP (D-C)"
-                           (append (cdr (assoc 'dc pv)) (pool:lbl pv '(lD lC))))
-            bo  (pool:askh "Side length BOTTOM (A-B)"
-                           (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
-            le  (pool:askh "End length LEFT (A-D)"
-                           (append (cdr (assoc 'da pv)) (pool:lbl pv '(lA lD))))
-            ri  (pool:askh "End length RIGHT (B-C)"
-                           (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))))
+      (setq ans (pool:askseq
+                  (list (list 'tp 'REQ "Side length (top & bottom)"
+                              (append (cdr (assoc 'dc pv)) (cdr (assoc 'ab pv))
+                                      (pool:lbl pv '(lA lB lC lD))))
+                        (list 'le 'REQ "End length (left & right)"
+                              (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))
+                                      (pool:lbl pv '(lA lB lC lD))))))
+            tp (pool:sq ans 'tp) bo tp
+            le (pool:sq ans 'le) ri le)
+      (setq ans (pool:askseq
+                  (list (list 'tp 'REQ "Side length TOP (D-C)"
+                              (append (cdr (assoc 'dc pv)) (pool:lbl pv '(lD lC))))
+                        (list 'bo 'REQ "Side length BOTTOM (A-B)"
+                              (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
+                        (list 'le 'REQ "End length LEFT (A-D)"
+                              (append (cdr (assoc 'da pv)) (pool:lbl pv '(lA lD))))
+                        (list 'ri 'REQ "End length RIGHT (B-C)"
+                              (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))))
+            tp (pool:sq ans 'tp) bo (pool:sq ans 'bo)
+            le (pool:sq ans 'le) ri (pool:sq ans 'ri)))
 
   ;; -------- oval ends.  Any ONE of total / left radius / right radius
   ;; may be NA -- the overall closes the chain against the body, and
@@ -3293,16 +3392,23 @@
   ;; oval).  Only the total is re-asked when too much is missing.
   (if (= ptype "Oval")
       (progn
-        (setq totl (pool:askhx "Total pool length (arc tip to arc tip)"
-                               (cdr (assoc 'tot pv))))
         ;; in-square ovals are symmetric, so the end radius is asked once
-        (if pool:*insq*
-            (setq lrad (pool:askhx "End radius (both ends)"
-                                   (append (cdr (assoc 'lrad pv))
-                                           (cdr (assoc 'rrad pv))))
-                  rrad lrad)
-            (setq lrad (pool:askhx "LEFT oval end radius" (cdr (assoc 'lrad pv)))
-                  rrad (pool:askhx "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
+        (setq ans (pool:askseq
+                    (if pool:*insq*
+                        (list (list 'tot 'NAX "Total pool length (arc tip to arc tip)"
+                                    (cdr (assoc 'tot pv)))
+                              (list 'lr 'NAX "End radius (both ends)"
+                                    (append (cdr (assoc 'lrad pv))
+                                            (cdr (assoc 'rrad pv)))))
+                        (list (list 'tot 'NAX "Total pool length (arc tip to arc tip)"
+                                    (cdr (assoc 'tot pv)))
+                              (list 'lr 'NAX "LEFT oval end radius"
+                                    (cdr (assoc 'lrad pv)))
+                              (list 'rr 'NAX "RIGHT oval end radius"
+                                    (cdr (assoc 'rrad pv))))))
+              totl (pool:sq ans 'tot)
+              lrad (pool:sq ans 'lr)
+              rrad (if pool:*insq* lrad (pool:sq ans 'rr)))
         (if (and (null totl) (or (null lrad) (null rrad)))
             (progn
               (princ "\nThe total length is needed when an end radius is NA.")
@@ -3360,15 +3466,24 @@
       (progn
         ;; sides are all in -- the cross dims appear now, one guide
         ;; line per measurement, between its actual reference points
+        ;; every cross guide line is drawn first, then the block runs
+        ;; as one Back-able sequence
+        (setq xitems nil k 0)
         (foreach tm (pool:crosstemplate cmode)
           (setq rpa (pool:cornerpoint gq gcorners (nth 3 tm) (nth 4 tm))
                 rpb (pool:cornerpoint gq gcorners (nth 5 tm) (nth 6 tm))
                 hl (pool:pvadd (pool:pvlined rpa rpb))
-                val (pool:askhx (cadr tm)
-                                (cons hl (pool:lbl pv
-                                           (list (pool:lblkey (nth (nth 3 tm) '("A" "B" "C" "D")))
-                                                 (pool:lblkey (nth (nth 5 tm) '("A" "B" "C" "D")))))))
-                xmeas (cons (append tm (list val)) xmeas))))
+                xitems (cons (list (read (strcat "x" (itoa k))) 'NAX (cadr tm)
+                                   (cons hl (pool:lbl pv
+                                     (list (pool:lblkey (nth (nth 3 tm) '("A" "B" "C" "D")))
+                                           (pool:lblkey (nth (nth 5 tm) '("A" "B" "C" "D")))))))
+                             xitems)
+                k (1+ k)))
+        (setq ans (pool:askseq (reverse xitems)) k 0)
+        (foreach tm (pool:crosstemplate cmode)
+          (setq xmeas (cons (append tm (list (pool:sq ans (read (strcat "x" (itoa k))))))
+                            xmeas)
+                k (1+ k))))
       (princ "\nIn-square: building true to the side measurements (no cross dims)."))
   (setq xmeas (reverse xmeas))
 
@@ -3638,7 +3753,7 @@
   pv)
 
 ;; Full guided flow for Roman pools.
-(defun pool:romanflow ( / oldclay perfect pv braw araw traw rombad
+(defun pool:romanflow ( / oldclay perfect pv braw araw traw rombad ans
                           slraw srraw s1lraw s1rraw vlraw vrraw r1 r2
                           hres sl tv sr lres rres s1l vl s1r vr
                           dac dbd fq quad failed a b c d cen meas notes
@@ -3654,35 +3769,46 @@
   (command "_.ZOOM" "_Window"
            (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 380.0)))
   (princ "\nRoman sheet -- the RED tie is the dimension being asked for.")
-  (setq braw (pool:askh "B - overall length" (cdr (assoc "B" pv)))
-        araw (pool:askh "A - overall width" (cdr (assoc "A" pv)))
-        traw (pool:askhx "T - side length (top & bottom)" (cdr (assoc "T" pv))))
-  (if perfect
-      (setq slraw (pool:askhx "S - end setback (both ends)"
-                              (append (cdr (assoc "SL" pv)) (cdr (assoc "SR" pv))))
-            srraw slraw
-            s1lraw (pool:askhx "S1 - corner drop (all corners)"
-                               (append (cdr (assoc "S1L" pv)) (cdr (assoc "S1R" pv))))
-            s1rraw s1lraw
-            vlraw (pool:askhx "V - end width (both ends)"
-                              (append (cdr (assoc "VL" pv)) (cdr (assoc "VR" pv))))
-            vrraw vlraw
-            r1 (pool:askhx "R - end radius (both ends, check)"
-                           (append (cdr (assoc "R1" pv)) (cdr (assoc "R2" pv))))
-            r2 r1)
-      (setq slraw (pool:askhx "S - LEFT end setback" (cdr (assoc "SL" pv)))
-            srraw (pool:askhx "S - RIGHT end setback" (cdr (assoc "SR" pv)))
-            s1lraw (pool:askhx "S1 - LEFT corner drop" (cdr (assoc "S1L" pv)))
-            s1rraw (pool:askhx "S1 - RIGHT corner drop" (cdr (assoc "S1R" pv)))
-            vlraw (pool:askhx "V - LEFT end width" (cdr (assoc "VL" pv)))
-            vrraw (pool:askhx "V - RIGHT end width" (cdr (assoc "VR" pv)))
-            r1 (pool:askhx "R1 - LEFT end radius (check)" (cdr (assoc "R1" pv)))
-            r2 (pool:askhx "R2 - RIGHT end radius (check)" (cdr (assoc "R2" pv)))))
+  (princ "\n(after the first answer, Back re-asks the previous one)")
+  (setq ans (pool:askseq
+              (append
+                (list (list 'b 'REQ "B - overall length" (cdr (assoc "B" pv)))
+                      (list 'a 'REQ "A - overall width" (cdr (assoc "A" pv)))
+                      (list 'tt 'NAX "T - side length (top & bottom)"
+                            (cdr (assoc "T" pv))))
+                (if perfect
+                    (list (list 'sl 'NAX "S - end setback (both ends)"
+                                (append (cdr (assoc "SL" pv)) (cdr (assoc "SR" pv))))
+                          (list 's1l 'NAX "S1 - corner drop (all corners)"
+                                (append (cdr (assoc "S1L" pv)) (cdr (assoc "S1R" pv))))
+                          (list 'vl 'NAX "V - end width (both ends)"
+                                (append (cdr (assoc "VL" pv)) (cdr (assoc "VR" pv))))
+                          (list 'r1 'NAX "R - end radius (both ends, check)"
+                                (append (cdr (assoc "R1" pv)) (cdr (assoc "R2" pv)))))
+                    (list (list 'sl 'NAX "S - LEFT end setback" (cdr (assoc "SL" pv)))
+                          (list 'sr 'NAX "S - RIGHT end setback" (cdr (assoc "SR" pv)))
+                          (list 's1l 'NAX "S1 - LEFT corner drop" (cdr (assoc "S1L" pv)))
+                          (list 's1r 'NAX "S1 - RIGHT corner drop" (cdr (assoc "S1R" pv)))
+                          (list 'vl 'NAX "V - LEFT end width" (cdr (assoc "VL" pv)))
+                          (list 'vr 'NAX "V - RIGHT end width" (cdr (assoc "VR" pv)))
+                          (list 'r1 'NAX "R1 - LEFT end radius (check)" (cdr (assoc "R1" pv)))
+                          (list 'r2 'NAX "R2 - RIGHT end radius (check)"
+                                (cdr (assoc "R2" pv)))))))
+        braw (pool:sq ans 'b) araw (pool:sq ans 'a) traw (pool:sq ans 'tt)
+        slraw (pool:sq ans 'sl) s1lraw (pool:sq ans 's1l)
+        vlraw (pool:sq ans 'vl) r1 (pool:sq ans 'r1)
+        srraw (if perfect slraw (pool:sq ans 'sr))
+        s1rraw (if perfect s1lraw (pool:sq ans 's1r))
+        vrraw (if perfect vlraw (pool:sq ans 'vr))
+        r2 (if perfect r1 (pool:sq ans 'r2)))
   ;; every side length is in -- now the cross dims appear on the guide
   (if (not pool:*insq*)
       (setq pv (pool:romancross pv)
-            dac (pool:askhx "Cross dim body A-C" (cdr (assoc "XAC" pv)))
-            dbd (pool:askhx "Cross dim body B-D" (cdr (assoc "XBD" pv)))))
+            ans (pool:askseq
+                  (list (list 'ac 'NAX "Cross dim body A-C" (cdr (assoc "XAC" pv)))
+                        (list 'bd 'NAX "Cross dim body B-D" (cdr (assoc "XBD" pv)))))
+            dac (pool:sq ans 'ac)
+            dbd (pool:sq ans 'bd)))
   (pool:pvkill)
 
   ;; resolve: per end S1/V vs A (V absorbs); then S + T + S = B with
@@ -3889,7 +4015,6 @@
   (setq pool:*valnotes* nil)
   (setvar "CMDECHO" 0)
   (pool:undobegin)
-  (setvar "OSMODE" 0)
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -3907,8 +4032,11 @@
   (initget 1 "Rectangle Grecian ROman L LAzyl Oval")
   (setq ptype (getkword "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval]: "))
 
+  ;; the base point is picked with the user's own snaps still live;
+  ;; only afterwards do snaps drop for the command-fed drawing work
   (setq base (getpoint "\nInsertion base point <0,0>: ")
         pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
   (pool:layer "POOL" 4)

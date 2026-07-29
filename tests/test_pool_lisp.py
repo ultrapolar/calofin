@@ -1353,4 +1353,57 @@ assert not deep_ok(36.0,40.0) and deep_ok(96.0,40.0)
 assert c2_ok(45.0,40.0,96.0) and not c2_ok(30.0,40.0,96.0) and not c2_ok(100.0,40.0,96.0)
 print("   oversized corners re-asked; D > C and C <= C2 <= D enforced")
 
+print("== 57. measurement sequence: Back, NA, suggestions, auto-skip ==")
+BACK = object()
+def askseq(items, script):
+    """Mirror of pool:askseq.  items: (key kind dflt skip); script is the
+    stream of answers the user types, consumed in order."""
+    ans={}; i=0; asked=[]; feed=iter(script)
+    order=[]
+    while i < len(items):
+        key,kind,dflt,skip = items[i]
+        if skip and skip(ans):
+            ans[key]=0.0; i+=1; continue
+        d=dflt
+        if isinstance(d,tuple):                 # first answered key wins
+            d=next((ans[k] for k in d if ans.get(k) is not None), None)
+        v=next(feed)
+        order.append(key)
+        if v is BACK:
+            if asked: i=asked.pop()             # re-ask the previous one
+            continue
+        if v=="": v=d                           # Enter takes the suggestion
+        if v=="NA": v=None
+        ans[key]=v; asked.append(i); i+=1
+    return ans, order
+
+items=[('h','NAX',None,None),('g','ZER',None,None),('f','NAX',None,None),
+       ('m','SUG',('h',),None),('k','SUG',('m','h'),None)]
+# straight run: suggestions fill M and K from H
+ans,_=askseq(items,[60.0,120.0,240.0,"",""])
+assert ans=={'h':60.0,'g':120.0,'f':240.0,'m':60.0,'k':60.0}
+# a typo in G: Back at F re-asks G, and the corrected value sticks
+ans,order=askseq(items,[60.0,999.0,BACK,120.0,240.0,"",""])
+assert ans['g']==120.0 and ans['f']==240.0
+assert order[:4]==['h','g','f','g']            # F's prompt is where Back was typed
+# Back twice walks back two questions
+ans,_=askseq(items,[60.0,120.0,BACK,BACK,10.0,20.0,30.0,"",""])
+assert ans['h']==10.0 and ans['g']==20.0 and ans['f']==30.0
+# NA is preserved, and K's suggestion falls through M to H
+ans,_=askseq(items,[60.0,120.0,240.0,"NA",""])
+assert ans['m'] is None and ans['k']==60.0
+# zero is legal for a ZER item (sport/slope G) and never becomes NA
+ans,_=askseq(items,[60.0,0.0,240.0,"",""])
+assert ans['g']==0.0
+# auto-skip answers 0 without consuming an input (the L pool E rule)
+skipE=lambda a: a.get('h') and a.get('g') and a.get('f') and \
+                abs(a['h']+a['g']+a['f']-300.0)<=0.5
+it2=[('h','NAX',None,None),('g','ZER',None,None),('f','NAX',None,None),
+     ('e','NAX',None,skipE)]
+ans,_=askseq(it2,[60.0,90.0,150.0])            # sums to 300 -> E unasked
+assert ans['e']==0.0
+ans,_=askseq(it2,[60.0,90.0,120.0,30.0])       # short -> E is asked
+assert ans['e']==30.0
+print("   Back rewinds one prompt at a time; NA/zero/suggestions/skip intact")
+
 print("\nALL CHECKS PASSED")

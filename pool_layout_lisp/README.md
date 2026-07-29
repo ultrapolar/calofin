@@ -447,6 +447,29 @@ L, the chosen level's set on a Grecian, the two body diagonals on a
 Roman. A shape whose diagonals all appeared at once used to bury the
 side being asked for.
 
+### Back: fix a typo without starting over
+
+Every measurement prompt after the first offers **`Back`**, which
+re-asks the previous question. Type `B`, correct the number, and the
+sequence carries on from there — a mistyped side length no longer
+means Esc and re-running the whole command. `Back` walks as far back
+through the current block as you like (sides, cross dims, or the
+bottom letters), and repeats work: two `Back`s go back two questions.
+
+Auto-answered questions are skipped over on the way back (the L
+pool's `E` when `H+G+F` already span the section), and everything
+else behaves exactly as before — `NA`, `0` where it's legal, and the
+`H`/`M`/`K` suggestions.
+
+### Object snaps stay live while you measure
+
+Your own object snaps are **live during every prompt**, including the
+insertion base point — so you can snap the pool onto existing
+geometry and pick-measure distances off the drawing. Snaps are
+dropped only while the routine is feeding points to AutoCAD commands
+(where a stray snap would grab the wrong geometry) and your settings
+are restored at the end either way.
+
 ### Validation: bad numbers can't fold the pool
 
 Field numbers get sanity-checked at every resolution step, and a
