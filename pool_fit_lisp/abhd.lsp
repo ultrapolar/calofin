@@ -1331,19 +1331,34 @@
   (list x0 y0 x1 y1))
 
 ;; Draw "1", "2", "3" beside each candidate, in that candidate's own
-;; colour, so the number in the prompt and the outline on screen are
-;; obviously the same thing.  The labels stack down the right-hand
-;; side of the shape and are sized to the drawing, so they read at any
-;; zoom.  Returns the text entity name.
-(defun pf:label (num colour bb hgt row / x y)
-  (setq x (+ (caddr bb) (* 0.6 hgt))
-        y (- (cadddr bb) (* row hgt 1.6)))
-  (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 *PF-OUT-LAYER*) (cons 62 colour)
-                  '(100 . "AcDbText")
-                  (cons 10 (list x y 0.0))
-                  (cons 40 hgt)
-                  (cons 1 num))))
+;; colour, with that fit's numbers spelled out to the right of it - so
+;; the whole choice can be made from the drawing without reading the
+;; command line at all.  The labels stack down the right-hand side of
+;; the shape and are sized to the drawing, so they read at any zoom.
+;; Returns the list of entities that make up the label.
+(defun pf:label (num colour bb hgt row info / x y out e)
+  (setq x   (+ (caddr bb) (* 0.6 hgt))
+        y   (- (cadddr bb) (* row hgt 1.8))
+        out nil)
+  ;; the number itself, full height
+  (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                          (cons 8 *PF-OUT-LAYER*) (cons 62 colour)
+                          '(100 . "AcDbText")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 hgt)
+                          (cons 1 num))))
+  (if e (setq out (cons e out)))
+  ;; its figures, smaller, to the right of the number
+  (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                          (cons 8 *PF-OUT-LAYER*) (cons 62 colour)
+                          '(100 . "AcDbText")
+                          (cons 10 (list (+ x (* 1.4 hgt))
+                                         (+ y (* 0.2 hgt))
+                                         0.0))
+                          (cons 40 (* 0.45 hgt))
+                          (cons 1 info))))
+  (if e (setq out (cons e out)))
+  (reverse out))
 
 ;; Ring every point the chosen fit could not hold, on its own layer,
 ;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
@@ -1553,8 +1568,8 @@
 ;; judged against the tolerance the user actually typed, so the columns
 ;; compare like for like.
 (defun pf:compare (tour loop pts dpts tol allow
-                   / prior vars v ent lab segs bad allbad first i pick
-                     idx keep ce bb hgt sel picked)
+                   / prior vars v e ent lab info segs bad allbad first i
+                     pick idx keep ce bb hgt sel picked)
   (setq prior (pf:prior-fits))
   (pf:ensure-layer *PF-OUT-LAYER* 3)
   ;; label height: a twentieth of the shape, so it reads at any zoom
@@ -1573,10 +1588,17 @@
           ent  (pf:make-pline
                  (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
                  *PF-OUT-LAYER* (cadr v))
+          bad  (pf:unheld segs pts tol)
+          ;; the same figures the table prints, spelled out so they
+          ;; stand on their own beside the number in the drawing
+          info (strcat (itoa (length segs)) " segs    "
+                       (itoa (pf:arc-count segs)) " curves    worst "
+                       (rtos (pf:worst segs pts) 2 2) "    "
+                       (itoa (length bad)) " not held    "
+                       (cadddr v))
           ;; the number, drawn beside the shape in that fit's own
           ;; colour: the "2" on screen IS the "2" in the prompt
-          lab  (pf:label (itoa i) (cadr v) bb hgt i)
-          bad  (pf:unheld segs pts tol)
+          lab  (pf:label (itoa i) (cadr v) bb hgt i info)
           vars (cons (list segs ent bad v lab) vars)
           i    (1+ i))
     (if first
@@ -1589,13 +1611,12 @@
       (princ (strcat "\n\nThree candidate fits are now drawn on layer "
                      *PF-OUT-LAYER*
                      ",\neach numbered on screen in its own colour:\n"))
-      (princ "\n   #  colour  segs  curves  worst off  not held  ")
-      (princ "\n   -  ------  ----  ------  ---------  --------  ")
+      (princ "\n   #  segs  curves  worst off  not held  ")
+      (princ "\n   -  ----  ------  ---------  --------  ")
       (setq i 1)
       (foreach v vars
         (setq segs (car v) bad (caddr v) ce (cadddr v))
         (princ (strcat "\n   " (itoa i) "  "
-                       (pf:pad (caddr ce) 8)
                        (pf:pad (itoa (length segs)) 6)
                        (pf:pad (itoa (pf:arc-count segs)) 8)
                        (pf:pad (rtos (pf:worst segs pts) 2 2) 11)
@@ -1626,7 +1647,8 @@
             (progn
               (setq picked (car sel) i 1)
               (foreach v vars
-                (if (or (eq picked (cadr v)) (eq picked (nth 4 v)))
+                (if (or (eq picked (cadr v))
+                        (member picked (nth 4 v)))
                   (setq pick (itoa i)))
                 (setq i (1+ i)))
               (if (null pick)
@@ -1642,7 +1664,7 @@
         ((= pick "None")
          (foreach v vars
            (if (cadr v) (entdel (cadr v)))
-           (if (nth 4 v) (entdel (nth 4 v))))
+           (foreach e (nth 4 v) (entdel e)))
          (princ "\nAll three erased - nothing was added to the drawing."))
         (T
          (setq idx (atoi pick) i 1)
@@ -1651,7 +1673,7 @@
              (setq keep v)
              (if (cadr v) (entdel (cadr v))))
            ;; the labels were only ever scaffolding for the choice
-           (if (nth 4 v) (entdel (nth 4 v)))
+           (foreach e (nth 4 v) (entdel e))
            (setq i (1+ i)))
          (if (cadr keep) (pf:set-bylayer (cadr keep)))))
       (if keep

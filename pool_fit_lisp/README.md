@@ -180,11 +180,11 @@ in its own colour beside the shape, and shows what each costs:
 Three candidate fits are now drawn on layer POOL-FIT,
 each numbered on screen in its own colour:
 
-   #  colour  segs  curves  worst off  not held
-   -  ------  ----  ------  ---------  --------
-   1  red     20    20      0.49       0         tighter - hugs the points
-   2  yellow  19    19      0.87       0         as asked
-   3  cyan    16    16      1.88       3         looser - fewer curves
+   #  segs  curves  worst off  not held
+   -  ----  ------  ---------  --------
+   1  20    20      0.49       0         tighter - hugs the points
+   2  19    19      0.87       0         as asked
+   3  16    16      1.88       3         looser - fewer curves
 
   "not held" = points further than 1.000 from that fit.
 
@@ -193,8 +193,15 @@ each numbered on screen in its own colour:
 ```
 
 The red `1`, yellow `2` and cyan `3` stack down the right-hand side of
-the pool, each in the same colour as its outline, so you never have to
-work out which colour is which number.
+the pool, each in the same colour as its outline — and **each figure
+is repeated in the drawing beside its number**, so the whole choice
+can be made on screen without reading the command line:
+
+```
+1   20 segs    20 curves    worst 0.49    0 not held    tighter - hugs the points
+2   19 segs    19 curves    worst 0.87    0 not held    as asked
+3   16 segs    16 curves    worst 1.88    3 not held    looser - fewer curves
+```
 
 **Just click the outline you want** — press `Enter` at the keyword
 prompt and ABHD asks you to pick one on screen; clicking either the
