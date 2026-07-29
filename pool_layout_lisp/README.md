@@ -14,6 +14,24 @@ ActiveX/VLA), so it loads in **AutoCAD 2018** and older releases alike
 1. `APPLOAD` → pick `POOL.LSP` (or drag the file into the drawing).
 2. Type `POOL` and answer the prompts.
 
+### Checking the install: `POOLDEMO`
+
+`POOLDEMO.LSP` is a separate, optional file. Load it after `POOL.LSP`
+and type **`POOLDEMO`** to draw — from hardcoded numbers, with no
+prompts — one captioned example of **every shape, every pool bottom,
+and every drawing feature** the routine produces: corner treatments,
+side sections, the report table, and a deliberately failed bottom
+showing the red marking.
+
+It answers in one second whether POOL.LSP loaded, whether the layers
+and the dashed/dotted linetypes come out right, whether the dimension
+commands work in this drawing's dim style, and whether arcs, text and
+the report render as intended. It doubles as a reference sheet of
+what the tool can draw.
+
+Run it in a **scratch drawing** — it draws on the same layers `POOL`
+uses. It never prompts, so it is safe to re-run any time.
+
 Drawing units are assumed to be **inches** — all tolerances below are
 in inches. The command switches to Architectural units while it runs
 (restored afterwards), so **every distance prompt** accepts feet-inch

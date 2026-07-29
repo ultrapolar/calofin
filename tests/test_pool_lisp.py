@@ -1406,4 +1406,36 @@ ans,_=askseq(it2,[60.0,90.0,120.0,30.0])       # short -> E is asked
 assert ans['e']==30.0
 print("   Back rewinds one prompt at a time; NA/zero/suggestions/skip intact")
 
+print("== 58. POOLDEMO cells are geometrically valid ==")
+# The demo draws from hardcoded numbers, so those numbers have to be
+# real: chains that close, corners that fit, ends that are reachable.
+# c1 / c9  rectangle 480x240, hopper H60 G90 F210 E120, M/K 60
+assert 60+90+210+120 == 480 and 240-60-60 == 120
+# c2  wedge (G=0 E=0) and a 36" radius corner on a 240" wall
+assert 60+0+420+0 == 480 and 36 <= 0.5*240
+# c8  modified flat (E=0) and sloping shallow end
+assert 24+432+24+0 == 480 and 60+60+240+120 == 480
+# c3  sport chain, and the oval's ends derived from the overall
+assert 48+60+120+144+108 == 480 and 240-24-24 == 192
+sag_c3=(480-360)/2.0
+assert sag_c3 == 60.0 and abs(sagr(sag_c3,240.0)-150.0) < 1e-9
+# c4  grecian 45-degree end must actually reach the 140" end width
+assert grecfit(240.0,70.0,70.0,140.0) is not None
+assert 90+120+150 < 480                      # its hopper fits
+# c5  roman S1 positive, and the oval hopper's R3 is the tangent L/2
+assert (260-160)/2 == 50 and 260-65-65 == 130 and 65 == 130/2
+# c6  true L closes on its own side lengths
+ab,bc,cd,de,ef,fa = 480.,420.,180.,180.,300.,240.
+assert abs(ab-cd-ef) < 1e-9 and abs((bc-de)-fa) < 1e-9
+assert 60+90 < ab-cd                         # main-section hopper fits
+# c7  lazy L closes back onto the left end
+ab,bc,cd,de,ef,fa = 296.,167.6,167.6,99.,226.,168.
+r2=math.sqrt(2)/2
+_c=(ab+bc*r2,bc*r2); _d=(_c[0]-cd*r2,_c[1]+cd*r2); _e=(_d[0]-de*r2,_d[1]-de*r2)
+assert abs(_e[1]-fa) < 1.5 and abs(_e[0]-ef) < 1.5
+# c9  the failure cell: G floors to 1', F pays, chain still closes
+_v,_f = chainval([60.0,-20.0,380.0,60.0],480.0)
+assert _v == [60.0,12.0,348.0,60.0] and _f == [1,2] and abs(sum(_v)-480.0) < 1e-9
+print("   every demo cell's numbers close, fit and are reachable")
+
 print("\nALL CHECKS PASSED")
