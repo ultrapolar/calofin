@@ -429,6 +429,26 @@
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   v)
 
+;; NA allowed, with a suggested value: Enter takes the suggestion.
+;; Used for the letters that are usually equal on a given pool (H, M
+;; and K), so the crew types the number once.
+(defun pool:askd (msg dflt / v)
+  (if (not dflt)
+      (pool:askx msg)
+      (progn
+        (initget 6 "NA")                ; null OK (= take the suggestion)
+        (setq v (getdist (strcat "\n" msg " <" (rtos dflt) "> (or NA): ")))
+        (cond ((= (type v) 'STR) nil)   ; NA
+              (v v)
+              (t dflt)))))
+
+(defun pool:askhd (msg ents dflt / v cols)
+  (setq cols (mapcar 'pool:getcol ents))
+  (foreach e ents (pool:setcol e pool:*hi-col*))
+  (setq v (pool:askd msg dflt))
+  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
+  v)
+
 ;; NA allowed AND zero allowed -- for chain letters that may
 ;; legitimately be absent (the sport G: 0 = no hopper pad).
 (defun pool:askz (msg / v)
@@ -1856,8 +1876,9 @@
 ;; pbrk pr, vertical pb phb pht pt (through the hopper centre).
 (defun pool:hopcalc (quad corners h g e m k / a b c d cen hl hr ht hb brk
                                               hbl htl hbr htr brkb brkt
-                                              lab1 lab2 lat1 lat2 hc hdir vdir
-                                              hc2)
+                                              lab1 lab2 lat1 lat2
+                                              rab1 rab2 rat1 rat2
+                                              hc hdir vdir hc2)
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         hl (pool:offline a d cen h)
@@ -1877,6 +1898,13 @@
         lab2 (pool:cornerpoint quad corners 0 'next)
         lat1 (pool:cornerpoint quad corners 3 'next)
         lat2 (pool:cornerpoint quad corners 3 'prev)
+        ;; and the same for the right corners, used when E = 0 puts the
+        ;; slope break on the end wall: the floor breaks to the ends of
+        ;; the corner treatment, not to the sharp corner behind it
+        rab1 (pool:cornerpoint quad corners 1 'prev)
+        rab2 (pool:cornerpoint quad corners 1 'next)
+        rat1 (pool:cornerpoint quad corners 2 'next)
+        rat2 (pool:cornerpoint quad corners 2 'prev)
         hc (pool:v* (pool:v+ (pool:v+ hbl htl) (pool:v+ hbr htr)) 0.25)
         hdir (pool:v- b a)
         vdir (pool:v- d a)
@@ -1889,6 +1917,8 @@
         (list 'brkb brkb) (list 'brkt brkt)
         (list 'lab1 lab1) (list 'lab2 lab2)
         (list 'lat1 lat1) (list 'lat2 lat2)
+        (list 'rab1 rab1) (list 'rab2 rab2)
+        (list 'rat1 rat1) (list 'rat2 rat2)
         (list 'pl (pool:linex hc2 hdir a (pool:v- d a)))
         (list 'phl (pool:linex hc2 hdir (car hl) (cadr hl)))
         (list 'phr (pool:linex hc2 hdir (car hr) (cadr hr)))
@@ -1911,28 +1941,40 @@
 ;; (one line when the corner is square and the ends coincide).
 ;; tie = draw the left corner ties (off for shapes whose "left end" is
 ;; an arc rather than a pair of corners).
-(defun pool:hopdraw (gg lay tie / hbl htl hbr htr brkb brkt lab1 lab2 lat1 lat2)
+(defun pool:hopdraw (gg lay tie / hbl htl hbr htr brkb brkt lab1 lab2 lat1 lat2
+                                  rab1 rab2 rat1 rat2)
   (setq hbl (cadr (assoc 'hbl gg)) htl (cadr (assoc 'htl gg))
         hbr (cadr (assoc 'hbr gg)) htr (cadr (assoc 'htr gg))
         brkb (cadr (assoc 'brkb gg)) brkt (cadr (assoc 'brkt gg))
         lab1 (cadr (assoc 'lab1 gg)) lab2 (cadr (assoc 'lab2 gg))
-        lat1 (cadr (assoc 'lat1 gg)) lat2 (cadr (assoc 'lat2 gg)))
+        lat1 (cadr (assoc 'lat1 gg)) lat2 (cadr (assoc 'lat2 gg))
+        rab1 (cadr (assoc 'rab1 gg)) rab2 (cadr (assoc 'rab2 gg))
+        rat1 (cadr (assoc 'rat1 gg)) rat2 (cadr (assoc 'rat2 gg)))
   (pool:line hbl htl lay)               ; deep-end line (the whole pad when G=0)
   (if (not (cadr (assoc 'zg gg)))
       (progn
         (pool:line htl htr lay)
         (pool:line htr hbr lay)
         (pool:line hbr hbl lay)))
-  ;; with E = 0 the break line lands on the end wall itself
-  (if (not (cadr (assoc 'ze gg))) (pool:line brkb brkt lay))
   (if tie
       (progn
         (pool:line lab1 hbl lay)
         (if (> (distance lab1 lab2) 1.0e-6) (pool:line lab2 hbl lay))
         (pool:line lat1 htl lay)
         (if (> (distance lat1 lat2) 1.0e-6) (pool:line lat2 htl lay))))
-  (pool:line htr brkt lay)
-  (pool:line hbr brkb lay))
+  (if (and (cadr (assoc 'ze gg)) tie)
+      ;; E = 0: the break IS the end wall, so the floor breaks to BOTH
+      ;; ends of each right corner treatment -- the same rule the left
+      ;; corners follow -- rather than to the sharp corner behind it
+      (progn
+        (pool:line rab1 hbr lay)
+        (if (> (distance rab1 rab2) 1.0e-6) (pool:line rab2 hbr lay))
+        (pool:line rat1 htr lay)
+        (if (> (distance rat1 rat2) 1.0e-6) (pool:line rat2 htr lay)))
+      (progn
+        (if (not (cadr (assoc 'ze gg))) (pool:line brkb brkt lay))
+        (pool:line htr brkt lay)
+        (pool:line hbr brkb lay))))
 
 ;;; -------------------- bottom styles ----------------------------------
 ;;;
@@ -2012,7 +2054,11 @@
                           (list (list 'lab1 'hbl) (list 'lab2 'hbl)
                                 (list 'lat1 'htl) (list 'lat2 'htl))
                           nil)
-                      (list (list 'htr 'brkt) (list 'hbr 'brkb)))
+                      ;; E = 0 breaks to the right corner treatments
+                      (if (and (cadr (assoc 'ze gg)) tie)
+                          (list (list 'rab1 'hbr) (list 'rab2 'hbr)
+                                (list 'rat1 'htr) (list 'rat2 'htr))
+                          (list (list 'htr 'brkt) (list 'hbr 'brkb))))
     (pool:pvadd (pool:pvline (cadr (assoc (car pr) gg))
                              (cadr (assoc (cadr pr) gg)))))
   (setq pv nil)
@@ -2121,9 +2167,12 @@
      (princ "\nH + G + F span the main section -- E not needed."))
     (t
      (setq eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv))))))
-  (setq mraw (pool:askhx "M - top side to deep end" (cdr (assoc "M" pv)))
+  ;; H, M and K are usually the same offset, so each suggests the last
+  ;; one entered -- Enter accepts it
+  (setq mraw (pool:askhd "M - top side to deep end" (cdr (assoc "M" pv)) hraw)
         lraw (pool:askhx "L - deep end width" (cdr (assoc "L" pv)))
-        kraw (pool:askhx "K - deep end to bottom side" (cdr (assoc "K" pv))))
+        kraw (pool:askhd "K - deep end to bottom side" (cdr (assoc "K" pv))
+                         (if mraw mraw hraw)))
   ;; depths, while the nominal section is still on screen
   (if (caddr sp)
       (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
@@ -2326,7 +2375,7 @@
         e1r (pool:askhx "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
         mraw (pool:askhx "M - top side to deep flat" (cdr (assoc "M" pv)))
         lraw (pool:askhx "L - deep flat width" (cdr (assoc "L" pv)))
-        kraw (pool:askhx "K - deep flat to bottom side" (cdr (assoc "K" pv)))
+        kraw (pool:askhd "K - deep flat to bottom side" (cdr (assoc "K" pv)) mraw)
         wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
         hd (pool:askh "D - deep depth" (cdr (assoc "D" pv))))
   (pool:pvkill)
@@ -2541,7 +2590,7 @@
 
 ;; Guided oval bottom phase.  Returns report rows (nil if skipped).
 (defun pool:hopoval (quad tipl tipr doff th / len wid ggn pv gg rows tl odl
-                                              h g f e m l k r3 w tt o
+                                              h g f e m l k r3 r3raw w tt o
                                               hraw graw fraw eraw mraw lraw kraw
                                               totv hres vres
                                               xmin xmax ymin ymax)
@@ -2575,13 +2624,14 @@
         (princ "\nPool bottom -- offsets along the pool axis; the RED tie is being asked for.")
         (setq hraw (pool:askhx "H - pool left tip to hopper tip" (cdr (assoc "H" pv)))
               graw (pool:askhx "G - hopper length (tip to right edge)" (cdr (assoc "G" pv)))
-              r3 (pool:askh "R3 - hopper end radius" (cdr (assoc "R3" pv)))
-              w (pool:askhx "W - hopper flat top (check)" (cdr (assoc "W" pv)))
+              r3raw (pool:askhx "R3 - hopper end radius" (cdr (assoc "R3" pv)))
+              w (pool:askhx "W - hopper flat top" (cdr (assoc "W" pv)))
               fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
               eraw (pool:askhx "E - slope break to pool right tip" (cdr (assoc "E" pv)))
-              mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
+              mraw (pool:askhd "M - top side to hopper" (cdr (assoc "M" pv)) hraw)
               lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
-              kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv)))
+              kraw (pool:askhd "K - hopper to bottom side" (cdr (assoc "K" pv))
+                               (if mraw mraw hraw))
               tt (pool:askhx "T - straight side length (check)" (cdr (assoc "T" pv))))
         (pool:pvkill)
         ;; resolve against tip-to-tip length and side-to-side width
@@ -2596,6 +2646,18 @@
               vres (pool:chainfix (list mraw lraw kraw) totv 1)
               h (car hres) g (cadr hres) f (caddr hres) e (cadddr hres)
               m (car vres) l (cadr vres) k (caddr vres))
+        ;; The hopper's radius end and its flat top close against the
+        ;; hopper length:  R3 + W = G.
+        ;;   * R3 NA -> half the hopper width the offsets give (L/2),
+        ;;     the semicircle end that meets the straight sides
+        ;;     tangentially; failing that, whatever W leaves of G
+        ;;   * W NA  -> G - R3, i.e. the flat runs from the arc's
+        ;;     tangent point to the hopper's right edge
+        (setq r3 (cond (r3raw r3raw)
+                       ((> l 1.0e-6) (* 0.5 l))
+                       (w (- g w))
+                       (t (* 0.5 l))))
+        (if (< r3 1.0e-6) (setq r3 (* 0.5 l)))
         (setq gg (pool:hopovalc quad tipl tipr h g e m k r3))
         (pool:hopovaldraw gg "POOL" nil)
         (setq odl (getvar "CLAYER"))
@@ -2616,7 +2678,7 @@
               rows (list
           (list "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))))
           (list "HOP G" graw (distance (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg))))
-          (list "HOP R3" r3 (if o (distance o (cadr (assoc 'tip gg))) r3))
+          (list "HOP R3" r3raw (if o (distance o (cadr (assoc 'tip gg))) r3))
           (list "HOP W" w (distance (cadr (assoc 'ttop gg)) (cadr (assoc 'htr gg))))
           (list "HOP F" fraw (distance (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg))))
           (list "HOP E" eraw (distance (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg))))
@@ -2768,9 +2830,10 @@
                   x (pool:askhx "X - hopper cut face length (check)" (cdr (assoc "X" pv)))))
         (setq fraw (pool:askhx "F - hopper to slope break" (cdr (assoc "F" pv)))
               eraw (pool:askhx "E - slope break to right end" (cdr (assoc "E" pv)))
-              mraw (pool:askhx "M - top side to hopper" (cdr (assoc "M" pv)))
+              mraw (pool:askhd "M - top side to hopper" (cdr (assoc "M" pv)) hraw)
               lraw (pool:askhx "L - hopper width" (cdr (assoc "L" pv)))
-              kraw (pool:askhx "K - hopper to bottom side" (cdr (assoc "K" pv))))
+              kraw (pool:askhd "K - hopper to bottom side" (cdr (assoc "K" pv))
+                               (if mraw mraw hraw)))
         (pool:pvkill)
         ;; resolve against wall-to-wall totals (end wall to end wall,
         ;; side to side) through the pool centre
@@ -3086,9 +3149,15 @@
   (if (= ptype "Oval")
       (progn
         (setq totl (pool:askhx "Total pool length (arc tip to arc tip)"
-                               (cdr (assoc 'tot pv)))
-              lrad (pool:askhx "LEFT oval end radius" (cdr (assoc 'lrad pv)))
-              rrad (pool:askhx "RIGHT oval end radius" (cdr (assoc 'rrad pv))))
+                               (cdr (assoc 'tot pv))))
+        ;; in-square ovals are symmetric, so the end radius is asked once
+        (if pool:*insq*
+            (setq lrad (pool:askhx "End radius (both ends)"
+                                   (append (cdr (assoc 'lrad pv))
+                                           (cdr (assoc 'rrad pv))))
+                  rrad lrad)
+            (setq lrad (pool:askhx "LEFT oval end radius" (cdr (assoc 'lrad pv)))
+                  rrad (pool:askhx "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
         (if (and (null totl) (or (null lrad) (null rrad)))
             (progn
               (princ "\nThe total length is needed when an end radius is NA.")

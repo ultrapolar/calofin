@@ -1237,4 +1237,71 @@ LB,A=(0.0,40.0),(40.0,0.0)
 assert cornerends((0,0),(0,100),(100,0),"Ends",LB,A)[:2]==(LB,A)
 print("   Square/Diag unchanged; Ends passes the cut's real endpoints through")
 
+print("== 52. E = 0 breaks to the RIGHT corner treatment ends ==")
+Q=[(0,0),(480,0),(480,240),(0,240)]
+def right_ties(quad,corners):
+    """Mirror of hopdraw's E=0 branch: both ends of corners 1 and 2."""
+    def cp(i,which):
+        p=quad[i]; pp=quad[(i+3)%4]; pn=quad[(i+1)%4]
+        e=cornerends(p,pp,pn,corners[i][0],corners[i][1])
+        return e[0] if which=='prev' else e[1]
+    b=[cp(1,'prev'),cp(1,'next')]
+    c=[cp(2,'next'),cp(2,'prev')]
+    # a duplicate (square corner) is drawn once
+    if dist(*b)<1e-9: b=b[:1]
+    if dist(*c)<1e-9: c=c[:1]
+    return b,c
+# square corners: one tie per corner, landing on the corner itself
+b,c=right_ties(Q,[("Square",0.0)]*4)
+assert b==[(480,0)] and c==[(480,240)]
+# a 12" diagonal corner: two ties per corner, on the chamfer's ENDS --
+# never the sharp corner behind it
+b,c=right_ties(Q,[("Square",0.0),("Diag",12.0),("Diag",12.0),("Square",0.0)])
+off=12.0/math.sqrt(2)
+assert len(b)==2 and len(c)==2
+assert abs(b[0][0]-(480-off))<1e-9 and abs(b[1][1]-off)<1e-9
+assert all(p!=(480,0) and p!=(480,240) for p in b+c)
+print("   square corners tie once to the corner; treated corners tie to both ends")
+
+print("== 53. H / M / K suggest the last value entered ==")
+def askd(entered, dflt):
+    """Mirror of pool:askd: a value wins, NA -> None, Enter -> default."""
+    if entered=="NA": return None
+    if entered=="": return dflt
+    return entered
+h=60.0
+m=askd("", h)                       # Enter -> takes H
+k=askd("", m if m else h)           # Enter -> takes M (== H here)
+assert m==60.0 and k==60.0
+m=askd(72.0, h); k=askd("", m if m else h)
+assert m==72.0 and k==72.0          # K follows the value actually entered
+m=askd("NA", h); k=askd("", m if m else h)
+assert m is None and k==60.0        # an NA M falls back to H, not to None
+assert askd("NA", h) is None        # NA still means NA
+print("   Enter accepts the suggestion; NA still means NA")
+
+print("== 54. oval hopper: R3 and W may both be NA ==")
+def hopoval_r3(r3raw, w, g, l):
+    """Mirror: R3 NA -> L/2 (the tangent semicircle from the offsets)."""
+    if r3raw is not None: r3=r3raw
+    elif l>1e-6:          r3=0.5*l
+    elif w is not None:   r3=g-w
+    else:                 r3=0.5*l
+    if r3<1e-6: r3=0.5*l
+    return r3, g-r3          # drawn W follows from the geometry
+G, L = 120.0, 96.0
+# both NA -> semicircle end tangent to the straight sides, W = G - R3
+r3,wd = hopoval_r3(None,None,G,L)
+assert r3==48.0 and wd==72.0
+# tangency means the arc's centre sits on the tangent line: sagitta over
+# the hopper-width chord equals the radius
+assert abs(sagr(r3,L)-r3)<1e-9
+# W given, R3 NA -> still the tangent radius; W becomes a report check
+r3,wd = hopoval_r3(None,70.0,G,L)
+assert r3==48.0 and wd==72.0
+# R3 given -> honoured as measured
+r3,wd = hopoval_r3(40.0,None,G,L)
+assert r3==40.0 and wd==80.0
+print("   NA R3 gives the tangent semicircle; NA W follows from G - R3")
+
 print("\nALL CHECKS PASSED")

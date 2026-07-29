@@ -65,8 +65,9 @@ treatment cuts inward from there.
 * **In-square:** one corner question, applied to all four corners.
   In-square pools also ask each **pair of opposing sides once** —
   side length (top & bottom together), end length (left & right
-  together), and on a Grecian each end's two diagonals together —
-  since a true pool's opposing sides are equal.
+  together), an oval's end radius (both ends together), and on a
+  Grecian each end's two diagonals together — since a true pool's
+  opposing sides are equal.
 * **Out-of-square:** asked per corner (A, B, C, D); press **Enter** to
   reuse the previous corner's answer, so four identical corners is
   three quick Enters.
@@ -159,16 +160,36 @@ hopper and to the sport deep flat.
 The hopper's left corners tie to the pool's left corners — when a
 corner is Diag/Rounded, **to both ends of the treatment** (one line
 per end) — and its right corners tie to the ends of the slope-break
-line. Everything is chain-dimensioned along the two centerlines like
-the field sheet, and every letter gets a report row.
+line. When `E` is 0 there is no separate break line (a modified flat
+or a wedge), so the right side ties to the pool's right corners under
+the same rule: **both ends of the treatment**, never the sharp corner
+behind it. Everything is chain-dimensioned along the two centerlines
+like the field sheet, and every letter gets a report row.
+
+**`H`, `M` and `K` suggest each other.** They are usually the same
+offset, so once one is entered the next offers it as a default —
+press Enter to accept, type a number to override, `NA` as always.
+(Sport bottoms do the same between `M` and `K`.)
 
 **Oval (True Oval sheet):** same phase, prompting the interior letters
 only (A, B, R1, R2 come from the perimeter). The hopper is a box with
 a radius **R3** left end set out along the pool axis (arc tip to arc
 tip): `H` tip→hopper tip, `G` hopper length, `R3` end radius, `E`
-break→right tip, `M`/`K` top/bottom offsets, with `W` (flat top,
-= G−R3), `F`, `L` and `T` (straight side) reported as checks. No left
-ties — the radius is the end; the right corners tie to the break ends.
+break→right tip, `M`/`K` top/bottom offsets, with `F`, `L` and `T`
+(straight side) reported as checks. No left ties — the radius is the
+end; the right corners tie to the break ends.
+
+**`R3` and `W` may both be `NA`.** They close against the hopper
+length (`R3 + W = G`):
+
+* **`R3` `NA`** → half the hopper width the `M`/`K` offsets leave
+  (`L/2`) — the semicircular end that meets the straight sides on a
+  **tangent**, no kink;
+* **`W` `NA`** → whatever the geometry gives, `G − R3`, so the flat
+  top runs from the arc's tangent point to the hopper's right edge.
+
+Both are reported against what was drawn, so a `W` you did measure
+still shows up as a check even when `R3` set the arc.
 
 **Grecian:** first asks **`Hopper type [Square/SIX-sided]`**, interior
 letters only (A, B, S, S1, S2, T, V come from the perimeter). Both
@@ -461,8 +482,10 @@ flagged in the report.
   `N/A` target.
 
 (The total is re-asked, without `NA`, if a radius is `NA` too —
-something has to close the chain.) The radii and the overall each get
-a report row, so any derived or clamped value is visible.
+something has to close the chain.) An **in-square** oval asks for the
+end radius **once** and uses it at both ends, so "both radii `NA`" is
+a single `NA` there. The radii and the overall each get a report row,
+so any derived or clamped value is visible.
 
 Nothing is drawn but the pool: the end chords and the old radius
 construction lines are gone, so an oval is two side lines plus the two
