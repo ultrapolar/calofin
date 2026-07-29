@@ -1321,6 +1321,30 @@
                   (cons 10 (list (car p1) (cadr p1) 0.0))
                   (cons 11 (list (car p2) (cadr p2) 0.0)))))
 
+;; Bounding box of a point list, as (minx miny maxx maxy).
+(defun pf:bbox (pts / x0 y0 x1 y1 q)
+  (foreach q pts
+    (if (null x0)
+      (setq x0 (car q) x1 (car q) y0 (cadr q) y1 (cadr q))
+      (setq x0 (min x0 (car q)) x1 (max x1 (car q))
+            y0 (min y0 (cadr q)) y1 (max y1 (cadr q)))))
+  (list x0 y0 x1 y1))
+
+;; Draw "1", "2", "3" beside each candidate, in that candidate's own
+;; colour, so the number in the prompt and the outline on screen are
+;; obviously the same thing.  The labels stack down the right-hand
+;; side of the shape and are sized to the drawing, so they read at any
+;; zoom.  Returns the text entity name.
+(defun pf:label (num colour bb hgt row / x y)
+  (setq x (+ (caddr bb) (* 0.6 hgt))
+        y (- (cadddr bb) (* row hgt 1.6)))
+  (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                  (cons 8 *PF-OUT-LAYER*) (cons 62 colour)
+                  '(100 . "AcDbText")
+                  (cons 10 (list x y 0.0))
+                  (cons 40 hgt)
+                  (cons 1 num))))
+
 ;; Ring every point the chosen fit could not hold, on its own layer,
 ;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
 ;; a real feature the tolerance is too tight for.
@@ -1529,21 +1553,32 @@
 ;; judged against the tolerance the user actually typed, so the columns
 ;; compare like for like.
 (defun pf:compare (tour loop pts dpts tol allow
-                   / prior vars v ent segs bad allbad first i pick idx
-                     keep ce)
+                   / prior vars v ent lab segs bad allbad first i pick
+                     idx keep ce bb hgt sel picked)
   (setq prior (pf:prior-fits))
   (pf:ensure-layer *PF-OUT-LAYER* 3)
+  ;; label height: a twentieth of the shape, so it reads at any zoom
+  (setq bb  (pf:bbox pts)
+        hgt (/ (max (- (caddr bb) (car bb))
+                    (- (cadddr bb) (cadr bb)))
+               20.0))
+  (if (<= hgt 0.0) (setq hgt 1.0))
   (setq pf-phase "building the three candidate fits"
         vars     nil
         allbad   nil
-        first    T)
+        first    T
+        i        1)
   (foreach v *PF-COMPARE*
     (setq segs (pf:build tour loop pts dpts (* tol (car v)) allow)
           ent  (pf:make-pline
                  (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
                  *PF-OUT-LAYER* (cadr v))
+          ;; the number, drawn beside the shape in that fit's own
+          ;; colour: the "2" on screen IS the "2" in the prompt
+          lab  (pf:label (itoa i) (cadr v) bb hgt i)
           bad  (pf:unheld segs pts tol)
-          vars (cons (list segs ent bad v) vars))
+          vars (cons (list segs ent bad v lab) vars)
+          i    (1+ i))
     (if first
       (setq allbad bad first nil)
       (setq allbad (pf:isect allbad bad))))
@@ -1552,7 +1587,8 @@
     (princ "\nABHD: could not draw the result - is the drawing read-only?")
     (progn
       (princ (strcat "\n\nThree candidate fits are now drawn on layer "
-                     *PF-OUT-LAYER* ":\n"))
+                     *PF-OUT-LAYER*
+                     ",\neach numbered on screen in its own colour:\n"))
       (princ "\n   #  colour  segs  curves  worst off  not held  ")
       (princ "\n   -  ------  ----  ------  ---------  --------  ")
       (setq i 1)
@@ -1574,15 +1610,39 @@
                        " - likely a mis-shot, a duplicate, or a corner"
                        " that needs more points around it.")))
       ;; -- let the user choose ---------------------------------------
+      ;; Clicking the outline you want beats translating a colour into
+      ;; a number, so a pick on screen is offered first; typing the
+      ;; number still works for anyone who prefers the keyboard.
       (setq pf-phase "waiting for the choice of fit")
+      (princ "\n\n  Click the outline you want to keep, or type its number.")
       (initget "1 2 3 All None")
-      (setq pick (getkword "\nKeep which fit [1/2/3/All/None] <2>: "))
-      (if (null pick) (setq pick "2"))
+      (setq pick (getkword
+                   "\n  Keep which fit - click one, or [1/2/3/All/None] <2>: "))
+      (if (null pick)
+        ;; no keyword typed: give them a click, and fall back to 2
+        (progn
+          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (if sel
+            (progn
+              (setq picked (car sel) i 1)
+              (foreach v vars
+                (if (or (eq picked (cadr v)) (eq picked (nth 4 v)))
+                  (setq pick (itoa i)))
+                (setq i (1+ i)))
+              (if (null pick)
+                (progn
+                  (princ "\n  (that is not one of the three - keeping 2)")
+                  (setq pick "2"))
+                (princ (strcat "\n  Keeping fit " pick "."))))
+            (setq pick "2"))))
       (cond
         ((= pick "All")
-         (princ "\nKeeping all three, in their preview colours."))
+         (princ "\nKeeping all three, in their preview colours.")
+         (princ "\n  (the number labels are left too - erase them when done)"))
         ((= pick "None")
-         (foreach v vars (if (cadr v) (entdel (cadr v))))
+         (foreach v vars
+           (if (cadr v) (entdel (cadr v)))
+           (if (nth 4 v) (entdel (nth 4 v))))
          (princ "\nAll three erased - nothing was added to the drawing."))
         (T
          (setq idx (atoi pick) i 1)
@@ -1590,6 +1650,8 @@
            (if (= i idx)
              (setq keep v)
              (if (cadr v) (entdel (cadr v))))
+           ;; the labels were only ever scaffolding for the choice
+           (if (nth 4 v) (entdel (nth 4 v)))
            (setq i (1+ i)))
          (if (cadr keep) (pf:set-bylayer (cadr keep)))))
       (if keep

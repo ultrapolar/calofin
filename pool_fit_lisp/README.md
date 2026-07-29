@@ -173,10 +173,12 @@ kept, so declared walls only steer the points-built fits.) Delete the
 ## Pick the one that looks right
 
 You do not have to guess the tolerance. ABHD draws **three candidate
-fits at once**, in different colours, and shows what each one costs:
+fits at once**, in different colours, **numbers each one on screen**
+in its own colour beside the shape, and shows what each costs:
 
 ```
-Three candidate fits are now drawn on layer POOL-FIT:
+Three candidate fits are now drawn on layer POOL-FIT,
+each numbered on screen in its own colour:
 
    #  colour  segs  curves  worst off  not held
    -  ------  ----  ------  ---------  --------
@@ -186,14 +188,22 @@ Three candidate fits are now drawn on layer POOL-FIT:
 
   "not held" = points further than 1.000 from that fit.
 
-Keep which fit [1/2/3/All/None] <2>:
+  Click the outline you want to keep, or type its number.
+  Keep which fit - click one, or [1/2/3/All/None] <2>:
 ```
 
-Look at them on screen, then type `1`, `2` or `3` — the other two are
-erased and the keeper reverts to the layer colour. `All` keeps all
-three (in their preview colours) to compare later; `None` erases all
-three and leaves the drawing untouched. Pressing `Enter` keeps **2**,
-the fit at exactly the tolerance you typed.
+The red `1`, yellow `2` and cyan `3` stack down the right-hand side of
+the pool, each in the same colour as its outline, so you never have to
+work out which colour is which number.
+
+**Just click the outline you want** — press `Enter` at the keyword
+prompt and ABHD asks you to pick one on screen; clicking either the
+outline or its number label keeps that fit. Typing `1`, `2` or `3`
+works just as well. The other two are erased, the number labels are
+cleaned up, and the keeper reverts to the layer colour. `All` keeps
+all three (labels included) to compare later; `None` erases everything
+and leaves the drawing untouched. `Enter` at both prompts keeps **2**,
+the fit at exactly the distance you typed.
 
 The three tolerances are ½×, 1× and 2× what you asked for; change the
 spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.
