@@ -110,9 +110,15 @@
 ;;;     for the standalone words "NOT" and "ERROR" in its attributes
 ;;;     and text (e.g. "Not Selected", "Not Included", "#ERROR");
 ;;;     any hit is reported with the block's location so you can
-;;;     look at it. And when steps are drawn, the liner pattern must
-;;;     cover them: if no liner block carries a "Step" section (the
-;;;     "Liner Material with Step" variant), that is reported too.
+;;;     look at it. The liner pattern must also agree with how the
+;;;     steps are built:
+;;;       - a FIBERGLASS STEP anywhere in the highlighted area (as
+;;;         text, a block, or the layer things sit on — see
+;;;         *dchk-fgstep-words*) is its own unit, so the liner must
+;;;         NOT carry a Step. One that does is reported.
+;;;       - otherwise, when steps are drawn, the liner must cover
+;;;         them: no liner block carrying a "Step" section (the
+;;;         "Liner Material with Step" variant) is reported.
 ;;;
 ;;;  7. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
@@ -125,7 +131,9 @@
 ;;;     questionable or that needs looking over (a flagged/wrong
 ;;;     item, a missing block, a "NOT" find, an "add ..." note, a
 ;;;     skipped check) is coloured RED in the report; everything
-;;;     that checked out stays the report's normal colour.
+;;;     that checked out stays the report's normal colour and is
+;;;     drawn at *dchk-green-scale* (3/4) of the red text's height,
+;;;     so the problems are the big lines on the sheet.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -159,6 +167,9 @@
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
 (setq *dchk-constr-color* 2)       ; yellow
+(setq *dchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
+(setq *dchk-fgstep-words*          ; a fiberglass step shows up under any of these
+      '("Fiberglass Step" "FG Step"))
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
 (setq *dchk-report-color* 3)       ; green
 (setq *dchk-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
@@ -358,12 +369,17 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
   (strcat "{\\C" (itoa *dchk-flag-color*) ";" s "}"))
+
+(defun dchk:small (s)
+  ;; all-clear text renders at *dchk-green-scale* of the height the
+  ;; red attention text gets, so problems stand out on the sheet
+  (strcat "{\\H" (rtos *dchk-green-scale* 2 4) "x;" s "}"))
 
 ;; --- geometry ------------------------------------------------------
 
@@ -759,6 +775,38 @@
     (if (and s
              (wcmatch (strcat " " (dchk:norm-text s) " ")
                       (strcat "* " word " *")))
+      (setq found T)))
+  found)
+
+(defun dchk:phrase-p (s / sq)
+  ;; T when the text carries one of *dchk-fgstep-words*, with case,
+  ;; spaces and punctuation ignored - so "FiberglassStep" (a layer
+  ;; name) matches "Fiberglass Step" just as well
+  (setq sq (dchk:squash s))
+  (vl-some '(lambda (w) (wcmatch sq (strcat "*" (dchk:squash w) "*")))
+           *dchk-fgstep-words*))
+
+(defun dchk:fgstep-p (ss blks / found i e ed et g b)
+  ;; T when a fiberglass step shows up anywhere in the highlighted
+  ;; area - as text, as a block, or as the layer things sit on
+  (setq found nil
+        i     0)
+  (repeat (sslength ss)
+    (setq e (ssname ss i)
+          i (1+ i))
+    (if (and (not found) (setq ed (entget e)))
+      (progn
+        (setq et (cdr (assoc 0 ed)))
+        (if (dchk:phrase-p (cdr (assoc 8 ed)))   ; the layer it sits on
+          (setq found T))
+        (if (and (not found) (member et '("TEXT" "MTEXT")))
+          (foreach g ed
+            (if (and (member (car g) '(1 3)) (dchk:phrase-p (cdr g)))
+              (setq found T)))))))
+  (foreach b blks                                ; block names & their text
+    (if (and (not found)
+             (or (dchk:phrase-p (dchk:block-name b))
+                 (vl-some 'dchk:phrase-p (dchk:ins-texts b))))
       (setq found T)))
   found)
 
@@ -1229,6 +1277,7 @@
                       nomerged noflag noleft
                       sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong liners linerbadw linernostep bad w bn bh bp
+                      linerstep linerfg fgstep
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
@@ -1668,7 +1717,12 @@
                             '(lambda (b) (dchk:ins-matches b "Liner Material"))
                             blks)
               linerbadw   nil
-              linernostep nil)
+              linernostep nil
+              linerstep   nil
+              linerfg     nil
+              fgstep      (dchk:fgstep-p ss blks))
+        (if fgstep
+          (princ "\n--- Fiberglass Step found in the highlighted area ---"))
         (if (null liners)
           (progn
             (princ "\n--- Liner check: no 'Liner Material' block in the selection ---")
@@ -1700,15 +1754,24 @@
                                     lines)))
                 (setq lines (cons (strcat "Liner Material (" bn ") " bh ": OK")
                                   lines))))
-            ;; steps drawn -> the liner pattern must cover the step
-            (if (and stepsp
-                     (not (vl-some '(lambda (b) (dchk:ins-has-word b "STEP"))
-                                   liners)))
-              (progn
-                (setq linernostep T)
-                (princ "\n  Note: steps are drawn but the liner pattern is MISSING its Step.")
-                (setq lines (cons "Liner Material: steps are drawn but the liner pattern is MISSING its 'Step' - use 'Liner Material with Step'"
-                                  lines))))))
+            (setq linerstep (vl-some '(lambda (b) (dchk:ins-has-word b "STEP"))
+                                     liners))
+            (cond
+              ;; a fiberglass step is its own unit - the liner pattern
+              ;; must NOT carry a step of its own
+              (fgstep
+               (if linerstep
+                 (progn
+                   (setq linerfg T)
+                   (princ "\n  Note: a Fiberglass Step is in the drawing but the liner pattern has a Step.")
+                   (setq lines (cons "Liner Material: a Fiberglass Step is in the drawing but the liner pattern HAS a Step - it should not"
+                                     lines)))))
+              ;; otherwise steps drawn -> the liner pattern must cover them
+              ((and stepsp (not linerstep))
+               (setq linernostep T)
+               (princ "\n  Note: steps are drawn but the liner pattern is MISSING its Step.")
+               (setq lines (cons "Liner Material: steps are drawn but the liner pattern is MISSING its 'Step' - use 'Liner Material with Step'"
+                                 lines))))))
 
         ;; --- restore colours (flagged/moved keep theirs) ------------
         (foreach pair saved
@@ -1751,7 +1814,10 @@
                          (if linernostep
                            "; steps drawn but liner MISSING its Step"
                            "")
-                         (if (and (null linerbadw) (not linernostep))
+                         (if linerfg
+                           "; Fiberglass Step in the drawing but the liner HAS a Step"
+                           "")
+                         (if (and (null linerbadw) (not linernostep) (not linerfg))
                            " - OK"
                            "")))))
 
@@ -1760,7 +1826,11 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        (setq nlin (+ 8 (length lines)))
+        ;; all-clear lines are shorter, so weight them when sizing
+        (setq nlin 3.0)                          ; title, legend, separator
+        (foreach l lines
+          (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
+        (setq nlin (+ nlin (* 6.0 *dchk-green-scale*)))   ; the header dashboard
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -1800,14 +1870,20 @@
           (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
                                             (dchk:attn-p htsum))))))
         (setq txt (strcat "DIMCHECK REPORT - " (dchk:datestr)
-                          "\\PItems needing attention are shown in "
-                          (dchk:red "red") "."))
+                          "\\P"
+                          (dchk:small
+                            (strcat "Items needing attention are shown in "
+                                    (dchk:red "red") ", larger than the rest."))))
         (foreach pr hdr
           (setq txt (strcat txt "\\P"
-                            (if (cdr pr) (dchk:red (car pr)) (car pr)))))
-        (setq txt (strcat txt "\\P----------------------------------------"))
+                            (if (cdr pr)
+                              (dchk:red (car pr))
+                              (dchk:small (car pr))))))
+        (setq txt (strcat txt "\\P"
+                          (dchk:small "----------------------------------------")))
         (foreach l (reverse lines)
-          (setq txt (strcat txt "\\P" (if (dchk:attn-p l) (dchk:red l) l))))
+          (setq txt (strcat txt "\\P"
+                            (if (dchk:attn-p l) (dchk:red l) (dchk:small l)))))
         (dchk:mtext ins h (* *dchk-report-chars* h) txt *dchk-report-layer*)
 
         ;; --- show the drawing plus the report -----------------------
