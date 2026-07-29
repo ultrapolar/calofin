@@ -101,16 +101,14 @@
 (setq pool:*pvents*    nil)           ; live guide-preview entities
 (setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
 
-;; Bottom-type keywords, shared by every shape's dispatcher.  Normal
-;; and the four special bottoms all run through pool:hopnormal (they
-;; are the same plan chain with G and/or E pinned); Sport is the
-;; symmetric full-width bottom, which the L pools do not take.
+;; Bottom-type keywords, shared by the rectangle / oval / grecian
+;; dispatchers.  Normal and the four special bottoms all run through
+;; pool:hopnormal (they are the same plan chain with G and/or E
+;; pinned); Sport is the symmetric full-width bottom.  L / Lazy L
+;; pools take the standard hopper only and are not asked.
 (setq pool:*btypes*   "Normal Sport Wedge SLope MOdflat SHallow")
 (setq pool:*btprompt*
       "\nBottom type [Normal/Sport/Wedge/SLope/MOdflat/SHallow] <Normal>: ")
-(setq pool:*btypes2*  "Normal Wedge SLope MOdflat SHallow")
-(setq pool:*btprompt2*
-      "\nBottom type [Normal/Wedge/SLope/MOdflat/SHallow] <Normal>: ")
 (setq pool:*sq4* (list (list "Square" 0.0) (list "Square" 0.0)
                        (list "Square" 0.0) (list "Square" 0.0)))
 
@@ -514,7 +512,7 @@
 ;; guide entities to highlight, plus an ALL entry with every guide
 ;; entity for later deletion.
 (defun pool:preview (ptype / pw ph a b c d cen pr all pv ent
-                             eab ebc ecd eda eac ebd
+                             eab ebc ecd eda
                              midl midr tipl tipr elrad errad elarc erarc etot)
   (setq pw 360.0 ph 180.0
         a (list 0.0 0.0) b (list pw 0.0) c (list pw ph) d (list 0.0 ph)
@@ -526,12 +524,8 @@
         all (list eab ebc ecd eda)
         pv (list (cons 'ab (list eab)) (cons 'bc (list ebc))
                  (cons 'dc (list ecd)) (cons 'da (list eda))))
-  ;; body diagonals only when out-of-square
-  (if (not pool:*insq*)
-      (setq eac (pool:pvlined a c)
-            ebd (pool:pvlined b d)
-            all (append all (list eac ebd))
-            pv (append pv (list (cons 'ac (list eac)) (cons 'bd (list ebd))))))
+  ;; No body diagonals here: the cross dims only appear once every side
+  ;; length is in, one guide line per measurement (see pool:quadflow).
   (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
     (pool:text (pool:v+ (car pr)
                         (pool:v* (pool:unit (pool:v- (car pr) cen)) 20.0))
@@ -933,6 +927,8 @@
           ent (if (member (caddr e) '(ad bc)) (pool:pvlined p q) (pool:pvline p q))
           pv (cons (cons (caddr e) (list ent)) pv)
           all (cons ent all)))
+  ;; crosses is normally nil here: pool:greccross adds the chosen
+  ;; mode's diagonals once the perimeter is measured
   (foreach c crosses
     (setq ent (pool:pvlined (nth (car c) npts) (nth (cadr c) npts))
           pv (cons (cons (caddr c) (list ent)) pv)
@@ -945,6 +941,15 @@
           pv (cons (cons (pool:lblkey (nth k pool:*grecnames*)) (list ent)) pv)
           k (1+ k)))
   (setq pool:*pvents* all)
+  pv)
+
+;; Add the chosen mode's cross diagonals to the Grecian guide once the
+;; perimeter is measured.  Returns the extended highlight assoc.
+(defun pool:greccross (crosses pv / c ent)
+  (foreach c crosses
+    (setq ent (pool:pvadd (pool:pvlined (nth (car c) pool:*grecnpts*)
+                                        (nth (cadr c) pool:*grecnpts*)))
+          pv (cons (cons (caddr c) (list ent)) pv)))
   pv)
 
 ;; Full guided flow for a Grecian pool (all three cross-dim modes).
@@ -988,21 +993,14 @@
                        e p qq cc nm tgt act rows k)
   (setq oldclay (getvar "CLAYER"))
 
-  ;; in-square Grecians skip cross dims entirely; out-of-square pick a
-  ;; cross-dim detail level
-  (if pool:*insq*
-      (setq mode "Simple" crosses nil)
-      (progn
-        (initget 1 "Simple Center Complex")
-        (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
-              crosses (pool:grecmode mode))))
-
-  ;; perimeter input method: measure every edge, or the overall sheet
-  ;; (A/B overalls with the sides assumed symmetric)
+  ;; perimeter input method first: measure every edge, or the overall
+  ;; sheet (A/B overalls with the sides assumed symmetric).  The
+  ;; cross-dim detail level is asked later, once the perimeter is in.
   (initget 1 "Measured Overall")
   (setq imeth (getkword "\nGrecian perimeter input [Measured/Overall]: "))
 
-  (setq pv (pool:grecpreview crosses))
+  (setq mode "Simple" crosses nil
+        pv (pool:grecpreview nil))
   (if (= imeth "Overall") (setq pvo (pool:grecovties)))
   (command "_.ZOOM" "_Window"
            (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0)))
@@ -1065,7 +1063,14 @@
             rew (pool:askh "RIGHT end width (RT-RB)"
                            (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))))
 
-  ;; -------- cross dims for the chosen mode (NA allowed on each)
+  ;; -------- the perimeter is in: now pick the cross-dim detail level,
+  ;; draw those diagonals on the guide, and measure them (NA allowed)
+  (if (not pool:*insq*)
+      (progn
+        (initget 1 "Simple Center Complex")
+        (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
+              crosses (pool:grecmode mode)
+              pv (pool:greccross crosses pv))))
   (setq crosscons nil)
   (foreach e crosses
     (setq tgt (pool:askhx (strcat "Cross dim " (caddr e))
@@ -1367,17 +1372,9 @@
           pv (cons (cons (nth k keys) (list ent)) pv)
           all (cons ent all)
           k (1+ k)))
-  ;; cross diagonals only when out-of-square
-  (if (not pool:*insq*)
-      (progn
-        (setq keys (list 'ac 'bd 'ce 'df 'ae 'bf 'ad 'be 'cf) k 0)
-        (foreach pr pool:*hexdiags*
-          ;; the lazy L omits the B-E joint diagonal (per the reference)
-          (if (not (and lazy (equal pr (list 1 4))))
-              (setq ent (pool:pvlined (nth (car pr) pts) (nth (cadr pr) pts))
-                    pv (cons (cons (nth k keys) (list ent)) pv)
-                    all (cons ent all)))
-          (setq k (1+ k)))))
+  ;; the cross diagonals are NOT drawn yet -- pool:hexcross adds them
+  ;; once every side length is in (nine diagonals over the shape would
+  ;; bury the side being measured)
   (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
   (foreach p pts
     (pool:text (pool:lbloff p cen pts 20.0) 12.0 (nth k lbls) "POOL-NOTES")
@@ -1388,11 +1385,30 @@
   (setq pool:*pvents* all)
   pv)
 
+;; Add the nine (eight on a lazy L) cross diagonals to the L guide once
+;; the side lengths are in.  Returns the extended highlight assoc.
+(defun pool:hexcross (lazy pv / pts keys k ent)
+  (setq pts (if lazy
+                (list (list 0.0 0.0) (list 296.0 0.0) (list 414.0 119.0)
+                      (list 296.0 238.0) (list 226.0 168.0) (list 0.0 168.0))
+                (list (list 0.0 0.0) (list 360.0 0.0) (list 360.0 315.0)
+                      (list 225.0 315.0) (list 225.0 180.0) (list 0.0 180.0)))
+        keys (list 'ac 'bd 'ce 'df 'ae 'bf 'ad 'be 'cf)
+        k 0)
+  (foreach pr pool:*hexdiags*
+    ;; the lazy L omits the B-E joint diagonal (per the reference)
+    (if (not (and lazy (equal pr (list 1 4))))
+        (setq ent (pool:pvadd (pool:pvlined (nth (car pr) pts)
+                                            (nth (cadr pr) pts)))
+              pv (cons (cons (nth k keys) (list ent)) pv)))
+    (setq k (1+ k)))
+  pv)
+
 ;; Full guided flow for L / Lazy L pools: preview, prompts, fit, draw,
 ;; dimension and report.  Caller handles sysvars / undo / zoom-extents.
 (defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes
                             cen p pr k w hh xmin xmax ymax ymin doff th
-                            odim rows lbls dv mquad sq4 elast btype)
+                            odim rows lbls dv mquad sq4 elast)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
   (command "_.ZOOM" "_Window"
@@ -1425,7 +1441,9 @@
                              (append (cdr (assoc 'ef pv)) (pool:lbl pv '(lE lF))))
                   (pool:askh "End F-A (left end)"
                              (append (cdr (assoc 'fa pv)) (pool:lbl pv '(lF lA)))))))
-  ;; cross dims only when out-of-square; in-square squares up to sides
+  ;; cross dims only when out-of-square; in-square squares up to sides.
+  ;; The diagonals join the guide now that the sides are all in.
+  (if (not pool:*insq*) (setq pv (pool:hexcross lazy pv)))
   (setq diags
         (if pool:*insq*
             (list nil nil nil nil nil nil nil nil nil)
@@ -1542,11 +1560,9 @@
                                 (- (apply 'min (mapcar 'cadr mquad)) doff)))
                  (pool:wp (list (+ (apply 'max (mapcar 'car mquad)) doff)
                                 (+ (apply 'max (mapcar 'cadr mquad)) doff))))
-        (initget pool:*btypes2*)
-        (setq btype (getkword pool:*btprompt2*))
-        (if (not btype) (setq btype "Normal"))
+        ;; L pools take the standard hopper only
         (setq rows (append rows
-                           (pool:hopnormal mquad sq4 doff th t btype
+                           (pool:hopnormal mquad sq4 doff th t "Normal"
                                            (apply 'min (mapcar 'car pts))
                                            (- (apply 'min (mapcar 'cadr pts))
                                               (* 2.2 doff))
@@ -3082,6 +3098,28 @@
             ri  (pool:askh "End length RIGHT (B-C)"
                            (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC))))))
 
+  ;; -------- oval ends.  Any ONE of total / left radius / right radius
+  ;; may be NA -- the overall closes the chain against the body, and
+  ;; with both radii NA the two ends come out the same (the in-square
+  ;; oval).  Only the total is re-asked when too much is missing.
+  (if (= ptype "Oval")
+      (progn
+        (setq totl (pool:askhx "Total pool length (arc tip to arc tip)"
+                               (cdr (assoc 'tot pv))))
+        ;; in-square ovals are symmetric, so the end radius is asked once
+        (if pool:*insq*
+            (setq lrad (pool:askhx "End radius (both ends)"
+                                   (append (cdr (assoc 'lrad pv))
+                                           (cdr (assoc 'rrad pv))))
+                  rrad lrad)
+            (setq lrad (pool:askhx "LEFT oval end radius" (cdr (assoc 'lrad pv)))
+                  rrad (pool:askhx "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
+        (if (and (null totl) (or (null lrad) (null rrad)))
+            (progn
+              (princ "\nThe total length is needed when an end radius is NA.")
+              (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
+                                    (cdr (assoc 'tot pv))))))))
+
   ;; -------- corner treatments (rectangle only; side lengths are to
   ;; the TRUE corner, treatments cut inward)
   (if (= ptype "Rectangle")
@@ -3128,8 +3166,8 @@
   (setq xmeas nil)
   (if (not pool:*insq*)
       (progn
-        (pool:pvdel (cdr (assoc 'ac pv)))
-        (pool:pvdel (cdr (assoc 'bd pv)))
+        ;; sides are all in -- the cross dims appear now, one guide
+        ;; line per measurement, between its actual reference points
         (foreach tm (pool:crosstemplate cmode)
           (setq rpa (pool:cornerpoint gq gcorners (nth 3 tm) (nth 4 tm))
                 rpb (pool:cornerpoint gq gcorners (nth 5 tm) (nth 6 tm))
@@ -3142,27 +3180,6 @@
       (princ "\nIn-square: building true to the side measurements (no cross dims)."))
   (setq xmeas (reverse xmeas))
 
-  ;; -------- oval ends.  Any ONE of total / left radius / right radius
-  ;; may be NA -- the overall closes the chain against the body, and
-  ;; with both radii NA the two ends come out the same (the in-square
-  ;; oval).  Only the total is re-asked when too much is missing.
-  (if (= ptype "Oval")
-      (progn
-        (setq totl (pool:askhx "Total pool length (arc tip to arc tip)"
-                               (cdr (assoc 'tot pv))))
-        ;; in-square ovals are symmetric, so the end radius is asked once
-        (if pool:*insq*
-            (setq lrad (pool:askhx "End radius (both ends)"
-                                   (append (cdr (assoc 'lrad pv))
-                                           (cdr (assoc 'rrad pv))))
-                  rrad lrad)
-            (setq lrad (pool:askhx "LEFT oval end radius" (cdr (assoc 'lrad pv)))
-                  rrad (pool:askhx "RIGHT oval end radius" (cdr (assoc 'rrad pv)))))
-        (if (and (null totl) (or (null lrad) (null rrad)))
-            (progn
-              (princ "\nThe total length is needed when an end radius is NA.")
-              (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
-                                    (cdr (assoc 'tot pv))))))))
 
   ;; the guide has served its purpose -- replace it with the true pool
   (pool:pvkill)
@@ -3387,7 +3404,17 @@
 ;; Gray nominal Roman guide, proportioned from the reference drawing:
 ;; full-length sides, vertical S1 stubs on the end lines, near-half-
 ;; round arcs, and the dashed tip-to-tip B centerline.
-(defun pool:romanpreview (needx / a b c d tl tr st1 sb1 st2 sb2 pv)
+;; Cross-dim guide lines are NOT part of the preview: they are added by
+;; pool:romancross once every side length is in, so the sheet stays
+;; uncluttered while the perimeter is being measured.
+(defun pool:romancross (pv)
+  (append pv
+          (list (cons "XAC" (list (pool:pvadd (pool:pvlined (list 0.0 0.0)
+                                                            (list 360.0 300.0)))))
+                (cons "XBD" (list (pool:pvadd (pool:pvlined (list 360.0 0.0)
+                                                            (list 0.0 300.0))))))))
+
+(defun pool:romanpreview ( / a b c d tl tr st1 sb1 st2 sb2 pv)
   (setq a (list 0.0 0.0) b (list 360.0 0.0)
         c (list 360.0 300.0) d (list 0.0 300.0)
         tl (list -52.0 150.0) tr (list 412.0 150.0)
@@ -3415,10 +3442,6 @@
     (pool:pvtie (list 432.0 60.0) (list 432.0 240.0) "VR" 10.0)
     (pool:pvtie tl (list 40.0 210.0) "R1" 10.0)
     (pool:pvtie tr (list 320.0 210.0) "R2" 10.0)))
-  (if needx
-      (setq pv (append pv (list
-        (cons "XAC" (list (pool:pvadd (pool:pvlined a c))))
-        (cons "XBD" (list (pool:pvadd (pool:pvlined b d))))))))
   pv)
 
 ;; Full guided flow for Roman pools.
@@ -3434,7 +3457,7 @@
       (progn
         (initget 1 "Yes No")
         (setq perfect (= "Yes" (getkword "\nAre both ends perfect (identical) [Yes/No]: ")))))
-  (setq pv (pool:romanpreview (not pool:*insq*)))
+  (setq pv (pool:romanpreview))
   (command "_.ZOOM" "_Window"
            (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 380.0)))
   (princ "\nRoman sheet -- the RED tie is the dimension being asked for.")
@@ -3462,8 +3485,10 @@
             vrraw (pool:askhx "V - RIGHT end width" (cdr (assoc "VR" pv)))
             r1 (pool:askhx "R1 - LEFT end radius (check)" (cdr (assoc "R1" pv)))
             r2 (pool:askhx "R2 - RIGHT end radius (check)" (cdr (assoc "R2" pv)))))
+  ;; every side length is in -- now the cross dims appear on the guide
   (if (not pool:*insq*)
-      (setq dac (pool:askhx "Cross dim body A-C" (cdr (assoc "XAC" pv)))
+      (setq pv (pool:romancross pv)
+            dac (pool:askhx "Cross dim body A-C" (cdr (assoc "XAC" pv)))
             dbd (pool:askhx "Cross dim body B-D" (cdr (assoc "XBD" pv)))))
   (pool:pvkill)
 
@@ -3639,8 +3664,8 @@
       (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
   ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
-  (initget 1 "Rectangle Oval Grecian L LAzyl ROman")
-  (setq ptype (getkword "\nPool shape [Rectangle/Oval/Grecian/L/LAzyl/ROman]: "))
+  (initget 1 "Rectangle Grecian ROman L LAzyl Oval")
+  (setq ptype (getkword "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval]: "))
 
   (setq base (getpoint "\nInsertion base point <0,0>: ")
         pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))

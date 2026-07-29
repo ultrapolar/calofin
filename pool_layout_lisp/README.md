@@ -1,7 +1,7 @@
 # POOL.LSP — swimming-pool as-built layout for AutoCAD
 
-AutoLISP routine that draws a pool plan (**Rectangle**, **Oval**,
-**Grecian**, **L**, **Lazy L** or **Roman**) from real-world field
+AutoLISP routine that draws a pool plan (**Rectangle**, **Grecian**,
+**Roman**, **L**, **Lazy L** or **Oval**) from real-world field
 measurements, dimensions it, and writes a target / actual / delta
 report next to the drawing.
 
@@ -35,21 +35,26 @@ A ---------- B        cross:  A-C and B-D
 1. **In-square or out-of-square?** An **in-square** pool is built true
    to the side/end measurements — no diagonals are asked for or drawn.
    An **out-of-square** pool takes the full cross-dim route below.
-2. Pool shape: `Rectangle` / `Oval` / `Grecian` / `L` / `LAzyl` /
-   `ROman` (type `L` for a true L, `LA` for a lazy L, `RO` for a
+2. Pool shape: `Rectangle` / `Grecian` / `ROman` / `L` / `LAzyl` /
+   `Oval` (type `L` for a true L, `LA` for a lazy L, `RO` for a
    Roman).
 3. Insertion base point.
-4. Side lengths, top then bottom.
-5. End lengths, left then right.
-6. Cross dimensions A-C and B-D. *(out-of-square only)*
-7. **Oval only:** total pool length, left end radius, right end radius
-   — any one of the three may be `NA` (see *Oval ends*).
-8. **Grecian only:** a cross-dim detail level (see below), then for
-   each end — diagonal top, diagonal bottom, end width — followed by
-   the cross dims for the chosen level.
-9. The pool bottom: `Yes`/`No`, then a bottom type
-   (`Normal` / `Sport` / `Wedge` / `SLope` / `MOdflat` / `SHallow`)
-   and that type's letters.
+4. **Every perimeter measurement first** — side lengths, end lengths,
+   and the shape's own perimeter letters (an oval's total length and
+   end radii, a Grecian's end diagonals and widths, a Roman's `S`/`S1`
+   /`V`/`R`).
+5. **Then the cross dimensions** *(out-of-square only)*: A-C and B-D
+   on a rectangle/oval/Roman, nine diagonals on an L, and the chosen
+   detail level's set on a Grecian.
+6. The pool bottom: `Yes`/`No`, then a bottom type
+   (`Normal` / `Sport` / `Wedge` / `SLope` / `MOdflat` / `SHallow`;
+   L and Lazy L take the standard hopper only) and that type's
+   letters.
+
+Nothing about the cross dims appears until the perimeter is complete —
+**the guide draws no diagonals while a side length is being asked
+for**, so the line you are measuring is never buried under them. They
+are added to the guide the moment the last perimeter answer is in.
 
 Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
@@ -202,15 +207,14 @@ check) — and the pool cut ends tie to the matching hopper cut ends.
 
 ### Special bottoms: wedge, slope, modified flat, sloping shallow end
 
-Every shape asks **`Bottom type
-[Normal/Sport/Wedge/SLope/MOdflat/SHallow]`** (L / Lazy L pools get
-the same list without `Sport`). The four special bottoms are the
-**standard hopper's plan language** — the same `H`/`G`/`F`/`E` +
-`M`/`L`/`K` chain, deep-end line, slope break and corner ties — with
-`G` and/or `E` pinned to zero, plus the side profile the style
-implies. They work on rectangles, ovals, Grecians and L pools, in
-square and out of square, because the chain is measured off the walls
-the same way in every shape.
+Rectangle, oval and Grecian pools ask **`Bottom type
+[Normal/Sport/Wedge/SLope/MOdflat/SHallow]`**; **L and Lazy L pools
+take the standard hopper only** and are not asked. The four special
+bottoms are the **standard hopper's plan language** — the same
+`H`/`G`/`F`/`E` + `M`/`L`/`K` chain, deep-end line, slope break and
+corner ties — with `G` and/or `E` pinned to zero, plus the side
+profile the style implies. They work in square and out of square,
+because the chain is measured off the walls the same way either way.
 
 | Style | Plan | Profile |
 | --- | --- | --- |
@@ -318,8 +322,9 @@ bottom** phase, tips and all.
 
 ### Grecian perimeter input (Measured / Overall)
 
-After the cross-dim level, the Grecian asks **`Perimeter input
-[Measured/Overall]`**:
+A Grecian asks **`Perimeter input [Measured/Overall]`** **first** —
+before any measurement, so you pick how the pool was taped and then
+just answer:
 
 * **Measured** — the existing per-edge prompts (body sides, body
   ends, each end's diagonals and width).
@@ -341,9 +346,11 @@ After the cross-dim level, the Grecian asks **`Perimeter input
 
 A Grecian has **8 corners**: the body A/B/C/D plus the angled-end tips
 **LT/LB** (left-top, left-bottom) and **RT/RB** (right-top,
-right-bottom). After choosing Grecian you pick how many cross dims to
-supply — the more you give, the more tightly the out-of-square shape
-is pinned down. Any cross dim may be answered `NA`.
+right-bottom). **Once the whole perimeter is in**, an out-of-square
+Grecian asks how many cross dims you have — the more you give, the
+more tightly the shape is pinned down — and only then are those
+diagonals drawn on the guide and measured. Any cross dim may be
+answered `NA`.
 
 | Level | Cross dims | What it adds |
 | --- | --- | --- |
@@ -431,6 +438,14 @@ line, and the Grecian corner diagonals and end widths. Once the last
 dimension is entered the guide deletes itself and the true
 out-of-square pool is drawn in its place (the guide is also cleaned
 up if the command is cancelled part-way).
+
+**The guide is drawn in two passes.** While the perimeter is being
+measured it shows the outline and corner letters only — no diagonals
+at all. When the last perimeter answer is in, the cross dims join it:
+one line per measurement on a rectangle/oval, the nine diagonals on an
+L, the chosen level's set on a Grecian, the two body diagonals on a
+Roman. A shape whose diagonals all appeared at once used to bury the
+side being asked for.
 
 ### Your settings come back
 
