@@ -344,6 +344,212 @@ def test_hemistep_arc_mode_breaks_curve_equally():
     assert abs((dist(e1, centre) - radius) - (dist(e2, centre) - radius)) < 1e-9
 
 
+# --------------------------------------------- HEMISTEP curve pieces
+# Mirrors of hs-hits / hs-open: the selected curve becomes a list of
+# boundary pieces, ("A", centre, radius, a1, a2) or ("S", p1, p2), so an
+# arc, a circle and a multi-arc polyline are all handled alike.
+
+def linecirc(a, d, c, r):
+    """hs-linecirc: the 2 crossings of line (a, unit d) with circle (c, r)."""
+    f = vec(c, a)
+    g = dot(d, f)
+    disc = r * r + g * g - dot(f, f)
+    if disc < 0.0:
+        return []
+    disc = math.sqrt(disc)
+    return [add(a, scl(d, -g - disc)), add(a, scl(d, -g + disc))]
+
+
+def hits(p, u, pieces):
+    """hs-hits: every crossing of the line with the curve."""
+    out = []
+    for pc in pieces:
+        if pc[0] == "A":
+            _, c, r, a1, a2 = pc
+            for q in linecirc(p, u, c, r):
+                if inspan(math.atan2(q[1] - c[1], q[0] - c[0]), a1, a2):
+                    out.append(q)
+        else:
+            q = inters(p, add(p, u), pc[1], pc[2])
+            if q is not None and beyond(q, pc[1], pc[2]) < 1e-8:
+                out.append(q)
+    return out
+
+
+def opening(p, u, pieces):
+    """hs-open: the nearest crossing either side of P, as (h1, h2, width)."""
+    sp = sn = h1 = h2 = None
+    for q in hits(p, u, pieces):
+        s = dot(vec(p, q), u)
+        if s > 1e-9:
+            if sp is None or s < sp:
+                sp, h1 = s, q
+        elif s < -1e-9:
+            if sn is None or s > sn:
+                sn, h2 = s, q
+    if h1 is None or h2 is None:
+        return None
+    return h1, h2, sp - sn
+
+
+def semicircle(radius=100.0, pieces_count=1):
+    """The right half of a circle at the origin, split into N arc pieces."""
+    start, sweep = -math.pi / 2, math.pi
+    out = []
+    for k in range(pieces_count):
+        a1 = start + sweep * k / pieces_count
+        a2 = start + sweep * (k + 1) / pieces_count
+        out.append(("A", (0.0, 0.0), radius, a1 % (2 * math.pi),
+                    a2 % (2 * math.pi) if a2 < 0 else a2))
+    return out
+
+
+def blgs(pts):
+    """hs-blgs: one bulge per segment, fitted through consecutive triples."""
+
+    def circum(a, b, q):
+        ax, ay = a
+        bx, by = b
+        qx, qy = q
+        d = 2 * (ax * (by - qy) + bx * (qy - ay) + qx * (ay - by))
+        if abs(d) < 1e-12:
+            return None
+        ux = ((ax * ax + ay * ay) * (by - qy) + (bx * bx + by * by) * (qy - ay)
+              + (qx * qx + qy * qy) * (ay - by)) / d
+        uy = ((ax * ax + ay * ay) * (qx - bx) + (bx * bx + by * by) * (ax - qx)
+              + (qx * qx + qy * qy) * (bx - ax)) / d
+        return (ux, uy)
+
+    def cross(a, b):
+        return a[0] * b[1] - a[1] * b[0]
+
+    def segb(a, b, o, ccw):
+        t1 = math.atan2(a[1] - o[1], a[0] - o[0])
+        t2 = math.atan2(b[1] - o[1], b[0] - o[0])
+        th = (t2 - t1) if ccw else (t1 - t2)
+        if th < 0:
+            th += 2 * math.pi
+        return (1 if ccw else -1) * math.tan(th / 4)
+
+    m, i, out = len(pts) - 1, 0, []
+    while i < m:
+        if i + 2 <= m:
+            p, q, s = pts[i], pts[i + 1], pts[i + 2]
+            o = circum(p, q, s)
+            if o:
+                ccw = cross(vec(p, q), vec(p, s)) > 0
+                out += [segb(p, q, o, ccw), segb(q, s, o, ccw)]
+            else:
+                out += [0.0, 0.0]
+            i += 2
+        elif i > 0:
+            p, q, s = pts[i - 1], pts[i], pts[i + 1]
+            o = circum(p, q, s)
+            if o:
+                ccw = cross(vec(p, q), vec(p, s)) > 0
+                out.append(segb(q, s, o, ccw))
+            else:
+                out.append(0.0)
+            i += 1
+        else:
+            out.append(0.0)
+            i += 1
+    return out
+
+
+def arc_from_bulge(a, b, bulge):
+    """Reconstruct (centre, radius) from a chord and its polyline bulge."""
+    chord = dist(a, b)
+    th = 4 * math.atan(abs(bulge))
+    r = chord / (2 * math.sin(th / 2))
+    mx, my = mid2(a, b)
+    h = math.sqrt(max(0.0, r * r - (chord / 2) ** 2))
+    ux, uy = unit(vec(a, b))
+    nx, ny = (-uy, ux)
+    sign = -1 if bulge > 0 else 1
+    return (mx + sign * h * nx, my + sign * h * ny), r
+
+
+def test_opening_matches_the_true_chord():
+    pieces = semicircle()
+    crown = (100.0, 0.0)
+    direction = unit(vec(crown, (0.0, 0.0)))
+    u = perp90(direction)
+    for depth in (5.0, 20.0, 50.0, 90.0):
+        p = add(crown, scl(direction, depth))
+        got = opening(p, u, pieces)
+        assert got is not None, depth
+        want = 2 * math.sqrt(100.0 ** 2 - (100.0 - depth) ** 2)
+        assert abs(got[2] - want) < 1e-9, f"depth {depth}: {got[2]} vs {want}"
+
+
+def test_opening_uses_the_nearest_crossing_not_the_extremes():
+    """A far-off boundary piece must not widen the local opening."""
+    pieces = semicircle() + [("S", (-500.0, 300.0), (500.0, 300.0))]
+    p = (80.0, 0.0)
+    u = (0.0, 1.0)
+    got = opening(p, u, pieces)
+    assert abs(got[2] - 120.0) < 1e-9, got[2]
+    assert abs(got[0][1] - 60.0) < 1e-9, "must stop at the arc, not the wall"
+
+
+def test_composite_curve_matches_a_single_arc():
+    """A hemisphere split into several arcs gives the same openings."""
+    single = semicircle(pieces_count=1)
+    for count in (2, 3, 5):
+        split = semicircle(pieces_count=count)
+        for depth in (10.0, 35.0, 75.0):
+            p = add((100.0, 0.0), scl(unit(vec((100.0, 0.0), (0.0, 0.0))), depth))
+            a = opening(p, (0.0, 1.0), single)
+            b = opening(p, (0.0, 1.0), split)
+            assert a is not None and b is not None, (count, depth)
+            assert abs(a[2] - b[2]) < 1e-9, f"{count} pieces at {depth}"
+
+
+def test_full_circle_piece_spans_everywhere():
+    circle = [("A", (0.0, 0.0), 100.0, 0.0, 2 * math.pi)]
+    for angle in (0.0, 1.0, 3.0, 5.0):
+        d = (math.cos(angle), math.sin(angle))
+        got = opening((0.0, 0.0), d, circle)
+        assert got is not None
+        assert abs(got[2] - 200.0) < 1e-9, "every chord through the centre"
+
+
+def test_opening_is_none_outside_the_curve():
+    pieces = semicircle()
+    # well past the flat side of the semicircle: nothing brackets the point
+    assert opening((-50.0, 0.0), (0.0, 1.0), pieces) is None
+
+
+def test_boundary_polyline_bulges_are_real_arcs():
+    """Each bulged segment reconstructs to a circle through its endpoints."""
+    side_a = [(1247.298, 463.447), (1259.298, 451.447),
+              (1275.298, 427.447), (1285.298, 403.447)]
+    crown = (1294.751, 343.447)
+    side_b = [(x, 2 * 343.447 - y) for (x, y) in side_a]
+    pts = side_a + [crown] + list(reversed(side_b))
+    bulges = blgs(pts)
+    assert len(bulges) == len(pts) - 1
+    for i, bulge in enumerate(bulges):
+        if bulge == 0.0:
+            continue
+        centre, r = arc_from_bulge(pts[i], pts[i + 1], bulge)
+        assert abs(dist(centre, pts[i]) - r) < 1e-6
+        assert abs(dist(centre, pts[i + 1]) - r) < 1e-6
+    # the curve must come out symmetric about the axis
+    assert all(abs(abs(bulges[i]) - abs(bulges[-1 - i])) < 1e-9
+               for i in range(len(bulges)))
+
+
+def test_boundary_polyline_pairs_share_a_circle():
+    """Segments fitted from one triple lie on the same arc, as 3-point arcs do."""
+    pts = [(0.0, 0.0), (10.0, 6.0), (24.0, 8.0), (40.0, 6.0), (50.0, 0.0)]
+    bulges = blgs(pts)
+    first = arc_from_bulge(pts[0], pts[1], bulges[0])[1]
+    second = arc_from_bulge(pts[1], pts[2], bulges[1])[1]
+    assert abs(first - second) < 1e-6, "a triple's two segments share a radius"
+
+
 def main():
     test_inside_out_holds_tread_depths()
     test_held_width_is_centred_between_the_walls()
@@ -359,6 +565,13 @@ def main():
     test_dimension_chain_and_nesting()
     test_hemistep_chords_are_parallel_and_centred()
     test_hemistep_arc_mode_breaks_curve_equally()
+    test_opening_matches_the_true_chord()
+    test_opening_uses_the_nearest_crossing_not_the_extremes()
+    test_composite_curve_matches_a_single_arc()
+    test_full_circle_piece_spans_everywhere()
+    test_opening_is_none_outside_the_curve()
+    test_boundary_polyline_bulges_are_real_arcs()
+    test_boundary_polyline_pairs_share_a_circle()
     print("all tests passed")
 
 

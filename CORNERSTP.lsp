@@ -218,7 +218,7 @@
 
 ;; Segments of a POLYLINE as records (p1 p2 bulge ename index).
 ;; Points are brought to WCS.  Handles LWPOLYLINE and old 2D POLYLINE.
-(defun cs-plsegs (en / ed el cl vs bs i m out v1 v2 b sub)
+(defun cs-plsegs (en / ed el cl vs bs i m out v1 v2 b sub pr)
   (setq ed (entget en)
         el (cond ((cdr (assoc 38 ed))) (0.0))
         cl (= 1 (logand 1 (cond ((cdr (assoc 70 ed))) (0)))))
@@ -248,7 +248,7 @@
   (reverse out))
 
 ;; nearest record in SEGS to point PT
-(defun cs-nearseg (segs pt / best bd d)
+(defun cs-nearseg (segs pt / best bd d s)
   (foreach s segs
     (setq d (cs-ptseg pt (car s) (cadr s)))
     (if (or (null best) (< d bd)) (setq best s bd d)))
@@ -389,7 +389,7 @@
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
                        prevL prevR dimflag w offd oldce oldstyle
                        outflag stopf op1 pprev tout tprev lastdep
-                       slog mark sdist sL sR sP sT sN ents)
+                       slog mark sdist sL sR sP sT sN s)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -401,7 +401,7 @@
     (princ))
 
   ;; remove the most recently drawn step and roll the state back
-  (defun cs-popstep ( / rec)
+  (defun cs-popstep ( / rec e)
     (cond
       ((null slog) (princ "\n  Nothing to undo.") nil)
       ((and outflag (= 1 (length slog)))

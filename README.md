@@ -206,15 +206,25 @@ What you select decides how the measuring axis is found:
   to it, and march perpendicular away from it in a direction you pick.
   After the steps, one last depth places the crown and the hemisphere
   boundary is drawn as a polyline of arc segments through every step end.
-* **Arc + line** — the line is the axis: depths start where it meets the
-  arc and run into the curve; widths sit perpendicular to the line.
-* **Arc only** — depths start at the middle of the arc and run into the
-  curve; widths sit along the tangent there.
+* **Curve + line** — the line is the axis: depths start where it meets
+  the curve and run into it; widths sit perpendicular to the line.
+* **Curve only** — depths start at the middle of the curve and run into
+  it; widths sit along the tangent there. With a single arc the middle
+  is found for you; on a composite curve you pick the point to measure
+  from.
 
-In the arc modes a width within the tolerance of the curve's opening
-snaps to the arc; any other width is held and breaks the curve equally
+A curve may be an **ARC**, a **CIRCLE**, or a **POLYLINE** — including a
+hemisphere built from several arc segments, and including a boundary this
+command drew earlier. Each step is measured against whichever part of the
+curve it actually lands on, using the opening nearest the axis on each
+side, so a distant wall elsewhere in the drawing cannot widen it.
+
+In the curve modes a width within the tolerance of the curve's opening
+snaps to the curve; any other width is held and breaks the curve equally
 at both ends. Each step asks width then depth, so the last input is
-always a depth; **Enter** or **0** at a width prompt finishes.
+always a depth. At a width prompt: **Enter** or **0** finishes, **Undo**
+removes the step just drawn; **Same** at a depth prompt repeats the
+previous depth.
 
 ### Dimensions
 
@@ -236,12 +246,13 @@ follows `DIMSCALE`, or the annotation scale for annotative styles.
 
 ### Assumptions and warnings
 
-Geometry is read in plan view. CORNERSTP warns when the current UCS is
-not parallel to the World XY plane, when a selected line is not flat,
-when the current layer is off/frozen/locked, when the two walls are
-nearly parallel, and when a wall had to be extended past its drawn end
-to meet a step. Dimensions are placed through the current UCS, so a
-rotated UCS still annotates correctly.
+Geometry is read in plan view. Both commands warn when the current UCS is
+not parallel to the World XY plane, when a selected line is not flat, and
+when the current layer is off/frozen/locked. CORNERSTP additionally warns
+when the two walls are nearly parallel and when a wall had to be extended
+past its drawn end to meet a step. Dimensions are placed through the
+current UCS, so a rotated UCS still annotates correctly, and arcs are read
+through their own curve geometry so mirrored arcs behave.
 
 ---
 
