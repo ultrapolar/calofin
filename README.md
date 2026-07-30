@@ -1,4 +1,4 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender DXF add-ons and AutoCAD step routines
 
 Two independent Blender add-ons (Blender 4.2+ including 5.0) for
 working between Blender and CAD:
@@ -7,6 +7,9 @@ working between Blender and CAD:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+
+Plus two standalone AutoLISP commands for pool step layout in AutoCAD
+2018 — `CORNERSTP.lsp` and `HEMISTEP.lsp` ([section 3](#3-autocad-step-routines-autolisp)).
 
 ## Installation (either add-on)
 
@@ -159,6 +162,89 @@ console.
 
 ---
 
+# 3. AutoCAD step routines (AutoLISP)
+
+Two standalone AutoLISP commands for laying out pool steps, written for
+**AutoCAD 2018** (plain AutoLISP plus ActiveX for dimension styles — no
+VLX or .NET). They are independent of the Blender add-ons above.
+
+| File | Command | What it draws |
+| --- | --- | --- |
+| `CORNERSTP.lsp` | `CORNERSTP` | Parallel corner steps fanning out of a pool corner |
+| `HEMISTEP.lsp` | `HEMISTEP` | Hemisphere steps that act as chords inside a circle |
+
+Load either with `APPLOAD` (or drag the file into the drawing window).
+Each command is a single undo step.
+
+### CORNERSTP
+
+Select the two walls of the corner — LINEs or straight segments of a
+polyline — optionally including a chamfer diagonal or a fillet arc. If
+more than two straight walls are selected you are asked to pick the two
+you mean. Then choose the draw direction:
+
+* **Inside out** — steps are built from the corner outward. For each
+  step you give a tread depth and a step width.
+* **Outside in** — you give the width of the furthest step, which is
+  bounded to the walls and so places itself; each following step asks
+  for a depth (walking back toward the corner) and a width.
+
+Tread depths are always held exactly. A step width within the tolerance
+of the wall opening is trimmed to the walls; any other width is held and
+the step breaks away from the walls, centred so it runs equally past (or
+equally short of) both walls. Riser lines close the step sides wherever
+the walls do not already.
+
+At any tread-depth prompt: **Enter** finishes, **Undo** removes the step
+just drawn (lines and dimensions), **Same** repeats the previous depth.
+
+### HEMISTEP
+
+What you select decides how the measuring axis is found:
+
+* **Line only** — steps are centred on the line's midpoint, run parallel
+  to it, and march perpendicular away from it in a direction you pick.
+  After the steps, one last depth places the crown and the hemisphere
+  boundary is drawn as a polyline of arc segments through every step end.
+* **Arc + line** — the line is the axis: depths start where it meets the
+  arc and run into the curve; widths sit perpendicular to the line.
+* **Arc only** — depths start at the middle of the arc and run into the
+  curve; widths sit along the tangent there.
+
+In the arc modes a width within the tolerance of the curve's opening
+snaps to the arc; any other width is held and breaks the curve equally
+at both ends. Each step asks width then depth, so the last input is
+always a depth; **Enter** or **0** at a width prompt finishes.
+
+### Dimensions
+
+Both commands offer `Dimension the steps? [Yes/No]`. Depths are chained
+along the measuring axis; widths span each step edge and nest outward so
+wider steps sit further out. Two dimension styles are used and must
+already exist in the drawing (otherwise the current style is used and a
+note is printed):
+
+| Setting | Default | Used for |
+| --- | --- | --- |
+| `*cs-depth-dimstyle*` | `"STANDARD INCHES"` | tread/step depths |
+| `*cs-width-dimstyle*` | `"SIDE STANDARD"` | step widths |
+| `*cs-width-tol*` | `nil` (auto: 1/8" via `INSUNITS`) | width tolerance |
+| `*cs-dim-layer*` | `nil` (current layer) | layer for dimensions |
+
+Set any of these before running the command to override. Dimension size
+follows `DIMSCALE`, or the annotation scale for annotative styles.
+
+### Assumptions and warnings
+
+Geometry is read in plan view. CORNERSTP warns when the current UCS is
+not parallel to the World XY plane, when a selected line is not flat,
+when the current layer is off/frozen/locked, when the two walls are
+nearly parallel, and when a wall had to be extended past its drawn end
+to meet a step. Dimensions are placed through the current UCS, so a
+rotated UCS still annotates correctly.
+
+---
+
 ## Development
 
 Both add-ons keep their geometry logic in `bpy`-free modules
@@ -166,8 +252,9 @@ Both add-ons keep their geometry logic in `bpy`-free modules
 they are unit-testable outside Blender:
 
 ```
-python3 tests/test_addon.py          # UV layout exporter
-python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_addon.py                  # UV layout exporter
+python3 tests/test_cloud_mesher.py           # point cloud mesher
+python3 tests/test_cornerstp_geometry.py     # AutoLISP step geometry
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
@@ -176,6 +263,13 @@ tests exercise boundary building, interior-point detection, Delaunay
 triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
 built-in `mathutils.geometry.delaunay_2d_cdt`), and the
 height/lowest-object classification rules.
+
+The AutoLISP routines cannot run outside AutoCAD, so
+`tests/test_cornerstp_geometry.py` mirrors their geometry helpers in
+Python and asserts the invariants the drawings rely on: tread depths held
+exactly, held widths centred on the wall opening, outermost steps landing
+wall-to-wall, polyline bulge/arc conversions round-tripping, and the
+dimension chain/nesting rules.
 
 ## License
 

@@ -69,8 +69,9 @@
 
 ;; Shared settings (also used by CORNERSTP.lsp when both are loaded -
 ;; whichever file loads first defines them, so they stay in sync).
-(if (null *cs-width-tol*)
-  (setq *cs-width-tol* 0.125))                  ; width tolerance: 1/8"
+;; Width tolerance: left nil here so CORNERSTP.lsp can auto-detect it
+;; from INSUNITS when both files are loaded; falls back to 1/8" below.
+(if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
 (if (null *cs-depth-dimstyle*)
   (setq *cs-depth-dimstyle* "STANDARD INCHES")) ; for step-depth dims
 (if (null *cs-width-dimstyle*)
@@ -235,7 +236,7 @@
 
 (defun c:HEMISTEP ( / *error* undoflag ss i ed lin lp1 lp2 arcd amode
                       c r a1 a2 m sp dir u dchk cand best bscr q q1 q2
-                      side pt stopf cum n wid dep p nat cen e1 e2 drawn
+                      side pt stopf cum n wid dep p nat cen e1 e2 drawn tol
                       dimflag txth offd pprev oldce oldstyle
                       ea eb crown pts)
 
@@ -248,6 +249,9 @@
     (princ))
 
   ;; ---- 1. selection ---------------------------------------------------
+  ;; width tolerance: the shared setting when set, else 1/8"
+  (setq tol (if (numberp *cs-width-tol*) *cs-width-tol* 0.125))
+
   (princ "\nSelect the base line, the base arc, or the arc plus its axis line:")
   (setq ss (ssget '((0 . "LINE,ARC"))))
   (if (null ss)
@@ -383,11 +387,11 @@
                                (hs-onarc q1 c a1 a2)
                                (hs-onarc q2 c a1 a2))
                         (distance q1 q2)))     ; curve opening here
-            (if (and nat (<= (abs (- nat wid)) *cs-width-tol*))
+            (if (and nat (<= (abs (- nat wid)) tol))
               (progn
                 (setq e1 q1 e2 q2)
                 (princ (strcat "\n  Step " (itoa n) ": curve opening "
-                               (rtos nat) " is within 1/8\" of "
+                               (rtos nat) " is within " (rtos tol) " of "
                                (rtos wid) " - snapped to the curve.")))
               (progn
                 ;; center on the circle's chord so the step breaks the
