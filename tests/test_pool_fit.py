@@ -918,18 +918,44 @@ def test_constants_match_lisp():
     print("  constants match abhd.lsp")
 
 
-def test_lisp_file_is_well_formed():
-    """Catch unbalanced parentheses before AutoCAD does."""
-    src = open(LISP_FILE).read()
-    stripped = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src)
-    stripped = re.sub(r";[^\n]*", "", stripped)
-    depth = 0
-    for ch in stripped:
-        if ch == "(":
+def paren_depth(src):
+    """Net paren depth of LISP source, scanned properly.
+
+    Strings and comments have to be recognised in one pass: a regex
+    that strips strings first mangles a comment containing a quote
+    (`off by 1-7/8"`), and one that strips comments first mangles a
+    string containing a semicolon.  Raises on a stray closer.
+    """
+    depth, in_str, in_comment, escaped = 0, False, False, False
+    for ch in src:
+        if in_comment:
+            if ch == "\n":
+                in_comment = False
+        elif in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch == ";":
+            in_comment = True
+        elif ch == "(":
             depth += 1
         elif ch == ")":
             depth -= 1
-            assert depth >= 0, "abhd.lsp closes a paren that never opened"
+            if depth < 0:
+                raise AssertionError(
+                    "abhd.lsp closes a paren that never opened")
+    return depth
+
+
+def test_lisp_file_is_well_formed():
+    """Catch unbalanced parentheses before AutoCAD does."""
+    src = open(LISP_FILE).read()
+    depth = paren_depth(src)
     assert depth == 0, "abhd.lsp has %d unclosed paren(s)" % depth
     defined = set(re.findall(r"\(defun\s+((?:pf:|c:)[^\s(]+)", src))
     called = set(re.findall(r"\((pf:[a-z0-9-]+)", src))
@@ -942,7 +968,8 @@ def test_lisp_file_is_well_formed():
     for fn in ("pf:compare", "pf:build", "pf:guided-fit", "pf:unheld",
                "pf:mark-unheld", "pf:report", "pf:label", "pf:bbox",
                "pf:devstats", "pf:temp-add", "pf:temp-clear",
-               "pf:purge-layer"):
+               "pf:purge-mine", "pf:tag-mine", "pf:pt-name",
+               "pf:block-number"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 

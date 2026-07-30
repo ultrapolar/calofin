@@ -109,8 +109,16 @@
                                     ; points; the block's insertion point
                                     ; is taken as the point location
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the fitted polyline goes on
-(setq *PF-MISS-LAYER*   "POOL-MISS"); layer the "could not hold this
-                                    ; point" markers go on
+(setq *PF-MISS-LAYER*   "FGStep")   ; layer the "could not hold this
+                                    ; point" circles and their list go
+                                    ; on.  This may well be a layer you
+                                    ; already use, so ABHD stamps the
+                                    ; objects it makes and only ever
+                                    ; erases its own (see pf:tag-mine)
+(setq *PF-MISS-RADIUS*  4.0)        ; radius of those circles (4 inches)
+(setq *PF-PT-TAG*       "number")   ; attribute tag on the point block
+                                    ; holding the surveyed point number,
+                                    ; used to label it as "Pt.17"
 (setq *PF-WALL-LAYER*   "POOL-WALLS"); layer the dashed markers for
                                     ; user-declared straight walls go on
 (setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
@@ -760,6 +768,38 @@
     (setq keyed (cons (cons (+ best tp) q) keyed)))
   (mapcar 'cdr (pf:sort-car keyed)))
 
+;; The surveyed number carried by a point block, read from its
+;; *PF-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
+;; no such attribute.
+(defun pf:block-number (en / sub ed val)
+  (setq sub (entnext en) val nil)
+  (while (and sub
+              (setq ed (entget sub))
+              (= "ATTRIB" (cdr (assoc 0 ed))))
+    (if (and (null val)
+             (cdr (assoc 2 ed))
+             (= (strcase (cdr (assoc 2 ed))) (strcase *PF-PT-TAG*)))
+      (setq val (cdr (assoc 1 ed))))
+    (setq sub (entnext sub)))
+  val)
+
+;; Remember a point and what to call it, so a miss can be reported as
+;; "Pt.17" using the number in the drawing rather than a private
+;; index.  Points with no number of their own get the next count.
+(defun pf:add-point (p nm)
+  (setq npt        (1+ npt)
+        pts        (cons p pts)
+        pf-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
+                         pf-ptnames)))
+
+;; What to call the surveyed point at Q.
+(defun pf:pt-name (q / nm p)
+  (setq nm nil)
+  (foreach p pf-ptnames
+    (if (and (null nm) (< (pf:dist (car p) q) *PF-EXACT-EPS*))
+      (setq nm (cdr p))))
+  (if nm nm "?"))
+
 ;; The member of LST nearest to P.
 (defun pf:nearest (p lst / best bd q d)
   (setq best nil bd nil)
@@ -1324,18 +1364,34 @@
     (if (and en (entget en)) (entdel en)))
   (setq pf-temp nil))
 
-;; Erase everything on a layer, to sweep scaffolding an interrupted
-;; earlier run may have left behind.  Returns how many went.
-(defun pf:purge-layer (name / ss i n)
+;; ---- "this one is mine" stamping -------------------------------------
+;; ABHD writes onto layers the drawing may already be using - FGStep in
+;; particular - so it must never clear a layer wholesale.  Everything it
+;; creates carries a small piece of extended data naming this command,
+;; and only stamped objects are ever erased again.
+
+(defun pf:tag-mine (en / ed)
+  (if en
+    (progn
+      (regapp "ABHD")
+      (setq ed (entget en))
+      (entmod (append ed (list (list -3 (list "ABHD" (cons 1000 "ABHD"))))))))
+  en)
+
+;; Erase only ABHD's own objects on a layer; anything the user drew
+;; there is left alone.  Returns how many went.
+(defun pf:purge-mine (name / ss i n en)
   (setq n 0)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
       (if ss
         (progn
-          (setq i 0 n (sslength ss))
-          (repeat n
-            (entdel (ssname ss i))
+          (setq i 0)
+          (repeat (sslength ss)
+            (setq en (ssname ss i))
+            (if (assoc -3 (entget en '("ABHD")))
+              (progn (entdel en) (setq n (1+ n))))
             (setq i (1+ i)))))))
   n)
 
@@ -1407,19 +1463,54 @@
 ;; Ring every point the chosen fit could not hold, on its own layer,
 ;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
 ;; a real feature the tolerance is too tight for.
-(defun pf:mark-unheld (bad tol / r q)
-  ;; markers from an earlier run describe a fit that no longer exists,
-  ;; so the layer always shows the current fit and nothing else
-  (pf:purge-layer *PF-MISS-LAYER*)
+;; Also writes the list of them to the side of the shape, worst first,
+;; as "Pt.17   off by 1-7/8"" - so the misses can be worked through
+;; without hunting for red circles.
+(defun pf:mark-unheld (bad segs bb hgt / q d s dmin keyed pair th x y
+                                         line)
+  ;; markers from an earlier run describe a fit that no longer exists;
+  ;; only ABHD's own are removed, never anything else on the layer
+  (pf:purge-mine *PF-MISS-LAYER*)
   (if bad
     (progn
       (pf:ensure-layer *PF-MISS-LAYER* 1)
-      (setq r (max (* 3.0 tol) 1.0))
+      ;; rings on the points themselves
       (foreach q bad
-        (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                        (cons 8 *PF-MISS-LAYER*) '(100 . "AcDbCircle")
-                        (cons 10 (list (car q) (cadr q) 0.0))
-                        (cons 40 r)))))))
+        (pf:tag-mine
+          (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                          (cons 8 *PF-MISS-LAYER*) '(100 . "AcDbCircle")
+                          (cons 10 (list (car q) (cadr q) 0.0))
+                          (cons 40 *PF-MISS-RADIUS*)))))
+      ;; how far off each one is, worst first
+      (setq keyed nil)
+      (foreach q bad
+        (setq dmin nil)
+        (foreach s segs
+          (setq d (pf:seg-dist q s))
+          (if (or (null dmin) (< d dmin)) (setq dmin d)))
+        (setq keyed (cons (cons dmin q) keyed)))
+      (setq keyed (reverse (pf:sort-car keyed))
+            th    (* 0.5 hgt)
+            x     (+ (caddr bb) (* 0.6 hgt))
+            y     (cadddr bb))
+      (pf:tag-mine
+        (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                        (cons 8 *PF-MISS-LAYER*) '(100 . "AcDbText")
+                        (cons 10 (list x y 0.0))
+                        (cons 40 th)
+                        (cons 1 (strcat "POINTS OFF THE LINE ("
+                                        (itoa (length bad)) ")")))))
+      (foreach pair keyed
+        (setq y    (- y (* th 1.6))
+              line (strcat "Pt." (pf:pt-name (cdr pair))
+                           "   off by " (rtos (car pair) 4 4)))
+        (pf:tag-mine
+          (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                          (cons 8 *PF-MISS-LAYER*) '(100 . "AcDbText")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 th)
+                          (cons 1 line)))))))
+  keyed)
 
 ;; Print the hit report for the fit the user kept.  ALLOW is the run's
 ;; miss allowance (how many points were permitted to sit between the
@@ -1644,7 +1735,7 @@
 ;; compare like for like.
 (defun pf:compare (tour loop pts dpts tol allow
                    / prior vars v e ent lab st onv segs bad allbad first
-                     i pick idx keep ce bb hgt sel picked)
+                     i pick idx keep ce bb hgt sel picked keyed pr)
   (setq prior (pf:prior-fits))
   (pf:ensure-layer *PF-OUT-LAYER* 3)
   ;; every candidate is judged against the distance the user typed, so
@@ -1770,21 +1861,24 @@
              (pf:set-bylayer (cadr keep))))))
       (if keep
         (progn
-          (pf:mark-unheld (caddr keep) tol)
+          (setq keyed (pf:mark-unheld (caddr keep) (car keep) bb hgt))
           (pf:report (car keep) pts tol allow prior)
-          (if (caddr keep)
-            (princ (strcat "\n  " (itoa (length (caddr keep)))
-                           " point(s) beyond the tolerance are ringed on"
-                           " layer " *PF-MISS-LAYER*
-                           " - zoom to them to see why (delete that"
-                           " layer when you are done).")))))))
+          (if keyed
+            (progn
+              (princ (strcat "\n  " (itoa (length keyed))
+                             " point(s) beyond the distance are ringed"
+                             " on layer " *PF-MISS-LAYER*
+                             " and listed beside the pool, worst first:"))
+              (foreach pr keyed
+                (princ (strcat "\n    Pt." (pf:pt-name (cdr pr))
+                               "   off by " (rtos (car pr) 4 4))))))))))
   (princ))
 
 ;; ---- the command -----------------------------------------------------
 (defun c:ABHD ( / tol mx pct ans go wp1 wp2 rawwalls w w1 w2
                     ss i en ed lay typ ext nunsup nocs
-                    segs pts dpts allow loop tour ok stale
-                    pf-miss-pct pf-walls pf-temp
+                    segs pts dpts allow loop tour ok stale npt
+                    pf-miss-pct pf-walls pf-temp pf-ptnames
                     *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
@@ -1807,7 +1901,7 @@
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
-  (setq stale (pf:purge-layer *PF-WALL-LAYER*))
+  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
   (if (> stale 0)
     (princ (strcat "\nABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
@@ -1893,7 +1987,7 @@
                 (setq wp1 (pf:2d wp1) wp2 (pf:2d wp2))
                 ;; the dashed marker is scaffolding: it confirms what
                 ;; you declared, and goes when the command ends
-                (pf:temp-add (pf:draw-wall-marker wp1 wp2))
+                (pf:temp-add (pf:tag-mine (pf:draw-wall-marker wp1 wp2)))
                 (setq rawwalls (cons (list wp1 wp2) rawwalls))
                 (initget "Yes No")
                 (if (/= (getkword "\n  Another straight line? [Yes/No] <No>: ")
@@ -1923,7 +2017,8 @@
     (progn
       ;; -- sort the selection into perimeter segments and points -----
       (setq pf-phase "reading the selected entities")
-      (setq segs nil pts nil i 0 nunsup 0 nocs 0)
+      (setq segs nil pts nil i 0 nunsup 0 nocs 0
+            npt 0 pf-ptnames nil)
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -1942,7 +2037,8 @@
           ;; blocks are never mistaken for perimeter geometry.
           ((and (= typ "INSERT")
                 (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
-           (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))
+           (pf:add-point (pf:2d (cdr (assoc 10 ed)))
+                         (pf:block-number en)))
           ;; curve types we cannot fit, sitting on the POOL layer: count
           ;; them so the user gets told what to do, instead of a
           ;; mystifying "the perimeter does not close" later on
@@ -1954,10 +2050,11 @@
            (setq segs (append segs (pf:ent-segs en))))
           ;; plain POINT entities on the POINTS layer
           ((and (= lay (strcase *PF-POINT-LAYER*)) (= typ "POINT"))
-           (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))
+           (pf:add-point (pf:2d (cdr (assoc 10 ed))) nil))
           ;; any other block dropped on the POINTS layer -> a point too
           ((and (= typ "INSERT") (= lay (strcase *PF-POINT-LAYER*)))
-           (setq pts (cons (pf:2d (cdr (assoc 10 ed))) pts)))))
+           (pf:add-point (pf:2d (cdr (assoc 10 ed)))
+                         (pf:block-number en)))))
       (if (> nunsup 0)
         (princ (strcat "\nABHD: warning - " (itoa nunsup)
                        " SPLINE/ELLIPSE object(s) on layer "

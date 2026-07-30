@@ -234,12 +234,32 @@ spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.
 
 ## Points it could not hold
 
-Every point further than your tolerance from the kept fit is **ringed
-with a circle on layer `POOL-MISS`** (red), so you can zoom straight
-to it and decide whether it is a bad shot, a duplicate, or a real
-feature that needs a tighter tolerance. Markers from an earlier run
-are cleared first, so that layer always describes the fit you are
-looking at. Delete it when you are done with it.
+Every point further than your distance from the kept fit is **ringed
+with a 4″ radius circle on layer `FGStep`**, and the whole set is
+**listed beside the pool, worst first**, using the point numbers from
+your `ab_pt` blocks:
+
+```
+POINTS OFF THE LINE (3)
+Pt.8    off by 1-7/8"
+Pt.7    off by 1-5/16"
+Pt.51   off by 1-1/16"
+```
+
+So you can work down the list instead of hunting for circles, and
+decide per point whether it is a bad shot, a duplicate, or a real
+feature that needs a tighter distance. The same list prints at the
+command line.
+
+The numbers come from the `number` attribute on each point block
+(`*PF-PT-TAG*`); points without one are numbered in selection order.
+The circle radius is `*PF-MISS-RADIUS*` and the layer is
+`*PF-MISS-LAYER*`, both at the top of `abhd.lsp`.
+
+**`FGStep` is likely a layer you already use, so ABHD never clears
+it wholesale.** Everything it draws there is stamped as its own, and
+only stamped objects are removed when the next run replaces them —
+your own geometry on that layer is left alone.
 
 If a point is beyond tolerance in **all three** candidates, ABHD says
 so before you choose — that one is almost certainly a mis-shot, a
@@ -294,7 +314,7 @@ in both files still agree.
 | "the result crosses itself" | The automatic ordering went the wrong way around a narrow waist. Draw a rough **lines-only** loop on `POOL` through the points in the right order and select it too. |
 | "not drawn in the world plane" | Geometry was drawn in a tilted UCS. Set UCS to World and flatten it; the fit is 2D. |
 | Nothing appears | The report says how many segments were written. If the layer was off/frozen/locked, ABHD restores it and says so; if the drawing is read-only it says that instead. |
-| Red circles in the drawing | Those are the points the kept fit could not hold, on layer `POOL-MISS`. Zoom to them, then delete the layer; the next run replaces them anyway. |
+| Red 4″ circles and a "POINTS OFF THE LINE" list | The points the kept fit could not hold, on layer `FGStep`. Work down the list; the next run replaces them. Only ABHD's own objects on that layer are ever erased. |
 | Grey dashed lines left behind | Straight-wall markers from a run that was interrupted before it could tidy up. The next `ABHD` sweeps them and says so. |
 | Three coloured outlines left behind | You answered `All` at the choose prompt. Erase the two you don't want, or re-run and pick one. |
 | It feels slow | Three fits are built, and ordering is O(n²); above ~150 points the command warns and takes a while. An ordering sketch skips the expensive search entirely. |
