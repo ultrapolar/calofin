@@ -1018,11 +1018,16 @@
 ;; An OCTAGON is the same eight-corner shape with the same edge list --
 ;; only the proportions differ: its cuts run at 45 degrees (S = S1) and
 ;; its short flats match the cut faces, where a grecian's ends are long
-;; and shallow.  Nominal guide: 460 x 180 with 52.5 cuts.
-(setq pool:*octnpts* (list (list 52.72 0.0) (list 407.28 0.0)
-                           (list 460.0 52.72) (list 460.0 127.28)
-                           (list 407.28 180.0) (list 52.72 180.0)
-                           (list 0.0 127.28) (list 0.0 52.72)))
+;; and shallow.
+;;
+;; The guide is a REGULAR octagon -- 300 square, cut c = 300/(2+root 2)
+;; = 87.87, so all eight sides come out 124.26 -- because that is what
+;; the shape being measured looks like.  (An elongated guide made the
+;; sheet read like a grecian's.)
+(setq pool:*octnpts* (list (list 87.87 0.0) (list 212.13 0.0)
+                           (list 300.0 87.87) (list 300.0 212.13)
+                           (list 212.13 300.0) (list 87.87 300.0)
+                           (list 0.0 212.13) (list 0.0 87.87)))
 
 (defun pool:grecpreview (crosses npts / cen p q e c ent all pv k)
   (setq cen (list 0.0 0.0) all nil pv nil)
@@ -1097,15 +1102,17 @@
 ;; Overall-sheet guide ties (B T S A S1 V S2) laid around the nominal
 ;; guide like the field sheet.  Returns the highlight assoc.
 (defun pool:grecovties (oct / pv)
+  ;; laid around the regular octagon: B/T/S across the top, A/S1/V
+  ;; down the left, S2 parallel to the bottom-right cut
   (if oct
       (setq pv (list
-        (pool:pvtie (list 0.0 240.0) (list 460.0 240.0) "B" 10.0)
-        (pool:pvtie (list 52.5 215.0) (list 407.5 215.0) "T" 10.0)
-        (pool:pvtie (list 0.0 215.0) (list 52.5 215.0) "S" 10.0)
-        (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
-        (pool:pvtie (list -45.0 127.5) (list -45.0 180.0) "S1" 10.0)
-        (pool:pvtie (list -45.0 52.5) (list -45.0 127.5) "V" 10.0)
-        (pool:pvtie (list 420.0 -18.0) (list 472.5 34.5) "S2" 10.0)))
+        (pool:pvtie (list 0.0 360.0) (list 300.0 360.0) "B" 10.0)
+        (pool:pvtie (list 87.87 335.0) (list 212.13 335.0) "T" 10.0)
+        (pool:pvtie (list 0.0 335.0) (list 87.87 335.0) "S" 10.0)
+        (pool:pvtie (list -95.0 0.0) (list -95.0 300.0) "A" 10.0)
+        (pool:pvtie (list -45.0 212.13) (list -45.0 300.0) "S1" 10.0)
+        (pool:pvtie (list -45.0 87.87) (list -45.0 212.13) "V" 10.0)
+        (pool:pvtie (list 230.0 -17.9) (list 317.9 70.0) "S2" 10.0)))
       (setq pv (list
         (pool:pvtie (list -50.0 240.0) (list 410.0 240.0) "B" 10.0)
         (pool:pvtie (list 0.0 215.0) (list 360.0 215.0) "T" 10.0)
@@ -1148,8 +1155,12 @@
     (setq mode "Simple" crosses nil
           pv (pool:grecpreview nil npts)
           pvo (if (= imeth "Overall") (pool:grecovties oct) nil))
-    (command "_.ZOOM" "_Window"
-             (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0)))
+    ;; the octagon guide is taller and narrower than the grecian's
+    (if oct
+        (command "_.ZOOM" "_Window"
+                 (pool:wp (list -130.0 -60.0)) (pool:wp (list 360.0 390.0)))
+        (command "_.ZOOM" "_Window"
+                 (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0))))
     nil)
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A/B bottom, C/D top, LT/LB left tips, RT/RB right tips.")

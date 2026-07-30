@@ -152,7 +152,32 @@ vm = run(["Insquare", "OC"] + BASE +
           None, 160.0, None],      # M sugg, L, K sugg
          "R6")
 assert len(drawn(vm, 'LINE', 'POOL')) >= 8
-print("   A+B alone drew the octagon; square hopper attached")
+# the GUIDE the crew sees must itself be a regular octagon -- read the
+# real constant back out of the loaded POOL.LSP, not a copy of it
+import math as _m
+from lispvm import Sym as _S
+_np = [(float(p[0]), float(p[1])) for p in vm.get(_S('pool:*octnpts*'))]
+_s = [_m.dist(_np[i], _np[(i + 1) % 8]) for i in range(8)]
+assert len(_np) == 8 and max(_s) - min(_s) < 0.01, _s
+_w = max(p[0] for p in _np) - min(p[0] for p in _np)
+_h = max(p[1] for p in _np) - min(p[1] for p in _np)
+assert abs(_w - _h) < 1e-6, (_w, _h)          # and it sits in a square
+print("   A+B alone drew the octagon; guide is a regular octagon")
+
+print("== R6b. the drawn octagon itself is regular (no bottom, so every "
+      "POOL line IS the perimeter) ==")
+vm = run(["Insquare", "OC"] + BASE +
+         [None, 400.0,
+          "NA", "NA", "NA", "NA", "NA",
+          "No"],
+         "R6b")
+_per = [_m.dist(tuple(d[10][:2]), tuple(d[11][:2]))
+        for d in drawn(vm, 'LINE', 'POOL')]
+assert len(_per) == 8, len(_per)
+assert max(_per) - min(_per) < 0.5, _per          # eight EQUAL sides
+assert abs(_per[0] - 400.0 / (1 + _m.sqrt(2))) < 0.5, _per[0]
+print(f"   eight sides {min(_per):.2f}..{max(_per):.2f} "
+      f"(regular = {400.0 / (1 + _m.sqrt(2)):.2f})")
 
 print("== R7. roman, in-square perfect, no bottom ==")
 vm = run(["Insquare", "RO"] + BASE +

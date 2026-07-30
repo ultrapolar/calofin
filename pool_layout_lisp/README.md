@@ -624,6 +624,9 @@ the short flats match the cut faces, where a Grecian's ends are long
 and shallow. It therefore inherits everything the Grecian has: the
 cross-dim levels, the best-fit, the hoppers.
 
+Its guide is a **regular octagon** — equal sides all round, the way
+the shape actually looks — rather than a stretched one.
+
 It uses the **overall sheet** by default (press Enter at the input
 prompt), and **`A` and `B` alone are enough to draw it** — every cut
 letter may be `NA`:

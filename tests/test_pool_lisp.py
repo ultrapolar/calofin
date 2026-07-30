@@ -1487,10 +1487,13 @@ for i,j,_ in [(0,1,'ab'),(1,2,'rbd'),(2,3,'rew'),(3,4,'rtd'),(4,5,'cd'),
 # and the body chords A-D / B-C are the overall width
 assert abs(dist(pts[0],pts[5])-240.0)<1e-9
 assert abs(dist(pts[1],pts[4])-240.0)<1e-9
-# the nominal guide is itself a true octagon
-NP=[(52.72,0.0),(407.28,0.0),(460.0,52.72),(460.0,127.28),
-    (407.28,180.0),(52.72,180.0),(0.0,127.28),(0.0,52.72)]
-assert abs(dist(NP[7],NP[0])-dist(NP[6],NP[7]))<0.01   # cut face == short flat
+# the nominal guide is a REGULAR octagon: all eight sides equal
+NP=[(87.87,0.0),(212.13,0.0),(300.0,87.87),(300.0,212.13),
+    (212.13,300.0),(87.87,300.0),(0.0,212.13),(0.0,87.87)]
+_sides=[dist(NP[i],NP[(i+1)%8]) for i in range(8)]
+assert max(_sides)-min(_sides) < 0.01, _sides
+assert abs(max(NP,key=lambda p:p[0])[0]-max(NP,key=lambda p:p[1])[1])<1e-9  # square
+assert abs(_sides[0]-124.26) < 0.01
 print("   A+B alone give a regular octagon; measured letters still win")
 
 print("== 60. round pool: circle in square, ellipse out of square ==")
