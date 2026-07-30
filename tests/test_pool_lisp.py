@@ -1506,4 +1506,66 @@ assert tl[0]==0.0 and tr[0]==b
 assert 0.0+h == 60.0
 print("   overalls drive the body and the hopper chain closes on them")
 
+print("== 61. Ends-mode cross dims must CROSS each other ==")
+def seg_cross(p1,p2,p3,p4):
+    def o(a,b,c): return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+    return (((o(p3,p4,p1)>0)!=(o(p3,p4,p2)>0)) and
+            ((o(p1,p2,p3)>0)!=(o(p1,p2,p4)>0)))
+QR=[(0,0),(480,0),(480,240),(0,240)]
+CS=[("Diag",40.0)]*4
+def cp(i,which):
+    p=QR[i]; pp=QR[(i+3)%4]; pn=QR[(i+1)%4]
+    e=cornerends(p,pp,pn,CS[i][0],CS[i][1])
+    return e[0] if which=='prev' else e[1]
+# the shipped template pairs the SAME spec at both corners
+ac=[(cp(0,'next'),cp(2,'next')), (cp(0,'prev'),cp(2,'prev'))]
+bd=[(cp(1,'prev'),cp(3,'prev')), (cp(1,'next'),cp(3,'next'))]
+assert seg_cross(*ac[0],*ac[1]), "the two A-C ties must cross"
+assert seg_cross(*bd[0],*bd[1]), "the two B-D ties must cross"
+# the old pairing (opposite specs) ran near-parallel and did not cross
+assert not seg_cross(cp(0,'next'),cp(2,'prev'),cp(0,'prev'),cp(2,'next'))
+# all four remain genuine corner-to-opposite-corner diagonals
+for a,b in ac+bd:
+    assert dist(a,b) > 400.0
+# square corners collapse both ties onto the true diagonal, unchanged
+CS=[("Square",0.0)]*4
+assert cp(0,'next')==(0,0) and cp(2,'next')==(480,240)
+print("   crossing ties confirmed; square corners still use the true corner")
+
+print("== 62. grecian Center gains the two tip-to-tip runs ==")
+SIMPLE=[(0,4),(1,5)]
+CENTER=[(0,4),(1,5),(7,3),(6,2),(6,3),(7,2)]
+EDGES={(0,1),(1,2),(2,3),(3,4),(4,5),(5,6),(6,7),(7,0),(0,5),(1,4)}
+assert CENTER[:4]==SIMPLE+[(7,3),(6,2)]      # Center still contains the old set
+assert (6,3) in CENTER and (7,2) in CENTER   # LT-RT and LB-RB are new
+for a,b in CENTER:                            # none may duplicate a real edge
+    assert (a,b) not in EDGES and (b,a) not in EDGES
+assert len(set(CENTER))==len(CENTER)==6
+print("   Center = 6 ties, none of them a perimeter edge")
+
+print("== 63. Back crosses stage boundaries, not just questions ==")
+def run_stages(stages, script):
+    """Mirror of pool:stages: a stage returning BACK steps back one."""
+    feed=iter(script); i=0; visited=[]
+    while i < len(stages):
+        visited.append(stages[i])
+        v=next(feed)
+        if v is BACK:
+            if i>0: i-=1          # first stage re-asks instead
+        else: i+=1
+    return visited
+S=['sides','oval','corners','cmode','cross']
+# a clean run visits each stage once, in order
+assert run_stages(S,[None]*5)==S
+# Back at the corners stage re-runs the oval stage, then carries on
+v=run_stages(S,[None,None,BACK,None,None,None,None])
+assert v==['sides','oval','corners','oval','corners','cmode','cross']
+# Back on the FIRST stage has nowhere to go: it just re-asks
+v=run_stages(S,[BACK,None,None,None,None,None])
+assert v[0]=='sides' and v[1]=='sides' and v[2:]==['oval','corners','cmode','cross']
+# repeated Backs walk all the way to the front
+v=run_stages(S,[None,None,None,BACK,BACK,BACK,None,None,None,None,None])
+assert v[:7]==['sides','oval','corners','cmode','corners','oval','sides']
+print("   stages step back one at a time; the first stage can't go further")
+
 print("\nALL CHECKS PASSED")

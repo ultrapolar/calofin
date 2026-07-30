@@ -53,9 +53,10 @@ A ---------- B        cross:  A-C and B-D
 1. **In-square or out-of-square?** An **in-square** pool is built true
    to the side/end measurements — no diagonals are asked for or drawn.
    An **out-of-square** pool takes the full cross-dim route below.
-2. Pool shape: `Rectangle` / `Grecian` / `OCtagon` / `ROman` / `L` /
-   `LAzyl` / `Oval` / `ROUnd` (type `L` for a true L, `LA` for a lazy
-   L, `OC` for an octagon, `RO` for a Roman, `ROU` for a round).
+2. Pool shape: `Rectangle` / `Grecian` / `ROman` / `L` / `LAzyl` /
+   `Oval` / `OCtagon` / `ROUnd` — the six common shapes first, then
+   the two rarely-used ones (type `L` for a true L, `LA` for a lazy L,
+   `RO` for a Roman, `OC` for an octagon, `ROU` for a round).
 3. Insertion base point.
 4. **Every perimeter measurement first** — side lengths, end lengths,
    and the shape's own perimeter letters (an oval's total length and
@@ -105,7 +106,13 @@ asked where the cross dims were measured from:
 | --- | --- | --- |
 | **Corner** | To the true (extended) sharp corner | A-C, B-D |
 | **Middle** | To the middle of each chamfer/arc | A-C, B-D |
-| **Ends** | To the treatment endpoints — **both** ends of each diagonal | A-C (B-side & D-side), B-D (A-side & C-side) |
+| **Ends** | To the treatment endpoints — **both** ends of each diagonal, **crossing** | A-C (A>B end→C>D end, A>D end→C>B end), B-D likewise |
+
+In **Ends** mode the two ties of a diagonal **cross each other**: each
+runs from one end of a corner treatment to the *opposite* end of the
+far treatment, the way the tape actually goes. (Pairing the same side
+at both corners would give two near-parallel ties, which pin the
+out-of-squareness down far less.)
 
 The measurements are converted to equivalent true-corner diagonals
 (corrected against the fitted corner geometry) so the body still
@@ -376,7 +383,7 @@ answered `NA`.
 | Level | Cross dims | What it adds |
 | --- | --- | --- |
 | **Simple** | A-C, B-D | The two body diagonals (the original behaviour). |
-| **Center** | + LB-RT, LT-RB | The two long tip-to-tip diagonals that cross near the pool centre. |
+| **Center** | + LB-RT, LT-RB, **LT-RT, LB-RB** | The two long tip-to-tip diagonals that cross near the pool centre, plus the two tip-to-tip runs straight down the top and the bottom. |
 | **Complex** | all 18 diagonals | Every possible diagonal among the 8 corners. Supply what you measured and `NA` the rest. |
 
 All 8 corners are then **best-fit** against every provided cross dim
@@ -470,17 +477,28 @@ side being asked for.
 
 ### Back: fix a typo without starting over
 
-Every measurement prompt after the first offers **`Back`**, which
-re-asks the previous question. Type `B`, correct the number, and the
-sequence carries on from there — a mistyped side length no longer
-means Esc and re-running the whole command. `Back` walks as far back
-through the current block as you like (sides, cross dims, or the
-bottom letters), and repeats work: two `Back`s go back two questions.
+**Every question in the drawing process offers `Back`** — not just the
+measurements, but the keyword questions too: the corner treatments,
+the cross-dim reference mode, the Grecian/Octagon input method and
+detail level, the Roman's "both ends perfect", the hopper type, the
+bottom type. Type `B`, correct the answer, and it carries on from
+there.
 
-Auto-answered questions are skipped over on the way back (the L
-pool's `E` when `H+G+F` already span the section), and everything
-else behaves exactly as before — `NA`, `0` where it's legal, and the
-`H`/`M`/`K` suggestions.
+`Back` **crosses question and stage boundaries alike**: from the first
+cross dim it steps back into the corner questions, from those back
+into the side lengths, and so on right to the front of the run. Two
+`Back`s go back two questions; keep going and you reach the first
+question, which simply re-asks itself.
+
+Auto-answered questions are stepped over on the way back (the L pool's
+`E` when `H+G+F` already span the section), and everything else
+behaves exactly as before — `NA`, `0` where it's legal, and the
+`H`/`M`/`K` suggestions. Backing into a stage re-runs it from scratch,
+so the guide always matches the answers you can see.
+
+The one limit: `Back` covers the **input phase**. Once the last
+measurement is in and the pool is drawn, the answers are committed —
+use `U` to undo the whole command.
 
 ### Object snaps stay live while you measure
 
