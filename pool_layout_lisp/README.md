@@ -388,7 +388,15 @@ answered `NA`.
 
 All 8 corners are then **best-fit** against every provided cross dim
 (sides/ends held within 1", end diagonals within ½", end widths near
-exact, cross dims pulled to target within 2"). If the cross dims
+exact, cross dims pulled to target within 2"). The **tip-to-tip
+widths `LT-RT` and `LB-RB` are the exception**: they are what `A`/`B`
+would be on an ideal Grecian, so when measured they are **held like
+walls** (the 1" edge band, wall priority) rather than pulled like
+cross dims — exactly as the body-end chords `A-D` and `B-C` already
+are. A tip width the walls can't honour within 1" holds the tape and
+flags the run instead of silently splitting the difference. `NA`
+leaves them free as before, and they keep their dashed dim and report
+row. If the cross dims
 can't be met the edges are held true and **`CROSS DIMS FAILED`** is
 reported — same policy as the rectangle. Every cross dim is
 dimensioned (in the `CROSS DIMENSION` style when present) and listed

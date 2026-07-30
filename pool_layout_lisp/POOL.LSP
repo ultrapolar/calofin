@@ -989,6 +989,11 @@
             (list p2 nil)
             (list p1 t)))))
 
+;; The tip-to-tip widths LT-RT and LB-RB, in either corner order.
+(defun pool:tippair (i j)
+  (or (and (= i 6) (= j 3)) (and (= i 3) (= j 6))
+      (and (= i 7) (= j 2)) (and (= i 2) (= j 7))))
+
 ;; Look up a provided cross target for corner pair (i j); nil if NA or
 ;; not in the active set.
 (defun pool:crossget (crosscons i j / out)
@@ -1120,7 +1125,7 @@
                        a b c d cen0 ml mr lend rend seed
                        res pts failed notes
                        xmin xmax ymin ymax w hh doff th cen odim
-                       e p qq cc nm tgt act rows k)
+                       e p qq cc nm tgt act rows k fedge fcross)
   (setq oldclay (getvar "CLAYER"))
 
   ;; perimeter input method first: measure every edge, or the overall
@@ -1346,11 +1351,23 @@
       (setq notes (cons "RIGHT END: diagonals/width did not fit -- 45 seed used" notes)))
 
   ;; -------- fit: Simple keeps the validated seed; Center/Complex
-  ;; best-fit all 8 corners against every provided cross dim
+  ;; best-fit all 8 corners against every provided cross dim.
+  ;; The tip-to-tip widths LT-RT and LB-RB are what B WOULD be on an
+  ;; ideal grecian, so when measured they are held like WALLS (the
+  ;; 1-inch edge band) -- just as the body chords A-D and B-C already
+  ;; are -- rather than pulled like cross dims in the 2-inch band.
+  ;; They still get their dashed dim and report row like any tie.
   (if (= mode "Simple")
       (setq pts seed failed (cadr fq))
       (progn
-        (setq res (pool:fitpoly seed edgecons crosscons pool:*cross-tol*)
+        (setq fedge edgecons fcross nil)
+        (foreach cc crosscons
+          (if (and (caddr cc) (pool:tippair (car cc) (cadr cc)))
+              (setq fedge (append fedge
+                                  (list (list (car cc) (cadr cc) (caddr cc)
+                                              pool:*side-tol*))))
+              (setq fcross (cons cc fcross))))
+        (setq res (pool:fitpoly seed fedge (reverse fcross) pool:*cross-tol*)
               pts (car res)
               failed (cadr res))))
 

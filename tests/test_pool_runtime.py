@@ -115,7 +115,8 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           70.0, 70.0, 100.0,              # left diag T, diag B, width
           70.0, 70.0, 100.0,              # right end
           "Center",
-          "NA", "NA", "NA", "NA", 460.0, 460.0,   # long + tip-to-tip ties
+          "NA", "NA", "NA", "NA",                 # long diagonals
+          474.5, 474.5,                           # LT-RT / LB-RB: near-true
           "NA", "NA", "NA", "NA",                 # the end-cut X, both ends
           "NA", "NA", "NA", "NA",                 # tips to far corners
           "No"],
@@ -125,7 +126,21 @@ xp=[p for p, a in vm.prompts if 'Cross dim' in p]
 assert len(xp) == 14, xp
 for tie in ("D-LB", "A-LT", "RB-C", "B-RT", "B-LT", "C-LB", "A-RT", "RB-D"):
     assert any(tie in p for p in xp), tie
-print("   grecian Center: 14 ties incl. the end-cut set, both sides")
+# the measured tip-to-tip widths are held like walls: the drawn LT-RT
+# must land within the 1" wall band of the tape (true is ~474.9)
+import math as _m
+pool_lines = [(tuple(d[10][:2]), tuple(d[11][:2]))
+              for d in drawn(vm, 'LINE', 'POOL')]
+verts = set()
+for a, b in pool_lines:
+    verts.add((round(a[0], 3), round(a[1], 3)))
+    verts.add((round(b[0], 3), round(b[1], 3)))
+# LT and RT are the leftmost/rightmost top-half vertices
+tops = [v for v in verts if v[1] > 100]
+lt = min(tops); rt = max(tops)
+ltrt = _m.dist(lt, rt)
+assert abs(ltrt - 474.5) <= 1.05, ltrt
+print("   Center's 14 ties asked; LT-RT held to the tape like a wall")
 
 print("== R6. octagon from A and B alone (Overall default), hopper ==")
 vm = run(["Insquare", "OC"] + BASE +

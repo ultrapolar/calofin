@@ -417,7 +417,9 @@ def _unit(p):
 GRECEDGES=[(0,1,1.0),(1,2,0.5),(2,3,0.1),(3,4,0.5),(4,5,1.0),
            (5,6,0.5),(6,7,0.1),(7,0,0.5),(0,5,1.0),(1,4,1.0)]
 GREC_SIMPLE=[(0,4),(1,5)]
-GREC_CENTER=[(0,4),(1,5),(7,3),(6,2)]
+GREC_CENTER=[(0,4),(1,5),(7,3),(6,2),(6,3),(7,2),
+             (5,7),(0,6),(2,4),(1,3),(1,6),(4,7),(0,3),(2,5)]
+TIPPAIRS={(6,3),(3,6),(7,2),(2,7)}    # LT-RT and LB-RB, either order
 GREC_COMPLEX=[(0,2),(0,3),(0,4),(0,6),(1,3),(1,5),(1,6),(1,7),
               (2,4),(2,5),(2,6),(2,7),(3,5),(3,6),(3,7),(4,6),(4,7),(5,7)]
 
@@ -474,7 +476,15 @@ def grec_fit(P, pairs, crossvals, mode):
     crosscons=[(i,j,crossvals.get((i,j))) for (i,j) in pairs]
     if mode=='Simple':
         return seed, failed0, edges, crosscons
-    pts,failed=fitpoly(seed,edges,crosscons,2.0)
+    # measured tip-to-tip widths are held like WALLS (edge band), the
+    # way the body chords A-D / B-C already are
+    fedge=list(edges); fcross=[]
+    for (i,j,t) in crosscons:
+        if t is not None and (i,j) in TIPPAIRS:
+            fedge.append((i,j,t,1.0))
+        else:
+            fcross.append((i,j,t))
+    pts,failed=fitpoly(seed,fedge,fcross,2.0)
     return pts, failed, edges, crosscons
 
 # a plausible slightly-out-of-square true Grecian, index order A B RB RT C D LT LB
@@ -1579,5 +1589,32 @@ assert v[0]=='sides' and v[1]=='sides' and v[2:]==['oval','corners','cmode','cro
 v=run_stages(S,[None,None,None,BACK,BACK,BACK,None,None,None,None,None])
 assert v[:7]==['sides','oval','corners','cmode','corners','oval','sides']
 print("   stages step back one at a time; the first stage can't go further")
+
+print("== 64. grecian tip-to-tip widths held like WALLS, not cross dims ==")
+# LT-RT / LB-RB are what B would be on an ideal grecian; A-D and B-C
+# (the body-end chords) are already edges.  A measured tip width joins
+# the edge family with the 1" wall band.
+_cv=full_cross(TRUE_G,GREC_CENTER)
+_t=_cv[(6,3)]
+# inside the wall band: the tape is held EXACTLY, no failure
+_c2=dict(_cv); _c2[(6,3)]=_t-0.8
+pts,failed,_,_ = grec_fit(TRUE_G,GREC_CENTER,_c2,'Center')
+assert not failed and abs(dist(pts[6],pts[3])-(_t-0.8))<1e-6
+# at 1.5" off, the fit lands at the wall band's edge (1" from the
+# tape) and the rest is pushed into the walls -- still no failure
+_c2=dict(_cv); _c2[(6,3)]=_t-1.5
+pts,failed,_,_ = grec_fit(TRUE_G,GREC_CENTER,_c2,'Center')
+assert not failed and abs(dist(pts[6],pts[3])-(_t-1.5))<=1.0+1e-6
+# a 2.5" disagreement cannot be reconciled: the tape is HELD (wall
+# priority) and the run is flagged -- the old cross treatment would
+# have silently split the difference and reported success
+_c2=dict(_cv); _c2[(6,3)]=_t-2.5
+pts,failed,_,_ = grec_fit(TRUE_G,GREC_CENTER,_c2,'Center')
+assert failed and abs(dist(pts[6],pts[3])-(_t-2.5))<0.01
+# an NA tip width stays a no-op: nothing to hold, nothing to pull
+_c2=dict(_cv); _c2[(6,3)]=None
+pts,failed,_,_ = grec_fit(TRUE_G,GREC_CENTER,_c2,'Center')
+assert not failed
+print("   measured LT-RT/LB-RB behave exactly like walls; NA stays free")
 
 print("\nALL CHECKS PASSED")
