@@ -7,7 +7,7 @@ working between Blender and CAD, plus an AutoLISP routine for AutoCAD:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| Pool Layout (AutoLISP) | `pool_layout_lisp/` | Draws rectangle / Grecian / Roman / L / lazy-L / oval pool plans from field measurements with tolerance fitting, hopper and sport bottoms, dimensions and a target-vs-actual report — plus `POOLDEMO` for an install check — see `pool_layout_lisp/README.md` |
+| Pool Layout (AutoLISP) | `pool_layout_lisp/` | Draws rectangle / Grecian / octagon / Roman / L / lazy-L / oval / round pool plans from field measurements with tolerance fitting, hopper and sport bottoms, dimensions and a target-vs-actual report — plus `POOLDEMO` for an install check — see `pool_layout_lisp/README.md` |
 
 ## Installation (either add-on)
 

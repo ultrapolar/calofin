@@ -960,9 +960,17 @@
                             (list 0.0 180.0) (list -50.0 125.0)
                             (list -50.0 55.0)))
 
-(defun pool:grecpreview (crosses / npts cen p q e c ent all pv k)
-  (setq npts pool:*grecnpts*
-        cen (list 0.0 0.0) all nil pv nil)
+;; An OCTAGON is the same eight-corner shape with the same edge list --
+;; only the proportions differ: its cuts run at 45 degrees (S = S1) and
+;; its short flats match the cut faces, where a grecian's ends are long
+;; and shallow.  Nominal guide: 460 x 180 with 52.5 cuts.
+(setq pool:*octnpts* (list (list 52.72 0.0) (list 407.28 0.0)
+                           (list 460.0 52.72) (list 460.0 127.28)
+                           (list 407.28 180.0) (list 52.72 180.0)
+                           (list 0.0 127.28) (list 0.0 52.72)))
+
+(defun pool:grecpreview (crosses npts / cen p q e c ent all pv k)
+  (setq cen (list 0.0 0.0) all nil pv nil)
   (foreach p npts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 8.0)))
   (foreach e pool:*grecedges*
@@ -988,10 +996,9 @@
 
 ;; Add the chosen mode's cross diagonals to the Grecian guide once the
 ;; perimeter is measured.  Returns the extended highlight assoc.
-(defun pool:greccross (crosses pv / c ent)
+(defun pool:greccross (crosses pv npts / c ent)
   (foreach c crosses
-    (setq ent (pool:pvadd (pool:pvlined (nth (car c) pool:*grecnpts*)
-                                        (nth (cadr c) pool:*grecnpts*)))
+    (setq ent (pool:pvadd (pool:pvlined (nth (car c) npts) (nth (cadr c) npts)))
           pv (cons (cons (caddr c) (list ent)) pv)))
   pv)
 
@@ -1012,20 +1019,50 @@
     (t (setq s1 (/ aov 6.0) v (* aov (/ 2.0 3.0)))))
   (list s tv s1 v))
 
+;; Octagon overall sheet.  With the letters unmeasured the shape is
+;; derived from A and B alone, per the sheet: the four corners are cut
+;; at 45 degrees (so S = S1 = c) and the SHORT flats equal the cut
+;; faces, i.e. every side of a square octagon is the same length.
+;;   c = min(A,B) / (2 + sqrt 2)   ->   T = B - 2c,  V = A - 2c
+;; Any letter that WAS measured wins and its partner is derived from
+;; it, exactly like the grecian sheet.  Returns (S T S1 V).
+(defun pool:octov (aov bov sraw traw s1raw vraw / c s tv s1 v)
+  (setq c (/ (min aov bov) 3.41421356237))
+  (cond
+    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
+    (traw (setq s (/ (- bov traw) 2.0) tv traw))
+    (t (setq s c tv (- bov (* 2.0 c)))))
+  (cond
+    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
+    (vraw (setq s1 (/ (- aov vraw) 2.0) v vraw))
+    ;; an unmeasured vertical cut matches the horizontal one (45 deg)
+    (t (setq s1 s v (- aov (* 2.0 s)))))
+  (list s tv s1 v))
+
 ;; Overall-sheet guide ties (B T S A S1 V S2) laid around the nominal
-;; grecian guide like the field sheet.  Returns the highlight assoc.
-(defun pool:grecovties ( / pv)
-  (setq pv (list
-    (pool:pvtie (list -50.0 240.0) (list 410.0 240.0) "B" 10.0)
-    (pool:pvtie (list 0.0 215.0) (list 360.0 215.0) "T" 10.0)
-    (pool:pvtie (list -50.0 215.0) (list 0.0 215.0) "S" 10.0)
-    (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
-    (pool:pvtie (list -72.0 125.0) (list -72.0 180.0) "S1" 10.0)
-    (pool:pvtie (list -72.0 55.0) (list -72.0 125.0) "V" 10.0)
-    (pool:pvtie (list 375.0 -15.0) (list 425.0 40.0) "S2" 10.0)))
+;; guide like the field sheet.  Returns the highlight assoc.
+(defun pool:grecovties (oct / pv)
+  (if oct
+      (setq pv (list
+        (pool:pvtie (list 0.0 240.0) (list 460.0 240.0) "B" 10.0)
+        (pool:pvtie (list 52.5 215.0) (list 407.5 215.0) "T" 10.0)
+        (pool:pvtie (list 0.0 215.0) (list 52.5 215.0) "S" 10.0)
+        (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
+        (pool:pvtie (list -45.0 127.5) (list -45.0 180.0) "S1" 10.0)
+        (pool:pvtie (list -45.0 52.5) (list -45.0 127.5) "V" 10.0)
+        (pool:pvtie (list 420.0 -18.0) (list 472.5 34.5) "S2" 10.0)))
+      (setq pv (list
+        (pool:pvtie (list -50.0 240.0) (list 410.0 240.0) "B" 10.0)
+        (pool:pvtie (list 0.0 215.0) (list 360.0 215.0) "T" 10.0)
+        (pool:pvtie (list -50.0 215.0) (list 0.0 215.0) "S" 10.0)
+        (pool:pvtie (list -95.0 0.0) (list -95.0 180.0) "A" 10.0)
+        (pool:pvtie (list -72.0 125.0) (list -72.0 180.0) "S1" 10.0)
+        (pool:pvtie (list -72.0 55.0) (list -72.0 125.0) "V" 10.0)
+        (pool:pvtie (list 375.0 -15.0) (list 425.0 40.0) "S2" 10.0))))
   pv)
 
-(defun pool:grecflow ( / oldclay mode crosses pv imeth pvo ovbad ans xitems
+(defun pool:grecflow (oct / oldclay mode crosses pv imeth pvo ovbad ans xitems
+                       nm2 npts
                        braw araw traw sraw s1raw vraw s2raw
                        ovres sv tv s1v vov hyp u2 vv2 bact aact sact s1act
                        tp bo le ri ltd lbd lew rtd rbd rew
@@ -1039,12 +1076,18 @@
   ;; perimeter input method first: measure every edge, or the overall
   ;; sheet (A/B overalls with the sides assumed symmetric).  The
   ;; cross-dim detail level is asked later, once the perimeter is in.
+  ;; An octagon defaults to Overall -- knowing A and B is enough to
+  ;; draw it, since its sides are all the same.
+  (setq nm2 (if oct "Octagon" "Grecian")
+        npts (if oct pool:*octnpts* pool:*grecnpts*))
   (initget 1 "Measured Overall")
-  (setq imeth (getkword "\nGrecian perimeter input [Measured/Overall]: "))
+  (setq imeth (getkword (strcat "\n" nm2 " perimeter input [Measured/Overall]"
+                                (if oct " <Overall>" "") ": ")))
+  (if (and oct (not imeth)) (setq imeth "Overall"))
 
   (setq mode "Simple" crosses nil
-        pv (pool:grecpreview nil))
-  (if (= imeth "Overall") (setq pvo (pool:grecovties)))
+        pv (pool:grecpreview nil npts))
+  (if (= imeth "Overall") (setq pvo (pool:grecovties oct)))
   (command "_.ZOOM" "_Window"
            (pool:wp (list -130.0 -80.0)) (pool:wp (list 470.0 310.0)))
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
@@ -1053,21 +1096,33 @@
   ;; -------- body + ends: measured edges, or the overall sheet
   (if (= imeth "Overall")
       (progn
-        (princ "\nOverall sheet -- symmetric grecian; the RED tie is being asked for.")
+        (princ (strcat "\nOverall sheet -- symmetric " (strcase nm2 t)
+                       "; the RED tie is being asked for."))
+        (if oct
+            (princ "\nThe cut letters may all be NA: A and B alone draw the octagon."))
         (princ "\n(after the first answer, Back re-asks the previous one)")
+        ;; in-square pools are symmetric, so A and B are asked ONCE
         (setq ans (pool:askseq
-                    (list (list 'b 'REQ "B - overall length" (cdr (assoc "B" pvo)))
-                          (list 'a 'REQ "A - overall width" (cdr (assoc "A" pvo)))
-                          (list 'tt 'NAX "T - top side length" (cdr (assoc "T" pvo)))
-                          (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
-                          (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
-                          (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
-                          (list 's2 'NAX "S2 - corner cut face (check)" (cdr (assoc "S2" pvo)))))
-              braw (pool:sq ans 'b) araw (pool:sq ans 'a)
+                    (append
+                      (if pool:*insq*
+                          (list (list 'b 'REQ "Overall size (A & B are equal)"
+                                      (append (cdr (assoc "B" pvo))
+                                              (cdr (assoc "A" pvo)))))
+                          (list (list 'b 'REQ "B - overall length" (cdr (assoc "B" pvo)))
+                                (list 'a 'REQ "A - overall width" (cdr (assoc "A" pvo)))))
+                      (list (list 'tt 'NAX "T - top side length" (cdr (assoc "T" pvo)))
+                            (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
+                            (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
+                            (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
+                            (list 's2 'NAX "S2 - corner cut face (check)" (cdr (assoc "S2" pvo))))))
+              braw (pool:sq ans 'b)
+              araw (if pool:*insq* braw (pool:sq ans 'a))
               traw (pool:sq ans 'tt) sraw (pool:sq ans 'ss)
               s1raw (pool:sq ans 's1) vraw (pool:sq ans 'vv)
               s2raw (pool:sq ans 's2)
-              ovres (pool:grecov araw braw sraw traw s1raw vraw)
+              ovres (if oct
+                        (pool:octov araw braw sraw traw s1raw vraw)
+                        (pool:grecov araw braw sraw traw s1raw vraw))
               sv (car ovres) tv (cadr ovres)
               s1v (caddr ovres) vov (cadddr ovres))
         ;; the sheet letters must close POSITIVE against the overalls;
@@ -1148,9 +1203,10 @@
   (if (not pool:*insq*)
       (progn
         (initget 1 "Simple Center Complex")
-        (setq mode (getkword "\nGrecian cross-dim detail [Simple/Center/Complex]: ")
+        (setq mode (getkword (strcat "\n" nm2
+                                     " cross-dim detail [Simple/Center/Complex]: "))
               crosses (pool:grecmode mode)
-              pv (pool:greccross crosses pv))))
+              pv (pool:greccross crosses pv npts))))
   (setq crosscons nil xitems nil k 0)
   (foreach e crosses
     (setq xitems (cons (list (read (strcat "x" (itoa k))) 'NAX
@@ -3675,6 +3731,99 @@
       (princ "\nPool layout complete -- see the report table."))
   (princ))
 
+;;; -------------------- round pools ------------------------------------
+;;;
+;;;  A round pool is a circle when it is in square and an ellipse when
+;;;  the two overalls disagree -- B across, A up, both measured through
+;;;  the middle.  There are no corners to best-fit, so the perimeter is
+;;;  drawn exactly to the overalls and the report shows them as-drawn.
+;;;
+;;;  The interior is the True Oval hopper / sport bottom set, measured
+;;;  off the pool's own extremes: H from the left edge, E to the right
+;;;  edge, M/K off the top and bottom -- so H+G+F+E = B and M+L+K = A,
+;;;  exactly like the field sheet.
+
+;; Circle (a = b) or axis-aligned ellipse, on layer lay.
+(defun pool:roundbody (cen b a lay)
+  (if (< (abs (- a b)) 1.0e-6)
+      (entmake (list '(0 . "CIRCLE")
+                     (cons 8 lay)
+                     (cons 10 (pool:wp cen))
+                     (cons 40 (* 0.5 b))))
+      (entmake (list '(0 . "ELLIPSE")
+                     '(100 . "AcDbEntity")
+                     (cons 8 lay)
+                     '(100 . "AcDbEllipse")
+                     (cons 10 (pool:wp cen))
+                     (cons 11 (list (* 0.5 b) 0.0 0.0))   ; major axis, relative
+                     (cons 210 '(0.0 0.0 1.0))
+                     (cons 40 (/ a b))                    ; minor / major
+                     (cons 41 0.0)
+                     (cons 42 (* 2.0 pi))))))
+
+;; Gray nominal round guide with its two overall ties.
+(defun pool:roundpreview ( / cen pv)
+  (setq cen (list 180.0 180.0))
+  (pool:roundbody cen 360.0 360.0 "POOL-NOTES")
+  (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
+  (setq pv (list
+    (pool:pvtie (list 0.0 415.0) (list 360.0 415.0) "B" 12.0)
+    (pool:pvtie (list -55.0 0.0) (list -55.0 360.0) "A" 12.0)))
+  pv)
+
+;; Full guided flow for round pools.
+(defun pool:roundflow ( / oldclay pv ans braw araw b a cen quad tipl tipr
+                          doff th rows notes xmax ymax)
+  (setq oldclay (getvar "CLAYER"))
+  (setq pv (pool:roundpreview))
+  (command "_.ZOOM" "_Window"
+           (pool:wp (list -140.0 -80.0)) (pool:wp (list 500.0 470.0)))
+  (princ "\nRound pool -- B across and A up, both through the middle.")
+  (princ "\n(after the first answer, Back re-asks the previous one)")
+  ;; in square, the two overalls are the same measurement
+  (setq ans (pool:askseq
+              (if pool:*insq*
+                  (list (list 'b 'REQ "Overall diameter (A & B are equal)"
+                              (append (cdr (assoc "B" pv)) (cdr (assoc "A" pv)))))
+                  (list (list 'b 'REQ "B - overall length (across)"
+                              (cdr (assoc "B" pv)))
+                        (list 'a 'REQ "A - overall width (up)"
+                              (cdr (assoc "A" pv))))))
+        braw (pool:sq ans 'b)
+        araw (if pool:*insq* braw (pool:sq ans 'a))
+        b braw a araw)
+  (pool:pvkill)
+
+  (setq cen (list (* 0.5 b) (* 0.5 a))
+        doff (max 12.0 (/ (max b a) 18.0))
+        th (max 3.0 (/ (max b a) 70.0))
+        notes nil
+        pool:*dashlt* (pool:ltload "DASHED"))
+  (pool:roundbody cen b a "POOL")
+  (if (> (abs (- a b)) 1.0e-6)
+      (princ "\nOut of square: the two overalls differ, so the pool is drawn as an ellipse.")
+      (princ "\nIn square: A and B agree, so the pool is drawn as a true circle."))
+
+  ;; the bounding box IS the hopper's frame: H/E off the left and right
+  ;; extremes, M/K off the top and bottom
+  (setq quad (list (list 0.0 0.0) (list b 0.0) (list b a) (list 0.0 a))
+        tipl (list 0.0 (* 0.5 a))
+        tipr (list b (* 0.5 a))
+        xmax b ymax a)
+
+  (setvar "CLAYER" "DIMENSION")
+  (pool:dimalg tipl tipr (list (* 0.5 b) (- 0.0 (* 1.4 doff))))
+  (pool:dimalg (list (* 0.5 b) 0.0) (list (* 0.5 b) a)
+               (list (- 0.0 (* 1.4 doff)) (* 0.5 a)))
+  (setvar "CLAYER" oldclay)
+
+  (setq rows (list (list "OV B" braw b) (list "OV A" araw a))
+        rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
+  (setq notes (append notes pool:*valnotes*))
+  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (princ "\nPool layout complete -- see the report table.")
+  (princ))
+
 ;;; -------------------- roman pools ------------------------------------
 ;;;
 ;;;  Rectangle body of side length T and width A, with a radius end
@@ -4029,8 +4178,12 @@
       (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
   ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
-  (initget 1 "Rectangle Grecian ROman L LAzyl Oval")
-  (setq ptype (getkword "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval]: "))
+  ;; OCtagon sits with the grecian (same eight-corner shape) and ROUnd
+  ;; with the oval; type RO for a roman, ROU for a round.
+  (initget 1 "Rectangle Grecian OCtagon ROman L LAzyl Oval ROUnd")
+  (setq ptype (getkword
+                (strcat "\nPool shape [Rectangle/Grecian/OCtagon/ROman/L/"
+                        "LAzyl/Oval/ROUnd]: ")))
 
   ;; the base point is picked with the user's own snaps still live;
   ;; only afterwards do snaps drop for the command-fed drawing work
@@ -4052,8 +4205,10 @@
   (cond
     ((= ptype "L") (pool:hexflow nil))
     ((= ptype "LAzyl") (pool:hexflow t))
-    ((= ptype "Grecian") (pool:grecflow))
+    ((= ptype "Grecian") (pool:grecflow nil))
+    ((= ptype "OCtagon") (pool:grecflow t))
     ((= ptype "ROman") (pool:romanflow))
+    ((= ptype "ROUnd") (pool:roundflow))
     (t (pool:quadflow ptype)))
 
   ;; ------------------------------------------------ finish

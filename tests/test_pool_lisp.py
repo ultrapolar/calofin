@@ -1438,4 +1438,72 @@ _v,_f = chainval([60.0,-20.0,380.0,60.0],480.0)
 assert _v == [60.0,12.0,348.0,60.0] and _f == [1,2] and abs(sum(_v)-480.0) < 1e-9
 print("   every demo cell's numbers close, fit and are reachable")
 
+print("== 59. octagon: same 8 corners as a grecian, drawn from A and B ==")
+def octov(a,b,s=None,t=None,s1=None,v=None):
+    """Mirror of pool:octov."""
+    c=min(a,b)/(2.0+math.sqrt(2.0))
+    if   s is not None: S,T = s,b-2*s
+    elif t is not None: S,T = (b-t)/2.0,t
+    else:               S,T = c,b-2*c
+    if   s1 is not None: S1,V = s1,a-2*s1
+    elif v is not None:  S1,V = (a-v)/2.0,v
+    else:                S1,V = S,a-2*S     # unmeasured cut is 45 deg
+    return S,T,S1,V
+def octpts(a,b,S,T,S1,V):
+    """The 8 corners in POOL.LSP's order: A B RB RT C D LT LB."""
+    return [(S,0.0),(S+T,0.0),(b,S1),(b,S1+V),(S+T,a),(S,a),(0.0,S1+V),(0.0,S1)]
+
+# a square octagon needs nothing but A = B: all eight sides come out equal
+S,T,S1,V = octov(360.0,360.0)
+face=math.hypot(S,S1)
+assert abs(T-V)<1e-9 and abs(T-face)<1e-6
+assert abs(S+T+S-360.0)<1e-9 and abs(S1+V+S1-360.0)<1e-9
+pts=octpts(360.0,360.0,S,T,S1,V)
+sides=[dist(pts[i],pts[(i+1)%8]) for i in range(8)]
+assert max(sides)-min(sides)<1e-6, sides        # a REGULAR octagon
+# elongated: cuts stay 45 deg, the short flat still equals the cut face
+S,T,S1,V = octov(240.0,480.0)
+assert abs(S-S1)<1e-9 and abs(V-math.hypot(S,S1))<1e-6 and T>V
+assert abs(S+T+S-480.0)<1e-9 and abs(S1+V+S1-240.0)<1e-9
+# a measured letter wins and derives its partner, like the grecian sheet
+assert octov(240.0,480.0,t=300.0)[:2]==(90.0,300.0)
+assert abs(octov(240.0,480.0,v=100.0)[2]-70.0)<1e-9
+# the shape reuses the grecian edge list, so every edge must be real
+S,T,S1,V = octov(240.0,480.0)
+pts=octpts(240.0,480.0,S,T,S1,V)
+for i,j,_ in [(0,1,'ab'),(1,2,'rbd'),(2,3,'rew'),(3,4,'rtd'),(4,5,'cd'),
+              (5,6,'ltd'),(6,7,'lew'),(7,0,'lbd')]:
+    assert dist(pts[i],pts[j])>1e-6
+# and the body chords A-D / B-C are the overall width
+assert abs(dist(pts[0],pts[5])-240.0)<1e-9
+assert abs(dist(pts[1],pts[4])-240.0)<1e-9
+# the nominal guide is itself a true octagon
+NP=[(52.72,0.0),(407.28,0.0),(460.0,52.72),(460.0,127.28),
+    (407.28,180.0),(52.72,180.0),(0.0,127.28),(0.0,52.72)]
+assert abs(dist(NP[7],NP[0])-dist(NP[6],NP[7]))<0.01   # cut face == short flat
+print("   A+B alone give a regular octagon; measured letters still win")
+
+print("== 60. round pool: circle in square, ellipse out of square ==")
+def roundframe(b,a):
+    """Mirror of pool:roundflow's hopper frame: the bounding box, with
+    the tips at the left and right extremes."""
+    return ([(0.0,0.0),(b,0.0),(b,a),(0.0,a)], (0.0,a/2.0), (b,a/2.0))
+# in square -> one measurement, a true circle
+q,tl,tr = roundframe(360.0,360.0)
+assert dist(tl,tr)==360.0 and dist(q[0],q[3])==360.0
+# out of square -> ellipse; ratio is minor/major as the DXF wants
+b,a = 480.0,300.0
+assert a/b == 0.625
+q,tl,tr = roundframe(b,a)
+# the hopper chain closes on the overalls, exactly like the field sheet
+h,g,f,e = 60.0,150.0,150.0,120.0
+assert h+g+f+e == b
+m,l,k = 60.0,180.0,60.0
+assert m+l+k == a
+# H is measured from the left extreme, E to the right one
+assert tl[0]==0.0 and tr[0]==b
+# and the hopper's radius end sits at H from that extreme
+assert 0.0+h == 60.0
+print("   overalls drive the body and the hopper chain closes on them")
+
 print("\nALL CHECKS PASSED")

@@ -1,7 +1,7 @@
 # POOL.LSP — swimming-pool as-built layout for AutoCAD
 
 AutoLISP routine that draws a pool plan (**Rectangle**, **Grecian**,
-**Roman**, **L**, **Lazy L** or **Oval**) from real-world field
+**Octagon**, **Roman**, **L**, **Lazy L**, **Oval** or **Round**) from real-world field
 measurements, dimensions it, and writes a target / actual / delta
 report next to the drawing.
 
@@ -53,21 +53,24 @@ A ---------- B        cross:  A-C and B-D
 1. **In-square or out-of-square?** An **in-square** pool is built true
    to the side/end measurements — no diagonals are asked for or drawn.
    An **out-of-square** pool takes the full cross-dim route below.
-2. Pool shape: `Rectangle` / `Grecian` / `ROman` / `L` / `LAzyl` /
-   `Oval` (type `L` for a true L, `LA` for a lazy L, `RO` for a
-   Roman).
+2. Pool shape: `Rectangle` / `Grecian` / `OCtagon` / `ROman` / `L` /
+   `LAzyl` / `Oval` / `ROUnd` (type `L` for a true L, `LA` for a lazy
+   L, `OC` for an octagon, `RO` for a Roman, `ROU` for a round).
 3. Insertion base point.
 4. **Every perimeter measurement first** — side lengths, end lengths,
    and the shape's own perimeter letters (an oval's total length and
    end radii, a Grecian's end diagonals and widths, a Roman's `S`/`S1`
-   /`V`/`R`).
+   /`V`/`R`, an octagon's `A`/`B` and cut letters, a round pool's two
+   overalls).
 5. **Then the cross dimensions** *(out-of-square only)*: A-C and B-D
    on a rectangle/oval/Roman, nine diagonals on an L, and the chosen
-   detail level's set on a Grecian.
+   detail level's set on a Grecian or octagon. A round pool has no
+   corners, so it is never asked for any.
 6. The pool bottom: `Yes`/`No`, then a bottom type
    (`Normal` / `Sport` / `Wedge` / `SLope` / `MOdflat` / `SHallow`;
    L and Lazy L take the standard hopper only) and that type's
-   letters.
+   letters. A round pool takes the oval's bottoms (its `Normal` is the
+   radius-end hopper on the sheet).
 
 Nothing about the cross dims appears until the perimeter is complete —
 **the guide draws no diagonals while a side length is being asked
@@ -585,6 +588,44 @@ Nothing is drawn but the pool: the end chords and the old radius
 construction lines are gone, so an oval is two side lines plus the two
 end arcs. The radius is dimensioned **on the arc, read from outside**
 — no dimension running back to the circle centre.
+
+### Octagon
+
+An octagon is the **same eight-corner shape as a Grecian** — same
+corners, same edges, same fitting — with the field sheet's own
+proportions: the four corners are cut at **45°** (so `S` = `S1`) and
+the short flats match the cut faces, where a Grecian's ends are long
+and shallow. It therefore inherits everything the Grecian has: the
+cross-dim levels, the best-fit, the hoppers.
+
+It uses the **overall sheet** by default (press Enter at the input
+prompt), and **`A` and `B` alone are enough to draw it** — every cut
+letter may be `NA`:
+
+* both cut letters `NA` → the cuts come out at 45° with
+  `c = min(A,B) / (2 + √2)`, which makes **all eight sides equal** on
+  a square octagon (`A` = `B`) and keeps the short flats equal to the
+  cut faces on an elongated one;
+* any letter you *did* measure still wins and derives its partner
+  (`S+T+S = B`, `S1+V+S1 = A`), exactly like the Grecian sheet;
+* `S2` (the cut face) is a check against √(S²+S1²).
+
+**In square**, `A` and `B` are the same measurement, so the overall is
+asked **once**.
+
+### Round
+
+A round pool is a **circle when it is in square** and an **ellipse**
+when the two overalls disagree — `B` across and `A` up, both measured
+through the middle. There are no corners to best-fit, so the perimeter
+is drawn exactly to the overalls. **In square**, one prompt: `A` and
+`B` are the same measurement.
+
+The interior is the **True Oval hopper / sport bottom** set, measured
+off the pool's own extremes — `H` from the left edge, `E` to the right
+edge, `M`/`K` off the top and bottom — so `H+G+F+E = B` and
+`M+L+K = A`, exactly like the field sheet. The hopper's radius end and
+its full-width slope break draw the same way they do in an oval.
 
 ### Grecian ends
 

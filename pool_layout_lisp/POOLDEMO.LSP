@@ -245,6 +245,45 @@
                (list "BOTTOM LENGTHS FAILED - G/F ADJUSTED, VERIFY")
                540.0 240.0 9.0 "POOL-NOTES"))
 
+;; 10. octagon drawn from A and B alone, with a square hopper
+(defun pooldemo:c10 (org / c pts gg)
+  (pooldemo:cap org "10  OCTAGON / drawn from A and B alone / square hopper")
+  ;; A = B = 420 -> a regular octagon: c = A / (2 + root 2)
+  (setq c (/ 420.0 3.41421356237)
+        pts (list (list c 0.0) (list (- 420.0 c) 0.0)
+                  (list 420.0 c) (list 420.0 (- 420.0 c))
+                  (list (- 420.0 c) 420.0) (list c 420.0)
+                  (list 0.0 (- 420.0 c)) (list 0.0 c)))
+  (pool:line (nth 0 pts) (nth 1 pts) "POOL")
+  (pool:line (nth 1 pts) (nth 2 pts) "POOL")
+  (pool:line (nth 2 pts) (nth 3 pts) "POOL")
+  (pool:line (nth 3 pts) (nth 4 pts) "POOL")
+  (pool:line (nth 4 pts) (nth 5 pts) "POOL")
+  (pool:line (nth 5 pts) (nth 6 pts) "POOL")
+  (pool:line (nth 6 pts) (nth 7 pts) "POOL")
+  (pool:line (nth 7 pts) (nth 0 pts) "POOL")
+  (setvar "CLAYER" "DIMENSION")
+  (pool:dimalg (list 0.0 0.0) (list 420.0 0.0) (list 210.0 -60.0))
+  (pool:dimalg (nth 7 pts) (nth 0 pts)
+               (pool:v+ (pool:mid (nth 7 pts) (nth 0 pts)) (list -30.0 -30.0)))
+  (setvar "CLAYER" "POOL")
+  (setq gg (pool:hopgrecc pts 90.0 110.0 130.0 90.0 90.0 nil nil))
+  (pool:hopgrecdraw gg "POOL" nil nil))
+
+;; 11. round pool: a true circle in square, with the radius-end hopper
+(defun pooldemo:c11 (org / quad tipl tipr gg)
+  (pooldemo:cap org "11  ROUND / in-square circle / TRUE-OVAL hopper")
+  (pool:roundbody (list 210.0 210.0) 420.0 420.0 "POOL")
+  (setq quad (list (list 0.0 0.0) (list 420.0 0.0)
+                   (list 420.0 420.0) (list 0.0 420.0))
+        tipl (list 0.0 210.0) tipr (list 420.0 210.0))
+  (setvar "CLAYER" "DIMENSION")
+  (pool:dimalg tipl tipr (list 210.0 -60.0))
+  (setvar "CLAYER" "POOL")
+  ;; H 70 + G 150 + F 110 + E 90 = 420 ; M 90 + L 240 + K 90 = 420
+  (setq gg (pool:hopovalc quad tipl tipr 70.0 150.0 90.0 90.0 90.0 120.0))
+  (pool:hopovaldraw gg "POOL" nil))
+
 ;;; -------------------- the command ------------------------------------
 
 (defun c:POOLDEMO ( / *error* cells k org)
@@ -281,7 +320,7 @@
   (princ "\nPOOLDEMO -- drawing one example of every shape and bottom ...")
   (setq cells (list 'pooldemo:c1 'pooldemo:c2 'pooldemo:c3 'pooldemo:c4
                     'pooldemo:c5 'pooldemo:c6 'pooldemo:c7 'pooldemo:c8
-                    'pooldemo:c9)
+                    'pooldemo:c9 'pooldemo:c10 'pooldemo:c11)
         k 0)
   (foreach fn cells
     (setq org (list (* pooldemo:*colw* (rem k 3))
