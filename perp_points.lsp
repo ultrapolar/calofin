@@ -17,7 +17,8 @@
 ;;; many times as you like.
 ;;;
 ;;; Workflow
-;;;   1. Select a LINE.
+;;;   1. Select a LINE (a polyline is also accepted, so work started in
+;;;      an earlier session can be resumed).
 ;;;   2. Click a point to set the direction:
 ;;;        - the line end nearest the click becomes START, the far end
 ;;;          FINISH, fixing the order the lengths are entered in;
@@ -25,7 +26,8 @@
 ;;;          points are offset toward.
 ;;;   3. Enter how many values (points) are required  (>= 2).
 ;;;   4. Enter a length for each point, in order START -> FINISH.
-;;;      Press Enter to reuse the previous length when it repeats.
+;;;      Press Enter to reuse the previous length when it repeats, or
+;;;      type U to step back and re-enter the previous point.
 ;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 4 with the new polyline as
 ;;;      the path.
@@ -34,10 +36,24 @@
 ;;; reused for every round, so all offsets stay on the same side of the
 ;;; original line and every dimension stays perpendicular to it.
 ;;;
+;;; Robustness
+;;;   * The whole run is one UNDO group: a single U reverses everything.
+;;;   * Esc or an error at any prompt restores every system variable it
+;;;     changed (OSMODE, CMDECHO, PDMODE, CLAYER), erases the temporary
+;;;     guides and closes the UNDO group.
+;;;   * Bad input re-prompts instead of aborting the command; zero and
+;;;     negative lengths are rejected, as is a direction click that lands
+;;;     on the line itself (where "which side" would be ambiguous).
+;;;   * All geometry is handled in the current UCS, so the command works
+;;;     in a rotated or shifted UCS.
+;;;   * Output goes on its own layers: PERPPTS-PLINE and PERPPTS-DIM.
+;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
 
-;; --- helpers ---------------------------------------------------------
+(vl-load-com)
+
+;; --- geometry helpers ------------------------------------------------
 
 ;; linear interpolation between two 3D points at parameter tt (0..1)
 (defun perp:lerp (a b tt)
@@ -81,59 +97,188 @@
           i   (1+ i)))
   (reverse out))
 
+;; drop consecutive duplicate points (a polyline may carry them)
+(defun perp:dedupe (pts / out)
+  (setq out (list (car pts)))
+  (foreach p (cdr pts)
+    (if (> (distance p (car out)) 1e-10)
+      (setq out (cons p out))))
+  (reverse out))
+
+;; vertices of a LINE / LWPOLYLINE / POLYLINE, in the current UCS.
+;; Returns nil for anything else.
+(defun perp:verts (e / d et el pts sub sd flg)
+  (setq d  (entget e)
+        et (cdr (assoc 0 d)))
+  (cond
+    ;; LINE group 10/11 are WCS
+    ((= et "LINE")
+     (list (trans (cdr (assoc 10 d)) 0 1)
+           (trans (cdr (assoc 11 d)) 0 1)))
+    ;; LWPOLYLINE group 10 are OCS 2D points at elevation 38
+    ((= et "LWPOLYLINE")
+     (setq el  (cond ((cdr (assoc 38 d))) (0.0))
+           pts '())
+     (foreach x d
+       (if (= 10 (car x))
+         (setq pts (cons (trans (list (cadr x) (caddr x) el) e 1) pts))))
+     (reverse pts))
+    ;; heavy POLYLINE: walk the VERTEX entities, OCS points
+    ((= et "POLYLINE")
+     (setq pts '() sub (entnext e))
+     (while (and sub
+                 (setq sd (entget sub))
+                 (/= "SEQEND" (cdr (assoc 0 sd))))
+       (setq flg (cond ((cdr (assoc 70 sd))) (0)))
+       ;; skip spline-frame control points and mesh vertices
+       (if (and (= "VERTEX" (cdr (assoc 0 sd)))
+                (zerop (logand 16 flg))
+                (zerop (logand 64 flg)))
+         (setq pts (cons (trans (cdr (assoc 10 sd)) e 1) pts)))
+       (setq sub (entnext sub)))
+     (reverse pts))
+    (t nil)))
+
+;; make sure a layer exists and is usable (thawed, unlocked, on)
+(defun perp:layer (nm col / en d)
+  (if (setq en (tblobjname "LAYER" nm))
+    (progn
+      (setq d (entget en))
+      ;; clear the frozen (1) and locked (4) bits
+      (setq d (subst (cons 70 (logand (cdr (assoc 70 d)) (~ 5)))
+                     (assoc 70 d) d))
+      ;; a negative colour number means the layer is switched off
+      (if (< (cdr (assoc 62 d)) 0)
+        (setq d (subst (cons 62 (abs (cdr (assoc 62 d)))) (assoc 62 d) d)))
+      (entmod d))
+    (entmake (list '(0 . "LAYER")
+                   '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 nm) '(70 . 0) (cons 62 col)
+                   '(6 . "Continuous"))))
+  nm)
+
 ;; --- command ---------------------------------------------------------
 
-(defun c:PERPPTS (/ *error* os ent edata p1 p2 pStart pFinish click
-                    dx dy dlen ux uy cross nx ny sz
+(defun c:PERPPTS (/ *error* perp:kill perp:finish
+                    os ce pd clay undoOpen tmpEnts
+                    sel ent etype verts p1 p2 pStart pFinish click
+                    dx dy dlen ux uy cross fuzz nx ny sz
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
-                    arrowEnts path n basePts newPts guideEnts
-                    len lastLen i base bx by np npx npy again iter p e)
+                    path n lastN basePts newPts guideEnts total
+                    len lastLen i base np again ans iter p e seg)
+
+  ;; erase one temporary entity and forget it
+  (defun perp:kill (e)
+    (if e
+      (progn (if (entget e) (entdel e))
+             (setq tmpEnts (vl-remove e tmpEnts)))))
+
+  ;; single cleanup path shared by normal exit, Esc and errors
+  (defun perp:finish (/ guard)
+    ;; cancel any command left pending by an Esc mid-PLINE/DIMALIGNED
+    (setq guard 0)
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+      (command)
+      (setq guard (1+ guard)))
+    (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
+    (setq tmpEnts nil)
+    (if clay (setvar "CLAYER"  clay))
+    (if pd   (setvar "PDMODE"  pd))
+    (if os   (setvar "OSMODE"  os))
+    (if ce   (setvar "CMDECHO" ce))
+    (if undoOpen
+      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
 
   (defun *error* (msg)
-    (if os (setvar "OSMODE" os))
+    (perp:finish)
     (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
-      (princ (strcat "\nError: " msg)))
+      (princ (strcat "\nError: " msg))
+      (princ "\nCancelled."))
     (princ))
 
-  ;; --- 1. select a line ------------------------------------------------
-  (setq ent (entsel "\nSelect a line: "))
-  (if (null ent)
-    (progn (princ "\nNothing selected.") (exit)))
-  (setq edata (entget (car ent)))
-  (if (/= "LINE" (cdr (assoc 0 edata)))
-    (progn (princ "\nSelected object is not a line.") (exit)))
-  (setq p1 (cdr (assoc 10 edata))          ; line start point
-        p2 (cdr (assoc 11 edata)))         ; line end point
+  ;; --- save state and open one undo group for the whole run -----------
+  (setq os   (getvar "OSMODE")
+        ce   (getvar "CMDECHO")
+        pd   (getvar "PDMODE")
+        clay (getvar "CLAYER")
+        tmpEnts '())
+  (setvar "CMDECHO" 0)
+  (command "._UNDO" "_Begin")
+  (setq undoOpen T)
+  ;; guide points must be visible whatever the drawing's PDMODE is
+  (if (member pd '(0 1)) (setvar "PDMODE" 3))
+
+  ;; --- 1. select a line (re-prompts until valid) -----------------------
+  (setq ent nil)
+  (while (null ent)
+    (setq sel (entsel "\nSelect a line or polyline: "))
+    (cond
+      ((null sel)
+       (princ "\nNothing selected - try again, or press Esc to quit."))
+      (t
+       (setq etype (cdr (assoc 0 (entget (car sel))))
+             verts (perp:verts (car sel)))
+       (cond
+         ((null verts)
+          (princ (strcat "\nA " etype " is not a line or polyline.")))
+         ((< (length (setq verts (perp:dedupe verts))) 2)
+          (princ "\nThat object has no usable length."))
+         ((<= (distance (car verts) (last verts)) 1e-9)
+          (princ "\nStart and end coincide - a closed shape has no direction."))
+         (t (setq ent (car sel)))))))
+
+  (setq p1 (car verts)                       ; first endpoint (UCS)
+        p2 (last verts))                     ; last endpoint  (UCS)
 
   ;; --- 2. click to set direction (START/FINISH) and offset side -------
-  (setq click (getpoint "\nClick to pick direction / offset side: "))
-  (if (null click)
-    (progn (princ "\nNo direction picked.") (exit)))
-
-  ;; nearest endpoint to the click = START
-  (if (<= (distance click p1) (distance click p2))
-    (setq pStart p1 pFinish p2)
-    (setq pStart p2 pFinish p1))
-
-  ;; unit vector along the line, START -> FINISH
-  (setq dx   (- (car pFinish) (car pStart))
-        dy   (- (cadr pFinish) (cadr pStart))
-        dlen (sqrt (+ (* dx dx) (* dy dy))))
-  (if (equal dlen 0.0 1e-9)
-    (progn (princ "\nLine has zero length.") (exit)))
-  (setq ux (/ dx dlen)
-        uy (/ dy dlen))
+  ;; Snapping is off so the click cannot be pulled onto the line itself,
+  ;; which would make "which side" ambiguous.
+  (setvar "OSMODE" 0)
+  (setq click nil)
+  (while (null click)
+    (setq click (getpoint "\nClick to pick direction / offset side: "))
+    (cond
+      ((null click)
+       (princ "\nA point is required - click one side of the line."))
+      (t
+       ;; nearest endpoint to the click = START
+       (if (<= (distance click p1) (distance click p2))
+         (setq pStart p1 pFinish p2)
+         (setq pStart p2 pFinish p1))
+       (setq dx   (- (car pFinish)  (car pStart))
+             dy   (- (cadr pFinish) (cadr pStart))
+             dlen (sqrt (+ (* dx dx) (* dy dy))))
+       (cond
+         ((equal dlen 0.0 1e-9)
+          (princ "\nSelected object has zero length.")
+          (perp:finish)
+          (exit))
+         (t
+          (setq ux (/ dx dlen)
+                uy (/ dy dlen))
+          ;; cross = signed distance from the infinite line;
+          ;; >0 => click is on the left.
+          (setq cross (- (* ux (- (cadr click) (cadr pStart)))
+                         (* uy (- (car click)  (car pStart))))
+                fuzz  (max 1e-8 (* dlen 1e-6)))
+          (if (< (abs cross) fuzz)
+            (progn
+              (princ "\nThat point is on the line - click clearly to one side.")
+              (setq click nil))))))))
 
   ;; perpendicular unit vector, chosen toward the clicked side.  This is
   ;; fixed for the whole command: every offset and dimension in every
   ;; round is measured along this direction, i.e. perpendicular to the
   ;; ORIGINAL line -- never to a later polyline.
-  ;; cross = ux*(cy-sy) - uy*(cx-sx); >0 => click is on the left.
-  (setq cross (- (* ux (- (cadr click) (cadr pStart)))
-                 (* uy (- (car click)  (car pStart)))))
   (if (>= cross 0.0)
     (setq nx (- uy) ny ux)          ; left normal
     (setq nx uy     ny (- ux)))     ; right normal
+
+  ;; --- prepare the output layers --------------------------------------
+  (perp:layer "PERPPTS-TEMP"  1)    ; guides, erased before the command ends
+  (perp:layer "PERPPTS-PLINE" 3)
+  (perp:layer "PERPPTS-DIM"   4)
 
   ;; --- draw an arrow pointing at the START end ------------------------
   ;; The arrow comes in from outside the line (along the FINISH->START
@@ -154,43 +299,51 @@
         b1y (+ (cadr pStart) (* hlen (+ (* bkx sa) (* bky ca))))
         b2x (+ (car pStart)  (* hlen (+ (* bkx ca) (* bky sa))))
         b2y (+ (cadr pStart) (* hlen (+ (* (- bkx) sa) (* bky ca)))))
-  (setq arrowEnts '())
-  ;; shaft
-  (entmake (list '(0 . "LINE") '(62 . 1)
-                 (list 10 tailx taily sz)
-                 (list 11 (car pStart) (cadr pStart) sz)))
-  (setq arrowEnts (cons (entlast) arrowEnts))
-  ;; two arrowhead barbs meeting at the tip (START)
-  (entmake (list '(0 . "LINE") '(62 . 1)
-                 (list 10 (car pStart) (cadr pStart) sz)
-                 (list 11 b1x b1y sz)))
-  (setq arrowEnts (cons (entlast) arrowEnts))
-  (entmake (list '(0 . "LINE") '(62 . 1)
-                 (list 10 (car pStart) (cadr pStart) sz)
-                 (list 11 b2x b2y sz)))
-  (setq arrowEnts (cons (entlast) arrowEnts))
+  ;; entmade LINE points are WCS, so convert from the current UCS
+  (foreach seg (list (list (list tailx taily sz) pStart)
+                     (list pStart (list b1x b1y sz))
+                     (list pStart (list b2x b2y sz)))
+    (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP") '(62 . 1)
+                   (cons 10 (trans (car seg)  1 0))
+                   (cons 11 (trans (cadr seg) 1 0))))
+    (setq tmpEnts (cons (entlast) tmpEnts)))
 
   ;; --- offset rounds --------------------------------------------------
-  (setq os (getvar "OSMODE"))
-  (setvar "OSMODE" 0)                       ; no snapping while placing
-
-  ;; the path the points are spaced along.  Round 1 uses the original
-  ;; line; each later round uses the polyline the previous round built.
-  (setq path  (list pStart pFinish)
+  ;; the path the points are spaced along.  Round 1 uses the selected
+  ;; object, oriented START -> FINISH; each later round uses the polyline
+  ;; the previous round built.
+  (setq path (if (equal pStart (car verts) 1e-9) verts (reverse verts))
         again "Yes"
-        iter  0)
+        iter  0
+        total 0)
 
-  (while (= again "Yes")
+  (while (equal again "Yes")
     (setq iter (1+ iter))
 
     ;; --- how many values / points for this round ---------------------
-    (setq n (getint (strcat "\nRound " (itoa iter)
-                            " - how many values (points) are required? ")))
-    (if (or (null n) (< n 2))
-      (progn (princ "\nNeed at least 2 points.")
-             (foreach e arrowEnts (if e (entdel e)))
-             (setvar "OSMODE" os)
-             (exit)))
+    ;; Enter reuses the previous round's count.
+    (setq n nil)
+    (while (null n)
+      (initget 6)                            ; no zero, no negative
+      (setq n (getint (strcat "\nRound " (itoa iter)
+                              " - how many values (points) are required?"
+                              (if lastN (strcat " <" (itoa lastN) ">") "")
+                              " ")))
+      (if (null n) (setq n lastN))           ; Enter = same count as last round
+      (cond
+        ((null n)
+         (princ "\nA number is required."))
+        ((< n 2)
+         (princ "\nNeed at least 2 points.")
+         (setq n nil))
+        ((> n 100)
+         ;; guard against a mistyped count creating thousands of entities
+         (initget "Yes No")
+         (setq ans (getkword
+                     (strcat "\n" (itoa n) " points means " (itoa n)
+                             " dimensions. Continue? [Yes/No] <No>: ")))
+         (if (not (equal ans "Yes")) (setq n nil)))))
+    (setq lastN n)
 
     ;; base points, equally spaced along the current path.  The offset
     ;; side (nx,ny) was fixed from the direction click and is reused for
@@ -198,54 +351,70 @@
     (setq basePts (perp:sample path n))
 
     ;; --- length per point + build the new perpendicular points -------
-    ;; Pressing Enter reuses the last length entered (shown as the
-    ;; prompt default), since runs of equal lengths are common.  The
-    ;; last value carries across rounds too.  Esc still cancels.
+    ;; Enter reuses the last length entered (shown as the prompt
+    ;; default), since runs of equal lengths are common; the last value
+    ;; carries across rounds.  U steps back a point.  Zero and negative
+    ;; lengths are rejected, so a dimension is never degenerate and the
+    ;; offset can never flip to the wrong side.
+    (setvar "CLAYER" "PERPPTS-TEMP")
     (setq newPts '() guideEnts '() i 0)
-    (foreach base basePts
+    (while (< i n)
+      (setq base (nth i basePts))
+      (initget 6 "Undo")                     ; no zero, no negative
       (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
                                  " of " (itoa n)
                                  (if lastLen
                                    (strcat " <" (rtos lastLen) ">")
                                    "")
-                                 ": ")))
-      (if (null len) (setq len lastLen))   ; Enter = same as last time
-      (if (null len)
-        (progn (foreach e guideEnts (if e (entdel e)))
-               (foreach e arrowEnts (if e (entdel e)))
-               (setvar "OSMODE" os)
-               (exit)))
-      (setq lastLen len)
-      (setq bx  (car base)
-            by  (cadr base)
-            npx (+ bx (* len nx))
-            npy (+ by (* len ny))
-            np  (list npx npy (caddr base)))
-      (setq newPts (cons np newPts))
-      ;; create a temporary POINT node at the new location as a guide
-      (command "._POINT" np)
-      (setq guideEnts (cons (entlast) guideEnts))
-      (setq i (1+ i)))
+                                 " [Undo]: ")))
+      (if (null len) (setq len lastLen))     ; Enter = same as last time
+      (cond
+        ;; step back one point and re-enter it (getdist returned "Undo")
+        ((eq (type len) 'STR)
+         (if (> i 0)
+           (progn
+             (setq i (1- i))
+             (perp:kill (car guideEnts))
+             (setq guideEnts (cdr guideEnts)
+                   newPts    (cdr newPts)))
+           (princ "\nNothing to undo - this is the first point.")))
+        ((null len)
+         (princ "\nA length is required."))
+        (t
+         (setq lastLen len
+               np      (list (+ (car base)  (* len nx))
+                             (+ (cadr base) (* len ny))
+                             (caddr base)))
+         (setq newPts (cons np newPts))
+         ;; temporary POINT node at the new location as a guide
+         (command "._POINT" np)
+         (setq guideEnts (cons (entlast) guideEnts)
+               tmpEnts   (cons (entlast) tmpEnts))
+         (setq i (1+ i)))))
     (setq newPts (reverse newPts))
 
     ;; --- connect the new points with a polyline ----------------------
+    (setvar "CLAYER" "PERPPTS-PLINE")
     (command "._PLINE")
     (foreach p newPts (command p))
     (command "")
 
     ;; --- erase this round's point guides -----------------------------
-    (foreach e guideEnts (if e (entdel e)))
+    (foreach e guideEnts (perp:kill e))
+    (setq guideEnts nil)
 
     ;; --- aligned dimension from each new point to its base point ------
     ;; np = base + len*(nx,ny), so the dimension line always runs along
     ;; the fixed normal, i.e. perpendicular to the ORIGINAL line, no
     ;; matter which polyline `base` sits on.
+    (setvar "CLAYER" "PERPPTS-DIM")
     (setq i 0)
     (while (< i n)
       (setq base (nth i basePts)
             np   (nth i newPts))
-      (command "._DIMALIGNED" base np np)   ; dim line through the new pt
+      (command "._DIMALIGNED" base np np)    ; dim line through the new pt
       (setq i (1+ i)))
+    (setq total (+ total n))
 
     ;; the polyline just built becomes the path for the next round
     (setq path newPts)
@@ -255,12 +424,12 @@
     (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
     (if (null again) (setq again "No")))
 
-  ;; --- clean up the direction arrow -----------------------------------
-  (foreach e arrowEnts (if e (entdel e)))
-
-  (setvar "OSMODE" os)
-  (princ (strcat "\nDone: " (itoa iter)
-                 " offset round(s), polylines and dimensions created."))
+  ;; --- restore everything and close the undo group --------------------
+  (perp:finish)
+  (princ (strcat "\nDone: " (itoa iter) " round(s), "
+                 (itoa total) " points, "
+                 (itoa iter) " polyline(s) and "
+                 (itoa total) " dimensions created."))
   (princ))
 
 (princ "\nperp_points.lsp loaded.  Type PERPPTS to run.")

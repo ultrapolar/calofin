@@ -1,14 +1,18 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender ↔ CAD tooling
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Two independent Blender add-ons (Blender 4.2+ including 5.0) for working
+between Blender and CAD, plus one standalone AutoCAD routine:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| PERPPTS (AutoLISP, not a Blender add-on) | `perp_points.lsp` | Divides a line into points, offsets them perpendicular by typed lengths, joins them with a polyline and dimensions each offset — repeatable on the polyline it creates |
 
-## Installation (either add-on)
+## Installation (Blender add-ons)
+
+The AutoCAD routine is loaded differently — see
+[PERPPTS](#3-perppts--perpendicular-offset-points-autocad) below.
 
 Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
 or `dxf_cloud_mesher`) either:
@@ -168,6 +172,7 @@ they are unit-testable outside Blender:
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_perp_points.py    # PERPPTS AutoLISP routine
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
@@ -175,7 +180,70 @@ DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
 tests exercise boundary building, interior-point detection, Delaunay
 triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
 built-in `mathutils.geometry.delaunay_2d_cdt`), and the
-height/lowest-object classification rules.
+height/lowest-object classification rules. The PERPPTS tests read
+`perp_points.lsp` itself to check the properties that make it safe to
+run — balanced parentheses, no variables leaking into the global
+namespace, and every system variable it changes being saved and
+restored — then exercise a reference port of its arc-length sampling
+helpers.
+
+---
+
+# 3. PERPPTS — perpendicular offset points (AutoCAD)
+
+`perp_points.lsp` is a standalone **AutoLISP** routine for AutoCAD 2018+
+(not a Blender add-on). Load it with *APPLOAD* — or drag the file into
+the drawing window — and run the `PERPPTS` command.
+
+It divides a line into equally-spaced points, offsets each one
+perpendicular to the line by a length you type, joins the offset points
+with a polyline, and dimensions each offset back to the line.
+
+### Repeating
+
+After a polyline is built, PERPPTS offers to repeat on it. Each round
+asks for a fresh point count and spaces that many points **by arc
+length** along the polyline from the previous round. The offset
+direction is fixed once from your initial direction click, so every
+round offsets to the same side and — importantly — every dimension stays
+perpendicular to the **original line**, never to the jagged polyline the
+points now sit on. Repeat as many times as you like.
+
+### Usage
+
+1. Run `PERPPTS` and select a line (a polyline is also accepted, so work
+   from an earlier session can be resumed).
+2. Click one side of the line. The nearer end becomes START (fixing the
+   order lengths are entered in) and the side you clicked is the side
+   offsets go toward. A red arrow marks the START end for the rest of
+   the command.
+3. Enter the number of points (at least 2).
+4. Enter a length for each point, START → FINISH. Press **Enter** to
+   reuse the previous length, or type **U** to step back and re-enter
+   the previous point.
+5. Answer the repeat prompt to run another round on the new polyline.
+
+Output goes on its own layers, `PERPPTS-PLINE` and `PERPPTS-DIM`, so it
+is easy to select or freeze independently of the source geometry.
+
+### Robustness
+
+* The whole run is a single UNDO group — one `U` reverses everything,
+  however many rounds were done.
+* Esc or an error at any prompt restores every system variable the
+  command changed (`OSMODE`, `CMDECHO`, `PDMODE`, `CLAYER`), erases the
+  temporary guide markers and closes the UNDO group.
+* Bad input re-prompts rather than aborting: a missed pick, a wrong
+  object type, or a point count below 2 all just ask again. Zero and
+  negative lengths are rejected, so a dimension is never degenerate and
+  an offset can never silently flip to the wrong side.
+* A direction click landing on the line itself is rejected, since
+  "which side" would be ambiguous; object snap is suppressed for that
+  click so it cannot be pulled onto the line.
+* A point count above 100 asks for confirmation, so a mistyped number
+  cannot spawn thousands of dimensions.
+* All geometry is handled in the current UCS, so the command behaves
+  correctly in a rotated or shifted UCS.
 
 ## License
 
