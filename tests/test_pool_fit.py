@@ -941,7 +941,8 @@ def test_lisp_file_is_well_formed():
     # the pieces the interactive flow depends on
     for fn in ("pf:compare", "pf:build", "pf:guided-fit", "pf:unheld",
                "pf:mark-unheld", "pf:report", "pf:label", "pf:bbox",
-               "pf:devstats"):
+               "pf:devstats", "pf:temp-add", "pf:temp-clear",
+               "pf:purge-layer"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 

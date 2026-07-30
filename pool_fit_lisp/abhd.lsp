@@ -1298,6 +1298,47 @@
     (if (pf:memb q b) (setq out (cons q out))))
   (reverse out))
 
+;; ---- temporary preview geometry --------------------------------------
+;; Everything ABHD draws to help you decide - the dashed straight-wall
+;; markers, the three candidate outlines, their number labels - is
+;; scaffolding, not a result.  Each piece is registered here as it is
+;; created and swept away when the command ends, whether that is
+;; normally, by ESC, or by an error, so no run leaves litter behind.
+;; Whatever the user chooses to keep is dropped from the list first.
+
+(defun pf:temp-add (en)
+  (if en (setq pf-temp (cons en pf-temp)))
+  en)
+
+(defun pf:temp-drop (en / out x)
+  (setq out nil)
+  (foreach x pf-temp
+    (if (not (eq x en)) (setq out (cons x out))))
+  (setq pf-temp (reverse out))
+  en)
+
+;; entget returns nil for something already gone, so a piece erased
+;; earlier is simply skipped instead of raising an error
+(defun pf:temp-clear ( / en)
+  (foreach en pf-temp
+    (if (and en (entget en)) (entdel en)))
+  (setq pf-temp nil))
+
+;; Erase everything on a layer, to sweep scaffolding an interrupted
+;; earlier run may have left behind.  Returns how many went.
+(defun pf:purge-layer (name / ss i n)
+  (setq n 0)
+  (if (tblsearch "LAYER" name)
+    (progn
+      (setq ss (ssget "_X" (list (cons 8 name))))
+      (if ss
+        (progn
+          (setq i 0 n (sslength ss))
+          (repeat n
+            (entdel (ssname ss i))
+            (setq i (1+ i)))))))
+  n)
+
 ;; Make sure the DASHED linetype exists (pure entmake, no command
 ;; calls).  Dash lengths are in drawing units - sized for an inch
 ;; drawing, so the dashes read at pool scale.
@@ -1367,6 +1408,9 @@
 ;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
 ;; a real feature the tolerance is too tight for.
 (defun pf:mark-unheld (bad tol / r q)
+  ;; markers from an earlier run describe a fit that no longer exists,
+  ;; so the layer always shows the current fit and nothing else
+  (pf:purge-layer *PF-MISS-LAYER*)
   (if bad
     (progn
       (pf:ensure-layer *PF-MISS-LAYER* 1)
@@ -1619,9 +1663,10 @@
         i        1)
   (foreach v *PF-COMPARE*
     (setq segs (pf:build tour loop pts dpts (* tol (car v)) allow)
-          ent  (pf:make-pline
-                 (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
-                 *PF-OUT-LAYER* (cadr v))
+          ent  (pf:temp-add
+                 (pf:make-pline
+                   (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
+                   *PF-OUT-LAYER* (cadr v)))
           bad  (pf:unheld segs pts tol)
           st   (pf:devstats segs pts onv)
           ;; the same figures the table prints, spelled out so they
@@ -1637,6 +1682,7 @@
                          "    avg off " (pf:fmt-dev (caddr st))))
           vars (cons (list segs ent bad v lab st) vars)
           i    (1+ i))
+    (foreach e lab (pf:temp-add e))
     (if first
       (setq allbad bad first nil)
       (setq allbad (pf:isect allbad bad))))
@@ -1698,25 +1744,30 @@
                   (setq pick "2"))
                 (princ (strcat "\n  Keeping fit " pick "."))))
             (setq pick "2"))))
+      ;; anything not explicitly kept stays registered as scaffolding
+      ;; and is swept when the command ends
       (cond
         ((= pick "All")
-         (princ "\nKeeping all three, in their preview colours.")
-         (princ "\n  (the number labels are left too - erase them when done)"))
-        ((= pick "None")
          (foreach v vars
-           (if (cadr v) (entdel (cadr v)))
-           (foreach e (nth 4 v) (entdel e)))
+           (pf:temp-drop (cadr v))
+           (foreach e (nth 4 v) (pf:temp-drop e)))
+         (princ "\nKeeping all three, in their preview colours.")
+         (princ "\n  (the number labels are kept too - erase them when done)"))
+        ((= pick "None")
          (princ "\nAll three erased - nothing was added to the drawing."))
         (T
          (setq idx (atoi pick) i 1)
          (foreach v vars
            (if (= i idx)
              (setq keep v)
-             (if (cadr v) (entdel (cadr v))))
-           ;; the labels were only ever scaffolding for the choice
-           (foreach e (nth 4 v) (entdel e))
+             ;; erase the losers now, so the keeper is clear on screen
+             ;; while the report is read
+             (if (and (cadr v) (entget (cadr v))) (entdel (cadr v))))
            (setq i (1+ i)))
-         (if (cadr keep) (pf:set-bylayer (cadr keep)))))
+         (if (cadr keep)
+           (progn
+             (pf:temp-drop (cadr keep))
+             (pf:set-bylayer (cadr keep))))))
       (if keep
         (progn
           (pf:mark-unheld (caddr keep) tol)
@@ -1732,11 +1783,15 @@
 ;; ---- the command -----------------------------------------------------
 (defun c:ABHD ( / tol mx pct ans go wp1 wp2 rawwalls w w1 w2
                     ss i en ed lay typ ext nunsup nocs
-                    segs pts dpts allow loop tour ok
-                    pf-miss-pct pf-walls
+                    segs pts dpts allow loop tour ok stale
+                    pf-miss-pct pf-walls pf-temp
                     *error* pf-old-err pf-phase)
-  ;; report which step failed if anything goes wrong, then restore
-  (setq pf-old-err *error*
+  ;; report which step failed if anything goes wrong, sweep away any
+  ;; preview geometry drawn so far, then restore the old handler - a
+  ;; cancelled run must not leave dashed markers or candidate outlines
+  ;; lying around
+  (setq pf-temp   nil
+        pf-old-err *error*
         *error*
           (lambda (m)
             (if (and m
@@ -1746,8 +1801,17 @@
               (princ (strcat "\nABHD stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
+            (pf:temp-clear)
             (setq *error* pf-old-err)
             (princ)))
+
+  ;; sweep leftovers from a run that was interrupted before it could
+  ;; tidy up after itself
+  (setq stale (pf:purge-layer *PF-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nABHD: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *PF-WALL-LAYER*
+                   ".")))
 
   (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
 
@@ -1827,7 +1891,9 @@
             (if wp2
               (progn
                 (setq wp1 (pf:2d wp1) wp2 (pf:2d wp2))
-                (pf:draw-wall-marker wp1 wp2)
+                ;; the dashed marker is scaffolding: it confirms what
+                ;; you declared, and goes when the command ends
+                (pf:temp-add (pf:draw-wall-marker wp1 wp2))
                 (setq rawwalls (cons (list wp1 wp2) rawwalls))
                 (initget "Yes No")
                 (if (/= (getkword "\n  Another straight line? [Yes/No] <No>: ")
@@ -1838,8 +1904,9 @@
       (setq rawwalls (reverse rawwalls))
       (if rawwalls
         (princ (strcat "\n  " (itoa (length rawwalls))
-                       " straight wall(s) noted - dashed markers on layer "
-                       *PF-WALL-LAYER* ".")))))
+                       " straight wall(s) noted - the dashed markers on "
+                       *PF-WALL-LAYER*
+                       " clear themselves when the command finishes.")))))
 
   ;; -- step 5: the selection ----------------------------------------
   (princ "\n\n  Step 5 of 5 - select the survey points (POINTS layer or ab_pt")
@@ -1968,6 +2035,9 @@
                              " the points-built fit; here your drawn"
                              " straight segments are already kept)")))))
          (if ok (pf:compare tour loop pts dpts tol allow))))))
+  ;; sweep the dashed wall markers and any candidate the user did not
+  ;; keep - the command tidies up after itself
+  (pf:temp-clear)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (princ))
 

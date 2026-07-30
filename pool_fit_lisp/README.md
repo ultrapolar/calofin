@@ -167,8 +167,13 @@ Declared walls are law: each comes out of the fit as a dead-straight
 cross them, and the arc after a wall leaves it near-tangent. Points
 along the wall that disagree with it are flagged like any other
 unheld point. (In guided mode your drawn straight segments are already
-kept, so declared walls only steer the points-built fits.) Delete the
-`POOL-WALLS` layer whenever you are done with the markers.
+kept, so declared walls only steer the points-built fits.)
+
+The dashed markers are scaffolding, not results: **ABHD erases them
+itself** when the command finishes — including when you cancel with
+`ESC` or the run stops on an error. If an older run was interrupted
+before it could tidy up, the next run sweeps the leftovers and says
+so.
 
 ## Pick the one that looks right
 
@@ -232,8 +237,9 @@ spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.
 Every point further than your tolerance from the kept fit is **ringed
 with a circle on layer `POOL-MISS`** (red), so you can zoom straight
 to it and decide whether it is a bad shot, a duplicate, or a real
-feature that needs a tighter tolerance. Delete that layer when you are
-done with it.
+feature that needs a tighter tolerance. Markers from an earlier run
+are cleared first, so that layer always describes the fit you are
+looking at. Delete it when you are done with it.
 
 If a point is beyond tolerance in **all three** candidates, ABHD says
 so before you choose — that one is almost certainly a mis-shot, a
@@ -288,8 +294,8 @@ in both files still agree.
 | "the result crosses itself" | The automatic ordering went the wrong way around a narrow waist. Draw a rough **lines-only** loop on `POOL` through the points in the right order and select it too. |
 | "not drawn in the world plane" | Geometry was drawn in a tilted UCS. Set UCS to World and flatten it; the fit is 2D. |
 | Nothing appears | The report says how many segments were written. If the layer was off/frozen/locked, ABHD restores it and says so; if the drawing is read-only it says that instead. |
-| Red circles in the drawing | Those are the points the kept fit could not hold, on layer `POOL-MISS`. Zoom to them, then delete the layer. |
-| Grey dashed lines in the drawing | Your declared straight walls, on layer `POOL-WALLS`. Delete the layer when you no longer need the markers. |
+| Red circles in the drawing | Those are the points the kept fit could not hold, on layer `POOL-MISS`. Zoom to them, then delete the layer; the next run replaces them anyway. |
+| Grey dashed lines left behind | Straight-wall markers from a run that was interrupted before it could tidy up. The next `ABHD` sweeps them and says so. |
 | Three coloured outlines left behind | You answered `All` at the choose prompt. Erase the two you don't want, or re-run and pick one. |
 | It feels slow | Three fits are built, and ordering is O(n²); above ~150 points the command warns and takes a while. An ordering sketch skips the expensive search entirely. |
 
