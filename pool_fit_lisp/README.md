@@ -180,17 +180,26 @@ in its own colour beside the shape, and shows what each costs:
 Three candidate fits are now drawn on layer POOL-FIT,
 each numbered on screen in its own colour:
 
-   #  segs  curves  worst off  not held
-   -  ----  ------  ---------  --------
-   1  20    20      0.49       0         tighter - hugs the points
-   2  19    19      0.87       0         as asked
-   3  16    16      1.88       3         looser - fewer curves
+   #  segs  curves  worst off  avg all  avg off  not held
+   -  ----  ------  ---------  -------  -------  --------
+   1  20    20      0.49       0.07     0.34     0         tighter - hugs the points
+   2  19    19      0.87       0.12     0.55     0         as asked
+   3  16    16      1.88       0.24     0.61     3         looser - fewer curves
 
   "not held" = points further than 1.000 from that fit.
+  "avg all" averages every point; "avg off" averages only the points
+  that are off the line (further than 0.250 from it).
 
   Click the outline you want to keep, or type its number.
   Keep which fit - click one, or [1/2/3/All/None] <2>:
 ```
+
+**`worst off`** is one bad point; **`avg all`** averages every point,
+so the ones sitting on the line count as the zeros they are; **`avg
+off`** averages only the points that actually strayed. Read together
+they separate "one point is off" from "everything drifted": above,
+fit 3's worst more than doubles but its strays still average close to
+fit 2's, so the extra error is concentrated rather than general.
 
 The red `1`, yellow `2` and cyan `3` stack down the right-hand side of
 the pool, each in the same colour as its outline — and **each figure
@@ -198,9 +207,12 @@ is repeated in the drawing beside its number**, so the whole choice
 can be made on screen without reading the command line:
 
 ```
-1   20 segs    20 curves    worst 0.49    0 not held    tighter - hugs the points
-2   19 segs    19 curves    worst 0.87    0 not held    as asked
-3   16 segs    16 curves    worst 1.88    3 not held    looser - fewer curves
+1   20 segs    20 curves    0 not held    tighter - hugs the points
+    worst 0.49    avg all 0.07    avg off 0.34
+2   19 segs    19 curves    0 not held    as asked
+    worst 0.87    avg all 0.12    avg off 0.55
+3   16 segs    16 curves    3 not held    looser - fewer curves
+    worst 1.88    avg all 0.24    avg off 0.61
 ```
 
 **Just click the outline you want** — press `Enter` at the keyword
@@ -241,6 +253,8 @@ ABHD: 19 segments (0 lines + 19 curves) written to layer POOL-FIT.
   Points off within tolerance:   9  (allowance 9)
   Points beyond tolerance:       0
   Worst point deviation:        0.870
+  Average off, all points:      0.124
+  Average off, off points only: 0.553  (9 point(s))
   Curves through a point:       16 of 19
   Curves on foot/half/inch radii:14 of 19
   Largest joint kink:           8.0 deg  (limit 8.0)

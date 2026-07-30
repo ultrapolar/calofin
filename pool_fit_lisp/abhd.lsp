@@ -1335,10 +1335,12 @@
 ;; the whole choice can be made from the drawing without reading the
 ;; command line at all.  The labels stack down the right-hand side of
 ;; the shape and are sized to the drawing, so they read at any zoom.
-;; Returns the list of entities that make up the label.
-(defun pf:label (num colour bb hgt row info / x y out e)
+;; Returns the list of entities that make up the label.  The figures
+;; go on two lines bracketing the number, so the label stays readable
+;; instead of trailing a single very long line across the drawing.
+(defun pf:label (num colour bb hgt row top bot / x y out e pr)
   (setq x   (+ (caddr bb) (* 0.6 hgt))
-        y   (- (cadddr bb) (* row hgt 1.8))
+        y   (- (cadddr bb) (* row hgt 2.1))
         out nil)
   ;; the number itself, full height
   (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
@@ -1348,16 +1350,17 @@
                           (cons 40 hgt)
                           (cons 1 num))))
   (if e (setq out (cons e out)))
-  ;; its figures, smaller, to the right of the number
-  (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                          (cons 8 *PF-OUT-LAYER*) (cons 62 colour)
-                          '(100 . "AcDbText")
-                          (cons 10 (list (+ x (* 1.4 hgt))
-                                         (+ y (* 0.2 hgt))
-                                         0.0))
-                          (cons 40 (* 0.45 hgt))
-                          (cons 1 info))))
-  (if e (setq out (cons e out)))
+  ;; its figures, smaller, on two lines to the right of the number
+  (foreach pr (list (cons top (* 0.55 hgt)) (cons bot (* -0.05 hgt)))
+    (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                            (cons 8 *PF-OUT-LAYER*) (cons 62 colour)
+                            '(100 . "AcDbText")
+                            (cons 10 (list (+ x (* 1.4 hgt))
+                                           (+ y (cdr pr))
+                                           0.0))
+                            (cons 40 (* 0.42 hgt))
+                            (cons 1 (car pr)))))
+    (if e (setq out (cons e out))))
   (reverse out))
 
 ;; Ring every point the chosen fit could not hold, on its own layer,
@@ -1378,9 +1381,10 @@
 ;; miss allowance (how many points were permitted to sit between the
 ;; on-the-shape threshold and the tolerance off the result).
 (defun pf:report (newsegs pts tol allow prior / nl na hiton hitok miss
-                                                q s s2 d dmin worst nice
-                                                onpt inner ns i te ts kk
-                                                mk nk pf-on-eps)
+                                                q s s2 d dmin worst sum
+                                                sumo no nice onpt inner
+                                                ns i te ts kk mk nk
+                                                pf-on-eps)
   ;; report against the same on-the-shape threshold the fit used
   (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol)))
   (progn
@@ -1403,13 +1407,16 @@
                 (setq inner T)))
             (if inner (setq onpt (1+ onpt))))))
       ;; -- how the survey points landed ------------------------------
-      (setq hiton 0 hitok 0 miss 0 worst 0.0)
+      (setq hiton 0 hitok 0 miss 0 worst 0.0 sum 0.0 sumo 0.0 no 0)
       (foreach q pts
         (setq dmin nil)
         (foreach s newsegs
           (setq d (pf:seg-dist q s))
           (if (or (null dmin) (< d dmin)) (setq dmin d)))
         (if (> dmin worst) (setq worst dmin))
+        (setq sum (+ sum dmin))
+        (if (> dmin (pf:oneps))
+          (setq sumo (+ sumo dmin) no (1+ no)))
         (cond
           ((<= dmin (pf:oneps)) (setq hiton (1+ hiton)))
           ((<= dmin tol)        (setq hitok (1+ hitok)))
@@ -1435,6 +1442,16 @@
                      "  (allowance " (itoa allow) ")"
                      "\n  Points beyond tolerance:      " (itoa miss)
                      "\n  Worst point deviation:        " (rtos worst 2 3)
+                     "\n  Average off, all points:      "
+                     (rtos (if (> (length pts) 0)
+                             (/ sum (length pts))
+                             0.0)
+                           2 3)
+                     "\n  Average off, off points only: "
+                     (if (> no 0)
+                       (strcat (rtos (/ sumo no) 2 3)
+                               "  (" (itoa no) " point(s))")
+                       "-  (every point is on the line)")
                      "\n  Curves through a point:       " (itoa onpt)
                      " of " (itoa na)
                      "\n  Curves on foot/half/inch radii:" (itoa nice)
@@ -1549,16 +1566,30 @@
     (pf:coarse-loop tour tol *PF-MAX-ARCS*)
     (pf:guided-fit loop pts dpts tol allow)))
 
-;; Worst distance from any of PTS to the segment list.
-(defun pf:worst (segs pts / w q s d dmin)
-  (setq w 0.0)
+;; Deviation summary for SEGS against PTS: (worst avg avg-off).
+;;   worst   - furthest any point sits from the line
+;;   avg     - mean over ALL points, so it counts the ones sitting on
+;;             the line as the zeros they are
+;;   avg-off - mean over only the points that are actually OFF the
+;;             line (further than ON from it), which says how far the
+;;             strays really stray; nil when nothing is off
+(defun pf:devstats (segs pts on / w q s d dmin sum n sumo no)
+  (setq w 0.0 sum 0.0 n 0 sumo 0.0 no 0)
   (foreach q pts
     (setq dmin nil)
     (foreach s segs
       (setq d (pf:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (if (> dmin w) (setq w dmin)))
-  w)
+    (if (> dmin w) (setq w dmin))
+    (setq sum (+ sum dmin) n (1+ n))
+    (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))
+  (list w
+        (if (> n 0) (/ sum n) 0.0)
+        (if (> no 0) (/ sumo no) nil)))
+
+;; A deviation for a table cell; "-" when there is nothing to average.
+(defun pf:fmt-dev (x)
+  (if x (rtos x 2 2) "-"))
 
 ;; ---- offer three fits and let the user pick ---------------------------
 ;; Guessing the right tolerance up front is the hardest part of the
@@ -1568,10 +1599,13 @@
 ;; judged against the tolerance the user actually typed, so the columns
 ;; compare like for like.
 (defun pf:compare (tour loop pts dpts tol allow
-                   / prior vars v e ent lab info segs bad allbad first i
-                     pick idx keep ce bb hgt sel picked)
+                   / prior vars v e ent lab st onv segs bad allbad first
+                     i pick idx keep ce bb hgt sel picked)
   (setq prior (pf:prior-fits))
   (pf:ensure-layer *PF-OUT-LAYER* 3)
+  ;; every candidate is judged against the distance the user typed, so
+  ;; "off the line" means the same thing in all three rows
+  (setq onv (max *PF-ON-EPS* (* 0.25 tol)))
   ;; label height: a twentieth of the shape, so it reads at any zoom
   (setq bb  (pf:bbox pts)
         hgt (/ (max (- (caddr bb) (car bb))
@@ -1589,17 +1623,19 @@
                  (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
                  *PF-OUT-LAYER* (cadr v))
           bad  (pf:unheld segs pts tol)
+          st   (pf:devstats segs pts onv)
           ;; the same figures the table prints, spelled out so they
           ;; stand on their own beside the number in the drawing
-          info (strcat (itoa (length segs)) " segs    "
-                       (itoa (pf:arc-count segs)) " curves    worst "
-                       (rtos (pf:worst segs pts) 2 2) "    "
-                       (itoa (length bad)) " not held    "
-                       (cadddr v))
-          ;; the number, drawn beside the shape in that fit's own
-          ;; colour: the "2" on screen IS the "2" in the prompt
-          lab  (pf:label (itoa i) (cadr v) bb hgt i info)
-          vars (cons (list segs ent bad v lab) vars)
+          lab  (pf:label
+                 (itoa i) (cadr v) bb hgt i
+                 (strcat (itoa (length segs)) " segs    "
+                         (itoa (pf:arc-count segs)) " curves    "
+                         (itoa (length bad)) " not held    "
+                         (cadddr v))
+                 (strcat "worst " (pf:fmt-dev (car st))
+                         "    avg all " (pf:fmt-dev (cadr st))
+                         "    avg off " (pf:fmt-dev (caddr st))))
+          vars (cons (list segs ent bad v lab st) vars)
           i    (1+ i))
     (if first
       (setq allbad bad first nil)
@@ -1611,20 +1647,25 @@
       (princ (strcat "\n\nThree candidate fits are now drawn on layer "
                      *PF-OUT-LAYER*
                      ",\neach numbered on screen in its own colour:\n"))
-      (princ "\n   #  segs  curves  worst off  not held  ")
-      (princ "\n   -  ----  ------  ---------  --------  ")
+      (princ "\n   #  segs  curves  worst off  avg all  avg off  not held  ")
+      (princ "\n   -  ----  ------  ---------  -------  -------  --------  ")
       (setq i 1)
       (foreach v vars
-        (setq segs (car v) bad (caddr v) ce (cadddr v))
+        (setq segs (car v) bad (caddr v) ce (cadddr v) st (nth 5 v))
         (princ (strcat "\n   " (itoa i) "  "
                        (pf:pad (itoa (length segs)) 6)
                        (pf:pad (itoa (pf:arc-count segs)) 8)
-                       (pf:pad (rtos (pf:worst segs pts) 2 2) 11)
+                       (pf:pad (pf:fmt-dev (car st)) 11)
+                       (pf:pad (pf:fmt-dev (cadr st)) 9)
+                       (pf:pad (pf:fmt-dev (caddr st)) 9)
                        (pf:pad (itoa (length bad)) 10)
                        (cadddr ce)))
         (setq i (1+ i)))
       (princ (strcat "\n\n  \"not held\" = points further than "
-                     (rtos tol 2 3) " from that fit."))
+                     (rtos tol 2 3) " from that fit."
+                     "\n  \"avg all\" averages every point; \"avg off\""
+                     " averages only the points that are off the line"
+                     "\n  (further than " (rtos onv 2 3) " from it)."))
       (if allbad
         (princ (strcat "\n  NOTE: " (itoa (length allbad))
                        " point(s) could not be held by ANY of the three"
