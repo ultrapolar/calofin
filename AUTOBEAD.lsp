@@ -3,160 +3,162 @@
 ;;; --------------------------------------------------------------------------
 ;;; Command:  AUTOBEAD
 ;;;
-;;; Prompts the user to select POOL lines to "bead", then to click the side to
-;;; bead toward.  For every selected line a companion line is created at a 2"
-;;; offset toward the clicked side.  The bead lines are placed on the
-;;; "Bead Track" layer.  Where adjacent bead offsets overshoot and cross one
-;;; another (e.g. at corners), the excess stubs are trimmed back to the
-;;; intersection point.
+;;; Prompts the user to select POOL lines to "bead" (LINEs, ARCs, and
+;;; polylines on any POOL* layer), then to click the side to bead toward.
+;;; The selection is copied, joined into continuous chains, and each chain
+;;; is offset 2" toward the clicked side using AutoCAD's native offset
+;;; engine, so corners come out right automatically:
+;;;   - convex (outside) corners have the excess trimmed
+;;;   - concave (inside) corners are extended to meet
+;;;   - arc / radius corners offset as true concentric arcs
+;;; The finished beads land on the "Bead Track" layer.  The original pool
+;;; geometry is never modified, and the whole operation undoes with one U.
+;;;
+;;; Tunables (top of c:AUTOBEAD):
+;;;   beadoff  - offset distance, drawing units (2.0 = 2 inches)
+;;;   layname  - output layer name ("Bead Track")
+;;;   layfilt  - selection layer filter ("POOL*")
+;;;   fuzz     - join tolerance for near-touching endpoints (0.001)
 ;;; ==========================================================================
 
-;; ---- small vector helpers -------------------------------------------------
+;; ---- helpers --------------------------------------------------------------
 
-(defun autobead-unit (v / d)
-  ;; Return the 2D unit vector of v (Z = 0), or nil if v is zero length.
-  (setq d (sqrt (+ (* (car v) (car v)) (* (cadr v) (cadr v)))))
-  (if (> d 1e-9)
-    (list (/ (car v) d) (/ (cadr v) d) 0.0)
-    nil))
+(defun autobead-newents (mark / e res)
+  ;; Every entity added to the database after 'mark' that is still alive.
+  (setq res '()
+        e   (if mark (entnext mark) (entnext)))
+  (while e
+    (if (entget e) (setq res (cons e res)))
+    (setq e (entnext e)))
+  (reverse res))
 
-(defun autobead-dot (a b)
-  ;; 2D dot product.
-  (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
+(defun autobead-flush ()
+  ;; Safety valve: if an internal command was left waiting for input
+  ;; (e.g. OFFSET rejected a pick), feed it Enters until it terminates.
+  (while (> (getvar "CMDACTIVE") 0) (command "")))
 
-(defun autobead-flat (p)
-  ;; Force a point onto the Z = 0 plane.
-  (list (car p) (cadr p) 0.0))
-
-;; ---- layer -----------------------------------------------------------------
-
-(defun autobead-ensure-layer (name)
-  ;; Create the target layer if it does not already exist.
-  (if (not (tblsearch "LAYER" name))
+(defun autobead-ensure-layer (name / def flags)
+  ;; Create the target layer if missing; thaw / unlock it if it exists
+  ;; frozen or locked so the beads are visible and editable.
+  (if (setq def (tblsearch "LAYER" name))
+    (progn
+      (setq flags (cdr (assoc 70 def)))
+      (if (= 1 (logand 1 flags))                 ; frozen
+        (command "._-layer" "_thaw" name ""))
+      (if (= 4 (logand 4 flags))                 ; locked
+        (command "._-layer" "_unlock" name "")))
     (entmake (list '(0 . "LAYER")
                    '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 name)
                    (cons 70 0)
-                   (cons 62 1)               ; color: red
+                   (cons 62 1)                   ; color: red
                    (cons 6 "Continuous")))))
 
-;; ---- trimming --------------------------------------------------------------
+;; ---- command --------------------------------------------------------------
 
-(defun autobead-nearend (bead x)
-  ;; Return the index (0 or 1) of the bead endpoint nearest to point x.
-  (if (< (distance (car bead) x) (distance (cadr bead) x)) 0 1))
+(defun c:AUTOBEAD ( / *error* beadoff layname layfilt fuzz
+                      oldcmd oldos oldpa temps
+                      ss dirpt mark copies ss2 chains
+                      mark2 news beadcount failcount c e )
 
-(defun autobead-addupd (updates bi ei np orig / found res)
-  ;; Record that endpoint ei of bead bi should move to np.
-  ;; If a move for that same endpoint already exists, keep whichever new point
-  ;; trims the least (i.e. is closest to the original endpoint 'orig').
-  (setq res '() found nil)
-  (foreach u updates
-    (if (and (= (car u) bi) (= (cadr u) ei))
-      (progn
-        (setq found T)
-        (if (< (distance np orig) (distance (caddr u) orig))
-          (setq res (cons (list bi ei np orig) res))
-          (setq res (cons u res))))
-      (setq res (cons u res))))
-  (if (not found)
-    (setq res (cons (list bi ei np orig) res)))
-  (reverse res))
+  (setq beadoff 2.0                ; bead offset distance (2")
+        layname "Bead Track"       ; output layer
+        layfilt "POOL*"            ; selectable source layers
+        fuzz    0.001)             ; endpoint join tolerance
 
-(defun autobead-trim (beads / n i j bi bj x nei nej updates res k b)
-  ;; Trim overshooting stubs where beads cross one another.  Intersections are
-  ;; computed against the original offset geometry, then all trims are applied.
-  (setq n (length beads) updates '() i 0)
-  (while (< i n)
-    (setq j (1+ i))
-    (while (< j n)
-      (setq bi (nth i beads)
-            bj (nth j beads)
-            ;; intersection, must lie on both segments (onseg = T)
-            x  (inters (car bi) (cadr bi) (car bj) (cadr bj) T))
-      (if x
-        (progn
-          (setq x   (autobead-flat x)
-                nei (autobead-nearend bi x)
-                nej (autobead-nearend bj x))
-          (setq updates (autobead-addupd updates i nei x
-                          (if (= nei 0) (car bi) (cadr bi))))
-          (setq updates (autobead-addupd updates j nej x
-                          (if (= nej 0) (car bj) (cadr bj))))))
-      (setq j (1+ j)))
-    (setq i (1+ i)))
-  ;; apply the collected trims
-  (setq res '() k 0)
-  (foreach b beads
-    (setq b (list (car b) (cadr b)))
-    (foreach u updates
-      (if (= (car u) k)
-        (if (= (cadr u) 0)
-          (setq b (list (caddr u) (cadr b)))
-          (setq b (list (car b) (caddr u))))))
-    (setq res (cons b res) k (1+ k)))
-  (reverse res))
+  ;; -- error handler: cancel stuck commands, purge temp geometry,
+  ;;    restore system variables, close the undo group -------------------
+  (defun *error* (msg)
+    (autobead-flush)
+    (foreach e temps
+      (if (and e (entget e)) (entdel e)))
+    (if oldpa (setvar "PEDITACCEPT" oldpa))
+    (if oldos (setvar "OSMODE" oldos))
+    (command "._undo" "_end")
+    (if oldcmd (setvar "CMDECHO" oldcmd))
+    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*,*BREAK*"))
+      (princ (strcat "\nAUTOBEAD error: " msg)))
+    (princ))
 
-;; ---- command ---------------------------------------------------------------
-
-(defun c:AUTOBEAD ( / beadoff layname ss dirpt beads i ent edata
-                      p1 p2 dir nrm side unit np1 np2 b )
-  (setq beadoff 2.0            ; bead offset distance (drawing units / inches)
-        layname "Bead Track")
+  (setq oldcmd (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  (command "._undo" "_begin")
+  (setq oldos (getvar "OSMODE")
+        oldpa (getvar "PEDITACCEPT")
+        temps '())
 
   (autobead-ensure-layer layname)
 
-  ;; 1) select the pool lines to bead
-  (prompt "\nSelect POOL lines to bead: ")
-  (setq ss (ssget '((0 . "LINE"))))
+  ;; 1) select the pool geometry (filtered to POOL* layers)
+  (prompt (strcat "\nSelect POOL lines to bead (layers " layfilt "): "))
+  (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
+                        (cons 8 layfilt))))
 
   (cond
     ((null ss)
-     (prompt "\nNo lines selected."))
+     (prompt (strcat "\nNothing selected on a " layfilt " layer.")))
 
     ;; 2) pick the side to bead toward
     ((null (setq dirpt (getpoint "\nClick the side to bead toward: ")))
      (prompt "\nNo direction point picked."))
 
     (T
-     (setq dirpt (autobead-flat dirpt)
-           beads '()
-           i 0)
+     (setvar "OSMODE" 0)          ; keep osnaps out of the internal commands
+     (setvar "PEDITACCEPT" 1)     ; auto-accept line/arc -> pline conversion
 
-     ;; 3) build an offset bead line for each selected line
-     (while (< i (sslength ss))
-       (setq ent   (ssname ss i)
-             edata (entget ent)
-             p1    (autobead-flat (cdr (assoc 10 edata)))
-             p2    (autobead-flat (cdr (assoc 11 edata)))
-             dir   (autobead-unit (mapcar '- p2 p1)))
-       (if dir
-         (progn
-           ;; left-hand normal of the line
-           (setq nrm (list (- (cadr dir)) (car dir) 0.0))
-           ;; flip it if the clicked side is on the other hand
-           (setq side (autobead-dot (mapcar '- dirpt p1) nrm))
-           (if (< side 0.0)
-             (setq nrm (mapcar '- nrm)))
-           (setq unit (mapcar '(lambda (c) (* c beadoff)) nrm)
-                 np1  (mapcar '+ p1 unit)
-                 np2  (mapcar '+ p2 unit)
-                 beads (cons (list np1 np2) beads))))
-       (setq i (1+ i)))
-     (setq beads (reverse beads))
+     ;; 3) copy the selection so the originals are never touched
+     (setq mark (entlast))
+     (command "._copy" ss "" "_displacement" "_non" '(0.0 0.0 0.0))
+     (autobead-flush)
+     (setq copies (autobead-newents mark)
+           temps  copies)
 
-     ;; 4) trim excess where beads intersect one another
-     (setq beads (autobead-trim beads))
+     (cond
+       ((null copies)
+        (prompt "\nCould not copy the selection (locked source layer?)."))
 
-     ;; 5) draw the finished beads on BEADTRACK
-     (foreach b beads
-       (entmake (list '(0 . "LINE")
-                      (cons 8 layname)
-                      (cons 10 (car b))
-                      (cons 11 (cadr b)))))
-     (prompt (strcat "\nCreated " (itoa (length beads))
-                     " bead line(s) on " layname "."))))
+       (T
+        ;; 4) join the copies into continuous polyline chains
+        (setq ss2 (ssadd))
+        (foreach c copies (ssadd c ss2))
+        (command "._pedit" "_multiple" ss2 "" "_join" fuzz "")
+        (autobead-flush)
+        (setq chains (autobead-newents mark)
+              temps  chains)
+
+        ;; 5) offset each chain toward the click; native offset trims
+        ;;    convex corners and extends concave ones automatically
+        (setq beadcount 0 failcount 0)
+        (foreach c chains
+          (setq mark2 (entlast))
+          (command "._offset" beadoff c "_non" dirpt "")
+          (autobead-flush)
+          (setq news (autobead-newents mark2))
+          (if news
+            (foreach e news
+              (entmod (subst (cons 8 layname)
+                             (assoc 8 (entget e))
+                             (entget e)))
+              (setq beadcount (1+ beadcount)))
+            (setq failcount (1+ failcount)))
+          ;; discard the temporary chain
+          (if (entget c) (entdel c)))
+        (setq temps '())
+
+        ;; 6) report
+        (prompt (strcat "\nCreated " (itoa beadcount)
+                        " bead object(s) on " layname "."))
+        (if (> failcount 0)
+          (prompt (strcat "\n" (itoa failcount)
+                          " chain(s) could not be offset -- try clicking"
+                          " farther from the pool line.")))))))
+
+  ;; -- restore --------------------------------------------------------------
+  (setvar "PEDITACCEPT" oldpa)
+  (setvar "OSMODE" oldos)
+  (command "._undo" "_end")
+  (setvar "CMDECHO" oldcmd)
   (princ))
 
 (princ "\nAUTOBEAD loaded.  Type AUTOBEAD to run.")
