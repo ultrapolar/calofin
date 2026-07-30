@@ -383,8 +383,8 @@ answered `NA`.
 | Level | Cross dims | What it adds |
 | --- | --- | --- |
 | **Simple** | A-C, B-D | The two body diagonals (the original behaviour). |
-| **Center** | + LB-RT, LT-RB, **LT-RT, LB-RB** | The two long tip-to-tip diagonals that cross near the pool centre, plus the two tip-to-tip runs straight down the top and the bottom. |
-| **Complex** | all 18 diagonals | Every possible diagonal among the 8 corners. Supply what you measured and `NA` the rest. |
+| **Center** | 14 ties | Simple plus: the long tip-to-tip diagonals (LB-RT, LT-RB), the tip-to-tip runs down the top and bottom (LT-RT, LB-RB), the **X over each end cut** (D-LB & A-LT on the left, RB-C & B-RT on the right), and each tip to the **far** body corner (B-LT, C-LB, A-RT, RB-D). |
+| **Complex** | all 18 diagonals | Every possible diagonal among the 8 corners — everything Center has plus the four remaining long ties (A-RB, B-LB, RB-LT, RT-D). Supply what you measured and `NA` the rest. |
 
 All 8 corners are then **best-fit** against every provided cross dim
 (sides/ends held within 1", end diagonals within ½", end widths near

@@ -920,7 +920,13 @@
       (list '(0 4 "A-C") '(1 5 "B-D") '(7 3 "LB-RT") '(6 2 "LT-RB")
             ;; tip to tip along the top and along the bottom -- the two
             ;; tapes a crew can run straight down the pool's own edges
-            '(6 3 "LT-RT") '(7 2 "LB-RB")))
+            '(6 3 "LT-RT") '(7 2 "LB-RB")
+            ;; the X over each end cut (tip to the near body corner)...
+            '(5 7 "D-LB") '(0 6 "A-LT")
+            '(2 4 "RB-C") '(1 3 "B-RT")
+            ;; ...and each tip to the far bottom/top body corner
+            '(1 6 "B-LT") '(4 7 "C-LB")
+            '(0 3 "A-RT") '(2 5 "RB-D")))
 (setq pool:*grec-complex*
       (list '(0 2 "A-RB") '(0 3 "A-RT") '(0 4 "A-C")  '(0 6 "A-LT")
             '(1 3 "B-RT") '(1 5 "B-D")  '(1 6 "B-LT") '(1 7 "B-LB")

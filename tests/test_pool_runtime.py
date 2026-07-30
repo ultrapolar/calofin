@@ -115,11 +115,17 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           70.0, 70.0, 100.0,              # left diag T, diag B, width
           70.0, 70.0, 100.0,              # right end
           "Center",
-          "NA", "NA", "NA", "NA", 460.0, 460.0,   # 6 Center ties
+          "NA", "NA", "NA", "NA", 460.0, 460.0,   # long + tip-to-tip ties
+          "NA", "NA", "NA", "NA",                 # the end-cut X, both ends
+          "NA", "NA", "NA", "NA",                 # tips to far corners
           "No"],
          "R5")
 assert len(drawn(vm, 'LINE', 'POOL')) >= 8
-print("   grecian with the two new tip-to-tip Center ties")
+xp=[p for p, a in vm.prompts if 'Cross dim' in p]
+assert len(xp) == 14, xp
+for tie in ("D-LB", "A-LT", "RB-C", "B-RT", "B-LT", "C-LB", "A-RT", "RB-D"):
+    assert any(tie in p for p in xp), tie
+print("   grecian Center: 14 ties incl. the end-cut set, both sides")
 
 print("== R6. octagon from A and B alone (Overall default), hopper ==")
 vm = run(["Insquare", "OC"] + BASE +

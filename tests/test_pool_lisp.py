@@ -1532,16 +1532,28 @@ CS=[("Square",0.0)]*4
 assert cp(0,'next')==(0,0) and cp(2,'next')==(480,240)
 print("   crossing ties confirmed; square corners still use the true corner")
 
-print("== 62. grecian Center gains the two tip-to-tip runs ==")
+print("== 62. grecian Center: tip-to-tip runs + the end-cut tie set ==")
 SIMPLE=[(0,4),(1,5)]
-CENTER=[(0,4),(1,5),(7,3),(6,2),(6,3),(7,2)]
+CENTER=[(0,4),(1,5),(7,3),(6,2),(6,3),(7,2),          # original + tip-to-tip
+        (5,7),(0,6),(2,4),(1,3),                      # the X over each end cut
+        (1,6),(4,7),(0,3),(2,5)]                      # tips to far corners
+COMPLEX=[(0,2),(0,3),(0,4),(0,6),(1,3),(1,5),(1,6),(1,7),(2,4),(2,5),
+         (2,6),(2,7),(3,5),(3,6),(3,7),(4,6),(4,7),(5,7)]
 EDGES={(0,1),(1,2),(2,3),(3,4),(4,5),(5,6),(6,7),(7,0),(0,5),(1,4)}
-assert CENTER[:4]==SIMPLE+[(7,3),(6,2)]      # Center still contains the old set
-assert (6,3) in CENTER and (7,2) in CENTER   # LT-RT and LB-RB are new
-for a,b in CENTER:                            # none may duplicate a real edge
-    assert (a,b) not in EDGES and (b,a) not in EDGES
-assert len(set(CENTER))==len(CENTER)==6
-print("   Center = 6 ties, none of them a perimeter edge")
+norm=lambda p: tuple(sorted(p))
+assert CENTER[:2]==SIMPLE                     # Center still starts with Simple
+assert len({norm(p) for p in CENTER})==14
+for p in CENTER:                              # none may duplicate a real edge
+    assert norm(p) not in {norm(e) for e in EDGES}, p
+    assert norm(p) in {norm(c) for c in COMPLEX}, p   # Center within Complex
+# the sketch's ties, both sides: end-cut X and tip-to-far-corner
+for want in [(5,7),(0,6),(1,6),(4,7),(2,4),(1,3),(0,3),(2,5)]:
+    assert norm(want) in {norm(p) for p in CENTER}
+# Complex is every non-edge pair among the 8 corners
+import itertools
+allpairs={norm(p) for p in itertools.combinations(range(8),2)}
+assert {norm(c) for c in COMPLEX} == allpairs - {norm(e) for e in EDGES}
+print("   Center = 14 ties incl. the sketch set; Complex = all 18 non-edges")
 
 print("== 63. Back crosses stage boundaries, not just questions ==")
 def run_stages(stages, script):
