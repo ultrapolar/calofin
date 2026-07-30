@@ -223,18 +223,28 @@ def snap_arc(a, b, bl, qs, tol, left, win):
 # ---- near-tangent span fitting ---------------------------------------
 
 
-def tang_window(te, a, b):
+# How far the tangent window may be stretched when nothing fits
+# inside it, tried in order (multiples of TANG_TOL).  Smoothness is
+# worth more than one extra arc, so the window widens by degrees
+# instead of being thrown away; the last resort is a one-point stub,
+# which continues the previous tangent exactly.
+TANG_STEPS = (1.0, 1.25, 1.5)
+
+
+def tang_window(te, a, b, wf=1.0):
+    tt = TANG_TOL * wf
     phi = signed_dang(te, ang(a, b))
-    alo = max(min((phi - TANG_TOL) / 2.0, ANG_CAP), -ANG_CAP)
-    ahi = max(min((phi + TANG_TOL) / 2.0, ANG_CAP), -ANG_CAP)
+    alo = max(min((phi - tt) / 2.0, ANG_CAP), -ANG_CAP)
+    ahi = max(min((phi + tt) / 2.0, ANG_CAP), -ANG_CAP)
     lo, hi = math.tan(alo), math.tan(ahi)
     return (lo, hi) if lo <= hi else (hi, lo)
 
 
-def end_window(ts0, a, b):
+def end_window(ts0, a, b, wf=1.0):
+    tt = TANG_TOL * wf
     psi = signed_dang(ang(a, b), ts0)
-    alo = max(min((psi - TANG_TOL) / 2.0, ANG_CAP), -ANG_CAP)
-    ahi = max(min((psi + TANG_TOL) / 2.0, ANG_CAP), -ANG_CAP)
+    alo = max(min((psi - tt) / 2.0, ANG_CAP), -ANG_CAP)
+    ahi = max(min((psi + tt) / 2.0, ANG_CAP), -ANG_CAP)
     lo, hi = math.tan(alo), math.tan(ahi)
     return (lo, hi) if lo <= hi else (hi, lo)
 
@@ -292,13 +302,16 @@ def span_fit(a, b, qs, win, tol, left):
     return best
 
 
-def sharp_flags(tour):
+def sharp_flags(tour, corners=None):
+    """Which tour points are kinks: turns sharper than CORNER_ANG,
+    plus any the user declared by picking them."""
     n = len(tour)
     out = []
     for i in range(n):
         prev, cur, nxt = tour[(i + n - 1) % n], tour[i], tour[(i + 1) % n]
         turn = abs(signed_dang(ang(prev, cur), ang(cur, nxt)))
-        out.append(turn > CORNER_ANG)
+        declared = any(dist(cur, c) < 1.0e-3 for c in (corners or []))
+        out.append(turn > CORNER_ANG or declared)
     return out
 
 
@@ -331,7 +344,8 @@ def arc_count(segs):
     return sum(1 for s in segs if abs(s[2]) >= 1.0e-9)
 
 
-def span_loop(tour, tol, left, te0=None, prorate=True, walls=None):
+def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
+              corners=None):
     """Cover the closed TOUR with arcs anchored on its points.
 
     When PRORATE is set each span may spend only its own fair share of
@@ -345,7 +359,7 @@ def span_loop(tour, tol, left, te0=None, prorate=True, walls=None):
     ordinary spans may neither swallow nor cross them.
     """
     n = len(tour)
-    sharp = sharp_flags(tour)
+    sharp = sharp_flags(tour, corners)
     start_sharp = sharp[0]
     # map the declared walls onto tour indices, the short way around;
     # the tour was rotated so none straddles index 0
@@ -390,24 +404,22 @@ def span_loop(tour, tol, left, te0=None, prorate=True, walls=None):
         # would be a single zero-length segment
         lim = n - pos - (1 if pos == 0 else 0)
         best = best_exact = None
-        # first pass honours the tangent window; if nothing fits inside
-        # it, retry without it rather than emitting a stub that
-        # continues an unsuitable tangent and cascades
-        for relaxed in (False, True):
+        # keep the tangency rule if there is any way to: the window is
+        # widened by degrees, and only if even the widest finds nothing
+        # do we fall through to a stub, which continues the previous
+        # tangent exactly
+        for wf in TANG_STEPS:
             length = 2
             while length <= lim:
                 if nogrow[(pos + length - 1) % n]:
                     break
                 b_end = tour[(pos + length) % n]
-                if relaxed:
-                    win = None
-                else:
-                    win = (tang_window(te, a, b_end)
-                           if te is not None else None)
-                    if (pos + length == n and not start_sharp
-                            and ts0 is not None):
-                        win = merge_windows(win,
-                                            end_window(ts0, a, b_end))
+                win = (tang_window(te, a, b_end, wf)
+                       if te is not None and wf else None)
+                if (pos + length == n and not start_sharp
+                        and ts0 is not None and wf):
+                    win = merge_windows(win,
+                                        end_window(ts0, a, b_end, wf))
                 qs = tour[pos + 1:pos + length]
                 lm = (min(left, pf_ceil(MISS_PCT * length)) if prorate
                       else left)
@@ -466,17 +478,19 @@ def seam_kink(segs):
     return abs(signed_dang(te, ts))
 
 
-def fit_pass(tour, tol, left, prorate=True, walls=None):
+def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None):
     """One full fit; the on-the-shape threshold tracks this tolerance."""
     global _ON_EPS
     saved, _ON_EPS = _ON_EPS, on_eps_for(tol)
     try:
-        segs, l1 = span_loop(tour, tol, left, None, prorate, walls)
+        segs, l1 = span_loop(tour, tol, left, None, prorate, walls,
+                             corners)
         k1 = seam_kink(segs)
         if k1 > TANG_TOL + 0.001:
             s_last = segs[-1]
             te0 = ang(s_last[0], s_last[1]) + 2.0 * math.atan(s_last[2])
-            segs2, l2 = span_loop(tour, tol, left, te0, prorate, walls)
+            segs2, l2 = span_loop(tour, tol, left, te0, prorate, walls,
+                                  corners)
             if seam_kink(segs2) < k1:
                 return segs2, l2
         return segs, l1
@@ -484,13 +498,18 @@ def fit_pass(tour, tol, left, prorate=True, walls=None):
         _ON_EPS = saved
 
 
-def coarse_loop(tour, tol, maxarcs, allowance, walls=None):
+def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
+                corners=None):
     """Full fit; the curve cap relaxes the tolerance and refits."""
     # start the walk at a declared wall when there is one, so no wall
     # straddles the walk's origin; otherwise at the sharpest turn
-    tour = (rotate_to_point(tour, walls[0][0]) if walls
-            else rotate_to_corner(tour))
-    segs, left = fit_pass(tour, tol, allowance, True, walls)
+    if walls:
+        tour = rotate_to_point(tour, walls[0][0])
+    elif corners:
+        tour = rotate_to_point(tour, corners[0])
+    else:
+        tour = rotate_to_corner(tour)
+    segs, left = fit_pass(tour, tol, allowance, True, walls, corners)
     # the cap buys few curves with accuracy, so its refits drop both
     # the miss allowance and the per-span fair share
     if maxarcs is not None:
@@ -499,7 +518,7 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None):
         while arc_count(segs) > maxarcs and tries < 40:
             tol2 *= 1.4
             tries += 1
-            segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls)
+            segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls, corners)
             if arc_count(segs2) < arc_count(segs):
                 segs = segs2
     return segs, left
@@ -581,10 +600,10 @@ def self_crosses(segs):
 # ---- measurements used by the tests ----------------------------------
 
 
-def fit(pts, tol=1.0, maxarcs=None, walls=None):
+def fit(pts, tol=1.0, maxarcs=None, walls=None, corners=None):
     allowance = pf_ceil(MISS_PCT * len(pts))
     tour = order_points(list(pts))
-    return coarse_loop(tour, tol, maxarcs, allowance, walls)
+    return coarse_loop(tour, tol, maxarcs, allowance, walls, corners)
 
 
 def closed(segs):
@@ -880,6 +899,65 @@ def test_declared_straight_walls():
     print("  declared straight walls survive fitting and the cap")
 
 
+def test_tangency_is_defended():
+    """The tangent window is widened by degrees, never abandoned.
+
+    Dropping the window outright let a joint kink 23.8 degrees on the
+    rounded rectangle - three times the limit - so the fitter now
+    stretches it in small steps and falls through to a tangent-
+    continuing stub instead.
+    """
+    worst_anywhere = 0.0
+    for label, pts in (("blob", blob_pts(56)),
+                       ("noisy", blob_pts(56, 0.15, 11)),
+                       ("rect", rounded_rect_pts()),
+                       ("circle", circle_pts(36))):
+        for tol in (0.5, 1.0, 2.0):
+            segs, _ = fit(pts, tol=tol)
+            k = math.degrees(max_kink(segs))
+            worst_anywhere = max(worst_anywhere, k)
+            # a joint may exceed the limit only by the amount the
+            # schedule is allowed to stretch it
+            assert k <= math.degrees(TANG_TOL) * max(TANG_STEPS) + 1.0, (
+                "%s at tol %.2f kinks %.1f deg" % (label, tol, k))
+    print("  tangency defended: worst kink anywhere %.1f deg (limit %.1f)"
+          % (worst_anywhere, math.degrees(TANG_TOL)))
+
+
+def test_declared_corners():
+    """A point the user calls a corner becomes a kink the fit keeps."""
+    pts = blob_pts(56)
+    tour = order_points(list(pts))
+    corner = tour[20]
+
+    plain, _ = fit(pts)
+    # nothing that smooth should have been a corner by itself
+    assert not any(dist(s[1], corner) < 1.0e-9
+                   and abs(signed_dang(
+                       ang(s[0], s[1]) + 2.0 * math.atan(s[2]),
+                       ang(plain[(i + 1) % len(plain)][0],
+                           plain[(i + 1) % len(plain)][1])
+                       - 2.0 * math.atan(plain[(i + 1) % len(plain)][2]))
+                   ) > CORNER_ANG
+                   for i, s in enumerate(plain))
+
+    segs, _ = fit(pts, corners=[corner])
+    assert closed(segs)
+    # the corner is now a segment endpoint, not buried inside an arc
+    assert any(dist(s[0], corner) < 1.0e-9 for s in segs), (
+        "declared corner was swallowed by an arc")
+    # and the tangency rule is waived exactly there: the joint may
+    # kink freely, which is the whole point of declaring it
+    assert worst_dev(segs, pts) <= 1.0
+    # a declared corner on a shape that already has real corners still
+    # works, and two at once are fine
+    segs, _ = fit(pts, corners=[tour[20], tour[40]])
+    assert closed(segs)
+    assert any(dist(s[0], tour[20]) < 1.0e-9 for s in segs)
+    assert any(dist(s[0], tour[40]) < 1.0e-9 for s in segs)
+    print("  declared corners become kept kinks")
+
+
 def test_degenerate_point_sets():
     """Three points, duplicates and near-collinear runs must not blow up."""
     segs, _ = fit([(0.0, 0.0), (100.0, 0.0), (50.0, 40.0)])
@@ -912,9 +990,11 @@ def test_constants_match_lisp():
                       % name, src)
         assert m, "could not read *PF-%s* from abhd.lsp" % name
         assert abs(math.pi / float(m.group(1)) - want) < 1.0e-12, name
-    m = re.search(r"\(setq\s+\*PF-NICE-RADII\*\s+'\(([^)]*)\)", src)
-    assert m
-    assert tuple(float(x) for x in m.group(1).split()) == NICE_RADII
+    for name, want in (("NICE-RADII", NICE_RADII),
+                       ("TANG-STEPS", TANG_STEPS)):
+        m = re.search(r"\(setq\s+\*PF-%s\*\s+'\(([^)]*)\)" % name, src)
+        assert m, "could not read *PF-%s* from abhd.lsp" % name
+        assert tuple(float(x) for x in m.group(1).split()) == want, name
     print("  constants match abhd.lsp")
 
 
@@ -969,7 +1049,7 @@ def test_lisp_file_is_well_formed():
                "pf:mark-unheld", "pf:report", "pf:label", "pf:bbox",
                "pf:devstats", "pf:temp-add", "pf:temp-clear",
                "pf:purge-mine", "pf:tag-mine", "pf:pt-name",
-               "pf:block-number"):
+               "pf:block-number", "pf:draw-corner-marker"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
@@ -988,6 +1068,8 @@ def main():
     test_curve_cap()
     test_tolerance_scales_the_fit()
     test_declared_straight_walls()
+    test_tangency_is_defended()
+    test_declared_corners()
     test_degenerate_point_sets()
     print("\nall tests passed")
 

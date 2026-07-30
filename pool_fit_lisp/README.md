@@ -59,6 +59,13 @@ long, overarching arcs that sit **on the points** and meet each other
   seam of the loop is held to the same window (when the first pass
   closes worse, the fit is re-run once with the arrival tangent
   seeded into the first span).
+* **Smoothness outranks the exact-arc rule.** When nothing fits
+  inside the window, the window is stretched by small steps
+  (`*PF-TANG-STEPS*`, 1× → 1.25× → 1.5×) rather than abandoned, and
+  if even the widest step finds nothing the fit falls back to a
+  one-point stub that continues the previous tangent exactly. Dropping
+  the window outright — what an earlier version did — let a joint kink
+  **23.8°**, three times the limit; it is now capped near 12°.
 * Each arc is grown point by point for as long as one in-window arc
   can hold every covered point within the tolerance (and the miss
   allowance) — the longest arc that fits the most points wins.
@@ -67,7 +74,8 @@ long, overarching arcs that sit **on the points** and meet each other
   waived. So a shape given as just its corner points (a triangle, a
   rectangle, any polygon) keeps its corners. Sample real tight curves
   with at least ~3 points per quarter turn so they stay under the
-  threshold.
+  threshold. **You can declare corners yourself** at step 5 for the
+  gentler ones the 45° test misses — see below.
 * The only places a straight segment can appear are between two sharp
   corners with no points in between (where a curve would be pure
   invention) and where the surveyed points run dead straight.
@@ -117,32 +125,37 @@ radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
 ## Usage
 
 1. `APPLOAD` → pick `abhd.lsp` (or drag it into the drawing).
-2. Type `ABHD`. It asks five plainly-worded questions:
+2. Type `ABHD`. It asks six plainly-worded questions:
 
 ```
 ABHD - fit a pool perimeter through the surveyed points.
 
-  Step 1 of 5 - how far may the fitted line sit from a survey point?
+  Step 1 of 6 - how far may the fitted line sit from a survey point?
   Type a distance in drawing units (1 = one inch, 2 at most), or
   pick two points in the drawing to measure one.
   Smaller = hugs the points.  Bigger = smoother, with fewer curves.
   Maximum distance from a point <1.000>:
 
-  Step 2 of 5 - what percent of the points may sit OFF the line
+  Step 2 of 6 - what percent of the points may sit OFF the line
   (off, but still within the distance above)?
   Press Enter for the standard 15 percent.
   Percent of points allowed off <15>:
 
-  Step 3 of 5 - limit how many curves the result may use?
+  Step 3 of 6 - limit how many curves the result may use?
   Type a whole number, or None for no limit.
   Maximum curves <None>:
 
-  Step 4 of 5 - does the pool edge have any dead-straight walls?
+  Step 4 of 6 - does the pool edge have any dead-straight walls?
   If Yes you will pick the two end points of each (snap to the
   survey points); a dashed line marks each declared wall.
   Any straight lines? [Yes/No] <No>:
 
-  Step 5 of 5 - select the survey points (POINTS layer or ab_pt
+  Step 5 of 6 - are there any sharp corners the fit must not round off?
+  Obvious ones are found automatically; declare the gentler ones here.
+  If Yes you will pick each corner point (snap to the survey points).
+  Any sharp corners? [Yes/No] <No>:
+
+  Step 6 of 6 - select the survey points (POINTS layer or ab_pt
   blocks) and, if you have one, the POOL perimeter or ordering sketch.
   Select objects:
 ```
@@ -151,7 +164,7 @@ The max distance is capped at **2 inches** — anything looser is no
 longer a trace of the points, so a bigger entry is pulled back to 2
 with a note. Distance and curve cap are remembered for the session;
 the percentage resets to the standard 15% each run (`Enter` keeps it).
-So a repeat run is just `ABHD` + `Enter` × 4 + select.
+So a repeat run is just `ABHD` + `Enter` × 5 + select.
 
 ### Declaring straight walls
 
@@ -174,6 +187,19 @@ itself** when the command finishes — including when you cancel with
 `ESC` or the run stops on an error. If an older run was interrupted
 before it could tidy up, the next run sweeps the leftovers and says
 so.
+
+### Declaring sharp corners
+
+The fitter finds obvious corners itself — any point where the survey
+turns more than `*PF-CORNER-ANG*` (45°). A gentler bend can still be a
+real corner on site, and the smoothness rule would round it off. Answer
+`y`/`Yes` at step 5 and pick those points; each gets a dashed ring, and
+`Enter` finishes the list.
+
+At a declared corner the **tangency rule is waived**: the fit breaks
+there, arcs never run through it, and the two sides are free to meet at
+any angle. Like the wall markers, the rings clear themselves when the
+command ends.
 
 ## Pick the one that looks right
 

@@ -177,6 +177,18 @@
                                     ; values shatter the fit into many
                                     ; short arcs (5 deg is workable,
                                     ; 6 deg and below is not).
+(setq *PF-TANG-STEPS* '(1.0 1.25 1.5)) ; when nothing fits inside the
+                                    ; tangent window, stretch it by
+                                    ; these multiples in turn rather
+                                    ; than abandon it; if even the
+                                    ; widest finds nothing, a one-point
+                                    ; stub takes over, and that
+                                    ; continues the previous tangent
+                                    ; exactly.  Smoothness is worth
+                                    ; more than one extra arc, so keep
+                                    ; the last step small: dropping the
+                                    ; window outright allowed joints to
+                                    ; kink three times the limit.
 (setq *PF-SNAP-EPS*     0.02)       ; a nice-radius snap may move the
                                     ; covered points at most this far
                                     ; beyond where they already sat, and
@@ -854,22 +866,26 @@
 ;; window is a cons (lo . hi); nil means unconstrained.
 
 ;; Allowed bulge interval for the span A->B whose START tangent must
-;; lie within *PF-TANG-TOL* of the incoming tangent TE.  The window
-;; edges are clamped so extreme (U-turn) geometry stays finite.
-(defun pf:tang-window (te a b / phi alo ahi lo hi)
-  (setq phi (pf:signed-dang te (angle a b))
-        alo (max (min (/ (- phi *PF-TANG-TOL*) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ phi *PF-TANG-TOL*) 2.0) 1.373) -1.373)
+;; lie within *PF-TANG-TOL* of the incoming tangent TE.  WF stretches
+;; that limit (see *PF-TANG-STEPS*).  The window edges are clamped so
+;; extreme (U-turn) geometry stays finite.
+(defun pf:tang-window (te a b wf / tt phi alo ahi lo hi)
+  (setq tt  (* *PF-TANG-TOL* wf)
+        phi (pf:signed-dang te (angle a b))
+        alo (max (min (/ (- phi tt) 2.0) 1.373) -1.373)
+        ahi (max (min (/ (+ phi tt) 2.0) 1.373) -1.373)
         lo  (pf:tan alo)
         hi  (pf:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
 
 ;; Allowed bulge interval for the CLOSING span A->B whose END tangent
-;; must lie within *PF-TANG-TOL* of the loop's start tangent TS0.
-(defun pf:end-window (ts0 a b / psi alo ahi lo hi)
-  (setq psi (pf:signed-dang (angle a b) ts0)
-        alo (max (min (/ (- psi *PF-TANG-TOL*) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ psi *PF-TANG-TOL*) 2.0) 1.373) -1.373)
+;; must lie within *PF-TANG-TOL* (times WF) of the loop's start
+;; tangent TS0.
+(defun pf:end-window (ts0 a b wf / tt psi alo ahi lo hi)
+  (setq tt  (* *PF-TANG-TOL* wf)
+        psi (pf:signed-dang (angle a b) ts0)
+        alo (max (min (/ (- psi tt) 2.0) 1.373) -1.373)
+        ahi (max (min (/ (+ psi tt) 2.0) 1.373) -1.373)
         lo  (pf:tan alo)
         hi  (pf:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -967,18 +983,22 @@
                                              turn strtshp segs pos te
                                              ts0 lim a best bstx len go
                                              bnd win qs fr bl mis sn
-                                             dev0 anch relax tries lm
+                                             dev0 anch steps wf lm
                                              walls w i1 i2 fwd nogrow f
                                              wrec)
   (setq n (length tour))
-  ;; flag the sharp corners (intentional kinks, window resets)
+  ;; flag the sharp corners (intentional kinks, window resets): turns
+  ;; sharper than *PF-CORNER-ANG*, plus every point the user declared
+  ;; a corner - there the tangency rule is waived on purpose
   (setq sharp nil i 0)
   (repeat n
     (setq prev (nth (rem (+ i n -1) n) tour)
           cur  (nth i tour)
           next (nth (rem (1+ i) n) tour)
           turn (abs (pf:signed-dang (angle prev cur) (angle cur next))))
-    (setq sharp (cons (> turn *PF-CORNER-ANG*) sharp)
+    (setq sharp (cons (or (> turn *PF-CORNER-ANG*)
+                          (pf:memb cur pf-corners))
+                      sharp)
           i     (1+ i)))
   (setq sharp (reverse sharp))
   ;; map the declared straight walls onto tour indices, walking the
@@ -1036,28 +1056,28 @@
     (setq lim  (if (= pos 0) (1- (- n pos)) (- n pos))
           best nil                   ; longest feasible span of any kind
           bstx nil                   ; longest span through an interior point
-          relax nil
-          tries 0)
-    ;; first pass honours the tangent window; if nothing at all fits
-    ;; inside it, a second pass drops the window rather than emitting a
-    ;; one-point stub, which would continue a tangent that clearly does
-    ;; not suit the data and tends to cascade into a run of stubs
-    (while (and (null best) (< tries 2))
-      (setq len 2 go T)
+          steps *PF-TANG-STEPS*)
+    ;; Smoothness is worth more than one extra arc, so the tangent
+    ;; window is stretched by degrees rather than thrown away.  Only
+    ;; when even the widest step finds nothing does the stub below take
+    ;; over, and that continues the previous tangent exactly - so the
+    ;; tangency rule is never simply abandoned.
+    (while (and (null best) steps)
+      (setq wf    (car steps)
+            steps (cdr steps)
+            len   2
+            go    T)
       (while (and go (<= len lim))
         (if (nth (rem (+ pos len -1) n) nogrow)
           (setq go nil)         ; never bury a corner or a wall point
           (progn
-            (setq bnd (nth (rem (+ pos len) n) tour))
-            (if relax
-              (setq win nil)
-              (progn
-                (setq win (if te (pf:tang-window te a bnd)))
-                ;; the span that closes the loop must also end within
-                ;; the tangent window of the loop's start
-                (if (and (= (+ pos len) n) (not strtshp) ts0)
-                  (setq win (pf:merge-windows win
-                                              (pf:end-window ts0 a bnd))))))
+            (setq bnd (nth (rem (+ pos len) n) tour)
+                  win (if te (pf:tang-window te a bnd wf)))
+            ;; the span that closes the loop must also end within the
+            ;; tangent window of the loop's start
+            (if (and (= (+ pos len) n) (not strtshp) ts0)
+              (setq win (pf:merge-windows win
+                                          (pf:end-window ts0 a bnd wf))))
             (setq qs (pf:sublist tour (1+ pos) (1- len))
                   lm (if pro
                        (min left (pf:ceil (* (pf:misspct) len)))
@@ -1068,8 +1088,7 @@
                 (setq best (list len (car fr) (caddr fr) win))
                 (if (cadddr fr) (setq bstx best))
                 (setq len (1+ len)))
-              (setq go nil)))))
-      (setq relax T tries (1+ tries)))
+              (setq go nil))))))
     ;; an arc that floats between the points has to earn its keep:
     ;; only take it when it covers at least 2 more points than the
     ;; longest arc that passes exactly through a point
@@ -1159,11 +1178,12 @@
 ;; fewest-curves result seen is kept, so an unreachably small cap
 ;; still returns the smallest fit possible - never the biggest.
 (defun pf:coarse-loop (tour tol maxarcs / segs segs2 tol2 tries)
-  ;; start the walk at a declared wall when there is one, so no wall
-  ;; straddles the walk's origin; otherwise at the sharpest turn
-  (setq tour (if pf-walls
-               (pf:rotate-to-point tour (car (car pf-walls)))
-               (pf:rotate-to-corner tour))
+  ;; start the walk at a declared wall or corner when there is one, so
+  ;; neither straddles the walk's origin; otherwise at the sharpest turn
+  (setq tour (cond
+               (pf-walls   (pf:rotate-to-point tour (car (car pf-walls))))
+               (pf-corners (pf:rotate-to-point tour (car pf-corners)))
+               (T          (pf:rotate-to-corner tour)))
         segs (pf:fit-pass tour tol pf-miss-left T))
   ;; the cap deliberately buys few curves with accuracy, so the refits
   ;; drop both the miss allowance and the per-span fair share
@@ -1407,6 +1427,16 @@
                    '(72 . 65) '(73 . 2) '(40 . 18.0)
                    '(49 . 12.0) '(74 . 0)
                    '(49 . -6.0) '(74 . 0)))))
+
+;; Draw the dashed ring marking a user-declared sharp corner.
+(defun pf:draw-corner-marker (p)
+  (pf:ensure-dashed)
+  (pf:ensure-layer *PF-WALL-LAYER* 8)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                  (cons 8 *PF-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car p) (cadr p) 0.0))
+                  (cons 40 *PF-MISS-RADIUS*))))
 
 ;; Draw the dashed marker for a user-declared straight wall.
 (defun pf:draw-wall-marker (p1 p2)
@@ -1875,10 +1905,10 @@
   (princ))
 
 ;; ---- the command -----------------------------------------------------
-(defun c:ABHD ( / tol mx pct ans go wp1 wp2 rawwalls w w1 w2
+(defun c:ABHD ( / tol mx pct ans go wp1 wp2 rawwalls rawcnrs w w1 w2
                     ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok stale npt
-                    pf-miss-pct pf-walls pf-temp pf-ptnames
+                    pf-miss-pct pf-walls pf-corners pf-temp pf-ptnames
                     *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
@@ -1915,7 +1945,7 @@
   ;; initget 6 refuses zero and negative values - a zero tolerance
   ;; would silently collapse the fit into single-point stubs.
   (setq pf-phase "reading the tolerance")
-  (princ "\n\n  Step 1 of 5 - how far may the fitted line sit from a survey point?")
+  (princ "\n\n  Step 1 of 6 - how far may the fitted line sit from a survey point?")
   (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
   (princ "\n  pick two points in the drawing to measure one.")
   (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
@@ -1934,7 +1964,7 @@
   ;; -- step 2: how many of the points may sit off the line? ---------
   ;; Enter means the standard share; the answer is per run, on purpose.
   (setq pf-phase "reading the miss percentage")
-  (princ "\n\n  Step 2 of 5 - what percent of the points may sit OFF the line")
+  (princ "\n\n  Step 2 of 6 - what percent of the points may sit OFF the line")
   (princ "\n  (off, but still within the distance above)?")
   (princ (strcat "\n  Press Enter for the standard "
                  (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
@@ -1952,7 +1982,7 @@
 
   ;; -- step 3: optional cap on how many curves the result may use ---
   (setq pf-phase "reading the curve limit")
-  (princ "\n\n  Step 3 of 5 - limit how many curves the result may use?")
+  (princ "\n\n  Step 3 of 6 - limit how many curves the result may use?")
   (princ "\n  Type a whole number, or None for no limit.")
   (initget 4 "None")
   (setq mx (getint (strcat "\n  Maximum curves <"
@@ -1967,7 +1997,7 @@
   ;; comes out of the fit as a straight LINE between those two survey
   ;; points, no matter what the arcs around it are doing.
   (setq pf-phase "asking about straight lines")
-  (princ "\n\n  Step 4 of 5 - does the pool edge have any dead-straight walls?")
+  (princ "\n\n  Step 4 of 6 - does the pool edge have any dead-straight walls?")
   (princ "\n  If Yes you will pick the two end points of each (snap to the")
   (princ "\n  survey points); a dashed line marks each declared wall.")
   (initget "Yes No")
@@ -2002,8 +2032,38 @@
                        *PF-WALL-LAYER*
                        " clear themselves when the command finishes.")))))
 
-  ;; -- step 5: the selection ----------------------------------------
-  (princ "\n\n  Step 5 of 5 - select the survey points (POINTS layer or ab_pt")
+  ;; -- step 5: any sharp corners to declare? ------------------------
+  ;; The fitter finds obvious corners itself (turns over
+  ;; *PF-CORNER-ANG*), but a gentler one still reads as a corner on
+  ;; site.  A declared point is exempt from the tangency rule: the fit
+  ;; breaks there instead of rounding it off.
+  (setq pf-phase "asking about sharp corners")
+  (princ "\n\n  Step 5 of 6 - are there any sharp corners the fit must not round off?")
+  (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
+  (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
+  (initget "Yes No")
+  (setq ans     (getkword "\n  Any sharp corners? [Yes/No] <No>: ")
+        rawcnrs nil)
+  (if (= ans "Yes")
+    (progn
+      (setq go T)
+      (while go
+        (setq pf-phase "picking a sharp corner"
+              wp1      (getpoint "\n  Corner point (Enter when done): "))
+        (if wp1
+          (progn
+            (setq wp1     (pf:2d wp1)
+                  rawcnrs (cons wp1 rawcnrs))
+            (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp1))))
+          (setq go nil)))
+      (setq rawcnrs (reverse rawcnrs))
+      (if rawcnrs
+        (princ (strcat "\n  " (itoa (length rawcnrs))
+                       " corner(s) noted - the markers clear themselves"
+                       " when the command finishes.")))))
+
+  ;; -- step 6: the selection ----------------------------------------
+  (princ "\n\n  Step 6 of 6 - select the survey points (POINTS layer or ab_pt")
   (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
   (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
@@ -2088,6 +2148,16 @@
              (princ "\n  (a declared wall end was picked well away from any survey point - snapped to the nearest one)"))
            (setq pf-walls (cons (list w1 w2) pf-walls)))))
       (setq pf-walls (reverse pf-walls))
+      ;; declared corners snap onto survey points the same way
+      (setq pf-corners nil)
+      (foreach w rawcnrs
+        (setq w1 (pf:nearest w dpts))
+        (if w1
+          (progn
+            (if (> (pf:dist w w1) (* 3.0 tol))
+              (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
+            (setq pf-corners (cons w1 pf-corners)))))
+      (setq pf-corners (reverse pf-corners))
       (if (> (length dpts) 150)
         (princ (strcat "\nABHD: " (itoa (length dpts))
                        " points - ordering and fitting will take a"
