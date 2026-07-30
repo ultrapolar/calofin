@@ -170,6 +170,7 @@ they are unit-testable outside Blender:
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
 python3 tests/test_pool_lisp.py      # pool layout LISP geometry (Python mirror)
+python3 tests/test_pool_runtime.py   # pool layout LISP executed end-to-end in a mini AutoLISP VM
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted

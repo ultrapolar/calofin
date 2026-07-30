@@ -1208,6 +1208,7 @@
       (progn
         (princ "\n(Back re-asks the previous question)")
         (if pool:*insq*
+            (progn
             (setq ans (pool:askseqb
                         (list (list 'bo 'REQ "Side (top & bottom)"
                                     (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))))
@@ -1222,13 +1223,15 @@
                               (list 'rew 'REQ "RIGHT end width (RT-RB)"
                                     (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))
                         t))
-            (if (eq ans 'POOL-BACK) (setq grback t))
-            (setq bo (pool:sq ans 'bo) tp bo
-                  le (pool:sq ans 'le) ri le
-                  ltd (pool:sq ans 'ltd) lbd ltd
-                  lew (pool:sq ans 'lew)
-                  rtd (pool:sq ans 'rtd) rbd rtd
-                  rew (pool:sq ans 'rew))
+            (if (eq ans 'POOL-BACK)
+                (setq grback t)
+                (setq bo (pool:sq ans 'bo) tp bo
+                      le (pool:sq ans 'le) ri le
+                      ltd (pool:sq ans 'ltd) lbd ltd
+                      lew (pool:sq ans 'lew)
+                      rtd (pool:sq ans 'rtd) rbd rtd
+                      rew (pool:sq ans 'rew))))
+            (progn
             (setq ans (pool:askseqb
                         (list (list 'bo 'REQ "Side BOTTOM (A-B)"
                                     (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
@@ -1251,13 +1254,14 @@
                               (list 'rew 'REQ "RIGHT end width (RT-RB)"
                                     (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))
                         t))
-            (if (eq ans 'POOL-BACK) (setq grback t))
-            (setq bo (pool:sq ans 'bo) tp (pool:sq ans 'tp)
-                  le (pool:sq ans 'le) ri (pool:sq ans 'ri)
-                  ltd (pool:sq ans 'ltd) lbd (pool:sq ans 'lbd)
-                  lew (pool:sq ans 'lew)
-                  rtd (pool:sq ans 'rtd) rbd (pool:sq ans 'rbd)
-                  rew (pool:sq ans 'rew)))))
+            (if (eq ans 'POOL-BACK)
+                (setq grback t)
+                (setq bo (pool:sq ans 'bo) tp (pool:sq ans 'tp)
+                      le (pool:sq ans 'le) ri (pool:sq ans 'ri)
+                      ltd (pool:sq ans 'ltd) lbd (pool:sq ans 'lbd)
+                      lew (pool:sq ans 'lew)
+                      rtd (pool:sq ans 'rtd) rbd (pool:sq ans 'rbd)
+                      rew (pool:sq ans 'rew)))))))
    (if grback 'POOL-BACK nil))
 
   ;; -------- the perimeter is in: now pick the cross-dim detail level,
@@ -3615,8 +3619,10 @@
                         (setq back t)   ; back out of the whole stage
                         (setq i (1- i)
                               corners (cdr corners)
-                              prevty (if (cdr corners) (car (cadr corners)) nil)
-                              prevsz (if (cdr corners) (cadr (cadr corners)) nil)))
+                              ;; the reuse default is the corner BEFORE
+                              ;; the one being re-asked
+                              prevty (if corners (car (car corners)) nil)
+                              prevsz (if corners (cadr (car corners)) nil)))
                     (setq prevty (car cc) prevsz (cadr cc)
                           corners (cons cc corners)
                           i (1+ i))))
