@@ -1175,10 +1175,13 @@
         (if oct
             (princ "\nThe cut letters may all be NA: A and B alone draw the octagon."))
         (princ "\n(after the first answer, Back re-asks the previous one)")
-        ;; in-square pools are symmetric, so A and B are asked ONCE
+        ;; An in-square OCTAGON is square, so its two overalls are one
+        ;; measurement, asked once.  A GRECIAN is a long pool -- its A
+        ;; and B are never equal -- so it is always asked for both,
+        ;; in square or not.
         (setq ans (pool:askseqb
                     (append
-                      (if pool:*insq*
+                      (if (and oct pool:*insq*)
                           (list (list 'b 'REQ "Overall size (A & B are equal)"
                                       (append (cdr (assoc "B" pvo))
                                               (cdr (assoc "A" pvo)))))
@@ -1193,7 +1196,7 @@
         (if (eq ans 'POOL-BACK)
             (setq grback t braw 1.0 araw 1.0 ans nil))
         (setq braw (pool:sq ans 'b)
-              araw (if pool:*insq* braw (pool:sq ans 'a))
+              araw (if (and oct pool:*insq*) braw (pool:sq ans 'a))
               traw (pool:sq ans 'tt) sraw (pool:sq ans 'ss)
               s1raw (pool:sq ans 's1) vraw (pool:sq ans 'vv)
               s2raw (pool:sq ans 's2)

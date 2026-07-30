@@ -1496,6 +1496,26 @@ assert abs(max(NP,key=lambda p:p[0])[0]-max(NP,key=lambda p:p[1])[1])<1e-9  # sq
 assert abs(_sides[0]-124.26) < 0.01
 print("   A+B alone give a regular octagon; measured letters still win")
 
+# the GRECIAN keeps its own defaults -- the octagon rule must not leak
+def grecov(a,b,s=None,t=None,s1=None,v=None):
+    """Mirror of pool:grecov: the long-pool defaults, unchanged."""
+    if   s is not None: S,T = s,b-2*s
+    elif t is not None: S,T = (b-t)/2.0,t
+    else:               S,T = b/8.0,0.75*b
+    if   s1 is not None: S1,V = s1,a-2*s1
+    elif v is not None:  S1,V = (a-v)/2.0,v
+    else:                S1,V = a/6.0,a*(2.0/3.0)
+    return S,T,S1,V
+_g = grecov(200.0,480.0)
+assert all(abs(x-y) < 1e-9 for x, y in
+           zip(_g, (60.0, 360.0, 200.0/6.0, 200.0*2/3.0))), _g
+# a grecian NEVER assumes A == B, and its S1 is not tied to S
+assert _g[0] != _g[2]
+_o = octov(200.0,480.0)
+assert abs(_o[0]-_o[2]) < 1e-9          # the octagon's cuts ARE 45 deg
+assert _g[:2] != _o[:2]                 # and the two derivations differ
+print("   grecian defaults untouched: its A and B stay independent")
+
 print("== 60. round pool: circle in square, ellipse out of square ==")
 def roundframe(b,a):
     """Mirror of pool:roundflow's hopper frame: the bounding box, with

@@ -142,6 +142,26 @@ ltrt = _m.dist(lt, rt)
 assert abs(ltrt - 474.5) <= 1.05, ltrt
 print("   Center's 14 ties asked; LT-RT held to the tape like a wall")
 
+print("== R5b. in-square GRECIAN on the overall sheet asks BOTH overalls ==")
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall",
+          480.0,                    # B - overall length
+          200.0,                    # A - overall width  (NOT assumed = B)
+          "NA", "NA", "NA", "NA", "NA",   # T S S1 V S2
+          "No"],
+         "R5b")
+_ov = [p for p, a in vm.prompts if "overall" in p.lower()]
+assert any("B - overall length" in p for p in _ov), _ov
+assert any("A - overall width" in p for p in _ov), _ov
+assert not any("A & B are equal" in p for p in _ov), _ov
+# and the drawn pool really is 480 long by 200 wide, not 480 square
+_pl = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+_xs = [p[0] for seg in _pl for p in seg]
+_ys = [p[1] for seg in _pl for p in seg]
+assert abs((max(_xs) - min(_xs)) - 480.0) < 1.5, max(_xs) - min(_xs)
+assert abs((max(_ys) - min(_ys)) - 200.0) < 1.5, max(_ys) - min(_ys)
+print("   grecian keeps its own A and B: drawn 480 x 200")
+
 print("== R6. octagon from A and B alone (Overall default), hopper ==")
 vm = run(["Insquare", "OC"] + BASE +
          [None,                    # method Enter -> Overall default

@@ -639,8 +639,10 @@ letter may be `NA`:
   (`S+T+S = B`, `S1+V+S1 = A`), exactly like the Grecian sheet;
 * `S2` (the cut face) is a check against √(S²+S1²).
 
-**In square**, `A` and `B` are the same measurement, so the overall is
-asked **once**.
+**In square**, an octagon is square, so `A` and `B` are the same
+measurement and the overall is asked **once**. This is an octagon
+rule only — a **Grecian is always asked for both overalls**, in square
+or not, since its length and width are never equal.
 
 ### Round
 
