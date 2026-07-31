@@ -112,7 +112,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.3") ; printed on load and at command start so a
+(setq *hs-version* "v2.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -307,13 +307,43 @@
   (if (< th 0.0) (setq th (+ th pi pi)))
   (* (if ccw 1.0 -1.0) (/ (sin (/ th 4.0)) (cos (/ th 4.0)))))
 
-;; Bulge for the segment A->B taken from arc piece PC, choosing the way
-;; round that passes the same side as REF.  Used so the reconstructed
-;; boundary spans the first step along the ORIGINAL curve instead of
+;; Midpoint of the arc that chord A-B carries with bulge BL.  A positive
+;; bulge is counterclockwise, which bulges to the RIGHT of A->B.
+(defun hs-bulgemid (a b bl / d nrm)
+  (setq d   (hs-vec a b)
+        nrm (hs-unit (list (cadr d) (- (car d)) 0.0)))
+  (if nrm
+    (hs-add (hs-mid2 a b) (hs-scl nrm (* 0.5 (distance a b) bl)))
+    (hs-mid2 a b)))
+
+;; Bulge for the boundary segment that spans the first step, A -> B,
+;; taken from the arc piece PC that the start point REF sits on.  So the
+;; boundary follows the ORIGINAL curve across the first step instead of
 ;; cutting in to a point on it.
-(defun hs-arcbulge (a b pc ref / c)
-  (setq c (cadr pc))
-  (hs-segb a b c (hs-inspan (angle c ref) (angle c a) (angle c b))))
+;;
+;; The side is chosen geometrically - whichever of the two possible arcs
+;; bulges nearer REF - so no angle-wrap case can select the wrong one.
+;; An arc sweeping more than half a circle would leave A heading back the
+;; way the boundary came, folding the corner into a spike, so it is
+;; rejected in favour of closing the span straight.
+(defun hs-firstspan (a b pc ref / c b1 b2 bl)
+  (setq c  (cadr pc)
+        b1 (hs-segb a b c T)
+        b2 (hs-segb a b c nil)
+        bl (if (< (distance (hs-bulgemid a b b1) ref)
+                  (distance (hs-bulgemid a b b2) ref))
+             b1 b2))
+  (if (> (abs bl) 1.0)
+    (progn
+      (princ (strcat "\n  Note: the curve wraps more than half a circle"
+                     " across the first step - closing it straight."))
+      0.0)
+    bl))
+
+;; A bulge past 1.0 sweeps more than half a circle, which folds the
+;; boundary back on itself; such a segment is drawn straight instead.
+(defun hs-safeb (bl)
+  (if (or (null bl) (> (abs bl) 1.0)) 0.0 bl))
 
 ;; Circle through PTS[i], PTS[i+1], PTS[i+2] as (center . counterclockwise)
 (defun hs-fit3 (pts i / a b c o)
@@ -368,17 +398,22 @@
   (setq i 0)
   (while (<= (+ i 2) nseg)
     (setq starts (append starts (list i)) i (1+ i)))
+  ;; A fitted segment sweeping more than half a circle leaves its start
+  ;; heading back the way the boundary came - a fold, never right between
+  ;; consecutive step ends - so such a segment is drawn straight.
   (foreach st starts
     (if (setq oc (hs-fit3 pts st))
       (progn
         (if (null (assoc st res))
-          (setq res (cons (cons st (hs-segb (nth st pts) (nth (1+ st) pts)
-                                            (car oc) (cdr oc)))
+          (setq res (cons (cons st (hs-safeb
+                                     (hs-segb (nth st pts) (nth (1+ st) pts)
+                                              (car oc) (cdr oc))))
                           res)))
         (if (null (assoc (1+ st) res))
-          (setq res (cons (cons (1+ st) (hs-segb (nth (1+ st) pts)
-                                                 (nth (+ st 2) pts)
-                                                 (car oc) (cdr oc)))
+          (setq res (cons (cons (1+ st) (hs-safeb
+                                          (hs-segb (nth (1+ st) pts)
+                                                   (nth (+ st 2) pts)
+                                                   (car oc) (cdr oc))))
                           res))))))
   (setq i 0)
   (repeat nseg                                 ; 0.0 where nothing fitted
@@ -889,8 +924,8 @@
               (setq pts (append (reverse ea) eb))
               (if (and spc (= "A" (car spc)))
                 (setq fx (list (cons (1- (length ea))
-                                     (hs-arcbulge (car ea) (car eb)
-                                                  spc sp)))))))))
+                                     (hs-firstspan (car ea) (car eb)
+                                                   spc sp)))))))))
       (if (and pts (> (length pts) 1))
         (progn
           (hs-mkpoly pts (hs-blgs pts kx fx))

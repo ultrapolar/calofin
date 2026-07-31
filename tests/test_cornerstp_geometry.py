@@ -478,8 +478,8 @@ def blgs(pts, k=None, fixed=None):
         if not o:
             continue
         ccw = cross(vec(p, q), vec(p, s)) > 0
-        res.setdefault(st, segb(p, q, o, ccw))
-        res.setdefault(st + 1, segb(q, s, o, ccw))
+        res.setdefault(st, safeb(segb(p, q, o, ccw)))
+        res.setdefault(st + 1, safeb(segb(q, s, o, ccw)))
     return [res.get(i, 0.0) for i in range(nseg)]
 
 
@@ -643,12 +643,30 @@ def segb_about(a, b, centre, ccw):
     return (1 if ccw else -1) * math.tan(th / 4)
 
 
-def arcbulge(a, b, centre, ref):
-    """hs-arcbulge: span a -> b on the original circle, passing REF's side."""
-    ccw = inspan(math.atan2(ref[1] - centre[1], ref[0] - centre[0]),
-                 math.atan2(a[1] - centre[1], a[0] - centre[0]),
-                 math.atan2(b[1] - centre[1], b[0] - centre[0]))
-    return segb_about(a, b, centre, ccw)
+def bulgemid(a, b, bulge):
+    """hs-bulgemid: midpoint of the arc a chord carries with this bulge."""
+    d = vec(a, b)
+    nrm = unit((d[1], -d[0]))            # right normal; +bulge bulges right
+    return add(mid2(a, b), scl(nrm, 0.5 * dist(a, b) * bulge))
+
+
+def safeb(bulge):
+    """hs-safeb: a sweep past half a circle folds back, so draw it straight."""
+    return 0.0 if bulge is None or abs(bulge) > 1.0 else bulge
+
+
+def firstspan(a, b, centre, ref):
+    """hs-firstspan: span a -> b on the original circle, on REF's side.
+
+    The side is chosen geometrically - whichever arc bulges nearer REF -
+    so no angle-wrap case can pick the wrong one, and the choice does not
+    depend on the order a/b are given in.
+    """
+    b1 = segb_about(a, b, centre, True)
+    b2 = segb_about(a, b, centre, False)
+    bulge = b1 if dist(bulgemid(a, b, b1), ref) < dist(bulgemid(a, b, b2),
+                                                       ref) else b2
+    return safeb(bulge)
 
 
 def curve_mode_steps(radius, plan, centre=(0.0, 0.0)):
@@ -681,7 +699,7 @@ def test_curve_mode_boundary_spans_the_first_step_on_the_original_arc():
         radius, [(12.0, None), (12.0, None), (12.0, None)])
     pts = list(reversed(side_a)) + side_b
     m = len(side_a) - 1                      # the segment across step 1
-    fixed = {m: arcbulge(side_a[0], side_b[0], centre, crown)}
+    fixed = {m: firstspan(side_a[0], side_b[0], centre, crown)}
     bulges = blgs(pts, None, fixed)
     got_centre, got_r = arc_from_bulge(pts[m], pts[m + 1], bulges[m])
     assert abs(got_r - radius) < 1e-6, got_r
@@ -714,7 +732,7 @@ def test_curve_mode_boundary_does_not_spike_at_the_crown():
     # new behaviour: no crown vertex, original curve spans the first step
     pts = list(reversed(side_a)) + side_b
     m = n - 1
-    fixed = {m: arcbulge(side_a[0], side_b[0], centre, crown)}
+    fixed = {m: firstspan(side_a[0], side_b[0], centre, crown)}
     new = blgs(pts, None, fixed)
     new_centre, new_r = arc_from_bulge(pts[m], pts[m + 1], new[m])
 
@@ -724,6 +742,63 @@ def test_curve_mode_boundary_does_not_spike_at_the_crown():
         "the old fit should have deviated wildly"
     assert all(abs(abs(new[i]) - abs(new[-1 - i])) < 1e-9
                for i in range(len(new))), "boundary must stay symmetric"
+
+
+def test_first_span_picks_the_crown_side_either_way_round():
+    """The side is chosen geometrically, so a/b order cannot flip the arc."""
+    radius, centre = 500.0, (0.0, 0.0)
+    crown = (radius, 0.0)
+    half = math.sqrt(radius ** 2 - (radius - 12.0) ** 2)
+    a, b = (488.0, -half), (488.0, half)
+    forward = firstspan(a, b, centre, crown)
+    backward = firstspan(b, a, centre, crown)
+    # same arc, described from either end
+    assert dist(bulgemid(a, b, forward), bulgemid(b, a, backward)) < 1e-9
+    # and it bulges toward the crown, not away from it
+    assert bulgemid(a, b, forward)[0] > 488.0
+    assert dist(bulgemid(a, b, forward), crown) < 1e-9
+    assert abs(forward) <= 1.0, "must be the minor arc"
+
+
+def test_first_span_rejects_a_fold():
+    """An arc sweeping past half a circle would spike, so it closes straight."""
+    radius, centre = 500.0, (0.0, 0.0)
+    # a chord subtending 120 degrees: the arc away from it sweeps 240
+    a = (radius * math.cos(math.radians(-60)), radius * math.sin(math.radians(-60)))
+    b = (radius * math.cos(math.radians(60)), radius * math.sin(math.radians(60)))
+    near_side = (radius, 0.0)                # the 120-degree arc
+    far_side = (-radius, 0.0)                # the 240-degree arc - a fold
+    assert abs(firstspan(a, b, centre, near_side) - math.tan(math.radians(30))) < 1e-9
+    assert firstspan(a, b, centre, far_side) == 0.0
+    # an exact semicircle is not a fold and is kept
+    assert abs(abs(firstspan((0.0, -radius), (0.0, radius), centre,
+                             (-radius, 0.0))) - 1.0) < 1e-9
+    # a genuine shallow arc is kept untouched
+    half = math.sqrt(radius ** 2 - (radius - 12.0) ** 2)
+    kept = firstspan((488.0, -half), (488.0, half), centre, (radius, 0.0))
+    assert kept != 0.0 and abs(kept) < 0.2
+
+
+def test_safeb_clamps_folding_segments():
+    assert safeb(0.5) == 0.5
+    assert safeb(-0.5) == -0.5
+    assert safeb(1.0) == 1.0                 # exactly a semicircle is fine
+    assert safeb(1.4) == 0.0
+    assert safeb(-3.0) == 0.0
+    assert safeb(None) == 0.0
+
+
+def test_no_boundary_segment_folds_back():
+    """Every segment of a rebuilt boundary must turn the same way as the run."""
+    radius, centre = 500.0, (0.0, 0.0)
+    plan = [(12.0, None), (12.0, 360.0), (12.0, 420.0), (12.0, 470.0)]
+    crown, _, _, side_a, side_b = curve_mode_steps(radius, plan)
+    pts = list(reversed(side_a)) + side_b
+    m = len(side_a) - 1
+    fixed = {m: firstspan(side_a[0], side_b[0], centre, crown)}
+    bulges = blgs(pts, None, fixed)
+    for i, bulge in enumerate(bulges):
+        assert abs(bulge) <= 1.0, f"segment {i} folds: bulge={bulge}"
 
 
 def test_line_mode_boundary_is_anchored_at_the_wall():
@@ -804,6 +879,10 @@ def main():
     test_crown_anchored_fit_keeps_the_apex_on_one_arc()
     test_curve_mode_boundary_spans_the_first_step_on_the_original_arc()
     test_curve_mode_boundary_does_not_spike_at_the_crown()
+    test_first_span_picks_the_crown_side_either_way_round()
+    test_first_span_rejects_a_fold()
+    test_safeb_clamps_folding_segments()
+    test_no_boundary_segment_folds_back()
     test_line_mode_boundary_is_anchored_at_the_wall()
     test_depths_are_measured_from_the_previous_step()
     test_boundary_polyline_pairs_share_a_circle()
