@@ -234,11 +234,14 @@ curve's opening snaps to the curve; any other width is held and breaks the
 curve equally at both ends.
 
 The hemisphere is then rebuilt as one polyline of arc segments through
-every step end: in line mode from the wall, around a crown set by one last
-depth, and back to the wall; in the curve modes around the point where the
-measuring axis meets the selected curve. The arc beside the crown is
-fitted through that point, so a step sitting on the curve reproduces the
-curve exactly rather than landing on a seam between two circles.
+every step end. In line mode it runs from the wall, around a crown set by
+one last depth, and back to the wall, with the arc across the crown fitted
+as a single arc so the apex has no kink. In the curve modes it runs from
+the deepest step around the first one and back, and the segment spanning
+the first step carries the selected curve's own bulge — so a first step
+sitting on the curve reproduces that curve exactly, and a wider one still
+follows its curvature instead of spiking in to the point where the axis
+met the curve.
 
 Both commands read distances architectural-style regardless of the
 drawing's units setting: a bare number is drawing units (inches in an

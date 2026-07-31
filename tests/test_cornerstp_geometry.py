@@ -404,12 +404,14 @@ def semicircle(radius=100.0, pieces_count=1):
     return out
 
 
-def blgs(pts, k=None):
+def blgs(pts, k=None, fixed=None):
     """hs-blgs: one bulge per segment, fitted through consecutive triples.
 
     When k (the crown vertex index) is given, the arc across the crown is
     fitted first and the rest fan outward from it, so the apex sits inside
-    a single arc instead of on a seam between two circles.
+    a single arc instead of on a seam between two circles.  `fixed` maps a
+    segment index to a bulge that wins over any fitting; when it holds the
+    middle segment the rest are fitted outward from there.
     """
 
     def circum(a, b, q):
@@ -450,6 +452,16 @@ def blgs(pts, k=None):
         while i + 2 <= nseg:
             starts.append(i)
             i += 2
+    elif fixed:
+        m = min(fixed)                       # outward from the fixed segment
+        i = m - 2
+        while i >= 0:
+            starts.append(i)
+            i -= 2
+        i = m + 1
+        while i + 2 <= nseg:
+            starts.append(i)
+            i += 2
     else:
         i = 0
         while i + 2 <= nseg:
@@ -459,7 +471,7 @@ def blgs(pts, k=None):
     while i + 2 <= nseg:
         starts.append(i)
         i += 1
-    res = {}
+    res = dict(fixed) if fixed else {}
     for st in starts:
         p, q, s = pts[st], pts[st + 1], pts[st + 2]
         o = circum(p, q, s)
@@ -621,6 +633,99 @@ def test_crown_anchored_fit_keeps_the_apex_on_one_arc():
                for i in range(len(anchored)))
 
 
+def segb_about(a, b, centre, ccw):
+    """hs-segb: the bulge for a -> b travelling round CENTRE."""
+    t1 = math.atan2(a[1] - centre[1], a[0] - centre[0])
+    t2 = math.atan2(b[1] - centre[1], b[0] - centre[0])
+    th = (t2 - t1) if ccw else (t1 - t2)
+    if th < 0:
+        th += 2 * math.pi
+    return (1 if ccw else -1) * math.tan(th / 4)
+
+
+def arcbulge(a, b, centre, ref):
+    """hs-arcbulge: span a -> b on the original circle, passing REF's side."""
+    ccw = inspan(math.atan2(ref[1] - centre[1], ref[0] - centre[0]),
+                 math.atan2(a[1] - centre[1], a[0] - centre[0]),
+                 math.atan2(b[1] - centre[1], b[0] - centre[0]))
+    return segb_about(a, b, centre, ccw)
+
+
+def curve_mode_steps(radius, plan, centre=(0.0, 0.0)):
+    """Steps marched into a circle from its crown; plan is (depth, width|None).
+
+    A width of None means the step was fitted to the curve at that depth.
+    Returns (crown, direction, u, side_a, side_b).
+    """
+    crown = (radius, 0.0)
+    direction = unit(vec(crown, centre))
+    u = perp90(direction)
+    prev, side_a, side_b = crown, [], []
+    for depth, width in plan:
+        p = add(prev, scl(direction, depth))
+        travelled = dist(crown, p)
+        if width is None:                    # fitted: use the true chord
+            half = math.sqrt(radius ** 2 - (radius - travelled) ** 2)
+        else:
+            half = width / 2.0
+        side_a.append(add(p, scl(u, half)))
+        side_b.append(add(p, scl(u, -half)))
+        prev = p
+    return crown, direction, u, side_a, side_b
+
+
+def test_curve_mode_boundary_spans_the_first_step_on_the_original_arc():
+    """A first step fitted to the curve must rebuild that curve exactly."""
+    radius, centre = 500.0, (0.0, 0.0)
+    crown, _, _, side_a, side_b = curve_mode_steps(
+        radius, [(12.0, None), (12.0, None), (12.0, None)])
+    pts = list(reversed(side_a)) + side_b
+    m = len(side_a) - 1                      # the segment across step 1
+    fixed = {m: arcbulge(side_a[0], side_b[0], centre, crown)}
+    bulges = blgs(pts, None, fixed)
+    got_centre, got_r = arc_from_bulge(pts[m], pts[m + 1], bulges[m])
+    assert abs(got_r - radius) < 1e-6, got_r
+    assert dist(got_centre, centre) < 1e-6, got_centre
+    # and it still passes through the crown of the original arc
+    assert abs(dist(got_centre, crown) - got_r) < 1e-6
+
+
+def test_curve_mode_boundary_does_not_spike_at_the_crown():
+    """A held width wider than the curve must not drag the boundary inward.
+
+    Inserting the crown as a vertex made the boundary dive from the wide
+    first step to a point only one depth away - the spike.  Spanning the
+    first step with the original curve's own bulge keeps the arc concentric
+    with the curve instead.
+    """
+    radius, centre = 500.0, (0.0, 0.0)
+    plan = [(12.0, 300.0), (12.0, 360.0), (12.0, 420.0), (12.0, 470.0)]
+    crown, _, _, side_a, side_b = curve_mode_steps(radius, plan)
+    # the first step is far wider than the curve's opening at that depth
+    opening = 2 * math.sqrt(radius ** 2 - (radius - 12.0) ** 2)
+    assert 300.0 > opening, "test needs a step that breaks the curve"
+
+    # old behaviour: crown inserted as a vertex
+    old_pts = list(reversed(side_a)) + [crown] + side_b
+    n = len(side_a)
+    old = blgs(old_pts, n)
+    _, old_r = arc_from_bulge(old_pts[n - 1], old_pts[n], old[n - 1])
+
+    # new behaviour: no crown vertex, original curve spans the first step
+    pts = list(reversed(side_a)) + side_b
+    m = n - 1
+    fixed = {m: arcbulge(side_a[0], side_b[0], centre, crown)}
+    new = blgs(pts, None, fixed)
+    new_centre, new_r = arc_from_bulge(pts[m], pts[m + 1], new[m])
+
+    assert dist(new_centre, centre) < 1e-6, "must stay concentric"
+    assert abs(new_r - radius) < 0.05 * radius, f"r={new_r} vs {radius}"
+    assert abs(old_r - radius) > 0.5 * radius, \
+        "the old fit should have deviated wildly"
+    assert all(abs(abs(new[i]) - abs(new[-1 - i])) < 1e-9
+               for i in range(len(new))), "boundary must stay symmetric"
+
+
 def test_line_mode_boundary_is_anchored_at_the_wall():
     """The base-line boundary starts and ends on the wall, not at step 1."""
     base_mid = (0.0, 0.0)
@@ -697,6 +802,8 @@ def main():
     test_boundary_polyline_bulges_are_real_arcs()
     test_crown_anchored_fit_reproduces_the_original_curve()
     test_crown_anchored_fit_keeps_the_apex_on_one_arc()
+    test_curve_mode_boundary_spans_the_first_step_on_the_original_arc()
+    test_curve_mode_boundary_does_not_spike_at_the_crown()
     test_line_mode_boundary_is_anchored_at_the_wall()
     test_depths_are_measured_from_the_previous_step()
     test_boundary_polyline_pairs_share_a_circle()

@@ -76,10 +76,12 @@
 ;;;       last depth from the last step to the back of the curve, and
 ;;;       the polyline runs wall - side A - crown - side B - wall (the
 ;;;       last depth also gets the final link of the depth-dim chain).
-;;;       In the curve modes the crown is the point where the measuring
-;;;       axis meets the selected curve, and the arc beside it is
-;;;       fitted through that original point - so a step sitting on the
-;;;       curve reproduces the curve exactly.
+;;;       In the curve modes the polyline runs from the deepest step
+;;;       around the first one and back, and the segment spanning the
+;;;       first step carries the SELECTED CURVE'S OWN bulge: a first
+;;;       step sitting on the curve reproduces that curve exactly, and
+;;;       a wider one still follows its curvature instead of spiking in
+;;;       to the point where the axis met it.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -110,7 +112,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.2") ; printed on load and at command start so a
+(setq *hs-version* "v2.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -305,6 +307,14 @@
   (if (< th 0.0) (setq th (+ th pi pi)))
   (* (if ccw 1.0 -1.0) (/ (sin (/ th 4.0)) (cos (/ th 4.0)))))
 
+;; Bulge for the segment A->B taken from arc piece PC, choosing the way
+;; round that passes the same side as REF.  Used so the reconstructed
+;; boundary spans the first step along the ORIGINAL curve instead of
+;; cutting in to a point on it.
+(defun hs-arcbulge (a b pc ref / c)
+  (setq c (cadr pc))
+  (hs-segb a b c (hs-inspan (angle c ref) (angle c a) (angle c b))))
+
 ;; Circle through PTS[i], PTS[i+1], PTS[i+2] as (center . counterclockwise)
 (defun hs-fit3 (pts i / a b c o)
   (setq a (nth i pts)
@@ -322,23 +332,37 @@
 ;; a single arc - so when those three points sit on the original curve
 ;; the reconstructed arc IS the original curve - instead of falling on
 ;; a seam between two circles.
-(defun hs-blgs (pts k / nseg starts i res oc out st)
-  (setq nseg (1- (length pts)))
+;;
+;; FIXED is an optional alist of (segment . bulge) that wins over any
+;; fitting; when it holds the middle segment (the curve modes put the
+;; original curve's own bulge there) the rest are fitted outward from
+;; it, keeping both sides symmetric.
+(defun hs-blgs (pts k fixed / nseg starts i res oc out st m)
+  (setq nseg (1- (length pts))
+        res  fixed)
   (if (or (null k) (< k 1) (> (1+ k) nseg)) (setq k nil))
   ;; the order triples are fitted in; earlier entries win
-  (if k
-    (progn
-      (setq starts (list (1- k))               ; the arc across the crown
-            i      (- k 3))
-      (while (>= i 0)                          ; outward, crown side A
-        (setq starts (append starts (list i)) i (- i 2)))
-      (setq i (1+ k))
-      (while (<= (+ i 2) nseg)                 ; outward, crown side B
-        (setq starts (append starts (list i)) i (+ i 2))))
-    (progn
-      (setq i 0)
-      (while (<= (+ i 2) nseg)
-        (setq starts (append starts (list i)) i (+ i 2)))))
+  (cond
+    (k
+     (setq starts (list (1- k))                ; the arc across the crown
+           i      (- k 3))
+     (while (>= i 0)                           ; outward, crown side A
+       (setq starts (append starts (list i)) i (- i 2)))
+     (setq i (1+ k))
+     (while (<= (+ i 2) nseg)                  ; outward, crown side B
+       (setq starts (append starts (list i)) i (+ i 2))))
+    (fixed                                     ; outward from the fixed one
+     (setq m (car (car fixed))
+           i (- m 2))
+     (while (>= i 0)
+       (setq starts (append starts (list i)) i (- i 2)))
+     (setq i (1+ m))
+     (while (<= (+ i 2) nseg)
+       (setq starts (append starts (list i)) i (+ i 2))))
+    (T
+     (setq i 0)
+     (while (<= (+ i 2) nseg)
+       (setq starts (append starts (list i)) i (+ i 2)))))
   ;; sweep every triple as a fallback so leftover end segments are
   ;; fitted through their own three points rather than a neighbour's
   (setq i 0)
@@ -458,7 +482,7 @@
                       p op nat cen e1 e2 drawn tol txth offd pprev
                       oldce oldstyle ea eb crown pts reflen lastdep
                       dimflag slog mark scum sP sN sEA sEB rec pc oldlu
-                      wallA wallB lastwid kx)
+                      wallA wallB lastwid kx fx)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -854,12 +878,22 @@
           (if (/= "No" (getkword (strcat "\nDraw the reconstructed boundary"
                                          " through the step ends? [Yes/No]"
                                          " <Yes>: ")))
-            ;; deepest step - side A - the original point - side B
-            (setq pts (append (reverse ea) (list sp) eb)
-                  kx  (length ea)))))
+            ;; Deepest step - side A - across the first step - side B.
+            ;; The start point is NOT made a vertex: near the crown the
+            ;; curve's opening is narrow, so forcing the boundary through
+            ;; it would spike inward whenever the first step is wider
+            ;; than the curve there.  Instead the segment spanning the
+            ;; first step carries the ORIGINAL curve's own bulge, which
+            ;; traces the crown exactly when that step sits on the curve.
+            (progn
+              (setq pts (append (reverse ea) eb))
+              (if (and spc (= "A" (car spc)))
+                (setq fx (list (cons (1- (length ea))
+                                     (hs-arcbulge (car ea) (car eb)
+                                                  spc sp)))))))))
       (if (and pts (> (length pts) 1))
         (progn
-          (hs-mkpoly pts (hs-blgs pts kx))
+          (hs-mkpoly pts (hs-blgs pts kx fx))
           (princ (strcat "\nBoundary polyline drawn through the step ends"
                          (cond ((not cmode)
                                 (if wallA ", held to the wall" ""))
