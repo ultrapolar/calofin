@@ -53,6 +53,19 @@
 ;;;  outline always takes the outside pair.  One more dimension at the
 ;;;  bottom gives the OVERLAP: how far the cover laps the water's edge.
 ;;;
+;;;  AUTO-HINGE
+;;;  ----------
+;;;  After the cover is dimensioned the command offers to auto-hinge it.
+;;;  Spillaways (corner or centred-on-a-wall) are asked first as no-go
+;;;  zones, then the "Spa Cover Details" block supplies the grade and
+;;;  taper, which set the foam width (max hinge spacing), foam length
+;;;  (max hinge run) and the acceptable piece counts.  The fewest hinges
+;;;  that fit are placed evenly and nudged off the no-go zones; the
+;;;  leftmost is the dashed fold "Hinge", the rest ByLayer "Velcro
+;;;  Hinge" lines, labels on the TEXT layer.  Anything out of spec --
+;;;  foam length exceeded, piece count not acceptable, a zone that
+;;;  could not be dodged -- is still drawn but flagged in the report.
+;;;
 ;;;  DIMENSION STYLES
 ;;;  ----------------
 ;;;    cover size   "STANDARD INCHES"
@@ -178,6 +191,7 @@
 (setq spa:*dsfac*    0.5)                     ; its furniture factor
 (setq spa:*odstyle*  nil)            ; the drawing's dim style before we ran
 (setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
+(setq spa:*hingerows* nil)           ; hinge/spillaway rows for the report
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -943,6 +957,434 @@
   (list (list (strcat (strcase (spa:modeword spa:*mode*)) " ACROSS") across across)
         (list (strcat (strcase (spa:modeword spa:*mode*)) " UP") up up)))
 
+
+;;; -------------------- hinges -----------------------------------------
+;;;
+;;;  After the cover is drawn (and dimensioned) the command offers to
+;;;  AUTO-HINGE it.  Hinges run north-south, splitting the cover into
+;;;  side-by-side pieces along its west-east length.
+;;;
+;;;  1.  SPILLAWAYS -- places a hinge cannot go.  Asked in a loop that
+;;;      always defaults to No: a CORNER spillaway blocks a typed length
+;;;      from that (hypotenuse) corner along both of its walls; a WALL
+;;;      spillaway is a typed overall length assumed centred on its
+;;;      wall.  A left/right wall spillaway cannot collide with a
+;;;      north-south hinge, so it is only recorded.
+;;;
+;;;  2.  The "Spa Cover Details" block supplies the GRADE and TAPER
+;;;      (Enter types the taper instead; no grade given means
+;;;      Standard).  Grade + taper give, from the foam sheets:
+;;;        foam width   the widest a piece may be = max hinge spacing
+;;;        foam length  the longest a hinge may run -- exceeded, the
+;;;                     hinge is still drawn and the report says so
+;;;        pieces       which piece counts are acceptable
+;;;
+;;;  3.  The FEWEST pieces that fit the foam width are used, spaced
+;;;      evenly, then nudged off any spillaway zone.  A nudge keeps
+;;;      every piece inside the foam width; when no nudge works the
+;;;      piece count is bumped, and failing everything the even layout
+;;;      is kept and the report says which hinge is in a zone.
+;;;
+;;;  The leftmost hinge is the FOLD hinge: a dashed line on COVER with
+;;;  "Hinge" alongside.  Any further hinges are Velcro: ByLayer lines
+;;;  on COVER reading "Velcro Hinge".  The labels go on the TEXT layer,
+;;;  parallel to their hinge.
+
+;; Foam sheet: (grade taper ((foamW . foamL) ...) (piece counts, 5 = 5+))
+;; A grade+taper with two width options (48" / 49-1/2") carries both;
+;; the solver picks the one that needs the fewest hinges.
+(setq spa:*foamtab*
+  (list
+    (list "ECONOMY"     "3-2"   (list (cons 48.0 96.0))                  (list 2))
+    (list "STANDARD"    "3-2"   (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2))
+    (list "STANDARD"    "4-2"   (list (cons 48.0 96.0)  (cons 49.5 102.0)) (list 2 3 4))
+    (list "STANDARD"    "4-3"   (list (cons 48.0 144.0))                 (list 2 3 4))
+    (list "STANDARD"    "5-3"   (list (cons 48.0 96.0))                  (list 2 3 4 5))
+    (list "STANDARD"    "5-4"   (list (cons 48.0 96.0))                  (list 2 3 4 5))
+    (list "STANDARD"    "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
+    (list "ULTRA"       "3-2"   (list (cons 48.0 144.0))                 (list 2))
+    (list "ULTRA"       "4-3"   (list (cons 48.0 96.0))                  (list 2 3 4))
+    (list "ULTRA"       "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
+    (list "THERMOLIGHT" "1-3/8" (list (cons 53.0 nil))                   (list 2 3 4 5))))
+
+;;; ---------- small string helpers (plain AutoLISP, no VL) ----------
+
+(defun spa:trim (s)
+  (while (and (> (strlen s) 0) (= " " (substr s 1 1)))
+    (setq s (substr s 2)))
+  (while (and (> (strlen s) 0) (= " " (substr s (strlen s) 1)))
+    (setq s (substr s 1 (1- (strlen s)))))
+  s)
+
+;; "Taper: 4-2" -> "4-2" (everything after the last colon, trimmed)
+(defun spa:aftercolon (s / i out)
+  (setq i (strlen s) out s)
+  (while (> i 0)
+    (if (= ":" (substr s i 1))
+        (progn (setq out (substr s (1+ i))) (setq i 0))
+        (setq i (1- i))))
+  (spa:trim out))
+
+;; Normalise a taper string to a foam-sheet key ("3-3 Flat" -> "3-3").
+(defun spa:tapernorm (v / u)
+  (setq u (strcase v))
+  (cond ((wcmatch u "*3-2*") "3-2")
+        ((wcmatch u "*4-2*") "4-2")
+        ((wcmatch u "*4-3*") "4-3")
+        ((wcmatch u "*5-3*") "5-3")
+        ((wcmatch u "*5-4*") "5-4")
+        ((wcmatch u "*3-3*") "3-3")
+        ((wcmatch u "*3/8*") "1-3/8")))
+
+;; Normalise a grade; anything unrecognised (or missing) is Standard.
+(defun spa:gradenorm (v / u)
+  (setq u (strcase (if v v "")))
+  (cond ((wcmatch u "*ECON*") "ECONOMY")
+        ((or (wcmatch u "*ULTRA*") (wcmatch u "*FRP*")) "ULTRA")
+        ((wcmatch u "*THERMO*") "THERMOLIGHT")
+        (t "STANDARD")))
+
+(defun spa:gradeshort (g)
+  (cond ((= g "ECONOMY") "ECO") ((= g "STANDARD") "STD")
+        ((= g "ULTRA") "ULTRA") (t "THERMO")))
+
+;; Attributes of a block reference, as ((TAG . value) ...).
+(defun spa:attribs (ename / e ed out)
+  (setq e (entnext ename))
+  (while (and e (setq ed (entget e)) (= "ATTRIB" (cdr (assoc 0 ed))))
+    (setq out (cons (cons (strcase (cdr (assoc 2 ed))) (cdr (assoc 1 ed))) out)
+          e (entnext e)))
+  (reverse out))
+
+;;; ---------- geometry: the cover's north-south chord at x ----------
+
+;; How far a corner treatment sets back along its walls.
+(defun spa:cornsb (cc)
+  (cond ((= (car cc) "Radius") (cadr cc))
+        ((= (car cc) "Diagonal") (* (cadr cc) 0.70711))
+        (t 0.0)))
+
+;; Offset of a treated edge INTO the shape at rx along a wall of length
+;; wlen; c1 is the corner at rx = 0, c2 the corner at rx = wlen.
+(defun spa:edgeoff (rx wlen c1 c2 / sb r)
+  (cond
+    ((< rx (setq sb (spa:cornsb c1)))
+     (if (= (car c1) "Radius")
+         (progn (setq r (cadr c1))
+                (- r (sqrt (max 0.0 (- (* r r) (* (- rx r) (- rx r)))))))
+         (- sb rx)))
+    ((> rx (- wlen (setq sb (spa:cornsb c2))))
+     (setq rx (- wlen rx))
+     (if (= (car c2) "Radius")
+         (progn (setq r (cadr c2))
+                (- r (sqrt (max 0.0 (- (* r r) (* (- rx r) (- rx r)))))))
+         (- sb rx)))
+    (t 0.0)))
+
+;; (ybot ytop) of the rectangle (with corner treatments) at x, or nil.
+(defun spa:chordrect (quad corners x / x0 y0 wlen hlen rx offb offt)
+  (setq x0 (car (car quad)) y0 (cadr (car quad))
+        wlen (- (car (cadr quad)) x0)
+        hlen (- (cadr (cadddr quad)) y0)
+        rx (- x x0))
+  (if (and (> rx 1.0e-6) (< rx (- wlen 1.0e-6)))
+      (progn
+        (setq offb (spa:edgeoff rx wlen (nth 0 corners) (nth 1 corners))
+              offt (spa:edgeoff rx wlen (nth 3 corners) (nth 2 corners)))
+        (if (< (+ offb offt) hlen)
+            (list (+ y0 offb) (- (+ y0 hlen) offt))))))
+
+;; (ybot ytop) of a polygon at x, or nil.
+(defun spa:chordpoly (pts x / n i p q tt ys)
+  (setq n (length pts) i 0 ys nil)
+  (while (< i n)
+    (setq p (nth i pts) q (nth (rem (1+ i) n) pts))
+    (if (or (and (<= (car p) x) (> (car q) x))
+            (and (<= (car q) x) (> (car p) x)))
+        (setq tt (/ (- x (car p)) (- (car q) (car p)))
+              ys (cons (+ (cadr p) (* tt (- (cadr q) (cadr p)))) ys)))
+    (setq i (1+ i)))
+  (if (>= (length ys) 2)
+      (list (apply 'min ys) (apply 'max ys))))
+
+;; (ybot ytop) of the circle / ellipse at x, or nil.
+(defun spa:chordell (cen b a x / dx q dy)
+  (setq dx (/ (- x (car cen)) (* 0.5 b))
+        q (- 1.0 (* dx dx)))
+  (if (> q 1.0e-9)
+      (progn
+        (setq dy (* 0.5 a (sqrt q)))
+        (list (- (cadr cen) dy) (+ (cadr cen) dy)))))
+
+;; desc = ("RECT" quad corners) | ("OCT" pts) | ("ROUND" cen b a)
+(defun spa:chordat (desc x)
+  (cond
+    ((= (car desc) "RECT") (spa:chordrect (cadr desc) (caddr desc) x))
+    ((= (car desc) "OCT")  (spa:chordpoly (cadr desc) x))
+    (t (spa:chordell (cadr desc) (caddr desc) (cadddr desc) x))))
+
+;;; ---------- the placement solver ----------
+
+(defun spa:ceilv (v / f)
+  (setq f (fix v))
+  (if (> v (+ f 1.0e-6)) (1+ f) f))
+
+;; The forbidden interval x falls inside, or nil.  Intervals are open,
+;; so a hinge sitting exactly on a zone's edge is allowed.
+(defun spa:inforb (x forb / hit f)
+  (foreach f forb
+    (if (and (> x (car f)) (< x (cadr f))) (setq hit f)))
+  hit)
+
+;; Even hinge stations for n pieces across [x1 x2].
+(defun spa:heven (x1 x2 n / i out)
+  (setq i 1 out nil)
+  (while (< i n)
+    (setq out (cons (+ x1 (* (- x2 x1) (/ (float i) n))) out)
+          i (1+ i)))
+  (reverse out))
+
+;; Place the n-1 hinges of an n-piece layout, dodging the forbidden
+;; zones.  Each hinge starts at its even station; one that lands in a
+;; zone moves to the nearer zone edge that still leaves every piece --
+;; taken and to come -- inside the foam width fw.  Returns the x list,
+;; or nil when this piece count cannot dodge the zones.
+(defun spa:hplace (x1 x2 n fw forb / i xs prev x lo hi f cand e ok)
+  (setq prev x1 xs nil i 1 ok t)
+  (while (and ok (< i n))
+    (setq x (+ x1 (* (- x2 x1) (/ (float i) n)))
+          lo (max (+ prev 0.01) (- x2 (* fw (- n i))))
+          hi (min (+ prev fw) (- x2 0.01)))
+    (if (> lo hi)
+        (setq ok nil)
+        (progn
+          (if (< x lo) (setq x lo))
+          (if (> x hi) (setq x hi))
+          (setq f (spa:inforb x forb))
+          (if f
+              (progn
+                (setq cand nil)
+                (foreach e (if (< (- x (car f)) (- (cadr f) x))
+                               (list (car f) (cadr f))
+                               (list (cadr f) (car f)))
+                  (if (and (not cand) (>= e lo) (<= e hi)
+                           (not (spa:inforb e forb)))
+                      (setq cand e)))
+                (if cand (setq x cand) (setq ok nil))))
+          (if ok (setq xs (cons x xs) prev x i (1+ i))))))
+  (if (and ok (<= (- x2 prev) (+ fw 0.01)))
+      (reverse xs)))
+
+;; Fewest pieces first: try n up to n+3 for a layout that dodges every
+;; zone.  Returns (n x-list solvedflag); when nothing dodges, the even
+;; minimum-count layout with the flag down.
+(defun spa:hsolve (x1 x2 fw forb nmin / n xs)
+  (setq n nmin)
+  (while (and (<= n (+ nmin 3)) (not xs))
+    (setq xs (spa:hplace x1 x2 n fw forb))
+    (if (not xs) (setq n (1+ n))))
+  (if xs
+      (list n xs t)
+      (list nmin (spa:heven x1 x2 nmin) nil)))
+
+(defun spa:hallow (n allowed)
+  (if (>= n 5) (member 5 allowed) (member n allowed)))
+
+;;; ---------- drawing ----------
+
+(defun spa:hdash ()
+  (if (/= spa:*dashlt* "CONTINUOUS")
+      (list (cons 6 spa:*dashlt*) (cons 48 (spa:ltsc)))))
+
+;; Vertical label beside a hinge, middle-centred, reading upward.
+(defun spa:htext (pt h str)
+  (entmake (list '(0 . "TEXT")
+                 '(8 . "TEXT")
+                 (cons 10 (spa:wp pt))
+                 (cons 40 h)
+                 (cons 1 str)
+                 (cons 50 (* 0.5 pi))
+                 '(72 . 1)
+                 (cons 11 (spa:wp pt))
+                 '(73 . 2))))
+
+;;; ---------- the guided flow ----------
+
+(defun spa:hask (msg / v)
+  (spa:osup)
+  (initget 7)
+  (setq v (getdist (strcat "\n" msg ": ")))
+  (spa:osdown)
+  v)
+
+;; Ask the spillaways.  Returns the forbidden x-intervals; report rows
+;; accumulate through rowsym (a quoted symbol set in the caller).
+(defun spa:askspill (x1 x2 / forb loc cnr d wall len)
+  (while (= "Yes" (spa:askkw "Is there a spillaway" "Yes No" "Yes/No" "No" nil))
+    (setq loc (spa:askkw "Spillaway location" "Corner Wall"
+                         "Corner/Wall(centred)" "Wall" nil))
+    (if (= loc "Corner")
+        (progn
+          (setq cnr (spa:askkw "Which corner"
+                               "BottomLeft BottomRight TopRight TopLeft"
+                               "BottomLeft/BottomRight/TopRight/TopLeft" nil nil)
+                d (spa:hask "Length from the corner to keep clear of hinges"))
+          (if (member cnr '("BottomLeft" "TopLeft"))
+              (setq forb (cons (list x1 (+ x1 d)) forb))
+              (setq forb (cons (list (- x2 d) x2) forb)))
+          (setq spa:*hingerows*
+                (append spa:*hingerows*
+                        (list (list (strcat "SPILLWAY " (strcase cnr)) nil d)))))
+        (progn
+          (setq wall (spa:askkw "On which wall" "Top Bottom Left Right"
+                                "Top/Bottom/Left/Right" nil nil)
+                len (spa:hask "Overall length of the spillaway (centred)"))
+          (if (member wall '("Top" "Bottom"))
+              (setq forb (cons (list (- (* 0.5 (+ x1 x2)) (* 0.5 len))
+                                     (+ (* 0.5 (+ x1 x2)) (* 0.5 len)))
+                               forb))
+              (princ "\n(a left/right wall spillaway cannot meet a north-south hinge; recorded only)"))
+          (setq spa:*hingerows*
+                (append spa:*hingerows*
+                        (list (list (strcat "SPILLWAY " (strcase wall) " WALL")
+                                    nil len)))))))
+  forb)
+
+;; Read grade + taper off the Spa Cover Details block (or the keyboard).
+;; Returns (grade taper).
+(defun spa:askdetails ( / sel ed bn att v grade taper)
+  (spa:osup)
+  (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to type the taper>: "))
+  (spa:osdown)
+  (if sel
+      (progn
+        (setq ed (entget (car sel)))
+        (if (= "INSERT" (cdr (assoc 0 ed)))
+            (progn
+              (setq bn (cdr (assoc 2 ed)))
+              (if (/= (strcase bn) "SPA COVER DETAILS")
+                  (princ (strcat "\n(block is named \"" bn
+                                 "\", not Spa Cover Details -- reading its tags anyway)")))
+              (setq att (spa:attribs (car sel)))
+              (if (setq v (cdr (assoc "GRADE" att)))
+                  (setq grade (spa:gradenorm (spa:aftercolon v))))
+              (if (setq v (cdr (assoc "TAPER" att)))
+                  (setq taper (spa:tapernorm (spa:aftercolon v))))
+              (if (null taper)
+                  (princ "\nNo readable TAPER tag on that block.")))
+            (princ "\nThat is not a block reference."))))
+  (if (null grade) (setq grade "STANDARD"))   ; no grade given -> Standard
+  (if (= grade "THERMOLIGHT") (setq taper "1-3/8"))
+  (while (null taper)
+    (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8): "))
+    (setq taper (spa:tapernorm v))
+    (if (null taper) (princ "\nNot a taper on the foam sheet -- again.")))
+  (list grade taper))
+
+;; The whole auto-hinge pass.  desc / x1 / x2 describe the COVER
+;; outline; coverp nil means only the water's edge was drawn and the
+;; hinges are being laid on that.  Draws the hinges and returns report
+;; rows (also via spillaway rows gathered in spa:*hingerows*).
+(defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row opts
+                         allowed best cand opt fw fl nmin res n xs
+                         k x ch maxch maxpc prev lbl)
+  (setq spa:*hingerows* nil)
+  (if (/= "Yes" (spa:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil))
+      nil
+      (progn
+        (if (not coverp)
+            (spa:valnote "NO COVER OUTLINE - HINGES LAID ON THE WATER'S EDGE"))
+        ;; 1 -- where hinges cannot go
+        (setq forb (spa:askspill x1 x2))
+        ;; 2 -- grade + taper -> foam width / length / piece counts
+        (setq gt (spa:askdetails)
+              grade (car gt) taper (cadr gt)
+              row nil)
+        (foreach r spa:*foamtab*
+          (if (and (not row) (= (car r) grade) (= (cadr r) taper))
+              (setq row r)))
+        (if (not row)                    ; e.g. an Economy taper only the
+            (foreach r spa:*foamtab*     ; Standard sheet carries
+              (if (and (not row) (= (car r) "STANDARD") (= (cadr r) taper))
+                  (setq row r))))
+        (if row
+            (setq opts (caddr row) allowed (cadddr row))
+            (progn
+              (spa:valnote (strcat "GRADE/TAPER " grade " " taper
+                                   " NOT ON THE FOAM SHEET - 48/96 ASSUMED"))
+              (setq opts (list (cons 48.0 96.0)) allowed (list 2 3 4 5))))
+        ;; 3 -- fewest hinges that fit the foam width and dodge the zones
+        (setq best nil)
+        (foreach opt opts
+          (setq fw (car opt)
+                nmin (max 2 (spa:ceilv (/ (- x2 x1) fw)))
+                res (spa:hsolve x1 x2 fw forb nmin)
+                cand (list (car res) (cadr res) fw (cdr opt) (caddr res)))
+          (if (or (null best)
+                  ;; dodging the zones beats not, an acceptable piece
+                  ;; count beats not, then fewer pieces
+                  (and (nth 4 cand) (not (nth 4 best)))
+                  (and (eq (nth 4 cand) (nth 4 best))
+                       (spa:hallow (car cand) allowed)
+                       (not (spa:hallow (car best) allowed)))
+                  (and (eq (nth 4 cand) (nth 4 best))
+                       (eq (if (spa:hallow (car cand) allowed) t nil)
+                           (if (spa:hallow (car best) allowed) t nil))
+                       (< (car cand) (car best))))
+              (setq best cand)))
+        (setq n (car best) xs (cadr best) fw (caddr best) fl (nth 3 best))
+        (if (not (nth 4 best))
+            (spa:valnote "SPILLAWAY ZONES COULD NOT ALL BE AVOIDED - CHECK HINGES"))
+        (if (not (spa:hallow n allowed))
+            (spa:valnote (strcat (itoa n) " PIECES NOT ACCEPTABLE FOR "
+                                 (spa:gradeshort grade) " " taper)))
+        ;; 4 -- draw them: leftmost = fold hinge (dashed, "Hinge"),
+        ;; the rest Velcro (ByLayer, "Velcro Hinge")
+        (setq k 0 maxch 0.0)
+        (foreach x xs
+          (setq ch (spa:chordat desc x))
+          (if ch
+              (progn
+                (setq maxch (max maxch (- (cadr ch) (car ch))))
+                (if (= k 0)
+                    (spa:line (list x (car ch)) (list x (cadr ch))
+                              "COVER" (spa:hdash))
+                    (spa:line (list x (car ch)) (list x (cadr ch))
+                              "COVER" nil))
+                (spa:htext (list (- x (* 2.0 th)) (* 0.5 (+ (car ch) (cadr ch))))
+                           (* 1.2 th)
+                           (if (= k 0) "Hinge" "Velcro Hinge"))
+                (if (and fl (> (- (cadr ch) (car ch)) (+ fl 0.01)))
+                    (spa:valnote (strcat "HINGE " (itoa (1+ k))
+                                         " EXCEEDS THE FOAM LENGTH ("
+                                         (rtos (- (cadr ch) (car ch)) 2 1)
+                                         " > " (rtos fl 2 0) ")")))
+                (if (spa:inforb x forb)
+                    (spa:valnote (strcat "HINGE " (itoa (1+ k))
+                                         " FALLS IN A SPILLAWAY ZONE")))))
+          (setq k (1+ k)))
+        (if (null fl)
+            (spa:valnote "THERMOLIGHT: HINGE LENGTH N/A - VERIFY"))
+        ;; 5 -- report rows: the pieces, their worst width, each hinge
+        (setq maxpc 0.0 prev x1)
+        (foreach x (append xs (list x2))
+          (setq maxpc (max maxpc (- x prev)) prev x))
+        (setq spa:*hingerows*
+              (append spa:*hingerows*
+                      (list (list (strcat "PIECES (" (spa:gradeshort grade)
+                                          " " taper ")")
+                                  nil (float n))
+                            (list "FOAM WIDTH MAX" fw maxpc)
+                            (list "FOAM LENGTH MAX" fl maxch))))
+        (setq k 0)
+        (foreach x xs
+          (setq lbl (if (= k 0) "HINGE 1 (FOLD)"
+                        (strcat "HINGE " (itoa (1+ k)) " (VELCRO)"))
+                spa:*hingerows*
+                (append spa:*hingerows* (list (list lbl nil (- x x1))))
+                k (1+ k)))
+        spa:*hingerows*)))
+
 ;;; -------------------- rectangle corner treatments --------------------
 ;;;
 ;;;  A corner may be Square, Rounded (radius) or Diag (chamfer).  Side
@@ -1207,7 +1649,7 @@
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
                         a b c d cen doff th allsame i j tmp lbls cc back
                         rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
-                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2)
+                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -1434,6 +1876,15 @@
                                          (cadr cc))))
                 i (1+ i)))
         (spa:setmode mode1)))
+  ;; -------------------------------------------------- hinges
+  (setq hrows
+    (cond ((= mode1 "Coversize")
+           (spa:hingeflow (list "RECT" quad corners) 0.0 w th t))
+          (meth
+           (spa:hingeflow (list "RECT" q2 c2) (car org2) (+ (car org2) w2) th t))
+          (t
+           (spa:hingeflow (list "RECT" quad corners) 0.0 w th nil))))
+  (if hrows (setq rows (append rows hrows)))
   (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
@@ -1532,7 +1983,7 @@
                        ovres s tv s1 v pts cen doff th e p q k rows
                        tact vact s2act alleq tmp
                        mode1 meth g kk b2 a2 s2 s12 ovr org2 pts2 cen2
-                       xlo xhi ylo yhi out1 ip1 ip2)
+                       xlo xhi ylo yhi out1 ip1 ip2 hrows)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -1731,6 +2182,15 @@
                                                " CUT FACE")
                                        nil (distance (nth 1 pts2) (nth 2 pts2))))))
         (spa:setmode mode1)))
+  ;; -------------------------------------------------- hinges
+  (setq hrows
+    (cond ((= mode1 "Coversize")
+           (spa:hingeflow (list "OCT" pts) 0.0 bov th t))
+          (meth
+           (spa:hingeflow (list "OCT" pts2) (car org2) (+ (car org2) b2) th t))
+          (t
+           (spa:hingeflow (list "OCT" pts) 0.0 bov th nil))))
+  (if hrows (setq rows (append rows hrows)))
   (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
@@ -1753,7 +2213,7 @@
 
 (defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp
                          mode1 meth g b2 a2 cen2 xlo xhi ylo yhi
-                         out1 bl br ab at)
+                         out1 bl br ab at hrows)
   (setq oldclay (getvar "CLAYER")
         pv (spa:roundpreview))
   (command "_.ZOOM" "_Window"
@@ -1872,6 +2332,16 @@
         (spa:setmode (spa:othermode))
         (setq rows (append rows (spa:otherrows b2 a2)))
         (spa:setmode mode1)))
+  ;; -------------------------------------------------- hinges
+  (setq hrows
+    (cond ((= mode1 "Coversize")
+           (spa:hingeflow (list "ROUND" cen bov aov) 0.0 bov th t))
+          (meth
+           (spa:hingeflow (list "ROUND" cen b2 a2)
+                          (- (car cen) (* 0.5 b2)) (+ (car cen) (* 0.5 b2)) th t))
+          (t
+           (spa:hingeflow (list "ROUND" cen bov aov) 0.0 bov th nil))))
+  (if hrows (setq rows (append rows hrows)))
   (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
@@ -1943,7 +2413,8 @@
 
   (spa:syssave)
   (setq spa:*valnotes* nil
-        spa:*turned* nil)
+        spa:*turned* nil
+        spa:*hingerows* nil)
   (setvar "CMDECHO" 0)
   (spa:undobegin)
   ;; architectural units while prompting so every distance can be typed
@@ -1975,6 +2446,7 @@
   (spa:layer spa:*lay-cover* 6)
   (spa:layer "DIMENSION" 2)
   (spa:layer "SPA-NOTES" 3)
+  (spa:layer "TEXT" 7)
 
   ;; dashed / dotted patterns up front so the guide draws them; the
   ;; patterns are defined in inches and scaled to cancel LTSCALE, so they

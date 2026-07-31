@@ -199,6 +199,7 @@ architectural units while it is prompting.
 | `COVER` | the outline at cover size |
 | `DIMENSION` | every dimension |
 | `SPA-NOTES` | corner letters, the mode note, the report table, and the grey input guide |
+| `TEXT` | the `Hinge` / `Velcro Hinge` labels |
 
 ## While it is asking
 
@@ -225,6 +226,48 @@ run a crew actually takes across the corner — so that is asked first and
 resolves to equal legs (`S = S1 = S2 / √2`). Leaving even `S2` as `NA`
 falls back to a true square octagon sized off `A` and `B` alone — 45°
 cuts, all eight sides equal.
+
+## Auto-hinge
+
+After the cover is dimensioned the command asks **"Auto-hinge the
+cover?"**. Hinges run north-south, splitting the cover into side-by-side
+pieces along its west-east length.
+
+**1. Spillaways** — places a hinge cannot go, asked in a loop that always
+defaults to `No`:
+
+* `Corner` — pick the corner, give the length from the (hypotenuse)
+  corner to keep clear; it blocks that far along both walls of the angle.
+* `Wall` — give the spillaway's overall length; it is assumed centred on
+  its wall. A left/right wall spillaway cannot meet a north-south hinge,
+  so it is recorded but blocks nothing.
+
+**2. The "Spa Cover Details" block** — select it and the `GRADE` and
+`TAPER` tags are read (`Grade: Standard`, `Taper: 4-2`); Enter types the
+taper instead, and a missing grade means **Standard**. Grade + taper give,
+from the foam sheets:
+
+| | governs |
+| --- | --- |
+| foam width | the widest a piece may be = max hinge spacing (48", 49 1/2", 53") |
+| foam length | the longest a hinge may run (96" / 144") — exceeded, the hinge is still drawn and the report says so |
+| pieces | which piece counts are acceptable (e.g. 3-2 folds in 2 only; 5-3 up to 5+) |
+
+A grade+taper with two foam options (Standard 3-2 / 4-2) carries both;
+the solver picks the one needing the fewest hinges.
+
+**3. Placement** — the fewest pieces that fit the foam width, spaced
+evenly, then nudged off any spillaway zone. A nudge keeps every piece
+inside the foam width; when no nudge works the piece count is bumped, and
+failing everything the even layout is kept and the report flags the hinge
+in the zone. One hinge prefers dead centre.
+
+**Drawing** — the leftmost hinge is the fold hinge: a **dashed** line on
+`COVER` labelled `Hinge`. Any further hinges are **ByLayer** lines on
+`COVER` labelled `Velcro Hinge`. Labels go on the `TEXT` layer, vertical,
+beside their hinge. The report gains rows for each spillaway, the piece
+count (with grade/taper), the worst piece width vs foam width, the worst
+hinge length vs foam length, and each hinge's offset from the left edge.
 
 ## Getting the clean sheet drawing
 
