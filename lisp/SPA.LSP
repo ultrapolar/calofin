@@ -104,6 +104,12 @@
 (setq spa:*dimprec*  3)         ; 5 -> 1/8", 2 -> 3 decimal places
 (setq spa:*dimpost*  "\"")      ; suffix stuck on every measurement
 
+;; How far the dimension lines stand off the cover outline, and where
+;; the Water's Edge / Cover Size note sits along its dimension line.
+(setq spa:*dimoff*   36.0)      ; 3 ft: outline -> the OVERALL dim line
+(setq spa:*flatoff*  18.0)      ; outline -> the inboard flat dims
+(setq spa:*notefrac* 0.3333)    ; a third along, from the left / the top
+
 (setq spa:*sfx-water* "Water's Edge")
 (setq spa:*sfx-cover* "Cover Size")
 (setq spa:*lay-water* "POOL")   ; water's edge perimeter layer (dashed)
@@ -121,6 +127,7 @@
 (setq spa:*perdash*  t)              ; draw the perimeter dashed
 (setq spa:*sfx*      "")             ; active dimension suffix
 (setq spa:*modename* "WATER'S EDGE") ; note written under the drawing
+(setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -363,7 +370,8 @@
 ;;;  corners) suffixed with the Water's Edge / Cover Size note.
 
 (setq spa:*dimvars*
-      '("DIMLUNIT" "DIMFRAC" "DIMDEC" "DIMZIN" "DIMPOST" "DIMTAD" "DIMTXT" "DIMASZ"
+      '("DIMLUNIT" "DIMFRAC" "DIMDEC" "DIMZIN" "DIMPOST" "DIMTAD" "DIMTMOVE"
+        "DIMTXT" "DIMASZ"
         "DIMEXE" "DIMEXO" "DIMGAP" "DIMSCALE" "DIMTIX" "DIMTOFL" "DIMATFIT"))
 
 ;; setvar that quietly skips a variable this release does not have.
@@ -376,6 +384,7 @@
   (spa:setv "DIMLUNIT" spa:*dimlunit*)  ; 5 = fractional inches
   (spa:setv "DIMFRAC"  0)               ; 39 3/8, stacked fraction
   (spa:setv "DIMTAD"   0)               ; text straddles the dim line (\X)
+  (spa:setv "DIMTMOVE" 2)               ; text may slide along without a leader
   (spa:setv "DIMDEC"   spa:*dimprec*)
   (spa:setv "DIMZIN"   8)               ; no trailing zeros
   (spa:setv "DIMPOST"  spa:*dimpost*)   ; the inch mark
@@ -405,6 +414,35 @@
       (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2)
                "_T" (strcat "<>" note) (spa:wp pt))
       (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2) (spa:wp pt))))
+
+;; Slide a dimension's text along its own dimension line to `frac` of the
+;; run -- measured from the LEFT on a dim that goes across, from the TOP
+;; on one that goes up.  DXF 11 is the text midpoint and bit 128 of DXF
+;; 70 marks it as user-placed; with DIMTMOVE 2 the dimension line itself
+;; stays put and no leader is added.
+(defun spa:dimslide (e p1 p2 loc frac / a b u tp ed f)
+  (if (>= (abs (- (car p2) (car p1))) (abs (- (cadr p2) (cadr p1))))
+      (if (<= (car p1) (car p2)) (setq a p1 b p2) (setq a p2 b p1))
+      (if (>= (cadr p1) (cadr p2)) (setq a p1 b p2) (setq a p2 b p1)))
+  (setq u  (spa:unit (spa:v- b a))
+        tp (spa:v+ a (spa:v* (spa:v- b a) frac))
+        tp (spa:v+ loc (spa:v* u (spa:dot (spa:v- tp loc) u))))
+  (if (and e (setq ed (entget e)) (= "DIMENSION" (cdr (assoc 0 ed)))
+           (assoc 11 ed) (assoc 70 ed))
+      (progn
+        (setq f  (cdr (assoc 70 ed))
+              ed (subst (cons 11 (spa:wp tp)) (assoc 11 ed) ed)
+              ed (subst (cons 70 (logior f 128)) (assoc 70 ed) ed))
+        (entmod ed)
+        (entupd e)))
+  (princ))
+
+;; An OVERALL dimension: the measurement over the Water's Edge / Cover
+;; Size note, with that note parked a third of the way along the
+;; dimension line so it clears the middle of the cover.
+(defun spa:dimov (p1 p2 loc)
+  (spa:dimalg p1 p2 loc (spa:ovnote))
+  (spa:dimslide (entlast) p1 p2 loc spa:*notefrac*))
 
 ;; Radius dimension read from OUTSIDE the arc: the arc is picked at its
 ;; far point and the dimension line dragged further out along the same
@@ -662,10 +700,15 @@
   (spa:line (list (- x h) ytop) (list (- x h) y0) lay nil)
   (princ))
 
-;; The Water's Edge / Cover Size note under the drawing.
+;; The Water's Edge / Cover Size note under the drawing, plus a line
+;; saying so when the cover was turned to lie long-ways.
 (defun spa:modenote (x y th)
   (spa:textc (list x y) (* 1.6 th)
-             (strcat "SPA OUTLINE DRAWN AT " spa:*modename*) "SPA-NOTES" 7))
+             (strcat "SPA OUTLINE DRAWN AT " spa:*modename*) "SPA-NOTES" 7)
+  (if spa:*turned*
+      (spa:textc (list x (- y (* 2.2 th))) (* 1.2 th)
+                 "TURNED A QUARTER TURN - LONG OVERALL RUNS ACROSS"
+                 "SPA-NOTES" 7)))
 
 ;;; -------------------- rectangle corner treatments --------------------
 ;;;
@@ -915,7 +958,7 @@
 
 ;; Full guided flow for a rectangular spa.
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
-                        a b c d cen doff th allsame oo fo i j lbls cc back
+                        a b c d cen doff th allsame oo fo i j tmp lbls cc back
                         rows lbl)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
@@ -979,6 +1022,21 @@
   (spa:stages (list 'rc:sides 'rc:corners))
   (spa:pvkill)
 
+  ;; -------------------------------------------------- orientation
+  ;; The long overall always runs west to east, whichever order the two
+  ;; were typed in.  Turning the cover a quarter turn clockwise carries
+  ;; the corners round with it: the corner that was B lands bottom-left,
+  ;; so the treatments and their letters rotate one step with the shape.
+  (if (> l w)
+      (setq tmp w
+            w l
+            l tmp
+            corners (append (cdr corners) (list (car corners)))
+            lbls (append (cdr lbls) (list (car lbls)))
+            spa:*turned* t))
+  (if spa:*turned*
+      (princ "\nThe long overall runs across, so the cover is drawn a quarter turn over."))
+
   ;; -------------------------------------------------- draw
   (setq quad (list (list 0.0 0.0) (list w 0.0) (list w l) (list 0.0 l))
         a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
@@ -995,15 +1053,17 @@
   ;; plus one Typ. corner callout is the whole drawing.  When they do
   ;; NOT match, each side a cut has shortened also gets its remaining
   ;; FLAT dimensioned, inboard of the overalls.
+  ;; The overall dimension lines stand 3 ft off the outline; the flats
+  ;; sit inboard of them, half that.
   (setq allsame (spa:samecorners corners)
-        oo (if allsame doff (* 1.7 doff))     ; overalls clear the flats
-        fo (* 0.6 doff))
+        oo spa:*dimoff*
+        fo spa:*flatoff*)
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
   ;; the overalls, true corner to true corner -- the only dims that
   ;; carry the Water's Edge / Cover Size note
-  (spa:dimalg d c (spa:outoff d c cen oo) (spa:ovnote))
-  (spa:dimalg a d (spa:outoff a d cen oo) (spa:ovnote))
+  (spa:dimov d c (spa:outoff d c cen oo))
+  (spa:dimov a d (spa:outoff a d cen oo))
   ;; the flats
   (if (not allsame)
       (foreach i (list 0 1 2 3)
@@ -1018,13 +1078,18 @@
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
-  (foreach lbl (list (list a "A") (list b "B") (list c "C") (list d "D"))
-    (spa:text (spa:v+ (car lbl)
-                      (spa:v* (spa:unit (spa:v- (car lbl) cen)) (* 1.6 th)))
-              th (cadr lbl) "SPA-NOTES"))
-  (spa:modenote 0.0 (- 0.0 (* 3.0 doff)) th)
-  (setq rows (list (list "OVERALL WIDTH (A-B)" w w)
-                   (list "OVERALL LENGTH (A-D)" l l)))
+  ;; the letters travel with their corners, so a turned cover still reads
+  ;; back against the report table
+  (setq i 0)
+  (foreach lbl quad
+    (spa:text (spa:v+ lbl (spa:v* (spa:unit (spa:v- lbl cen)) (* 1.6 th)))
+              th (nth i lbls) "SPA-NOTES")
+    (setq i (1+ i)))
+  (spa:modenote 0.0 (- 0.0 (* 1.4 spa:*dimoff*)) th)
+  (setq rows (list (list (strcat "OVERALL ACROSS (" (nth 0 lbls) "-" (nth 1 lbls) ")")
+                         w w)
+                   (list (strcat "OVERALL UP (" (nth 0 lbls) "-" (nth 3 lbls) ")")
+                         l l)))
   (setq i 0)
   (foreach cc corners
     (setq rows (append rows
@@ -1033,7 +1098,7 @@
                                    (if (= (car cc) "90") nil (cadr cc))
                                    (cadr cc))))
           i (1+ i)))
-  (spa:report rows spa:*valnotes* (+ w (* 2.0 doff)) l th "SPA-NOTES")
+  (spa:report rows spa:*valnotes* (+ w spa:*dimoff*) l th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -1129,7 +1194,7 @@
 ;; Full guided flow for an octagonal spa.
 (defun spa:octflow ( / oldclay pvs pv pvo ans bov aov traw sraw s1raw vraw s2raw
                        ovres s tv s1 v pts cen doff th e p q k rows
-                       xmax ymax ymin tact vact s2act alleq)
+                       xmax ymax ymin tact vact s2act alleq tmp)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -1178,6 +1243,19 @@
         (setq s1 (min 6.0 (* 0.125 aov)) v (- aov s1 s1))
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
+  ;; -------------------------------------------------- orientation
+  ;; the long overall runs west to east; a quarter turn swaps the two
+  ;; overalls and, with them, the flats and the cut legs
+  (if (> aov bov)
+      (setq tmp bov  bov  aov   aov   tmp
+            tmp s    s    s1    s1    tmp
+            tmp tv   tv   v     v     tmp
+            tmp traw traw vraw  vraw  tmp
+            tmp sraw sraw s1raw s1raw tmp
+            spa:*turned* t))
+  (if spa:*turned*
+      (princ "\nThe long overall runs across, so the spa is drawn a quarter turn over."))
+
   ;; -------------------------------------------------- draw
   (setq pts (spa:octpts bov aov s s1)
         cen (spa:centroid pts)
@@ -1204,18 +1282,18 @@
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
   ;; the two overalls, hooked to real corners, dragged clear of the shape
-  (spa:dimalg (nth 7 pts) (nth 2 pts)
-              (list (* 0.5 bov) (+ ymax (* 1.6 doff))) (spa:ovnote))
-  (spa:dimalg (nth 0 pts) (nth 5 pts)
-              (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) (spa:ovnote))
+  (spa:dimov (nth 7 pts) (nth 2 pts)
+             (list (* 0.5 bov) (+ ymax spa:*dimoff*)))
+  (spa:dimov (nth 0 pts) (nth 5 pts)
+             (list (- 0.0 spa:*dimoff*) (* 0.5 aov)))
   ;; the flats, only when the eight sides are NOT simply all equal --
   ;; a true square octagon needs the overalls and the cut, nothing else
   (if (not alleq)
       (progn
         (spa:dimalg (nth 0 pts) (nth 1 pts)
-                    (list (* 0.5 bov) (- ymin (* 0.6 doff))) nil)
+                    (list (* 0.5 bov) (- ymin spa:*flatoff*)) nil)
         (spa:dimalg (nth 2 pts) (nth 3 pts)
-                    (list (+ xmax (* 0.6 doff)) (* 0.5 aov)) nil)))
+                    (list (+ xmax spa:*flatoff*) (* 0.5 aov)) nil)))
   ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
   ;; because all four cuts of an octagon are the same
   (setq p (nth 1 pts) q (nth 2 pts))
@@ -1227,15 +1305,15 @@
   (foreach p pts
     (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) "SPA-NOTES")
     (setq k (1+ k)))
-  (spa:modenote 0.0 (- ymin (* 2.4 doff)) th)
-  (setq rows (list (list "OV B (ACROSS)" bov bov)
-                   (list "OV A (UP)" aov aov)
+  (spa:modenote 0.0 (- ymin (* 1.4 spa:*dimoff*)) th)
+  (setq rows (list (list "OVERALL ACROSS" bov bov)
+                   (list "OVERALL UP" aov aov)
                    (list "T - FLAT ACROSS" traw tact)
                    (list "V - FLAT UP" vraw vact)
                    (list "S - CUT ALONG SIDE" sraw s)
                    (list "S1 - CUT UP END" s1raw s1)
                    (list "S2 - CUT FACE" s2raw s2act)))
-  (spa:report rows spa:*valnotes* (+ xmax (* 2.0 doff)) ymax th "SPA-NOTES")
+  (spa:report rows spa:*valnotes* (+ xmax spa:*dimoff*) ymax th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -1255,7 +1333,7 @@
     (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" 10.0)))
   pv)
 
-(defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows)
+(defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp)
   (setq oldclay (getvar "CLAYER")
         pv (spa:roundpreview))
   (command "_.ZOOM" "_Window"
@@ -1270,6 +1348,12 @@
         bov (spa:sq ans 'b)
         aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov))  ; NA at A -> circle
   (spa:pvkill)
+  ;; an out-of-round spa lies with its long overall west to east
+  (if (> aov bov)
+      (setq tmp bov bov aov aov tmp
+            spa:*turned* t))
+  (if spa:*turned*
+      (princ "\nThe long overall runs across, so the spa is drawn a quarter turn over."))
 
   (setq cen (list (* 0.5 bov) (* 0.5 aov))
         doff (max 6.0 (/ (max bov aov) 12.0))
@@ -1284,17 +1368,17 @@
   ;; shows; only an out-of-round spa needs the second one.
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
-  (spa:dimalg (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
-              (list (* 0.5 bov) (+ aov (* 1.6 doff))) (spa:ovnote))
+  (spa:dimov (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
+             (list (* 0.5 bov) (+ aov spa:*dimoff*)))
   (if (> (abs (- aov bov)) 1.0e-6)
-      (spa:dimalg (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
-                  (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) (spa:ovnote)))
+      (spa:dimov (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
+                 (list (- 0.0 spa:*dimoff*) (* 0.5 aov))))
   (setvar "CLAYER" oldclay)
 
-  (spa:modenote 0.0 (- 0.0 (* 3.0 doff)) th)
-  (setq rows (list (list "OV B (ACROSS)" bov bov)
-                   (list "OV A (UP)" aov aov)))
-  (spa:report rows spa:*valnotes* (+ bov (* 2.0 doff)) aov th "SPA-NOTES")
+  (spa:modenote 0.0 (- 0.0 (* 1.4 spa:*dimoff*)) th)
+  (setq rows (list (list "OVERALL ACROSS" bov bov)
+                   (list "OVERALL UP" aov aov)))
+  (spa:report rows spa:*valnotes* (+ bov spa:*dimoff*) aov th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -1358,7 +1442,8 @@
   (if *push-error-using-command* (*push-error-using-command*))
 
   (spa:syssave)
-  (setq spa:*valnotes* nil)
+  (setq spa:*valnotes* nil
+        spa:*turned* nil)
   (setvar "CMDECHO" 0)
   (spa:undobegin)
   ;; architectural units while prompting so every distance can be typed

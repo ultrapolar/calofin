@@ -71,7 +71,38 @@ Callouts sit outside the corner on its 45° line: a radius dimension on a
 face (`21"`), and a circled corner point with a `90°` leader on a `90`
 corner.
 
+## Orientation
+
+**The long overall always runs west to east**, whichever order the two
+were typed in. If the length comes in bigger than the width the cover is
+drawn a quarter turn over, and the corner treatments and their letters
+travel round with it — the corner the user called `B` lands bottom-left
+and is still labelled `B`, so the drawing reads back against the report
+table. The turn is announced at the command line and noted under the
+drawing.
+
 ## Where the dimensions go
+
+Overall dimension lines stand **3 ft off the outline**; the inboard flat
+dims sit half that. Corner callouts stay near their corner, scaled to the
+cover.
+
+```lisp
+(setq spa:*dimoff*   36.0)   ; 3 ft: outline -> the OVERALL dim line
+(setq spa:*flatoff*  18.0)   ; outline -> the inboard flat dims
+(setq spa:*notefrac* 0.3333) ; where the note sits along its dim line
+```
+
+The `Water's Edge` / `Cover Size` note is parked **a third of the way
+along** its dimension line — from the **left** on a dim that runs across,
+from the **top** on one that runs up — so it stays clear of the middle of
+the cover:
+
+```
+       95"
+  |---------------|
+      Cover Size          <- a third along, not centred
+```
 
 The overall **across** goes on the **top** and the overall **up** on the
 **left**, on every shape. What else appears depends on the corners:
