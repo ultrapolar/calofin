@@ -54,20 +54,28 @@
 ;;;           1 to step 2, ...), in dim style "STANDARD INCHES".
 ;;;       If a style is missing the current style is used instead.
 ;;;   4.  For each step you are asked for the step width, then the step
-;;;       depth (measured from the previous step edge - from the start
-;;;       of the axis for the first step).  The step is drawn once both
-;;;       are given, so the last input is always a depth.
-;;;   5.  Enter (or 0) at a width prompt means the steps are done.
-;;;       Undo at a width prompt removes the step just drawn (its line
-;;;       and its dimensions); Same at a depth prompt repeats the
-;;;       previous depth.
+;;;       depth.  Every depth is measured FROM THE PREVIOUS STEP EDGE
+;;;       (from the start of the axis for the first step) - never a
+;;;       running total.  The step is drawn once both are given, so the
+;;;       last input is always a depth.  Distances read architectural
+;;;       style: a bare number is inches (drawing units) and feet-inch
+;;;       entry like 1'4 (= 16") works whatever the units setting.
+;;;   5.  Ending and shortcuts:
+;;;         - LINE mode: Enter (or 0) at a width prompt = done.
+;;;         - CURVE modes: Enter at a width prompt fits that step to
+;;;           the curve; 0 = done.
+;;;         - Undo at a width prompt removes the step just drawn (its
+;;;           line and its dimensions); Same at a depth prompt repeats
+;;;           the previous depth.
 ;;;   6.  In LINE-only mode you are then asked for one last depth, from
 ;;;       the last step to the back of the curve, and the curve itself
 ;;;       is drawn: a polyline of arc segments through each end of each
 ;;;       step, bulging out to that crown point (the last depth also
 ;;;       gets the final link of the depth-dim chain).  Enter skips the
-;;;       crown and the polyline just chains the step ends.  The curve
-;;;       modes skip this - their curve was selected.
+;;;       crown and the polyline just chains the step ends.  In the
+;;;       curve modes you are offered the same reconstructed boundary
+;;;       through the step ends, with the crown at the point where the
+;;;       measuring axis meets the selected curve.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -97,6 +105,9 @@
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
+
+(setq *hs-version* "v2.1") ; printed on load and at command start so a
+                           ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
 
@@ -415,12 +426,13 @@
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
                       oldce oldstyle ea eb crown pts reflen lastdep
-                      dimflag slog mark scum sP sN sEA sEB rec pc)
+                      dimflag slog mark scum sP sN sEA sEB rec pc oldlu)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nHEMISTEP: " msg)))
@@ -445,8 +457,15 @@
         T)))
 
   ;; ---- 0. environment checks -------------------------------------------
+  (princ (strcat "\nHEMISTEP " *hs-version* " - each depth is measured"
+                 " from the previous step."))
   (setq tol  (hs-tolerance)
         txth (hs-txth))
+  ;; Read distances architectural-style for the whole command: a bare
+  ;; number is drawing units (inches in an inch-based drawing) and
+  ;; feet-inch entry like 1'4 works whatever LUNITS was set to.
+  (setq oldlu (getvar "LUNITS"))
+  (setvar "LUNITS" 4)
   (if (not (equal (trans '(0.0 0.0 1.0) 1 0 T) '(0.0 0.0 1.0) 1e-8))
     (princ (strcat "\nWARNING: the current UCS is not parallel to the"
                    " World XY plane - results may be skewed.")))
@@ -637,14 +656,19 @@
          (progn
            (setq wid 'RETRY)
            (while (eq wid 'RETRY)
-             (initget 4 "Undo")         ; no negative; Enter or 0 = done
+             (initget 4 "Undo")         ; no negative; 0 always = done
              (setq wid (getdist (strcat "\nStep " (itoa n)
-                                        " - step width [Undo]"
-                                        " <Enter = done>: ")))
+                                        " - step width [Undo] "
+                                        (if cmode
+                                          "<Enter = fit to curve, 0 = done>: "
+                                          "<Enter = done>: "))))
              (if (= (type wid) 'STR)
                (progn (if (= wid "Undo") (hs-popstep))
                       (setq wid 'RETRY))))
-           (and wid (> wid 1e-10))))
+           ;; in curve mode Enter means fit this step to the curve;
+           ;; entering 0 ends the run in either mode
+           (if (and cmode (null wid)) (setq wid 'FIT))
+           (and wid (or (eq wid 'FIT) (> wid 1e-10)))))
     (setq dep 'RETRY)
     (while (eq dep 'RETRY)
       (initget 6 (if lastdep "Same" ""))
@@ -662,8 +686,9 @@
         (setq mark (entlast)
               scum cum sP pprev sN n sEA ea sEB eb
               lastdep dep
-              cum  (+ cum dep)               ; depth from the start point
-              p    (hs-add sp (hs-scl dir cum))
+              ;; each step sits DEP past the PREVIOUS step edge, never
+              ;; a running total from the start
+              p    (hs-add pprev (hs-scl dir dep))
               e1   nil
               e2   nil)
         (if cmode
@@ -671,36 +696,48 @@
           (progn
             (setq op  (hs-open p u pieces)
                   nat (if op (caddr op)))
-            (if (and nat (<= (abs (- nat wid)) tol))
-              (progn
-                (setq e1 (car op) e2 (cadr op))
-                (princ (strcat "\n  Step " (itoa n) ": curve opening "
-                               (rtos nat) " is within " (rtos tol) " of "
-                               (rtos wid) " - snapped to the curve.")))
-              (progn
-                ;; center on the curve's opening so the step breaks it
-                ;; equally on both sides; on the axis when there is none
-                (setq cen (if op (hs-mid2 (car op) (cadr op)) p)
-                      e1  (hs-add cen (hs-scl u (* 0.5 wid)))
-                      e2  (hs-add cen (hs-scl u (* -0.5 wid))))
-                (princ (strcat "\n  Step " (itoa n) ": width " (rtos wid)
-                               " held"
-                               (if nat
-                                 (strcat " (curve opening " (rtos nat) ")")
-                                 " (the curve does not reach this depth)")
-                               " - step breaks from the curve.")))))
+            (cond
+              ;; Enter on width -> fit this step to the curve
+              ((eq wid 'FIT)
+               (if op
+                 (progn
+                   (setq e1 (car op) e2 (cadr op))
+                   (princ (strcat "\n  Step " (itoa n)
+                                  ": fitted to the curve, width = "
+                                  (rtos (caddr op)) ".")))
+                 (princ (strcat "\n  Step " (itoa n)
+                                ": the curve does not reach this depth"
+                                " - step skipped."))))
+              ((and nat (<= (abs (- nat wid)) tol))
+               (setq e1 (car op) e2 (cadr op))
+               (princ (strcat "\n  Step " (itoa n) ": curve opening "
+                              (rtos nat) " is within " (rtos tol) " of "
+                              (rtos wid) " - snapped to the curve.")))
+              (T
+               ;; center on the curve's opening so the step breaks it
+               ;; equally on both sides; on the axis when there is none
+               (setq cen (if op (hs-mid2 (car op) (cadr op)) p)
+                     e1  (hs-add cen (hs-scl u (* 0.5 wid)))
+                     e2  (hs-add cen (hs-scl u (* -0.5 wid))))
+               (princ (strcat "\n  Step " (itoa n) ": width " (rtos wid)
+                              " held"
+                              (if nat
+                                (strcat " (curve opening " (rtos nat) ")")
+                                " (the curve does not reach this depth)")
+                              " - step breaks from the curve.")))))
           ;; classic base-line mode: centered on the axis as given
           (progn
             (setq e1 (hs-add p (hs-scl u (* 0.5 wid)))
-                  e2 (hs-add p (hs-scl u (* -0.5 wid))))
-            (princ (strcat "\n  Step " (itoa n) ": width " (rtos wid)
-                           " at depth " (rtos cum) " from the line."))))
+                  e2 (hs-add p (hs-scl u (* -0.5 wid))))))
         (if (and e1 e2)
           (progn
+            (setq cum (+ cum dep))             ; running total (echo only)
+            (princ (strcat "\n  Step " (itoa n) ": " (rtos dep)
+                           " past the previous step ("
+                           (rtos cum) " from the start)."))
             (hs-mkline e1 e2)                  ; the chord (step edge)
-            (if (not cmode)                    ; remember the ends for the
-              (setq ea (append ea (list e1))   ; boundary polyline
-                    eb (append eb (list e2))))
+            (setq ea (append ea (list e1))     ; remember the ends for
+                  eb (append eb (list e2)))    ; the boundary polyline
             (if dimflag
               (progn
                 ;; step width: across the chord, nested behind the start
@@ -732,7 +769,7 @@
                                  " of the curve <Enter = none>: ")))
       (if (and dep (= (type dep) 'REAL))
         (progn
-          (setq crown (hs-add sp (hs-scl dir (+ cum dep))))
+          (setq crown (hs-add pprev (hs-scl dir dep)))
           (if dimflag                        ; last link of the depth chain
             (hs-dim *cs-depth-dimstyle* pprev crown
                     (hs-add (hs-mid2 pprev crown) (hs-scl u offd))))))
@@ -741,6 +778,23 @@
                         (reverse eb)))
       (if (> (length pts) 1)
         (progn
+          (hs-mkpoly pts (hs-blgs pts))
+          (princ "\nBoundary polyline drawn through the step ends.")))))
+
+  ;; ---- 5b. as-built boundary (curve modes) -----------------------------
+  ;; When steps were drawn into a selected curve, offer the same
+  ;; reconstructed boundary through the step ends.  The crown is the
+  ;; axis start point, which is already on the curve, so no extra depth
+  ;; is needed: the polyline runs from the widest step around the crown
+  ;; and back.
+  (if (and cmode (> drawn 0))
+    (progn
+      (initget "Yes No")
+      (if (/= "No" (getkword (strcat "\nDraw the reconstructed boundary"
+                                     " through the step ends? [Yes/No]"
+                                     " <Yes>: ")))
+        (progn
+          (setq pts (append (reverse ea) (list sp) eb))
           (hs-mkpoly pts (hs-blgs pts))
           (princ "\nBoundary polyline drawn through the step ends.")))))
 
@@ -753,8 +807,10 @@
   (if oldstyle (hs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
   (princ))
 
-(princ "\nHEMISTEP.lsp loaded - type HEMISTEP to draw hemisphere steps.")
+(princ (strcat "\nHEMISTEP.lsp " *hs-version*
+               " loaded - type HEMISTEP to draw hemisphere steps."))
 (princ)

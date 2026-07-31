@@ -221,10 +221,20 @@ side, so a distant wall elsewhere in the drawing cannot widen it.
 
 In the curve modes a width within the tolerance of the curve's opening
 snaps to the curve; any other width is held and breaks the curve equally
-at both ends. Each step asks width then depth, so the last input is
-always a depth. At a width prompt: **Enter** or **0** finishes, **Undo**
-removes the step just drawn; **Same** at a depth prompt repeats the
-previous depth.
+at both ends. Each step asks width then depth — every depth measured from
+the previous step edge, never a running total — so the last input is
+always a depth. At a width prompt: in line mode **Enter** or **0**
+finishes; in the curve modes **Enter** fits that step to the curve and
+**0** finishes. **Undo** removes the step just drawn; **Same** at a depth
+prompt repeats the previous depth. After the steps, the curve modes offer
+the same reconstructed boundary polyline through the step ends, with the
+crown at the point where the measuring axis meets the selected curve.
+
+Both commands read distances architectural-style regardless of the
+drawing's units setting: a bare number is drawing units (inches in an
+inch-based drawing) and feet-inch entry like `1'4` (= 16") always works.
+Each prints its version on load and at command start, so a stale copy
+still loaded from an earlier APPLOAD is easy to spot.
 
 ### Dimensions
 

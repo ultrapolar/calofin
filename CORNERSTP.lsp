@@ -111,6 +111,9 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
+(setq *cs-version* "v2.1") ; printed on load and at command start so a
+                           ; stale APPLOADed copy is easy to spot
+
 ;;; ------------------------- vector helpers ----------------------------
 
 (defun cs-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
@@ -387,7 +390,7 @@
                        score best j k tmp w1 w2 corner ang c r a1 a2
                        mid key start d1 d2 bis perp reflen tol txth
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
-                       prevL prevR dimflag w offd oldce oldstyle
+                       prevL prevR dimflag w offd oldce oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark sdist sL sR sP sT sN s)
 
@@ -395,6 +398,7 @@
     (if undoflag (command-s "_.UNDO" "_End"))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nCORNERSTP: " msg)))
@@ -424,8 +428,14 @@
        T)))
 
   ;; ---- 0. environment checks ------------------------------------------
+  (princ (strcat "\nCORNERSTP " *cs-version*))
   (setq tol  (cs-tolerance)
         txth (cs-txth))
+  ;; Read distances architectural-style for the whole command: a bare
+  ;; number is drawing units (inches in an inch-based drawing) and
+  ;; feet-inch entry like 1'4 works whatever LUNITS was set to.
+  (setq oldlu (getvar "LUNITS"))
+  (setvar "LUNITS" 4)
   (if (not (equal (trans '(0.0 0.0 1.0) 1 0 T) '(0.0 0.0 1.0) 1e-8))
     (princ (strcat "\nWARNING: the current UCS is not parallel to the"
                    " World XY plane - results may be skewed."))
@@ -870,8 +880,10 @@
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
   (princ))
 
-(princ "\nCORNERSTP.lsp loaded - type CORNERSTP to draw corner steps.")
+(princ (strcat "\nCORNERSTP.lsp " *cs-version*
+               " loaded - type CORNERSTP to draw corner steps."))
 (princ)
