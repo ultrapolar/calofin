@@ -15,13 +15,20 @@
 ;;;  The first question asks which one is being drawn:
 ;;;
 ;;;    Watersedge  the perimeter is drawn DASHED on layer POOL and every
-;;;                overall / side dimension reads  <measurement> Water's Edge
+;;;                overall reads  <measurement> over  Water's Edge
 ;;;    Coversize   the perimeter is drawn on layer COVER and every
-;;;                overall / side dimension reads  <measurement> Cover Size
+;;;                overall reads  <measurement> over  Cover Size
 ;;;
-;;;  The suffix goes on the OVERALLS only.  Corner callouts (radii, cut
-;;;  faces) and the inboard flat dims are left plain, so a corner or a
-;;;  segment note can never be mistaken for an overall.
+;;;  The note is stacked UNDER the measurement, across the dimension
+;;;  line, the way the order sheet draws it:
+;;;
+;;;             95"
+;;;       |--------------|
+;;;          Cover Size
+;;;
+;;;  It goes on the OVERALLS only.  Corner callouts (radii, cut faces)
+;;;  and the inboard flat dims are left plain, so a corner or a segment
+;;;  note can never be mistaken for an overall.
 ;;;
 ;;;  STANDARD INCHES
 ;;;  ---------------
@@ -36,16 +43,25 @@
 ;;;
 ;;;  DIMENSION LAYOUT
 ;;;  ----------------
-;;;  Laid out the way the cover order sheet does it:
+;;;  The overall ACROSS goes on the TOP and the overall UP on the LEFT,
+;;;  on every shape.  What else appears depends on the corners:
 ;;;
-;;;    Rectangle  overall across on the BOTTOM, overall up on the LEFT;
-;;;               once corners are cut away, the remaining FLAT runs are
-;;;               dimensioned inboard of them on the bottom and right.
-;;;    Octagon    overall across and overall up, plus ONE corner-cut
-;;;               callout (Typ.).  All eight sides equal -> that is all
-;;;               it gets, and the drawing says so; unequal flats get
-;;;               their own inboard dims like the rectangle.
-;;;    Round      one overall.  Only an out-of-round spa gets a second.
+;;;    All four corners identical -- the two overalls plus ONE corner
+;;;    callout with a Typ. suffix, at the bottom-right.  That is the
+;;;    whole drawing for an all-radius or all-diagonal cover, and for a
+;;;    true square octagon.  A plain 90-corner rectangle gets no corner
+;;;    callout at all: the two overalls are the drawing.
+;;;
+;;;    Corners NOT identical -- each cut corner is called out on its own
+;;;    (no Typ.), the square ones among them share one 90-degree mark,
+;;;    and every side a cut has SHORTENED also gets its remaining FLAT
+;;;    dimensioned, inboard of the overalls.  So a cover with one cut
+;;;    top-right reads: overall across, overall up, the top flat, the
+;;;    right flat, the cut face, and 90 Typ. on the square corners.
+;;;
+;;;  The round spa takes one overall; only an out-of-round one gets the
+;;;  second.  An octagon whose eight sides come out unequal picks up the
+;;;  bottom and right flats the same way the rectangle does.
 ;;;
 ;;;  RECTANGLE CORNERS
 ;;;  -----------------
@@ -58,10 +74,9 @@
 ;;;  corners and two square ones takes four different answers.
 ;;;
 ;;;  Callouts sit outside the corner on its 45-degree line: a radius dim
-;;;  on a Radius corner, an aligned dim across a Diagonal cut face, and
-;;;  a 90-degree leader on a 90 corner -- that last only when the corners
-;;;  are MIXED, since an all-square rectangle needs no corner notes.
-;;;  Four identical corners are called out ONCE, with a Typ. suffix.
+;;;  on a Radius corner (R12"), an aligned dim across a Diagonal cut
+;;;  face (21"), and a circled corner point with a 90%%d leader on a 90
+;;;  corner.
 ;;;
 ;;;  Corner naming (plan view):   D ---------- C
 ;;;                               |            |
@@ -89,8 +104,8 @@
 (setq spa:*dimprec*  3)         ; 5 -> 1/8", 2 -> 3 decimal places
 (setq spa:*dimpost*  "\"")      ; suffix stuck on every measurement
 
-(setq spa:*sfx-water* " Water's Edge")
-(setq spa:*sfx-cover* " Cover Size")
+(setq spa:*sfx-water* "Water's Edge")
+(setq spa:*sfx-cover* "Cover Size")
 (setq spa:*lay-water* "POOL")   ; water's edge perimeter layer (dashed)
 (setq spa:*lay-cover* "COVER")  ; cover size perimeter layer
 
@@ -348,7 +363,7 @@
 ;;;  corners) suffixed with the Water's Edge / Cover Size note.
 
 (setq spa:*dimvars*
-      '("DIMLUNIT" "DIMFRAC" "DIMDEC" "DIMZIN" "DIMPOST" "DIMTXT" "DIMASZ"
+      '("DIMLUNIT" "DIMFRAC" "DIMDEC" "DIMZIN" "DIMPOST" "DIMTAD" "DIMTXT" "DIMASZ"
         "DIMEXE" "DIMEXO" "DIMGAP" "DIMSCALE" "DIMTIX" "DIMTOFL" "DIMATFIT"))
 
 ;; setvar that quietly skips a variable this release does not have.
@@ -359,7 +374,8 @@
 ;; off it so the numbers read at any spa size.
 (defun spa:dimsetup (th)
   (spa:setv "DIMLUNIT" spa:*dimlunit*)  ; 5 = fractional inches
-  (spa:setv "DIMFRAC"  2)               ; 84-1/2, not stacked
+  (spa:setv "DIMFRAC"  0)               ; 39 3/8, stacked fraction
+  (spa:setv "DIMTAD"   0)               ; text straddles the dim line (\X)
   (spa:setv "DIMDEC"   spa:*dimprec*)
   (spa:setv "DIMZIN"   8)               ; no trailing zeros
   (spa:setv "DIMPOST"  spa:*dimpost*)   ; the inch mark
@@ -374,12 +390,20 @@
   (spa:setv "DIMATFIT" 3)
   (princ))
 
-;; Aligned dimension between two points, dragged to pt.  sfx is the
-;; Water's Edge / Cover Size note; pass nil for corner callouts.
-(defun spa:dimalg (p1 p2 pt sfx)
-  (if (and sfx (/= sfx ""))
+;; The tail of an OVERALL dimension's text override.  \X splits the
+;; text across the dimension line, so an overall reads as the order
+;; sheet draws it -- the measurement on top, the note stacked under it:
+;;        95"
+;;     Cover Size
+(defun spa:ovnote () (strcat "\\X" spa:*sfx*))
+
+;; Aligned dimension between two points, dragged to pt.  note is appended
+;; to the measurement inside a text override ("\\XCover Size" to stack it,
+;; " Typ." to run it on); pass nil for a plain dimension.
+(defun spa:dimalg (p1 p2 pt note)
+  (if (and note (/= note ""))
       (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2)
-               "_T" (strcat "<>" sfx) (spa:wp pt))
+               "_T" (strcat "<>" note) (spa:wp pt))
       (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2) (spa:wp pt))))
 
 ;; Radius dimension read from OUTSIDE the arc: the arc is picked at its
@@ -723,20 +747,40 @@
         (setq same nil)))
   same)
 
+;; The order sheet's 90-degree corner mark: a small circle on the corner
+;; point with a leader out of it.  Assumes CLAYER is already DIMENSION.
+(defun spa:dim90 (quad i cen doff sfx / p outd r)
+  (setq p (nth i quad)
+        outd (spa:unit (spa:v- p cen))
+        r (* 0.18 doff))
+  (entmake (list '(0 . "CIRCLE")
+                 (cons 8 "DIMENSION")
+                 (cons 10 (spa:wp p))
+                 (cons 40 r)))
+  (command "_.LEADER" (spa:wp (spa:v+ p (spa:v* outd r)))
+           (spa:wp (spa:v+ p (spa:v* outd (* 1.2 doff))))
+           "" (strcat "90%%d" sfx) ""))
+
 ;; Corner callouts, laid out the way the order sheet does them: the note
 ;; sits OUTSIDE the corner, on the 45-degree line out of it.
-;;   Radius    -> a radius dimension read from outside the arc  (R6")
-;;   Diagonal  -> an aligned dimension across the cut face       (12")
-;;   90        -> a leader reading 90 degrees, and only when the corners
-;;                are MIXED (a plain four-square rectangle needs none)
-;; Four identical corners get ONE callout with a Typ. suffix.  None of
-;; these ever carry the Water's Edge / Cover Size note -- they are
+;;   Radius    -> a radius dimension read from outside the arc  (R12")
+;;   Diagonal  -> an aligned dimension across the cut face      (21")
+;;   90        -> a circled corner point with a 90%%d leader
+;;
+;; Four identical corners are called out ONCE, at the bottom-right, with
+;; a Typ. suffix -- that is the whole annotation an all-radius or
+;; all-diagonal cover needs.  Mixed corners are called out one by one,
+;; and the square ones among them share a single 90-degree mark (Typ.
+;; when there is more than one).  A plain rectangle -- four 90 corners,
+;; nothing cut -- gets no corner notes at all.
+;;
+;; None of these ever carry the Water's Edge / Cover Size note: they are
 ;; corners, not overalls.  Assumes CLAYER is already DIMENSION.
-(defun spa:dimcorners (quad corners arcs cen doff anycut / ilist sfx i cc ce
-                                                          p pp pn ty outd am fm)
-  (if (spa:samecorners corners)
-      (setq ilist (list 3) sfx " Typ.")   ; top-left, as the sheet shows it
-      (setq ilist (list 0 1 2 3) sfx ""))
+(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist nsq sqi
+                                                   i cc ce p pp pn ty outd am fm)
+  (setq allsame (spa:samecorners corners)
+        sfx (if allsame " Typ." "")
+        ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
   (foreach i ilist
     (setq p (nth i quad)
           pp (nth (rem (+ i 3) 4) quad)
@@ -752,11 +796,18 @@
       ((= ty "Diagonal")
        (setq fm (spa:mid (car ce) (cadr ce)))
        (spa:dimalg (car ce) (cadr ce)
-                   (spa:v+ fm (spa:v* outd (* 0.6 doff))) sfx))
-      (anycut
-       (command "_.LEADER" (spa:wp p)
-                (spa:wp (spa:v+ p (spa:v* outd (* 1.2 doff))))
-                "" (strcat "90%%d" sfx) "")))))
+                   (spa:v+ fm (spa:v* outd (* 0.6 doff))) sfx))))
+  ;; the square corners of a MIXED set share one mark, scanned from the
+  ;; bottom-right the way the sheet places it
+  (if (not allsame)
+      (progn
+        (setq nsq 0 sqi nil)
+        (foreach i (list 1 0 2 3)
+          (if (= (car (nth i corners)) "90")
+              (progn (setq nsq (1+ nsq))
+                     (if (null sqi) (setq sqi i)))))
+        (if sqi (spa:dim90 quad sqi cen doff (if (> nsq 1) " Typ." "")))))
+  (princ))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
 ;; the picture matches what will be built.  gq = the guide quad,
@@ -864,7 +915,8 @@
 
 ;; Full guided flow for a rectangular spa.
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
-                        a b c d cen doff th oo fo i lbls cc back rows lbl)
+                        a b c d cen doff th allsame oo fo i j lbls cc back
+                        rows lbl)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -937,28 +989,32 @@
   (setq arcs (spa:drawrect quad corners))
 
   ;; -------------------------------------------------- dimensions
-  ;; Laid out the way the order sheet does it: the two overalls on the
-  ;; bottom and the left, and -- once corners are cut away -- the
-  ;; remaining FLAT runs inboard of them, on the bottom and the right.
+  ;; Laid out the way the order sheet does it: the overall across on the
+  ;; TOP and the overall up on the LEFT, both reading <size> over the
+  ;; Cover Size / Water's Edge note.  When all four corners match, that
+  ;; plus one Typ. corner callout is the whole drawing.  When they do
+  ;; NOT match, each side a cut has shortened also gets its remaining
+  ;; FLAT dimensioned, inboard of the overalls.
+  (setq allsame (spa:samecorners corners)
+        oo (if allsame doff (* 1.7 doff))     ; overalls clear the flats
+        fo (* 0.6 doff))
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
-  (setq oo (if anycut (* 1.6 doff) doff)      ; overalls clear the flats
-        fo (* 0.55 doff))
-  ;; the overalls, measured true corner to true corner -- the only dims
-  ;; that carry the Water's Edge / Cover Size note
-  (spa:dimalg a b (spa:outoff a b cen oo) spa:*sfx*)
-  (spa:dimalg a d (spa:outoff a d cen oo) spa:*sfx*)
-  ;; the flats, where a cut corner has actually shortened the run
-  (if (or (/= (car (nth 0 corners)) "90") (/= (car (nth 1 corners)) "90"))
-      (spa:dimalg (spa:cornerpoint quad corners 0 'next)
-                  (spa:cornerpoint quad corners 1 'prev)
-                  (spa:outoff a b cen fo) nil))
-  (if (or (/= (car (nth 1 corners)) "90") (/= (car (nth 2 corners)) "90"))
-      (spa:dimalg (spa:cornerpoint quad corners 1 'next)
-                  (spa:cornerpoint quad corners 2 'prev)
-                  (spa:outoff b c cen fo) nil))
+  ;; the overalls, true corner to true corner -- the only dims that
+  ;; carry the Water's Edge / Cover Size note
+  (spa:dimalg d c (spa:outoff d c cen oo) (spa:ovnote))
+  (spa:dimalg a d (spa:outoff a d cen oo) (spa:ovnote))
+  ;; the flats
+  (if (not allsame)
+      (foreach i (list 0 1 2 3)
+        (setq j (rem (+ i 1) 4))
+        (if (or (/= (car (nth i corners)) "90")
+                (/= (car (nth j corners)) "90"))
+            (spa:dimalg (spa:cornerpoint quad corners i 'next)
+                        (spa:cornerpoint quad corners j 'prev)
+                        (spa:outoff (nth i quad) (nth j quad) cen fo) nil))))
   ;; corner callouts (no note -- these are corners, not overalls)
-  (spa:dimcorners quad corners arcs cen doff anycut)
+  (spa:dimcorners quad corners arcs cen doff)
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
@@ -1005,14 +1061,20 @@
       (list '(0 1 side) '(1 2 cut) '(2 3 side) '(3 4 cut)
             '(4 5 side) '(5 6 cut) '(6 7 side) '(7 0 cut)))
 
-;; Resolve the sheet letters against the overalls.  With the cut letters
-;; unmeasured the shape is a true square octagon: the corners are cut at
-;; 45 degrees (S = S1 = c) and the flats equal the cut faces, i.e.
+;; Resolve the sheet letters against the overalls.
+;;
+;; The cut is normally measured as its FACE (S2) -- that is the tape run
+;; a crew actually takes across the corner -- so a 45-degree face
+;; resolves to equal legs, S = S1 = S2 / sqrt 2.  With even that
+;; unmeasured the shape falls back to a true square octagon, where the
+;; flats equal the cut faces:
 ;;   c = min(A,B) / (2 + sqrt 2)  ->  T = B - 2c,  V = A - 2c
 ;; Any letter that WAS measured wins and its partner is derived from it.
 ;; Returns (S T S1 V).
-(defun spa:octov (aov bov sraw traw s1raw vraw / c s tv s1 v)
-  (setq c (/ (min aov bov) 3.41421356237))
+(defun spa:octov (aov bov sraw traw s1raw vraw s2raw / c s tv s1 v)
+  (setq c (if s2raw
+              (/ s2raw 1.41421356237)
+              (/ (min aov bov) 3.41421356237)))
   (cond
     (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
     (traw (setq s (/ (- bov traw) 2.0) tv traw))
@@ -1074,24 +1136,26 @@
   (command "_.ZOOM" "_Window"
            (spa:wp (list -120.0 -70.0)) (spa:wp (list 340.0 340.0)))
   (princ "\nA gray guide spa is shown -- the RED tie is the dimension being asked for.")
-  (princ "\nThe cut letters may all be NA: A and B alone draw a true square octagon.")
+  (princ "\nUsually A, B and the cut FACE S2 are all that is measured -- NA the rest.")
+  (princ "\nEven S2 may be NA: A and B alone draw a true square octagon.")
   (princ "\n(after the first answer, Back re-asks the previous one)")
 
   (setq ans (spa:askseqb
               (list (list 'b 'REQ "B - overall size ACROSS" (cdr (assoc "B" pvo)))
                     (list 'a 'SUG "A - overall size UP" (cdr (assoc "A" pvo)) '(b))
+                    (list 's2 'NAX "S2 - corner cut FACE (the tape across the cut)"
+                          (cdr (assoc "S2" pvo)))
                     (list 'tt 'NAX "T - flat across (top & bottom)" (cdr (assoc "T" pvo)))
                     (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
                     (list 's1 'NAX "S1 - corner cut up the end" (cdr (assoc "S1" pvo)))
-                    (list 'vv 'NAX "V - flat up (left & right)" (cdr (assoc "V" pvo)))
-                    (list 's2 'NAX "S2 - corner cut face (check)" (cdr (assoc "S2" pvo))))
+                    (list 'vv 'NAX "V - flat up (left & right)" (cdr (assoc "V" pvo))))
               nil)
         bov (spa:sq ans 'b)
         aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)   ; NA at A -> square
         traw (spa:sq ans 'tt) sraw (spa:sq ans 'ss)
         s1raw (spa:sq ans 's1) vraw (spa:sq ans 'vv)
         s2raw (spa:sq ans 's2)
-        ovres (spa:octov aov bov sraw traw s1raw vraw)
+        ovres (spa:octov aov bov sraw traw s1raw vraw s2raw)
         s (car ovres) tv (cadr ovres) s1 (caddr ovres) v (cadddr ovres))
   (spa:pvkill)
 
@@ -1133,22 +1197,25 @@
   (setq tact (distance (nth 0 pts) (nth 1 pts))
         vact (distance (nth 2 pts) (nth 3 pts))
         s2act (distance (nth 1 pts) (nth 2 pts))
-        alleq (and (< (abs (- tact vact)) 0.0625)
-                   (< (abs (- tact s2act)) 0.0625)))
+        ;; "all sides equal" to within 1/8" -- a rounded-off cut face
+        ;; like 39-3/8" must still read as the regular octagon it is
+        alleq (and (< (abs (- tact vact)) 0.125)
+                   (< (abs (- tact s2act)) 0.125)))
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
   ;; the two overalls, hooked to real corners, dragged clear of the shape
   (spa:dimalg (nth 7 pts) (nth 2 pts)
-              (list (* 0.5 bov) (- ymin (* 1.6 doff))) spa:*sfx*)
+              (list (* 0.5 bov) (+ ymax (* 1.6 doff))) (spa:ovnote))
   (spa:dimalg (nth 0 pts) (nth 5 pts)
-              (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) spa:*sfx*)
-  ;; the flats, only when they are not simply "all sides equal"
+              (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) (spa:ovnote))
+  ;; the flats, only when the eight sides are NOT simply all equal --
+  ;; a true square octagon needs the overalls and the cut, nothing else
   (if (not alleq)
       (progn
         (spa:dimalg (nth 0 pts) (nth 1 pts)
-                    (list (* 0.5 bov) (- ymin (* 0.55 doff))) nil)
+                    (list (* 0.5 bov) (- ymin (* 0.6 doff))) nil)
         (spa:dimalg (nth 2 pts) (nth 3 pts)
-                    (list (+ xmax (* 0.55 doff)) (* 0.5 aov)) nil)))
+                    (list (+ xmax (* 0.6 doff)) (* 0.5 aov)) nil)))
   ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
   ;; because all four cuts of an octagon are the same
   (setq p (nth 1 pts) q (nth 2 pts))
@@ -1160,10 +1227,7 @@
   (foreach p pts
     (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) "SPA-NOTES")
     (setq k (1+ k)))
-  (if alleq
-      (spa:textc (list 0.0 (- ymin (* 2.4 doff))) (* 1.2 th)
-                 "OCTAGON - ALL SIDES EQUAL" "SPA-NOTES" 7))
-  (spa:modenote 0.0 (- ymin (* 3.4 doff)) th)
+  (spa:modenote 0.0 (- ymin (* 2.4 doff)) th)
   (setq rows (list (list "OV B (ACROSS)" bov bov)
                    (list "OV A (UP)" aov aov)
                    (list "T - FLAT ACROSS" traw tact)
@@ -1221,10 +1285,10 @@
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
   (spa:dimalg (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
-              (list (* 0.5 bov) (- 0.0 (* 1.6 doff))) spa:*sfx*)
+              (list (* 0.5 bov) (+ aov (* 1.6 doff))) (spa:ovnote))
   (if (> (abs (- aov bov)) 1.0e-6)
       (spa:dimalg (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
-                  (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) spa:*sfx*))
+                  (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) (spa:ovnote)))
   (setvar "CLAYER" oldclay)
 
   (spa:modenote 0.0 (- 0.0 (* 3.0 doff)) th)
@@ -1317,7 +1381,7 @@
             spa:*modename* "COVER SIZE"))
   (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
                  (if spa:*perdash* " (dashed)" "")
-                 ", dims read \"<measurement>" spa:*sfx* "\"."))
+                 "; overalls read <measurement> over \"" spa:*sfx* "\"."))
 
   ;; ------------------------------------------------ shape
   (initget 1 "Rectangle OCtagon ROund")

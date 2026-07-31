@@ -11,7 +11,7 @@ Load it (`APPLOAD`, or drag the file into the drawing) and type **`SPA`**.
 | Shape | What it asks for |
 | --- | --- |
 | **Rectangle** | overall width (A‑B), overall length (A‑D), then each corner |
-| **Octagon** | overalls **B** across and **A** up, plus the cut letters **T / S / S1 / V / S2** (any of them may be `NA`) |
+| **Octagon** | overalls **B** across and **A** up, then the cut **face S2**, then **T / S / S1 / V** (any of them may be `NA`) |
 | **Round** | **B** across and **A** up — a circle when they agree, an ellipse when they do not |
 
 Corner naming, plan view:
@@ -32,14 +32,23 @@ A --------- B        |               |
 The first question is which one is being drawn, and it decides both the
 layer and the dimension text:
 
-| Answer | Perimeter | Dimension text |
+| Answer | Perimeter | Overall dimension reads |
 | --- | --- | --- |
-| `Watersedge` | **dashed**, on layer `POOL` | `<measurement> Water's Edge` |
-| `Coversize` | solid, on layer `COVER` | `<measurement> Cover Size` |
+| `Watersedge` | **dashed**, on layer `POOL` | `<measurement>` over `Water's Edge` |
+| `Coversize` | solid, on layer `COVER` | `<measurement>` over `Cover Size` |
 
-The suffix goes on the **overalls only**. Corner callouts (radii, cut
-faces) and the inboard flat dims are left plain, so a corner or a segment
-note can never be mistaken for an overall.
+The note is stacked **under** the measurement, across the dimension line,
+the way the order sheet draws it:
+
+```
+        95"
+  |--------------|
+     Cover Size
+```
+
+It goes on the **overalls only**. Corner callouts (radii, cut faces) and
+the inboard flat dims are left plain, so a corner or a segment note can
+never be mistaken for an overall.
 
 The mode is also written under the drawing (`SPA OUTLINE DRAWN AT
 WATER'S EDGE`) and in the report table's title.
@@ -58,20 +67,31 @@ treatment cuts inward from there, and a treatment too big for its walls
 is re‑asked.
 
 Callouts sit outside the corner on its 45° line: a radius dimension on a
-`Radius` corner, an aligned dimension across a `Diagonal` cut face, and a
-`90°` leader on a `90` corner — that last **only when the corners are
-mixed**, so an all-square rectangle carries no corner notes at all.
-Four identical corners are called out **once**, with a `Typ.` suffix.
+`Radius` corner (`R12"`), an aligned dimension across a `Diagonal` cut
+face (`21"`), and a circled corner point with a `90°` leader on a `90`
+corner.
 
 ## Where the dimensions go
 
-Laid out the way the cover order sheet does it:
+The overall **across** goes on the **top** and the overall **up** on the
+**left**, on every shape. What else appears depends on the corners:
 
-| Shape | Dimensions drawn |
-| --- | --- |
-| **Rectangle** | overall across on the bottom, overall up on the left; once corners are cut away, the remaining **flat** runs are dimensioned inboard of them, on the bottom and the right |
-| **Octagon** | overall across, overall up, and **one** corner-cut callout (`Typ.`). All eight sides equal → that is all it gets, and the drawing says `OCTAGON - ALL SIDES EQUAL`; unequal flats get their own inboard dims like the rectangle |
-| **Round** | one overall. Only an out-of-round spa gets the second one |
+**All four corners identical** — the two overalls plus **one** corner
+callout with a `Typ.` suffix, at the bottom-right. That is the whole
+drawing for an all-radius or all-diagonal cover, and for a true square
+octagon. A plain 90-corner rectangle gets no corner callout at all: the
+two overalls *are* the drawing.
+
+**Corners not identical** — each cut corner is called out on its own (no
+`Typ.`), the square ones among them share one `90°` mark, and every side
+a cut has **shortened** also gets its remaining **flat** dimensioned,
+inboard of the overalls. So a cover with one cut at the top-right reads:
+overall across, overall up, the top flat, the right flat, the cut face,
+and `90° Typ.` on the square corners.
+
+The round spa takes one overall; only an out-of-round one gets the
+second. An octagon whose eight sides come out unequal picks up the bottom
+and right flats the same way the rectangle does.
 
 ## Standard inches
 
@@ -84,10 +104,13 @@ stay in inches once the command is done.
 Defaults (constants at the top of the file):
 
 ```lisp
-(setq spa:*dimlunit* 5)     ; 5 = fractional inches (84-1/2), 2 = decimal (84.50)
+(setq spa:*dimlunit* 5)     ; 5 = fractional inches (39 3/8), 2 = decimal (39.375)
 (setq spa:*dimprec*  3)     ; 5 -> 1/8", 2 -> 3 decimal places
 (setq spa:*dimpost*  "\"")  ; the inch mark appended to every measurement
 ```
+
+Fractions are stacked (`39 3/8"`, `80 1/8"`, `65 1/4"`) to match the
+sheet.
 
 Input is a separate matter: measurements may be typed as `6'10"`,
 `6'-10-1/2"` or plain inches (`82.5`) — the routine puts the drawing into
@@ -122,8 +145,17 @@ octagon it earns its keep: the cut letters have to close against the
 overalls (`S + T + S = B`, `S1 + V + S1 = A`), and a letter that does not
 fit is adjusted, flagged red, and noted under the table.
 
-Leaving all the octagon cut letters `NA` falls back to a true square
-octagon sized off `A` and `B` alone — 45° cuts, all eight sides equal.
+The octagon's cut is normally measured as its **face** (`S2`) — the tape
+run a crew actually takes across the corner — so that is asked first and
+resolves to equal legs (`S = S1 = S2 / √2`). Leaving even `S2` as `NA`
+falls back to a true square octagon sized off `A` and `B` alone — 45°
+cuts, all eight sides equal.
+
+## Getting the clean sheet drawing
+
+The corner letters, the mode note and the report table all live on
+`SPA-NOTES`. Freeze that one layer and what is left is the outline and
+its dimensions — the drawing as the order sheet shows it.
 
 ## Notes
 
