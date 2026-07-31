@@ -46,10 +46,12 @@
 ;;;            implied lap works out to, so Enter walks through when it
 ;;;            really is a parallel offset.
 ;;;
-;;;  The second outline's overalls go on the BOTTOM and the RIGHT so they
-;;;  cannot collide with the first's pair on the top and the left, and
-;;;  every dimension line -- both outlines' -- stands 3 ft off the COVER
-;;;  outline, the outer of the two.
+;;;  With both drawn, the COVER's overalls go outside -- across 2 ft
+;;;  above it, up 3 ft to its left -- and the WATER'S EDGE's overalls go
+;;;  a third of the way INTO the water's edge, hooked to points on the
+;;;  dimension line itself so the arrows land on the outline.  A lone
+;;;  outline always takes the outside pair.  One more dimension at the
+;;;  bottom gives the OVERLAP: how far the cover laps the water's edge.
 ;;;
 ;;;  DIMENSION STYLES
 ;;;  ----------------
@@ -75,7 +77,8 @@
 ;;;  DIMENSION LAYOUT
 ;;;  ----------------
 ;;;  The overall ACROSS goes on the TOP and the overall UP on the LEFT,
-;;;  on every shape.  What else appears depends on the corners:
+;;;  on every shape, with the text centred on its dimension line as
+;;;  normal.  What else appears depends on the corners:
 ;;;
 ;;;    All four corners identical -- the two overalls plus ONE corner
 ;;;    callout with a Typ. suffix, at the bottom-right.  That is the
@@ -137,9 +140,11 @@
 
 ;; How far the dimension lines stand off the cover outline, and where
 ;; the Water's Edge / Cover Size note sits along its dimension line.
-(setq spa:*dimoff*   36.0)      ; 3 ft: outline -> the OVERALL dim line
-(setq spa:*flatoff*  18.0)      ; outline -> the inboard flat dims
-(setq spa:*notefrac* 0.3333)    ; a third along, from the left / the top
+(setq spa:*dimoff*    36.0)     ; 3 ft: cover outline -> the LEFT overall dim
+(setq spa:*topoff*    24.0)     ; 2 ft: cover outline -> the TOP overall dim
+(setq spa:*flatoff*   18.0)     ; outline -> the inboard flat dims
+(setq spa:*insetfrac* 0.3333)   ; water's edge dims, a third of the way in
+(setq spa:*lapoff*    14.0)     ; how far under the cover the lap note sits
 
 (setq spa:*sfx-water* "Water's Edge")
 (setq spa:*sfx-cover* "Cover Size")
@@ -508,34 +513,24 @@
                "_T" (strcat "<>" note) (spa:wp pt))
       (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2) (spa:wp pt))))
 
-;; Slide a dimension's text along its own dimension line to `frac` of the
-;; run -- measured from the LEFT on a dim that goes across, from the TOP
-;; on one that goes up.  DXF 11 is the text midpoint and bit 128 of DXF
-;; 70 marks it as user-placed; with DIMTMOVE 2 the dimension line itself
-;; stays put and no leader is added.
-(defun spa:dimslide (e p1 p2 loc frac / a b u tp ed f)
-  (if (>= (abs (- (car p2) (car p1))) (abs (- (cadr p2) (cadr p1))))
-      (if (<= (car p1) (car p2)) (setq a p1 b p2) (setq a p2 b p1))
-      (if (>= (cadr p1) (cadr p2)) (setq a p1 b p2) (setq a p2 b p1)))
-  (setq u  (spa:unit (spa:v- b a))
-        tp (spa:v+ a (spa:v* (spa:v- b a) frac))
-        tp (spa:v+ loc (spa:v* u (spa:dot (spa:v- tp loc) u))))
+;; Park a dimension's text at an explicit point.  DXF 11 is the text
+;; midpoint and bit 128 of DXF 70 marks it as user-placed.  Used only for
+;; the overlap note, which is far too small to hold its own text.
+(defun spa:dimtextat (e pt / ed f)
   (if (and e (setq ed (entget e)) (= "DIMENSION" (cdr (assoc 0 ed)))
            (assoc 11 ed) (assoc 70 ed))
       (progn
         (setq f  (cdr (assoc 70 ed))
-              ed (subst (cons 11 (spa:wp tp)) (assoc 11 ed) ed)
+              ed (subst (cons 11 (spa:wp pt)) (assoc 11 ed) ed)
               ed (subst (cons 70 (logior f 128)) (assoc 70 ed) ed))
         (entmod ed)
         (entupd e)))
   (princ))
 
 ;; An OVERALL dimension: the measurement over the Water's Edge / Cover
-;; Size note, with that note parked a third of the way along the
-;; dimension line so it clears the middle of the cover.
+;; Size note, both centred on the dimension line as normal.
 (defun spa:dimov (p1 p2 loc)
-  (spa:dimalg p1 p2 loc (spa:ovnote))
-  (spa:dimslide (entlast) p1 p2 loc spa:*notefrac*))
+  (spa:dimalg p1 p2 loc (spa:ovnote)))
 
 ;; Radius dimension read from OUTSIDE the arc: the arc is picked at its
 ;; far point and the dimension line dragged further out along the same
@@ -893,16 +888,55 @@
 (defun spa:orgfor (cen w l)
   (list (- (car cen) (* 0.5 w)) (- (cadr cen) (* 0.5 l))))
 
-;; The SECOND outline's overalls, dimensioned on the BOTTOM and the
-;; RIGHT so they cannot collide with the first outline's pair on the top
-;; and the left.  Both stand off the COVER outline -- the outer of the
-;; two -- by the usual 3 ft.  ac1/ac2 span the shape across, up1/up2 span
-;; it up; xhi/ylo are the cover's right and bottom extents.
-(defun spa:dimother (ac1 ac2 up1 up2 xhi ylo)
-  (spa:dimov ac1 ac2
-             (list (* 0.5 (+ (car ac1) (car ac2))) (- ylo spa:*dimoff*)))
-  (spa:dimov up1 up2
-             (list (+ xhi spa:*dimoff*) (* 0.5 (+ (cadr up1) (cadr up2))))))
+;; Dimension one outline's two overalls.
+;;
+;;   OUTSIDE -- the COVER's pair, and a lone outline's: the across dim
+;;   2 ft above the cover and the up dim 3 ft to its left, clear of the
+;;   whole drawing.
+;;
+;;   INSIDE -- the WATER'S EDGE's pair, when the cover is drawn as well:
+;;   a third of the way into its own outline, hooked to points that sit
+;;   ON the dimension line, so the arrows land on the outline itself
+;;   rather than trailing extension lines across the cover.
+;;
+;;  cxlo / cyhi are the cover's left and top edges.
+(defun spa:dimoveralls (outside ac1 ac2 up1 up2 cxlo cyhi)
+  (if outside
+      (progn
+        (spa:dimov ac1 ac2 (list (* 0.5 (+ (car ac1) (car ac2)))
+                                 (+ cyhi spa:*topoff*)))
+        (spa:dimov up1 up2 (list (- cxlo spa:*dimoff*)
+                                 (* 0.5 (+ (cadr up1) (cadr up2))))))
+      (progn
+        (spa:dimov ac1 ac2 (spa:mid ac1 ac2))
+        (spa:dimov up1 up2 (spa:mid up1 up2))))
+  (princ))
+
+;; The four points an outline is dimensioned from when its pair goes
+;; INSIDE: a third of the way up from the bottom for the across dim and
+;; a third of the way in from the left for the up dim, each pair lying on
+;; its own dimension line.  inx / iny push the station clear of a cut
+;; corner, so the arrows always land on a straight run of the outline.
+;; Returns (across1 across2 up1 up2).
+(defun spa:insidepts (xlo xhi ylo yhi inx iny / xst yst)
+  (setq xst (+ xlo (max (* (- xhi xlo) spa:*insetfrac*) (* 1.05 inx)))
+        yst (+ ylo (max (* (- yhi ylo) spa:*insetfrac*) (* 1.05 iny))))
+  (list (list xlo yst) (list xhi yst)
+        (list xst ylo) (list xst yhi)))
+
+;; The overlap between the two outlines, dimensioned at the BOTTOM: how
+;; far the cover laps the water's edge.  The lap is far too small to hold
+;; its own text, so the note is parked below the cover -- DIMTMOVE 1
+;; gives it a leader back to the dimension.
+(defun spa:dimlap (x ycov ywe / om)
+  (setq om (getvar "DIMTMOVE"))
+  (spa:setv "DIMTMOVE" 1)
+  (spa:dimalg (list x ycov) (list x ywe) (list x (* 0.5 (+ ycov ywe)))
+              " Overlap")
+  (spa:dimtextat (entlast)
+                 (list x (- (min ycov ywe) spa:*lapoff*)))
+  (if om (spa:setv "DIMTMOVE" om))
+  (princ))
 
 ;; Report rows for the second outline, tagged with which one it is.
 (defun spa:otherrows (across up)
@@ -978,6 +1012,16 @@
        (setq arcs (cons (entlast) arcs)))
       (t (setq arcs (cons nil arcs)))))
   (reverse arcs))
+
+;; How far the deepest corner treatment sets back along its walls -- an
+;; inside dimension has to stand clear of that to land on a straight run.
+(defun spa:maxsetback (corners / m c)
+  (setq m 0.0)
+  (foreach c corners
+    (setq m (max m (cond ((= (car c) "Radius") (cadr c))
+                         ((= (car c) "Diagonal") (* (cadr c) 0.70711))
+                         (t 0.0)))))
+  m)
 
 ;; Do all four corners carry the same treatment?  Four identical corners
 ;; get ONE callout with a Typ. suffix, the way the order sheet shows it.
@@ -1163,7 +1207,7 @@
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
                         a b c d cen doff th allsame i j tmp lbls cc back
                         rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
-                        xlo xhi ylo yhi)
+                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -1301,21 +1345,24 @@
         (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions
-  ;; Laid out the way the order sheet does it: the overall across on the
-  ;; TOP and the overall up on the LEFT, both reading <size> over the
-  ;; Cover Size / Water's Edge note.  When all four corners match, that
-  ;; plus one Typ. corner callout is the whole drawing.  When they do
-  ;; NOT match, each side a cut has shortened also gets its remaining
-  ;; FLAT dimensioned, inboard of the overalls.
-  ;; The overall dimension lines stand 3 ft off the cover outline; the
-  ;; flats sit inboard of them, half that.
-  (setq allsame (spa:samecorners corners))
+  ;; Laid out the way the order sheet does it.  The COVER's overalls go
+  ;; outside -- across 2 ft above it, up 3 ft to its left.  The WATER'S
+  ;; EDGE's overalls, when both outlines are drawn, go a third of the way
+  ;; INTO the water's edge.  When all four corners match, that plus one
+  ;; Typ. corner callout is the whole drawing; when they do not, each
+  ;; side a cut has shortened also gets its remaining FLAT dimensioned.
+  (setq allsame (spa:samecorners corners)
+        out1 (or (null meth) (= mode1 "Coversize"))
+        sb1 (spa:maxsetback corners)
+        ip1 (spa:insidepts 0.0 w 0.0 l sb1 sb1))
   (setvar "CLAYER" "DIMENSION")
   (spa:dimstylenow th)
-  ;; the overalls, true corner to true corner -- the only dims that
-  ;; carry the Water's Edge / Cover Size note
-  (spa:dimov d c (list (* 0.5 w) (+ yhi spa:*dimoff*)))
-  (spa:dimov a d (list (- xlo spa:*dimoff*) (* 0.5 l)))
+  ;; the overalls -- the only dims that carry the Water's Edge / Cover
+  ;; Size note
+  (if out1
+      (spa:dimoveralls t d c a d xlo yhi)
+      (spa:dimoveralls nil (nth 0 ip1) (nth 1 ip1) (nth 2 ip1) (nth 3 ip1)
+                       xlo yhi))
   ;; the flats
   (if (not allsame)
       (foreach i (list 0 1 2 3)
@@ -1329,17 +1376,27 @@
   ;; corner callouts (no note -- these are corners, not overalls)
   (spa:dimcorners quad corners arcs cen doff)
 
-  ;; the second outline: its two overalls on the bottom and the right,
-  ;; in ITS dimension style, plus one Typ. corner callout at the
-  ;; top-left when its corners all match
+  ;; the second outline, in ITS dimension style, plus one Typ. corner
+  ;; callout at the top-left when its corners all match
   (if meth
       (progn
         (spa:setmode (spa:othermode))
         (spa:dimstylenow th)
-        (spa:dimother (nth 0 q2) (nth 1 q2) (nth 1 q2) (nth 2 q2) xhi ylo)
+        (setq sb2 (spa:maxsetback c2)
+              ip2 (spa:insidepts (car org2) (+ (car org2) w2)
+                                 (cadr org2) (+ (cadr org2) l2) sb2 sb2))
+        (if out1
+            (spa:dimoveralls nil (nth 0 ip2) (nth 1 ip2) (nth 2 ip2) (nth 3 ip2)
+                             xlo yhi)
+            (spa:dimoveralls t (nth 3 q2) (nth 2 q2) (nth 0 q2) (nth 3 q2)
+                             xlo yhi))
         (if (spa:samecorners c2)
             (spa:dimcorner1 q2 c2 arcs2 cen2 doff 3 " Typ."))
-        (spa:setmode mode1)))
+        (spa:setmode mode1)
+        ;; and how far the cover laps the water's edge, at the bottom
+        (spa:dimstyle spa:*ds-cover* th 1.0)
+        (spa:dimlap (* 0.5 (+ xlo xhi)) ylo (max 0.0 (cadr org2))))
+      nil)
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
@@ -1475,7 +1532,7 @@
                        ovres s tv s1 v pts cen doff th e p q k rows
                        tact vact s2act alleq tmp
                        mode1 meth g kk b2 a2 s2 s12 ovr org2 pts2 cen2
-                       xlo xhi ylo yhi)
+                       xlo xhi ylo yhi out1 ip1 ip2)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -1601,22 +1658,24 @@
   ;; The order sheet's octagon panel carries three things: the overall
   ;; across, the overall up, and ONE corner-cut callout, because all
   ;; eight sides are equal.  When the cut letters make the sides UNequal
-  ;; the two flats are dimensioned as well, inboard of the overalls --
-  ;; the same layout as the cut-corner rectangle panel.
+  ;; the two flats are dimensioned as well, inboard of the overalls.
   (setq tact (distance (nth 0 pts) (nth 1 pts))
         vact (distance (nth 2 pts) (nth 3 pts))
         s2act (distance (nth 1 pts) (nth 2 pts))
         ;; "all sides equal" to within 1/8" -- a rounded-off cut face
         ;; like 39-3/8" must still read as the regular octagon it is
         alleq (and (< (abs (- tact vact)) 0.125)
-                   (< (abs (- tact s2act)) 0.125)))
+                   (< (abs (- tact s2act)) 0.125))
+        out1 (or (null meth) (= mode1 "Coversize"))
+        ip1 (spa:insidepts 0.0 bov 0.0 aov s s1))
   (setvar "CLAYER" "DIMENSION")
   (spa:dimstylenow th)
-  ;; the two overalls, hooked to real corners, dragged clear of the shape
-  (spa:dimov (nth 7 pts) (nth 2 pts)
-             (list (* 0.5 bov) (+ yhi spa:*dimoff*)))
-  (spa:dimov (nth 0 pts) (nth 5 pts)
-             (list (- xlo spa:*dimoff*) (* 0.5 aov)))
+  ;; the two overalls, hooked to real corners
+  (if out1
+      (spa:dimoveralls t (nth 7 pts) (nth 2 pts) (nth 0 pts) (nth 5 pts)
+                       xlo yhi)
+      (spa:dimoveralls nil (nth 0 ip1) (nth 1 ip1) (nth 2 ip1) (nth 3 ip1)
+                       xlo yhi))
   ;; the flats, only when the eight sides are NOT simply all equal --
   ;; a true square octagon needs the overalls and the cut, nothing else
   (if (not alleq)
@@ -1630,16 +1689,24 @@
   (setq p (nth 1 pts) q (nth 2 pts))
   (spa:dimalg p q (spa:outoffp p q pts (* 0.8 doff)) " Typ.")
 
-  ;; the second outline: its two overalls on the bottom and the right,
-  ;; in ITS dimension style, plus its cut face on the top-left cut
+  ;; the second outline, in ITS dimension style, plus its cut face
   (if meth
       (progn
         (spa:setmode (spa:othermode))
         (spa:dimstylenow th)
-        (spa:dimother (nth 7 pts2) (nth 2 pts2) (nth 0 pts2) (nth 5 pts2) xhi ylo)
+        (setq ip2 (spa:insidepts (car org2) (+ (car org2) b2)
+                                 (cadr org2) (+ (cadr org2) a2) s2 s12))
+        (if out1
+            (spa:dimoveralls nil (nth 0 ip2) (nth 1 ip2) (nth 2 ip2) (nth 3 ip2)
+                             xlo yhi)
+            (spa:dimoveralls t (nth 7 pts2) (nth 2 pts2) (nth 0 pts2) (nth 5 pts2)
+                             xlo yhi))
         (setq p (nth 5 pts2) q (nth 6 pts2))
         (spa:dimalg p q (spa:outoffp p q pts2 (* 0.8 doff)) " Typ.")
-        (spa:setmode mode1)))
+        (spa:setmode mode1)
+        ;; and how far the cover laps the water's edge, at the bottom
+        (spa:dimstyle spa:*ds-cover* th 1.0)
+        (spa:dimlap (* 0.5 (+ xlo xhi)) ylo (max 0.0 (cadr org2)))))
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
@@ -1685,7 +1752,8 @@
   pv)
 
 (defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp
-                         mode1 meth g b2 a2 cen2 xlo xhi ylo yhi)
+                         mode1 meth g b2 a2 cen2 xlo xhi ylo yhi
+                         out1 bl br ab at)
   (setq oldclay (getvar "CLAYER")
         pv (spa:roundpreview))
   (command "_.ZOOM" "_Window"
@@ -1752,24 +1820,48 @@
         (spa:setmode mode1)))
 
   ;; A true circle takes the single overall the order sheet's round panel
-  ;; shows; only an out-of-round spa needs the second one.
+  ;; shows; only an out-of-round spa needs the second one.  A round spa's
+  ;; overalls have to run through the centre, so the water's edge pair
+  ;; sits on the centre lines rather than a third of the way in.
+  (setq out1 (or (null meth) (= mode1 "Coversize")))
   (setvar "CLAYER" "DIMENSION")
   (spa:dimstylenow th)
-  (spa:dimov (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
-             (list (* 0.5 bov) (+ yhi spa:*dimoff*)))
-  (if (> (abs (- aov bov)) 1.0e-6)
-      (spa:dimov (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
-                 (list (- xlo spa:*dimoff*) (* 0.5 aov))))
+  (if out1
+      (progn
+        (spa:dimov (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
+                   (list (* 0.5 bov) (+ yhi spa:*topoff*)))
+        (if (> (abs (- aov bov)) 1.0e-6)
+            (spa:dimov (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
+                       (list (- xlo spa:*dimoff*) (* 0.5 aov)))))
+      (progn
+        (spa:dimov (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
+                   (list (* 0.5 bov) (* 0.5 aov)))
+        (if (> (abs (- aov bov)) 1.0e-6)
+            (spa:dimov (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
+                       (list (* 0.5 bov) (* 0.5 aov))))))
   (if meth
       (progn
         (spa:setmode (spa:othermode))
         (spa:dimstylenow th)
-        (spa:dimother (list (- (car cen) (* 0.5 b2)) (cadr cen))
-                      (list (+ (car cen) (* 0.5 b2)) (cadr cen))
-                      (list (car cen) (- (cadr cen) (* 0.5 a2)))
-                      (list (car cen) (+ (cadr cen) (* 0.5 a2)))
-                      xhi ylo)
-        (spa:setmode mode1)))
+        (setq bl (- (car cen) (* 0.5 b2)) br (+ (car cen) (* 0.5 b2))
+              ab (- (cadr cen) (* 0.5 a2)) at (+ (cadr cen) (* 0.5 a2)))
+        (if out1
+            (progn
+              (spa:dimov (list bl (cadr cen)) (list br (cadr cen))
+                         (list (car cen) (cadr cen)))
+              (if (> (abs (- a2 b2)) 1.0e-6)
+                  (spa:dimov (list (car cen) ab) (list (car cen) at)
+                             (list (car cen) (cadr cen)))))
+            (progn
+              (spa:dimov (list bl (cadr cen)) (list br (cadr cen))
+                         (list (car cen) (+ yhi spa:*topoff*)))
+              (if (> (abs (- a2 b2)) 1.0e-6)
+                  (spa:dimov (list (car cen) ab) (list (car cen) at)
+                             (list (- xlo spa:*dimoff*) (cadr cen))))))
+        (spa:setmode mode1)
+        ;; and how far the cover laps the water's edge, at the bottom
+        (spa:dimstyle spa:*ds-cover* th 1.0)
+        (spa:dimlap (car cen) ylo (max 0.0 ab))))
   (setvar "CLAYER" oldclay)
 
   (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)

@@ -72,9 +72,10 @@ implied lap works out to — Enter walks straight through when the second
 outline really is a parallel offset, and a corner measured differently
 can be typed over.
 
-The second outline's overalls go on the **bottom** and the **right**, so
-they cannot collide with the first outline's pair on the top and the
-left. Both outlines end up in the report table.
+With both drawn, the **cover's** overalls go outside and the **water's
+edge's** go a third of the way **into** the water's edge — see below. One
+more dimension at the **bottom** gives the **overlap**: how far the cover
+laps the water's edge. Both outlines end up in the report table.
 
 ## Dimension styles
 
@@ -119,26 +120,33 @@ drawing.
 
 ## Where the dimensions go
 
-Overall dimension lines stand **3 ft off the cover outline** — the outer
-of the two when both are drawn; the inboard flat dims sit half that. Corner callouts stay near their corner, scaled to the
-cover.
+The **cover's** overalls go outside it: the across dim **2 ft above**,
+the up dim **3 ft to the left**. A lone outline — whichever it is — is
+dimensioned the same way.
+
+When both outlines are drawn, the **water's edge's** overalls go a third
+of the way **into** the water's edge: the across dim a third up from its
+bottom, the up dim a third in from its left. Both are hooked to points
+that sit on the dimension line itself, so the arrows land on the outline
+instead of trailing extension lines across the cover.
+
+All dimension text is **centred** on its dimension line as normal.
 
 ```lisp
-(setq spa:*dimoff*   36.0)   ; 3 ft: outline -> the OVERALL dim line
-(setq spa:*flatoff*  18.0)   ; outline -> the inboard flat dims
-(setq spa:*notefrac* 0.3333) ; where the note sits along its dim line
+(setq spa:*dimoff*    36.0)   ; 3 ft: cover -> the LEFT overall dim
+(setq spa:*topoff*    24.0)   ; 2 ft: cover -> the TOP overall dim
+(setq spa:*flatoff*   18.0)   ; outline -> the inboard flat dims
+(setq spa:*insetfrac* 0.3333) ; water's edge dims, a third of the way in
+(setq spa:*lapoff*    14.0)   ; how far under the cover the lap note sits
 ```
 
-The `Water's Edge` / `Cover Size` note is parked **a third of the way
-along** its dimension line — from the **left** on a dim that runs across,
-from the **top** on one that runs up — so it stays clear of the middle of
-the cover:
+Corner callouts stay near their corner, scaled to the cover. The water's
+edge's flats and corner callouts are still placed relative to its own
+outline, so they can land on top of the cover — nudge those by hand.
 
-```
-       95"
-  |---------------|
-      Cover Size          <- a third along, not centred
-```
+A round spa is the one exception to the inset rule: its overalls have to
+run through the centre to be diameters, so the water's edge pair sits on
+the centre lines.
 
 The overall **across** goes on the **top** and the overall **up** on the
 **left**, on every shape. What else appears depends on the corners:
