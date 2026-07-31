@@ -84,6 +84,19 @@
 ;;;       appear somewhere in the highlighted area — missing is
 ;;;       suggested. With a cover drawn the note must NOT be there —
 ;;;       present suggests taking it off; absent is all good.
+;;;     - COVER LAYER = POLYLINES. Anything drawn on the cover layer
+;;;       that is not a polyline is called out.
+;;;     - OVERLAP NA <-> DASHED OUTLINE. Overlap reading NA means no
+;;;       dashed polyline may sit on the pool layer; a stated overlap
+;;;       demands one. Either mismatch is reported.
+;;;     - REPLACEMENT. A "Replacement Disclaimer" block should be in
+;;;       the selection. Without one COVERCHECK asks whether the
+;;;       drawing is a replacement; answering Yes asks you to point
+;;;       at the block, and not finding it is reported. COVERSCAN
+;;;       cannot ask and just notes the block is not there.
+;;;     - Under any of these - a replacement, an NA overlap, or a
+;;;       cover drawn on the cover layer - PADDLE pads are NOT
+;;;       suggested.
 ;;;     - PADS. The pool outline is run through PADDLE's concave-
 ;;;       feature hunt at 36" pads; every spot with no pad already
 ;;;       nearby (existing pads = *cchk-pad-blocks* inserts, or any
@@ -170,6 +183,8 @@
 (setq *cchk-pad-maxrad*  54.0)     ; 4'-6": largest concave radius needing pads (PADDLE)
 (setq *cchk-chain-fuzz*  0.05)     ; max gap when chaining an exploded outline
 (setq *cchk-pad-angtol*  (/ pi 180.0)) ; 1 deg: corners flatter than this are straight-through
+(setq *cchk-repl-block*  "Replacement Disclaimer") ; block demanded on replacement drawings
+(setq *cchk-dashed-pat*  "*DASH*,*HIDDEN*") ; linetype names that count as dashed
 
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
@@ -439,6 +454,12 @@
   (setq ans (getkword (strcat msg " [Yes/No] <Yes>: ")))
   (or (null ans) (= ans "Yes")))
 
+(defun cchk:ask-ny (msg / ans)
+  ;; T = yes; Enter or N = no (the cautious default)
+  (initget "Yes No")
+  (setq ans (getkword (strcat msg " [Yes/No] <No>: ")))
+  (= ans "Yes"))
+
 (defun cchk:ask-yn-nav (msg / ans)
   ;; the reviewing question, with a way out of a mis-press:
   ;; 'yes 'no 'back (redo the previous item) 'skip (stop asking,
@@ -501,7 +522,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1805,16 +1826,50 @@
 (defun cchk:nxn-str (sp)
   (strcat (itoa (car sp)) "x" (itoa (cadr sp))))
 
-(defun cchk:layer-in-sel (ss lay / i ed found)
-  ;; T when anything in the selection sits on the given layer
+(defun cchk:na-p (s)
+  ;; T when the text reads NA / N/A instead of a value
+  (and s (wcmatch (strcat " " (cchk:norm-text s) " ")
+                  "* NA *,* N A *")))
+
+(defun cchk:ent-linetype (ent / ed lt ld)
+  ;; the entity's effective linetype name (ByLayer resolved through
+  ;; its layer); "CONTINUOUS" when nothing says otherwise
+  (setq ed (entget ent)
+        lt (cdr (assoc 6 ed)))
+  (if (or (null lt) (= "BYLAYER" (strcase lt)))
+    (progn
+      (setq ld (tblsearch "LAYER" (cdr (assoc 8 ed))))
+      (setq lt (if ld (cdr (assoc 6 ld))))))
+  (if lt lt "CONTINUOUS"))
+
+(defun cchk:dashed-poly-on (ss lay / i e ed found)
+  ;; T when the selection holds a polyline on the given layer drawn
+  ;; with a dashed linetype (*cchk-dashed-pat*)
   (setq i 0 lay (strcase lay))
+  (repeat (sslength ss)
+    (setq e  (ssname ss i)
+          i  (1+ i)
+          ed (entget e))
+    (if (and (not found) ed
+             (member (cdr (assoc 0 ed)) '("LWPOLYLINE" "POLYLINE"))
+             (= lay (strcase (cdr (assoc 8 ed))))
+             (wcmatch (strcase (cchk:ent-linetype e)) *cchk-dashed-pat*))
+      (setq found T)))
+  found)
+
+(defun cchk:cover-nonpoly (ss lay / i ed n bad)
+  ;; (total . non-polylines) over everything in the selection on the
+  ;; given layer - the drawn cover must be polylines only
+  (setq i 0 n 0 bad 0 lay (strcase lay))
   (repeat (sslength ss)
     (setq ed (entget (ssname ss i))
           i  (1+ i))
-    (if (and (not found) ed
-             (= lay (strcase (cdr (assoc 8 ed)))))
-      (setq found T)))
-  found)
+    (if (and ed (= lay (strcase (cdr (assoc 8 ed)))))
+      (progn
+        (setq n (1+ n))
+        (if (not (member (cdr (assoc 0 ed)) '("LWPOLYLINE" "POLYLINE")))
+          (setq bad (1+ bad))))))
+  (cons n bad))
 
 (defun cchk:sel-has-phrase (ss blks phrase / pat found i e ed g b)
   ;; T when the phrase appears in the highlighted area: on a TEXT or
@@ -1872,16 +1927,19 @@
                      (cons 40 (/ *cchk-pad-size* 2.0))))
     (cchk:tag (entlast) "MARKER")))
 
-(defun cchk:cover-audit (ss blks markers saved / pres pents vts narc nlin v
-                          sqft det ovraw ovval ovok spraw spval arcy
-                          wantov wantsp why covered note lines s f
+(defun cchk:cover-audit (ss blks live saved / pres pents vts narc nlin v
+                          sqft det ovraw ovval ovok ovna spraw spval spna
+                          arcy wantov wantsp why dashpoly cstat covered note
+                          replblk replp replsum padskip pk lines s f
                           feats padctrs miss poolsum detsum padsum notesum)
   ;; every cover rule, run over the selection. Returns
   ;;   (header-summaries detail-lines)
   ;; as plain report strings - cchk:attn-p decides which turn red.
   ;; Nothing in the drawing is rewritten; disagreements are only
-  ;; SUGGESTED against. With MARKERS, suggested pad spots are also
-  ;; circled on the construction layer.
+  ;; SUGGESTED against. LIVE marks a real COVERCHECK run: suggested
+  ;; pad spots are circled on the construction layer, and with no
+  ;; Replacement Disclaimer selected the replacement question is
+  ;; asked at the prompt (COVERSCAN never asks).
 
   ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
   (setq pres  (cchk:pool-ents ss saved)
@@ -1951,19 +2009,29 @@
         (foreach s (cchk:ins-texts det)
           (if (and (null ovraw) s (wcmatch (cchk:norm-text s) "*OVERLAP*"))
             (setq ovraw s))))
-      (setq ovval (if ovraw (cchk:parse-len ovraw))
-            ovok  (and ovval
-                       (vl-some '(lambda (x) (equal x ovval 1e-6))
-                                *cchk-overlap-vals*)))
+      (setq ovval    (if ovraw (cchk:parse-len ovraw))
+            ovna     (cchk:na-p ovraw)
+            ovok     (and ovval
+                          (vl-some '(lambda (x) (equal x ovval 1e-6))
+                                   *cchk-overlap-vals*))
+            dashpoly (cchk:dashed-poly-on ss *cchk-pool-layer*))
       ;; the SPACING tag, same hunt
       (setq spraw (cchk:ins-attrib det "SPACING"))
       (if (null spraw)
         (foreach s (cchk:ins-texts det)
           (if (and (null spraw) s (wcmatch (cchk:norm-text s) "*SPACING*"))
             (setq spraw s))))
-      (setq spval (cchk:parse-nxn spraw))
+      (setq spval (cchk:parse-nxn spraw)
+            spna  (cchk:na-p spraw))
       (setq lines (append lines (list
         (cond
+          (ovna
+           (strcat "Cover Details: Overlap is NA"
+                   (if dashpoly
+                     (strcat " but a DASHED polyline sits on layer '"
+                             *cchk-pool-layer* "' - LOOK AT it")
+                     (strcat " and layer '" *cchk-pool-layer*
+                             "' has no dashed polyline - OK"))))
           ((null ovval)
            (strcat "Cover Details: Overlap is "
                    (if (and ovraw (/= ovraw ""))
@@ -1988,8 +2056,19 @@
           (t
            (strcat "Cover Details: Overlap " (rtos ovval 2 0)
                    "\" - no pool outline to check it against"))))))
+      ;; any stated overlap demands a dashed cover outline on the
+      ;; pool layer
+      (if ovval
+        (setq lines (append lines (list
+          (if dashpoly
+            (strcat "Cover Details: overlap set and a dashed polyline sits on layer '"
+                    *cchk-pool-layer* "' - OK")
+            (strcat "Cover Details: overlap set but NO DASHED polyline on layer '"
+                    *cchk-pool-layer*
+                    "' - draw the cover outline dashed"))))))
       (setq lines (append lines (list
         (cond
+          (spna "Cover Details: Spacing is NA")
           ((null spval)
            (strcat "Cover Details: Spacing is "
                    (if (and spraw (/= spraw ""))
@@ -2016,22 +2095,36 @@
                    " - no pool outline to check it against"))))))
       (setq detsum
             (strcat "Overlap "
-                    (if ovval (strcat (rtos ovval 2 0) "\"") "BLANK")
+                    (cond (ovna "NA")
+                          (ovval (strcat (rtos ovval 2 0) "\""))
+                          (t "BLANK"))
                     (if (and ovval (not ovok)) " (not 12/15/18)" "")
-                    (if (and wantov (or (null ovval)
-                                        (not (equal ovval wantov 1e-6))))
+                    (if (and wantov (not ovna)
+                             (or (null ovval)
+                                 (not (equal ovval wantov 1e-6))))
                       (strcat " - SUGGEST " (rtos wantov 2 0) "\"")
                       "")
+                    (if (and ovval (not dashpoly)) " - NO DASHED outline" "")
+                    (if (and ovna dashpoly) " - dashed outline present, LOOK AT it" "")
                     "; Spacing "
-                    (if spval (cchk:nxn-str spval) "BLANK")
-                    (if (and wantsp (or (null spval)
-                                        (not (equal spval wantsp))))
+                    (cond (spna "NA")
+                          (spval (cchk:nxn-str spval))
+                          (t "BLANK"))
+                    (if (and wantsp (not spna)
+                             (or (null spval)
+                                 (not (equal spval wantsp))))
                       (strcat " - SUGGEST " (cchk:nxn-str wantsp))
                       "")))))
 
-  ;; --- 'Pool Size Shown' note vs the cover layer -------------------
-  (setq covered (cchk:layer-in-sel ss *cchk-cover-layer*)
+  ;; --- the cover layer: polylines only + 'Pool Size Shown' note ----
+  (setq cstat   (cchk:cover-nonpoly ss *cchk-cover-layer*)
+        covered (> (car cstat) 0)
         note    (cchk:sel-has-phrase ss blks *cchk-pool-note*))
+  (if (and covered (> (cdr cstat) 0))
+    (setq lines (append lines (list
+      (strcat "Cover: " (itoa (cdr cstat)) " of " (itoa (car cstat))
+              " item(s) on layer '" *cchk-cover-layer*
+              "' are NOT A POLYLINE - redraw the cover as a polyline")))))
   (setq notesum
         (cond
           ((and covered note)
@@ -2048,9 +2141,55 @@
            (strcat "no cover on layer '" *cchk-cover-layer*
                    "' and the '" *cchk-pool-note*
                    "' note is nowhere in the selection - SUGGEST adding it"))))
+  (if (and covered (> (cdr cstat) 0))
+    (setq notesum (strcat notesum "; " (itoa (cdr cstat))
+                          " item(s) NOT A POLYLINE")))
+
+  ;; --- Replacement Disclaimer --------------------------------------
+  (setq replblk (car (vl-remove-if-not
+                       '(lambda (b) (cchk:ins-matches b *cchk-repl-block*))
+                       blks)))
+  (cond
+    (replblk
+     (setq replp   T
+           replsum (strcat "'" *cchk-repl-block*
+                           "' block present - replacement drawing")))
+    (live
+     (if (cchk:ask-ny (strcat "\nNo '" *cchk-repl-block*
+                              "' block is selected - is this drawing a replacement?"))
+       (progn
+         (setq replp T)
+         (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
+                                  "' block <it is not placed>: ")))
+         (cond
+           ((and pk
+                 (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
+                 (cchk:ins-matches (car pk) *cchk-repl-block*))
+            (setq replsum (strcat "replacement; '" *cchk-repl-block*
+                                  "' found where you pointed (outside the selection)")))
+           (pk
+            (setq replsum (strcat "replacement, but what you picked is not it - '"
+                                  *cchk-repl-block* "' block MISSING, add it")))
+           (t
+            (setq replsum (strcat "replacement but the '" *cchk-repl-block*
+                                  "' block is MISSING - add it")))))
+       (setq replsum (strcat "not a replacement - '" *cchk-repl-block*
+                             "' not needed"))))
+    (t
+     (setq replsum (strcat "no '" *cchk-repl-block*
+                           "' in the selection - run COVERCHECK to confirm"))))
+  (setq lines (append lines (list (strcat "Replacement: " replsum))))
 
   ;; --- pads along the pool outline (PADDLE logic, 36" pads) --------
-  (if vts
+  ;; a replacement, an NA overlap or a drawn cover all mean the pads
+  ;; are not sized from the pool outline - PADDLE is not used there
+  (setq padskip
+        (cond
+          (replp   "this is a replacement")
+          (ovna    "the Overlap is NA")
+          (covered (strcat "a cover is drawn on layer '"
+                           *cchk-cover-layer* "'"))))
+  (if (and vts (not padskip))
     (progn
       (setq feats   (if (> (length vts) 1)
                       (cchk:pv-features vts *cchk-pad-size*))
@@ -2070,22 +2209,25 @@
                                     " spot(s) checked - every one has a pad"))
               (t (strcat (itoa (length miss)) " of " (itoa (length feats))
                          " 36\" spot(s) have no pad - SUGGEST adding"
-                         (if markers " (circled)" "")))))
+                         (if live " (circled)" "")))))
       (setq lines (append lines (list (strcat "Pads: " padsum))))
       (foreach f miss
-        (if markers (cchk:mark-pad (car f)))
+        (if live (cchk:mark-pad (car f)))
         (setq lines (append lines (list
           (strcat "Pad SUGGESTED at " (cchk:ptstr (car f))
                   (if (= (caddr f) "corner")
                     " (inside corner)"
                     " (along a concave arc)")))))))
     (progn
-      (setq padsum "pool outline not found - not checked")
+      (setq padsum (if padskip
+                     (strcat "not suggested - " padskip)
+                     "pool outline not found - not checked"))
       (setq lines (append lines (list (strcat "Pads: " padsum))))))
 
   (list (list (strcat "Pool: " poolsum)
               (strcat "Cover Details: " detsum)
-              (strcat "Cover note: " notesum)
+              (strcat "Cover: " notesum)
+              (strcat "Replacement: " replsum)
               (strcat "Pads: " padsum))
         lines))
 
@@ -2349,7 +2491,7 @@
         (setq nlin 3.0)                          ; title, legend, separator
         (foreach l lines
           (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-        (setq nlin (+ nlin (* 7.0 *cchk-green-scale*)))   ; the header dashboard
+        (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))   ; the header dashboard
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -2566,7 +2708,7 @@
      (setq nlin 3.0)
      (foreach l lines
        (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-     (setq nlin (+ nlin (* 7.0 *cchk-green-scale*)))
+     (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))
      (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
        (progn
          (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
