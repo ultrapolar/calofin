@@ -30,6 +30,37 @@
 ;;;  and the inboard flat dims are left plain, so a corner or a segment
 ;;;  note can never be mistaken for an overall.
 ;;;
+;;;  BOTH OUTLINES
+;;;  -------------
+;;;  Once the first outline is drawn the command offers to add the other
+;;;  one, either way round.  THE COVER IS ALWAYS THE LARGER of the two,
+;;;  which settles the direction of travel:
+;;;
+;;;    Offset  ask how far the cover laps the water's edge and offset
+;;;            OUTWARD (water's edge drawn first) or INWARD (cover drawn
+;;;            first).  Radii grow and shrink with the offset, cut faces
+;;;            by g * (2*sqrt2 - 2), and a treatment offset away to
+;;;            nothing falls back to a 90 corner.
+;;;    Dims    give the other outline as measured; the two are drawn
+;;;            concentric.  The corner sizes are offered at whatever the
+;;;            implied lap works out to, so Enter walks through when it
+;;;            really is a parallel offset.
+;;;
+;;;  The second outline's overalls go on the BOTTOM and the RIGHT so they
+;;;  cannot collide with the first's pair on the top and the left, and
+;;;  every dimension line -- both outlines' -- stands 3 ft off the COVER
+;;;  outline, the outer of the two.
+;;;
+;;;  DIMENSION STYLES
+;;;  ----------------
+;;;    cover size   "STANDARD INCHES"
+;;;    water's edge "STANDARD INCHES 0.5"
+;;;  A style the drawing already defines is used exactly as it stands --
+;;;  the office template wins.  A missing one is built from the
+;;;  standard-inches settings below, the water's edge at half the normal
+;;;  furniture size.  The drawing's own current style is put back when
+;;;  the command finishes.
+;;;
 ;;;  STANDARD INCHES
 ;;;  ---------------
 ;;;  Every dimension is written in standard inches (fractional inches to
@@ -115,6 +146,16 @@
 (setq spa:*lay-water* "POOL")   ; water's edge perimeter layer (dashed)
 (setq spa:*lay-cover* "COVER")  ; cover size perimeter layer
 
+;; Dimension styles, one per outline.  A style the drawing already
+;; defines is used exactly as it stands -- the office template wins --
+;; and one that is missing is built from the standard-inches settings
+;; below, the water's edge at spa:*wefactor* of the normal furniture
+;; size (the 0.5 in its name).
+(setq spa:*ds-cover*  "STANDARD INCHES")
+(setq spa:*ds-water*  "STANDARD INCHES 0.5")
+(setq spa:*wefactor*  0.5)
+(setq spa:*gapdflt*   3.0)      ; suggested cover lap over the water's edge
+
 (setq spa:*base*     (list 0.0 0.0))
 (setq spa:*dashlt*   "CONTINUOUS")   ; resolved to SPADASH per run
 (setq spa:*dotlt*    "CONTINUOUS")   ; resolved to SPADOT per run
@@ -127,6 +168,10 @@
 (setq spa:*perdash*  t)              ; draw the perimeter dashed
 (setq spa:*sfx*      "")             ; active dimension suffix
 (setq spa:*modename* "WATER'S EDGE") ; note written under the drawing
+(setq spa:*mode*     "Watersedge")   ; which outline is being drawn
+(setq spa:*dstyle*   "STANDARD INCHES 0.5")   ; its dimension style
+(setq spa:*dsfac*    0.5)                     ; its furniture factor
+(setq spa:*odstyle*  nil)            ; the drawing's dim style before we ran
 (setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
 
 ;;; -------------------- small vector helpers --------------------------
@@ -342,6 +387,35 @@
                  (cons 40 h)
                  (cons 1 str))))
 
+;;; -------------------- which outline is being drawn -------------------
+;;;
+;;;  Everything that differs between the two outlines -- layer, linetype,
+;;;  dimension note, dimension style -- hangs off one switch, so the
+;;;  command can draw one, flip, and draw the other.
+
+(defun spa:setmode (m)
+  (setq spa:*mode* m)
+  (if (= m "Watersedge")
+      (setq spa:*perlay*   spa:*lay-water*
+            spa:*perdash*  t
+            spa:*sfx*      spa:*sfx-water*
+            spa:*modename* "WATER'S EDGE"
+            spa:*dstyle*   spa:*ds-water*
+            spa:*dsfac*    spa:*wefactor*)
+      (setq spa:*perlay*   spa:*lay-cover*
+            spa:*perdash*  nil
+            spa:*sfx*      spa:*sfx-cover*
+            spa:*modename* "COVER SIZE"
+            spa:*dstyle*   spa:*ds-cover*
+            spa:*dsfac*    1.0))
+  m)
+
+(defun spa:othermode ()
+  (if (= spa:*mode* "Watersedge") "Coversize" "Watersedge"))
+
+(defun spa:modeword (m)
+  (if (= m "Watersedge") "water's edge" "cover size"))
+
 ;;; -------------------- the perimeter itself ---------------------------
 ;;;  Water's edge -> dashed, on the POOL layer.
 ;;;  Cover size   -> solid, on the COVER layer.
@@ -405,6 +479,25 @@
 ;;        95"
 ;;     Cover Size
 (defun spa:ovnote () (strcat "\\X" spa:*sfx*))
+
+;; Put the outline's named dimension style in charge of the dims that
+;; follow.  A style the drawing already defines is restored untouched --
+;; the office template wins.  A missing one is built from the
+;; standard-inches settings at `fac` times the normal furniture size and
+;; saved under the name, so the drawing ends up carrying both styles.
+(defun spa:dimstyle (name th fac)
+  (if (tblsearch "DIMSTYLE" name)
+      (command "_.-DIMSTYLE" "_Restore" name)
+      (progn
+        (spa:dimsetup (* th fac))
+        (command "_.-DIMSTYLE" "_Save" name)))
+  ;; whatever the style says, the note has to be free to slide along its
+  ;; dimension line without dragging the line or growing a leader
+  (spa:setv "DIMTMOVE" 2)
+  (princ))
+
+;; The style for whichever outline is being drawn right now.
+(defun spa:dimstylenow (th) (spa:dimstyle spa:*dstyle* th spa:*dsfac*))
 
 ;; Aligned dimension between two points, dragged to pt.  note is appended
 ;; to the measurement inside a text override ("\\XCover Size" to stack it,
@@ -710,6 +803,112 @@
                  "TURNED A QUARTER TURN - LONG OVERALL RUNS ACROSS"
                  "SPA-NOTES" 7)))
 
+;;; -------------------- water's edge <-> cover -------------------------
+;;;
+;;;  The COVER IS ALWAYS THE LARGER of the two -- it laps the water's
+;;;  edge by the same gap the whole way round.  That single fact settles
+;;;  which way the offset runs:
+;;;
+;;;    drew the water's edge, adding the cover   ->  offset OUTWARD
+;;;    drew the cover, adding the water's edge   ->  offset INWARD
+;;;
+;;;  By dims the two outlines are simply concentric: the second is built
+;;;  from its own measurements and centred on the first.
+;;;
+;;;  Offsetting a corner by g (positive outward) is not the same for
+;;;  every treatment:
+;;;    Radius    the arc stays concentric, so r -> r + g
+;;;    Diagonal  the cut face lengthens, f -> f + g * (2*sqrt2 - 2)
+;;;    90        stays a sharp 90
+;;;  and a treatment offset inward past nothing falls back to a 90.
+
+(setq spa:*diagoff* 0.82842712)         ; 2*sqrt 2 - 2
+
+;; Which way the offset runs to get from the outline just drawn to the
+;; other one: +1 outward (water's edge -> cover), -1 inward.
+(defun spa:offsign ()
+  (if (= spa:*mode* "Watersedge") 1.0 -1.0))
+
+;; Offer the other outline once the first is drawn.  Returns the method
+;; keyword ("Offset" / "Dims") or nil.
+(defun spa:askother ( / v)
+  (princ (strcat "\nThe " (spa:modeword (spa:othermode))
+                 " can be added now -- the cover is always the larger of the two."))
+  (if (= "Yes" (spa:askkw (strcat "Draw the " (spa:modeword (spa:othermode))
+                                  " as well")
+                          "Yes No" "Yes/No" "Yes" nil))
+      (spa:askkw "Take it from" "Offset Dims" "Offset/Dims" "Offset" nil)))
+
+;; The gap between the two outlines, asked as a positive lap and signed
+;; for the direction of travel.
+(defun spa:askgap ( / g)
+  (spa:osup)
+  (initget 6)                           ; no zero, no negative
+  (setq g (getdist (strcat "\nHow far does the cover lap the water's edge <"
+                           (rtos spa:*gapdflt*) ">: ")))
+  (spa:osdown)
+  (if (null g) (setq g spa:*gapdflt*))
+  (* g (spa:offsign)))
+
+;; Offset every corner treatment by g (positive = outward).
+(defun spa:offcorners (corners g / out c sz)
+  (foreach c corners
+    (setq sz (cond ((= (car c) "Radius") (+ (cadr c) g))
+                   ((= (car c) "Diagonal") (+ (cadr c) (* g spa:*diagoff*)))
+                   (t 0.0)))
+    (setq out (cons (if (and (/= (car c) "90") (> sz 1.0e-6))
+                        (list (car c) sz)
+                        (list "90" 0.0))
+                    out)))
+  (reverse out))
+
+;; By dims, the corner sizes still have to come from somewhere.  Each is
+;; offered with the size the implied lap works out to, so Enter walks
+;; straight through when the second outline really is a parallel offset,
+;; and a corner that was measured differently can be typed over.
+(defun spa:askothercorners (corners lbls maxsb / out i cc any)
+  (setq any nil)
+  (foreach cc corners (if (/= (car cc) "90") (setq any t)))
+  (if any
+      (princ (strcat "\n" (spa:modeword (spa:othermode))
+                     " corners -- Enter takes the size the overalls imply.")))
+  (setq out nil i 0)
+  (foreach cc corners
+    (setq out (cons (if (= (car cc) "90")
+                        cc
+                        (spa:askcorner (strcat "Corner " (nth i lbls))
+                                       (car cc) (cadr cc) nil maxsb nil))
+                    out)
+          i (1+ i)))
+  (reverse out))
+
+;; A quad of width w by length l with its bottom-left at org.
+(defun spa:quadat (org w l)
+  (list org
+        (spa:v+ org (list w 0.0))
+        (spa:v+ org (list w l))
+        (spa:v+ org (list 0.0 l))))
+
+;; Bottom-left corner that puts a w x l shape concentric with cen.
+(defun spa:orgfor (cen w l)
+  (list (- (car cen) (* 0.5 w)) (- (cadr cen) (* 0.5 l))))
+
+;; The SECOND outline's overalls, dimensioned on the BOTTOM and the
+;; RIGHT so they cannot collide with the first outline's pair on the top
+;; and the left.  Both stand off the COVER outline -- the outer of the
+;; two -- by the usual 3 ft.  ac1/ac2 span the shape across, up1/up2 span
+;; it up; xhi/ylo are the cover's right and bottom extents.
+(defun spa:dimother (ac1 ac2 up1 up2 xhi ylo)
+  (spa:dimov ac1 ac2
+             (list (* 0.5 (+ (car ac1) (car ac2))) (- ylo spa:*dimoff*)))
+  (spa:dimov up1 up2
+             (list (+ xhi spa:*dimoff*) (* 0.5 (+ (cadr up1) (cadr up2))))))
+
+;; Report rows for the second outline, tagged with which one it is.
+(defun spa:otherrows (across up)
+  (list (list (strcat (strcase (spa:modeword spa:*mode*)) " ACROSS") across across)
+        (list (strcat (strcase (spa:modeword spa:*mode*)) " UP") up up)))
+
 ;;; -------------------- rectangle corner treatments --------------------
 ;;;
 ;;;  A corner may be Square, Rounded (radius) or Diag (chamfer).  Side
@@ -819,27 +1018,31 @@
 ;;
 ;; None of these ever carry the Water's Edge / Cover Size note: they are
 ;; corners, not overalls.  Assumes CLAYER is already DIMENSION.
-(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist nsq sqi
-                                                   i cc ce p pp pn ty outd am fm)
+(defun spa:dimcorner1 (quad corners arcs cen doff i sfx / cc ce p pp pn ty
+                                                          outd am fm)
+  (setq p (nth i quad)
+        pp (nth (rem (+ i 3) 4) quad)
+        pn (nth (rem (+ i 1) 4) quad)
+        cc (nth i corners)
+        ty (car cc)
+        ce (spa:cornerends p pp pn ty (cadr cc))
+        outd (spa:unit (spa:v- p cen)))
+  (cond
+    ((= ty "Radius")
+     (setq am (caddr ce))
+     (spa:dimrad (nth i arcs) am outd doff sfx))
+    ((= ty "Diagonal")
+     (setq fm (spa:mid (car ce) (cadr ce)))
+     (spa:dimalg (car ce) (cadr ce)
+                 (spa:v+ fm (spa:v* outd (* 0.6 doff))) sfx)))
+  (princ))
+
+(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist nsq sqi i)
   (setq allsame (spa:samecorners corners)
         sfx (if allsame " Typ." "")
         ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
   (foreach i ilist
-    (setq p (nth i quad)
-          pp (nth (rem (+ i 3) 4) quad)
-          pn (nth (rem (+ i 1) 4) quad)
-          cc (nth i corners)
-          ty (car cc)
-          ce (spa:cornerends p pp pn ty (cadr cc))
-          outd (spa:unit (spa:v- p cen)))
-    (cond
-      ((= ty "Radius")
-       (setq am (caddr ce))
-       (spa:dimrad (nth i arcs) am outd doff sfx))
-      ((= ty "Diagonal")
-       (setq fm (spa:mid (car ce) (cadr ce)))
-       (spa:dimalg (car ce) (cadr ce)
-                   (spa:v+ fm (spa:v* outd (* 0.6 doff))) sfx))))
+    (spa:dimcorner1 quad corners arcs cen doff i sfx))
   ;; the square corners of a MIXED set share one mark, scanned from the
   ;; bottom-right the way the sheet places it
   (if (not allsame)
@@ -958,8 +1161,9 @@
 
 ;; Full guided flow for a rectangular spa.
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
-                        a b c d cen doff th allsame oo fo i j tmp lbls cc back
-                        rows lbl)
+                        a b c d cen doff th allsame i j tmp lbls cc back
+                        rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
+                        xlo xhi ylo yhi)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -1037,14 +1241,64 @@
   (if spa:*turned*
       (princ "\nThe long overall runs across, so the cover is drawn a quarter turn over."))
 
-  ;; -------------------------------------------------- draw
-  (setq quad (list (list 0.0 0.0) (list w 0.0) (list w l) (list 0.0 l))
+  (setq quad (spa:quadat (list 0.0 0.0) w l)
         a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (list (* 0.5 w) (* 0.5 l))
         doff (max 6.0 (/ (max w l) 12.0))
         th (max 1.0 (/ (max w l) 40.0))
-        spa:*dashlt* (spa:ltload "DASHED"))
+        spa:*dashlt* (spa:ltload "DASHED")
+        mode1 spa:*mode*)
+
+  ;; ------------------------------------------- draw the first outline
   (setq arcs (spa:drawrect quad corners))
+
+  ;; ------------------------------------------- and, if wanted, the other
+  ;; Resolved BEFORE anything is dimensioned, because every dimension
+  ;; line stands off the COVER outline -- the outer of the two.
+  (setq meth (spa:askother))
+  (if meth
+      (progn
+        (if (= meth "Offset")
+            (setq g  (spa:askgap)
+                  w2 (+ w (* 2.0 g))
+                  l2 (+ l (* 2.0 g))
+                  c2 (spa:offcorners corners g))
+            (progn
+              (princ (strcat "\nThe two outlines share a centre; give the "
+                             (spa:modeword (spa:othermode)) " as measured."))
+              (setq ans (spa:askseqb
+                          (list (list 'w2 'REQ (strcat (strcase (spa:modeword (spa:othermode)) t)
+                                                       " overall ACROSS") nil)
+                                (list 'l2 'REQ (strcat (strcase (spa:modeword (spa:othermode)) t)
+                                                       " overall UP") nil))
+                          nil)
+                    w2 (spa:sq ans 'w2)
+                    l2 (spa:sq ans 'l2)
+                    ;; the implied lap drives the corner sizes, which the
+                    ;; user may then correct one at a time
+                    g  (* 0.25 (+ (- w2 w) (- l2 l)))
+                    c2 (spa:offcorners corners g)
+                    c2 (spa:askothercorners c2 lbls (* 0.5 (min w2 l2))))))
+        (if (or (<= w2 0.0) (<= l2 0.0))
+            (progn
+              (spa:valnote "THE SECOND OUTLINE CAME OUT AT OR BELOW ZERO - SKIPPED")
+              (setq meth nil))
+            (setq org2 (spa:orgfor cen w2 l2)
+                  q2   (spa:quadat org2 w2 l2)
+                  cen2 cen))))
+
+  ;; the cover is the larger, so its extents are the ones to stand off
+  (setq xhi (if meth (max w (+ (car org2) w2)) w)
+        ylo (if meth (min 0.0 (cadr org2)) 0.0)
+        xlo (if meth (min 0.0 (car org2)) 0.0)
+        yhi (if meth (max l (+ (cadr org2) l2)) l))
+
+  ;; ------------------------------------------- draw the second outline
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (setq arcs2 (spa:drawrect q2 c2))
+        (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions
   ;; Laid out the way the order sheet does it: the overall across on the
@@ -1053,17 +1307,15 @@
   ;; plus one Typ. corner callout is the whole drawing.  When they do
   ;; NOT match, each side a cut has shortened also gets its remaining
   ;; FLAT dimensioned, inboard of the overalls.
-  ;; The overall dimension lines stand 3 ft off the outline; the flats
-  ;; sit inboard of them, half that.
-  (setq allsame (spa:samecorners corners)
-        oo spa:*dimoff*
-        fo spa:*flatoff*)
+  ;; The overall dimension lines stand 3 ft off the cover outline; the
+  ;; flats sit inboard of them, half that.
+  (setq allsame (spa:samecorners corners))
   (setvar "CLAYER" "DIMENSION")
-  (spa:dimsetup th)
+  (spa:dimstylenow th)
   ;; the overalls, true corner to true corner -- the only dims that
   ;; carry the Water's Edge / Cover Size note
-  (spa:dimov d c (spa:outoff d c cen oo))
-  (spa:dimov a d (spa:outoff a d cen oo))
+  (spa:dimov d c (list (* 0.5 w) (+ yhi spa:*dimoff*)))
+  (spa:dimov a d (list (- xlo spa:*dimoff*) (* 0.5 l)))
   ;; the flats
   (if (not allsame)
       (foreach i (list 0 1 2 3)
@@ -1072,9 +1324,22 @@
                 (/= (car (nth j corners)) "90"))
             (spa:dimalg (spa:cornerpoint quad corners i 'next)
                         (spa:cornerpoint quad corners j 'prev)
-                        (spa:outoff (nth i quad) (nth j quad) cen fo) nil))))
+                        (spa:outoff (nth i quad) (nth j quad) cen spa:*flatoff*)
+                        nil))))
   ;; corner callouts (no note -- these are corners, not overalls)
   (spa:dimcorners quad corners arcs cen doff)
+
+  ;; the second outline: its two overalls on the bottom and the right,
+  ;; in ITS dimension style, plus one Typ. corner callout at the
+  ;; top-left when its corners all match
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (spa:dimstylenow th)
+        (spa:dimother (nth 0 q2) (nth 1 q2) (nth 1 q2) (nth 2 q2) xhi ylo)
+        (if (spa:samecorners c2)
+            (spa:dimcorner1 q2 c2 arcs2 cen2 doff 3 " Typ."))
+        (spa:setmode mode1)))
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
@@ -1085,7 +1350,7 @@
     (spa:text (spa:v+ lbl (spa:v* (spa:unit (spa:v- lbl cen)) (* 1.6 th)))
               th (nth i lbls) "SPA-NOTES")
     (setq i (1+ i)))
-  (spa:modenote 0.0 (- 0.0 (* 1.4 spa:*dimoff*)) th)
+  (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list (strcat "OVERALL ACROSS (" (nth 0 lbls) "-" (nth 1 lbls) ")")
                          w w)
                    (list (strcat "OVERALL UP (" (nth 0 lbls) "-" (nth 3 lbls) ")")
@@ -1098,7 +1363,21 @@
                                    (if (= (car cc) "90") nil (cadr cc))
                                    (cadr cc))))
           i (1+ i)))
-  (spa:report rows spa:*valnotes* (+ w spa:*dimoff*) l th "SPA-NOTES")
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (setq rows (append rows (spa:otherrows w2 l2)))
+        (setq i 0)
+        (foreach cc c2
+          (setq rows (append rows
+                             (list (list (strcat (strcase (spa:modeword spa:*mode*))
+                                                 " COR " (nth i lbls) " "
+                                                 (strcase (car cc)))
+                                         (if (= (car cc) "90") nil (cadr cc))
+                                         (cadr cc))))
+                i (1+ i)))
+        (spa:setmode mode1)))
+  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -1194,7 +1473,9 @@
 ;; Full guided flow for an octagonal spa.
 (defun spa:octflow ( / oldclay pvs pv pvo ans bov aov traw sraw s1raw vraw s2raw
                        ovres s tv s1 v pts cen doff th e p q k rows
-                       xmax ymax ymin tact vact s2act alleq tmp)
+                       tact vact s2act alleq tmp
+                       mode1 meth g kk b2 a2 s2 s12 ovr org2 pts2 cen2
+                       xlo xhi ylo yhi)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -1256,15 +1537,65 @@
   (if spa:*turned*
       (princ "\nThe long overall runs across, so the spa is drawn a quarter turn over."))
 
-  ;; -------------------------------------------------- draw
   (setq pts (spa:octpts bov aov s s1)
         cen (spa:centroid pts)
         doff (max 6.0 (/ (max bov aov) 12.0))
         th (max 1.0 (/ (max bov aov) 40.0))
         spa:*dashlt* (spa:ltload "DASHED")
-        xmax bov ymax aov ymin 0.0)
+        mode1 spa:*mode*)
+
+  ;; ------------------------------------------- draw the first outline
   (foreach e spa:*octedges*
     (spa:perline (nth (car e) pts) (nth (cadr e) pts)))
+
+  ;; ------------------------------------------- and, if wanted, the other
+  ;; An octagon offset by g keeps its shape: the overalls each grow by
+  ;; 2g and the cut legs by g*(s + s1 - face)/the other leg.
+  (setq meth (spa:askother))
+  (if meth
+      (progn
+        (if (= meth "Offset")
+            (setq g   (spa:askgap)
+                  kk  (- (+ s s1) (distance (nth 1 pts) (nth 2 pts)))
+                  b2  (+ bov (* 2.0 g))
+                  a2  (+ aov (* 2.0 g))
+                  s2  (+ s  (/ (* g kk) s1))
+                  s12 (+ s1 (/ (* g kk) s)))
+            (progn
+              (princ (strcat "\nThe two outlines share a centre; give the "
+                             (spa:modeword (spa:othermode)) " as measured."))
+              (setq ans (spa:askseqb
+                          (list (list 'b2 'REQ "Overall ACROSS" nil)
+                                (list 'a2 'SUG "Overall UP" nil '(b2))
+                                (list 'f2 'NAX "Corner cut FACE" nil))
+                          nil)
+                    b2 (spa:sq ans 'b2)
+                    a2 (if (spa:sq ans 'a2) (spa:sq ans 'a2) b2)
+                    ovr (spa:octov a2 b2 nil nil nil nil (spa:sq ans 'f2))
+                    s2 (car ovr) s12 (caddr ovr))))
+        (if (or (<= b2 0.0) (<= a2 0.0) (<= s2 0.0) (<= s12 0.0)
+                (<= (- b2 (* 2.0 s2)) 0.0) (<= (- a2 (* 2.0 s12)) 0.0))
+            (progn
+              (spa:valnote "THE SECOND OUTLINE WILL NOT CLOSE - SKIPPED")
+              (setq meth nil))
+            (setq org2 (spa:orgfor cen b2 a2)
+                  pts2 (mapcar '(lambda (p) (spa:v+ p org2))
+                               (spa:octpts b2 a2 s2 s12))
+                  cen2 cen))))
+
+  ;; the cover is the larger, so its extents are the ones to stand off
+  (setq xlo (if meth (min 0.0 (car org2)) 0.0)
+        xhi (if meth (max bov (+ (car org2) b2)) bov)
+        ylo (if meth (min 0.0 (cadr org2)) 0.0)
+        yhi (if meth (max aov (+ (cadr org2) a2)) aov))
+
+  ;; ------------------------------------------- draw the second outline
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (foreach e spa:*octedges*
+          (spa:perline (nth (car e) pts2) (nth (cadr e) pts2)))
+        (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions
   ;; The order sheet's octagon panel carries three things: the overall
@@ -1280,24 +1611,35 @@
         alleq (and (< (abs (- tact vact)) 0.125)
                    (< (abs (- tact s2act)) 0.125)))
   (setvar "CLAYER" "DIMENSION")
-  (spa:dimsetup th)
+  (spa:dimstylenow th)
   ;; the two overalls, hooked to real corners, dragged clear of the shape
   (spa:dimov (nth 7 pts) (nth 2 pts)
-             (list (* 0.5 bov) (+ ymax spa:*dimoff*)))
+             (list (* 0.5 bov) (+ yhi spa:*dimoff*)))
   (spa:dimov (nth 0 pts) (nth 5 pts)
-             (list (- 0.0 spa:*dimoff*) (* 0.5 aov)))
+             (list (- xlo spa:*dimoff*) (* 0.5 aov)))
   ;; the flats, only when the eight sides are NOT simply all equal --
   ;; a true square octagon needs the overalls and the cut, nothing else
   (if (not alleq)
       (progn
         (spa:dimalg (nth 0 pts) (nth 1 pts)
-                    (list (* 0.5 bov) (- ymin spa:*flatoff*)) nil)
+                    (list (* 0.5 bov) (- 0.0 spa:*flatoff*)) nil)
         (spa:dimalg (nth 2 pts) (nth 3 pts)
-                    (list (+ xmax spa:*flatoff*) (* 0.5 aov)) nil)))
+                    (list (+ bov spa:*flatoff*) (* 0.5 aov)) nil)))
   ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
   ;; because all four cuts of an octagon are the same
   (setq p (nth 1 pts) q (nth 2 pts))
   (spa:dimalg p q (spa:outoffp p q pts (* 0.8 doff)) " Typ.")
+
+  ;; the second outline: its two overalls on the bottom and the right,
+  ;; in ITS dimension style, plus its cut face on the top-left cut
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (spa:dimstylenow th)
+        (spa:dimother (nth 7 pts2) (nth 2 pts2) (nth 0 pts2) (nth 5 pts2) xhi ylo)
+        (setq p (nth 5 pts2) q (nth 6 pts2))
+        (spa:dimalg p q (spa:outoffp p q pts2 (* 0.8 doff)) " Typ.")
+        (spa:setmode mode1)))
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
@@ -1305,7 +1647,7 @@
   (foreach p pts
     (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) "SPA-NOTES")
     (setq k (1+ k)))
-  (spa:modenote 0.0 (- ymin (* 1.4 spa:*dimoff*)) th)
+  (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list "OVERALL ACROSS" bov bov)
                    (list "OVERALL UP" aov aov)
                    (list "T - FLAT ACROSS" traw tact)
@@ -1313,7 +1655,16 @@
                    (list "S - CUT ALONG SIDE" sraw s)
                    (list "S1 - CUT UP END" s1raw s1)
                    (list "S2 - CUT FACE" s2raw s2act)))
-  (spa:report rows spa:*valnotes* (+ xmax spa:*dimoff*) ymax th "SPA-NOTES")
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (setq rows (append rows
+                           (spa:otherrows b2 a2)
+                           (list (list (strcat (strcase (spa:modeword spa:*mode*))
+                                               " CUT FACE")
+                                       nil (distance (nth 1 pts2) (nth 2 pts2))))))
+        (spa:setmode mode1)))
+  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -1333,7 +1684,8 @@
     (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" 10.0)))
   pv)
 
-(defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp)
+(defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp
+                         mode1 meth g b2 a2 cen2 xlo xhi ylo yhi)
   (setq oldclay (getvar "CLAYER")
         pv (spa:roundpreview))
   (command "_.ZOOM" "_Window"
@@ -1358,27 +1710,77 @@
   (setq cen (list (* 0.5 bov) (* 0.5 aov))
         doff (max 6.0 (/ (max bov aov) 12.0))
         th (max 1.0 (/ (max bov aov) 40.0))
-        spa:*dashlt* (spa:ltload "DASHED"))
+        spa:*dashlt* (spa:ltload "DASHED")
+        mode1 spa:*mode*)
   (spa:perround cen bov aov)
   (if (> (abs (- aov bov)) 1.0e-6)
       (princ "\nThe two overalls differ, so the spa is drawn as an ellipse.")
       (princ "\nA and B agree, so the spa is drawn as a true circle."))
 
+  ;; ------------------------------------------- and, if wanted, the other
+  (setq meth (spa:askother))
+  (if meth
+      (progn
+        (if (= meth "Offset")
+            (setq g  (spa:askgap)
+                  b2 (+ bov (* 2.0 g))
+                  a2 (+ aov (* 2.0 g)))
+            (progn
+              (princ (strcat "\nThe two outlines share a centre; give the "
+                             (spa:modeword (spa:othermode)) " as measured."))
+              (setq ans (spa:askseqb
+                          (list (list 'b2 'REQ "Overall ACROSS" nil)
+                                (list 'a2 'SUG "Overall UP" nil '(b2)))
+                          nil)
+                    b2 (spa:sq ans 'b2)
+                    a2 (if (spa:sq ans 'a2) (spa:sq ans 'a2) b2))))
+        (if (or (<= b2 0.0) (<= a2 0.0))
+            (progn
+              (spa:valnote "THE SECOND OUTLINE CAME OUT AT OR BELOW ZERO - SKIPPED")
+              (setq meth nil))
+            (setq cen2 cen))))
+
+  (setq xlo (if meth (min 0.0 (- (car cen) (* 0.5 b2))) 0.0)
+        xhi (if meth (max bov (+ (car cen) (* 0.5 b2))) bov)
+        ylo (if meth (min 0.0 (- (cadr cen) (* 0.5 a2))) 0.0)
+        yhi (if meth (max aov (+ (cadr cen) (* 0.5 a2))) aov))
+
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (spa:perround cen2 b2 a2)
+        (spa:setmode mode1)))
+
   ;; A true circle takes the single overall the order sheet's round panel
   ;; shows; only an out-of-round spa needs the second one.
   (setvar "CLAYER" "DIMENSION")
-  (spa:dimsetup th)
+  (spa:dimstylenow th)
   (spa:dimov (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
-             (list (* 0.5 bov) (+ aov spa:*dimoff*)))
+             (list (* 0.5 bov) (+ yhi spa:*dimoff*)))
   (if (> (abs (- aov bov)) 1.0e-6)
       (spa:dimov (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
-                 (list (- 0.0 spa:*dimoff*) (* 0.5 aov))))
+                 (list (- xlo spa:*dimoff*) (* 0.5 aov))))
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (spa:dimstylenow th)
+        (spa:dimother (list (- (car cen) (* 0.5 b2)) (cadr cen))
+                      (list (+ (car cen) (* 0.5 b2)) (cadr cen))
+                      (list (car cen) (- (cadr cen) (* 0.5 a2)))
+                      (list (car cen) (+ (cadr cen) (* 0.5 a2)))
+                      xhi ylo)
+        (spa:setmode mode1)))
   (setvar "CLAYER" oldclay)
 
-  (spa:modenote 0.0 (- 0.0 (* 1.4 spa:*dimoff*)) th)
+  (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list "OVERALL ACROSS" bov bov)
                    (list "OVERALL UP" aov aov)))
-  (spa:report rows spa:*valnotes* (+ bov spa:*dimoff*) aov th "SPA-NOTES")
+  (if meth
+      (progn
+        (spa:setmode (spa:othermode))
+        (setq rows (append rows (spa:otherrows b2 a2)))
+        (spa:setmode mode1)))
+  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -1409,9 +1811,11 @@
 
 (defun spa:syssave ( / v)
   (if (not spa:*sysold*)
-      (foreach v (spa:sysvars)
-        (if (/= nil (getvar v))
-            (setq spa:*sysold* (append spa:*sysold* (list (cons v (getvar v)))))))))
+      (progn
+        (foreach v (spa:sysvars)
+          (if (/= nil (getvar v))
+              (setq spa:*sysold* (append spa:*sysold* (list (cons v (getvar v)))))))
+        (setq spa:*odstyle* (getvar "DIMSTYLE")))))
 
 (defun spa:sysrestore ( / v p)
   ;; OSMODE first -- object snaps are the setting the user misses most
@@ -1419,7 +1823,11 @@
   (foreach v (spa:sysvars)
     (setq p (assoc v spa:*sysold*))
     (if p (setvar v (cdr p))))
-  (setq spa:*sysold* nil))
+  ;; the current dimension style is read-only, so it takes a command
+  (if (and spa:*odstyle* (tblsearch "DIMSTYLE" spa:*odstyle*))
+      (command "_.-DIMSTYLE" "_Restore" spa:*odstyle*))
+  (setq spa:*sysold* nil
+        spa:*odstyle* nil))
 
 ;;; -------------------- main command -----------------------------------
 
@@ -1453,17 +1861,9 @@
   (princ "\nDimensions are written in standard inches and placed outside the shape.")
 
   ;; ------------------------------------------------ what is being drawn
-  (setq mode (spa:askkw "Is this drawing at the water's edge or the cover size"
-                        "Watersedge Coversize" "Watersedge/Coversize" nil nil))
-  (if (= mode "Watersedge")
-      (setq spa:*perlay*   spa:*lay-water*
-            spa:*perdash*  t
-            spa:*sfx*      spa:*sfx-water*
-            spa:*modename* "WATER'S EDGE")
-      (setq spa:*perlay*   spa:*lay-cover*
-            spa:*perdash*  nil
-            spa:*sfx*      spa:*sfx-cover*
-            spa:*modename* "COVER SIZE"))
+  (setq mode (spa:setmode
+               (spa:askkw "Is this drawing at the water's edge or the cover size"
+                          "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
   (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
                  (if spa:*perdash* " (dashed)" "")
                  "; overalls read <measurement> over \"" spa:*sfx* "\"."))

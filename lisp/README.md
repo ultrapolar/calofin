@@ -53,6 +53,42 @@ never be mistaken for an overall.
 The mode is also written under the drawing (`SPA OUTLINE DRAWN AT
 WATER'S EDGE`) and in the report table's title.
 
+## Drawing both outlines
+
+Once the first outline is drawn the command offers to add the other one,
+either way round. **The cover is always the larger of the two**, which is
+what settles the direction of travel:
+
+| Method | What it asks | What it does |
+| --- | --- | --- |
+| `Offset` | how far the cover laps the water's edge | offsets **outward** if the water's edge was drawn first, **inward** if the cover was |
+| `Dims` | the other outline as measured | draws the two **concentric** |
+
+Offsetting is a true parallel offset, so the corners move with it: a
+radius grows and shrinks with the offset, a diagonal cut face by
+`g × (2√2 − 2)`, and a treatment offset away to nothing falls back to a
+`90` corner. By dims, the corner sizes are *offered* at whatever the
+implied lap works out to — Enter walks straight through when the second
+outline really is a parallel offset, and a corner measured differently
+can be typed over.
+
+The second outline's overalls go on the **bottom** and the **right**, so
+they cannot collide with the first outline's pair on the top and the
+left. Both outlines end up in the report table.
+
+## Dimension styles
+
+| Outline | Style |
+| --- | --- |
+| Cover size | `STANDARD INCHES` |
+| Water's edge | `STANDARD INCHES 0.5` |
+
+A style the drawing already defines is **used exactly as it stands** —
+the office template wins. A missing one is built from the standard-inches
+settings below, the water's edge at `spa:*wefactor*` (0.5) of the normal
+furniture size. The drawing's own current style is put back when the
+command finishes.
+
 ## Rectangle corners
 
 Every corner is asked for separately, using the order sheet's own corner
@@ -83,8 +119,8 @@ drawing.
 
 ## Where the dimensions go
 
-Overall dimension lines stand **3 ft off the outline**; the inboard flat
-dims sit half that. Corner callouts stay near their corner, scaled to the
+Overall dimension lines stand **3 ft off the cover outline** — the outer
+of the two when both are drawn; the inboard flat dims sit half that. Corner callouts stay near their corner, scaled to the
 cover.
 
 ```lisp
