@@ -60,10 +60,35 @@
 ;;;         L          ->  LEAVE them as drawn (intentional)
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
-;;;  5. COVER-SPECIFIC CHECKS — to be added. COVERCHECK follows the
-;;;     same shape as DIMCHECK but its own rules: the step /
-;;;     staircase, Tech Title wall-height and Liner Material checks
-;;;     are deliberately NOT part of it.
+;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
+;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - POOL OUTLINE & AREA. Everything in the selection on layer
+;;;       "POOL" (tune *cchk-pool-layer*) whose properties are all
+;;;       ByLayer is the pool outline: a closed (lw)polyline, or the
+;;;       same shape exploded into lines and arcs — touching ends are
+;;;       chained back together and the largest closed loop wins. Its
+;;;       area (sq ft) and its straight / arc segment split are given
+;;;       in the report on the side.
+;;;     - COVER DETAILS. A block named (or containing) "Cover
+;;;       Details" holds an OVERLAP value ("Overlap: 12''" — only
+;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" —
+;;;       NxN). What they SHOULD say comes from the outline:
+;;;         more arcs than straights           -> 18" overlap, 3x3
+;;;         mostly straights, under 1,200 sqft -> 12" overlap, 5x5
+;;;         mostly straights, 1,200-2,000      -> 15" overlap, 3x3
+;;;         mostly straights, over 2,000       -> 18" overlap, 3x3
+;;;       A value that disagrees, is blank or is unreadable gets a
+;;;       SUGGEST line; the block itself is never touched.
+;;;     - POOL SIZE SHOWN. With nothing drawn on the cover layer
+;;;       (tune *cchk-cover-layer*) the note "Pool Size Shown" must
+;;;       appear somewhere in the highlighted area — missing is
+;;;       suggested. With a cover drawn the note must NOT be there —
+;;;       present suggests taking it off; absent is all good.
+;;;     - PADS. The pool outline is run through PADDLE's concave-
+;;;       feature hunt at 36" pads; every spot with no pad already
+;;;       nearby (existing pads = *cchk-pad-blocks* inserts, or any
+;;;       insert on *cchk-pads-layer*) is circled on the construction
+;;;       layer and SUGGESTED in the report.
 ;;;
 ;;;  6. A COVERCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer COVERCHECK-REPORT listing every dimension —
@@ -130,6 +155,22 @@
 (setq *cchk-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
 
+;; --- cover tunables ------------------------------------------------
+(setq *cchk-pool-layer*  "POOL")   ; layer the pool outline is drawn on (ByLayer properties)
+(setq *cchk-cover-layer* "COVER")  ; layer a drawn cover lives on
+(setq *cchk-pool-note*   "Pool Size Shown") ; note demanded when no cover is drawn
+(setq *cchk-details-block* "Cover Details") ; block carrying Overlap & Spacing
+(setq *cchk-overlap-vals* '(12.0 15.0 18.0)) ; the only overlaps that exist
+(setq *cchk-area-small*  1200.0)   ; sq ft: under this -> 12" overlap, 5x5
+(setq *cchk-area-large*  2000.0)   ; sq ft: over this -> 18" overlap, 3x3
+(setq *cchk-pad-size*    36.0)     ; pads are suggested at 36" (PADDLE's big pad)
+(setq *cchk-pad-blocks*  '("Pad36x36" "Pad24x24")) ; blocks that count as an existing pad
+(setq *cchk-pads-layer*  "PADS")   ; layer existing pads sit on
+(setq *cchk-pad-near*    18.0)     ; a pad center within this (Chebyshev) covers a spot
+(setq *cchk-pad-maxrad*  54.0)     ; 4'-6": largest concave radius needing pads (PADDLE)
+(setq *cchk-chain-fuzz*  0.05)     ; max gap when chaining an exploded outline
+(setq *cchk-pad-angtol*  (/ pi 180.0)) ; 1 deg: corners flatter than this are straight-through
+
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
 (defun cchk:regapp ()
@@ -175,7 +216,7 @@
       (setq e  (ssname ss2 i)
             i  (1+ i)
             xd (cchk:xd e))
-      (if (member (cdr (assoc 1000 xd)) '("REPORT" "XLINE"))
+      (if (member (cdr (assoc 1000 xd)) '("REPORT" "XLINE" "MARKER"))
         (progn (entdel e) (setq n (1+ n))))))
   (if (> n 0)
     (princ (strcat "\n(Removed " (itoa n)
@@ -213,7 +254,7 @@
             i  (1+ i)
             xd (cchk:xd e))
       (cond
-        ((member (cdr (assoc 1000 xd)) '("REPORT" "XLINE"))
+        ((member (cdr (assoc 1000 xd)) '("REPORT" "XLINE" "MARKER"))
          (entdel e)
          (setq n (1+ n)))
         ((assoc 1071 xd)
@@ -460,7 +501,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1435,6 +1476,619 @@
          (princ "\n  Left as drawn.")
          (list label "left as drawn" 'left))))))
 
+
+;; --- pad geometry (ported from PADDLE.lsp) --------------------------
+;; Bulge-aware outline handling and the concave-feature hunt, used to
+;; measure the pool outline and suggest 36" pads along it. Accepts a
+;; closed LWPOLYLINE / 2D POLYLINE or the same shape exploded into
+;; loose LINEs and ARCs - touching segments (ends within
+;; *cchk-chain-fuzz*) are chained back into closed loops.
+
+(defun cchk:pv-sub (a b) (list (- (car a) (car b)) (- (cadr a) (cadr b))))
+(defun cchk:pv-add (a b) (list (+ (car a) (car b)) (+ (cadr a) (cadr b))))
+(defun cchk:pv-scl (v k) (list (* (car v) k) (* (cadr v) k)))
+(defun cchk:pv-len (v) (distance '(0.0 0.0) v))
+(defun cchk:pv-unit (v / l)
+  (if (> (setq l (cchk:pv-len v)) 1e-12) (cchk:pv-scl v (/ 1.0 l))))
+(defun cchk:pv-cross (a b) (- (* (car a) (cadr b)) (* (cadr a) (car b))))
+(defun cchk:pv-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
+(defun cchk:pv-dir (a) (list (cos a) (sin a))) ; unit vector at angle a
+(defun cchk:pv-2d (p) (list (car p) (cadr p)))
+(defun cchk:pv-arcpt (cen r ang) (cchk:pv-add cen (cchk:pv-scl (cchk:pv-dir ang) r)))
+(defun cchk:pv-cheb (v) (max (abs (car v)) (abs (cadr v)))) ; Chebyshev norm
+
+;; Segment data for vertex A -> B with bulge b (b /= 0):
+;; returns (theta radius center start-tangent end-tangent)
+;; theta = signed included angle (CCW positive), tangents are angles.
+(defun cchk:pv-arcdata (a b blg / theta chord r phi ts cen)
+  (setq theta (* 4.0 (atan blg))
+        chord (distance a b)
+        r     (/ chord (* 2.0 (sin (/ (abs theta) 2.0))))
+        phi   (angle a b)
+        ts    (- phi (/ theta 2.0))
+        cen   (cchk:pv-add a (cchk:pv-scl (cchk:pv-dir (+ ts (if (> blg 0.0) (/ pi 2.0) (/ pi -2.0)))) r)))
+  (list theta r cen ts (+ phi (/ theta 2.0))))
+
+;; Signed area of a closed vertex list (shoelace + circular segments).
+;; vts = list of (x y bulge), bulge belongs to the segment leaving it.
+(defun cchk:pv-area (vts / n i a b blg area theta r seg)
+  (setq n (length vts) i 0 area 0.0)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a))
+    (setq area (+ area (* 0.5 (- (* (car a) (cadr b)) (* (car b) (cadr a))))))
+    (if (/= blg 0.0)
+        (progn
+          (setq seg   (cchk:pv-arcdata a b blg)
+                theta (abs (car seg))
+                r     (cadr seg))
+          (setq area (+ area (* (if (> blg 0.0) 1.0 -1.0)
+                                0.5 r r (- theta (sin theta)))))))
+    (setq i (1+ i)))
+  area)
+
+;; Next pad along an arc: starting from arc-parameter CUR (previous
+;; pad center PREV), find the parameter where the pad center is
+;; exactly PADSIZE away from PREV in Chebyshev distance -- axis-
+;; aligned pads of that size then touch edge-to-edge without ever
+;; overlapping. Returns (parameter center), or nil when the rest of
+;; the arc is too short for another flush pad.
+(defun cchk:pv-next-flush (cen r sa sgn cur sweep prev padsize
+                           / ds d p hit lo hi mid)
+  (setq ds (/ padsize r 8.0))                ; ~1/8 pad per probe step
+  (if (> ds (/ sweep 4.0)) (setq ds (/ sweep 4.0)))
+  (setq d cur hit nil)
+  (while (and (not hit) (< d (- sweep 1e-9))) ; walk until pads separate
+    (setq lo d
+          d  (min sweep (+ d ds))
+          p  (cchk:pv-arcpt cen r (+ sa (* sgn d))))
+    (if (>= (cchk:pv-cheb (cchk:pv-sub p prev)) padsize)
+        (setq hit T)))
+  (if hit
+      (progn ; tighten the crossing between lo and d by bisection
+        (setq hi d)
+        (repeat 45
+          (setq mid (/ (+ lo hi) 2.0)
+                p   (cchk:pv-arcpt cen r (+ sa (* sgn mid))))
+          (if (>= (cchk:pv-cheb (cchk:pv-sub p prev)) padsize)
+              (setq hi mid)
+              (setq lo mid)))
+        (list hi (cchk:pv-arcpt cen r (+ sa (* sgn hi)))))))
+
+;; Pad centers for one concave arc: the first pad is centered on the
+;; MIDDLE of the arc; further pads march outward toward both ends,
+;; each exactly one pad-size on center from the last. Marching stops
+;; when the leftover end of the arc is too short for another flush
+;; pad - the extreme ends of the radius are allowed to stay uncovered.
+(defun cchk:pv-arc-pads (cen r sa sgn sweep padsize
+                         / mid amid pmid fwd bwd cur prev nxt)
+  (setq mid  (/ sweep 2.0)
+        amid (+ sa (* sgn mid))
+        pmid (cchk:pv-arcpt cen r amid))
+  ;; march from the middle toward the arc's end...
+  (setq cur 0.0 prev pmid fwd nil)
+  (while (setq nxt (cchk:pv-next-flush cen r amid sgn cur (- sweep mid) prev padsize))
+    (setq cur (car nxt) prev (cadr nxt) fwd (cons prev fwd)))
+  ;; ...and from the middle back toward the arc's start
+  (setq cur 0.0 prev pmid bwd nil)
+  (while (setq nxt (cchk:pv-next-flush cen r amid (- sgn) cur mid prev padsize))
+    (setq cur (car nxt) prev (cadr nxt) bwd (cons prev bwd)))
+  (append bwd (list pmid) (reverse fwd)))
+
+;; Direction (unit vector) of travel at the START / END of segment a->b.
+(defun cchk:pv-tan-start (a b blg)
+  (if (= blg 0.0)
+      (cchk:pv-unit (cchk:pv-sub b a))
+      (cchk:pv-dir (cadddr (cchk:pv-arcdata a b blg)))))
+(defun cchk:pv-tan-end (a b blg)
+  (if (= blg 0.0)
+      (cchk:pv-unit (cchk:pv-sub b a))
+      (cchk:pv-dir (last (cchk:pv-arcdata a b blg)))))
+
+;; LWPOLYLINE -> (closed-flag . vts)
+(defun cchk:pv-lwverts (ent / ed out grp)
+  (setq ed (entget ent))
+  (foreach grp ed
+    (cond
+      ((= (car grp) 10)
+       (setq out (cons (list (cadr grp) (caddr grp) 0.0) out)))
+      ((= (car grp) 42)
+       (if out (setq out (cons (list (caar out) (cadr (car out)) (cdr grp)) (cdr out)))))))
+  (cons (= 1 (logand 1 (cdr (assoc 70 ed)))) (reverse out)))
+
+;; heavy 2D POLYLINE -> (closed-flag . vts), nil for 3D/mesh plines
+(defun cchk:pv-plverts (ent / ed flags e ved out p)
+  (setq ed (entget ent) flags (cdr (assoc 70 ed)))
+  (if (zerop (logand 112 flags)) ; skip 3D polylines / meshes / polyfaces
+      (progn
+        (setq e (entnext ent))
+        (while (and e (= "VERTEX" (cdr (assoc 0 (setq ved (entget e))))))
+          (if (zerop (logand 16 (cond ((cdr (assoc 70 ved))) (0)))) ; skip spline frame pts
+              (progn
+                (setq p (cdr (assoc 10 ved)))
+                (setq out (cons (list (car p) (cadr p)
+                                      (cond ((cdr (assoc 42 ved))) (0.0)))
+                                out))))
+          (setq e (entnext e)))
+        (cons (= 1 (logand 1 flags)) (reverse out)))))
+
+;; vertex list -> segments (p1 p2 bulge), wrapping when closed
+(defun cchk:pv-vts->segs (closed vts / n i segs a b)
+  (setq n (length vts) i 0)
+  (repeat (if closed n (max 0 (1- n)))
+    (setq a (nth i vts)
+          b (nth (rem (1+ i) n) vts))
+    (setq segs (cons (list (cchk:pv-2d a) (cchk:pv-2d b) (caddr a)) segs))
+    (setq i (1+ i)))
+  (reverse segs))
+
+;; any supported entity -> list of bulge-aware segments
+(defun cchk:pv-ent-segs (ent / ed typ cen r sa ea sweep cv)
+  (setq ed (entget ent) typ (cdr (assoc 0 ed)))
+  (cond
+    ((= typ "LINE")
+     (list (list (cchk:pv-2d (cdr (assoc 10 ed)))
+                 (cchk:pv-2d (cdr (assoc 11 ed))) 0.0)))
+    ((= typ "ARC")
+     (setq cen   (cchk:pv-2d (cdr (assoc 10 ed)))
+           r     (cdr (assoc 40 ed))
+           sa    (cdr (assoc 50 ed))
+           ea    (cdr (assoc 51 ed))
+           sweep (- ea sa))
+     (if (<= sweep 0.0) (setq sweep (+ sweep pi pi)))
+     (list (list (cchk:pv-add cen (cchk:pv-scl (cchk:pv-dir sa) r))
+                 (cchk:pv-add cen (cchk:pv-scl (cchk:pv-dir ea) r))
+                 (/ (sin (/ sweep 4.0)) (cos (/ sweep 4.0)))))) ; tan(sweep/4)
+    ((= typ "LWPOLYLINE")
+     (setq cv (cchk:pv-lwverts ent))
+     (cchk:pv-vts->segs (car cv) (cdr cv)))
+    ((= typ "POLYLINE")
+     (setq cv (cchk:pv-plverts ent))
+     (if cv (cchk:pv-vts->segs (car cv) (cdr cv))))))
+
+;; Chains touching segments (ends within *cchk-chain-fuzz*) end-to-end.
+;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
+(defun cchk:pv-chain (segs / loops nopen chain head tail done found rest s)
+  (setq nopen 0)
+  ;; drop degenerate slivers
+  (setq segs (vl-remove-if
+               '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
+               segs))
+  (while segs
+    (setq chain (list (car segs))
+          head  (car (car segs))
+          tail  (cadr (car segs))
+          segs  (cdr segs)
+          done  nil)
+    (while (not done)
+      (cond
+        ;; loop closed back onto its start?
+        ((and (> (length chain) 1) (<= (distance tail head) *cchk-chain-fuzz*))
+         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+                                   chain)
+                           loops)
+               done  T))
+        (T ;; look for a segment continuing from the tail
+         (setq found nil rest nil)
+         (foreach s segs
+           (if found
+               (setq rest (cons s rest))
+               (cond
+                 ((<= (distance tail (car s)) *cchk-chain-fuzz*)
+                  (setq found s))
+                 ((<= (distance tail (cadr s)) *cchk-chain-fuzz*) ; reversed
+                  (setq found (list (cadr s) (car s) (- (caddr s)))))
+                 (T (setq rest (cons s rest))))))
+         (if found
+             (setq chain (append chain (list found))
+                   tail  (cadr found)
+                   segs  (reverse rest))
+             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
+  (cons (reverse loops) nopen))
+
+;; Concave features of one closed loop: returns pads, each
+;; (center rotation kind) with kind = "corner" / "arc". PADSIZE sets
+;; the pad-grid pitch used to cover concave arcs.
+(defun cchk:pv-features (vts padsize / s n i a b c blg pads din dout turn
+                             seg theta r cen sa sgn sweep)
+  (setq s (if (< (cchk:pv-area vts) 0.0) -1 1) ; -1 = clockwise
+        n (length vts)
+        i 0)
+  (repeat n
+    (setq a   (nth i vts)                     ; segment i : a -> b
+          b   (nth (rem (1+ i) n) vts)
+          c   (nth (rem (+ i (1- n)) n) vts)  ; previous vertex
+          blg (caddr a))
+    ;; --- concave vertex (inside corner) at a, between seg i-1 and i ---
+    (setq din  (cchk:pv-tan-end (cchk:pv-2d c) (cchk:pv-2d a) (caddr c))
+          dout (cchk:pv-tan-start (cchk:pv-2d a) (cchk:pv-2d b) blg))
+    (if (and din dout)
+        (progn
+          (setq turn (atan (cchk:pv-cross din dout) (cchk:pv-dot din dout)))
+          (if (< (* s turn) (- *cchk-pad-angtol*)) ; turns away from interior
+              (setq pads (cons (list (cchk:pv-2d a) (angle '(0.0 0.0) din) "corner")
+                               pads)))))
+    ;; --- concave arc segment with radius <= *cchk-pad-maxrad* ---
+    (if (and (/= blg 0.0)
+             (< (* s blg) 0.0)) ; bulges into the interior
+        (progn
+          (setq seg   (cchk:pv-arcdata (cchk:pv-2d a) (cchk:pv-2d b) blg)
+                theta (car seg)
+                r     (cadr seg)
+                cen   (caddr seg))
+          (if (<= r (+ *cchk-pad-maxrad* 1e-6))
+              (progn
+                (setq sa    (angle cen (cchk:pv-2d a))
+                      sgn   (if (> theta 0.0) 1.0 -1.0)
+                      sweep (abs theta))
+                (foreach ctr (cchk:pv-arc-pads cen r sa sgn sweep padsize)
+                  (setq pads (cons (list ctr 0.0 "arc") pads)))))))
+    (setq i (1+ i)))
+  (reverse pads))
+
+;; --- cover rules ----------------------------------------------------
+
+(defun cchk:bylayer-p (ent col / ed)
+  ;; T when the entity's properties are all ByLayer; COL is its TRUE
+  ;; colour (256 = ByLayer) - passed in because during a review the
+  ;; entity may be wearing the grey or a flag colour
+  (setq ed (entget ent))
+  (and (= 256 col)
+       (or (null (assoc 6 ed))
+           (= "BYLAYER" (strcase (cdr (assoc 6 ed)))))
+       (or (null (assoc 370 ed))
+           (= -1 (cdr (assoc 370 ed))))))
+
+(defun cchk:pool-ents (ss saved / i e ed out nskip)
+  ;; pool-outline candidates: LINE/ARC/LWPOLYLINE/POLYLINE on the pool
+  ;; layer with every property ByLayer, from the selection. SAVED (the
+  ;; review's colour stash) supplies the true colour of anything
+  ;; currently greyed out. Returns (ents . skipped); skipped sit on
+  ;; the layer but carry explicit properties.
+  (setq i 0 nskip 0)
+  (repeat (sslength ss)
+    (setq e  (ssname ss i)
+          i  (1+ i)
+          ed (entget e))
+    (if (and ed
+             (member (cdr (assoc 0 ed)) '("LINE" "ARC" "LWPOLYLINE" "POLYLINE"))
+             (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pool-layer*)))
+      (if (cchk:bylayer-p e (cond ((assoc e saved) (cdr (assoc e saved)))
+                                  ((cchk:ent-color e))))
+        (setq out (cons e out))
+        (setq nskip (1+ nskip)))))
+  (cons (reverse out) nskip))
+
+(defun cchk:pool-loop (pents / segs e res best bestarea a l)
+  ;; the pool outline: the largest closed loop chained from the
+  ;; candidates' bulge-aware segments; nil when nothing closes back
+  ;; on itself
+  (foreach e pents
+    (setq segs (append segs (cchk:pv-ent-segs e))))
+  (setq res      (cchk:pv-chain segs)
+        bestarea 0.0)
+  (foreach l (car res)
+    (setq a (abs (cchk:pv-area l)))
+    (if (> a bestarea) (setq bestarea a best l)))
+  best)
+
+(defun cchk:parse-nxn (s / lst i n num a res)
+  ;; the first "NxN" written in the text ("5x5", "3 X 3") as a list
+  ;; (n1 n2); nil when none
+  (if s
+    (progn
+      (setq lst (vl-string->list (cchk:squash s))
+            i   0
+            n   (length lst))
+      (while (and (< i n) (null res))
+        (if (and (>= (nth i lst) 48) (<= (nth i lst) 57))
+          (progn
+            (setq num 0)
+            (while (and (< i n) (>= (nth i lst) 48) (<= (nth i lst) 57))
+              (setq num (+ (* 10 num) (- (nth i lst) 48))
+                    i   (1+ i)))
+            (setq a num)
+            (if (and (< i n) (= (nth i lst) 88))       ; X
+              (progn
+                (setq i (1+ i))
+                (if (and (< i n) (>= (nth i lst) 48) (<= (nth i lst) 57))
+                  (progn
+                    (setq num 0)
+                    (while (and (< i n) (>= (nth i lst) 48) (<= (nth i lst) 57))
+                      (setq num (+ (* 10 num) (- (nth i lst) 48))
+                            i   (1+ i)))
+                    (setq res (list a num)))))))
+          (setq i (1+ i))))))
+  res)
+
+(defun cchk:nxn-str (sp)
+  (strcat (itoa (car sp)) "x" (itoa (cadr sp))))
+
+(defun cchk:layer-in-sel (ss lay / i ed found)
+  ;; T when anything in the selection sits on the given layer
+  (setq i 0 lay (strcase lay))
+  (repeat (sslength ss)
+    (setq ed (entget (ssname ss i))
+          i  (1+ i))
+    (if (and (not found) ed
+             (= lay (strcase (cdr (assoc 8 ed)))))
+      (setq found T)))
+  found)
+
+(defun cchk:sel-has-phrase (ss blks phrase / pat found i e ed g b)
+  ;; T when the phrase appears in the highlighted area: on a TEXT or
+  ;; MTEXT entity, or in a block's name, attributes or definition
+  ;; (case, spacing and punctuation ignored). COVERCHECK's own report
+  ;; is skipped so a rerun never reads its own words back.
+  (setq pat (strcat "*" (cchk:squash phrase) "*")
+        i   0)
+  (repeat (sslength ss)
+    (setq e  (ssname ss i)
+          i  (1+ i)
+          ed (entget e))
+    (if (and (not found) ed
+             (/= (strcase (cdr (assoc 8 ed))) (strcase *cchk-report-layer*))
+             (member (cdr (assoc 0 ed)) '("TEXT" "MTEXT")))
+      (foreach g ed
+        (if (and (member (car g) '(1 3))
+                 (wcmatch (cchk:squash (cdr g)) pat))
+          (setq found T)))))
+  (foreach b blks
+    (if (and (not found) (cchk:ins-matches b phrase))
+      (setq found T)))
+  found)
+
+(defun cchk:pad-centers (/ ss2 i e ed nm bb out)
+  ;; centers (extents middle) of every pad already in the drawing: an
+  ;; INSERT on the pads layer, or one whose (effective) name is a pad
+  ;; block from *cchk-pad-blocks*
+  (setq ss2 (ssget "_X" '((0 . "INSERT")))
+        i   0)
+  (if ss2
+    (repeat (sslength ss2)
+      (setq e  (ssname ss2 i)
+            i  (1+ i)
+            ed (entget e)
+            nm (cchk:squash (cchk:block-name e)))
+      (if (or (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pads-layer*))
+              (vl-some '(lambda (p) (= nm (cchk:squash p))) *cchk-pad-blocks*))
+        (progn
+          (setq bb (cchk:bbox e))
+          (if bb
+            (setq out (cons (list (* 0.5 (+ (caar bb) (caadr bb)))
+                                  (* 0.5 (+ (cadar bb) (cadadr bb))))
+                            out)))))))
+  out)
+
+(defun cchk:mark-pad (ctr)
+  ;; circle a suggested pad spot on the construction layer, tagged so
+  ;; a rerun or COVERCHECKRESCUE clears it
+  (if (entmake (list '(0 . "CIRCLE")
+                     '(100 . "AcDbEntity")
+                     (cons 8 *cchk-constr-layer*)
+                     '(100 . "AcDbCircle")
+                     (cons 10 (list (car ctr) (cadr ctr) 0.0))
+                     (cons 40 (/ *cchk-pad-size* 2.0))))
+    (cchk:tag (entlast) "MARKER")))
+
+(defun cchk:cover-audit (ss blks markers saved / pres pents vts narc nlin v
+                          sqft det ovraw ovval ovok spraw spval arcy
+                          wantov wantsp why covered note lines s f
+                          feats padctrs miss poolsum detsum padsum notesum)
+  ;; every cover rule, run over the selection. Returns
+  ;;   (header-summaries detail-lines)
+  ;; as plain report strings - cchk:attn-p decides which turn red.
+  ;; Nothing in the drawing is rewritten; disagreements are only
+  ;; SUGGESTED against. With MARKERS, suggested pad spots are also
+  ;; circled on the construction layer.
+
+  ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
+  (setq pres  (cchk:pool-ents ss saved)
+        pents (car pres)
+        vts   (if pents (cchk:pool-loop pents))
+        narc  0
+        nlin  0)
+  (if (> (cdr pres) 0)
+    (setq lines
+          (append lines
+                  (list (strcat "Pool: " (itoa (cdr pres)) " item(s) on layer '"
+                                *cchk-pool-layer*
+                                "' SKIPPED - properties are not ByLayer")))))
+  (if vts
+    (progn
+      (foreach v vts
+        (if (equal 0.0 (caddr v) 1e-12)
+          (setq nlin (1+ nlin))
+          (setq narc (1+ narc))))
+      (setq sqft    (/ (abs (cchk:pv-area vts)) 144.0)
+            arcy    (> narc nlin)
+            poolsum (strcat (rtos sqft 2 1) " sq ft - outline "
+                            (itoa nlin) " straight / " (itoa narc)
+                            " arc segment(s), mostly "
+                            (if arcy "arcs" "straights")))
+      ;; what the cover SHOULD be for this pool
+      (cond
+        (arcy
+         (setq wantov 18.0
+               wantsp '(3 3)
+               why    "outline is mostly arcs"))
+        ((< sqft *cchk-area-small*)
+         (setq wantov 12.0
+               wantsp '(5 5)
+               why    (strcat "under " (rtos *cchk-area-small* 2 0) " sq ft")))
+        ((<= sqft *cchk-area-large*)
+         (setq wantov 15.0
+               wantsp '(3 3)
+               why    (strcat (rtos *cchk-area-small* 2 0) "-"
+                              (rtos *cchk-area-large* 2 0) " sq ft")))
+        (t
+         (setq wantov 18.0
+               wantsp '(3 3)
+               why    (strcat "over " (rtos *cchk-area-large* 2 0) " sq ft")))))
+    (setq poolsum (strcat "NOTHING closed and ByLayer found on layer '"
+                          *cchk-pool-layer*
+                          "' - area not measured (check for gaps)")))
+
+  ;; --- Cover Details: Overlap & Spacing vs what the pool needs -----
+  (setq det (car (vl-remove-if-not
+                   '(lambda (b) (cchk:ins-matches b *cchk-details-block*))
+                   blks)))
+  (if (null det)
+    (progn
+      (setq detsum (strcat "block MISSING"
+                           (if wantov
+                             (strcat " - SUGGEST Overlap "
+                                     (rtos wantov 2 0) "\", Spacing "
+                                     (cchk:nxn-str wantsp) " (" why ")")
+                             "")))
+      (setq lines (append lines (list (strcat "Cover Details: " detsum)))))
+    (progn
+      ;; the OVERLAP value: attribute tag first, any text carrying
+      ;; the word next
+      (setq ovraw (cchk:ins-attrib det "OVERLAP"))
+      (if (null ovraw)
+        (foreach s (cchk:ins-texts det)
+          (if (and (null ovraw) s (wcmatch (cchk:norm-text s) "*OVERLAP*"))
+            (setq ovraw s))))
+      (setq ovval (if ovraw (cchk:parse-len ovraw))
+            ovok  (and ovval
+                       (vl-some '(lambda (x) (equal x ovval 1e-6))
+                                *cchk-overlap-vals*)))
+      ;; the SPACING tag, same hunt
+      (setq spraw (cchk:ins-attrib det "SPACING"))
+      (if (null spraw)
+        (foreach s (cchk:ins-texts det)
+          (if (and (null spraw) s (wcmatch (cchk:norm-text s) "*SPACING*"))
+            (setq spraw s))))
+      (setq spval (cchk:parse-nxn spraw))
+      (setq lines (append lines (list
+        (cond
+          ((null ovval)
+           (strcat "Cover Details: Overlap is "
+                   (if (and ovraw (/= ovraw ""))
+                     (strcat "UNREADABLE ('" (cchk:clip ovraw 20) "')")
+                     "BLANK")
+                   " - "
+                   (if wantov
+                     (strcat "SUGGEST " (rtos wantov 2 0) "\" (" why ")")
+                     "fill it in")))
+          ((not ovok)
+           (strcat "Cover Details: Overlap reads '" (cchk:clip ovraw 20)
+                   "' - not 12\"/15\"/18\""
+                   (if wantov
+                     (strcat " - SUGGEST " (rtos wantov 2 0) "\" (" why ")")
+                     "")))
+          ((and wantov (not (equal ovval wantov 1e-6)))
+           (strcat "Cover Details: Overlap " (rtos ovval 2 0)
+                   "\" - SUGGEST " (rtos wantov 2 0) "\" (" why ")"))
+          (wantov
+           (strcat "Cover Details: Overlap " (rtos ovval 2 0)
+                   "\" - matches (" why ")"))
+          (t
+           (strcat "Cover Details: Overlap " (rtos ovval 2 0)
+                   "\" - no pool outline to check it against"))))))
+      (setq lines (append lines (list
+        (cond
+          ((null spval)
+           (strcat "Cover Details: Spacing is "
+                   (if (and spraw (/= spraw ""))
+                     (strcat "UNREADABLE ('" (cchk:clip spraw 20) "')")
+                     "BLANK")
+                   " - "
+                   (if wantsp
+                     (strcat "SUGGEST " (cchk:nxn-str wantsp) " (" why ")")
+                     "fill it in (NxN)")))
+          ((/= (car spval) (cadr spval))
+           (strcat "Cover Details: Spacing reads '" (cchk:clip spraw 20)
+                   "' - not NxN"
+                   (if wantsp
+                     (strcat " - SUGGEST " (cchk:nxn-str wantsp) " (" why ")")
+                     "")))
+          ((and wantsp (not (equal spval wantsp)))
+           (strcat "Cover Details: Spacing " (cchk:nxn-str spval)
+                   " - SUGGEST " (cchk:nxn-str wantsp) " (" why ")"))
+          (wantsp
+           (strcat "Cover Details: Spacing " (cchk:nxn-str spval)
+                   " - matches (" why ")"))
+          (t
+           (strcat "Cover Details: Spacing " (cchk:nxn-str spval)
+                   " - no pool outline to check it against"))))))
+      (setq detsum
+            (strcat "Overlap "
+                    (if ovval (strcat (rtos ovval 2 0) "\"") "BLANK")
+                    (if (and ovval (not ovok)) " (not 12/15/18)" "")
+                    (if (and wantov (or (null ovval)
+                                        (not (equal ovval wantov 1e-6))))
+                      (strcat " - SUGGEST " (rtos wantov 2 0) "\"")
+                      "")
+                    "; Spacing "
+                    (if spval (cchk:nxn-str spval) "BLANK")
+                    (if (and wantsp (or (null spval)
+                                        (not (equal spval wantsp))))
+                      (strcat " - SUGGEST " (cchk:nxn-str wantsp))
+                      "")))))
+
+  ;; --- 'Pool Size Shown' note vs the cover layer -------------------
+  (setq covered (cchk:layer-in-sel ss *cchk-cover-layer*)
+        note    (cchk:sel-has-phrase ss blks *cchk-pool-note*))
+  (setq notesum
+        (cond
+          ((and covered note)
+           (strcat "cover drawn on layer '" *cchk-cover-layer*
+                   "' AND the '" *cchk-pool-note*
+                   "' note is in - SUGGEST taking the note off"))
+          (covered
+           (strcat "cover drawn on layer '" *cchk-cover-layer*
+                   "', no '" *cchk-pool-note* "' note - OK"))
+          (note
+           (strcat "no cover on layer '" *cchk-cover-layer*
+                   "', '" *cchk-pool-note* "' note is in - OK"))
+          (t
+           (strcat "no cover on layer '" *cchk-cover-layer*
+                   "' and the '" *cchk-pool-note*
+                   "' note is nowhere in the selection - SUGGEST adding it"))))
+
+  ;; --- pads along the pool outline (PADDLE logic, 36" pads) --------
+  (if vts
+    (progn
+      (setq feats   (if (> (length vts) 1)
+                      (cchk:pv-features vts *cchk-pad-size*))
+            padctrs (cchk:pad-centers)
+            miss    nil)
+      (foreach f feats
+        (if (not (vl-some
+                   '(lambda (p) (<= (cchk:pv-cheb (cchk:pv-sub p (car f)))
+                                    *cchk-pad-near*))
+                   padctrs))
+          (setq miss (cons f miss))))
+      (setq miss (reverse miss))
+      (setq padsum
+            (cond
+              ((null feats) "outline has no concave features - none needed")
+              ((null miss)  (strcat (itoa (length feats))
+                                    " spot(s) checked - every one has a pad"))
+              (t (strcat (itoa (length miss)) " of " (itoa (length feats))
+                         " 36\" spot(s) have no pad - SUGGEST adding"
+                         (if markers " (circled)" "")))))
+      (setq lines (append lines (list (strcat "Pads: " padsum))))
+      (foreach f miss
+        (if markers (cchk:mark-pad (car f)))
+        (setq lines (append lines (list
+          (strcat "Pad SUGGESTED at " (cchk:ptstr (car f))
+                  (if (= (caddr f) "corner")
+                    " (inside corner)"
+                    " (along a concave arc)")))))))
+    (progn
+      (setq padsum "pool outline not found - not checked")
+      (setq lines (append lines (list (strcat "Pads: " padsum))))))
+
+  (list (list (strcat "Pool: " poolsum)
+              (strcat "Cover Details: " detsum)
+              (strcat "Cover note: " notesum)
+              (strcat "Pads: " padsum))
+        lines))
+
 ;; --- command -------------------------------------------------------
 
 (defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et
@@ -1442,7 +2096,7 @@
                       saved keep res n total lines
                       ndok ndflag ndmoved naok namoved nasnap
                       nomerged noflag noleft
-                      rowtol sty l pair hdr
+                      rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
                       minx miny maxx maxy bb h m ins txt nlin ref)
@@ -1669,11 +2323,11 @@
              (setq keep (append (cdddr res) keep))
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))))
 
-        ;; --- cover-specific checks ----------------------------------
-        ;; COVER's own rules go here; each one adds its findings to
-        ;; `lines` (and its verdict to the header dashboard below).
-        ;; The blocks in the selection are already collected in `blks`
-        ;; and every straight segment in `segs`.
+        ;; --- cover checks: pool area, Cover Details, note, pads -----
+        (princ "\n--- Cover checks: pool outline & area, Cover Details, pads ---")
+        (setq cres (cchk:cover-audit ss blks T saved))
+        (foreach l (cadr cres)
+          (setq lines (cons l lines)))
 
         ;; --- restore colours (flagged/moved keep theirs) ------------
         ;; restored entities drop their rescue stash; flagged/moved
@@ -1695,7 +2349,7 @@
         (setq nlin 3.0)                          ; title, legend, separator
         (foreach l lines
           (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-        (setq nlin (+ nlin (* 3.0 *cchk-green-scale*)))   ; the header dashboard
+        (setq nlin (+ nlin (* 7.0 *cchk-green-scale*)))   ; the header dashboard
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -1729,6 +2383,9 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
+        (setq hdr (append hdr
+                          (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                  (car cres))))
         (setq txt (strcat "COVERCHECK REPORT - " (cchk:datestr)
                           "\\P"
                           (cchk:small
@@ -1775,8 +2432,9 @@
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged (cyan), "
                                  (itoa noleft) " left as drawn")
-                         "")
-                       "\nReport placed on the right side of the drawing (layer "
+                         "")))
+        (foreach l (car cres) (princ (strcat "\n" l)))
+        (princ (strcat "\nReport placed on the right side of the drawing (layer "
                        *cchk-report-layer* ")."
                        (if (> ndmoved 0)
                          (strcat "\nConstruction lines through moved dimensions' original points are on layer "
@@ -1792,7 +2450,7 @@
 
 (defun c:COVERSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
                      blks lines olaps pr bb bad
-                     nd ndbad na nabad h ins txt nlin ref hdr l
+                     nd ndbad na nabad h ins txt nlin ref hdr l cres
                      minx miny maxx maxy p13 p14 near s)
 
   (defun *error* (msg)
@@ -1885,7 +2543,10 @@
                                  " - flagged")
                          lines)))
 
-     ;; --- cover-specific checks (read-only twins of COVERCHECK's) ---
+     ;; --- cover checks (read-only - no pad markers are drawn) -------
+     (setq cres (cchk:cover-audit ss blks nil nil))
+     (foreach l (cadr cres)
+       (setq lines (cons l lines)))
 
      ;; --- report (the only thing COVERSCAN writes) ------------------
      (cchk:ensure-layer *cchk-report-layer* *cchk-report-color*)
@@ -1899,10 +2560,13 @@
                        (> nabad 0))
                  (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
                        (> (length olaps) 0))))
+     (setq hdr (append hdr
+                       (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                               (car cres))))
      (setq nlin 3.0)
      (foreach l lines
        (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-     (setq nlin (+ nlin (* 3.0 *cchk-green-scale*)))
+     (setq nlin (+ nlin (* 7.0 *cchk-green-scale*)))
      (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
        (progn
          (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -1929,11 +2593,12 @@
      (princ (strcat "\n--- COVERSCAN complete (read-only) ---"
                     "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
                     "\nArcs: " (itoa na) " scanned, " (itoa nabad) " with an unattached end"
-                    "\nOverlapping line pairs: " (itoa (length olaps))
-                    "\nReport written on layer " *cchk-report-layer*
+                    "\nOverlapping line pairs: " (itoa (length olaps))))
+     (foreach l (car cres) (princ (strcat "\n" l)))
+     (princ (strcat "\nReport written on layer " *cchk-report-layer*
                     "; nothing else was changed."))))
   (princ))
 
-(princ "\ncovercheck.lsp loaded - COVERCHECK reviews dimensions & arcs one at a time,")
+(princ "\ncovercheck.lsp loaded - COVERCHECK reviews dims, arcs & the cover rules,")
 (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
 (princ)
