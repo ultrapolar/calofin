@@ -19,9 +19,9 @@
 ;;;    Coversize   the perimeter is drawn on layer COVER and every
 ;;;                overall / side dimension reads  <measurement> Cover Size
 ;;;
-;;;  The suffix is deliberately NOT applied to corner callouts (corner
-;;;  radii, chamfer faces, octagon cut faces) -- only to the overalls
-;;;  and the straight runs between the corners.
+;;;  The suffix goes on the OVERALLS only.  Corner callouts (radii, cut
+;;;  faces) and the inboard flat dims are left plain, so a corner or a
+;;;  segment note can never be mistaken for an overall.
 ;;;
 ;;;  STANDARD INCHES
 ;;;  ---------------
@@ -34,13 +34,34 @@
 ;;;  command is done.  See the adjustable constants below to change the
 ;;;  units or the precision.
 ;;;
+;;;  DIMENSION LAYOUT
+;;;  ----------------
+;;;  Laid out the way the cover order sheet does it:
+;;;
+;;;    Rectangle  overall across on the BOTTOM, overall up on the LEFT;
+;;;               once corners are cut away, the remaining FLAT runs are
+;;;               dimensioned inboard of them on the bottom and right.
+;;;    Octagon    overall across and overall up, plus ONE corner-cut
+;;;               callout (Typ.).  All eight sides equal -> that is all
+;;;               it gets, and the drawing says so; unequal flats get
+;;;               their own inboard dims like the rectangle.
+;;;    Round      one overall.  Only an out-of-round spa gets a second.
+;;;
 ;;;  RECTANGLE CORNERS
 ;;;  -----------------
-;;;  A corner may be Square, Rounded (radius) or Diag (chamfer, sized by
-;;;  its face length).  Side lengths are always to the TRUE (sharp)
-;;;  corner; the treatment cuts inward from there.  Corner A is asked
-;;;  first and its answer AUTOFILLS corners B, C and D -- press Enter at
-;;;  each to accept it, or type a different treatment for that corner.
+;;;  A corner is Radius (sized by its radius), Diagonal (a cut, sized by
+;;;  its face length) or 90 -- the sheet's own corner legend.  Side
+;;;  lengths are always to the TRUE (sharp) corner; the treatment cuts
+;;;  inward from there.  Corner A is asked first and its answer
+;;;  AUTOFILLS corners B, C and D -- press Enter at each to accept it, or
+;;;  type a different treatment for that corner, so a cover with two cut
+;;;  corners and two square ones takes four different answers.
+;;;
+;;;  Callouts sit outside the corner on its 45-degree line: a radius dim
+;;;  on a Radius corner, an aligned dim across a Diagonal cut face, and
+;;;  a 90-degree leader on a 90 corner -- that last only when the corners
+;;;  are MIXED, since an all-square rectangle needs no corner notes.
+;;;  Four identical corners are called out ONCE, with a Typ. suffix.
 ;;;
 ;;;  Corner naming (plan view):   D ---------- C
 ;;;                               |            |
@@ -364,10 +385,14 @@
 ;; Radius dimension read from OUTSIDE the arc: the arc is picked at its
 ;; far point and the dimension line dragged further out along the same
 ;; direction, so the leader comes in from outside.
-(defun spa:dimrad (ent tip outd doff)
+(defun spa:dimrad (ent tip outd doff sfx)
   (if (and ent (entget ent) (= "ARC" (cdr (assoc 0 (entget ent)))))
-      (command "_.DIMRADIUS" (list ent (spa:wp tip))
-               (spa:wp (spa:v+ tip (spa:v* outd (* 0.9 doff)))))
+      (if (and sfx (/= sfx ""))
+          (command "_.DIMRADIUS" (list ent (spa:wp tip))
+                   "_T" (strcat "<>" sfx)
+                   (spa:wp (spa:v+ tip (spa:v* outd (* 0.9 doff)))))
+          (command "_.DIMRADIUS" (list ent (spa:wp tip))
+                   (spa:wp (spa:v+ tip (spa:v* outd (* 0.9 doff))))))
       (princ "\n(radius dim skipped -- that corner came out flat, no arc)")))
 
 ;;; -------------------- user input -------------------------------------
@@ -627,19 +652,19 @@
 ;;;    Diag    -> the CHAMFER FACE length (the cut itself)
 
 ;; The two points where a corner's treatment meets the straight sides
-;; (toward the previous / next corner) plus, for Rounded, the arc mid.
-;; Returns (ePrev eNext arcMid|nil).  Square -> (P P nil).
+;; (toward the previous / next corner) plus, for Radius, the arc mid.
+;; Returns (ePrev eNext arcMid|nil).  A 90 corner -> (P P nil).
 (defun spa:cornerends (p pp pn ctype size / uprev unext dp ang sb bis cen)
   (setq uprev (spa:unit (spa:v- pp p))
         unext (spa:unit (spa:v- pn p))
         dp (spa:dot uprev unext)
         ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
   (cond
-    ((= ctype "Diag")
+    ((= ctype "Diagonal")
      (setq sb (/ size (* 2.0 (sin (/ ang 2.0)))))           ; face -> edge setback
      (list (spa:v+ p (spa:v* uprev sb))
            (spa:v+ p (spa:v* unext sb)) nil))
-    ((= ctype "Rounded")
+    ((= ctype "Radius")
      (setq sb (/ (* size (cos (/ ang 2.0))) (sin (/ ang 2.0)))  ; r/tan(ang/2)
            bis (spa:unit (spa:v+ uprev unext))
            cen (spa:v+ p (spa:v* bis (/ size (sin (/ ang 2.0))))))
@@ -657,9 +682,20 @@
                              (car (nth i corners)) (cadr (nth i corners))))
           (list 0 1 2 3)))
 
+;; A reference point at corner i of quad q:
+;;   spec = 'true (the sharp corner) | 'prev | 'next (the treatment ends)
+(defun spa:cornerpoint (q corners i spec / ce)
+  (setq ce (spa:cornerends (nth i q)
+                           (nth (rem (+ i 3) 4) q)
+                           (nth (rem (+ i 1) 4) q)
+                           (car (nth i corners)) (cadr (nth i corners))))
+  (cond ((eq spec 'prev) (car ce))
+        ((eq spec 'next) (cadr ce))
+        (t (nth i q))))
+
 ;; Draw the rectangle perimeter with its corner treatments.  Returns the
-;; list of fillet-arc entity names per corner (nil where the corner is
-;; square or chamfered) for the corner dimensions.
+;; list of fillet-arc entity names per corner (nil where the corner is 90
+;; or diagonal) for the corner callouts.
 (defun spa:drawrect (q corners / ce i tyi arcs)
   (setq ce (spa:allends q corners))
   (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
@@ -668,23 +704,40 @@
   (foreach i (list 0 1 2 3)             ; corner treatments
     (setq tyi (car (nth i corners)))
     (cond
-      ((= tyi "Diag")
+      ((= tyi "Diagonal")
        (spa:perline (car (nth i ce)) (cadr (nth i ce)))
        (setq arcs (cons nil arcs)))
-      ((= tyi "Rounded")
+      ((= tyi "Radius")
        (spa:perarc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)))
        (setq arcs (cons (entlast) arcs)))
       (t (setq arcs (cons nil arcs)))))
   (reverse arcs))
 
-;; Corner callouts: a radius dim on each rounded corner, an aligned dim
-;; across each chamfer face, and (only when the corners are mixed) a
-;; 90-degree leader on the square ones.  These NEVER carry the Water's
-;; Edge / Cover Size suffix -- they are corners, not overalls.
-;; Assumes CLAYER is already DIMENSION.
-(defun spa:dimcorners (quad corners arcs cen doff anycut / i cc ce p pp pn
-                                                          ty outd am fm)
-  (foreach i (list 0 1 2 3)
+;; Do all four corners carry the same treatment?  Four identical corners
+;; get ONE callout with a Typ. suffix, the way the order sheet shows it.
+(defun spa:samecorners (corners / c0 same)
+  (setq c0 (car corners) same t)
+  (foreach c corners
+    (if (or (/= (car c) (car c0))
+            (> (abs (- (cadr c) (cadr c0))) 0.0005))
+        (setq same nil)))
+  same)
+
+;; Corner callouts, laid out the way the order sheet does them: the note
+;; sits OUTSIDE the corner, on the 45-degree line out of it.
+;;   Radius    -> a radius dimension read from outside the arc  (R6")
+;;   Diagonal  -> an aligned dimension across the cut face       (12")
+;;   90        -> a leader reading 90 degrees, and only when the corners
+;;                are MIXED (a plain four-square rectangle needs none)
+;; Four identical corners get ONE callout with a Typ. suffix.  None of
+;; these ever carry the Water's Edge / Cover Size note -- they are
+;; corners, not overalls.  Assumes CLAYER is already DIMENSION.
+(defun spa:dimcorners (quad corners arcs cen doff anycut / ilist sfx i cc ce
+                                                          p pp pn ty outd am fm)
+  (if (spa:samecorners corners)
+      (setq ilist (list 3) sfx " Typ.")   ; top-left, as the sheet shows it
+      (setq ilist (list 0 1 2 3) sfx ""))
+  (foreach i ilist
     (setq p (nth i quad)
           pp (nth (rem (+ i 3) 4) quad)
           pn (nth (rem (+ i 1) 4) quad)
@@ -693,17 +746,17 @@
           ce (spa:cornerends p pp pn ty (cadr cc))
           outd (spa:unit (spa:v- p cen)))
     (cond
-      ((= ty "Rounded")
+      ((= ty "Radius")
        (setq am (caddr ce))
-       (spa:dimrad (nth i arcs) am outd doff))
-      ((= ty "Diag")
+       (spa:dimrad (nth i arcs) am outd doff sfx))
+      ((= ty "Diagonal")
        (setq fm (spa:mid (car ce) (cadr ce)))
        (spa:dimalg (car ce) (cadr ce)
-                   (spa:v+ fm (spa:v* outd (* 0.6 doff))) nil))
+                   (spa:v+ fm (spa:v* outd (* 0.6 doff))) sfx))
       (anycut
        (command "_.LEADER" (spa:wp p)
                 (spa:wp (spa:v+ p (spa:v* outd (* 1.2 doff))))
-                "" "90%%d" "")))))
+                "" (strcat "90%%d" sfx) "")))))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
 ;; the picture matches what will be built.  gq = the guide quad,
@@ -724,59 +777,62 @@
   (setq i 0)
   (foreach cc corners
     (cond
-      ((= (car cc) "Diag")
+      ((= (car cc) "Diagonal")
        (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)))))
-      ((= (car cc) "Rounded")
+      ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   "SPA-NOTES" nil)
        (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))))
     (setq i (1+ i)))
   pv)
 
-;; Prompt one corner's treatment.  dflty/dfltsz are the autofill answer
-;; (corner A's) -- Enter accepts them.  maxsb caps the treatment's
-;; setback along the walls at half the shorter adjacent wall, so two
-;; treatments can never overlap and fold the perimeter; too-large
-;; answers are re-asked.  Returns (type size) or SPA-BACK.
+;; What the corner's size prompt is called.
+(defun spa:cornersizemsg (ty)
+  (if (= ty "Radius") " corner radius" " diagonal cut face length"))
+
+;; Prompt one corner's treatment, named the way the order sheet's corner
+;; legend names them: Radius / Diagonal / 90.  ("Square" is accepted as
+;; a synonym for 90 and normalised away.)  dflty/dfltsz are the autofill
+;; answer (corner A's) -- Enter accepts them.  maxsb caps the
+;; treatment's setback along the walls at half the shorter adjacent
+;; wall, so two treatments can never overlap and fold the perimeter;
+;; too-large answers are re-asked.  Returns (type size) or SPA-BACK.
 (defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (spa:osup)
-  (setq ty (spa:askkw label "Square Rounded Diag" "Square/Rounded/Diag"
+  (setq ty (spa:askkw label "Radius Diagonal 90 Square" "Radius/Diagonal/90"
                       dflty back))
   (spa:osdown)
   (if (eq ty 'SPA-BACK) (setq ty nil))
+  (if (equal ty "Square") (setq ty "90"))   ; sheet legend calls it 90
   (if (null ty)
       (progn (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
              'SPA-BACK)
       (progn
-        (if (= ty "Square")
+        (if (= ty "90")
             (setq sz 0.0)
             (progn
               (spa:osup)
               ;; the autofill size only stands in when it came from the
-              ;; SAME treatment -- a radius is not a chamfer face
+              ;; SAME treatment -- a radius is not a cut face
               (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
                   (setq dfltsz nil))
               (initget (if dfltsz 6 7))
-              (setq sz (getdist (strcat "\n" label
-                                        (if (= ty "Rounded") " corner radius"
-                                            " chamfer face length")
+              (setq sz (getdist (strcat "\n" label (spa:cornersizemsg ty)
                                         (if dfltsz (strcat " <" (rtos dfltsz) ">") "")
                                         ": ")))
               (if (null sz) (setq sz dfltsz))
-              ;; Rounded sets back r along each wall; a Diag face f sets
-              ;; back f/sqrt(2) on a 90-degree corner
+              ;; Radius sets back r along each wall; a Diagonal face f
+              ;; sets back f/sqrt(2) on a 90-degree corner
               (while (and maxsb
-                          (> (setq sb (if (= ty "Rounded") sz (* sz 0.70711)))
+                          (> (setq sb (if (= ty "Radius") sz (* sz 0.70711)))
                              maxsb))
                 (princ (strcat "\nToo large for this corner's walls -- max "
-                               (rtos (if (= ty "Rounded") maxsb (/ maxsb 0.70711)))
+                               (rtos (if (= ty "Radius") maxsb (/ maxsb 0.70711)))
                                ".  Re-enter."))
                 (initget 7)
-                (setq sz (getdist (strcat "\n" label
-                                          (if (= ty "Rounded") " corner radius"
-                                              " chamfer face length")
+                (setq sz (getdist (strcat "\n" label (spa:cornersizemsg ty)
                                           ": "))))
               (spa:osdown)))
         (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
@@ -808,7 +864,7 @@
 
 ;; Full guided flow for a rectangular spa.
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
-                        a b c d cen doff th i lbls cc back rows lbl)
+                        a b c d cen doff th oo fo i lbls cc back rows lbl)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -853,7 +909,7 @@
         'SPA-BACK
         (progn
           (setq corners (reverse corners) anycut nil)
-          (foreach cc corners (if (/= (car cc) "Square") (setq anycut t)))
+          (foreach cc corners (if (/= (car cc) "90") (setq anycut t)))
           ;; show the chosen treatments on the guide, scaled from the
           ;; real spa onto the 240 x 200 nominal and capped so a big
           ;; treatment cannot swallow the guide
@@ -881,12 +937,26 @@
   (setq arcs (spa:drawrect quad corners))
 
   ;; -------------------------------------------------- dimensions
+  ;; Laid out the way the order sheet does it: the two overalls on the
+  ;; bottom and the left, and -- once corners are cut away -- the
+  ;; remaining FLAT runs inboard of them, on the bottom and the right.
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
-  ;; the two overalls, measured true corner to true corner, outside the
-  ;; shape, each carrying the Water's Edge / Cover Size note
-  (spa:dimalg a b (spa:outoff a b cen doff) spa:*sfx*)
-  (spa:dimalg a d (spa:outoff a d cen doff) spa:*sfx*)
+  (setq oo (if anycut (* 1.6 doff) doff)      ; overalls clear the flats
+        fo (* 0.55 doff))
+  ;; the overalls, measured true corner to true corner -- the only dims
+  ;; that carry the Water's Edge / Cover Size note
+  (spa:dimalg a b (spa:outoff a b cen oo) spa:*sfx*)
+  (spa:dimalg a d (spa:outoff a d cen oo) spa:*sfx*)
+  ;; the flats, where a cut corner has actually shortened the run
+  (if (or (/= (car (nth 0 corners)) "90") (/= (car (nth 1 corners)) "90"))
+      (spa:dimalg (spa:cornerpoint quad corners 0 'next)
+                  (spa:cornerpoint quad corners 1 'prev)
+                  (spa:outoff a b cen fo) nil))
+  (if (or (/= (car (nth 1 corners)) "90") (/= (car (nth 2 corners)) "90"))
+      (spa:dimalg (spa:cornerpoint quad corners 1 'next)
+                  (spa:cornerpoint quad corners 2 'prev)
+                  (spa:outoff b c cen fo) nil))
   ;; corner callouts (no note -- these are corners, not overalls)
   (spa:dimcorners quad corners arcs cen doff anycut)
   (setvar "CLAYER" oldclay)
@@ -896,7 +966,7 @@
     (spa:text (spa:v+ (car lbl)
                       (spa:v* (spa:unit (spa:v- (car lbl) cen)) (* 1.6 th)))
               th (cadr lbl) "SPA-NOTES"))
-  (spa:modenote 0.0 (- 0.0 (* 2.6 doff)) th)
+  (spa:modenote 0.0 (- 0.0 (* 3.0 doff)) th)
   (setq rows (list (list "OVERALL WIDTH (A-B)" w w)
                    (list "OVERALL LENGTH (A-D)" l l)))
   (setq i 0)
@@ -904,7 +974,7 @@
     (setq rows (append rows
                        (list (list (strcat "CORNER " (nth i lbls) " "
                                            (strcase (car cc)))
-                                   (if (= (car cc) "Square") nil (cadr cc))
+                                   (if (= (car cc) "90") nil (cadr cc))
                                    (cadr cc))))
           i (1+ i)))
   (spa:report rows spa:*valnotes* (+ w (* 2.0 doff)) l th "SPA-NOTES")
@@ -996,8 +1066,8 @@
 
 ;; Full guided flow for an octagonal spa.
 (defun spa:octflow ( / oldclay pvs pv pvo ans bov aov traw sraw s1raw vraw s2raw
-                       ovres s tv s1 v pts cen doff th e p q k nm rows
-                       xmax ymax ymin s2act)
+                       ovres s tv s1 v pts cen doff th e p q k rows
+                       xmax ymax ymin tact vact s2act alleq)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -1055,6 +1125,16 @@
     (spa:perline (nth (car e) pts) (nth (cadr e) pts)))
 
   ;; -------------------------------------------------- dimensions
+  ;; The order sheet's octagon panel carries three things: the overall
+  ;; across, the overall up, and ONE corner-cut callout, because all
+  ;; eight sides are equal.  When the cut letters make the sides UNequal
+  ;; the two flats are dimensioned as well, inboard of the overalls --
+  ;; the same layout as the cut-corner rectangle panel.
+  (setq tact (distance (nth 0 pts) (nth 1 pts))
+        vact (distance (nth 2 pts) (nth 3 pts))
+        s2act (distance (nth 1 pts) (nth 2 pts))
+        alleq (and (< (abs (- tact vact)) 0.0625)
+                   (< (abs (- tact s2act)) 0.0625)))
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
   ;; the two overalls, hooked to real corners, dragged clear of the shape
@@ -1062,12 +1142,17 @@
               (list (* 0.5 bov) (- ymin (* 1.6 doff))) spa:*sfx*)
   (spa:dimalg (nth 0 pts) (nth 5 pts)
               (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) spa:*sfx*)
-  ;; every edge: the four flats carry the note, the four cuts are
-  ;; corners and do not
-  (foreach e spa:*octedges*
-    (setq p (nth (car e) pts) q (nth (cadr e) pts))
-    (spa:dimalg p q (spa:outoffp p q pts (* 0.55 doff))
-                (if (eq (caddr e) 'cut) nil spa:*sfx*)))
+  ;; the flats, only when they are not simply "all sides equal"
+  (if (not alleq)
+      (progn
+        (spa:dimalg (nth 0 pts) (nth 1 pts)
+                    (list (* 0.5 bov) (- ymin (* 0.55 doff))) nil)
+        (spa:dimalg (nth 2 pts) (nth 3 pts)
+                    (list (+ xmax (* 0.55 doff)) (* 0.5 aov)) nil)))
+  ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
+  ;; because all four cuts of an octagon are the same
+  (setq p (nth 1 pts) q (nth 2 pts))
+  (spa:dimalg p q (spa:outoffp p q pts (* 0.8 doff)) " Typ.")
   (setvar "CLAYER" oldclay)
 
   ;; -------------------------------------------------- labels + report
@@ -1075,12 +1160,14 @@
   (foreach p pts
     (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) "SPA-NOTES")
     (setq k (1+ k)))
-  (spa:modenote 0.0 (- ymin (* 3.0 doff)) th)
-  (setq s2act (distance (nth 1 pts) (nth 2 pts))
-        rows (list (list "OV B (ACROSS)" bov bov)
+  (if alleq
+      (spa:textc (list 0.0 (- ymin (* 2.4 doff))) (* 1.2 th)
+                 "OCTAGON - ALL SIDES EQUAL" "SPA-NOTES" 7))
+  (spa:modenote 0.0 (- ymin (* 3.4 doff)) th)
+  (setq rows (list (list "OV B (ACROSS)" bov bov)
                    (list "OV A (UP)" aov aov)
-                   (list "T - FLAT ACROSS" traw (distance (nth 0 pts) (nth 1 pts)))
-                   (list "V - FLAT UP" vraw (distance (nth 2 pts) (nth 3 pts)))
+                   (list "T - FLAT ACROSS" traw tact)
+                   (list "V - FLAT UP" vraw vact)
                    (list "S - CUT ALONG SIDE" sraw s)
                    (list "S1 - CUT UP END" s1raw s1)
                    (list "S2 - CUT FACE" s2raw s2act)))
@@ -1129,12 +1216,15 @@
       (princ "\nThe two overalls differ, so the spa is drawn as an ellipse.")
       (princ "\nA and B agree, so the spa is drawn as a true circle."))
 
+  ;; A true circle takes the single overall the order sheet's round panel
+  ;; shows; only an out-of-round spa needs the second one.
   (setvar "CLAYER" "DIMENSION")
   (spa:dimsetup th)
   (spa:dimalg (list 0.0 (* 0.5 aov)) (list bov (* 0.5 aov))
               (list (* 0.5 bov) (- 0.0 (* 1.6 doff))) spa:*sfx*)
-  (spa:dimalg (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
-              (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) spa:*sfx*)
+  (if (> (abs (- aov bov)) 1.0e-6)
+      (spa:dimalg (list (* 0.5 bov) 0.0) (list (* 0.5 bov) aov)
+                  (list (- 0.0 (* 1.6 doff)) (* 0.5 aov)) spa:*sfx*))
   (setvar "CLAYER" oldclay)
 
   (spa:modenote 0.0 (- 0.0 (* 3.0 doff)) th)

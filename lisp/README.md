@@ -37,27 +37,41 @@ layer and the dimension text:
 | `Watersedge` | **dashed**, on layer `POOL` | `<measurement> Water's Edge` |
 | `Coversize` | solid, on layer `COVER` | `<measurement> Cover Size` |
 
-The suffix goes on the **overalls and the straight sides only**. Corner
-callouts — radii, chamfer faces, octagon cut faces — are left plain, so a
-corner note never reads as an overall.
+The suffix goes on the **overalls only**. Corner callouts (radii, cut
+faces) and the inboard flat dims are left plain, so a corner or a segment
+note can never be mistaken for an overall.
 
 The mode is also written under the drawing (`SPA OUTLINE DRAWN AT
 WATER'S EDGE`) and in the report table's title.
 
 ## Rectangle corners
 
-Every corner is asked for separately and may be `Square`, `Rounded`
-(sized by its radius) or `Diag` (a chamfer, sized by its face length).
+Every corner is asked for separately, using the order sheet's own corner
+legend — `Radius` (sized by its radius), `Diagonal` (a cut, sized by its
+face length) or `90`. (`Square` is accepted as a synonym for `90`.)
 
 **Corner A's answer autofills B, C and D** — press Enter at each of them
-to accept it, or type a different treatment for that corner. Side lengths
-are always measured to the *true* (sharp) corner; the treatment cuts
-inward from there, and a treatment too big for its walls is re‑asked.
+to accept it, or type a different treatment for that corner, so a cover
+with two cut corners and two square ones takes four different answers.
+Side lengths are always measured to the *true* (sharp) corner; the
+treatment cuts inward from there, and a treatment too big for its walls
+is re‑asked.
 
-Corner callouts drawn: a radius dimension on each rounded corner, an
-aligned dimension across each chamfer face, and a `90°` leader on square
-corners — the last only when the corners are mixed, so a plain
-four‑square rectangle stays clean.
+Callouts sit outside the corner on its 45° line: a radius dimension on a
+`Radius` corner, an aligned dimension across a `Diagonal` cut face, and a
+`90°` leader on a `90` corner — that last **only when the corners are
+mixed**, so an all-square rectangle carries no corner notes at all.
+Four identical corners are called out **once**, with a `Typ.` suffix.
+
+## Where the dimensions go
+
+Laid out the way the cover order sheet does it:
+
+| Shape | Dimensions drawn |
+| --- | --- |
+| **Rectangle** | overall across on the bottom, overall up on the left; once corners are cut away, the remaining **flat** runs are dimensioned inboard of them, on the bottom and the right |
+| **Octagon** | overall across, overall up, and **one** corner-cut callout (`Typ.`). All eight sides equal → that is all it gets, and the drawing says `OCTAGON - ALL SIDES EQUAL`; unequal flats get their own inboard dims like the rectangle |
+| **Round** | one overall. Only an out-of-round spa gets the second one |
 
 ## Standard inches
 
@@ -120,3 +134,7 @@ octagon sized off `A` and `B` alone — 45° cuts, all eight sides equal.
 * The whole run is wrapped in a single UNDO group.
 * The dash and dot patterns are defined in inches and scaled to cancel
   the drawing's `LTSCALE`, so they look the same in any drawing.
+* Not covered: the order sheet's *"Indicate Strap and Handle Placement"*
+  and *"You must indicate hinge direction!"* annotations. Those are
+  order-entry marks rather than measurements, so they are left to be
+  added by hand.
