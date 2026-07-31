@@ -53,29 +53,33 @@
 ;;;         - Step depths chained along the axis (start to step 1, step
 ;;;           1 to step 2, ...), in dim style "STANDARD INCHES".
 ;;;       If a style is missing the current style is used instead.
-;;;   4.  For each step you are asked for the step width, then the step
-;;;       depth.  Every depth is measured FROM THE PREVIOUS STEP EDGE
-;;;       (from the start of the axis for the first step) - never a
-;;;       running total.  The step is drawn once both are given, so the
-;;;       last input is always a depth.  Distances read architectural
-;;;       style: a bare number is inches (drawing units) and feet-inch
-;;;       entry like 1'4 (= 16") works whatever the units setting.
-;;;   5.  Ending and shortcuts:
-;;;         - LINE mode: Enter (or 0) at a width prompt = done.
-;;;         - CURVE modes: Enter at a width prompt fits that step to
-;;;           the curve; 0 = done.
-;;;         - Undo at a width prompt removes the step just drawn (its
-;;;           line and its dimensions); Same at a depth prompt repeats
-;;;           the previous depth.
-;;;   6.  In LINE-only mode you are then asked for one last depth, from
-;;;       the last step to the back of the curve, and the curve itself
-;;;       is drawn: a polyline of arc segments through each end of each
-;;;       step, bulging out to that crown point (the last depth also
-;;;       gets the final link of the depth-dim chain).  Enter skips the
-;;;       crown and the polyline just chains the step ends.  In the
-;;;       curve modes you are offered the same reconstructed boundary
-;;;       through the step ends, with the crown at the point where the
-;;;       measuring axis meets the selected curve.
+;;;   4.  LINE mode starts with the width of the step AT THE WALL: that
+;;;       is the top of the run, so no chord is drawn there (the wall
+;;;       already is one), but it is dimensioned and it anchors both
+;;;       ends of the boundary curve.  The curve modes skip it, since
+;;;       the width at the start is set by the curve itself.
+;;;   5.  From there both modes run DEPTH then WIDTH, repeating.  Every
+;;;       depth is measured FROM THE PREVIOUS STEP EDGE (from the start
+;;;       of the axis for the first step) - never a running total.
+;;;       Distances read architectural style: a bare number is inches
+;;;       (drawing units) and feet-inch entry like 1'4 (= 16") works
+;;;       whatever the units setting.
+;;;   6.  Ending and shortcuts:
+;;;         - Enter at a depth prompt = done.
+;;;         - Undo at a depth prompt removes the step just drawn (its
+;;;           line and its dimensions); Same repeats the previous depth.
+;;;         - Enter at a width prompt fits that step to the curve in
+;;;           the curve modes, or repeats the previous width in LINE
+;;;           mode.
+;;;   7.  The hemisphere is then rebuilt as one polyline of arc segments
+;;;       through every step end.  In LINE mode you are asked for one
+;;;       last depth from the last step to the back of the curve, and
+;;;       the polyline runs wall - side A - crown - side B - wall (the
+;;;       last depth also gets the final link of the depth-dim chain).
+;;;       In the curve modes the crown is the point where the measuring
+;;;       axis meets the selected curve, and the arc beside it is
+;;;       fitted through that original point - so a step sitting on the
+;;;       curve reproduces the curve exactly.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -106,7 +110,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.1") ; printed on load and at command start so a
+(setq *hs-version* "v2.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -301,34 +305,61 @@
   (if (< th 0.0) (setq th (+ th pi pi)))
   (* (if ccw 1.0 -1.0) (/ (sin (/ th 4.0)) (cos (/ th 4.0)))))
 
+;; Circle through PTS[i], PTS[i+1], PTS[i+2] as (center . counterclockwise)
+(defun hs-fit3 (pts i / a b c o)
+  (setq a (nth i pts)
+        b (nth (1+ i) pts)
+        c (nth (+ i 2) pts)
+        o (hs-circum a b c))
+  (if o (cons o (> (hs-cross (hs-vec a b) (hs-vec a c)) 0.0))))
+
 ;; Bulges for a polyline through PTS, one per segment, by fitting a
-;; circle through each consecutive triple (a chain of 3-point arcs).
-(defun hs-blgs (pts / m i p q s o ccw out)
-  (setq m (1- (length pts)) i 0)
-  (while (< i m)
-    (cond
-      ((<= (+ i 2) m)
-       (setq p (nth i pts) q (nth (1+ i) pts) s (nth (+ i 2) pts)
-             o (hs-circum p q s))
-       (if o
-         (progn
-           (setq ccw (> (hs-cross (hs-vec p q) (hs-vec p s)) 0.0))
-           (setq out (append out (list (hs-segb p q o ccw)
-                                       (hs-segb q s o ccw)))))
-         (setq out (append out (list 0.0 0.0))))
-       (setq i (+ i 2)))
-      ((> i 0)
-       (setq p (nth (1- i) pts) q (nth i pts) s (nth (1+ i) pts)
-             o (hs-circum p q s))
-       (if o
-         (progn
-           (setq ccw (> (hs-cross (hs-vec p q) (hs-vec p s)) 0.0))
-           (setq out (append out (list (hs-segb q s o ccw)))))
-         (setq out (append out (list 0.0))))
-       (setq i (1+ i)))
-      (T
-       (setq out (append out (list 0.0)))
-       (setq i (1+ i)))))
+;; circle through consecutive triples (a chain of 3-point arcs).
+;;
+;; K is the index of the crown vertex, or nil.  When given, the first
+;; circle fitted is the one through the crown and its two neighbours,
+;; and the rest are fitted outward from there.  That keeps the apex on
+;; a single arc - so when those three points sit on the original curve
+;; the reconstructed arc IS the original curve - instead of falling on
+;; a seam between two circles.
+(defun hs-blgs (pts k / nseg starts i res oc out st)
+  (setq nseg (1- (length pts)))
+  (if (or (null k) (< k 1) (> (1+ k) nseg)) (setq k nil))
+  ;; the order triples are fitted in; earlier entries win
+  (if k
+    (progn
+      (setq starts (list (1- k))               ; the arc across the crown
+            i      (- k 3))
+      (while (>= i 0)                          ; outward, crown side A
+        (setq starts (append starts (list i)) i (- i 2)))
+      (setq i (1+ k))
+      (while (<= (+ i 2) nseg)                 ; outward, crown side B
+        (setq starts (append starts (list i)) i (+ i 2))))
+    (progn
+      (setq i 0)
+      (while (<= (+ i 2) nseg)
+        (setq starts (append starts (list i)) i (+ i 2)))))
+  ;; sweep every triple as a fallback so leftover end segments are
+  ;; fitted through their own three points rather than a neighbour's
+  (setq i 0)
+  (while (<= (+ i 2) nseg)
+    (setq starts (append starts (list i)) i (1+ i)))
+  (foreach st starts
+    (if (setq oc (hs-fit3 pts st))
+      (progn
+        (if (null (assoc st res))
+          (setq res (cons (cons st (hs-segb (nth st pts) (nth (1+ st) pts)
+                                            (car oc) (cdr oc)))
+                          res)))
+        (if (null (assoc (1+ st) res))
+          (setq res (cons (cons (1+ st) (hs-segb (nth (1+ st) pts)
+                                                 (nth (+ st 2) pts)
+                                                 (car oc) (cdr oc)))
+                          res))))))
+  (setq i 0)
+  (repeat nseg                                 ; 0.0 where nothing fitted
+    (setq out (append out (list (cond ((cdr (assoc i res))) (0.0))))
+          i   (1+ i)))
   out)
 
 ;; open LWPOLYLINE through PTS with one bulge per segment
@@ -426,7 +457,8 @@
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
                       oldce oldstyle ea eb crown pts reflen lastdep
-                      dimflag slog mark scum sP sN sEA sEB rec pc oldlu)
+                      dimflag slog mark scum sP sN sEA sEB rec pc oldlu
+                      wallA wallB lastwid kx)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -651,33 +683,62 @@
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
 
+  ;; In base-line mode the first width sits AT the wall: it is the top
+  ;; of the run, so no chord is drawn there (the wall already is one),
+  ;; but it is dimensioned and it anchors both ends of the boundary.
+  ;; In the curve modes the width at the start is set by the curve, so
+  ;; the run begins straight away with a depth.
+  (if (not cmode)
+    (progn
+      (initget 6)
+      (setq wid (getdist "\nWidth of the step at the wall <Enter = none>: "))
+      (if wid
+        (progn
+          (setq wallA   (hs-add sp (hs-scl u (* 0.5 wid)))
+                wallB   (hs-add sp (hs-scl u (* -0.5 wid)))
+                lastwid wid)
+          (if dimflag
+            (hs-dim *cs-width-dimstyle* wallA wallB
+                    (hs-add sp (hs-scl dir (- (+ (* 0.5 wid)
+                                                 (* 1.5 txth)))))))
+          (princ (strcat "\n  Width at the wall: " (rtos wid) "."))))))
+
   (while
     (and (not stopf)
          (progn
-           (setq wid 'RETRY)
-           (while (eq wid 'RETRY)
-             (initget 4 "Undo")         ; no negative; 0 always = done
-             (setq wid (getdist (strcat "\nStep " (itoa n)
-                                        " - step width [Undo] "
-                                        (if cmode
-                                          "<Enter = fit to curve, 0 = done>: "
-                                          "<Enter = done>: "))))
-             (if (= (type wid) 'STR)
-               (progn (if (= wid "Undo") (hs-popstep))
-                      (setq wid 'RETRY))))
-           ;; in curve mode Enter means fit this step to the curve;
-           ;; entering 0 ends the run in either mode
-           (if (and cmode (null wid)) (setq wid 'FIT))
-           (and wid (or (eq wid 'FIT) (> wid 1e-10)))))
-    (setq dep 'RETRY)
-    (while (eq dep 'RETRY)
-      (initget 6 (if lastdep "Same" ""))
-      (setq dep (getdist (strcat "\nStep " (itoa n) " - step depth"
-                                 (if lastdep " [Same]" "") ": ")))
-      (if (= (type dep) 'STR)
-        (if (and (= dep "Same") lastdep)
-          (setq dep lastdep)
-          (setq dep 'RETRY))))
+           (setq dep 'RETRY)
+           (while (eq dep 'RETRY)
+             (initget 6 (strcat "Undo" (if lastdep " Same" "")))
+             (setq dep (getdist
+                         (strcat "\nStep " (itoa n)
+                                 " - depth from the previous step [Undo"
+                                 (if lastdep "/Same" "") "]"
+                                 " <Enter = done>: ")))
+             (if (= (type dep) 'STR)
+               (cond
+                 ((= dep "Undo") (hs-popstep) (setq dep 'RETRY))
+                 ((= dep "Same")
+                  (if lastdep
+                    (setq dep lastdep)
+                    (progn (princ "\n  No previous depth.")
+                           (setq dep 'RETRY))))
+                 (T (setq dep 'RETRY)))))
+           dep))
+    (setq wid 'RETRY)
+    (while (eq wid 'RETRY)
+      (initget 6)
+      (setq wid (getdist (strcat "\nStep " (itoa n) " - step width "
+                                 (cond
+                                   (cmode "<Enter = fit to the curve>: ")
+                                   (lastwid (strcat "<Enter = "
+                                                    (rtos lastwid) ">: "))
+                                   (T ": ")))))
+      (if (null wid)
+        (cond
+          (cmode   (setq wid 'FIT))
+          (lastwid (setq wid lastwid))
+          (T (princ "\n  A width is needed for this step.")
+             (setq wid 'RETRY)))))
     (if (null dep)
       (progn
         (princ "\nNo depth given - step discarded; finishing.")
@@ -753,50 +814,57 @@
                 (hs-dim *cs-depth-dimstyle* pprev p
                         (hs-add (hs-mid2 pprev p) (hs-scl u offd)))))
             (setq pprev p drawn (1+ drawn)
+                  lastwid (distance e1 e2)
                   slog  (cons (list (hs-since mark) scum sP sN sEA sEB)
                               slog))))
         (setq n (1+ n)))))
 
-  ;; ---- 5. boundary curve through the step ends (line mode only) --------
-  ;; In the curve modes the curve already exists (it was selected); in
-  ;; the base-line mode the curve is drawn as a polyline of arc
-  ;; segments through each end of each step, bulging out to a crown
-  ;; point set by one last depth.
-  (if (and (not cmode) (> drawn 0))
+  ;; ---- 5. boundary curve through the step ends -------------------------
+  ;; The hemisphere is rebuilt as one polyline of arc segments running
+  ;; through every step end.  In base-line mode it starts and finishes
+  ;; at the wall (the width given at the wall) and bulges out to a crown
+  ;; set by one last depth.  In the curve modes the crown is the point
+  ;; where the measuring axis meets the selected curve, so the arc
+  ;; beside it is fitted through that original point.
+  (if (> drawn 0)
     (progn
-      (initget 6)
-      (setq dep (getdist (strcat "\nDepth from the last step to the back"
-                                 " of the curve <Enter = none>: ")))
-      (if (and dep (= (type dep) 'REAL))
+      (if (not cmode)
         (progn
-          (setq crown (hs-add pprev (hs-scl dir dep)))
-          (if dimflag                        ; last link of the depth chain
-            (hs-dim *cs-depth-dimstyle* pprev crown
-                    (hs-add (hs-mid2 pprev crown) (hs-scl u offd))))))
-      (setq pts (append ea
-                        (if crown (list crown))
-                        (reverse eb)))
-      (if (> (length pts) 1)
+          (initget 6)
+          (setq dep (getdist (strcat "\nDepth from the last step to the back"
+                                     " of the curve <Enter = none>: ")))
+          (if (and dep (= (type dep) 'REAL))
+            (progn
+              (setq crown (hs-add pprev (hs-scl dir dep)))
+              (if dimflag                    ; last link of the depth chain
+                (hs-dim *cs-depth-dimstyle* pprev crown
+                        (hs-add (hs-mid2 pprev crown)
+                                (hs-scl u offd))))))
+          ;; wallA - side A - crown - side B - wallB
+          (setq pts (append (if wallA (list wallA))
+                            ea
+                            (if crown (list crown))
+                            (reverse eb)
+                            (if wallB (list wallB)))
+                ;; index of the crown vertex, for the arc fitting
+                kx  (if crown
+                      (+ (length ea) (if wallA 1 0)))))
         (progn
-          (hs-mkpoly pts (hs-blgs pts))
-          (princ "\nBoundary polyline drawn through the step ends.")))))
-
-  ;; ---- 5b. as-built boundary (curve modes) -----------------------------
-  ;; When steps were drawn into a selected curve, offer the same
-  ;; reconstructed boundary through the step ends.  The crown is the
-  ;; axis start point, which is already on the curve, so no extra depth
-  ;; is needed: the polyline runs from the widest step around the crown
-  ;; and back.
-  (if (and cmode (> drawn 0))
-    (progn
-      (initget "Yes No")
-      (if (/= "No" (getkword (strcat "\nDraw the reconstructed boundary"
-                                     " through the step ends? [Yes/No]"
-                                     " <Yes>: ")))
+          (initget "Yes No")
+          (if (/= "No" (getkword (strcat "\nDraw the reconstructed boundary"
+                                         " through the step ends? [Yes/No]"
+                                         " <Yes>: ")))
+            ;; deepest step - side A - the original point - side B
+            (setq pts (append (reverse ea) (list sp) eb)
+                  kx  (length ea)))))
+      (if (and pts (> (length pts) 1))
         (progn
-          (setq pts (append (reverse ea) (list sp) eb))
-          (hs-mkpoly pts (hs-blgs pts))
-          (princ "\nBoundary polyline drawn through the step ends.")))))
+          (hs-mkpoly pts (hs-blgs pts kx))
+          (princ (strcat "\nBoundary polyline drawn through the step ends"
+                         (cond ((not cmode)
+                                (if wallA ", held to the wall" ""))
+                               (T ", held to the original point"))
+                         "."))))))
 
   ;; ---- 6. done ---------------------------------------------------------
   (if (zerop drawn)

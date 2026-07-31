@@ -219,16 +219,26 @@ command drew earlier. Each step is measured against whichever part of the
 curve it actually lands on, using the opening nearest the axis on each
 side, so a distant wall elsewhere in the drawing cannot widen it.
 
-In the curve modes a width within the tolerance of the curve's opening
-snaps to the curve; any other width is held and breaks the curve equally
-at both ends. Each step asks width then depth — every depth measured from
-the previous step edge, never a running total — so the last input is
-always a depth. At a width prompt: in line mode **Enter** or **0**
-finishes; in the curve modes **Enter** fits that step to the curve and
-**0** finishes. **Undo** removes the step just drawn; **Same** at a depth
-prompt repeats the previous depth. After the steps, the curve modes offer
-the same reconstructed boundary polyline through the step ends, with the
-crown at the point where the measuring axis meets the selected curve.
+Line mode starts by asking the width of the step **at the wall** — the top
+of the run. No chord is drawn there (the wall already is one), but it is
+dimensioned and it anchors both ends of the boundary curve. The curve
+modes skip it, since the width at the start is set by the curve itself.
+
+From there both modes run **depth then width**, repeating, with every
+depth measured from the previous step edge — never a running total.
+**Enter** at a depth prompt finishes; **Undo** removes the step just drawn
+and **Same** repeats the previous depth. **Enter** at a width prompt fits
+that step to the curve in the curve modes, or repeats the previous width
+in line mode. In the curve modes a width within the tolerance of the
+curve's opening snaps to the curve; any other width is held and breaks the
+curve equally at both ends.
+
+The hemisphere is then rebuilt as one polyline of arc segments through
+every step end: in line mode from the wall, around a crown set by one last
+depth, and back to the wall; in the curve modes around the point where the
+measuring axis meets the selected curve. The arc beside the crown is
+fitted through that point, so a step sitting on the curve reproduces the
+curve exactly rather than landing on a seam between two circles.
 
 Both commands read distances architectural-style regardless of the
 drawing's units setting: a bare number is drawing units (inches in an

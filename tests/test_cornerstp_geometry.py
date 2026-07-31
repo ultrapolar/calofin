@@ -404,8 +404,13 @@ def semicircle(radius=100.0, pieces_count=1):
     return out
 
 
-def blgs(pts):
-    """hs-blgs: one bulge per segment, fitted through consecutive triples."""
+def blgs(pts, k=None):
+    """hs-blgs: one bulge per segment, fitted through consecutive triples.
+
+    When k (the crown vertex index) is given, the arc across the crown is
+    fitted first and the rest fan outward from it, so the apex sits inside
+    a single arc instead of on a seam between two circles.
+    """
 
     def circum(a, b, q):
         ax, ay = a
@@ -431,42 +436,56 @@ def blgs(pts):
             th += 2 * math.pi
         return (1 if ccw else -1) * math.tan(th / 4)
 
-    m, i, out = len(pts) - 1, 0, []
-    while i < m:
-        if i + 2 <= m:
-            p, q, s = pts[i], pts[i + 1], pts[i + 2]
-            o = circum(p, q, s)
-            if o:
-                ccw = cross(vec(p, q), vec(p, s)) > 0
-                out += [segb(p, q, o, ccw), segb(q, s, o, ccw)]
-            else:
-                out += [0.0, 0.0]
+    nseg = len(pts) - 1
+    if k is not None and not (1 <= k <= nseg - 1):
+        k = None
+    starts = []
+    if k is not None:
+        starts.append(k - 1)                 # the arc across the crown
+        i = k - 3
+        while i >= 0:
+            starts.append(i)
+            i -= 2
+        i = k + 1
+        while i + 2 <= nseg:
+            starts.append(i)
             i += 2
-        elif i > 0:
-            p, q, s = pts[i - 1], pts[i], pts[i + 1]
-            o = circum(p, q, s)
-            if o:
-                ccw = cross(vec(p, q), vec(p, s)) > 0
-                out.append(segb(q, s, o, ccw))
-            else:
-                out.append(0.0)
-            i += 1
-        else:
-            out.append(0.0)
-            i += 1
-    return out
+    else:
+        i = 0
+        while i + 2 <= nseg:
+            starts.append(i)
+            i += 2
+    i = 0                                    # fallback sweep for leftovers
+    while i + 2 <= nseg:
+        starts.append(i)
+        i += 1
+    res = {}
+    for st in starts:
+        p, q, s = pts[st], pts[st + 1], pts[st + 2]
+        o = circum(p, q, s)
+        if not o:
+            continue
+        ccw = cross(vec(p, q), vec(p, s)) > 0
+        res.setdefault(st, segb(p, q, o, ccw))
+        res.setdefault(st + 1, segb(q, s, o, ccw))
+    return [res.get(i, 0.0) for i in range(nseg)]
 
 
 def arc_from_bulge(a, b, bulge):
-    """Reconstruct (centre, radius) from a chord and its polyline bulge."""
+    """Reconstruct (centre, radius) from a chord and its polyline bulge.
+
+    Mirrors hs-bulgearc: a positive bulge is counterclockwise, so the
+    centre lies to the left of a -> b.  h is signed via cos(theta/2), which
+    flips the centre across the chord once the arc passes 180 degrees.
+    """
     chord = dist(a, b)
-    th = 4 * math.atan(abs(bulge))
+    th = 4 * math.atan(abs(bulge))       # magnitude of the included angle
     r = chord / (2 * math.sin(th / 2))
+    h = r * math.cos(th / 2)             # negative when th > pi
     mx, my = mid2(a, b)
-    h = math.sqrt(max(0.0, r * r - (chord / 2) ** 2))
     ux, uy = unit(vec(a, b))
-    nx, ny = (-uy, ux)
-    sign = -1 if bulge > 0 else 1
+    nx, ny = (-uy, ux)                   # left normal of a -> b
+    sign = 1 if bulge > 0 else -1
     return (mx + sign * h * nx, my + sign * h * ny), r
 
 
@@ -541,6 +560,111 @@ def test_boundary_polyline_bulges_are_real_arcs():
                for i in range(len(bulges)))
 
 
+def test_crown_anchored_fit_reproduces_the_original_curve():
+    """Steps sitting on the arc must rebuild that exact arc beside the crown.
+
+    This is the curve-mode boundary: deepest step -> side A -> the original
+    point where the axis met the curve -> side B.  The crown's neighbours
+    are the widest step's ends, which lie on the curve when that step was
+    fitted, so the arc through them is the original circle.
+    """
+    radius = 100.0
+    centre = (0.0, 0.0)
+    crown = (radius, 0.0)
+    direction = unit(vec(crown, centre))
+    u = perp90(direction)
+    # three steps fitted to the curve at increasing depth
+    side_a, side_b = [], []
+    for depth in (10.0, 26.0, 44.0):
+        p = add(crown, scl(direction, depth))
+        half = math.sqrt(radius ** 2 - (radius - depth) ** 2)
+        side_a.append(add(p, scl(u, half)))
+        side_b.append(add(p, scl(u, -half)))
+    pts = list(reversed(side_a)) + [crown] + side_b
+    k = len(side_a)
+    bulges = blgs(pts, k)
+    # the two segments touching the crown must lie on the original circle
+    for seg in (k - 1, k):
+        got_centre, got_r = arc_from_bulge(pts[seg], pts[seg + 1], bulges[seg])
+        assert abs(got_r - radius) < 1e-6, f"seg {seg}: r={got_r}"
+        assert dist(got_centre, centre) < 1e-6, f"seg {seg}: c={got_centre}"
+
+
+def test_crown_anchored_fit_keeps_the_apex_on_one_arc():
+    """Both crown segments share a circle; left-to-right pairing may not.
+
+    Pairing from index 0 puts segments (0,1), (2,3), (4,5)... on one circle
+    each, so an apex at an even vertex index lands on the seam between two
+    circles - a kink at the crown.  Anchoring at the crown fixes that
+    whatever the step count.
+    """
+    side_a = [(1247.298, 463.447), (1259.298, 451.447),
+              (1275.298, 427.447), (1285.298, 403.447)]
+    crown = (1294.751, 343.447)
+    side_b = [(x, 2 * 343.447 - y) for (x, y) in side_a]
+    pts = side_a + [crown] + list(reversed(side_b))
+    k = len(side_a)                           # 4 - an even index
+    anchored = blgs(pts, k)
+    left = arc_from_bulge(pts[k - 1], pts[k], anchored[k - 1])
+    right = arc_from_bulge(pts[k], pts[k + 1], anchored[k])
+    assert abs(left[1] - right[1]) < 1e-6, "apex must sit inside one arc"
+    assert dist(left[0], right[0]) < 1e-6
+    # The un-anchored fit puts the apex on a seam between two circles.
+    # They are mirror images, so they share a radius - only the centres
+    # reveal the kink.
+    plain = blgs(pts)
+    lp = arc_from_bulge(pts[k - 1], pts[k], plain[k - 1])
+    rp = arc_from_bulge(pts[k], pts[k + 1], plain[k])
+    assert dist(lp[0], rp[0]) > 1e-6, "un-anchored fit should seam here"
+    # anchoring must not break the symmetry the un-anchored fit had
+    assert all(abs(abs(anchored[i]) - abs(anchored[-1 - i])) < 1e-9
+               for i in range(len(anchored)))
+
+
+def test_line_mode_boundary_is_anchored_at_the_wall():
+    """The base-line boundary starts and ends on the wall, not at step 1."""
+    base_mid = (0.0, 0.0)
+    u = (0.0, 1.0)
+    direction = (1.0, 0.0)
+    wall_width = 257.6
+    wall_a = add(base_mid, scl(u, wall_width / 2))
+    wall_b = add(base_mid, scl(u, -wall_width / 2))
+    side_a, side_b, prev = [], [], base_mid
+    for depth, width in ((13.0, 240.0), (12.0, 216.0), (16.0, 168.0)):
+        p = add(prev, scl(direction, depth))
+        side_a.append(add(p, scl(u, width / 2)))
+        side_b.append(add(p, scl(u, -width / 2)))
+        prev = p
+    crown = add(prev, scl(direction, 9.45))
+    pts = [wall_a] + side_a + [crown] + list(reversed(side_b)) + [wall_b]
+    k = 1 + len(side_a)
+    assert pts[0] == wall_a and pts[-1] == wall_b
+    assert pts[k] == crown, "crown index must point at the crown vertex"
+    # both wall vertices sit exactly on the base line (x = 0 here)
+    assert abs(pts[0][0]) < 1e-12 and abs(pts[-1][0]) < 1e-12
+    bulges = blgs(pts, k)
+    assert len(bulges) == len(pts) - 1
+    # the first arc leaves the wall and passes through step 1's end
+    centre, r = arc_from_bulge(pts[0], pts[1], bulges[0])
+    assert abs(dist(centre, pts[0]) - r) < 1e-6
+    assert abs(dist(centre, pts[1]) - r) < 1e-6
+    # and the whole curve stays symmetric about the axis
+    assert all(abs(abs(bulges[i]) - abs(bulges[-1 - i])) < 1e-9
+               for i in range(len(bulges)))
+
+
+def test_depths_are_measured_from_the_previous_step():
+    """12, 12, 12, 14 must give those spacings, not a running total."""
+    start, prev, positions, spacings = 0.0, 0.0, [], []
+    for depth in (12.0, 12.0, 12.0, 14.0):
+        p = prev + depth              # p = previous edge + depth
+        spacings.append(p - prev)
+        positions.append(p - start)
+        prev = p
+    assert spacings == [12.0, 12.0, 12.0, 14.0]
+    assert positions == [12.0, 24.0, 36.0, 50.0]
+
+
 def test_boundary_polyline_pairs_share_a_circle():
     """Segments fitted from one triple lie on the same arc, as 3-point arcs do."""
     pts = [(0.0, 0.0), (10.0, 6.0), (24.0, 8.0), (40.0, 6.0), (50.0, 0.0)]
@@ -571,6 +695,10 @@ def main():
     test_full_circle_piece_spans_everywhere()
     test_opening_is_none_outside_the_curve()
     test_boundary_polyline_bulges_are_real_arcs()
+    test_crown_anchored_fit_reproduces_the_original_curve()
+    test_crown_anchored_fit_keeps_the_apex_on_one_arc()
+    test_line_mode_boundary_is_anchored_at_the_wall()
+    test_depths_are_measured_from_the_previous_step()
     test_boundary_polyline_pairs_share_a_circle()
     print("all tests passed")
 
