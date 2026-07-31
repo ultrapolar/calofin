@@ -599,7 +599,7 @@
 
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol SPA-BACK.
-(defun spa:asks (kind msg ents dflt back / v cols kw)
+(defun spa:asks (kind msg ents dflt back / v cols kw e)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (spa:osup)
@@ -747,7 +747,7 @@
 
 ;; Delete all guide entities (tracked globally so the *error* handler
 ;; can clean up after a cancel mid-prompt).
-(defun spa:pvkill ()
+(defun spa:pvkill ( / e)
   (foreach e spa:*pvents*
     (if (and e (entget e)) (entdel e)))
   (setq spa:*pvents* nil))
@@ -1285,7 +1285,7 @@
 ;; outline; coverp nil means only the water's edge was drawn and the
 ;; hinges are being laid on that.  Draws the hinges and returns report
 ;; rows (also via spillaway rows gathered in spa:*hingerows*).
-(defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row opts
+(defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row r opts
                          allowed best cand opt fw fl nmin res n xs
                          k x ch maxch maxpc prev lbl)
   (setq spa:*hingerows* nil)
@@ -1467,7 +1467,7 @@
 
 ;; Do all four corners carry the same treatment?  Four identical corners
 ;; get ONE callout with a Typ. suffix, the way the order sheet shows it.
-(defun spa:samecorners (corners / c0 same)
+(defun spa:samecorners (corners / c c0 same)
   (setq c0 (car corners) same t)
   (foreach c corners
     (if (or (/= (car c) (car c0))
@@ -1580,7 +1580,7 @@
 ;; treatment's setback along the walls at half the shorter adjacent
 ;; wall, so two treatments can never overlap and fold the perimeter;
 ;; too-large answers are re-asked.  Returns (type size) or SPA-BACK.
-(defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb)
+(defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (spa:osup)
