@@ -21,7 +21,36 @@
 ;;;   fuzz     - join tolerance for near-touching endpoints (0.001)
 ;;; ==========================================================================
 
+(vl-load-com)
+
 ;; ---- helpers --------------------------------------------------------------
+
+(defun autobead-copy (e / o c)
+  ;; Duplicate an entity in place and return the new ename (nil on failure).
+  ;; This deliberately avoids the COPY command: COPY's point input depends on
+  ;; the base-point / displacement prompt sequence and on the current copy
+  ;; mode, so a mis-timed response silently translates the duplicate instead
+  ;; of leaving it put.  vla-Copy always duplicates in place.
+  (setq o (vlax-ename->vla-object e)
+        c (vl-catch-all-apply 'vla-Copy (list o)))
+  (if (vl-catch-all-error-p c)
+    nil
+    (vlax-vla-object->ename c)))
+
+(defun autobead-minpt (e / o mn mx)
+  ;; Lower-left corner of an entity's bounding box, or nil if unavailable.
+  (setq o (vlax-ename->vla-object e))
+  (if (vl-catch-all-error-p
+        (vl-catch-all-apply 'vla-GetBoundingBox (list o 'mn 'mx)))
+    nil
+    (vlax-safearray->list mn)))
+
+(defun autobead-inplace-p (src new / a b)
+  ;; T if 'new' really did land on top of 'src'.  Guards against any future
+  ;; copy path quietly displacing the geometry.
+  (setq a (autobead-minpt src)
+        b (autobead-minpt new))
+  (or (null a) (null b) (< (distance a b) 1e-6)))
 
 (defun autobead-newents (mark / e res)
   ;; Every entity added to the database after 'mark' that is still alive.
@@ -60,7 +89,8 @@
 (defun c:AUTOBEAD ( / *error* beadoff layname layfilt fuzz
                       oldcmd oldos oldpa temps
                       ss dirpt mark copies ss2 chains
-                      mark2 news beadcount failcount c e )
+                      mark2 news beadcount failcount c e
+                      i src dup drift )
 
   (setq beadoff 2.0                ; bead offset distance (2")
         layname "Bead Track"       ; output layer
@@ -107,16 +137,31 @@
      (setvar "OSMODE" 0)          ; keep osnaps out of the internal commands
      (setvar "PEDITACCEPT" 1)     ; auto-accept line/arc -> pline conversion
 
-     ;; 3) copy the selection so the originals are never touched
-     (setq mark (entlast))
-     (command "._copy" ss "" "_displacement" "_non" '(0.0 0.0 0.0))
-     (autobead-flush)
-     (setq copies (autobead-newents mark)
+     ;; 3) copy the selection in place so the originals are never touched
+     (setq mark   (entlast)
+           copies '()
+           drift  nil
+           i      0)
+     (while (< i (sslength ss))
+       (setq src (ssname ss i)
+             dup (autobead-copy src))
+       (if dup
+         (progn
+           (if (not (autobead-inplace-p src dup)) (setq drift T))
+           (setq copies (cons dup copies))))
+       (setq i (1+ i)))
+     (setq copies (reverse copies)
            temps  copies)
 
      (cond
        ((null copies)
         (prompt "\nCould not copy the selection (locked source layer?)."))
+
+       (drift
+        (foreach e copies (if (entget e) (entdel e)))
+        (setq temps '())
+        (prompt (strcat "\nAborted: the working copies did not land on the"
+                        " source geometry.\nNothing was drawn.")))
 
        (T
         ;; 4) join the copies into continuous polyline chains
