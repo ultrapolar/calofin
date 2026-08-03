@@ -53,6 +53,15 @@
 ;;;  outline always takes the outside pair.  One more dimension at the
 ;;;  bottom gives the OVERLAP: how far the cover laps the water's edge.
 ;;;
+;;;  THERMO-LIGHT
+;;;  ------------
+;;;  Two rules make it a special case, so the Spa Cover Details block is
+;;;  read BEFORE anything else is asked:
+;;;    * its water's edge and cover size are the same, so that question
+;;;      is skipped (drawn as COVER SIZE) and so is the offer to add the
+;;;      other outline;
+;;;    * every one of its hinges is velcro -- no dashed fold hinge.
+;;;
 ;;;  AUTO-HINGE
 ;;;  ----------
 ;;;  After the cover is dimensioned the command offers to auto-hinge it.
@@ -197,6 +206,8 @@
 (setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
 (setq spa:*hingerows* nil)           ; hinge/spillaway rows for the report
 (setq spa:*advice*    nil)           ; hardware recommendations
+(setq spa:*grade*     nil)           ; from the Spa Cover Details block
+(setq spa:*taper*     nil)
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -855,6 +866,13 @@
 ;; Offer the other outline once the first is drawn.  Returns the method
 ;; keyword ("Offset" / "Dims") or nil.
 (defun spa:askother ( / v)
+  (if (spa:thermop)
+      (progn
+        (princ "\nThermo-Light: the water's edge and the cover are the same -- nothing to add.")
+        nil)
+      (spa:askother2)))
+
+(defun spa:askother2 ( / v)
   (princ (strcat "\nThe " (spa:modeword (spa:othermode))
                  " can be added now -- the cover is always the larger of the two."))
   (if (= "Yes" (spa:askkw (strcat "Draw the " (spa:modeword (spa:othermode))
@@ -1294,11 +1312,16 @@
                                     nil len)))))))
   forb)
 
-;; Read grade + taper off the Spa Cover Details block (or the keyboard).
-;; Returns (grade taper).
-(defun spa:askdetails ( / sel ed bn att v grade taper)
+;; Is this a Thermo-Light cover?  Its water's edge and cover size are
+;; the same thing, and every one of its hinges is velcro.
+(defun spa:thermop ()
+  (and spa:*grade* (= spa:*grade* "THERMOLIGHT")))
+
+;; Try to read GRADE and TAPER off a Spa Cover Details block.  Sets the
+;; globals; either may be left nil.  Returns T when something was read.
+(defun spa:readblock ( / sel ed bn att v got)
   (spa:osup)
-  (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to type the taper>: "))
+  (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
   (spa:osdown)
   (if sel
       (progn
@@ -1311,19 +1334,27 @@
                                  "\", not Spa Cover Details -- reading its tags anyway)")))
               (setq att (spa:attribs (car sel)))
               (if (setq v (cdr (assoc "GRADE" att)))
-                  (setq grade (spa:gradenorm (spa:aftercolon v))))
+                  (setq spa:*grade* (spa:gradenorm (spa:aftercolon v)) got t))
               (if (setq v (cdr (assoc "TAPER" att)))
-                  (setq taper (spa:tapernorm (spa:aftercolon v))))
-              (if (null taper)
+                  (setq spa:*taper* (spa:tapernorm (spa:aftercolon v)) got t))
+              (if (null spa:*taper*)
                   (princ "\nNo readable TAPER tag on that block.")))
             (princ "\nThat is not a block reference."))))
-  (if (null grade) (setq grade "STANDARD"))   ; no grade given -> Standard
-  (if (= grade "THERMOLIGHT") (setq taper "1-3/8"))
-  (while (null taper)
+  got)
+
+;; Grade and taper for the hinge maths.  Whatever the block gave up front
+;; stands; anything still missing is asked for now.  No grade at all
+;; means Standard.  Returns (grade taper).
+(defun spa:askdetails ( / v)
+  (if (and (null spa:*grade*) (null spa:*taper*))
+      (spa:readblock))                  ; not offered earlier -- offer now
+  (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
+  (if (spa:thermop) (setq spa:*taper* "1-3/8"))
+  (while (null spa:*taper*)
     (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8): "))
-    (setq taper (spa:tapernorm v))
-    (if (null taper) (princ "\nNot a taper on the foam sheet -- again.")))
-  (list grade taper))
+    (setq spa:*taper* (spa:tapernorm v))
+    (if (null spa:*taper*) (princ "\nNot a taper on the foam sheet -- again.")))
+  (list spa:*grade* spa:*taper*))
 
 ;; The whole auto-hinge pass.  desc / x1 / x2 describe the COVER
 ;; outline; coverp nil means only the water's edge was drawn and the
@@ -1331,7 +1362,7 @@
 ;; rows (also via spillaway rows gathered in spa:*hingerows*).
 (defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row r opts
                          allowed best bestsc cand opt fw fl nmin res n xs
-                         mc lenok pcok sc hw h nm vd
+                         mc lenok pcok sc hw h nm vd allvel
                          k x ch maxch maxpc prev lbl)
   (setq spa:*hingerows* nil)
   (if (/= "Yes" (spa:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil))
@@ -1344,7 +1375,11 @@
         ;; 2 -- grade + taper -> foam width / length / piece counts
         (setq gt (spa:askdetails)
               grade (car gt) taper (cadr gt)
+              ;; Thermo-Light is velcro throughout -- no fold hinge
+              allvel (spa:thermop)
               row nil)
+        (if allvel
+            (spa:advise "THERMO-LIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
         (foreach r spa:*foamtab*
           (if (and (not row) (= (car r) grade) (= (cadr r) taper))
               (setq row r)))
@@ -1406,14 +1441,14 @@
           (if ch
               (progn
                 (setq maxch (max maxch (- (cadr ch) (car ch))))
-                (if (= k 0)
+                (if (and (= k 0) (not allvel))
                     (spa:line (list x (car ch)) (list x (cadr ch))
                               "COVER" (spa:hdash))
                     (spa:line (list x (car ch)) (list x (cadr ch))
                               "COVER" nil))
                 (spa:htext (list (- x (* 2.0 th)) (* 0.5 (+ (car ch) (cadr ch))))
                            (* 1.2 th)
-                           (if (= k 0) "Hinge" "Velcro Hinge"))
+                           (if (and (= k 0) (not allvel)) "Hinge" "Velcro Hinge"))
                 (if (and fl (> (- (cadr ch) (car ch)) (+ fl 0.01)))
                     (spa:valnote (strcat "HINGE " (itoa (1+ k))
                                          " EXCEEDS THE FOAM LENGTH ("
@@ -1451,7 +1486,8 @@
                             (list "FOAM LENGTH MAX" fl maxch))))
         (setq k 0)
         (foreach x xs
-          (setq lbl (if (= k 0) "HINGE 1 (FOLD)"
+          (setq lbl (if (and (= k 0) (not allvel))
+                        "HINGE 1 (FOLD)"
                         (strcat "HINGE " (itoa (1+ k)) " (VELCRO)"))
                 spa:*hingerows*
                 (append spa:*hingerows* (list (list lbl nil (- x x1))))
@@ -2466,7 +2502,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* stype base mode)
+(defun c:SPA ( / *error* stype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -2488,7 +2524,9 @@
   (setq spa:*valnotes* nil
         spa:*turned* nil
         spa:*hingerows* nil
-        spa:*advice* nil)
+        spa:*advice* nil
+        spa:*grade* nil
+        spa:*taper* nil)
   (setvar "CMDECHO" 0)
   (spa:undobegin)
   ;; architectural units while prompting so every distance can be typed
@@ -2497,10 +2535,23 @@
   (princ "\nDistances may be typed as 6'10\", 6'-10-1/2\" or 82.5 (plain numbers = inches).")
   (princ "\nDimensions are written in standard inches and placed outside the shape.")
 
-  ;; ------------------------------------------------ what is being drawn
-  (setq mode (spa:setmode
-               (spa:askkw "Is this drawing at the water's edge or the cover size"
-                          "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+  ;; ------------------------------------------------ grade + taper first
+  ;; The Spa Cover Details block is read UP FRONT because its grade can
+  ;; settle the next question outright: a Thermo-Light cover's water's
+  ;; edge and cover size are the same thing, so there is nothing to ask
+  ;; and nothing to add later.  Skipping here just defers the block to
+  ;; the hinge pass.
+  (princ "\nThe Spa Cover Details block sets the grade and taper.")
+  (spa:readblock)
+  (if (spa:thermop)
+      (progn
+        (spa:setmode "Coversize")
+        (setq spa:*taper* "1-3/8")
+        (princ "\nThermo-Light: the water's edge and the cover size are the same.")
+        (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
+      (spa:setmode
+        (spa:askkw "Is this drawing at the water's edge or the cover size"
+                   "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
   (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
                  (if spa:*perdash* " (dashed)" "")
                  "; overalls read <measurement> over \"" spa:*sfx* "\"."))

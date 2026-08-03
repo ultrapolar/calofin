@@ -27,9 +27,26 @@ A --------- B        |               |
                        A --------- B
 ```
 
+## Thermo-Light
+
+Thermo-Light is a special case on two counts, so the **Spa Cover Details
+block is read first**, before anything else is asked:
+
+* **Water's edge = cover size.** They are the same thing on a
+  Thermo-Light cover, so the water's-edge question is not asked at all —
+  the drawing is made as `Cover Size` — and the offer to add the other
+  outline is skipped, since there is no other outline.
+* **Every hinge is velcro.** There is no dashed fold hinge; all hinges
+  are ByLayer lines labelled `Velcro Hinge`, matching the hardware chart
+  ("Velcro Hinges: Always").
+
+Both are noted under the report table. Skipping the block up front just
+defers it to the hinge pass, where it is asked for again — but then a
+Thermo-Light grade arrives too late for the two rules above.
+
 ## Water's edge vs cover size
 
-The first question is which one is being drawn, and it decides both the
+Except on Thermo-Light, the first question is which one is being drawn, and it decides both the
 layer and the dimension text:
 
 | Answer | Perimeter | Overall dimension reads |
@@ -242,7 +259,8 @@ defaults to `No`:
   its wall. A left/right wall spillaway cannot meet a north-south hinge,
   so it is recorded but blocks nothing.
 
-**2. The "Spa Cover Details" block** — select it and the `GRADE` and
+**2. Grade and taper** — from the "Spa Cover Details" block read at the
+start, or asked for here if that was skipped. The `GRADE` and
 `TAPER` tags are read (`Grade: Standard`, `Taper: 4-2`); Enter types the
 taper instead, and a missing grade means **Standard**. Grade + taper give,
 from the foam sheets:
