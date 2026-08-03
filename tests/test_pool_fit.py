@@ -796,7 +796,10 @@ def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None):
         return None
     anchors = [(0.0, offa)]
     keyed = []
-    for wp, woff in (waypts or []):
+    for w in (waypts or []):
+        wp, woff = w[0], w[1]       # a third element (the ft-in flag
+                                    # the LISP carries for dim styles)
+                                    # is display-only and ignored here
         bk = min(range(len(base)), key=lambda k: dist(wp, base[k]))
         if dist(wp, base[bk]) > BOTTOM_STEP or bk in (0, cnt):
             continue                    # wrong side, or on a break
@@ -1405,6 +1408,9 @@ def test_constants_match_lisp():
     assert float(setq_value("TOL-MAX")) == TOL_MAX
     assert float(setq_value("BOTTOM-STEP")) == BOTTOM_STEP
     assert float(setq_value("HOP-OFF")) == HOP_OFF
+    # the dimension styles picked by how an offset was typed
+    assert setq_value("DIM-FTIN") == '"SIDE DIMENSION"'
+    assert setq_value("DIM-IN") == '"STANDARD INCHES"'
     # angles are written as (/ pi N)
     for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL)):
         m = re.search(r"\(setq\s+\*PF-%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
@@ -1462,9 +1468,10 @@ def test_lisp_file_is_well_formed():
     called = set(re.findall(r"\((pf:[a-z0-9-]+)", src))
     missing = called - defined
     assert not missing, "abhd.lsp calls undefined: %s" % sorted(missing)
-    dead = defined - called - {"c:ABHD"}
+    dead = defined - called - {"c:ABHD", "c:ADAB"}
     assert not dead, "abhd.lsp defines but never calls: %s" % sorted(dead)
     assert "c:ABHD" in defined, "abhd.lsp no longer defines c:ABHD"
+    assert "c:ADAB" in defined, "abhd.lsp no longer defines c:ADAB"
     # the pieces the interactive flow depends on
     for fn in ("pf:compare", "pf:build", "pf:guided-fit", "pf:unheld",
                "pf:mark-unheld", "pf:report", "pf:label", "pf:bbox",
@@ -1473,7 +1480,8 @@ def test_lisp_file_is_well_formed():
                "pf:block-number", "pf:draw-corner-marker",
                "pf:bottom", "pf:hopper-pts", "pf:hopper-back",
                "pf:sample-loop", "pf:curve-near", "pf:make-dim",
-               "pf:slope-pts", "pf:off-at", "pf:ask-slope"):
+               "pf:slope-pts", "pf:off-at", "pf:ask-slope",
+               "pf:get-off", "pf:dim-style"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 

@@ -3,7 +3,10 @@
 ;;; -------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
-;;; Command:  ABHD
+;;; Commands:  ABHD - fit the perimeter, then optionally the bottom
+;;;            ADAB - the pool bottom on its own, over an existing
+;;;                   perimeter (select the survey points and the
+;;;                   closed polyline or its exploded lines/arcs)
 ;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
@@ -153,6 +156,16 @@
 (if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; default hopper
                                     ; offset (18 in), remembered per
                                     ; session like the tolerance
+(setq *PF-DIM-FTIN* "SIDE DIMENSION") ; dimension style stamped on the
+                                    ; offset dims NOT anchored to a
+                                    ; break point (hopper back, slope
+                                    ; waypoints) when the offset was
+                                    ; typed as feet-and-inches (3'6)
+(setq *PF-DIM-IN* "STANDARD INCHES") ; same dims when the offset was
+                                    ; typed in plain inches (42).
+                                    ; Either style missing from the
+                                    ; drawing falls back to the
+                                    ; current style, with a note
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
   '((0.5 1 "red"    "tighter - hugs the points")
     (1.0 2 "yellow" "as asked")
@@ -1931,7 +1944,7 @@
                 (princ (strcat "\n    Pt." (pf:pt-name (cdr pr))
                                "   off by " (rtos (car pr) 4 4))))))
           ;; one perimeter was chosen, so the floor can be drawn too
-          (pf:bottom (car keep) dpts)))))
+          (pf:bottom (car keep) dpts T)))))
   (princ))
 
 ;; ---- the pool bottom (hopper) ----------------------------------------
@@ -2086,23 +2099,68 @@
   (foreach q pts (setq dxf (append dxf (list (cons 10 q)))))
   (entmakex dxf))
 
+;; The dimension style to stamp on a new dim: NAME when the drawing
+;; actually has it, else the current style - with a note the first
+;; time each missing name comes up (pf-dim-warned is run-scoped).
+(defun pf:dim-style (name)
+  (if (and name (tblsearch "DIMSTYLE" name))
+    name
+    (progn
+      (if (and name (not (member name pf-dim-warned)))
+        (progn
+          (setq pf-dim-warned (cons name pf-dim-warned))
+          (princ (strcat "\n  (dimension style \"" name
+                         "\" is not in this drawing - using the"
+                         " current style instead)"))))
+      (getvar "DIMSTYLE"))))
+
 ;; An aligned dimension measuring PA to PB, its line and text on the
-;; measured stretch itself.  The empty group 1 makes AutoCAD fill in
-;; the measured value (the "auto" dimension text) and build the
-;; dimension block; nil comes back when the drawing cannot take a
-;; dimension, and the caller says so once.
-(defun pf:make-dim (pa pb / m)
+;; measured stretch itself, in dimension style STY (nil = current).
+;; The empty group 1 makes AutoCAD fill in the measured value (the
+;; "auto" dimension text) and build the dimension block; nil comes
+;; back when the drawing cannot take a dimension, and the caller says
+;; so once.
+(defun pf:make-dim (pa pb sty / m)
   (setq m (pf:mid pa pb))
   (entmakex (list '(0 . "DIMENSION") '(100 . "AcDbEntity")
                   (cons 8 *PF-BOTTOM-LAYER*)
                   '(100 . "AcDbDimension")
-                  (cons 3 (getvar "DIMSTYLE"))
+                  (cons 3 (pf:dim-style sty))
                   (cons 10 (list (car m) (cadr m) 0.0))
                   '(70 . 33)                     ; aligned + block flag
                   '(1 . "")                      ; text = the measurement
                   '(100 . "AcDbAlignedDimension")
                   (cons 13 (list (car pa) (cadr pa) 0.0))
                   (cons 14 (list (car pb) (cadr pb) 0.0)))))
+
+;; Show an offset the way it was typed: architectural when it came in
+;; as feet-and-inches, plain inches otherwise.  DEF is (value . ftin).
+(defun pf:fmt-off (def)
+  (if (cdr def) (rtos (car def) 4 4) (rtos (car def) 2 2)))
+
+;; Read an offset distance, remembering HOW it was typed - as
+;; feet-and-inches (3'6) or as plain inches (42) - because that
+;; choice picks the dimension style later.  Returns (value . T) for
+;; feet-and-inches, (value . nil) for inches; Enter takes DEF, a
+;; (value . ftin) pair from the previous entry.  Negative input is
+;; refused, zero too unless ALLOWZERO (a waypoint may pin the line
+;; to the wall).
+(defun pf:get-off (msg def allowzero / s v res)
+  (setq res nil)
+  (while (null res)
+    (setq s (getstring T (strcat msg " <" (pf:fmt-off def) ">: ")))
+    (cond
+      ((= s "") (setq res def))
+      (T
+       (setq v (distof s 4))
+       (cond
+         ((null v)
+          (princ "\n  (that is not a distance - type inches like 42, or feet and inches like 3'6)"))
+         ((or (< v 0.0) (and (= v 0.0) (not allowzero)))
+          (princ (strcat "\n  (the offset must be a positive distance"
+                         (if allowzero " or zero" "") ")")))
+         (T (setq res (cons v (if (wcmatch s "*'*") T nil))))))))
+  res)
 
 ;; Snap a picked break point onto the nearest survey point, warning
 ;; when the pick was nowhere near one (same rule as declared walls).
@@ -2218,20 +2276,21 @@
 ;; A guided slope line: walk CNT samples from index IA in direction
 ;; DIR (the side away from the hopper), following the perimeter with
 ;; an inward offset that starts at OFFA on the hopper's end and eases
-;; to nothing at the shallow break.  WAYPTS - (surveyPt . offset)
-;; pairs the user picked along this side - pin the offset to those
+;; to nothing at the shallow break.  WAYPTS - (surveyPt offset ftin)
+;; entries the user picked along this side - pin the offset to those
 ;; values where they sit, measured square off the wall (along the
 ;; local inward normal); between anchors the offset runs straight
 ;; over arc length, so the picked points steer the line and the curve
 ;; carries it the rest of the way.  PA and PB are the exact break
 ;; positions; the first point lands exactly on the hopper's end, the
 ;; last exactly on the shallow break point.
-;; Returns (linePts dimPairs) - one (wallPt . linePt) per accepted
-;; waypoint, so its offset can be dimensioned - or nil when the walk
-;; is too short to bother (the caller draws a straight line then).
+;; Returns (linePts dimTriples) - one (wallPt linePt ftin) per
+;; accepted waypoint, so its offset can be dimensioned in the style
+;; its format asks for - or nil when the walk is too short to bother
+;; (the caller draws a straight line then).
 (defun pf:slope-pts (samps sgn ia dir cnt pa pb offa waypts
                      / n idxs i k base cum lt prev q out j anchors wp
-                       woff bk bd d dims)
+                       woff wfl bk bd d dims)
   (setq n (length samps))
   (if (< cnt 2)
     nil
@@ -2259,7 +2318,8 @@
           ;; waypoint the user gave along this side
           (setq anchors (list (cons 0.0 offa)) dims nil)
           (foreach wp waypts
-            (setq woff (cdr wp) wp (car wp) bk nil bd nil k 0)
+            (setq woff (cadr wp) wfl (caddr wp) wp (car wp)
+                  bk nil bd nil k 0)
             (foreach q base
               (setq d (pf:dist wp q))
               (if (or (null bd) (< d bd)) (setq bk k bd d))
@@ -2275,7 +2335,8 @@
                               " ignored, the breaks rule there)")))
               (T
                (setq anchors (cons (cons (nth bk cum) woff) anchors)
-                     dims    (cons (cons (nth bk base) bk) dims)))))
+                     dims    (cons (list (nth bk base) bk wfl)
+                                   dims)))))
           (setq anchors (pf:sort-car anchors)
                 anchors (append anchors (list (cons lt 0.0))))
           (setq out nil j 0)
@@ -2289,8 +2350,9 @@
                   j   (1+ j)))
           (setq out (reverse out))
           (list out
-                (mapcar '(lambda (pr) (cons (car pr)
-                                            (nth (cdr pr) out)))
+                (mapcar '(lambda (pr) (list (car pr)
+                                            (nth (cadr pr) out)
+                                            (caddr pr)))
                         (reverse dims))))))))
 
 ;; Drop consecutive duplicates closer than a hundredth - a tight
@@ -2305,13 +2367,16 @@
 ;; lines, and an aligned dimension on each of the three hopper
 ;; offsets plus every waypoint offset.  GUIDED holds the user's
 ;; answer for each side: nil = straight, T = guided along the
-;; perimeter's curve, or a list of (surveyPt . offset) waypoints =
-;; guided through those pinned offsets.  LINES holds the two break
-;; lines pf:bottom already drew; everything stays scaffolding until
-;; the end, so an error in between sweeps the lot - the bottom only
-;; ever lands complete.
-(defun pf:bottom-draw (segs sp1 sp2 dp1 dp2 back off1 off2 off3 lines
-                       guided
+;; perimeter's curve, or a list of (surveyPt offset ftin) waypoints =
+;; guided through those pinned offsets.  Dims not anchored to a break
+;; point (the hopper back, the waypoints) carry the dimension style
+;; their typed format asks for: *PF-DIM-FTIN* when the offset came in
+;; as feet-and-inches (BFL for the back one), *PF-DIM-IN* for plain
+;; inches.  LINES holds the two break lines pf:bottom already drew;
+;; everything stays scaffolding until the end, so an error in between
+;; sweeps the lot - the bottom only ever lands complete.
+(defun pf:bottom-draw (segs sp1 sp2 dp1 dp2 back off1 off2 off3 bfl
+                       lines guided
                        / made samps sgn i1 i2 ib hp hpts base kb dir
                          n is1 is2 sl spec wdims desc1 desc2 e1 e2 q e
                          dimfail)
@@ -2383,14 +2448,20 @@
                                            " point(s)"))
                         (T "guided")))
       ;; dimension each offset right where it applies - the three
-      ;; hopper offsets, and every waypoint offset the user pinned
+      ;; hopper offsets, and every waypoint offset the user pinned.
+      ;; Break-point dims keep the current style; the others get the
+      ;; style their typed format asks for
       (setq dimfail nil)
       (foreach q (append
-                   (list (list dp1 e1) (list dp2 e2)
-                         (list (nth kb base) (nth kb hpts)))
-                   (mapcar '(lambda (pr) (list (car pr) (cdr pr)))
+                   (list (list dp1 e1 nil) (list dp2 e2 nil)
+                         (list (nth kb base) (nth kb hpts)
+                               (if bfl *PF-DIM-FTIN* *PF-DIM-IN*)))
+                   (mapcar '(lambda (pr) (list (car pr) (cadr pr)
+                                               (if (caddr pr)
+                                                 *PF-DIM-FTIN*
+                                                 *PF-DIM-IN*)))
                            wdims))
-        (setq e (pf:make-dim (car q) (cadr q)))
+        (setq e (pf:make-dim (car q) (cadr q) (caddr q)))
         (if e
           (setq made (cons (pf:temp-add e) made))
           (setq dimfail T)))
@@ -2409,10 +2480,11 @@
 
 ;; Ask how one slope line should run.  NM names the deep break point
 ;; whose side is being asked about; DPTS are the survey points and
-;; OFFD seeds the offset default.  Returns nil for straight, T for
-;; guided, or a list of (surveyPt . offset) waypoints for a guided
-;; line that passes through picked points at pinned offsets.
-(defun pf:ask-slope (nm dpts offd / ans wp spec woff seed)
+;; DEFO - a (value . ftin) pair - seeds the offset default.  Returns
+;; nil for straight, T for guided, or a list of (surveyPt offset
+;; ftin) waypoints for a guided line that passes through picked
+;; points at pinned offsets.
+(defun pf:ask-slope (nm dpts defo / ans wp spec o seed)
   (initget "Straight Guided Points")
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
@@ -2425,7 +2497,7 @@
      (princ "\n  gets its own offset, measured square off the wall.  The line")
      (princ "\n  follows the curve through them and eases to the shallow break.")
      (setq spec     nil
-           seed     offd
+           seed     defo
            pf-phase "picking slope waypoints")
      (while (setq wp (getpoint (strcat
                        "\n  Point on the Pt." nm
@@ -2435,13 +2507,11 @@
        ;; clears itself when the command ends
        (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp)))
        (setq pf-phase "reading a slope waypoint offset")
-       (initget 4)
-       (setq woff (getdist (strcat
-                    "\n  What is the offset at Pt." (pf:pt-name wp)
-                    "? <" (rtos seed 2 2) ">: ")))
-       (if (null woff) (setq woff seed))
-       (setq spec     (cons (cons wp woff) spec)
-             seed     woff
+       (setq o (pf:get-off (strcat "\n  What is the offset at Pt."
+                                   (pf:pt-name wp) "?")
+                           seed T))
+       (setq spec     (cons (list wp (car o) (cdr o)) spec)
+             seed     o
              pf-phase "picking slope waypoints"))
      (if spec
        (reverse spec)
@@ -2449,15 +2519,21 @@
          (princ "\n  (no points picked - guiding along the curve instead)")
          T)))))
 
-;; The interactive flow, run once a perimeter has been kept.  SEGS is
-;; the kept fit, DPTS the survey points.  Enter (or No) skips it and
-;; the command finishes per usual.
-(defun pf:bottom (segs dpts / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2 back
-                              off1 off2 off3 lines nm1 nm2 g1 g2)
-  (setq pf-phase "asking about the pool bottom")
-  (initget "Yes No")
-  (setq ans (getkword
-              "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+;; The interactive flow, run once a perimeter is in hand.  SEGS is
+;; the closed loop, DPTS the survey points.  With ASK the user is
+;; first offered the bottom (Enter or No skips it - the ABHD ending);
+;; without, the flow starts straight away (the ADAB command, which
+;; exists only for this).
+(defun pf:bottom (segs dpts ask / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2
+                                   back off1 off2 off3 o1 o2 o3 bfl
+                                   lines nm1 nm2 g1 g2)
+  (setq ans "Yes")
+  (if ask
+    (progn
+      (setq pf-phase "asking about the pool bottom")
+      (initget "Yes No")
+      (setq ans (getkword
+                  "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))))
   (if (= ans "Yes")
     (progn
       (princ "\n\n  SHALLOW BREAK - where the flat shallow floor starts sloping down.")
@@ -2510,25 +2586,24 @@
                      nm1      (pf:pt-name d1)
                      nm2      (pf:pt-name d2))
                (princ "\n  Three offsets pull the hopper in from the perimeter;")
-               (princ "\n  they blend gradually where they differ.")
-               (initget 6)
-               (setq off1 (getdist (strcat
+               (princ "\n  they blend gradually where they differ.  Type inches (42)")
+               (princ "\n  or feet and inches (3'6).")
+               (setq o1   (pf:get-off (strcat
                             "\n  What is the deep end offset at Pt."
-                            nm1 "? <"
-                            (rtos *PF-HOP-OFF* 2 2) ">: ")))
-               (if (null off1) (setq off1 *PF-HOP-OFF*))
-               (initget 6)
-               (setq off2 (getdist (strcat
+                            nm1 "?")
+                            (cons *PF-HOP-OFF* nil) nil)
+                     off1 (car o1)
+                     o2   (pf:get-off (strcat
                             "\n  What is the deep end offset at Pt."
-                            nm2 "? <"
-                            (rtos off1 2 2) ">: ")))
-               (if (null off2) (setq off2 off1))
-               (initget 6)
-               (setq off3 (getdist (strcat
+                            nm2 "?")
+                            o1 nil)
+                     off2 (car o2)
+                     o3   (pf:get-off (strcat
                             "\n  What is the offset at the back of the"
-                            " hopper (Pt." (pf:pt-name back) ")? <"
-                            (rtos off1 2 2) ">: ")))
-               (if (null off3) (setq off3 off1))
+                            " hopper (Pt." (pf:pt-name back) ")?")
+                            o1 nil)
+                     off3 (car o3)
+                     bfl  (cdr o3))
                (setq *PF-HOP-OFF* off1)
                ;; each slope line can run straight to the shallow
                ;; break, follow the perimeter's curve gently in, or
@@ -2537,10 +2612,10 @@
                (princ "\n  Each slope line can run STRAIGHT to the shallow break, be GUIDED")
                (princ "\n  by the perimeter - easing in along its curve - or pass through")
                (princ "\n  POINTS you pick along that side, each with its own offset.")
-               (setq g1 (pf:ask-slope nm1 dpts off1)
-                     g2 (pf:ask-slope nm2 dpts off2))
+               (setq g1 (pf:ask-slope nm1 dpts o1)
+                     g2 (pf:ask-slope nm2 dpts o2))
                (pf:bottom-draw segs sp1 sp2 dp1 dp2 back
-                               off1 off2 off3 lines
+                               off1 off2 off3 bfl lines
                                (list g1 g2))))))))))
   (princ))
 
@@ -2549,7 +2624,7 @@
                     ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok stale npt
                     pf-miss-pct pf-walls pf-corners pf-temp pf-ptnames
-                    *error* pf-old-err pf-phase)
+                    pf-dim-warned *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -2848,5 +2923,105 @@
   (setq *error* pf-old-err)   ; restore the previous error handler
   (princ))
 
-(princ "\nABHD loaded.  Type ABHD to fit the pool perimeter through its points.")
+;; ---- ADAB: the pool bottom on its own --------------------------------
+;; The end of the ABHD flow as a command of its own: select the survey
+;; points and an existing perimeter - one closed polyline, or the
+;; exploded lines/arcs that form one - and go straight to the breaks,
+;; the hopper offsets and the slope lines.  For when the perimeter was
+;; fitted (or drawn) some other day and only the floor is needed.
+(defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
+                    npt stale pf-temp pf-ptnames pf-dim-warned
+                    *error* pf-old-err pf-phase)
+  (setq pf-temp   nil
+        pf-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m
+                     (/= m "Function cancelled")
+                     (/= m "quit / exit abort")
+                     (/= m "console break"))
+              (princ (strcat "\nADAB stopped while "
+                             (if pf-phase pf-phase "starting up")
+                             " -- " m)))
+            (pf:temp-clear)
+            (setq *error* pf-old-err)
+            (princ)))
+  ;; sweep leftovers from a run interrupted before it could tidy up
+  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nADAB: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *PF-WALL-LAYER*
+                   ".")))
+  (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
+  (princ "\n\n  Select the survey points (ab_pt blocks or POINT entities) and the")
+  (princ "\n  pool perimeter - one closed polyline, or its exploded lines/arcs.")
+  (princ "\n  Select objects: ")
+  (setq pf-phase "waiting for the selection")
+  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (princ "\nNothing usable selected (survey points and the perimeter geometry).")
+    (progn
+      (setq pf-phase "reading the selected entities")
+      (setq segs nil pts nil i 0 nocs 0 nskip 0
+            npt 0 pf-ptnames nil)
+      (while (< i (sslength ss))
+        (setq en  (ssname ss i)
+              ed  (entget en)
+              typ (cdr (assoc 0 ed))
+              lay (strcase (cdr (assoc 8 ed)))
+              ext (cdr (assoc 210 ed))
+              i   (1+ i))
+        (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
+        (cond
+          ;; ab_pt blocks are survey points wherever they sit
+          ((and (= typ "INSERT")
+                (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
+           (pf:add-point (pf:2d (cdr (assoc 10 ed)))
+                         (pf:block-number en)))
+          ;; a plain POINT counts on any layer here - the selection
+          ;; is explicit, so there is no guessing involved
+          ((= typ "POINT")
+           (pf:add-point (pf:2d (cdr (assoc 10 ed))) nil))
+          ;; other blocks only count as points on the points layer
+          ((= typ "INSERT")
+           (if (= lay (strcase *PF-POINT-LAYER*))
+             (pf:add-point (pf:2d (cdr (assoc 10 ed)))
+                           (pf:block-number en))))
+          ;; ABHD's own scaffolding and results must never be read
+          ;; back as perimeter: miss rings, dashed markers, and an
+          ;; earlier bottom all live on known layers or carry the
+          ;; ABHD stamp
+          ((or (= lay (strcase *PF-MISS-LAYER*))
+               (= lay (strcase *PF-WALL-LAYER*))
+               (= lay (strcase *PF-BOTTOM-LAYER*))
+               (assoc -3 (entget en '("ABHD"))))
+           (setq nskip (1+ nskip)))
+          (T
+           (setq segs (append segs (pf:ent-segs en))))))
+      (if (> nocs 0)
+        (princ (strcat "\nADAB: warning - " (itoa nocs)
+                       " selected object(s) are not drawn in the world"
+                       " plane; the bottom is built flat (XY) and may"
+                       " be wrong.  Set UCS to World and flatten them"
+                       " first.")))
+      (if (> nskip 0)
+        (princ (strcat "\n  (" (itoa nskip)
+                       " marker/bottom object(s) in the selection were"
+                       " ignored)")))
+      (setq dpts (if pts (pf:dedupe pts)))
+      (cond
+        ((null segs)
+         (princ "\nNo perimeter found in the selection - include the closed polyline or its exploded lines/arcs."))
+        ((null dpts)
+         (princ (strcat "\nNo survey points found (\"" *PF-POINT-BLOCK*
+                        "\" blocks or POINT entities) - the breaks and"
+                        " the back of the hopper come from them.")))
+        ((null (setq loop (pf:chain segs))) nil)   ; pf:chain said why
+        (T (pf:bottom loop dpts nil)))))
+  (pf:temp-clear)
+  (setq *error* pf-old-err)
+  (princ))
+
+(princ "\nABHD loaded.  ABHD fits the pool perimeter through its points;")
+(princ "\nADAB draws the pool bottom over an existing perimeter.")
 (princ)

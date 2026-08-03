@@ -11,6 +11,11 @@ while the points stay in charge. Up to 15% of the points (rounded up)
 are allowed to sit about an inch off the result, and you can cap the
 number of curves outright.
 
+Two commands ship in the one file: **`ABHD`** runs the whole fit (and
+offers the pool bottom at the end), and **`ADAB`** runs just the
+pool-bottom flow over a perimeter that already exists — see
+[ADAB](#adab--the-bottom-on-its-own).
+
 ## Setup expected in the drawing
 
 | Layer | Contents |
@@ -360,6 +365,15 @@ defaulting to the previous entry:
   What is the offset at the back of the hopper (Pt.32)? <18.00>:
 ```
 
+Type plain inches (`42`) or feet-and-inches (`3'6`) — **how you type
+it picks the dimension style** on the dims that are not anchored to a
+break point (the back of the hopper and any slope waypoints):
+feet-and-inches goes on **`SIDE DIMENSION`**, plain inches on
+**`STANDARD INCHES`** (`*PF-DIM-FTIN*` / `*PF-DIM-IN*`; if a style is
+missing from the drawing the current style is used and a note says
+so). The two deep-break dims stay in the drawing's current dimension
+style.
+
 The perimeter beyond the deep break is **offset inward** by those
 amounts — exactly your `Pt.12` offset at `Pt.12`, exactly the back
 offset at the back, exactly the `Pt.7` offset at the other end,
@@ -415,6 +429,27 @@ style. The first offset becomes the session default (`*PF-HOP-OFF*`,
 — the bottom only stays once it is complete. If no survey point lies
 beyond the deep break, ABHD asks whether the two break lines were
 swapped and adds nothing.
+
+### ADAB — the bottom on its own
+
+When the perimeter already exists — fitted by `ABHD` on an earlier
+day, or drawn by hand — **`ADAB`** runs just the bottom flow over it:
+
+1. Select the **survey points** (`ab_pt` blocks anywhere, or plain
+   `POINT` entities — any layer, since the selection is explicit) and
+   the **perimeter**: one closed polyline, or the exploded
+   `LINE`s/`ARC`s that form one. Layer does not matter; ABHD's own
+   markers, miss rings and an earlier bottom in the selection are
+   recognised and ignored.
+2. The pieces are chained into a closed loop (the same check `ABHD`
+   uses — a gap is reported with its location), and the flow goes
+   straight to the shallow-break picks: breaks, back point, offsets,
+   slope lines and dimensions, exactly as above — just without the
+   "Add the bottom?" question, since running `ADAB` *is* the answer.
+
+Everything else behaves identically: the same prompts by point
+number, the same straight/guided/points slope lines, the same
+dimension-style rules, and the same clean-up on `ESC`.
 
 ## Checking it still works
 
