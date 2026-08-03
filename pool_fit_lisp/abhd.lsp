@@ -100,6 +100,19 @@
 ;;;
 ;;; A hit report is printed: how many points the new perimeter passes
 ;;; through exactly, how many are within tolerance, how many missed.
+;;;
+;;; THE POOL BOTTOM: once a perimeter is kept, the command offers to
+;;; draw the floor too (Enter = No).  The user picks the two ends of
+;;; the SHALLOW BREAK and the DEEP BREAK; the hopper - the flat
+;;; deep-end floor - lies beyond the deep break, away from the
+;;; shallow.  Its back is found automatically (the survey point
+;;; nearest a perpendicular ray cast from the middle of the deep
+;;; break), and three offsets - one at each deep break point, one at
+;;; the back - pull the hopper in from the perimeter, blending
+;;; gradually where they differ.  Straight slope lines join the
+;;; hopper's ends to the shallow break points.  Everything is drawn
+;;; solid on *PF-BOTTOM-LAYER*, and each offset gets an aligned
+;;; dimension automatically.
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
@@ -125,6 +138,16 @@
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
                                     ; trace of the points
+(setq *PF-BOTTOM-LAYER* "POOL-BOTTOM") ; layer the pool-bottom lines
+                                    ; (breaks, hopper, slopes) and
+                                    ; their dimensions go on - all
+                                    ; solid/continuous
+(setq *PF-BOTTOM-STEP*  6.0)        ; sampling step for the hopper
+                                    ; offset curve (6 inches keeps it
+                                    ; smooth without a heavy polyline)
+(if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; default hopper
+                                    ; offset (18 in), remembered per
+                                    ; session like the tolerance
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
   '((0.5 1 "red"    "tighter - hugs the points")
     (1.0 2 "yellow" "as asked")
@@ -1901,7 +1924,411 @@
                              " and listed beside the pool, worst first:"))
               (foreach pr keyed
                 (princ (strcat "\n    Pt." (pf:pt-name (cdr pr))
-                               "   off by " (rtos (car pr) 4 4))))))))))
+                               "   off by " (rtos (car pr) 4 4))))))
+          ;; one perimeter was chosen, so the floor can be drawn too
+          (pf:bottom (car keep) dpts)))))
+  (princ))
+
+;; ---- the pool bottom (hopper) ----------------------------------------
+;; After a perimeter is kept, the floor can be drawn in the same
+;; sitting: the SHALLOW BREAK and DEEP BREAK lines across the pool,
+;; and the hopper - the flat deep-end floor - as an inward offset of
+;; the perimeter beyond the deep break.  Three offsets shape it: one
+;; at each deep break point and one at the back of the hopper,
+;; blending gradually in between when they differ.  Straight slope
+;; lines join the hopper's ends to the shallow break points.
+;; Everything is solid, on *PF-BOTTOM-LAYER*, and each offset is
+;; dimensioned automatically.
+
+;; Unit vector of V, or nil when V is (near) zero-length.
+(defun pf:unit (v / l)
+  (setq l (sqrt (pf:dot v v)))
+  (if (> l 1.0e-12) (pf:scl v (/ 1.0 l))))
+
+;; Closest point ON segment (p1 p2 bulge) to P - pf:seg-dist's twin,
+;; returning the foot of the distance instead of the distance.
+(defun pf:seg-near (p seg / p1 p2 b v w len2 t2 g c r a1 a2 ap sweep
+                            rel)
+  (setq p  (pf:2d p)
+        p1 (pf:2d (car seg))
+        p2 (pf:2d (cadr seg))
+        b  (caddr seg))
+  (if (< (abs b) 1.0e-9)
+    ;; straight: project onto the segment, clamp to its ends
+    (progn
+      (setq v    (pf:sub p2 p1)
+            w    (pf:sub p p1)
+            len2 (pf:dot v v))
+      (if (< len2 1.0e-20)
+        p1
+        (progn
+          (setq t2 (/ (pf:dot w v) len2))
+          (if (< t2 0.0) (setq t2 0.0))
+          (if (> t2 1.0) (setq t2 1.0))
+          (pf:add p1 (pf:scl v t2)))))
+    ;; arc: the radial foot when P falls inside the sweep, else the
+    ;; nearer endpoint
+    (progn
+      (setq g (pf:arc-geom p1 p2 b))
+      (if (null g)
+        (if (<= (pf:dist p p1) (pf:dist p p2)) p1 p2)
+        (progn
+          (setq c  (car g)  r (cadr g)
+                a1 (caddr g) a2 (cadddr g)
+                ap (angle c p))
+          (if (> b 0.0)
+            (setq sweep (pf:norm-ang (- a2 a1)) rel (pf:norm-ang (- ap a1)))
+            (setq sweep (pf:norm-ang (- a1 a2)) rel (pf:norm-ang (- ap a2))))
+          (if (<= rel sweep)
+            (pf:add c (pf:scl (list (cos ap) (sin ap)) r))
+            (if (<= (pf:dist p p1) (pf:dist p p2)) p1 p2)))))))
+
+;; Closest point on the whole loop to P.
+(defun pf:curve-near (p segs / best bd s q d)
+  (foreach s segs
+    (setq q (pf:seg-near p s)
+          d (pf:dist p q))
+    (if (or (null bd) (< d bd)) (setq best q bd d)))
+  best)
+
+;; Sample the closed loop into points spaced about STEP apart, walking
+;; it in order: each segment contributes its start point plus enough
+;; interior points that no gap exceeds STEP (its end is the next
+;; segment's start, so nothing doubles up).
+(defun pf:sample-loop (segs step / out s p1 p2 b g c r a1 a2 sweep
+                                   len k j aa)
+  (setq out nil)
+  (foreach s segs
+    (setq p1  (pf:2d (car s))
+          p2  (pf:2d (cadr s))
+          b   (caddr s)
+          out (cons p1 out)
+          g   (if (>= (abs b) 1.0e-9) (pf:arc-geom p1 p2 b)))
+    (if g
+      (progn
+        (setq c  (car g)   r  (cadr g)
+              a1 (caddr g) a2 (cadddr g))
+        (if (> b 0.0)
+          (setq sweep (pf:norm-ang (- a2 a1)))
+          (setq sweep (- (pf:norm-ang (- a1 a2)))))
+        (setq len (* r (abs sweep))
+              k   (max 1 (fix (/ len step)))
+              j   1)
+        (while (< j k)
+          (setq aa  (+ a1 (* sweep (/ (float j) (float k))))
+                out (cons (list (+ (car c) (* r (cos aa)))
+                                (+ (cadr c) (* r (sin aa))))
+                          out)
+                j   (1+ j))))
+      (progn
+        (setq len (pf:dist p1 p2)
+              k   (max 1 (fix (/ len step)))
+              j   1)
+        (while (< j k)
+          (setq out (cons (pf:add p1 (pf:scl (pf:sub p2 p1)
+                                             (/ (float j) (float k))))
+                          out)
+                j   (1+ j))))))
+  (reverse out))
+
+;; Signed shoelace area of a point ring: positive = counter-clockwise.
+;; Only the SIGN is used, to orient the inward normals.
+(defun pf:loop-area (pts / sum prev q)
+  (setq sum 0.0 prev (last pts))
+  (foreach q pts
+    (setq sum  (+ sum (- (* (car prev) (cadr q))
+                         (* (car q) (cadr prev))))
+          prev q))
+  (/ sum 2.0))
+
+;; Index of the sample nearest P.
+(defun pf:near-idx (p pts / k best bd q d)
+  (setq k 0 best 0 bd nil)
+  (foreach q pts
+    (setq d (pf:dist p q))
+    (if (or (null bd) (< d bd)) (setq best k bd d))
+    (setq k (1+ k)))
+  best)
+
+;; Inward unit normal of the sampled loop at index I.  The tangent
+;; comes from the neighbouring samples; SGN is +1 for a counter-
+;; clockwise ring (interior on the left of travel), -1 for clockwise.
+(defun pf:samp-normal (i pts sgn / n u)
+  (setq n (length pts)
+        u (pf:unit (pf:sub (nth (rem (1+ i) n) pts)
+                           (nth (rem (+ i n -1) n) pts))))
+  (if (null u)
+    (setq u (pf:unit (pf:sub (nth (rem (1+ i) n) pts) (nth i pts)))))
+  (if (null u) (setq u '(1.0 0.0)))
+  (pf:scl (pf:perp u) sgn))
+
+;; A solid LINE on the pool-bottom layer.
+(defun pf:make-line (p1 p2)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
+                  (cons 8 *PF-BOTTOM-LAYER*)
+                  '(100 . "AcDbLine")
+                  (cons 10 (list (car p1) (cadr p1) 0.0))
+                  (cons 11 (list (car p2) (cadr p2) 0.0)))))
+
+;; An OPEN polyline through PTS (no bulges) on the pool-bottom layer.
+(defun pf:make-open-pline (pts / dxf q)
+  (setq dxf (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
+                  (cons 8 *PF-BOTTOM-LAYER*)
+                  '(100 . "AcDbPolyline")
+                  (cons 90 (length pts)) '(70 . 0)))
+  (foreach q pts (setq dxf (append dxf (list (cons 10 q)))))
+  (entmakex dxf))
+
+;; An aligned dimension measuring PA to PB, its line and text on the
+;; measured stretch itself.  The empty group 1 makes AutoCAD fill in
+;; the measured value (the "auto" dimension text) and build the
+;; dimension block; nil comes back when the drawing cannot take a
+;; dimension, and the caller says so once.
+(defun pf:make-dim (pa pb / m)
+  (setq m (pf:mid pa pb))
+  (entmakex (list '(0 . "DIMENSION") '(100 . "AcDbEntity")
+                  (cons 8 *PF-BOTTOM-LAYER*)
+                  '(100 . "AcDbDimension")
+                  (cons 3 (getvar "DIMSTYLE"))
+                  (cons 10 (list (car m) (cadr m) 0.0))
+                  '(70 . 33)                     ; aligned + block flag
+                  '(1 . "")                      ; text = the measurement
+                  '(100 . "AcDbAlignedDimension")
+                  (cons 13 (list (car pa) (cadr pa) 0.0))
+                  (cons 14 (list (car pb) (cadr pb) 0.0)))))
+
+;; Snap a picked break point onto the nearest survey point, warning
+;; when the pick was nowhere near one (same rule as declared walls).
+(defun pf:snap-break (p dpts / q)
+  (setq p (pf:2d p)
+        q (pf:nearest p dpts))
+  (if (null q)
+    p
+    (progn
+      (if (> (pf:dist p q) (* 3.0 *PF-TOL*))
+        (princ "\n  (picked well away from any survey point - snapped to the nearest one)"))
+      q)))
+
+;; The survey point marking the BACK of the hopper: cast a ray from
+;; the middle of the deep break line, perpendicular to it, away from
+;; the shallow break, and take the point closest to that ray on that
+;; side.  nil when no survey point lies beyond the deep break at all.
+(defun pf:hopper-back (dp1 dp2 sp1 sp2 dpts / mid u q t2 lat back bd)
+  (setq mid (pf:mid dp1 dp2)
+        u   (pf:unit (pf:perp (pf:sub dp2 dp1))))
+  (if u
+    (progn
+      (if (> (pf:dot u (pf:sub (pf:mid sp1 sp2) mid)) 0.0)
+        (setq u (pf:scl u -1.0)))
+      (setq back nil bd nil)
+      (foreach q dpts
+        (setq t2  (pf:dot (pf:sub q mid) u)
+              lat (abs (pf:dot (pf:sub q mid) (pf:perp u))))
+        (if (and (> t2 *PF-EXACT-EPS*)
+                 (or (null bd) (< lat bd)))
+          (setq back q bd lat)))
+      back)))
+
+;; The hopper outline: walk the sampled perimeter from the deep break
+;; point at sample I1 to the one at I2, whichever way round passes the
+;; back point at IB, pushing every point inward by an offset that
+;; blends OFF1 at the start through OFF3 at the back to OFF2 at the
+;; end - a straight run over arc length, so differing offsets change
+;; gradually.  P1 and P2 are the exact break positions and stand in
+;; for their samples, so the hopper's ends land exactly off them.
+;; Returns (hopperPts backPos perimeterPts), or nil when the two deep
+;; break points share a sample.
+(defun pf:hopper-pts (samps sgn i1 i2 ib p1 p2 off1 off2 off3
+                      / n fwdb fwd2 dir cnt kb idxs i k base cum lt lb
+                        prev q out j cj offv)
+  (setq n    (length samps)
+        fwdb (rem (+ (- ib i1) n) n)
+        fwd2 (rem (+ (- i2 i1) n) n))
+  ;; walk whichever way round passes the back of the hopper
+  (if (<= fwdb fwd2)
+    (setq dir 1  cnt fwd2 kb fwdb)
+    (setq dir -1 cnt (rem (+ (- i1 i2) n) n)
+          kb  (rem (+ (- i1 ib) n) n)))
+  (if (< cnt 2)
+    nil
+    (progn
+      ;; the perimeter points under the hopper, break to break
+      (setq idxs nil i i1 k 0)
+      (while (<= k cnt)
+        (setq idxs (cons i idxs)
+              i    (rem (+ i dir n) n)
+              k    (1+ k)))
+      (setq idxs (reverse idxs)
+            base nil)
+      (foreach i idxs (setq base (cons (nth i samps) base)))
+      (setq base (reverse base)
+            base (cons p1 (cdr base))
+            base (reverse (cons p2 (cdr (reverse base)))))
+      ;; arc length along the walk places the blend
+      (setq cum nil lt 0.0 prev nil)
+      (foreach q base
+        (if prev (setq lt (+ lt (pf:dist prev q))))
+        (setq cum (cons lt cum) prev q))
+      (setq cum (reverse cum)
+            lb  (nth kb cum))
+      (if (< lt 1.0e-9)
+        nil
+        (progn
+          (setq out nil j 0)
+          (foreach q base
+            (setq cj   (nth j cum)
+                  offv (if (<= cj lb)
+                         (+ off1 (* (- off3 off1)
+                                    (if (> lb 1.0e-9) (/ cj lb) 1.0)))
+                         (+ off3 (* (- off2 off3)
+                                    (if (> (- lt lb) 1.0e-9)
+                                      (/ (- cj lb) (- lt lb))
+                                      1.0))))
+                  out  (cons (pf:add q (pf:scl
+                                         (pf:samp-normal (nth j idxs)
+                                                         samps sgn)
+                                         offv))
+                             out)
+                  j    (1+ j)))
+          (list (reverse out) kb base))))))
+
+;; Draw the rest of the bottom package: the hopper outline, the slope
+;; lines, and an aligned dimension on each of the three offsets.
+;; LINES holds the two break lines pf:bottom already drew; everything
+;; stays scaffolding until the end, so an error in between sweeps the
+;; lot - the bottom only ever lands complete.
+(defun pf:bottom-draw (segs sp1 sp2 dp1 dp2 back off1 off2 off3 lines
+                       / made samps sgn i1 i2 ib hp hpts base kb
+                         e1 e2 q e prev dedup dimfail)
+  (setq pf-phase "building the hopper"
+        samps    (pf:sample-loop segs *PF-BOTTOM-STEP*)
+        sgn      (if (< (pf:loop-area samps) 0.0) -1.0 1.0)
+        i1       (pf:near-idx dp1 samps)
+        i2       (pf:near-idx dp2 samps)
+        ib       (pf:near-idx (pf:curve-near back segs) samps)
+        hp       (pf:hopper-pts samps sgn i1 i2 ib dp1 dp2
+                                off1 off2 off3))
+  (if (null hp)
+    ;; the break lines stay scaffolding and are swept with the rest
+    (princ "\n  (the deep break points sit on top of each other on the perimeter - the pool bottom was not added)")
+    (progn
+      (setq hpts (car hp)  kb (cadr hp)  base (caddr hp)
+            e1   (car hpts) e2 (last hpts)
+            made lines)
+      ;; a tight offset can fold neighbouring samples onto each other;
+      ;; the drawn outline skips the duplicates
+      (setq dedup nil prev nil)
+      (foreach q hpts
+        (if (or (null prev) (> (pf:dist prev q) 0.01))
+          (setq dedup (cons q dedup) prev q)))
+      (setq dedup (reverse dedup)
+            made  (cons (pf:temp-add (pf:make-open-pline dedup)) made))
+      ;; the slope lines: each hopper end joins the shallow break
+      ;; point on its own side, so the two lines never cross
+      (if (> (+ (pf:dist e1 sp1) (pf:dist e2 sp2))
+             (+ (pf:dist e1 sp2) (pf:dist e2 sp1)))
+        (setq q sp1 sp1 sp2 sp2 q))
+      (setq made (cons (pf:temp-add (pf:make-line e1 sp1)) made)
+            made (cons (pf:temp-add (pf:make-line e2 sp2)) made))
+      ;; dimension each offset right where it applies
+      (setq dimfail nil)
+      (foreach q (list (list dp1 e1) (list dp2 e2)
+                       (list (nth kb base) (nth kb hpts)))
+        (setq e (pf:make-dim (car q) (cadr q)))
+        (if e
+          (setq made (cons (pf:temp-add e) made))
+          (setq dimfail T)))
+      (if dimfail
+        (princ (strcat "\n  (a dimension could not be created - the"
+                       " offsets are " (rtos off1 2 2) ", "
+                       (rtos off2 2 2) " and " (rtos off3 2 2) ")")))
+      ;; the flow finished: promote it all from scaffolding to result
+      (foreach e made (if e (pf:temp-drop e)))
+      (princ (strcat "\nPool bottom added on layer " *PF-BOTTOM-LAYER*
+                     ": both break lines, the hopper (offsets "
+                     (rtos off1 2 2) " / " (rtos off3 2 2) " / "
+                     (rtos off2 2 2)
+                     "), the slope lines, and their dimensions."))))
+  (princ))
+
+;; The interactive flow, run once a perimeter has been kept.  SEGS is
+;; the kept fit, DPTS the survey points.  Enter (or No) skips it and
+;; the command finishes per usual.
+(defun pf:bottom (segs dpts / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2 back
+                              off1 off2 off3 lines)
+  (setq pf-phase "asking about the pool bottom")
+  (initget "Yes No")
+  (setq ans (getkword
+              "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+  (if (= ans "Yes")
+    (progn
+      (princ "\n\n  SHALLOW BREAK - where the flat shallow floor starts sloping down.")
+      (princ "\n  Pick its two ends (snap to the survey points).")
+      (setq pf-phase "picking the shallow break"
+            s1       (getpoint "\n  First shallow break point: "))
+      (if s1 (setq s2 (getpoint s1 "\n  Second shallow break point: ")))
+      (if s2
+        (progn
+          (princ "\n  DEEP BREAK - where the slope levels out into the hopper.")
+          (setq pf-phase "picking the deep break"
+                d1       (getpoint "\n  First deep break point: "))))
+      (if d1 (setq d2 (getpoint d1 "\n  Second deep break point: ")))
+      (cond
+        ((null d2)
+         (princ "\n  (point pick cancelled - the pool bottom was not added)"))
+        (T
+         ;; break ends snap to survey points, like declared walls do
+         (setq s1 (pf:snap-break s1 dpts) s2 (pf:snap-break s2 dpts)
+               d1 (pf:snap-break d1 dpts) d2 (pf:snap-break d2 dpts))
+         (cond
+           ((or (< (pf:dist s1 s2) *PF-EXACT-EPS*)
+                (< (pf:dist d1 d2) *PF-EXACT-EPS*))
+            (princ "\n  (both ends of a break line landed on the same survey point - the pool bottom was not added)"))
+           (T
+            ;; the break ends land exactly on the kept perimeter
+            (setq sp1  (pf:curve-near s1 segs)
+                  sp2  (pf:curve-near s2 segs)
+                  dp1  (pf:curve-near d1 segs)
+                  dp2  (pf:curve-near d2 segs)
+                  back (pf:hopper-back dp1 dp2 sp1 sp2 dpts))
+            (cond
+              ((null back)
+               (princ (strcat "\n  (no survey point lies beyond the"
+                              " deep break - are the two break lines"
+                              " swapped?  The pool bottom was not"
+                              " added)")))
+              (T
+               ;; both break lines go down now, solid, so what was
+               ;; declared is visible while the offsets are typed;
+               ;; they stay scaffolding until the whole flow lands
+               (pf:ensure-layer *PF-BOTTOM-LAYER* 5)
+               (setq lines (list (pf:temp-add (pf:make-line sp1 sp2))
+                                 (pf:temp-add (pf:make-line dp1 dp2))))
+               (princ (strcat "\n  Back of the hopper: Pt."
+                              (pf:pt-name back)
+                              " (the survey point straight out from"
+                              " the deep break)."))
+               (setq pf-phase "reading the hopper offsets")
+               (princ "\n  Three offsets pull the hopper in from the perimeter;")
+               (princ "\n  they blend gradually where they differ.")
+               (initget 6)
+               (setq off1 (getdist (strcat
+                            "\n  Offset in from the FIRST deep break point <"
+                            (rtos *PF-HOP-OFF* 2 2) ">: ")))
+               (if (null off1) (setq off1 *PF-HOP-OFF*))
+               (initget 6)
+               (setq off2 (getdist (strcat
+                            "\n  Offset in from the SECOND deep break point <"
+                            (rtos off1 2 2) ">: ")))
+               (if (null off2) (setq off2 off1))
+               (initget 6)
+               (setq off3 (getdist (strcat
+                            "\n  Offset in from the BACK of the hopper <"
+                            (rtos off1 2 2) ">: ")))
+               (if (null off3) (setq off3 off1))
+               (setq *PF-HOP-OFF* off1)
+               (pf:bottom-draw segs sp1 sp2 dp1 dp2 back
+                               off1 off2 off3 lines)))))))))
   (princ))
 
 ;; ---- the command -----------------------------------------------------

@@ -258,6 +258,10 @@ the fit at exactly the distance you typed.
 The three tolerances are ½×, 1× and 2× what you asked for; change the
 spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.
 
+Keeping a single fit also unlocks the pool-bottom flow — see
+[The pool bottom (hopper)](#the-pool-bottom-hopper) below (`All` and
+`None` skip it).
+
 ## Points it could not hold
 
 Every point further than your distance from the kept fit is **ringed
@@ -320,6 +324,60 @@ out separately. The command also warns when the result **crosses
 itself** (almost always a wrong automatic point order — draw an
 ordering sketch), and when earlier fits are still sitting on the
 `POOL-FIT` layer.
+
+## The pool bottom (hopper)
+
+Once you keep one of the perimeters, ABHD offers to draw the floor
+too:
+
+```
+  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:
+```
+
+`Enter` skips it and the command finishes per usual. Answer `y`/`Yes`
+and you pick four points (use osnap to land on the survey points —
+each pick snaps to the nearest one anyway):
+
+1. the two ends of the **SHALLOW BREAK** — where the flat shallow
+   floor starts sloping down, then
+2. the two ends of the **DEEP BREAK** — where the slope levels out
+   into the hopper.
+
+The **hopper** — the flat deep-end floor — lies beyond the deep
+break, away from the shallow end. Its **back is found for you**: a
+ray is cast from the middle of the deep break line, perpendicular to
+it, away from the shallow break, and the survey point closest to that
+ray marks the back of the hopper (the command names it, e.g.
+`Back of the hopper: Pt.32`).
+
+Then three offsets, each defaulting to the previous entry:
+
+```
+  Offset in from the FIRST deep break point <18.00>:
+  Offset in from the SECOND deep break point <18.00>:
+  Offset in from the BACK of the hopper <18.00>:
+```
+
+The perimeter beyond the deep break is **offset inward** by those
+amounts — exactly the first offset at the first deep break point,
+exactly the back offset at the back, exactly the second at the other
+end, **blending gradually over arc length in between** when they
+differ. The hopper's two ends then join the shallow break points with
+clean straight **slope lines**, each on its own side so they never
+cross.
+
+Everything is drawn **solid** on layer `POOL-BOTTOM` (blue, created
+if needed): the shallow break line, the deep break line, the hopper
+outline (an open polyline sampled every 6″ — `*PF-BOTTOM-STEP*`), the
+two slope lines, and an **aligned dimension on each of the three
+offsets**, measured automatically in the drawing's current dimension
+style. The first offset becomes the session default (`*PF-HOP-OFF*`,
+18″ out of the box).
+
+`ESC` or a cancelled pick anywhere in the flow leaves nothing behind
+— the bottom only stays once it is complete. If no survey point lies
+beyond the deep break, ABHD asks whether the two break lines were
+swapped and adds nothing.
 
 ## Checking it still works
 

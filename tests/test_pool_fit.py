@@ -38,6 +38,8 @@ CORNER_ANG = math.pi / 4.0         # *PF-CORNER-ANG*
 TANG_TOL = math.pi / 22.5          # *PF-TANG-TOL*
 NICE_RADII = (12.0, 6.0, 1.0)      # *PF-NICE-RADII*
 ANG_CAP = 1.373                    # window-edge clamp, atan(5)
+BOTTOM_STEP = 6.0                  # *PF-BOTTOM-STEP*
+HOP_OFF = 18.0                     # *PF-HOP-OFF* (default)
 
 # ---- small 2D helpers ------------------------------------------------
 
@@ -597,6 +599,164 @@ def self_crosses(segs):
     return False
 
 
+# ---- pool bottom (hopper) geometry -----------------------------------
+# Mirrors the pf:bottom helpers: the hopper is the flat deep-end floor,
+# built as an inward offset of the kept perimeter beyond the deep
+# break, blending between three user offsets.
+
+
+def unit(v):
+    l = math.hypot(v[0], v[1])
+    if l <= 1.0e-12:
+        return None
+    return (v[0] / l, v[1] / l)
+
+
+def seg_near(p, seg):
+    """Closest point ON segment (p1, p2, bulge) to P (pf:seg-near)."""
+    p1, p2, b = seg[0], seg[1], seg[2]
+    if abs(b) < 1.0e-9:
+        vx, vy = p2[0] - p1[0], p2[1] - p1[1]
+        len2 = vx * vx + vy * vy
+        if len2 < 1.0e-20:
+            return p1
+        t = ((p[0] - p1[0]) * vx + (p[1] - p1[1]) * vy) / len2
+        t = max(0.0, min(1.0, t))
+        return (p1[0] + vx * t, p1[1] + vy * t)
+    g = arc_geom(p1, p2, b)
+    if g is None:
+        return p1 if dist(p, p1) <= dist(p, p2) else p2
+    c, r, a1, a2 = g
+    ap = ang(c, p)
+    if b > 0.0:
+        sweep, rel = norm_ang(a2 - a1), norm_ang(ap - a1)
+    else:
+        sweep, rel = norm_ang(a1 - a2), norm_ang(ap - a2)
+    if rel <= sweep:
+        return (c[0] + r * math.cos(ap), c[1] + r * math.sin(ap))
+    return p1 if dist(p, p1) <= dist(p, p2) else p2
+
+
+def curve_near(p, segs):
+    """Closest point on the whole loop to P (pf:curve-near)."""
+    best, bd = None, None
+    for s in segs:
+        q = seg_near(p, s)
+        d = dist(p, q)
+        if bd is None or d < bd:
+            best, bd = q, d
+    return best
+
+
+def sample_loop(segs, step=BOTTOM_STEP):
+    """The loop as points spaced about STEP apart (pf:sample-loop)."""
+    out = []
+    for s in segs:
+        p1, p2, b = s[0], s[1], s[2]
+        out.append(p1)
+        g = arc_geom(p1, p2, b) if abs(b) >= 1.0e-9 else None
+        if g:
+            c, r, a1, a2 = g
+            sweep = (norm_ang(a2 - a1) if b > 0.0
+                     else -norm_ang(a1 - a2))
+            k = max(1, int(r * abs(sweep) / step))
+            for j in range(1, k):
+                aa = a1 + sweep * j / k
+                out.append((c[0] + r * math.cos(aa),
+                            c[1] + r * math.sin(aa)))
+        else:
+            k = max(1, int(dist(p1, p2) / step))
+            for j in range(1, k):
+                t = j / k
+                out.append((p1[0] + (p2[0] - p1[0]) * t,
+                            p1[1] + (p2[1] - p1[1]) * t))
+    return out
+
+
+def loop_area(pts):
+    """Signed shoelace area, positive = CCW (pf:loop-area)."""
+    total = 0.0
+    prev = pts[-1]
+    for q in pts:
+        total += prev[0] * q[1] - q[0] * prev[1]
+        prev = q
+    return total / 2.0
+
+
+def near_idx(p, pts):
+    """Index of the sample nearest P (pf:near-idx)."""
+    return min(range(len(pts)), key=lambda i: dist(p, pts[i]))
+
+
+def samp_normal(i, pts, sgn):
+    """Inward unit normal of the sampled loop at I (pf:samp-normal)."""
+    n = len(pts)
+    u = unit((pts[(i + 1) % n][0] - pts[(i - 1) % n][0],
+              pts[(i + 1) % n][1] - pts[(i - 1) % n][1]))
+    if u is None:
+        u = unit((pts[(i + 1) % n][0] - pts[i][0],
+                  pts[(i + 1) % n][1] - pts[i][1]))
+    if u is None:
+        u = (1.0, 0.0)
+    return (-u[1] * sgn, u[0] * sgn)
+
+
+def hopper_back(dp1, dp2, sp1, sp2, dpts):
+    """The survey point marking the back of the hopper (pf:hopper-back):
+    nearest to the perpendicular ray from the deep break's middle, cast
+    away from the shallow break.  None when no point lies beyond."""
+    mid = ((dp1[0] + dp2[0]) / 2.0, (dp1[1] + dp2[1]) / 2.0)
+    u = unit((-(dp2[1] - dp1[1]), dp2[0] - dp1[0]))
+    if u is None:
+        return None
+    smid = ((sp1[0] + sp2[0]) / 2.0, (sp1[1] + sp2[1]) / 2.0)
+    if u[0] * (smid[0] - mid[0]) + u[1] * (smid[1] - mid[1]) > 0.0:
+        u = (-u[0], -u[1])
+    back, bd = None, None
+    for q in dpts:
+        t = u[0] * (q[0] - mid[0]) + u[1] * (q[1] - mid[1])
+        lat = abs(-u[1] * (q[0] - mid[0]) + u[0] * (q[1] - mid[1]))
+        if t > 1.0e-3 and (bd is None or lat < bd):
+            back, bd = q, lat
+    return back
+
+
+def hopper_pts(samps, sgn, i1, i2, ib, p1, p2, off1, off2, off3):
+    """The hopper outline (pf:hopper-pts): walk the samples from I1 to
+    I2 the way round that passes IB, pushing each inward by an offset
+    blending OFF1 -> OFF3 (at the back) -> OFF2 over arc length.
+    Returns (hopperPts, backPos, perimeterPts) or None."""
+    n = len(samps)
+    fwdb, fwd2 = (ib - i1) % n, (i2 - i1) % n
+    if fwdb <= fwd2:
+        direc, cnt, kb = 1, fwd2, fwdb
+    else:
+        direc, cnt, kb = -1, (i1 - i2) % n, (i1 - ib) % n
+    if cnt < 2:
+        return None
+    idxs = [(i1 + direc * k) % n for k in range(cnt + 1)]
+    base = [samps[i] for i in idxs]
+    base[0], base[-1] = p1, p2
+    cum, lt = [0.0], 0.0
+    for a, b in zip(base, base[1:]):
+        lt += dist(a, b)
+        cum.append(lt)
+    lb = cum[kb]
+    if lt < 1.0e-9:
+        return None
+    out = []
+    for j, q in enumerate(base):
+        cj = cum[j]
+        if cj <= lb:
+            offv = off1 + (off3 - off1) * (cj / lb if lb > 1.0e-9 else 1.0)
+        else:
+            offv = off3 + (off2 - off3) * ((cj - lb) / (lt - lb)
+                                           if lt - lb > 1.0e-9 else 1.0)
+        nx, ny = samp_normal(idxs[j], samps, sgn)
+        out.append((q[0] + nx * offv, q[1] + ny * offv))
+    return out, kb, base
+
+
 # ---- measurements used by the tests ----------------------------------
 
 
@@ -970,6 +1130,119 @@ def test_degenerate_point_sets():
     print("  degenerate point sets survive")
 
 
+def test_pool_bottom_geometry():
+    """The pool-bottom helpers: sampling, area sign, projections."""
+    r = 100.0
+    b = pf_tan(math.pi / 8.0)
+    quad = [(r, 0.0), (0.0, r), (-r, 0.0), (0.0, -r)]
+    segs = [(quad[i], quad[(i + 1) % 4], b) for i in range(4)]
+    samps = sample_loop(segs, BOTTOM_STEP)
+    assert all(abs(math.hypot(*p) - r) < 1.0e-6 for p in samps)
+    gaps = [dist(samps[i], samps[(i + 1) % len(samps)])
+            for i in range(len(samps))]
+    assert max(gaps) <= BOTTOM_STEP + 0.5, "sampling left a gap"
+    assert loop_area(samps) > 0.0, "CCW ring must have positive area"
+    rev = [(s[1], s[0], -s[2]) for s in reversed(segs)]
+    assert loop_area(sample_loop(rev, BOTTOM_STEP)) < 0.0
+    # the closest point on the loop to an outside pick is radial
+    q = curve_near((150.0, 50.0), segs)
+    assert abs(math.hypot(*q) - r) < 1.0e-6
+    assert abs(ang((0, 0), q) - ang((0, 0), (150.0, 50.0))) < 1.0e-6
+    # inward normals point at the centre, whichever way the loop runs
+    for smp in (samps, sample_loop(rev, BOTTOM_STEP)):
+        sgn = 1.0 if loop_area(smp) > 0.0 else -1.0
+        for i in (0, 7, len(smp) // 3):
+            nx, ny = samp_normal(i, smp, sgn)
+            p = smp[i]
+            assert (math.hypot(p[0] + 10 * nx, p[1] + 10 * ny)
+                    < math.hypot(*p)), "normal points outward"
+    print("  bottom geometry: sampling, area sign, projections, normals")
+
+
+def test_pool_bottom_hopper():
+    """The hopper offsets in from the perimeter, blending gradually."""
+    r = 100.0
+    b = pf_tan(math.pi / 8.0)
+    quad = [(r, 0.0), (0.0, r), (-r, 0.0), (0.0, -r)]
+    segs = [(quad[i], quad[(i + 1) % 4], b) for i in range(4)]
+    # survey points every 10 degrees; deep end +x, shallow break -x
+    dpts = [(r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
+            for a in range(0, 360, 10)]
+    d1, d2 = dpts[32], dpts[4]          # -40 and +40 degrees
+    s1, s2 = dpts[14], dpts[22]         # 140 and 220 degrees
+    back = hopper_back(d1, d2, s1, s2, dpts)
+    assert back == dpts[0], "back = the point straight out from the break"
+    assert hopper_back(d2, d1, s2, s1, dpts) == dpts[0], "order-proof"
+
+    samps = sample_loop(segs, BOTTOM_STEP)
+    sgn = 1.0 if loop_area(samps) > 0.0 else -1.0
+    i1, i2 = near_idx(d1, samps), near_idx(d2, samps)
+    ib = near_idx(curve_near(back, segs), samps)
+    # constant offsets: the hopper is a concentric arc through the back
+    hpts, kb, base = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
+                                12.0, 12.0, 12.0)
+    assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2 for p in hpts)
+    assert dist(base[kb], (r, 0.0)) < BOTTOM_STEP, "walk missed the back"
+    # differing offsets: exact at the three anchors, gradual between
+    hpts, kb, base = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
+                                12.0, 18.0, 24.0)
+    assert abs(dist(hpts[0], d1) - 12.0) < 1.0e-9
+    assert abs(dist(hpts[-1], d2) - 18.0) < 1.0e-9
+    assert abs(dist(hpts[kb], base[kb]) - 24.0) < 1.0e-9
+    devs = [r - math.hypot(*p) for p in hpts]
+    assert all(devs[i] <= devs[i + 1] + 0.3 for i in range(kb)), \
+        "depth must grow towards the back"
+    assert all(devs[i] + 0.3 >= devs[i + 1]
+               for i in range(kb, len(devs) - 1)), \
+        "depth must ease off after the back"
+    # a clockwise perimeter must give the same hopper
+    rev = [(s[1], s[0], -s[2]) for s in reversed(segs)]
+    smp = sample_loop(rev, BOTTOM_STEP)
+    sg2 = 1.0 if loop_area(smp) > 0.0 else -1.0
+    hp2 = hopper_pts(smp, sg2, near_idx(d1, smp), near_idx(d2, smp),
+                     near_idx(curve_near(back, rev), smp),
+                     d1, d2, 12.0, 12.0, 12.0)
+    assert hp2 is not None
+    assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2 for p in hp2[0])
+
+    # and on a fitted organic pool: the hopper stays inside it
+    def inside(p, poly):
+        ins, j = False, len(poly) - 1
+        for i in range(len(poly)):
+            xi, yi = poly[i]
+            xj, yj = poly[j]
+            if ((yi > p[1]) != (yj > p[1])
+                    and p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi):
+                ins = not ins
+            j = i
+        return ins
+
+    blob = blob_pts()
+    bsegs, _ = fit(blob, tol=1.0)
+    d1, d2 = blob[51], blob[5]          # deep end on +x again
+    s1, s2 = blob[23], blob[33]
+    dp1, dp2 = curve_near(d1, bsegs), curve_near(d2, bsegs)
+    sp1, sp2 = curve_near(s1, bsegs), curve_near(s2, bsegs)
+    back = hopper_back(dp1, dp2, sp1, sp2, blob)
+    assert back is not None
+    samps = sample_loop(bsegs, BOTTOM_STEP)
+    sgn = 1.0 if loop_area(samps) > 0.0 else -1.0
+    hp = hopper_pts(samps, sgn, near_idx(dp1, samps),
+                    near_idx(dp2, samps),
+                    near_idx(curve_near(back, bsegs), samps),
+                    dp1, dp2, 12.0, 15.0, 20.0)
+    assert hp is not None
+    hpts, kb, base = hp
+    assert abs(dist(hpts[0], dp1) - 12.0) < 1.0e-9
+    assert abs(dist(hpts[-1], dp2) - 15.0) < 1.0e-9
+    assert abs(dist(hpts[kb], base[kb]) - 20.0) < 1.0e-9
+    assert all(inside(p, samps) for p in hpts), "hopper left the pool"
+    for p in hpts:
+        d = min(seg_dist(p, s) for s in bsegs)
+        assert 3.0 < d < 30.0, "hopper strayed from its offsets"
+    print("  pool bottom: back point, blended offsets, stays inside")
+
+
 def test_constants_match_lisp():
     """The LISP and this mirror must stay in step."""
     src = open(LISP_FILE).read()
@@ -984,6 +1257,8 @@ def test_constants_match_lisp():
     assert float(setq_value("SNAP-EPS")) == SNAP_EPS
     assert float(setq_value("FIT-EPS")) == FIT_EPS
     assert float(setq_value("TOL-MAX")) == TOL_MAX
+    assert float(setq_value("BOTTOM-STEP")) == BOTTOM_STEP
+    assert float(setq_value("HOP-OFF")) == HOP_OFF
     # angles are written as (/ pi N)
     for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL)):
         m = re.search(r"\(setq\s+\*PF-%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
@@ -1049,7 +1324,9 @@ def test_lisp_file_is_well_formed():
                "pf:mark-unheld", "pf:report", "pf:label", "pf:bbox",
                "pf:devstats", "pf:temp-add", "pf:temp-clear",
                "pf:purge-mine", "pf:tag-mine", "pf:pt-name",
-               "pf:block-number", "pf:draw-corner-marker"):
+               "pf:block-number", "pf:draw-corner-marker",
+               "pf:bottom", "pf:hopper-pts", "pf:hopper-back",
+               "pf:sample-loop", "pf:curve-near", "pf:make-dim"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
@@ -1071,6 +1348,8 @@ def main():
     test_tangency_is_defended()
     test_declared_corners()
     test_degenerate_point_sets()
+    test_pool_bottom_geometry()
+    test_pool_bottom_hopper()
     print("\nall tests passed")
 
 
