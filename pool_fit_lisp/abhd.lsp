@@ -111,10 +111,12 @@
 ;;; deep break point, one at the back - pull the hopper in from the
 ;;; perimeter, blending gradually where they differ.  Slope lines
 ;;; join the hopper's ends to the shallow break points - each side is
-;;; asked whether its line runs STRAIGHT or GUIDED, guided meaning it
-;;; follows the perimeter's curve with the offset easing to nothing
-;;; at the shallow break.  Everything is drawn solid on
-;;; *PF-BOTTOM-LAYER*, and each offset gets an aligned dimension
+;;; asked whether its line runs STRAIGHT, GUIDED (following the
+;;; perimeter's curve, the offset easing to nothing at the shallow
+;;; break), or through POINTS the user picks along that side, each
+;;; with its own offset measured square off the wall - the line still
+;;; runs guided between them.  Everything is drawn solid on
+;;; *PF-BOTTOM-LAYER*, and every offset gets an aligned dimension
 ;;; automatically.
 ;;; ===================================================================
 
@@ -1940,9 +1942,10 @@
 ;; asked by survey point number: one at each deep break point and one
 ;; at the back of the hopper, blending gradually in between when they
 ;; differ.  A slope line joins each of the hopper's ends to the
-;; shallow break point on its side - straight, or guided along the
-;; perimeter's curve, asked per side.  Everything is solid, on
-;; *PF-BOTTOM-LAYER*, and each offset is dimensioned automatically.
+;; shallow break point on its side - straight, guided along the
+;; perimeter's curve, or guided through points the user picks at
+;; pinned offsets, asked per side.  Everything is solid, on
+;; *PF-BOTTOM-LAYER*, and every offset is dimensioned automatically.
 
 ;; Unit vector of V, or nil when V is (near) zero-length.
 (defun pf:unit (v / l)
@@ -2196,16 +2199,39 @@
                   j    (1+ j)))
           (list (reverse out) kb base dir))))))
 
+;; Offset at arc position CJ, read off the piecewise profile ANCHORS
+;; ((position . offset) ... sorted ascending, both ends included):
+;; the offset runs straight between neighbouring anchors.
+(defun pf:off-at (cj anchors / prev a res span)
+  (setq prev (car anchors) res nil)
+  (foreach a (cdr anchors)
+    (if (and (null res) (<= cj (car a)))
+      (setq span (- (car a) (car prev))
+            res  (if (< span 1.0e-9)
+                   (cdr a)
+                   (+ (cdr prev)
+                      (* (- (cdr a) (cdr prev))
+                         (/ (- cj (car prev)) span))))))
+    (if (null res) (setq prev a)))
+  (if res res (cdr prev)))
+
 ;; A guided slope line: walk CNT samples from index IA in direction
-;; DIR (the side away from the hopper), easing the inward offset from
-;; OFFA at the deep break down to nothing at the shallow break, so
-;; the line follows the perimeter's own curve gently in to PB.  PA
-;; and PB are the exact break positions; the first point lands
-;; exactly on the hopper's end, the last exactly on the shallow break
-;; point.  nil when the walk is too short to bother - the caller
-;; falls back to a straight line.
-(defun pf:slope-pts (samps sgn ia dir cnt pa pb offa
-                     / n idxs i k base cum lt prev q out j)
+;; DIR (the side away from the hopper), following the perimeter with
+;; an inward offset that starts at OFFA on the hopper's end and eases
+;; to nothing at the shallow break.  WAYPTS - (surveyPt . offset)
+;; pairs the user picked along this side - pin the offset to those
+;; values where they sit, measured square off the wall (along the
+;; local inward normal); between anchors the offset runs straight
+;; over arc length, so the picked points steer the line and the curve
+;; carries it the rest of the way.  PA and PB are the exact break
+;; positions; the first point lands exactly on the hopper's end, the
+;; last exactly on the shallow break point.
+;; Returns (linePts dimPairs) - one (wallPt . linePt) per accepted
+;; waypoint, so its offset can be dimensioned - or nil when the walk
+;; is too short to bother (the caller draws a straight line then).
+(defun pf:slope-pts (samps sgn ia dir cnt pa pb offa waypts
+                     / n idxs i k base cum lt prev q out j anchors wp
+                       woff bk bd d dims)
   (setq n (length samps))
   (if (< cnt 2)
     nil
@@ -2229,16 +2255,43 @@
       (if (< lt 1.0e-9)
         nil
         (progn
+          ;; the offset profile: pinned at both ends and at each
+          ;; waypoint the user gave along this side
+          (setq anchors (list (cons 0.0 offa)) dims nil)
+          (foreach wp waypts
+            (setq woff (cdr wp) wp (car wp) bk nil bd nil k 0)
+            (foreach q base
+              (setq d (pf:dist wp q))
+              (if (or (null bd) (< d bd)) (setq bk k bd d))
+              (setq k (1+ k)))
+            (cond
+              ((> bd *PF-BOTTOM-STEP*)
+               (princ (strcat "\n  (Pt." (pf:pt-name wp)
+                              " is not on this side of the pool - its"
+                              " offset is ignored)")))
+              ((or (= bk 0) (= bk cnt))
+               (princ (strcat "\n  (Pt." (pf:pt-name wp)
+                              " sits on a break point - its offset is"
+                              " ignored, the breaks rule there)")))
+              (T
+               (setq anchors (cons (cons (nth bk cum) woff) anchors)
+                     dims    (cons (cons (nth bk base) bk) dims)))))
+          (setq anchors (pf:sort-car anchors)
+                anchors (append anchors (list (cons lt 0.0))))
           (setq out nil j 0)
           (foreach q base
             (setq out (cons (pf:add q (pf:scl
                                         (pf:samp-normal (nth j idxs)
                                                         samps sgn)
-                                        (* offa (- 1.0 (/ (nth j cum)
-                                                          lt)))))
+                                        (pf:off-at (nth j cum)
+                                                   anchors)))
                             out)
                   j   (1+ j)))
-          (reverse out))))))
+          (setq out (reverse out))
+          (list out
+                (mapcar '(lambda (pr) (cons (car pr)
+                                            (nth (cdr pr) out)))
+                        (reverse dims))))))))
 
 ;; Drop consecutive duplicates closer than a hundredth - a tight
 ;; offset can fold neighbouring samples onto each other.
@@ -2249,16 +2302,19 @@
   (reverse out))
 
 ;; Draw the rest of the bottom package: the hopper outline, the slope
-;; lines - straight, or guided along the perimeter's curve, per the
-;; user's answer for each side in GUIDED (a list of two flags) - and
-;; an aligned dimension on each of the three offsets.  LINES holds
-;; the two break lines pf:bottom already drew; everything stays
-;; scaffolding until the end, so an error in between sweeps the lot -
-;; the bottom only ever lands complete.
+;; lines, and an aligned dimension on each of the three hopper
+;; offsets plus every waypoint offset.  GUIDED holds the user's
+;; answer for each side: nil = straight, T = guided along the
+;; perimeter's curve, or a list of (surveyPt . offset) waypoints =
+;; guided through those pinned offsets.  LINES holds the two break
+;; lines pf:bottom already drew; everything stays scaffolding until
+;; the end, so an error in between sweeps the lot - the bottom only
+;; ever lands complete.
 (defun pf:bottom-draw (segs sp1 sp2 dp1 dp2 back off1 off2 off3 lines
                        guided
                        / made samps sgn i1 i2 ib hp hpts base kb dir
-                         n is1 is2 sl desc1 desc2 e1 e2 q e dimfail)
+                         n is1 is2 sl spec wdims desc1 desc2 e1 e2 q e
+                         dimfail)
   (setq pf-phase "building the hopper"
         samps    (pf:sample-loop segs *PF-BOTTOM-STEP*)
         sgn      (if (< (pf:loop-area samps) 0.0) -1.0 1.0)
@@ -2289,31 +2345,51 @@
              (rem (+ (* dir (- i1 is1)) n n) n))
         (setq q sp1 sp1 sp2 sp2 q
               q is1 is1 is2 is2 q))
-      ;; straight, or eased in along the perimeter's own curve
-      (setq sl (if (car guided)
-                 (pf:slope-pts samps sgn i1 (- dir)
-                               (rem (+ (* dir (- i1 is1)) n n) n)
-                               dp1 sp1 off1)))
+      ;; straight, eased in along the perimeter's own curve, or eased
+      ;; through the offsets the user pinned at picked points
+      (setq wdims nil
+            spec  (car guided)
+            sl    (if spec
+                    (pf:slope-pts samps sgn i1 (- dir)
+                                  (rem (+ (* dir (- i1 is1)) n n) n)
+                                  dp1 sp1 off1
+                                  (if (eq spec T) nil spec))))
       (setq made  (cons (pf:temp-add
                           (if sl
-                            (pf:make-open-pline (pf:thin-run sl))
+                            (pf:make-open-pline (pf:thin-run (car sl)))
                             (pf:make-line e1 sp1)))
                         made)
-            desc1 (if sl "guided" "straight"))
-      (setq sl (if (cadr guided)
-                 (pf:slope-pts samps sgn i2 dir
-                               (rem (+ (* dir (- is2 i2)) n n) n)
-                               dp2 sp2 off2)))
+            wdims (if sl (append wdims (cadr sl)))
+            desc1 (cond ((null sl) "straight")
+                        ((cadr sl) (strcat "guided through "
+                                           (itoa (length (cadr sl)))
+                                           " point(s)"))
+                        (T "guided")))
+      (setq spec (cadr guided)
+            sl   (if spec
+                   (pf:slope-pts samps sgn i2 dir
+                                 (rem (+ (* dir (- is2 i2)) n n) n)
+                                 dp2 sp2 off2
+                                 (if (eq spec T) nil spec))))
       (setq made  (cons (pf:temp-add
                           (if sl
-                            (pf:make-open-pline (pf:thin-run sl))
+                            (pf:make-open-pline (pf:thin-run (car sl)))
                             (pf:make-line e2 sp2)))
                         made)
-            desc2 (if sl "guided" "straight"))
-      ;; dimension each offset right where it applies
+            wdims (if sl (append wdims (cadr sl)) wdims)
+            desc2 (cond ((null sl) "straight")
+                        ((cadr sl) (strcat "guided through "
+                                           (itoa (length (cadr sl)))
+                                           " point(s)"))
+                        (T "guided")))
+      ;; dimension each offset right where it applies - the three
+      ;; hopper offsets, and every waypoint offset the user pinned
       (setq dimfail nil)
-      (foreach q (list (list dp1 e1) (list dp2 e2)
-                       (list (nth kb base) (nth kb hpts)))
+      (foreach q (append
+                   (list (list dp1 e1) (list dp2 e2)
+                         (list (nth kb base) (nth kb hpts)))
+                   (mapcar '(lambda (pr) (list (car pr) (cdr pr)))
+                           wdims))
         (setq e (pf:make-dim (car q) (cadr q)))
         (if e
           (setq made (cons (pf:temp-add e) made))
@@ -2330,6 +2406,48 @@
                      (rtos off2 2 2) "), the slope lines ("
                      desc1 " / " desc2 "), and their dimensions."))))
   (princ))
+
+;; Ask how one slope line should run.  NM names the deep break point
+;; whose side is being asked about; DPTS are the survey points and
+;; OFFD seeds the offset default.  Returns nil for straight, T for
+;; guided, or a list of (surveyPt . offset) waypoints for a guided
+;; line that passes through picked points at pinned offsets.
+(defun pf:ask-slope (nm dpts offd / ans wp spec woff seed)
+  (initget "Straight Guided Points")
+  (setq ans (getkword (strcat
+              "\n  Slope line from the offset at Pt." nm
+              " [Straight/Guided/Points] <Straight>: ")))
+  (cond
+    ((= ans "Guided") T)
+    ((/= ans "Points") nil)
+    (T
+     (princ "\n  Pick survey points along this side, between the breaks; each")
+     (princ "\n  gets its own offset, measured square off the wall.  The line")
+     (princ "\n  follows the curve through them and eases to the shallow break.")
+     (setq spec     nil
+           seed     offd
+           pf-phase "picking slope waypoints")
+     (while (setq wp (getpoint (strcat
+                       "\n  Point on the Pt." nm
+                       " side (Enter when done): ")))
+       (setq wp (pf:snap-break wp dpts))
+       ;; the dashed ring is scaffolding: it confirms the pick and
+       ;; clears itself when the command ends
+       (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp)))
+       (setq pf-phase "reading a slope waypoint offset")
+       (initget 4)
+       (setq woff (getdist (strcat
+                    "\n  What is the offset at Pt." (pf:pt-name wp)
+                    "? <" (rtos seed 2 2) ">: ")))
+       (if (null woff) (setq woff seed))
+       (setq spec     (cons (cons wp woff) spec)
+             seed     woff
+             pf-phase "picking slope waypoints"))
+     (if spec
+       (reverse spec)
+       (progn
+         (princ "\n  (no points picked - guiding along the curve instead)")
+         T)))))
 
 ;; The interactive flow, run once a perimeter has been kept.  SEGS is
 ;; the kept fit, DPTS the survey points.  Enter (or No) skips it and
@@ -2413,18 +2531,14 @@
                (if (null off3) (setq off3 off1))
                (setq *PF-HOP-OFF* off1)
                ;; each slope line can run straight to the shallow
-               ;; break, or follow the perimeter's curve gently in
+               ;; break, follow the perimeter's curve gently in, or
+               ;; pass through picked points at pinned offsets
                (setq pf-phase "asking about the slope lines")
-               (princ "\n  Each slope line can run STRAIGHT to the shallow break, or be")
-               (princ "\n  GUIDED by the perimeter - easing in along its curve.")
-               (initget "Straight Guided")
-               (setq g1 (= "Guided" (getkword (strcat
-                          "\n  Slope line from the offset at Pt." nm1
-                          " [Straight/Guided] <Straight>: "))))
-               (initget "Straight Guided")
-               (setq g2 (= "Guided" (getkword (strcat
-                          "\n  Slope line from the offset at Pt." nm2
-                          " [Straight/Guided] <Straight>: "))))
+               (princ "\n  Each slope line can run STRAIGHT to the shallow break, be GUIDED")
+               (princ "\n  by the perimeter - easing in along its curve - or pass through")
+               (princ "\n  POINTS you pick along that side, each with its own offset.")
+               (setq g1 (pf:ask-slope nm1 dpts off1)
+                     g2 (pf:ask-slope nm2 dpts off2))
                (pf:bottom-draw segs sp1 sp2 dp1 dp2 back
                                off1 off2 off3 lines
                                (list g1 g2))))))))))

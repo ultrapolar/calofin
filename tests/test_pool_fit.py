@@ -757,12 +757,31 @@ def hopper_pts(samps, sgn, i1, i2, ib, p1, p2, off1, off2, off3):
     return out, kb, base, direc
 
 
-def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa):
+def off_at(cj, anchors):
+    """Offset at arc position CJ on the piecewise profile (pf:off-at):
+    anchors are (position, offset), sorted, ends included; the offset
+    runs straight between neighbours."""
+    prev = anchors[0]
+    for a in anchors[1:]:
+        if cj <= a[0]:
+            span = a[0] - prev[0]
+            if span < 1.0e-9:
+                return a[1]
+            return prev[1] + (a[1] - prev[1]) * (cj - prev[0]) / span
+        prev = a
+    return prev[1]
+
+
+def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None):
     """A guided slope line (pf:slope-pts): CNT samples from IA in
-    direction DIREC (the side away from the hopper), the inward offset
-    easing from OFFA at the deep break to nothing at the shallow
-    break, so the line follows the perimeter gently in to PB.
-    None when the walk is too short - a straight line then."""
+    direction DIREC (the side away from the hopper), following the
+    perimeter with an inward offset that starts at OFFA and eases to
+    nothing at the shallow break.  WAYPTS - (surveyPt, offset) pairs
+    along this side - pin the offset where they sit, measured square
+    off the wall; between anchors the offset runs straight.
+    Returns (linePts, dimPairs) - one (wallPt, linePt) per accepted
+    waypoint - or None when the walk is too short (a straight line
+    then)."""
     n = len(samps)
     if cnt < 2:
         return None
@@ -775,12 +794,22 @@ def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa):
         cum.append(lt)
     if lt < 1.0e-9:
         return None
+    anchors = [(0.0, offa)]
+    keyed = []
+    for wp, woff in (waypts or []):
+        bk = min(range(len(base)), key=lambda k: dist(wp, base[k]))
+        if dist(wp, base[bk]) > BOTTOM_STEP or bk in (0, cnt):
+            continue                    # wrong side, or on a break
+        anchors.append((cum[bk], woff))
+        keyed.append((base[bk], bk))
+    anchors.sort()
+    anchors.append((lt, 0.0))
     out = []
     for j, q in enumerate(base):
-        offv = offa * (1.0 - cum[j] / lt)
+        offv = off_at(cum[j], anchors)
         nx, ny = samp_normal(idxs[j], samps, sgn)
         out.append((q[0] + nx * offv, q[1] + ny * offv))
-    return out
+    return out, [(wall, out[bk]) for wall, bk in keyed]
 
 
 # ---- measurements used by the tests ----------------------------------
@@ -1292,8 +1321,10 @@ def test_guided_slope_lines():
     a140 = (direc * (i1 - near_idx(s140, samps))) % n
     a220 = (direc * (i1 - near_idx(s220, samps))) % n
     assert a220 < a140, "side pairing picked the wrong shallow point"
-    sl = slope_pts(samps, sgn, i1, -direc, a220, d1, s220, 12.0)
-    assert sl is not None and len(sl) > 10
+    res = slope_pts(samps, sgn, i1, -direc, a220, d1, s220, 12.0)
+    assert res is not None
+    sl, wdims = res
+    assert wdims == [] and len(sl) > 10
     assert abs(dist(sl[0], d1) - 12.0) < 1.0e-9, "must start on hopper end"
     assert dist(sl[-1], s220) < 1.0e-9, "must land on the shallow break"
     devs = [r - math.hypot(*p) for p in sl]
@@ -1305,12 +1336,57 @@ def test_guided_slope_lines():
     assert all(dv > -1.0e-6 for dv in devs), "guided line left the pool"
     # the other side pairs with the 140-degree point, walking forward
     b140 = (direc * (near_idx(s140, samps) - i2)) % n
-    sl2 = slope_pts(samps, sgn, i2, direc, b140, d2, s140, 15.0)
+    sl2, _ = slope_pts(samps, sgn, i2, direc, b140, d2, s140, 15.0)
     assert abs(dist(sl2[0], d2) - 15.0) < 1.0e-9
     assert dist(sl2[-1], s140) < 1.0e-9
     # a walk too short to bother falls back to a straight line
     assert slope_pts(samps, sgn, i1, -direc, 1, d1, s220, 12.0) is None
     print("  guided slopes: side pairing, exact ends, monotonic ease-off")
+
+
+def test_slope_waypoints():
+    """Picked points pin the slope offset, measured square off the wall."""
+    r = 100.0
+    b = pf_tan(math.pi / 8.0)
+    quad = [(r, 0.0), (0.0, r), (-r, 0.0), (0.0, -r)]
+    segs = [(quad[i], quad[(i + 1) % 4], b) for i in range(4)]
+    dpts = [(r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
+            for a in range(0, 360, 10)]
+    d1, d2 = dpts[32], dpts[4]
+    s220 = dpts[22]
+    samps = sample_loop(segs, BOTTOM_STEP)
+    sgn = 1.0 if loop_area(samps) > 0.0 else -1.0
+    n = len(samps)
+    i1, i2 = near_idx(d1, samps), near_idx(d2, samps)
+    ib = near_idx(dpts[0], samps)
+    _, _, _, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
+                                12.0, 15.0, 20.0)
+    steps = (direc * (i1 - near_idx(s220, samps))) % n
+    # two waypoints on this side (260 and 240 degrees), plus one deep
+    # inside the hopper arc that must be recognised as off-side
+    res = slope_pts(samps, sgn, i1, -direc, steps, d1, s220, 12.0,
+                    [(dpts[26], 20.0), (dpts[24], 6.0),
+                     (dpts[1], 99.0)])
+    assert res is not None
+    sl, wdims = res
+    assert len(wdims) == 2, "the point inside the hopper must be ignored"
+    for (wall, lp), want in zip(wdims, (20.0, 6.0)):
+        # the pinned offset is exact, and square off the wall: on a
+        # circle that means radial, so the line point sits at r - off
+        assert abs(dist(wall, lp) - want) < 1.0e-9
+        assert abs(math.hypot(*lp) - (r - want)) < 1.0e-6
+    # ends still exact, profile bounded by its anchors
+    assert abs(dist(sl[0], d1) - 12.0) < 1.0e-9
+    assert dist(sl[-1], s220) < 1.0e-9
+    devs = [r - math.hypot(*p) for p in sl]
+    assert max(devs) < 20.0 + 0.3
+    assert all(dv > -1.0e-6 for dv in devs)
+    # no waypoints at all behaves exactly like the plain guided line
+    plain, _ = slope_pts(samps, sgn, i1, -direc, steps, d1, s220, 12.0)
+    viaempty, _ = slope_pts(samps, sgn, i1, -direc, steps, d1, s220,
+                            12.0, [])
+    assert all(dist(a, b2) < 1.0e-12 for a, b2 in zip(plain, viaempty))
+    print("  slope waypoints: pinned offsets, off-side picks ignored")
 
 
 def test_constants_match_lisp():
@@ -1397,7 +1473,7 @@ def test_lisp_file_is_well_formed():
                "pf:block-number", "pf:draw-corner-marker",
                "pf:bottom", "pf:hopper-pts", "pf:hopper-back",
                "pf:sample-loop", "pf:curve-near", "pf:make-dim",
-               "pf:slope-pts"):
+               "pf:slope-pts", "pf:off-at", "pf:ask-slope"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
@@ -1422,6 +1498,7 @@ def main():
     test_pool_bottom_geometry()
     test_pool_bottom_hopper()
     test_guided_slope_lines()
+    test_slope_waypoints()
     print("\nall tests passed")
 
 

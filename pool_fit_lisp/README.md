@@ -370,8 +370,8 @@ on its own side — is then asked about separately, again by point
 number:
 
 ```
-  Slope line from the offset at Pt.12 [Straight/Guided] <Straight>:
-  Slope line from the offset at Pt.7 [Straight/Guided] <Straight>:
+  Slope line from the offset at Pt.12 [Straight/Guided/Points] <Straight>:
+  Slope line from the offset at Pt.7 [Straight/Guided/Points] <Straight>:
 ```
 
 `Straight` (the default) is a clean straight run to the shallow break
@@ -380,8 +380,28 @@ along the perimeter with its inward offset **easing from the hopper
 offset at the deep break down to nothing at the shallow break**, so
 it lands on the shallow break point having gently followed the wall
 in. Sides are paired by walking the perimeter away from the hopper,
-so the two lines never cross, and either answer can be mixed — one
-side straight, the other guided.
+so the two lines never cross, and the answers can be mixed freely.
+
+`Points` takes control of the line where you want it: pick survey
+points along that side, between the two breaks, and give each an
+offset — **measured square off the wall** (perpendicular, along the
+perimeter's inward normal at that point):
+
+```
+  Point on the Pt.12 side (Enter when done):
+  What is the offset at Pt.23? <18.00>:
+```
+
+The line is pinned to exactly those offsets at those points and runs
+**guided in between** — from the hopper offset at the deep break,
+through each picked point's offset, easing to nothing at the shallow
+break — so a few points steer it and the pool's own curve carries it
+the rest of the way. Each pick gets a dashed confirmation ring
+(scaffolding, cleared when the command ends), and **every waypoint
+offset is dimensioned** just like the three hopper offsets. A pick
+that isn't on that side of the pool, or that lands on a break point,
+is called out and ignored; picking no points at all just gives the
+plain guided line.
 
 Everything is drawn **solid** on layer `POOL-BOTTOM` (blue, created
 if needed): the shallow break line, the deep break line, the hopper
