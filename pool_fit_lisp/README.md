@@ -350,21 +350,38 @@ it, away from the shallow break, and the survey point closest to that
 ray marks the back of the hopper (the command names it, e.g.
 `Back of the hopper: Pt.32`).
 
-Then three offsets, each defaulting to the previous entry:
+Then three offsets, **each named by its survey point number** so
+there is never a doubt which side is being asked about, each
+defaulting to the previous entry:
 
 ```
-  Offset in from the FIRST deep break point <18.00>:
-  Offset in from the SECOND deep break point <18.00>:
-  Offset in from the BACK of the hopper <18.00>:
+  What is the deep end offset at Pt.12? <18.00>:
+  What is the deep end offset at Pt.7? <18.00>:
+  What is the offset at the back of the hopper (Pt.32)? <18.00>:
 ```
 
 The perimeter beyond the deep break is **offset inward** by those
-amounts — exactly the first offset at the first deep break point,
-exactly the back offset at the back, exactly the second at the other
-end, **blending gradually over arc length in between** when they
-differ. The hopper's two ends then join the shallow break points with
-clean straight **slope lines**, each on its own side so they never
-cross.
+amounts — exactly your `Pt.12` offset at `Pt.12`, exactly the back
+offset at the back, exactly the `Pt.7` offset at the other end,
+**blending gradually over arc length in between** when they differ.
+
+Each **slope line** — from a hopper end up to the shallow break point
+on its own side — is then asked about separately, again by point
+number:
+
+```
+  Slope line from the offset at Pt.12 [Straight/Guided] <Straight>:
+  Slope line from the offset at Pt.7 [Straight/Guided] <Straight>:
+```
+
+`Straight` (the default) is a clean straight run to the shallow break
+point. `Guided` follows the pool's own curve instead: the line runs
+along the perimeter with its inward offset **easing from the hopper
+offset at the deep break down to nothing at the shallow break**, so
+it lands on the shallow break point having gently followed the wall
+in. Sides are paired by walking the perimeter away from the hopper,
+so the two lines never cross, and either answer can be mixed — one
+side straight, the other guided.
 
 Everything is drawn **solid** on layer `POOL-BOTTOM` (blue, created
 if needed): the shallow break line, the deep break line, the hopper

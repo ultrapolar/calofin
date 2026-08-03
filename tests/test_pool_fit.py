@@ -725,7 +725,7 @@ def hopper_pts(samps, sgn, i1, i2, ib, p1, p2, off1, off2, off3):
     """The hopper outline (pf:hopper-pts): walk the samples from I1 to
     I2 the way round that passes IB, pushing each inward by an offset
     blending OFF1 -> OFF3 (at the back) -> OFF2 over arc length.
-    Returns (hopperPts, backPos, perimeterPts) or None."""
+    Returns (hopperPts, backPos, perimeterPts, walkDir) or None."""
     n = len(samps)
     fwdb, fwd2 = (ib - i1) % n, (i2 - i1) % n
     if fwdb <= fwd2:
@@ -754,7 +754,33 @@ def hopper_pts(samps, sgn, i1, i2, ib, p1, p2, off1, off2, off3):
                                            if lt - lb > 1.0e-9 else 1.0)
         nx, ny = samp_normal(idxs[j], samps, sgn)
         out.append((q[0] + nx * offv, q[1] + ny * offv))
-    return out, kb, base
+    return out, kb, base, direc
+
+
+def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa):
+    """A guided slope line (pf:slope-pts): CNT samples from IA in
+    direction DIREC (the side away from the hopper), the inward offset
+    easing from OFFA at the deep break to nothing at the shallow
+    break, so the line follows the perimeter gently in to PB.
+    None when the walk is too short - a straight line then."""
+    n = len(samps)
+    if cnt < 2:
+        return None
+    idxs = [(ia + direc * k) % n for k in range(cnt + 1)]
+    base = [samps[i] for i in idxs]
+    base[0], base[-1] = pa, pb
+    cum, lt = [0.0], 0.0
+    for a, b in zip(base, base[1:]):
+        lt += dist(a, b)
+        cum.append(lt)
+    if lt < 1.0e-9:
+        return None
+    out = []
+    for j, q in enumerate(base):
+        offv = offa * (1.0 - cum[j] / lt)
+        nx, ny = samp_normal(idxs[j], samps, sgn)
+        out.append((q[0] + nx * offv, q[1] + ny * offv))
+    return out
 
 
 # ---- measurements used by the tests ----------------------------------
@@ -1179,13 +1205,13 @@ def test_pool_bottom_hopper():
     i1, i2 = near_idx(d1, samps), near_idx(d2, samps)
     ib = near_idx(curve_near(back, segs), samps)
     # constant offsets: the hopper is a concentric arc through the back
-    hpts, kb, base = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
-                                12.0, 12.0, 12.0)
+    hpts, kb, base, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
+                                       12.0, 12.0, 12.0)
     assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2 for p in hpts)
     assert dist(base[kb], (r, 0.0)) < BOTTOM_STEP, "walk missed the back"
     # differing offsets: exact at the three anchors, gradual between
-    hpts, kb, base = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
-                                12.0, 18.0, 24.0)
+    hpts, kb, base, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
+                                       12.0, 18.0, 24.0)
     assert abs(dist(hpts[0], d1) - 12.0) < 1.0e-9
     assert abs(dist(hpts[-1], d2) - 18.0) < 1.0e-9
     assert abs(dist(hpts[kb], base[kb]) - 24.0) < 1.0e-9
@@ -1232,7 +1258,7 @@ def test_pool_bottom_hopper():
                     near_idx(curve_near(back, bsegs), samps),
                     dp1, dp2, 12.0, 15.0, 20.0)
     assert hp is not None
-    hpts, kb, base = hp
+    hpts, kb, base, _ = hp
     assert abs(dist(hpts[0], dp1) - 12.0) < 1.0e-9
     assert abs(dist(hpts[-1], dp2) - 15.0) < 1.0e-9
     assert abs(dist(hpts[kb], base[kb]) - 20.0) < 1.0e-9
@@ -1241,6 +1267,50 @@ def test_pool_bottom_hopper():
         d = min(seg_dist(p, s) for s in bsegs)
         assert 3.0 < d < 30.0, "hopper strayed from its offsets"
     print("  pool bottom: back point, blended offsets, stays inside")
+
+
+def test_guided_slope_lines():
+    """Guided slope lines follow the perimeter, easing to nothing."""
+    r = 100.0
+    b = pf_tan(math.pi / 8.0)
+    quad = [(r, 0.0), (0.0, r), (-r, 0.0), (0.0, -r)]
+    segs = [(quad[i], quad[(i + 1) % 4], b) for i in range(4)]
+    dpts = [(r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
+            for a in range(0, 360, 10)]
+    d1, d2 = dpts[32], dpts[4]          # deep break at -40 and +40 deg
+    s140, s220 = dpts[14], dpts[22]     # shallow break ends
+    samps = sample_loop(segs, BOTTOM_STEP)
+    sgn = 1.0 if loop_area(samps) > 0.0 else -1.0
+    n = len(samps)
+    i1, i2 = near_idx(d1, samps), near_idx(d2, samps)
+    ib = near_idx(dpts[0], samps)
+    _, _, _, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
+                                12.0, 15.0, 20.0)
+    # walking away from the hopper, d1's side reaches the 220-degree
+    # shallow point first - that is its partner (same arithmetic as
+    # pf:bottom-draw)
+    a140 = (direc * (i1 - near_idx(s140, samps))) % n
+    a220 = (direc * (i1 - near_idx(s220, samps))) % n
+    assert a220 < a140, "side pairing picked the wrong shallow point"
+    sl = slope_pts(samps, sgn, i1, -direc, a220, d1, s220, 12.0)
+    assert sl is not None and len(sl) > 10
+    assert abs(dist(sl[0], d1) - 12.0) < 1.0e-9, "must start on hopper end"
+    assert dist(sl[-1], s220) < 1.0e-9, "must land on the shallow break"
+    devs = [r - math.hypot(*p) for p in sl]
+    assert abs(devs[0] - 12.0) < 0.2
+    assert abs(devs[-1]) < 1.0e-6
+    assert all(devs[i] + 0.3 >= devs[i + 1]
+               for i in range(len(devs) - 1)), \
+        "the guided line must ease off monotonically"
+    assert all(dv > -1.0e-6 for dv in devs), "guided line left the pool"
+    # the other side pairs with the 140-degree point, walking forward
+    b140 = (direc * (near_idx(s140, samps) - i2)) % n
+    sl2 = slope_pts(samps, sgn, i2, direc, b140, d2, s140, 15.0)
+    assert abs(dist(sl2[0], d2) - 15.0) < 1.0e-9
+    assert dist(sl2[-1], s140) < 1.0e-9
+    # a walk too short to bother falls back to a straight line
+    assert slope_pts(samps, sgn, i1, -direc, 1, d1, s220, 12.0) is None
+    print("  guided slopes: side pairing, exact ends, monotonic ease-off")
 
 
 def test_constants_match_lisp():
@@ -1326,7 +1396,8 @@ def test_lisp_file_is_well_formed():
                "pf:purge-mine", "pf:tag-mine", "pf:pt-name",
                "pf:block-number", "pf:draw-corner-marker",
                "pf:bottom", "pf:hopper-pts", "pf:hopper-back",
-               "pf:sample-loop", "pf:curve-near", "pf:make-dim"):
+               "pf:sample-loop", "pf:curve-near", "pf:make-dim",
+               "pf:slope-pts"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
@@ -1350,6 +1421,7 @@ def main():
     test_degenerate_point_sets()
     test_pool_bottom_geometry()
     test_pool_bottom_hopper()
+    test_guided_slope_lines()
     print("\nall tests passed")
 
 

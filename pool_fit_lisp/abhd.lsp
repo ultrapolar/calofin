@@ -107,12 +107,15 @@
 ;;; deep-end floor - lies beyond the deep break, away from the
 ;;; shallow.  Its back is found automatically (the survey point
 ;;; nearest a perpendicular ray cast from the middle of the deep
-;;; break), and three offsets - one at each deep break point, one at
-;;; the back - pull the hopper in from the perimeter, blending
-;;; gradually where they differ.  Straight slope lines join the
-;;; hopper's ends to the shallow break points.  Everything is drawn
-;;; solid on *PF-BOTTOM-LAYER*, and each offset gets an aligned
-;;; dimension automatically.
+;;; break), and three offsets - asked by point number, one at each
+;;; deep break point, one at the back - pull the hopper in from the
+;;; perimeter, blending gradually where they differ.  Slope lines
+;;; join the hopper's ends to the shallow break points - each side is
+;;; asked whether its line runs STRAIGHT or GUIDED, guided meaning it
+;;; follows the perimeter's curve with the offset easing to nothing
+;;; at the shallow break.  Everything is drawn solid on
+;;; *PF-BOTTOM-LAYER*, and each offset gets an aligned dimension
+;;; automatically.
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
@@ -1933,12 +1936,13 @@
 ;; After a perimeter is kept, the floor can be drawn in the same
 ;; sitting: the SHALLOW BREAK and DEEP BREAK lines across the pool,
 ;; and the hopper - the flat deep-end floor - as an inward offset of
-;; the perimeter beyond the deep break.  Three offsets shape it: one
-;; at each deep break point and one at the back of the hopper,
-;; blending gradually in between when they differ.  Straight slope
-;; lines join the hopper's ends to the shallow break points.
-;; Everything is solid, on *PF-BOTTOM-LAYER*, and each offset is
-;; dimensioned automatically.
+;; the perimeter beyond the deep break.  Three offsets shape it,
+;; asked by survey point number: one at each deep break point and one
+;; at the back of the hopper, blending gradually in between when they
+;; differ.  A slope line joins each of the hopper's ends to the
+;; shallow break point on its side - straight, or guided along the
+;; perimeter's curve, asked per side.  Everything is solid, on
+;; *PF-BOTTOM-LAYER*, and each offset is dimensioned automatically.
 
 ;; Unit vector of V, or nil when V is (near) zero-length.
 (defun pf:unit (v / l)
@@ -2136,8 +2140,8 @@
 ;; end - a straight run over arc length, so differing offsets change
 ;; gradually.  P1 and P2 are the exact break positions and stand in
 ;; for their samples, so the hopper's ends land exactly off them.
-;; Returns (hopperPts backPos perimeterPts), or nil when the two deep
-;; break points share a sample.
+;; Returns (hopperPts backPos perimeterPts walkDir), or nil when the
+;; two deep break points share a sample.
 (defun pf:hopper-pts (samps sgn i1 i2 ib p1 p2 off1 off2 off3
                       / n fwdb fwd2 dir cnt kb idxs i k base cum lt lb
                         prev q out j cj offv)
@@ -2190,16 +2194,71 @@
                                          offv))
                              out)
                   j    (1+ j)))
-          (list (reverse out) kb base))))))
+          (list (reverse out) kb base dir))))))
+
+;; A guided slope line: walk CNT samples from index IA in direction
+;; DIR (the side away from the hopper), easing the inward offset from
+;; OFFA at the deep break down to nothing at the shallow break, so
+;; the line follows the perimeter's own curve gently in to PB.  PA
+;; and PB are the exact break positions; the first point lands
+;; exactly on the hopper's end, the last exactly on the shallow break
+;; point.  nil when the walk is too short to bother - the caller
+;; falls back to a straight line.
+(defun pf:slope-pts (samps sgn ia dir cnt pa pb offa
+                     / n idxs i k base cum lt prev q out j)
+  (setq n (length samps))
+  (if (< cnt 2)
+    nil
+    (progn
+      (setq idxs nil i ia k 0)
+      (while (<= k cnt)
+        (setq idxs (cons i idxs)
+              i    (rem (+ i dir n) n)
+              k    (1+ k)))
+      (setq idxs (reverse idxs)
+            base nil)
+      (foreach i idxs (setq base (cons (nth i samps) base)))
+      (setq base (reverse base)
+            base (cons pa (cdr base))
+            base (reverse (cons pb (cdr (reverse base)))))
+      (setq cum nil lt 0.0 prev nil)
+      (foreach q base
+        (if prev (setq lt (+ lt (pf:dist prev q))))
+        (setq cum (cons lt cum) prev q))
+      (setq cum (reverse cum))
+      (if (< lt 1.0e-9)
+        nil
+        (progn
+          (setq out nil j 0)
+          (foreach q base
+            (setq out (cons (pf:add q (pf:scl
+                                        (pf:samp-normal (nth j idxs)
+                                                        samps sgn)
+                                        (* offa (- 1.0 (/ (nth j cum)
+                                                          lt)))))
+                            out)
+                  j   (1+ j)))
+          (reverse out))))))
+
+;; Drop consecutive duplicates closer than a hundredth - a tight
+;; offset can fold neighbouring samples onto each other.
+(defun pf:thin-run (pts / out prev q)
+  (foreach q pts
+    (if (or (null prev) (> (pf:dist prev q) 0.01))
+      (setq out (cons q out) prev q)))
+  (reverse out))
 
 ;; Draw the rest of the bottom package: the hopper outline, the slope
-;; lines, and an aligned dimension on each of the three offsets.
-;; LINES holds the two break lines pf:bottom already drew; everything
-;; stays scaffolding until the end, so an error in between sweeps the
-;; lot - the bottom only ever lands complete.
+;; lines - straight, or guided along the perimeter's curve, per the
+;; user's answer for each side in GUIDED (a list of two flags) - and
+;; an aligned dimension on each of the three offsets.  LINES holds
+;; the two break lines pf:bottom already drew; everything stays
+;; scaffolding until the end, so an error in between sweeps the lot -
+;; the bottom only ever lands complete.
 (defun pf:bottom-draw (segs sp1 sp2 dp1 dp2 back off1 off2 off3 lines
-                       / made samps sgn i1 i2 ib hp hpts base kb
-                         e1 e2 q e prev dedup dimfail)
+                       guided
+                       / made samps sgn i1 i2 ib hp hpts base kb dir
+                         n is1 is2 sl desc1 desc2 e1 e2 q e dimfail)
   (setq pf-phase "building the hopper"
         samps    (pf:sample-loop segs *PF-BOTTOM-STEP*)
         sgn      (if (< (pf:loop-area samps) 0.0) -1.0 1.0)
@@ -2212,24 +2271,45 @@
     ;; the break lines stay scaffolding and are swept with the rest
     (princ "\n  (the deep break points sit on top of each other on the perimeter - the pool bottom was not added)")
     (progn
-      (setq hpts (car hp)  kb (cadr hp)  base (caddr hp)
-            e1   (car hpts) e2 (last hpts)
+      (setq hpts (car hp)  kb  (cadr hp)
+            base (caddr hp) dir (cadddr hp)
+            e1   (car hpts) e2  (last hpts)
             made lines)
-      ;; a tight offset can fold neighbouring samples onto each other;
-      ;; the drawn outline skips the duplicates
-      (setq dedup nil prev nil)
-      (foreach q hpts
-        (if (or (null prev) (> (pf:dist prev q) 0.01))
-          (setq dedup (cons q dedup) prev q)))
-      (setq dedup (reverse dedup)
-            made  (cons (pf:temp-add (pf:make-open-pline dedup)) made))
+      (setq made (cons (pf:temp-add
+                         (pf:make-open-pline (pf:thin-run hpts)))
+                       made))
       ;; the slope lines: each hopper end joins the shallow break
-      ;; point on its own side, so the two lines never cross
-      (if (> (+ (pf:dist e1 sp1) (pf:dist e2 sp2))
-             (+ (pf:dist e1 sp2) (pf:dist e2 sp1)))
-        (setq q sp1 sp1 sp2 sp2 q))
-      (setq made (cons (pf:temp-add (pf:make-line e1 sp1)) made)
-            made (cons (pf:temp-add (pf:make-line e2 sp2)) made))
+      ;; point on its own side of the loop, so the two never cross -
+      ;; walking away from the hopper from each deep break end, the
+      ;; shallow projection met first is that side's partner
+      (setq n   (length samps)
+            is1 (pf:near-idx sp1 samps)
+            is2 (pf:near-idx sp2 samps))
+      (if (< (rem (+ (* dir (- i1 is2)) n n) n)
+             (rem (+ (* dir (- i1 is1)) n n) n))
+        (setq q sp1 sp1 sp2 sp2 q
+              q is1 is1 is2 is2 q))
+      ;; straight, or eased in along the perimeter's own curve
+      (setq sl (if (car guided)
+                 (pf:slope-pts samps sgn i1 (- dir)
+                               (rem (+ (* dir (- i1 is1)) n n) n)
+                               dp1 sp1 off1)))
+      (setq made  (cons (pf:temp-add
+                          (if sl
+                            (pf:make-open-pline (pf:thin-run sl))
+                            (pf:make-line e1 sp1)))
+                        made)
+            desc1 (if sl "guided" "straight"))
+      (setq sl (if (cadr guided)
+                 (pf:slope-pts samps sgn i2 dir
+                               (rem (+ (* dir (- is2 i2)) n n) n)
+                               dp2 sp2 off2)))
+      (setq made  (cons (pf:temp-add
+                          (if sl
+                            (pf:make-open-pline (pf:thin-run sl))
+                            (pf:make-line e2 sp2)))
+                        made)
+            desc2 (if sl "guided" "straight"))
       ;; dimension each offset right where it applies
       (setq dimfail nil)
       (foreach q (list (list dp1 e1) (list dp2 e2)
@@ -2247,15 +2327,15 @@
       (princ (strcat "\nPool bottom added on layer " *PF-BOTTOM-LAYER*
                      ": both break lines, the hopper (offsets "
                      (rtos off1 2 2) " / " (rtos off3 2 2) " / "
-                     (rtos off2 2 2)
-                     "), the slope lines, and their dimensions."))))
+                     (rtos off2 2 2) "), the slope lines ("
+                     desc1 " / " desc2 "), and their dimensions."))))
   (princ))
 
 ;; The interactive flow, run once a perimeter has been kept.  SEGS is
 ;; the kept fit, DPTS the survey points.  Enter (or No) skips it and
 ;; the command finishes per usual.
 (defun pf:bottom (segs dpts / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2 back
-                              off1 off2 off3 lines)
+                              off1 off2 off3 lines nm1 nm2 g1 g2)
   (setq pf-phase "asking about the pool bottom")
   (initget "Yes No")
   (setq ans (getkword
@@ -2308,27 +2388,46 @@
                               (pf:pt-name back)
                               " (the survey point straight out from"
                               " the deep break)."))
-               (setq pf-phase "reading the hopper offsets")
+               (setq pf-phase "reading the hopper offsets"
+                     nm1      (pf:pt-name d1)
+                     nm2      (pf:pt-name d2))
                (princ "\n  Three offsets pull the hopper in from the perimeter;")
                (princ "\n  they blend gradually where they differ.")
                (initget 6)
                (setq off1 (getdist (strcat
-                            "\n  Offset in from the FIRST deep break point <"
+                            "\n  What is the deep end offset at Pt."
+                            nm1 "? <"
                             (rtos *PF-HOP-OFF* 2 2) ">: ")))
                (if (null off1) (setq off1 *PF-HOP-OFF*))
                (initget 6)
                (setq off2 (getdist (strcat
-                            "\n  Offset in from the SECOND deep break point <"
+                            "\n  What is the deep end offset at Pt."
+                            nm2 "? <"
                             (rtos off1 2 2) ">: ")))
                (if (null off2) (setq off2 off1))
                (initget 6)
                (setq off3 (getdist (strcat
-                            "\n  Offset in from the BACK of the hopper <"
+                            "\n  What is the offset at the back of the"
+                            " hopper (Pt." (pf:pt-name back) ")? <"
                             (rtos off1 2 2) ">: ")))
                (if (null off3) (setq off3 off1))
                (setq *PF-HOP-OFF* off1)
+               ;; each slope line can run straight to the shallow
+               ;; break, or follow the perimeter's curve gently in
+               (setq pf-phase "asking about the slope lines")
+               (princ "\n  Each slope line can run STRAIGHT to the shallow break, or be")
+               (princ "\n  GUIDED by the perimeter - easing in along its curve.")
+               (initget "Straight Guided")
+               (setq g1 (= "Guided" (getkword (strcat
+                          "\n  Slope line from the offset at Pt." nm1
+                          " [Straight/Guided] <Straight>: "))))
+               (initget "Straight Guided")
+               (setq g2 (= "Guided" (getkword (strcat
+                          "\n  Slope line from the offset at Pt." nm2
+                          " [Straight/Guided] <Straight>: "))))
                (pf:bottom-draw segs sp1 sp2 dp1 dp2 back
-                               off1 off2 off3 lines)))))))))
+                               off1 off2 off3 lines
+                               (list g1 g2))))))))))
   (princ))
 
 ;; ---- the command -----------------------------------------------------
