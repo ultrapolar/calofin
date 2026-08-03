@@ -59,7 +59,11 @@
 ;;;  Spillaways (corner or centred-on-a-wall) are asked first as no-go
 ;;;  zones, then the "Spa Cover Details" block supplies the grade and
 ;;;  taper, which set the foam width (max hinge spacing), foam length
-;;;  (max hinge run) and the acceptable piece counts.  The fewest hinges
+;;;  (max hinge run) and the acceptable piece counts.  A taper can carry
+;;;  MORE THAN ONE foam sheet and one may work where the other will not,
+;;;  so every sheet is solved and scored before fewest pieces decides.
+;;;  The longest hinge is then checked against the hinge-length chart
+;;;  and velcro hinges / double C channel / hold down kit recommended.  The fewest hinges
 ;;;  that fit are placed evenly and nudged off the no-go zones; the
 ;;;  leftmost is the dashed fold "Hinge", the rest ByLayer "Velcro
 ;;;  Hinge" lines, labels on the TEXT layer.  Anything out of spec --
@@ -192,6 +196,7 @@
 (setq spa:*odstyle*  nil)            ; the drawing's dim style before we ran
 (setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
 (setq spa:*hingerows* nil)           ; hinge/spillaway rows for the report
+(setq spa:*advice*    nil)           ; hardware recommendations
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -762,6 +767,12 @@
   (setq spa:*valnotes* (append spa:*valnotes* (list msg)))
   (princ (strcat "\n" msg)))
 
+;; An advisory -- a recommendation rather than a problem.  Printed under
+;; the report table in cyan, so it reads apart from the red failures.
+(defun spa:advise (msg)
+  (setq spa:*advice* (append spa:*advice* (list msg)))
+  (princ (strcat "\n" msg)))
+
 ;; rows  = list of (label target actual [red]); a nil target prints N/A
 ;; notes = list of failure strings (written big and red)
 (defun spa:report (rows notes x y h lay / lh ytop y0 xr r tgt act dl ds n)
@@ -794,6 +805,9 @@
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
     (spa:textc (list x y) (* 1.4 h) n lay 1))
+  (foreach n spa:*advice*
+    (setq y (- y (* 1.3 lh)))
+    (spa:textc (list x y) (* 1.15 h) n lay 4))
   (setq y0 (- y lh)
         ytop (+ ytop (* 0.6 lh)))
   (spa:line (list (- x h) y0) (list xr y0) lay nil)
@@ -1007,6 +1021,28 @@
     (list "ULTRA"       "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
     (list "THERMOLIGHT" "1-3/8" (list (cons 53.0 nil))                   (list 2 3 4 5))))
 
+;; Hardware called for by the LONGEST hinge, per grade.  Each rule is
+;; (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST).
+(setq spa:*hardtab*
+  (list                 ;  grade          velcro        double C      hold down
+    (list "ECONOMY"     '(REQUEST)    '(REQUEST)    '(REQUEST))
+    (list "STANDARD"    '(OVER 120.0) '(OVER 108.0) '(OVER 120.0))
+    (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
+    (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
+
+;; A rule against the longest hinge -> (needed . reason), needed nil when
+;; the item is not called for.
+(defun spa:hardverdict (rule len / k v)
+  (setq k (car rule) v (cadr rule))
+  (cond
+    ((eq k 'ALWAYS)  (cons t   "always for this grade"))
+    ((eq k 'NEVER)   (cons nil "not used on this grade"))
+    ((eq k 'REQUEST) (cons t   "upon request only"))
+    ((> len v)       (cons t   (strcat "hinge " (rtos len 2 1)
+                                       " over " (rtos v 2 0))))
+    (t               (cons nil (strcat "hinge " (rtos len 2 1)
+                                       " not over " (rtos v 2 0))))))
+
 ;;; ---------- small string helpers (plain AutoLISP, no VL) ----------
 
 (defun spa:trim (s)
@@ -1175,6 +1211,14 @@
   (if (and ok (<= (- x2 prev) (+ fw 0.01)))
       (reverse xs)))
 
+;; The longest hinge a station list would produce.
+(defun spa:hmaxchord (desc xs / m ch x)
+  (setq m 0.0)
+  (foreach x xs
+    (if (setq ch (spa:chordat desc x))
+        (setq m (max m (- (cadr ch) (car ch))))))
+  m)
+
 ;; Fewest pieces first: try n up to n+3 for a layout that dodges every
 ;; zone.  Returns (n x-list solvedflag); when nothing dodges, the even
 ;; minimum-count layout with the flag down.
@@ -1286,7 +1330,8 @@
 ;; hinges are being laid on that.  Draws the hinges and returns report
 ;; rows (also via spillaway rows gathered in spa:*hingerows*).
 (defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row r opts
-                         allowed best cand opt fw fl nmin res n xs
+                         allowed best bestsc cand opt fw fl nmin res n xs
+                         mc lenok pcok sc hw h nm vd
                          k x ch maxch maxpc prev lbl)
   (setq spa:*hingerows* nil)
   (if (/= "Yes" (spa:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil))
@@ -1313,31 +1358,46 @@
               (spa:valnote (strcat "GRADE/TAPER " grade " " taper
                                    " NOT ON THE FOAM SHEET - 48/96 ASSUMED"))
               (setq opts (list (cons 48.0 96.0)) allowed (list 2 3 4 5))))
-        ;; 3 -- fewest hinges that fit the foam width and dodge the zones
-        (setq best nil)
+        ;; 3 -- pick the foam option and the layout.
+        ;; A grade/taper can carry MORE THAN ONE foam sheet -- Standard
+        ;; 3-2 and 4-2 each come in a 48 x 144/96 and a 49-1/2 x 102 --
+        ;; and one can work where the other will not: the wider sheet
+        ;; needs fewer hinges, the longer one lets a hinge run further.
+        ;; So every option is solved and scored on what it satisfies --
+        ;; dodging the spillaways, fitting the foam length, an
+        ;; acceptable piece count -- and only then on fewest pieces.
+        (setq best nil bestsc -1)
         (foreach opt opts
           (setq fw (car opt)
+                fl (cdr opt)
                 nmin (max 2 (spa:ceilv (/ (- x2 x1) fw)))
                 res (spa:hsolve x1 x2 fw forb nmin)
-                cand (list (car res) (cadr res) fw (cdr opt) (caddr res)))
+                mc (spa:hmaxchord desc (cadr res))
+                lenok (or (null fl) (<= mc (+ fl 0.01)))
+                pcok (if (spa:hallow (car res) allowed) t nil)
+                sc (+ (if (caddr res) 4 0) (if lenok 2 0) (if pcok 1 0))
+                cand (list (car res) (cadr res) fw fl (caddr res) lenok pcok mc))
           (if (or (null best)
-                  ;; dodging the zones beats not, an acceptable piece
-                  ;; count beats not, then fewer pieces
-                  (and (nth 4 cand) (not (nth 4 best)))
-                  (and (eq (nth 4 cand) (nth 4 best))
-                       (spa:hallow (car cand) allowed)
-                       (not (spa:hallow (car best) allowed)))
-                  (and (eq (nth 4 cand) (nth 4 best))
-                       (eq (if (spa:hallow (car cand) allowed) t nil)
-                           (if (spa:hallow (car best) allowed) t nil))
-                       (< (car cand) (car best))))
-              (setq best cand)))
+                  (> sc bestsc)
+                  (and (= sc bestsc) (< (car cand) (car best)))
+                  ;; nothing to choose on either -> the longer sheet, so
+                  ;; a hinge that overruns overruns by as little as it can
+                  (and (= sc bestsc) (= (car cand) (car best))
+                       (> (if fl fl 0.0)
+                          (if (nth 3 best) (nth 3 best) 0.0))))
+              (setq best cand bestsc sc)))
         (setq n (car best) xs (cadr best) fw (caddr best) fl (nth 3 best))
         (if (not (nth 4 best))
             (spa:valnote "SPILLAWAY ZONES COULD NOT ALL BE AVOIDED - CHECK HINGES"))
         (if (not (spa:hallow n allowed))
             (spa:valnote (strcat (itoa n) " PIECES NOT ACCEPTABLE FOR "
                                  (spa:gradeshort grade) " " taper)))
+        ;; say which sheet was taken when the taper offers a choice
+        (if (> (length opts) 1)
+            (spa:advise (strcat "FOAM SHEET USED: " (rtos fw 2 2) " x "
+                                (if fl (rtos fl 2 0) "N/A")
+                                " (this taper has "
+                                (itoa (length opts)) " sheets)")))
         ;; 4 -- draw them: leftmost = fold hinge (dashed, "Hinge"),
         ;; the rest Velcro (ByLayer, "Velcro Hinge")
         (setq k 0 maxch 0.0)
@@ -1365,6 +1425,19 @@
           (setq k (1+ k)))
         (if (null fl)
             (spa:valnote "THERMOLIGHT: HINGE LENGTH N/A - VERIFY"))
+        ;; 4b -- hardware called for by the longest hinge
+        (setq hw nil)
+        (foreach h spa:*hardtab*
+          (if (and (not hw) (= (car h) grade)) (setq hw h)))
+        (if hw
+            (progn
+              (setq k 0)
+              (foreach nm (list "VELCRO HINGES" "DOUBLE C CHANNEL" "HOLD DOWN KIT")
+                (setq vd (spa:hardverdict (nth (1+ k) hw) maxch))
+                (if (car vd)
+                    (spa:advise (strcat nm ": YES - " (cdr vd)))
+                    (spa:advise (strcat nm ": no - " (cdr vd))))
+                (setq k (1+ k)))))
         ;; 5 -- report rows: the pieces, their worst width, each hinge
         (setq maxpc 0.0 prev x1)
         (foreach x (append xs (list x2))
@@ -2414,7 +2487,8 @@
   (spa:syssave)
   (setq spa:*valnotes* nil
         spa:*turned* nil
-        spa:*hingerows* nil)
+        spa:*hingerows* nil
+        spa:*advice* nil)
   (setvar "CMDECHO" 0)
   (spa:undobegin)
   ;; architectural units while prompting so every distance can be typed

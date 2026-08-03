@@ -253,14 +253,33 @@ from the foam sheets:
 | foam length | the longest a hinge may run (96" / 144") — exceeded, the hinge is still drawn and the report says so |
 | pieces | which piece counts are acceptable (e.g. 3-2 folds in 2 only; 5-3 up to 5+) |
 
-A grade+taper with two foam options (Standard 3-2 / 4-2) carries both;
-the solver picks the one needing the fewest hinges.
+**A grade+taper can carry more than one foam sheet** — Standard 3-2 and
+4-2 each come as 48" × 144"/96" *and* 49½" × 102" — and **one can work
+where the other will not**: the wider sheet needs fewer hinges, the
+longer one lets a hinge run further. Every sheet is solved and scored on
+what it satisfies (dodges the spillaways / fits the foam length /
+acceptable piece count) before fewest pieces is even considered. When
+neither fits the length, the longer sheet wins so the overrun is as small
+as it can be. Which sheet was taken is noted under the report.
 
 **3. Placement** — the fewest pieces that fit the foam width, spaced
 evenly, then nudged off any spillaway zone. A nudge keeps every piece
 inside the foam width; when no nudge works the piece count is bumped, and
 failing everything the even layout is kept and the report flags the hinge
 in the zone. One hinge prefers dead centre.
+
+**4. Hardware** — the longest hinge in the drawing is checked against the
+hinge-length chart and each item recommended in the report:
+
+| Grade | Velcro hinges | Double C channel | Hold down kit |
+| --- | --- | --- | --- |
+| Economy | upon request only | upon request only | upon request only |
+| Standard & Deluxe | over 120" | over 108" | over 120" |
+| Ultra | over 108" | never | over 96" |
+| Thermo-Light | always | never | never |
+
+These are **advisories**, printed in cyan under the report table rather
+than red — they are recommendations, not failures.
 
 **Drawing** — the leftmost hinge is the fold hinge: a **dashed** line on
 `COVER` labelled `Hinge`. Any further hinges are **ByLayer** lines on
