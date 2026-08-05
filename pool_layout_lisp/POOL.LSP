@@ -1523,6 +1523,26 @@
             f (pool:v- e (list (nth 4 sides) 0.0))))
   (list a b c d e f))
 
+;; In-square lazy L: hold the direction of every side EXACTLY so the
+;; two parallel pairs stay parallel (A-B // E-F and B-C // D-E), rather
+;; than letting the relaxation bend the corners to absorb closure
+;; error.  The chain A->B->C->D->E is walked at the exact headings
+;; (0, 45, 135, 225 degrees) with the measured lengths, then F drops
+;; straight down from E onto the left wall (F = (0, Ey)).  Any closure
+;; error therefore lands in the LENGTHS of E-F and F-A (visible in the
+;; report as small deltas), never in the angles.
+(defun pool:hexsquare (sides / u ab bc cd de a b c d e f)
+  (setq u 0.7071067812
+        ab (nth 0 sides) bc (nth 1 sides)
+        cd (nth 2 sides) de (nth 3 sides)
+        a (list 0.0 0.0)
+        b (list ab 0.0))
+  (setq c (pool:v+ b (list (* bc u) (* bc u)))
+        d (pool:v+ c (list (* cd (- u)) (* cd u)))
+        e (pool:v+ d (list (* de (- u)) (* de (- u))))
+        f (list 0.0 (cadr e)))
+  (list a b c d e f))
+
 ;; Side constraints (banded by +/-band) for the hexagon.
 (defun pool:hexsidecon (sides band w / k out pr)
   (setq k 0 out nil)
@@ -1568,7 +1588,17 @@
 ;;  3. otherwise sides held true, cross dims as close as possible,
 ;;     failure flag set
 ;; Returns (pts failed).
-(defun pool:fithex (sides diags lazy stol xtol / guess p1 e1 p2 e2)
+(defun pool:fithex (sides diags lazy stol xtol / guess p1 e1 p2 e2 any dg)
+  ;; In-square lazy L (no cross dims measured): build the shape at
+  ;; exact headings instead of relaxing, so A-B // E-F and B-C // D-E
+  ;; hold perfectly and closure error goes to the E-F / F-A lengths.
+  (setq any nil)
+  (foreach dg diags (if dg (setq any t)))
+  (if (and lazy (not any))
+      (list (pool:hexsquare sides) nil)
+      (pool:fithexr sides diags lazy stol xtol)))
+
+(defun pool:fithexr (sides diags lazy stol xtol / guess p1 e1 p2 e2)
   (setq guess (pool:hexguess sides lazy)
         p1 (pool:relaxn guess
                         (append (pool:hexdiagcon diags 0.4)

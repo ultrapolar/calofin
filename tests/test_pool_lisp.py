@@ -305,7 +305,21 @@ def hexerr(pts, sides, diags):
            for k, (i, j) in enumerate(HEXDIAGS) if diags[k] is not None]
     return smax, max(xds) if xds else 0.0
 
+def hexsquare(sides):
+    # in-square lazy L: exact headings (0/45/135/225 deg), closure
+    # error lands in the E-F / F-A lengths, never the angles
+    u = 0.7071067812
+    ab, bc, cd, de, ef, fa = sides
+    a, b = (0.0, 0.0), (ab, 0.0)
+    c = (b[0] + bc * u, b[1] + bc * u)
+    d = (c[0] - cd * u, c[1] + cd * u)
+    e = (d[0] - de * u, d[1] - de * u)
+    f = (0.0, e[1])
+    return [a, b, c, d, e, f]
+
 def fithex(sides, diags, lazy, stol=1.0, xtol=2.0):
+    if lazy and not any(d is not None for d in diags):
+        return hexsquare(sides), False
     p1 = relaxn(hexguess(sides, lazy),
                 hexdiagcon(diags, 0.4) + hexsidecon(sides, 0.0, 1.0), 3000)
     p1 = relaxn(p1, hexsidecon(sides, 0.0, 1.0), 400)
@@ -1639,5 +1653,37 @@ _c2=dict(_cv); _c2[(6,3)]=None
 pts,failed,_,_ = grec_fit(TRUE_G,GREC_CENTER,_c2,'Center')
 assert not failed
 print("   measured LT-RT/LB-RB behave exactly like walls; NA stays free")
+
+print("== 65. in-square lazy L: parallel pairs held EXACTLY ==")
+# Field lengths that don't quite close (real tapes never do).  The
+# in-square build must keep A-B // E-F and B-C // D-E perfectly
+# parallel and put the closure error into the E-F / F-A lengths.
+_s = [296.0, 167.6, 167.6, 99.0, 226.0, 168.0]
+pts, failed = fithex(_s, [None]*9, lazy=True)
+assert not failed
+def _vec(i, j):
+    return (pts[j][0]-pts[i][0], pts[j][1]-pts[i][1])
+def _crossz(u, v):
+    return u[0]*v[1] - u[1]*v[0]
+ab, ef = _vec(0, 1), _vec(5, 4)   # E->F reversed = F->E; parallel either way
+bc, de = _vec(1, 2), _vec(4, 3)
+assert abs(_crossz(ab, ef)) < 1e-6, "A-B // E-F must be exact"
+assert abs(_crossz(bc, de)) < 1e-6, "B-C // D-E must be exact"
+# F-A is the left wall: dead vertical, A at the origin
+assert abs(pts[5][0]) < 1e-9 and abs(pts[0][0]) < 1e-9
+# A-B..D-E keep their taped lengths exactly
+for k in range(4):
+    assert abs(dist(pts[HEXSIDES[k][0]], pts[HEXSIDES[k][1]]) - _s[k]) < 1e-6
+# closure error shows up ONLY as small E-F / F-A length deltas
+d_ef = dist(pts[4], pts[5]) - _s[4]
+d_fa = dist(pts[5], pts[0]) - _s[5]
+assert abs(d_ef) < 1.0 and abs(d_fa) < 1.5 and (abs(d_ef) > 0 or abs(d_fa) > 0)
+# the out-of-square path (measured diagonals) is untouched: test 17's
+# reference lazy L still fits through the relaxation
+_sd, _dd = hexmeas(LAZY_L)
+_dd = [_dd[k] if k != 7 else None for k in range(9)]
+pts2, failed2 = fithex(_sd, _dd, lazy=True)
+assert not failed2
+print("   parallelism exact; closure error -> E-F/F-A lengths only")
 
 print("\nALL CHECKS PASSED")

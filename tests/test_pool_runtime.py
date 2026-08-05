@@ -229,7 +229,29 @@ vm = run(["Insquare", "LA"] + BASE +
           "Yes"],                 # mirror
          "R9")
 assert any('_.MIRROR' in str(c) for c in vm.commands)
-print("   lazy L mirrored")
+# in-square: the parallel pairs must be held EXACTLY -- A-B and E-F
+# both dead horizontal, B-C at +45 and D-E at 225 (parallel), closure
+# error absorbed by the E-F / F-A lengths instead of bent corners
+segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
+
+
+def _seg(pa, pb, tol=0.01):
+    return any((abs(a[0]-pa[0]) < tol and abs(a[1]-pa[1]) < tol and
+                abs(b[0]-pb[0]) < tol and abs(b[1]-pb[1]) < tol) or
+               (abs(a[0]-pb[0]) < tol and abs(a[1]-pb[1]) < tol and
+                abs(b[0]-pa[0]) < tol and abs(b[1]-pa[1]) < tol)
+               for a, b in segs)
+
+
+_u = 0.7071067812
+_A, _B = (0.0, 0.0), (296.0, 0.0)
+_C = (_B[0] + 167.6*_u, 167.6*_u)
+_D = (_C[0] - 167.6*_u, _C[1] + 167.6*_u)
+_E = (_D[0] - 99.0*_u, _D[1] - 99.0*_u)
+_F = (0.0, _E[1])
+for pa, pb in [(_A, _B), (_B, _C), (_C, _D), (_D, _E), (_E, _F), (_F, _A)]:
+    assert _seg(pa, pb), f"in-square lazy L perimeter missing {pa}->{pb}"
+print("   lazy L mirrored; parallel pairs exact, closure -> E-F/F-A")
 
 print("== R10. round, in-square (one prompt), oval hopper ==")
 vm = run(["Insquare", "ROU"] + BASE +

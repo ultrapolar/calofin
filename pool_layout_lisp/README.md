@@ -451,6 +451,17 @@ pinned down — with none at all you simply get the perfect right-angle
 (or 45°-jointed) shape. The two-triangle check is a rectangle-only
 computation and is not made for L pools.
 
+**In-square lazy L — parallel pairs held exactly.** Field side
+lengths never quite close, and letting a best-fit absorb that error
+would bend the corners, breaking the pairs that must read parallel
+(**A-B ∥ E-F** and **B-C ∥ D-E**). So the in-square lazy L is not
+relaxed at all: the chain A→B→C→D→E is walked at the **exact
+headings** (0°, 45°, 135°, 225°) with the taped lengths, and F drops
+straight down from E onto the left wall. Parallelism is perfect by
+construction; whatever closure error the tapes carried lands in the
+**lengths of E-F and F-A**, where the report shows it as small
+target/actual deltas instead of a subtly bent pool.
+
 ### Guided input
 
 As soon as the shape is chosen, a gray nominal "guide" pool of that
