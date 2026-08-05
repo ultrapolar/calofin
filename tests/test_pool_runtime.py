@@ -45,6 +45,10 @@ def drawn(vm, etype, layer=None):
     return out
 
 
+def dimcalls(vm, name='_.DIMALIGNED'):
+    return [c for c in vm.commands if c and c[0] == name]
+
+
 BASE = [(0.0, 0.0, 0.0)]      # insertion point pick
 
 
@@ -106,7 +110,16 @@ vm = run(["Insquare", "Oval"] + BASE +
           "NA"],                  # T check
          "R4")
 assert drawn(vm, 'ARC', 'POOL')
-print("   NA radius derived; tangent hopper end drawn")
+# in-square oval exterior per the field sheet: no bottom-side dim (T
+# reads once, on top) and the tip-to-tip B sits ABOVE the pool
+import math as _m
+_dc = [c for c in dimcalls(vm)]
+assert not any(abs(c[1][1]) < 0.01 and abs(c[2][1]) < 0.01 for c in _dc), \
+    "bottom side must not be dimensioned in-square"
+_bt = [c for c in _dc
+       if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 0.5]
+assert _bt and all(c[3][1] > 240.0 for c in _bt), _bt
+print("   NA radius derived; tangent hopper end drawn; B on top, no bottom dim")
 
 print("== R5. grecian, out-of-square, Measured, Center detail ==")
 vm = run(["Outofsquare", "Grecian"] + BASE +
@@ -160,7 +173,17 @@ _xs = [p[0] for seg in _pl for p in seg]
 _ys = [p[1] for seg in _pl for p in seg]
 assert abs((max(_xs) - min(_xs)) - 480.0) < 1.5, max(_xs) - min(_xs)
 assert abs((max(_ys) - min(_ys)) - 200.0) < 1.5, max(_ys) - min(_ys)
-print("   grecian keeps its own A and B: drawn 480 x 200")
+# in-square exterior dims follow the field sheet: exactly S T B S1 V
+# A S2 (7 dims, no bottom -> nothing else on the DIMENSION layer)
+_dc = dimcalls(vm)
+assert len(_dc) == 7, len(_dc)
+# B = the tip-to-tip 480, dimensioned once, ABOVE the pool
+_bt = [c for c in _dc if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 1.5]
+assert len(_bt) == 1 and _bt[0][3][1] > 200.0, _bt
+# A = the 200 overall, dimensioned once, LEFT of the pool
+_at = [c for c in _dc if abs(_m.dist(c[1][:2], c[2][:2]) - 200.0) < 1.5]
+assert len(_at) == 1 and _at[0][3][0] < 0.0, _at
+print("   grecian keeps its own A and B: drawn 480 x 200; 7 sheet dims")
 
 print("== R6. octagon from A and B alone (Overall default), hopper ==")
 vm = run(["Insquare", "OC"] + BASE +
@@ -196,8 +219,13 @@ _per = [_m.dist(tuple(d[10][:2]), tuple(d[11][:2]))
 assert len(_per) == 8, len(_per)
 assert max(_per) - min(_per) < 0.5, _per          # eight EQUAL sides
 assert abs(_per[0] - 400.0 / (1 + _m.sqrt(2))) < 0.5, _per[0]
+# same 7-dim field-sheet exterior as the grecian: S T B S1 V A S2
+_dc = dimcalls(vm)
+assert len(_dc) == 7, len(_dc)
+_bt = [c for c in _dc if abs(_m.dist(c[1][:2], c[2][:2]) - 400.0) < 1.5]
+assert len(_bt) == 2, _bt          # B (top) and A (left), both 400
 print(f"   eight sides {min(_per):.2f}..{max(_per):.2f} "
-      f"(regular = {400.0 / (1 + _m.sqrt(2)):.2f})")
+      f"(regular = {400.0 / (1 + _m.sqrt(2)):.2f}); 7 sheet dims")
 
 print("== R7. roman, in-square perfect, no bottom ==")
 vm = run(["Insquare", "RO"] + BASE +
@@ -206,7 +234,21 @@ vm = run(["Insquare", "RO"] + BASE +
           "No"],
          "R7")
 assert drawn(vm, 'ARC', 'POOL')
-print("   roman ends drawn with implied radius")
+# in-square roman exterior per the sheet: S T S over B on top, S1 V
+# S1 beside A on the left -- 8 linear dims (S and S1 BOTH show twice),
+# plus the two end-radius dims; the bottom side is not dimensioned
+_dc = dimcalls(vm)
+assert len(_dc) == 8, len(_dc)
+assert len(dimcalls(vm, '_.DIMRADIUS')) == 2
+_ls = sorted(round(_m.dist(c[1][:2], c[2][:2]), 1) for c in _dc)
+assert _ls.count(45.0) == 2, _ls       # S twice
+assert _ls.count(50.0) == 2, _ls       # S1 twice
+assert _ls.count(160.0) == 1, _ls      # V once
+assert _ls.count(400.0) == 1, _ls      # B once
+assert _ls.count(260.0) == 1, _ls      # A once
+assert not any(abs(c[1][1]) < 0.01 and abs(c[2][1]) < 0.01 for c in _dc), \
+    "bottom side must not be dimensioned in-square"
+print("   roman ends drawn; sheet dims: S,S1 twice -- T,B,V,A once")
 
 print("== R8. true L, out-of-square, diagonals NA, hopper E-skip, mirror No ==")
 vm = run(["Outofsquare", "L"] + BASE +
@@ -262,7 +304,13 @@ vm = run(["Insquare", "ROU"] + BASE +
           "NA"],
          "R10")
 assert drawn(vm, 'CIRCLE', 'POOL')
-print("   circle drawn from one measurement; hopper attached")
+# per the sheet: B reads across the TOP, A up the left side
+_bt = [c for c in dimcalls(vm)
+       if abs(_m.dist(c[1][:2], c[2][:2]) - 420.0) < 0.5]
+_top = [c for c in _bt if c[3][1] > 420.0]
+_left = [c for c in _bt if c[3][0] < 0.0]
+assert _top and _left, _bt
+print("   circle drawn from one measurement; hopper attached; B top, A left")
 
 print("== R11. sport bottom with G=0 collapse and depth re-ask ==")
 vm = run(["Insquare", "Rectangle"] + BASE +

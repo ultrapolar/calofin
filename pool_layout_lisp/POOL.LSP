@@ -1406,16 +1406,51 @@
         (pool:line p qq "POOL")))
 
   ;; -------- dimensions (DIMENSION)
+  ;; In-square: the field-sheet exterior set only -- S+T share a row
+  ;; above the top with B outboard of them, S1+V share a column left
+  ;; of the pool with A outboard, and S2 reads once on the
+  ;; bottom-right cut.  Every corner is the same corner in square, so
+  ;; one of each keeps the sheet clean.  Out-of-square: every edge
+  ;; differs, so every edge is dimensioned as before.
   (setvar "CLAYER" "DIMENSION")
-  (foreach e pool:*grecedges*
-    (setq p (nth (car e) pts) qq (nth (cadr e) pts))
-    (cond
-      ((= (caddr e) 'ad)                ; left end chord -> outboard left
-       (pool:dimalg p qq (list (- xmin (* 0.6 doff)) (cadr (pool:mid p qq)))))
-      ((= (caddr e) 'bc)                ; right end chord -> outboard right
-       (pool:dimalg p qq (list (+ xmax (* 0.6 doff)) (cadr (pool:mid p qq)))))
-      (t
-       (pool:dimalg p qq (pool:outoffp p qq pts doff)))))
+  (if pool:*insq*
+      (progn
+        ;; S: pool's left extreme to the top side start (row 1)
+        (setq p (nth 6 pts) qq (nth 5 pts))              ; LT, D
+        (pool:dimalg (list (car p) ymax) qq
+                     (list (* 0.5 (+ (car p) (car qq))) (+ ymax doff)))
+        ;; T: the top side D-C (row 1)
+        (pool:dimalg (nth 5 pts) (nth 4 pts)
+                     (list (car (pool:mid (nth 5 pts) (nth 4 pts)))
+                           (+ ymax doff)))
+        ;; B: overall, tip to tip LT-RT (row 2, outboard)
+        (pool:dimalg (nth 6 pts) (nth 3 pts)
+                     (list (car (pool:mid (nth 6 pts) (nth 3 pts)))
+                           (+ ymax (* 1.9 doff))))
+        ;; S1: top down to the left tip (column 1)
+        (pool:dimalg (list xmin ymax) (nth 6 pts)
+                     (list (- xmin doff)
+                           (* 0.5 (+ ymax (cadr (nth 6 pts))))))
+        ;; V: the left end LT-LB (column 1)
+        (pool:dimalg (nth 6 pts) (nth 7 pts)
+                     (list (- xmin doff)
+                           (cadr (pool:mid (nth 6 pts) (nth 7 pts)))))
+        ;; A: overall, the A-D chord (column 2, outboard)
+        (pool:dimalg (nth 0 pts) (nth 5 pts)
+                     (list (- xmin (* 1.9 doff))
+                           (cadr (pool:mid (nth 0 pts) (nth 5 pts)))))
+        ;; S2: the bottom-right corner cut, once
+        (pool:dimalg (nth 1 pts) (nth 2 pts)
+                     (pool:outoffp (nth 1 pts) (nth 2 pts) pts doff)))
+      (foreach e pool:*grecedges*
+        (setq p (nth (car e) pts) qq (nth (cadr e) pts))
+        (cond
+          ((= (caddr e) 'ad)            ; left end chord -> outboard left
+           (pool:dimalg p qq (list (- xmin (* 0.6 doff)) (cadr (pool:mid p qq)))))
+          ((= (caddr e) 'bc)            ; right end chord -> outboard right
+           (pool:dimalg p qq (list (+ xmax (* 0.6 doff)) (cadr (pool:mid p qq)))))
+          (t
+           (pool:dimalg p qq (pool:outoffp p qq pts doff))))))
   ;; provided cross dims, in the CROSS DIMENSION style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach cc crosscons
@@ -3866,12 +3901,21 @@
                      (pool:cornerpoint quad corners 3 'prev)   ; top wall left
                      (angle a d)
                      (pool:outoff a d cen doff)))
-      (progn
-        (setq endoff (* -0.6 doff))
-        (pool:dimalg a b (pool:outoff a b cen doff))
-        (pool:dimalg d c (pool:outoff d c cen doff))
-        (pool:dimalg a d (pool:outoff a d cen endoff))
-        (pool:dimalg b c (pool:outoff b c cen endoff))))
+      (if pool:*insq*
+          ;; oval in-square, per the field sheet: T above the top side
+          ;; and A outside the left arc -- the bottom side and right
+          ;; chord repeat them, so they are not dimensioned (B joins
+          ;; from the tip-to-tip dim below)
+          (progn
+            (pool:dimalg d c (pool:outoff d c cen doff))
+            (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
+                                   (cadr (pool:mid a d)))))
+          (progn
+            (setq endoff (* -0.6 doff))
+            (pool:dimalg a b (pool:outoff a b cen doff))
+            (pool:dimalg d c (pool:outoff d c cen doff))
+            (pool:dimalg a d (pool:outoff a d cen endoff))
+            (pool:dimalg b c (pool:outoff b c cen endoff)))))
   ;; corner annotations: one "Typ." at B when in-square, every corner
   ;; individually when out-of-square
   (if (= ptype "Rectangle")
@@ -3882,8 +3926,12 @@
       (progn
         (pool:dimrad larc tipl ml doff)
         (pool:dimrad rarc tipr mr doff)
+        ;; B tip-to-tip: on top per the field sheet when in-square,
+        ;; below the pool (clear of the 4 side dims) out-of-square
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
-                                     (- ymin (* 1.5 doff))))))
+                                     (if pool:*insq*
+                                         (+ ymax (* 1.9 doff))
+                                         (- ymin (* 1.5 doff)))))))
   ;; provided cross dims, between their reference points, in the CROSS
   ;; DIMENSION style when the drawing has one
   (setq odim (pool:dimxbegin) k 0)
@@ -4034,8 +4082,9 @@
         tipr (list b (* 0.5 a))
         xmax b ymax a)
 
+  ;; per the field sheet: B across the top, A up the left side
   (setvar "CLAYER" "DIMENSION")
-  (pool:dimalg tipl tipr (list (* 0.5 b) (- 0.0 (* 1.4 doff))))
+  (pool:dimalg tipl tipr (list (* 0.5 b) (+ a (* 1.4 doff))))
   (pool:dimalg (list (* 0.5 b) 0.0) (list (* 0.5 b) a)
                (list (- 0.0 (* 1.4 doff)) (* 0.5 a)))
   (setvar "CLAYER" oldclay)
@@ -4130,7 +4179,7 @@
                           hres sl tv sr lres rres s1l vl s1r vr
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
-                          allpts xmax ymax ymin rows)
+                          allpts xmax ymax ymin rows xcol xa)
   (setq oldclay (getvar "CLAYER"))
   (defun rm:perfect ( / v)
     (if pool:*insq*
@@ -4284,10 +4333,40 @@
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
   (setvar "CLAYER" "DIMENSION")
-  (pool:dimalg a b (pool:outoff a b cen doff))
-  (pool:dimalg d c (pool:outoff d c cen doff))
-  (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr)) (- ymin (* 1.5 doff))))
-  (pool:dimalg a d (list (- (car tipl) (* 1.2 doff)) (cadr (pool:mid a d))))
+  (if pool:*insq*
+      ;; in-square, per the field sheet: S+T+S share a row along the
+      ;; top with B outboard of them (S shows at BOTH ends), and
+      ;; S1+V+S1 share a column beside the left end with A outboard
+      ;; (S1 shows at BOTH corners); the bottom side repeats T and is
+      ;; not dimensioned
+      (progn
+        (setq xcol (- (car tipl) (* 0.9 doff))
+              xa (- (car tipl) (* 1.9 doff)))
+        ;; row 1: S (left tip to side start), T, S (side end to right tip)
+        (pool:dimalg (list (car tipl) ymax) d
+                     (list (* 0.5 (+ (car tipl) (car d))) (+ ymax doff)))
+        (pool:dimalg d c (list (car (pool:mid d c)) (+ ymax doff)))
+        (pool:dimalg c (list (car tipr) ymax)
+                     (list (* 0.5 (+ (car c) (car tipr))) (+ ymax doff)))
+        ;; row 2: B, tip to tip
+        (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
+                                     (+ ymax (* 1.9 doff))))
+        ;; column 1: S1, V, S1 down the left end line
+        (pool:dimalg d (cadr lend)
+                     (list xcol (* 0.5 (+ (cadr d) (cadr (cadr lend))))))
+        (pool:dimalg (cadr lend) (caddr lend)
+                     (list xcol (cadr (pool:mid (cadr lend) (caddr lend)))))
+        (pool:dimalg (caddr lend) a
+                     (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
+        ;; column 2: A, the overall width
+        (pool:dimalg a d (list xa (cadr (pool:mid a d)))))
+      (progn
+        (pool:dimalg a b (pool:outoff a b cen doff))
+        (pool:dimalg d c (pool:outoff d c cen doff))
+        (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
+                                     (- ymin (* 1.5 doff))))
+        (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
+                               (cadr (pool:mid a d))))))
   (pool:dimrad (nth 3 lend) tipl ml doff)
   (pool:dimrad (nth 3 rend) tipr mr doff)
   (setq odim (pool:dimxbegin))

@@ -127,8 +127,32 @@ linear dims whose extension lines hook to **points on the object**:
 the top endpoints of the two side walls and the left endpoints of the
 top/bottom walls (the arc-tangent / chamfer ends when corners are
 cut). No floating true-corner extension lines. All four sides still
-appear in the report table. Other shapes keep their full dim sets,
-which already hook to drawn geometry.
+appear in the report table.
+
+**In-square exterior dims follow the field sheets** for the other
+shapes too — each letter is dimensioned exactly where (and exactly as
+often as) it appears on the reference sheet, instead of dimensioning
+every edge:
+
+* **Grecian / Octagon** — 7 dims: `S` + `T` share a row above the
+  top side with `B` (tip-to-tip overall) outboard of them; `S1` + `V`
+  share a column left of the pool with `A` (the overall) outboard;
+  `S2` reads **once**, on the bottom-right corner cut. In square every
+  corner is the same corner, so one of each keeps the sheet clean.
+* **Roman** — 8 linear dims: `S + T + S` share the top row (S shows
+  at **both** ends, per the sheet) with `B` outboard; `S1 + V + S1`
+  share the left column (S1 shows at **both** corners) with `A`
+  outboard; plus the two end-radius dims. The bottom side repeats `T`
+  and is not dimensioned.
+* **True Oval** — 3 linear dims: `T` above the top side, `B`
+  (tip-to-tip) outboard above it, `A` outside the left arc; plus the
+  two radius dims on the arcs. The bottom side and right chord repeat
+  `T`/`A` and are not dimensioned.
+* **Round** — `B` across the top, `A` up the left side.
+
+**Out-of-square** pools keep their full dim sets — every edge differs,
+so every edge is dimensioned; the report table always lists everything
+either way.
 
 **Corner dimensions**: an **in-square** pool gets a single "Typ."
 callout at the bottom-right corner (B) — a radius dimension reading
