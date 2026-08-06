@@ -284,6 +284,32 @@
   (setq gg (pool:hopovalc quad tipl tipr 70.0 150.0 90.0 90.0 90.0 120.0))
   (pool:hopovaldraw gg "POOL" nil))
 
+;; 12. mutt: roman deep end + grecian shallow end on one rectangle body
+(defun pooldemo:c12 (org / quad lend rend tipl tipr hq gg)
+  (pooldemo:cap org "12  MUTT / ROMAN deep end + GRECIAN shallow end / NORMAL hopper")
+  ;; body 440 x 240; roman end sticks 40 out left, grecian cuts 50 in
+  (setq quad (list (list 0.0 0.0) (list 440.0 0.0)
+                   (list 440.0 240.0) (list 0.0 240.0)))
+  (pool:line (list 0.0 0.0) (list 390.0 0.0) "POOL")
+  (pool:line (list 0.0 240.0) (list 390.0 240.0) "POOL")
+  (setq lend (pool:muttend (nth 0 quad) (nth 3 quad)
+                           (list 0.0 0.0) (list 0.0 240.0)
+                           (list -1.0 0.0) "ROman" 40.0 160.0 40.0 "POOL")
+        rend (pool:muttend (nth 1 quad) (nth 2 quad)
+                           (list 390.0 0.0) (list 390.0 240.0)
+                           (list 1.0 0.0) "Grecian" 40.0 160.0 0.0 "POOL")
+        tipl (car lend) tipr (car rend))
+  (setvar "CLAYER" "DIMENSION")
+  (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr)) 300.0))
+  (pool:dimrad (cadddr lend) tipl (list -1.0 0.0) 30.0)
+  (setvar "CLAYER" "POOL")
+  ;; bottom on the tip-to-tip frame, no corner ties (mixed ends)
+  (setq hq (list (list -40.0 0.0) (list 440.0 0.0)
+                 (list 440.0 240.0) (list -40.0 240.0))
+        gg (pool:hopcalc hq pool:*sq4* 60.0 90.0 120.0 60.0 60.0))
+  (pool:hopdraw gg "POOL" nil)
+  (pooldemo:hopdims gg nil))
+
 ;;; -------------------- the command ------------------------------------
 
 (defun c:POOLDEMO ( / *error* cells k org)
@@ -320,7 +346,7 @@
   (princ "\nPOOLDEMO -- drawing one example of every shape and bottom ...")
   (setq cells (list 'pooldemo:c1 'pooldemo:c2 'pooldemo:c3 'pooldemo:c4
                     'pooldemo:c5 'pooldemo:c6 'pooldemo:c7 'pooldemo:c8
-                    'pooldemo:c9 'pooldemo:c10 'pooldemo:c11)
+                    'pooldemo:c9 'pooldemo:c10 'pooldemo:c11 'pooldemo:c12)
         k 0)
   (foreach fn cells
     (setq org (list (* pooldemo:*colw* (rem k 3))

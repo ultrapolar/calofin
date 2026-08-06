@@ -334,4 +334,54 @@ red_texts = [d for d in drawn(vm, 'TEXT', 'POOL-NOTES') if d.get(62) == 1]
 assert red_texts, "the failed chain must produce red report text"
 print("   chain failure produced red report rows and a red note")
 
+print("== R13. MUTT in-square: ROMAN deep end + GRECIAN shallow end ==")
+vm = run(["Insquare", "MU"] + BASE +
+         ["ROman", "Grecian",       # deep / shallow end styles
+          480.0, 240.0,             # B tip-to-tip, A
+          40.0, 40.0, 160.0, "NA",  # deep roman S S1 V R(check)
+          50.0, 40.0, "NA",         # shallow grecian S S1 S2(check)
+          "Yes", "Normal",
+          60.0, 90.0, 210.0, "NA",  # H G F, E takes the rest of 480
+          None, 120.0, None],       # M sugg=H, L, K sugg
+         "R13")
+assert drawn(vm, 'ARC', 'POOL'), "roman deep end must draw an arc"
+# geometry: ext(roman)=S=40 so the body is 440 long; the grecian cut
+# runs from the side start (390,0) up to the wall at (440,40)
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+
+
+def hasseg(pa, pb, tol=0.01):
+    return any((_m.dist(a, pa) < tol and _m.dist(b, pb) < tol) or
+               (_m.dist(a, pb) < tol and _m.dist(b, pa) < tol)
+               for a, b in segs)
+
+
+assert hasseg((390.0, 0.0), (440.0, 40.0)), "grecian shallow cut"
+assert hasseg((440.0, 40.0), (440.0, 200.0)), "grecian shallow wall"
+assert hasseg((0.0, 0.0), (390.0, 0.0)), "bottom side stops at the cut"
+# B reads tip to tip (480) and sits above the pool, in-square style
+_bt = [c for c in dimcalls(vm) if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 0.5]
+assert _bt and all(c[3][1] > 240.0 for c in _bt), _bt
+# the bottom chain closes against the tip-to-tip 480, from the tip
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 60.0) < 0.5 and
+           abs(c[1][0] - -40.0) < 0.5 or abs(c[2][0] - -40.0) < 0.5
+           for c in dimcalls(vm)), "H must anchor at the deep tip"
+print("   roman + grecian ends on one body; H taped from the tip")
+
+print("== R13b. MUTT out-of-square: OVAL deep end, half round (R = NA) ==")
+vm = run(["Outofsquare", "MU"] + BASE +
+         ["Oval", "Square",
+          480.0, "Back", 480.0,     # Back inside the letters block
+          240.0,
+          "NA",                     # oval deep R -> half round, ext 120
+          "NA", "Back", "NA", "NA",  # Back inside the cross block too
+          "No"],
+         "R13b")
+assert drawn(vm, 'ARC', 'POOL'), "oval deep end must draw an arc"
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((360.0, 0.0), (360.0, 240.0)), "square shallow wall at body end"
+assert hasseg((0.0, 0.0), (360.0, 0.0)), "body is B minus the half-round ext"
+assert any("Cross dim body A-C" in p for p, a in vm.prompts)
+print("   half-round deep end, square shallow end, crosses asked")
+
 print("\nALL RUNTIME SCENARIOS PASSED")

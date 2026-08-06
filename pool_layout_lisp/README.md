@@ -1,7 +1,9 @@
 # POOL.LSP — swimming-pool as-built layout for AutoCAD
 
 AutoLISP routine that draws a pool plan (**Rectangle**, **Grecian**,
-**Octagon**, **Roman**, **L**, **Lazy L**, **Oval** or **Round**) from real-world field
+**Octagon**, **Roman**, **L**, **Lazy L**, **Oval**, **Round** or
+**Mutt** — a rectangle body with independently chosen deep/shallow
+ends) from real-world field
 measurements, dimensions it, and writes a target / actual / delta
 report next to the drawing.
 
@@ -54,9 +56,10 @@ A ---------- B        cross:  A-C and B-D
    to the side/end measurements — no diagonals are asked for or drawn.
    An **out-of-square** pool takes the full cross-dim route below.
 2. Pool shape: `Rectangle` / `Grecian` / `ROman` / `L` / `LAzyl` /
-   `Oval` / `OCtagon` / `ROUnd` — the six common shapes first, then
-   the two rarely-used ones (type `L` for a true L, `LA` for a lazy L,
-   `RO` for a Roman, `OC` for an octagon, `ROU` for a round).
+   `Oval` / `OCtagon` / `ROUnd` / `MUtt` — the six common shapes
+   first, then the rarely-used ones (type `L` for a true L, `LA` for
+   a lazy L, `RO` for a Roman, `OC` for an octagon, `ROU` for a
+   round, `MU` for a mutt).
 3. Insertion base point.
 4. **Every perimeter measurement first** — side lengths, end lengths,
    and the shape's own perimeter letters (an oval's total length and
@@ -64,12 +67,12 @@ A ---------- B        cross:  A-C and B-D
    /`V`/`R`, an octagon's `A`/`B` and cut letters, a round pool's two
    overalls).
 5. **Then the cross dimensions** *(out-of-square only)*: A-C and B-D
-   on a rectangle/oval/Roman, nine diagonals on an L, and the chosen
-   detail level's set on a Grecian or octagon. A round pool has no
-   corners, so it is never asked for any.
+   on a rectangle/oval/Roman/mutt, nine diagonals on an L, and the
+   chosen detail level's set on a Grecian or octagon. A round pool
+   has no corners, so it is never asked for any.
 6. The pool bottom: `Yes`/`No`, then a bottom type
    (`Normal` / `Sport` / `Wedge` / `SLope` / `MOdflat` / `SHallow`;
-   L and Lazy L take the standard hopper only) and that type's
+   L, Lazy L and mutt take the standard hopper only) and that type's
    letters. A round pool takes the oval's bottoms (its `Normal` is the
    radius-end hopper on the sheet).
 
@@ -149,6 +152,10 @@ every edge:
   two radius dims on the arcs. The bottom side and right chord repeat
   `T`/`A` and are not dimensioned.
 * **Round** — `B` across the top, `A` up the left side.
+* **Mutt** — each end's letters where its home sheet puts them: `S`
+  rows above the top with `B` (tip-to-tip) outboard, `S1`/`V` columns
+  beside their own ends, `A` outboard left, `S2` on Grecian cuts, `R`
+  on the arcs.
 
 **Out-of-square** pools keep their full dim sets — every edge differs,
 so every edge is dimensioned; the report table always lists everything
@@ -371,6 +378,44 @@ it's drawn as a semicircle and flagged in the notes. The ends get
 radius dimensions, the overalls B (tip to tip) and A are dimensioned
 like the sheet, and the interior is the **True Oval hopper / sport
 bottom** phase, tips and all.
+
+### Mutt pools (mixed ends)
+
+Field pools don't always match one sheet — a Roman deep end shows up
+on a Grecian shallow end, a Grecian deep end on an oval shallow end,
+and so on. The **`MUtt`** shape is a rectangle body whose two ends
+are picked **independently**: it first asks the **DEEP end (left)
+style** and the **SHALLOW end (right) style**, each one of:
+
+* **`Square`** — a plain wall (the rectangle end);
+* **`Grecian`** — corner cuts: `S` setback along the sides, `S1`
+  drop down the end, `S2` cut face (check);
+* **`ROman`** — `S1` corner stubs with an arc bulging `S` past the
+  end line (`V` between the springs, `R` as a check, either derivable
+  from the other);
+* **`Oval`** — a full-width arc (`R`, `NA` = half round).
+
+The guide redraws itself in the two chosen styles, then asks **`B` —
+the tip-to-tip overall** and **`A` — the overall width** followed by
+each end's own letters (only the letters its style uses). Every
+letter closes against the overalls exactly as on its home sheet
+(`S1+V+S1 = A`, an `NA` Roman `S` derived from `R`, an oval `R`
+smaller than `A/2` drawn as a half round and flagged), and the body
+length is **what's left of `B`** after the end bulges — a Roman or
+oval end spends its bulge out of `B`, a Grecian or square end spends
+nothing. Ends that can't close positive are adjusted, flagged red in
+the report and listed in the notes, same as everywhere else.
+
+Out-of-square mutts take the Roman route: body cross dims `A-C` /
+`B-D` (NA-able, drawn dashed) fit the body, and the ends are built
+onto the fitted body. The report shows `OV B` / `OV A`, the derived
+side length, and one lettered block per end (`DEEP S1`, `SHAL R`, …).
+
+**Bottom:** the standard pipeline (`Normal` / `Sport` / `Wedge` /
+`SLope` / `MOdflat` / `SHallow`), anchored **tip to tip** — `H` is
+taped from the deep-end extreme and the chain closes against `B`,
+exactly like every home sheet. The hopper draws square corners with
+no corner ties (the ends are too varied to tie the hopper back to).
 
 ### Grecian perimeter input (Measured / Overall)
 

@@ -4427,6 +4427,468 @@
       (princ "\nPool layout complete -- see the report table."))
   (princ))
 
+;;; -------------------- mutt pools -------------------------------------
+;;;
+;;;  A "mutt" is a rectangle body whose DEEP end (left) and SHALLOW
+;;;  end (right) are picked independently -- a roman deep end with a
+;;;  grecian shallow end, a grecian deep end with an oval shallow end,
+;;;  and so on.  End styles:
+;;;    Square  -- plain wall (the rectangle end)
+;;;    Grecian -- corner cuts: S setback / S1 drop / S2 face (check)
+;;;    ROman   -- S1 stubs + arc bulging S past the end line (V, R)
+;;;    Oval    -- full-width arc (R, NA = half round)
+;;;  B is the tip-to-tip overall, A the overall width; each end's
+;;;  letters close against them exactly like their home sheets, and
+;;;  the body length is what's left of B after the end bulges.
+;;;  Interior = the standard rectangle bottom pipeline, anchored tip
+;;;  to tip (no corner ties -- the ends are too varied to tie to).
+
+;; Resolve one mutt end.  Returns (ext inset s1 v r bad):
+;; ext = how far the end sticks out past the body end line, inset =
+;; how far a grecian cut eats into the sides.  Emits valnotes on the
+;; way out of anything that doesn't close.
+(defun pool:muttres (style sraw s1raw vraw rraw aov bov nm / s s1 v ext
+                                                            bad half res)
+  (cond
+    ((= style "Grecian")
+     (setq s (if sraw sraw (/ bov 8.0))
+           s1 (if s1raw s1raw (/ aov 6.0))
+           v (- aov s1 s1))
+     (if (<= v 1.0e-6)
+         (progn
+           (setq s1 (min 12.0 (* 0.125 aov)) v (- aov s1 s1) bad t)
+           (pool:valnote (strcat nm " END S1 + V + S1 DOES NOT FIT A - ADJUSTED"))))
+     (if (<= s 1.0e-6)
+         (progn
+           (setq s (min 12.0 (/ bov 8.0)) bad t)
+           (pool:valnote (strcat nm " END S NOT POSITIVE - ADJUSTED"))))
+     (list 0.0 s s1 v nil bad))
+    ((= style "ROman")
+     (setq res (pool:romres aov s1raw vraw)
+           s1 (car res) v (cadr res))
+     (if (<= v 1.0e-6)
+         (progn
+           (setq s1 (min 12.0 (* 0.125 aov)) v (- aov s1 s1) bad t)
+           (pool:valnote (strcat nm " END S1 + V + S1 DOES NOT FIT A - ADJUSTED"))))
+     (setq s (cond
+               (sraw sraw)
+               ((and rraw (>= rraw (* 0.5 v)))
+                (- rraw (sqrt (max 0.0 (- (* rraw rraw) (* 0.25 v v))))))
+               (t (/ bov 8.0))))
+     (if (<= s 1.0e-6)
+         (progn
+           (setq s (min 12.0 (/ bov 8.0)) bad t)
+           (pool:valnote (strcat nm " END S NOT POSITIVE - ADJUSTED"))))
+     (list s 0.0 s1 v rraw bad))
+    ((= style "Oval")
+     (setq half (* 0.5 aov)
+           ext (cond
+                 ((and rraw (>= rraw half))
+                  (- rraw (sqrt (max 0.0 (- (* rraw rraw) (* half half))))))
+                 (rraw
+                  (pool:valnote (strcat nm " END RADIUS SMALLER THAN A/2 - HALF ROUND DRAWN"))
+                  (setq bad t)
+                  half)
+                 (t half)))
+     (list ext 0.0 nil nil rraw bad))
+    (t (list 0.0 0.0 nil nil nil nil))))
+
+;; Draw one mutt end onto the fitted body.  pbot/ptop = the body
+;; corners on this end line, pb2/pt2 = where the sides start (inset
+;; for a grecian end), m = outward unit normal.
+;; Returns (tip springT springB arcent rfit) -- tip is the extreme
+;; point B is taped to; springs are the wall/stub ends (the body
+;; corners themselves on a square or oval end).
+(defun pool:muttend (pbot ptop pb2 pt2 m style s1 v ext lay / uu wb wt tip o)
+  (setq uu (pool:unit (pool:v- ptop pbot)))
+  (cond
+    ((= style "Square")
+     (pool:line pbot ptop lay)
+     (list (pool:mid pbot ptop) ptop pbot nil nil))
+    ((= style "Grecian")
+     (setq wb (pool:v+ pbot (pool:v* uu s1))
+           wt (pool:v- ptop (pool:v* uu s1)))
+     (pool:line pb2 wb lay)
+     (pool:line wb wt lay)
+     (pool:line wt pt2 lay)
+     (list (pool:mid pbot ptop) wt wb nil nil))
+    ((= style "ROman")
+     (pool:romend pbot ptop m ext v lay))
+    (t                                  ; Oval
+     (setq tip (pool:v+ (pool:mid pbot ptop) (pool:v* m ext)))
+     (pool:arc3p ptop tip pbot lay)
+     (setq o (pool:circum ptop tip pbot))
+     (list tip ptop pbot (entlast) (if o (distance o tip) ext)))))
+
+;; Nominal preview of one mutt end on the 360x300 guide body.
+;; wx = the body end line, sgn = -1 left / +1 right, sfx = "L"/"R".
+;; Returns (tip inset ties).
+(defun pool:muttpvend (wx sgn style sfx / a d tip ins ties tx)
+  (setq a (list wx 0.0) d (list wx 300.0)
+        tip (list wx 150.0) ins 0.0 ties nil)
+  (cond
+    ((= style "Square")
+     (pool:pvadd (pool:pvline a d)))
+    ((= style "Grecian")
+     (setq ins 60.0)
+     (pool:pvadd (pool:pvline (list (+ wx (* sgn 60.0)) 0.0) (list wx 60.0)))
+     (pool:pvadd (pool:pvline (list wx 60.0) (list wx 240.0)))
+     (pool:pvadd (pool:pvline (list wx 240.0) (list (+ wx (* sgn 60.0)) 300.0)))
+     (setq ties (list (pool:pvtie (list (+ wx (* sgn 60.0)) 0.0) (list wx 60.0)
+                                  (strcat "S2" sfx) 10.0))))
+    ((= style "ROman")
+     (setq tip (list (+ wx (* sgn 52.0)) 150.0))
+     (pool:pvadd (pool:pvline d (list wx 240.0)))
+     (pool:pvadd (pool:pvline a (list wx 60.0)))
+     (pool:arc3p (list wx 240.0) tip (list wx 60.0) "POOL-NOTES")
+     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
+     (setq ties (list (pool:pvtie tip (list (+ wx (* sgn -40.0)) 210.0)
+                                  (strcat "R" sfx) 10.0))))
+    (t                                  ; Oval
+     (setq tip (list (+ wx (* sgn 90.0)) 150.0))
+     (pool:arc3p d tip a "POOL-NOTES")
+     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
+     (setq ties (list (pool:pvtie tip (list (+ wx (* sgn -40.0)) 210.0)
+                                  (strcat "R" sfx) 10.0)))))
+  ;; grecian and roman ends share the S / S1 / V letters
+  (if (or (= style "Grecian") (= style "ROman"))
+      (setq tx (+ wx (* sgn 72.0))
+            ties (append ties
+                   (list (pool:pvtie (list (car tip) 330.0)
+                                     (list (+ wx (* sgn ins)) 330.0)
+                                     (strcat "S" sfx) 10.0)
+                         (pool:pvtie (list tx 240.0) (list tx 300.0)
+                                     (strcat "S1" sfx) 10.0)
+                         (pool:pvtie (list tx 60.0) (list tx 240.0)
+                                     (strcat "V" sfx) 10.0)))))
+  (list tip ins ties))
+
+;; Gray nominal mutt guide: 360x300 body, each end drawn in its chosen
+;; style, the dashed tip-to-tip B centerline and the A tape.
+(defun pool:muttpreview (dst sst / le re)
+  (setq le (pool:muttpvend 0.0 -1.0 dst "L")
+        re (pool:muttpvend 360.0 1.0 sst "R"))
+  (pool:pvadd (pool:pvline (list (cadr le) 0.0) (list (- 360.0 (cadr re)) 0.0)))
+  (pool:pvadd (pool:pvline (list (cadr le) 300.0) (list (- 360.0 (cadr re)) 300.0)))
+  (append
+    (list (pool:pvtie (car le) (car re) "B" 10.0)
+          (pool:pvtie (list -125.0 0.0) (list -125.0 300.0) "A" 10.0))
+    (caddr le) (caddr re)))
+
+;; Full guided flow for mutt pools.
+(defun pool:muttflow ( / oldclay pv dstyle sstyle ans braw araw
+                         dsraw ds1raw dvraw ds2raw drraw
+                         ssraw ss1raw svraw ss2raw srraw
+                         dres sres extl extr insl insr tv muttbad
+                         dac dbd fq quad failed a b c d cen meas notes
+                         uab udc ml mr lend rend tipl tipr
+                         pab0 pab1 pdc0 pdc1 doff th odim
+                         allpts xmax ymax ymin rows xcol xa)
+  (setq oldclay (getvar "CLAYER"))
+
+  (defun mu:ends ( / v)
+    (setq v (pool:askkw "DEEP end (left) style"
+                        "Square Grecian ROman Oval"
+                        "Square/Grecian/ROman/Oval" nil t))
+    (if (eq v 'POOL-BACK)
+        v
+        (progn
+          (setq dstyle v
+                v (pool:askkw "SHALLOW end (right) style"
+                              "Square Grecian ROman Oval"
+                              "Square/Grecian/ROman/Oval" nil t))
+          (if (eq v 'POOL-BACK)
+              v
+              (progn (setq sstyle v) nil)))))
+
+  (defun mu:guide ()
+    (pool:pvkill)
+    (setq pv (pool:muttpreview dstyle sstyle))
+    (command "_.ZOOM" "_Window"
+             (pool:wp (list -160.0 -80.0)) (pool:wp (list 520.0 380.0)))
+    (princ "\nMutt sheet -- deep end LEFT, shallow end RIGHT; the RED tie is the dimension being asked for.")
+    (princ "\n(Back re-asks the previous question)")
+    nil)
+
+  ;; the letter items one end contributes, per its style
+  (defun mu:enditems (style sfx nm ks ks1 kv ks2 kr)
+    (cond
+      ((= style "Grecian")
+       (list (list ks 'NAX (strcat nm " end S - corner setback")
+                   (cdr (assoc (strcat "S" sfx) pv)))
+             (list ks1 'NAX (strcat nm " end S1 - corner drop")
+                   (cdr (assoc (strcat "S1" sfx) pv)))
+             (list ks2 'NAX (strcat nm " end S2 - corner face (check)")
+                   (cdr (assoc (strcat "S2" sfx) pv)))))
+      ((= style "ROman")
+       (list (list ks 'NAX (strcat nm " end S - tip setback")
+                   (cdr (assoc (strcat "S" sfx) pv)))
+             (list ks1 'NAX (strcat nm " end S1 - corner drop")
+                   (cdr (assoc (strcat "S1" sfx) pv)))
+             (list kv 'NAX (strcat nm " end V - width between springs")
+                   (cdr (assoc (strcat "V" sfx) pv)))
+             (list kr 'NAX (strcat nm " end R - radius (check)")
+                   (cdr (assoc (strcat "R" sfx) pv)))))
+      ((= style "Oval")
+       (list (list kr 'NAX (strcat nm " end R - radius (NA = half round)")
+                   (cdr (assoc (strcat "R" sfx) pv)))))
+      (t nil)))
+
+  (defun mu:letters ( / ans)
+    (setq ans (pool:askseqb
+                (append
+                  (list (list 'b 'REQ "B - overall length (tip to tip)"
+                              (cdr (assoc "B" pv)))
+                        (list 'a 'REQ "A - overall width"
+                              (cdr (assoc "A" pv))))
+                  (mu:enditems dstyle "L" "Deep" 'dsl 'ds1 'dv 'ds2 'dr)
+                  (mu:enditems sstyle "R" "Shallow" 'ssl 'ss1 'sv 'ss2 'sr))
+                t))
+    (if (eq ans 'POOL-BACK)
+        'POOL-BACK
+        (progn
+          (setq braw (pool:sq ans 'b) araw (pool:sq ans 'a)
+                dsraw (pool:sq ans 'dsl) ds1raw (pool:sq ans 'ds1)
+                dvraw (pool:sq ans 'dv) ds2raw (pool:sq ans 'ds2)
+                drraw (pool:sq ans 'dr)
+                ssraw (pool:sq ans 'ssl) ss1raw (pool:sq ans 'ss1)
+                svraw (pool:sq ans 'sv) ss2raw (pool:sq ans 'ss2)
+                srraw (pool:sq ans 'sr))
+          nil)))
+
+  ;; body cross dims, out-of-square only (the ends ride on the body)
+  (defun mu:cross ( / ans xg)
+    (if pool:*insq*
+        nil
+        (progn
+          (setq pv (pool:romancross pv)
+                xg (append (cdr (assoc "XAC" pv)) (cdr (assoc "XBD" pv)))
+                ans (pool:askseqb
+                      (list (list 'ac 'NAX "Cross dim body A-C"
+                                  (cdr (assoc "XAC" pv)))
+                            (list 'bd 'NAX "Cross dim body B-D"
+                                  (cdr (assoc "XBD" pv))))
+                      t))
+          (if (eq ans 'POOL-BACK)
+              (progn (pool:pvdel xg) 'POOL-BACK)
+              (progn (setq dac (pool:sq ans 'ac)
+                           dbd (pool:sq ans 'bd))
+                     nil)))))
+
+  (pool:stages (list 'mu:ends 'mu:guide 'mu:letters 'mu:cross))
+  (pool:pvkill)
+
+  ;; -------- resolve the ends, then the body against B
+  (setq dres (pool:muttres dstyle dsraw ds1raw dvraw drraw araw braw "DEEP")
+        sres (pool:muttres sstyle ssraw ss1raw svraw srraw araw braw "SHALLOW")
+        extl (car dres) insl (cadr dres)
+        extr (car sres) insr (cadr sres)
+        muttbad (or (nth 5 dres) (nth 5 sres))
+        tv (- braw extl extr))
+  (if (<= (- tv insl insr) 1.0e-6)
+      (progn
+        (setq tv (+ insl insr (min 12.0 (* 0.25 braw))) muttbad t)
+        (pool:valnote "MUTT ENDS DO NOT FIT B - BODY ADJUSTED")))
+
+  ;; -------- fit the body, draw sides and ends
+  (princ "\nFitting pool body to the measurements ...")
+  (setq fq (pool:fitquad tv tv araw araw dac dbd pool:*side-tol* pool:*cross-tol*)
+        quad (car fq) failed (cadr fq)
+        a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
+        cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
+        meas (pool:quadmeas quad)
+        notes nil
+        doff (max 12.0 (/ (max braw araw) 18.0))
+        th (max 3.0 (/ (max braw araw) 70.0))
+        pool:*dashlt* (pool:ltload "DASHED")
+        uab (pool:unit (pool:v- b a))
+        udc (pool:unit (pool:v- c d)))
+  (setq ml (pool:unit (pool:perp (pool:v- d a))))
+  (if (< (pool:dot (pool:v- (pool:mid a d) cen) ml) 0.0)
+      (setq ml (pool:v* ml -1.0)))
+  (setq mr (pool:unit (pool:perp (pool:v- c b))))
+  (if (< (pool:dot (pool:v- (pool:mid b c) cen) mr) 0.0)
+      (setq mr (pool:v* mr -1.0)))
+  (setq pab0 (pool:v+ a (pool:v* uab insl))
+        pab1 (pool:v- b (pool:v* uab insr))
+        pdc0 (pool:v+ d (pool:v* udc insl))
+        pdc1 (pool:v- c (pool:v* udc insr)))
+  (pool:line pab0 pab1 "POOL")
+  (pool:line pdc0 pdc1 "POOL")
+  (setq lend (pool:muttend a d pab0 pdc0 ml dstyle
+                           (caddr dres) (nth 3 dres) extl "POOL")
+        rend (pool:muttend b c pab1 pdc1 mr sstyle
+                           (caddr sres) (nth 3 sres) extr "POOL")
+        tipl (car lend) tipr (car rend))
+
+  ;; -------- extents / dims
+  (setq allpts (append quad (list tipl tipr (cadr lend) (caddr lend)
+                                  (cadr rend) (caddr rend)))
+        xmax (apply 'max (mapcar 'car allpts))
+        ymax (apply 'max (mapcar 'cadr allpts))
+        ymin (apply 'min (mapcar 'cadr allpts)))
+  (setvar "CLAYER" "DIMENSION")
+  (if pool:*insq*
+      ;; field-sheet set: each end's letters where its home sheet puts
+      ;; them -- S row + top side under B along the top, S1/V columns
+      ;; beside their ends, A outboard left, S2 on grecian cuts, R on
+      ;; the arcs (below)
+      (progn
+        (if (or (= dstyle "Grecian") (= dstyle "ROman"))
+            (pool:dimalg (list (car tipl) ymax) pdc0
+                         (list (* 0.5 (+ (car tipl) (car pdc0)))
+                               (+ ymax doff))))
+        (pool:dimalg pdc0 pdc1
+                     (list (car (pool:mid pdc0 pdc1)) (+ ymax doff)))
+        (if (or (= sstyle "Grecian") (= sstyle "ROman"))
+            (pool:dimalg pdc1 (list (car tipr) ymax)
+                         (list (* 0.5 (+ (car pdc1) (car tipr)))
+                               (+ ymax doff))))
+        (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
+                                     (+ ymax (* 1.9 doff))))
+        (setq xcol (- (car tipl) (* 0.9 doff))
+              xa (- (car tipl) (* 1.9 doff)))
+        (if (or (= dstyle "Grecian") (= dstyle "ROman"))
+            (progn
+              (pool:dimalg d (cadr lend)
+                           (list xcol (* 0.5 (+ (cadr d) (cadr (cadr lend))))))
+              (pool:dimalg (cadr lend) (caddr lend)
+                           (list xcol (cadr (pool:mid (cadr lend) (caddr lend)))))))
+        (if (or (= sstyle "Grecian") (= sstyle "ROman"))
+            (progn
+              (pool:dimalg c (cadr rend)
+                           (list (+ (car tipr) (* 0.9 doff))
+                                 (* 0.5 (+ (cadr c) (cadr (cadr rend))))))
+              (pool:dimalg (cadr rend) (caddr rend)
+                           (list (+ (car tipr) (* 0.9 doff))
+                                 (cadr (pool:mid (cadr rend) (caddr rend)))))))
+        (pool:dimalg a d (list xa (cadr (pool:mid a d))))
+        (if (= dstyle "Grecian")
+            (pool:dimalg pab0 (caddr lend)
+                         (pool:outoffp pab0 (caddr lend)
+                                       (list pab0 pab1 pdc1 pdc0) doff)))
+        (if (= sstyle "Grecian")
+            (pool:dimalg pab1 (caddr rend)
+                         (pool:outoffp pab1 (caddr rend)
+                                       (list pab0 pab1 pdc1 pdc0) doff))))
+      ;; out-of-square: the simple roman-style set + dashed crosses
+      (progn
+        (pool:dimalg pab0 pab1 (pool:outoff pab0 pab1 cen doff))
+        (pool:dimalg pdc0 pdc1 (pool:outoff pdc0 pdc1 cen doff))
+        (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
+                                     (- ymin (* 1.5 doff))))
+        (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
+                               (cadr (pool:mid a d))))))
+  (pool:dimrad (nth 3 lend) tipl ml doff)
+  (pool:dimrad (nth 3 rend) tipr mr doff)
+  (if (not pool:*insq*)
+      (progn
+        (setq odim (pool:dimxbegin))
+        (if dac
+            (progn
+              (pool:dimalg a c (pool:v+ (pool:mid a c)
+                                        (pool:v* (pool:unit (pool:perp (pool:v- c a)))
+                                                 (* 0.2 doff))))
+              (pool:dimdash)))
+        (if dbd
+            (progn
+              (pool:dimalg b d (pool:v+ (pool:mid b d)
+                                        (pool:v* (pool:unit (pool:perp (pool:v- d b)))
+                                                 (* -0.2 doff))))
+              (pool:dimdash)))
+        (pool:dimxend odim)))
+  (setvar "CLAYER" oldclay)
+
+  ;; -------- body corner labels
+  (foreach fq (list (list a "A") (list b "B") (list c "C") (list d "D"))
+    (pool:text (pool:v+ (car fq)
+                        (pool:v* (pool:unit (pool:v- (car fq) cen)) (* 1.5 th)))
+               th (cadr fq) "POOL-NOTES"))
+
+  ;; -------- report: one block per end, in its own sheet's letters
+  (defun mu:endrows (nm style res ends pbot ptop pb2 sraw s1raw vraw
+                     s2raw rraw / bad out)
+    (setq bad (if (nth 5 res) (list t) nil)
+          out nil)
+    (if (or (= style "Grecian") (= style "ROman"))
+        (setq out (append out (list
+          (append (list (strcat nm " S") sraw
+                        (if (= style "Grecian")
+                            (distance pbot pb2)
+                            (distance (car ends) (pool:mid pbot ptop))))
+                  bad)
+          (append (list (strcat nm " S1") s1raw
+                        (distance ptop (cadr ends))) bad)
+          (append (list (strcat nm " V") vraw
+                        (distance (cadr ends) (caddr ends))) bad)))))
+    (if (= style "Grecian")
+        (setq out (append out (list
+          (append (list (strcat nm " S2") s2raw
+                        (distance pb2 (caddr ends))) bad)))))
+    (if (or (= style "ROman") (= style "Oval"))
+        (setq out (append out (list
+          (append (list (strcat nm " R") rraw (nth 4 ends)) bad)))))
+    out)
+
+  (setq rows (append
+    (list (append (list "OV B" braw (distance tipl tipr))
+                  (if muttbad (list t) nil))
+          (list "OV A" araw (distance a d))
+          (list "T SIDE" (- tv insl insr) (distance pdc0 pdc1)))
+    (mu:endrows "DEEP" dstyle dres lend a d pab0
+                dsraw ds1raw dvraw ds2raw drraw)
+    (mu:endrows "SHAL" sstyle sres rend b c pab1
+                ssraw ss1raw svraw ss2raw srraw)))
+  (if (not pool:*insq*)
+      (setq rows (append rows
+                         (list (list "CROSS A-C" dac (nth 4 meas))
+                               (list "CROSS B-D" dbd (nth 5 meas))))))
+
+  ;; -------- interior: standard bottom pipeline, anchored tip to tip
+  (setq rows (append rows (pool:hopmuttdsp quad tipl tipr doff th)))
+  (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
+  (setq notes (append notes pool:*valnotes*))
+  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (if failed
+      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
+      (princ "\nPool layout complete -- see the report table."))
+  (princ))
+
+;; Mutt bottom dispatcher: the standard rectangle pipeline on the
+;; tip-to-tip frame (H closes from the deep tip, E to the shallow
+;; tip, like every home sheet), square hopper corners, no corner
+;; ties -- the ends are too varied to tie the hopper back to.
+(defun pool:hopmuttdsp (quad tipl tipr doff th / btype u v)
+  (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+      nil
+      (progn
+        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
+                                "Normal" nil))
+        (setq u (pool:unit (pool:v- tipr tipl))
+              v (pool:perp u))
+        (if (/= btype "Sport")
+            (pool:hopnormal (pool:bodyquad (list tipl v) (list tipr v)
+                                           (list (car quad)
+                                                 (pool:v- (cadr quad) (car quad)))
+                                           (list (cadddr quad)
+                                                 (pool:v- (caddr quad) (cadddr quad))))
+                            pool:*sq4* doff th nil btype
+                            (min (car tipl) (car tipr))
+                            (- (apply 'min (mapcar 'cadr quad)) (* 2.2 doff))
+                            nil)
+            (pool:hopsport (list tipl v) (list tipr v)
+                           (list (car quad) (pool:v- (cadr quad) (car quad)))
+                           (list (cadddr quad)
+                                 (pool:v- (caddr quad) (cadddr quad)))
+                           (pool:v* (pool:v+ (pool:v+ (car quad) (cadr quad))
+                                             (pool:v+ (caddr quad) (cadddr quad)))
+                                    0.25)
+                           (distance tipl tipr)
+                           (min (car tipl) (car tipr))
+                           (- (apply 'min (mapcar 'cadr quad)) (* 2.2 doff))
+                           (apply 'max (mapcar 'cadr quad))
+                           doff th)))))
+
 ;; UNDO grouping that copes with drawings where undo is limited or
 ;; off, and with an error firing before the group was ever opened.
 (defun pool:undobegin ()
@@ -4502,12 +4964,12 @@
       (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
   ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
-  ;; the six common shapes first, then the two rarely-used ones;
-  ;; type RO for a roman, ROU for a round.
-  (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd")
+  ;; the six common shapes first, then the rarely-used ones; type RO
+  ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
+  (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
   (setq ptype (getkword
                 (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
-                        "OCtagon/ROUnd]: ")))
+                        "OCtagon/ROUnd/MUtt]: ")))
 
   ;; the base point is picked with the user's own snaps still live;
   ;; only afterwards do snaps drop for the command-fed drawing work
@@ -4533,6 +4995,7 @@
     ((= ptype "OCtagon") (pool:grecflow t))
     ((= ptype "ROman") (pool:romanflow))
     ((= ptype "ROUnd") (pool:roundflow))
+    ((= ptype "MUtt") (pool:muttflow))
     (t (pool:quadflow ptype)))
 
   ;; ------------------------------------------------ finish

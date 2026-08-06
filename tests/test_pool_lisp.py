@@ -1460,6 +1460,10 @@ assert abs(_e[1]-fa) < 1.5 and abs(_e[0]-ef) < 1.5
 # c9  the failure cell: G floors to 1', F pays, chain still closes
 _v,_f = chainval([60.0,-20.0,380.0,60.0],480.0)
 assert _v == [60.0,12.0,348.0,60.0] and _f == [1,2] and abs(sum(_v)-480.0) < 1e-9
+# c12  mutt: roman ext 40 + body 440 = 480 tip to tip; grecian S1+V+S1
+# closes on A; hopper chain closes on the tip-to-tip frame
+assert 40+440 == 480 and 40+160+40 == 240 and 440-50 == 390
+assert 60+90+210+120 == 480 and 60+120+60 == 240
 print("   every demo cell's numbers close, fit and are reachable")
 
 print("== 59. octagon: same 8 corners as a grecian, drawn from A and B ==")
@@ -1685,5 +1689,71 @@ _dd = [_dd[k] if k != 7 else None for k in range(9)]
 pts2, failed2 = fithex(_sd, _dd, lazy=True)
 assert not failed2
 print("   parallelism exact; closure error -> E-F/F-A lengths only")
+
+print("== 66. mutt ends: per-style resolution against the overalls ==")
+def romres(aov, s1raw, vraw):
+    if s1raw is not None:
+        return s1raw, aov - 2.0 * s1raw
+    if vraw is not None:
+        return (aov - vraw) / 2.0, vraw
+    return aov / 6.0, aov * 2.0 / 3.0
+
+def muttres(style, sraw, s1raw, vraw, rraw, aov, bov):
+    # mirrors pool:muttres -- returns (ext, inset, s1, v, bad)
+    bad = False
+    if style == "Grecian":
+        s = sraw if sraw is not None else bov / 8.0
+        s1 = s1raw if s1raw is not None else aov / 6.0
+        v = aov - 2.0 * s1
+        if v <= 1e-6:
+            s1 = min(12.0, 0.125 * aov); v = aov - 2.0 * s1; bad = True
+        if s <= 1e-6:
+            s = min(12.0, bov / 8.0); bad = True
+        return 0.0, s, s1, v, bad
+    if style == "ROman":
+        s1, v = romres(aov, s1raw, vraw)
+        if v <= 1e-6:
+            s1 = min(12.0, 0.125 * aov); v = aov - 2.0 * s1; bad = True
+        if sraw is not None:
+            s = sraw
+        elif rraw is not None and rraw >= 0.5 * v:
+            s = rraw - math.sqrt(max(0.0, rraw * rraw - 0.25 * v * v))
+        else:
+            s = bov / 8.0
+        if s <= 1e-6:
+            s = min(12.0, bov / 8.0); bad = True
+        return s, 0.0, s1, v, bad
+    if style == "Oval":
+        half = 0.5 * aov
+        if rraw is not None and rraw >= half:
+            ext = rraw - math.sqrt(max(0.0, rraw * rraw - half * half))
+        elif rraw is not None:
+            ext = half; bad = True       # can't reach: half round + note
+        else:
+            ext = half
+        return ext, 0.0, None, None, bad
+    return 0.0, 0.0, None, None, False
+
+# roman deep end: S measured; ext = S, no side inset
+ext, ins, s1, v, bad = muttres("ROman", 40.0, 40.0, None, None, 240.0, 480.0)
+assert (ext, ins, s1, v, bad) == (40.0, 0.0, 40.0, 160.0, False)
+# grecian shallow end: no bulge, S insets the sides
+ext, ins, s1, v, bad = muttres("Grecian", 50.0, 40.0, None, None, 240.0, 480.0)
+assert (ext, ins, s1, v, bad) == (0.0, 50.0, 40.0, 160.0, False)
+# the body is what's left of B: 480 - 40 - 0 = 440, sides inset to 390
+assert 480.0 - 40.0 - 0.0 == 440.0 and 440.0 - 50.0 == 390.0
+# oval end, R = NA -> half round; R given -> minor-arc bulge
+assert muttres("Oval", None, None, None, None, 240.0, 480.0)[0] == 120.0
+assert abs(muttres("Oval", None, None, None, 130.0, 240.0, 480.0)[0] - 80.0) < 1e-9
+# an R smaller than A/2 can't reach the walls: half round + flagged
+ext, _, _, _, bad = muttres("Oval", None, None, None, 100.0, 240.0, 480.0)
+assert ext == 120.0 and bad
+# roman S derived from the radius check when S itself is NA
+ext, _, s1, v, _ = muttres("ROman", None, 40.0, None, 100.0, 240.0, 480.0)
+assert abs(ext - (100.0 - math.sqrt(100.0**2 - 80.0**2))) < 1e-9
+# a grecian S1 that swallows A is floored and flagged
+ext, ins, s1, v, bad = muttres("Grecian", 50.0, 130.0, None, None, 240.0, 480.0)
+assert bad and s1 == 12.0 and v == 216.0
+print("   roman/grecian/oval ends resolve like their home sheets")
 
 print("\nALL CHECKS PASSED")
