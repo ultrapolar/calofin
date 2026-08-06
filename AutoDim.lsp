@@ -1,19 +1,23 @@
 ;;; ======================================================================
 ;;;  AutoDim.lsp
 ;;;
-;;;  AUTODIM  - 1. Dimensions the straight lines about the perimeter of
-;;;                the drawing (LINE entities and straight LWPOLYLINE
-;;;                segments) with aligned dimensions placed on the
-;;;                outside of the plan.
-;;;             2. Asks the user to highlight the stairs - every
+;;;  AUTODIM  - 1. Asks the user to highlight the stuff to auto-dim
+;;;                (the plan geometry).  Everything else in the drawing
+;;;                is ignored from then on.
+;;;             2. Dimensions the straight lines about the perimeter of
+;;;                the highlighted geometry (LINE entities and straight
+;;;                LWPOLYLINE segments) with aligned dimensions placed
+;;;                on the outside of the plan.
+;;;             3. Asks the user to highlight the stairs - every
 ;;;                straight line in that selection is auto-dimmed too.
-;;;             3. Asks the user to draw two "floor dims" lines.  Each
+;;;             4. Asks the user to draw two "floor dims" lines.  Each
 ;;;                one becomes a continued dimension chain (DIMALIGNED
-;;;                + DIMCONTINUE) that breaks at every object standing
-;;;                in its way.
+;;;                + DIMCONTINUE) that breaks at every highlighted
+;;;                object standing in its way.
 ;;;
 ;;;  STAIRDIM - Runs just the stairs part again for another selection.
-;;;  FLOORDIM - Runs just the floor dims part for one extra line.
+;;;  FLOORDIM - Runs just the floor dims part for one extra line
+;;;             (breaks at everything in model space).
 ;;;
 ;;;  Usage:
 ;;;    1. APPLOAD this file (or drag it into the drawing window).
@@ -21,12 +25,12 @@
 ;;;
 ;;;  How the perimeter is found:
 ;;;    From the midpoint of every straight segment a test ray is cast
-;;;    perpendicular to each side, out past the drawing extents.  If at
-;;;    least one side is completely clear of geometry the segment is on
-;;;    the perimeter, and its dimension is placed on that clear side.
-;;;    Geometry sitting outside the plan (title borders, north arrows,
-;;;    site work) will block the rays, so keep the model space around
-;;;    the plan clean for best results.
+;;;    perpendicular to each side, out past the extents of the
+;;;    highlighted geometry.  If at least one side is completely clear
+;;;    of highlighted geometry the segment is on the perimeter, and its
+;;;    dimension is placed on that clear side.  Because only the
+;;;    highlighted stuff blocks the rays, title borders, notes and
+;;;    anything else in the drawing cannot get in the way.
 ;;;
 ;;;  Notes:
 ;;;    * Dimensions use the current dimension style and current layer.
@@ -96,11 +100,30 @@
        (setq n (1+ n)))
      (reverse segs))))
 
-;; all model space geometry that can block a ray / break a dim chain
+;; dxf filter for geometry that can be dimensioned / block a ray /
+;; break a dim chain
+(defun ad:geomfilter ()
+  '((0 . "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT")))
+
+;; everything in model space matching the geometry filter
 (defun ad:geomss ()
-  (ssget "_X"
-         '((0 . "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT")
-           (410 . "Model"))))
+  (ssget "_X" (append (ad:geomfilter) '((410 . "Model")))))
+
+;; WCS bounding box of a selection set as (min max), nil if none
+(defun ad:ssbox (ss / i obj ll ur mn mx)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq obj (vlax-ename->vla-object (ssname ss i))
+            i   (1+ i))
+      (if (not (vl-catch-all-error-p
+                 (vl-catch-all-apply 'vla-getboundingbox (list obj 'll 'ur))))
+        (progn
+          (setq ll (vlax-safearray->list ll)
+                ur (vlax-safearray->list ur)
+                mn (if mn (mapcar 'min mn ll) ll)
+                mx (if mx (mapcar 'max mx ur) ur))))))
+  (if mn (list mn mx)))
 
 ;; ------------------------------------------ part 1: perimeter dimensions
 
@@ -125,36 +148,35 @@
   (entdel lin)
   clear)
 
-;; if segment p1-p2 lies on the perimeter of the drawing, return the
-;; angle pointing to its clear (outside) side, else nil
+;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
+;; return the angle pointing to its clear (outside) side, else nil
 (defun ad:perimang (p1 p2 diag eps ss / mid a)
   (setq mid (ad:mid p1 p2)
         a   (angle p1 p2))
   (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps ss) (+ a (* 0.5 pi)))
         ((ad:sideclear mid (- a (* 0.5 pi)) diag eps ss) (- a (* 0.5 pi)))))
 
-;; dimension every straight segment about the perimeter, return how many
-(defun ad:dimperim (/ ss cand diag eps off cnt i en seg pa)
-  (setq ss   (ad:geomss)
-        cand (ssget "_X" '((0 . "LINE,LWPOLYLINE") (410 . "Model")))
-        diag (if (< (car (getvar "EXTMIN")) 1e19)
-               (* 2.0 (distance (getvar "EXTMIN") (getvar "EXTMAX")))
-               1e6)
-        eps  (* 1e-6 diag)
-        off  (ad:dimoff)
+;; dimension every straight segment about the perimeter of the
+;; highlighted geometry in ss, return how many
+(defun ad:dimperim (ss / box diag eps off cnt i en seg pa)
+  (setq box  (ad:ssbox ss)
         cnt  0
         i    0)
-  (if cand
-    (repeat (sslength cand)
-      (setq en (ssname cand i)
-            i  (1+ i))
-      (foreach seg (ad:segs en)
-        (if (and (> (distance (car seg) (cadr seg)) 1e-8)
-                 (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
-          (progn
-            (ad:aligned (car seg) (cadr seg)
-                        (polar (ad:mid (car seg) (cadr seg)) pa off))
-            (setq cnt (1+ cnt)))))))
+  (if box
+    (progn
+      (setq diag (* 2.0 (distance (car box) (cadr box)))
+            eps  (* 1e-6 diag)
+            off  (ad:dimoff))
+      (repeat (sslength ss)
+        (setq en (ssname ss i)
+              i  (1+ i))
+        (foreach seg (ad:segs en)
+          (if (and (> (distance (car seg) (cadr seg)) 1e-8)
+                   (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
+            (progn
+              (ad:aligned (car seg) (cadr seg)
+                          (polar (ad:mid (car seg) (cadr seg)) pa off))
+              (setq cnt (1+ cnt))))))))
   cnt)
 
 ;; --------------------------------------------- part 2: stairs dimensions
@@ -179,9 +201,9 @@
 ;; ------------------------------------------------- part 3: the floor dims
 
 ;; WCS intersection points between the floor dims line and every object
-;; in model space that stands in its way
-(defun ad:xpoints (lin lobj / ss i rtn pts res)
-  (setq ss  (ad:geomss)
+;; in obstacles that stands in its way (nil = all model space geometry)
+(defun ad:xpoints (lin lobj obstacles / ss i rtn pts res)
+  (setq ss  (if obstacles obstacles (ad:geomss))
         res '()
         i   0)
   (if (and ss (ssmemb lin ss)) (ssdel lin ss))
@@ -203,7 +225,7 @@
 ;; build one floor dims chain along p1->p2 (WCS): a first aligned dim
 ;; followed by DIMCONTINUE through every break point, then erase the
 ;; construction line.  Returns the number of dimensions placed.
-(defun ad:floorchain (p1 p2 loc / lin lobj len dir ds d chain prev)
+(defun ad:floorchain (p1 p2 loc obstacles / lin lobj len dir ds d chain prev)
   (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
   (setq lin  (entlast)
         lobj (vlax-ename->vla-object lin)
@@ -211,7 +233,7 @@
         dir  (mapcar '(lambda (a b) (/ (- b a) len)) p1 p2)
         ds   '())
   ;; distance of every crossing object along the line
-  (foreach x (ad:xpoints lin lobj)
+  (foreach x (ad:xpoints lin lobj obstacles)
     (setq d (apply '+ (mapcar '* dir (mapcar '- x p1))))
     (if (and (> d 1e-4) (< d (- len 1e-4)))
       (setq ds (cons d ds))))
@@ -233,8 +255,9 @@
   (entdel lin)
   (1- (length chain)))
 
-;; prompt the user to draw one floor dims line and dimension it
-(defun ad:getfloor (tag / p1 p2 loc n)
+;; prompt the user to draw one floor dims line and dimension it,
+;; breaking at the given obstacles (nil = all model space geometry)
+(defun ad:getfloor (tag obstacles / p1 p2 loc n)
   (setq p1 (getpoint (strcat "\n" tag " - first point (Enter to skip): ")))
   (if p1
     (progn
@@ -244,34 +267,41 @@
           (setq loc (getpoint (strcat "\n" tag
                                       " - dimension line location <on the line>: ")))
           (if (null loc) (setq loc (ad:mid p1 p2)))
-          (setq n (ad:floorchain (trans p1 1 0) (trans p2 1 0) (trans loc 1 0)))
+          (setq n (ad:floorchain (trans p1 1 0) (trans p2 1 0)
+                                 (trans loc 1 0) obstacles))
           (prompt (strcat "\n" tag ": " (itoa n) " dimension(s) placed."))
           n)
         (prompt "\nNothing drawn - skipped.")))))
 
 ;; --------------------------------------------------------------- commands
 
-(defun c:AUTODIM (/ *error* oldcmd nper nstair)
+(defun c:AUTODIM (/ *error* oldcmd plan nper nstair)
   (defun *error* (msg)
     (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (setq oldcmd (getvar "CMDECHO"))
-  (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (prompt "\nDimensioning the straight lines about the perimeter...")
-  (setq nper (ad:dimperim))
-  (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
-  (setq nstair (ad:dimstairs))
-  (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
-  (prompt (strcat "\nNow draw the two floor dims lines - the dimension"
-                  " chain breaks at everything standing in its way."))
-  (ad:getfloor "Floor dims 1")
-  (ad:getfloor "Floor dims 2")
-  (command "_.UNDO" "_End")
-  (setvar "CMDECHO" oldcmd)
+  (prompt "\nHighlight the stuff to auto-dimension (the plan geometry).")
+  (setq plan (ssget (ad:geomfilter)))
+  (if (null plan)
+    (prompt "\nNothing highlighted - AUTODIM cancelled.")
+    (progn
+      (setq oldcmd (getvar "CMDECHO"))
+      (setvar "CMDECHO" 0)
+      (command "_.UNDO" "_Begin")
+      (prompt "\nDimensioning the straight lines about the perimeter...")
+      (setq nper (ad:dimperim plan))
+      (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
+      (setq nstair (ad:dimstairs))
+      (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
+      (prompt (strcat "\nNow draw the two floor dims lines - the dimension"
+                      " chain breaks at every highlighted object standing"
+                      " in its way."))
+      (ad:getfloor "Floor dims 1" plan)
+      (ad:getfloor "Floor dims 2" plan)
+      (command "_.UNDO" "_End")
+      (setvar "CMDECHO" oldcmd)))
   (princ))
 
 (defun c:STAIRDIM (/ *error* oldcmd n)
@@ -300,10 +330,10 @@
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
-  (ad:getfloor "Floor dims")
+  (ad:getfloor "Floor dims" nil)
   (command "_.UNDO" "_End")
   (setvar "CMDECHO" oldcmd)
   (princ))
 
-(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (perimeter + stairs + two floor dims), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain).")
+(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain).")
 (princ)
