@@ -33,9 +33,14 @@
 ;;;    anything else in the drawing cannot get in the way.
 ;;;
 ;;;  Notes:
-;;;    * Dimensions use the current dimension style and current layer.
-;;;    * Perimeter and stair dims are offset from their line by
-;;;      2 x DIMTXT x DIMSCALE.
+;;;    * Perimeter dims use the "SIDE DIMENSION" style and floor dims
+;;;      the "STANDARD" style when the drawing has them, otherwise the
+;;;      current style is used.  Stair dims always use the current
+;;;      style.  The style that was current before AUTODIM ran is
+;;;      restored afterwards.  All dims go on the current layer.
+;;;    * Perimeter dims are placed at least one foot away from the
+;;;      perimeter, heading outwards (or 2 x DIMTXT x DIMSCALE when
+;;;      that is larger).  Stair dims are offset 2 x DIMTXT x DIMSCALE.
 ;;;    * The two floor dims lines are construction lines only - they
 ;;;      are erased once their dimension chain has been created.
 ;;;    * Break points closer together than 0.0001 drawing units are
@@ -56,6 +61,23 @@
   (* 2.0
      (getvar "DIMTXT")
      (if (zerop (getvar "DIMSCALE")) 1.0 (getvar "DIMSCALE"))))
+
+;; one foot expressed in the current drawing units (INSUNITS),
+;; assuming inches when unitless or unknown
+(defun ad:onefoot (/ u)
+  (setq u (getvar "INSUNITS"))
+  (cond ((= u 2) 1.0)                   ; feet
+        ((= u 4) 304.8)                 ; millimetres
+        ((= u 5) 30.48)                 ; centimetres
+        ((= u 6) 0.3048)                ; metres
+        ((= u 10) (/ 1.0 3.0))          ; yards
+        (t 12.0)))                      ; inches / unitless
+
+;; restore a dimension style by name if the drawing has it,
+;; return T when the style was set
+(defun ad:setdimstyle (name)
+  (if (and name (tblsearch "DIMSTYLE" name))
+    (progn (command "_.-DIMSTYLE" "_Restore" name) t)))
 
 ;; place one aligned dimension - all points expected in WCS
 (defun ad:aligned (p1 p2 loc)
@@ -166,7 +188,8 @@
     (progn
       (setq diag (* 2.0 (distance (car box) (cadr box)))
             eps  (* 1e-6 diag)
-            off  (ad:dimoff))
+            ;; at least a foot away from the perimeter, heading outwards
+            off  (max (ad:dimoff) (ad:onefoot)))
       (repeat (sslength ss)
         (setq en (ssname ss i)
               i  (1+ i))
@@ -275,9 +298,11 @@
 
 ;; --------------------------------------------------------------- commands
 
-(defun c:AUTODIM (/ *error* oldcmd plan nper nstair)
+(defun c:AUTODIM (/ *error* oldcmd olddim plan nper nstair)
   (defun *error* (msg)
     (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    (if olddim
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -287,19 +312,24 @@
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
-      (setq oldcmd (getvar "CMDECHO"))
+      (setq oldcmd (getvar "CMDECHO")
+            olddim (getvar "DIMSTYLE"))
       (setvar "CMDECHO" 0)
       (command "_.UNDO" "_Begin")
       (prompt "\nDimensioning the straight lines about the perimeter...")
+      (ad:setdimstyle "SIDE DIMENSION")
       (setq nper (ad:dimperim plan))
       (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
+      (ad:setdimstyle olddim)
       (setq nstair (ad:dimstairs))
       (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
       (prompt (strcat "\nNow draw the two floor dims lines - the dimension"
                       " chain breaks at every highlighted object standing"
                       " in its way."))
+      (ad:setdimstyle "STANDARD")
       (ad:getfloor "Floor dims 1" plan)
       (ad:getfloor "Floor dims 2" plan)
+      (ad:setdimstyle olddim)
       (command "_.UNDO" "_End")
       (setvar "CMDECHO" oldcmd)))
   (princ))
@@ -320,17 +350,22 @@
   (setvar "CMDECHO" oldcmd)
   (princ))
 
-(defun c:FLOORDIM (/ *error* oldcmd)
+(defun c:FLOORDIM (/ *error* oldcmd olddim)
   (defun *error* (msg)
     (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    (if olddim
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (setq oldcmd (getvar "CMDECHO"))
+  (setq oldcmd (getvar "CMDECHO")
+        olddim (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
+  (ad:setdimstyle "STANDARD")
   (ad:getfloor "Floor dims" nil)
+  (ad:setdimstyle olddim)
   (command "_.UNDO" "_End")
   (setvar "CMDECHO" oldcmd)
   (princ))
