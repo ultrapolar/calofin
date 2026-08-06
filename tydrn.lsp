@@ -22,15 +22,12 @@
 ;;;
 ;;;   4. ORIENT - after the conversion the processed text is rotated
 ;;;              flat so it reads west -> east, right side up
-;;;              (absolute angle 0), turning about its middle point
-;;;              exactly the way Express Tools TORIENT does, so the
-;;;              labels stay in place.  The transformation is done
-;;;              natively rather than by calling TORIENT: Express
-;;;              Tools commands are LISP-defined and AutoLISP cannot
-;;;              invoke one LISP command from inside another.
-;;;              Set *tydrn-orient-angle* to nil for TORIENT's "Most
-;;;              readable" behavior instead (only upside-down text is
-;;;              flipped 180).
+;;;              (absolute angle 0).  Each text pivots about its own
+;;;              insertion point - the labels share that point in
+;;;              space with the POINT they belong to - so every label
+;;;              stays anchored to its point.  Set
+;;;              *tydrn-orient-angle* to nil to only flip upside-down
+;;;              text instead ("Most readable").
 ;;;
 ;;; The ROMANC text style and the POINTS layer are created if they do
 ;;; not already exist.  Locked layers are unlocked for the duration of
@@ -113,19 +110,14 @@
   (vla-put-Linetype obj "ByLayer")
   (vla-put-Lineweight obj acLnWtByLayer))
 
-;; Center of an object's bounding box.
-(defun tydrn:bbox-center (obj / ll ur)
-  (vla-GetBoundingBox obj 'll 'ur)
-  (mapcar '(lambda (a b) (/ (+ a b) 2.0))
-          (vlax-safearray->list ll)
-          (vlax-safearray->list ur)))
-
-;; Native equivalent of Express Tools TORIENT.  With
-;; *tydrn-orient-angle* set, the text is turned to that absolute
-;; angle; with it nil, only upside-down text (angle in (90, 270]
-;; degrees) is flipped 180.  Either way the text turns about its
-;; middle point so it stays where it was.
-(defun tydrn:orient (obj / cur target c1 c2)
+;; Rotate a text to the target orientation.  Setting the Rotation
+;; property pivots the text about its insertion/alignment point; the
+;; point labels share that point in space with the POINT entity they
+;; belong to, so each label swings around its own point and stays
+;; anchored to it.  With *tydrn-orient-angle* set, the text is turned
+;; to that absolute angle; with it nil, only upside-down text (angle
+;; in (90, 270] degrees) is flipped 180.
+(defun tydrn:orient (obj / cur target)
   (setq cur (rem (vla-get-Rotation obj) (* 2.0 pi)))   ; radians
   (if (< cur 0.0) (setq cur (+ cur (* 2.0 pi))))
   (setq target
@@ -135,11 +127,7 @@
             (rem (+ cur pi) (* 2.0 pi))
             cur)))
   (if (not (equal cur target 1e-8))
-    (progn
-      (setq c1 (tydrn:bbox-center obj))
-      (vla-put-Rotation obj target)
-      (setq c2 (tydrn:bbox-center obj))
-      (vla-Move obj (vlax-3d-point c2) (vlax-3d-point c1)))))
+    (vla-put-Rotation obj target)))
 
 ;; Collect the distinct layer names used by the entities of a
 ;; selection set.
@@ -247,8 +235,8 @@
 
   ;; ------------------------------------------------------------
   ;; 4. Orient the converted text to read west -> east, right side
-  ;;    up (native TORIENT-equivalent, turning each text about its
-  ;;    middle point).
+  ;;    up, each label pivoting about its insertion point (= the
+  ;;    point it labels).
   ;; ------------------------------------------------------------
   (if ss-text
     (progn
