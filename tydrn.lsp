@@ -20,6 +20,13 @@
 ;;;              an explicit magenta (ACI 6) color - the same pink as
 ;;;              the points - but stays on the ANCHORS layer.
 ;;;
+;;;   4. ORIENT - after the conversion the processed text is rotated
+;;;              to read west -> east, right side up (absolute angle
+;;;              0) using the Express Tools TORIENT command.  Like
+;;;              TORIENT, text turns about its middle point so labels
+;;;              stay in place.  If Express Tools is not loaded a
+;;;              built-in fallback does the same thing.
+;;;
 ;;; The ROMANC text style and the POINTS layer are created if they do
 ;;; not already exist.  Locked layers are unlocked for the duration of
 ;;; the command and re-locked afterwards.  The whole run is wrapped in
@@ -95,6 +102,31 @@
   (vla-put-Color obj acByLayer)
   (vla-put-Linetype obj "ByLayer")
   (vla-put-Lineweight obj acLnWtByLayer))
+
+;; Is the Express Tools TORIENT command available?
+;; (An unbound c:torient evaluates to nil; ACETUTIL.ARX is the core
+;; Express Tools module and is loaded at startup when installed.)
+(defun tydrn:torient-p ()
+  (or (not (null c:torient))
+      (member "ACETUTIL.ARX" (mapcar 'strcase (arx)))))
+
+;; Center of an object's bounding box.
+(defun tydrn:bbox-center (obj / ll ur)
+  (vla-GetBoundingBox obj 'll 'ur)
+  (mapcar '(lambda (a b) (/ (+ a b) 2.0))
+          (vlax-safearray->list ll)
+          (vlax-safearray->list ur)))
+
+;; Fallback for TORIENT 0: set rotation to 0 while keeping the text
+;; centered on the spot it occupied (TORIENT turns text about its
+;; middle point).
+(defun tydrn:orient-zero (obj / c1 c2)
+  (if (not (equal (vla-get-Rotation obj) 0.0 1e-8))
+    (progn
+      (setq c1 (tydrn:bbox-center obj))
+      (vla-put-Rotation obj 0.0)
+      (setq c2 (tydrn:bbox-center obj))
+      (vla-Move obj (vlax-3d-point c2) (vlax-3d-point c1)))))
 
 ;; Collect the distinct layer names used by the entities of a
 ;; selection set.
@@ -200,6 +232,19 @@
         (setq n-anch (1+ n-anch)
               i      (1+ i)))))
 
+  ;; ------------------------------------------------------------
+  ;; 4. Orient the converted text to read west -> east, right side
+  ;;    up (absolute rotation 0) with TORIENT when available.
+  ;; ------------------------------------------------------------
+  (if ss-text
+    (if (tydrn:torient-p)
+      (command "._TORIENT" ss-text "" "0")
+      (progn
+        (setq i 0)
+        (while (< i (sslength ss-text))
+          (tydrn:orient-zero (vlax-ename->vla-object (ssname ss-text i)))
+          (setq i (1+ i))))))
+
   ;; Re-lock whatever we unlocked and close the undo group.
   (tydrn:relock-layers *tydrn-unlocked*)
   (setq *tydrn-unlocked* nil)
@@ -209,7 +254,7 @@
   (princ (strcat "\nTYDRN done: "
                  (itoa n-text) " text -> " *tydrn-text-style*
                  " h" (rtos *tydrn-text-height* 2 2)
-                 ", "
+                 " oriented W->E, "
                  (itoa n-pool) " point(s) POOL -> " *tydrn-dest-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
