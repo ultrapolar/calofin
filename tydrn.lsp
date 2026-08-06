@@ -20,12 +20,13 @@
 ;;;              an explicit magenta (ACI 6) color - the same pink as
 ;;;              the points - but stays on the ANCHORS layer.
 ;;;
-;;;   4. ORIENT - after the conversion the processed text is rotated
-;;;              to read west -> east, right side up (absolute angle
-;;;              0) using the Express Tools TORIENT command.  Like
-;;;              TORIENT, text turns about its middle point so labels
-;;;              stay in place.  If Express Tools is not loaded a
-;;;              built-in fallback does the same thing.
+;;;   4. ORIENT - after the conversion the processed text is run
+;;;              through Express Tools TORIENT in "Most readable"
+;;;              mode: text that reads upside down is flipped 180
+;;;              degrees about its middle point so it stays in place,
+;;;              while already-readable text keeps its angle.  If
+;;;              Express Tools is not loaded a built-in fallback does
+;;;              the same thing.
 ;;;
 ;;; The ROMANC text style and the POINTS layer are created if they do
 ;;; not already exist.  Locked layers are unlocked for the duration of
@@ -117,14 +118,17 @@
           (vlax-safearray->list ll)
           (vlax-safearray->list ur)))
 
-;; Fallback for TORIENT 0: set rotation to 0 while keeping the text
-;; centered on the spot it occupied (TORIENT turns text about its
-;; middle point).
-(defun tydrn:orient-zero (obj / c1 c2)
-  (if (not (equal (vla-get-Rotation obj) 0.0 1e-8))
+;; Fallback for TORIENT "Most readable": text whose angle is in
+;; (90, 270] degrees reads upside down, so flip it 180 degrees while
+;; keeping it centered on the spot it occupied (TORIENT turns text
+;; about its middle point).  Readable text is left alone.
+(defun tydrn:orient-readable (obj / ang c1 c2)
+  (setq ang (rem (vla-get-Rotation obj) (* 2.0 pi)))   ; radians
+  (if (< ang 0.0) (setq ang (+ ang (* 2.0 pi))))
+  (if (and (> ang (* 0.5 pi)) (<= ang (* 1.5 pi)))
     (progn
       (setq c1 (tydrn:bbox-center obj))
-      (vla-put-Rotation obj 0.0)
+      (vla-put-Rotation obj (rem (+ ang pi) (* 2.0 pi)))
       (setq c2 (tydrn:bbox-center obj))
       (vla-Move obj (vlax-3d-point c2) (vlax-3d-point c1)))))
 
@@ -233,16 +237,16 @@
               i      (1+ i)))))
 
   ;; ------------------------------------------------------------
-  ;; 4. Orient the converted text to read west -> east, right side
-  ;;    up (absolute rotation 0) with TORIENT when available.
+  ;; 4. Orient the converted text with TORIENT "Most readable"
+  ;;    (the Enter default at its rotation prompt).
   ;; ------------------------------------------------------------
   (if ss-text
     (if (tydrn:torient-p)
-      (command "._TORIENT" ss-text "" "0")
+      (command "._TORIENT" ss-text "" "")
       (progn
         (setq i 0)
         (while (< i (sslength ss-text))
-          (tydrn:orient-zero (vlax-ename->vla-object (ssname ss-text i)))
+          (tydrn:orient-readable (vlax-ename->vla-object (ssname ss-text i)))
           (setq i (1+ i))))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
@@ -254,7 +258,7 @@
   (princ (strcat "\nTYDRN done: "
                  (itoa n-text) " text -> " *tydrn-text-style*
                  " h" (rtos *tydrn-text-height* 2 2)
-                 " oriented W->E, "
+                 " oriented most-readable, "
                  (itoa n-pool) " point(s) POOL -> " *tydrn-dest-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
