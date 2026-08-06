@@ -35,19 +35,50 @@ KEYWORDS = {"T", "Yes", "No", "Undo", "STR"}
 
 
 def strip_comments(src):
-    """Drop ;-comments without being fooled by semicolons inside strings."""
+    """Drop ;-comments without being fooled by semicolons inside strings.
+
+    Backslash escapes matter: a LISP string may contain \\" and the
+    scanner must not treat that as the end of the string.
+    """
     out = []
     for line in src.split("\n"):
         in_string = False
+        escaped = False
         kept = ""
         for ch in line:
-            if ch == '"':
+            if escaped:
+                escaped = False
+            elif ch == "\\" and in_string:
+                escaped = True
+            elif ch == '"':
                 in_string = not in_string
-            if ch == ";" and not in_string:
+            elif ch == ";" and not in_string:
                 break
             kept += ch
         out.append(kept)
     return "\n".join(out)
+
+
+def strip_strings(code):
+    """Blank out string literals, respecting backslash escapes."""
+    out = []
+    in_string = False
+    escaped = False
+    for ch in code:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+                out.append('""')
+            continue
+        if ch == '"':
+            in_string = True
+            continue
+        out.append(ch)
+    return "".join(out)
 
 
 def load_code():
@@ -58,18 +89,14 @@ def load_code():
 # --- structural checks ------------------------------------------------
 
 def test_parens_balanced():
-    code = load_code()
+    code = strip_strings(load_code())
     depth = 0
-    in_string = False
     for ch in code:
-        if ch == '"':
-            in_string = not in_string
-        elif not in_string:
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                assert depth >= 0, "closing paren with nothing open"
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            assert depth >= 0, "closing paren with nothing open"
     assert depth == 0, "unbalanced parentheses: depth %d" % depth
     print("parens balanced")
 
@@ -84,7 +111,7 @@ def test_no_global_leaks():
     match = re.search(r"\(defun\s+c:PERPPTS\s*\(([^)]*)\)", code)
     assert match, "c:PERPPTS not found"
     declared = set(match.group(1).split("/")[1].split())
-    body = re.sub(r'"[^"]*"', "", code[match.start():])
+    body = strip_strings(code[match.start():])
     called = set(re.findall(r"\(\s*([A-Za-z*][A-Za-z0-9:*_\-]*)", body))
     used = set(re.findall(r"(?<![0-9.])[A-Za-z*][A-Za-z0-9:*_\-]*", body))
     leaked = sorted(
@@ -115,6 +142,43 @@ def test_sysvars_saved_and_restored():
     missing = sorted(changed - restored)
     assert not missing, "not restored in perp:finish: %s" % missing
     print("system variables saved and restored: %s" % sorted(changed))
+
+
+def test_dimension_style_handling():
+    """The dim style is changed by a command, so the setvar scan misses it."""
+    code = load_code()
+    assert '(getvar "DIMSTYLE")' in code, "current dimension style not saved"
+    finish = re.search(r"\(defun\s+perp:finish.*?(?=\n  \(defun)", code, re.S)
+    assert finish and "-DIMSTYLE" in finish.group(0) and "cdim" in finish.group(0), \
+        "the current dimension style must be restored on cleanup"
+    for name in ('"STANDARD INCHES"', '"SIDE STANDARD"'):
+        assert name in code, "missing dimension style choice %s" % name
+    assert '(tblsearch "DIMSTYLE" dimStyle)' in code, \
+        "must check the style exists before restoring it"
+    # dimensions are drawn once, at the end, not per round
+    assert code.count("._DIMALIGNED") == 1, \
+        "dimensions should be drawn by a single deferred loop"
+    print("dimension style chosen, checked and restored")
+
+
+def test_output_placement_and_properties():
+    """Polylines inherit the source object's look; dims go on DIMENSIONS."""
+    code = load_code()
+    # every property copied from the source is applied before PLINE runs
+    pline = code.index('(command "._PLINE")')
+    setup = code[:pline]
+    for var, src in (("CLAYER", "srcLayer"), ("CECOLOR", "srcColor"),
+                     ("CELTYPE", "srcLtype"), ("CELWEIGHT", "srcLw"),
+                     ("CELTSCALE", "srcLts")):
+        assert re.search(r'\(setvar\s+"%s"\s+%s\)' % (var, src), setup), \
+            "polyline must inherit %s from the source object" % var
+    # the dimension loop runs on the DIMENSIONS layer
+    dim = code.index('._DIMALIGNED')
+    assert re.search(r'\(setvar\s+"CLAYER"\s+"DIMENSIONS"\)', code[:dim]), \
+        "dimensions must be created on the DIMENSIONS layer"
+    assert '(perp:layer "DIMENSIONS"' in code, \
+        "the DIMENSIONS layer must be created if missing"
+    print("polylines inherit source properties, dims on DIMENSIONS layer")
 
 
 def test_error_handler_cleans_up():
@@ -234,6 +298,8 @@ def main():
     test_parens_balanced()
     test_no_global_leaks()
     test_sysvars_saved_and_restored()
+    test_dimension_style_handling()
+    test_output_placement_and_properties()
     test_error_handler_cleans_up()
     test_straight_line_spacing()
     test_arc_length_spacing_across_a_corner()

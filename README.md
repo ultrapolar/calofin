@@ -222,16 +222,31 @@ points now sit on. Repeat as many times as you like.
    reuse the previous length, or type **U** to step back and re-enter
    the previous point.
 5. Answer the repeat prompt to run another round on the new polyline.
+6. Pick the dimension style — **STANDARD INCHES** or **SIDE STANDARD**.
+   All dimensions are then drawn at once.
 
-Output goes on its own layers, `PERPPTS-PLINE` and `PERPPTS-DIM`, so it
-is easy to select or freeze independently of the source geometry.
+### Layers & properties
+
+The offset polylines are drawn with the same **layer, colour, linetype,
+lineweight and linetype scale** as the object they were offset from, so
+each new polyline reads as the same kind of object as the line it came
+from. (Any property the source does not set explicitly is BYLAYER,
+which is inherited as BYLAYER.)
+
+Dimensions go on the **`DIMENSIONS`** layer, created if the drawing does
+not already have it. They use the dimension style you pick at the end —
+`STANDARD INCHES` or `SIDE STANDARD` — when that style exists in the
+drawing; if it does not, the current style is used and a note is printed
+rather than failing. Whatever the drawing's current dimension style was
+is restored when the command ends.
 
 ### Robustness
 
 * The whole run is a single UNDO group — one `U` reverses everything,
   however many rounds were done.
 * Esc or an error at any prompt restores every system variable the
-  command changed (`OSMODE`, `CMDECHO`, `PDMODE`, `CLAYER`), erases the
+  command changed (`OSMODE`, `CMDECHO`, `PDMODE`, `CLAYER`, the `CE*`
+  creation defaults and the current dimension style), erases the
   temporary guide markers and closes the UNDO group.
 * Bad input re-prompts rather than aborting: a missed pick, a wrong
   object type, or a point count below 2 all just ask again. Zero and

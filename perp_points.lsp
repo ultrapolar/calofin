@@ -31,22 +31,32 @@
 ;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 4 with the new polyline as
 ;;;      the path.
+;;;   6. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 2 and
 ;;; reused for every round, so all offsets stay on the same side of the
 ;;; original line and every dimension stays perpendicular to it.
 ;;;
+;;; Properties
+;;;   * The offset polylines take the layer, colour, linetype, lineweight
+;;;     and linetype scale of the object they were offset from.
+;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
+;;;     and use the dimension style picked in step 6 when the drawing
+;;;     has it; otherwise the current style is used and a note is
+;;;     printed.
+;;;
 ;;; Robustness
 ;;;   * The whole run is one UNDO group: a single U reverses everything.
 ;;;   * Esc or an error at any prompt restores every system variable it
-;;;     changed (OSMODE, CMDECHO, PDMODE, CLAYER), erases the temporary
+;;;     changed (OSMODE, CMDECHO, PDMODE, CLAYER, the CE* creation
+;;;     defaults and the current dimension style), erases the temporary
 ;;;     guides and closes the UNDO group.
 ;;;   * Bad input re-prompts instead of aborting the command; zero and
 ;;;     negative lengths are rejected, as is a direction click that lands
 ;;;     on the line itself (where "which side" would be ambiguous).
 ;;;   * All geometry is handled in the current UCS, so the command works
 ;;;     in a rotated or shifted UCS.
-;;;   * Output goes on its own layers: PERPPTS-PLINE and PERPPTS-DIM.
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
@@ -139,6 +149,21 @@
      (reverse pts))
     (t nil)))
 
+;; colour of an entity as a CECOLOR string ("BYLAYER", "3", "12,34,56")
+(defun perp:color (d / c tc)
+  (cond
+    ;; 24-bit true colour packed into one integer
+    ((setq tc (cdr (assoc 420 d)))
+     (strcat (itoa (logand (lsh tc -16) 255)) ","
+             (itoa (logand (lsh tc -8) 255)) ","
+             (itoa (logand tc 255))))
+    ((setq c (cdr (assoc 62 d)))
+     (cond ((= c 0) "BYBLOCK")
+           ((= c 256) "BYLAYER")
+           ;; a negative index means the layer is off; the colour still applies
+           (t (itoa (abs c)))))
+    (t "BYLAYER")))
+
 ;; make sure a layer exists and is usable (thawed, unlocked, on)
 (defun perp:layer (nm col / en d)
   (if (setq en (tblobjname "LAYER" nm))
@@ -161,7 +186,9 @@
 ;; --- command ---------------------------------------------------------
 
 (defun c:PERPPTS (/ *error* perp:kill perp:finish
-                    os ce pd clay undoOpen tmpEnts
+                    os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
+                    srcData srcLayer srcColor srcLtype srcLw srcLts
+                    dimPairs dimStyle pr
                     sel ent etype verts p1 p2 pStart pFinish click
                     dx dy dlen ux uy cross fuzz nx ny sz
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
@@ -183,6 +210,13 @@
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
+    ;; leave the drawing's creation defaults exactly as they were found
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if (and cdim (tblsearch "DIMSTYLE" cdim))
+      (command "._-DIMSTYLE" "_Restore" cdim))
     (if clay (setvar "CLAYER"  clay))
     (if pd   (setvar "PDMODE"  pd))
     (if os   (setvar "OSMODE"  os))
@@ -198,10 +232,15 @@
     (princ))
 
   ;; --- save state and open one undo group for the whole run -----------
-  (setq os   (getvar "OSMODE")
-        ce   (getvar "CMDECHO")
-        pd   (getvar "PDMODE")
-        clay (getvar "CLAYER")
+  (setq os    (getvar "OSMODE")
+        ce    (getvar "CMDECHO")
+        pd    (getvar "PDMODE")
+        clay  (getvar "CLAYER")
+        cec   (getvar "CECOLOR")
+        celt  (getvar "CELTYPE")
+        celw  (getvar "CELWEIGHT")
+        celts (getvar "CELTSCALE")
+        cdim  (getvar "DIMSTYLE")
         tmpEnts '())
   (setvar "CMDECHO" 0)
   (command "._UNDO" "_Begin")
@@ -230,6 +269,19 @@
 
   (setq p1 (car verts)                       ; first endpoint (UCS)
         p2 (last verts))                     ; last endpoint  (UCS)
+
+  ;; --- properties to give the offset polylines -------------------------
+  ;; The new polylines are drawn with the same layer, colour, linetype,
+  ;; lineweight and linetype scale as the object they are offset from, so
+  ;; they read as the same kind of object in the drawing.  Anything the
+  ;; source does not carry explicitly is BYLAYER, which is also the
+  ;; correct inherited value.
+  (setq srcData  (entget ent)
+        srcLayer (cdr (assoc 8 srcData))
+        srcColor (perp:color srcData)
+        srcLtype (cond ((cdr (assoc 6 srcData))) ("BYLAYER"))
+        srcLw    (cond ((cdr (assoc 370 srcData))) (-1))
+        srcLts   (cond ((cdr (assoc 48 srcData))) (1.0)))
 
   ;; --- 2. click to set direction (START/FINISH) and offset side -------
   ;; Snapping is off so the click cannot be pulled onto the line itself,
@@ -275,10 +327,12 @@
     (setq nx (- uy) ny ux)          ; left normal
     (setq nx uy     ny (- ux)))     ; right normal
 
-  ;; --- prepare the output layers --------------------------------------
-  (perp:layer "PERPPTS-TEMP"  1)    ; guides, erased before the command ends
-  (perp:layer "PERPPTS-PLINE" 3)
-  (perp:layer "PERPPTS-DIM"   4)
+  ;; --- prepare the layers ---------------------------------------------
+  ;; Guides live on their own layer so a locked current layer cannot stop
+  ;; them being erased.  Offset polylines go on the source object's own
+  ;; layer; dimensions go on DIMENSIONS.
+  (perp:layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
+  (perp:layer "DIMENSIONS"   4)
 
   ;; --- draw an arrow pointing at the START end ------------------------
   ;; The arrow comes in from outside the line (along the FINISH->START
@@ -394,7 +448,12 @@
     (setq newPts (reverse newPts))
 
     ;; --- connect the new points with a polyline ----------------------
-    (setvar "CLAYER" "PERPPTS-PLINE")
+    ;; drawn with the source object's layer and line properties
+    (setvar "CLAYER"    srcLayer)
+    (setvar "CECOLOR"   srcColor)
+    (setvar "CELTYPE"   srcLtype)
+    (setvar "CELWEIGHT" srcLw)
+    (setvar "CELTSCALE" srcLts)
     (command "._PLINE")
     (foreach p newPts (command p))
     (command "")
@@ -403,17 +462,15 @@
     (foreach e guideEnts (perp:kill e))
     (setq guideEnts nil)
 
-    ;; --- aligned dimension from each new point to its base point ------
-    ;; np = base + len*(nx,ny), so the dimension line always runs along
-    ;; the fixed normal, i.e. perpendicular to the ORIGINAL line, no
-    ;; matter which polyline `base` sits on.
-    (setvar "CLAYER" "PERPPTS-DIM")
+    ;; --- remember the dimensions to draw -----------------------------
+    ;; np = base + len*(nx,ny), so each dimension runs along the fixed
+    ;; normal, i.e. perpendicular to the ORIGINAL line, no matter which
+    ;; polyline `base` sits on.  They are drawn once at the end, after
+    ;; the dimension style has been chosen.
     (setq i 0)
     (while (< i n)
-      (setq base (nth i basePts)
-            np   (nth i newPts))
-      (command "._DIMALIGNED" base np np)    ; dim line through the new pt
-      (setq i (1+ i)))
+      (setq dimPairs (cons (list (nth i basePts) (nth i newPts)) dimPairs)
+            i        (1+ i)))
     (setq total (+ total n))
 
     ;; the polyline just built becomes the path for the next round
@@ -424,12 +481,27 @@
     (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
     (if (null again) (setq again "No")))
 
+  ;; --- 5. dimension style, then draw every dimension ------------------
+  (initget "STandard SIde")
+  (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
+                              "SIDE STANDARD? [STandard/SIde] <STandard>: ")))
+  (setq dimStyle (if (equal ans "SIde") "SIDE STANDARD" "STANDARD INCHES"))
+  (if (tblsearch "DIMSTYLE" dimStyle)
+    (command "._-DIMSTYLE" "_Restore" dimStyle)
+    (princ (strcat "\nDimension style \"" dimStyle
+                   "\" is not in this drawing - using the current style \""
+                   cdim "\" instead.")))
+
+  (setvar "CLAYER" "DIMENSIONS")
+  (foreach pr (reverse dimPairs)
+    (command "._DIMALIGNED" (car pr) (cadr pr) (cadr pr)))
+
   ;; --- restore everything and close the undo group --------------------
   (perp:finish)
   (princ (strcat "\nDone: " (itoa iter) " round(s), "
                  (itoa total) " points, "
-                 (itoa iter) " polyline(s) and "
-                 (itoa total) " dimensions created."))
+                 (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
+                 (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
 (princ "\nperp_points.lsp loaded.  Type PERPPTS to run.")
