@@ -23,14 +23,14 @@
 ;;;   4. ORIENT - after the conversion the processed text is rotated
 ;;;              flat so it reads west -> east, right side up
 ;;;              (absolute angle 0), turning about its middle point
-;;;              the way Express Tools TORIENT does so labels stay in
-;;;              place.  TORIENT is used when available, and a
-;;;              built-in pass then verifies every text actually
-;;;              landed on the target angle, fixing any that did not
-;;;              (or all of them when Express Tools is missing).
-;;;              Set *tydrn-orient-angle* to nil to use TORIENT's
-;;;              "Most readable" behavior instead (only upside-down
-;;;              text is flipped 180).
+;;;              exactly the way Express Tools TORIENT does, so the
+;;;              labels stay in place.  The transformation is done
+;;;              natively rather than by calling TORIENT: Express
+;;;              Tools commands are LISP-defined and AutoLISP cannot
+;;;              invoke one LISP command from inside another.
+;;;              Set *tydrn-orient-angle* to nil for TORIENT's "Most
+;;;              readable" behavior instead (only upside-down text is
+;;;              flipped 180).
 ;;;
 ;;; The ROMANC text style and the POINTS layer are created if they do
 ;;; not already exist.  Locked layers are unlocked for the duration of
@@ -113,13 +113,6 @@
   (vla-put-Linetype obj "ByLayer")
   (vla-put-Lineweight obj acLnWtByLayer))
 
-;; Is the Express Tools TORIENT command available?
-;; (An unbound c:torient evaluates to nil; ACETUTIL.ARX is the core
-;; Express Tools module and is loaded at startup when installed.)
-(defun tydrn:torient-p ()
-  (or (not (null c:torient))
-      (member "ACETUTIL.ARX" (mapcar 'strcase (arx)))))
-
 ;; Center of an object's bounding box.
 (defun tydrn:bbox-center (obj / ll ur)
   (vla-GetBoundingBox obj 'll 'ur)
@@ -127,12 +120,11 @@
           (vlax-safearray->list ll)
           (vlax-safearray->list ur)))
 
-;; Built-in equivalent of TORIENT, used to verify (and if needed fix)
-;; every text after the TORIENT attempt, or to do the whole job when
-;; Express Tools is missing.  With *tydrn-orient-angle* set, the text
-;; is turned to that absolute angle; with it nil, only upside-down
-;; text (angle in (90, 270] degrees) is flipped 180.  Either way the
-;; text turns about its middle point so it stays where it was.
+;; Native equivalent of Express Tools TORIENT.  With
+;; *tydrn-orient-angle* set, the text is turned to that absolute
+;; angle; with it nil, only upside-down text (angle in (90, 270]
+;; degrees) is flipped 180.  Either way the text turns about its
+;; middle point so it stays where it was.
 (defun tydrn:orient (obj / cur target c1 c2)
   (setq cur (rem (vla-get-Rotation obj) (* 2.0 pi)))   ; radians
   (if (< cur 0.0) (setq cur (+ cur (* 2.0 pi))))
@@ -254,18 +246,12 @@
               i      (1+ i)))))
 
   ;; ------------------------------------------------------------
-  ;; 4. Orient the converted text: TORIENT first when available,
-  ;;    then a built-in pass that guarantees the result even if
-  ;;    TORIENT was missing, failed, or skipped something.
+  ;; 4. Orient the converted text to read west -> east, right side
+  ;;    up (native TORIENT-equivalent, turning each text about its
+  ;;    middle point).
   ;; ------------------------------------------------------------
   (if ss-text
     (progn
-      (if (tydrn:torient-p)
-        (vl-catch-all-apply
-          'command
-          (if *tydrn-orient-angle*
-            (list "._TORIENT" ss-text "" (rtos *tydrn-orient-angle* 2 8))
-            (list "._TORIENT" ss-text "" ""))))
       (setq i 0)
       (while (< i (sslength ss-text))
         (vl-catch-all-apply
