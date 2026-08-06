@@ -20,13 +20,17 @@
 ;;;              an explicit magenta (ACI 6) color - the same pink as
 ;;;              the points - but stays on the ANCHORS layer.
 ;;;
-;;;   4. ORIENT - after the conversion the processed text is run
-;;;              through Express Tools TORIENT in "Most readable"
-;;;              mode: text that reads upside down is flipped 180
-;;;              degrees about its middle point so it stays in place,
-;;;              while already-readable text keeps its angle.  If
-;;;              Express Tools is not loaded a built-in fallback does
-;;;              the same thing.
+;;;   4. ORIENT - after the conversion the processed text is rotated
+;;;              flat so it reads west -> east, right side up
+;;;              (absolute angle 0), turning about its middle point
+;;;              the way Express Tools TORIENT does so labels stay in
+;;;              place.  TORIENT is used when available, and a
+;;;              built-in pass then verifies every text actually
+;;;              landed on the target angle, fixing any that did not
+;;;              (or all of them when Express Tools is missing).
+;;;              Set *tydrn-orient-angle* to nil to use TORIENT's
+;;;              "Most readable" behavior instead (only upside-down
+;;;              text is flipped 180).
 ;;;
 ;;; The ROMANC text style and the POINTS layer are created if they do
 ;;; not already exist.  Locked layers are unlocked for the duration of
@@ -45,7 +49,12 @@
       *tydrn-pool-layer*  "POOL"
       *tydrn-dest-layer*  "POINTS"
       *tydrn-anch-layer*  "ANCHORS"
-      *tydrn-pink*        6)          ; ACI 6 = magenta / pink
+      *tydrn-pink*        6           ; ACI 6 = magenta / pink
+      *tydrn-orient-angle* 0.0)       ; absolute text angle in degrees
+                                      ; (0 = read west->east, right
+                                      ; side up); nil = only flip
+                                      ; upside-down text ("Most
+                                      ; readable")
 
 ;; ---------------------------------------------------------------
 ;; Helpers
@@ -118,17 +127,25 @@
           (vlax-safearray->list ll)
           (vlax-safearray->list ur)))
 
-;; Fallback for TORIENT "Most readable": text whose angle is in
-;; (90, 270] degrees reads upside down, so flip it 180 degrees while
-;; keeping it centered on the spot it occupied (TORIENT turns text
-;; about its middle point).  Readable text is left alone.
-(defun tydrn:orient-readable (obj / ang c1 c2)
-  (setq ang (rem (vla-get-Rotation obj) (* 2.0 pi)))   ; radians
-  (if (< ang 0.0) (setq ang (+ ang (* 2.0 pi))))
-  (if (and (> ang (* 0.5 pi)) (<= ang (* 1.5 pi)))
+;; Built-in equivalent of TORIENT, used to verify (and if needed fix)
+;; every text after the TORIENT attempt, or to do the whole job when
+;; Express Tools is missing.  With *tydrn-orient-angle* set, the text
+;; is turned to that absolute angle; with it nil, only upside-down
+;; text (angle in (90, 270] degrees) is flipped 180.  Either way the
+;; text turns about its middle point so it stays where it was.
+(defun tydrn:orient (obj / cur target c1 c2)
+  (setq cur (rem (vla-get-Rotation obj) (* 2.0 pi)))   ; radians
+  (if (< cur 0.0) (setq cur (+ cur (* 2.0 pi))))
+  (setq target
+        (if *tydrn-orient-angle*
+          (* pi (/ *tydrn-orient-angle* 180.0))
+          (if (and (> cur (* 0.5 pi)) (<= cur (* 1.5 pi)))
+            (rem (+ cur pi) (* 2.0 pi))
+            cur)))
+  (if (not (equal cur target 1e-8))
     (progn
       (setq c1 (tydrn:bbox-center obj))
-      (vla-put-Rotation obj (rem (+ ang pi) (* 2.0 pi)))
+      (vla-put-Rotation obj target)
       (setq c2 (tydrn:bbox-center obj))
       (vla-Move obj (vlax-3d-point c2) (vlax-3d-point c1)))))
 
@@ -237,17 +254,24 @@
               i      (1+ i)))))
 
   ;; ------------------------------------------------------------
-  ;; 4. Orient the converted text with TORIENT "Most readable"
-  ;;    (the Enter default at its rotation prompt).
+  ;; 4. Orient the converted text: TORIENT first when available,
+  ;;    then a built-in pass that guarantees the result even if
+  ;;    TORIENT was missing, failed, or skipped something.
   ;; ------------------------------------------------------------
   (if ss-text
-    (if (tydrn:torient-p)
-      (command "._TORIENT" ss-text "" "")
-      (progn
-        (setq i 0)
-        (while (< i (sslength ss-text))
-          (tydrn:orient-readable (vlax-ename->vla-object (ssname ss-text i)))
-          (setq i (1+ i))))))
+    (progn
+      (if (tydrn:torient-p)
+        (vl-catch-all-apply
+          'command
+          (if *tydrn-orient-angle*
+            (list "._TORIENT" ss-text "" (rtos *tydrn-orient-angle* 2 8))
+            (list "._TORIENT" ss-text "" ""))))
+      (setq i 0)
+      (while (< i (sslength ss-text))
+        (vl-catch-all-apply
+          'tydrn:orient
+          (list (vlax-ename->vla-object (ssname ss-text i))))
+        (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
   (tydrn:relock-layers *tydrn-unlocked*)
@@ -258,7 +282,7 @@
   (princ (strcat "\nTYDRN done: "
                  (itoa n-text) " text -> " *tydrn-text-style*
                  " h" (rtos *tydrn-text-height* 2 2)
-                 " oriented most-readable, "
+                 " oriented W->E, "
                  (itoa n-pool) " point(s) POOL -> " *tydrn-dest-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
