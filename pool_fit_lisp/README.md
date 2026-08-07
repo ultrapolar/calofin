@@ -227,7 +227,8 @@ each numbered on screen in its own colour:
   that are off the line (further than 0.250 from it).
 
   Click the outline you want to keep, or type its number.
-  Keep which fit - click one, or [1/2/3/All/None] <2>:
+  Redo refits with new settings, and lets you omit points first.
+  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:
 ```
 
 **`worst off`** is one bad point; **`avg all`** averages every point,
@@ -259,6 +260,16 @@ cleaned up, and the keeper reverts to the layer colour. `All` keeps
 all three (labels included) to compare later; `None` erases everything
 and leaves the drawing untouched. `Enter` at both prompts keeps **2**,
 the fit at exactly the distance you typed.
+
+**`Redo`** throws all three away and refits without leaving the
+command. First it asks whether any points should be left out this
+time — pick each one (mis-shots, duplicates, anything the line should
+not chase; each gets a dashed ring and is named), or press `Enter`
+for none. Then the distance, the percent and the curve cap are asked
+again — `Enter` keeps each as it is — and three new candidates are
+drawn from the surviving points. Declared walls and corners carry
+over; one anchored on an omitted point is dropped with a note. Redo
+as many times as it takes.
 
 The three tolerances are ½×, 1× and 2× what you asked for; change the
 spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.

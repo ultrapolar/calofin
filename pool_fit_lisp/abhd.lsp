@@ -1814,7 +1814,7 @@
 ;; compare like for like.
 (defun pf:compare (tour loop pts dpts tol allow
                    / prior vars v e ent lab st onv segs bad allbad first
-                     i pick idx keep ce bb hgt sel picked keyed pr)
+                     i pick idx keep ce bb hgt sel picked keyed pr res)
   (setq prior (pf:prior-fits))
   (pf:ensure-layer *PF-OUT-LAYER* 3)
   ;; every candidate is judged against the distance the user typed, so
@@ -1893,9 +1893,10 @@
       ;; number still works for anyone who prefers the keyboard.
       (setq pf-phase "waiting for the choice of fit")
       (princ "\n\n  Click the outline you want to keep, or type its number.")
-      (initget "1 2 3 All None")
+      (princ "\n  Redo refits with new settings, and lets you omit points first.")
+      (initget "1 2 3 All None Redo")
       (setq pick (getkword
-                   "\n  Keep which fit - click one, or [1/2/3/All/None] <2>: "))
+                   "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
       (if (null pick)
         ;; no keyword typed: give them a click, and fall back to 2
         (progn
@@ -1917,6 +1918,14 @@
       ;; anything not explicitly kept stays registered as scaffolding
       ;; and is swept when the command ends
       (cond
+        ((= pick "Redo")
+         ;; clear this trio off the screen right away - the caller
+         ;; asks its questions and draws a fresh one
+         (foreach v vars
+           (if (and (cadr v) (entget (cadr v))) (entdel (cadr v)))
+           (foreach e (nth 4 v)
+             (if (and e (entget e)) (entdel e))))
+         (setq res 'REDO))
         ((= pick "All")
          (foreach v vars
            (pf:temp-drop (cadr v))
@@ -1953,7 +1962,8 @@
                                "   off by " (rtos (car pr) 4 4))))))
           ;; one perimeter was chosen, so the floor can be drawn too
           (pf:bottom (car keep) dpts T)))))
-  (princ))
+  (princ)
+  res)
 
 ;; ---- the pool bottom (hopper) ----------------------------------------
 ;; After a perimeter is kept, the floor can be drawn in the same
@@ -2639,10 +2649,55 @@
                                (list g1 g2))))))))))
   (princ))
 
+;; ---- the numeric parameters ------------------------------------------
+;; Asked identically at the start of a run and again on a Redo -
+;; Enter keeps the shown value each time.
+
+;; Maximum distance from a point; remembered in *PF-TOL*.
+(defun pf:ask-tol (/ tol)
+  (initget 6)
+  (setq tol (getdist (strcat "\n  Maximum distance from a point <"
+                             (rtos *PF-TOL* 2 3) ">: ")))
+  (if (null tol) (setq tol *PF-TOL*))
+  (if (> tol *PF-TOL-MAX*)
+    (progn
+      (princ (strcat "\n  (more than " (rtos *PF-TOL-MAX* 2 1)
+                     " and the line is no longer a trace of the points"
+                     " - using " (rtos *PF-TOL-MAX* 2 1) ")"))
+      (setq tol *PF-TOL-MAX*)))
+  (setq *PF-TOL* tol)
+  tol)
+
+;; Share of the points allowed off the line, returned as a fraction;
+;; DEF is the fraction Enter keeps.
+(defun pf:ask-pct (def / pct)
+  (initget 4)
+  (setq pct (getint (strcat "\n  Percent of points allowed off <"
+                            (itoa (fix (+ 0.5 (* 100.0 def))))
+                            ">: ")))
+  (cond
+    ((null pct) def)
+    ((> pct 100)
+     (princ "\n  (more than 100 makes no sense - using 100)")
+     1.0)
+    (T (/ pct 100.0))))
+
+;; Curve cap; remembered in *PF-MAX-ARCS* (nil = no cap).
+(defun pf:ask-cap (/ mx)
+  (initget 4 "None")
+  (setq mx (getint (strcat "\n  Maximum curves <"
+                           (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
+                           ">: ")))
+  (cond ((null mx) nil)                            ; Enter: keep as-is
+        ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
+        (T (setq *PF-MAX-ARCS* mx)))
+  *PF-MAX-ARCS*)
+
 ;; ---- the command -----------------------------------------------------
-(defun c:ABHD ( / tol mx pct ans go wp1 wp2 rawwalls rawcnrs w w1 w2
+(defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs w w1 w2
                     ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok stale npt
+                    again omits pts2
                     pf-miss-pct pf-walls pf-corners pf-temp pf-ptnames
                     pf-dim-warned *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, sweep away any
@@ -2684,17 +2739,7 @@
   (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
   (princ "\n  pick two points in the drawing to measure one.")
   (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
-  (initget 6)
-  (setq tol (getdist (strcat "\n  Maximum distance from a point <"
-                             (rtos *PF-TOL* 2 3) ">: ")))
-  (if (null tol) (setq tol *PF-TOL*))
-  (if (> tol *PF-TOL-MAX*)
-    (progn
-      (princ (strcat "\n  (more than " (rtos *PF-TOL-MAX* 2 1)
-                     " and the line is no longer a trace of the points"
-                     " - using " (rtos *PF-TOL-MAX* 2 1) ")"))
-      (setq tol *PF-TOL-MAX*)))
-  (setq *PF-TOL* tol)
+  (setq tol (pf:ask-tol))
 
   ;; -- step 2: how many of the points may sit off the line? ---------
   ;; Enter means the standard share; the answer is per run, on purpose.
@@ -2704,28 +2749,13 @@
   (princ (strcat "\n  Press Enter for the standard "
                  (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
                  " percent."))
-  (initget 4)
-  (setq pct (getint (strcat "\n  Percent of points allowed off <"
-                            (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
-                            ">: ")))
-  (cond
-    ((null pct) (setq pf-miss-pct *PF-MISS-PCT*))
-    ((> pct 100)
-     (princ "\n  (more than 100 makes no sense - using 100)")
-     (setq pf-miss-pct 1.0))
-    (T (setq pf-miss-pct (/ pct 100.0))))
+  (setq pf-miss-pct (pf:ask-pct *PF-MISS-PCT*))
 
   ;; -- step 3: optional cap on how many curves the result may use ---
   (setq pf-phase "reading the curve limit")
   (princ "\n\n  Step 3 of 6 - limit how many curves the result may use?")
   (princ "\n  Type a whole number, or None for no limit.")
-  (initget 4 "None")
-  (setq mx (getint (strcat "\n  Maximum curves <"
-                           (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
-                           ">: ")))
-  (cond ((null mx) nil)                            ; Enter: keep as-is
-        ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
-        (T (setq *PF-MAX-ARCS* mx)))
+  (pf:ask-cap)
 
   ;; -- step 4: any dead-straight walls to declare? ------------------
   ;; Each declared wall is marked with a dashed line right away and
@@ -2936,7 +2966,76 @@
               (princ (strcat "\n  (declared straight walls only steer"
                              " the points-built fit; here your drawn"
                              " straight segments are already kept)")))))
-         (if ok (pf:compare tour loop pts dpts tol allow))))))
+         (if ok
+           (progn
+             (setq again T)
+             (while again
+               (setq again nil)
+               (if (eq 'REDO (pf:compare tour loop pts dpts tol allow))
+                 (progn
+                   ;; -- redo: maybe omit points, then re-ask the
+                   ;; numbers and draw a fresh trio -----------------
+                   (setq pf-phase "picking points to omit"
+                         omits    nil)
+                   (princ "\n\nRedoing the fit.  Any points to leave out this time?")
+                   (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
+                   (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                   (while (setq wp1 (getpoint "\n  Point to omit (Enter when done): "))
+                     (setq w1 (pf:nearest (pf:2d wp1) dpts))
+                     (if w1
+                       (progn
+                         (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w1)))
+                         (setq omits (cons w1 omits))
+                         (princ (strcat "  - omitting Pt." (pf:pt-name w1))))))
+                   (if omits
+                     (progn
+                       ;; drop them - and their duplicates - from the
+                       ;; fit, the stats and the miss allowance alike
+                       (setq pts2 nil)
+                       (foreach w pts
+                         (if (not (pf:memb w omits))
+                           (setq pts2 (cons w pts2))))
+                       (setq pts  (reverse pts2)
+                             dpts (if pts (pf:dedupe pts)))
+                       ;; declared walls and corners anchored on an
+                       ;; omitted point make no sense any more
+                       (setq pts2 nil)
+                       (foreach w pf-walls
+                         (if (not (or (pf:memb (car w) omits)
+                                      (pf:memb (cadr w) omits)))
+                           (setq pts2 (cons w pts2))))
+                       (if (< (length pts2) (length pf-walls))
+                         (princ "\n  (a declared wall lost an end and was dropped)"))
+                       (setq pf-walls (reverse pts2)
+                             pts2     nil)
+                       (foreach w pf-corners
+                         (if (not (pf:memb w omits))
+                           (setq pts2 (cons w pts2))))
+                       (setq pf-corners (reverse pts2))
+                       (princ (strcat "\n  " (itoa (length omits))
+                                      " point(s) omitted - "
+                                      (itoa (length dpts))
+                                      " remain."))))
+                   (if (< (length dpts) 3)
+                     (princ "\nToo few points remain for a fit - nothing redone.")
+                     (progn
+                       (princ "\n\n  New settings - Enter keeps each one as it is.")
+                       (setq pf-phase "reading the tolerance"
+                             tol      (pf:ask-tol))
+                       (setq pf-phase "reading the miss percentage"
+                             pf-miss-pct (pf:ask-pct pf-miss-pct))
+                       (setq pf-phase "reading the curve limit")
+                       (pf:ask-cap)
+                       (setq allow (pf:ceil (* (pf:misspct)
+                                               (length dpts))))
+                       ;; the point order must forget the omitted ones
+                       (cond
+                         ((null loop)
+                          (setq pf-phase "ordering the points"
+                                tour     (pf:order-points dpts)))
+                         ((not (pf:has-arcs loop))
+                          (setq tour (pf:loop-order loop dpts))))
+                       (setq again T))))))))))))
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
