@@ -40,6 +40,7 @@ NICE_RADII = (12.0, 6.0, 1.0)      # *PF-NICE-RADII*
 ANG_CAP = 1.373                    # window-edge clamp, atan(5)
 BOTTOM_STEP = 6.0                  # *PF-BOTTOM-STEP*
 HOP_OFF = 18.0                     # *PF-HOP-OFF* (default)
+PICKUP_EPS = 3.0                   # *PF-PICKUP-EPS*
 
 # ---- small 2D helpers ------------------------------------------------
 
@@ -648,6 +649,13 @@ def curve_near(p, segs):
     return best
 
 
+def near_loop(pts, segs, eps=PICKUP_EPS):
+    """The subset of PTS within EPS of the loop (pf:near-loop) - the
+    perimeter's own survey points, not the depth shots nearby."""
+    return [q for q in pts
+            if min(seg_dist(q, s) for s in segs) <= eps]
+
+
 def sample_loop(segs, step=BOTTOM_STEP):
     """The loop as points spaced about STEP apart (pf:sample-loop)."""
     out = []
@@ -1214,6 +1222,11 @@ def test_pool_bottom_geometry():
             p = smp[i]
             assert (math.hypot(p[0] + 10 * nx, p[1] + 10 * ny)
                     < math.hypot(*p)), "normal points outward"
+    # near_loop keeps the perimeter's own points, drops the strays -
+    # how ADAB finds the points when only the polyline is selected
+    keep = [(r, 0.0), (0.0, -r), (r - 1.0, 0.0)]
+    drop = [(0.0, 0.0), (r + 20.0, 0.0), (30.0, 10.0)]
+    assert near_loop(keep + drop, segs, 3.0) == keep
     print("  bottom geometry: sampling, area sign, projections, normals")
 
 
@@ -1408,6 +1421,7 @@ def test_constants_match_lisp():
     assert float(setq_value("TOL-MAX")) == TOL_MAX
     assert float(setq_value("BOTTOM-STEP")) == BOTTOM_STEP
     assert float(setq_value("HOP-OFF")) == HOP_OFF
+    assert float(setq_value("PICKUP-EPS")) == PICKUP_EPS
     # the dimension styles picked by how an offset was typed
     assert setq_value("DIM-FTIN") == '"SIDE DIMENSION"'
     assert setq_value("DIM-IN") == '"STANDARD INCHES"'
@@ -1481,7 +1495,7 @@ def test_lisp_file_is_well_formed():
                "pf:bottom", "pf:hopper-pts", "pf:hopper-back",
                "pf:sample-loop", "pf:curve-near", "pf:make-dim",
                "pf:slope-pts", "pf:off-at", "pf:ask-slope",
-               "pf:get-off", "pf:dim-style"):
+               "pf:get-off", "pf:dim-style", "pf:near-loop"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 

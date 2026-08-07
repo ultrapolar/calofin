@@ -5,8 +5,9 @@
 ;;;
 ;;; Commands:  ABHD - fit the perimeter, then optionally the bottom
 ;;;            ADAB - the pool bottom on its own, over an existing
-;;;                   perimeter (select the survey points and the
-;;;                   closed polyline or its exploded lines/arcs)
+;;;                   perimeter (select the closed polyline or its
+;;;                   exploded lines/arcs; the survey points sitting
+;;;                   on it are found automatically)
 ;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
@@ -153,6 +154,13 @@
 (setq *PF-BOTTOM-STEP*  6.0)        ; sampling step for the hopper
                                     ; offset curve (6 inches keeps it
                                     ; smooth without a heavy polyline)
+(setq *PF-PICKUP-EPS*   3.0)        ; a survey point within this of the
+                                    ; selected perimeter counts as one
+                                    ; of ITS points when ADAB gathers
+                                    ; or trims them (3 in - genuine
+                                    ; edge points sit within the fit
+                                    ; tolerance, depth shots and deck
+                                    ; points are feet away)
 (if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; default hopper
                                     ; offset (18 in), remembered per
                                     ; session like the tolerance
@@ -2011,6 +2019,18 @@
     (if (or (null bd) (< d bd)) (setq best q bd d)))
   best)
 
+;; The subset of PTS sitting within EPS of the loop SEGS - the
+;; perimeter's own survey points, as opposed to depth shots and deck
+;; points that only happen to be nearby.
+(defun pf:near-loop (pts segs eps / out q s d dmin)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (pf:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (and dmin (<= dmin eps)) (setq out (cons q out))))
+  (reverse out))
+
 ;; Sample the closed loop into points spaced about STEP apart, walking
 ;; it in order: each segment contributes its start point plus enough
 ;; interior points that no gap exceeds STEP (its end is the next
@@ -2924,13 +2944,18 @@
   (princ))
 
 ;; ---- ADAB: the pool bottom on its own --------------------------------
-;; The end of the ABHD flow as a command of its own: select the survey
-;; points and an existing perimeter - one closed polyline, or the
-;; exploded lines/arcs that form one - and go straight to the breaks,
-;; the hopper offsets and the slope lines.  For when the perimeter was
+;; The end of the ABHD flow as a command of its own: select an
+;; existing perimeter - one closed polyline, or the exploded
+;; lines/arcs that form one - and go straight to the breaks, the
+;; hopper offsets and the slope lines.  The survey points do not have
+;; to be selected: with none in the selection, every ab_pt block and
+;; POINTS-layer point in the drawing is gathered and only those
+;; sitting ON the loop (within *PF-PICKUP-EPS*) are used, so stray
+;; depth shots and deck points stay out of it.  Points that ARE
+;; selected are trimmed by the same rule.  For when the perimeter was
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
-                    npt stale pf-temp pf-ptnames pf-dim-warned
+                    nall npt stale pf-temp pf-ptnames pf-dim-warned
                     *error* pf-old-err pf-phase)
   (setq pf-temp   nil
         pf-old-err *error*
@@ -2953,8 +2978,9 @@
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
-  (princ "\n\n  Select the survey points (ab_pt blocks or POINT entities) and the")
-  (princ "\n  pool perimeter - one closed polyline, or its exploded lines/arcs.")
+  (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
+  (princ "\n  lines/arcs.  The survey points sitting on it are found by")
+  (princ "\n  themselves; select them too only if they live somewhere unusual.")
   (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
   (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
@@ -3012,12 +3038,59 @@
       (cond
         ((null segs)
          (princ "\nNo perimeter found in the selection - include the closed polyline or its exploded lines/arcs."))
-        ((null dpts)
-         (princ (strcat "\nNo survey points found (\"" *PF-POINT-BLOCK*
-                        "\" blocks or POINT entities) - the breaks and"
-                        " the back of the hopper come from them.")))
         ((null (setq loop (pf:chain segs))) nil)   ; pf:chain said why
-        (T (pf:bottom loop dpts nil)))))
+        (T
+         (if (null dpts)
+           ;; no points in the selection: the perimeter knows its own.
+           ;; Gather every survey point in the drawing and keep the
+           ;; ones sitting on the loop.
+           (progn
+             (setq pf-phase "gathering the perimeter's points"
+                   ss (ssget "_X"
+                        (list '(-4 . "<OR")
+                              '(-4 . "<AND") '(0 . "INSERT")
+                              (cons 2 *PF-POINT-BLOCK*) '(-4 . "AND>")
+                              '(-4 . "<AND") '(0 . "POINT")
+                              (cons 8 *PF-POINT-LAYER*) '(-4 . "AND>")
+                              '(-4 . "<AND") '(0 . "INSERT")
+                              (cons 8 *PF-POINT-LAYER*) '(-4 . "AND>")
+                              '(-4 . "OR>"))))
+             (if ss
+               (progn
+                 (setq i 0)
+                 (while (< i (sslength ss))
+                   (setq en  (ssname ss i)
+                         ed  (entget en)
+                         typ (cdr (assoc 0 ed))
+                         i   (1+ i))
+                   (pf:add-point (pf:2d (cdr (assoc 10 ed)))
+                                 (if (= typ "INSERT")
+                                   (pf:block-number en))))))
+             (setq dpts (if pts (pf:dedupe pts))
+                   dpts (pf:near-loop dpts loop *PF-PICKUP-EPS*))
+             (if dpts
+               (princ (strcat "\n  " (itoa (length dpts))
+                              " survey point(s) sitting on the"
+                              " perimeter picked up automatically."))))
+           ;; points WERE selected: trim them to the perimeter's own,
+           ;; so depth shots and deck points caught by the window do
+           ;; not get in the way of the break and waypoint snapping
+           (progn
+             (setq nall (length dpts)
+                   dpts (pf:near-loop dpts loop *PF-PICKUP-EPS*))
+             (if (< (length dpts) nall)
+               (princ (strcat "\n  (" (itoa (- nall (length dpts)))
+                              " selected point(s) well off the"
+                              " perimeter were set aside)")))))
+         (if (null dpts)
+           (princ (strcat "\nNo survey points sit on this perimeter"
+                          " (within " (rtos *PF-PICKUP-EPS* 2 1)
+                          ") - looked for \"" *PF-POINT-BLOCK*
+                          "\" blocks anywhere and points on layer "
+                          *PF-POINT-LAYER*
+                          ".  Select the points explicitly if they"
+                          " live elsewhere."))
+           (pf:bottom loop dpts nil))))))
   (pf:temp-clear)
   (setq *error* pf-old-err)
   (princ))

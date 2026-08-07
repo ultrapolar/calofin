@@ -435,12 +435,18 @@ swapped and adds nothing.
 When the perimeter already exists — fitted by `ABHD` on an earlier
 day, or drawn by hand — **`ADAB`** runs just the bottom flow over it:
 
-1. Select the **survey points** (`ab_pt` blocks anywhere, or plain
-   `POINT` entities — any layer, since the selection is explicit) and
-   the **perimeter**: one closed polyline, or the exploded
+1. Select the **perimeter**: one closed polyline, or the exploded
    `LINE`s/`ARC`s that form one. Layer does not matter; ABHD's own
    markers, miss rings and an earlier bottom in the selection are
-   recognised and ignored.
+   recognised and ignored. **The survey points do not need to be
+   selected** — with none in the selection, every `ab_pt` block and
+   `POINTS`-layer point in the drawing is gathered and only the ones
+   **sitting on the loop** (within `*PF-PICKUP-EPS*`, 3″) are used,
+   so depth shots and deck points nearby stay out of it, and the
+   command says how many it picked up. Points you *do* select are
+   trimmed by the same on-the-loop rule (with a note when strays are
+   set aside) — select them explicitly only when they live on unusual
+   layers.
 2. The pieces are chained into a closed loop (the same check `ABHD`
    uses — a gap is reported with its location), and the flow goes
    straight to the shallow-break picks: breaks, back point, offsets,
