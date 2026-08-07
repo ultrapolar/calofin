@@ -41,6 +41,7 @@ ANG_CAP = 1.373                    # window-edge clamp, atan(5)
 BOTTOM_STEP = 6.0                  # *PF-BOTTOM-STEP*
 HOP_OFF = 18.0                     # *PF-HOP-OFF* (default)
 PICKUP_EPS = 3.0                   # *PF-PICKUP-EPS*
+DIM_OFF = 12.0                     # *PF-DIM-OFF*
 
 # ---- small 2D helpers ------------------------------------------------
 
@@ -762,6 +763,12 @@ def hopper_pts(samps, sgn, i1, i2, ib, p1, p2, off1, off2, off3):
                                            if lt - lb > 1.0e-9 else 1.0)
         nx, ny = samp_normal(idxs[j], samps, sgn)
         out.append((q[0] + nx * offv, q[1] + ny * offv))
+    # the hopper's corners sit ON the deep break line itself, off1
+    # and off2 in from its ends - not merely near it
+    bl = unit((p2[0] - p1[0], p2[1] - p1[1]))
+    if bl:
+        out[0] = (p1[0] + bl[0] * off1, p1[1] + bl[1] * off1)
+        out[-1] = (p2[0] - bl[0] * off2, p2[1] - bl[1] * off2)
     return out, kb, base, direc
 
 
@@ -780,7 +787,8 @@ def off_at(cj, anchors):
     return prev[1]
 
 
-def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None):
+def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None,
+              ea=None):
     """A guided slope line (pf:slope-pts): CNT samples from IA in
     direction DIREC (the side away from the hopper), following the
     perimeter with an inward offset that starts at OFFA and eases to
@@ -820,6 +828,8 @@ def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None):
         offv = off_at(cum[j], anchors)
         nx, ny = samp_normal(idxs[j], samps, sgn)
         out.append((q[0] + nx * offv, q[1] + ny * offv))
+    if ea is not None:
+        out[0] = ea                 # depart from the hopper's corner
     return out, [(wall, out[bk]) for wall, bk in keyed]
 
 
@@ -1252,7 +1262,13 @@ def test_pool_bottom_hopper():
     # constant offsets: the hopper is a concentric arc through the back
     hpts, kb, base, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
                                        12.0, 12.0, 12.0)
-    assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2 for p in hpts)
+    assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2
+               for p in hpts[1:-1])
+    # the corners sit ON the deep break line itself, 12 in from its
+    # ends - collinear with d1-d2, exactly the offset away
+    for corner, end in ((hpts[0], d1), (hpts[-1], d2)):
+        assert abs(cross3(d1, d2, corner)) < 1.0e-6 * dist(d1, d2)
+        assert abs(dist(corner, end) - 12.0) < 1.0e-9
     assert dist(base[kb], (r, 0.0)) < BOTTOM_STEP, "walk missed the back"
     # differing offsets: exact at the three anchors, gradual between
     hpts, kb, base, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
@@ -1274,7 +1290,8 @@ def test_pool_bottom_hopper():
                      near_idx(curve_near(back, rev), smp),
                      d1, d2, 12.0, 12.0, 12.0)
     assert hp2 is not None
-    assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2 for p in hp2[0])
+    assert all(abs(math.hypot(*p) - (r - 12.0)) < 0.2
+               for p in hp2[0][1:-1])
 
     # and on a fitted organic pool: the hopper stays inside it
     def inside(p, poly):
@@ -1357,6 +1374,10 @@ def test_guided_slope_lines():
     assert dist(sl2[-1], s140) < 1.0e-9
     # a walk too short to bother falls back to a straight line
     assert slope_pts(samps, sgn, i1, -direc, 1, d1, s220, 12.0) is None
+    # an exact hopper corner passed in becomes the first point verbatim
+    sl3, _ = slope_pts(samps, sgn, i1, -direc, a220, d1, s220, 12.0,
+                       None, (77.0, -50.0))
+    assert sl3[0] == (77.0, -50.0)
     print("  guided slopes: side pairing, exact ends, monotonic ease-off")
 
 
@@ -1422,6 +1443,7 @@ def test_constants_match_lisp():
     assert float(setq_value("BOTTOM-STEP")) == BOTTOM_STEP
     assert float(setq_value("HOP-OFF")) == HOP_OFF
     assert float(setq_value("PICKUP-EPS")) == PICKUP_EPS
+    assert float(setq_value("DIM-OFF")) == DIM_OFF
     # the dimension styles picked by how an offset was typed
     assert setq_value("DIM-FTIN") == '"SIDE DIMENSION"'
     assert setq_value("DIM-IN") == '"STANDARD INCHES"'
@@ -1496,7 +1518,8 @@ def test_lisp_file_is_well_formed():
                "pf:sample-loop", "pf:curve-near", "pf:make-dim",
                "pf:slope-pts", "pf:off-at", "pf:ask-slope",
                "pf:get-off", "pf:dim-style", "pf:near-loop",
-               "pf:ask-tol", "pf:ask-pct", "pf:ask-cap"):
+               "pf:ask-tol", "pf:ask-pct", "pf:ask-cap",
+               "pf:ensure-dashed2"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 

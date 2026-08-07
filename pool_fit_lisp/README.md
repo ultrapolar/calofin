@@ -386,9 +386,18 @@ so). The two deep-break dims stay in the drawing's current dimension
 style.
 
 The perimeter beyond the deep break is **offset inward** by those
-amounts — exactly your `Pt.12` offset at `Pt.12`, exactly the back
-offset at the back, exactly the `Pt.7` offset at the other end,
-**blending gradually over arc length in between** when they differ.
+amounts — exactly the back offset at the back, blending gradually
+over arc length where they differ — and the hopper's two **corners
+land ON the deep break line itself**, each exactly its offset in from
+its wall end.
+
+The deep break is then drawn as **three collinear lines on the `POOL`
+layer**: a `DASHED2` stub from each wall in to its hopper corner, and
+a solid (ByLayer) run across the hopper between them. Its dimensions
+form the classic **K/L/M string**: wall-to-hopper, hopper width
+(between the two corners), and hopper-to-wall, all chained on one
+line **a foot off the deep break** (`*PF-DIM-OFF*`) on the hopper
+side.
 
 Each **slope line** — from a hopper end up to the shallow break point
 on its own side — is then asked about separately, again by point
@@ -428,13 +437,13 @@ that isn't on that side of the pool, or that lands on a break point,
 is called out and ignored; picking no points at all just gives the
 plain guided line.
 
-Everything is drawn **solid** on layer `POOL-BOTTOM` (blue, created
-if needed): the shallow break line, the deep break line, the hopper
-outline (an open polyline sampled every 6″ — `*PF-BOTTOM-STEP*`), the
-two slope lines, and an **aligned dimension on each of the three
-offsets**, measured automatically in the drawing's current dimension
-style. The first offset becomes the session default (`*PF-HOP-OFF*`,
-18″ out of the box).
+Everything else is drawn **solid** on layer `POOL-BOTTOM` (blue,
+created if needed): the shallow break line, the hopper outline (an
+open polyline sampled every 6″ — `*PF-BOTTOM-STEP*`), the two slope
+lines, and the **aligned dimensions** — the deep-end K/L/M string
+plus one on the back offset and on every waypoint, measured
+automatically. The first offset becomes the session default
+(`*PF-HOP-OFF*`, 18″ out of the box).
 
 `ESC` or a cancelled pick anywhere in the flow leaves nothing behind
 — the bottom only stays once it is complete. If no survey point lies

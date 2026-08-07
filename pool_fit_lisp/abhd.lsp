@@ -174,6 +174,11 @@
                                     ; Either style missing from the
                                     ; drawing falls back to the
                                     ; current style, with a note
+(setq *PF-DIM-OFF* 12.0)            ; the deep-end dimension string
+                                    ; (wall-to-hopper, hopper width,
+                                    ; hopper-to-wall) sits this far off
+                                    ; the deep break line (a foot), on
+                                    ; the hopper side
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
   '((0.5 1 "red"    "tighter - hugs the points")
     (1.0 2 "yellow" "as asked")
@@ -2112,13 +2117,28 @@
   (if (null u) (setq u '(1.0 0.0)))
   (pf:scl (pf:perp u) sgn))
 
-;; A solid LINE on the pool-bottom layer.
-(defun pf:make-line (p1 p2)
-  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                  (cons 8 *PF-BOTTOM-LAYER*)
-                  '(100 . "AcDbLine")
-                  (cons 10 (list (car p1) (cadr p1) 0.0))
-                  (cons 11 (list (car p2) (cadr p2) 0.0)))))
+;; A LINE on LAYER (nil = the pool-bottom layer) with linetype LTYP
+;; (nil = ByLayer).
+(defun pf:make-line (p1 p2 layer ltyp / dxf)
+  (setq dxf (list '(0 . "LINE") '(100 . "AcDbEntity")
+                  (cons 8 (if layer layer *PF-BOTTOM-LAYER*))))
+  (if ltyp (setq dxf (append dxf (list (cons 6 ltyp)))))
+  (entmakex (append dxf
+                    (list '(100 . "AcDbLine")
+                          (cons 10 (list (car p1) (cadr p1) 0.0))
+                          (cons 11 (list (car p2) (cadr p2) 0.0))))))
+
+;; Make sure the DASHED2 linetype (the half-size dashes marking the
+;; underwater break stubs) exists - pure entmake, like pf:ensure-dashed.
+(defun pf:ensure-dashed2 ()
+  (if (not (tblsearch "LTYPE" "DASHED2"))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   '(2 . "DASHED2") '(70 . 0)
+                   '(3 . "Dashed (.5x) _ _ _ _ _")
+                   '(72 . 65) '(73 . 2) '(40 . 9.0)
+                   '(49 . 6.0) '(74 . 0)
+                   '(49 . -3.0) '(74 . 0)))))
 
 ;; An OPEN polyline through PTS (no bulges) on the pool-bottom layer.
 (defun pf:make-open-pline (pts / dxf q)
@@ -2144,14 +2164,14 @@
                          " current style instead)"))))
       (getvar "DIMSTYLE"))))
 
-;; An aligned dimension measuring PA to PB, its line and text on the
-;; measured stretch itself, in dimension style STY (nil = current).
-;; The empty group 1 makes AutoCAD fill in the measured value (the
-;; "auto" dimension text) and build the dimension block; nil comes
-;; back when the drawing cannot take a dimension, and the caller says
-;; so once.
-(defun pf:make-dim (pa pb sty / m)
-  (setq m (pf:mid pa pb))
+;; An aligned dimension measuring PA to PB, in dimension style STY
+;; (nil = current), its dimension line through PDL - or right on the
+;; measured stretch when PDL is nil.  The empty group 1 makes AutoCAD
+;; fill in the measured value (the "auto" dimension text) and build
+;; the dimension block; nil comes back when the drawing cannot take a
+;; dimension, and the caller says so once.
+(defun pf:make-dim (pa pb sty pdl / m)
+  (setq m (if pdl pdl (pf:mid pa pb)))
   (entmakex (list '(0 . "DIMENSION") '(100 . "AcDbEntity")
                   (cons 8 *PF-BOTTOM-LAYER*)
                   '(100 . "AcDbDimension")
@@ -2235,7 +2255,7 @@
 ;; two deep break points share a sample.
 (defun pf:hopper-pts (samps sgn i1 i2 ib p1 p2 off1 off2 off3
                       / n fwdb fwd2 dir cnt kb idxs i k base cum lt lb
-                        prev q out j cj offv)
+                        prev q out j cj offv bl)
   (setq n    (length samps)
         fwdb (rem (+ (- ib i1) n) n)
         fwd2 (rem (+ (- i2 i1) n) n))
@@ -2285,7 +2305,15 @@
                                          offv))
                              out)
                   j    (1+ j)))
-          (list (reverse out) kb base dir))))))
+          (setq out (reverse out))
+          ;; the hopper's corners sit ON the deep break line itself,
+          ;; OFF1 and OFF2 in from its ends - not merely near it
+          (setq bl (pf:unit (pf:sub p2 p1)))
+          (if bl
+            (setq out (cons (pf:add p1 (pf:scl bl off1)) (cdr out))
+                  out (reverse (cons (pf:add p2 (pf:scl bl (- off2)))
+                                     (cdr (reverse out))))))
+          (list out kb base dir))))))
 
 ;; Offset at arc position CJ, read off the piecewise profile ANCHORS
 ;; ((position . offset) ... sorted ascending, both ends included):
@@ -2312,13 +2340,14 @@
 ;; local inward normal); between anchors the offset runs straight
 ;; over arc length, so the picked points steer the line and the curve
 ;; carries it the rest of the way.  PA and PB are the exact break
-;; positions; the first point lands exactly on the hopper's end, the
-;; last exactly on the shallow break point.
+;; positions; the first point lands exactly on the hopper's corner EA
+;; (which sits on the deep break line), the last exactly on the
+;; shallow break point.
 ;; Returns (linePts dimTriples) - one (wallPt linePt ftin) per
 ;; accepted waypoint, so its offset can be dimensioned in the style
 ;; its format asks for - or nil when the walk is too short to bother
 ;; (the caller draws a straight line then).
-(defun pf:slope-pts (samps sgn ia dir cnt pa pb offa waypts
+(defun pf:slope-pts (samps sgn ia dir cnt pa pb offa waypts ea
                      / n idxs i k base cum lt prev q out j anchors wp
                        woff wfl bk bd d dims)
   (setq n (length samps))
@@ -2379,6 +2408,7 @@
                             out)
                   j   (1+ j)))
           (setq out (reverse out))
+          (if ea (setq out (cons ea (cdr out))))
           (list out
                 (mapcar '(lambda (pr) (list (car pr)
                                             (nth (cadr pr) out)
@@ -2409,7 +2439,7 @@
                        lines guided
                        / made samps sgn i1 i2 ib hp hpts base kb dir
                          n is1 is2 sl spec wdims desc1 desc2 e1 e2 q e
-                         dimfail)
+                         dimfail u)
   (setq pf-phase "building the hopper"
         samps    (pf:sample-loop segs *PF-BOTTOM-STEP*)
         sgn      (if (< (pf:loop-area samps) 0.0) -1.0 1.0)
@@ -2426,6 +2456,25 @@
             base (caddr hp) dir (cadddr hp)
             e1   (car hpts) e2  (last hpts)
             made lines)
+      (if (<= (pf:dist dp1 dp2) (+ off1 off2))
+        (princ "\n  (warning: the two deep end offsets meet or overlap across the pool)"))
+      ;; the deep break becomes THREE lines on the pool layer: dashed
+      ;; stubs from each wall in to the hopper's corners, and a solid
+      ;; (ByLayer) run across the hopper between them - the single
+      ;; placeholder line drawn during the questions goes away
+      (if (and (cadr lines) (entget (cadr lines)))
+        (entdel (cadr lines)))
+      (pf:ensure-dashed2)
+      (pf:ensure-layer *PF-POOL-LAYER* 4)
+      (setq made (cons (pf:temp-add
+                         (pf:make-line dp1 e1 *PF-POOL-LAYER* "DASHED2"))
+                       made)
+            made (cons (pf:temp-add
+                         (pf:make-line e1 e2 *PF-POOL-LAYER* nil))
+                       made)
+            made (cons (pf:temp-add
+                         (pf:make-line e2 dp2 *PF-POOL-LAYER* "DASHED2"))
+                       made))
       (setq made (cons (pf:temp-add
                          (pf:make-open-pline (pf:thin-run hpts)))
                        made))
@@ -2448,11 +2497,11 @@
                     (pf:slope-pts samps sgn i1 (- dir)
                                   (rem (+ (* dir (- i1 is1)) n n) n)
                                   dp1 sp1 off1
-                                  (if (eq spec T) nil spec))))
+                                  (if (eq spec T) nil spec) e1)))
       (setq made  (cons (pf:temp-add
                           (if sl
                             (pf:make-open-pline (pf:thin-run (car sl)))
-                            (pf:make-line e1 sp1)))
+                            (pf:make-line e1 sp1 nil nil)))
                         made)
             wdims (if sl (append wdims (cadr sl)))
             desc1 (cond ((null sl) "straight")
@@ -2465,11 +2514,11 @@
                    (pf:slope-pts samps sgn i2 dir
                                  (rem (+ (* dir (- is2 i2)) n n) n)
                                  dp2 sp2 off2
-                                 (if (eq spec T) nil spec))))
+                                 (if (eq spec T) nil spec) e2)))
       (setq made  (cons (pf:temp-add
                           (if sl
                             (pf:make-open-pline (pf:thin-run (car sl)))
-                            (pf:make-line e2 sp2)))
+                            (pf:make-line e2 sp2 nil nil)))
                         made)
             wdims (if sl (append wdims (cadr sl)) wdims)
             desc2 (cond ((null sl) "straight")
@@ -2477,21 +2526,38 @@
                                            (itoa (length (cadr sl)))
                                            " point(s)"))
                         (T "guided")))
-      ;; dimension each offset right where it applies - the three
-      ;; hopper offsets, and every waypoint offset the user pinned.
-      ;; Break-point dims keep the current style; the others get the
-      ;; style their typed format asks for
+      ;; dimension each offset right where it applies.  The deep end
+      ;; gets the K/L/M-style string: wall-to-hopper, hopper width,
+      ;; hopper-to-wall, all chained on one line a foot off the deep
+      ;; break on the hopper side.  Break-point dims keep the current
+      ;; style; the back and waypoint dims get the style their typed
+      ;; format asks for, on the measured stretch itself
+      (setq u (pf:unit (pf:perp (pf:sub dp2 dp1))))
+      (if (and u
+               (> (pf:dot u (pf:sub (pf:mid sp1 sp2) (pf:mid dp1 dp2)))
+                  0.0))
+        (setq u (pf:scl u -1.0)))       ; u points to the hopper side
       (setq dimfail nil)
       (foreach q (append
-                   (list (list dp1 e1 nil) (list dp2 e2 nil)
+                   (list (list dp1 e1 nil
+                               (if u (pf:add (pf:mid dp1 e1)
+                                             (pf:scl u *PF-DIM-OFF*))))
+                         (list e1 e2 nil
+                               (if u (pf:add (pf:mid e1 e2)
+                                             (pf:scl u *PF-DIM-OFF*))))
+                         (list e2 dp2 nil
+                               (if u (pf:add (pf:mid e2 dp2)
+                                             (pf:scl u *PF-DIM-OFF*))))
                          (list (nth kb base) (nth kb hpts)
-                               (if bfl *PF-DIM-FTIN* *PF-DIM-IN*)))
+                               (if bfl *PF-DIM-FTIN* *PF-DIM-IN*)
+                               nil))
                    (mapcar '(lambda (pr) (list (car pr) (cadr pr)
                                                (if (caddr pr)
                                                  *PF-DIM-FTIN*
-                                                 *PF-DIM-IN*)))
+                                                 *PF-DIM-IN*)
+                                               nil))
                            wdims))
-        (setq e (pf:make-dim (car q) (cadr q) (caddr q)))
+        (setq e (pf:make-dim (car q) (cadr q) (caddr q) (cadddr q)))
         (if e
           (setq made (cons (pf:temp-add e) made))
           (setq dimfail T)))
@@ -2501,11 +2567,15 @@
                        (rtos off2 2 2) " and " (rtos off3 2 2) ")")))
       ;; the flow finished: promote it all from scaffolding to result
       (foreach e made (if e (pf:temp-drop e)))
-      (princ (strcat "\nPool bottom added on layer " *PF-BOTTOM-LAYER*
-                     ": both break lines, the hopper (offsets "
+      (princ (strcat "\nPool bottom added: the shallow break, the"
+                     " three-piece deep break (dashed stubs and solid"
+                     " middle, on " *PF-POOL-LAYER*
+                     "), the hopper (offsets "
                      (rtos off1 2 2) " / " (rtos off3 2 2) " / "
-                     (rtos off2 2 2) "), the slope lines ("
-                     desc1 " / " desc2 "), and their dimensions."))))
+                     (rtos off2 2 2) ") on " *PF-BOTTOM-LAYER*
+                     ", the slope lines (" desc1 " / " desc2
+                     "), and the dimension string a foot off the"
+                     " deep break."))))
   (princ))
 
 ;; Ask how one slope line should run.  NM names the deep break point
@@ -2606,8 +2676,10 @@
                ;; declared is visible while the offsets are typed;
                ;; they stay scaffolding until the whole flow lands
                (pf:ensure-layer *PF-BOTTOM-LAYER* 5)
-               (setq lines (list (pf:temp-add (pf:make-line sp1 sp2))
-                                 (pf:temp-add (pf:make-line dp1 dp2))))
+               (setq lines (list (pf:temp-add
+                                   (pf:make-line sp1 sp2 nil nil))
+                                 (pf:temp-add
+                                   (pf:make-line dp1 dp2 nil nil))))
                (princ (strcat "\n  Back of the hopper: Pt."
                               (pf:pt-name back)
                               " (the survey point straight out from"
