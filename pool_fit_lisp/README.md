@@ -413,8 +413,11 @@ point. `Guided` follows the pool's own curve instead: the line runs
 along the perimeter with its inward offset **easing from the hopper
 offset at the deep break down to nothing at the shallow break**, so
 it lands on the shallow break point having gently followed the wall
-in. Sides are paired by walking the perimeter away from the hopper,
-so the two lines never cross, and the answers can be mixed freely.
+in. Every mode — straight, guided or points — **departs from the
+hopper's corner on the deep break line itself**; the guided spine is
+pulled onto that corner with a fade, not just its first vertex.
+Sides are paired by walking the perimeter away from the hopper, so
+the two lines never cross, and the answers can be mixed freely.
 
 `Points` takes control of the line where you want it: pick survey
 points along that side, between the two breaks, and give each an

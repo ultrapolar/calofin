@@ -829,7 +829,17 @@ def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None,
         nx, ny = samp_normal(idxs[j], samps, sgn)
         out.append((q[0] + nx * offv, q[1] + ny * offv))
     if ea is not None:
-        out[0] = ea                 # depart from the hopper's corner
+        # the line must DEPART from the hopper's corner, not merely
+        # have its first vertex moved there: pull the early stretch by
+        # the corner gap, fading to nothing by the first pinned anchor
+        # (or the shallow break), so waypoint offsets stay exact
+        dv = (ea[0] - out[0][0], ea[1] - out[0][1])
+        fade = anchors[1][0]
+        if fade < 1.0e-9:
+            fade = lt
+        out = [(q[0] + dv[0] * w, q[1] + dv[1] * w)
+               for q, w in ((q, (1.0 - cj / fade) if cj < fade else 0.0)
+                            for q, cj in zip(out, cum))]
     return out, [(wall, out[bk]) for wall, bk in keyed]
 
 
@@ -1374,11 +1384,19 @@ def test_guided_slope_lines():
     assert dist(sl2[-1], s140) < 1.0e-9
     # a walk too short to bother falls back to a straight line
     assert slope_pts(samps, sgn, i1, -direc, 1, d1, s220, 12.0) is None
-    # an exact hopper corner passed in becomes the first point verbatim
+    # a hopper corner passed in: the line DEPARTS from it - the whole
+    # early stretch is pulled over, fading out toward the shallow end,
+    # not just the first vertex teleported
+    ea = (77.0, -50.0)
     sl3, _ = slope_pts(samps, sgn, i1, -direc, a220, d1, s220, 12.0,
-                       None, (77.0, -50.0))
-    assert sl3[0] == (77.0, -50.0)
-    print("  guided slopes: side pairing, exact ends, monotonic ease-off")
+                       None, ea)
+    assert dist(sl3[0], ea) < 1.0e-9, "must start exactly on the corner"
+    assert dist(sl3[-1], s220) < 1.0e-9, "shallow end must stay exact"
+    gaps = [dist(a2, b2) for a2, b2 in zip(sl3, sl)]
+    assert gaps[0] > gaps[1] > gaps[len(gaps) // 2] > gaps[-1] - 1.0e-12, \
+        "the corner pull must fade smoothly along the line"
+    assert gaps[-1] < 1.0e-9
+    print("  guided slopes: side pairing, exact ends, corner pull fades")
 
 
 def test_slope_waypoints():
@@ -1423,6 +1441,14 @@ def test_slope_waypoints():
     viaempty, _ = slope_pts(samps, sgn, i1, -direc, steps, d1, s220,
                             12.0, [])
     assert all(dist(a, b2) < 1.0e-12 for a, b2 in zip(plain, viaempty))
+    # the corner pull dies out by the first waypoint, so its pinned
+    # offset still measures exactly what was typed
+    ea = (77.0, -50.0)
+    _, wd2 = slope_pts(samps, sgn, i1, -direc, steps, d1, s220, 12.0,
+                       [(dpts[26], 20.0)], ea)
+    assert len(wd2) == 1
+    assert abs(dist(wd2[0][0], wd2[0][1]) - 20.0) < 1.0e-9, \
+        "corner pull must not disturb a pinned waypoint offset"
     print("  slope waypoints: pinned offsets, off-side picks ignored")
 
 

@@ -2349,7 +2349,7 @@
 ;; (the caller draws a straight line then).
 (defun pf:slope-pts (samps sgn ia dir cnt pa pb offa waypts ea
                      / n idxs i k base cum lt prev q out j anchors wp
-                       woff wfl bk bd d dims)
+                       woff wfl bk bd d dims dv fade w cj out2)
   (setq n (length samps))
   (if (< cnt 2)
     nil
@@ -2408,7 +2408,24 @@
                             out)
                   j   (1+ j)))
           (setq out (reverse out))
-          (if ea (setq out (cons ea (cdr out))))
+          ;; the line must DEPART from the hopper's corner EA, not
+          ;; merely have its first vertex moved there: pull the early
+          ;; stretch by the gap between the corner and the plain
+          ;; normal-offset start, fading the pull to nothing by the
+          ;; first pinned anchor (or the shallow break when there is
+          ;; none), so waypoint offsets stay exact
+          (if ea
+            (progn
+              (setq dv   (pf:sub ea (car out))
+                    fade (car (cadr anchors)))
+              (if (< fade 1.0e-9) (setq fade lt))
+              (setq out2 nil j 0)
+              (foreach q out
+                (setq cj   (nth j cum)
+                      w    (if (< cj fade) (- 1.0 (/ cj fade)) 0.0)
+                      out2 (cons (pf:add q (pf:scl dv w)) out2)
+                      j    (1+ j)))
+              (setq out (reverse out2))))
           (list out
                 (mapcar '(lambda (pr) (list (car pr)
                                             (nth (cadr pr) out)
