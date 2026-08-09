@@ -170,4 +170,50 @@ assert not leaked, "spa:*form* still armed after the run: %r" % (leaked,)
 print("   spa:*form* cleared once the command finished")
 
 
+# --------------------------------------------------------------------
+# 6.  The wire format.
+#
+#     The palette cannot be compiled or run here, so the one thing that
+#     CAN be pinned down is the text it puts on the wire.  These are the
+#     exact strings LispBridge builds -- quoted alist, invariant-culture
+#     decimals, a point as a plain list rather than a dotted pair -- fed
+#     to the real SPA.LSP.  If the bridge's format is wrong, this breaks.
+# --------------------------------------------------------------------
+print("== 6. the exact expression the palette sends ==")
+
+WIRE = ("(spa:run-with-answers '("
+        '(mode . "Watersedge") (shape . "Rectangle") '
+        "(w . 84.0) (l . 72.0) "
+        '(cornera-ty . "90") (cornerb-ty . "90") '
+        '(cornerc-ty . "90") (cornerd-ty . "90")'
+        "))")
+
+h = VM()
+h.load(LSP)
+# The palette deliberately does NOT send 'base: the insertion point is
+# still picked in the drawing, where the user's own snaps are live.
+h.script = [None, (0, 0), "No", "No"]
+h.prompts = []
+h.eval(parse_all(WIRE)[0])
+same(a, h, "wire format")
+picked = [p for p, _ in h.prompts if 'base point' in p]
+assert len(picked) == 1, "the insertion point should still be picked"
+print("   palette's literal parses and draws the same spa")
+print("   insertion point still picked in the drawing, as intended")
+
+# a blank field goes out as an explicit nil, and must be accepted as NA
+# rather than crashing or being mistaken for a missing key
+NIL_WIRE = ("(spa:run-with-answers '("
+            '(mode . "Watersedge") (shape . "Rectangle") '
+            "(w . 84.0) (l . 72.0) (cornera-sz . nil)"
+            "))")
+i = VM()
+i.load(LSP)
+i.script = [None, (0, 0), "90", "90", "90", "90", "No", "No"]
+i.prompts = []
+i.eval(parse_all(NIL_WIRE)[0])
+same(a, i, "explicit nil")
+print("   an explicit nil is taken as NA, not as a missing key")
+
+
 print("\nALL SPA FORM SCENARIOS PASSED")

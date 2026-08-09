@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- AutoCAD loads in-process against .NET Framework; net48 is the
+         target for AutoCAD 2021-2024. AutoCAD 2025+ moved to .NET 8,
+         which needs net8.0-windows and the matching AutoCAD.NET package
+         version - see README.md. -->
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>Calofin</RootNamespace>
+    <AssemblyName>Calofin</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <OptionStrict>On</OptionStrict>
+    <OptionInfer>On</OptionInfer>
+    <LangVersion>latest</LangVersion>
+    <!-- AutoCAD owns the process; this assembly is only ever loaded into it -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference assemblies only. CopyLocal MUST stay false: shipping
+         acmgd/acdbmgd next to the assembly makes AutoCAD load a second
+         copy of its own API and fail in ways that look unrelated. -->
+    <PackageReference Include="AutoCAD.NET" Version="24.3.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shape art travels with the assembly; ShapeCatalog.ImagePath
+         resolves it relative to the loaded DLL. -->
+    <None Include="assets\shapes\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="assets\shapes\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
