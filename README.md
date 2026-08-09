@@ -1,12 +1,13 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender & AutoCAD tools
 
 Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+working between Blender and CAD, plus an AutoLISP routine for AutoCAD:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| Pool Layout (AutoLISP) | `pool_layout_lisp/` | Draws rectangle / Grecian / octagon / Roman / L / lazy-L / oval / round / mutt (mixed-end) pool plans from field measurements with tolerance fitting, hopper and sport bottoms, dimensions and a target-vs-actual report — plus `POOLDEMO` for an install check — see `pool_layout_lisp/README.md` |
 
 ## Installation (either add-on)
 
@@ -168,6 +169,8 @@ they are unit-testable outside Blender:
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_pool_lisp.py      # pool layout LISP geometry (Python mirror)
+python3 tests/test_pool_runtime.py   # pool layout LISP executed end-to-end in a mini AutoLISP VM
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
