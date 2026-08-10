@@ -39,7 +39,7 @@
 ;;;  --------
 ;;;     DDFIX   - select a feature, enter its height, apply the correction
 ;;;     DDSET   - set/forget the drone height H (DDFIX also asks the first time)
-;;;     DDALT   - read RelativeAltitude from the original DJI .JPG and set H
+;;;     DDALT   - read RelativeAltitude from the original DJI image and set H
 ;;;     DDCAL   - back-solve H from a feature of known true size (cross-check)
 ;;;     DDINFO  - show current settings and the distortion rate
 ;;;
@@ -260,13 +260,15 @@
   (princ))
 
 ;; ---------------------------------------------------------------------------
-;;  RelativeAltitude reader  -  pull dji:RelativeAltitude out of a DJI .JPG
+;;  RelativeAltitude reader  -  pull dji:RelativeAltitude out of a DJI image
 ;; ---------------------------------------------------------------------------
-;;  DJI writes an XMP text packet inside the JPEG holding, e.g.
+;;  DJI writes an XMP text packet inside the image holding, e.g.
 ;;      dji:RelativeAltitude="+18.90"     (METRES above the TAKE-OFF point)
-;;  This reads the file's raw bytes (Windows ADODB.Stream) and scans for the tag.
-;;  It only works on the ORIGINAL camera .JPG; screenshots, edited, emailed or
-;;  re-exported copies have the metadata stripped.  (Windows AutoCAD only.)
+;;  This reads the file's raw bytes (Windows ADODB.Stream) and scans for the
+;;  tag, so the container does not matter - JPG and PNG both work as long as
+;;  the packet survived. It only works on ORIGINAL camera files; screenshots,
+;;  edited, emailed or re-exported copies have the metadata stripped.
+;;  (Windows AutoCAD only.)
 
 ;; value string like "+18.90" -> real metres (drops a leading +, trims spaces)
 (defun dd-relalt->num (s)
@@ -298,7 +300,7 @@
   (if stm (vl-catch-all-apply 'vlax-release-object (list stm)))
   (if (vl-catch-all-error-p err) nil out))
 
-;; scan a JPG for  RelativeAltitude="..."  ; returns METRES (real) or nil.
+;; scan an image for  RelativeAltitude="..."  ; returns METRES (real) or nil.
 ;; tgt is the ASCII for  RelativeAltitude="  - we walk the raw bytes so the
 ;; binary image data does not trip us up; stop at the closing quote.
 (defun dd-jpg-relalt (file / lst tgt tlen m val done b)
@@ -319,15 +321,16 @@
     (dd-relalt->num val)))
 
 ;; ---------------------------------------------------------------------------
-;;  DDALT : read RelativeAltitude from a drone JPG and (optionally) set H
+;;  DDALT : read RelativeAltitude from a drone image and (optionally) set H
 ;; ---------------------------------------------------------------------------
 (defun c:DDALT ( / file m ft off h ans)
-  (setq file (getfiled "Select the ORIGINAL drone JPG" "" "jpg" 16))
+  (setq file (getfiled "Select the ORIGINAL drone image (PNG / JPG / TIF)" ""
+                       "png;jpg;jpeg;tif;tiff" 20))
   (cond
     ((null file) (princ "\nNo file selected."))
     ((null (setq m (dd-jpg-relalt file)))
      (princ "\nCould not find dji:RelativeAltitude in that file.")
-     (princ "\n  Is it the ORIGINAL DJI .JPG?  Screenshots / edited / exported copies lose it."))
+     (princ "\n  Is it the ORIGINAL camera file?  Screenshots / edited / exported copies lose it."))
     (t
      (setq ft (* m 3.280839895))
      (princ "\nRelativeAltitude (drone height above the TAKE-OFF point):")
@@ -354,6 +357,6 @@
                             "% size change per unit of height."))))))))
   (princ))
 
-(princ "\nDrone Distortion tool v3.1 loaded  (DDALT now reads the JPG as binary).")
+(princ "\nDrone Distortion tool v3.2 loaded  (DDALT accepts PNG / JPG / TIF).")
 (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
 (princ)

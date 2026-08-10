@@ -2,12 +2,15 @@
 """Verify DroneHeightGPS.lsp logic:
 1. Paren/quote balance lint of the .lsp source.
 2. Transliteration of the byte-parsing algorithms (identical arithmetic)
-   tested against a synthetic DJI-style JPEG (XMP + EXIF GPS IFD, LE and BE).
+   tested against synthetic DJI-style images: JPEG (APP1 EXIF + APP1 XMP),
+   PNG (eXIf chunk + iTXt XMP, front- or tail-of-file), bare TIFF; XMP in
+   both attribute and element serialisation; LE and BE byte orders.
 3. JSON number extractor tested against real-world response shapes.
 """
-import struct, sys
+import os, struct, sys, zlib
 
-LSP = __import__("os").path.join(__import__("os").path.dirname(__file__), "..", "drone_height_lisp", "DroneHeightGPS.lsp")
+LSP = os.path.join(os.path.dirname(__file__), "..",
+                   "drone_height_lisp", "DroneHeightGPS.lsp")
 
 # ---------------------------------------------------------------- lint ------
 def lint(path):
@@ -68,16 +71,28 @@ def grab_text(lst, n):
         out.append(chr(b) if 31 < b < 127 else " ")
     return "".join(out)
 
+# Mirror of ddg-xmp-text: anchor chain <x:xmpmeta -> APP1 URI -> drone-dji:
 def xmp_text(lst):
-    rest = scan_to(lst, [ord(c) for c in "ns.adobe.com/xap/1.0/"])
+    rest = scan_to(lst, [ord(c) for c in "<x:xmpmeta"])
+    if rest is None:
+        rest = scan_to(lst, [ord(c) for c in "ns.adobe.com/xap/1.0/"])
+    if rest is None:
+        rest = scan_to(lst, [ord(c) for c in "drone-dji:"])
     return grab_text(rest, 6144) if rest is not None else ""
 
+# Mirror of ddg-xmp-attr: attribute form Tag="..." then element form <Tag>...<
 def xmp_attr(txt, tag):
     pos = txt.find(tag + '="')
-    if pos < 0: return None
-    rest = txt[pos + len(tag) + 2:]          # LISP substr (+ pos (strlen tag) 3), 1-based
-    end = rest.find('"')
-    return rest[:end] if end >= 0 else None
+    if pos >= 0:
+        rest = txt[pos + len(tag) + 2:]      # LISP substr (+ pos (strlen tag) 3), 1-based
+        end = rest.find('"')
+        return rest[:end] if end >= 0 else None
+    pos = txt.find(tag + ">")
+    if pos >= 0:
+        rest = txt[pos + len(tag) + 1:]      # LISP substr (+ pos (strlen tag) 2), 1-based
+        end = rest.find("<")
+        return rest[:end] if end >= 0 else None
+    return None
 
 def numstr(s):
     s = s.strip(" ")
@@ -132,35 +147,72 @@ def gps_coord(lst, ent, le):
     if None in (d, m, s): return None
     return d + m / 60.0 + s / 3600.0
 
+# Mirror of ddg-tiff-at
+def tiff_at(rest):
+    b0, b1 = bb(rest, 0), bb(rest, 1)
+    if b0 == 73 and b1 == 73 and bb(rest, 2) == 42 and bb(rest, 3) == 0:
+        return rest
+    if b0 == 77 and b1 == 77 and bb(rest, 2) == 0 and bb(rest, 3) == 42:
+        return rest
+    return None
+
+# Mirror of ddg-find-tiff: bare TIFF, JPEG "Exif\0\0", PNG eXIf chunk;
+# false matches without a valid TIFF magic are skipped
+def find_tiff(lst):
+    tif = tiff_at(lst)
+    rest = lst
+    while tif is None:
+        rest = scan_to(rest, [ord(c) for c in "Exif"])
+        if rest is None: break
+        if bb(rest, 0) == 0 and bb(rest, 1) == 0:
+            tif = tiff_at(rest[2:])
+    rest = lst
+    while tif is None:
+        rest = scan_to(rest, [ord(c) for c in "eXIf"])
+        if rest is None: break
+        tif = tiff_at(rest)
+    return tif
+
 def exif_gps(lst):
     lat = lon = altm = None
-    tif = scan_to(lst, [ord(c) for c in "Exif"])
-    if tif is not None and bb(tif, 0) == 0 and bb(tif, 1) == 0:
-        tif = tif[2:]
-        b0, b1 = bb(tif, 0), bb(tif, 1)
-        ord_ = "LE" if (b0 == 73 and b1 == 73) else ("BE" if (b0 == 77 and b1 == 77) else None)
-        if ord_:
-            le = ord_ == "LE"
-            ifd0 = u32i(tif, 4, le)
-            ent = ifd_find(tif, ifd0, le, 0x8825) if ifd0 is not None else None
-            gps = u32i(tif, ent + 8, le) if ent is not None else None
-            if gps is not None:
-                ent = ifd_find(tif, gps, le, 2)
-                if ent is not None: lat = gps_coord(tif, ent, le)
-                ent = ifd_find(tif, gps, le, 1)
-                if lat is not None and ent is not None and bb(tif, ent + 8) == 83:
-                    lat = -lat
-                ent = ifd_find(tif, gps, le, 4)
-                if ent is not None: lon = gps_coord(tif, ent, le)
-                ent = ifd_find(tif, gps, le, 3)
-                if lon is not None and ent is not None and bb(tif, ent + 8) == 87:
-                    lon = -lon
-                ent = ifd_find(tif, gps, le, 6)
-                if ent is not None: altm = rat(tif, u32i(tif, ent + 8, le), le)
-                ent = ifd_find(tif, gps, le, 5)
-                if altm is not None and ent is not None and bb(tif, ent + 8) == 1:
-                    altm = -altm
+    tif = find_tiff(lst)
+    if tif is not None:
+        le = bb(tif, 0) == 73
+        ifd0 = u32i(tif, 4, le)
+        ent = ifd_find(tif, ifd0, le, 0x8825) if ifd0 is not None else None
+        gps = u32i(tif, ent + 8, le) if ent is not None else None
+        if gps is not None:
+            ent = ifd_find(tif, gps, le, 2)
+            if ent is not None: lat = gps_coord(tif, ent, le)
+            ent = ifd_find(tif, gps, le, 1)
+            if lat is not None and ent is not None and bb(tif, ent + 8) == 83:
+                lat = -lat
+            ent = ifd_find(tif, gps, le, 4)
+            if ent is not None: lon = gps_coord(tif, ent, le)
+            ent = ifd_find(tif, gps, le, 3)
+            if lon is not None and ent is not None and bb(tif, ent + 8) == 87:
+                lon = -lon
+            ent = ifd_find(tif, gps, le, 6)
+            if ent is not None: altm = rat(tif, u32i(tif, ent + 8, le), le)
+            ent = ifd_find(tif, gps, le, 5)
+            if altm is not None and ent is not None and bb(tif, ent + 8) == 1:
+                altm = -altm
     return (lat, lon, altm)
+
+# Mirror of ddg-read-meta: XMP first, EXIF fills the gaps
+def read_meta(lst):
+    t = xmp_text(lst)
+    absm = xmp_num(t, "AbsoluteAltitude")
+    relm = xmp_num(t, "RelativeAltitude")
+    lat = xmp_num(t, "GpsLatitude")
+    lon = xmp_num(t, "GpsLongitude")
+    if lon is None: lon = xmp_num(t, "GpsLongtitude")
+    if lat is None or lon is None or absm is None:
+        e = exif_gps(lst)
+        if lat is None: lat = e[0]
+        if lon is None: lon = e[1]
+        if absm is None: absm = e[2]
+    return (absm, relm, lat, lon)
 
 def json_num(txt, key):
     pos = txt.find('"' + key + '"')
@@ -174,15 +226,18 @@ def json_num(txt, key):
         num += rest[i]; i += 1
     return numstr(num) if num else None
 
-# -------------------------------------------- synthetic DJI JPEG ------------
-def build_exif_app1(le=True):
+# -------------------------------------------- synthetic DJI images ----------
+# 32 42' 56.6568" N,  117 09' 39.9016" W, 123.456 m
+LAT = 32 + 42/60 + 56.6568/3600
+LON = -(117 + 9/60 + 39.9016/3600)
+
+def build_tiff(le=True):
     E = "<" if le else ">"
     order = b"II" if le else b"MM"
 
     def ent(tag, typ, cnt, val4):
         return struct.pack(E + "HHI", tag, typ, cnt) + val4
 
-    # TIFF header (8) + IFD0 + GPS IFD + data area; all offsets from TIFF start
     ifd0_off = 8
     ifd0_n = 2
     gps_ifd_off = ifd0_off + 2 + ifd0_n * 12 + 4          # 38
@@ -211,35 +266,69 @@ def build_exif_app1(le=True):
     gps += ent(6, 5, 1, struct.pack(E + "I", alt_off))     # Alt: 1 rational
     gps += struct.pack(E + "I", 0)
 
-    # 32 42' 56.6568" N,  117 09' 39.9016" W, 123.456 m
     data = rat_bytes([(32, 1), (42, 1), (566568, 10000)])
     data += rat_bytes([(117, 1), (9, 1), (399016, 10000)])
     data += rat_bytes([(123456, 1000)])
 
-    tiff = order + struct.pack(E + "H", 42) + struct.pack(E + "I", ifd0_off) + ifd0 + gps + data
-    body = b"Exif\x00\x00" + tiff
-    return b"\xff\xe1" + struct.pack(">H", len(body) + 2) + body
+    return order + struct.pack(E + "H", 42) + struct.pack(E + "I", ifd0_off) + ifd0 + gps + data
 
-def build_xmp_app1(lon_tag="GpsLongtitude"):
-    xmp = (b"http://ns.adobe.com/xap/1.0/\x00"
-           b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
-           b'<rdf:Description xmlns:drone-dji="http://www.dji.com/drone-dji/1.0/" '
-           b'drone-dji:AbsoluteAltitude="+123.45" '
-           b'drone-dji:RelativeAltitude="+30.50" '
-           b'drone-dji:GpsLatitude="+32.7157380" '
-           b'drone-dji:' + lon_tag.encode() + b'="-117.1610838" '
-           b'drone-dji:GimbalPitchDegree="-89.90"/></rdf:RDF></x:xmpmeta>')
-    return b"\xff\xe1" + struct.pack(">H", len(xmp) + 2) + xmp
+def xmp_packet(element_form=False, lon_tag="GpsLongtitude"):
+    lt = lon_tag.encode()
+    head = (b'<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+            b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+            b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">')
+    tail = b"</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+    if element_form:
+        body = (b'<rdf:Description xmlns:drone-dji="http://www.dji.com/drone-dji/1.0/">'
+                b"<drone-dji:AbsoluteAltitude>+123.45</drone-dji:AbsoluteAltitude>"
+                b"<drone-dji:RelativeAltitude>+30.50</drone-dji:RelativeAltitude>"
+                b"<drone-dji:GpsLatitude>+32.7157380</drone-dji:GpsLatitude>"
+                b"<drone-dji:" + lt + b">-117.1610838</drone-dji:" + lt + b">"
+                b"</rdf:Description>")
+    else:
+        body = (b'<rdf:Description xmlns:drone-dji="http://www.dji.com/drone-dji/1.0/" '
+                b'drone-dji:AbsoluteAltitude="+123.45" '
+                b'drone-dji:RelativeAltitude="+30.50" '
+                b'drone-dji:GpsLatitude="+32.7157380" '
+                b'drone-dji:' + lt + b'="-117.1610838" '
+                b'drone-dji:GimbalPitchDegree="-89.90"/>')
+    return head + body + tail
 
 def build_jpg(with_xmp=True, le=True, lon_tag="GpsLongtitude"):
-    out = b"\xff\xd8" + build_exif_app1(le)
+    body = b"Exif\x00\x00" + build_tiff(le)
+    out = b"\xff\xd8" + b"\xff\xe1" + struct.pack(">H", len(body) + 2) + body
     if with_xmp:
-        out += build_xmp_app1(lon_tag)
+        xmp = b"http://ns.adobe.com/xap/1.0/\x00" + xmp_packet(lon_tag=lon_tag)
+        out += b"\xff\xe1" + struct.pack(">H", len(xmp) + 2) + xmp
     # junk incl. 0x1A bytes (kills text-mode reads) and a decoy FF E1
     out += b"\xff\xdb" + struct.pack(">H", 6) + b"\x1a\x00\x1a\x00"
     out += b"\xff\xe1" + struct.pack(">H", 8) + b"NOPE\x1a\x00"
     out += bytes(range(256)) * 4
     return out
+
+def png_chunk(typ, data):
+    return (struct.pack(">I", len(data)) + typ + data
+            + struct.pack(">I", zlib.crc32(typ + data) & 0xFFFFFFFF))
+
+def build_png(with_xmp=True, with_exif=True, element_form=False, meta_at_end=False):
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = png_chunk(b"IHDR", struct.pack(">IIBBBBB", 640, 480, 8, 2, 0, 0, 0))
+    meta = b""
+    if with_xmp:
+        itxt = b"XML:com.adobe.xmp\x00\x00\x00\x00\x00" + xmp_packet(element_form)
+        meta += png_chunk(b"iTXt", itxt)
+    if with_exif:
+        meta += png_chunk(b"eXIf", build_tiff(le=True))
+    # compressed-looking junk with DECOY anchors: a bare "Exif" not followed by
+    # \0\0+TIFF and a bare "eXIf" not followed by a TIFF magic - the parser
+    # must skip both and still find the real chunks that come AFTER
+    junk = b"\x1a\x00Exif??junk\x1a\xffeXIfNOPE" + bytes(range(256)) * 8
+    idat = png_chunk(b"IDAT", junk)
+    iend = png_chunk(b"IEND", b"")
+    if meta_at_end:
+        big = png_chunk(b"IDAT", bytes(300000))   # pushes meta past 256 KB
+        return sig + ihdr + idat + big + meta + iend
+    return sig + ihdr + idat + meta + iend        # decoys BEFORE real chunks
 
 def approx(a, b, tol=1e-6):
     return a is not None and abs(a - b) < tol
@@ -252,48 +341,38 @@ def main():
         print(("PASS  " if ok else "FAIL  ") + name)
         if not ok: failures.append(name)
 
-    LAT = 32 + 42/60 + 56.6568/3600          # 32.715738
-    LON = -(117 + 9/60 + 39.9016/3600)       # -117.16108...
-
-    # --- XMP route (with DJI's GpsLongtitude typo) ---
+    # --- JPEG: XMP route (with DJI's GpsLongtitude typo) ---
     lst = list(build_jpg())
     t = xmp_text(lst)
-    check("xmp AbsoluteAltitude", approx(xmp_num(t, "AbsoluteAltitude"), 123.45))
-    check("xmp RelativeAltitude", approx(xmp_num(t, "RelativeAltitude"), 30.50))
-    check("xmp GpsLatitude", approx(xmp_num(t, "GpsLatitude"), 32.7157380))
-    check("xmp GpsLongitude absent -> None", xmp_num(t, "GpsLongitude") is None)
+    check("jpg xmp AbsoluteAltitude", approx(xmp_num(t, "AbsoluteAltitude"), 123.45))
+    check("jpg xmp RelativeAltitude", approx(xmp_num(t, "RelativeAltitude"), 30.50))
+    check("jpg xmp GpsLatitude", approx(xmp_num(t, "GpsLatitude"), 32.7157380))
+    check("jpg xmp GpsLongitude absent -> None", xmp_num(t, "GpsLongitude") is None)
     v = xmp_num(t, "GpsLongitude")
     if v is None: v = xmp_num(t, "GpsLongtitude")
-    check("xmp longitude via typo fallback", approx(v, -117.1610838))
+    check("jpg xmp longitude via typo fallback", approx(v, -117.1610838))
 
-    # --- correctly-spelt variant ---
-    lst2 = list(build_jpg(lon_tag="GpsLongitude"))
-    t2 = xmp_text(lst2)
-    check("xmp GpsLongitude (correct spelling)", approx(xmp_num(t2, "GpsLongitude"), -117.1610838))
+    # --- JPEG: correctly-spelt variant ---
+    t2 = xmp_text(list(build_jpg(lon_tag="GpsLongitude")))
+    check("jpg xmp GpsLongitude (correct spelling)", approx(xmp_num(t2, "GpsLongitude"), -117.1610838))
 
-    # --- EXIF route, little-endian (no XMP in file) ---
+    # --- JPEG: EXIF route (no XMP in file) ---
     lst3 = list(build_jpg(with_xmp=False, le=True))
-    check("no-XMP file -> xmp_text empty", xmp_text(lst3) == "")
+    check("jpg no-XMP -> xmp_text empty", xmp_text(lst3) == "")
     la, lo, al = exif_gps(lst3)
-    check("exif LE latitude", approx(la, LAT))
-    check("exif LE longitude (W negative)", approx(lo, LON))
-    check("exif LE altitude", approx(al, 123.456))
+    check("jpg exif LE latitude", approx(la, LAT))
+    check("jpg exif LE longitude (W negative)", approx(lo, LON))
+    check("jpg exif LE altitude", approx(al, 123.456))
 
-    # --- EXIF route, big-endian ---
-    lst4 = list(build_jpg(with_xmp=False, le=False))
-    la, lo, al = exif_gps(lst4)
-    check("exif BE latitude", approx(la, LAT))
-    check("exif BE longitude", approx(lo, LON))
-    check("exif BE altitude", approx(al, 123.456))
+    la, lo, al = exif_gps(list(build_jpg(with_xmp=False, le=False)))
+    check("jpg exif BE lat/lon/alt", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
 
-    # --- EXIF parse also works when XMP present (fallback never harms) ---
     la, lo, al = exif_gps(lst)
-    check("exif parse with XMP present", approx(la, LAT) and approx(lo, LON))
+    check("jpg exif parse with XMP present", approx(la, LAT) and approx(lo, LON))
 
     # --- signed-byte input (some ADODB builds return signed) ---
     lst5 = [b - 256 if b > 127 else b for b in build_jpg()]
-    t5 = xmp_text(lst5)
-    check("signed bytes: xmp still parses", approx(xmp_num(t5, "AbsoluteAltitude"), 123.45))
+    check("signed bytes: xmp still parses", approx(xmp_num(xmp_text(lst5), "AbsoluteAltitude"), 123.45))
     la, lo, al = exif_gps([b - 256 if b > 127 else b for b in build_jpg(with_xmp=False)])
     check("signed bytes: exif still parses", approx(la, LAT) and approx(al, 123.456))
 
@@ -301,14 +380,63 @@ def main():
     la, lo, al = exif_gps(list(build_jpg(with_xmp=False))[:80])
     check("truncated file -> graceful Nones", lo is None and al is None)
 
+    # --- PNG: XMP route via iTXt (no APP1 URI marker in PNGs) ---
+    png = list(build_png())
+    tp = xmp_text(png)
+    check("png xmp AbsoluteAltitude", approx(xmp_num(tp, "AbsoluteAltitude"), 123.45))
+    check("png xmp RelativeAltitude", approx(xmp_num(tp, "RelativeAltitude"), 30.50))
+    check("png xmp GpsLatitude", approx(xmp_num(tp, "GpsLatitude"), 32.7157380))
+    v = xmp_num(tp, "GpsLongitude")
+    if v is None: v = xmp_num(tp, "GpsLongtitude")
+    check("png xmp longitude", approx(v, -117.1610838))
+
+    # --- PNG: eXIf chunk route, decoy "Exif"/"eXIf" strings skipped ---
+    la, lo, al = exif_gps(list(build_png(with_xmp=False)))
+    check("png eXIf latitude (decoys skipped)", approx(la, LAT))
+    check("png eXIf longitude", approx(lo, LON))
+    check("png eXIf altitude", approx(al, 123.456))
+
+    # --- PNG: element-form XMP (re-serialised by some converters) ---
+    te = xmp_text(list(build_png(element_form=True, with_exif=False)))
+    check("png element-form AbsoluteAltitude", approx(xmp_num(te, "AbsoluteAltitude"), 123.45))
+    check("png element-form GpsLatitude", approx(xmp_num(te, "GpsLatitude"), 32.7157380))
+    ve = xmp_num(te, "GpsLongitude")
+    if ve is None: ve = xmp_num(te, "GpsLongtitude")
+    check("png element-form longitude", approx(ve, -117.1610838))
+
+    # --- PNG: metadata parked after >256 KB of image data (tail window) ---
+    data = build_png(meta_at_end=True)
+    front = read_meta(list(data[:262144]))
+    check("png tail-meta: front window finds nothing",
+          front[0] is None and front[2] is None and front[3] is None)
+    tailm = read_meta(list(data[-262144:]))
+    # merge exactly like DDGPS does: tail fills whatever the front left nil
+    absm, relm, lat, lon = front
+    if absm is None: absm = tailm[0]
+    if relm is None: relm = tailm[1]
+    if lat is None: lat = tailm[2]
+    if lon is None: lon = tailm[3]
+    check("png tail-meta: tail window recovers everything",
+          approx(absm, 123.45) and approx(relm, 30.50)
+          and approx(lat, 32.7157380) and approx(lon, -117.1610838))
+
+    # --- bare TIFF file (header at byte 0), both byte orders ---
+    la, lo, al = exif_gps(list(build_tiff(le=True)))
+    check("bare TIFF LE", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
+    la, lo, al = exif_gps(list(build_tiff(le=False)))
+    check("bare TIFF BE", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
+
+    # --- read_meta prefers XMP, EXIF fills gaps ---
+    absm, relm, lat, lon = read_meta(list(build_png(with_xmp=False)))
+    check("read_meta from eXIf only", approx(lat, LAT) and approx(lon, LON) and approx(absm, 123.456)
+          and relm is None)
+
     # --- JSON extractor against real response shapes ---
     epqs = '{"location":{"x":-117.161,"y":32.7157,"spatialReference":{"wkid":4326,"latestWkid":4326}},"locationId":0,"value":"296.606","rasterId":68360,"resolution":1}'
     check("json EPQS quoted value", approx(json_num(epqs, "value"), 296.606))
-    epqs2 = '{"value": 57.99, "rasterId": 1}'
-    check("json EPQS bare value", approx(json_num(epqs2, "value"), 57.99))
-    epqs3 = '{"value": "-1000000", "rasterId": 1}'
+    check("json EPQS bare value", approx(json_num('{"value": 57.99, "rasterId": 1}', "value"), 57.99))
     check("json EPQS no-data sentinel parses (range filter rejects later)",
-          approx(json_num(epqs3, "value"), -1000000.0))
+          approx(json_num('{"value": "-1000000", "rasterId": 1}', "value"), -1000000.0))
     otd = '{"results": [{"dataset": "ned10m", "elevation": 89.5, "location": {"lat": 32.7157, "lng": -117.161}}], "status": "OK"}'
     check("json OpenTopoData elevation", approx(json_num(otd, "elevation"), 89.5))
     otd_null = '{"results": [{"dataset": "ned10m", "elevation": null, "location": {}}], "status": "OK"}'
@@ -316,12 +444,6 @@ def main():
     oel = '{"results": [{"latitude": 32.7157, "longitude": -117.161, "elevation": 88.0}]}'
     check("json Open-Elevation", approx(json_num(oel, "elevation"), 88.0))
     check("json missing key -> None", json_num(oel, "value") is None)
-
-    # --- height math sanity ---
-    absft = 123.45 * 3.280839895
-    gft = 296.606
-    hgps = absft - gft
-    check("height math example", approx(hgps, 123.45 * 3.280839895 - 296.606))
 
     print()
     if failures:

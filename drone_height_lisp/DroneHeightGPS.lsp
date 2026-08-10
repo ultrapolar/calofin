@@ -5,7 +5,7 @@
 ;;;  above grade (the office default of "100 ft"), DDGPS works it out from the
 ;;;  photo itself:
 ;;;
-;;;     1. File picker  - pick the ORIGINAL drone .JPG (starts on H:, then
+;;;     1. File picker  - pick the ORIGINAL drone image (starts on H:, then
 ;;;                       remembers the last folder you used).
 ;;;     2. Read the GPS - latitude / longitude / AbsoluteAltitude /
 ;;;                       RelativeAltitude straight out of the file. The DJI
@@ -21,6 +21,22 @@
 ;;;  H is saved to the SAME per-drawing store DroneDistortion.lsp uses, so
 ;;;  DDFIX immediately offers it as its default. This file also works on its
 ;;;  own - DroneDistortion.lsp does not need to be loaded.
+;;;
+;;;  FILE TYPES
+;;;  ----------
+;;;  PNG, JPG/JPEG and TIFF are all understood. The reader does not trust the
+;;;  file extension - it looks for the metadata containers themselves:
+;;;    * XMP text packet   - JPEG APP1, PNG iTXt chunk, or anywhere else the
+;;;                          "<x:xmpmeta" packet appears; both DJI's normal
+;;;                          attribute form (Tag="...") and the element form
+;;;                          (<ns:Tag>...</ns:Tag>) some converters re-write.
+;;;    * binary EXIF GPS   - JPEG "Exif\0\0" APP1 block, PNG eXIf chunk, or a
+;;;                          bare TIFF header (a .TIF file), either byte order.
+;;;  The first 256 KB of the file is scanned; if nothing is found there the
+;;;  LAST 256 KB is scanned too (PNG writers may park metadata after the image
+;;;  data). A converted file only works if the converter carried the metadata
+;;;  over - screenshots and "export/share" copies usually strip it, and DDGPS
+;;;  will say so rather than guess.
 ;;;
 ;;;  ELEVATION SERVICES (tried in order until one answers; no API keys)
 ;;;  ------------------
@@ -52,8 +68,8 @@
 ;;;  REQUIREMENTS
 ;;;  ------------
 ;;;  Windows AutoCAD (uses ADODB.Stream + MSXML2.XMLHTTP ActiveX), internet
-;;;  access for the elevation lookup, and the ORIGINAL camera .JPG -
-;;;  screenshots, edited, emailed or re-exported copies lose the metadata.
+;;;  access for the elevation lookup, and an image that still carries the
+;;;  camera metadata (see FILE TYPES above).
 ;;;  If the elevation services cannot be reached the command lets you type a
 ;;;  known site elevation instead (e.g. from the survey).
 ;;;
@@ -63,7 +79,7 @@
 ;;;
 ;;;  COMMANDS
 ;;;  --------
-;;;     DDGPS   - pick the drone JPG, compute H, save it for DDFIX
+;;;     DDGPS   - pick the drone image, compute H, save it for DDFIX
 ;;;     DDELEV  - type a latitude / longitude, print the ground elevation
 ;;;               (handy as an internet-connectivity test)
 ;;;
@@ -92,15 +108,22 @@
 ;;  plain (open ... "r") is text mode and stops at the first 0x1A byte)
 ;; ===========================================================================
 
-;; read up to CNT bytes of FILE as a list of ints, or nil if unreadable
-(defun ddg-file-bytes (file cnt / stm out err)
+;; read up to CNT bytes of FILE as a list of ints, or nil if unreadable.
+;; TAIL nil = from the start of the file; TAIL non-nil = the LAST cnt bytes
+;; (PNG writers may park the metadata chunks after the image data).
+(defun ddg-file-bytes (file cnt tail / stm out err)
   (setq err
     (vl-catch-all-apply
-      '(lambda ( / raw sa tmp)
+      '(lambda ( / raw sa tmp pos)
          (setq stm (vlax-create-object "ADODB.Stream"))
          (vlax-invoke-method stm 'Open)
          (vlax-put-property  stm 'Type 1)              ; 1 = adTypeBinary
          (vlax-invoke-method stm 'LoadFromFile file)
+         (if tail
+           (progn
+             (setq pos (- (vlax-get-property stm 'Size) cnt))
+             (if (< pos 0) (setq pos 0))
+             (vlax-put-property stm 'Position pos)))
          (setq raw (vlax-invoke-method stm 'Read cnt))
          (vlax-invoke-method stm 'Close)
          (cond
@@ -137,26 +160,41 @@
   (apply 'strcat (reverse (cons chunk out))))
 
 ;; ===========================================================================
-;;  XMP route (all modern DJI aircraft) - the JPG carries a text packet like
+;;  XMP route (all modern DJI aircraft) - the image carries a text packet like
 ;;    drone-dji:AbsoluteAltitude="+247.66" drone-dji:RelativeAltitude="+98.40"
 ;;    drone-dji:GpsLatitude="+32.7157380"  drone-dji:GpsLongtitude="-117.16..."
 ;;  ("GpsLongtitude" is DJI's own long-standing typo; newer firmware also
 ;;   writes the correctly-spelt tag - both are checked.)
+;;  The packet is found by content, not by container, so JPEG APP1 and PNG
+;;  iTXt chunks both work: anchor on "<x:xmpmeta" (any container), then the
+;;  JPEG APP1 signature, then the DJI namespace itself as a last resort.
 ;; ===========================================================================
 
 ;; the XMP packet (as one printable string), or "" if the file has none
 (defun ddg-xmp-text (lst / rest)
-  (setq rest (ddg-scan-to lst (vl-string->list "ns.adobe.com/xap/1.0/")))
+  (setq rest (ddg-scan-to lst (vl-string->list "<x:xmpmeta")))
+  (if (null rest)
+    (setq rest (ddg-scan-to lst (vl-string->list "ns.adobe.com/xap/1.0/"))))
+  (if (null rest)
+    (setq rest (ddg-scan-to lst (vl-string->list "drone-dji:"))))
   (if rest (ddg-grab-text rest 6144) ""))
 
-;; value of   TAG="..."   inside TXT, or nil
+;; value of   TAG="..."   (DJI's attribute form) or   <ns:TAG>...</ns:TAG>
+;; (the element form some converters re-write XMP into), or nil
 (defun ddg-xmp-attr (txt tag / pos rest end)
   (setq pos (vl-string-search (strcat tag "=\"") txt))
   (if pos
     (progn
       (setq rest (substr txt (+ pos (strlen tag) 3)))  ; just past the ="
       (setq end (vl-string-search "\"" rest))
-      (if end (substr rest 1 end)))))
+      (if end (substr rest 1 end)))
+    (progn
+      (setq pos (vl-string-search (strcat tag ">") txt))
+      (if pos
+        (progn
+          (setq rest (substr txt (+ pos (strlen tag) 2)))   ; just past the >
+          (setq end (vl-string-search "<" rest))
+          (if end (substr rest 1 end)))))))
 
 ;; "+18.90" / "-117.16" / "18.90" -> real, or nil
 (defun ddg-numstr (s)
@@ -222,41 +260,78 @@
             s (ddg-rat lst (+ off 16) le))
       (if (and d m s) (+ d (/ m 60.0) (/ s 3600.0))))))
 
-;; "Exif\0\0" -> TIFF header -> IFD0 -> GPS IFD; returns (lat lon alt-metres),
-;; any of which may be nil
-(defun ddg-exif-gps (lst / tif b0 b1 ord le ifd0 ent gps lat lon altm)
-  (setq tif (ddg-scan-to lst (vl-string->list "Exif")))
-  (if (and tif (equal (ddg-b tif 0) 0) (equal (ddg-b tif 1) 0))
+;; does REST start with a TIFF header?  ("II" 42 0  /  "MM" 0 42) -> REST or nil
+(defun ddg-tiff-at (rest / b0 b1)
+  (setq b0 (ddg-b rest 0) b1 (ddg-b rest 1))
+  (cond
+    ((and (equal b0 73) (equal b1 73)
+          (equal (ddg-b rest 2) 42) (equal (ddg-b rest 3) 0)) rest)
+    ((and (equal b0 77) (equal b1 77)
+          (equal (ddg-b rest 2) 0) (equal (ddg-b rest 3) 42)) rest)))
+
+;; find the EXIF TIFF block whatever the container:
+;;   * a bare .TIF file        - TIFF header at byte 0
+;;   * JPEG (and HEIC) style   - "Exif" 0 0, then the TIFF header
+;;   * PNG eXIf chunk          - the TIFF header directly follows the type
+;; A match is only accepted if a valid TIFF magic follows, so a stray "Exif"
+;; inside compressed image data is skipped and the scan continues.
+(defun ddg-find-tiff (lst / tif rest)
+  (setq tif (ddg-tiff-at lst))
+  (setq rest lst)
+  (while (and (null tif)
+              (setq rest (ddg-scan-to rest (vl-string->list "Exif"))))
+    (if (and (equal (ddg-b rest 0) 0) (equal (ddg-b rest 1) 0))
+      (setq tif (ddg-tiff-at (cddr rest)))))
+  (setq rest lst)
+  (while (and (null tif)
+              (setq rest (ddg-scan-to rest (vl-string->list "eXIf"))))
+    (setq tif (ddg-tiff-at rest)))
+  tif)
+
+;; TIFF header -> IFD0 -> GPS IFD; returns (lat lon alt-metres), any may be nil
+(defun ddg-exif-gps (lst / tif le ifd0 ent gps lat lon altm)
+  (setq tif (ddg-find-tiff lst))
+  (if tif
     (progn
-      (setq tif (cddr tif)                     ; skip the two NULs -> TIFF header
-            b0  (ddg-b tif 0)
-            b1  (ddg-b tif 1))
-      (setq ord (cond ((and (= b0 73) (= b1 73)) 'LE)     ; "II"
-                      ((and (= b0 77) (= b1 77)) 'BE)))   ; "MM"
-      (if ord
+      (setq le (equal (ddg-b tif 0) 73))       ; "II" little / "MM" big endian
+      (setq ifd0 (ddg-u32i tif 4 le))
+      (if ifd0 (setq ent (ddg-ifd-find tif ifd0 le 34853)))  ; 0x8825 GPS IFD
+      (if ent  (setq gps (ddg-u32i tif (+ ent 8) le)))
+      (if gps
         (progn
-          (setq le (eq ord 'LE))
-          (setq ifd0 (ddg-u32i tif 4 le))
-          (if ifd0 (setq ent (ddg-ifd-find tif ifd0 le 34853)))  ; 0x8825 GPS IFD
-          (if ent  (setq gps (ddg-u32i tif (+ ent 8) le)))
-          (if gps
-            (progn
-              (if (setq ent (ddg-ifd-find tif gps le 2))         ; GPSLatitude
-                (setq lat (ddg-gps-coord tif ent le)))
-              (if (and lat (setq ent (ddg-ifd-find tif gps le 1))
-                       (equal (ddg-b tif (+ ent 8)) 83))         ; ref "S"
-                (setq lat (- lat)))
-              (if (setq ent (ddg-ifd-find tif gps le 4))         ; GPSLongitude
-                (setq lon (ddg-gps-coord tif ent le)))
-              (if (and lon (setq ent (ddg-ifd-find tif gps le 3))
-                       (equal (ddg-b tif (+ ent 8)) 87))         ; ref "W"
-                (setq lon (- lon)))
-              (if (setq ent (ddg-ifd-find tif gps le 6))         ; GPSAltitude
-                (setq altm (ddg-rat tif (ddg-u32i tif (+ ent 8) le) le)))
-              (if (and altm (setq ent (ddg-ifd-find tif gps le 5))
-                       (equal (ddg-b tif (+ ent 8)) 1))          ; below sea level
-                (setq altm (- altm)))))))))
+          (if (setq ent (ddg-ifd-find tif gps le 2))         ; GPSLatitude
+            (setq lat (ddg-gps-coord tif ent le)))
+          (if (and lat (setq ent (ddg-ifd-find tif gps le 1))
+                   (equal (ddg-b tif (+ ent 8)) 83))         ; ref "S"
+            (setq lat (- lat)))
+          (if (setq ent (ddg-ifd-find tif gps le 4))         ; GPSLongitude
+            (setq lon (ddg-gps-coord tif ent le)))
+          (if (and lon (setq ent (ddg-ifd-find tif gps le 3))
+                   (equal (ddg-b tif (+ ent 8)) 87))         ; ref "W"
+            (setq lon (- lon)))
+          (if (setq ent (ddg-ifd-find tif gps le 6))         ; GPSAltitude
+            (setq altm (ddg-rat tif (ddg-u32i tif (+ ent 8) le) le)))
+          (if (and altm (setq ent (ddg-ifd-find tif gps le 5))
+                   (equal (ddg-b tif (+ ent 8)) 1))          ; below sea level
+            (setq altm (- altm)))))))
   (list lat lon altm))
+
+;; everything the file tells us: (absalt-m relalt-m lat lon) - XMP first,
+;; the binary EXIF GPS block filling any gaps
+(defun ddg-read-meta (lst / xtxt exif absm relm lat lon)
+  (setq xtxt (ddg-xmp-text lst))
+  (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
+        relm (ddg-xmp-num xtxt "RelativeAltitude")
+        lat  (ddg-xmp-num xtxt "GpsLatitude")
+        lon  (ddg-xmp-num xtxt "GpsLongitude"))
+  (if (null lon) (setq lon (ddg-xmp-num xtxt "GpsLongtitude")))
+  (if (or (null lat) (null lon) (null absm))
+    (progn
+      (setq exif (ddg-exif-gps lst))
+      (if (null lat)  (setq lat  (car exif)))
+      (if (null lon)  (setq lon  (cadr exif)))
+      (if (null absm) (setq absm (caddr exif)))))
+  (list absm relm lat lon))
 
 ;; ===========================================================================
 ;;  HTTP + JSON (MSXML2.XMLHTTP ActiveX; synchronous GET)
@@ -337,9 +412,9 @@
   res)
 
 ;; ---------------------------------------------------------------------------
-;;  DDGPS : pick the drone JPG -> read GPS -> look up ground -> save H
+;;  DDGPS : pick the drone image -> read GPS -> look up ground -> save H
 ;; ---------------------------------------------------------------------------
-(defun c:DDGPS ( / *error* def c file lst xtxt absm relm lat lon exif g gft gsrc
+(defun c:DDGPS ( / *error* def c file lst meta fsize absm relm lat lon g gft gsrc
                    absft relft hgps hrel diff ans hsel)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
@@ -354,37 +429,42 @@
     (progn
       (setq c (substr def (strlen def) 1))
       (if (and (/= c "/") (/= c "\\")) (setq def (strcat def "\\")))))
-  (setq file (getfiled "Select the ORIGINAL drone JPG" def "jpg" 16))
+  (setq file (getfiled "Select the ORIGINAL drone image (PNG / JPG / TIF)" def
+                       "png;jpg;jpeg;tif;tiff" 20))    ; 16 path-only + 4 any ext
   (cond
     ((null file) (princ "\nNo file selected."))
     (t
      (if (vl-filename-directory file)
        (setenv "DDGPS_LastDir" (vl-filename-directory file)))
      (princ "\nReading the photo ...")
-     (setq lst (ddg-file-bytes file 262144))           ; metadata lives up front
+     (setq lst (ddg-file-bytes file 262144 nil))       ; metadata usually up front
      (cond
        ((null lst)
         (princ "\nCould not read that file (is it on a dead network path?)."))
        (t
         ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
-        (setq xtxt (ddg-xmp-text lst))
-        (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
-              relm (ddg-xmp-num xtxt "RelativeAltitude")
-              lat  (ddg-xmp-num xtxt "GpsLatitude")
-              lon  (ddg-xmp-num xtxt "GpsLongitude"))
-        (if (null lon) (setq lon (ddg-xmp-num xtxt "GpsLongtitude")))
-        (if (or (null lat) (null lon) (null absm))
+        (setq meta (ddg-read-meta lst)
+              absm (nth 0 meta) relm (nth 1 meta)
+              lat  (nth 2 meta) lon  (nth 3 meta))
+        ;; some PNG writers park the metadata after the image data - if the
+        ;; front window came up short, scan the tail of the file too
+        (if (and (or (null lat) (null lon) (null absm))
+                 (setq fsize (vl-file-size file))
+                 (> fsize 262144)
+                 (setq lst (ddg-file-bytes file 262144 T)))
           (progn
-            (setq exif (ddg-exif-gps lst))
-            (if (null lat)  (setq lat  (car exif)))
-            (if (null lon)  (setq lon  (cadr exif)))
-            (if (null absm) (setq absm (caddr exif)))))
+            (setq meta (ddg-read-meta lst))
+            (if (null absm) (setq absm (nth 0 meta)))
+            (if (null relm) (setq relm (nth 1 meta)))
+            (if (null lat)  (setq lat  (nth 2 meta)))
+            (if (null lon)  (setq lon  (nth 3 meta)))))
         (cond
           ((or (null lat) (null lon)
                (and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))   ; "no fix"
                (> (abs lat) 90.0) (> (abs lon) 180.0))
            (princ "\nNo usable GPS position in that file.")
-           (princ "\n  Is it the ORIGINAL DJI .JPG?  Screenshots / edited / emailed copies lose the metadata."))
+           (princ "\n  Is it the ORIGINAL camera file?  Screenshots and most edited /")
+           (princ "\n  emailed / re-exported copies (JPG or PNG) strip the GPS metadata."))
           (t
            (princ "\n--- from the photo -----------------------------------------")
            (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)))
@@ -490,6 +570,6 @@
        (princ "\nLookup failed - check the internet connection (or the coordinate)."))))
   (princ))
 
-(princ "\nDrone Height from GPS v1.0 loaded  (elevation lookup needs internet).")
-(princ "\n  Commands: DDGPS  (pick drone JPG -> compute + save H)   DDELEV  (elevation at a typed lat/long)")
+(princ "\nDrone Height from GPS v1.1 loaded  (reads PNG / JPG / TIF; elevation lookup needs internet).")
+(princ "\n  Commands: DDGPS  (pick drone image -> compute + save H)   DDELEV  (elevation at a typed lat/long)")
 (princ)

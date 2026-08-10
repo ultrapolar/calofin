@@ -179,7 +179,7 @@ tool scales the traced geometry by `(H − z) / H`.
 
 Commands: `DDFIX` (select a feature, enter its height, apply the
 correction), `DDSET` (set/remember *H*), `DDALT` (read
-`RelativeAltitude` out of the original DJI JPG), `DDCAL` (back-solve
+`RelativeAltitude` out of the original DJI image), `DDCAL` (back-solve
 *H* from a feature of known true size), `DDINFO` (show settings).
 *H* is stored per drawing and survives save/reopen.
 
@@ -190,12 +190,15 @@ drone height. Nobody logs the height in the field, but the drone logs
 its GPS position in the photo automatically, so:
 
 1. `DDGPS` opens a file picker (starts on `H:`, remembers the last
-   folder) for the original drone JPG.
+   folder) for the original drone image — PNG, JPG/JPEG or TIFF.
 2. It reads latitude/longitude, `AbsoluteAltitude` and
-   `RelativeAltitude` straight out of the file — DJI's XMP text packet
-   first (both the `GpsLongitude` and DJI's misspelt `GpsLongtitude`
-   tags are understood), falling back to parsing the binary EXIF GPS
-   block (either byte order).
+   `RelativeAltitude` straight out of the file, whatever the container:
+   DJI's XMP text packet first (JPEG APP1 or PNG iTXt; attribute or
+   element serialisation; both the `GpsLongitude` and DJI's misspelt
+   `GpsLongtitude` tags), falling back to the binary EXIF GPS block
+   (JPEG `Exif` APP1, PNG `eXIf` chunk, or a bare TIFF header — either
+   byte order). The first 256 KB are scanned, then the last 256 KB if
+   needed, since PNG writers may park metadata after the image data.
 3. It asks a free online elevation service for the ground elevation at
    that coordinate — USGS EPQS (3DEP bare earth, answers in feet), then
    OpenTopoData NED10m, then Open-Elevation SRTM as fallbacks; no API
@@ -234,10 +237,13 @@ python3 tests/test_drone_height_lisp.py   # drone LISP: lint + parser checks
 
 The drone-LISP test lints `DroneHeightGPS.lsp` (paren/string balance)
 and exercises a line-for-line Python transliteration of its byte-level
-parsers against a synthetic DJI-style JPEG: the XMP route (including
-DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block in both
-byte orders, signed-byte and truncated-file inputs, and the JSON
-number extraction for each elevation service's response shape.
+parsers against synthetic DJI-style images — JPEG, PNG and bare TIFF:
+the XMP route (JPEG APP1 and PNG iTXt, attribute and element forms,
+DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block (JPEG
+APP1, PNG `eXIf` chunk with decoy anchors in the image data, both byte
+orders), metadata parked past the 256 KB front window (tail-window
+recovery), signed-byte and truncated-file inputs, and the JSON number
+extraction for each elevation service's response shape.
 
 The exporter tests mock the bmesh structures and validate the emitted
 DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
