@@ -40,8 +40,8 @@
 ;;;
 ;;; How the offset direction is found
 ;;;   Every round works from the NEWEST curve.  Round 1 offsets from the
-;;;   selected curve; each later round offsets from the curve-fit
-;;;   polyline the previous round built.  Each base point sits on that
+;;;   selected curve; each later round offsets from the arc polyline
+;;;   the previous round built.  Each base point sits on that
 ;;;   newest curve, and its offset runs along the normal of the curve's
 ;;;   tangent underneath it -- so both the offset and its dimension read
 ;;;   perpendicular to the line the point actually sits on, and each
@@ -391,8 +391,8 @@
   ;; --- offset rounds --------------------------------------------------
   ;; Every round samples and offsets from the NEWEST curve: the selected
   ;; curve in round 1 (traversed from the clicked end), then the
-  ;; curve-fit polyline each round builds.  Later curves are built in
-  ;; travel order, so their traversal is never reversed.
+  ;; arc polyline each round builds.  Later curves are built in travel
+  ;; order, so their traversal is never reversed.
   (setq curCrv crv
         curRev rev
         again  "Yes"
