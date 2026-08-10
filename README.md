@@ -8,6 +8,7 @@ between Blender and CAD, plus one standalone AutoCAD routine:
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
 | PERPPTS (AutoLISP, not a Blender add-on) | `perp_points.lsp` | Divides a line into points, offsets them perpendicular by typed lengths, joins them with a polyline and dimensions each offset — repeatable on the polyline it creates |
+| CPERPPTS (AutoLISP, not a Blender add-on) | `cperp_points.lsp` | The curved companion to PERPPTS: same pipeline, but offsets run perpendicular to the tangent of the selected curve, so arcs, bulged polylines and splines can be offset with variation too |
 
 ## Installation (Blender add-ons)
 
@@ -181,11 +182,11 @@ tests exercise boundary building, interior-point detection, Delaunay
 triangulation (a pure-Python Bowyer-Watson fallback mirrors Blender's
 built-in `mathutils.geometry.delaunay_2d_cdt`), and the
 height/lowest-object classification rules. The PERPPTS tests read
-`perp_points.lsp` itself to check the properties that make it safe to
-run — balanced parentheses, no variables leaking into the global
-namespace, and every system variable it changes being saved and
-restored — then exercise a reference port of its arc-length sampling
-helpers.
+`perp_points.lsp` and `cperp_points.lsp` themselves to check the
+properties that make them safe to run — balanced parentheses, no
+variables leaking into the global namespace, and every system variable
+they change being saved and restored — then exercise reference ports of
+the arc-length sampling helpers and of the curve tangent/normal logic.
 
 ---
 
@@ -259,6 +260,52 @@ is restored when the command ends.
   cannot spawn thousands of dimensions.
 * All geometry is handled in the current UCS, so the command behaves
   correctly in a rotated or shifted UCS.
+
+---
+
+# 4. CPERPPTS — perpendicular offset points for curves (AutoCAD)
+
+`cperp_points.lsp` is the curved-geometry companion to PERPPTS ("C" for
+curved). Load it with *APPLOAD* and run the `CPERPPTS` command. Same
+workflow, same pipeline — select, click a side, enter a count and
+lengths, repeat on the result, pick a dimension style at the end — but
+built for **curves**: it accepts anything AutoCAD can measure along
+(polylines with arc segments, arcs, ellipses, splines, and plain lines
+too), as long as the curve is open.
+
+The difference is the offset direction. Where PERPPTS offsets along one
+fixed perpendicular, CPERPPTS offsets each point **perpendicular to the
+tangent of the curve underneath it**, so a curved line can be offset
+with a different length at every point and the offsets follow the bend.
+
+Base points are spaced by **true arc length** along the curve, so
+spacing stays even through curved segments instead of bunching where
+the geometry is tight.
+
+### Repeating on a curve
+
+On repeat rounds the base points sit on the polyline built by the
+previous round — but each one is **projected back onto the original
+curve**, and its offset runs along the curve's normal at that
+projection. This is the curved twin of PERPPTS's fixed perpendicular:
+every dimension in every round reads perpendicular to the *original*
+curve, never to the jagged polyline, and successive offsets accumulate
+along the same normal ray. Which side of the curve is used is fixed
+once from the direction click, relative to the curve's own direction,
+so the offset side stays consistent however the curve bends.
+
+Everything else matches PERPPTS: polylines inherit the source curve's
+layer and line properties, dimensions go on the `DIMENSIONS` layer in
+the style picked at the end, the whole run is one UNDO group, and the
+same input validation and Esc-safe cleanup apply.
+
+Two things to know:
+
+* The offset points are joined with straight segments, so a curved
+  result is only as smooth as the number of points you ask for.
+* On a tight concave bend, normals converge — a large offset there can
+  make the new polyline cross itself. That is inherent to offsetting
+  along normals, not a fault of the routine.
 
 ## License
 
