@@ -1756,4 +1756,47 @@ ext, ins, s1, v, bad = muttres("Grecian", 50.0, 130.0, None, None, 240.0, 480.0)
 assert bad and s1 == 12.0 and v == 216.0
 print("   roman/grecian/oval ends resolve like their home sheets")
 
+print("== 67. L corner treatments: bend and reflex corners fillet true ==")
+def add(p, q): return (p[0]+q[0], p[1]+q[1])
+def sub(p, q): return (p[0]-q[0], p[1]-q[1])
+def mul(p, s): return (p[0]*s, p[1]*s)
+def unit(p):
+    n = math.hypot(*p)
+    return (p[0]/n, p[1]/n)
+
+def cornerends(p, pp, pn, ctype, size):
+    # mirrors pool:cornerends (local wedge math, any corner angle)
+    up = unit(sub(pp, p)); un = unit(sub(pn, p))
+    dp = up[0]*un[0] + up[1]*un[1]
+    ang = math.atan2(math.sqrt(max(0.0, 1.0 - dp*dp)), dp)
+    if ctype == "Diag":
+        sb = size / (2.0 * math.sin(ang / 2.0))
+        return add(p, mul(up, sb)), add(p, mul(un, sb)), None
+    if ctype == "Rounded":
+        sb = size * math.cos(ang/2.0) / math.sin(ang/2.0)
+        bis = unit(add(up, un))
+        cen = add(p, mul(bis, size / math.sin(ang/2.0)))
+        return add(p, mul(up, sb)), add(p, mul(un, sb)), sub(cen, mul(bis, size))
+    return p, p, None
+
+# true L inner corner E: walls D-E (down x=300) and E-F (left y=240);
+# a 24" fillet must sit tangent to BOTH walls with its centre in the
+# notch, and the arc mid must land between centre and corner
+E, D, F = (300.0, 240.0), (300.0, 420.0), (0.0, 240.0)
+e1, e2, am = cornerends(E, D, F, "Rounded", 24.0)
+assert abs(e1[0]-300.0) < 1e-9 and abs(e1[1]-264.0) < 1e-9   # on wall D-E
+assert abs(e2[0]-276.0) < 1e-9 and abs(e2[1]-240.0) < 1e-9   # on wall E-F
+cen = (300.0-24.0, 240.0+24.0)                               # in the notch
+assert abs(dist(am, cen) - 24.0) < 1e-9                      # mid ON the arc
+assert dist(am, E) < dist(cen, E)                            # bulges toward E
+# lazy L bend corner B (135-degree wedge): an 18" chamfer face keeps
+# its full 18" length and sets back f/(2 sin 67.5) along each wall
+A, B, C = (0.0, 0.0), (296.0, 0.0), (296.0+167.6*0.7071067812, 167.6*0.7071067812)
+e1, e2, _ = cornerends(B, A, C, "Diag", 18.0)
+assert abs(dist(e1, e2) - 18.0) < 1e-9
+assert abs(dist(e1, B) - 18.0/(2.0*math.sin(math.radians(67.5)))) < 1e-9
+# square corners degenerate to the true corner: nothing cut
+assert cornerends(B, A, C, "Square", 0.0)[0] == B
+print("   reflex fillet in the notch; 135-degree chamfer face true")
+
 print("\nALL CHECKS PASSED")

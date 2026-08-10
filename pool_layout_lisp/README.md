@@ -494,6 +494,19 @@ to **B1** (within ½"), the break lands on the inner corner and the
 doesn't reach B1, `E` is prompted and the four-part chain resolves
 against B1 as usual (G absorbing, NA taking the remainder).
 
+**Corner treatments:** after the perimeter (and cross dims) are in —
+before the floor — both L types ask **`Are the corners modified
+(rounded / chamfered)?`** (default No). Answering Yes asks the
+**OUTER corners** once (`Square` / `Rounded` radius / `Diag` chamfer
+face, one answer for all five) and then the **INNER corner (E)**
+separately, since it is typically different — Enter reuses the outer
+answer. Sizes are capped so treatments can never overlap and fold a
+wall, the cuts are drawn exactly like the rectangle's (fillet arcs /
+chamfer faces, correct at the 45° bend corners and at the reflex
+inner corner), side dims still read to the TRUE corners, and the
+drawing gets one `Typ.` callout on an outer corner plus the inner
+corner's own radius/face dim. The report lists both sizes.
+
 **Mirroring:** once every dimension is in, the L pools ask
 **`Mirror the pool [Yes/No]`** — answering Yes mirrors the finished
 pool, its dimensions and its hopper about the pool's vertical

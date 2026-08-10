@@ -1742,7 +1742,8 @@
 ;; dimension and report.  Caller handles sysvars / undo / zoom-extents.
 (defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes ans hxr
                             cen p pr k w hh xmin xmax ymax ymin doff th
-                            odim rows lbls dv mquad sq4 elast)
+                            odim rows lbls dv mquad sq4 elast
+                            octy ocsz icty icsz oc ic hcs hce hcarcs)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
   (command "_.ZOOM" "_Window"
@@ -1806,7 +1807,32 @@
                         (pool:sq ans 'cf))))))
   (if (eq diags 'POOL-BACK) 'POOL-BACK nil))
 
-  (pool:stages (list 'hx:sides 'hx:diags))
+  ;; corner treatments, like the rectangle: the five OUTER corners
+  ;; take one answer; the INNER corner (E) is typically different, so
+  ;; it is asked separately (Enter reuses the outer answer)
+  (defun hx:corners ( / v)
+    (setq octy "Square" ocsz 0.0 icty "Square" icsz 0.0)
+    (setq v (pool:askyn "Are the corners modified (rounded / chamfered)"
+                        "No" t))
+    (cond
+      ((eq v 'POOL-BACK) 'POOL-BACK)
+      ((not v) nil)
+      (t
+       (setq oc (pool:askcorner "OUTER corners" nil nil nil
+                                (* 0.5 (apply 'min sides)) t))
+       (if (eq oc 'POOL-BACK)
+           'POOL-BACK
+           (progn
+             (setq octy (car oc) ocsz (cadr oc)
+                   ic (pool:askcorner "INNER corner (E)" octy ocsz nil
+                                      (* 0.5 (min (nth 3 sides)
+                                                  (nth 4 sides)))
+                                      t))
+             (if (eq ic 'POOL-BACK)
+                 'POOL-BACK
+                 (progn (setq icty (car ic) icsz (cadr ic)) nil)))))))
+
+  (pool:stages (list 'hx:sides 'hx:diags 'hx:corners))
   (pool:pvkill)
 
   (princ "\nFitting pool body to the measurements ...")
@@ -1828,17 +1854,56 @@
   (setq cen (pool:v* cen (/ 1.0 6.0)))
 
   ;; perimeter (layer POOL) -- mark the drawing so the whole pool can
-  ;; be mirrored later if the user asks
+  ;; be mirrored later if the user asks.  Corner treatments cut in
+  ;; exactly like the rectangle's: sides run between the treatment
+  ;; ends, an arc or chamfer face closes each corner (square corners
+  ;; degenerate to the plain corner-to-corner sides).  E (index 4) is
+  ;; the inner corner and carries its own treatment; the wedge math in
+  ;; pool:cornerends handles the reflex angle as-is.
   (setq elast (entlast))
-  (foreach pr pool:*hexsides*
-    (pool:line (nth (car pr) pts) (nth (cadr pr) pts) "POOL"))
+  (setq hcs (list (list octy ocsz) (list octy ocsz) (list octy ocsz)
+                  (list octy ocsz) (list icty icsz) (list octy ocsz))
+        hce (mapcar '(lambda (k)
+                       (pool:cornerends (nth k pts)
+                                        (nth (rem (+ k 5) 6) pts)
+                                        (nth (rem (+ k 1) 6) pts)
+                                        (car (nth k hcs)) (cadr (nth k hcs))
+                                        nil))
+                    (list 0 1 2 3 4 5)))
+  (foreach pr pool:*hexsides*            ; side i: eNext(i) -> ePrev(i+1)
+    (pool:line (cadr (nth (car pr) hce)) (car (nth (cadr pr) hce)) "POOL"))
+  (setq hcarcs nil k 0)
+  (foreach p hcs
+    (cond
+      ((= (car p) "Diag")
+       (pool:line (car (nth k hce)) (cadr (nth k hce)) "POOL")
+       (setq hcarcs (cons nil hcarcs)))
+      ((= (car p) "Rounded")
+       (pool:arc3p (car (nth k hce)) (caddr (nth k hce)) (cadr (nth k hce))
+                   "POOL")
+       (setq hcarcs (cons (entlast) hcarcs)))
+      (t (setq hcarcs (cons nil hcarcs))))
+    (setq k (1+ k)))
+  (setq hcarcs (reverse hcarcs))
 
-  ;; dimensions (layer DIMENSION)
+  ;; dimensions (layer DIMENSION) -- side dims read to the TRUE
+  ;; corners, same convention as the rectangle
   (setvar "CLAYER" "DIMENSION")
   (foreach pr pool:*hexsides*
     (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
                  (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
                                pts doff)))
+  ;; corner annotations: one Typ. callout on an outer corner (B), the
+  ;; inner corner E dimensioned on its own
+  (if (/= octy "Square")
+      (pool:dimcorner1 (nth 1 hce) octy (nth 1 hcarcs)
+                       (pool:unit (pool:v- (nth 1 pts) cen)) doff " Typ."))
+  (if (/= icty "Square")
+      (pool:dimcorner1 (nth 4 hce) icty (nth 4 hcarcs)
+                       (pool:unit
+                         (pool:v+ (pool:unit (pool:v- (nth 3 pts) (nth 4 pts)))
+                                  (pool:unit (pool:v- (nth 5 pts) (nth 4 pts)))))
+                       doff ""))
   ;; provided cross dims, in the CROSS DIMENSION style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach pr pool:*hexdiags*
@@ -1881,6 +1946,14 @@
                            rows)
                 k (1+ k)))))
   (setq rows (reverse rows))
+  (if (/= octy "Square")
+      (setq rows (append rows (list
+        (list (if (= octy "Rounded") "OUTER CORNER RAD" "OUTER CORNER FACE")
+              ocsz ocsz)))))
+  (if (/= icty "Square")
+      (setq rows (append rows (list
+        (list (if (= icty "Rounded") "INNER CORNER RAD" "INNER CORNER FACE")
+              icsz icsz)))))
 
   ;; -------- standard hopper in the main section (no sport for L).
   ;; D' = the virtual main-section corner where the left side (F-A)
@@ -2053,8 +2126,30 @@
 ;; corners.  Out-of-square pools dim every corner individually --
 ;; radius dim, chamfer dim, or the ACTUAL angular dimension for a
 ;; square corner.  Assumes CLAYER is already DIMENSION.
+;; One corner-treatment annotation: a radius dim on a fillet arc or an
+;; aligned dim on a chamfer face, dropped outward along outd, with an
+;; optional " Typ." suffix.  Square corners are not this helper's job.
+(defun pool:dimcorner1 (ce ty arc outd doff sfx / am fm)
+  (cond
+    ((= ty "Rounded")
+     (setq am (caddr ce))
+     (if (= sfx "")
+         (command "_.DIMRADIUS" (list arc (pool:wp am))
+                  (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))
+         (command "_.DIMRADIUS" (list arc (pool:wp am))
+                  "_T" (strcat "<>" sfx)
+                  (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))))
+    ((= ty "Diag")
+     (setq fm (pool:mid (car ce) (cadr ce)))
+     (if (= sfx "")
+         (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
+                  (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))
+         (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
+                  "_T" (strcat "<>" sfx)
+                  (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))))))
+
 (defun pool:dimcorners (quad corners arcs cen doff / ilist sfx i cc ce p pp pn
-                                                    ty outd am fm p1 p2)
+                                                    ty outd fm p1 p2)
   (if pool:*insq*
       (setq ilist (list 1) sfx " Typ.")
       (setq ilist (list 0 1 2 3) sfx ""))
@@ -2067,22 +2162,8 @@
           ce (pool:cornerends p pp pn ty (cadr cc) (caddr cc))
           outd (pool:unit (pool:v- p cen)))
     (cond
-      ((= ty "Rounded")
-       (setq am (caddr ce))
-       (if (= sfx "")
-           (command "_.DIMRADIUS" (list (nth i arcs) (pool:wp am))
-                    (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))
-           (command "_.DIMRADIUS" (list (nth i arcs) (pool:wp am))
-                    "_T" (strcat "<>" sfx)
-                    (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))))
-      ((= ty "Diag")
-       (setq fm (pool:mid (car ce) (cadr ce)))
-       (if (= sfx "")
-           (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
-                    (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))
-           (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
-                    "_T" (strcat "<>" sfx)
-                    (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))))
+      ((or (= ty "Rounded") (= ty "Diag"))
+       (pool:dimcorner1 ce ty (nth i arcs) outd doff sfx))
       (t                                ; Square
        (if (= sfx "")
            (progn                       ; the actual corner angle

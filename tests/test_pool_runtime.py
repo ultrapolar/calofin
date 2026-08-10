@@ -254,6 +254,7 @@ print("== R8. true L, out-of-square, diagonals NA, hopper E-skip, mirror No ==")
 vm = run(["Outofsquare", "L"] + BASE +
          [480.0, 420.0, 180.0, 180.0, 300.0, 240.0,   # six sides
           "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA",  # 9 diags
+          None,                   # corners modified? Enter = No
           "Yes",
           60.0, 90.0, 150.0,      # H G F sum to B1=300 -> E skipped
           None, 100.0, None,      # M sugg, L, K sugg
@@ -265,6 +266,7 @@ print("   L pool + main-section hopper, E auto-skipped")
 print("== R9. lazy L, in-square, hopper, mirror Yes ==")
 vm = run(["Insquare", "LA"] + BASE +
          [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
+          "No",                   # corners not modified
           "Yes",
           48.0, 72.0, 106.0,      # H G F sum to B1 -> E skipped
           40.0, 80.0, 40.0,       # M L K (typed, no suggestions taken)
@@ -383,5 +385,32 @@ assert hasseg((360.0, 0.0), (360.0, 240.0)), "square shallow wall at body end"
 assert hasseg((0.0, 0.0), (360.0, 0.0)), "body is B minus the half-round ext"
 assert any("Cross dim body A-C" in p for p, a in vm.prompts)
 print("   half-round deep end, square shallow end, crosses asked")
+
+print("== R14. lazy L with ROUNDED outer corners + DIAG inner corner ==")
+vm = run(["Insquare", "LA"] + BASE +
+         [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
+          "Yes",                  # corners modified
+          "Rounded", 24.0,        # OUTER corners
+          "Diag", 18.0,           # INNER corner (E) differs
+          "No", "No"],            # no bottom, no mirror
+         "R14")
+# five outer fillet arcs on the pool perimeter
+_arcs = drawn(vm, 'ARC', 'POOL')
+assert len(_arcs) == 5, len(_arcs)
+# ... and the inner corner E carries an 18" chamfer face instead: a
+# POOL line of length 18 right at E (the in-square E of R9's numbers)
+_u = 0.7071067812
+_E = (296.0 - 99.0*_u, 296.0*0 + (167.6*_u + 167.6*_u) - 99.0*_u)
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+_cham = [s for s in segs
+         if abs(_m.dist(*s) - 18.0) < 0.05 and
+         _m.dist(((s[0][0]+s[1][0])/2, (s[0][1]+s[1][1])/2), _E) < 15.0]
+assert _cham, "inner chamfer face missing at E"
+# side dims still read to the TRUE corners: the full 296 bottom
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 296.0) < 0.5 for c in dimcalls(vm))
+# the Typ. radius callout ran for the outer corners
+assert any(c[0] == '_.DIMRADIUS' and any('Typ.' in str(x) for x in c)
+           for c in vm.commands), "outer corner Typ. callout"
+print("   5 rounded outer corners, chamfered inner corner, Typ. callout")
 
 print("\nALL RUNTIME SCENARIOS PASSED")
