@@ -278,34 +278,34 @@ fixed perpendicular, CPERPPTS offsets each point **perpendicular to the
 tangent of the curve underneath it**, so a curved line can be offset
 with a different length at every point and the offsets follow the bend.
 
+The polyline built from the offset points is **curve-fit** (PEDIT Fit),
+so the result is itself a smooth curve passing exactly through every
+offset point — not a chain of straight segments — and each dimension's
+endpoint lies on the new curve.
+
 Base points are spaced by **true arc length** along the curve, so
 spacing stays even through curved segments instead of bunching where
 the geometry is tight.
 
 ### Repeating on a curve
 
-On repeat rounds the base points sit on the polyline built by the
-previous round — but each one is **projected back onto the original
-curve**, and its offset runs along the curve's normal at that
-projection. This is the curved twin of PERPPTS's fixed perpendicular:
-every dimension in every round reads perpendicular to the *original*
-curve, never to the jagged polyline, and successive offsets accumulate
-along the same normal ray. Which side of the curve is used is fixed
-once from the direction click, relative to the curve's own direction,
-so the offset side stays consistent however the curve bends.
+Every round works from the **newest curve**. Round 1 offsets from the
+curve you selected; each later round samples and offsets from the
+curve-fit polyline the previous round built. Both the offset and its
+dimension run along the normal of the curve the point actually sits on,
+so each round follows the shape its predecessor took. Which side is
+offset toward is fixed once from the direction click, relative to the
+direction of travel (START → FINISH), so every round offsets to the
+same side however the curves bend.
 
 Everything else matches PERPPTS: polylines inherit the source curve's
 layer and line properties, dimensions go on the `DIMENSIONS` layer in
 the style picked at the end, the whole run is one UNDO group, and the
 same input validation and Esc-safe cleanup apply.
 
-Two things to know:
-
-* The offset points are joined with straight segments, so a curved
-  result is only as smooth as the number of points you ask for.
-* On a tight concave bend, normals converge — a large offset there can
-  make the new polyline cross itself. That is inherent to offsetting
-  along normals, not a fault of the routine.
+One thing to know: on a tight concave bend, normals converge — a large
+offset there can make the new curve cross itself. That is inherent to
+offsetting along normals, not a fault of the routine.
 
 ## License
 

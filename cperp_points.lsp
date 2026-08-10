@@ -4,12 +4,16 @@
 ;;;
 ;;; The curved-geometry companion to PERPPTS (perp_points.lsp).  Same
 ;;; workflow and same pipeline, but the offsets are taken perpendicular
-;;; to the TANGENT of the selected curve rather than to a straight line,
-;;; so arcs, bulged polylines and splines can be offset with a different
-;;; length at every point.
+;;; to the TANGENT of the curve rather than to a straight line, so arcs,
+;;; bulged polylines and splines can be offset with a different length
+;;; at every point.
 ;;;
 ;;; Works on anything AutoCAD treats as a curve: LWPOLYLINE (including
 ;;; arc/bulge segments), POLYLINE, LINE, ARC, ELLIPSE and SPLINE.
+;;;
+;;; The polyline built from the offset points is curve-fit (PEDIT Fit),
+;;; so the result is itself a smooth curve through the points, not a
+;;; chain of straight segments.
 ;;;
 ;;; Points are spaced by true arc length along the curve, so spacing
 ;;; stays even through curved segments instead of bunching up.
@@ -32,20 +36,18 @@
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; How the offset direction is found
-;;;   Each base point is projected onto the ORIGINAL curve, and the
-;;;   offset runs along the normal of the curve's tangent at that
-;;;   projection.  In round 1 the base points sit on the curve, so this
-;;;   is simply the tangent underneath each point.  In later rounds the
-;;;   base points sit on the polyline built by the previous round, and
-;;;   projecting them back means every dimension still reads
-;;;   perpendicular to the ORIGINAL curve -- never to the polyline the
-;;;   points currently lie on.  Offsets therefore accumulate along the
-;;;   same normal ray, exactly as they do along the fixed perpendicular
-;;;   in PERPPTS.
+;;;   Every round works from the NEWEST curve.  Round 1 offsets from the
+;;;   selected curve; each later round offsets from the curve-fit
+;;;   polyline the previous round built.  Each base point sits on that
+;;;   newest curve, and its offset runs along the normal of the curve's
+;;;   tangent underneath it -- so both the offset and its dimension read
+;;;   perpendicular to the line the point actually sits on, and each
+;;;   round follows the shape its predecessor took.
 ;;;
-;;;   Which side of the curve is used is fixed once, from the direction
-;;;   click, relative to the curve's own direction, so every point in
-;;;   every round offsets to the same side however the curve bends.
+;;;   Which side is used is fixed once, from the direction click,
+;;;   relative to the direction of travel (START -> FINISH), so every
+;;;   point in every round offsets to the same side however the curves
+;;;   bend.
 ;;;
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
@@ -67,11 +69,11 @@
 ;;;   * All geometry is handled in the current UCS, so the command works
 ;;;     in a rotated or shifted UCS.
 ;;;
-;;; Note: the offset points are joined with straight segments, so a
-;;; curved result is only as smooth as the number of points asked for.
-;;; On a tight concave bend, normals converge and large offsets can make
-;;; the new polyline cross itself -- inherent to offsetting along
-;;; normals, not a fault of the routine.
+;;; Note: on a tight concave bend, normals converge and large offsets
+;;; can make the new curve cross itself -- inherent to offsetting along
+;;; normals, not a fault of the routine.  The fit curve passes exactly
+;;; through every offset point, so each dimension's endpoint lies on
+;;; the new curve.
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
@@ -79,47 +81,6 @@
 (vl-load-com)
 
 ;; --- generic helpers -------------------------------------------------
-
-;; linear interpolation between two 3D points at parameter tt (0..1)
-(defun cperp:lerp (a b tt)
-  (list (+ (car a)   (* tt (- (car b)   (car a))))
-        (+ (cadr a)  (* tt (- (cadr b)  (cadr a))))
-        (+ (caddr a) (* tt (- (caddr b) (caddr a))))))
-
-;; total length of a polyline given as a list of points
-(defun cperp:pathlen (pts / total i)
-  (setq total 0.0 i 0)
-  (while (< (1+ i) (length pts))
-    (setq total (+ total (distance (nth i pts) (nth (1+ i) pts)))
-          i     (1+ i)))
-  total)
-
-;; point at arc-length distance d along the polyline pts
-(defun cperp:pt-at (pts d / i a b segd res)
-  (cond
-    ((<= d 0.0) (car pts))
-    (t
-     (setq i 0 res nil)
-     (while (and (null res) (< (1+ i) (length pts)))
-       (setq a    (nth i pts)
-             b    (nth (1+ i) pts)
-             segd (distance a b))
-       (if (<= d segd)
-         (setq res (cperp:lerp a b (if (> segd 1e-12) (/ d segd) 0.0)))
-         (setq d (- d segd) i (1+ i))))
-     (if res res (last pts)))))
-
-;; n points equally spaced by arc length along the polyline pts
-(defun cperp:sample (pts n / total i out)
-  (setq total (cperp:pathlen pts) out '() i 0)
-  (while (< i n)
-    (setq out (cons (cperp:pt-at pts
-                                 (if (> n 1)
-                                   (* (/ (float i) (float (1- n))) total)
-                                   0.0))
-                    out)
-          i   (1+ i)))
-  (reverse out))
 
 ;; colour of an entity as a CECOLOR string ("BYLAYER", "3", "12,34,56")
 (defun cperp:color (d / c tc)
@@ -182,8 +143,10 @@
   (reverse out))
 
 ;; Unit tangent of the curve (current UCS) at the point of the curve
-;; closest to pt, as a 2D (x y) vector.  Returns nil at a cusp.
-(defun cperp:tangent (crv pt / w p prm d dx dy dl)
+;; closest to pt, as a 2D (x y) vector.  rev flips it so the tangent
+;; follows the direction of travel when the curve is being traversed
+;; from its far end.  Returns nil at a cusp.
+(defun cperp:tangent (crv pt rev / w p prm d dx dy dl)
   (setq w   (trans pt 1 0)
         p   (vlax-curve-getClosestPointTo crv w))
   (if (null p)
@@ -202,12 +165,16 @@
                 dx (car d)
                 dy (cadr d)
                 dl (sqrt (+ (* dx dx) (* dy dy))))
-          (if (< dl 1e-12) nil (list (/ dx dl) (/ dy dl))))))))
+          (if (< dl 1e-12)
+            nil
+            (progn
+              (if rev (setq dx (- dx) dy (- dy)))
+              (list (/ dx dl) (/ dy dl)))))))))
 
-;; Unit normal to the curve at the projection of pt, on the chosen side.
-;; side is 1.0 (left of the curve's own direction) or -1.0 (right).
-(defun cperp:normal (crv pt side / t2)
-  (if (setq t2 (cperp:tangent crv pt))
+;; Unit normal to the curve at the projection of pt, on the chosen side
+;; of the direction of travel: side is 1.0 (left) or -1.0 (right).
+(defun cperp:normal (crv pt side rev / t2)
+  (if (setq t2 (cperp:tangent crv pt rev))
     (list (* side (- (cadr t2))) (* side (car t2)))))
 
 ;; --- command ---------------------------------------------------------
@@ -217,11 +184,12 @@
                      srcData srcLayer srcColor srcLtype srcLw srcLts
                      dimPairs dimStyle pr
                      sel crv etype sp ep click rev side tot
-                     tng cross fuzz nrm sz
+                     tng prj cross fuzz nrm sz
                      arlen hlen p2 tx ty tailx taily ca sa bkx bky
                      b1x b1y b2x b2y
-                     path n lastN basePts newPts usedBases idxs guideEnts
-                     total len lastLen i base np again ans iter p e seg)
+                     curCrv curRev n lastN basePts newPts usedBases idxs
+                     guideEnts total len lastLen i base np again ans iter
+                     p e seg)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
@@ -306,8 +274,9 @@
         srcLts   (cond ((cdr (assoc 48 srcData))) (1.0)))
 
   ;; --- 2. click to set direction (START/FINISH) and offset side -------
-  ;; The side is measured against the curve's own direction, so it stays
-  ;; the same side whichever end the traversal starts from.
+  ;; The side is measured against the direction of travel (START ->
+  ;; FINISH), so later rounds -- whose curves are built in travel order
+  ;; -- inherit the same side directly.
   (setvar "OSMODE" 0)
   (setq click nil)
   (while (null click)
@@ -315,27 +284,28 @@
     (cond
       ((null click)
        (princ "\nA point is required - click one side of the curve."))
-      ((null (setq tng (cperp:tangent crv click)))
-       (princ "\nCannot read the curve direction there - click elsewhere.")
-       (setq click nil))
       (t
-       ;; signed distance from the curve's tangent line at the projection
-       (setq cross (- (* (car tng)  (- (cadr click)
-                                       (cadr (trans (vlax-curve-getClosestPointTo
-                                                      crv (trans click 1 0))
-                                                    0 1))))
-                      (* (cadr tng) (- (car click)
-                                       (car (trans (vlax-curve-getClosestPointTo
-                                                     crv (trans click 1 0))
-                                                   0 1)))))
-             fuzz  (max 1e-8 (* tot 1e-6)))
-       (if (< (abs cross) fuzz)
-         (progn
-           (princ "\nThat point is on the curve - click clearly to one side.")
-           (setq click nil))))))
+       ;; nearest end of the curve to the click = START
+       (setq rev (> (distance click sp) (distance click ep)))
+       (cond
+         ((null (setq tng (cperp:tangent crv click rev)))
+          (princ "\nCannot read the curve direction there - click elsewhere.")
+          (setq click nil))
+         (t
+          ;; signed offset of the click from the tangent line at the
+          ;; projection of the click onto the curve
+          (setq prj (trans (vlax-curve-getClosestPointTo
+                             crv (trans click 1 0))
+                           0 1))
+          (setq cross (- (* (car tng)  (- (cadr click) (cadr prj)))
+                         (* (cadr tng) (- (car click)  (car prj))))
+                fuzz  (max 1e-8 (* tot 1e-6)))
+          (if (< (abs cross) fuzz)
+            (progn
+              (princ "\nThat point is on the curve - click clearly to one side.")
+              (setq click nil))))))))
 
-  (setq side (if (>= cross 0.0) 1.0 -1.0)
-        rev  (> (distance click sp) (distance click ep)))
+  (setq side (if (>= cross 0.0) 1.0 -1.0))
 
   ;; --- prepare the layers ---------------------------------------------
   (cperp:layer "PERPPTS-TEMP" 1)
@@ -377,12 +347,15 @@
     (setq tmpEnts (cons (entlast) tmpEnts)))
 
   ;; --- offset rounds --------------------------------------------------
-  ;; path is nil in round 1, meaning "sample the curve itself"; later
-  ;; rounds sample the polyline the previous round built.
-  (setq path  nil
-        again "Yes"
-        iter  0
-        total 0)
+  ;; Every round samples and offsets from the NEWEST curve: the selected
+  ;; curve in round 1 (traversed from the clicked end), then the
+  ;; curve-fit polyline each round builds.  Later curves are built in
+  ;; travel order, so their traversal is never reversed.
+  (setq curCrv crv
+        curRev rev
+        again  "Yes"
+        iter   0
+        total  0)
 
   (while (equal again "Yes")
     (setq iter (1+ iter))
@@ -410,9 +383,9 @@
          (if (not (equal ans "Yes")) (setq n nil)))))
     (setq lastN n)
 
-    ;; base points: along the curve itself in round 1 (by true arc
-    ;; length), along the previous round's polyline after that
-    (setq basePts (if path (cperp:sample path n) (cperp:curve-pts crv n rev)))
+    ;; base points, equally spaced by true arc length along the newest
+    ;; curve, START first
+    (setq basePts (cperp:curve-pts curCrv n curRev))
 
     ;; --- length per point + build the new perpendicular points -------
     ;; usedBases collects the base of each created point so bases and
@@ -423,7 +396,7 @@
     (setq newPts '() usedBases '() idxs '() guideEnts '() i 0)
     (while (< i n)
       (setq base (nth i basePts)
-            nrm  (cperp:normal crv base side))
+            nrm  (cperp:normal curCrv base side curRev))
       (cond
         ;; no readable tangent under this point - skip it rather than
         ;; place the offset in an arbitrary direction
@@ -485,23 +458,29 @@
     (command "._PLINE")
     (foreach p newPts (command p))
     (command "")
+    ;; curve-fit it so the result is a smooth curve through the offset
+    ;; points, not a chain of straight segments.  The fit curve passes
+    ;; exactly through every vertex, so the dimension endpoints stay on
+    ;; the new curve.
+    (command "._PEDIT" (entlast) "_Fit" "")
+
+    ;; the curve just built becomes the source for the next round; it
+    ;; was drawn in travel order, so it is never traversed reversed
+    (setq curCrv (entlast)
+          curRev nil)
 
     ;; --- erase this round's point guides -----------------------------
     (foreach e guideEnts (cperp:kill e))
     (setq guideEnts nil)
 
     ;; --- remember the dimensions to draw -----------------------------
-    ;; each pair runs along the curve normal at the base point's
-    ;; projection, so the dimension reads perpendicular to the ORIGINAL
-    ;; curve whichever polyline the base point sits on
+    ;; each pair runs along the normal of the curve the base point sits
+    ;; on, so the dimension reads perpendicular to that curve
     (setq i 0)
     (while (< i (length newPts))
       (setq dimPairs (cons (list (nth i usedBases) (nth i newPts)) dimPairs)
             i        (1+ i)))
     (setq total (+ total (length newPts)))
-
-    ;; the polyline just built becomes the path for the next round
-    (setq path newPts)
 
     ;; --- repeat? -----------------------------------------------------
     (initget "Yes No")

@@ -382,25 +382,54 @@ def test_curve_offsets_are_radial():
     print("curve offsets are radial and perpendicular to the tangent")
 
 
-def test_curve_repeat_rounds_accumulate_radially():
-    """The CPERPPTS core invariant, the curved twin of the line test:
-    a round-2 base point sits OFF the curve, but projecting it back
-    means its offset still runs along the ORIGINAL curve's normal, so
-    offsets accumulate along the same radial ray."""
+def test_curve_repeat_rounds_offset_from_the_newest_curve():
+    """CPERPPTS repeat rounds work from the NEWEST curve: a round-2 base
+    point sits ON the curve round 1 built, and its offset runs along
+    THAT curve's normal.  Modelled with concentric circles (a constant
+    round-1 offset of a circle is a circle), where the newest curve's
+    normal is radial about the same centre -- so the numbers also show
+    the rounds chaining consistently outward."""
     for a in (0.3, 1.0, 2.0):
+        # round-1 result: circle of radius R+2; the base sits ON it
         base = [(CURVE_R + 2.0) * math.cos(a),
-                (CURVE_R + 2.0) * math.sin(a), 0.0]    # a round-1 result
-        nx, ny = curve_normal(base, -1.0)              # via the projection
+                (CURVE_R + 2.0) * math.sin(a), 0.0]
+        # normal of the NEWEST curve under the base (radial for a circle
+        # about the same centre, whatever its radius)
+        nx, ny = curve_normal(base, -1.0)
         new = [base[0] + 1.5 * nx, base[1] + 1.5 * ny]
         assert abs(math.hypot(*new) - (CURVE_R + 3.5)) < 1e-12, \
-            "round-2 offsets must accumulate along the original normal"
-        tx, ty = curve_tangent(base)                   # tangent at projection
+            "round-2 offsets must run along the newest curve's normal"
+        tx, ty = curve_tangent(base)          # tangent of the newest curve
         vx, vy = new[0] - base[0], new[1] - base[1]
         assert abs(vx * tx + vy * ty) < 1e-12, \
-            "round-2 dimension must stay perpendicular to the ORIGINAL curve"
+            "round-2 dimension must be perpendicular to the newest curve"
         assert abs(math.dist(base[:3], new[:2] + [0.0]) - 1.5) < 1e-12, \
             "dimension must measure the entered length"
-    print("curve repeat rounds accumulate radially off the original curve")
+    print("curve repeat rounds offset from the newest curve")
+
+
+def test_cperppts_uses_newest_curve_and_fits_the_result():
+    """Structural pins for the two curved-specific behaviours:
+    each round samples/offsets from curCrv (the newest curve), and the
+    offset polyline is curve-fit so the result is itself a curve."""
+    path = os.path.join(REPO_DIR, "cperp_points.lsp")
+    code = load(path)
+    assert re.search(r"\(cperp:curve-pts\s+curCrv\b", code), \
+        "base points must be sampled from the newest curve (curCrv)"
+    assert re.search(r"\(cperp:normal\s+curCrv\b", code), \
+        "offsets must run along the newest curve's normal (curCrv)"
+    assert not re.search(r"\(cperp:normal\s+crv\b", code), \
+        "offsets must not be taken from the original curve"
+    # the new polyline is fitted right after it is drawn, and becomes
+    # the next round's curve
+    pline = code.index('(command "._PLINE")')
+    after = code[pline:]
+    fit = after.find('"._PEDIT"')
+    assert fit >= 0 and "_Fit" in after[fit:fit + 80], \
+        "the offset polyline must be curve-fit (PEDIT Fit)"
+    assert re.search(r"\(setq\s+curCrv\s+\(entlast\)", after), \
+        "the fitted curve must become the next round's source"
+    print("cperppts offsets from the newest curve and fits the result")
 
 
 def main():
@@ -412,7 +441,8 @@ def main():
     test_offsets_stay_perpendicular_to_the_original_line()
     test_curve_side_matches_the_click()
     test_curve_offsets_are_radial()
-    test_curve_repeat_rounds_accumulate_radially()
+    test_curve_repeat_rounds_offset_from_the_newest_curve()
+    test_cperppts_uses_newest_curve_and_fits_the_result()
     print("\nall tests passed")
 
 
