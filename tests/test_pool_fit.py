@@ -710,6 +710,19 @@ def samp_normal(i, pts, sgn):
     return (-u[1] * sgn, u[0] * sgn)
 
 
+def run_bulges(pts):
+    """Bulges that turn a sampled run into a smooth chain of small
+    arcs (pf:run-bulges): each segment leaves its start along the
+    central-difference direction of the neighbouring samples."""
+    out = []
+    prev = pts[0]
+    for cur, nxt in zip(pts, pts[1:]):
+        b = tangent_bulge(cur, ang(prev, nxt), nxt)
+        out.append(0.0 if abs(b) > 1.0 else b)
+        prev = cur
+    return out
+
+
 def hopper_back(dp1, dp2, sp1, sp2, dpts):
     """The survey point marking the back of the hopper (pf:hopper-back):
     nearest to the perpendicular ray from the deep break's middle, cast
@@ -1280,6 +1293,15 @@ def test_pool_bottom_hopper():
         assert abs(cross3(d1, d2, corner)) < 1.0e-6 * dist(d1, d2)
         assert abs(dist(corner, end) - 12.0) < 1.0e-9
     assert dist(base[kb], (r, 0.0)) < BOTTOM_STEP, "walk missed the back"
+    # drawn with run_bulges the offset is a true curve: away from the
+    # pinned corners each little arc reproduces the r-12 circle
+    bls = run_bulges(hpts)
+    for j in range(3, len(hpts) - 4):
+        g = arc_geom(hpts[j], hpts[j + 1], bls[j])
+        assert g is not None, "interior segments must be arcs"
+        c, rr, _, _ = g
+        assert abs(rr - (r - 12.0)) < 1.0, "arc radius off the offset circle"
+        assert dist(c, (0.0, 0.0)) < 2.0, "arc bows the wrong way"
     # differing offsets: exact at the three anchors, gradual between
     hpts, kb, base, direc = hopper_pts(samps, sgn, i1, i2, ib, d1, d2,
                                        12.0, 18.0, 24.0)
@@ -1545,7 +1567,7 @@ def test_lisp_file_is_well_formed():
                "pf:slope-pts", "pf:off-at", "pf:ask-slope",
                "pf:get-off", "pf:dim-style", "pf:near-loop",
                "pf:ask-tol", "pf:ask-pct", "pf:ask-cap",
-               "pf:ensure-dashed2"):
+               "pf:ensure-dashed2", "pf:run-bulges"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 

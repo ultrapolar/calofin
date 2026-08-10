@@ -440,13 +440,17 @@ that isn't on that side of the pool, or that lands on a break point,
 is called out and ignored; picking no points at all just gives the
 plain guided line.
 
-Everything else is drawn **solid** on layer `POOL-BOTTOM` (blue,
-created if needed): the shallow break line, the hopper outline (an
-open polyline sampled every 6″ — `*PF-BOTTOM-STEP*`), the two slope
-lines, and the **aligned dimensions** — the deep-end K/L/M string
-plus one on the back offset and on every waypoint, measured
-automatically. The first offset becomes the session default
-(`*PF-HOP-OFF*`, 18″ out of the box).
+**All the bottom's lines land on the `POOL` layer** with the
+perimeter: the shallow break, the three-piece deep break, the hopper
+outline and the slope lines (only the deep-break stubs are dashed).
+The hopper and the guided/points slopes are **genuinely curved** —
+each 6″ sampled run (`*PF-BOTTOM-STEP*`) is drawn as a chain of small
+arcs whose tangents are smoothed from the neighbouring samples, not
+as straight facets. The **aligned dimensions** — the deep-end K/L/M
+string plus one on the back offset and on every waypoint — go on
+layer `POOL-BOTTOM` (created if needed), measured automatically. The
+first offset becomes the session default (`*PF-HOP-OFF*`, 18″ out of
+the box).
 
 `ESC` or a cancelled pick anywhere in the flow leaves nothing behind
 — the bottom only stays once it is complete. If no survey point lies

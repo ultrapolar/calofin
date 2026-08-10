@@ -119,9 +119,11 @@
 ;;; perimeter's curve, the offset easing to nothing at the shallow
 ;;; break), or through POINTS the user picks along that side, each
 ;;; with its own offset measured square off the wall - the line still
-;;; runs guided between them.  Everything is drawn solid on
-;;; *PF-BOTTOM-LAYER*, and every offset gets an aligned dimension
-;;; automatically.
+;;; runs guided between them.  The hopper and the guided slopes are
+;;; chains of small arcs (curves, not facets).  All the bottom's
+;;; lines land on *PF-POOL-LAYER* with the perimeter (the deep break
+;;; stubs dashed); the dimensions - every offset gets one - go on
+;;; *PF-BOTTOM-LAYER*.
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
@@ -147,10 +149,11 @@
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
                                     ; trace of the points
-(setq *PF-BOTTOM-LAYER* "POOL-BOTTOM") ; layer the pool-bottom lines
-                                    ; (breaks, hopper, slopes) and
-                                    ; their dimensions go on - all
-                                    ; solid/continuous
+(setq *PF-BOTTOM-LAYER* "POOL-BOTTOM") ; layer the pool-bottom
+                                    ; DIMENSIONS go on; the bottom's
+                                    ; lines themselves (breaks, hopper,
+                                    ; slopes) land on *PF-POOL-LAYER*
+                                    ; with the perimeter
 (setq *PF-BOTTOM-STEP*  6.0)        ; sampling step for the hopper
                                     ; offset curve (6 inches keeps it
                                     ; smooth without a heavy polyline)
@@ -1980,8 +1983,10 @@
 ;; differ.  A slope line joins each of the hopper's ends to the
 ;; shallow break point on its side - straight, guided along the
 ;; perimeter's curve, or guided through points the user picks at
-;; pinned offsets, asked per side.  Everything is solid, on
-;; *PF-BOTTOM-LAYER*, and every offset is dimensioned automatically.
+;; pinned offsets, asked per side.  The hopper and guided slopes are
+;; drawn as chains of small arcs (curved, not faceted).  All the
+;; lines land on *PF-POOL-LAYER*; the dimensions - one per offset -
+;; go on *PF-BOTTOM-LAYER*.
 
 ;; Unit vector of V, or nil when V is (near) zero-length.
 (defun pf:unit (v / l)
@@ -2117,11 +2122,11 @@
   (if (null u) (setq u '(1.0 0.0)))
   (pf:scl (pf:perp u) sgn))
 
-;; A LINE on LAYER (nil = the pool-bottom layer) with linetype LTYP
+;; A LINE on LAYER (nil = the pool layer) with linetype LTYP
 ;; (nil = ByLayer).
 (defun pf:make-line (p1 p2 layer ltyp / dxf)
   (setq dxf (list '(0 . "LINE") '(100 . "AcDbEntity")
-                  (cons 8 (if layer layer *PF-BOTTOM-LAYER*))))
+                  (cons 8 (if layer layer *PF-POOL-LAYER*))))
   (if ltyp (setq dxf (append dxf (list (cons 6 ltyp)))))
   (entmakex (append dxf
                     (list '(100 . "AcDbLine")
@@ -2140,14 +2145,38 @@
                    '(49 . 6.0) '(74 . 0)
                    '(49 . -3.0) '(74 . 0)))))
 
-;; An OPEN polyline through PTS (no bulges) on the pool-bottom layer.
-(defun pf:make-open-pline (pts / dxf q)
+;; An OPEN polyline through PTS on the pool layer, with the segment
+;; bulges BLS (one per segment, nil = all straight).
+(defun pf:make-open-pline (pts bls / dxf q)
   (setq dxf (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
-                  (cons 8 *PF-BOTTOM-LAYER*)
+                  (cons 8 *PF-POOL-LAYER*)
                   '(100 . "AcDbPolyline")
                   (cons 90 (length pts)) '(70 . 0)))
-  (foreach q pts (setq dxf (append dxf (list (cons 10 q)))))
+  (foreach q pts
+    (setq dxf (append dxf (list (cons 10 q)
+                                (cons 42 (if bls (car bls) 0.0))))
+          bls (cdr bls)))
   (entmakex dxf))
+
+;; Bulges that turn a run of sampled points into a smooth chain of
+;; small arcs: each segment leaves its start along the direction
+;; smoothed from the neighbouring samples (central difference), so a
+;; drawn offset is genuinely CURVED, not a run of 6-inch facets.  A
+;; bulge past 1.0 (a quarter turn in one step) can only be a cusp
+;; artefact and is left straight.
+(defun pf:run-bulges (pts / out prev cur rest next b)
+  (setq prev (car pts)
+        cur  (car pts)
+        rest (cdr pts)
+        out  nil)
+  (while rest
+    (setq next (car rest)
+          b    (pf:tangent-bulge cur (angle prev next) next)
+          out  (cons (if (> (abs b) 1.0) 0.0 b) out)
+          prev cur
+          cur  next
+          rest (cdr rest)))
+  (reverse out))
 
 ;; The dimension style to stamp on a new dim: NAME when the drawing
 ;; actually has it, else the current style - with a note the first
@@ -2483,17 +2512,20 @@
         (entdel (cadr lines)))
       (pf:ensure-dashed2)
       (pf:ensure-layer *PF-POOL-LAYER* 4)
-      (setq made (cons (pf:temp-add
-                         (pf:make-line dp1 e1 *PF-POOL-LAYER* "DASHED2"))
+      (setq made (cons (pf:temp-add (pf:tag-mine
+                         (pf:make-line dp1 e1 nil "DASHED2")))
                        made)
-            made (cons (pf:temp-add
-                         (pf:make-line e1 e2 *PF-POOL-LAYER* nil))
+            made (cons (pf:temp-add (pf:tag-mine
+                         (pf:make-line e1 e2 nil nil)))
                        made)
-            made (cons (pf:temp-add
-                         (pf:make-line e2 dp2 *PF-POOL-LAYER* "DASHED2"))
+            made (cons (pf:temp-add (pf:tag-mine
+                         (pf:make-line e2 dp2 nil "DASHED2")))
                        made))
-      (setq made (cons (pf:temp-add
-                         (pf:make-open-pline (pf:thin-run hpts)))
+      ;; the hopper outline is a chain of small arcs - the offset is
+      ;; a curve, not a run of facets
+      (setq sl   (pf:thin-run hpts)
+            made (cons (pf:temp-add (pf:tag-mine
+                         (pf:make-open-pline sl (pf:run-bulges sl))))
                        made))
       ;; the slope lines: each hopper end joins the shallow break
       ;; point on its own side of the loop, so the two never cross -
@@ -2515,10 +2547,11 @@
                                   (rem (+ (* dir (- i1 is1)) n n) n)
                                   dp1 sp1 off1
                                   (if (eq spec T) nil spec) e1)))
-      (setq made  (cons (pf:temp-add
+      (setq q     (if sl (pf:thin-run (car sl))))
+      (setq made  (cons (pf:temp-add (pf:tag-mine
                           (if sl
-                            (pf:make-open-pline (pf:thin-run (car sl)))
-                            (pf:make-line e1 sp1 nil nil)))
+                            (pf:make-open-pline q (pf:run-bulges q))
+                            (pf:make-line e1 sp1 nil nil))))
                         made)
             wdims (if sl (append wdims (cadr sl)))
             desc1 (cond ((null sl) "straight")
@@ -2532,10 +2565,11 @@
                                  (rem (+ (* dir (- is2 i2)) n n) n)
                                  dp2 sp2 off2
                                  (if (eq spec T) nil spec) e2)))
-      (setq made  (cons (pf:temp-add
+      (setq q     (if sl (pf:thin-run (car sl))))
+      (setq made  (cons (pf:temp-add (pf:tag-mine
                           (if sl
-                            (pf:make-open-pline (pf:thin-run (car sl)))
-                            (pf:make-line e2 sp2 nil nil)))
+                            (pf:make-open-pline q (pf:run-bulges q))
+                            (pf:make-line e2 sp2 nil nil))))
                         made)
             wdims (if sl (append wdims (cadr sl)) wdims)
             desc2 (cond ((null sl) "straight")
@@ -2554,6 +2588,7 @@
                (> (pf:dot u (pf:sub (pf:mid sp1 sp2) (pf:mid dp1 dp2)))
                   0.0))
         (setq u (pf:scl u -1.0)))       ; u points to the hopper side
+      (pf:ensure-layer *PF-BOTTOM-LAYER* 5)
       (setq dimfail nil)
       (foreach q (append
                    (list (list dp1 e1 nil
@@ -2584,15 +2619,14 @@
                        (rtos off2 2 2) " and " (rtos off3 2 2) ")")))
       ;; the flow finished: promote it all from scaffolding to result
       (foreach e made (if e (pf:temp-drop e)))
-      (princ (strcat "\nPool bottom added: the shallow break, the"
-                     " three-piece deep break (dashed stubs and solid"
-                     " middle, on " *PF-POOL-LAYER*
-                     "), the hopper (offsets "
-                     (rtos off1 2 2) " / " (rtos off3 2 2) " / "
-                     (rtos off2 2 2) ") on " *PF-BOTTOM-LAYER*
-                     ", the slope lines (" desc1 " / " desc2
-                     "), and the dimension string a foot off the"
-                     " deep break."))))
+      (princ (strcat "\nPool bottom added on layer " *PF-POOL-LAYER*
+                     ": the shallow break, the three-piece deep break"
+                     " (dashed stubs, solid middle), the curved hopper"
+                     " (offsets " (rtos off1 2 2) " / "
+                     (rtos off3 2 2) " / " (rtos off2 2 2)
+                     "), and the slope lines (" desc1 " / " desc2
+                     ").  The dimensions sit on " *PF-BOTTOM-LAYER*
+                     ", the deep-end string a foot off the break."))))
   (princ))
 
 ;; Ask how one slope line should run.  NM names the deep break point
@@ -2692,11 +2726,11 @@
                ;; both break lines go down now, solid, so what was
                ;; declared is visible while the offsets are typed;
                ;; they stay scaffolding until the whole flow lands
-               (pf:ensure-layer *PF-BOTTOM-LAYER* 5)
-               (setq lines (list (pf:temp-add
-                                   (pf:make-line sp1 sp2 nil nil))
-                                 (pf:temp-add
-                                   (pf:make-line dp1 dp2 nil nil))))
+               (pf:ensure-layer *PF-POOL-LAYER* 4)
+               (setq lines (list (pf:temp-add (pf:tag-mine
+                                   (pf:make-line sp1 sp2 nil nil)))
+                                 (pf:temp-add (pf:tag-mine
+                                   (pf:make-line dp1 dp2 nil nil)))))
                (princ (strcat "\n  Back of the hopper: Pt."
                               (pf:pt-name back)
                               " (the survey point straight out from"
