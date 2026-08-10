@@ -472,7 +472,60 @@
   (setq ans (pool:askseqb items nil))
   ans)
 
-(defun pool:askseqb (items bk / ans i n it v dflt asked out)
+;;; -------------------- form-supplied answers --------------------------
+;;;
+;;;  pool:*form* is nil for ordinary command-line operation and every
+;;;  prompt below behaves as it always has.  When the palette runs the
+;;;  command it binds pool:*form* to an alist of (key . value):
+;;;
+;;;    key present, value non-nil   use it, ask nothing
+;;;    key present, value nil       the field was left BLANK, which is
+;;;                                 the same answer as NA at the prompt
+;;;    key absent                   not supplied, so ask as usual
+;;;
+;;;  Same contract as SPA.LSP, deliberately: one rule for both sheets.
+
+(setq pool:*form* nil)
+
+;; (T . value) when the form carries KEY, nil when it does not.  The
+;; wrapper is what tells a supplied nil apart from a missing key.
+(defun pool:fhit (key / c)
+  (if (and pool:*form* (setq c (assoc key pool:*form*)))
+      (cons t (cdr c))))
+
+;; The depth prompts are the only ones not keyed by an askseqb item, and
+;; they all read "<letter> - <description>": "C - wall height", "D -
+;; deep end depth", "C2 - depth where the shallow floor meets the
+;; break".  The key is read off that prefix, so no call site changes.
+;;
+;; The shape is checked strictly -- a short token followed by " - " --
+;; because pool:askh also asks things like "Total pool length (arc tip
+;; to arc tip)", which must NOT turn into a form key.
+(defun pool:fkeyof (msg / i c tok)
+  (setq tok "" i 0)
+  (while (and (< i (strlen msg))
+              (/= (setq c (substr msg (1+ i) 1)) " "))
+    (setq tok (strcat tok c) i (1+ i)))
+  (if (and (> (strlen tok) 0)
+           (<= (strlen tok) 3)
+           (= (substr msg (1+ i) 3) " - "))
+      (read (strcase tok t))))
+
+;; The bottom type, taken from the form when the palette picked one.
+;;
+;; Only the six styles POOL can actually draw are accepted.  A name from
+;; the shape chart that has no implementation here -- Multiple Depth,
+;; Flat, Straight Slope, Sport (No Hopper Pad), Sport (Shallow Cove),
+;; Modified Flat Shallow End -- falls through to the prompt instead of
+;; being passed on to fail somewhere less obvious.
+(defun pool:askbtype ( / h v)
+  (if (and (setq h (pool:fhit 'btype))
+           (setq v (cdr h))
+           (member v '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow")))
+      v
+      (pool:askkw "Bottom type" pool:*btypes* pool:*btshown* "Normal" nil)))
+
+(defun pool:askseqb (items bk / ans i n it v dflt asked out h)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items))
@@ -485,8 +538,11 @@
           (setq dflt (nth 4 it))
           (if (and dflt (listp dflt))
               (setq dflt (pool:sqfirst ans dflt)))
-          (setq v (pool:asks (cadr it) (caddr it) (cadddr it) dflt
-                             (if (or asked bk) t nil)))
+          (setq h (pool:fhit (car it)))
+          (setq v (if h
+                      (cdr h)
+                      (pool:asks (cadr it) (caddr it) (cadddr it) dflt
+                                 (if (or asked bk) t nil))))
           (if (eq v 'POOL-BACK)
               (if asked
                   (setq i (car asked) asked (cdr asked))
@@ -546,7 +602,19 @@
 
 ;; Ask for a distance while the matching guide elements glow red, then
 ;; restore each element to the color it had (outline vs cross-dim gray).
-(defun pool:askh (msg ents / v cols)
+;; A depth the form supplied is taken as given; anything else is asked.
+(defun pool:askh (msg ents / k h)
+  (if (and (setq k (pool:fkeyof msg))
+           (setq h (pool:fhit k))
+           (cdr h))
+      (cdr h)
+      (pool:askh-prompt msg ents)))
+
+;; The prompt itself.  pool:askdeep and pool:askc2 re-ask through THIS
+;; rather than pool:askh: a form value that fails their range check has
+;; to be corrected at the keyboard, and re-reading the same form entry
+;; would spin forever.
+(defun pool:askh-prompt (msg ents / v cols)
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (setq v (pool:ask msg))
@@ -2551,7 +2619,7 @@
   (while (<= dp wh)
     (princ (strcat "\nD must be deeper than the wall height C ("
                    (rtos wh) ") -- re-enter."))
-    (setq dp (pool:askh msg ents)))
+    (setq dp (pool:askh-prompt msg ents)))
   dp)
 
 (defun pool:askc2 (msg ents wh dp / c2)
@@ -2559,7 +2627,7 @@
   (while (or (< c2 wh) (> c2 dp))
     (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
                    (rtos dp) ") -- re-enter."))
-    (setq c2 (pool:askh msg ents)))
+    (setq c2 (pool:askh-prompt msg ents)))
   c2)
 
 ;; Hopper-language bottom: lettered guide, the H/G/F/E/M/L/K chain,
@@ -2968,8 +3036,7 @@
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- xmin doff) (- ymin doff)))
                  (pool:wp (list (+ xmax doff) (+ ymax doff))))
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askbtype))
         (if (/= btype "Sport")
             (pool:hopnormal quad corners doff th nil btype
                             xmin (- ymin (* 2.2 doff)) t)
@@ -3470,8 +3537,7 @@
   (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askbtype))
         (setq u (pool:unit (pool:v- tipr tipl))
               v (pool:perp u)
               lline (list tipl v)
@@ -3508,8 +3574,7 @@
   (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askbtype))
         (setq cen (list 0.0 0.0))
         (foreach p pts (setq cen (pool:v+ cen p)))
         (setq cen (pool:v* cen 0.125)
@@ -4862,8 +4927,7 @@
   (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askbtype))
         (setq u (pool:unit (pool:v- tipr tipl))
               v (pool:perp u))
         (if (/= btype "Sport")
@@ -4936,6 +5000,9 @@
         (princ (strcat "\nPOOL error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (pool:sysrestore)
+    ;; an aborted form run must not leave its answers armed for the
+    ;; next plain POOL at the command line
+    (setq pool:*form* nil)
     (pool:pvkill)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
@@ -5005,6 +5072,33 @@
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
+
+;;; ==================== palette entry point ============================
+;;;
+;;;  The palette collects its answers into an alist and calls this.
+;;;  Everything below it -- the hopper chains, the depth validation, the
+;;;  side profile, every dimension -- is unchanged and never learns a
+;;;  form was involved.
+;;;
+;;;  (pool:run-with-answers
+;;;    '((btype . "Normal")
+;;;      (h . 48.0) (g . 96.0) (f . 120.0) (e . 96.0)
+;;;      (c . 42.0) (d . 96.0)))
+;;;
+;;;  Keys are the sheet letters, lower-cased: the plan chain H G F E
+;;;  (and E2 F2 F1 E1 on a Sport) and the depths C, D and C2.  Any key
+;;;  left out is asked for at the command line, so a partly-filled form
+;;;  is a valid form.
+;;;
+;;;  btype takes one of the six styles in pool:*btypes*.  The other six
+;;;  bottoms on the shape chart are not implemented here and fall back
+;;;  to the prompt.
+
+(defun pool:run-with-answers (form)
+  (setq pool:*form* form)
+  (c:POOL)
+  (setq pool:*form* nil)
+  (princ))
 
 (princ "\nPOOL.LSP loaded.  Type POOL to lay out a pool.")
 (princ)

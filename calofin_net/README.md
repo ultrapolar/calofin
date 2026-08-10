@@ -85,6 +85,48 @@ against the real artwork. Nothing depends on them being exact.
 
 Nine of the twelve shapes are POOL shapes awaiting phase 3.
 
+## Pool bottoms
+
+`assets/bottoms/` holds the twelve side-view bottom types from the Bottom
+Types chart. **POOL draws six of them** — `pool:*btypes*` is the
+authority:
+
+| Chart panel | POOL keyword |
+| --- | --- |
+| Standard Hopper | `Normal` |
+| Sloping Shallow End | `SHallow` |
+| Sport | `Sport` |
+| Slope Bottom | `SLope` |
+| Wedge | `Wedge` |
+| Modified Flat | `MOdflat` |
+
+The other six are listed on the tab but disabled, with the reason in a
+tooltip, so the screen matches the paper and the gap is visible rather
+than looking like something you failed to find. A `btype` the form sends
+that isn't one of the six is ignored and POOL asks as usual.
+
+The depths needed a different mechanism from everything else. The plan
+chain (`H G F E`, or `E2 F2 G F1 E1` on a Sport) is keyed through
+`pool:askseqb` exactly like SPA's fields — but `C`, `D` and `C2` are not:
+they go through `pool:askh` / `pool:askdeep` / `pool:askc2` and land in
+local variables with no keys at all. They are keyed off the prompt's
+letter prefix instead, which is why `pool:fkeyof` insists on the
+`"<letter> - "` shape: `pool:askh` also asks *"Total pool length (arc tip
+to arc tip)"*, and that must never become a form key.
+
+`pool:askdeep` and `pool:askc2` re-ask through `pool:askh-prompt` rather
+than `pool:askh`. A form value that fails their range check has to be
+corrected at the keyboard — re-reading the same form entry would spin
+forever.
+
+Chart letters `C1`, `C3`, `C4` and `F3` are collected nowhere: they
+appear only on bottoms POOL cannot draw. `B` is on every section but is
+never an input here — the overall length is settled by the plan view
+before a bottom is asked for.
+
+The Pool tab covers the **bottom only**. Shape, corners and cross dims
+are still answered at the command line.
+
 ## Blank versus missing
 
 The distinction the whole feature rests on:

@@ -28,6 +28,8 @@
          resolves it relative to the loaded DLL. -->
     <None Include="assets\shapes\*.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="assets\shapes\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="assets\bottoms\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="assets\bottoms\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

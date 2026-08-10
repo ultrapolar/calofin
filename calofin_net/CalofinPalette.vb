@@ -29,6 +29,7 @@ Public Class CalofinPalette
 
             _ps.AddVisual("Commands", New CommandsTab())
             _ps.AddVisual("Spa", New SpaFormView())
+            _ps.AddVisual("Pool bottom", New PoolFormView())
         End If
         _ps.Visible = True
     End Sub
