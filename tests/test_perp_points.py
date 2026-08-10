@@ -427,6 +427,10 @@ def test_cperppts_uses_newest_curve_and_fits_the_result():
     fit = after.find('"._PEDIT"')
     assert fit >= 0 and "_Fit" in after[fit:fit + 80], \
         "the offset polyline must be curve-fit (PEDIT Fit)"
+    # the result must stay a polyline: arc-fit only, never spline-fit
+    # (PEDIT Spline) and never a SPLINE entity
+    assert "_Spline" not in code and "._SPLINE" not in code, \
+        "output must be a polyline curve, not a spline"
     assert re.search(r"\(setq\s+curCrv\s+\(entlast\)", after), \
         "the fitted curve must become the next round's source"
     print("cperppts offsets from the newest curve and fits the result")
