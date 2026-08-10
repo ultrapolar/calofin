@@ -79,7 +79,8 @@
 ;;; returns the fewest-curves fit found - never the full-size one.
 ;;;
 ;;; The command rebuilds the perimeter as a single closed LWPOLYLINE
-;;; (lines + arcs only, no splines) on layer "POOL-FIT":
+;;; (lines + arcs only, no splines); the candidates preview on layer
+;;; "POOL-FIT" and the kept one moves onto the POOL layer:
 ;;;   * Every polyline vertex is snapped to the nearest surveyed point
 ;;;     within the tolerance (default 1 unit = 1 inch), so corners land
 ;;;     exactly on points whenever one is close enough.
@@ -120,10 +121,11 @@
 ;;; break), or through POINTS the user picks along that side, each
 ;;; with its own offset measured square off the wall - the line still
 ;;; runs guided between them.  The hopper and the guided slopes are
-;;; chains of small arcs (curves, not facets).  All the bottom's
-;;; lines land on *PF-POOL-LAYER* with the perimeter (the deep break
-;;; stubs dashed); the dimensions - every offset gets one - go on
-;;; *PF-BOTTOM-LAYER*.
+;;; merged into as FEW long arcs as hold their shape (within
+;;; *PF-BOTTOM-FIT*) - curves, not facets, and not many of them.
+;;; Everything - the bottom's lines, the dimensions, and the kept
+;;; perimeter itself - ends up on *PF-POOL-LAYER* (the deep break
+;;; stubs dashed).
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
@@ -149,14 +151,20 @@
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
                                     ; trace of the points
-(setq *PF-BOTTOM-LAYER* "POOL-BOTTOM") ; layer the pool-bottom
-                                    ; DIMENSIONS go on; the bottom's
-                                    ; lines themselves (breaks, hopper,
-                                    ; slopes) land on *PF-POOL-LAYER*
-                                    ; with the perimeter
+(setq *PF-BOTTOM-LAYER* "POOL-BOTTOM") ; legacy: where earlier versions
+                                    ; of this command put the bottom
+                                    ; geometry and dims.  Everything
+                                    ; goes on *PF-POOL-LAYER* now, but
+                                    ; ADAB still skips this layer when
+                                    ; reading a selection
 (setq *PF-BOTTOM-STEP*  6.0)        ; sampling step for the hopper
                                     ; offset curve (6 inches keeps it
                                     ; smooth without a heavy polyline)
+(setq *PF-BOTTOM-FIT*   0.25)       ; merging those samples into long
+                                    ; arcs may leave no sample further
+                                    ; than this off the drawn curve (a
+                                    ; quarter inch - invisible at pool
+                                    ; scale, a big cut in arc count)
 (setq *PF-PICKUP-EPS*   3.0)        ; a survey point within this of the
                                     ; selected perimeter counts as one
                                     ; of ITS points when ADAB gathers
@@ -1380,11 +1388,15 @@
     (setq dxf (append dxf (list (cons 10 (car v)) (cons 42 (cadr v))))))
   (entmakex dxf))
 
-;; Put an entity's colour back to BYLAYER (used on the fit the user
-;; keeps, so the preview colours do not linger in the drawing).
+;; The kept fit joins the POOL layer in ByLayer colour: the preview
+;; colour and the preview layer both belonged to the comparison - the
+;; result belongs with the pool.
 (defun pf:set-bylayer (en / ed)
-  (setq ed (entget en))
-  (if (assoc 62 ed) (entmod (subst '(62 . 256) (assoc 62 ed) ed))))
+  (pf:ensure-layer *PF-POOL-LAYER* 4)
+  (setq ed (entget en)
+        ed (subst (cons 8 *PF-POOL-LAYER*) (assoc 8 ed) ed))
+  (if (assoc 62 ed) (setq ed (subst '(62 . 256) (assoc 62 ed) ed)))
+  (entmod ed))
 
 ;; Pad S with spaces to width W, for the comparison table.
 (defun pf:pad (s w)
@@ -1658,7 +1670,7 @@
         (setq i (1+ i)))
       (princ (strcat "\nABHD: " (itoa ns) " segments ("
                      (itoa nl) " lines + " (itoa na)
-                     " curves) written to layer " *PF-OUT-LAYER* "."
+                     " curves) written to layer " *PF-POOL-LAYER* "."
                      "\n  Points on the perimeter:      " (itoa hiton)
                      "\n  Points off within tolerance:  " (itoa hitok)
                      "  (allowance " (itoa allow) ")"
@@ -1984,9 +1996,9 @@
 ;; shallow break point on its side - straight, guided along the
 ;; perimeter's curve, or guided through points the user picks at
 ;; pinned offsets, asked per side.  The hopper and guided slopes are
-;; drawn as chains of small arcs (curved, not faceted).  All the
-;; lines land on *PF-POOL-LAYER*; the dimensions - one per offset -
-;; go on *PF-BOTTOM-LAYER*.
+;; drawn as few long arcs (merged within *PF-BOTTOM-FIT* - curved,
+;; not faceted, not heavy).  Lines and dimensions all land on
+;; *PF-POOL-LAYER*.
 
 ;; Unit vector of V, or nil when V is (near) zero-length.
 (defun pf:unit (v / l)
@@ -2158,25 +2170,62 @@
           bls (cdr bls)))
   (entmakex dxf))
 
-;; Bulges that turn a run of sampled points into a smooth chain of
-;; small arcs: each segment leaves its start along the direction
-;; smoothed from the neighbouring samples (central difference), so a
-;; drawn offset is genuinely CURVED, not a run of 6-inch facets.  A
-;; bulge past 1.0 (a quarter turn in one step) can only be a cusp
-;; artefact and is left straight.
-(defun pf:run-bulges (pts / out prev cur rest next b)
-  (setq prev (car pts)
-        cur  (car pts)
-        rest (cdr pts)
-        out  nil)
+;; One arc from sample I to sample J through their middle sample: its
+;; bulge when every sample between them stays within *PF-BOTTOM-FIT*
+;; of it, else nil.  (0.0 - a straight stretch - is a valid answer:
+;; the offset of a dead-straight wall IS straight.)
+(defun pf:arc-fits (pts i j / a b m bl seg k ok)
+  (setq a   (nth i pts)
+        b   (nth j pts)
+        m   (nth (/ (+ i j) 2) pts)
+        bl  (pf:bulge-3pt a m b)
+        seg (list a b bl)
+        ok  T
+        k   (1+ i))
+  (while (and ok (< k j))
+    (if (> (pf:seg-dist (nth k pts) seg) *PF-BOTTOM-FIT*)
+      (setq ok nil))
+    (setq k (1+ k)))
+  (if ok bl))
+
+;; Replace a densely sampled run with as FEW arcs as hold every
+;; sample within *PF-BOTTOM-FIT* of the drawn curve: spans grow
+;; greedily (longest first), each drawn as the 3-point arc through
+;; its middle sample, and every point in KEEP stays a vertex exactly,
+;; so the dimension anchors sit ON the line.  Returns (verts bulges)
+;; ready for pf:make-open-pline.
+(defun pf:merge-arcs (pts keep / n idx q k i j bl verts bls prevk
+                                stop rest)
+  (setq n   (length pts)
+        idx (list 0 (1- n)))
+  (foreach q keep
+    (setq k (pf:near-idx q pts))
+    (if (and (> k 0) (< k (1- n)) (not (member k idx)))
+      (setq idx (cons k idx))))
+  (setq idx (mapcar 'car
+                    (pf:sort-car (mapcar '(lambda (k) (cons k k))
+                                         idx))))
+  (setq verts (list (car pts))
+        bls   nil
+        prevk (car idx)
+        rest  (cdr idx))
   (while rest
-    (setq next (car rest)
-          b    (pf:tangent-bulge cur (angle prev next) next)
-          out  (cons (if (> (abs b) 1.0) 0.0 b) out)
-          prev cur
-          cur  next
-          rest (cdr rest)))
-  (reverse out))
+    (setq stop (car rest)
+          i    prevk)
+    (while (< i stop)
+      (setq j stop bl nil)
+      (while (and (null bl) (> j (1+ i)))
+        (if (null (setq bl (pf:arc-fits pts i j)))
+          (setq j (1- j))))
+      (if (null bl)
+        (setq j  (1+ i)
+              bl (pf:arc-fits pts i j)))
+      (setq verts (cons (nth j pts) verts)
+            bls   (cons bl bls)
+            i     j))
+    (setq prevk stop
+          rest  (cdr rest)))
+  (list (reverse verts) (reverse bls)))
 
 ;; The dimension style to stamp on a new dim: NAME when the drawing
 ;; actually has it, else the current style - with a note the first
@@ -2202,7 +2251,7 @@
 (defun pf:make-dim (pa pb sty pdl / m)
   (setq m (if pdl pdl (pf:mid pa pb)))
   (entmakex (list '(0 . "DIMENSION") '(100 . "AcDbEntity")
-                  (cons 8 *PF-BOTTOM-LAYER*)
+                  (cons 8 *PF-POOL-LAYER*)
                   '(100 . "AcDbDimension")
                   (cons 3 (pf:dim-style sty))
                   (cons 10 (list (car m) (cadr m) 0.0))
@@ -2521,11 +2570,13 @@
             made (cons (pf:temp-add (pf:tag-mine
                          (pf:make-line e2 dp2 nil "DASHED2")))
                        made))
-      ;; the hopper outline is a chain of small arcs - the offset is
-      ;; a curve, not a run of facets
-      (setq sl   (pf:thin-run hpts)
+      ;; the hopper outline: the dense samples merge into as few long
+      ;; arcs as hold the shape, the back anchor kept as a vertex so
+      ;; its dimension sits on the line
+      (setq sl   (pf:merge-arcs (pf:thin-run hpts)
+                                (list (nth kb hpts)))
             made (cons (pf:temp-add (pf:tag-mine
-                         (pf:make-open-pline sl (pf:run-bulges sl))))
+                         (pf:make-open-pline (car sl) (cadr sl))))
                        made))
       ;; the slope lines: each hopper end joins the shallow break
       ;; point on its own side of the loop, so the two never cross -
@@ -2547,10 +2598,11 @@
                                   (rem (+ (* dir (- i1 is1)) n n) n)
                                   dp1 sp1 off1
                                   (if (eq spec T) nil spec) e1)))
-      (setq q     (if sl (pf:thin-run (car sl))))
+      (setq q     (if sl (pf:merge-arcs (pf:thin-run (car sl))
+                                        (mapcar 'cadr (cadr sl)))))
       (setq made  (cons (pf:temp-add (pf:tag-mine
                           (if sl
-                            (pf:make-open-pline q (pf:run-bulges q))
+                            (pf:make-open-pline (car q) (cadr q))
                             (pf:make-line e1 sp1 nil nil))))
                         made)
             wdims (if sl (append wdims (cadr sl)))
@@ -2565,10 +2617,11 @@
                                  (rem (+ (* dir (- is2 i2)) n n) n)
                                  dp2 sp2 off2
                                  (if (eq spec T) nil spec) e2)))
-      (setq q     (if sl (pf:thin-run (car sl))))
+      (setq q     (if sl (pf:merge-arcs (pf:thin-run (car sl))
+                                        (mapcar 'cadr (cadr sl)))))
       (setq made  (cons (pf:temp-add (pf:tag-mine
                           (if sl
-                            (pf:make-open-pline q (pf:run-bulges q))
+                            (pf:make-open-pline (car q) (cadr q))
                             (pf:make-line e2 sp2 nil nil))))
                         made)
             wdims (if sl (append wdims (cadr sl)) wdims)
@@ -2588,7 +2641,6 @@
                (> (pf:dot u (pf:sub (pf:mid sp1 sp2) (pf:mid dp1 dp2)))
                   0.0))
         (setq u (pf:scl u -1.0)))       ; u points to the hopper side
-      (pf:ensure-layer *PF-BOTTOM-LAYER* 5)
       (setq dimfail nil)
       (foreach q (append
                    (list (list dp1 e1 nil
@@ -2624,9 +2676,9 @@
                      " (dashed stubs, solid middle), the curved hopper"
                      " (offsets " (rtos off1 2 2) " / "
                      (rtos off3 2 2) " / " (rtos off2 2 2)
-                     "), and the slope lines (" desc1 " / " desc2
-                     ").  The dimensions sit on " *PF-BOTTOM-LAYER*
-                     ", the deep-end string a foot off the break."))))
+                     "), the slope lines (" desc1 " / " desc2
+                     "), and every dimension - the deep-end string a"
+                     " foot off the break."))))
   (princ))
 
 ;; Ask how one slope line should run.  NM names the deep break point
@@ -2993,6 +3045,11 @@
           ((and (= lay (strcase *PF-POOL-LAYER*))
                 (member typ '("SPLINE" "ELLIPSE")))
            (setq nunsup (1+ nunsup)))
+          ;; ABHD's own pool-bottom geometry lives on the POOL layer
+          ;; too (stamped) - never read it back as a guide
+          ((and (= lay (strcase *PF-POOL-LAYER*))
+                (assoc -3 (entget en '("ABHD"))))
+           nil)
           ;; perimeter / ordering sketch on the POOL layer
           ((= lay (strcase *PF-POOL-LAYER*))
            (setq segs (append segs (pf:ent-segs en))))

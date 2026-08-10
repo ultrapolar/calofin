@@ -312,10 +312,12 @@ so before you choose — that one is almost certainly a mis-shot, a
 duplicate, or a corner that needs more points around it, and no
 tolerance setting will rescue it.
 
-The kept fit is a closed `LWPOLYLINE` on layer `POOL-FIT` (green,
-created if missing; if the layer exists but is off, frozen or locked
-it is restored so the result is actually visible). Your original
-geometry is never touched.
+The kept fit is a closed `LWPOLYLINE`: the three candidates preview
+on layer `POOL-FIT` (created if missing; if a layer exists but is
+off, frozen or locked it is restored so the result is actually
+visible), and **the one you keep moves onto the `POOL` layer** in
+ByLayer colour, joining the rest of the pool. Your original geometry
+is never touched.
 
 ### What the report tells you
 
@@ -440,17 +442,18 @@ that isn't on that side of the pool, or that lands on a break point,
 is called out and ignored; picking no points at all just gives the
 plain guided line.
 
-**All the bottom's lines land on the `POOL` layer** with the
-perimeter: the shallow break, the three-piece deep break, the hopper
-outline and the slope lines (only the deep-break stubs are dashed).
-The hopper and the guided/points slopes are **genuinely curved** —
-each 6″ sampled run (`*PF-BOTTOM-STEP*`) is drawn as a chain of small
-arcs whose tangents are smoothed from the neighbouring samples, not
-as straight facets. The **aligned dimensions** — the deep-end K/L/M
-string plus one on the back offset and on every waypoint — go on
-layer `POOL-BOTTOM` (created if needed), measured automatically. The
-first offset becomes the session default (`*PF-HOP-OFF*`, 18″ out of
-the box).
+**Everything lands on the `POOL` layer** with the perimeter: the
+shallow break, the three-piece deep break, the hopper outline, the
+slope lines (only the deep-break stubs are dashed) **and all the
+dimensions** — the deep-end K/L/M string plus one on the back offset
+and on every waypoint, measured automatically. The hopper and the
+guided/points slopes are **genuinely curved, with few curves**: the
+6″ sampling (`*PF-BOTTOM-STEP*`) is merged into as few long arcs as
+keep every sample within a quarter inch of the drawn line
+(`*PF-BOTTOM-FIT*`) — a circular deep end comes out as a handful of
+arcs, not a hundred facets, and dimension anchors are kept as
+vertices so every dim sits exactly on the line. The first offset
+becomes the session default (`*PF-HOP-OFF*`, 18″ out of the box).
 
 `ESC` or a cancelled pick anywhere in the flow leaves nothing behind
 — the bottom only stays once it is complete. If no survey point lies
