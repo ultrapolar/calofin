@@ -199,8 +199,35 @@ def exif_gps(lst):
                 altm = -altm
     return (lat, lon, altm, tif is not None)   # 4th: EXIF block found at all?
 
-# Mirror of ddg-read-meta: XMP first, EXIF fills the gaps; the flags say
-# whether each metadata container was present at all
+# Mirror of ddg-hexval / ddg-hex-after (ImageMagick "Raw profile type" chunks)
+def hexval(b):
+    if 48 <= b <= 57: return b - 48
+    if 97 <= b <= 102: return b - 87
+    if 65 <= b <= 70: return b - 55
+    return None
+
+def hex_after(lst, anchor):
+    rest = scan_to(lst, [ord(c) for c in anchor])
+    if rest is None: return None
+    i = 0; nl = 0
+    while i < len(rest) and nl < 3:          # skip keyword NUL + 2 header lines
+        if rest[i] == 10: nl += 1
+        i += 1
+    acc = []; hi = None; cnt = 0
+    while i < len(rest) and cnt < 65536:
+        b = rest[i]; i += 1
+        if b < 0: b += 256
+        if b in (10, 13, 32): continue
+        v = hexval(b)
+        if v is None: break
+        if hi is None:
+            hi = v
+        else:
+            acc.append(16 * hi + v); hi = None; cnt += 1
+    return acc if acc else None
+
+# Mirror of ddg-read-meta: XMP -> EXIF -> hex profiles -> DJI .SRT text,
+# each later step filling whatever is still missing
 def read_meta(lst):
     t = xmp_text(lst)
     xmpf = len(t) > 0
@@ -216,7 +243,56 @@ def read_meta(lst):
         if lon is None: lon = e[1]
         if absm is None: absm = e[2]
         tiff = e[3]
+    if lat is None or lon is None or absm is None:
+        blob = hex_after(lst, "Raw profile type exif")
+        if blob is None: blob = hex_after(lst, "Raw profile type APP1")
+        if blob:
+            e = exif_gps(blob)
+            if lat is None: lat = e[0]
+            if lon is None: lon = e[1]
+            if absm is None: absm = e[2]
+            if e[3]: tiff = True
+        blob = hex_after(lst, "Raw profile type xmp")
+        if blob:
+            tx = grab_text(blob, 6144)
+            xmpf = True
+            if absm is None: absm = xmp_num(tx, "AbsoluteAltitude")
+            if relm is None: relm = xmp_num(tx, "RelativeAltitude")
+            if lat is None: lat = xmp_num(tx, "GpsLatitude")
+            if lon is None: lon = xmp_num(tx, "GpsLongitude")
+            if lon is None: lon = xmp_num(tx, "GpsLongtitude")
+    if lat is None or lon is None:
+        rest = scan_to(lst, [ord(c) for c in "latitude"])
+        if rest is not None:
+            tx = "latitude" + grab_text(rest, 2048)
+            if lat is None: lat = num_after(tx, "latitude")
+            if lon is None: lon = num_after(tx, "longitude")
+            if absm is None: absm = num_after(tx, "abs_alt")
+            if relm is None: relm = num_after(tx, "rel_alt")
     return (absm, relm, lat, lon, xmpf, tiff)
+
+# Mirror of ddg-parse-latlon (manual coordinate entry)
+def parse_latlon(s):
+    s = s.strip(" \t")
+    pos = s.find(",")
+    if pos < 0: pos = s.find(" ")
+    lat = lon = None
+    if pos >= 0:
+        lat = numstr(s[:pos])
+        lon = numstr(s[pos + 1:].strip(" ,"))
+    if (lat is not None and lon is not None and abs(lat) <= 90.0
+            and abs(lon) <= 180.0 and not (abs(lat) < 1e-9 and abs(lon) < 1e-9)):
+        return (lat, lon)
+    return None
+
+# Mirror of ddg-parse-ft (manual height entry: feet, or metres with m suffix)
+def parse_ft(s):
+    s = s.strip(" \t")
+    if s == "": return None
+    if s[-1].upper() == "M":
+        v = numstr(s[:-1].strip(" "))
+        return v * 3.280839895 if v is not None else None
+    return numstr(s)
 
 def read_meta4(lst):
     return read_meta(lst)[:4]
@@ -235,17 +311,21 @@ def classify(absm, relm, lat, lon, xmpf, tiff):
         return "NO_ALTITUDE"
     return "OK"
 
-def json_num(txt, key):
-    pos = txt.find('"' + key + '"')
+# Mirror of ddg-num-after / ddg-json-num
+def num_after(txt, key):
+    pos = txt.find(key)
     if pos < 0: return None
-    rest = txt[pos + len(key) + 2:]          # LISP: (substr txt (+ pos (strlen key) 3))
+    rest = txt[pos + len(key):]              # LISP: (substr txt (+ pos (strlen key) 1))
     i = 0
-    while i < len(rest) and rest[i] in ' :"\t':
+    while i < len(rest) and rest[i] in ' :=["\t':
         i += 1
     num = ""
     while i < len(rest) and rest[i] in "-+.0123456789eE":
         num += rest[i]; i += 1
     return numstr(num) if num else None
+
+def json_num(txt, key):
+    return num_after(txt, '"' + key + '"')
 
 # -------------------------------------------- synthetic DJI images ----------
 # 32 42' 56.6568" N,  117 09' 39.9016" W, 123.456 m
@@ -358,6 +438,34 @@ def build_png(with_xmp=True, with_exif=True, element_form=False, meta_at_end=Fal
         big = png_chunk(b"IDAT", bytes(300000))   # pushes meta past 256 KB
         return sig + ihdr + idat + big + meta + iend
     return sig + ihdr + idat + meta + iend        # decoys BEFORE real chunks
+
+def build_srt():
+    # modern DJI video caption file (DJI_0001.SRT next to DJI_0001.MP4)
+    return (b"1\n00:00:00,000 --> 00:00:00,033\n"
+            b'<font size="28">SrtCnt : 1, DiffTime : 33ms\n'
+            b"2023-06-01 12:00:00.000\n"
+            b"[iso : 100] [shutter : 1/120] [fnum : 2.8] [ev : 0] [ct : 5500] "
+            b"[focal_len : 24.00] [latitude: 32.715738] [longitude: -117.161084] "
+            b"[rel_alt: 30.500 abs_alt: 123.456] </font>\n")
+
+def im_hex_profile(name, payload):
+    # ImageMagick "Raw profile type X" tEXt chunk: \0 \n name \n len \n hex...
+    hexs = __import__("binascii").hexlify(payload)
+    lines = [hexs[i:i + 72] for i in range(0, len(hexs), 72)]
+    body = (b"\n" + name.encode() + b"\n" + str(len(payload)).rjust(8).encode()
+            + b"\n" + b"\n".join(lines) + b"\n")
+    return png_chunk(b"tEXt", b"Raw profile type " + name.encode() + b"\x00" + body)
+
+def build_png_imhex(kind="exif"):
+    # a converted PNG whose only metadata is an ImageMagick hex profile
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = png_chunk(b"IHDR", struct.pack(">IIBBBBB", 640, 480, 8, 2, 0, 0, 0))
+    if kind == "exif":
+        prof = im_hex_profile("exif", b"Exif\x00\x00" + build_tiff(le=True))
+    else:
+        prof = im_hex_profile("xmp", xmp_packet())
+    junk = png_chunk(b"IDAT", b"\x1a\x00junk" + bytes(range(256)) * 4)
+    return sig + ihdr + prof + junk + png_chunk(b"IEND", b"")
 
 def approx(a, b, tol=1e-6):
     return a is not None and abs(a - b) < tol
@@ -477,6 +585,37 @@ def main():
           cls(build_png(with_exif=False, lat_s=b"+99.0000000")) == "BAD_GPS")
     check("classify coords but no altitude -> NO_ALTITUDE",
           cls(build_png(with_exif=False, alts=False)) == "NO_ALTITUDE")
+
+    # --- DJI .SRT flight log (video workflow: frame grabs have no metadata,
+    #     the sidecar SRT has it all) ---
+    absm, relm, lat, lon, xmpf, tiff = read_meta(list(build_srt()))
+    check("srt latitude", approx(lat, 32.715738))
+    check("srt longitude", approx(lon, -117.161084))
+    check("srt abs_alt", approx(absm, 123.456))
+    check("srt rel_alt", approx(relm, 30.500))
+    check("srt classifies OK", cls(build_srt()) == "OK")
+
+    # --- ImageMagick hex profiles (converted PNGs hiding metadata as hex) ---
+    absm, relm, lat, lon, xmpf, tiff = read_meta(list(build_png_imhex("exif")))
+    check("IM hex exif profile: lat/lon", approx(lat, LAT) and approx(lon, LON))
+    check("IM hex exif profile: altitude", approx(absm, 123.456))
+    absm, relm, lat, lon, xmpf, tiff = read_meta(list(build_png_imhex("xmp")))
+    check("IM hex xmp profile: lat/lon",
+          approx(lat, 32.7157380) and approx(lon, -117.1610838))
+    check("IM hex xmp profile: altitudes",
+          approx(absm, 123.45) and approx(relm, 30.50))
+
+    # --- manual entry parsers (the frame-grab rescue path) ---
+    check("parse_latlon comma", parse_latlon("32.715738, -117.161084") == (32.715738, -117.161084))
+    check("parse_latlon space", parse_latlon("32.715738 -117.161084") == (32.715738, -117.161084))
+    check("parse_latlon padded", parse_latlon("  32.7 ,  -117.1  ") == (32.7, -117.1))
+    check("parse_latlon garbage -> None", parse_latlon("the pool by the slide") is None)
+    check("parse_latlon 0,0 -> None", parse_latlon("0, 0") is None)
+    check("parse_latlon out of range -> None", parse_latlon("99.0, -117.1") is None)
+    check("parse_ft plain feet", parse_ft("98") == 98.0)
+    check("parse_ft metres suffix", approx(parse_ft("30.5m"), 30.5 * 3.280839895))
+    check("parse_ft metres padded", approx(parse_ft(" 30.5 M "), 30.5 * 3.280839895))
+    check("parse_ft blank -> None", parse_ft("") is None and parse_ft("m") is None)
 
     # --- JSON extractor against real response shapes ---
     epqs = '{"location":{"x":-117.161,"y":32.7157,"spatialReference":{"wkid":4326,"latestWkid":4326}},"locationId":0,"value":"296.606","rasterId":68360,"resolution":1}'

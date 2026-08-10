@@ -190,15 +190,25 @@ drone height. Nobody logs the height in the field, but the drone logs
 its GPS position in the photo automatically, so:
 
 1. `DDGPS` opens a file picker (starts on `H:`, remembers the last
-   folder) for the original drone image — PNG, JPG/JPEG or TIFF.
+   folder) for the drone image — PNG, JPG/JPEG, TIFF — or the video's
+   DJI `.SRT` flight log.
 2. It reads latitude/longitude, `AbsoluteAltitude` and
    `RelativeAltitude` straight out of the file, whatever the container:
    DJI's XMP text packet first (JPEG APP1 or PNG iTXt; attribute or
    element serialisation; both the `GpsLongitude` and DJI's misspelt
-   `GpsLongtitude` tags), falling back to the binary EXIF GPS block
-   (JPEG `Exif` APP1, PNG `eXIf` chunk, or a bare TIFF header — either
-   byte order). The first 256 KB are scanned, then the last 256 KB if
-   needed, since PNG writers may park metadata after the image data.
+   `GpsLongtitude` tags), then the binary EXIF GPS block (JPEG `Exif`
+   APP1, PNG `eXIf` chunk, or a bare TIFF header — either byte order),
+   then ImageMagick-style hex text profiles (`Raw profile type
+   exif/xmp/APP1`), then DJI `.SRT` caption tags (`[latitude: …]
+   [rel_alt: … abs_alt: …]`). The first 256 KB are scanned, then the
+   last 256 KB if needed, since PNG writers may park metadata after
+   the image data.
+   **Files with no metadata at all** — 1080p/4K video frame grabs and
+   screenshots — don't dead-end: after the loud alert, DDGPS asks for
+   the pool's coordinates (paste them from Google Maps right-click),
+   still fetches the ground elevation automatically, and takes the
+   flight height typed from the DJI app / log / on-screen display
+   (feet, or metres with a trailing `m`: `30.5m`).
 3. It asks a free online elevation service for the ground elevation at
    that coordinate — USGS EPQS (3DEP bare earth, answers in feet), then
    OpenTopoData NED10m, then Open-Elevation SRTM as fallbacks; no API
@@ -244,7 +254,9 @@ python3 tests/test_drone_height_lisp.py   # drone LISP: lint + parser checks
 
 The drone-LISP test lints `DroneHeightGPS.lsp` (paren/string balance)
 and exercises a line-for-line Python transliteration of its byte-level
-parsers against synthetic DJI-style images — JPEG, PNG and bare TIFF:
+parsers against synthetic DJI-style inputs — JPEG, PNG, bare TIFF,
+`.SRT` flight logs, ImageMagick hex-profile PNGs, and the manual
+coordinate/height entry parsers:
 the XMP route (JPEG APP1 and PNG iTXt, attribute and element forms,
 DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block (JPEG
 APP1, PNG `eXIf` chunk with decoy anchors in the image data, both byte
