@@ -278,10 +278,14 @@ fixed perpendicular, CPERPPTS offsets each point **perpendicular to the
 tangent of the curve underneath it**, so a curved line can be offset
 with a different length at every point and the offsets follow the bend.
 
-The polyline built from the offset points is **curve-fit** (PEDIT Fit),
-so the result is itself a smooth curve passing exactly through every
-offset point — not a chain of straight segments — and each dimension's
-endpoint lies on the new curve.
+The offset points are joined into a single **lightweight polyline whose
+segments are arcs** (bulges), each arc matched to the curve's tangent
+direction at its start point. The result is a smooth curve passing
+exactly through every offset point that is a plain polyline entity
+through and through — never a spline, and never a curve-fit heavy
+polyline (which is why `PEDIT` is deliberately not used). Each
+dimension's endpoint lies on the new curve. Sampled off a circle, the
+arcs reproduce the circle exactly.
 
 Base points are spaced by **true arc length** along the curve, so
 spacing stays even through curved segments instead of bunching where
@@ -291,7 +295,7 @@ the geometry is tight.
 
 Every round works from the **newest curve**. Round 1 offsets from the
 curve you selected; each later round samples and offsets from the
-curve-fit polyline the previous round built. Both the offset and its
+arc polyline the previous round built. Both the offset and its
 dimension run along the normal of the curve the point actually sits on,
 so each round follows the shape its predecessor took. Which side is
 offset toward is fixed once from the direction click, relative to the

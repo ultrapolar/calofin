@@ -408,32 +408,98 @@ def test_curve_repeat_rounds_offset_from_the_newest_curve():
     print("curve repeat rounds offset from the newest curve")
 
 
-def test_cperppts_uses_newest_curve_and_fits_the_result():
-    """Structural pins for the two curved-specific behaviours:
-    each round samples/offsets from curCrv (the newest curve), and the
-    offset polyline is curve-fit so the result is itself a curve."""
+def test_cperppts_uses_newest_curve_and_builds_arc_polylines():
+    """Structural pins for the curved-specific behaviours: each round
+    samples/offsets from curCrv (the newest curve), and the offset
+    points are joined into an LWPOLYLINE whose segments are bulge arcs
+    -- built by writing group-42 bulges, never by PEDIT and never as a
+    spline."""
     path = os.path.join(REPO_DIR, "cperp_points.lsp")
     code = load(path)
     assert re.search(r"\(cperp:curve-pts\s+curCrv\b", code), \
         "base points must be sampled from the newest curve (curCrv)"
-    assert re.search(r"\(cperp:normal\s+curCrv\b", code), \
-        "offsets must run along the newest curve's normal (curCrv)"
-    assert not re.search(r"\(cperp:normal\s+crv\b", code), \
-        "offsets must not be taken from the original curve"
-    # the new polyline is fitted right after it is drawn, and becomes
-    # the next round's curve
+    assert re.search(r"\(cperp:tangent\s+curCrv\b", code), \
+        "offset directions must come from the newest curve (curCrv)"
+    # the straight polyline is turned into arcs right after it is
+    # drawn, and becomes the next round's curve
     pline = code.index('(command "._PLINE")')
     after = code[pline:]
-    fit = after.find('"._PEDIT"')
-    assert fit >= 0 and "_Fit" in after[fit:fit + 80], \
-        "the offset polyline must be curve-fit (PEDIT Fit)"
-    # the result must stay a polyline: arc-fit only, never spline-fit
-    # (PEDIT Spline) and never a SPLINE entity
+    assert re.search(r"\(cperp:arcs\s+\(entlast\)", after), \
+        "the offset polyline must be given arc bulges (cperp:arcs)"
+    assert re.search(r"\(setq\s+curCrv\s+\(entlast\)", after), \
+        "the arc polyline must become the next round's source"
+    # the arcs are written as group-42 bulges via entmod, keeping the
+    # entity an LWPOLYLINE
+    assert re.search(r"\(cons\s+42\s+b?", code) and "(entmod" in code, \
+        "arcs must be written as bulge (42) groups via entmod"
+    assert re.search(r'\(setvar\s+"PLINETYPE"\s+2\)', code), \
+        "PLINE must be forced to produce a lightweight polyline"
+    # never a spline, and never PEDIT (whose Fit turns the entity into
+    # a curve-fit heavy polyline that reads as spline-like downstream)
     assert "_Spline" not in code and "._SPLINE" not in code, \
         "output must be a polyline curve, not a spline"
-    assert re.search(r"\(setq\s+curCrv\s+\(entlast\)", after), \
-        "the fitted curve must become the next round's source"
-    print("cperppts offsets from the newest curve and fits the result")
+    assert "PEDIT" not in code, \
+        "PEDIT must not be used - bulges keep the entity an LWPOLYLINE"
+    print("cperppts offsets from the newest curve; output is an arc LWPOLYLINE")
+
+
+# --- bulge arc reference (CPERPPTS output) ----------------------------
+
+def bulge(tg, a, b):
+    """Port of cperp:bulge: tan(alpha/2), alpha = angle tangent->chord."""
+    cx, cy = b[0] - a[0], b[1] - a[1]
+    if tg is None or math.hypot(cx, cy) < 1e-12:
+        return 0.0
+    dot = tg[0] * cx + tg[1] * cy
+    crs = tg[0] * cy - tg[1] * cx
+    alpha = math.atan2(crs, dot)
+    alpha = max(-2.98, min(2.98, alpha))
+    return math.tan(alpha / 2.0)
+
+
+def test_bulge_arcs_reproduce_a_circle():
+    """Sampling a circle and bulging each segment from the tangent at
+    its start must reproduce the circle exactly: bulge == tan(delta/4)
+    (the LWPOLYLINE arc convention) and every arc midpoint lies on the
+    circle.  A positive bulge is a CCW arc, whose sagitta points to the
+    RIGHT of the chord."""
+    for npts in (5, 9, 24):
+        delta = math.pi / (npts - 1)
+        pts = [(CURVE_R * math.cos(i * delta), CURVE_R * math.sin(i * delta))
+               for i in range(npts)]
+        tgs = [(-math.sin(i * delta), math.cos(i * delta))
+               for i in range(npts)]
+        for i in range(npts - 1):
+            bl = bulge(tgs[i], pts[i], pts[i + 1])
+            assert abs(bl - math.tan(delta / 4)) < 1e-12, \
+                "bulge must equal tan(included/4)"
+            (ax, ay), (bx, by) = pts[i], pts[i + 1]
+            cx, cy = bx - ax, by - ay
+            clen = math.hypot(cx, cy)
+            sag = bl * clen / 2
+            arc_mid = ((ax + bx) / 2 + sag * cy / clen,
+                       (ay + by) / 2 - sag * cx / clen)
+            assert abs(math.hypot(*arc_mid) - CURVE_R) < 1e-9, \
+                "every arc must lie exactly on the circle"
+    print("bulge arcs reproduce a circle exactly")
+
+
+def test_bulge_degenerate_cases():
+    assert bulge((1, 0), (0, 0), (4, 0)) == 0.0, \
+        "tangent parallel to chord must give a straight segment"
+    assert bulge(None, (0, 0), (1, 1)) == 0.0, \
+        "no tangent must fall back to a straight segment"
+    assert bulge((1, 0), (2, 2), (2, 2)) == 0.0, \
+        "zero-length chord must give bulge 0"
+    assert bulge((0, 1), (0, 0), (0, 5)) == 0.0, \
+        "straight travel along +Y must stay straight"
+    assert bulge((0.0, -1.0),                       # CW tangent at angle 0
+                 (CURVE_R * math.cos(0), CURVE_R * math.sin(0)),
+                 (CURVE_R * math.cos(-0.4), CURVE_R * math.sin(-0.4))) < 0, \
+        "a clockwise arc must get a negative bulge"
+    assert abs(bulge((1, 0), (0, 0), (-5, 1e-6))) < 15, \
+        "a folding chord must clamp instead of blowing up"
+    print("bulge degenerate cases handled")
 
 
 def main():
@@ -446,7 +512,9 @@ def main():
     test_curve_side_matches_the_click()
     test_curve_offsets_are_radial()
     test_curve_repeat_rounds_offset_from_the_newest_curve()
-    test_cperppts_uses_newest_curve_and_fits_the_result()
+    test_cperppts_uses_newest_curve_and_builds_arc_polylines()
+    test_bulge_arcs_reproduce_a_circle()
+    test_bulge_degenerate_cases()
     print("\nall tests passed")
 
 

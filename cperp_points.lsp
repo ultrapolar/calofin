@@ -11,9 +11,12 @@
 ;;; Works on anything AutoCAD treats as a curve: LWPOLYLINE (including
 ;;; arc/bulge segments), POLYLINE, LINE, ARC, ELLIPSE and SPLINE.
 ;;;
-;;; The polyline built from the offset points is curve-fit (PEDIT Fit),
-;;; so the result is itself a smooth curve through the points, not a
-;;; chain of straight segments.
+;;; The offset points are joined into a single LWPOLYLINE whose
+;;; segments are ARCS (bulges), each arc matched to the curve's tangent
+;;; direction at its start point.  The result is a smooth POLYLINE
+;;; curve passing exactly through every offset point -- a real
+;;; lightweight polyline, never a spline and never a curve-fit heavy
+;;; polyline.
 ;;;
 ;;; Points are spaced by true arc length along the curve, so spacing
 ;;; stays even through curved segments instead of bunching up.
@@ -71,7 +74,7 @@
 ;;;
 ;;; Note: on a tight concave bend, normals converge and large offsets
 ;;; can make the new curve cross itself -- inherent to offsetting along
-;;; normals, not a fault of the routine.  The fit curve passes exactly
+;;; normals, not a fault of the routine.  The arc segments pass exactly
 ;;; through every offset point, so each dimension's endpoint lies on
 ;;; the new curve.
 ;;;
@@ -171,11 +174,45 @@
               (if rev (setq dx (- dx) dy (- dy)))
               (list (/ dx dl) (/ dy dl)))))))))
 
-;; Unit normal to the curve at the projection of pt, on the chosen side
-;; of the direction of travel: side is 1.0 (left) or -1.0 (right).
-(defun cperp:normal (crv pt side rev / t2)
-  (if (setq t2 (cperp:tangent crv pt rev))
-    (list (* side (- (cadr t2))) (* side (car t2)))))
+;; Bulge of the arc from a to b whose tangent at a is tg: tan(alpha/2)
+;; where alpha is the signed angle from the tangent to the chord (the
+;; arc's included angle is 2*alpha).  Sampling a circle this way
+;; reproduces the circle exactly.  Falls back to a straight segment
+;; (bulge 0) when there is no tangent or no chord.
+(defun cperp:bulge (tg a b / cx cy dot crs alpha lim)
+  (setq cx (- (car b) (car a))
+        cy (- (cadr b) (cadr a)))
+  (if (or (null tg)
+          (< (sqrt (+ (* cx cx) (* cy cy))) 1e-12))
+    0.0
+    (progn
+      (setq dot   (+ (* (car tg) cx) (* (cadr tg) cy))
+            crs   (- (* (car tg) cy) (* (cadr tg) cx))
+            alpha (atan crs dot))
+      ;; a chord folding back on the tangent would blow the bulge up
+      ;; toward infinity; cap the included angle at ~342 degrees
+      (setq lim 2.98)
+      (if (> alpha lim)     (setq alpha lim))
+      (if (< alpha (- lim)) (setq alpha (- lim)))
+      (/ (sin (/ alpha 2.0)) (cos (/ alpha 2.0))))))
+
+;; Turn the straight LWPOLYLINE en (drawn through pts, whose travel
+;; tangents are tangs) into an arc polyline: every segment becomes an
+;; arc matched to the tangent at its start point.  The entity stays an
+;; LWPOLYLINE -- only bulge values are written.
+(defun cperp:arcs (en pts tangs / d out g i b)
+  (setq d (entget en) out '() i 0)
+  (foreach g d
+    (cond
+      ((= 42 (car g)))                       ; drop existing bulges
+      ((= 10 (car g))
+       (setq b (if (< (1+ i) (length pts))
+                 (cperp:bulge (nth i tangs) (nth i pts) (nth (1+ i) pts))
+                 0.0))
+       (setq out (cons (cons 42 b) (cons g out))
+             i   (1+ i)))
+      (t (setq out (cons g out)))))
+  (entmod (reverse out)))
 
 ;; --- command ---------------------------------------------------------
 
@@ -188,8 +225,8 @@
                      arlen hlen p2 tx ty tailx taily ca sa bkx bky
                      b1x b1y b2x b2y
                      curCrv curRev n lastN basePts newPts usedBases idxs
-                     guideEnts total len lastLen i base np again ans iter
-                     p e seg)
+                     tangs tg guideEnts total len lastLen i base np again
+                     ans iter plt p e seg)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
@@ -214,6 +251,7 @@
     (if clay (setvar "CLAYER"  clay))
     (if pd   (setvar "PDMODE"  pd))
     (if os   (setvar "OSMODE"  os))
+    (if plt  (setvar "PLINETYPE" plt))
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (command "._UNDO" "_End") (setq undoOpen nil))))
@@ -235,8 +273,12 @@
         celw  (getvar "CELWEIGHT")
         celts (getvar "CELTSCALE")
         cdim  (getvar "DIMSTYLE")
+        plt   (getvar "PLINETYPE")
         tmpEnts '())
   (setvar "CMDECHO" 0)
+  ;; PLINE must produce a lightweight polyline so the arc bulges can be
+  ;; written into it and the result stays a plain LWPOLYLINE
+  (setvar "PLINETYPE" 2)
   (command "._UNDO" "_Begin")
   (setq undoOpen T)
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
@@ -389,14 +431,17 @@
 
     ;; --- length per point + build the new perpendicular points -------
     ;; usedBases collects the base of each created point so bases and
-    ;; new points stay paired even when a point is skipped; idxs records
-    ;; each created point's position so U returns to the right prompt
-    ;; even across skipped points.
+    ;; new points stay paired even when a point is skipped; tangs holds
+    ;; the travel tangent under each created point (it becomes the arc
+    ;; direction of the new polyline there); idxs records each created
+    ;; point's position so U returns to the right prompt even across
+    ;; skipped points.
     (setvar "CLAYER" "PERPPTS-TEMP")
-    (setq newPts '() usedBases '() idxs '() guideEnts '() i 0)
+    (setq newPts '() usedBases '() tangs '() idxs '() guideEnts '() i 0)
     (while (< i n)
       (setq base (nth i basePts)
-            nrm  (cperp:normal curCrv base side curRev))
+            tg   (cperp:tangent curCrv base curRev)
+            nrm  (if tg (list (* side (- (cadr tg))) (* side (car tg)))))
       (cond
         ;; no readable tangent under this point - skip it rather than
         ;; place the offset in an arbitrary direction
@@ -422,6 +467,7 @@
                 (setq guideEnts (cdr guideEnts)
                       newPts    (cdr newPts)
                       usedBases (cdr usedBases)
+                      tangs     (cdr tangs)
                       idxs      (cdr idxs)))
               (princ "\nNothing to undo - this is the first point.")))
            ((null len)
@@ -433,13 +479,15 @@
                                 (caddr base)))
             (setq newPts    (cons np newPts)
                   usedBases (cons base usedBases)
+                  tangs     (cons tg tangs)
                   idxs      (cons i idxs))
             (command "._POINT" np)
             (setq guideEnts (cons (entlast) guideEnts)
                   tmpEnts   (cons (entlast) tmpEnts))
             (setq i (1+ i)))))))
     (setq newPts    (reverse newPts)
-          usedBases (reverse usedBases))
+          usedBases (reverse usedBases)
+          tangs     (reverse tangs))
 
     ;; --- connect the new points with a polyline ----------------------
     ;; drawn with the source curve's layer and line properties.  If
@@ -458,11 +506,12 @@
     (command "._PLINE")
     (foreach p newPts (command p))
     (command "")
-    ;; curve-fit it so the result is a smooth curve through the offset
-    ;; points, not a chain of straight segments.  The fit curve passes
-    ;; exactly through every vertex, so the dimension endpoints stay on
-    ;; the new curve.
-    (command "._PEDIT" (entlast) "_Fit" "")
+    ;; Curve it: every straight segment becomes an arc whose direction
+    ;; at its start point matches the source curve's tangent there (an
+    ;; offset curve runs parallel to its source, so the tangent carries
+    ;; over).  The entity stays a plain LWPOLYLINE -- smooth, passing
+    ;; exactly through every offset point, and never a spline.
+    (cperp:arcs (entlast) newPts tangs)
 
     ;; the curve just built becomes the source for the next round; it
     ;; was drawn in travel order, so it is never traversed reversed
