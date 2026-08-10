@@ -1,14 +1,16 @@
-# calofin — Blender DXF add-ons
+# calofin — Blender DXF add-ons & AutoCAD LISP tools
 
 Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+working between Blender and CAD, plus AutoCAD AutoLISP tools for
+drone-photo tracing work:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| Drone survey LISPs (AutoCAD) | `drone_height_lisp/` | Corrects the scale of off-deck features traced from rectified drone photos, and computes the drone height from the photo's GPS + an online ground-elevation lookup |
 
-## Installation (either add-on)
+## Installation (either Blender add-on)
 
 Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
 or `dxf_cloud_mesher`) either:
@@ -159,6 +161,65 @@ console.
 
 ---
 
+# 3. Drone survey LISPs (AutoCAD)
+
+Two AutoLISP files in `drone_height_lisp/` for tracing pools from
+rectified near-nadir drone photos. Load them with `APPLOAD` (add both to
+the *Startup Suite* so they load in every drawing). Windows AutoCAD
+only — they use ActiveX (`ADODB.Stream` for binary file reads,
+`MSXML2.XMLHTTP` for the elevation web request).
+
+### DroneDistortion.lsp
+
+Corrects the scale of features that are **not at deck level** after a
+photo has been rectified to deck scale: a raised spa is closer to the
+camera and traces too big, a sunken catch basin traces too small. For a
+feature at signed height *z* above the deck and a drone height *H*, the
+tool scales the traced geometry by `(H − z) / H`.
+
+Commands: `DDFIX` (select a feature, enter its height, apply the
+correction), `DDSET` (set/remember *H*), `DDALT` (read
+`RelativeAltitude` out of the original DJI JPG), `DDCAL` (back-solve
+*H* from a feature of known true size), `DDINFO` (show settings).
+*H* is stored per drawing and survives save/reopen.
+
+### DroneHeightGPS.lsp
+
+Companion tool that replaces the "just assume 100 ft" guess for the
+drone height. Nobody logs the height in the field, but the drone logs
+its GPS position in the photo automatically, so:
+
+1. `DDGPS` opens a file picker (starts on `H:`, remembers the last
+   folder) for the original drone JPG.
+2. It reads latitude/longitude, `AbsoluteAltitude` and
+   `RelativeAltitude` straight out of the file — DJI's XMP text packet
+   first (both the `GpsLongitude` and DJI's misspelt `GpsLongtitude`
+   tags are understood), falling back to parsing the binary EXIF GPS
+   block (either byte order).
+3. It asks a free online elevation service for the ground elevation at
+   that coordinate — USGS EPQS (3DEP bare earth, answers in feet), then
+   OpenTopoData NED10m, then Open-Elevation SRTM as fallbacks; no API
+   keys. If all fail (no internet) it lets you type a known site
+   elevation instead.
+4. The drone height above grade is the delta:
+   `H = AbsoluteAltitude − ground elevation`, cross-checked against the
+   barometric `RelativeAltitude` (the difference between the two methods
+   is the take-off-point offset — or the GPS error, and the command says
+   which value looks trustworthy). Pick which one to save; *H* goes into
+   the same per-drawing store `DDFIX` reads, so it immediately becomes
+   the default there.
+
+`DDELEV` prints the ground elevation at a typed latitude/longitude —
+useful as a connectivity test.
+
+Accuracy note: consumer-drone GPS altitude is good to roughly 10–30 ft,
+so the computed *H* is an estimate — but a visible, cross-checked one
+instead of a blind guess, and the scale correction only changes by
+~z/H² per foot of *H* error. For a hard number, `DDCAL` back-solves *H*
+from one feature of known true size.
+
+---
+
 ## Development
 
 Both add-ons keep their geometry logic in `bpy`-free modules
@@ -166,9 +227,17 @@ Both add-ons keep their geometry logic in `bpy`-free modules
 they are unit-testable outside Blender:
 
 ```
-python3 tests/test_addon.py          # UV layout exporter
-python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_addon.py               # UV layout exporter
+python3 tests/test_cloud_mesher.py        # point cloud mesher
+python3 tests/test_drone_height_lisp.py   # drone LISP: lint + parser checks
 ```
+
+The drone-LISP test lints `DroneHeightGPS.lsp` (paren/string balance)
+and exercises a line-for-line Python transliteration of its byte-level
+parsers against a synthetic DJI-style JPEG: the XMP route (including
+DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block in both
+byte orders, signed-byte and truncated-file inputs, and the JSON
+number extraction for each elevation service's response shape.
 
 The exporter tests mock the bmesh structures and validate the emitted
 DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
