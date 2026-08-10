@@ -65,6 +65,16 @@
 ;;;  * For a hard number, DDCAL (in DroneDistortion.lsp) back-solves H from
 ;;;    one feature of known true size.
 ;;;
+;;;  FAILURE REPORTING
+;;;  -----------------
+;;;  Every failure is LOUD: a dialog box pops up saying exactly WHAT failed
+;;;  and HOW - "no camera metadata in this file", "no GPS data found",
+;;;  "no GPS fix (position is 0,0)", "no altitude data", or which elevation
+;;;  service failed and why (no answer / HTTP error / outside coverage) -
+;;;  and the same detail is printed on the command line for the record.
+;;;  The only quiet exits are the ones you choose yourself (cancelling the
+;;;  file dialog or pressing Enter at an abort prompt).
+;;;
 ;;;  REQUIREMENTS
 ;;;  ------------
 ;;;  Windows AutoCAD (uses ADODB.Stream + MSXML2.XMLHTTP ActiveX), internet
@@ -102,6 +112,22 @@
 ;; -- formatting helpers -----------------------------------------------------
 (defun ddg-n1 (x) (rtos x 2 1))        ; feet, 1 decimal
 (defun ddg-n7 (x) (rtos x 2 7))        ; lat/long, 7 decimals (~1/2 inch)
+
+;; file name without the folder, for messages
+(defun ddg-fname (f / e)
+  (setq e (vl-filename-extension f))
+  (strcat (vl-filename-base f) (if e e "")))
+
+;; -- loud failure -----------------------------------------------------------
+;; Pops a modal alert box saying WHAT failed (title) and HOW (lines), and
+;; prints the same detail on the command line for the record.
+(defun ddg-fail (title lines / msg)
+  (setq msg title)
+  (foreach l lines (setq msg (strcat msg "\n" l)))
+  (princ (strcat "\n*** " title " ***"))
+  (foreach l lines (if (/= l "") (princ (strcat "\n  " l))))
+  (alert msg)
+  (princ))
 
 ;; ===========================================================================
 ;;  Binary file access (Windows ADODB.Stream - same technique as DDALT;
@@ -314,12 +340,15 @@
           (if (and altm (setq ent (ddg-ifd-find tif gps le 5))
                    (equal (ddg-b tif (+ ent 8)) 1))          ; below sea level
             (setq altm (- altm)))))))
-  (list lat lon altm))
+  (list lat lon altm (if tif T)))     ; 4th: was an EXIF block found at all?
 
-;; everything the file tells us: (absalt-m relalt-m lat lon) - XMP first,
-;; the binary EXIF GPS block filling any gaps
-(defun ddg-read-meta (lst / xtxt exif absm relm lat lon)
+;; everything the file tells us: (absalt-m relalt-m lat lon xmp-found exif-found)
+;; XMP first, the binary EXIF GPS block filling any gaps. The last two flags
+;; say whether each metadata container existed at all - failure reporting uses
+;; them to tell "stripped file" apart from "metadata without GPS".
+(defun ddg-read-meta (lst / xtxt exif absm relm lat lon xmpf tiff)
   (setq xtxt (ddg-xmp-text lst))
+  (setq xmpf (> (strlen xtxt) 0))
   (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
         relm (ddg-xmp-num xtxt "RelativeAltitude")
         lat  (ddg-xmp-num xtxt "GpsLatitude")
@@ -330,15 +359,19 @@
       (setq exif (ddg-exif-gps lst))
       (if (null lat)  (setq lat  (car exif)))
       (if (null lon)  (setq lon  (cadr exif)))
-      (if (null absm) (setq absm (caddr exif)))))
-  (list absm relm lat lon))
+      (if (null absm) (setq absm (caddr exif)))
+      (setq tiff (cadddr exif))))
+  (list absm relm lat lon xmpf tiff))
 
 ;; ===========================================================================
 ;;  HTTP + JSON (MSXML2.XMLHTTP ActiveX; synchronous GET)
 ;; ===========================================================================
 
-;; one attempt with a given ProgID; returns the response text on HTTP 200
-(defun ddg-http-try (prog url / xh err txt sts ok)
+;; one attempt with a given ProgID.  Returns (list rank payload):
+;;   rank 2 - HTTP 200, payload = the response text
+;;   rank 1 - reached a server but got a bad answer (payload = how it failed)
+;;   rank 0 - the request never completed        (payload = how it failed)
+(defun ddg-http-try (prog url / xh err txt sts)
   (setq err
     (vl-catch-all-apply
       '(lambda ()
@@ -349,18 +382,35 @@
                (vl-catch-all-apply '(lambda () (vlax-invoke-method xh 'Send))))
            (vlax-invoke-method xh 'Send ""))
          (setq sts (vlax-get-property xh 'Status))
-         (setq txt (vlax-get-property xh 'ResponseText))
-         (setq ok t))))
+         (setq txt (vlax-get-property xh 'ResponseText)))))
   (if xh (vl-catch-all-apply 'vlax-release-object (list xh)))
-  (if (and ok (not (vl-catch-all-error-p err))
-           (equal sts 200) txt (> (strlen txt) 0))
-    txt))
+  (cond
+    ((vl-catch-all-error-p err)
+     (list 0 (if xh
+               "no answer (no internet / DNS / firewall / timeout)"
+               (strcat prog " is not available on this PC"))))
+    ((not (and (numberp sts) (= sts 200)))
+     (list 1 (strcat "server answered HTTP "
+                     (if (numberp sts) (itoa (fix sts)) "?")
+                     " instead of 200")))
+    ((or (null txt) (= (strlen txt) 0))
+     (list 1 "server sent back an empty response"))
+    (t (list 2 txt))))
 
-;; XMLHTTP first (follows the office/IE proxy settings), ServerXMLHTTP last
-(defun ddg-http-get (url / txt)
+;; GET URL trying several ProgIDs (XMLHTTP follows the office/IE proxy
+;; settings; ServerXMLHTTP is the last resort).
+;; Returns (list T text) on success, else (list nil how-it-failed) - the
+;; reason kept is from the attempt that got the furthest.
+(defun ddg-http-get (url / best r)
   (foreach prog '("MSXML2.XMLHTTP.6.0" "MSXML2.XMLHTTP" "MSXML2.ServerXMLHTTP.6.0")
-    (if (null txt) (setq txt (ddg-http-try prog url))))
-  txt)
+    (if (or (null best) (< (car best) 2))
+      (progn
+        (setq r (ddg-http-try prog url))
+        (if (or (null best) (> (car r) (car best)))
+          (setq best r)))))
+  (if (= (car best) 2)
+    (list T (cadr best))
+    (list nil (cadr best))))
 
 ;; first number that follows "KEY" in a JSON text - tolerant of quoting and
 ;; whitespace ("value":"296.61" and "elevation": 251.3 both work); nil on null
@@ -383,39 +433,57 @@
         (setq i (1+ i)))
       (if (> (strlen numstr) 0) (ddg-numstr numstr)))))
 
-;; ground elevation in FEET at LAT/LON -> (feet . "source"), or nil.
-;; Services tried in order; each answer is sanity-ranged before being trusted.
-(defun ddg-ground-elev (lat lon / la lo txt v res)
-  (setq la (ddg-n7 lat) lo (ddg-n7 lon))
+;; ground elevation in FEET at LAT/LON. Services tried in order; each answer
+;; is sanity-ranged before being trusted.
+;;   success -> (list feet source-name)
+;;   failure -> (list nil notes)   notes = one "service: how it failed" line
+;;                                 for every service that was tried
+(defun ddg-ground-elev (lat lon / la lo r v res notes)
+  (setq la (ddg-n7 lat) lo (ddg-n7 lon) notes '())
   ;; 1) USGS EPQS - 3DEP bare earth, NAVD88, answers in FEET. US only.
-  (setq txt (ddg-http-get (strcat "https://epqs.nationalmap.gov/v1/json?x=" lo
-                                  "&y=" la "&wkid=4326&units=Feet")))
-  (setq v (if txt (ddg-json-num txt "value")))
-  (if (and v (> v -1500.0) (< v 25000.0))              ; feet; filters the
-    (setq res (cons v "USGS 3DEP")))                   ; -1000000 no-data flag
+  (setq r (ddg-http-get (strcat "https://epqs.nationalmap.gov/v1/json?x=" lo
+                                "&y=" la "&wkid=4326&units=Feet")))
+  (if (car r)
+    (progn
+      (setq v (ddg-json-num (cadr r) "value"))
+      (if (and v (> v -1500.0) (< v 25000.0))          ; filters the -1000000
+        (setq res (list v "USGS 3DEP"))                ; no-data flag
+        (setq notes (cons "USGS EPQS: answered, but has no elevation for this spot (outside US coverage?)"
+                          notes))))
+    (setq notes (cons (strcat "USGS EPQS: " (cadr r)) notes)))
   ;; 2) OpenTopoData NED 10 m - metres. US only.
   (if (null res)
     (progn
-      (setq txt (ddg-http-get (strcat "https://api.opentopodata.org/v1/ned10m?locations="
-                                      la "," lo)))
-      (setq v (if txt (ddg-json-num txt "elevation")))
-      (if (and v (> v -500.0) (< v 7000.0))
-        (setq res (cons (* v ddg-m->ft) "OpenTopoData NED10m")))))
+      (setq r (ddg-http-get (strcat "https://api.opentopodata.org/v1/ned10m?locations="
+                                    la "," lo)))
+      (if (car r)
+        (progn
+          (setq v (ddg-json-num (cadr r) "elevation"))
+          (if (and v (> v -500.0) (< v 7000.0))
+            (setq res (list (* v ddg-m->ft) "OpenTopoData NED10m"))
+            (setq notes (cons "OpenTopoData: answered, but has no elevation for this spot (outside US coverage?)"
+                              notes))))
+        (setq notes (cons (strcat "OpenTopoData: " (cadr r)) notes)))))
   ;; 3) Open-Elevation - SRTM ~30 m, metres. Worldwide fallback.
   (if (null res)
     (progn
-      (setq txt (ddg-http-get (strcat "https://api.open-elevation.com/api/v1/lookup?locations="
-                                      la "," lo)))
-      (setq v (if txt (ddg-json-num txt "elevation")))
-      (if (and v (> v -500.0) (< v 7000.0))
-        (setq res (cons (* v ddg-m->ft) "Open-Elevation SRTM")))))
-  res)
+      (setq r (ddg-http-get (strcat "https://api.open-elevation.com/api/v1/lookup?locations="
+                                    la "," lo)))
+      (if (car r)
+        (progn
+          (setq v (ddg-json-num (cadr r) "elevation"))
+          (if (and v (> v -500.0) (< v 7000.0))
+            (setq res (list (* v ddg-m->ft) "Open-Elevation SRTM"))
+            (setq notes (cons "Open-Elevation: answered without a usable elevation"
+                              notes))))
+        (setq notes (cons (strcat "Open-Elevation: " (cadr r)) notes)))))
+  (if res res (list nil (reverse notes))))
 
 ;; ---------------------------------------------------------------------------
 ;;  DDGPS : pick the drone image -> read GPS -> look up ground -> save H
 ;; ---------------------------------------------------------------------------
-(defun c:DDGPS ( / *error* def c file lst meta fsize absm relm lat lon g gft gsrc
-                   absft relft hgps hrel diff ans hsel)
+(defun c:DDGPS ( / *error* def c file lst meta fsize absm relm lat lon xmpf tiff
+                   g gft gsrc absft relft hgps hrel diff ans hsel)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
       (princ (strcat "\nError: " m)))
@@ -440,12 +508,17 @@
      (setq lst (ddg-file-bytes file 262144 nil))       ; metadata usually up front
      (cond
        ((null lst)
-        (princ "\nCould not read that file (is it on a dead network path?)."))
+        (ddg-fail "COULD NOT READ THE FILE"
+          (list (strcat "File: " file)
+                ""
+                "The file could not be opened for reading - dead network"
+                "path, file locked by another program, or no permission.")))
        (t
         ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
         (setq meta (ddg-read-meta lst)
               absm (nth 0 meta) relm (nth 1 meta)
-              lat  (nth 2 meta) lon  (nth 3 meta))
+              lat  (nth 2 meta) lon  (nth 3 meta)
+              xmpf (nth 4 meta) tiff (nth 5 meta))
         ;; some PNG writers park the metadata after the image data - if the
         ;; front window came up short, scan the tail of the file too
         (if (and (or (null lat) (null lon) (null absm))
@@ -457,14 +530,60 @@
             (if (null absm) (setq absm (nth 0 meta)))
             (if (null relm) (setq relm (nth 1 meta)))
             (if (null lat)  (setq lat  (nth 2 meta)))
-            (if (null lon)  (setq lon  (nth 3 meta)))))
+            (if (null lon)  (setq lon  (nth 3 meta)))
+            (if (nth 4 meta) (setq xmpf T))
+            (if (nth 5 meta) (setq tiff T))))
+        ;; 2b) say EXACTLY what is wrong if the file cannot be used
         (cond
-          ((or (null lat) (null lon)
-               (and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))   ; "no fix"
-               (> (abs lat) 90.0) (> (abs lon) 180.0))
-           (princ "\nNo usable GPS position in that file.")
-           (princ "\n  Is it the ORIGINAL camera file?  Screenshots and most edited /")
-           (princ "\n  emailed / re-exported copies (JPG or PNG) strip the GPS metadata."))
+          ((and (or (null lat) (null lon)) (not xmpf) (not tiff))
+           (ddg-fail "NO CAMERA METADATA IN THIS FILE"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   "No XMP packet and no EXIF block anywhere in the file"
+                   "(searched the first 256 KB and the last 256 KB)."
+                   ""
+                   "This copy was saved WITHOUT metadata - screenshots and"
+                   "most export / share / convert steps strip it."
+                   "Use the file exactly as it came off the drone.")))
+          ((or (null lat) (null lon))
+           (ddg-fail "NO GPS DATA FOUND"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   (strcat "The file DOES contain camera metadata ("
+                           (cond ((and xmpf tiff) "an XMP packet and an EXIF block")
+                                 (xmpf "an XMP packet")
+                                 (t "an EXIF block"))
+                           ")")
+                   "but there is no GPS position in it."
+                   ""
+                   "Either the drone had no GPS fix recorded, or the"
+                   "conversion that made this file kept only part of the"
+                   "metadata. Use the file exactly as it came off the drone.")))
+          ((and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))
+           (ddg-fail "NO GPS FIX"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   "The GPS position stored in the file is 0, 0 - the drone"
+                   "had no satellite fix when this shot was taken."
+                   "Pick a different shot from the same flight.")))
+          ((or (> (abs lat) 90.0) (> (abs lon) 180.0))
+           (ddg-fail "BAD GPS DATA"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   (strcat "The stored GPS position (" (ddg-n7 lat) ", "
+                           (ddg-n7 lon) ")")
+                   "is not a valid latitude / longitude - corrupt metadata."
+                   "Use the file exactly as it came off the drone.")))
+          ((and (null absm) (null relm))
+           (ddg-fail "NO ALTITUDE DATA"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   (strcat "GPS position found (" (ddg-n7 lat) ", "
+                           (ddg-n7 lon) "), but the file holds NO altitude:")
+                   "XMP AbsoluteAltitude, XMP RelativeAltitude and EXIF"
+                   "GPSAltitude are all missing, so no drone height can be"
+                   "computed from it. Use the file exactly as it came off"
+                   "the drone.")))
           (t
            (princ "\n--- from the photo -----------------------------------------")
            (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)))
@@ -479,10 +598,19 @@
            ;; 3) ground elevation at the photo position
            (princ "\nLooking up ground elevation (internet, a few seconds) ...")
            (setq g (ddg-ground-elev lat lon))
-           (if g
-             (setq gft (car g) gsrc (cdr g))
+           (if (car g)
+             (setq gft (car g) gsrc (cadr g))
              (progn
-               (princ "\nElevation lookup FAILED - no internet, or the services are down/blocked.")
+               (ddg-fail "ELEVATION LOOKUP FAILED"
+                 (append
+                   (list (strcat "No ground elevation could be fetched for "
+                                 (ddg-n7 lat) ", " (ddg-n7 lon) ":")
+                         "")
+                   (cadr g)
+                   (list ""
+                         "Check the internet connection (DDELEV is a quick"
+                         "test), or type the site elevation by hand at the"
+                         "next prompt.")))
                (setq gft  (getreal "\nGround elevation at the site in FEET, if you know it (Enter to abort): ")
                      gsrc "entered by hand")))
            (cond
@@ -536,7 +664,20 @@
                                              " ft (RelativeAltitude)? [Yes/No] <Yes>: ")))
                  (if (null ans) (setq ans "Yes"))
                  (if (= ans "Yes") (setq hsel hrel)))
-                (t (princ "\nNo positive height could be computed - nothing to save.")))
+                (t
+                 (ddg-fail "NO USABLE HEIGHT"
+                   (list
+                     (if absft
+                       (strcat "GPS method:  " (ddg-n1 absft) " - " (ddg-n1 gft)
+                               " = " (ddg-n1 (- absft gft)) " ft")
+                       "GPS method:  no absolute altitude in the file")
+                     (if relft
+                       (strcat "Barometer method:  " (ddg-n1 relft) " ft")
+                       "Barometer method:  no RelativeAltitude in the file")
+                     ""
+                     "Neither method gave a height above 0 ft - a big GPS"
+                     "error, or a wrong ground elevation. Nothing was saved."
+                     "Set H with DDSET, or back-solve it with DDCAL."))))
               (if hsel
                 (progn
                   (ddg-put "H" hsel)
@@ -564,12 +705,19 @@
     (t
      (princ "\nLooking up ground elevation ...")
      (setq g (ddg-ground-elev lat lon))
-     (if g
+     (if (car g)
        (princ (strcat "\nGround elevation: " (ddg-n1 (car g)) " ft   ("
-                      (ddg-n1 (/ (car g) ddg-m->ft)) " m)   [" (cdr g) "]"))
-       (princ "\nLookup failed - check the internet connection (or the coordinate)."))))
+                      (ddg-n1 (/ (car g) ddg-m->ft)) " m)   [" (cadr g) "]"))
+       (ddg-fail "ELEVATION LOOKUP FAILED"
+         (append
+           (list (strcat "No ground elevation could be fetched for "
+                         (ddg-n7 lat) ", " (ddg-n7 lon) ":")
+                 "")
+           (cadr g)
+           (list ""
+                 "Check the internet connection / firewall, then try again."))))))
   (princ))
 
-(princ "\nDrone Height from GPS v1.1 loaded  (reads PNG / JPG / TIF; elevation lookup needs internet).")
+(princ "\nDrone Height from GPS v1.2 loaded  (reads PNG / JPG / TIF; failures pop a dialog saying what went wrong).")
 (princ "\n  Commands: DDGPS  (pick drone image -> compute + save H)   DDELEV  (elevation at a typed lat/long)")
 (princ)

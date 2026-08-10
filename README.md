@@ -215,6 +215,13 @@ its GPS position in the photo automatically, so:
 `DDELEV` prints the ground elevation at a typed latitude/longitude —
 useful as a connectivity test.
 
+Failures are loud: a dialog box pops up saying exactly what failed and
+how — "no camera metadata in this file", "no GPS data found", "no GPS
+fix (position is 0,0)", "no altitude data", or which elevation service
+failed and why (no answer / HTTP error / outside coverage) — with the
+same detail printed on the command line. Only deliberate cancels are
+quiet.
+
 Accuracy note: consumer-drone GPS altitude is good to roughly 10–30 ft,
 so the computed *H* is an estimate — but a visible, cross-checked one
 instead of a blind guess, and the scale correction only changes by
@@ -242,8 +249,10 @@ the XMP route (JPEG APP1 and PNG iTXt, attribute and element forms,
 DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block (JPEG
 APP1, PNG `eXIf` chunk with decoy anchors in the image data, both byte
 orders), metadata parked past the 256 KB front window (tail-window
-recovery), signed-byte and truncated-file inputs, and the JSON number
-extraction for each elevation service's response shape.
+recovery), signed-byte and truncated-file inputs, the failure
+classification behind the loud-error dialogs (no metadata / no GPS
+data / no fix / bad GPS / no altitude), and the JSON number extraction
+for each elevation service's response shape.
 
 The exporter tests mock the bmesh structures and validate the emitted
 DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher

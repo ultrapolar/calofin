@@ -329,6 +329,14 @@
   (cond
     ((null file) (princ "\nNo file selected."))
     ((null (setq m (dd-jpg-relalt file)))
+     (alert (strcat "NO RelativeAltitude IN THIS FILE"
+                    "\nFile: " (vl-filename-base file)
+                    (if (vl-filename-extension file) (vl-filename-extension file) "")
+                    "\n\nCould not find dji:RelativeAltitude in the file."
+                    "\nIs it the ORIGINAL camera file?  Screenshots / edited /"
+                    "\nexported copies lose the metadata."
+                    "\n\n(DDGPS reads more formats and also falls back to the"
+                    "\nEXIF GPS block - try that.)"))
      (princ "\nCould not find dji:RelativeAltitude in that file.")
      (princ "\n  Is it the ORIGINAL camera file?  Screenshots / edited / exported copies lose it."))
     (t
@@ -357,6 +365,6 @@
                             "% size change per unit of height."))))))))
   (princ))
 
-(princ "\nDrone Distortion tool v3.2 loaded  (DDALT accepts PNG / JPG / TIF).")
+(princ "\nDrone Distortion tool v3.3 loaded  (DDALT accepts PNG / JPG / TIF and fails loud).")
 (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
 (princ)
