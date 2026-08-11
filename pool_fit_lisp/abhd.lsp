@@ -2868,6 +2868,123 @@
         (T (setq *PF-MAX-ARCS* mx)))
   *PF-MAX-ARCS*)
 
+;; ---- redo-time editing of walls and corners --------------------------
+;; A Redo may change more than the numbers: straight walls and sharp
+;; corners can be added or removed before the refit.  Both editors
+;; work on the run-scoped pf-walls / pf-corners lists and keep the
+;; dashed markers in step with them.
+
+;; Erase this run's scaffolding markers of one entity type on the
+;; marker layer (walls are the LINEs, rings the CIRCLEs), so the set
+;; can be redrawn to match an edited declaration list.
+(defun pf:sweep-marks (etype / keep en ed)
+  (setq keep nil)
+  (foreach en pf-temp
+    (setq ed (if (and en (entget en)) (entget en)))
+    (if (and ed
+             (= etype (cdr (assoc 0 ed)))
+             (= (strcase *PF-WALL-LAYER*)
+                (strcase (cdr (assoc 8 ed)))))
+      (entdel en)
+      (setq keep (cons en keep))))
+  (setq pf-temp (reverse keep)))
+
+;; Add or remove declared straight walls.  Ends snap to the survey
+;; points; each change is confirmed by name and the dashed markers
+;; follow.
+(defun pf:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d)
+  (setq ans T)
+  (while ans
+    (initget "Add Remove Keep")
+    (setq ans (getkword (strcat
+                "\n  Straight walls (" (itoa (length pf-walls))
+                " declared) - [Add/Remove/Keep] <Keep>: ")))
+    (cond
+      ((= ans "Add")
+       (setq pf-phase "picking a straight wall"
+             wp1      (getpoint "\n  First end of the straight wall: ")
+             wp2      (if wp1 (getpoint wp1 "\n  Second end: ")))
+       (if wp2
+         (progn
+           (setq w1 (pf:snap-break wp1 dpts)
+                 w2 (pf:snap-break wp2 dpts))
+           (if (< (pf:dist w1 w2) *PF-EXACT-EPS*)
+             (princ "\n  (both ends landed on the same survey point - ignored)")
+             (progn
+               (setq pf-walls (append pf-walls (list (list w1 w2))))
+               (pf:temp-add (pf:tag-mine (pf:draw-wall-marker w1 w2)))
+               (princ (strcat "\n  wall Pt." (pf:pt-name w1)
+                              " - Pt." (pf:pt-name w2) " added")))))))
+      ((= ans "Remove")
+       (if (null pf-walls)
+         (princ "\n  (no straight walls to remove)")
+         (progn
+           (setq pf-phase "removing a straight wall"
+                 wp1      (getpoint "\n  Pick near the straight wall to remove: "))
+           (if wp1
+             (progn
+               (setq wp1 (pf:2d wp1) best nil bd nil)
+               (foreach w pf-walls
+                 (setq d (pf:seg-dist wp1 (list (car w) (cadr w) 0.0)))
+                 (if (or (null bd) (< d bd)) (setq best w bd d)))
+               (setq pf-walls (pf:remove best pf-walls))
+               ;; redraw the wall markers to match what is left
+               (pf:sweep-marks "LINE")
+               (foreach w pf-walls
+                 (pf:temp-add (pf:tag-mine
+                   (pf:draw-wall-marker (car w) (cadr w)))))
+               (princ (strcat "\n  wall Pt." (pf:pt-name (car best))
+                              " - Pt." (pf:pt-name (cadr best))
+                              " removed")))))))
+      (T (setq ans nil)))))
+
+;; Add or remove declared sharp corners the same way.  (The corners
+;; the fitter finds by itself - turns over *PF-CORNER-ANG* - are not
+;; declarations and cannot be removed here.)
+(defun pf:edit-corners (dpts / ans wp1 w1 best bd w)
+  (setq ans T)
+  (while ans
+    (initget "Add Remove Keep")
+    (setq ans (getkword (strcat
+                "\n  Sharp corners (" (itoa (length pf-corners))
+                " declared) - [Add/Remove/Keep] <Keep>: ")))
+    (cond
+      ((= ans "Add")
+       (setq pf-phase "picking a sharp corner"
+             wp1      (getpoint "\n  Corner point: "))
+       (if wp1
+         (progn
+           (setq w1 (pf:snap-break wp1 dpts))
+           (if (pf:memb w1 pf-corners)
+             (princ "\n  (that corner is already declared)")
+             (progn
+               (setq pf-corners (append pf-corners (list w1)))
+               (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w1)))
+               (princ (strcat "\n  corner Pt." (pf:pt-name w1)
+                              " added")))))))
+      ((= ans "Remove")
+       (if (null pf-corners)
+         (princ "\n  (no declared corners to remove)")
+         (progn
+           (setq pf-phase "removing a sharp corner"
+                 wp1      (getpoint "\n  Pick the declared corner to remove: "))
+           (if wp1
+             (progn
+               (setq wp1 (pf:2d wp1) best nil bd nil)
+               (foreach w pf-corners
+                 (if (or (null bd) (< (pf:dist wp1 w) bd))
+                   (setq best w bd (pf:dist wp1 w))))
+               (setq pf-corners (pf:remove best pf-corners))
+               ;; the rings share their look with the omit markers;
+               ;; redraw only the corner rings (spent omit rings go
+               ;; quietly - the omissions themselves already happened)
+               (pf:sweep-marks "CIRCLE")
+               (foreach w pf-corners
+                 (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w))))
+               (princ (strcat "\n  corner Pt." (pf:pt-name best)
+                              " removed")))))))
+      (T (setq ans nil)))))
+
 ;; ---- the command -----------------------------------------------------
 (defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs w w1 w2
                     ss i en ed lay typ ext nunsup nocs
@@ -3199,6 +3316,13 @@
                    (if (< (length dpts) 3)
                      (princ "\nToo few points remain for a fit - nothing redone.")
                      (progn
+                       ;; walls and corners may change for the retry
+                       (princ "\n\n  Straight walls and sharp corners can change too -")
+                       (princ "\n  Enter keeps each list as it is.")
+                       (setq pf-phase "editing straight walls")
+                       (pf:edit-walls dpts)
+                       (setq pf-phase "editing sharp corners")
+                       (pf:edit-corners dpts)
                        (princ "\n\n  New settings - Enter keeps each one as it is.")
                        (setq pf-phase "reading the tolerance"
                              tol      (pf:ask-tol))

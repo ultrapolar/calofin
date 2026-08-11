@@ -265,11 +265,16 @@ the fit at exactly the distance you typed.
 command. First it asks whether any points should be left out this
 time — pick each one (mis-shots, duplicates, anything the line should
 not chase; each gets a dashed ring and is named), or press `Enter`
-for none. Then the distance, the percent and the curve cap are asked
-again — `Enter` keeps each as it is — and three new candidates are
-drawn from the surviving points. Declared walls and corners carry
-over; one anchored on an omitted point is dropped with a note. Redo
-as many times as it takes.
+for none. Then the **declared straight walls and sharp corners can
+change too**: each gets an `[Add/Remove/Keep]` loop — `Add` picks new
+ends or corner points (snapped to the survey points, markers drawn on
+the spot), `Remove` takes a pick near the wall or on the corner to
+drop (named in the confirmation, markers redrawn to match), and
+`Enter`/`Keep` moves on. Finally the distance, the percent and the
+curve cap are asked again — `Enter` keeps each as it is — and three
+new candidates are drawn from the surviving points. Walls and corners
+otherwise carry over; one anchored on an omitted point is dropped
+with a note. Redo as many times as it takes.
 
 The three tolerances are ½×, 1× and 2× what you asked for; change the
 spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.

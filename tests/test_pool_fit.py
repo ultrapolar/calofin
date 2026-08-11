@@ -1610,7 +1610,8 @@ def test_lisp_file_is_well_formed():
                "pf:slope-pts", "pf:off-at", "pf:ask-slope",
                "pf:get-off", "pf:dim-style", "pf:near-loop",
                "pf:ask-tol", "pf:ask-pct", "pf:ask-cap",
-               "pf:ensure-dashed2", "pf:merge-arcs", "pf:arc-fits"):
+               "pf:ensure-dashed2", "pf:merge-arcs", "pf:arc-fits",
+               "pf:edit-walls", "pf:edit-corners", "pf:sweep-marks"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
