@@ -1118,14 +1118,22 @@
 ;; against B (T absorbs any difference), S1/V against A (V absorbs);
 ;; NA entries are derived, and with a whole pair NA a nominal split is
 ;; used.  Returns (S T S1 V).
+;; WALLS BEAT CORNERS.  T and V run along a wall, so a tape can be
+;; held flat against them and they come back reliable.  S and S1 only
+;; locate the VIRTUAL sharp corner out past the cut -- on a real pool
+;; there is nothing there to measure to, so they are the softer
+;; numbers.  When both are given, the wall wins and its partner is
+;; re-derived from the overall (S = (B - T)/2, S1 = (A - V)/2); the
+;; taped S / S1 still show in the report against what was drawn.
+;; Only when the wall was NOT measured does S / S1 drive the shape.
 (defun pool:grecov (aov bov sraw traw s1raw vraw / s tv s1 v)
   (cond
-    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
     (traw (setq s (/ (- bov traw) 2.0) tv traw))
+    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
     (t (setq s (/ bov 8.0) tv (* 0.75 bov))))
   (cond
-    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
     (vraw (setq s1 (/ (- aov vraw) 2.0) v vraw))
+    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
     (t (setq s1 (/ aov 6.0) v (* aov (/ 2.0 3.0)))))
   (list s tv s1 v))
 
@@ -1134,17 +1142,18 @@
 ;; at 45 degrees (so S = S1 = c) and the SHORT flats equal the cut
 ;; faces, i.e. every side of a square octagon is the same length.
 ;;   c = min(A,B) / (2 + sqrt 2)   ->   T = B - 2c,  V = A - 2c
-;; Any letter that WAS measured wins and its partner is derived from
-;; it, exactly like the grecian sheet.  Returns (S T S1 V).
+;; A measured letter wins over the derivation, and -- exactly like the
+;; grecian sheet -- the WALL letters (T, V) win over the corner ones
+;; (S, S1) when both were taped.  Returns (S T S1 V).
 (defun pool:octov (aov bov sraw traw s1raw vraw / c s tv s1 v)
   (setq c (/ (min aov bov) 3.41421356237))
   (cond
-    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
     (traw (setq s (/ (- bov traw) 2.0) tv traw))
+    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
     (t (setq s c tv (- bov (* 2.0 c)))))
   (cond
-    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
     (vraw (setq s1 (/ (- aov vraw) 2.0) v vraw))
+    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
     ;; an unmeasured vertical cut matches the horizontal one (45 deg)
     (t (setq s1 s v (- aov (* 2.0 s)))))
   (list s tv s1 v))
@@ -1257,6 +1266,15 @@
                             (pool:grecov araw braw sraw traw s1raw vraw)))
               sv (car ovres) tv (cadr ovres)
               s1v (caddr ovres) vov (cadddr ovres))
+        ;; walls beat corners (see pool:grecov): say so when holding a
+        ;; taped T / V actually moved the taped S / S1, so the crew can
+        ;; see in the report why their corner number came out different
+        (if (and traw sraw (> (abs (- sv sraw)) 0.5))
+            (princ (strcat "\nT is a wall, so it is held true -- S re-derived "
+                           (rtos sraw 2 2) " -> " (rtos sv 2 2) ".")))
+        (if (and vraw s1raw (> (abs (- s1v s1raw)) 0.5))
+            (princ (strcat "\nV is a wall, so it is held true -- S1 re-derived "
+                           (rtos s1raw 2 2) " -> " (rtos s1v 2 2) ".")))
         ;; the sheet letters must close POSITIVE against the overalls;
         ;; a letter that does not fit is adjusted, warned about now,
         ;; and its report rows go red

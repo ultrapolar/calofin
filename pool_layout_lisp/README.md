@@ -430,14 +430,27 @@ just answer:
   then `T` top side, `S` corner-cut run along the side, `S1`
   corner-cut drop down the end, `V` end width, `S2` cut face — each
   `NA`-able. The letters close against the overalls (`S+T+S = B`,
-  `S1+V+S1 = A`): an `NA` is derived from its partners, and when both
-  are given but don't close, the middle absorbs (`T` against B, `V`
-  against A). `S2` is a check against √(S²+S1²). The derived edge set
+  `S1+V+S1 = A`), and an `NA` is derived from its partners. `S2` is a
+  check against √(S²+S1²). The derived edge set
   feeds the normal pipeline, so cross dims, fitting, hoppers and the
   report all work as usual, with `OV` report rows showing each sheet
   letter against the fitted shape. The guide shows the sheet's ties
   (B/T/S across the top, A/S1/V down the left, S2 at a cut),
   highlighted as prompted.
+
+**Walls beat corners.** When the letters are given but don't close,
+the **wall** measurements are held true and the **corner** ones give
+way — `T` wins over `S`, `V` wins over `S1`. The reason is how they
+get taped: `T` and `V` run along a wall, so the tape lies flat
+against something real and comes back reliable, while `S` and `S1`
+only locate the *virtual* sharp corner out past the cut, where there
+is nothing to measure to. So a measured `T` is held and
+`S = (B − T)/2` is re-derived (likewise `S1 = (A − V)/2` from `V`);
+only when the wall is `NA` does the corner letter drive the shape.
+The taped `S`/`S1` still appear in the report against what was drawn,
+and the routine says at the command line when holding a wall moved
+one of them. This usually makes the `S2` check pass too, since a cut
+face is itself a wall the crew could tape.
 
 ### Grecian cross-dim detail (Simple / Center / Complex)
 

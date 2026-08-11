@@ -952,18 +952,30 @@ print("   chain at centre-12 (or centre-L/6); M/L/K attached to the hopper edge"
 
 print("== 43. Grecian overall-sheet input (A/B/T/S/S1/V/S2) ==")
 def grecov(aov,bov,s,t,s1,v):
-    if s is not None: S,T = s, bov-2*s          # T absorbs
-    elif t is not None: S,T = (bov-t)/2.0, t
+    # WALLS BEAT CORNERS: T and V are taped along a wall, S and S1 only
+    # locate the virtual sharp corner, so a measured wall wins and its
+    # corner partner is re-derived from the overall.
+    if t is not None: S,T = (bov-t)/2.0, t
+    elif s is not None: S,T = s, bov-2*s
     else: S,T = bov/8.0, 0.75*bov
-    if s1 is not None: S1,V = s1, aov-2*s1      # V absorbs
-    elif v is not None: S1,V = (aov-v)/2.0, v
+    if v is not None: S1,V = (aov-v)/2.0, v
+    elif s1 is not None: S1,V = s1, aov-2*s1
     else: S1,V = aov/6.0, aov*2.0/3.0
     return S,T,S1,V
 # consistent sheet: B=500 A=200 T=400 S=50 S1=55 V=90
 S,T,S1,V = grecov(200,500,50,400,55,90)
 assert (S,T,S1,V)==(50,400,55,90)
-# T and V absorb when the given values don't close
+# when they DON'T close, the wall letters are held and the corner
+# letters absorb -- the reverse of the old rule
 S,T,S1,V = grecov(200,500,50,398,55,88)
+assert (S,T,S1,V)==(51,398,56,88)
+# the field case from beforeaftergrecianoosexample.dxf: taped S=61 is
+# 2.25" out against the wall T, so T stands and S gives way
+S,T,S1,V = grecov(216.0,441.5,61.0,324.0,60.0,96.0)
+assert (round(S,2),T,S1,V)==(58.75,324.0,60.0,96.0)
+assert abs(math.hypot(S,S1)-84.0) < 0.05     # and S2 84" now checks out
+# with the wall NA, the corner letter still drives the shape
+S,T,S1,V = grecov(200,500,50,None,55,None)
 assert (S,T,S1,V)==(50,400,55,90)
 # NA derivations
 S,T,S1,V = grecov(200,500,None,400,None,90)
@@ -1468,13 +1480,13 @@ print("   every demo cell's numbers close, fit and are reachable")
 
 print("== 59. octagon: same 8 corners as a grecian, drawn from A and B ==")
 def octov(a,b,s=None,t=None,s1=None,v=None):
-    """Mirror of pool:octov."""
+    """Mirror of pool:octov: wall letters (T, V) beat corner ones."""
     c=min(a,b)/(2.0+math.sqrt(2.0))
-    if   s is not None: S,T = s,b-2*s
-    elif t is not None: S,T = (b-t)/2.0,t
+    if   t is not None: S,T = (b-t)/2.0,t
+    elif s is not None: S,T = s,b-2*s
     else:               S,T = c,b-2*c
-    if   s1 is not None: S1,V = s1,a-2*s1
-    elif v is not None:  S1,V = (a-v)/2.0,v
+    if   v is not None:  S1,V = (a-v)/2.0,v
+    elif s1 is not None: S1,V = s1,a-2*s1
     else:                S1,V = S,a-2*S     # unmeasured cut is 45 deg
     return S,T,S1,V
 def octpts(a,b,S,T,S1,V):
@@ -1516,12 +1528,13 @@ print("   A+B alone give a regular octagon; measured letters still win")
 
 # the GRECIAN keeps its own defaults -- the octagon rule must not leak
 def grecov(a,b,s=None,t=None,s1=None,v=None):
-    """Mirror of pool:grecov: the long-pool defaults, unchanged."""
-    if   s is not None: S,T = s,b-2*s
-    elif t is not None: S,T = (b-t)/2.0,t
+    """Mirror of pool:grecov: the long-pool defaults, unchanged.
+    Wall letters (T, V) win over corner letters (S, S1)."""
+    if   t is not None: S,T = (b-t)/2.0,t
+    elif s is not None: S,T = s,b-2*s
     else:               S,T = b/8.0,0.75*b
-    if   s1 is not None: S1,V = s1,a-2*s1
-    elif v is not None:  S1,V = (a-v)/2.0,v
+    if   v is not None:  S1,V = (a-v)/2.0,v
+    elif s1 is not None: S1,V = s1,a-2*s1
     else:                S1,V = a/6.0,a*(2.0/3.0)
     return S,T,S1,V
 _g = grecov(200.0,480.0)

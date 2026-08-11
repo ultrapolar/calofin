@@ -496,4 +496,39 @@ assert vm2.dimstyle_log == ['CROSS DIMENSION', 'STANDARD INCHES',
                             'CROSS DIMENSION', 'STANDARD'], vm2.dimstyle_log
 print("   4 corner faces in inches; a nested small dim unwinds to CROSS DIMENSION")
 
+print("== R16. grecian Overall: WALL letters beat CORNER letters ==")
+# The field case from beforeaftergrecianoosexample.dxf.  A tape can be
+# held flat along T and V, so they are held true; S and S1 only locate
+# the virtual sharp corner and get re-derived.  Expected perimeter =
+# the "after" figure measured straight out of that DXF.
+vm = run(["Outofsquare", "Grecian"] + BASE +
+         ["Overall",
+          441.50, 216.00,                 # B, A overalls
+          324.00, 61.00, 60.00, 96.00, 84.00,   # T, S, S1, V, S2
+          "Simple", 389.00, 388.50,       # cross dims A-C, B-D
+          "No"],                          # no bottom: every POOL line
+         "R16")                           # is a perimeter edge
+_seg = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert len(_seg) == 8, len(_seg)
+_pts = set()
+for _a, _b in _seg:
+    _pts.add((round(_a[0], 2), round(_a[1], 2)))
+    _pts.add((round(_b[0], 2), round(_b[1], 2)))
+_ox = min(p[0] for p in _pts)
+_got = [(round(p[0] - _ox, 2), round(p[1], 2)) for p in _pts]
+AFTER = [(58.65, 0.00), (382.65, 0.00), (441.47, 59.94), (441.60, 155.90),
+         (382.95, 216.00), (58.95, 216.00), (0.13, 156.06), (0.00, 60.10)]
+assert len(_got) == 8, _got
+for _t in AFTER:
+    assert min(_m.dist(_g, _t) for _g in _got) < 0.05, (_t, sorted(_got))
+# the walls the crew taped are held EXACTLY ...
+_lens = sorted(round(_m.dist(*s), 2) for s in _seg)
+assert _lens.count(324.00) == 2, _lens               # T top and bottom
+assert sum(1 for x in _lens if abs(x - 96.0) <= 0.05) == 2, _lens    # V ends
+assert sum(1 for x in _lens if abs(x - 84.0) <= 0.05) == 4, _lens    # S2 faces
+# ... and the old behaviour (T squashed to 319.5, faces at 85.56) is gone
+assert not any(abs(x - 319.50) < 0.6 for x in _lens), _lens
+assert not any(abs(x - 85.56) < 0.05 for x in _lens), _lens
+print("   T/V/S2 walls held true; S and S1 absorbed the error")
+
 print("\nALL RUNTIME SCENARIOS PASSED")
