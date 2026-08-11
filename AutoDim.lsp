@@ -24,6 +24,16 @@
 ;;;  FLOORDIM - Runs just the floor dims part for one extra line
 ;;;             (breaks at everything in model space).
 ;;;
+;;;  AUTODIMSIDEPOV - Dimensions steps drawn in side view (elevation).
+;;;             Highlight the step profile: every vertical riser gets a
+;;;             vertical dimension placed beside its step - extension
+;;;             lines hooked to the nosing corners, each dim stepping
+;;;             down the flight with the stairs - plus one overall
+;;;             height dimension further out.  The dims are created on
+;;;             layer "DIMENSION" in the "STANDARD INCHES" style, like
+;;;             the reference drawing, and work whichever way the
+;;;             stairs face.
+;;;
 ;;;  Usage:
 ;;;    1. APPLOAD this file (or drag it into the drawing window).
 ;;;    2. Type AUTODIM and follow the prompts.
@@ -100,6 +110,26 @@
 (defun ad:setdimstyle (name)
   (if (and name (tblsearch "DIMSTYLE" name))
     (progn (command "_.-DIMSTYLE" "_Restore" name) t)))
+
+;; make a layer current, creating it first when the drawing lacks it
+(defun ad:setlayer (name)
+  (if (not (tblsearch "LAYER" name))
+    (entmake (list '(0 . "LAYER")
+                   '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 name)
+                   '(70 . 0)
+                   '(62 . 7)
+                   '(6 . "Continuous"))))
+  (setvar "CLAYER" name))
+
+;; place one vertical linear dimension - all points expected in WCS
+(defun ad:vertdim (p1 p2 loc)
+  (command "_.DIMLINEAR"
+           "_non" (trans p1 0 1)
+           "_non" (trans p2 0 1)
+           "_V"
+           "_non" (trans loc 0 1)))
 
 ;; place one aligned dimension - all points expected in WCS
 (defun ad:aligned (p1 p2 loc)
@@ -515,5 +545,104 @@
   (setvar "CMDECHO" oldcmd)
   (princ))
 
-(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain).")
+;; AUTODIMSIDEPOV - dimension steps drawn in side view (elevation):
+;; every riser gets a vertical dimension placed beside its step,
+;; stepping down the flight with the nosing corners as extension line
+;; origins, plus one overall height dimension further out.  The dims
+;; are created on layer "DIMENSION" in the "STANDARD INCHES" style to
+;; match the reference drawing.
+(defun c:AUTODIMSIDEPOV (/ *error* oldcmd olddim oldlay ss i en s risers
+                            chain sx clear xdim edge loc cnt prev pb)
+  (defun *error* (msg)
+    (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    (if olddim
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
+    (if oldcmd (setvar "CMDECHO" oldcmd))
+    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+      (prompt (strcat "\nAutoDim error: " msg)))
+    (princ))
+  (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side view:"
+                  " every riser gets a vertical dim beside its step, plus"
+                  " the overall height."
+                  "\nHighlight the side view of the steps, then press"
+                  " Enter."))
+  (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))
+  (if (null ss)
+    (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
+    (progn
+      (setq oldcmd (getvar "CMDECHO")
+            olddim (getvar "DIMSTYLE")
+            oldlay (getvar "CLAYER"))
+      (setvar "CMDECHO" 0)
+      (command "_.UNDO" "_Begin")
+      (ad:setlayer "DIMENSION")
+      (ad:setdimstyle "STANDARD INCHES")
+      ;; the vertical segments in the selection are the risers
+      (setq risers '()
+            i      0)
+      (repeat (sslength ss)
+        (setq en (ssname ss i)
+              i  (1+ i))
+        (foreach s (ad:segs en)
+          (if (and (> (distance (car s) (cadr s)) 1e-8)
+                   (< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
+                   (> (abs (- (cadr (car s)) (cadr (cadr s)))) 1e-4))
+            (setq risers (cons s risers)))))
+      (if (null risers)
+        (prompt (strcat "\nNo vertical riser lines found in the selection"
+                        " - nothing dimensioned."))
+        (progn
+          ;; each riser as (top bottom), sorted from the top step down
+          (setq risers
+                 (vl-sort
+                   (mapcar '(lambda (s)
+                              (if (> (cadr (car s)) (cadr (cadr s)))
+                                s
+                                (list (cadr s) (car s))))
+                           risers)
+                   '(lambda (a b) (> (cadr (car a)) (cadr (car b))))))
+          ;; chain of nosing corners: the top of the top riser, then
+          ;; the bottom corner of every riser going down the flight
+          (setq chain (cons (car (car risers)) (mapcar 'cadr risers))
+                ;; dims go on the high side of the steps
+                sx    (if (>= (car (car chain)) (car (last chain))) 1.0 -1.0)
+                clear (max (ad:dimoff) (* 2.0 (ad:onefoot)))
+                edge  nil
+                cnt   0
+                prev  (car chain))
+          ;; one vertical dimension per riser, beside its step
+          (foreach pb (cdr chain)
+            (if (> (abs (- (cadr prev) (cadr pb))) 1e-4)
+              (progn
+                (setq xdim (+ (* sx clear)
+                              (if (> sx 0.0)
+                                (max (car prev) (car pb))
+                                (min (car prev) (car pb))))
+                      edge (cond ((null edge) xdim)
+                                 ((> sx 0.0) (max edge xdim))
+                                 (t (min edge xdim)))
+                      loc  (list xdim
+                                 (* 0.5 (+ (cadr prev) (cadr pb)))
+                                 0.0))
+                (ad:vertdim prev pb loc)
+                (setq cnt (1+ cnt))))
+            (setq prev pb))
+          ;; the overall height, one step further out
+          (if (> cnt 1)
+            (progn
+              (setq loc (list (+ edge (* sx clear))
+                              (* 0.5 (+ (cadr (car chain))
+                                        (cadr (last chain))))
+                              0.0))
+              (ad:vertdim (last chain) (car chain) loc)
+              (setq cnt (1+ cnt))))
+          (prompt (strcat "\n" (itoa cnt) " step dimension(s) placed."))))
+      (ad:setdimstyle olddim)
+      (setvar "CLAYER" oldlay)
+      (command "_.UNDO" "_End")
+      (setvar "CMDECHO" oldcmd)))
+  (princ))
+
+(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")
 (princ)
