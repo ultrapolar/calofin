@@ -667,6 +667,28 @@ zeroed state as your preference.
 | `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under Grecian ends; ovals draw none — see *Oval ends*), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
 | `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
 
+### Dimension styles
+
+Two named styles are used when the drawing defines them, and the
+previous style is always restored right afterwards:
+
+* **`CROSS DIMENSION`** — the cross-dim (diagonal) block.
+* **`STANDARD INCHES`** — **every dimension measuring less than
+  24"**, whatever it is: corner radii and chamfer faces, short hopper
+  offsets, end radii, profile depths. The switch happens per
+  dimension, keyed on that dimension's own measurement, so a 96" side
+  and an 18" chamfer on the same pool each get the right style.
+  Angular corner dims measure degrees, not inches, and are left in the
+  current style.
+
+If a style is missing from the drawing the dimension is simply drawn
+in the current style (the routine says so once per run for
+`STANDARD INCHES`, then stays quiet). The styles nest correctly — a
+small dimension drawn inside the cross-dim block returns to
+`CROSS DIMENSION`, not to whatever was current before it — and the
+style in effect when `POOL` started is restored even if the command
+errors out part-way.
+
 ### Fitting logic
 
 1. Sides are first held **exactly** true and the body is skewed

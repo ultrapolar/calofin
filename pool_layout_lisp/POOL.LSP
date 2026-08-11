@@ -113,6 +113,14 @@
 (setq pool:*valnotes* nil)            ; validation problems for the report
 (setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
+;; Measurements under pool:*smalldim* are dimensioned in the drawing's
+;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
+;; note is printed at most once per run.
+(setq pool:*smalldim*    24.0)
+(setq pool:*smallstyle*  "STANDARD INCHES")
+(setq pool:*smallwarned* nil)
+(setq pool:*dimstyle0*   nil)         ; dim style current when POOL started
+
 ;;; -------------------- small vector helpers --------------------------
 
 (defun pool:d2r (a) (* pi (/ a 180.0)))
@@ -295,26 +303,68 @@
                        (cons 51 e))))
       (pool:line p1 p3 lay)))
 
-(defun pool:dimalg (p1 p2 pt)
-  (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt)))
+;;; Small dimensions read in inches.  Any measurement under 24" is
+;;; drawn in the "STANDARD INCHES" dim style when the drawing has one,
+;;; and the previous style comes straight back afterwards.  Every
+;;; dimension the routine draws goes through pool:dimalg / pool:dimrot
+;;; / pool:dimrad / pool:dimcorner1, so switching in those four covers
+;;; plan dims, hopper chain dims, corner treatments, radii and the
+;;; side-profile depths alike.  (Angular corner dims measure degrees,
+;;; not inches, so they are left alone.)
+
+(defun pool:dimsbegin (d / odim)
+  (if (< d pool:*smalldim*)
+      (if (tblsearch "DIMSTYLE" pool:*smallstyle*)
+          (progn
+            (setq odim (getvar "DIMSTYLE"))
+            ;; already current -> nothing to switch, nothing to undo
+            (if (= (strcase odim) (strcase pool:*smallstyle*))
+                (setq odim nil)
+                (command "_.-DIMSTYLE" "_Restore" pool:*smallstyle*))
+            odim)
+          (progn
+            (if (not pool:*smallwarned*)
+                (progn
+                  (princ (strcat "\n(no \"" pool:*smallstyle*
+                                 "\" dim style in this drawing -- dims under "
+                                 (rtos pool:*smalldim*)
+                                 " drawn in the current style)"))
+                  (setq pool:*smallwarned* t)))
+            nil))))
+
+(defun pool:dimsend (odim)
+  (if (and odim (tblsearch "DIMSTYLE" odim))
+      (command "_.-DIMSTYLE" "_Restore" odim)))
+
+(defun pool:dimalg (p1 p2 pt / od)
+  (setq od (pool:dimsbegin (distance p1 p2)))
+  (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt))
+  (pool:dimsend od))
 
 ;; Radius dimension ON the arc, read from OUTSIDE it: the arc is picked
 ;; at its far point and the dimension line is dragged further out along
 ;; the same direction, so the leader comes in from outside instead of
 ;; running back to the circle centre.
-(defun pool:dimrad (ent tip outd doff)
+(defun pool:dimrad (ent tip outd doff / od)
   (if (and ent (entget ent) (= "ARC" (cdr (assoc 0 (entget ent)))))
-      (command "_.DIMRADIUS" (list ent (pool:wp tip))
-               (pool:wp (pool:v+ tip (pool:v* outd (* 0.9 doff)))))
+      (progn
+        (setq od (pool:dimsbegin (cdr (assoc 40 (entget ent)))))
+        (command "_.DIMRADIUS" (list ent (pool:wp tip))
+                 (pool:wp (pool:v+ tip (pool:v* outd (* 0.9 doff)))))
+        (pool:dimsend od))
       ;; a degenerate end (bulge ~ 0) drew a straight line instead
       (princ "\n(radius dim skipped -- the end came out flat, no arc)")))
 
 ;; Rotated linear dimension hooked to two OBJECT points: the ext-line
 ;; origins land on drawn geometry (wall endpoints / arc tangents), and
 ;; the rotation makes it read the full run regardless of the hooks.
-(defun pool:dimrot (p1 p2 ang loc)
+(defun pool:dimrot (p1 p2 ang loc / od)
+  ;; a rotated linear dim measures the RUN along ang, not p1->p2
+  (setq od (pool:dimsbegin (abs (pool:dot (pool:v- p2 p1)
+                                          (list (cos ang) (sin ang))))))
   (command "_.DIMLINEAR" (pool:wp p1) (pool:wp p2)
-           "_R" (angtos ang 0 6) (pool:wp loc)))
+           "_R" (angtos ang 0 6) (pool:wp loc))
+  (pool:dimsend od))
 
 ;; Switch to the CROSS DIMENSION dim style when the drawing has one.
 ;; Returns the previous style name (for pool:dimxend), or nil.
@@ -2129,24 +2179,30 @@
 ;; One corner-treatment annotation: a radius dim on a fillet arc or an
 ;; aligned dim on a chamfer face, dropped outward along outd, with an
 ;; optional " Typ." suffix.  Square corners are not this helper's job.
-(defun pool:dimcorner1 (ce ty arc outd doff sfx / am fm)
+(defun pool:dimcorner1 (ce ty arc outd doff sfx / am fm od)
   (cond
     ((= ty "Rounded")
-     (setq am (caddr ce))
+     (setq am (caddr ce)
+           od (pool:dimsbegin (if (and arc (entget arc))
+                                  (cdr (assoc 40 (entget arc)))
+                                  (distance (car ce) (cadr ce)))))
      (if (= sfx "")
          (command "_.DIMRADIUS" (list arc (pool:wp am))
                   (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))
          (command "_.DIMRADIUS" (list arc (pool:wp am))
                   "_T" (strcat "<>" sfx)
-                  (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))))
+                  (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff))))))
+     (pool:dimsend od))
     ((= ty "Diag")
-     (setq fm (pool:mid (car ce) (cadr ce)))
+     (setq fm (pool:mid (car ce) (cadr ce))
+           od (pool:dimsbegin (distance (car ce) (cadr ce))))
      (if (= sfx "")
          (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
                   (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))
          (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
                   "_T" (strcat "<>" sfx)
-                  (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))))))
+                  (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff))))))
+     (pool:dimsend od))))
 
 (defun pool:dimcorners (quad corners arcs cen doff / ilist sfx i cc ce p pp pn
                                                     ty outd fm p1 p2)
@@ -5017,6 +5073,10 @@
         (princ (strcat "\nPOOL error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (pool:sysrestore)
+    ;; DIMSTYLE is read-only to setvar, so it is put back the only way
+    ;; it can be: dying inside a small-dim or cross-dim block must not
+    ;; leave that style current in the user's drawing
+    (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
@@ -5027,7 +5087,9 @@
   (if *push-error-using-command* (*push-error-using-command*))
 
   (pool:syssave)
-  (setq pool:*valnotes* nil)
+  (setq pool:*valnotes* nil
+        pool:*smallwarned* nil
+        pool:*dimstyle0* (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
   (pool:undobegin)
   ;; architectural units while prompting so every distance can be

@@ -330,7 +330,8 @@
 (defun pooldemo:run ( / cells k org)
   (if *push-error-using-command* (*push-error-using-command*))
   (pool:syssave)
-  (setq pool:*valnotes* nil)
+  (setq pool:*valnotes* nil
+        pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
   (pool:undobegin)
   (setvar "OSMODE" 0)

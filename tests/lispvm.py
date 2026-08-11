@@ -171,6 +171,7 @@ class VM:
         self.script = []
         self.prompts = []        # (prompt, answer) log
         self.commands = []       # every (command ...) call
+        self.dimstyle_log = []   # every dim style made current, in order
         self.entities = []       # Ent -> alist, in creation order
         self.entdata = {}
         self.deleted = set()
@@ -367,8 +368,14 @@ class VM:
 
     # ---------------- program entry
     def load(self, path):
-        for form in parse_all(open(path).read()):
-            self.eval(form)
+        self.loads(open(path).read())
+
+    def loads(self, src):
+        """Evaluate LISP source text (for test fixtures / extra defuns)."""
+        r = NIL
+        for form in parse_all(src):
+            r = self.eval(form)
+        return r
 
     def run(self, name, script):
         self.script = list(script)
@@ -850,6 +857,12 @@ BUILTINS[Sym('ssname')] = lambda vm, a: a[0][int(a[1]) + 1]
 @bi('command')
 def _command(vm, a):
     vm.commands.append(list(a))
+    # -DIMSTYLE Restore really does change the current dim style, and
+    # code that saves/restores it round-trips through getvar, so the
+    # VM has to model it or a wrong-style restore would go unnoticed
+    if a and a[0] == '_.-DIMSTYLE' and len(a) >= 3 and a[1] == '_Restore':
+        vm.sysvars['DIMSTYLE'] = a[2]
+        vm.dimstyle_log.append(a[2])
     return NIL
 
 

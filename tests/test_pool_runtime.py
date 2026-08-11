@@ -18,9 +18,11 @@ LSP = os.path.join(os.path.dirname(__file__), '..',
                    'pool_layout_lisp', 'POOL.LSP')
 
 
-def run(script, label):
+def run(script, label, dimstyles=()):
     vm = VM()
     vm.load(LSP)
+    for s in dimstyles:
+        vm.tables['DIMSTYLE'].add(s)
     try:
         vm.run('c:POOL', script)
     except LispError as e:
@@ -412,5 +414,86 @@ assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 296.0) < 0.5 for c in dimcalls(vm))
 assert any(c[0] == '_.DIMRADIUS' and any('Typ.' in str(x) for x in c)
            for c in vm.commands), "outer corner Typ. callout"
 print("   5 rounded outer corners, chamfered inner corner, Typ. callout")
+
+print("== R15. dims under 24\" use the STANDARD INCHES dim style ==")
+# same pool as R14 (24" outer radius, 18" inner chamfer) in a drawing
+# that HAS the style: the corner treatments are small, the sides big
+vm = run(["Insquare", "LA"] + BASE +
+         [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
+          "Yes", "Rounded", 20.0, "Diag", 18.0,
+          "No", "No"],
+         "R15", dimstyles=("STANDARD INCHES",))
+
+
+def styled(vm):
+    """(measurement, style current when it was drawn) per dimension."""
+    cur, out = 'STANDARD', []
+    for c in vm.commands:
+        if c and c[0] == '_.-DIMSTYLE' and len(c) >= 3 and c[1] == '_Restore':
+            cur = c[2]
+        elif c and c[0] == '_.DIMALIGNED':
+            out.append((_m.dist(c[1][:2], c[2][:2]), cur))
+        elif c and c[0] == '_.DIMRADIUS':
+            out.append(('R', cur))
+    return out
+
+
+sd = styled(vm)
+big = [(d, s) for d, s in sd if d != 'R' and d >= 24.0]
+small = [(d, s) for d, s in sd if d != 'R' and d < 24.0]
+assert big and all(s == 'STANDARD' for d, s in big), big
+assert small and all(s == 'STANDARD INCHES' for d, s in small), small
+# the 18" chamfer face is one of them, and the 20" corner radius dim
+# (a DIMRADIUS) switched too
+assert any(abs(d - 18.0) < 0.05 for d, s in small), sd
+assert any(s == 'STANDARD INCHES' for d, s in sd if d == 'R'), sd
+# and the style always lands back where it started
+assert vm.get(__import__('lispvm').Sym('pool:*dimstyle0*')) == 'STANDARD'
+assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.sysvars['DIMSTYLE']
+print(f"   {len(small)} small dims in STANDARD INCHES, "
+      f"{len(big)} large in STANDARD, style restored")
+
+print("== R15b. no STANDARD INCHES in the drawing -> current style, warned once ==")
+vm = run(["Insquare", "LA"] + BASE +
+         [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
+          "Yes", "Rounded", 20.0, "Diag", 18.0,
+          "No", "No"],
+         "R15b")
+assert not vm.dimstyle_log, vm.dimstyle_log      # never switched
+assert sum(1 for p, a in vm.prompts
+           if 'STANDARD INCHES' in p and 'dim style' in p) <= 1
+print("   falls back cleanly when the style is absent")
+
+print("== R15c. out-of-square corner dims + nesting inside CROSS DIMENSION ==")
+# out-of-square dims every corner, so all four 18" chamfer faces take
+# the inches style, while the two cross diagonals stay big
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 240.0, 120.0, 120.0,
+          "Diag", 18.0,
+          None, None, None, None, None, None,
+          "Corner", 268.0, 268.0,
+          "No"],
+         "R15c", dimstyles=("STANDARD INCHES", "CROSS DIMENSION"))
+assert vm.dimstyle_log.count('STANDARD INCHES') == 4, vm.dimstyle_log
+assert 'CROSS DIMENSION' in vm.dimstyle_log
+assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.dimstyle_log
+# Nesting: a small dim drawn while CROSS DIMENSION is current must
+# come back to CROSS DIMENSION, not to STANDARD.  The draw order
+# never produces a small cross dim today, so drive it directly rather
+# than let the assertion sit vacuous.
+vm2 = VM()
+vm2.load(LSP)
+for s in ("STANDARD INCHES", "CROSS DIMENSION"):
+    vm2.tables['DIMSTYLE'].add(s)
+vm2.loads("""
+  (defun testnest ( / od)
+    (setq od (pool:dimxbegin))
+    (pool:dimalg '(0.0 0.0) '(18.0 0.0) '(9.0 5.0))
+    (pool:dimxend od))
+""")
+vm2.run('testnest', [])
+assert vm2.dimstyle_log == ['CROSS DIMENSION', 'STANDARD INCHES',
+                            'CROSS DIMENSION', 'STANDARD'], vm2.dimstyle_log
+print("   4 corner faces in inches; a nested small dim unwinds to CROSS DIMENSION")
 
 print("\nALL RUNTIME SCENARIOS PASSED")
