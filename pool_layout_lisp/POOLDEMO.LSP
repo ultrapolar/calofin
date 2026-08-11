@@ -152,7 +152,9 @@
   (pool:dimalg (nth 7 pts) (nth 6 pts)
                (pool:v+ (pool:mid (nth 7 pts) (nth 6 pts)) (list -40.0 0.0)))
   (setvar "CLAYER" "POOL")
-  (setq gg (pool:hopgrecc pts 90.0 120.0 150.0 60.0 60.0 36.0 36.0))
+  ;; sheet letters: W 84 flat, L1 48 left edge on the 120 hopper width
+  (setq gg (pool:hopgrecc pts 90.0 120.0 150.0 60.0 60.0
+                          (list "Letters" 84.0 48.0 120.0)))
   (pool:hopgrecdraw gg "POOL" t nil))
 
 ;; 5. roman, oval (radius-end) hopper
@@ -267,7 +269,7 @@
   (pool:dimalg (nth 7 pts) (nth 0 pts)
                (pool:v+ (pool:mid (nth 7 pts) (nth 0 pts)) (list -30.0 -30.0)))
   (setvar "CLAYER" "POOL")
-  (setq gg (pool:hopgrecc pts 90.0 110.0 130.0 90.0 90.0 nil nil))
+  (setq gg (pool:hopgrecc pts 90.0 110.0 130.0 90.0 90.0 nil))
   (pool:hopgrecdraw gg "POOL" nil nil))
 
 ;; 11. round pool: a true circle in square, with the radius-end hopper

@@ -1812,4 +1812,50 @@ assert abs(dist(e1, B) - 18.0/(2.0*math.sin(math.radians(67.5)))) < 1e-9
 assert cornerends(B, A, C, "Square", 0.0)[0] == B
 print("   reflex fillet in the notch; 135-degree chamfer face true")
 
+print("== 68. six-sided grecian hopper: offsets vs sheet letters ==")
+# Axis-aligned mirror of pool:hopgrecc's hex corners for the pool from
+# 6sidedgrecianexample.dxf: 480x240, S=60, S1=72 (tips at x=0/480).
+H, G, M, K = 48.0, 72.0, 48.0, 48.0
+D, LT, A_, LB = (60.0, 240.0), (0.0, 168.0), (60.0, 0.0), (0.0, 72.0)
+
+def hex_letters(w, l1, lw):
+    # W back from the pad's right edge; left edge L1 centred; faces connect
+    xr = H + G
+    dy = 0.5 * (lw - l1)
+    ct1 = (xr - w, 240.0 - M)
+    ct2 = (H, 240.0 - M - dy)
+    cb2 = (H, K + dy)
+    cb1 = (xr - w, K)
+    return ct1, ct2, cb2, cb1
+
+def hex_offsets(co):
+    # every edge = its wall offset inward; cut lines parallel to cuts
+    u = ((D[0]-LT[0]), (D[1]-LT[1]))
+    n = math.hypot(*u); u = (u[0]/n, u[1]/n)
+    nrm = (u[1], -u[0])                       # inward for the top cut
+    p = (LT[0] + nrm[0]*co, LT[1] + nrm[1]*co)
+    # intersect offset cut line with y = 240-M and with x = H
+    t1 = (240.0 - M - p[1]) / u[1]
+    ct1 = (p[0] + u[0]*t1, 240.0 - M)
+    t2 = (H - p[0]) / u[0]
+    ct2 = (H, p[1] + u[1]*t2)
+    return ct1, ct2
+
+# Letters: the demonstrated-dims figure -- W=38 L1=72 on the 144 width
+ct1, ct2, cb2, cb1 = hex_letters(38.0, 72.0, 144.0)
+assert ct1 == (82.0, 192.0) and ct2 == (48.0, 156.0)
+assert cb2 == (48.0, 84.0) and cb1 == (82.0, 48.0)
+# X closes: sqrt((G-W)^2 + ((L-L1)/2)^2) vs the taped 49.5
+assert abs(math.hypot(72.0-38.0, 36.0) - 49.5) < 0.5
+# faces need NOT be parallel to the pool cut (and here they aren't)
+_f = (ct2[0]-ct1[0], ct2[1]-ct1[1]); _c = (LT[0]-D[0], LT[1]-D[1])
+assert abs(_f[0]*_c[1] - _f[1]*_c[0]) > 1.0
+# Offsets: the offsets figure -- CO defaults to H=48, faces parallel
+ct1, ct2 = hex_offsets(48.0)
+assert abs(ct1[0] - 82.47) < 0.05 and abs(ct1[1] - 192.0) < 1e-9
+assert abs(ct2[0] - 48.0) < 1e-9 and abs(ct2[1] - 150.63) < 0.05
+_f = (ct2[0]-ct1[0], ct2[1]-ct1[1])
+assert abs(_f[0]*_c[1] - _f[1]*_c[0]) < 1e-9   # exactly parallel
+print("   letters give the round-number hex; offsets stay parallel")
+
 print("\nALL CHECKS PASSED")

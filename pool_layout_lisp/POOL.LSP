@@ -3386,15 +3386,30 @@
 ;;;
 ;;;  Square hopper = the rectangle letters (H G F E M L K), anchored
 ;;;  off the end walls; each hopper left corner ties to BOTH ends of
-;;;  its pool corner cut.  The 6-sided hopper adds cut left corners:
-;;;    W  = cut setback along the hopper top/bottom edges
-;;;    L1 = cut setback down the hopper left edge
-;;;    X  = cut face length (CHECK, = sqrt(W^2 + L1^2) when square)
-;;;  and the pool cut ends tie to the matching hopper cut ends.
+;;;  its pool corner cut.  The 6-sided hopper cuts the deep pad's left
+;;;  corners, and can be measured TWO ways (hex argument):
+;;;
+;;;    ("Offsets" co) -- offsets from the walls only: every pad edge
+;;;      is its pool wall offset inward (left wall by H, top/bottom by
+;;;      M/K) and the cut faces are the pool CORNER CUTS offset in by
+;;;      co, so every hopper line is PARALLEL to its wall.  Corners
+;;;      land wherever adjacent offset lines intersect.
+;;;
+;;;    ("Letters" w l1 lw) -- the field-sheet letters:
+;;;      W  = the top/bottom flat, cut corner to the pad's right edge
+;;;      L1 = the left edge length, centred on the pad
+;;;      (lw = the resolved hopper width L, so the cut drop per corner
+;;;      is (L - L1)/2; X = sqrt((G-W)^2 + ((L-L1)/2)^2) is a CHECK.)
+;;;      The flats and the left edge ride their wall-offset lines
+;;;      (parallel); the cut faces just CONNECT the corners and need
+;;;      not be parallel to anything.
+;;;
+;;;  Either way the pool cut ends tie to the matching hopper corners.
 
-(defun pool:hopgrecc (pts h g e m k w l1 / aa bb rb rt cc dd ltp lbp cen p
-                                           hl hr ht hb brk hbl htl hbr htr
-                                           hlw htl1 hbl1 hc u v hc2 out)
+(defun pool:hopgrecc (pts h g e m k hex / aa bb rb rt cc dd ltp lbp cen p
+                                          hl hr ht hb brk hbl htl hbr htr
+                                          hlw htl1 hbl1 hc u v hc2 out
+                                          tcut bcut dy ct1 ct2 cb1 cb2)
   (setq aa (nth 0 pts) bb (nth 1 pts) rb (nth 2 pts) rt (nth 3 pts)
         cc (nth 4 pts) dd (nth 5 pts) ltp (nth 6 pts) lbp (nth 7 pts)
         cen (list 0.0 0.0))
@@ -3431,15 +3446,30 @@
           (list 'pht htr)
           (list 'pt (pool:linex (car hr) (cadr hr) dd (pool:v- cc dd)))
           (list 'voff (pool:v* (pool:unit u) pool:*mlkoff*))))
-  (if w
-      (setq hlw (pool:offline lbp ltp cen (+ h w))
-            htl1 (pool:offline dd cc cen (+ m l1))
-            hbl1 (pool:offline aa bb cen (+ k l1))
-            out (append out (list
-              (list 'ct1 (pool:linex (car hlw) (cadr hlw) (car ht) (cadr ht)))
-              (list 'ct2 (pool:linex (car hl) (cadr hl) (car htl1) (cadr htl1)))
-              (list 'cb1 (pool:linex (car hlw) (cadr hlw) (car hb) (cadr hb)))
-              (list 'cb2 (pool:linex (car hl) (cadr hl) (car hbl1) (cadr hbl1)))))))
+  (if hex
+      (progn
+        (if (= (car hex) "Offsets")
+            ;; cut faces = the pool corner cuts offset inward by co;
+            ;; corners at the intersections with the adjacent offsets
+            (setq tcut (pool:offline ltp dd cen (cadr hex))
+                  bcut (pool:offline lbp aa cen (cadr hex))
+                  ct1 (pool:linex (car tcut) (cadr tcut) (car ht) (cadr ht))
+                  ct2 (pool:linex (car tcut) (cadr tcut) (car hl) (cadr hl))
+                  cb1 (pool:linex (car bcut) (cadr bcut) (car hb) (cadr hb))
+                  cb2 (pool:linex (car bcut) (cadr bcut) (car hl) (cadr hl)))
+            ;; sheet letters: cut corners W back from the pad's right
+            ;; edge along the flats, the left edge L1 long centred on
+            ;; the pad; the faces connect them (no parallelism forced)
+            (setq hlw (pool:offline lbp ltp cen (+ h (- g (cadr hex))))
+                  dy (* 0.5 (- (cadddr hex) (caddr hex)))
+                  htl1 (pool:offline dd cc cen (+ m dy))
+                  hbl1 (pool:offline aa bb cen (+ k dy))
+                  ct1 (pool:linex (car hlw) (cadr hlw) (car ht) (cadr ht))
+                  ct2 (pool:linex (car hl) (cadr hl) (car htl1) (cadr htl1))
+                  cb1 (pool:linex (car hlw) (cadr hlw) (car hb) (cadr hb))
+                  cb2 (pool:linex (car hl) (cadr hl) (car hbl1) (cadr hbl1))))
+        (setq out (append out (list (list 'ct1 ct1) (list 'ct2 ct2)
+                                    (list 'cb1 cb1) (list 'cb2 cb2))))))
   out)
 
 (defun pool:hopgrecdraw (gg lay six pvflag / hbl htl hbr htr brkb brkt
@@ -3476,18 +3506,25 @@
         (pool:hgl lbp hbl lay pvflag))))
 
 ;; Guided grecian bottom phase.  Returns report rows (nil if skipped).
-(defun pool:hopgrec (pts doff th / htype six len wid ggn pv gg rows tl odl
-                                   h g f e m l k w l1 x wp
+(defun pool:hopgrec (pts doff th / htype six mode len wid ggn pv gg rows tl odl
+                                   h g f e m l k w l1 x co coraw xcal sixbad
                                    hraw graw fraw eraw mraw lraw kraw
                                    cen p u vv toth totv hres vres cv hfx vfx ans
-                                   xmin xmax ymin ymax)
+                                   xmin xmax ymin ymax mm ud proj)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
         (setq htype (pool:askkw "Hopper type" "Square SIX" "Square/SIX-sided"
                                 "Square" nil)
-              six (= htype "SIX")
-              xmin (- (apply 'min (mapcar 'car pts)) doff)
+              six (= htype "SIX"))
+        ;; a six-sided deep end can be taped two ways: offsets shot
+        ;; from every wall (cut faces parallel to the pool cuts), or
+        ;; the sheet letters W / X / L / L1 / G / M / K
+        (if six
+            (setq mode (pool:askkw "SIX-sided corners measured by"
+                                   "Offsets Letters" "Offsets/Letters"
+                                   "Offsets" nil)))
+        (setq xmin (- (apply 'min (mapcar 'car pts)) doff)
               xmax (+ (apply 'max (mapcar 'car pts)) doff)
               ymin (- (apply 'min (mapcar 'cadr pts)) doff)
               ymax (+ (apply 'max (mapcar 'cadr pts)) doff))
@@ -3498,8 +3535,12 @@
               wid (distance (nth 0 pts) (nth 5 pts))
               ggn (pool:hopgrecc pts (* 0.10 len) (* 0.20 len) (* 0.38 len)
                                  (* 0.27 wid) (* 0.27 wid)
-                                 (if six (* 0.05 len) nil)
-                                 (if six (* 0.08 wid) nil)))
+                                 (cond
+                                   ((not six) nil)
+                                   ((= mode "Offsets")
+                                    (list "Offsets" (* 0.10 len)))
+                                   (t (list "Letters" (* 0.12 len)
+                                            (* 0.26 wid) (* 0.46 wid))))))
         (pool:hopgrecdraw ggn "POOL-NOTES" six t)
         (setq pv (list
           (pool:pvtie (cadr (assoc 'pl ggn)) (cadr (assoc 'phl ggn)) "H" th)
@@ -3510,25 +3551,37 @@
           (pool:pvtie (cadr (assoc 'phb ggn)) (cadr (assoc 'pht ggn)) "L" th)
           (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'phb ggn)) "K" th)))
         (if six
-            (setq wp (cadr (assoc 'htl ggn))   ; hopper's virtual top-left corner
-                  pv (append pv (list
-                    (pool:pvtie wp (cadr (assoc 'ct1 ggn)) "W" th)
-                    (pool:pvtie wp (cadr (assoc 'ct2 ggn)) "L1" th)
-                    (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn)) "X" th)))))
+            (setq pv (append pv
+              (if (= mode "Offsets")
+                  (list (pool:pvtie
+                          (pool:mid (cadr (assoc 'dd ggn)) (cadr (assoc 'ltp ggn)))
+                          (pool:mid (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn)))
+                          "CUT" th))
+                  (list (pool:pvtie (cadr (assoc 'ct1 ggn)) (cadr (assoc 'htr ggn))
+                                    "W" th)
+                        (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'cb2 ggn))
+                                    "L1" th)
+                        (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn))
+                                    "X" th))))))
         (princ "\nPool bottom -- offsets from the end walls; the RED tie is being asked for.")
         (princ "\n(after the first answer, Back re-asks the previous one)")
         (setq ans (pool:askseq
                     (append
                       (list (list 'h 'NAX "H - left end to hopper" (cdr (assoc "H" pv)))
                             (list 'g 'NAX "G - hopper length" (cdr (assoc "G" pv))))
-                      (if six
-                          (list (list 'w 'REQ "W - hopper cut along top/bottom edges"
-                                      (cdr (assoc "W" pv)))
-                                (list 'l1 'REQ "L1 - hopper cut down the left edge"
-                                      (cdr (assoc "L1" pv)))
-                                (list 'x 'NAX "X - hopper cut face length (check)"
-                                      (cdr (assoc "X" pv))))
-                          nil)
+                      (cond
+                        ((not six) nil)
+                        ((= mode "Offsets")
+                         (list (list 'co 'NAX
+                                     "Cut faces - offset in from the pool corner cuts (NA = H)"
+                                     (cdr (assoc "CUT" pv)))))
+                        (t
+                         (list (list 'w 'REQ "W - top/bottom flat, cut corner to hopper end"
+                                     (cdr (assoc "W" pv)))
+                               (list 'l1 'REQ "L1 - hopper left edge length"
+                                     (cdr (assoc "L1" pv)))
+                               (list 'x 'NAX "X - hopper cut face length (check)"
+                                     (cdr (assoc "X" pv))))))
                       (list (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
                             (list 'e 'NAX "E - slope break to right end" (cdr (assoc "E" pv)))
                             (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
@@ -3536,6 +3589,7 @@
                             (list 'k 'SUG "K - hopper to bottom side"
                                   (cdr (assoc "K" pv)) '(m h)))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g)
+              coraw (pool:sq ans 'co)
               w (pool:sq ans 'w) l1 (pool:sq ans 'l1) x (pool:sq ans 'x)
               fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
               mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k))
@@ -3565,7 +3619,27 @@
         (if vfx (pool:valnote (strcat "BOTTOM WIDTHS FAILED - "
                                       (pool:fixnames vfx '("M" "L" "K"))
                                       " ADJUSTED, VERIFY")))
-        (setq gg (pool:hopgrecc pts h g e m k (if six w nil) (if six l1 nil)))
+        ;; six-sided closure checks, per input method
+        (if (and six (= mode "Offsets"))
+            (setq co (if coraw coraw h)))
+        (if (and six (= mode "Letters"))
+            (progn
+              (if (> w g)
+                  (progn (setq w g sixbad t)
+                         (pool:valnote "HOPPER W LONGER THAN G - ADJUSTED")))
+              (if (> l1 l)
+                  (progn (setq l1 l sixbad t)
+                         (pool:valnote "HOPPER L1 LONGER THAN L - ADJUSTED")))
+              (setq xcal (sqrt (+ (* (- g w) (- g w))
+                                  (* (* 0.5 (- l l1)) (* 0.5 (- l l1))))))
+              (if (and x (> (abs (- x xcal)) 0.5))
+                  (progn (setq sixbad t)
+                         (pool:valnote "HOPPER CUT X DOES NOT CLOSE AGAINST W/L1 - VERIFY")))))
+        (setq gg (pool:hopgrecc pts h g e m k
+                                (cond
+                                  ((not six) nil)
+                                  ((= mode "Offsets") (list "Offsets" co))
+                                  (t (list "Letters" w l1 l)))))
         (pool:hopgrecdraw gg "POOL" six nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
@@ -3583,13 +3657,31 @@
                                     (list 0.0 0.0))))
           (if (cadddr tl) (pool:dimred)))
         (if six
-            (progn
-              (pool:dimalg (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))
-                           (pool:mid (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))))
-              (pool:dimalg (cadr (assoc 'htl gg)) (cadr (assoc 'ct2 gg))
-                           (pool:mid (cadr (assoc 'htl gg)) (cadr (assoc 'ct2 gg))))
-              (pool:dimalg (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))
-                           (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))
+            (if (= mode "Offsets")
+                ;; one offset dim per cut face, square off the pool cut
+                (foreach tl (list (list 'ct1 'ct2 'dd 'ltp)
+                                  (list 'cb1 'cb2 'aa 'lbp))
+                  (setq mm (pool:mid (cadr (assoc (car tl) gg))
+                                     (cadr (assoc (cadr tl) gg)))
+                        ud (pool:unit (pool:v- (cadr (assoc (cadddr tl) gg))
+                                               (cadr (assoc (caddr tl) gg))))
+                        proj (pool:v+ (cadr (assoc (caddr tl) gg))
+                                      (pool:v* ud (pool:dot
+                                        (pool:v- mm (cadr (assoc (caddr tl) gg)))
+                                        ud))))
+                  (pool:dimalg proj mm (pool:mid proj mm))
+                  (if sixbad (pool:dimred)))
+                ;; the sheet letters: W flat, L1 left edge, X on a face
+                (progn
+                  (pool:dimalg (cadr (assoc 'ct1 gg)) (cadr (assoc 'htr gg))
+                               (pool:mid (cadr (assoc 'ct1 gg)) (cadr (assoc 'htr gg))))
+                  (if sixbad (pool:dimred))
+                  (pool:dimalg (cadr (assoc 'ct2 gg)) (cadr (assoc 'cb2 gg))
+                               (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'cb2 gg))))
+                  (if sixbad (pool:dimred))
+                  (pool:dimalg (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))
+                               (pool:mid (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))))
+                  (if sixbad (pool:dimred)))))
         (setvar "CLAYER" odl)
         (setq rows (list
           (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -3600,10 +3692,28 @@
           (pool:vrow "HOP L" lraw (distance (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg))) 1 vfx)
           (pool:vrow "HOP K" kraw (distance (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg))) 2 vfx)))
         (if six
-            (setq rows (append rows (list
-              (list "HOP W" w (distance (cadr (assoc 'htl gg)) (cadr (assoc 'ct1 gg))))
-              (list "HOP L1" l1 (distance (cadr (assoc 'htl gg)) (cadr (assoc 'ct2 gg))))
-              (list "HOP X" x (distance (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg))))))))
+            (setq rows (append rows
+              (if (= mode "Offsets")
+                  ;; actual = the drawn face's true perpendicular
+                  ;; offset from the pool's corner cut
+                  (progn
+                    (setq mm (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg)))
+                          ud (pool:unit (pool:v- (cadr (assoc 'ltp gg))
+                                                 (cadr (assoc 'dd gg))))
+                          proj (pool:v+ (cadr (assoc 'dd gg))
+                                        (pool:v* ud (pool:dot
+                                          (pool:v- mm (cadr (assoc 'dd gg))) ud))))
+                    (list (list "HOP CUT OFF" coraw (distance proj mm))))
+                  (list
+                    (append (list "HOP W" w (distance (cadr (assoc 'ct1 gg))
+                                                      (cadr (assoc 'htr gg))))
+                            (if sixbad (list t) nil))
+                    (append (list "HOP L1" l1 (distance (cadr (assoc 'ct2 gg))
+                                                        (cadr (assoc 'cb2 gg))))
+                            (if sixbad (list t) nil))
+                    (append (list "HOP X" x (distance (cadr (assoc 'ct2 gg))
+                                                      (cadr (assoc 'ct1 gg))))
+                            (if sixbad (list t) nil)))))))
         rows)))
 
 ;; Body quad spanning two end lines and the two side lines: the frame

@@ -531,4 +531,72 @@ assert not any(abs(x - 319.50) < 0.6 for x in _lens), _lens
 assert not any(abs(x - 85.56) < 0.05 for x in _lens), _lens
 print("   T/V/S2 walls held true; S and S1 absorbed the error")
 
+print("== R17. SIX-sided grecian hopper, sheet-letter input (W X L L1 G M K) ==")
+# the demonstrated-dims figure from 6sidedgrecianexample.dxf: W is the
+# FLAT (cut corner to the pad's right edge), L1 the left edge length
+# centred on the pad, X a check on the connecting faces
+
+
+def hexrun(mode_answers, label):
+    vm = run(["Insquare", "Grecian"] + BASE +
+             ["Overall", 480.0, 240.0, "NA", 60.0, 72.0, "NA", "NA",
+              "Yes", "Normal", "SIX"] + mode_answers, label)
+    s = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+    ox = min(p[0] for seg in s for p in seg)
+    return vm, [((a[0] - ox, a[1]), (b[0] - ox, b[1])) for a, b in s]
+
+
+def findseg(segs, pa, pb, tol=0.15):
+    for a, b in segs:
+        if (_m.dist(a, pa) < tol and _m.dist(b, pb) < tol) or \
+           (_m.dist(a, pb) < tol and _m.dist(b, pa) < tol):
+            return (a, b)
+    return None
+
+
+vm, segs = hexrun(["Letters", 48.0, 72.0,      # H G
+                   38.0, 72.0, 49.5,           # W L1 X(check)
+                   240.0, "NA",                 # F, E takes the rest
+                   48.0, "NA", None],           # M, L derived, K sugg
+                  "R17")
+for pa, pb, what in [((82, 192), (120, 192), "W top flat"),
+                     ((82, 48), (120, 48), "W bottom flat"),
+                     ((48, 156), (48, 84), "L1 left edge"),
+                     ((82, 192), (48, 156), "cut face top"),
+                     ((48, 84), (82, 48), "cut face bottom"),
+                     ((120, 48), (120, 192), "pad right edge"),
+                     ((59.99, 240), (82, 192), "tie D"),
+                     ((0, 167.99), (48, 156), "tie LT"),
+                     ((0, 72.01), (48, 84), "tie LB"),
+                     ((59.99, 0), (82, 48), "tie A"),
+                     ((360, 0), (360, 240), "break")]:
+    assert findseg(segs, pa, pb), what
+# X = sqrt(34^2 + 36^2) = 49.52 vs the taped 49.5: inside the check
+assert not any('X DOES NOT CLOSE' in str(n)
+               for n in (vm.get(__import__('lispvm').Sym('pool:*valnotes*')) or []))
+print("   sheet letters reproduce the demonstrated-dims figure")
+
+print("== R17b. SIX-sided grecian hopper, offsets input (faces parallel) ==")
+vm, segs = hexrun(["Offsets", 48.0, 72.0,      # H G
+                   "NA",                        # cut offset NA -> H
+                   240.0, "NA", 48.0, "NA", None],
+                  "R17b")
+for pa, pb, what in [((82.47, 192), (48, 150.63), "top cut"),
+                     ((48, 89.37), (82.47, 48), "bottom cut"),
+                     ((48, 150.63), (48, 89.37), "left edge"),
+                     ((82.47, 192), (120, 192), "top flat"),
+                     ((120, 48), (120, 192), "pad right edge")]:
+    assert findseg(segs, pa, pb), what
+# the cut face is EXACTLY parallel to the pool's corner cut, 48 off it
+_pc = findseg(segs, (59.99, 240), (0, 167.99))
+_hx = findseg(segs, (82.47, 192), (48, 150.63))
+_d1 = (_hx[1][0] - _hx[0][0], _hx[1][1] - _hx[0][1])
+_d2 = (_pc[1][0] - _pc[0][0], _pc[1][1] - _pc[0][1])
+assert abs(_d1[0]*_d2[1] - _d1[1]*_d2[0]) / (_m.hypot(*_d1)*_m.hypot(*_d2)) < 1e-9
+_mm = ((_hx[0][0]+_hx[1][0])/2, (_hx[0][1]+_hx[1][1])/2)
+_u = (_d2[0]/_m.hypot(*_d2), _d2[1]/_m.hypot(*_d2))
+_w = (_mm[0]-_pc[0][0], _mm[1]-_pc[0][1])
+assert abs(abs(_w[0]*_u[1] - _w[1]*_u[0]) - 48.0) < 1e-6
+print("   offsets reproduce the offsets figure; faces parallel at 48")
+
 print("\nALL RUNTIME SCENARIOS PASSED")

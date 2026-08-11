@@ -260,9 +260,32 @@ letters only (A, B, S, S1, S2, T, V come from the perimeter). Both
 anchor `H`/`E` off the end walls and `M`/`K` off the sides. The square
 hopper is the rectangle letter set; each hopper left corner ties to
 **both ends of its pool corner cut** (to D and LT, and to A and LB).
-The 6-sided hopper adds cut left corners — `W` (setback along the
-top/bottom edges), `L1` (setback down the left edge), `X` (cut face,
-check) — and the pool cut ends tie to the matching hopper cut ends.
+
+The **6-sided** hopper cuts the deep pad's left corners, and asks
+**`SIX-sided corners measured by [Offsets/Letters]`** — the two ways
+the corner detail gets taped in the field:
+
+* **Offsets** — offsets shot from the walls only: the pad's left
+  edge sits `H` off the left end, its top/bottom flats `M`/`K` off
+  the sides, and the **cut faces are the pool's corner cuts offset
+  inward** by one more measurement (`NA` = same as `H`). Every hopper
+  line is **parallel to its wall** and the corners land wherever
+  adjacent offset lines intersect. The faces are dimensioned square
+  off the pool cuts at their offset.
+* **Letters** — the field-sheet letters `W`/`X`/`L`/`L1` on top of
+  the usual `G`/`M`/`K`: **`W` is the flat**, cut corner to the pad's
+  right edge, along the top/bottom lines; **`L1` is the left edge
+  length**, centred on the pad (the cut drop per corner is
+  `(L − L1)/2`); **`X` is the cut face, a check** against
+  `√((G−W)² + ((L−L1)/2)²)` — off by more than ½" flags the rows red
+  with a note. The flats and left edge still ride their wall-offset
+  lines (parallel), but the **cut faces just connect the corners and
+  need not be parallel** to the pool cuts. `W` longer than `G`, or
+  `L1` longer than `L`, is floored and flagged.
+
+Either way the pool cut ends tie to the matching hopper corners, and
+the report shows each letter (or the cut offset) against what was
+drawn.
 
 ### Special bottoms: wedge, slope, modified flat, sloping shallow end
 
