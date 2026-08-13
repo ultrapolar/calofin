@@ -5,54 +5,53 @@
 ;;;  above grade (the office default of "100 ft"), DDGPS works it out from the
 ;;;  photo itself:
 ;;;
-;;;     1. File picker  - pick the ORIGINAL drone image (starts on H:, then
-;;;                       remembers the last folder you used).
-;;;     2. Read the GPS - latitude / longitude / AbsoluteAltitude /
-;;;                       RelativeAltitude straight out of the file. The DJI
-;;;                       XMP text packet is tried first; if it is missing the
-;;;                       binary EXIF GPS block is parsed instead.
-;;;     3. Elevation    - ask a free online elevation service for the ground
-;;;                       elevation at that latitude / longitude (HTTP request
-;;;                       via the Windows MSXML2.XMLHTTP ActiveX object).
-;;;     4. The delta    - drone height above grade:
+;;;     1. File picker   - pick the ORIGINAL drone photo (starts on H:, then
+;;;                        remembers the last folder you used).
+;;;     2. Read the GPS  - latitude / longitude / AbsoluteAltitude straight
+;;;                        out of the file. The DJI XMP text packet is tried
+;;;                        first; if it is missing the binary EXIF GPS block
+;;;                        is parsed instead.
+;;;     3. Click a point - pick where in the drawing to place the result.
+;;;     4. Elevation     - ask a free online elevation service for the ground
+;;;                        elevation at that latitude / longitude (HTTP
+;;;                        request via the Windows MSXML2.XMLHTTP object).
+;;;     5. The delta     - drone height above grade:
 ;;;
 ;;;              H  =  AbsoluteAltitude(ft)  -  ground elevation(ft)
 ;;;
-;;;  H is saved to the SAME per-drawing store DroneDistortion.lsp uses, so
-;;;  DDFIX immediately offers it as its default. This file also works on its
-;;;  own - DroneDistortion.lsp does not need to be loaded.
+;;;        rounded to the nearest foot, written as text at the picked point,
+;;;        AND saved to the SAME per-drawing store DroneDistortion.lsp uses,
+;;;        so DDFIX immediately offers it as its default. This file also
+;;;        works on its own - DroneDistortion.lsp does not need to be loaded.
 ;;;
 ;;;  FILE TYPES
 ;;;  ----------
-;;;  PNG, JPG/JPEG, TIFF and DJI .SRT flight logs are all understood. The
-;;;  reader does not trust the file extension - it looks for the metadata
-;;;  containers themselves:
+;;;  PNG, JPG/JPEG and TIFF are all understood, PROVIDED the file still
+;;;  carries its original camera metadata - this only works on an original
+;;;  drone photo, not a video frame grab, screenshot, or an export that
+;;;  stripped it. The reader does not trust the file extension - it looks for
+;;;  the metadata containers themselves:
 ;;;    * XMP text packet   - JPEG APP1, PNG iTXt chunk, or anywhere else the
 ;;;                          "<x:xmpmeta" packet appears; both DJI's normal
 ;;;                          attribute form (Tag="...") and the element form
 ;;;                          (<ns:Tag>...</ns:Tag>) some converters re-write.
 ;;;    * binary EXIF GPS   - JPEG "Exif\0\0" APP1 block, PNG eXIf chunk, or a
 ;;;                          bare TIFF header (a .TIF file), either byte order.
-;;;    * hex text profiles - ImageMagick-converted files ("Raw profile type
-;;;                          exif/xmp/APP1" chunks) are hex-decoded and parsed.
-;;;    * DJI flight log    - .SRT subtitle files written next to videos:
-;;;                          [latitude: ...] [longitude: ...] [rel_alt: ...
-;;;                          abs_alt: ...] from the first video frame.
 ;;;  The first 256 KB of the file is scanned; if nothing is found there the
-;;;  LAST 256 KB is scanned too (PNG writers may park metadata after the image
-;;;  data).
+;;;  LAST 256 KB is scanned too (PNG writers may park metadata after the
+;;;  image data). If neither container has a usable GPS position and
+;;;  altitude, DDGPS fails loudly and stops - use the file exactly as it
+;;;  came off the drone.
 ;;;
-;;;  VIDEO FRAME GRABS / SCREENSHOTS - files with NO metadata at all
-;;;  ---------------------------------------------------------------
-;;;  A 1080p/4K frame saved out of a video, or a screenshot, carries nothing
-;;;  to read. DDGPS says so - loudly - and then CONTINUES instead of giving
-;;;  up: paste the pool's coordinates (right-click the pool in Google Maps
-;;;  and click the coordinates line to copy them), the ground elevation is
-;;;  still fetched automatically, and the flight height is typed from the
-;;;  DJI app / flight log / the H value burned into the video's on-screen
-;;;  display (accepts feet, or metres with a trailing m: "30.5m").
-;;;  If captions were on, the video's .SRT file has it all - pick that
-;;;  instead of the frame grab and everything is automatic.
+;;;  ANNOTATION
+;;;  ----------
+;;;  After you click a point, DDGPS drops 5 lines of plain single-line TEXT
+;;;  at that point (GPS position, drone altitude, ground elevation + source,
+;;;  the subtraction, and the final rounded height) on the current layer, in
+;;;  the current text style. Text height defaults to the drawing's current
+;;;  TEXTSIZE the first time; after that it is remembered per drawing (same
+;;;  store as H below) and offered as the default - press Enter to keep it,
+;;;  or type a new height to change it.
 ;;;
 ;;;  ELEVATION SERVICES (tried in order until one answers; no API keys)
 ;;;  ------------------
@@ -61,6 +60,8 @@
 ;;;                        that matter at office volumes.
 ;;;    2. OpenTopoData   - NED 10 m dataset, metres. US only.
 ;;;    3. Open-Elevation - SRTM ~30 m grid, metres. Worldwide fallback.
+;;;  If none can be reached, DDGPS lets you type a known site elevation
+;;;  instead (e.g. from the survey) rather than losing the whole run.
 ;;;
 ;;;  ACCURACY - READ THIS ONCE
 ;;;  -------------------------
@@ -68,18 +69,15 @@
 ;;;    feet). The weak link is the drone's ABSOLUTE altitude: consumer GPS
 ;;;    vertical error is routinely 10-30 ft, and DJI's sea-level reference
 ;;;    does not exactly match the USGS datum (a few more feet).
-;;;  * That is still far better than a blind 100 ft guess, and the error is
-;;;    VISIBLE: DDGPS cross-checks against the barometric RelativeAltitude
-;;;    (accurate to inches, but referenced to the TAKE-OFF point). If the tech
-;;;    launched at deck level and the two methods agree, trust either. If they
-;;;    disagree, the difference IS the GPS error - prefer Relative.
+;;;  * That is still far better than a blind 100 ft guess.
 ;;;  * The GPS method shines exactly where the guess fails hardest: hillside
 ;;;    lots where the drone launched well above or below the pool deck.
 ;;;  * Remember 1/H: at H = 100 ft, 10 ft of H error changes a correction
 ;;;    that is itself only ~1% per foot of feature height - for a 2 ft raised
 ;;;    spa that is a 0.2% size difference. H does not need to be perfect.
 ;;;  * For a hard number, DDCAL (in DroneDistortion.lsp) back-solves H from
-;;;    one feature of known true size.
+;;;    one feature of known true size. DDALT (also in DroneDistortion.lsp)
+;;;    remains available as a no-internet, barometric-only alternative.
 ;;;
 ;;;  FAILURE REPORTING
 ;;;  -----------------
@@ -89,15 +87,13 @@
 ;;;  service failed and why (no answer / HTTP error / outside coverage) -
 ;;;  and the same detail is printed on the command line for the record.
 ;;;  The only quiet exits are the ones you choose yourself (cancelling the
-;;;  file dialog or pressing Enter at an abort prompt).
+;;;  file dialog, declining a point, or pressing Enter at an abort prompt).
 ;;;
 ;;;  REQUIREMENTS
 ;;;  ------------
 ;;;  Windows AutoCAD (uses ADODB.Stream + MSXML2.XMLHTTP ActiveX), internet
-;;;  access for the elevation lookup, and an image that still carries the
-;;;  camera metadata (see FILE TYPES above).
-;;;  If the elevation services cannot be reached the command lets you type a
-;;;  known site elevation instead (e.g. from the survey).
+;;;  access for the elevation lookup, and an ORIGINAL drone photo that still
+;;;  carries the camera metadata (see FILE TYPES above).
 ;;;
 ;;;  NOTE: the HTTP request is synchronous - AutoCAD sits for a second or two
 ;;;  while the service answers. If the network is down it can take ~30 s to
@@ -105,13 +101,14 @@
 ;;;
 ;;;  COMMANDS
 ;;;  --------
-;;;     DDGPS   - pick the drone image, compute H, save it for DDFIX
+;;;     DDGPS   - pick the drone photo, click a point, place the height
+;;;               report there, and save H for DDFIX
 ;;;     DDELEV  - type a latitude / longitude, print the ground elevation
 ;;;               (handy as an internet-connectivity test)
 ;;;
 ;;;  UNITS
 ;;;  -----
-;;;  Altitudes in the file are metres (DJI writes metres); everything is
+;;;  Altitude in the file is metres (DJI writes metres); everything is
 ;;;  reported and saved in FEET to match DroneDistortion.lsp.
 ;;; ============================================================================
 
@@ -203,7 +200,7 @@
 
 ;; ===========================================================================
 ;;  XMP route (all modern DJI aircraft) - the image carries a text packet like
-;;    drone-dji:AbsoluteAltitude="+247.66" drone-dji:RelativeAltitude="+98.40"
+;;    drone-dji:AbsoluteAltitude="+247.66"
 ;;    drone-dji:GpsLatitude="+32.7157380"  drone-dji:GpsLongtitude="-117.16..."
 ;;  ("GpsLongtitude" is DJI's own long-standing typo; newer firmware also
 ;;   writes the correctly-spelt tag - both are checked.)
@@ -358,52 +355,16 @@
             (setq altm (- altm)))))))
   (list lat lon altm (if tif T)))     ; 4th: was an EXIF block found at all?
 
-;; hex digit byte -> value, nil if not hex
-(defun ddg-hexval (b)
-  (cond ((and (>= b 48) (<= b 57))  (- b 48))     ; 0-9
-        ((and (>= b 97) (<= b 102)) (- b 87))     ; a-f
-        ((and (>= b 65) (<= b 70))  (- b 55))))   ; A-F
-
-;; ImageMagick-style hex profile. Some converters re-write the metadata into
-;; a PNG tEXt chunk called "Raw profile type exif" / "xmp" / "APP1" holding
-;;   \0 \n <name> \n <length> \n <hex, 72 chars per line>
-;; Skips the header lines, hex-decodes the body (up to 64 KB) and returns the
-;; decoded bytes as a list, or nil if the profile is not in the file.
-(defun ddg-hex-after (lst anchor / rest nl b v hi acc cnt done)
-  (setq rest (ddg-scan-to lst (vl-string->list anchor)))
-  (if rest
-    (progn
-      (setq nl 0)                                  ; skip to past the 3rd \n
-      (while (and rest (< nl 3))
-        (setq b (car rest) rest (cdr rest))
-        (if (= b 10) (setq nl (1+ nl))))
-      (setq acc '() cnt 0 hi nil done nil)
-      (while (and rest (not done) (< cnt 65536))
-        (setq b (car rest) rest (cdr rest))
-        (if (< b 0) (setq b (+ b 256)))
-        (cond
-          ((or (= b 10) (= b 13) (= b 32)))        ; skip line breaks / blanks
-          ((setq v (ddg-hexval b))
-           (if hi
-             (setq acc (cons (+ (* 16 hi) v) acc) hi nil cnt (1+ cnt))
-             (setq hi v)))
-          (t (setq done t))))                      ; first non-hex byte = end
-      (if acc (reverse acc)))))
-
-;; everything the file tells us: (absalt-m relalt-m lat lon xmp-found exif-found)
-;; Tried in order, each later step filling whatever is still missing:
-;;   1. XMP text packet          (JPEG APP1 / PNG iTXt)
-;;   2. binary EXIF GPS block    (JPEG APP1 / PNG eXIf / bare TIFF)
-;;   3. ImageMagick hex profiles ("Raw profile type ..." tEXt chunks)
-;;   4. DJI flight-log text      (.SRT subtitle files: [latitude: ...] tags)
-;; The last two flags say whether an XMP packet / EXIF block was present at
-;; all - failure reporting uses them to tell "stripped file" apart from
-;; "metadata without GPS".
-(defun ddg-read-meta (lst / xtxt exif blob rest txt absm relm lat lon xmpf tiff)
+;; everything the file tells us: (absalt-m lat lon xmp-found exif-found)
+;; XMP text packet first (JPEG APP1 / PNG iTXt), the binary EXIF GPS block
+;; filling any gaps (JPEG APP1 / PNG eXIf / bare TIFF). The last two flags
+;; say whether an XMP packet / EXIF block was present at all - failure
+;; reporting uses them to tell "stripped file" apart from "metadata without
+;; GPS".
+(defun ddg-read-meta (lst / xtxt exif absm lat lon xmpf tiff)
   (setq xtxt (ddg-xmp-text lst))
   (setq xmpf (> (strlen xtxt) 0))
   (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
-        relm (ddg-xmp-num xtxt "RelativeAltitude")
         lat  (ddg-xmp-num xtxt "GpsLatitude")
         lon  (ddg-xmp-num xtxt "GpsLongitude"))
   (if (null lon) (setq lon (ddg-xmp-num xtxt "GpsLongtitude")))
@@ -414,86 +375,7 @@
       (if (null lon)  (setq lon  (cadr exif)))
       (if (null absm) (setq absm (caddr exif)))
       (setq tiff (cadddr exif))))
-  (if (or (null lat) (null lon) (null absm))
-    (progn
-      (setq blob (ddg-hex-after lst "Raw profile type exif"))
-      (if (null blob) (setq blob (ddg-hex-after lst "Raw profile type APP1")))
-      (if blob
-        (progn
-          (setq exif (ddg-exif-gps blob))
-          (if (null lat)  (setq lat  (car exif)))
-          (if (null lon)  (setq lon  (cadr exif)))
-          (if (null absm) (setq absm (caddr exif)))
-          (if (cadddr exif) (setq tiff T))))
-      (setq blob (ddg-hex-after lst "Raw profile type xmp"))
-      (if blob
-        (progn
-          (setq xtxt (ddg-grab-text blob 6144))
-          (setq xmpf T)
-          (if (null absm) (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")))
-          (if (null relm) (setq relm (ddg-xmp-num xtxt "RelativeAltitude")))
-          (if (null lat)  (setq lat  (ddg-xmp-num xtxt "GpsLatitude")))
-          (if (null lon)  (setq lon  (ddg-xmp-num xtxt "GpsLongitude")))
-          (if (null lon)  (setq lon  (ddg-xmp-num xtxt "GpsLongtitude")))))))
-  (if (or (null lat) (null lon))
-    (progn
-      (setq rest (ddg-scan-to lst (vl-string->list "latitude")))
-      (if rest
-        (progn
-          (setq txt (strcat "latitude" (ddg-grab-text rest 2048)))
-          (if (null lat)  (setq lat  (ddg-num-after txt "latitude")))
-          (if (null lon)  (setq lon  (ddg-num-after txt "longitude")))
-          (if (null absm) (setq absm (ddg-num-after txt "abs_alt")))
-          (if (null relm) (setq relm (ddg-num-after txt "rel_alt")))))))
-  (list absm relm lat lon xmpf tiff))
-
-;; is the position unusable?  (missing / 0,0 "no fix" / out of range)
-(defun ddg-badpos (lat lon)
-  (or (null lat) (null lon)
-      (and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))
-      (> (abs lat) 90.0) (> (abs lon) 180.0)))
-
-;; "32.715738, -117.161084" (comma or space separated) -> (lat lon), or nil
-(defun ddg-parse-latlon (s / pos lat lon)
-  (setq s (vl-string-trim " \t" s))
-  (setq pos (vl-string-search "," s))
-  (if (null pos) (setq pos (vl-string-search " " s)))
-  (if pos
-    (setq lat (ddg-numstr (substr s 1 pos))
-          lon (ddg-numstr (vl-string-trim " ," (substr s (+ pos 2))))))
-  (if (and lat lon (<= (abs lat) 90.0) (<= (abs lon) 180.0)
-           (not (and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))))
-    (list lat lon)))
-
-;; height string -> FEET: plain number = feet, trailing m/M = metres (30.5m)
-(defun ddg-parse-ft (s / v)
-  (setq s (vl-string-trim " \t" s))
-  (cond
-    ((= s "") nil)
-    ((= (strcase (substr s (strlen s) 1)) "M")
-     (setq v (ddg-numstr (vl-string-trim " " (substr s 1 (1- (strlen s))))))
-     (if v (* v ddg-m->ft)))
-    (t (ddg-numstr s))))
-
-;; ask for coordinates pasted as one line; alerts (loud) on unreadable input
-(defun ddg-ask-coords ( / s pt)
-  (setq s (getstring T "\nPool coordinates as  lat, long  (paste from Google Maps; Enter to abort): "))
-  (if (= (vl-string-trim " \t" s) "")
-    nil
-    (progn
-      (setq pt (ddg-parse-latlon s))
-      (if (null pt)
-        (ddg-fail "BAD COORDINATES"
-          (list (strcat "Could not read a latitude / longitude out of:  " s)
-                ""
-                "Paste them like:  32.715738, -117.161084"
-                "(Google Maps: right-click the pool, then click the"
-                "coordinates on the top line to copy them.)")))
-      pt)))
-
-;; ask for a height in feet (trailing m = metres); nil if left blank
-(defun ddg-ask-ft (prompt)
-  (ddg-parse-ft (getstring T prompt)))
+  (list absm lat lon xmpf tiff))
 
 ;; ===========================================================================
 ;;  HTTP + JSON (MSXML2.XMLHTTP ActiveX; synchronous GET)
@@ -545,8 +427,7 @@
     (list nil (cadr best))))
 
 ;; first number that follows KEY in TXT - skips :, =, [, quotes and blanks in
-;; between; shared by the JSON answers and the DJI flight-log text; nil on
-;; null / absent
+;; between; nil on null / absent
 (defun ddg-num-after (txt key / pos rest len i numstr)
   (setq pos (vl-string-search key txt))
   (if pos
@@ -616,11 +497,52 @@
         (setq notes (cons (strcat "Open-Elevation: " (cadr r)) notes)))))
   (if res res (list nil (reverse notes))))
 
+;; ===========================================================================
+;;  Drawing annotation helpers
+;; ===========================================================================
+
+;; round-half-away-from-zero (AutoLISP has no built-in ROUND; FIX truncates
+;; toward zero, so nudge by +/- 0.5 first)
+(defun ddg-round (x) (fix (+ x (if (>= x 0.0) 0.5 -0.5))))
+
+;; annotation text height: defaults to the drawing's current TEXTSIZE, then
+;; remembers a per-drawing override under the same store as H - same
+;; "current value in <brackets>, Enter keeps it" idiom as DDSET/DDFIX/DDALT
+(defun ddg-txt-height ( / cur ht)
+  (setq cur (ddg-get "TXTHT"))
+  (if (null cur) (setq cur (getvar "TEXTSIZE")))
+  (if (or (null cur) (<= cur 0.0)) (setq cur 1.0))   ; TEXTSIZE can legitimately be 0
+  (setq ht (getreal (strcat "\nAnnotation text height <" (ddg-n1 cur) ">: ")))
+  (if (or (null ht) (<= ht 0.0)) (setq ht cur))
+  (ddg-put "TXTHT" ht)
+  ht)
+
+;; place LINES (strings, top to bottom) as stacked single-line TEXT entities
+;; starting at BASEPT-UCS (a point in the CURRENT UCS, e.g. straight out of
+;; getpoint). Each point is converted UCS -> WCS right before entmake (entity
+;; data needs WCS; mirrors the (trans base 0 1) idiom DroneDistortion.lsp
+;; uses the other way around before feeding a point to a command). Returns T
+;; if every line was created.
+(defun ddg-place-text (basept-ucs lines height layer style / y pt ok)
+  (setq y 0.0 ok T)
+  (foreach ln lines
+    (setq pt (list (car basept-ucs) (- (cadr basept-ucs) y) (caddr basept-ucs)))
+    (if (null (entmake (list '(0 . "TEXT")
+                              (cons 8 layer)
+                              (cons 10 (trans pt 1 0))     ; UCS -> WCS
+                              (cons 40 height)
+                              (cons 1 ln)
+                              (cons 7 style))))
+      (setq ok nil))
+    (setq y (+ y (* height 1.667))))   ; AutoCAD's standard single-line spacing
+  ok)
+
 ;; ---------------------------------------------------------------------------
-;;  DDGPS : pick the drone image -> read GPS -> look up ground -> save H
+;;  DDGPS : pick the drone photo -> read GPS -> click a point -> look up
+;;          ground elevation -> place the height report -> save H
 ;; ---------------------------------------------------------------------------
-(defun c:DDGPS ( / *error* def c file lst meta fsize absm relm lat lon xmpf tiff
-                   pt man askedh g gft gsrc absft relft hgps hrel diff ans hsel)
+(defun c:DDGPS ( / *error* def c file lst meta fsize absm lat lon xmpf tiff
+                   pt g gft gsrc absft hraw hsel ht lines placed ans)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
       (princ (strcat "\nError: " m)))
@@ -634,8 +556,8 @@
     (progn
       (setq c (substr def (strlen def) 1))
       (if (and (/= c "/") (/= c "\\")) (setq def (strcat def "\\")))))
-  (setq file (getfiled "Select the drone image (PNG / JPG / TIF) or its .SRT flight log" def
-                       "png;jpg;jpeg;tif;tiff;srt" 20)) ; 16 path-only + 4 any ext
+  (setq file (getfiled "Select the ORIGINAL drone photo (PNG / JPG / TIF)" def
+                       "png;jpg;jpeg;tif;tiff" 16))
   (cond
     ((null file) (princ "\nNo file selected."))
     (t
@@ -653,9 +575,8 @@
        (t
         ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
         (setq meta (ddg-read-meta lst)
-              absm (nth 0 meta) relm (nth 1 meta)
-              lat  (nth 2 meta) lon  (nth 3 meta)
-              xmpf (nth 4 meta) tiff (nth 5 meta))
+              absm (nth 0 meta) lat  (nth 1 meta) lon  (nth 2 meta)
+              xmpf (nth 3 meta) tiff (nth 4 meta))
         ;; some PNG writers park the metadata after the image data - if the
         ;; front window came up short, scan the tail of the file too
         (if (and (or (null lat) (null lon) (null absm))
@@ -665,12 +586,14 @@
           (progn
             (setq meta (ddg-read-meta lst))
             (if (null absm) (setq absm (nth 0 meta)))
-            (if (null relm) (setq relm (nth 1 meta)))
-            (if (null lat)  (setq lat  (nth 2 meta)))
-            (if (null lon)  (setq lon  (nth 3 meta)))
-            (if (nth 4 meta) (setq xmpf T))
-            (if (nth 5 meta) (setq tiff T))))
-        ;; 2b) say EXACTLY what is wrong if the file cannot be used
+            (if (null lat)  (setq lat  (nth 1 meta)))
+            (if (null lon)  (setq lon  (nth 2 meta)))
+            (if (nth 3 meta) (setq xmpf T))
+            (if (nth 4 meta) (setq tiff T))))
+        ;; 2b) say EXACTLY what is wrong if the file cannot be used - this is
+        ;; a hard stop, no rescue: use the file exactly as it came off the
+        ;; drone. Everything past this point lives in the final (t ...)
+        ;; branch below, so a failure here truly stops the command.
         (cond
           ((and (or (null lat) (null lon)) (not xmpf) (not tiff))
            (ddg-fail "NO CAMERA METADATA IN THIS FILE"
@@ -681,12 +604,8 @@
                    ""
                    "This copy was saved WITHOUT metadata - screenshots,"
                    "video frame grabs and most export / share / convert"
-                   "steps strip it."
-                   ""
-                   "You can still continue: paste the pool's coordinates at"
-                   "the next prompt (Google Maps: right-click the pool and"
-                   "click the coordinates to copy them), or re-run DDGPS on"
-                   "the video's .SRT flight log if there is one.")))
+                   "steps strip it. Use the file exactly as it came off"
+                   "the drone.")))
           ((or (null lat) (null lon))
            (ddg-fail "NO GPS DATA FOUND"
              (list (strcat "File: " (ddg-fname file))
@@ -700,11 +619,7 @@
                    ""
                    "Either the drone had no GPS fix recorded, or the"
                    "conversion that made this file kept only part of the"
-                   "metadata."
-                   ""
-                   "You can still continue: paste the pool's coordinates at"
-                   "the next prompt (Google Maps: right-click the pool and"
-                   "click the coordinates to copy them).")))
+                   "metadata. Use the file exactly as it came off the drone.")))
           ((and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))
            (ddg-fail "NO GPS FIX"
              (list (strcat "File: " (ddg-fname file))
@@ -712,159 +627,111 @@
                    "The GPS position stored in the file is 0, 0 - the drone"
                    "had no satellite fix when this shot was taken."
                    ""
-                   "Pick a different shot from the same flight, or continue"
-                   "by pasting the pool's coordinates at the next prompt"
-                   "(Google Maps: right-click the pool to copy them).")))
+                   "Pick a different shot from the same flight.")))
           ((or (> (abs lat) 90.0) (> (abs lon) 180.0))
            (ddg-fail "BAD GPS DATA"
              (list (strcat "File: " (ddg-fname file))
                    ""
                    (strcat "The stored GPS position (" (ddg-n7 lat) ", "
                            (ddg-n7 lon) ")")
-                   "is not a valid latitude / longitude - corrupt metadata."
-                   ""
-                   "You can still continue: paste the pool's coordinates at"
-                   "the next prompt (Google Maps: right-click the pool and"
-                   "click the coordinates to copy them).")))
-          ((and (null absm) (null relm))
+                   "is not a valid latitude / longitude - corrupt metadata.")))
+          ((null absm)
            (ddg-fail "NO ALTITUDE DATA"
              (list (strcat "File: " (ddg-fname file))
                    ""
                    (strcat "GPS position found (" (ddg-n7 lat) ", "
-                           (ddg-n7 lon) "), but the file holds NO altitude:")
-                   "XMP AbsoluteAltitude, XMP RelativeAltitude and EXIF"
-                   "GPSAltitude are all missing."
+                           (ddg-n7 lon) "), but the file holds no")
+                   "AbsoluteAltitude / EXIF GPSAltitude."
                    ""
-                   "DDGPS will continue: it looks up the ground elevation,"
-                   "then asks you for the flight height (the DJI app / log"
-                   "shows it; on video frames it is burned into the display)."))))
-        ;; 2c) manual rescue - no usable position in the file, so ask for one
-        (if (ddg-badpos lat lon)
-          (progn
-            (setq pt (ddg-ask-coords))
-            (if pt (setq lat (car pt) lon (cadr pt) man T))))
-        ;; 2d) proceed only with a usable position
-        (cond
-          ((ddg-badpos lat lon)
-           (princ "\nDDGPS aborted - no usable position."))
+                   "Use the file exactly as it came off the drone, or set H"
+                   "manually with DDSET.")))
           (t
+           ;; 2c) all good - show what came from the file
            (princ "\n--- position & altitude ------------------------------------")
-           (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)
-                          (if man "   (typed by hand)" "   (from the file)")))
-           (if absm
-             (princ (strcat "\n  AbsoluteAltitude : " (ddg-n1 (* absm ddg-m->ft))
-                            " ft above sea level   (" (ddg-n1 absm) " m)")))
-           (if relm
-             (princ (strcat "\n  RelativeAltitude : " (ddg-n1 (* relm ddg-m->ft))
-                            " ft above the take-off point   (" (ddg-n1 relm) " m)")))
-           (if (null absm)
-             (princ "\n  No absolute altitude in the file - only the barometric method is available."))
-           ;; 3) ground elevation at the photo position
-           (princ "\nLooking up ground elevation (internet, a few seconds) ...")
-           (setq g (ddg-ground-elev lat lon))
-           (if (car g)
-             (setq gft (car g) gsrc (cadr g))
-             (progn
-               (ddg-fail "ELEVATION LOOKUP FAILED"
-                 (append
-                   (list (strcat "No ground elevation could be fetched for "
-                                 (ddg-n7 lat) ", " (ddg-n7 lon) ":")
-                         "")
-                   (cadr g)
-                   (list ""
-                         "Check the internet connection (DDELEV is a quick"
-                         "test), or type the site elevation by hand at the"
-                         "next prompt.")))
-               (setq gft  (getreal "\nGround elevation at the site in FEET, if you know it (Enter to abort): ")
-                     gsrc "entered by hand")))
+           (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)))
+           (princ (strcat "\n  AbsoluteAltitude : " (ddg-n1 (* absm ddg-m->ft))
+                          " ft above sea level   (" (ddg-n1 absm) " m)"))
+           ;; 3) click a point in the drawing for the report
+           (setq pt (getpoint "\nPick a point in the drawing for the height report: "))
            (cond
-             ((null gft) (princ "\nAborted - H unchanged."))
+             ((null pt) (princ "\nAborted - no point picked."))
              (t
-              (princ (strcat "\n  Ground elevation : " (ddg-n1 gft) " ft   [" gsrc "]"))
-              (if absm (setq absft (* absm ddg-m->ft) hgps (- absft gft)))
-              (if relm (setq relft (* relm ddg-m->ft)))
-              ;; nothing usable came from the file? type the flight height
-              (if (and (null absft) (null relft))
+              ;; 4) ground elevation at the photo position
+              (princ "\nLooking up ground elevation (internet, a few seconds) ...")
+              (setq g (ddg-ground-elev lat lon))
+              (if (car g)
+                (setq gft (car g) gsrc (cadr g))
                 (progn
-                  (princ "\nNo altitude came from the file - type the flight height instead.")
-                  (princ "\n  The DJI app / flight log shows it; on video frame grabs it is")
-                  (princ "\n  burned into the on-screen display (e.g. \"H 30.5m\").")
-                  (setq relft  (ddg-ask-ft "\nDrone height above TAKE-OFF, in FEET (add m for metres, e.g. 30.5m; Enter to abort): ")
-                        askedh T)))
-              (if relft (setq hrel relft))
-              ;; 4) the delta, plus the barometric cross-check
-              (princ "\n--- drone height above grade -------------------------------")
-              (if hgps
-                (princ (strcat "\n  GPS method       : " (ddg-n1 absft) " - " (ddg-n1 gft)
-                               "  ->  H = " (ddg-n1 hgps) " ft")))
-              (if hrel
-                (princ (strcat "\n  Barometer method : H = " (ddg-n1 hrel)
-                               " ft   (true only if the take-off point was at deck grade)")))
-              (if (and hgps hrel)
-                (progn
-                  (setq diff (- (- absft relft) gft))  ; take-off elev vs grade
-                  (princ (strcat "\n  Cross-check      : the take-off point computes to "
-                                 (ddg-n1 (abs diff)) " ft "
-                                 (if (>= diff 0.0) "ABOVE" "BELOW")
-                                 " the grade at the photo spot."))
-                  (princ (if (< (abs diff) 6.0)
-                           "\n                     Small -> the methods agree; either value is good."
-                           "\n                     If the tech actually launched at deck level, that IS the GPS error -> prefer Relative."))))
-              (if (and hgps (or (<= hgps 0.0) (> hgps 400.0)))
-                (princ (strcat "\n  WARNING: H = " (ddg-n1 hgps)
-                               " ft from GPS is outside the sane 0-400 ft flying range - GPS error likely.")))
-              ;; 5) choose + save (only positive heights are offered)
-              (setq hgps (if (and hgps (> hgps 0.0)) hgps)
-                    hrel (if (and hrel (> hrel 0.0)) hrel))
+                  (ddg-fail "ELEVATION LOOKUP FAILED"
+                    (append
+                      (list (strcat "No ground elevation could be fetched for "
+                                    (ddg-n7 lat) ", " (ddg-n7 lon) ":")
+                            "")
+                      (cadr g)
+                      (list ""
+                            "Check the internet connection (DDELEV is a quick"
+                            "test), or type the site elevation by hand at the"
+                            "next prompt.")))
+                  (setq gft  (getreal "\nGround elevation at the site in FEET, if you know it (Enter to abort): ")
+                        gsrc "entered by hand")))
               (cond
-                ((and hgps hrel)
-                 (initget "Gps Relative No")
-                 (setq ans (getkword (strcat "\nSave which as the drone height H?  Gps="
-                                             (ddg-n1 hgps) "  Relative=" (ddg-n1 hrel)
-                                             "  [Gps/Relative/No] <Gps>: ")))
-                 (if (null ans) (setq ans "Gps"))
-                 (setq hsel (cond ((= ans "Gps") hgps)
-                                  ((= ans "Relative") hrel))))
-                (hgps
-                 (initget "Yes No")
-                 (setq ans (getkword (strcat "\nSave H = " (ddg-n1 hgps)
-                                             " ft (GPS method)? [Yes/No] <Yes>: ")))
-                 (if (null ans) (setq ans "Yes"))
-                 (if (= ans "Yes") (setq hsel hgps)))
-                (hrel
-                 (initget "Yes No")
-                 (setq ans (getkword (strcat "\nNo usable GPS altitude - save H = " (ddg-n1 hrel)
-                                             " ft (RelativeAltitude)? [Yes/No] <Yes>: ")))
-                 (if (null ans) (setq ans "Yes"))
-                 (if (= ans "Yes") (setq hsel hrel)))
+                ((null gft) (princ "\nAborted - H unchanged."))
                 (t
-                 (if askedh
-                   (princ "\nNo height given - H unchanged.")     ; user's abort
-                   (ddg-fail "NO USABLE HEIGHT"
-                     (list
-                       (if absft
-                         (strcat "GPS method:  " (ddg-n1 absft) " - " (ddg-n1 gft)
-                                 " = " (ddg-n1 (- absft gft)) " ft")
-                         "GPS method:  no absolute altitude in the file")
-                       (if relft
-                         (strcat "Barometer method:  " (ddg-n1 relft) " ft")
-                         "Barometer method:  no RelativeAltitude in the file")
-                       ""
-                       "Neither method gave a height above 0 ft - a big GPS"
-                       "error, or a wrong ground elevation. Nothing was saved."
-                       "Set H with DDSET, or back-solve it with DDCAL.")))))
-              (if hsel
-                (progn
-                  (ddg-put "H" hsel)
-                  (ddg-put "GPS_LAT" lat)              ; kept for reference
-                  (ddg-put "GPS_LON" lon)
-                  (ddg-put "GPS_GROUND" gft)
-                  (ddg-put "GPS_SRC" gsrc)
-                  (princ (strcat "\nSaved drone height  H = " (ddg-n1 hsel)
-                                 " ft   (DDFIX now offers it as the default)"))
-                  (princ (strcat "\nDistortion rate: ~" (rtos (/ 100.0 hsel) 2 3)
-                                 "% size change per unit of height.")))
-                (princ "\nH unchanged."))))))))))
+                 (princ (strcat "\n  Ground elevation : " (ddg-n1 gft) " ft   [" gsrc "]"))
+                 ;; 5) the delta, rounded to the nearest foot
+                 (setq absft (* absm ddg-m->ft)
+                       hraw  (- absft gft)
+                       hsel  (float (ddg-round hraw)))
+                 (cond
+                   ((<= hsel 0.0)
+                    (ddg-fail "NON-PHYSICAL HEIGHT"
+                      (list (strcat (ddg-n1 absft) " - " (ddg-n1 gft) " = "
+                                    (ddg-n1 hraw) " ft")
+                            ""
+                            "That is not above ground - a big GPS error, or a"
+                            "wrong ground elevation. Nothing was saved or"
+                            "drawn. Set H with DDSET, or back-solve it with"
+                            "DDCAL.")))
+                   (t
+                    (if (> hsel 400.0)
+                      (princ (strcat "\n  WARNING: H = " (ddg-n1 hsel)
+                                     " ft is outside the sane 0-400 ft flying range - GPS error likely.")))
+                    (princ (strcat "\n  " (ddg-n1 absft) " - " (ddg-n1 gft) " = "
+                                   (ddg-n1 hraw) " ft  ->  H = " (ddg-n1 hsel) " ft"))
+                    ;; 6) place the report in the drawing
+                    (setq ht (ddg-txt-height))
+                    (setq lines
+                      (list
+                        (strcat "GPS position: " (ddg-n7 lat) ", " (ddg-n7 lon))
+                        (strcat "Drone altitude (MSL): " (ddg-n1 absft) " ft")
+                        (strcat "Ground elevation (MSL): " (ddg-n1 gft) " ft   [" gsrc "]")
+                        (strcat (ddg-n1 absft) " - " (ddg-n1 gft) " = " (ddg-n1 hraw) " ft")
+                        (strcat "Height above grade: " (itoa (fix hsel)) " ft")))
+                    (setq placed (ddg-place-text pt lines ht (getvar "CLAYER") (getvar "TEXTSTYLE")))
+                    (if (null placed)
+                      (ddg-fail "COULD NOT CREATE THE ANNOTATION TEXT"
+                        (list "entmake failed partway through - check whether"
+                              "the current layer is locked or frozen, or the"
+                              "current text style is invalid."
+                              ""
+                              "H is still valid below - you can still save it.")))
+                    ;; 7) save H for DDFIX
+                    (initget "Yes No")
+                    (setq ans (getkword (strcat "\nSave H = " (ddg-n1 hsel)
+                                                " ft for DDFIX? [Yes/No] <Yes>: ")))
+                    (if (null ans) (setq ans "Yes"))
+                    (if (= ans "Yes")
+                      (progn
+                        (ddg-put "H" hsel)
+                        (ddg-put "GPS_LAT" lat)
+                        (ddg-put "GPS_LON" lon)
+                        (ddg-put "GPS_GROUND" gft)
+                        (ddg-put "GPS_SRC" gsrc)
+                        (princ (strcat "\nSaved drone height  H = " (ddg-n1 hsel)
+                                       " ft   (DDFIX now offers it as the default)"))
+                        (princ (strcat "\nDistortion rate: ~" (rtos (/ 100.0 hsel) 2 3)
+                                       "% size change per unit of height.")))
+                      (princ "\nH unchanged."))))))))))))))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -893,7 +760,6 @@
                  "Check the internet connection / firewall, then try again."))))))
   (princ))
 
-(princ "\nDrone Height from GPS v1.3 loaded  (PNG / JPG / TIF / DJI .SRT logs; metadata-free frame grabs")
-(princ "\n  continue with typed coordinates instead of failing).")
-(princ "\n  Commands: DDGPS  (pick drone image -> compute + save H)   DDELEV  (elevation at a typed lat/long)")
+(princ "\nDrone Height from GPS v2.0 loaded  (pick a photo, click a point, place the height report).")
+(princ "\n  Commands: DDGPS  (pick drone photo -> compute + place + save H)   DDELEV  (elevation at a typed lat/long)")
 (princ)

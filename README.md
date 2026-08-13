@@ -8,7 +8,7 @@ drone-photo tracing work:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| Drone survey LISPs (AutoCAD) | `drone_height_lisp/` | Corrects the scale of off-deck features traced from rectified drone photos, and computes the drone height from the photo's GPS + an online ground-elevation lookup |
+| Drone survey LISPs (AutoCAD) | `drone_height_lisp/` | Corrects the scale of off-deck features traced from rectified drone photos, and computes the drone's height above grade from the photo's GPS + an online ground-elevation lookup, annotating the result in the drawing |
 
 ## Installation (either Blender add-on)
 
@@ -186,57 +186,63 @@ correction), `DDSET` (set/remember *H*), `DDALT` (read
 ### DroneHeightGPS.lsp
 
 Companion tool that replaces the "just assume 100 ft" guess for the
-drone height. Nobody logs the height in the field, but the drone logs
-its GPS position in the photo automatically, so:
+drone height. Nobody logs the height in the field, but the drone
+records its GPS position and altitude in the photo automatically. The
+drone's altitude is measured from **sea level**, so subtracting the
+ground elevation at that same coordinate gives the height above grade:
 
 1. `DDGPS` opens a file picker (starts on `H:`, remembers the last
-   folder) for the drone image — PNG, JPG/JPEG, TIFF — or the video's
-   DJI `.SRT` flight log.
-2. It reads latitude/longitude, `AbsoluteAltitude` and
-   `RelativeAltitude` straight out of the file, whatever the container:
-   DJI's XMP text packet first (JPEG APP1 or PNG iTXt; attribute or
-   element serialisation; both the `GpsLongitude` and DJI's misspelt
-   `GpsLongtitude` tags), then the binary EXIF GPS block (JPEG `Exif`
-   APP1, PNG `eXIf` chunk, or a bare TIFF header — either byte order),
-   then ImageMagick-style hex text profiles (`Raw profile type
-   exif/xmp/APP1`), then DJI `.SRT` caption tags (`[latitude: …]
-   [rel_alt: … abs_alt: …]`). The first 256 KB are scanned, then the
-   last 256 KB if needed, since PNG writers may park metadata after
+   folder) for the original drone photo — PNG, JPG/JPEG or TIFF.
+2. It reads latitude/longitude and `AbsoluteAltitude` straight out of
+   the file, whatever the container: DJI's XMP text packet first (JPEG
+   APP1 or PNG iTXt; attribute or element serialisation; both the
+   `GpsLongitude` and DJI's misspelt `GpsLongtitude` tags), then the
+   binary EXIF GPS block (JPEG `Exif` APP1, PNG `eXIf` chunk, or a bare
+   TIFF header — either byte order). The first 256 KB are scanned, then
+   the last 256 KB if needed, since PNG writers may park metadata after
    the image data.
-   **Files with no metadata at all** — 1080p/4K video frame grabs and
-   screenshots — don't dead-end: after the loud alert, DDGPS asks for
-   the pool's coordinates (paste them from Google Maps right-click),
-   still fetches the ground elevation automatically, and takes the
-   flight height typed from the DJI app / log / on-screen display
-   (feet, or metres with a trailing `m`: `30.5m`).
-3. It asks a free online elevation service for the ground elevation at
+3. You click a point in the drawing for the report.
+4. It asks a free online elevation service for the ground elevation at
    that coordinate — USGS EPQS (3DEP bare earth, answers in feet), then
    OpenTopoData NED10m, then Open-Elevation SRTM as fallbacks; no API
    keys. If all fail (no internet) it lets you type a known site
    elevation instead.
-4. The drone height above grade is the delta:
-   `H = AbsoluteAltitude − ground elevation`, cross-checked against the
-   barometric `RelativeAltitude` (the difference between the two methods
-   is the take-off-point offset — or the GPS error, and the command says
-   which value looks trustworthy). Pick which one to save; *H* goes into
-   the same per-drawing store `DDFIX` reads, so it immediately becomes
-   the default there.
+5. The height above grade is the subtraction —
+   `AbsoluteAltitude − ground elevation`, rounded to the nearest foot —
+   and it is written into the drawing at the point you picked, as five
+   lines of plain single-line `TEXT` on the current layer in the current
+   text style:
+
+   ```
+   GPS position: 32.7157380, -117.1610838
+   Drone altitude (MSL): 405.0 ft
+   Ground elevation (MSL): 296.6 ft   [USGS 3DEP]
+   405.0 - 296.6 = 108.4 ft
+   Height above grade: 108 ft
+   ```
+
+   Text height defaults to the drawing's `TEXTSIZE` the first time, then
+   is remembered per drawing and offered as the default (Enter keeps
+   it). The rounded height also goes into the same per-drawing store
+   `DDFIX` reads, so it immediately becomes the default there.
 
 `DDELEV` prints the ground elevation at a typed latitude/longitude —
 useful as a connectivity test.
 
-Failures are loud: a dialog box pops up saying exactly what failed and
-how — "no camera metadata in this file", "no GPS data found", "no GPS
-fix (position is 0,0)", "no altitude data", or which elevation service
-failed and why (no answer / HTTP error / outside coverage) — with the
-same detail printed on the command line. Only deliberate cancels are
-quiet.
+This needs the **original camera file**. Video frame grabs, screenshots
+and most export/share/convert steps strip the metadata, leaving nothing
+to read — and failures are loud: a dialog box pops up saying exactly
+what failed and how ("no camera metadata in this file", "no GPS data
+found", "no GPS fix (position is 0,0)", "no altitude data", or which
+elevation service failed and why), with the same detail printed on the
+command line. Only deliberate cancels are quiet.
 
 Accuracy note: consumer-drone GPS altitude is good to roughly 10–30 ft,
-so the computed *H* is an estimate — but a visible, cross-checked one
-instead of a blind guess, and the scale correction only changes by
-~z/H² per foot of *H* error. For a hard number, `DDCAL` back-solves *H*
-from one feature of known true size.
+so the computed height is an estimate — but a visible one, with its
+inputs written down in the drawing, instead of a blind guess. The scale
+correction only changes by ~z/H² per foot of *H* error. For a hard
+number, `DDCAL` back-solves *H* from one feature of known true size, and
+`DDALT` remains available as a no-internet barometric alternative.
 
 ---
 
@@ -254,17 +260,20 @@ python3 tests/test_drone_height_lisp.py   # drone LISP: lint + parser checks
 
 The drone-LISP test lints `DroneHeightGPS.lsp` (paren/string balance)
 and exercises a line-for-line Python transliteration of its byte-level
-parsers against synthetic DJI-style inputs — JPEG, PNG, bare TIFF,
-`.SRT` flight logs, ImageMagick hex-profile PNGs, and the manual
-coordinate/height entry parsers:
+parsers against synthetic DJI-style images — JPEG, PNG and bare TIFF:
 the XMP route (JPEG APP1 and PNG iTXt, attribute and element forms,
 DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block (JPEG
 APP1, PNG `eXIf` chunk with decoy anchors in the image data, both byte
 orders), metadata parked past the 256 KB front window (tail-window
 recovery), signed-byte and truncated-file inputs, the failure
 classification behind the loud-error dialogs (no metadata / no GPS
-data / no fix / bad GPS / no altitude), and the JSON number extraction
-for each elevation service's response shape.
+data / no fix / bad GPS / no altitude), rounding to the nearest foot,
+and the JSON number extraction for each elevation service's response
+shape.
+
+The drawing-side behaviour (`getpoint`, the `entmake` TEXT entities,
+the UCS→WCS conversion, and the `DDFIX` handoff) needs real AutoCAD —
+it is not covered by this harness.
 
 The exporter tests mock the bmesh structures and validate the emitted
 DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
