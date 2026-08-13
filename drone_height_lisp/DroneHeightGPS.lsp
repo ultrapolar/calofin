@@ -546,6 +546,12 @@
             s (ddg-rat lst (+ off 16) le))
       (if (and d m s) (+ d (/ m 60.0) (/ s 3600.0))))))
 
+;; the character of a GPS*Ref entry ("N"/"S"/"E"/"W"), or nil if absent.
+;; These are ASCII fields of count 2, so the value sits inline in the entry.
+(defun ddg-refchar (lst ent / b)
+  (if (setq b (ddg-b lst (+ ent 8)))
+    (if (and (> b 32) (< b 127)) (chr b))))
+
 ;; does REST start with a TIFF header?  ("II" 42 0  /  "MM" 0 42) -> REST or nil
 (defun ddg-tiff-at (rest / b0 b1)
   (setq b0 (ddg-b rest 0) b1 (ddg-b rest 1))
@@ -575,7 +581,7 @@
   tif)
 
 ;; TIFF header -> IFD0 -> GPS IFD; returns (lat lon alt-metres), any may be nil
-(defun ddg-exif-gps (lst / tif le ifd0 ent gps lat lon altm)
+(defun ddg-exif-gps (lst / tif le ifd0 ent gps lat lon altm latref lonref r)
   (setq tif (ddg-find-tiff lst))
   (if tif
     (progn
@@ -587,20 +593,25 @@
         (progn
           (if (setq ent (ddg-ifd-find tif gps le 2))         ; GPSLatitude
             (setq lat (ddg-gps-coord tif ent le)))
-          (if (and lat (setq ent (ddg-ifd-find tif gps le 1))
-                   (equal (ddg-b tif (+ ent 8)) 83))         ; ref "S"
-            (setq lat (- lat)))
+          (if (and (setq ent (ddg-ifd-find tif gps le 1))    ; GPSLatitudeRef
+                   (setq r (ddg-refchar tif ent)))
+            (setq latref (strcase r)))
+          (if (and lat (equal latref "S")) (setq lat (- lat)))
           (if (setq ent (ddg-ifd-find tif gps le 4))         ; GPSLongitude
             (setq lon (ddg-gps-coord tif ent le)))
-          (if (and lon (setq ent (ddg-ifd-find tif gps le 3))
-                   (equal (ddg-b tif (+ ent 8)) 87))         ; ref "W"
-            (setq lon (- lon)))
+          (if (and (setq ent (ddg-ifd-find tif gps le 3))    ; GPSLongitudeRef
+                   (setq r (ddg-refchar tif ent)))
+            (setq lonref (strcase r)))
+          (if (and lon (equal lonref "W")) (setq lon (- lon)))
           (if (setq ent (ddg-ifd-find tif gps le 6))         ; GPSAltitude
             (setq altm (ddg-rat tif (ddg-u32i tif (+ ent 8) le) le)))
           (if (and altm (setq ent (ddg-ifd-find tif gps le 5))
                    (equal (ddg-b tif (+ ent 8)) 1))          ; below sea level
             (setq altm (- altm)))))))
-  (list lat lon altm (if tif T)))     ; 4th: was an EXIF block found at all?
+  ;; 4th: was an EXIF block found at all?  5th/6th: the hemisphere letters,
+  ;; nil when the file simply does not record them - in which case the SIGN
+  ;; of the coordinate is unknown, not positive.
+  (list lat lon altm (if tif T) latref lonref))
 
 ;; everything the file tells us: (absalt-m lat lon xmp-found exif-found)
 ;; XMP text packet first (JPEG APP1 / PNG iTXt), the binary EXIF GPS block
@@ -608,21 +619,25 @@
 ;; say whether an XMP packet / EXIF block was present at all - failure
 ;; reporting uses them to tell "stripped file" apart from "metadata without
 ;; GPS".
-(defun ddg-read-meta (lst / xtxt exif absm lat lon xmpf tiff)
+(defun ddg-read-meta (lst / xtxt exif absm lat lon xmpf tiff lonok)
   (setq xtxt (ddg-xmp-text lst))
   (setq xmpf (> (strlen xtxt) 0))
   (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
         lat  (ddg-xmp-num xtxt "GpsLatitude")
         lon  (ddg-xmp-num xtxt "GpsLongitude"))
   (if (null lon) (setq lon (ddg-xmp-num xtxt "GpsLongtitude")))
+  (if lon (setq lonok T))              ; XMP writes the sign into the number
   (if (or (null lat) (null lon) (null absm))
     (progn
       (setq exif (ddg-exif-gps lst))
-      (if (null lat)  (setq lat  (car exif)))
-      (if (null lon)  (setq lon  (cadr exif)))
-      (if (null absm) (setq absm (caddr exif)))
-      (setq tiff (cadddr exif))))
-  (list absm lat lon xmpf tiff))
+      (if (null lat)  (setq lat  (nth 0 exif)))
+      (if (null lon)
+        (progn
+          (setq lon (nth 1 exif))
+          (if (nth 5 exif) (setq lonok T))))   ; only if E/W was recorded
+      (if (null absm) (setq absm (nth 2 exif)))
+      (setq tiff (nth 3 exif))))
+  (list absm lat lon xmpf tiff lonok))
 
 ;; ===========================================================================
 ;;  HTTP + JSON (MSXML2.XMLHTTP ActiveX; synchronous GET)
@@ -789,7 +804,7 @@
 ;;  DDGPS : pick the drone photo -> read GPS -> click a point -> look up
 ;;          ground elevation -> place the height report -> save H
 ;; ---------------------------------------------------------------------------
-(defun c:DDGPS ( / *error* def c file rd rpath lst meta fsize absm lat lon xmpf tiff
+(defun c:DDGPS ( / *error* def c file rd rpath lst meta fsize absm lat lon xmpf tiff lonok
                    pt g gft gsrc absft hraw hsel ht lines placed ans)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
@@ -825,7 +840,7 @@
         ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
         (setq meta (ddg-read-meta lst)
               absm (nth 0 meta) lat  (nth 1 meta) lon  (nth 2 meta)
-              xmpf (nth 3 meta) tiff (nth 4 meta))
+              xmpf (nth 3 meta) tiff (nth 4 meta) lonok (nth 5 meta))
         ;; some PNG writers park the metadata after the image data - if the
         ;; front window came up short, scan the tail of the file too
         (if (and (or (null lat) (null lon) (null absm))
@@ -838,7 +853,8 @@
             (if (null lat)  (setq lat  (nth 1 meta)))
             (if (null lon)  (setq lon  (nth 2 meta)))
             (if (nth 3 meta) (setq xmpf T))
-            (if (nth 4 meta) (setq tiff T))))
+            (if (nth 4 meta) (setq tiff T))
+            (if (nth 5 meta) (setq lonok T))))
         ;; 2b) say EXACTLY what is wrong if the file cannot be used - this is
         ;; a hard stop, no rescue: use the file exactly as it came off the
         ;; drone. Everything past this point lives in the final (t ...)
@@ -896,6 +912,18 @@
                    "manually with DDSET.")))
           (t
            ;; 2c) all good - show what came from the file
+           ;; Some files record the coordinate but not the E/W hemisphere. The
+           ;; sign is then genuinely unknown - assuming East would silently put
+           ;; a Pennsylvania pool in China - so ask rather than guess.
+           (if (null lonok)
+             (progn
+               (princ "\n  NOTE: this photo records the longitude but NOT the E/W hemisphere.")
+               (initget "West East")
+               (setq ans (getkword "\nIs the site West (the Americas) or East? [West/East] <West>: "))
+               (if (null ans) (setq ans "West"))
+               (if (= ans "West")
+                 (setq lon (- (abs lon)))
+                 (setq lon (abs lon)))))
            (princ "\n--- position & altitude ------------------------------------")
            (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)))
            (princ (strcat "\n  AbsoluteAltitude : " (ddg-n1 (* absm ddg-m->ft))
@@ -1084,12 +1112,15 @@
                          (ddg-yn (ddg-find-tiff lst)))
                  (strcat "GPS position found    : "
                          (ddg-yn (and (nth 1 m) (nth 2 m))))
+                 (strcat "   E/W recorded?      : " (ddg-yn (nth 5 m))
+                         (if (and (nth 2 m) (null (nth 5 m)))
+                           "  (sign unknown - DDGPS will ask)" ""))
                  (strcat "Altitude found        : "
                          (ddg-yn (nth 0 m)))))))
        (setq out (append out (list "Could not get ANY bytes out of this file."))))
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.3 loaded  (pick a photo, click a point, place the height report).")
+(princ "\nDrone Height from GPS v2.4 loaded  (pick a photo, click a point, place the height report).")
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)

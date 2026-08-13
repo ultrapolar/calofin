@@ -265,8 +265,13 @@ def find_tiff(lst):
         tif = tiff_at(rest)
     return tif
 
+# Mirror of ddg-refchar: the hemisphere letter of a GPS*Ref entry, or None
+def refchar(lst, ent):
+    b = bb(lst, ent + 8)
+    return chr(b).upper() if (b is not None and 32 < b < 127) else None
+
 def exif_gps(lst):
-    lat = lon = altm = None
+    lat = lon = altm = latref = lonref = None
     tif = find_tiff(lst)
     if tif is not None:
         le = bb(tif, 0) == 73
@@ -277,19 +282,21 @@ def exif_gps(lst):
             ent = ifd_find(tif, gps, le, 2)
             if ent is not None: lat = gps_coord(tif, ent, le)
             ent = ifd_find(tif, gps, le, 1)
-            if lat is not None and ent is not None and bb(tif, ent + 8) == 83:
-                lat = -lat
+            if ent is not None: latref = refchar(tif, ent)
+            if lat is not None and latref == "S": lat = -lat
             ent = ifd_find(tif, gps, le, 4)
             if ent is not None: lon = gps_coord(tif, ent, le)
             ent = ifd_find(tif, gps, le, 3)
-            if lon is not None and ent is not None and bb(tif, ent + 8) == 87:
-                lon = -lon
+            if ent is not None: lonref = refchar(tif, ent)
+            if lon is not None and lonref == "W": lon = -lon
             ent = ifd_find(tif, gps, le, 6)
             if ent is not None: altm = rat(tif, u32i(tif, ent + 8, le), le)
             ent = ifd_find(tif, gps, le, 5)
             if altm is not None and ent is not None and bb(tif, ent + 8) == 1:
                 altm = -altm
-    return (lat, lon, altm, tif is not None)   # 4th: EXIF block found at all?
+    # 4th: EXIF block found at all?  5th/6th: hemisphere letters (None =
+    # not recorded, so the SIGN is unknown rather than positive)
+    return (lat, lon, altm, tif is not None, latref, lonref)
 
 # Mirror of ddg-read-meta: XMP text packet first, binary EXIF GPS block
 # filling any gaps. The flags say whether each container was present at all.
@@ -301,13 +308,16 @@ def read_meta(lst):
     lat = xmp_num(t, "GpsLatitude")
     lon = xmp_num(t, "GpsLongitude")
     if lon is None: lon = xmp_num(t, "GpsLongtitude")
+    lonok = True if lon is not None else None   # XMP writes the sign in
     if lat is None or lon is None or absm is None:
         e = exif_gps(lst)
         if lat is None: lat = e[0]
-        if lon is None: lon = e[1]
+        if lon is None:
+            lon = e[1]
+            if e[5]: lonok = True               # only if E/W was recorded
         if absm is None: absm = e[2]
         tiff = e[3]
-    return (absm, lat, lon, xmpf, tiff)
+    return (absm, lat, lon, xmpf, tiff, lonok)
 
 # Mirror of ddg-round: round-half-away-from-zero (FIX truncates toward zero)
 def round_ft(x):
@@ -390,7 +400,7 @@ def json_num(txt, key):
 LAT = 32 + 42/60 + 56.6568/3600
 LON = -(117 + 9/60 + 39.9016/3600)
 
-def build_tiff(le=True, with_gps=True):
+def build_tiff(le=True, with_gps=True, with_lonref=True):
     E = "<" if le else ">"
     order = b"II" if le else b"MM"
 
@@ -418,15 +428,19 @@ def build_tiff(le=True, with_gps=True):
     if not with_gps:                                       # EXIF without GPS
         return order + struct.pack(E + "H", 42) + struct.pack(E + "I", ifd0_off) + ifd0
 
-    gps = struct.pack(E + "H", gps_n)
+    # dropping an entry would shift the data block, so keep the declared
+    # offsets and pad the 12 bytes back at the end instead
+    gps = struct.pack(E + "H", gps_n - (0 if with_lonref else 1))
     gps += ent(0, 1, 4, b"\x02\x03\x00\x00")               # GPSVersionID
     gps += ent(1, 2, 2, b"N\x00\x00\x00")                  # LatRef
     gps += ent(2, 5, 3, struct.pack(E + "I", lat_off))     # Lat: 3 rationals
-    gps += ent(3, 2, 2, b"W\x00\x00\x00")                  # LonRef
+    if with_lonref:
+        gps += ent(3, 2, 2, b"W\x00\x00\x00")              # LonRef
     gps += ent(4, 5, 3, struct.pack(E + "I", lon_off))     # Lon
     gps += ent(5, 1, 1, b"\x00\x00\x00\x00")               # AltRef: above sea
     gps += ent(6, 5, 1, struct.pack(E + "I", alt_off))     # Alt: 1 rational
     gps += struct.pack(E + "I", 0)
+    if not with_lonref: gps += bytes(12)                   # keep data_off valid
 
     data = rat_bytes([(32, 1), (42, 1), (566568, 10000)])
     data += rat_bytes([(117, 1), (9, 1), (399016, 10000)])
@@ -528,25 +542,25 @@ def main():
     # --- JPEG: EXIF route (no XMP in file) ---
     lst3 = list(build_jpg(with_xmp=False, le=True))
     check("jpg no-XMP -> xmp_text empty", xmp_text(lst3) == "")
-    la, lo, al, tf = exif_gps(lst3)
+    la, lo, al, tf, lr, nr = exif_gps(lst3)
     check("jpg exif LE latitude", approx(la, LAT))
     check("jpg exif LE longitude (W negative)", approx(lo, LON))
     check("jpg exif LE altitude", approx(al, 123.456))
 
-    la, lo, al, tf = exif_gps(list(build_jpg(with_xmp=False, le=False)))
+    la, lo, al, tf, lr, nr = exif_gps(list(build_jpg(with_xmp=False, le=False)))
     check("jpg exif BE lat/lon/alt", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
 
-    la, lo, al, tf = exif_gps(lst)
+    la, lo, al, tf, lr, nr = exif_gps(lst)
     check("jpg exif parse with XMP present", approx(la, LAT) and approx(lo, LON))
 
     # --- signed-byte input (some ADODB builds return signed) ---
     lst5 = [b - 256 if b > 127 else b for b in build_jpg()]
     check("signed bytes: xmp still parses", approx(xmp_num(xmp_text(lst5), "AbsoluteAltitude"), 123.45))
-    la, lo, al, tf = exif_gps([b - 256 if b > 127 else b for b in build_jpg(with_xmp=False)])
+    la, lo, al, tf, lr, nr = exif_gps([b - 256 if b > 127 else b for b in build_jpg(with_xmp=False)])
     check("signed bytes: exif still parses", approx(la, LAT) and approx(al, 123.456))
 
     # --- truncated file: must return Nones, not crash ---
-    la, lo, al, tf = exif_gps(list(build_jpg(with_xmp=False))[:80])
+    la, lo, al, tf, lr, nr = exif_gps(list(build_jpg(with_xmp=False))[:80])
     check("truncated file -> graceful Nones", lo is None and al is None)
 
     # --- PNG: XMP route via iTXt (no APP1 URI marker in PNGs) ---
@@ -559,7 +573,7 @@ def main():
     check("png xmp longitude", approx(v, -117.1610838))
 
     # --- PNG: eXIf chunk route, decoy "Exif"/"eXIf" strings skipped ---
-    la, lo, al, tf = exif_gps(list(build_png(with_xmp=False)))
+    la, lo, al, tf, lr, nr = exif_gps(list(build_png(with_xmp=False)))
     check("png eXIf latitude (decoys skipped)", approx(la, LAT))
     check("png eXIf longitude", approx(lo, LON))
     check("png eXIf altitude", approx(al, 123.456))
@@ -588,20 +602,20 @@ def main():
           and approx(lon, -117.1610838))
 
     # --- bare TIFF file (header at byte 0), both byte orders ---
-    la, lo, al, tf = exif_gps(list(build_tiff(le=True)))
+    la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=True)))
     check("bare TIFF LE", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
-    la, lo, al, tf = exif_gps(list(build_tiff(le=False)))
+    la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=False)))
     check("bare TIFF BE", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
 
     # --- read_meta prefers XMP, EXIF fills gaps ---
-    absm, lat, lon, xmpf, tiff = read_meta(list(build_png(with_xmp=False)))
+    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_png(with_xmp=False)))
     check("read_meta from eXIf only",
           approx(lat, LAT) and approx(lon, LON) and approx(absm, 123.456)
           and not xmpf and tiff)
 
     # --- failure classification (mirrors DDGPS's loud-failure decision) ---
     def cls(data):
-        return classify(*read_meta(list(data)))
+        return classify(*read_meta(list(data))[:5])
     check("classify normal jpg -> OK", cls(build_jpg()) == "OK")
     check("classify normal png -> OK", cls(build_png()) == "OK")
     check("classify stripped png -> NO_METADATA",
@@ -629,6 +643,28 @@ def main():
     check("round -57.4 -> -57", round_ft(-57.4) == -57)
     check("round 0.0 -> 0", round_ft(0.0) == 0)
     check("round exact 100.0 -> 100", round_ft(100.0) == 100)
+
+    # --- GPS hemisphere refs ---
+    # A real file reported 39.8872046, +76.8967573 - western China - when the
+    # site was York County, PA at -76.8967573. Longitude carries no sign of its
+    # own in EXIF; it comes from GPSLongitudeRef, and a missing ref means the
+    # sign is UNKNOWN, not positive.
+    la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=True)))
+    check("exif: W ref makes the longitude negative", lo < 0)
+    check("exif: refs are reported", lr == "N" and nr == "W")
+    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_tiff(le=True)))
+    check("read_meta: sign is known when the ref is present", lonok is True)
+    # same file with GPSLongitudeRef removed
+    la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=True, with_lonref=False)))
+    check("exif: missing W ref leaves longitude unsigned", lo > 0 and nr is None)
+    absm, lat, lon, xmpf, tiff, lonok = read_meta(
+        list(build_tiff(le=True, with_lonref=False)))
+    check("read_meta: sign is NOT assumed when the ref is missing", lonok is None)
+    check("read_meta: the coordinate itself still parses", approx(lon, abs(LON)))
+    # a photo whose GPS came from XMP always has an explicit sign
+    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_jpg()))
+    check("read_meta: XMP longitude is signed, so no question to ask",
+          lonok is True and lon < 0)
 
     # --- certutil hex-dump parsing (the no-ADODB fallback reader) ---
     # a real "certutil -encodehex" line, ASCII column and all
@@ -672,7 +708,7 @@ def main():
           hexline(ln)[0] == 0xff and hexline(ln)[1] == 0xd8)
 
     # --- the whole computation, end to end (what DDGPS reports) ---
-    absm, lat, lon, xmpf, tiff = read_meta(list(build_jpg()))
+    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_jpg()))
     absft = absm * 3.280839895                       # 123.45 m -> 404.99 ft
     gft = 296.606                                    # a real USGS EPQS answer
     check("height = drone altitude - ground elevation",
