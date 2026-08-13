@@ -286,7 +286,15 @@
       '(lambda ( / raw sa tmp)
          (setq stm (vlax-create-object "ADODB.Stream"))
          (vlax-put-property  stm 'Type 1)              ; 1 = adTypeBinary,
-         (vlax-invoke-method stm 'Open)                ; set BEFORE Open
+         ;; AutoLISP will not call a method whose parameters are all optional
+         ;; unless they are supplied - a bare (Open) fails with "too few
+         ;; actual parameters". Pass Stream.Open's documented defaults.
+         (if (vl-catch-all-error-p
+               (vl-catch-all-apply
+                 '(lambda ()
+                    (vlax-invoke-method stm 'Open (vlax-make-variant) 0 -1 "" ""))
+                 '()))
+           (vlax-invoke-method stm 'Open))
          (vlax-invoke-method stm 'LoadFromFile file)
          (setq raw (vlax-invoke-method stm 'Read cnt)) ; first cnt bytes
          (vlax-invoke-method stm 'Close)
@@ -365,6 +373,6 @@
                             "% size change per unit of height."))))))))
   (princ))
 
-(princ "\nDrone Distortion tool v3.3 loaded  (DDALT accepts PNG / JPG / TIF and fails loud).")
+(princ "\nDrone Distortion tool v3.4 loaded  (DDALT accepts PNG / JPG / TIF and fails loud).")
 (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
 (princ)

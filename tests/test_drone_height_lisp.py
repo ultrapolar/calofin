@@ -339,7 +339,12 @@ def hexbyte(s):
     return 16 * a + b if (a is not None and b is not None) else None
 
 def hexline(line):
-    toks = split_sp(line)[1:]        # drop the leading offset
+    toks = split_sp(line)
+    # drop the offset column ONLY if it is not itself a byte - dropping it
+    # unconditionally shifts a no-address dump by one byte per line, which
+    # corrupts everything while still looking like a successful read
+    if toks and hexbyte(toks[0]) is None:
+        toks = toks[1:]
     out = []
     for t in toks:
         if len(out) >= 16: break
@@ -651,6 +656,20 @@ def main():
     check("hexline: dump round-trips to the original bytes", rebuilt == list(raw))
     check("split_sp collapses runs of spaces",
           split_sp("a   b  c") == ["a", "b", "c"])
+    # regression: a dump with NO address column must not lose its first byte.
+    # Dropping the leading token unconditionally shifted every line by one,
+    # which still returned a full-looking byte count but garbage content.
+    noaddr = "ff d8 ff e1 00 18 45 78 69 66 00 00 49 49 2a 00"
+    check("hexline: no-address dump keeps its first byte",
+          hexline(noaddr)[:4] == [0xff, 0xd8, 0xff, 0xe1])
+    check("hexline: no-address dump keeps all 16",
+          len(hexline(noaddr)) == 16)
+    # and the addressed form still drops the address
+    check("hexline: addressed dump still drops the offset",
+          hexline("0010  ff d8 ff e1")[:2] == [0xff, 0xd8])
+    # the JPEG-magic self-check DDTEST reports
+    check("looks_jpeg detects a real JPEG start",
+          hexline(ln)[0] == 0xff and hexline(ln)[1] == 0xd8)
 
     # --- the whole computation, end to end (what DDGPS reports) ---
     absm, lat, lon, xmpf, tiff = read_meta(list(build_jpg()))

@@ -183,7 +183,26 @@
       (cons "switch the stream to binary mode"
             '(lambda () (vlax-put-property stm 'Type 1)))    ; 1 = adTypeBinary
       (cons "open the stream"
-            '(lambda () (vlax-invoke-method stm 'Open)))
+            ;; AutoLISP's COM bridge refuses to call a method whose parameters
+            ;; are ALL optional unless they are supplied - a bare (Open) comes
+            ;; back as "too few actual parameters". Stream.Open takes
+            ;; (Source, Mode, OpenOptions, UserName, Password), so pass the
+            ;; documented defaults: an empty variant, adModeUnknown (0),
+            ;; adOpenStreamUnspecified (-1) and two empty strings. The bare
+            ;; call is kept as a last resort for builds that accept it.
+            '(lambda ( / e)
+               (setq e (vl-catch-all-apply
+                         '(lambda ()
+                            (vlax-invoke-method stm 'Open
+                              (vlax-make-variant) 0 -1 "" ""))
+                         '()))
+               (if (vl-catch-all-error-p e)
+                 (setq e (vl-catch-all-apply
+                           '(lambda ()
+                              (vlax-invoke-method stm 'Open nil 0 -1 "" ""))
+                           '())))
+               (if (vl-catch-all-error-p e)
+                 (vlax-invoke-method stm 'Open))))
       (cons "load the file into the stream"
             '(lambda () (vlax-invoke-method stm 'LoadFromFile file)))
       (cons "seek to the right place in the file"
@@ -258,6 +277,24 @@
      (list (reverse out)
            (if (and fsz (< n (min cnt fsz))) T)))))     ; hit a 0x1A, not the end
 
+(defun ddg-tohex (b / h)
+  (setq h "0123456789abcdef")
+  (strcat (substr h (1+ (/ b 16)) 1) (substr h (1+ (rem b 16)) 1)))
+
+;; first N bytes of LST as "ff d8 ff e1" - so a report can show whether a
+;; reader actually returned the file, or returned mush
+(defun ddg-firstbytes (lst n / out b)
+  (setq out "")
+  (while (and lst (> n 0))
+    (setq b (car lst) lst (cdr lst) n (1- n))
+    (if (< b 0) (setq b (+ b 256)))
+    (setq out (strcat out (if (= out "") "" " ") (ddg-tohex b))))
+  out)
+
+;; every JPEG starts FF D8; a reader that does not produce that is mangling
+(defun ddg-looks-jpeg (lst)
+  (and (equal (ddg-b lst 0) 255) (equal (ddg-b lst 1) 216)))
+
 ;; local temp folder, always with a trailing backslash ("" if unknown)
 (defun ddg-tempdir ( / dir)
   (setq dir (getvar "TEMPPREFIX"))
@@ -295,7 +332,13 @@
 ;; so drop the leading offset and take at most 16 two-hex-digit tokens, which
 ;; stops cleanly before the ASCII column on the right.
 (defun ddg-hexline (line / toks out v n stop)
-  (setq toks (cdr (ddg-split line)) out '() n 0)
+  (setq toks (ddg-split line))
+  ;; Drop the leading offset column ONLY if it is not itself a byte. Dropping
+  ;; it unconditionally shifts every line by one byte when the dump has no
+  ;; address column, which corrupts the whole stream while still looking like
+  ;; a successful read.
+  (if (and toks (null (ddg-hexbyte (car toks)))) (setq toks (cdr toks)))
+  (setq out '() n 0)
   (while (and toks (< n 16) (null stop))
     (setq v (ddg-hexbyte (car toks)) toks (cdr toks))
     (if v (setq out (cons v out) n (1+ n)) (setq stop T)))
@@ -1010,6 +1053,11 @@
      (setq out (append out
        (list (strcat "certutil hex read     : "
                      (if cu (strcat "OK, " (itoa (length cu)) " bytes") "FAILED")))))
+     (if cu (setq out (append out
+       (list (strcat "   first bytes        : " (ddg-firstbytes cu 8)
+                     (if (ddg-looks-jpeg cu)
+                       "   (valid JPEG start)"
+                       "   (NOT a JPEG start - these bytes are wrong)"))))))
      (if (null lst) (setq lst cu))
      ;; --- plain AutoLISP read ---
      (setq pr (ddg-plain-read (if tmp tmp file) 262144))
@@ -1018,6 +1066,11 @@
        (list (strcat "Plain AutoLISP read   : "
                      (if (car pr) (strcat "OK, " (itoa n) " bytes") "FAILED")
                      (if (cadr pr) "  (stopped early at a 0x1A byte)" "")))))
+     (if (car pr) (setq out (append out
+       (list (strcat "   first bytes        : " (ddg-firstbytes (car pr) 8)
+                     (if (ddg-looks-jpeg (car pr))
+                       "   (valid JPEG start)"
+                       "   (NOT a JPEG start)"))))))
      (if (null lst) (setq lst (car pr)))
      ;; --- does the file even carry metadata? ---
      (setq out (append out (list "")))
@@ -1037,6 +1090,6 @@
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.2 loaded  (pick a photo, click a point, place the height report).")
+(princ "\nDrone Height from GPS v2.3 loaded  (pick a photo, click a point, place the height report).")
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)
