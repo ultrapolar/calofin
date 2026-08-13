@@ -52,8 +52,9 @@
                              ; T = rotate pads with the perimeter edge
 (setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
                              ; chaining loose lines/arcs into a loop
-(setq *paddle-angtol* (/ pi 180.0)) ; 1 deg: corners flatter than this
-                                    ; are treated as straight-through
+(setq *paddle-angtol* (/ (* 10.0 pi) 180.0)) ; connection points that
+                             ; deviate 10 degrees or less from a
+                             ; straight line are not corners - no pad
 
 ;; ------------------------ 2D vector helpers ------------------------
 (defun paddle--sub (a b) (list (- (car a) (car b)) (- (cadr a) (cadr b))))

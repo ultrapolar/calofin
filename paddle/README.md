@@ -61,8 +61,11 @@ Everything inserted in one run is a single undo step.
   `*paddle-align*` to `T` at the top of the lisp if you ever want
   them rotated to follow the perimeter edge instead.)
 * Pads land on layer **PADS** (created if missing).
-* Corners flatter than 1° are treated as straight-through (so the
-  tangent joints of a fillet don't double-count as corners).
+* A connection point only counts as a corner when the direction
+  changes by **more than 10°** (`*paddle-angtol*`). Anything
+  sufficiently close to a straight line — segmented walls, slight
+  drafting kinks, the tangent joints of a fillet — is passed over
+  without a pad.
 
 ## Loose-geometry chaining
 
@@ -107,6 +110,7 @@ constants at the top of `PADDLE.lsp` are easy to change:
 (setq *paddle-layer*  "PADS")      ; insertion layer
 (setq *paddle-align*  nil)         ; nil = pads parallel to X/Y axes
 (setq *paddle-fuzz*   0.05)        ; gap tolerance when chaining
+(setq *paddle-angtol* (/ (* 10.0 pi) 180.0)) ; min corner deviation
 ```
 
 Supported perimeter geometry: **LWPOLYLINE, 2D POLYLINE, LINE, ARC**
