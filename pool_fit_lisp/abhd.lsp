@@ -2989,7 +2989,7 @@
 (defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs w w1 w2
                     ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok stale npt
-                    again omits pts2
+                    again omits pts2 ent ring pf-omitted
                     pf-miss-pct pf-walls pf-corners pf-temp pf-ptnames
                     pf-dim-warned *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, sweep away any
@@ -3277,25 +3277,58 @@
                    (princ "\n\nRedoing the fit.  Any points to leave out this time?")
                    (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
                    (princ "\n  anything the line should not chase; each gets a dashed ring.")
-                   (while (setq wp1 (getpoint "\n  Point to omit (Enter when done): "))
-                     (setq w1 (pf:nearest (pf:2d wp1) dpts))
-                     (if w1
-                       (progn
-                         (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w1)))
-                         (setq omits (cons w1 omits))
-                         (princ (strcat "  - omitting Pt." (pf:pt-name w1))))))
+                   (if pf-omitted
+                     (princ (strcat "\n  " (itoa (length pf-omitted))
+                                    " point(s) are already out -"
+                                    " picking one of those puts it"
+                                    " BACK IN.")))
+                   (while (setq wp1 (getpoint
+                                      "\n  Point to omit - or a ringed one to restore (Enter when done): "))
+                     (setq wp1 (pf:2d wp1)
+                           w1  (pf:nearest wp1 dpts)
+                           w2  (pf:nearest wp1 (mapcar 'car pf-omitted)))
+                     (cond
+                       ;; nearer to an already-omitted point: this
+                       ;; click un-omits it - the saved entries (its
+                       ;; duplicates too) rejoin the fit, its ring goes
+                       ((and w2 (or (null w1)
+                                    (<= (pf:dist wp1 w2)
+                                        (pf:dist wp1 w1))))
+                        (setq ent        (assoc w2 pf-omitted)
+                              pts        (append pts (cadr ent))
+                              dpts       (pf:dedupe pts)
+                              pf-omitted (pf:remove ent pf-omitted)
+                              omits      (pf:remove w2 omits))
+                        (if (and (caddr ent) (entget (caddr ent)))
+                          (progn
+                            (pf:temp-drop (caddr ent))
+                            (entdel (caddr ent))))
+                        (princ (strcat "  - Pt." (pf:pt-name w2)
+                                       " back in")))
+                       ;; otherwise omit: pull it - and its duplicates
+                       ;; - out of the fit, the stats and the miss
+                       ;; allowance alike, and remember how to undo it
+                       (w1
+                        (setq pts2 nil ent nil)
+                        (foreach w pts
+                          (if (< (pf:dist w w1) *PF-EXACT-EPS*)
+                            (setq ent (cons w ent))
+                            (setq pts2 (cons w pts2))))
+                        (setq pts  (reverse pts2)
+                              dpts (pf:dedupe pts)
+                              ring (pf:temp-add (pf:tag-mine
+                                     (pf:draw-corner-marker w1)))
+                              pf-omitted (cons (list w1 ent ring)
+                                               pf-omitted)
+                              omits      (cons w1 omits))
+                        (princ (strcat "  - omitting Pt."
+                                       (pf:pt-name w1))))))
                    (if omits
                      (progn
-                       ;; drop them - and their duplicates - from the
-                       ;; fit, the stats and the miss allowance alike
-                       (setq pts2 nil)
-                       (foreach w pts
-                         (if (not (pf:memb w omits))
-                           (setq pts2 (cons w pts2))))
-                       (setq pts  (reverse pts2)
-                             dpts (if pts (pf:dedupe pts)))
-                       ;; declared walls and corners anchored on an
-                       ;; omitted point make no sense any more
+                       ;; declared walls and corners anchored on a
+                       ;; point omitted this round make no sense any
+                       ;; more (a restored point keeps nothing - the
+                       ;; wall went when it went out)
                        (setq pts2 nil)
                        (foreach w pf-walls
                          (if (not (or (pf:memb (car w) omits)
@@ -3308,11 +3341,12 @@
                        (foreach w pf-corners
                          (if (not (pf:memb w omits))
                            (setq pts2 (cons w pts2))))
-                       (setq pf-corners (reverse pts2))
-                       (princ (strcat "\n  " (itoa (length omits))
-                                      " point(s) omitted - "
-                                      (itoa (length dpts))
-                                      " remain."))))
+                       (setq pf-corners (reverse pts2))))
+                   (if pf-omitted
+                     (princ (strcat "\n  " (itoa (length pf-omitted))
+                                    " point(s) omitted in total - "
+                                    (itoa (length dpts))
+                                    " in the fit.")))
                    (if (< (length dpts) 3)
                      (princ "\nToo few points remain for a fit - nothing redone.")
                      (progn

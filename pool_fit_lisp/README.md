@@ -265,7 +265,12 @@ the fit at exactly the distance you typed.
 command. First it asks whether any points should be left out this
 time — pick each one (mis-shots, duplicates, anything the line should
 not chase; each gets a dashed ring and is named), or press `Enter`
-for none. Then the **declared straight walls and sharp corners can
+for none. **The pick is a toggle**: omissions carry over from redo to
+redo, and clicking a ringed, already-omitted point puts it **back
+in** — its ring disappears and its duplicates rejoin the fit, the
+stats and the miss allowance. (A wall or corner that was dropped when
+its point went out is not resurrected — re-add it in the next step if
+it is still wanted.) Then the **declared straight walls and sharp corners can
 change too**: each gets an `[Add/Remove/Keep]` loop — `Add` picks new
 ends or corner points (snapped to the survey points, markers drawn on
 the spot), `Remove` takes a pick near the wall or on the corner to
