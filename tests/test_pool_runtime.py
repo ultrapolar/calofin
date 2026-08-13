@@ -464,7 +464,7 @@ assert sum(1 for p, a in vm.prompts
            if 'STANDARD INCHES' in p and 'dim style' in p) <= 1
 print("   falls back cleanly when the style is absent")
 
-print("== R15c. out-of-square corner dims + nesting inside CROSS DIMENSION ==")
+print("== R15c. out-of-square corner dims + nesting inside CROSS DIMENSIONS ==")
 # out-of-square dims every corner, so all four 18" chamfer faces take
 # the inches style, while the two cross diagonals stay big
 vm = run(["Outofsquare", "Rectangle"] + BASE +
@@ -473,17 +473,17 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           None, None, None, None, None, None,
           "Corner", 268.0, 268.0,
           "No"],
-         "R15c", dimstyles=("STANDARD INCHES", "CROSS DIMENSION"))
+         "R15c", dimstyles=("STANDARD INCHES", "CROSS DIMENSIONS"))
 assert vm.dimstyle_log.count('STANDARD INCHES') == 4, vm.dimstyle_log
-assert 'CROSS DIMENSION' in vm.dimstyle_log
+assert 'CROSS DIMENSIONS' in vm.dimstyle_log
 assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.dimstyle_log
-# Nesting: a small dim drawn while CROSS DIMENSION is current must
-# come back to CROSS DIMENSION, not to STANDARD.  The draw order
+# Nesting: a small dim drawn while CROSS DIMENSIONS is current must
+# come back to CROSS DIMENSIONS, not to STANDARD.  The draw order
 # never produces a small cross dim today, so drive it directly rather
 # than let the assertion sit vacuous.
 vm2 = VM()
 vm2.load(LSP)
-for s in ("STANDARD INCHES", "CROSS DIMENSION"):
+for s in ("STANDARD INCHES", "CROSS DIMENSIONS"):
     vm2.tables['DIMSTYLE'].add(s)
 vm2.loads("""
   (defun testnest ( / od)
@@ -492,9 +492,9 @@ vm2.loads("""
     (pool:dimxend od))
 """)
 vm2.run('testnest', [])
-assert vm2.dimstyle_log == ['CROSS DIMENSION', 'STANDARD INCHES',
-                            'CROSS DIMENSION', 'STANDARD'], vm2.dimstyle_log
-print("   4 corner faces in inches; a nested small dim unwinds to CROSS DIMENSION")
+assert vm2.dimstyle_log == ['CROSS DIMENSIONS', 'STANDARD INCHES',
+                            'CROSS DIMENSIONS', 'STANDARD'], vm2.dimstyle_log
+print("   4 corner faces in inches; a nested small dim unwinds to CROSS DIMENSIONS")
 
 print("== R16. grecian Overall: WALL letters beat CORNER letters ==")
 # The field case from beforeaftergrecianoosexample.dxf.  A tape can be
@@ -598,5 +598,45 @@ _u = (_d2[0]/_m.hypot(*_d2), _d2[1]/_m.hypot(*_d2))
 _w = (_mm[0]-_pc[0][0], _mm[1]-_pc[0][1])
 assert abs(abs(_w[0]*_u[1] - _w[1]*_u[0]) - 48.0) < 1e-6
 print("   offsets reproduce the offsets figure; faces parallel at 48")
+
+print("== R18. cross dims: no per-entity style override (pure ByLayer) ==")
+# pool:dimdash used to stamp a hardcoded linetype (group 6) + ltscale
+# (group 48) onto every cross-dim entity so it read dashed regardless
+# of layer/style.  That is gone -- cross dims are ByLayer now, and
+# their look comes only from the CROSS DIMENSIONS dim style / the
+# DIMENSION layer.  Calling the retired function must fail outright,
+# not silently resolve to something else.
+vm = VM()
+vm.load(LSP)
+vm.loads("(defun testdimdash () (pool:dimdash))")
+try:
+    vm.run('testdimdash', [])
+    raise AssertionError("pool:dimdash must no longer exist")
+except LispError as e:
+    assert 'dimdash' in str(e), e
+print("   pool:dimdash is gone -- cross dims carry no property override")
+
+print("== R19. small-dim cutover is UNDER 2', not at-or-under ==")
+# a dimension of exactly pool:*smalldim* (24") must NOT switch to
+# STANDARD INCHES -- it stays in whatever style was already current,
+# in or out of a cross-dim block.
+vm = VM()
+vm.load(LSP)
+vm.tables['DIMSTYLE'].add("STANDARD INCHES")
+vm.tables['DIMSTYLE'].add("CROSS DIMENSIONS")
+vm.loads("""
+  (defun testcutover ( / od)
+    (pool:dimalg '(0.0 0.0) '(23.999 0.0) '(12.0 5.0))   ; just under
+    (pool:dimalg '(0.0 0.0) '(24.0 0.0) '(12.0 5.0))     ; exactly 24
+    (setq od (pool:dimxbegin))
+    (pool:dimalg '(0.0 0.0) '(24.0 0.0) '(12.0 5.0))     ; exactly 24, crossed
+    (pool:dimxend od))
+""")
+vm.run('testcutover', [])
+assert vm.dimstyle_log == ['STANDARD INCHES', 'STANDARD',   # under 24 switches
+                           # exactly 24 outside any block: no switch at all
+                           'CROSS DIMENSIONS',              # cross block opens
+                           'STANDARD'], vm.dimstyle_log      # exactly 24 inside: stays CROSS DIMENSIONS, block closes
+print("   under 24\" switches to STANDARD INCHES; exactly 24\" keeps the current style")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

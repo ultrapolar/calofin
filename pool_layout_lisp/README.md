@@ -359,9 +359,11 @@ closes the main rectangle A-B-C-D', the usual H/G/F/E/M/L/K letters
 anchor off its walls, the slope break spans the main section only,
 and the hopper's left corners tie to A and D'.
 
-**Cross dims are drawn dashed** in the final drawing (a linetype
-override on the dimension entities, on top of the `CROSS DIMENSION`
-style when present), matching the dashed guide convention.
+**Cross dims are drawn in the `CROSS DIMENSIONS` dim style** when the
+drawing has one (see *Dimension styles* below) — ByLayer, no
+per-entity color/linetype/lineweight override, so their look comes
+entirely from that style and the `DIMENSION` layer, same as every
+other dim the routine draws.
 
 ### In-square vs out-of-square
 
@@ -500,11 +502,11 @@ walls** (the 1" edge band, wall priority) rather than pulled like
 cross dims — exactly as the body-end chords `A-D` and `B-C` already
 are. A tip width the walls can't honour within 1" holds the tape and
 flags the run instead of silently splitting the difference. `NA`
-leaves them free as before, and they keep their dashed dim and report
-row. If the cross dims
+leaves them free as before, and they keep their `CROSS DIMENSIONS`-
+style dim and report row like any tie. If the cross dims
 can't be met the edges are held true and **`CROSS DIMS FAILED`** is
 reported — same policy as the rectangle. Every cross dim is
-dimensioned (in the `CROSS DIMENSION` style when present) and listed
+dimensioned (in the `CROSS DIMENSIONS` style when present) and listed
 in the report table (`X A-C`, `X LB-RT`, …) with target/actual/delta.
 
 ### L / Lazy L pools
@@ -701,27 +703,33 @@ zeroed state as your preference.
 | --- | --- |
 | `POOL` | The full pool **perimeter**, running around the whole shape — including the oval end arcs and Grecian corner cuts (individual lines/arcs, i.e. an exploded polyline). Best-fit body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). |
 | `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under Grecian ends; ovals draw none — see *Oval ends*), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
-| `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSION`** dimension style when the drawing has one (the current style is restored afterwards); everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
+| `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSIONS`** dimension style when the drawing has one (the current style is restored afterwards), ByLayer with no per-entity override; everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
 
 ### Dimension styles
 
 Two named styles are used when the drawing defines them, and the
 previous style is always restored right afterwards:
 
-* **`CROSS DIMENSION`** — the cross-dim (diagonal) block.
-* **`STANDARD INCHES`** — **every dimension measuring less than
-  24"**, whatever it is: corner radii and chamfer faces, short hopper
-  offsets, end radii, profile depths. The switch happens per
-  dimension, keyed on that dimension's own measurement, so a 96" side
-  and an 18" chamfer on the same pool each get the right style.
-  Angular corner dims measure degrees, not inches, and are left in the
-  current style.
+* **`CROSS DIMENSIONS`** — every cross dim (the diagonal block, on
+  any shape). Drawn **ByLayer** — no per-entity color, linetype or
+  lineweight override — so the look (dashed or otherwise) comes
+  entirely from that dim style and the `DIMENSION` layer, exactly the
+  way any other AutoCAD dimension does.
+* **`STANDARD INCHES`** — **every dimension measuring under 2'
+  (24")**, whatever it is: corner radii and chamfer faces, short
+  hopper offsets, end radii, profile depths. A dimension of exactly
+  2' stays in the current style (`STANDARD`, or `CROSS DIMENSIONS`
+  inside a cross-dim block) — the cutover is *under* 24", not
+  *at or under*. The switch happens per dimension, keyed on that
+  dimension's own measurement, so a 96" side and an 18" chamfer on
+  the same pool each get the right style. Angular corner dims measure
+  degrees, not inches, and are left in the current style.
 
 If a style is missing from the drawing the dimension is simply drawn
 in the current style (the routine says so once per run for
 `STANDARD INCHES`, then stays quiet). The styles nest correctly — a
 small dimension drawn inside the cross-dim block returns to
-`CROSS DIMENSION`, not to whatever was current before it — and the
+`CROSS DIMENSIONS`, not to whatever was current before it — and the
 style in effect when `POOL` started is restored even if the command
 errors out part-way.
 

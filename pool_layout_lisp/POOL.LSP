@@ -115,10 +115,12 @@
 
 ;; Measurements under pool:*smalldim* are dimensioned in the drawing's
 ;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
-;; note is printed at most once per run.
+;; note is printed at most once per run.  Cross dims (the diagonal
+;; block, any shape) use pool:*crossstyle* instead -- see pool:dimxbegin.
 (setq pool:*smalldim*    24.0)
 (setq pool:*smallstyle*  "STANDARD INCHES")
 (setq pool:*smallwarned* nil)
+(setq pool:*crossstyle*  "CROSS DIMENSIONS")
 (setq pool:*dimstyle0*   nil)         ; dim style current when POOL started
 
 ;;; -------------------- small vector helpers --------------------------
@@ -366,33 +368,21 @@
            "_R" (angtos ang 0 6) (pool:wp loc))
   (pool:dimsend od))
 
-;; Switch to the CROSS DIMENSION dim style when the drawing has one.
+;; Switch to the CROSS DIMENSIONS dim style when the drawing has one.
+;; Cross dims are drawn ByLayer (no per-entity color/linetype/lineweight
+;; override) -- their look (dashed or otherwise) comes entirely from
+;; that dim style and the DIMENSION layer, same as every other dim.
 ;; Returns the previous style name (for pool:dimxend), or nil.
 (defun pool:dimxbegin ( / odim)
-  (if (tblsearch "DIMSTYLE" "CROSS DIMENSION")
+  (if (tblsearch "DIMSTYLE" pool:*crossstyle*)
       (progn
         (setq odim (getvar "DIMSTYLE"))
-        (command "_.-DIMSTYLE" "_Restore" "CROSS DIMENSION")
+        (command "_.-DIMSTYLE" "_Restore" pool:*crossstyle*)
         odim)))
 
 (defun pool:dimxend (odim)
   (if (and odim (tblsearch "DIMSTYLE" odim))
       (command "_.-DIMSTYLE" "_Restore" odim)))
-
-;; Give the just-drawn dimension a dashed linetype override so cross
-;; dims read apart from the regular dims at a glance.
-(defun pool:dimdash ( / e ed)
-  (setq e (entlast))
-  (if (and e (setq ed (entget e)) (/= pool:*dashlt* "CONTINUOUS"))
-      (progn
-        (setq ed (if (assoc 6 ed)
-                     (subst (cons 6 pool:*dashlt*) (assoc 6 ed) ed)
-                     (append ed (list (cons 6 pool:*dashlt*)))))
-        (setq ed (if (assoc 48 ed)
-                     (subst (cons 48 (pool:ltsc)) (assoc 48 ed) ed)
-                     (append ed (list (cons 48 (pool:ltsc))))))
-        (entmod ed)
-        (entupd e))))
 
 ;; Point offset outward (away from cen) from the midpoint of p->q.
 ;; A negative dist offsets inward instead.
@@ -1438,7 +1428,8 @@
   ;; ideal grecian, so when measured they are held like WALLS (the
   ;; 1-inch edge band) -- just as the body chords A-D and B-C already
   ;; are -- rather than pulled like cross dims in the 2-inch band.
-  ;; They still get their dashed dim and report row like any tie.
+  ;; They still get their CROSS DIMENSIONS-style dim and report row
+  ;; like any tie.
   (if (= mode "Simple")
       (setq pts seed failed (cadr fq))
       (progn
@@ -1519,18 +1510,16 @@
            (pool:dimalg p qq (list (+ xmax (* 0.6 doff)) (cadr (pool:mid p qq)))))
           (t
            (pool:dimalg p qq (pool:outoffp p qq pts doff))))))
-  ;; provided cross dims, in the CROSS DIMENSION style when available
+  ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach cc crosscons
     (if (caddr cc)
-        (progn
-          (pool:dimalg (nth (car cc) pts) (nth (cadr cc) pts)
-                       (pool:v+ (pool:mid (nth (car cc) pts) (nth (cadr cc) pts))
-                                (pool:v* (pool:unit
-                                           (pool:perp (pool:v- (nth (cadr cc) pts)
-                                                               (nth (car cc) pts))))
-                                         (* (if (= 0 (rem k 2)) 0.12 -0.12) doff))))
-          (pool:dimdash)))
+        (pool:dimalg (nth (car cc) pts) (nth (cadr cc) pts)
+                     (pool:v+ (pool:mid (nth (car cc) pts) (nth (cadr cc) pts))
+                              (pool:v* (pool:unit
+                                         (pool:perp (pool:v- (nth (cadr cc) pts)
+                                                             (nth (car cc) pts))))
+                                       (* (if (= 0 (rem k 2)) 0.12 -0.12) doff)))))
     (setq k (1+ k)))
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
@@ -1972,20 +1961,18 @@
                          (pool:v+ (pool:unit (pool:v- (nth 3 pts) (nth 4 pts)))
                                   (pool:unit (pool:v- (nth 5 pts) (nth 4 pts)))))
                        doff ""))
-  ;; provided cross dims, in the CROSS DIMENSION style when available
+  ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach pr pool:*hexdiags*
     (if (nth k diags)
-        (progn
-          (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
-                       (pool:v+ (pool:mid (nth (car pr) pts) (nth (cadr pr) pts))
-                                (pool:v* (pool:unit
-                                           (pool:perp
-                                             (pool:v- (nth (cadr pr) pts)
-                                                      (nth (car pr) pts))))
-                                         (* (if (= 0 (rem k 2)) 0.15 -0.15)
-                                            doff))))
-          (pool:dimdash)))
+        (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
+                     (pool:v+ (pool:mid (nth (car pr) pts) (nth (cadr pr) pts))
+                              (pool:v* (pool:unit
+                                         (pool:perp
+                                           (pool:v- (nth (cadr pr) pts)
+                                                    (nth (car pr) pts))))
+                                       (* (if (= 0 (rem k 2)) 0.15 -0.15)
+                                          doff)))))
     (setq k (1+ k)))
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
@@ -4208,8 +4195,7 @@
           (pool:dimalg rpa rpb
                        (pool:v+ (pool:mid rpa rpb)
                                 (pool:v* (pool:unit (pool:perp (pool:v- rpb rpa)))
-                                         (* (if (= 0 (rem k 2)) 0.2 -0.2) doff))))
-          (pool:dimdash)))
+                                         (* (if (= 0 (rem k 2)) 0.2 -0.2) doff))))))
     (setq k (1+ k)))
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
@@ -4636,17 +4622,13 @@
   (pool:dimrad (nth 3 rend) tipr mr doff)
   (setq odim (pool:dimxbegin))
   (if dac
-      (progn
-        (pool:dimalg a c (pool:v+ (pool:mid a c)
-                                  (pool:v* (pool:unit (pool:perp (pool:v- c a)))
-                                           (* 0.2 doff))))
-        (pool:dimdash)))
+      (pool:dimalg a c (pool:v+ (pool:mid a c)
+                                (pool:v* (pool:unit (pool:perp (pool:v- c a)))
+                                         (* 0.2 doff)))))
   (if dbd
-      (progn
-        (pool:dimalg b d (pool:v+ (pool:mid b d)
-                                  (pool:v* (pool:unit (pool:perp (pool:v- d b)))
-                                           (* -0.2 doff))))
-        (pool:dimdash)))
+      (pool:dimalg b d (pool:v+ (pool:mid b d)
+                                (pool:v* (pool:unit (pool:perp (pool:v- d b)))
+                                         (* -0.2 doff)))))
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
@@ -5050,17 +5032,13 @@
       (progn
         (setq odim (pool:dimxbegin))
         (if dac
-            (progn
-              (pool:dimalg a c (pool:v+ (pool:mid a c)
-                                        (pool:v* (pool:unit (pool:perp (pool:v- c a)))
-                                                 (* 0.2 doff))))
-              (pool:dimdash)))
+            (pool:dimalg a c (pool:v+ (pool:mid a c)
+                                      (pool:v* (pool:unit (pool:perp (pool:v- c a)))
+                                               (* 0.2 doff)))))
         (if dbd
-            (progn
-              (pool:dimalg b d (pool:v+ (pool:mid b d)
-                                        (pool:v* (pool:unit (pool:perp (pool:v- d b)))
-                                                 (* -0.2 doff))))
-              (pool:dimdash)))
+            (pool:dimalg b d (pool:v+ (pool:mid b d)
+                                      (pool:v* (pool:unit (pool:perp (pool:v- d b)))
+                                               (* -0.2 doff)))))
         (pool:dimxend odim)))
   (setvar "CLAYER" oldclay)
 

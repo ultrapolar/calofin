@@ -82,7 +82,7 @@
   (pooldemo:hopdims gg nil))
 
 ;; 2. out-of-square rectangle, rounded corners, WEDGE bottom + profile
-(defun pooldemo:c2 (org / q cs arcs cen gg)
+(defun pooldemo:c2 (org / q cs arcs cen gg od)
   (pooldemo:cap org "2  RECTANGLE out-of-square / rounded corners / WEDGE + section")
   (setq q (list (list 0.0 0.0) (list 482.0 3.0) (list 479.0 243.0) (list 2.0 239.0))
         cs (list (list "Rounded" 36.0) (list "Rounded" 36.0)
@@ -91,8 +91,9 @@
                               (pool:v+ (nth 2 q) (nth 3 q))) 0.25)
         arcs (pool:drawrect q cs))
   (setvar "CLAYER" "DIMENSION")
+  (setq od (pool:dimxbegin))
   (pool:dimalg (nth 0 q) (nth 2 q) (pool:mid (nth 0 q) (nth 2 q)))
-  (pool:dimdash)
+  (pool:dimxend od)
   (pool:dimcorners q cs arcs cen 30.0)
   (setvar "CLAYER" "POOL")
   (setq gg (pooldemo:bottom q cs "Wedge" 60.0 0.0 420.0 0.0 60.0 60.0
