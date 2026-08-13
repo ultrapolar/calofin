@@ -64,11 +64,12 @@
 ;;;     disagreement is only SUGGESTED against, in the report:
 ;;;     - POOL OUTLINE & AREA. Everything in the selection on layer
 ;;;       "POOL" (tune *cchk-pool-layer*) whose properties are all
-;;;       ByLayer is the pool outline: a closed (lw)polyline, or the
-;;;       same shape exploded into lines and arcs — touching ends are
-;;;       chained back together and the largest closed loop wins. Its
-;;;       area (sq ft) and its straight / arc segment split are given
-;;;       in the report on the side.
+;;;       ByLayer is the pool outline: a closed (lw)polyline, a
+;;;       CIRCLE, or the same shape exploded into lines and arcs —
+;;;       touching ends are chained back together and the largest
+;;;       closed loop wins; leftover open chains or other closed loops
+;;;       are reported as AMBIGUOUS. Its area (sq ft) and its straight
+;;;       / arc segment split are given in the report on the side.
 ;;;     - COVER DETAILS. A block named (or containing) "Cover
 ;;;       Details" holds an OVERLAP value ("Overlap: 12''" — only
 ;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" —
@@ -88,12 +89,17 @@
 ;;;       that is not a polyline is called out.
 ;;;     - OVERLAP NA <-> DASHED OUTLINE. Overlap reading NA means no
 ;;;       dashed polyline may sit on the pool layer; a stated overlap
-;;;       demands one. Either mismatch is reported.
+;;;       demands one and its absence is reported - UNLESS the "Pool
+;;;       Size Shown" note (above) is in the selection, in which case
+;;;       this demand is skipped entirely.
 ;;;     - REPLACEMENT. A "Replacement Disclaimer" block should be in
-;;;       the selection. Without one COVERCHECK asks whether the
-;;;       drawing is a replacement; answering Yes asks you to point
-;;;       at the block, and not finding it is reported. COVERSCAN
-;;;       cannot ask and just notes the block is not there.
+;;;       the selection. Without one - and without a "Pool Size Shown"
+;;;       note either - COVERCHECK asks whether the drawing is a
+;;;       replacement; answering Yes asks you to point at the block,
+;;;       and not finding it is reported. A "Pool Size Shown" note
+;;;       skips the question outright (a full pool size drawing is
+;;;       never a replacement). COVERSCAN cannot ask and just notes
+;;;       the block is not there.
 ;;;     - Under any of these - a replacement, an NA overlap, or a
 ;;;       cover drawn on the cover layer - PADDLE pads are NOT
 ;;;       suggested.
@@ -363,7 +369,9 @@
   best)
 
 (defun cchk:ptstr (p)
-  (strcat "(" (rtos (car p) 2 4) ", " (rtos (cadr p) 2 4) ")"))
+  ;; formatted with the drawing's own unit settings (LUNITS/LUPREC),
+  ;; same as every measurement elsewhere in the report
+  (strcat "(" (rtos (car p)) ", " (rtos (cadr p)) ")"))
 
 (defun cchk:pad2 (n)
   (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
@@ -472,9 +480,6 @@
         ((= ans "Back")  'back)
         (t               'skip)))
 
-(defun cchk:progress (what n total)
-  (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
-
 (defun cchk:confirm-move (label orig sugg / ans newp)
   ;; The point has been put where COVERCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
@@ -522,7 +527,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -800,13 +805,6 @@
           (setq segs (cons s segs))))))
   (reverse segs))
 
-(defun cchk:group-ents (g / out e s)
-  ;; the distinct entities a group's segments belong to
-  (foreach s (cdr g)
-    (setq e (cchk:seg-ent s))
-    (if (not (member e out)) (setq out (cons e out))))
-  (reverse out))
-
 (defun cchk:seg-dir-ang (s / a)
   ;; segment direction folded into [0, pi)
   (setq a (angle (cchk:seg-p1 s) (cchk:seg-p2 s)))
@@ -828,37 +826,6 @@
             rest (cdr rest)))
     (setq out (append (reverse pre) (list r) rest)))
   out)
-
-(defun cchk:pts-bbox (segs / xs ys e p)
-  ;; ((minx miny) (maxx maxy)) over the endpoints of a list of segments
-  (setq xs nil ys nil)
-  (foreach e segs
-    (foreach p (list (cchk:seg-p1 e) (cchk:seg-p2 e))
-      (setq xs (cons (car p) xs)
-            ys (cons (cadr p) ys))))
-  (if xs
-    (list (list (apply 'min xs) (apply 'min ys))
-          (list (apply 'max xs) (apply 'max ys)))))
-
-(defun cchk:boxes-touch (b1 b2 m)
-  ;; do two ((minx miny)(maxx maxy)) boxes overlap once grown by m?
-  (and b1 b2
-       (<= (- (caar b2) m) (caadr b1))
-       (<= (- (caar b1) m) (caadr b2))
-       (<= (- (cadar b2) m) (cadadr b1))
-       (<= (- (cadar b1) m) (cadadr b2))))
-
-(defun cchk:zoom-box (bb / p1 p2 m)
-  ;; zoom the current view onto a ((minx miny)(maxx maxy)) box
-  (if bb
-    (progn
-      (setq p1 (car bb)
-            p2 (cadr bb)
-            m  (* *cchk-zoom-margin*
-                  (max (- (car p2) (car p1)) (- (cadr p2) (cadr p1)) 1e-6)))
-      (command "_.ZOOM" "_Window"
-               (trans (list (- (car p1) m) (- (cadr p1) m) 0.0) 0 1)
-               (trans (list (+ (car p2) m) (+ (cadr p2) m) 0.0) 0 1)))))
 
 ;; --- block & text helpers ------------------------------------------
 
@@ -921,17 +888,6 @@
               e   (entnext e)))))
   (append lst (cchk:blockdef-texts (cdr (assoc 2 ed)) *cchk-block-depth*)))
 
-(defun cchk:ins-attrib-deep (ent tag / val s)
-  ;; the tag's value on the INSERT, or on a block nested inside it
-  (setq val (cchk:ins-attrib ent tag))
-  (if val
-    val
-    (foreach s (cchk:blockdef-texts (cdr (assoc 2 (entget ent)))
-                                    *cchk-block-depth*)
-      (if (and (null val)
-               (wcmatch (cchk:squash s) (strcat "*" (cchk:squash tag) "*")))
-        (setq val s)))))
-
 (defun cchk:block-has-layer-p (bname layer depth / e et found)
   ;; does the block definition (or a block it nests, down to depth)
   ;; draw anything on the given layer?
@@ -956,19 +912,6 @@
         found (wcmatch (cchk:norm-text (cchk:block-name ent)) pat))
   (foreach s (cchk:ins-texts ent)
     (if (wcmatch (cchk:norm-text s) pat)
-      (setq found T)))
-  found)
-
-(defun cchk:ins-has-word (ent word / found s)
-  ;; T when the INSERT's (effective) name or any text it shows
-  ;; contains the given standalone word — "NOT" hits "Not Selected"
-  ;; but never "NOTE"; "STEP" hits "with Step" but never "Stepstone"
-  (setq word  (strcase word)
-        found nil)
-  (foreach s (cons (cchk:block-name ent) (cchk:ins-texts ent))
-    (if (and s
-             (wcmatch (strcat " " (cchk:norm-text s) " ")
-                      (strcat "* " word " *")))
       (setq found T)))
   found)
 
@@ -1156,41 +1099,6 @@
      (if (and meas (>= meas 0.0)) (angtos meas)))
     (t                                        ; radius/diameter/ordinate
      (if (and meas (>= meas 0.0)) (rtos meas)))))
-
-(defun cchk:dim-num (ent / ed dtype p13 p14 ang v)
-  ;; the dimension's linear measurement as a NUMBER, recomputed from
-  ;; its definition points; falls back to the stored measurement
-  (setq ed    (entget ent)
-        dtype (logand 7 (cdr (assoc 70 ed)))
-        p13   (cdr (assoc 13 ed))
-        p14   (cdr (assoc 14 ed)))
-  (cond
-    ((and (= dtype 1) p13 p14) (distance p13 p14))
-    ((and (= dtype 0) p13 p14)
-     (setq ang (cdr (assoc 50 ed)))
-     (if (null ang) (setq ang 0.0))
-     (setq v (mapcar '- p14 p13))
-     (abs (+ (* (car v) (cos ang)) (* (cadr v) (sin ang)))))
-    (t (cdr (assoc 42 ed)))))
-
-(defun cchk:dim-stated (ent / txt v)
-  ;; the value the dimension actually STATES: its text override when
-  ;; it carries a readable one, else what it measures
-  (setq txt (cdr (assoc 1 (entget ent))))
-  (if (and txt
-           (/= txt "")
-           (not (vl-string-search "<>" txt))    ; "<>" = show the measurement
-           (setq v (cchk:parse-len txt)))
-    v
-    (cchk:dim-num ent)))
-
-(defun cchk:pt-in-box (p bb m)
-  ;; is point p inside the ((minx miny)(maxx maxy)) box grown by m?
-  (and bb p
-       (>= (car p)  (- (caar bb) m))
-       (<= (car p)  (+ (caadr bb) m))
-       (>= (cadr p) (- (cadar bb) m))
-       (<= (cadr p) (+ (cadadr bb) m))))
 
 (defun cchk:audit-dim-point (ent gcode label cands / ed pt near sugg ans final how)
   ;; audits one definition point: an off-object point is put where it
@@ -1661,6 +1569,14 @@
      (list (list (cchk:pv-add cen (cchk:pv-scl (cchk:pv-dir sa) r))
                  (cchk:pv-add cen (cchk:pv-scl (cchk:pv-dir ea) r))
                  (/ (sin (/ sweep 4.0)) (cos (/ sweep 4.0)))))) ; tan(sweep/4)
+    ((= typ "CIRCLE")
+     ;; two flush half-circle arcs (east point -> west point -> east
+     ;; point, both CCW) chain into the same closed loop a polyline
+     ;; circle would, without any extra vertex-list plumbing
+     (setq cen (cchk:pv-2d (cdr (assoc 10 ed)))
+           r   (cdr (assoc 40 ed)))
+     (list (list (cchk:pv-add cen (list r 0.0)) (cchk:pv-add cen (list (- r) 0.0)) 1.0)
+           (list (cchk:pv-add cen (list (- r) 0.0)) (cchk:pv-add cen (list r 0.0)) 1.0)))
     ((= typ "LWPOLYLINE")
      (setq cv (cchk:pv-lwverts ent))
      (cchk:pv-vts->segs (car cv) (cdr cv)))
@@ -1773,7 +1689,7 @@
           i  (1+ i)
           ed (entget e))
     (if (and ed
-             (member (cdr (assoc 0 ed)) '("LINE" "ARC" "LWPOLYLINE" "POLYLINE"))
+             (member (cdr (assoc 0 ed)) '("LINE" "ARC" "LWPOLYLINE" "POLYLINE" "CIRCLE"))
              (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pool-layer*)))
       (if (cchk:bylayer-p e (cond ((assoc e saved) (cdr (assoc e saved)))
                                   ((cchk:ent-color e))))
@@ -1781,18 +1697,22 @@
         (setq nskip (1+ nskip)))))
   (cons (reverse out) nskip))
 
-(defun cchk:pool-loop (pents / segs e res best bestarea a l)
+(defun cchk:pool-loop (pents / segs e res loops best bestarea a l)
   ;; the pool outline: the largest closed loop chained from the
-  ;; candidates' bulge-aware segments; nil when nothing closes back
-  ;; on itself
+  ;; candidates' bulge-aware segments. Returns
+  ;;   (best-loop open-chain-count other-closed-loop-count)
+  ;; best-loop is nil when nothing closes back on itself; the other
+  ;; two counts flag an ambiguous outline (a gap, or extra geometry
+  ;; on the pool layer) even when a loop was still found.
   (foreach e pents
     (setq segs (append segs (cchk:pv-ent-segs e))))
   (setq res      (cchk:pv-chain segs)
+        loops    (car res)
         bestarea 0.0)
-  (foreach l (car res)
+  (foreach l loops
     (setq a (abs (cchk:pv-area l)))
     (if (> a bestarea) (setq bestarea a best l)))
-  best)
+  (list best (cdr res) (max 0 (1- (length loops)))))
 
 (defun cchk:parse-nxn (s / lst i n num a res)
   ;; the first "NxN" written in the text ("5x5", "3 X 3") as a list
@@ -1897,23 +1817,26 @@
 (defun cchk:pad-centers (/ ss2 i e ed nm bb out)
   ;; centers (extents middle) of every pad already in the drawing: an
   ;; INSERT on the pads layer, or one whose (effective) name is a pad
-  ;; block from *cchk-pad-blocks*
-  (setq ss2 (ssget "_X" '((0 . "INSERT")))
+  ;; block from *cchk-pad-blocks* - scoped to the current layout tab
+  ;; so a pad sitting in another tab is never counted as covering this one
+  (setq ss2 (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB"))))
         i   0)
   (if ss2
     (repeat (sslength ss2)
       (setq e  (ssname ss2 i)
             i  (1+ i)
-            ed (entget e)
-            nm (cchk:squash (cchk:block-name e)))
-      (if (or (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pads-layer*))
-              (vl-some '(lambda (p) (= nm (cchk:squash p))) *cchk-pad-blocks*))
+            ed (entget e))
+      (if ed
         (progn
-          (setq bb (cchk:bbox e))
-          (if bb
-            (setq out (cons (list (* 0.5 (+ (caar bb) (caadr bb)))
-                                  (* 0.5 (+ (cadar bb) (cadadr bb))))
-                            out)))))))
+          (setq nm (cchk:squash (cchk:block-name e)))
+          (if (or (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pads-layer*))
+                  (vl-some '(lambda (p) (= nm (cchk:squash p))) *cchk-pad-blocks*))
+            (progn
+              (setq bb (cchk:bbox e))
+              (if bb
+                (setq out (cons (list (* 0.5 (+ (caar bb) (caadr bb)))
+                                      (* 0.5 (+ (cadar bb) (cadadr bb))))
+                                out)))))))))
   out)
 
 (defun cchk:mark-pad (ctr)
@@ -1927,7 +1850,7 @@
                      (cons 40 (/ *cchk-pad-size* 2.0))))
     (cchk:tag (entlast) "MARKER")))
 
-(defun cchk:cover-audit (ss blks live saved / pres pents vts narc nlin v
+(defun cchk:cover-audit (ss blks live saved / pres pents lres vts narc nlin v
                           sqft det ovraw ovval ovok ovna spraw spval spna
                           arcy wantov wantsp why dashpoly cstat covered note
                           replblk replp replsum padskip pk lines s f
@@ -1941,10 +1864,17 @@
   ;; Replacement Disclaimer selected the replacement question is
   ;; asked at the prompt (COVERSCAN never asks).
 
+  ;; the 'Pool Size Shown' note is checked first: besides its own
+  ;; verdict (below) it also silences the replacement prompt and the
+  ;; NA-overlap dashed-outline demand, both of which assume a drawn
+  ;; cover exists to check against
+  (setq note (cchk:sel-has-phrase ss blks *cchk-pool-note*))
+
   ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
   (setq pres  (cchk:pool-ents ss saved)
         pents (car pres)
-        vts   (if pents (cchk:pool-loop pents))
+        lres  (if pents (cchk:pool-loop pents))
+        vts   (car lres)
         narc  0
         nlin  0)
   (if (> (cdr pres) 0)
@@ -1953,6 +1883,16 @@
                   (list (strcat "Pool: " (itoa (cdr pres)) " item(s) on layer '"
                                 *cchk-pool-layer*
                                 "' SKIPPED - properties are not ByLayer")))))
+  (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
+    (setq lines (append lines (list
+      (strcat "Pool: outline on layer '" *cchk-pool-layer* "' is AMBIGUOUS -"
+              (if (> (cadr lres) 0)
+                (strcat " " (itoa (cadr lres)) " open chain(s) (check for gaps)")
+                "")
+              (if (> (caddr lres) 0)
+                (strcat (if (> (cadr lres) 0) ";" "") " " (itoa (caddr lres))
+                        " other closed loop(s) ignored (largest used)")
+                ""))))))
   (if vts
     (progn
       (foreach v vts
@@ -1964,7 +1904,10 @@
             poolsum (strcat (rtos sqft 2 1) " sq ft - outline "
                             (itoa nlin) " straight / " (itoa narc)
                             " arc segment(s), mostly "
-                            (if arcy "arcs" "straights")))
+                            (if arcy "arcs" "straights")
+                            (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
+                              " (AMBIGUOUS - see detail)"
+                              "")))
       ;; what the cover SHOULD be for this pool
       (cond
         (arcy
@@ -2056,9 +1999,10 @@
           (t
            (strcat "Cover Details: Overlap " (rtos ovval 2 0)
                    "\" - no pool outline to check it against"))))))
-      ;; any stated overlap demands a dashed cover outline on the
-      ;; pool layer
-      (if ovval
+      ;; any stated overlap demands a dashed cover outline on the pool
+      ;; layer - UNLESS the 'Pool Size Shown' note is present, which
+      ;; means no drawn cover is expected in the first place
+      (if (and ovval (not note))
         (setq lines (append lines (list
           (if dashpoly
             (strcat "Cover Details: overlap set and a dashed polyline sits on layer '"
@@ -2104,7 +2048,7 @@
                                  (not (equal ovval wantov 1e-6))))
                       (strcat " - SUGGEST " (rtos wantov 2 0) "\"")
                       "")
-                    (if (and ovval (not dashpoly)) " - NO DASHED outline" "")
+                    (if (and ovval (not dashpoly) (not note)) " - NO DASHED outline" "")
                     (if (and ovna dashpoly) " - dashed outline present, LOOK AT it" "")
                     "; Spacing "
                     (cond (spna "NA")
@@ -2117,9 +2061,9 @@
                       "")))))
 
   ;; --- the cover layer: polylines only + 'Pool Size Shown' note ----
+  ;; (note itself was already read at the top of the function)
   (setq cstat   (cchk:cover-nonpoly ss *cchk-cover-layer*)
-        covered (> (car cstat) 0)
-        note    (cchk:sel-has-phrase ss blks *cchk-pool-note*))
+        covered (> (car cstat) 0))
   (if (and covered (> (cdr cstat) 0))
     (setq lines (append lines (list
       (strcat "Cover: " (itoa (cdr cstat)) " of " (itoa (car cstat))
@@ -2154,6 +2098,10 @@
      (setq replp   T
            replsum (strcat "'" *cchk-repl-block*
                            "' block present - replacement drawing")))
+    (note
+     ;; a full pool size drawing is never a replacement - do not ask
+     (setq replsum (strcat "not asked - '" *cchk-pool-note*
+                           "' note is present (full pool size shown)")))
     (live
      (if (cchk:ask-ny (strcat "\nNo '" *cchk-repl-block*
                               "' block is selected - is this drawing a replacement?"))
@@ -2165,6 +2113,7 @@
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
                  (cchk:ins-matches (car pk) *cchk-repl-block*))
+            (cchk:zoom-ent (car pk))
             (setq replsum (strcat "replacement; '" *cchk-repl-block*
                                   "' found where you pointed (outside the selection)")))
            (pk
@@ -2465,12 +2414,6 @@
              (setq keep (append (cdddr res) keep))
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))))
 
-        ;; --- cover checks: pool area, Cover Details, note, pads -----
-        (princ "\n--- Cover checks: pool outline & area, Cover Details, pads ---")
-        (setq cres (cchk:cover-audit ss blks T saved))
-        (foreach l (cadr cres)
-          (setq lines (cons l lines)))
-
         ;; --- restore colours (flagged/moved keep theirs) ------------
         ;; restored entities drop their rescue stash; flagged/moved
         ;; ones keep it so COVERCHECKRESCUE can clear the marks later
@@ -2481,6 +2424,13 @@
               (cchk:unstash (car pair)))))
         (foreach l relock (cchk:set-layer-lock l T))
         (setq relock nil)
+
+        ;; --- cover checks: pool area, Cover Details, note, pads -----
+        (princ "\n--- Cover checks: pool outline & area, Cover Details, pads ---")
+        (setq cres (cchk:cover-audit ss blks T saved))
+        (foreach l (cadr cres)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
 
         ;; --- report on the right side, to scale with the drawing ----
         ;; text height picked from the drawing's extents so the whole
@@ -2603,12 +2553,17 @@
 
   (prompt "\nHighlight the drawing to COVERSCAN (Enter = whole drawing): ")
   (setq ss (ssget))
-  (if (null ss) (setq ss (ssget "_X")))
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
     (t
      (setq oldecho (getvar "CMDECHO"))
      (setvar "CMDECHO" 0)
+     ;; a rerun's leftover report/marker entities (e.g. suggested-pad
+     ;; circles) must not pollute this scan's own attachment checks -
+     ;; clear them before anything is collected, not after
+     (cchk:ensure-layer *cchk-report-layer* *cchk-report-color*)
+     (cchk:clear-old)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
@@ -2686,13 +2641,13 @@
                          lines)))
 
      ;; --- cover checks (read-only - no pad markers are drawn) -------
+     (princ "\n--- Cover checks: pool outline & area, Cover Details, pads ---")
      (setq cres (cchk:cover-audit ss blks nil nil))
      (foreach l (cadr cres)
+       (princ (strcat "\n  " l))
        (setq lines (cons l lines)))
 
      ;; --- report (the only thing COVERSCAN writes) ------------------
-     (cchk:ensure-layer *cchk-report-layer* *cchk-report-color*)
-     (cchk:clear-old)
      (setq hdr (list
                  (cons (strcat "Dimensions scanned: " (itoa nd) " ("
                                (itoa ndbad) " with a stray definition point)")
