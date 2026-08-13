@@ -330,6 +330,23 @@ def assume_west(lon, lonok):
 def in_us(lat, lon):
     return 17.0 < lat < 72.0 and -180.0 < lon < -64.0
 
+# Mirror of DDGPS's altitude-reading decision. XMP AbsoluteAltitude is
+# sea-level by definition; EXIF GPSAltitude may hold either that or the
+# height above the take-off point, depending on the DJI model. Both readings
+# are computed and the physically possible one wins - a drone cannot fly
+# below the ground, nor legally above 400 ft AGL.
+def pick_altitude(absft, gft, altmsl):
+    hmsl, hrel = absft - gft, absft
+    okmsl = 1.0 < hmsl <= 400.0
+    okrel = 1.0 < hrel <= 400.0
+    if altmsl or (okmsl and not okrel):
+        return hmsl, "MSL"
+    if okrel and not okmsl:
+        return hrel, "REL"
+    if okmsl:
+        return hmsl, "MSL?"
+    return None, None
+
 # Mirrors of ddg-split / ddg-hexbyte / ddg-hexline - parsing a certutil
 # "-encodehex" dump back into bytes, the fallback for PCs where ADODB is
 # blocked. Lines look like:
@@ -690,6 +707,34 @@ def main():
     check("US check accepts Hawaii", in_us(21.3, -157.8))
     check("US check accepts Alaska", in_us(64.8, -147.7))
     check("US check rejects western China", not in_us(39.9, 76.9))
+
+    # --- which altitude did the photo actually record? ---
+    # Dracut MA, from a file with no XMP: EXIF GPSAltitude 37.5 m = 123.0 ft,
+    # ground 244.1 ft. Read as sea level that is 121 ft UNDERGROUND, so the tag
+    # is holding height above take-off - and 123 ft is an ordinary pool-shoot
+    # height. This is the case that produced NON-PHYSICAL HEIGHT.
+    h, mode = pick_altitude(123.0, 244.1, None)
+    check("EXIF altitude below ground is read as above-take-off", mode == "REL")
+    check("...and gives the flight height directly", approx(h, 123.0))
+    check("...which rounds to a sane 123 ft", round_ft(h) == 123)
+    # York County PA: 201.179 m = 660.0 ft with ground ~450 ft. As sea level
+    # that is 210 ft AGL - legal and plausible; as above-take-off it would be
+    # 660 ft, over the 400 ft ceiling. So sea level is the only reading left.
+    h, mode = pick_altitude(660.0, 450.0, None)
+    check("EXIF altitude far above ground is read as sea level", mode == "MSL")
+    check("...and the subtraction is used", approx(h, 210.0))
+    # XMP AbsoluteAltitude is never ambiguous, even when both readings fit
+    h, mode = pick_altitude(300.0, 150.0, True)
+    check("XMP AbsoluteAltitude is always taken as sea level", mode == "MSL")
+    check("...even though 300 ft above take-off would also be plausible",
+          approx(h, 150.0))
+    # genuinely ambiguous EXIF: both readings inside the flying range
+    h, mode = pick_altitude(250.0, 100.0, None)
+    check("ambiguous EXIF prefers sea level but is flagged", mode == "MSL?")
+    # nothing works: a bad fix well underground and far over the ceiling
+    h, mode = pick_altitude(1500.0, 2000.0, None)
+    check("impossible either way -> no height, loud failure",
+          h is None and mode is None)
 
     # --- certutil hex-dump parsing (the no-ADODB fallback reader) ---
     # a real "certutil -encodehex" line, ASCII column and all

@@ -222,6 +222,13 @@ ground elevation at that same coordinate gives the height above grade:
    elevation instead.
 5. The height above grade is the subtraction —
    `AbsoluteAltitude − ground elevation`, rounded to the nearest foot —
+   but only when the photo's altitude really is sea-level referenced.
+   XMP `AbsoluteAltitude` always is; EXIF `GPSAltitude` often is **not**
+   (many DJI models put the height above the *take-off point* in that
+   tag). So both readings are computed and the physically possible one
+   is used — a drone can't fly below the ground, and can't legally fly
+   above 400 ft AGL. The command says which reading it took, and the
+   text in the drawing says so too.
    and it is written into the drawing at the point you picked, as five
    lines of plain single-line `TEXT` on the current layer in the current
    text style:
@@ -287,8 +294,10 @@ recovery), signed-byte and truncated-file inputs, the failure
 classification behind the loud-error dialogs (no metadata / no GPS
 data / no fix / bad GPS / no altitude), the GPS hemisphere rules
 (a `W` reference must make the longitude negative; a *missing*
-reference means the sign is unknown, never positive) and the US
-sanity check, rounding to the nearest foot, the `certutil` hex-dump
+reference means the sign is unknown, never positive), the US
+sanity check, the sea-level-vs-above-take-off altitude decision
+(exercised with both real files that hit it), rounding to the
+nearest foot, the `certutil` hex-dump
 parser, and the JSON number extraction for each elevation service's
 response shape.
 

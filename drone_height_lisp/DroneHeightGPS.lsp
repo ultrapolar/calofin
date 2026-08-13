@@ -25,6 +25,16 @@
 ;;;
 ;;;              H  =  AbsoluteAltitude(ft)  -  ground elevation(ft)
 ;;;
+;;;                    ...but only when the photo's altitude really is
+;;;                    referenced to sea level. XMP AbsoluteAltitude always
+;;;                    is; EXIF GPSAltitude often is NOT - plenty of DJI
+;;;                    models put the height above the TAKE-OFF point in
+;;;                    that tag. So both readings are worked out and the
+;;;                    physically possible one is used: a drone cannot fly
+;;;                    below the ground, and cannot legally fly above
+;;;                    400 ft AGL. The run says which one it took, and so
+;;;                    does the text placed in the drawing.
+;;;
 ;;;        rounded to the nearest foot, written as text at the picked point,
 ;;;        AND saved to the SAME per-drawing store DroneDistortion.lsp uses,
 ;;;        so DDFIX immediately offers it as its default. This file also
@@ -625,7 +635,7 @@
 ;; say whether an XMP packet / EXIF block was present at all - failure
 ;; reporting uses them to tell "stripped file" apart from "metadata without
 ;; GPS".
-(defun ddg-read-meta (lst / xtxt exif absm lat lon xmpf tiff lonok)
+(defun ddg-read-meta (lst / xtxt exif absm lat lon xmpf tiff lonok altmsl)
   (setq xtxt (ddg-xmp-text lst))
   (setq xmpf (> (strlen xtxt) 0))
   (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
@@ -633,6 +643,7 @@
         lon  (ddg-xmp-num xtxt "GpsLongitude"))
   (if (null lon) (setq lon (ddg-xmp-num xtxt "GpsLongtitude")))
   (if lon (setq lonok T))              ; XMP writes the sign into the number
+  (if absm (setq altmsl T))            ; XMP AbsoluteAltitude IS sea-level
   (if (or (null lat) (null lon) (null absm))
     (progn
       (setq exif (ddg-exif-gps lst))
@@ -641,9 +652,12 @@
         (progn
           (setq lon (nth 1 exif))
           (if (nth 5 exif) (setq lonok T))))   ; only if E/W was recorded
+      ;; EXIF GPSAltitude is left un-flagged: plenty of DJI models write the
+      ;; height above the TAKE-OFF point into it rather than height above sea
+      ;; level, so which one it is has to be worked out from the numbers.
       (if (null absm) (setq absm (nth 2 exif)))
       (setq tiff (nth 3 exif))))
-  (list absm lat lon xmpf tiff lonok))
+  (list absm lat lon xmpf tiff lonok altmsl))
 
 ;; ===========================================================================
 ;;  HTTP + JSON (MSXML2.XMLHTTP ActiveX; synchronous GET)
@@ -811,6 +825,7 @@
 ;;          ground elevation -> place the height report -> save H
 ;; ---------------------------------------------------------------------------
 (defun c:DDGPS ( / *error* def c file rd rpath lst meta fsize absm lat lon xmpf tiff lonok
+                   altmsl hmsl hrel okmsl okrel mode
                    pt g gft gsrc absft hraw hsel ht lines placed ans)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
@@ -846,7 +861,8 @@
         ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
         (setq meta (ddg-read-meta lst)
               absm (nth 0 meta) lat  (nth 1 meta) lon  (nth 2 meta)
-              xmpf (nth 3 meta) tiff (nth 4 meta) lonok (nth 5 meta))
+              xmpf (nth 3 meta) tiff (nth 4 meta) lonok (nth 5 meta)
+              altmsl (nth 6 meta))
         ;; some PNG writers park the metadata after the image data - if the
         ;; front window came up short, scan the tail of the file too
         (if (and (or (null lat) (null lon) (null absm))
@@ -860,7 +876,8 @@
             (if (null lon)  (setq lon  (nth 2 meta)))
             (if (nth 3 meta) (setq xmpf T))
             (if (nth 4 meta) (setq tiff T))
-            (if (nth 5 meta) (setq lonok T))))
+            (if (nth 5 meta) (setq lonok T))
+            (if (nth 6 meta) (setq altmsl T))))
         ;; 2b) say EXACTLY what is wrong if the file cannot be used - this is
         ;; a hard stop, no rescue: use the file exactly as it came off the
         ;; drone. Everything past this point lives in the final (t ...)
@@ -966,35 +983,70 @@
                 ((null gft) (princ "\nAborted - H unchanged."))
                 (t
                  (princ (strcat "\n  Ground elevation : " (ddg-n1 gft) " ft   [" gsrc "]"))
-                 ;; 5) the delta, rounded to the nearest foot
+                 ;; 5) work out WHICH altitude the photo actually recorded.
+                 ;; XMP AbsoluteAltitude is sea-level by definition. EXIF
+                 ;; GPSAltitude is not so simple: many DJI models write the
+                 ;; height above the TAKE-OFF point into that tag instead. Both
+                 ;; readings are computed and the physically possible one wins
+                 ;; - a drone cannot fly below the ground, and cannot legally
+                 ;; fly above 400 ft AGL.
                  (setq absft (* absm ddg-m->ft)
-                       hraw  (- absft gft)
-                       hsel  (float (ddg-round hraw)))
+                       hmsl  (- absft gft)          ; if it is above sea level
+                       hrel  absft                  ; if it is above take-off
+                       okmsl (and (> hmsl 1.0) (<= hmsl 400.0))
+                       okrel (and (> hrel 1.0) (<= hrel 400.0)))
                  (cond
-                   ((<= hsel 0.0)
-                    (ddg-fail "NON-PHYSICAL HEIGHT"
-                      (list (strcat (ddg-n1 absft) " - " (ddg-n1 gft) " = "
-                                    (ddg-n1 hraw) " ft")
+                   ((or altmsl (and okmsl (not okrel)))
+                    (setq hraw hmsl mode "MSL"))
+                   ((and okrel (not okmsl))
+                    (setq hraw hrel mode "REL"))
+                   (okmsl                            ; both possible - prefer MSL
+                    (setq hraw hmsl mode "MSL?"))
+                   (t (setq hraw nil)))
+                 (setq hsel (if hraw (float (ddg-round hraw))))
+                 (cond
+                   ((or (null hsel) (<= hsel 0.0))
+                    (ddg-fail "ALTITUDE DOES NOT MAKE SENSE"
+                      (list (strcat "Photo altitude    : " (ddg-n1 absft) " ft")
+                            (strcat "Ground elevation  : " (ddg-n1 gft) " ft")
                             ""
-                            "That is not above ground - a big GPS error, or a"
-                            "wrong ground elevation. Nothing was saved or"
-                            "drawn. Set H with DDSET, or back-solve it with"
-                            "DDCAL.")))
+                            "Neither reading of that altitude is possible:"
+                            (strcat "  as above sea level -> " (ddg-n1 hmsl)
+                                    " ft above ground")
+                            (strcat "  as above take-off  -> " (ddg-n1 hrel) " ft")
+                            ""
+                            "Nothing was saved or drawn. Set H with DDSET, or"
+                            "back-solve it with DDCAL.")))
                    (t
-                    (if (> hsel 400.0)
-                      (princ (strcat "\n  WARNING: H = " (ddg-n1 hsel)
-                                     " ft is outside the sane 0-400 ft flying range - GPS error likely.")))
-                    (princ (strcat "\n  " (ddg-n1 absft) " - " (ddg-n1 gft) " = "
-                                   (ddg-n1 hraw) " ft  ->  H = " (ddg-n1 hsel) " ft"))
+                    (if (= mode "REL")
+                      (progn
+                        (princ "\n  The photo altitude is BELOW the ground here, so it is not a")
+                        (princ "\n  sea-level figure - it is the height above the TAKE-OFF point.")
+                        (princ (strcat "\n  Using it directly:  H = " (ddg-n1 hsel) " ft"))
+                        (princ "\n  (true if the drone took off at deck level - see DDALT/DDCAL)"))
+                      (progn
+                        (if (= mode "MSL?")
+                          (princ "\n  NOTE: both readings of the altitude are possible; taking it as sea-level."))
+                        (princ (strcat "\n  " (ddg-n1 absft) " - " (ddg-n1 gft) " = "
+                                       (ddg-n1 hraw) " ft  ->  H = " (ddg-n1 hsel) " ft"))))
                     ;; 6) place the report in the drawing
                     (setq ht (ddg-txt-height))
+                    ;; the middle lines say which reading of the altitude was
+                    ;; used, so the drawing carries its own justification
                     (setq lines
-                      (list
-                        (strcat "GPS position: " (ddg-n7 lat) ", " (ddg-n7 lon))
-                        (strcat "Drone altitude (MSL): " (ddg-n1 absft) " ft")
-                        (strcat "Ground elevation (MSL): " (ddg-n1 gft) " ft   [" gsrc "]")
-                        (strcat (ddg-n1 absft) " - " (ddg-n1 gft) " = " (ddg-n1 hraw) " ft")
-                        (strcat "Height above grade: " (itoa (fix hsel)) " ft")))
+                      (if (= mode "REL")
+                        (list
+                          (strcat "GPS position: " (ddg-n7 lat) ", " (ddg-n7 lon))
+                          (strcat "Drone altitude: " (ddg-n1 absft) " ft above take-off")
+                          (strcat "Ground elevation (MSL): " (ddg-n1 gft) " ft   [" gsrc "]")
+                          "Photo altitude is not sea-level referenced - used as-is"
+                          (strcat "Height above grade: " (itoa (fix hsel)) " ft"))
+                        (list
+                          (strcat "GPS position: " (ddg-n7 lat) ", " (ddg-n7 lon))
+                          (strcat "Drone altitude (MSL): " (ddg-n1 absft) " ft")
+                          (strcat "Ground elevation (MSL): " (ddg-n1 gft) " ft   [" gsrc "]")
+                          (strcat (ddg-n1 absft) " - " (ddg-n1 gft) " = " (ddg-n1 hraw) " ft")
+                          (strcat "Height above grade: " (itoa (fix hsel)) " ft"))))
                     (setq placed (ddg-place-text pt lines ht (getvar "CLAYER") (getvar "TEXTSTYLE")))
                     (if (null placed)
                       (ddg-fail "COULD NOT CREATE THE ANNOTATION TEXT"
@@ -1132,6 +1184,6 @@
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.5 loaded  (pick a photo, click a point, place the height report).")
+(princ "\nDrone Height from GPS v2.6 loaded  (pick a photo, click a point, place the height report).")
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)
