@@ -285,8 +285,8 @@
     (vl-catch-all-apply
       '(lambda ( / raw sa tmp)
          (setq stm (vlax-create-object "ADODB.Stream"))
-         (vlax-invoke-method stm 'Open)
-         (vlax-put-property  stm 'Type 1)              ; 1 = adTypeBinary
+         (vlax-put-property  stm 'Type 1)              ; 1 = adTypeBinary,
+         (vlax-invoke-method stm 'Open)                ; set BEFORE Open
          (vlax-invoke-method stm 'LoadFromFile file)
          (setq raw (vlax-invoke-method stm 'Read cnt)) ; first cnt bytes
          (vlax-invoke-method stm 'Close)

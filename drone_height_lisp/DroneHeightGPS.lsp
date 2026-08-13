@@ -105,6 +105,10 @@
 ;;;               report there, and save H for DDFIX
 ;;;     DDELEV  - type a latitude / longitude, print the ground elevation
 ;;;               (handy as an internet-connectivity test)
+;;;     DDTEST  - diagnose a photo that will not read: walks every step
+;;;               (find the file, ADODB.Stream, local copy, plain read) and
+;;;               reports what this PC allows, then whether the file carries
+;;;               any GPS metadata at all
 ;;;
 ;;;  UNITS
 ;;;  -----
@@ -142,61 +146,160 @@
   (alert msg)
   (princ))
 
+;; same, without the failure framing - for DDTEST's report
+(defun ddg-report (title lines / msg)
+  (setq msg title)
+  (foreach l lines (setq msg (strcat msg "\n" l)))
+  (princ (strcat "\n--- " title " ---"))
+  (foreach l lines (if (/= l "") (princ (strcat "\n  " l))))
+  (alert msg)
+  (princ))
+
+;; "yes"/"no" for the report
+(defun ddg-yn (x) (if x "yes" "NO"))
+
 ;; ===========================================================================
 ;;  Binary file access (Windows ADODB.Stream - same technique as DDALT;
 ;;  plain (open ... "r") is text mode and stops at the first 0x1A byte)
 ;; ===========================================================================
 
-;; read up to CNT bytes of FILE as a list of ints, or nil if unreadable.
-;; TAIL nil = from the start of the file; TAIL non-nil = the LAST cnt bytes
-;; (PNG writers may park the metadata chunks after the image data).
-(defun ddg-file-bytes (file cnt tail / stm out err)
-  (setq err
-    (vl-catch-all-apply
-      '(lambda ( / raw sa tmp pos)
-         (setq stm (vlax-create-object "ADODB.Stream"))
-         (vlax-invoke-method stm 'Open)
-         (vlax-put-property  stm 'Type 1)              ; 1 = adTypeBinary
-         (vlax-invoke-method stm 'LoadFromFile file)
-         (if tail
-           (progn
-             (setq pos (- (vlax-get-property stm 'Size) cnt))
-             (if (< pos 0) (setq pos 0))
-             (vlax-put-property stm 'Position pos)))
-         (setq raw (vlax-invoke-method stm 'Read cnt))
-         (vlax-invoke-method stm 'Close)
-         (cond
-           ((listp raw) (setq out raw))                ; some builds return a list
-           (t
-            (setq tmp (vl-catch-all-apply 'vlax-variant-value (list raw)))
-            (setq sa  (if (vl-catch-all-error-p tmp) raw tmp))
-            (setq out (vlax-safearray->list sa)))))
-      '()))
+;; Windows AutoCAD has no binary file mode in plain AutoLISP, so the primary
+;; reader is the ADODB.Stream ActiveX object. EVERY COM step is caught on its
+;; own, so when it breaks we can say exactly which step failed and what
+;; Windows said about it - run DDTEST to see the whole sequence.
+;;
+;; TAIL nil = read from the start of the file; TAIL non-nil = the LAST cnt
+;; bytes (PNG writers may park the metadata chunks after the image data).
+;; Returns (list bytes failed-step errmsg) - bytes nil if any step failed.
+;;
+;; NOTE on the order below: Type is set BEFORE Open. ADODB.Stream only allows
+;; the mode to be changed while the stream is closed (or empty and at
+;; position 0), and setting it first is the order every working example uses.
+(defun ddg-adodb-read (file cnt tail / stm out steps err failed)
+  (setq steps
+    (list
+      (cons "create the ADODB.Stream object"
+            '(lambda () (setq stm (vlax-create-object "ADODB.Stream"))))
+      (cons "switch the stream to binary mode"
+            '(lambda () (vlax-put-property stm 'Type 1)))    ; 1 = adTypeBinary
+      (cons "open the stream"
+            '(lambda () (vlax-invoke-method stm 'Open)))
+      (cons "load the file into the stream"
+            '(lambda () (vlax-invoke-method stm 'LoadFromFile file)))
+      (cons "seek to the right place in the file"
+            '(lambda ( / pos)
+               (if tail
+                 (progn
+                   (setq pos (- (vlax-get-property stm 'Size) cnt))
+                   (if (< pos 0) (setq pos 0))
+                   (vlax-put-property stm 'Position pos)))))
+      (cons "read the bytes out of the stream"
+            '(lambda ( / raw sa tmp)
+               (setq raw (vlax-invoke-method stm 'Read cnt))
+               (cond
+                 ((listp raw) (setq out raw))            ; some builds return a list
+                 (t
+                  (setq tmp (vl-catch-all-apply 'vlax-variant-value (list raw)))
+                  (setq sa  (if (vl-catch-all-error-p tmp) raw tmp))
+                  (setq out (vlax-safearray->list sa))))))))
+  (foreach s steps
+    (if (null failed)
+      (progn
+        (setq err (vl-catch-all-apply (cdr s) '()))
+        (if (vl-catch-all-error-p err)
+          (setq failed (list (car s) (vl-catch-all-error-message err)))))))
   (if stm (vl-catch-all-apply 'vlax-release-object (list stm)))
-  (if (vl-catch-all-error-p err) nil out))
+  (if failed
+    (list nil (car failed) (cadr failed))
+    (list out nil nil)))
 
-;; walk LST until the byte pattern TGT has just been matched;
-;; return the remainder of the list AFTER the pattern, or nil if never found
-(defun ddg-scan-to (lst tgt / tlen m b)
-  (setq tlen (length tgt) m 0)
-  (while (and lst (< m tlen))
-    (setq b (car lst) lst (cdr lst))
-    (if (< b 0) (setq b (+ b 256)))                    ; normalise if signed
-    (if (= b (nth m tgt))
-      (setq m (1+ m))
-      (setq m (if (= b (car tgt)) 1 0))))
-  (if (= m tlen) lst))
+;; plain byte list, or nil - the shape the rest of the file expects
+(defun ddg-file-bytes (file cnt tail)
+  (car (ddg-adodb-read file cnt tail)))
 
-;; take up to N bytes off LST as a plain string (non-printables become spaces)
-(defun ddg-grab-text (lst n / out chunk b)
-  (setq out '() chunk "")
-  (while (and lst (> n 0))
-    (setq b (car lst) lst (cdr lst) n (1- n))
-    (if (< b 0) (setq b (+ b 256)))
-    (setq chunk (strcat chunk (if (and (> b 31) (< b 127)) (chr b) " ")))
-    (if (>= (strlen chunk) 128)                        ; chunked to keep strcat cheap
-      (setq out (cons chunk out) chunk "")))
-  (apply 'strcat (reverse (cons chunk out))))
+;; Fallback for when ADODB.Stream is not usable at all (blocked by policy on
+;; locked-down PCs, or not registered). Plain AutoLISP file I/O is TEXT mode -
+;; it stops at the first 0x1A byte, of which JPEGs have plenty - so this is no
+;; use for the binary EXIF block. It is still worth trying, because it often
+;; reaches the XMP text packet, which is all DDGPS really needs.
+;; Returns (list bytes stopped-early-flag).
+(defun ddg-plain-read (file cnt / f b out n fsz)
+  (setq out '() n 0)
+  (cond
+    ((null (setq f (open file "r"))) (list nil nil))
+    (t
+     (while (and (< n cnt) (setq b (read-char f)))
+       (setq out (cons b out) n (1+ n)))
+     (close f)
+     (setq fsz (vl-file-size file))
+     (list (reverse out)
+           (if (and fsz (< n (min cnt fsz))) T)))))     ; hit a 0x1A, not the end
+
+;; copy FILE into the local temp folder and return the local path, or nil.
+;; Reading straight off a mapped drive can fail for reasons that have nothing
+;; to do with the photo; a plain local copy sidesteps those.
+(defun ddg-local-copy (file / dir dst)
+  (setq dir (getvar "TEMPPREFIX"))
+  (if (or (null dir) (= dir "")) (setq dir (getenv "TEMP")))
+  (if (and dir (/= dir ""))
+    (progn
+      (if (not (member (substr dir (strlen dir) 1) '("/" "\\")))
+        (setq dir (strcat dir "\\")))
+      (setq dst (strcat dir "DDGPS_photo"
+                        (if (vl-filename-extension file)
+                          (vl-filename-extension file) ".dat")))
+      (if (findfile dst) (vl-file-delete dst))      ; vl-file-copy won't overwrite
+      (if (vl-file-copy file dst) dst))))
+
+;; Get the first CNT bytes of the photo, trying, in order: a straight ADODB
+;; read; an ADODB read of a local copy (unreadable network paths); a plain
+;; text-mode read (ADODB blocked).
+;;   success -> (list bytes path note)   PATH = what actually got read, so the
+;;              tail scan reads the same thing; NOTE = a line to print, or nil
+;;   failure -> (list nil nil nil reason-lines)   for the loud alert
+(defun ddg-open-photo (file cnt / r lst path note tmp step msg pr)
+  (setq r (ddg-adodb-read file cnt nil))
+  (if (car r)
+    (setq lst (car r) path file)
+    (setq step (cadr r) msg (caddr r)))
+  ;; ADODB worked but on a copy? (mapped drive / locked original)
+  (if (null lst)
+    (progn
+      (setq tmp (ddg-local-copy file))
+      (if tmp
+        (progn
+          (setq r (ddg-adodb-read tmp cnt nil))
+          (if (car r)
+            (setq lst  (car r) path tmp
+                  note "\n  (could not read it in place - used a local copy)"))))))
+  ;; ADODB unusable entirely - try plain AutoLISP file I/O
+  (if (null lst)
+    (progn
+      (setq pr (ddg-plain-read (if tmp tmp file) cnt))
+      (if (car pr)
+        (setq lst  (car pr) path (if tmp tmp file)
+              note (strcat "\n  (ADODB.Stream failed - fell back to a plain read"
+                           (if (cadr pr)
+                             ", which stopped early at a 0x1A byte)"
+                             ")"))))))
+  (if lst
+    (list lst path note)
+    (list nil nil nil
+      (append
+        (list (strcat "File: " file) "")
+        (if (findfile file)
+          (list "AutoCAD CAN see the file, so this is not a missing path -"
+                "it could not be read into memory."
+                "")
+          (list "AutoCAD cannot even find that path."
+                ""))
+        (if step
+          (list (strcat "ADODB.Stream failed trying to " step ".")
+                (if msg (strcat "Windows said: " msg) ""))
+          '())
+        (list ""
+              "Run DDTEST on this same file - it walks every step and"
+              "reports exactly what your PC allows.")))))
 
 ;; ===========================================================================
 ;;  XMP route (all modern DJI aircraft) - the image carries a text packet like
@@ -541,7 +644,7 @@
 ;;  DDGPS : pick the drone photo -> read GPS -> click a point -> look up
 ;;          ground elevation -> place the height report -> save H
 ;; ---------------------------------------------------------------------------
-(defun c:DDGPS ( / *error* def c file lst meta fsize absm lat lon xmpf tiff
+(defun c:DDGPS ( / *error* def c file rd rpath lst meta fsize absm lat lon xmpf tiff
                    pt g gft gsrc absft hraw hsel ht lines placed ans)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
@@ -564,15 +667,16 @@
      (if (vl-filename-directory file)
        (setenv "DDGPS_LastDir" (vl-filename-directory file)))
      (princ "\nReading the photo ...")
-     (setq lst (ddg-file-bytes file 262144 nil))       ; metadata usually up front
+     ;; metadata usually sits up front; ddg-open-photo falls back to a local
+     ;; copy if the file cannot be read where it sits (mapped-drive trouble)
+     (setq rd    (ddg-open-photo file 262144)
+           lst   (nth 0 rd)
+           rpath (nth 1 rd))
      (cond
        ((null lst)
-        (ddg-fail "COULD NOT READ THE FILE"
-          (list (strcat "File: " file)
-                ""
-                "The file could not be opened for reading - dead network"
-                "path, file locked by another program, or no permission.")))
+        (ddg-fail "COULD NOT READ THE FILE" (nth 3 rd)))
        (t
+        (if (nth 2 rd) (princ (nth 2 rd)))
         ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
         (setq meta (ddg-read-meta lst)
               absm (nth 0 meta) lat  (nth 1 meta) lon  (nth 2 meta)
@@ -580,9 +684,9 @@
         ;; some PNG writers park the metadata after the image data - if the
         ;; front window came up short, scan the tail of the file too
         (if (and (or (null lat) (null lon) (null absm))
-                 (setq fsize (vl-file-size file))
+                 (setq fsize (vl-file-size rpath))
                  (> fsize 262144)
-                 (setq lst (ddg-file-bytes file 262144 T)))
+                 (setq lst (car (ddg-file-bytes rpath 262144 T))))
           (progn
             (setq meta (ddg-read-meta lst))
             (if (null absm) (setq absm (nth 0 meta)))
@@ -760,6 +864,71 @@
                  "Check the internet connection / firewall, then try again."))))))
   (princ))
 
-(princ "\nDrone Height from GPS v2.0 loaded  (pick a photo, click a point, place the height report).")
-(princ "\n  Commands: DDGPS  (pick drone photo -> compute + place + save H)   DDELEV  (elevation at a typed lat/long)")
+;; ---------------------------------------------------------------------------
+;;  DDTEST : why can't this PC read the photo?
+;;  Walks every step DDGPS uses and reports what your machine actually allows.
+;;  Run this once on a file that fails and send the report.
+;; ---------------------------------------------------------------------------
+(defun c:DDTEST ( / file out fsz r pr tmp lst n m)
+  (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
+  (cond
+    ((null file) (princ "\nNo file selected."))
+    (t
+     (setq out (list (strcat "File: " file) ""))
+     ;; --- what AutoCAD itself can see ---
+     (setq fsz (vl-file-size file))
+     (setq out (append out
+       (list (strcat "AutoCAD can find it   : " (ddg-yn (findfile file)))
+             (strcat "Size on disk          : "
+                     (if fsz (strcat (itoa fsz) " bytes") "unknown"))
+             "")))
+     ;; --- ADODB, step by step ---
+     (setq r (ddg-adodb-read file 262144 nil))
+     (setq out (append out
+       (if (car r)
+         (list (strcat "ADODB.Stream read     : OK, "
+                       (itoa (length (car r))) " bytes"))
+         (list "ADODB.Stream read     : FAILED"
+               (strcat "   failed trying to " (cadr r))
+               (if (caddr r) (strcat "   Windows said: " (caddr r)) "")))))
+     (if (car r) (setq lst (car r)))
+     ;; --- local copy ---
+     (setq tmp (ddg-local-copy file))
+     (setq out (append out
+       (list (strcat "Copy to local temp    : " (ddg-yn tmp)))))
+     (if (and (null lst) tmp)
+       (progn
+         (setq r (ddg-adodb-read tmp 262144 nil))
+         (setq out (append out
+           (list (strcat "ADODB on the copy     : "
+                         (if (car r) "OK" "FAILED")))))
+         (if (car r) (setq lst (car r)))))
+     ;; --- plain AutoLISP read ---
+     (setq pr (ddg-plain-read (if tmp tmp file) 262144))
+     (setq n (length (car pr)))
+     (setq out (append out
+       (list (strcat "Plain AutoLISP read   : "
+                     (if (car pr) (strcat "OK, " (itoa n) " bytes") "FAILED")
+                     (if (cadr pr) "  (stopped early at a 0x1A byte)" "")))))
+     (if (null lst) (setq lst (car pr)))
+     ;; --- does the file even carry metadata? ---
+     (setq out (append out (list "")))
+     (if lst
+       (progn
+         (setq m (ddg-read-meta lst))
+         (setq out (append out
+           (list (strcat "XMP packet in it      : "
+                         (ddg-yn (> (strlen (ddg-xmp-text lst)) 0)))
+                 (strcat "EXIF block in it      : "
+                         (ddg-yn (ddg-find-tiff lst)))
+                 (strcat "GPS position found    : "
+                         (ddg-yn (and (nth 1 m) (nth 2 m))))
+                 (strcat "Altitude found        : "
+                         (ddg-yn (nth 0 m)))))))
+       (setq out (append out (list "Could not get ANY bytes out of this file."))))
+     (ddg-report "DDGPS READ TEST" out)))
+  (princ))
+
+(princ "\nDrone Height from GPS v2.1 loaded  (pick a photo, click a point, place the height report).")
+(princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)
