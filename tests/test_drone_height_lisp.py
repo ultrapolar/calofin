@@ -323,6 +323,13 @@ def read_meta(lst):
 def round_ft(x):
     return int(x + (0.5 if x >= 0.0 else -0.5))
 
+# Mirror of the "assume West when EXIF omits E/W" rule and the US sanity net
+def assume_west(lon, lonok):
+    return lon if lonok else -abs(lon)
+
+def in_us(lat, lon):
+    return 17.0 < lat < 72.0 and -180.0 < lon < -64.0
+
 # Mirrors of ddg-split / ddg-hexbyte / ddg-hexline - parsing a certutil
 # "-encodehex" dump back into bytes, the fallback for PCs where ADODB is
 # blocked. Lines look like:
@@ -665,6 +672,24 @@ def main():
     absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_jpg()))
     check("read_meta: XMP longitude is signed, so no question to ask",
           lonok is True and lon < 0)
+
+    # --- the US assumption, using the real failing coordinate ---
+    # The photo that started this: York County, PA, reported by EXIF without an
+    # E/W reference. Left alone it lands in western China.
+    YORK_LAT, YORK_LON = 39.8872046, 76.8967573
+    check("assume West fixes the unsigned York County longitude",
+          approx(assume_west(YORK_LON, None), -76.8967573))
+    check("assume West leaves an already-signed longitude alone",
+          approx(assume_west(-76.8967573, True), -76.8967573))
+    check("assume West does not flip an already-negative value twice",
+          approx(assume_west(-76.8967573, None), -76.8967573))
+    check("US check rejects the unsigned coordinate",
+          not in_us(YORK_LAT, YORK_LON))
+    check("US check accepts it once West is applied",
+          in_us(YORK_LAT, assume_west(YORK_LON, None)))
+    check("US check accepts Hawaii", in_us(21.3, -157.8))
+    check("US check accepts Alaska", in_us(64.8, -147.7))
+    check("US check rejects western China", not in_us(39.9, 76.9))
 
     # --- certutil hex-dump parsing (the no-ADODB fallback reader) ---
     # a real "certutil -encodehex" line, ASCII column and all

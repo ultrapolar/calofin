@@ -10,7 +10,13 @@
 ;;;     2. Read the GPS  - latitude / longitude / AbsoluteAltitude straight
 ;;;                        out of the file. The DJI XMP text packet is tried
 ;;;                        first; if it is missing the binary EXIF GPS block
-;;;                        is parsed instead.
+;;;                        is parsed instead. EXIF stores the hemisphere
+;;;                        separately (GPSLatitudeRef / GPSLongitudeRef); if
+;;;                        a file omits the E/W one, WEST is assumed, since
+;;;                        every job is in the United States, and the run
+;;;                        says so. A position that does not land in the US
+;;;                        is flagged - that is what a wrong hemisphere
+;;;                        looks like.
 ;;;     3. Click a point - pick where in the drawing to place the result.
 ;;;     4. Elevation     - ask a free online elevation service for the ground
 ;;;                        elevation at that latitude / longitude (HTTP
@@ -912,20 +918,25 @@
                    "manually with DDSET.")))
           (t
            ;; 2c) all good - show what came from the file
-           ;; Some files record the coordinate but not the E/W hemisphere. The
-           ;; sign is then genuinely unknown - assuming East would silently put
-           ;; a Pennsylvania pool in China - so ask rather than guess.
+           ;; Some files record the coordinate but not the E/W hemisphere, so
+           ;; the sign is unknown. Every job this tool is used for is in the
+           ;; United States, so take the western hemisphere - the alternative
+           ;; silently moves a Pennsylvania pool to China. Assumed, not asked,
+           ;; but said out loud, because it IS an assumption.
            (if (null lonok)
              (progn
-               (princ "\n  NOTE: this photo records the longitude but NOT the E/W hemisphere.")
-               (initget "West East")
-               (setq ans (getkword "\nIs the site West (the Americas) or East? [West/East] <West>: "))
-               (if (null ans) (setq ans "West"))
-               (if (= ans "West")
-                 (setq lon (- (abs lon)))
-                 (setq lon (abs lon)))))
+               (setq lon (- (abs lon)))
+               (princ "\n  NOTE: the photo does not record E/W - assuming WEST (United States).")))
            (princ "\n--- position & altitude ------------------------------------")
            (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)))
+           ;; Jobs are in the United States, so anything outside it is worth
+           ;; flagging - it usually means a hemisphere or a datum is wrong.
+           ;; A warning only: the lookup still runs, and the worldwide service
+           ;; will answer if the site really is abroad.
+           (if (not (and (> lat 17.0) (< lat 72.0)
+                         (> lon -180.0) (< lon -64.0)))
+             (princ (strcat "\n  WARNING: that position is not in the United States."
+                            "\n           Check the photo - a wrong E/W reference looks exactly like this.")))
            (princ (strcat "\n  AbsoluteAltitude : " (ddg-n1 (* absm ddg-m->ft))
                           " ft above sea level   (" (ddg-n1 absm) " m)"))
            ;; 3) click a point in the drawing for the report
@@ -1121,6 +1132,6 @@
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.4 loaded  (pick a photo, click a point, place the height report).")
+(princ "\nDrone Height from GPS v2.5 loaded  (pick a photo, click a point, place the height report).")
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)

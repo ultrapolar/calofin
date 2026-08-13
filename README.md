@@ -201,6 +201,19 @@ ground elevation at that same coordinate gives the height above grade:
    TIFF header — either byte order). The first 256 KB are scanned, then
    the last 256 KB if needed, since PNG writers may park metadata after
    the image data.
+   EXIF keeps the hemisphere in separate `GPSLatitudeRef` /
+   `GPSLongitudeRef` tags, so those are applied; a file that omits the
+   E/W one is assumed **West**, because every job is in the United
+   States, and the run says so on the command line. A position that
+   doesn't land in the US is flagged — that is exactly what a wrong
+   hemisphere looks like.
+
+   Reading the bytes is the fiddly part on locked-down machines, so
+   there are three tiers: `ADODB.Stream` (with `Stream.Open`'s optional
+   parameters passed explicitly — AutoLISP refuses the bare call),
+   then the same read from a local temp copy, then a `certutil`
+   hex dump parsed back to bytes for PCs where ADODB is blocked
+   outright.
 3. You click a point in the drawing for the report.
 4. It asks a free online elevation service for the ground elevation at
    that coordinate — USGS EPQS (3DEP bare earth, answers in feet), then
@@ -227,7 +240,12 @@ ground elevation at that same coordinate gives the height above grade:
    `DDFIX` reads, so it immediately becomes the default there.
 
 `DDELEV` prints the ground elevation at a typed latitude/longitude —
-useful as a connectivity test.
+useful as a connectivity test. `DDTEST` diagnoses a photo that won't
+read: it walks every reader in turn, reports what the PC actually
+allows (including the exact COM step that failed and what Windows said
+about it) and the first bytes each reader returned, then says whether
+the file carries an XMP packet, an EXIF block, a GPS position, an
+altitude, and an E/W reference.
 
 This needs the **original camera file**. Video frame grabs, screenshots
 and most export/share/convert steps strip the metadata, leaving nothing
@@ -267,9 +285,18 @@ APP1, PNG `eXIf` chunk with decoy anchors in the image data, both byte
 orders), metadata parked past the 256 KB front window (tail-window
 recovery), signed-byte and truncated-file inputs, the failure
 classification behind the loud-error dialogs (no metadata / no GPS
-data / no fix / bad GPS / no altitude), rounding to the nearest foot,
-and the JSON number extraction for each elevation service's response
-shape.
+data / no fix / bad GPS / no altitude), the GPS hemisphere rules
+(a `W` reference must make the longitude negative; a *missing*
+reference means the sign is unknown, never positive) and the US
+sanity check, rounding to the nearest foot, the `certutil` hex-dump
+parser, and the JSON number extraction for each elevation service's
+response shape.
+
+It also parses the `.lsp` files themselves and fails on functions that
+are called but never defined, calls with the wrong number of arguments
+(user functions and the built-ins these files lean on), and Common Lisp
+forms that AutoLISP does not have — mistakes the Python mirrors cannot
+see, because they only surface as runtime errors inside AutoCAD.
 
 The drawing-side behaviour (`getpoint`, the `entmake` TEXT entities,
 the UCS→WCS conversion, and the `DDFIX` handoff) needs real AutoCAD —
