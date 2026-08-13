@@ -106,9 +106,9 @@
 ;;;     DDELEV  - type a latitude / longitude, print the ground elevation
 ;;;               (handy as an internet-connectivity test)
 ;;;     DDTEST  - diagnose a photo that will not read: walks every step
-;;;               (find the file, ADODB.Stream, local copy, plain read) and
-;;;               reports what this PC allows, then whether the file carries
-;;;               any GPS metadata at all
+;;;               (find the file, ADODB.Stream, local copy, certutil hex
+;;;               dump, plain read), reports what this PC actually allows,
+;;;               then says whether the file carries any GPS metadata at all
 ;;;
 ;;;  UNITS
 ;;;  -----
@@ -217,6 +217,29 @@
 (defun ddg-file-bytes (file cnt tail)
   (car (ddg-adodb-read file cnt tail)))
 
+;; walk LST until the byte pattern TGT has just been matched;
+;; return the remainder of the list AFTER the pattern, or nil if never found
+(defun ddg-scan-to (lst tgt / tlen m b)
+  (setq tlen (length tgt) m 0)
+  (while (and lst (< m tlen))
+    (setq b (car lst) lst (cdr lst))
+    (if (< b 0) (setq b (+ b 256)))                    ; normalise if signed
+    (if (= b (nth m tgt))
+      (setq m (1+ m))
+      (setq m (if (= b (car tgt)) 1 0))))
+  (if (= m tlen) lst))
+
+;; take up to N bytes off LST as a plain string (non-printables become spaces)
+(defun ddg-grab-text (lst n / out chunk b)
+  (setq out '() chunk "")
+  (while (and lst (> n 0))
+    (setq b (car lst) lst (cdr lst) n (1- n))
+    (if (< b 0) (setq b (+ b 256)))
+    (setq chunk (strcat chunk (if (and (> b 31) (< b 127)) (chr b) " ")))
+    (if (>= (strlen chunk) 128)                        ; chunked to keep strcat cheap
+      (setq out (cons chunk out) chunk "")))
+  (apply 'strcat (reverse (cons chunk out))))
+
 ;; Fallback for when ADODB.Stream is not usable at all (blocked by policy on
 ;; locked-down PCs, or not registered). Plain AutoLISP file I/O is TEXT mode -
 ;; it stops at the first 0x1A byte, of which JPEGs have plenty - so this is no
@@ -235,20 +258,91 @@
      (list (reverse out)
            (if (and fsz (< n (min cnt fsz))) T)))))     ; hit a 0x1A, not the end
 
+;; local temp folder, always with a trailing backslash ("" if unknown)
+(defun ddg-tempdir ( / dir)
+  (setq dir (getvar "TEMPPREFIX"))
+  (if (or (null dir) (= dir "")) (setq dir (getenv "TEMP")))
+  (cond
+    ((or (null dir) (= dir "")) "")
+    ((member (substr dir (strlen dir) 1) '("/" "\\")) dir)
+    (t (strcat dir "\\"))))
+
+;; split S on spaces; returns the non-empty pieces
+(defun ddg-split (s / out pos tok)
+  (setq out '())
+  (while (setq pos (vl-string-search " " s))
+    (setq tok (substr s 1 pos) s (substr s (+ pos 2)))
+    (if (/= tok "") (setq out (cons tok out))))
+  (if (/= s "") (setq out (cons s out)))
+  (reverse out))
+
+;; hex digit character code -> value, nil if not a hex digit
+(defun ddg-hexval (b)
+  (cond ((and (>= b 48) (<= b 57))  (- b 48))     ; 0-9
+        ((and (>= b 97) (<= b 102)) (- b 87))     ; a-f
+        ((and (>= b 65) (<= b 70))  (- b 55))))   ; A-F
+
+;; "ff" -> 255; nil unless the token is exactly two hex digits
+(defun ddg-hexbyte (s / a b)
+  (if (= (strlen s) 2)
+    (progn
+      (setq a (ddg-hexval (ascii (substr s 1 1)))
+            b (ddg-hexval (ascii (substr s 2 1))))
+      (if (and a b) (+ (* 16 a) b)))))
+
+;; one line of a certutil hex dump -> its byte values. Lines look like
+;;   0000  ff d8 ff e1 00 18 45 78  69 66 00 00 49 49 2a 00   ......Exif..II*.
+;; so drop the leading offset and take at most 16 two-hex-digit tokens, which
+;; stops cleanly before the ASCII column on the right.
+(defun ddg-hexline (line / toks out v n stop)
+  (setq toks (cdr (ddg-split line)) out '() n 0)
+  (while (and toks (< n 16) (null stop))
+    (setq v (ddg-hexbyte (car toks)) toks (cdr toks))
+    (if v (setq out (cons v out) n (1+ n)) (setq stop T)))
+  (reverse out))
+
+;; Third-tier reader: have Windows' own certutil rewrite the file as a HEX
+;; TEXT dump, then read that back with plain AutoLISP. The dump is pure ASCII,
+;; so none of the binary-file problems apply - this is the fallback for PCs
+;; where ADODB.Stream is blocked outright. Returns a byte list, or nil.
+(defun ddg-certutil-read (file cnt / sh dst err f line out n dir)
+  (setq dir (ddg-tempdir))
+  (cond
+    ((= dir "") nil)
+    (t
+     (setq dst (strcat dir "DDGPS_hex.txt"))
+     (if (findfile dst) (vl-file-delete dst))
+     (setq err
+       (vl-catch-all-apply
+         '(lambda ()
+            (setq sh (vlax-create-object "WScript.Shell"))
+            (vlax-invoke-method sh 'Run
+              (strcat "cmd /c certutil -encodehex \"" file "\" \"" dst "\"")
+              0 :vlax-true))                       ; 0 = hidden, T = wait for it
+         '()))
+     (if sh (vl-catch-all-apply 'vlax-release-object (list sh)))
+     (cond
+       ((vl-catch-all-error-p err) nil)
+       ((null (setq f (open dst "r"))) nil)
+       (t
+        (setq out '() n 0)
+        (while (and (< n cnt) (setq line (read-line f)))
+          (foreach b (ddg-hexline line)
+            (if (< n cnt) (setq out (cons b out) n (1+ n)))))
+        (close f)
+        (if out (reverse out)))))))
+
 ;; copy FILE into the local temp folder and return the local path, or nil.
 ;; Reading straight off a mapped drive can fail for reasons that have nothing
 ;; to do with the photo; a plain local copy sidesteps those.
 (defun ddg-local-copy (file / dir dst)
-  (setq dir (getvar "TEMPPREFIX"))
-  (if (or (null dir) (= dir "")) (setq dir (getenv "TEMP")))
-  (if (and dir (/= dir ""))
+  (setq dir (ddg-tempdir))
+  (if (/= dir "")
     (progn
-      (if (not (member (substr dir (strlen dir) 1) '("/" "\\")))
-        (setq dir (strcat dir "\\")))
       (setq dst (strcat dir "DDGPS_photo"
                         (if (vl-filename-extension file)
                           (vl-filename-extension file) ".dat")))
-      (if (findfile dst) (vl-file-delete dst))      ; vl-file-copy won't overwrite
+      (if (findfile dst) (vl-file-delete dst))    ; vl-file-copy won't overwrite
       (if (vl-file-copy file dst) dst))))
 
 ;; Get the first CNT bytes of the photo, trying, in order: a straight ADODB
@@ -272,7 +366,14 @@
           (if (car r)
             (setq lst  (car r) path tmp
                   note "\n  (could not read it in place - used a local copy)"))))))
-  ;; ADODB unusable entirely - try plain AutoLISP file I/O
+  ;; ADODB unusable entirely - let certutil turn the file into hex text
+  (if (null lst)
+    (progn
+      (setq lst (ddg-certutil-read (if tmp tmp file) cnt))
+      (if lst
+        (setq path (if tmp tmp file)
+              note "\n  (ADODB.Stream failed - read it through certutil instead)"))))
+  ;; last resort: a plain text-mode read, which may stop early
   (if (null lst)
     (progn
       (setq pr (ddg-plain-read (if tmp tmp file) cnt))
@@ -496,10 +597,11 @@
          (vlax-invoke-method xh 'Open "GET" url :vlax-false)
          ;; some builds want (Send) bare, some want an (empty) body argument
          (if (vl-catch-all-error-p
-               (vl-catch-all-apply '(lambda () (vlax-invoke-method xh 'Send))))
+               (vl-catch-all-apply '(lambda () (vlax-invoke-method xh 'Send)) '()))
            (vlax-invoke-method xh 'Send ""))
          (setq sts (vlax-get-property xh 'Status))
-         (setq txt (vlax-get-property xh 'ResponseText)))))
+         (setq txt (vlax-get-property xh 'ResponseText)))
+      '()))
   (if xh (vl-catch-all-apply 'vlax-release-object (list xh)))
   (cond
     ((vl-catch-all-error-p err)
@@ -869,7 +971,7 @@
 ;;  Walks every step DDGPS uses and reports what your machine actually allows.
 ;;  Run this once on a file that fails and send the report.
 ;; ---------------------------------------------------------------------------
-(defun c:DDTEST ( / file out fsz r pr tmp lst n m)
+(defun c:DDTEST ( / file out fsz r pr cu tmp lst n m)
   (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
   (cond
     ((null file) (princ "\nNo file selected."))
@@ -903,6 +1005,12 @@
            (list (strcat "ADODB on the copy     : "
                          (if (car r) "OK" "FAILED")))))
          (if (car r) (setq lst (car r)))))
+     ;; --- certutil hex dump (works where ADODB is blocked) ---
+     (setq cu (ddg-certutil-read (if tmp tmp file) 262144))
+     (setq out (append out
+       (list (strcat "certutil hex read     : "
+                     (if cu (strcat "OK, " (itoa (length cu)) " bytes") "FAILED")))))
+     (if (null lst) (setq lst cu))
      ;; --- plain AutoLISP read ---
      (setq pr (ddg-plain-read (if tmp tmp file) 262144))
      (setq n (length (car pr)))
@@ -929,6 +1037,6 @@
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.1 loaded  (pick a photo, click a point, place the height report).")
+(princ "\nDrone Height from GPS v2.2 loaded  (pick a photo, click a point, place the height report).")
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)

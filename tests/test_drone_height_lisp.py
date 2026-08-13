@@ -9,7 +9,7 @@
 4. Rounding to the nearest foot, and the JSON number extractor against
    real-world elevation-service response shapes.
 """
-import os, struct, sys, zlib
+import os, re, struct, sys, zlib
 
 LSP = os.path.join(os.path.dirname(__file__), "..",
                    "drone_height_lisp", "DroneHeightGPS.lsp")
@@ -50,6 +50,96 @@ def lint(path):
     if depth != 0:
         raise SystemExit(f"LINT FAIL: {depth} unclosed '('")
     print("lint: parens/strings balanced, pure ASCII  OK")
+
+# ------------------------------------------------- static checks ------------
+# The Python mirrors below re-implement the LISP algorithms, so they cannot
+# catch a function that the .lsp never defines, or one called with the wrong
+# number of arguments - both of which only surface as a runtime error inside
+# AutoCAD. These two checks read the .lsp itself.
+def sexp(src):
+    toks=[]; i=0
+    while i < len(src):
+        c = src[i]
+        if c == ';':
+            while i < len(src) and src[i] != '\n': i += 1
+        elif c == '"':
+            j = i + 1
+            while j < len(src):
+                if src[j] == '\\': j += 2; continue
+                if src[j] == '"': break
+                j += 1
+            toks.append(src[i:j+1]); i = j + 1
+        elif c in "()'":
+            toks.append(c); i += 1
+        elif c.isspace():
+            i += 1
+        else:
+            j = i
+            while j < len(src) and not src[j].isspace() and src[j] not in '();"\'':
+                j += 1
+            toks.append(src[i:j]); i = j
+    forms=[]; stack=[forms]
+    for t in toks:
+        if t == '(':
+            new=[]; stack[-1].append(new); stack.append(new)
+        elif t == ')':
+            stack.pop()
+        elif t == "'":
+            continue
+        else:
+            stack[-1].append(t)
+    return forms
+
+def walk(node, fn):
+    if isinstance(node, list):
+        fn(node)
+        for c in node: walk(c, fn)
+
+# minimum argument counts for the built-ins this file leans on
+BUILTIN_MIN = {
+    'vl-catch-all-apply': 2, 'vlax-put-property': 3, 'vlax-get-property': 2,
+    'vlax-invoke-method': 2, 'vlax-create-object': 1, 'vl-file-copy': 2,
+    'getfiled': 4, 'trans': 3, 'entmake': 1, 'strcat': 1, 'cons': 2,
+    'nth': 2, 'substr': 2, 'member': 2, 'apply': 2, 'open': 2, 'itoa': 1,
+    'vl-file-size': 1, 'findfile': 1, 'getvar': 1, 'alert': 1, 'initget': 1,
+}
+
+def static_checks(path):
+    src = open(path, encoding="ascii").read()
+    forms = sexp(src)
+    arity = {}
+    def collect(n):
+        if n and n[0] == 'defun' and len(n) > 2 and isinstance(n[2], list):
+            p = n[2]
+            req = p[:p.index('/')] if '/' in p else p
+            arity[n[1]] = len(req)
+    walk(forms, collect)
+
+    called = set(re.findall(r'\((ddg-[\w>\-]+)', src))
+    missing = sorted(called - set(arity))
+    if missing:
+        raise SystemExit(f"CHECK FAIL: called but never defined: {missing}")
+    print(f"defs: every called ddg-* function is defined ({len(arity)} defuns)  OK")
+
+    bad = []
+    def check(n):
+        if not n or not isinstance(n[0], str): return
+        f, got = n[0], len(n) - 1
+        if f in arity and got != arity[f]:
+            bad.append(f"{f}: defined {arity[f]} args, called with {got}")
+        elif f in BUILTIN_MIN and got < BUILTIN_MIN[f]:
+            bad.append(f"{f}: needs >={BUILTIN_MIN[f]} args, called with {got}")
+    walk(forms, check)
+    if bad:
+        raise SystemExit("CHECK FAIL: arity:\n  " + "\n  ".join(sorted(set(bad))))
+    print("arity: all calls match their definitions  OK")
+
+    # forms that exist in Common Lisp but NOT in AutoLISP
+    for form in ('(let ', '(let*', '(dolist', '(loop ', '(format ', '(when ',
+                 '(unless ', '(incf', '(setf', '(defvar'):
+        if form in src:
+            raise SystemExit(f"CHECK FAIL: '{form.strip()}' is not an AutoLISP form")
+    print("forms: no non-AutoLISP special forms  OK")
 
 # ------------------------------------------------- LISP mirrors -------------
 # Mirror of ddg-scan-to (state machine incl. its reset rule)
@@ -223,6 +313,41 @@ def read_meta(lst):
 def round_ft(x):
     return int(x + (0.5 if x >= 0.0 else -0.5))
 
+# Mirrors of ddg-split / ddg-hexbyte / ddg-hexline - parsing a certutil
+# "-encodehex" dump back into bytes, the fallback for PCs where ADODB is
+# blocked. Lines look like:
+#   0000  ff d8 ff e1 00 18 45 78  69 66 00 00 49 49 2a 00   ......Exif..II*.
+def split_sp(s):
+    out = []
+    while True:
+        pos = s.find(" ")
+        if pos < 0: break
+        tok, s = s[:pos], s[pos + 1:]
+        if tok != "": out.append(tok)
+    if s != "": out.append(s)
+    return out
+
+def hexval(b):
+    if 48 <= b <= 57: return b - 48
+    if 97 <= b <= 102: return b - 87
+    if 65 <= b <= 70: return b - 55
+    return None
+
+def hexbyte(s):
+    if len(s) != 2: return None
+    a, b = hexval(ord(s[0])), hexval(ord(s[1]))
+    return 16 * a + b if (a is not None and b is not None) else None
+
+def hexline(line):
+    toks = split_sp(line)[1:]        # drop the leading offset
+    out = []
+    for t in toks:
+        if len(out) >= 16: break
+        v = hexbyte(t)
+        if v is None: break          # hit the ASCII column
+        out.append(v)
+    return out
+
 # Mirror of DDGPS's failure-classification cond (step 2b in the command).
 # Every branch is now a hard stop - AbsoluteAltitude alone decides
 # NO_ALTITUDE, since the barometric method is gone.
@@ -372,6 +497,9 @@ def approx(a, b, tol=1e-6):
 
 def main():
     lint(LSP)
+    static_checks(LSP)
+    static_checks(os.path.join(os.path.dirname(__file__), '..',
+                               'drone_height_lisp', 'DroneDistortion.lsp'))
     failures = []
 
     def check(name, ok):
@@ -496,6 +624,33 @@ def main():
     check("round -57.4 -> -57", round_ft(-57.4) == -57)
     check("round 0.0 -> 0", round_ft(0.0) == 0)
     check("round exact 100.0 -> 100", round_ft(100.0) == 100)
+
+    # --- certutil hex-dump parsing (the no-ADODB fallback reader) ---
+    # a real "certutil -encodehex" line, ASCII column and all
+    ln = "0000  ff d8 ff e1 00 18 45 78  69 66 00 00 49 49 2a 00   ......Exif..II*."
+    check("hexline: 16 bytes from a full line", len(hexline(ln)) == 16)
+    check("hexline: correct values",
+          hexline(ln)[:6] == [0xff, 0xd8, 0xff, 0xe1, 0x00, 0x18])
+    check("hexline: ASCII column not eaten", hexline(ln)[-1] == 0x00)
+    short = "0010  ff d9"
+    check("hexline: short final line", hexline(short) == [0xff, 0xd9])
+    check("hexline: blank line -> nothing", hexline("") == [])
+    # an ASCII column that happens to start with two hex-looking chars still
+    # cannot leak in, because 16 bytes are already taken by then
+    tricky = "0020  61 62 63 64 61 62 63 64  61 62 63 64 61 62 63 64   abcdabcdabcdabcd"
+    check("hexline: caps at 16 even with hex-looking ASCII", len(hexline(tricky)) == 16)
+    # round-trip a whole synthetic dump back to the original bytes
+    raw = build_jpg()[:64]
+    dump = []
+    for off in range(0, len(raw), 16):
+        chunk = raw[off:off + 16]
+        cols = " ".join(f"{b:02x}" for b in chunk)
+        asc = "".join(chr(b) if 31 < b < 127 else "." for b in chunk)
+        dump.append(f"{off:04x}  {cols}   {asc}")
+    rebuilt = [b for line in dump for b in hexline(line)]
+    check("hexline: dump round-trips to the original bytes", rebuilt == list(raw))
+    check("split_sp collapses runs of spaces",
+          split_sp("a   b  c") == ["a", "b", "c"])
 
     # --- the whole computation, end to end (what DDGPS reports) ---
     absm, lat, lon, xmpf, tiff = read_meta(list(build_jpg()))
