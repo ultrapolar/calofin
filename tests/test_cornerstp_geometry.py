@@ -977,6 +977,77 @@ def test_normie_u_mode_handles_parallel_arms():
     assert all(abs(w - 160.0) < 1e-9 for w in widths), widths
 
 
+ROOT2 = math.sqrt(2.0)
+
+
+def recess_corner(e, wdir, direction, kind, size):
+    """ns-side: the two points the recess corner runs between.
+
+    E is where the side of the pocket meets the wall, WDIR is the way the
+    wall carries on, DIRECTION is the way the run heads.  Returns
+    (on_wall, on_side) - a diagonal joins them, a fillet arc is tangent at
+    them, and a square corner has both at E.
+    """
+    off = size if kind in ("Diagonal", "Rounded") else 0.0
+    return add(e, scl(wdir, off)), add(e, scl(direction, off))
+
+
+def test_recess_offset_and_cut_convert_both_ways():
+    """A 45 degree cut and its offset each determine the other."""
+    for offset in (3.0, 6.0, 12.0):
+        cut = offset * ROOT2
+        assert abs(cut / ROOT2 - offset) < 1e-12
+    for cut in (8.485281374238571, 17.0):
+        offset = cut / ROOT2
+        assert abs(offset * ROOT2 - cut) < 1e-9
+
+
+def test_recess_diagonal_is_45_degrees_to_both_lines():
+    e, wdir, direction = (50.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    for offset in (6.0, 12.0):
+        on_wall, on_side = recess_corner(e, wdir, direction, "Diagonal", offset)
+        cut = unit(vec(on_wall, on_side))
+        assert abs(dist(on_wall, on_side) - offset * ROOT2) < 1e-12
+        # equal angle to the wall and to the side of the recess
+        to_wall = math.degrees(math.acos(abs(dot(cut, wdir))))
+        to_side = math.degrees(math.acos(abs(dot(cut, direction))))
+        assert abs(to_wall - 45.0) < 1e-9 and abs(to_side - 45.0) < 1e-9
+
+
+def test_recess_rounded_corner_is_tangent_to_both_lines():
+    e, wdir, direction = (50.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    wall = (e, add(e, wdir))
+    side = (e, add(e, direction))
+    for radius in (4.0, 9.0):
+        t1, t2 = recess_corner(e, wdir, direction, "Rounded", radius)
+        centre = add(t1, scl(direction, radius))     # ns-side's centre
+        assert abs(ptline(centre, *wall) - radius) < 1e-12, "tangent to wall"
+        assert abs(ptline(centre, *side) - radius) < 1e-12, "tangent to side"
+        assert abs(dist(centre, t1) - radius) < 1e-12
+        assert abs(dist(centre, t2) - radius) < 1e-12
+
+
+def test_recess_flares_the_mouth_by_the_offset():
+    """The pocket opens wider at the wall and closes to the run width."""
+    width, offset = 120.0, 9.0
+    sp, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    e1 = add(sp, scl(u, width / 2))
+    e2 = add(sp, scl(u, -width / 2))
+    w1, s1 = recess_corner(e1, u, direction, "Diagonal", offset)
+    w2, s2 = recess_corner(e2, scl(u, -1.0), direction, "Diagonal", offset)
+    assert abs(dist(w1, w2) - (width + 2 * offset)) < 1e-12, "mouth flares"
+    assert abs(dist(s1, s2) - width) < 1e-12, "closes to the run width"
+    # the side lines start one offset in from the wall
+    assert abs(dot(vec(sp, s1), direction) - offset) < 1e-12
+
+
+def test_recess_square_corner_leaves_the_side_at_the_wall():
+    e, wdir, direction = (60.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    for kind in ("Straight", None):
+        on_wall, on_side = recess_corner(e, wdir, direction, kind, 9.0)
+        assert on_wall == e and on_side == e, "no flare without a treatment"
+
+
 def test_normie_u_base_detection():
     """The base of a U is the one segment joined to both of the others."""
     arm1 = ((-100.0, 200.0), (-70.0, 0.0))
@@ -1031,6 +1102,11 @@ def main():
     test_normie_u_mode_trims_to_the_arms()
     test_normie_u_mode_handles_parallel_arms()
     test_normie_u_base_detection()
+    test_recess_offset_and_cut_convert_both_ways()
+    test_recess_diagonal_is_45_degrees_to_both_lines()
+    test_recess_rounded_corner_is_tangent_to_both_lines()
+    test_recess_flares_the_mouth_by_the_offset()
+    test_recess_square_corner_leaves_the_side_at_the_wall()
     print("all tests passed")
 
 

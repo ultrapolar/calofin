@@ -258,21 +258,41 @@ the run sits.
 
 * **One line** — the steps are **centred** on it. You pick which side they
   go, give the width once, then the depths.
-* **Two lines forming a corner** — the steps sit against the corner. You
-  are asked which of the two lines the steps run **off of**; the treads run
-  parallel to that one and butt against the other, so each tread starts on
-  the side line and runs out by the width. Works on a skewed corner too —
-  the depths stay square to the line you picked.
+* **Two lines forming a corner** — the steps sit against the corner and
+  always run **outward** from it. You are asked which of the two lines the
+  steps run **off of** — the same line the recess offset is measured on;
+  the treads run parallel to that one and butt against the other, so each
+  tread starts on the side line and runs out by the width. Works on a
+  skewed corner too — the depths stay square to the line you picked.
 * **A U** (three lines, or a 3-segment polyline) — the perimeter is already
   drawn, so the treads are just filled in: parallel to the base of the U
   and trimmed to its two arms. No width is asked for, since the arms give
   it, and the run stops once a tread would fall past the base.
 
+The one-line and corner modes also ask whether there is a **recess** — the
+pocket the run sits in. Its corners, where the sides of the pocket meet the
+wall, are then one of:
+
+| Corner | What you give | What is drawn |
+| --- | --- | --- |
+| Straight | nothing | square corners — the plain side lines |
+| Rounded | a radius | a fillet arc tangent to the wall and to the side |
+| Diagonal | an **Offset** *or* a **Cut** | a 45° cut between the two |
+
+For the diagonal, the offset (back along each line) and the cut (the
+diagonal itself) are the two legs and the hypotenuse of the same 45°
+triangle, so giving either derives the other — `cut = offset × √2`. Either
+treatment flares the mouth of the recess by that offset, and the sides
+close back to the run width at that depth. A U is not asked, since its
+perimeter is already drawn.
+
 Depths are asked one per step, each measured from the previous tread.
 **Enter** finishes, **Undo** removes the step just drawn, and **Same**
-repeats the previous depth — which is what most plain runs want. The
-stringer lines down the sides are drawn for the one-line and corner modes;
-the U already has them.
+repeats the previous depth — which is what most plain runs want. The side
+lines of the run, with the recess corners worked in, are drawn for the
+one-line and corner modes; in corner mode only the outer side, since the
+run goes outward from the corner and the picked line closes the inner side.
+The U already has its perimeter.
 
 ### Dimensions
 

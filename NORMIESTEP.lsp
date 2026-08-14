@@ -16,10 +16,11 @@
 ;;;                      which side they go, give the width once, then
 ;;;                      the tread depths.
 ;;;   TWO LINES (a corner)
-;;;                      the steps sit against the corner.  You are
-;;;                      asked which of the two lines the steps run off
-;;;                      of; the treads run parallel to that line and
-;;;                      butt against the other one.
+;;;                      the steps sit against the corner and always run
+;;;                      OUTWARD from it.  You are asked which of the two
+;;;                      lines the steps run off of - the same line the
+;;;                      recess offset is measured on; the treads run
+;;;                      parallel to it and butt against the other one.
 ;;;   A "U" (three lines or a 3-segment polyline)
 ;;;                      the perimeter of the steps is already drawn, so
 ;;;                      the treads are just filled in: parallel to the
@@ -32,7 +33,16 @@
 ;;;   2.  One-line mode asks which side the steps go.  Corner mode asks
 ;;;       which line the steps run off of.  The U needs neither.
 ;;;   3.  Unless it is a U, you give the step width ONCE - every step
-;;;       gets it.
+;;;       gets it - and are asked whether there is a RECESS: the pocket
+;;;       the run sits in.  Its corners, where the sides of the pocket
+;;;       meet the wall, are then either
+;;;         Straight - square, the plain side lines
+;;;         Rounded  - a fillet arc, you give the radius
+;;;         Diagonal - a 45 degree cut, given as either its Offset back
+;;;                    along each line or the length of the Cut itself
+;;;                    (each gives the other: cut = offset x root 2)
+;;;       Either treatment flares the mouth of the recess by that
+;;;       offset.  A U is not asked - its perimeter is already drawn.
 ;;;   4.  Then tread depths, one per step, each measured FROM THE
 ;;;       PREVIOUS TREAD (from the base line for the first).  Distances
 ;;;       read architectural style: a bare number is inches (drawing
@@ -41,8 +51,11 @@
 ;;;   5.  Enter at a depth prompt = done.  Undo removes the step just
 ;;;       drawn (its line and its dimensions).  Same repeats the previous
 ;;;       depth, which is what most runs want.
-;;;   6.  The stringer lines down the sides of the run are drawn for the
-;;;       one-line and corner modes.  The U already has them.
+;;;   6.  The side lines of the run - with the recess corners worked in -
+;;;       are drawn for the one-line and corner modes.  In corner mode
+;;;       only the outer side is drawn, since the steps run outward from
+;;;       the corner and the picked line closes the inner side.  The U
+;;;       already has its perimeter.
 ;;;   7.  Optional dimensions: the depths chained along the run, plus the
 ;;;       step width once (it is the same for every step).
 ;;;
@@ -72,7 +85,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.0") ; printed on load and at command start so a
+(setq *ns-version* "v1.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -209,6 +222,48 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; Fillet arc of radius R about centre O between tangent points T1 and
+;; T2.  The minor arc is taken, so a quarter-round comes out as one.
+(defun ns-mkfillet (o r t1 t2 / a1 a2 sw)
+  (setq a1 (angle o t1)
+        a2 (angle o t2)
+        sw (- a2 a1))
+  (if (< sw 0.0) (setq sw (+ sw pi pi)))
+  (if (> sw pi) (setq sw a1 a1 a2 a2 sw))    ; the other way round is shorter
+  (entmake (list '(0 . "ARC")
+                 (cons 10 (list (car o) (cadr o) 0.0))
+                 (cons 40 r)
+                 (cons 50 a1)
+                 (cons 51 a2))))
+
+;; Draw one side of the run: the recess corner where it meets the wall at
+;; E - the wall carries on along WDIR, the run heads along DIR for LEN -
+;; and then the side line down to the last tread.
+;;   RTYPE nil / "Straight" - a plain side line straight off the wall
+;;   "Rounded"              - a fillet arc of radius RRAD
+;;   "Diagonal"             - a 45 degree cut, ROFF back along each leg
+;; Either treatment flares the mouth of the recess by that offset.
+(defun ns-side (e wdir dir len rtype roff rrad / off t1 t2 o)
+  (setq off (cond ((and (= rtype "Diagonal") roff) roff)
+                  ((and (= rtype "Rounded") rrad) rrad)
+                  (0.0)))
+  (if (>= off len)
+    (progn
+      (princ (strcat "\n  Note: the recess corner (" (rtos off)
+                     ") is deeper than the whole run (" (rtos len)
+                     ") - that side is drawn square."))
+      (setq off 0.0 rtype "Straight")))
+  (setq t1 (ns-add e (ns-scl wdir off))      ; tangent/cut point on the wall
+        t2 (ns-add e (ns-scl dir off)))      ; and on the side of the recess
+  (cond
+    ((and (= rtype "Diagonal") (> off 0.0))
+     (ns-mkline t1 t2))
+    ((and (= rtype "Rounded") (> off 0.0))
+     ;; centre sits one radius off each leg, so the arc is tangent to both
+     (setq o (ns-add t1 (ns-scl dir off)))
+     (ns-mkfillet o off t1 t2)))
+  (ns-mkline t2 (ns-add e (ns-scl dir len))))
+
 ;; T when layer NAME exists and can be drawn on right now
 (defun ns-layerok (name / ld f cl)
   (if (setq ld (tblsearch "LAYER" name))
@@ -258,7 +313,7 @@
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd
                         pprev oldce oldstyle oldlu slog mark scum sP sN
-                        cum rec)
+                        cum rec rtype roff rrad rcut)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -389,7 +444,8 @@
                                 (if (< (ns-dot (ns-perp u) dir) 0.0)
                                   -1.0 1.0)))
            sp  corner)
-     (princ "\nSteps against the corner, running off the picked line."))
+     (princ (strcat "\nSteps against the corner, running OUTWARD from it"
+                    " off the picked line.")))
 
     ;; ---------- a U: the perimeter is drawn, fill in the treads ----------
     (T
@@ -432,6 +488,43 @@
     (progn
       (initget 7)                              ; required, no zero/negative
       (setq wid (getdist "\nStep width (the same for every step): "))))
+
+  ;; ---- 3b. a recess at the wall? ----------------------------------------
+  ;; The recess is the pocket the run sits in.  Its corners - where the
+  ;; sides of the pocket meet the wall - can be square, radiused, or cut
+  ;; at 45 degrees.  A U already has its perimeter drawn, so it is not
+  ;; asked.
+  (if (/= mode "U")
+    (progn
+      (initget "Yes No")
+      (if (= "Yes" (getkword "\nIs there a recess? [Yes/No] <No>: "))
+        (progn
+          (initget "Straight Rounded Diagonal")
+          (setq rtype (cond ((getkword (strcat "\nRecess corners"
+                                               " [Straight/Rounded/Diagonal]"
+                                               " <Straight>: ")))
+                            ("Straight")))
+          (cond
+            ((= rtype "Rounded")
+             (initget 7)
+             (setq rrad (getdist "\nCorner radius: ")))
+            ((= rtype "Diagonal")
+             ;; offset and cut are the two legs and the hypotenuse of the
+             ;; same 45 degree triangle, so either one gives the other
+             (initget "Offset Cut")
+             (if (= "Cut" (getkword
+                            (strcat "\nIs the diagonal given as its"
+                                    " [Offset/Cut] <Offset>: ")))
+               (progn
+                 (initget 7)
+                 (setq rcut (getdist "\nLength of the diagonal cut: ")
+                       roff (/ rcut (sqrt 2.0))))
+               (progn
+                 (initget 7)
+                 (setq roff (getdist "\nOffset back along each line: ")
+                       rcut (* roff (sqrt 2.0)))))
+             (princ (strcat "\n  45 degree diagonal: offset " (rtos roff)
+                            " each way, cut " (rtos rcut) "."))))))))
 
   ;; ---- 4. dimension the steps? -----------------------------------------
   (initget "Yes No")
@@ -546,20 +639,22 @@
               slog  (cons (list (ns-since mark) scum sP sN) slog))))
     (setq n (1+ n)))
 
-  ;; ---- 6. stringers down the sides, and the one width dim --------------
+  ;; ---- 6. sides of the run (with the recess corners) and the width dim -
   (if (> drawn 0)
     (progn
       (cond
-        ;; both sides of a centered run
+        ;; both sides of a centered run; the wall carries on outward
+        ;; past each edge, so WDIR is +u on one side and -u on the other
         ((= mode "LINE")
-         (ns-mkline (ns-add sp (ns-scl u (* 0.5 wid)))
-                    (ns-add pprev (ns-scl u (* 0.5 wid))))
-         (ns-mkline (ns-add sp (ns-scl u (* -0.5 wid)))
-                    (ns-add pprev (ns-scl u (* -0.5 wid)))))
-        ;; the outer side only - the picked line closes the other
+         (ns-side (ns-add sp (ns-scl u (* 0.5 wid)))
+                  u dir cum rtype roff rrad)
+         (ns-side (ns-add sp (ns-scl u (* -0.5 wid)))
+                  (ns-scl u -1.0) dir cum rtype roff rrad))
+        ;; the outer side only - the steps run outward from the corner,
+        ;; so the picked line closes the inner side already
         ((= mode "CORNER")
-         (ns-mkline (ns-add corner (ns-scl u wid))
-                    (ns-add pprev (ns-scl u wid)))))
+         (ns-side (ns-add corner (ns-scl u wid))
+                  u dir cum rtype roff rrad)))
       (if dimflag
         (ns-dim *cs-width-dimstyle* first1 first2
                 (ns-add sp (ns-scl dir (- (+ (* 0.5 (distance first1 first2))
