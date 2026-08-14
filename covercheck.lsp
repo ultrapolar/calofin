@@ -84,7 +84,10 @@
 ;;;       (tune *cchk-cover-layer*) the note "Pool Size Shown" must
 ;;;       appear somewhere in the highlighted area — missing is
 ;;;       suggested. With a cover drawn the note must NOT be there —
-;;;       present suggests taking it off; absent is all good.
+;;;       present suggests taking it off; absent is all good. If both
+;;;       "Pool Size Shown" and "Spa Size Shown" (tune
+;;;       *cchk-spa-note*) turn up in the same selection, that is
+;;;       flagged as an error — ONLY ONE SIZE CAN BE SHOWN.
 ;;;     - COVER LAYER = POLYLINES. Anything drawn on the cover layer
 ;;;       that is not a polyline is called out.
 ;;;     - OVERLAP NA <-> DASHED OUTLINE. Overlap reading NA means no
@@ -178,6 +181,7 @@
 (setq *cchk-pool-layer*  "POOL")   ; layer the pool outline is drawn on (ByLayer properties)
 (setq *cchk-cover-layer* "COVER")  ; layer a drawn cover lives on
 (setq *cchk-pool-note*   "Pool Size Shown") ; note demanded when no cover is drawn
+(setq *cchk-spa-note*    "Spa Size Shown")  ; the pool note's spa counterpart - both together is an error
 (setq *cchk-details-block* "Cover Details") ; block carrying Overlap & Spacing
 (setq *cchk-overlap-vals* '(12.0 15.0 18.0)) ; the only overlaps that exist
 (setq *cchk-area-small*  1200.0)   ; sq ft: under this -> 12" overlap, 5x5
@@ -527,7 +531,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1853,7 +1857,7 @@
 (defun cchk:cover-audit (ss blks live saved / pres pents lres vts narc nlin v
                           sqft det ovraw ovval ovok ovna spraw spval spna
                           arcy wantov wantsp why dashpoly cstat covered note
-                          replblk replp replsum padskip pk lines s f
+                          spanote replblk replp replsum padskip pk lines s f
                           feats padctrs miss poolsum detsum padsum notesum)
   ;; every cover rule, run over the selection. Returns
   ;;   (header-summaries detail-lines)
@@ -1868,7 +1872,13 @@
   ;; verdict (below) it also silences the replacement prompt and the
   ;; NA-overlap dashed-outline demand, both of which assume a drawn
   ;; cover exists to check against
-  (setq note (cchk:sel-has-phrase ss blks *cchk-pool-note*))
+  (setq note    (cchk:sel-has-phrase ss blks *cchk-pool-note*)
+        spanote (cchk:sel-has-phrase ss blks *cchk-spa-note*))
+  ;; both notes at once is a contradiction, not two separate all-clears
+  (if (and note spanote)
+    (setq lines (append lines (list
+      (strcat "Pool/Spa size: BOTH '" *cchk-pool-note* "' and '" *cchk-spa-note*
+              "' are in the selection - ONLY ONE SIZE CAN BE SHOWN")))))
 
   ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
   (setq pres  (cchk:pool-ents ss saved)
@@ -2088,6 +2098,10 @@
   (if (and covered (> (cdr cstat) 0))
     (setq notesum (strcat notesum "; " (itoa (cdr cstat))
                           " item(s) NOT A POLYLINE")))
+  (if (and note spanote)
+    (setq notesum (strcat notesum "; ONLY ONE SIZE CAN BE SHOWN ('"
+                          *cchk-pool-note* "' & '" *cchk-spa-note*
+                          "' both present)")))
 
   ;; --- Replacement Disclaimer --------------------------------------
   (setq replblk (car (vl-remove-if-not
