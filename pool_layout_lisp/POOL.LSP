@@ -2011,9 +2011,16 @@
               icsz icsz)))))
 
   ;; -------- standard hopper in the main section (no sport for L).
-  ;; D' = the virtual main-section corner where the left side (F-A)
-  ;; meets the main-top line (C-D); the hopper anchors off the main
-  ;; rectangle A-B-C-D' and its left corners tie to A and D'.
+  ;; dv = the virtual main-section corner where the break line (down
+  ;; from inner corner E) meets the main-run line A-B; the hopper
+  ;; anchors off the main rectangle A-dv-E-F and its left corners tie
+  ;; to A and F.  A and F are REAL pool corners, so when the outer
+  ;; corner treatment cuts them, the ties must land on the ends of
+  ;; that cut -- exactly like the rectangle's hopper -- not on the
+  ;; sharp corner behind it.  dv and E are not real treated walls in
+  ;; this virtual frame (dv has no corner at all; E's real treatment
+  ;; is sized for the true reflex angle against D, not against dv), so
+  ;; they stay plain "Square" the way they always have.
   (if (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil)
       (progn
         ;; per the reference: the break line drops from the inner
@@ -2022,7 +2029,8 @@
         (setq dv (pool:linex (nth 4 pts) (pool:v- (nth 5 pts) (nth 0 pts))
                              (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
               mquad (list (nth 0 pts) dv (nth 4 pts) (nth 5 pts))
-              sq4 pool:*sq4*)
+              sq4 (list (list octy ocsz) (list "Square" 0.0)
+                        (list "Square" 0.0) (list octy ocsz)))
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- (apply 'min (mapcar 'car mquad)) doff)
                                 (- (apply 'min (mapcar 'cadr mquad)) doff)))

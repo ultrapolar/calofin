@@ -415,6 +415,95 @@ assert any(c[0] == '_.DIMRADIUS' and any('Typ.' in str(x) for x in c)
            for c in vm.commands), "outer corner Typ. callout"
 print("   5 rounded outer corners, chamfered inner corner, Typ. callout")
 
+print("== R14b. true L hopper ties connect to the ROUNDED deep-end wall ==")
+# true L, sides 480/420/180/180/300/240 -> A=(0,0) B=(480,0) C=(480,420)
+# D=(300,420) E=(300,240) F=(0,240).  The deep-end wall is A-F (both
+# plain 90-degree corners), so with a 24" outer radius the hopper's
+# left-corner ties must land on the ends of that cut -- (24,0) and
+# (0,24) at A, (24,240) and (0,216) at F -- not on the sharp corners
+# behind them like the old (hardcoded-Square) main-section frame drew.
+vm = run(["Insquare", "L"] + BASE +
+         [480.0, 420.0, 180.0, 180.0, 300.0, 240.0,
+          "Yes", "Rounded", 24.0, "Square",   # outer 24" round, inner square
+          "Yes",
+          60.0, 90.0, 150.0,      # H G F sum to B1=300 -> E skipped
+          None, 100.0, None,      # M sugg, L, K sugg
+          "No"],                  # mirror
+         "R14b")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+
+
+def endpoint_near(seg, pt, tol=0.05):
+    return any(_m.dist(p, pt) < tol for p in seg)
+
+
+def other_end(seg, pt, tol=0.05):
+    return seg[1] if _m.dist(seg[0], pt) < tol else seg[0]
+
+
+# the corner-cut point is also a perimeter WALL endpoint (the cut end
+# shared with corner B, say) -- pick the SHORTEST matching segment,
+# since a tie line runs corner-cut -> hopper corner while the wall
+# runs corner-cut -> the far end of that wall
+def shortest_from(pt):
+    cands = [s for s in segs if endpoint_near(s, pt)]
+    return min(cands, key=lambda s: _m.dist(*s)) if cands else None
+
+
+tieA1 = shortest_from((24.0, 0.0))
+tieA2 = shortest_from((0.0, 24.0))
+tieF1 = shortest_from((24.0, 240.0))
+tieF2 = shortest_from((0.0, 216.0))
+assert tieA1 and tieA2, "hopper tie must reach both ends of A's corner cut"
+assert tieF1 and tieF2, "hopper tie must reach both ends of F's corner cut"
+# both A-side ties converge on the SAME hopper corner (hbl)
+hblA = other_end(tieA1, (24.0, 0.0))
+hblB = other_end(tieA2, (0.0, 24.0))
+assert _m.dist(hblA, hblB) < 0.05, (hblA, hblB)
+# both F-side ties converge on the SAME hopper corner (htl)
+htlA = other_end(tieF1, (24.0, 240.0))
+htlB = other_end(tieF2, (0.0, 216.0))
+assert _m.dist(htlA, htlB) < 0.05, (htlA, htlB)
+# and the old bug -- ties collapsing onto the SHARP corner (0,0)/(0,240)
+# because the main-section frame hardcoded Square -- is gone: no POOL
+# line has an endpoint sitting exactly on the sharp corner itself
+assert not any(endpoint_near(s, (0.0, 0.0)) for s in segs), \
+    "a tie is still landing on the sharp corner A, not the cut"
+assert not any(endpoint_near(s, (0.0, 240.0)) for s in segs), \
+    "a tie is still landing on the sharp corner F, not the cut"
+print("   deep-end ties land on the rounded corner cut, matching the rectangle")
+
+print("== R14c. lazy L: the same fix applies (shared hopper code path) ==")
+# same mechanism, lazy L this time -- A and F are still plain corners
+# on the deep-end wall (only B/D bend at 45 degrees), so a 20" chamfer
+# there must still produce TWO distinct tie lines per side instead of
+# collapsing onto the sharp corner.
+vm = run(["Insquare", "LA"] + BASE +
+         [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
+          "Yes", "Diag", 20.0, "Square",
+          "Yes",
+          48.0, 72.0, 106.0,
+          40.0, 80.0, 40.0,
+          "No"],
+         "R14c")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+# A = (0,0): a 20" chamfer face should be sitting near it, both ends
+# distinct (the old bug drew NO 20-inch segment there at all -- the
+# main-section frame forced Square, i.e. a zero-length "cut")
+_near_a = [s for s in segs
+           if abs(_m.dist(*s) - 20.0) < 0.5 and _m.dist(s[0], (0.0, 0.0)) < 25.0]
+assert _near_a, "no 20-inch chamfer face found near A"
+_aface = _near_a[0]
+tieA1 = [s for s in segs if endpoint_near(s, _aface[0])
+         and abs(_m.dist(*s) - 20.0) > 0.5]
+tieA2 = [s for s in segs if endpoint_near(s, _aface[1])
+         and abs(_m.dist(*s) - 20.0) > 0.5]
+assert tieA1 and tieA2, "both ends of A's chamfer must carry their own tie"
+_hbl1 = other_end(min(tieA1, key=lambda s: _m.dist(*s)), _aface[0])
+_hbl2 = other_end(min(tieA2, key=lambda s: _m.dist(*s)), _aface[1])
+assert _m.dist(_hbl1, _hbl2) < 0.05, (_hbl1, _hbl2)
+print("   lazy L deep-end ties land on the cut too (same code path as true L)")
+
 print("== R15. dims under 24\" use the STANDARD INCHES dim style ==")
 # same pool as R14 (24" outer radius, 18" inner chamfer) in a drawing
 # that HAS the style: the corner treatments are small, the sides big

@@ -545,6 +545,15 @@ inner corner), side dims still read to the TRUE corners, and the
 drawing gets one `Typ.` callout on an outer corner plus the inner
 corner's own radius/face dim. The report lists both sizes.
 
+**Hopper vs. the deep-end wall:** A and F — the two corners on the
+main section's left (deep-end) wall — are real pool corners, so when
+the outer treatment cuts them the hopper's left-corner ties land on
+**both ends of that cut**, exactly like the rectangle, instead of the
+sharp corner behind it. The inner corner (E) is not touched by this:
+the hopper's virtual break frame meets E from a different direction
+than E's own real neighbour, so it stays square there regardless of
+the inner corner treatment.
+
 **Mirroring:** once every dimension is in, the L pools ask
 **`Mirror the pool [Yes/No]`** — answering Yes mirrors the finished
 pool, its dimensions and its hopper about the pool's vertical

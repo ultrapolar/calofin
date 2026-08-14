@@ -1858,4 +1858,53 @@ _f = (ct2[0]-ct1[0], ct2[1]-ct1[1])
 assert abs(_f[0]*_c[1] - _f[1]*_c[0]) < 1e-9   # exactly parallel
 print("   letters give the round-number hex; offsets stay parallel")
 
+print("== 69. L/Lazy L hopper ties connect to the treated deep-end wall ==")
+# Mirrors the fix in pool:hexflow: the main-section frame mquad =
+# (A, dv, E, F) used to hand the hopper hardcoded Square corners, so
+# the left-corner ties always landed on the SHARP corner even when A
+# and F carried a real outer-corner treatment.  A and F are genuine
+# pool corners (their mquad neighbours are exactly their REAL
+# perimeter neighbours -- dv sits on the real A-B line, so it gives
+# the same edge direction as B), so the fix threads the real (octy,
+# ocsz) treatment through for indices 0 and 3, leaving 1 (dv, virtual)
+# and 2 (E, a DIFFERENT corner from the real reflex E) at Square.
+A, B, Cc, D, E, F = ((0.0, 0.0), (480.0, 0.0), (480.0, 420.0),
+                     (300.0, 420.0), (300.0, 240.0), (0.0, 240.0))
+dv = (300.0, 0.0)          # on line A-B, at E's x -- matches pool:hexflow
+mquad = [A, dv, E, F]
+
+def cornerpoint(q, corners, i, spec):
+    p, pp, pn = q[i], q[(i + 3) % 4], q[(i + 1) % 4]
+    ty, sz = corners[i]
+    e1, e2, _ = cornerends(p, pp, pn, ty, sz)
+    return e1 if spec == 'prev' else e2
+
+# the FIXED corner spec: real outer treatment at A (0) and F (3),
+# Square at dv (1) and E (2)
+fixed = [("Rounded", 24.0), ("Square", 0.0), ("Square", 0.0), ("Rounded", 24.0)]
+lab1 = cornerpoint(mquad, fixed, 0, 'prev')   # toward F
+lab2 = cornerpoint(mquad, fixed, 0, 'next')   # toward dv (== toward B)
+lat1 = cornerpoint(mquad, fixed, 3, 'next')   # toward A
+lat2 = cornerpoint(mquad, fixed, 3, 'prev')   # toward E
+assert dist(lab1, (0.0, 24.0)) < 1e-6, lab1
+assert dist(lab2, (24.0, 0.0)) < 1e-6, lab2
+assert dist(lat1, (0.0, 216.0)) < 1e-6, lat1
+assert dist(lat2, (24.0, 240.0)) < 1e-6, lat2
+# and this is IDENTICAL to computing A/F's treatment against the REAL
+# hexagon neighbours (F/B for A, E/A for F) -- proving dv's
+# collinearity with B makes the virtual frame geometrically exact
+lab1_real = cornerends(A, F, B, "Rounded", 24.0)[0]
+lab2_real = cornerends(A, F, B, "Rounded", 24.0)[1]
+lat1_real = cornerends(F, E, A, "Rounded", 24.0)[1]
+lat2_real = cornerends(F, E, A, "Rounded", 24.0)[0]
+assert dist(lab1, lab1_real) < 1e-9 and dist(lab2, lab2_real) < 1e-9
+assert dist(lat1, lat1_real) < 1e-9 and dist(lat2, lat2_real) < 1e-9
+# the OLD (buggy) behaviour: hardcoded Square everywhere collapses
+# both ends onto the sharp corner -- exactly what the fix eliminates
+old = [("Square", 0.0)] * 4
+lab1_old = cornerpoint(mquad, old, 0, 'prev')
+lab2_old = cornerpoint(mquad, old, 0, 'next')
+assert lab1_old == A and lab2_old == A and dist(lab1_old, lab2_old) < 1e-9
+print("   deep-end ties (A, F) use the real cut; dv/E correctly stay square")
+
 print("\nALL CHECKS PASSED")
