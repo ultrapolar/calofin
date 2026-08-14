@@ -8,8 +8,9 @@ working between Blender and CAD:
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
 
-Plus two standalone AutoLISP commands for pool step layout in AutoCAD
-2018 — `CORNERSTP.lsp` and `HEMISTEP.lsp` ([section 3](#3-autocad-step-routines-autolisp)).
+Plus three standalone AutoLISP commands for pool step layout in AutoCAD
+2018 — `CORNERSTP.lsp`, `HEMISTEP.lsp` and `NORMIESTEP.lsp`
+([section 3](#3-autocad-step-routines-autolisp)).
 
 ## Installation (either add-on)
 
@@ -164,7 +165,7 @@ console.
 
 # 3. AutoCAD step routines (AutoLISP)
 
-Two standalone AutoLISP commands for laying out pool steps, written for
+Three standalone AutoLISP commands for laying out pool steps, written for
 **AutoCAD 2018** (plain AutoLISP plus ActiveX for dimension styles — no
 VLX or .NET). They are independent of the Blender add-ons above.
 
@@ -172,6 +173,7 @@ VLX or .NET). They are independent of the Blender add-ons above.
 | --- | --- | --- |
 | `CORNERSTP.lsp` | `CORNERSTP` | Parallel corner steps fanning out of a pool corner |
 | `HEMISTEP.lsp` | `HEMISTEP` | Hemisphere steps that act as chords inside a circle |
+| `NORMIESTEP.lsp` | `NORMIESTEP` | Plain straight steps, every one the same width |
 
 Load either with `APPLOAD` (or drag the file into the drawing window).
 Each command is a single undo step.
@@ -243,15 +245,38 @@ sitting on the curve reproduces that curve exactly, and a wider one still
 follows its curvature instead of spiking in to the point where the axis
 met the curve.
 
-Both commands read distances architectural-style regardless of the
+All three commands read distances architectural-style regardless of the
 drawing's units setting: a bare number is drawing units (inches in an
 inch-based drawing) and feet-inch entry like `1'4` (= 16") always works.
 Each prints its version on load and at command start, so a stale copy
 still loaded from an earlier APPLOAD is easy to spot.
 
+### NORMIESTEP
+
+The plain one: every step is the same width. What you select decides where
+the run sits.
+
+* **One line** — the steps are **centred** on it. You pick which side they
+  go, give the width once, then the depths.
+* **Two lines forming a corner** — the steps sit against the corner. You
+  are asked which of the two lines the steps run **off of**; the treads run
+  parallel to that one and butt against the other, so each tread starts on
+  the side line and runs out by the width. Works on a skewed corner too —
+  the depths stay square to the line you picked.
+* **A U** (three lines, or a 3-segment polyline) — the perimeter is already
+  drawn, so the treads are just filled in: parallel to the base of the U
+  and trimmed to its two arms. No width is asked for, since the arms give
+  it, and the run stops once a tread would fall past the base.
+
+Depths are asked one per step, each measured from the previous tread.
+**Enter** finishes, **Undo** removes the step just drawn, and **Same**
+repeats the previous depth — which is what most plain runs want. The
+stringer lines down the sides are drawn for the one-line and corner modes;
+the U already has them.
+
 ### Dimensions
 
-Both commands offer `Dimension the steps? [Yes/No]`. Depths are chained
+All three commands offer `Dimension the steps? [Yes/No]`. Depths are chained
 along the measuring axis; widths span each step edge and nest outward so
 wider steps sit further out. Two dimension styles are used and must
 already exist in the drawing (otherwise the current style is used and a
@@ -269,7 +294,7 @@ follows `DIMSCALE`, or the annotation scale for annotative styles.
 
 ### Assumptions and warnings
 
-Geometry is read in plan view. Both commands warn when the current UCS is
+Geometry is read in plan view. All three commands warn when the current UCS is
 not parallel to the World XY plane, when a selected line is not flat, and
 when the current layer is off/frozen/locked. CORNERSTP additionally warns
 when the two walls are nearly parallel and when a wall had to be extended

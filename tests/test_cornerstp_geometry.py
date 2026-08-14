@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Geometry regression tests for CORNERSTP.lsp and HEMISTEP.lsp.
+"""Geometry regression tests for the AutoLISP step routines.
+
+Covers CORNERSTP.lsp, HEMISTEP.lsp and NORMIESTEP.lsp.
 
 The AutoLISP routines cannot run outside AutoCAD, so this module mirrors
 their geometry helpers in Python and asserts the invariants the drawings
@@ -854,6 +856,144 @@ def test_boundary_polyline_pairs_share_a_circle():
     assert abs(first - second) < 1e-6, "a triple's two segments share a radius"
 
 
+# ------------------------------------------------- NORMIESTEP modes
+# Mirrors of the three ways NORMIESTEP places its constant-width treads.
+
+def ptline(p, a, b):
+    """ns-ptline: perpendicular distance from P to the line through A-B."""
+    d = unit(vec(a, b))
+    return abs(d[0] * (p[1] - a[1]) - d[1] * (p[0] - a[0]))
+
+
+def normie_line_mode(base, side_point, width, depths):
+    """One line: treads centred on it, marching toward SIDE_POINT."""
+    sp = mid2(*base)
+    u = unit(vec(*base))
+    signed = dot(vec(sp, side_point), perp90(u))
+    direction = unit(scl(perp90(u), 1.0 if signed > 0 else -1.0))
+    prev, out = sp, []
+    for depth in depths:
+        p = add(prev, scl(direction, depth))
+        out.append((add(p, scl(u, width / 2)), add(p, scl(u, -width / 2)), p))
+        prev = p
+    return sp, u, direction, out
+
+
+def normie_corner_mode(base, side, width, depths, corner=(0.0, 0.0)):
+    """Two lines: treads parallel to BASE, butting against SIDE."""
+    u = unit(vec(corner, base[1]))
+    toward = unit(vec(corner, side[1]))
+    pd = perp90(u)
+    direction = unit(scl(pd, 1.0 if dot(pd, toward) > 0 else -1.0))
+    prev, out = corner, []
+    for depth in depths:
+        p = add(prev, scl(direction, depth))
+        inner = inters(p, add(p, u), *side)
+        out.append((inner, add(inner, scl(u, width)), p))
+        prev = p
+    return u, direction, out
+
+
+def normie_u_mode(arm1, arm2, base, depths):
+    """A U: treads parallel to the base, trimmed to the arms."""
+    u = unit(vec(*base))
+    mouth = mid2(arm1[0], arm2[0])
+    base_mid = mid2(*base)
+    pd = perp90(u)
+    direction = unit(scl(pd, 1.0 if dot(pd, vec(mouth, base_mid)) > 0 else -1.0))
+    prev, out, stopped = mouth, [], False
+    for depth in depths:
+        p = add(prev, scl(direction, depth))
+        if dot(vec(p, base_mid), direction) < 0.0:   # past the base of the U
+            stopped = True
+            break
+        out.append((inters(p, add(p, u), *arm1),
+                    inters(p, add(p, u), *arm2), p))
+        prev = p
+    return u, direction, out, stopped
+
+
+def test_normie_line_mode_is_centred_and_constant():
+    base = ((0.0, 0.0), (200.0, 0.0))
+    width = 120.0
+    sp, u, direction, steps = normie_line_mode(
+        base, (100.0, 50.0), width, (12.0, 12.0, 12.0, 14.0))
+    for e1, e2, p in steps:
+        assert abs(dist(e1, e2) - width) < 1e-9, "every step the same width"
+        assert dist(mid2(e1, e2), p) < 1e-9, "centred on the line's midpoint"
+        assert abs(dot(unit(vec(e1, e2)), direction)) < 1e-12, "parallel"
+    # depths are per-step, not a running total
+    previous = [sp] + [s[2] for s in steps[:-1]]
+    spacings = [abs(dot(vec(a, s[2]), direction))
+                for a, s in zip(previous, steps)]
+    assert [round(s, 9) for s in spacings] == [12.0, 12.0, 12.0, 14.0]
+
+
+def test_normie_corner_mode_butts_the_side_line():
+    """On a skewed corner each tread still starts on the side line."""
+    for deg in (70.0, 90.0, 115.0):
+        corner = (0.0, 0.0)
+        base = (corner, (300.0, 0.0))
+        rad = math.radians(deg)
+        side = (corner, (300 * math.cos(rad), 300 * math.sin(rad)))
+        width = 100.0
+        u, direction, steps = normie_corner_mode(
+            base, side, width, (12.0, 12.0, 12.0))
+        cum = 0.0
+        for inner, outer, _ in steps:
+            cum += 12.0
+            assert abs(dist(inner, outer) - width) < 1e-9, f"{deg}: width held"
+            assert ptline(inner, *side) < 1e-9, "inner end lies on the side"
+            assert abs(ptline(inner, *base) - cum) < 1e-9, \
+                "depth measured square to the base line"
+            assert abs(abs(dot(unit(vec(inner, outer)), u)) - 1.0) < 1e-12, \
+                "tread runs parallel to the base line"
+
+
+def test_normie_u_mode_trims_to_the_arms():
+    arm1 = ((-100.0, 200.0), (-70.0, 0.0))
+    arm2 = ((100.0, 200.0), (70.0, 0.0))
+    base = ((-70.0, 0.0), (70.0, 0.0))
+    u, direction, steps, stopped = normie_u_mode(arm1, arm2, base, [40.0] * 6)
+    assert stopped, "must stop once a tread would fall past the base"
+    assert len(steps) == 5
+    widths = []
+    for e1, e2, _ in steps:
+        assert ptline(e1, *arm1) < 1e-9, "left end lies on the left arm"
+        assert ptline(e2, *arm2) < 1e-9, "right end lies on the right arm"
+        assert abs(abs(dot(unit(vec(e1, e2)), u)) - 1.0) < 1e-12
+        widths.append(dist(e1, e2))
+    # converging arms narrow the treads, and no width is asked for
+    assert all(b < a for a, b in zip(widths, widths[1:])), widths
+
+
+def test_normie_u_mode_handles_parallel_arms():
+    """Parallel arms give the constant width the routine is named for."""
+    arm1 = ((-80.0, 150.0), (-80.0, 0.0))
+    arm2 = ((80.0, 150.0), (80.0, 0.0))
+    base = ((-80.0, 0.0), (80.0, 0.0))
+    _, _, steps, _ = normie_u_mode(arm1, arm2, base, (30.0, 30.0, 30.0))
+    widths = [dist(e1, e2) for e1, e2, _ in steps]
+    assert all(abs(w - 160.0) < 1e-9 for w in widths), widths
+
+
+def test_normie_u_base_detection():
+    """The base of a U is the one segment joined to both of the others."""
+    arm1 = ((-100.0, 200.0), (-70.0, 0.0))
+    arm2 = ((100.0, 200.0), (70.0, 0.0))
+    base = ((-70.0, 0.0), (70.0, 0.0))
+    fuzz = 0.5
+
+    def joined(a, b):
+        return min(dist(a[0], b[0]), dist(a[0], b[1]),
+                   dist(a[1], b[0]), dist(a[1], b[1])) < fuzz
+
+    segs = [arm1, arm2, base]
+    found = [s for s in segs
+             if all(joined(s, o) for o in segs if o is not s)]
+    assert found == [base], "only the base joins both arms"
+
+
 def main():
     test_inside_out_holds_tread_depths()
     test_held_width_is_centred_between_the_walls()
@@ -886,6 +1026,11 @@ def main():
     test_line_mode_boundary_is_anchored_at_the_wall()
     test_depths_are_measured_from_the_previous_step()
     test_boundary_polyline_pairs_share_a_circle()
+    test_normie_line_mode_is_centred_and_constant()
+    test_normie_corner_mode_butts_the_side_line()
+    test_normie_u_mode_trims_to_the_arms()
+    test_normie_u_mode_handles_parallel_arms()
+    test_normie_u_base_detection()
     print("all tests passed")
 
 
