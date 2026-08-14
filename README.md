@@ -264,10 +264,14 @@ the run sits.
   the treads run parallel to that one and butt against the other, so each
   tread starts on the side line and runs out by the width. Works on a
   skewed corner too — the depths stay square to the line you picked.
-* **A U** (three lines, or a 3-segment polyline) — the perimeter is already
-  drawn, so the treads are just filled in: parallel to the base of the U
-  and trimmed to its two arms. No width is asked for, since the arms give
-  it, and the run stops once a tread would fall past the base.
+* **A U** — the perimeter is already drawn, so the treads are just filled
+  in: parallel to the base of the U and trimmed to its sides. No width is
+  asked for, since the sides give it, and the run stops once a tread would
+  fall past the base. The U's corners — where the arms meet the base — may
+  be square (three lines), **diagonal** (five lines), or **rounded** (three
+  lines plus two fillet arcs); polylines work too, including bulged corner
+  segments. Treads trim to whatever part of the side they land on — arm,
+  diagonal, or arc — so the steps inside a corner treatment narrow with it.
 
 The one-line and corner modes also ask whether there is a **recess** — the
 pocket the run sits in. Its corners, where the sides of the pocket meet the

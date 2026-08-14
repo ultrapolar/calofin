@@ -1048,6 +1048,145 @@ def test_recess_square_corner_leaves_the_side_at_the_wall():
         assert on_wall == e and on_side == e, "no flare without a treatment"
 
 
+def linecirc_hits(a, d, c, r):
+    """ns-linecirc: crossings of line (a, unit d) with circle (c, r)."""
+    f = vec(c, a)
+    g = dot(d, f)
+    disc = r * r + g * g - dot(f, f)
+    if disc < 0:
+        return []
+    disc = math.sqrt(disc)
+    return [add(a, scl(d, -g - disc)), add(a, scl(d, -g + disc))]
+
+
+def side_hit(p, u, side, fuzz):
+    """ns-sidehit: nearest on-piece hit of the tread line on one side.
+
+    A side is a list of pieces: ("S", p1, p2) or ("A", p1, p2, c, r, a1, a2).
+    """
+    best, bd = None, None
+    for pc in side:
+        if pc[0] == "S":
+            q = inters(p, add(p, u), pc[1], pc[2])
+            if q and beyond(q, pc[1], pc[2]) < fuzz and \
+                    (best is None or dist(p, q) < bd):
+                best, bd = q, dist(p, q)
+        else:
+            _, _, _, c, r, a1, a2 = pc
+            for q in linecirc_hits(p, u, c, r):
+                ang = math.atan2(q[1] - c[1], q[0] - c[0]) % (2 * math.pi)
+                if inspan(ang, a1, a2) and (best is None or dist(p, q) < bd):
+                    best, bd = q, dist(p, q)
+    return best
+
+
+def chain_pieces(pieces, fuzz):
+    """The NORMIESTEP U chain walk: order pieces end to end.
+
+    Returns (chain, free_end_1, free_end_2); raises if the parts do not
+    form one open chain.
+    """
+    freep = []
+    for pc in pieces:
+        for e in (pc[1], pc[2]):
+            hits = 0
+            for qc in pieces:
+                if qc is not pc:
+                    if dist(e, qc[1]) < fuzz:
+                        hits += 1
+                    if dist(e, qc[2]) < fuzz:
+                        hits += 1
+            if hits == 0:
+                freep.append((pc, e))
+    assert len(freep) == 2, f"{len(freep)} free ends"
+    arm1, f1 = freep[0]
+    chain = [arm1]
+    cure = arm1[2] if dist(f1, arm1[1]) < fuzz else arm1[1]
+    rest = [pc for pc in pieces if pc is not arm1]
+    while True:
+        nxt = [pc for pc in rest
+               if dist(cure, pc[1]) < fuzz or dist(cure, pc[2]) < fuzz]
+        if not nxt:
+            break
+        nxt = nxt[0]
+        chain.append(nxt)
+        cure = nxt[2] if dist(cure, nxt[1]) < fuzz else nxt[1]
+        rest.remove(nxt)
+    assert not rest, "pieces do not all connect"
+    return chain, f1, cure
+
+
+def chamfered_u(offset=12.0, half=80.0, height=150.0):
+    arm_l = ("S", (-half, height), (-half, offset))
+    arm_r = ("S", (half, height), (half, offset))
+    dg_l = ("S", (-half, offset), (-half + offset, 0.0))
+    dg_r = ("S", (half, offset), (half - offset, 0.0))
+    base = ("S", (-half + offset, 0.0), (half - offset, 0.0))
+    return [dg_r, arm_l, base, arm_r, dg_l], base   # scrambled on purpose
+
+
+def filleted_u(radius=12.0, half=80.0, height=150.0):
+    arm_l = ("S", (-half, height), (-half, radius))
+    arm_r = ("S", (half, height), (half, radius))
+    c_l = (-half + radius, radius)
+    c_r = (half - radius, radius)
+    f_l = ("A", (-half, radius), (-half + radius, 0.0), c_l, radius,
+           math.pi, 1.5 * math.pi)
+    f_r = ("A", (half - radius, 0.0), (half, radius), c_r, radius,
+           1.5 * math.pi, 2 * math.pi)
+    base = ("S", (-half + radius, 0.0), (half - radius, 0.0))
+    return [f_r, arm_l, base, arm_r, f_l], base     # scrambled on purpose
+
+
+def test_u_chain_finds_the_base_whatever_the_selection_order():
+    """The middle of the walked chain is the base, for 3 and 5 pieces."""
+    fuzz = 0.5
+    arm_l = ("S", (-80.0, 150.0), (-80.0, 0.0))
+    arm_r = ("S", (80.0, 150.0), (80.0, 0.0))
+    base = ("S", (-80.0, 0.0), (80.0, 0.0))
+    chain, f1, f2 = chain_pieces([base, arm_l, arm_r], fuzz)
+    assert chain[len(chain) // 2] is base
+    assert sorted([f1, f2]) == [(-80.0, 150.0), (80.0, 150.0)]
+    for build in (chamfered_u, filleted_u):
+        pieces, want_base = build()
+        chain, _, _ = chain_pieces(pieces, fuzz)
+        assert len(chain) == 5
+        assert chain[2] is want_base, "middle of the 5-chain is the base"
+
+
+def test_u_treads_trim_to_diagonal_corners():
+    """Below the chamfer start the treads narrow linearly with depth."""
+    offset, half = 12.0, 80.0
+    pieces, _ = chamfered_u(offset, half)
+    chain, _, _ = chain_pieces(pieces, 0.5)
+    side1, side2 = chain[:2], chain[3:]
+    for y in (140.0, 20.0, 12.0, 10.0, 6.0, 2.0):
+        e1 = side_hit((0.0, y), (1.0, 0.0), side1, 0.5)
+        e2 = side_hit((0.0, y), (1.0, 0.0), side2, 0.5)
+        want = 2 * half if y >= offset else 2 * (half - (offset - y))
+        assert abs(dist(e1, e2) - want) < 1e-9, f"y={y}"
+
+
+def test_u_treads_trim_to_rounded_corners():
+    """Inside the fillet the treads follow the arc, not the arm."""
+    radius, half = 12.0, 80.0
+    pieces, _ = filleted_u(radius, half)
+    chain, _, _ = chain_pieces(pieces, 0.5)
+    side1, side2 = chain[:2], chain[3:]
+    for y in (140.0, 20.0, 12.0, 10.0, 6.0, 2.0):
+        e1 = side_hit((0.0, y), (1.0, 0.0), side1, 0.5)
+        e2 = side_hit((0.0, y), (1.0, 0.0), side2, 0.5)
+        if y >= radius:
+            want = 2 * half
+        else:
+            dx = math.sqrt(radius ** 2 - (y - radius) ** 2)
+            want = 2 * (half - radius + dx)
+        assert abs(dist(e1, e2) - want) < 1e-9, f"y={y}"
+        if y < radius:                        # the hit really sits on the arc
+            c_l = (-half + radius, radius)
+            assert abs(dist(e1, c_l) - radius) < 1e-9
+
+
 def test_normie_u_base_detection():
     """The base of a U is the one segment joined to both of the others."""
     arm1 = ((-100.0, 200.0), (-70.0, 0.0))
@@ -1102,6 +1241,9 @@ def main():
     test_normie_u_mode_trims_to_the_arms()
     test_normie_u_mode_handles_parallel_arms()
     test_normie_u_base_detection()
+    test_u_chain_finds_the_base_whatever_the_selection_order()
+    test_u_treads_trim_to_diagonal_corners()
+    test_u_treads_trim_to_rounded_corners()
     test_recess_offset_and_cut_convert_both_ways()
     test_recess_diagonal_is_45_degrees_to_both_lines()
     test_recess_rounded_corner_is_tangent_to_both_lines()

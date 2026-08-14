@@ -21,11 +21,18 @@
 ;;;                      lines the steps run off of - the same line the
 ;;;                      recess offset is measured on; the treads run
 ;;;                      parallel to it and butt against the other one.
-;;;   A "U" (three lines or a 3-segment polyline)
-;;;                      the perimeter of the steps is already drawn, so
+;;;   A "U" ............ the perimeter of the steps is already drawn, so
 ;;;                      the treads are just filled in: parallel to the
-;;;                      base of the U and trimmed to its two arms.  No
-;;;                      width is asked for - the arms give it.
+;;;                      base of the U and trimmed to its sides.  No
+;;;                      width is asked for - the sides give it.  The U
+;;;                      may have corner treatments where the arms meet
+;;;                      the base: three lines is a plain U, five lines
+;;;                      is one with diagonal (cut) corners, and three
+;;;                      lines plus two arcs is one with rounded
+;;;                      corners.  Polylines work too, including bulged
+;;;                      (rounded) corner segments.  Treads trim to
+;;;                      whatever part of the side they land on - arm,
+;;;                      diagonal, or arc.
 ;;;
 ;;; WORKFLOW
 ;;;   1.  Select the base line, the two lines of a corner, or a U-shaped
@@ -85,7 +92,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.1") ; printed on load and at command start so a
+(setq *ns-version* "v1.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -142,20 +149,6 @@
     (if (or (null best) (< d bd)) (setq best s bd d)))
   best)
 
-;; T when the two segments share an endpoint (within FUZZ)
-(defun ns-joined (a b fuzz)
-  (or (< (distance (car a)  (car b))  fuzz)
-      (< (distance (car a)  (cadr b)) fuzz)
-      (< (distance (cadr a) (car b))  fuzz)
-      (< (distance (cadr a) (cadr b)) fuzz)))
-
-;; the endpoint of ARM that is NOT shared with BASE (the free end)
-(defun ns-freeend (arm base fuzz)
-  (if (or (< (distance (car arm) (car base))  fuzz)
-          (< (distance (car arm) (cadr base)) fuzz))
-    (cadr arm)
-    (car arm)))
-
 ;;; --------------------- geometry from entities -------------------------
 
 ;; Straight segments of a POLYLINE as (p1 p2 ename), points in WCS.
@@ -187,6 +180,118 @@
       (setq out (cons (list v1 v2 en) out)))
     (setq i (1+ i)))
   (reverse out))
+
+(defun ns-flat (p) (list (car p) (cadr p) 0.0))
+
+;; point on a circle: center C, radius R, angle A
+(defun ns-arcpt (c r a)
+  (list (+ (car c) (* r (cos a))) (+ (cadr c) (* r (sin a))) 0.0))
+
+;; T when angle A lies on the counterclockwise span A1 -> A2
+(defun ns-inspan (a a1 a2 / e)
+  (setq e (- a2 a1))
+  (if (< e 0.0) (setq e (+ e pi pi)))
+  (setq a (- a a1))
+  (if (< a 0.0) (setq a (+ a pi pi)))
+  (<= a (+ e 1e-6)))
+
+;; intersections of the circle (C,R) with the infinite line through A
+;; along the UNIT direction D; a list of 0 or 2 points
+(defun ns-linecirc (a d c r / f g disc)
+  (setq f    (ns-vec c a)
+        g    (ns-dot d f)
+        disc (+ (* r r) (- (* g g) (ns-dot f f))))
+  (if (>= disc 0.0)
+    (progn
+      (setq disc (sqrt disc))
+      (list (ns-add a (ns-scl d (- (- g) disc)))
+            (ns-add a (ns-scl d (+ (- g) disc)))))))
+
+;;; U pieces: every part of a U perimeter as a uniform record so lines
+;;; and corner arcs chain and trim alike -
+;;;   ("S" p1 p2)                 a straight part
+;;;   ("A" p1 p2 center r a1 a2)  a corner arc, counterclockwise
+
+;; arc piece from an ARC entity, normalized from the curve's own
+;; start/mid/end points and its OCS center so mirrored arcs behave
+(defun ns-arcent (en / ed c r ep mp a1 a2 sw)
+  (setq ed (entget en)
+        c  (trans (cdr (assoc 10 ed)) en 0)
+        r  (cdr (assoc 40 ed))
+        ep (vlax-curve-getendpoint en)
+        mp (vlax-curve-getpointatdist
+             en (* 0.5 (vlax-curve-getdistatparam
+                         en (vlax-curve-getendparam en))))
+        a1 (angle c (vlax-curve-getstartpoint en))
+        a2 (angle c ep))
+  (if (not (ns-inspan (angle c mp) a1 a2))
+    (setq sw a1 a1 a2 a2 sw))
+  (if (< a2 a1) (setq a2 (+ a2 pi pi)))
+  (list "A" (ns-arcpt c r a1) (ns-arcpt c r a2) (ns-flat c) r a1 a2))
+
+;; arc piece from a polyline bulge segment P1 -> P2
+(defun ns-bulgepc (p1 p2 b / th l r h nrm cen a1 a2)
+  (setq p1  (ns-flat p1)
+        p2  (ns-flat p2)
+        th  (* 4.0 (atan b))
+        l   (distance p1 p2)
+        r   (abs (/ l (* 2.0 (sin (/ th 2.0)))))
+        h   (* r (cos (/ (abs th) 2.0)))
+        nrm (ns-unit (ns-perp (ns-vec p1 p2)))
+        cen (ns-add (ns-mid2 p1 p2)
+                    (ns-scl nrm (if (> b 0.0) h (- h)))))
+  (if (> b 0.0)
+    (setq a1 (angle cen p1) a2 (angle cen p2))
+    (setq a1 (angle cen p2) a2 (angle cen p1)))
+  (if (< a2 a1) (setq a2 (+ a2 pi pi)))
+  (list "A" p1 p2 cen r a1 a2))
+
+;; Bulged segments of a POLYLINE as arc pieces (the straight ones come
+;; from ns-plsegs)
+(defun ns-plarcs (en / ed el cl vs bs i m out v1 v2 pr sub)
+  (setq ed (entget en)
+        el (cond ((cdr (assoc 38 ed))) (0.0))
+        cl (= 1 (logand 1 (cond ((cdr (assoc 70 ed))) (0)))))
+  (if (= "LWPOLYLINE" (cdr (assoc 0 ed)))
+    (foreach pr ed
+      (cond
+        ((= 10 (car pr))
+         (setq vs (cons (trans (list (car (cdr pr)) (cadr (cdr pr)) el) en 0) vs)
+               bs (cons 0.0 bs)))
+        ((= 42 (car pr))
+         (if bs (setq bs (cons (cdr pr) (cdr bs)))))))
+    (progn
+      (setq sub (entnext en))
+      (while (and sub (= "VERTEX" (cdr (assoc 0 (entget sub)))))
+        (setq ed  (entget sub)
+              vs  (cons (trans (cdr (assoc 10 ed)) en 0) vs)
+              bs  (cons (cond ((cdr (assoc 42 ed))) (0.0)) bs)
+              sub (entnext sub)))))
+  (setq vs (reverse vs) bs (reverse bs) m (length vs) i 0)
+  (while (< i (if cl m (1- m)))
+    (setq v1 (nth i vs)
+          v2 (nth (rem (1+ i) m) vs))
+    (if (and (> (distance v1 v2) 1e-10)
+             (not (equal 0.0 (nth i bs) 1e-9)))
+      (setq out (cons (ns-bulgepc v1 v2 (nth i bs)) out)))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; The on-piece hit of the tread line (P along U) nearest to P among
+;; SIDE's pieces - the arm, and the corner treatment when there is one.
+(defun ns-sidehit (p u side fuzz / best bd q pc)
+  (foreach pc side
+    (if (= "S" (car pc))
+      (progn
+        (setq q (inters p (ns-add p u) (cadr pc) (caddr pc) nil))
+        (if (and q (< (ns-beyond q (cadr pc) (caddr pc)) fuzz)
+                 (or (null best) (< (distance p q) bd)))
+          (setq best q bd (distance p q))))
+      (foreach q (ns-linecirc p u (nth 3 pc) (nth 4 pc))
+        (if (and (ns-inspan (angle (nth 3 pc) q) (nth 5 pc) (nth 6 pc))
+                 (or (null best) (< (distance p q) bd)))
+          (setq best q bd (distance p q))))))
+  best)
 
 ;;; ------------------------- setting helpers ----------------------------
 
@@ -313,7 +418,9 @@
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd
                         pprev oldce oldstyle oldlu slog mark scum sP sN
-                        cum rec rtype roff rrad rcut)
+                        cum rec rtype roff rrad rcut
+                        arcps pieces freep chain cure rest nxt basepc
+                        side1 side2 pc qc e)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -362,7 +469,7 @@
   ;; ---- 1. selection ----------------------------------------------------
   (princ (strcat "\nSelect the base line, the two lines of a corner,"
                  " or a U-shaped step perimeter:"))
-  (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -371,14 +478,18 @@
           ed (entget en)
           et (cdr (assoc 0 ed))
           i  (1+ i))
-    (if (= et "LINE")
-      (progn
-        (if (> (abs (- (caddr (cdr (assoc 10 ed)))
-                       (caddr (cdr (assoc 11 ed))))) 1e-6)
-          (setq zf T))
-        (setq segs (cons (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) en)
-                         segs)))
-      (setq segs (append (ns-plsegs en) segs))))
+    (cond
+      ((= et "LINE")
+       (if (> (abs (- (caddr (cdr (assoc 10 ed)))
+                      (caddr (cdr (assoc 11 ed))))) 1e-6)
+         (setq zf T))
+       (setq segs (cons (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) en)
+                        segs)))
+      ((= et "ARC")
+       (setq arcps (cons (ns-arcent en) arcps)))
+      (T
+       (setq segs  (append (ns-plsegs en) segs)
+             arcps (append (ns-plarcs en) arcps)))))
   (setq segs (reverse segs))
   (if zf
     (princ (strcat "\nWARNING: a selected line is not flat (its ends"
@@ -389,13 +500,17 @@
   (cond
     ((null segs)
      (princ "\nNo straight lines in the selection.") (exit))
-    ((= 1 (length segs)) (setq mode "LINE"))
-    ((= 2 (length segs)) (setq mode "CORNER"))
-    ((= 3 (length segs)) (setq mode "U"))
+    ((and (= 1 (length segs)) (null arcps)) (setq mode "LINE"))
+    ((and (= 2 (length segs)) (null arcps)) (setq mode "CORNER"))
+    ;; a U: three straights; five when its corners are cut diagonally;
+    ;; three straights plus two arcs when its corners are rounded
+    ((and (member (length segs) '(3 5)) (null arcps)) (setq mode "U"))
+    ((and (= 3 (length segs)) (= 2 (length arcps)))   (setq mode "U"))
     (T
-     (princ (strcat "\n" (itoa (length segs)) " lines were selected -"
-                    " NORMIESTEP takes one line, two lines forming a"
-                    " corner, or three forming a U."))
+     (princ (strcat "\nThat selection does not fit - NORMIESTEP takes one"
+                    " line, two lines forming a corner, or a U (three"
+                    " lines; five with diagonal corners; three lines and"
+                    " two arcs with rounded corners)."))
      (exit)))
 
   ;; ---- 2. work out the run from what was selected ----------------------
@@ -448,24 +563,72 @@
                     " off the picked line.")))
 
     ;; ---------- a U: the perimeter is drawn, fill in the treads ----------
+    ;; The parts - arms, an optional corner treatment on each side
+    ;; (diagonal cut or fillet arc), and the base - are chained end to
+    ;; end from one free end to the other; the middle of the chain is
+    ;; the base and each half-chain is one side's trimming boundary.
     (T
-     ;; the base of the U is the segment joined to both others
-     (foreach s segs
-       (setq d1 (vl-remove s segs))
-       (if (and (null base)
-                (ns-joined s (car d1) fuzz)
-                (ns-joined s (cadr d1) fuzz))
-         (setq base s arm1 (car d1) arm2 (cadr d1))))
-     (if (null base)
-       (progn (princ (strcat "\nThose three lines do not form a U - one"
-                             " of them must join the other two."))
+     (setq pieces (append (mapcar '(lambda (s)
+                                     (list "S" (ns-flat (car s))
+                                               (ns-flat (cadr s))))
+                                  segs)
+                          arcps))
+     ;; the two free endpoints (shared with nothing) mark the arms
+     (foreach pc pieces
+       (foreach e (list (cadr pc) (caddr pc))
+         (setq d1 0)
+         (foreach qc pieces
+           (if (not (eq qc pc))
+             (progn
+               (if (< (distance e (cadr qc)) fuzz) (setq d1 (1+ d1)))
+               (if (< (distance e (caddr qc)) fuzz) (setq d1 (1+ d1))))))
+         (if (zerop d1) (setq freep (cons (list pc e) freep)))))
+     (if (/= 2 (length freep))
+       (progn (princ (strcat "\nThose parts do not form a U - they must"
+                             " chain end to end with two open ends."))
               (exit)))
-     (setq u  (ns-unit (ns-vec (car base) (cadr base)))
-           f1 (ns-freeend arm1 base fuzz)
-           f2 (ns-freeend arm2 base fuzz)
-           sp (ns-mid2 f1 f2))                 ; the mouth of the U
+     ;; walk the chain from one free end to the other
+     (setq arm1 (car (car freep))
+           f1   (cadr (car freep))
+           chain (list arm1)
+           cure  (if (< (distance f1 (cadr arm1)) fuzz)
+                   (caddr arm1)
+                   (cadr arm1))
+           rest  (vl-remove arm1 pieces))
+     (while (setq nxt (car (vl-remove-if-not
+                             '(lambda (pc)
+                                (or (< (distance cure (cadr pc)) fuzz)
+                                    (< (distance cure (caddr pc)) fuzz)))
+                             rest)))
+       (setq chain (append chain (list nxt))
+             cure  (if (< (distance cure (cadr nxt)) fuzz)
+                     (caddr nxt)
+                     (cadr nxt))
+             rest  (vl-remove nxt rest)))
+     (if rest
+       (progn (princ "\nThose parts do not all connect - not a U.")
+              (exit)))
+     (setq f2     cure                          ; the other free end
+           d2     (length chain)
+           basepc (nth (/ d2 2) chain))         ; the middle of the chain
+     (if (/= "S" (car basepc))
+       (progn (princ "\nThe middle of the U (its base) must be straight.")
+              (exit)))
+     (setq base (list (cadr basepc) (caddr basepc))
+           u    (ns-unit (ns-vec (car base) (cadr base)))
+           sp   (ns-mid2 f1 f2))                ; the mouth of the U
+     ;; each half of the chain is one side's boundary
+     (setq i 0)
+     (foreach pc chain
+       (cond ((< i (/ d2 2)) (setq side1 (cons pc side1)))
+             ((> i (/ d2 2)) (setq side2 (cons pc side2))))
+       (setq i (1+ i)))
+     (setq arm1 (list (cadr (car chain)) (caddr (car chain)))
+           arm2 (list (cadr (last chain)) (caddr (last chain))))
      (if (null u)
        (progn (princ "\nThe base of the U has zero length.") (exit)))
+     (if (= 5 d2)
+       (princ "\nU with corner treatments: treads trim to them."))
      ;; DIR runs from the mouth toward the base, square to the treads
      (setq dir (ns-unit (ns-scl (ns-perp u)
                                 (if (< (ns-dot (ns-perp u)
@@ -604,23 +767,32 @@
          (setq e1  inn
                e2  (ns-add inn (ns-scl u wid))
                bey (ns-beyond inn (car side) (cadr side)))))
-      ;; trimmed to the two arms of the U
+      ;; trimmed to the sides of the U - arm, diagonal or fillet,
+      ;; whichever the tread actually lands on
       (T
-       (setq e1 (inters p (ns-add p u) (car arm1) (cadr arm1) nil)
-             e2 (inters p (ns-add p u) (car arm2) (cadr arm2) nil))
+       (setq e1  (ns-sidehit p u side1 fuzz)
+             e2  (ns-sidehit p u side2 fuzz)
+             bey 0.0)
+       ;; nothing on-piece on a side: fall back to the arm extended
+       (if (null e1)
+         (progn
+           (setq e1 (inters p (ns-add p u) (car arm1) (cadr arm1) nil))
+           (if e1 (setq bey (ns-beyond e1 (car arm1) (cadr arm1))))))
+       (if (null e2)
+         (progn
+           (setq e2 (inters p (ns-add p u) (car arm2) (cadr arm2) nil))
+           (if e2 (setq bey (max bey (ns-beyond e2 (car arm2)
+                                                (cadr arm2)))))))
        (cond
          ((or (null e1) (null e2))
           (princ (strcat "\n  Step " (itoa n)
-                         ": cannot reach both arms - step skipped."))
+                         ": cannot reach both sides - step skipped."))
           (setq e1 nil e2 nil))
          ;; past the base of the U: the run is full
          ((< (ns-dot (ns-vec p (ns-mid2 (car base) (cadr base))) dir) 0.0)
           (princ (strcat "\n  Step " (itoa n) " would fall past the base"
                          " of the U - stopping."))
-          (setq e1 nil e2 nil stopf T))
-         (T
-          (setq bey (max (ns-beyond e1 (car arm1) (cadr arm1))
-                         (ns-beyond e2 (car arm2) (cadr arm2))))))))
+          (setq e1 nil e2 nil stopf T)))))
     (if (and e1 e2)
       (progn
         (setq cum (+ cum dep))
