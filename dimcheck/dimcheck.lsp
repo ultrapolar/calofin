@@ -95,7 +95,16 @@
 ;;;     *dchk-title-block* / *dchk-wallht-tag*). Heights written as
 ;;;     40'', 3'-4'', 3' 4 1/2" or 40.5 are all understood, and a
 ;;;     label is ignored, so the attribute may read "Finished Wall
-;;;     Ht = 40''" and still measure 40. When the side view carries
+;;;     Ht = 40''" and still measure 40. The WallHt itself is
+;;;     validated whenever a Tech Title exists, steps or not:
+;;;       - several heights at once ("0'', 35 3/4'', 37 1/4''") ->
+;;;         CHECK THE WALL HEIGHT, side view left alone;
+;;;       - a lone 0'' (below *dchk-min-wallht*) -> NONSENSICAL,
+;;;         fix the title block - the dim is never blamed for it;
+;;;       - "?" -> fine only when a "Wall height" note (tune
+;;;         *dchk-ask-phrase*) asks the customer somewhere in the
+;;;         drawing; otherwise the report says to add one;
+;;;       - a single sensible value ("35 3/4''") -> no warning. When the side view carries
 ;;;     its own overall-height dimension (the one whose definition
 ;;;     points span the full rise), that dimension is what gets
 ;;;     compared — and if it disagrees with WallHt, or its text was
@@ -204,6 +213,8 @@
 (setq *dchk-title-block*  "Tech Title") ; title block holding the wall height (spaces optional)
 (setq *dchk-wallht-tag*   "WallHt")     ; attribute tag carrying the wall height
 (setq *dchk-height-tol*   0.25)    ; steps height vs WallHt: allowed difference (units)
+(setq *dchk-min-wallht*   1.0)     ; a WallHt below this is NONSENSICAL (0'' walls do not exist)
+(setq *dchk-ask-phrase*   "Wall height") ; the question text expected when WallHt is "?"
 
 ;; dimension styles are reviewed in this order; styles not listed
 ;; come afterwards ("whatever else is left"), still left-to-right
@@ -620,7 +631,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1285,6 +1296,24 @@
               (setq found (strcat "block text '" (dchk:clip s 40) "'"))))))))
   found)
 
+(defun dchk:drawing-has-phrase (phrase / pat ss2 i e ed found g)
+  ;; T when any TEXT or MTEXT in the drawing carries the phrase,
+  ;; case and punctuation ignored
+  (setq pat (strcat "*" (dchk:norm-text phrase) "*")
+        ss2 (ssget "_X" '((0 . "TEXT,MTEXT")))
+        i   0)
+  (if ss2
+    (repeat (sslength ss2)
+      (setq e  (ssname ss2 i)
+            i  (1+ i)
+            ed (entget e))
+      (foreach g ed
+        (if (and (not found)
+                 (member (car g) '(1 3))
+                 (wcmatch (dchk:norm-text (cdr g)) pat))
+          (setq found T)))))
+  found)
+
 (defun dchk:join (lst sep / out s)
   ;; "A" + "B" + ... joined with sep
   (foreach s lst
@@ -1847,7 +1876,7 @@
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
                       svbb hdim dimht htval htbad
-                      wallvals wallvar wallmany htskip
+                      wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
                       minx miny maxx maxy bb h m ins txt nlin ref)
@@ -2249,150 +2278,168 @@
                                             " lines - add bead track")
                                     lines)))))))
 
-        ;; --- overall height vs Tech Title WallHt --------------------
-        ;; the steps' total rise (side view) must match the WallHt
-        ;; attribute of the Tech Title block
+        ;; --- Tech Title WallHt & overall height ---------------------
+        ;; the title block's wall height is validated whenever a Tech
+        ;; Title exists - steps or no steps - and the side view's rise
+        ;; is compared against it when steps are present
         (setq htsum nil stepht nil wallht nil wallraw nil tins nil
               svbb nil hdim nil dimht nil htval nil htbad nil
-              wallvals nil wallvar nil wallmany nil htskip nil)
+              wallvals nil wallvar nil wallmany nil htskip nil
+              wallzero nil wallask nil)
+        ;; overall height from the steps
         (if stepsp
+          (cond
+            ((eq svmode 'auto)               ; side view found: measure it
+             (setq svbb (dchk:pts-bbox (apply 'append (mapcar 'cdr svgroups))))
+             (if svbb (setq stepht (- (cadr (cadr svbb)) (cadr (car svbb))))))
+            ((eq svmode 'user)               ; user says it exists elsewhere
+             (princ "\n  Confirm the overall step height against the Tech Title.")
+             (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: ")))))
+        ;; every Tech Title block: those in the selection, else
+        ;; drawing-wide; the one nearest the checked area wins, and
+        ;; titles that disagree on WallHt are called out
+        (setq tpat  (strcat "*" (dchk:squash *dchk-title-block*) "*")
+              tlist nil)
+        (foreach b blks
+          (if (wcmatch (dchk:squash (dchk:block-name b)) tpat)
+            (setq tlist (cons b tlist))))
+        (if (null tlist)
           (progn
-            ;; overall height from the steps
-            (cond
-              ((eq svmode 'auto)               ; side view found: measure it
-               (setq svbb (dchk:pts-bbox (apply 'append (mapcar 'cdr svgroups))))
-               (if svbb (setq stepht (- (cadr (cadr svbb)) (cadr (car svbb))))))
-              ((eq svmode 'user)               ; user says it exists elsewhere
-               (princ "\n  Confirm the overall step height against the Tech Title.")
-               (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: "))))
-            ;; every Tech Title block: those in the selection, else
-            ;; drawing-wide; the one nearest the checked area wins,
-            ;; and titles that disagree on WallHt are called out
-            (setq tpat  (strcat "*" (dchk:squash *dchk-title-block*) "*")
-                  tlist nil)
-            (foreach b blks
-              (if (wcmatch (dchk:squash (dchk:block-name b)) tpat)
-                (setq tlist (cons b tlist))))
-            (if (null tlist)
-              (progn
-                (setq tss (ssget "_X" '((0 . "INSERT")))
-                      i   0)
-                (if tss
-                  (repeat (sslength tss)
-                    (setq b (ssname tss i)
-                          i (1+ i))
-                    (if (wcmatch (dchk:squash (dchk:block-name b)) tpat)
-                      (setq tlist (cons b tlist)))))))
-            (setq cx (if minx (* 0.5 (+ minx maxx)) 0.0)
-                  cy (if miny (* 0.5 (+ miny maxy)) 0.0)
-                  tbest nil)
+            (setq tss (ssget "_X" '((0 . "INSERT")))
+                  i   0)
+            (if tss
+              (repeat (sslength tss)
+                (setq b (ssname tss i)
+                      i (1+ i))
+                (if (wcmatch (dchk:squash (dchk:block-name b)) tpat)
+                  (setq tlist (cons b tlist)))))))
+        (setq cx (if minx (* 0.5 (+ minx maxx)) 0.0)
+              cy (if miny (* 0.5 (+ miny maxy)) 0.0)
+              tbest nil)
+        (foreach b tlist
+          (setq bp (cdr (assoc 10 (entget b)))
+                d  (distance (list cx cy) (list (car bp) (cadr bp))))
+          (if (or (null tbest) (< d tbest))
+            (setq tbest d
+                  tins  b)))
+        (if (> (length tlist) 1)
+          (progn
+            (setq tvals nil)
             (foreach b tlist
-              (setq bp (cdr (assoc 10 (entget b)))
-                    d  (distance (list cx cy) (list (car bp) (cadr bp))))
-              (if (or (null tbest) (< d tbest))
-                (setq tbest d
-                      tins  b)))
-            (if (> (length tlist) 1)
+              (setq s (dchk:ins-attrib b *dchk-wallht-tag*))
+              (if s
+                (progn
+                  (setq s (dchk:norm-text (dchk:after-eq s)))
+                  (if (not (member s tvals))
+                    (setq tvals (cons s tvals))))))
+            (if (> (length tvals) 1)
               (progn
-                (setq tvals nil)
-                (foreach b tlist
-                  (setq s (dchk:ins-attrib b *dchk-wallht-tag*))
-                  (if s
-                    (progn
-                      (setq s (dchk:norm-text (dchk:after-eq s)))
-                      (if (not (member s tvals))
-                        (setq tvals (cons s tvals))))))
-                (if (> (length tvals) 1)
-                  (progn
-                    (princ (strcat "\n  Note: " (itoa (length tlist)) " '"
-                                   *dchk-title-block* "' blocks disagree on "
-                                   *dchk-wallht-tag* "; using the nearest one."))
-                    (setq lines (cons (strcat (itoa (length tlist)) " '"
-                                              *dchk-title-block*
-                                              "' blocks DISAGREE on "
-                                              *dchk-wallht-tag*
-                                              " - CHECK THE WALL HEIGHT (nearest one used)")
-                                      lines))))))
-            (if tins
-              (setq wallraw  (dchk:ins-attrib-deep tins *dchk-wallht-tag*)
-                    wallvals (if wallraw (dchk:len-values wallraw))
-                    wallvar  (and wallraw (dchk:varies-p wallraw))
-                    wallmany (> (length wallvals) 1)
-                    wallht   (if (and wallvals (not wallmany))
-                               (car wallvals))))
-            ;; a height that Varies, or a title block holding several
-            ;; heights, gives nothing to check the side view against -
-            ;; leave it alone rather than marking it red
-            (setq htskip (or wallvar wallmany))
-            ;; the side view's own overall-height dimension, and the
-            ;; height it states - that dimension is what gets compared
-            (if (and svbb stepht (not htskip))
-              (setq hdim (dchk:height-dim dims svbb stepht)))
-            (if hdim (setq dimht (dchk:dim-stated hdim)))
-            (setq htval (if dimht dimht stepht))
-            (setq htbad (and htval wallht
-                             (> (abs (- htval wallht)) *dchk-height-tol*)))
-            ;; a dimension that disagrees with the title block is wrong:
-            ;; mark it red automatically and keep it red
-            (if (and htbad hdim)
-              (progn
-                (dchk:set-color hdim *dchk-flag-color*)
-                (if (not (member hdim keep)) (setq keep (cons hdim keep)))
-                (princ (strcat "\n  Side view height dimension "
-                               (cdr (assoc 5 (entget hdim)))
-                               " disagrees with " *dchk-wallht-tag*
-                               " - marked red."))
-                (setq lines (cons (strcat "Height dim "
-                                          (cdr (assoc 5 (entget hdim)))
-                                          " states " (rtos dimht)
-                                          " but " *dchk-wallht-tag* " is '"
-                                          wallraw "' - MISMATCH, marked red")
-                                  lines))))
-            ;; a dimension whose text was overridden to disagree with
-            ;; the geometry it spans is wrong too
-            (if (and hdim dimht stepht
-                     (> (abs (- dimht stepht)) *dchk-height-tol*))
-              (progn
-                (dchk:set-color hdim *dchk-flag-color*)
-                (if (not (member hdim keep)) (setq keep (cons hdim keep)))
-                (setq lines (cons (strcat "Height dim "
-                                          (cdr (assoc 5 (entget hdim)))
-                                          " states " (rtos dimht)
-                                          " but the side view is drawn "
-                                          (rtos stepht)
-                                          " tall - MISMATCH, marked red")
-                                  lines))))
-            (setq htsum
-              (cond
-                ((null htval)
-                 "steps present but their overall height was NOT CONFIRMED (no side view measured)")
-                ((null tins)
-                 (strcat "steps rise " (rtos htval) " but no '"
-                         *dchk-title-block* "' block was found - NOT CONFIRMED"))
-                (wallvar
-                 (strcat "steps rise " (rtos htval) " and " *dchk-wallht-tag*
-                         " reads '" wallraw
-                         "' - height varies, side view left alone"))
-                (wallmany
-                 (strcat "steps rise " (rtos htval) " but " *dchk-wallht-tag*
-                         " holds " (itoa (length wallvals)) " heights ('"
-                         wallraw "') - CHECK THE WALL HEIGHT in the "
-                         *dchk-title-block* ", side view left alone"))
-                ((null wallht)
-                 (strcat "steps rise " (rtos htval) " but the "
-                         *dchk-wallht-tag* " attribute "
-                         (if wallraw
-                           (strcat "'" wallraw "' is unreadable")
-                           "is missing")
-                         " - NOT CONFIRMED"))
-                ((not htbad)
-                 (strcat "steps rise " (rtos htval) " = WallHt '" wallraw
-                         "' - MATCHES"))
-                (t
-                 (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
-                         "' (" (rtos wallht) ") - MISMATCH"
-                         (if hdim ", dimension marked red" ", look at it")))))
-            (princ (strcat "\n  Overall height: " htsum))))
+                (princ (strcat "\n  Note: " (itoa (length tlist)) " '"
+                               *dchk-title-block* "' blocks disagree on "
+                               *dchk-wallht-tag* "; using the nearest one."))
+                (setq lines (cons (strcat (itoa (length tlist)) " '"
+                                          *dchk-title-block*
+                                          "' blocks DISAGREE on "
+                                          *dchk-wallht-tag*
+                                          " - CHECK THE WALL HEIGHT (nearest one used)")
+                                  lines))))))
+        (if tins
+          (setq wallraw  (dchk:ins-attrib-deep tins *dchk-wallht-tag*)
+                wallvals (if wallraw (dchk:len-values wallraw))
+                wallvar  (and wallraw (dchk:varies-p wallraw))
+                wallmany (> (length wallvals) 1)
+                wallzero (and wallvals (not wallmany)
+                              (< (car wallvals) *dchk-min-wallht*))
+                wallask  (and (null wallvals)
+                              wallraw
+                              (vl-string-search "?" (dchk:after-eq wallraw)))
+                wallht   (if (and wallvals (not wallmany) (not wallzero))
+                           (car wallvals))))
+        ;; Varies, several heights, a nonsensical zero or a "?" give
+        ;; nothing to check the side view against - leave it alone
+        ;; rather than marking a dimension red
+        (setq htskip (or wallvar wallmany wallzero wallask))
+        ;; the side view's own overall-height dimension, and the
+        ;; height it states - that dimension is what gets compared
+        (if (and svbb stepht (not htskip))
+          (setq hdim (dchk:height-dim dims svbb stepht)))
+        (if hdim (setq dimht (dchk:dim-stated hdim)))
+        (setq htval (if dimht dimht stepht))
+        (setq htbad (and htval wallht
+                         (> (abs (- htval wallht)) *dchk-height-tol*)))
+        ;; a dimension that disagrees with the title block is wrong:
+        ;; mark it red automatically and keep it red
+        (if (and htbad hdim)
+          (progn
+            (dchk:set-color hdim *dchk-flag-color*)
+            (if (not (member hdim keep)) (setq keep (cons hdim keep)))
+            (princ (strcat "\n  Side view height dimension "
+                           (cdr (assoc 5 (entget hdim)))
+                           " disagrees with " *dchk-wallht-tag*
+                           " - marked red."))
+            (setq lines (cons (strcat "Height dim "
+                                      (cdr (assoc 5 (entget hdim)))
+                                      " states " (rtos dimht)
+                                      " but " *dchk-wallht-tag* " is '"
+                                      wallraw "' - MISMATCH, marked red")
+                              lines))))
+        ;; a dimension whose text was overridden to disagree with
+        ;; the geometry it spans is wrong too
+        (if (and hdim dimht stepht
+                 (> (abs (- dimht stepht)) *dchk-height-tol*))
+          (progn
+            (dchk:set-color hdim *dchk-flag-color*)
+            (if (not (member hdim keep)) (setq keep (cons hdim keep)))
+            (setq lines (cons (strcat "Height dim "
+                                      (cdr (assoc 5 (entget hdim)))
+                                      " states " (rtos dimht)
+                                      " but the side view is drawn "
+                                      (rtos stepht)
+                                      " tall - MISMATCH, marked red")
+                              lines))))
+        (setq htsum
+          (cond
+            ((and (null tins) stepsp)
+             (strcat "steps rise " (if htval (rtos htval) "?") " but no '"
+                     *dchk-title-block* "' block was found - NOT CONFIRMED"))
+            ((null tins) nil)                 ; no title, no steps: quiet
+            (wallvar
+             (strcat *dchk-wallht-tag* " reads '" wallraw "' - height varies"
+                     (if htval ", side view left alone" "")))
+            (wallmany
+             (strcat *dchk-wallht-tag* " holds " (itoa (length wallvals))
+                     " heights ('" wallraw "') - CHECK THE WALL HEIGHT in the "
+                     *dchk-title-block*
+                     (if htval ", side view left alone" "")))
+            (wallzero
+             (strcat *dchk-wallht-tag* " is '" wallraw
+                     "' - a NONSENSICAL wall height, fix the "
+                     *dchk-title-block*))
+            (wallask
+             (if (dchk:drawing-has-phrase *dchk-ask-phrase*)
+               (strcat *dchk-wallht-tag* " reads '" wallraw
+                       "' and the drawing asks for the wall height - waiting on the customer")
+               (strcat *dchk-wallht-tag* " reads '" wallraw
+                       "' but NOTHING in the drawing asks for it - add a '"
+                       *dchk-ask-phrase* "' note for the customer")))
+            ((null wallht)
+             (strcat "the " *dchk-wallht-tag* " attribute "
+                     (if wallraw
+                       (strcat "'" wallraw "' is unreadable")
+                       "is missing")
+                     " - NOT CONFIRMED"))
+            ((null htval)
+             (if stepsp
+               "steps present but their overall height was NOT CONFIRMED (no side view measured)"
+               (strcat *dchk-wallht-tag* " = '" wallraw "' - OK")))
+            ((not htbad)
+             (strcat "steps rise " (rtos htval) " = WallHt '" wallraw
+                     "' - MATCHES"))
+            (t
+             (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
+                     "' (" (rtos wallht) ") - MISMATCH"
+                     (if hdim ", dimension marked red" ", look at it")))))
+        (if htsum (princ (strcat "\n  Wall height: " htsum)))
 
         ;; --- Liner Material check -----------------------------------
         (setq liners      (vl-remove-if-not
@@ -2592,7 +2639,7 @@
             (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (dchk:attn-p bordsum))))
         (if htsum
-          (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
+          (setq hdr (append hdr (list (cons (strcat "Wall height: " htsum)
                                             (dchk:attn-p htsum))))))
         (setq txt (strcat "DIMCHECK REPORT - " (dchk:datestr)
                           "\\P"
@@ -2642,7 +2689,7 @@
                                  (itoa noleft) " left as drawn")
                          "")
                        "\nSteps: " stepsum
-                       (if htsum (strcat "\nOverall height: " htsum) "")
+                       (if htsum (strcat "\nWall height: " htsum) "")
                        "\nLiner Material: " linersum
                        "\nTitle block border: " bordsum
                        "\nReport placed on the right side of the drawing (layer "
@@ -2663,7 +2710,8 @@
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
                      beadss beadbbs bb gbb tlist tins bp cx cy d tbest
-                     wallraw wallvals wallvar wallmany wallht hdim dimht
+                     wallraw wallvals wallvar wallmany wallzero wallask
+                     wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      nd ndbad na nabad h m ins txt nlin ref hdr l badtags
                      bordbb bordsum
@@ -2840,24 +2888,44 @@
              wallvals (if wallraw (dchk:len-values wallraw))
              wallvar  (and wallraw (dchk:varies-p wallraw))
              wallmany (> (length wallvals) 1)
-             wallht   (if (and wallvals (not wallmany)) (car wallvals))))
-     (if (and svbb stepht (not (or wallvar wallmany)))
+             wallzero (and wallvals (not wallmany)
+                           (< (car wallvals) *dchk-min-wallht*))
+             wallask  (and (null wallvals)
+                           wallraw
+                           (vl-string-search "?" (dchk:after-eq wallraw)))
+             wallht   (if (and wallvals (not wallmany) (not wallzero))
+                        (car wallvals))))
+     (if (and svbb stepht (not (or wallvar wallmany wallzero wallask)))
        (setq hdim (dchk:height-dim dims svbb stepht)))
      (if hdim (setq dimht (dchk:dim-stated hdim)))
      (setq htval (if dimht dimht stepht)
            htbad (and htval wallht (> (abs (- htval wallht)) *dchk-height-tol*)))
      (setq htsum
            (cond
-             ((null htval) nil)
+             ((and (null tins) (null htval)) nil)
              ((null tins) (strcat "steps rise " (rtos htval) " but no '"
                                   *dchk-title-block* "' block found - NOT CONFIRMED"))
-             (wallvar (strcat "steps rise " (rtos htval) " and " *dchk-wallht-tag*
-                              " reads '" wallraw "' - height varies, not checked"))
-             (wallmany (strcat "steps rise " (rtos htval) " but " *dchk-wallht-tag*
-                               " holds " (itoa (length wallvals)) " heights ('" wallraw
+             (wallvar (strcat *dchk-wallht-tag* " reads '" wallraw
+                              "' - height varies, not checked"))
+             (wallmany (strcat *dchk-wallht-tag* " holds "
+                               (itoa (length wallvals)) " heights ('" wallraw
                                "') - CHECK THE WALL HEIGHT in the " *dchk-title-block*))
-             ((null wallht) (strcat "steps rise " (rtos htval) " but "
-                                    *dchk-wallht-tag* " is unreadable - NOT CONFIRMED"))
+             (wallzero (strcat *dchk-wallht-tag* " is '" wallraw
+                               "' - a NONSENSICAL wall height, fix the "
+                               *dchk-title-block*))
+             (wallask
+              (if (dchk:drawing-has-phrase *dchk-ask-phrase*)
+                (strcat *dchk-wallht-tag* " reads '" wallraw
+                        "' and the drawing asks for the wall height - waiting on the customer")
+                (strcat *dchk-wallht-tag* " reads '" wallraw
+                        "' but NOTHING in the drawing asks for it - add a '"
+                        *dchk-ask-phrase* "' note for the customer")))
+             ((null wallht) (strcat "the " *dchk-wallht-tag* " attribute "
+                                    (if wallraw
+                                      (strcat "'" wallraw "' is unreadable")
+                                      "is missing")
+                                    " - NOT CONFIRMED"))
+             ((null htval) (strcat *dchk-wallht-tag* " = '" wallraw "' - OK"))
              ((not htbad) (strcat "steps rise " (rtos htval) " = WallHt '"
                                   wallraw "' - MATCHES"))
              (t (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
@@ -2928,7 +2996,7 @@
                  (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (dchk:attn-p bordsum))))
      (if htsum
-       (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
+       (setq hdr (append hdr (list (cons (strcat "Wall height: " htsum)
                                          (dchk:attn-p htsum))))))
      (setq nlin 3.0)
      (foreach l lines
@@ -2964,7 +3032,7 @@
                     "\nSteps: " stepsum
                     "\nLiner Material: " linersum
                     "\nTitle block border: " bordsum
-                    (if htsum (strcat "\nOverall height: " htsum) "")
+                    (if htsum (strcat "\nWall height: " htsum) "")
                     "\nReport written on layer " *dchk-report-layer*
                     "; nothing else was changed."))))
   (princ))

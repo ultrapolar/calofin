@@ -24,6 +24,9 @@ green lines are the all-clear (and render at 3/4 height).
 | `liner_step_without_fg` | steps drawn but liner **MISSING its Step** | the fiberglass warning |
 | `fgstep_with_liner_step` | Fiberglass Step present **and** liner HAS a Step → warn, naming the block | "liner missing its Step" (suppressed by design) |
 | `bead_missing` | Bead attachment + plan steps, **NOTHING on layer Bead Track** | bead track present |
+| `wallht_zero` | **NONSENSICAL wall height** (0'') in red; the 40" dim NOT marked | a MISMATCH against 0 |
+| `wallht_question_asked` | WallHt `?` and a "Wall height?" note exists — **green, waiting on the customer** | any red height line |
+| `wallht_question_missing` | WallHt `?` and **NOTHING asks for it — add a 'Wall height' note** (red) | waiting-on-customer |
 | `pattern_not_supplied` | WALL and FLOOR **WIPED clean** (they read "Not Supplied" / "#ERROR"); STEP `Tex` untouched | the STEP field being cleared |
 | `pattern_clean` | liner **OK** — `Blue Granite` / `Mosaic Tile` / `Tex` all kept | any wipe |
 | `border_nominal` | border 704 x 543.625 — **nominal size, OK** (green) | any error |
@@ -52,6 +55,11 @@ green lines are the all-clear (and render at 3/4 height).
   fields that never got filled in are cleared, and a real pattern name
   is never mistaken for one. DIMSCAN reports these as NEEDS WIPING and
   clears nothing.
+- The three `wallht_*` question/zero cases pin the title-block states:
+  more than one value -> CHECK THE WALL HEIGHT; a lone 0'' ->
+  NONSENSICAL (and the side-view dim is never blamed for it); `?` is
+  fine only when a "Wall height" note asks the customer. These run
+  with or without steps in the drawing.
 - Heights are in drawing units where 1 unit = 1 inch, matching
   `*dchk-step-maxgap*` = 18 and `*dchk-bead-dist*` = 18.
 

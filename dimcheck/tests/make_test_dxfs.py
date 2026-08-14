@@ -133,6 +133,11 @@ def liner(at=(100.0, -40.0), wall="", floor="", step=None, with_step=False):
                   at, attribs)
 
 
+def text(s, at=(0.0, 0.0), h=3.0):
+    return _pairs((0, "TEXT"), (8, "0"), (10, at[0]), (20, at[1]), (30, 0.0),
+                  (40, h), (1, s))
+
+
 def title(wallht, at=(200.0, 0.0)):
     return insert("Tech Title", at, [("WallHt", wallht)])
 
@@ -364,6 +369,36 @@ def _():
     return dxf(border(1.0)
                + liner(wall="Blue Granite", floor="Mosaic Tile", step="Tex",
                        with_step=True),
+               liner_blocks())
+
+
+@case("wallht_zero")
+def _():
+    """WallHt of 0'' is nonsensical -> red, and the dim is left alone."""
+    geo, pts = staircase(treads=3, rise=10.0, run=12.0)
+    lo, hi = pts[-1], pts[0]
+    return dxf(geo + dim_rotated(lo, hi, 40.0, angle=1.5707963267948966)
+               + title("Finished Wall Ht = 0''")
+               + insert("Liner Material with Step", (100.0, -40.0)),
+               liner_blocks())
+
+
+@case("wallht_question_asked")
+def _():
+    """WallHt '?' AND a 'Wall height?' note -> green, waiting on customer."""
+    return dxf(line((0.0, 0.0), (100.0, 0.0))
+               + title("Finished Wall Ht = ?\"")
+               + text("Wall height?", (50.0, 60.0))
+               + insert("Liner Material", (100.0, -40.0)),
+               liner_blocks())
+
+
+@case("wallht_question_missing")
+def _():
+    """WallHt '?' but nothing asks the customer -> red, add the note."""
+    return dxf(line((0.0, 0.0), (100.0, 0.0))
+               + title("Finished Wall Ht = ?\"")
+               + insert("Liner Material", (100.0, -40.0)),
                liner_blocks())
 
 
