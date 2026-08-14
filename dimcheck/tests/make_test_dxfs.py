@@ -73,7 +73,7 @@ def block(name, body):
             + body + _pairs((0, "ENDBLK"), (8, "0")))
 
 
-def dxf(entities, blocks="", layers=("POOL", "DIMENSION", "Bead Track", "0")):
+def dxf(entities, blocks="", layers=("POOL", "DIMENSION", "Bead Track", "border", "0")):
     tables = _pairs((0, "SECTION"), (2, "TABLES"), (0, "TABLE"), (2, "LAYER"),
                     (70, len(layers)))
     for lay in layers:
@@ -288,6 +288,55 @@ def _():
                + title("Finished Wall Ht = 40\"")
                + insert("Bead Step Attachment", (60.0, -20.0))
                + insert("Liner Material with Step", (100.0, -40.0)),
+               liner_blocks())
+
+
+BORDER_W = 58 * 12 + 8            # 58'-8"
+BORDER_H = 45 * 12 + 3 + 5 / 8    # 45'-3 5/8"
+
+
+def border(scale=1.0, wscale=None, at=(0.0, 0.0)):
+    """The title block frame, as a closed polyline on the border layer."""
+    w = BORDER_W * (wscale if wscale is not None else scale)
+    h = BORDER_H * scale
+    x, y = at
+    return lwpolyline([(x, y), (x + w, y), (x + w, y + h), (x, y + h)],
+                      layer="border", closed=True)
+
+
+@case("border_nominal")
+def _():
+    """Border exactly 58'-8" x 45'-3 5/8" -> OK."""
+    return dxf(border(1.0) + insert("Liner Material", (100.0, 100.0)),
+               liner_blocks())
+
+
+@case("border_scaled_up")
+def _():
+    """Border at 2x -> a scaled-up multiple is fine."""
+    return dxf(border(2.0) + insert("Liner Material", (100.0, 100.0)),
+               liner_blocks())
+
+
+@case("border_scaled_down")
+def _():
+    """Border at half size -> the error the report must carry."""
+    return dxf(border(0.5) + insert("Liner Material", (100.0, 100.0)),
+               liner_blocks())
+
+
+@case("border_stretched")
+def _():
+    """Right height, wrong width -> out of proportion."""
+    return dxf(border(1.0, wscale=1.2) + insert("Liner Material", (100.0, 100.0)),
+               liner_blocks())
+
+
+@case("border_missing")
+def _():
+    """Nothing on the border layer at all."""
+    return dxf(line((0.0, 0.0), (100.0, 0.0))
+               + insert("Liner Material", (100.0, 100.0)),
                liner_blocks())
 
 

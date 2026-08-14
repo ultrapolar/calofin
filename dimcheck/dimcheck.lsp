@@ -127,7 +127,19 @@
 ;;;         them: no liner block carrying a "Step" section (the
 ;;;         "Liner Material with Step" variant) is reported.
 ;;;
-;;;  7. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;  7. TITLE BLOCK BORDER. The outer drawing on layer "border"
+;;;     (tune *dchk-border-layer*) must be the nominal sheet —
+;;;     58'-8" wide by 45'-3 5/8" tall — or a scaled-UP multiple of
+;;;     it. Anything smaller is reported in red as
+;;;         "Title block should not be SCALED DOWN for Liners".
+;;;     A border out of proportion (scaled unevenly) is reported
+;;;     separately as STRETCHED, and a missing border as NO BORDER.
+;;;     Everything on the layer is measured together, so a frame
+;;;     drawn as one polyline and one drawn as four lines both
+;;;     measure the same. The selection is used when it holds the
+;;;     border, otherwise the whole drawing is searched.
+;;;
+;;;  8. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
 ;;;     with its measured distance (in the drawing's units; angular
 ;;;     dims show their angle) — every arc, every overlapping line
@@ -195,6 +207,11 @@
 (setq *dchk-block-depth*  3)       ; how many levels of nested blocks to search for names/text
 (setq *dchk-orig-color*   1)       ; red X: where you drew the point
 (setq *dchk-sugg-color*   3)       ; green +: where DIMCHECK would move it
+;; title block border: nominal 58'-8" x 45'-3 5/8", or a scaled-UP multiple
+(setq *dchk-border-layer* "border")
+(setq *dchk-border-w*     704.0)   ; 58'-8"     in drawing units (1 unit = 1 inch)
+(setq *dchk-border-h*     543.625) ; 45'-3 5/8" in drawing units
+(setq *dchk-border-tol*   0.005)   ; 0.5% slack on both the scale and the aspect ratio
 (setq *dchk-fgstep-words*          ; a fiberglass step shows up under any of these
       '("Fiberglass Step" "FG Step"))
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
@@ -533,11 +550,66 @@
   (if (entmake (append dxf (list (cons 1 text))))
     (dchk:tag (entlast) "REPORT")))
 
+(defun dchk:border-box (ss / i e ed bb lo hi)
+  ;; overall extents of everything on the border layer, so a frame
+  ;; drawn as one polyline and one drawn as four separate lines both
+  ;; measure the same
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e))
+      (if (and ed
+               (= (strcase (cdr (assoc 8 ed))) (strcase *dchk-border-layer*))
+               (setq bb (dchk:bbox e)))
+        (setq lo (if lo
+                   (list (min (car lo) (caar bb)) (min (cadr lo) (cadar bb)))
+                   (list (caar bb) (cadar bb)))
+              hi (if hi
+                   (list (max (car hi) (caadr bb)) (max (cadr hi) (cadadr bb)))
+                   (list (caadr bb) (cadadr bb)))))))
+  (if (and lo hi) (list lo hi)))
+
+(defun dchk:border-verdict (bb / bw bh sw sh sc)
+  ;; measure the border against the nominal sheet. Returns the report
+  ;; sentence; the drawing may be the nominal size or any scaled-UP
+  ;; multiple of it, but never smaller.
+  (if (null bb)
+    (strcat "NO BORDER found on layer '" *dchk-border-layer* "'")
+    (progn
+      (setq bw (- (car (cadr bb)) (car (car bb)))
+            bh (- (cadr (cadr bb)) (cadr (car bb))))
+      (if (or (<= bw 1e-6) (<= bh 1e-6))
+        "border has no measurable size"
+        (progn
+          (setq sw (/ bw *dchk-border-w*)
+                sh (/ bh *dchk-border-h*)
+                sc (min sw sh))
+          (cond
+            ;; a border out of proportion is wrong whatever its size
+            ((> (abs (- sw sh)) (* *dchk-border-tol* (max sw sh)))
+             (strcat (rtos bw) " x " (rtos bh) " - STRETCHED out of proportion ("
+                     (rtos sw 2 3) "x wide but " (rtos sh 2 3)
+                     "x tall); nominal is " (rtos *dchk-border-w*) " x "
+                     (rtos *dchk-border-h*)))
+            ;; the one the user asked for by name
+            ((< sc (- 1.0 *dchk-border-tol*))
+             (strcat (rtos bw) " x " (rtos bh) " is only " (rtos sc 2 3)
+                     "x the nominal " (rtos *dchk-border-w*) " x "
+                     (rtos *dchk-border-h*)
+                     " - Title block should not be SCALED DOWN for Liners"))
+            ((< sc (+ 1.0 *dchk-border-tol*))
+             (strcat (rtos bw) " x " (rtos bh) " - nominal size, OK"))
+            (t
+             (strcat (rtos bw) " x " (rtos bh) " - " (rtos sc 2 3)
+                     "x the nominal size, OK"))))))))
+
 (defun dchk:attn-p (s)
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1731,7 +1803,7 @@
                       svbb hdim dimht htval htbad
                       wallvals wallvar wallmany htskip
                       laylist locked relock lay tlist tbest cx cy tvals s d
-                      dlines skiprest
+                      dlines skiprest bordbb bordsum
                       minx miny maxx maxy bb h m ins txt nlin ref)
 
   (defun *error* (msg)
@@ -2351,6 +2423,16 @@
         (foreach l relock (dchk:set-layer-lock l T))
         (setq relock nil)
 
+        ;; --- title block border size --------------------------------
+        ;; the whole title block is normally in the selection; fall
+        ;; back to the drawing when the border was not highlighted
+        (setq bordbb (dchk:border-box ss))
+        (if (null bordbb)
+          (setq bordbb (dchk:border-box
+                         (ssget "_X" (list (cons 8 *dchk-border-layer*))))))
+        (setq bordsum (dchk:border-verdict bordbb))
+        (princ (strcat "\n--- Border: " bordsum " ---"))
+
         ;; --- one-line verdicts for steps & liner --------------------
         (setq stepsum
               (cond
@@ -2403,7 +2485,7 @@
         (setq nlin 3.0)                          ; title, legend, separator
         (foreach l lines
           (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
-        (setq nlin (+ nlin (* 6.0 *dchk-green-scale*)))   ; the header dashboard
+        (setq nlin (+ nlin (* 7.0 *dchk-green-scale*)))   ; the header dashboard
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -2438,7 +2520,8 @@
                             " - none found"))
                   (> noflag 0))
             (cons (strcat "Steps: " stepsum)          (dchk:attn-p stepsum))
-            (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))))
+            (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))
+            (cons (strcat "Title block border: " bordsum) (dchk:attn-p bordsum))))
         (if htsum
           (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
                                             (dchk:attn-p htsum))))))
@@ -2492,6 +2575,7 @@
                        "\nSteps: " stepsum
                        (if htsum (strcat "\nOverall height: " htsum) "")
                        "\nLiner Material: " linersum
+                       "\nTitle block border: " bordsum
                        "\nReport placed on the right side of the drawing (layer "
                        *dchk-report-layer* ")."
                        (if (> ndmoved 0)
@@ -2513,6 +2597,7 @@
                      wallraw wallvals wallvar wallmany wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      nd ndbad na nabad h m ins txt nlin ref hdr l
+                     bordbb bordsum
                      minx miny maxx maxy p13 p14 near s b w)
 
   (defun *error* (msg)
@@ -2744,6 +2829,13 @@
                           "; Fiberglass Step in the drawing but the liner HAS a Step" "")
                         (if (and (null wnd) (not (and fgstep linerstep))) " - OK" "")))))
 
+     ;; --- title block border size
+     (setq bordbb (dchk:border-box ss))
+     (if (null bordbb)
+       (setq bordbb (dchk:border-box
+                      (ssget "_X" (list (cons 8 *dchk-border-layer*))))))
+     (setq bordsum (dchk:border-verdict bordbb))
+
      ;; --- report (the only thing DIMSCAN writes) ------------------
      (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
      (dchk:clear-old)
@@ -2757,14 +2849,15 @@
                  (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
                        (> (length olaps) 0))
                  (cons (strcat "Steps: " stepsum)           (dchk:attn-p stepsum))
-                 (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))))
+                 (cons (strcat "Liner Material: " linersum) (dchk:attn-p linersum))
+                 (cons (strcat "Title block border: " bordsum) (dchk:attn-p bordsum))))
      (if htsum
        (setq hdr (append hdr (list (cons (strcat "Overall height: " htsum)
                                          (dchk:attn-p htsum))))))
      (setq nlin 3.0)
      (foreach l lines
        (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
-     (setq nlin (+ nlin (* 6.0 *dchk-green-scale*)))
+     (setq nlin (+ nlin (* 7.0 *dchk-green-scale*)))
      (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
        (progn
          (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -2794,6 +2887,7 @@
                     "\nOverlapping line pairs: " (itoa (length olaps))
                     "\nSteps: " stepsum
                     "\nLiner Material: " linersum
+                    "\nTitle block border: " bordsum
                     (if htsum (strcat "\nOverall height: " htsum) "")
                     "\nReport written on layer " *dchk-report-layer*
                     "; nothing else was changed."))))

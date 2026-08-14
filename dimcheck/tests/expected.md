@@ -24,6 +24,11 @@ green lines are the all-clear (and render at 3/4 height).
 | `liner_step_without_fg` | steps drawn but liner **MISSING its Step** | the fiberglass warning |
 | `fgstep_with_liner_step` | Fiberglass Step present **and** liner HAS a Step → warn, naming the block | "liner missing its Step" (suppressed by design) |
 | `bead_missing` | Bead attachment + plan steps, **NOTHING on layer Bead Track** | bead track present |
+| `border_nominal` | border 704 x 543.625 — **nominal size, OK** (green) | any error |
+| `border_scaled_up` | border at **2x — OK** (a scaled-up multiple is fine) | scaled-down |
+| `border_scaled_down` | **"Title block should not be SCALED DOWN for Liners"** (red) | an OK verdict |
+| `border_stretched` | **STRETCHED out of proportion** (1.200x wide, 1.000x tall) | scaled-down |
+| `border_missing` | **NO BORDER found on layer 'border'** | a size verdict |
 | `rectangle_not_sideview` | "no step patterns detected" | a side view (this is the false-positive guard) |
 
 ## Notes
@@ -37,6 +42,10 @@ green lines are the all-clear (and render at 3/4 height).
 - `fgstep_with_liner_step` checks the rule interaction: the fiberglass
   warning must *replace* the opposite "missing its Step" warning, not
   appear alongside it.
+- The border cases pin the title-block rule: nominal **58'-8" x 45'-3 5/8"**
+  (704 x 543.625 units) or any scaled-**up** multiple passes; anything
+  smaller is the error, and a border out of proportion is caught
+  separately from one that is merely the wrong size.
 - Heights are in drawing units where 1 unit = 1 inch, matching
   `*dchk-step-maxgap*` = 18 and `*dchk-bead-dist*` = 18.
 
