@@ -24,6 +24,8 @@ green lines are the all-clear (and render at 3/4 height).
 | `liner_step_without_fg` | steps drawn but liner **MISSING its Step** | the fiberglass warning |
 | `fgstep_with_liner_step` | Fiberglass Step present **and** liner HAS a Step → warn, naming the block | "liner missing its Step" (suppressed by design) |
 | `bead_missing` | Bead attachment + plan steps, **NOTHING on layer Bead Track** | bead track present |
+| `pattern_not_supplied` | WALL and FLOOR **WIPED clean** (they read "Not Supplied" / "#ERROR"); STEP `Tex` untouched | the STEP field being cleared |
+| `pattern_clean` | liner **OK** — `Blue Granite` / `Mosaic Tile` / `Tex` all kept | any wipe |
 | `border_nominal` | border 704 x 543.625 — **nominal size, OK** (green) | any error |
 | `border_scaled_up` | border at **2x — OK** (a scaled-up multiple is fine) | scaled-down |
 | `border_scaled_down` | **"Title block should not be SCALED DOWN for Liners"** (red) | an OK verdict |
@@ -46,6 +48,10 @@ green lines are the all-clear (and render at 3/4 height).
   (704 x 543.625 units) or any scaled-**up** multiple passes; anything
   smaller is the error, and a border out of proportion is caught
   separately from one that is merely the wrong size.
+- `pattern_not_supplied` vs `pattern_clean` guard the wipe: only the
+  fields that never got filled in are cleared, and a real pattern name
+  is never mistaken for one. DIMSCAN reports these as NEEDS WIPING and
+  clears nothing.
 - Heights are in drawing units where 1 unit = 1 inch, matching
   `*dchk-step-maxgap*` = 18 and `*dchk-bead-dist*` = 18.
 

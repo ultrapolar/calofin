@@ -124,6 +124,15 @@ def liner_blocks():
                            (1, "FG Step"))))
 
 
+def liner(at=(100.0, -40.0), wall="", floor="", step=None, with_step=False):
+    """A liner pattern block with fillable WALL / FLOOR / STEP fields."""
+    attribs = [("WALL", wall), ("FLOOR", floor)]
+    if step is not None:
+        attribs.append(("STEP", step))
+    return insert("Liner Material with Step" if with_step else "Liner Material",
+                  at, attribs)
+
+
 def title(wallht, at=(200.0, 0.0)):
     return insert("Tech Title", at, [("WallHt", wallht)])
 
@@ -337,6 +346,24 @@ def _():
     """Nothing on the border layer at all."""
     return dxf(line((0.0, 0.0), (100.0, 0.0))
                + insert("Liner Material", (100.0, 100.0)),
+               liner_blocks())
+
+
+@case("pattern_not_supplied")
+def _():
+    """Pattern fields reading "Not Supplied" / "#ERROR" -> wiped clean."""
+    return dxf(border(1.0)
+               + liner(wall="Not Supplied", floor="#ERROR", step="Tex",
+                       with_step=True),
+               liner_blocks())
+
+
+@case("pattern_clean")
+def _():
+    """Real pattern names must be left exactly alone."""
+    return dxf(border(1.0)
+               + liner(wall="Blue Granite", floor="Mosaic Tile", step="Tex",
+                       with_step=True),
                liner_blocks())
 
 

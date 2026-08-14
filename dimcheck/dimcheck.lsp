@@ -116,8 +116,16 @@
 ;;;     with Step". Missing -> reported. Each one found is scanned
 ;;;     for the standalone words "NOT" and "ERROR" in its attributes
 ;;;     and text (e.g. "Not Selected", "Not Included", "#ERROR");
-;;;     any hit is reported with the block's location so you can
-;;;     look at it. The liner pattern must also agree with how the
+;;;     A field that carries one of those words was never really
+;;;     filled in ("Not Supplied", "#ERROR"), so DIMCHECK WIPES IT
+;;;     BACK TO BLANK and says which fields it cleared - the pattern
+;;;     block reads clean afterwards. Only attribute VALUES are
+;;;     cleared: the block's own labels ("Pattern:", "Wall:",
+;;;     "Floor:", "Step:") live in its definition and are never
+;;;     touched, and a real pattern name is left alone. A bad word
+;;;     sitting in the block's static text cannot be cleared, so it
+;;;     is reported instead. DIMSCAN, being read-only, reports these
+;;;     as NEEDS WIPING and changes nothing. The liner pattern must also agree with how the
 ;;;     steps are built:
 ;;;       - a FIBERGLASS STEP anywhere in the highlighted area (as
 ;;;         text, a block, or the layer things sit on — see
@@ -214,6 +222,9 @@
 (setq *dchk-border-tol*   0.005)   ; 0.5% slack on both the scale and the aspect ratio
 (setq *dchk-fgstep-words*          ; a fiberglass step shows up under any of these
       '("Fiberglass Step" "FG Step"))
+;; a liner pattern field carrying one of these was never really filled
+;; in ("Not Supplied", "#ERROR") - DIMCHECK wipes it back to blank
+(setq *dchk-badwords*     '("NOT" "ERROR"))
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
 (setq *dchk-report-color* 3)       ; green
 (setq *dchk-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
@@ -609,7 +620,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1141,6 +1152,41 @@
         (setq lst (cons (cdr (assoc 1 (entget e))) lst)
               e   (entnext e)))))
   (append lst (dchk:blockdef-texts (cdr (assoc 2 ed)) *dchk-block-depth*)))
+
+(defun dchk:attrib-bad-tags (ent words / e ed val tags)
+  ;; tags of the INSERT's ATTRIBUTES whose value carries one of the
+  ;; standalone words. Only attribute VALUES are considered - the
+  ;; block's own labels ("Wall:", "Floor:") live in its definition and
+  ;; must never be touched.
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
+        (setq val (cdr (assoc 1 ed)))
+        (if (vl-some '(lambda (w)
+                        (wcmatch (strcat " " (dchk:norm-text val) " ")
+                                 (strcat "* " (strcase w) " *")))
+                     words)
+          (setq tags (cons (cdr (assoc 2 ed)) tags)))
+        (setq e (entnext e)))))
+  (reverse tags))
+
+(defun dchk:wipe-attribs (ent tags / e ed n)
+  ;; blank the listed attribute values so the pattern reads clean:
+  ;; the label stays, whatever was written after it goes
+  (setq n 0)
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
+        (if (member (cdr (assoc 2 ed)) tags)
+          (progn
+            (entmod (subst '(1 . "") (assoc 1 ed) ed))
+            (entupd e)
+            (setq n (1+ n))))
+        (setq e (entnext e)))))
+  (if (> n 0) (entupd ent))
+  n)
 
 (defun dchk:ins-attrib-deep (ent tag / val s)
   ;; the tag's value on the INSERT, or on a block nested inside it
@@ -1796,7 +1842,7 @@
                       nomerged noflag noleft
                       sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong liners linerbadw linernostep bad w bn bh bp
-                      linerstep linerfg fgstep
+                      linerstep linerfg fgstep badtags linerwiped
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
@@ -2356,6 +2402,7 @@
               linernostep nil
               linerstep   nil
               linerfg     nil
+              linerwiped  0
               fgstep      (dchk:fgstep-src ss blks))
         (if fgstep
           (princ (strcat "\n--- Fiberglass Step found in the highlighted area: "
@@ -2369,28 +2416,46 @@
             (princ (strcat "\n--- Liner check: " (itoa (length liners))
                            " 'Liner Material' block(s) found ---"))
             (foreach b liners
-              (setq bn  (dchk:block-name b)
-                    bh  (cdr (assoc 5 (entget b)))
-                    bp  (cdr (assoc 10 (entget b)))
-                    bad nil)
-              (foreach w '("NOT" "ERROR")
+              (setq bn      (dchk:block-name b)
+                    bh      (cdr (assoc 5 (entget b)))
+                    bp      (cdr (assoc 10 (entget b)))
+                    badtags (dchk:attrib-bad-tags b *dchk-badwords*)
+                    bad     nil)
+              (foreach w *dchk-badwords*
                 (if (dchk:ins-has-word b w)
                   (setq bad (append bad (list w)))))
               (foreach w bad
                 (if (not (member w linerbadw))
                   (setq linerbadw (append linerbadw (list w)))))
-              (if bad
-                (progn
-                  (princ (strcat "\n  Note: '" bn "' contains the word "
-                                 (dchk:join bad " & ") " - look at it."))
-                  (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
-                                            (dchk:ptstr bp)
-                                            ": contains the word "
-                                            (dchk:join bad " & ")
-                                            " - look at it")
-                                    lines)))
-                (setq lines (cons (strcat "Liner Material (" bn ") " bh ": OK")
-                                  lines))))
+              (cond
+                ;; a pattern field that says "Not Supplied" or carries an
+                ;; ERROR was never filled in - wipe it back to blank so
+                ;; the block reads clean, and say which fields went
+                (badtags
+                 (dchk:wipe-attribs b badtags)
+                 (setq linerwiped (+ linerwiped (length badtags)))
+                 (princ (strcat "\n  '" bn "': wiped "
+                                (dchk:join badtags ", ") " clean."))
+                 (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                           (dchk:ptstr bp) ": "
+                                           (dchk:join badtags ", ")
+                                           " carried " (dchk:join bad " & ")
+                                           " - WIPED clean")
+                                   lines)))
+                ;; the word sits in the block's own text, not in a field
+                ;; we can clear - report it and leave it alone
+                (bad
+                 (princ (strcat "\n  Note: '" bn "' contains the word "
+                                (dchk:join bad " & ") " - look at it."))
+                 (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                           (dchk:ptstr bp)
+                                           ": contains the word "
+                                           (dchk:join bad " & ")
+                                           " - look at it")
+                                   lines)))
+                (t
+                 (setq lines (cons (strcat "Liner Material (" bn ") " bh ": OK")
+                                   lines)))))
             (setq linerstep (vl-some '(lambda (b) (dchk:ins-has-word b "STEP"))
                                      liners))
             (cond
@@ -2462,17 +2527,21 @@
                  "block MISSING - add 'Liner Material' (or 'with Step')")
                 (t
                  (strcat (itoa (length liners)) " block(s) found"
-                         (if linerbadw
-                           (strcat "; word " (dchk:join linerbadw " & ")
-                                   " found - review")
-                           "")
+                         (if (> linerwiped 0)
+                           (strcat "; " (itoa linerwiped)
+                                   " pattern field(s) WIPED clean")
+                           (if linerbadw
+                             (strcat "; word " (dchk:join linerbadw " & ")
+                                     " found - review")
+                             ""))
                          (if linernostep
                            "; steps drawn but liner MISSING its Step"
                            "")
                          (if linerfg
                            "; Fiberglass Step in the drawing but the liner HAS a Step"
                            "")
-                         (if (and (null linerbadw) (not linernostep) (not linerfg))
+                         (if (and (null linerbadw) (not linernostep) (not linerfg)
+                                  (= linerwiped 0))
                            " - OK"
                            "")))))
 
@@ -2596,7 +2665,7 @@
                      beadss beadbbs bb gbb tlist tins bp cx cy d tbest
                      wallraw wallvals wallvar wallmany wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
-                     nd ndbad na nabad h m ins txt nlin ref hdr l
+                     nd ndbad na nabad h m ins txt nlin ref hdr l badtags
                      bordbb bordsum
                      minx miny maxx maxy p13 p14 near s b w)
 
@@ -2801,17 +2870,24 @@
      (if liners
        (setq linerstep (vl-some '(lambda (x) (dchk:ins-has-word x "STEP")) liners)))
      (foreach b liners
-       (setq bad nil)
-       (foreach w '("NOT" "ERROR")
+       (setq bad     nil
+             badtags (dchk:attrib-bad-tags b *dchk-badwords*))
+       (foreach w *dchk-badwords*
          (if (dchk:ins-has-word b w)
            (progn (setq bad (append bad (list w)))
                   (if (not (member w wnd)) (setq wnd (append wnd (list w)))))))
+       ;; read-only: say which fields DIMCHECK would clear, clear nothing
        (setq lines (cons (strcat "Liner Material (" (dchk:block-name b) ") "
                                  (cdr (assoc 5 (entget b))) ": "
-                                 (if bad
-                                   (strcat "contains the word " (dchk:join bad " & ")
-                                           " - look at it")
-                                   "OK"))
+                                 (cond
+                                   (badtags
+                                    (strcat (dchk:join badtags ", ")
+                                            " carries " (dchk:join bad " & ")
+                                            " - NEEDS WIPING (run DIMCHECK)"))
+                                   (bad
+                                    (strcat "contains the word "
+                                            (dchk:join bad " & ") " - look at it"))
+                                   (t "OK")))
                          lines)))
      (if (and fgstep linerstep)
        (setq lines (cons (strcat "Liner Material: a Fiberglass Step (" fgstep
