@@ -22,7 +22,7 @@ import re
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
 LISP_DIR = os.path.join(REPO_DIR, "lisp", "perp_points")
-RELEASES_DIR = os.path.join(REPO_DIR, "releases", "perp_points")
+RELEASES_DIR = os.path.join(REPO_DIR, "releases")
 
 # (path, command defun, helper prefix) for each routine under test
 ROUTINES = [
@@ -247,7 +247,7 @@ def test_structure_of_all_routines():
 
 
 def test_releases_match_their_source():
-    """releases/perp_points/ holds dated copies (NAME_MMDDYY_REV##.lsp);
+    """releases/ holds dated copies (NAME_MMDDYY_REV##.lsp);
     the newest release of every lisp/perp_points/*.lsp must be
     byte-identical to it -- the two files stay the same going forward.
     Fix a mismatch by running: python3 tools/release_lisp.py"""

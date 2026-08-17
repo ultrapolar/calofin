@@ -9,7 +9,7 @@ checkout.
 ```
 blender/    Blender add-ons (DXF import/export, mesh tools)
 lisp/       AutoLISP routines, current static-named files
-releases/   Dated REV-stamped twins of the lisp/ files, same layout
+releases/   Dated REV-stamped twins of the lisp/ files, flat (no subfolders)
 ui/         The Calofin AutoCAD palette (VB.NET) and its LISP glue
 tools/      Shared dev tooling (release stamping, static checks)
 tests/      Python test suite - runs without AutoCAD or Blender installed
@@ -30,9 +30,8 @@ see each folder's own README for the exact steps.
 ## AutoLISP routines (`lisp/`)
 
 Each tool lives under `lisp/<name>/`, with the identically-named,
-dated copy of any versioned file mirrored under `releases/<name>/`
-(see below). Load a routine with APPLOAD, or add it to your startup
-suite.
+dated copy of any versioned file living flat in `releases/` (see
+below). Load a routine with APPLOAD, or add it to your startup suite.
 
 | Command(s) | Folder | What it does |
 | --- | --- | --- |
@@ -77,11 +76,12 @@ consolidation:
 ## Releases (`releases/`)
 
 Some tools distribute a dated, REV-numbered twin of their static file
-(`CORNERSTP.lsp` alongside `CORNERSTP_081726_REV22.lsp`) so a loaded
-routine never silently changes underfoot, and a version banner in the
-file, its filename, and what the command prints at startup can never
-disagree. Those twins live under `releases/<tool>/`, mirroring the
-`lisp/<tool>/` layout, instead of next to the static file. Regenerate
+(`lisp/cornerstp/CORNERSTP.lsp` alongside
+`releases/CORNERSTP_081726_REV22.lsp`) so a loaded routine never
+silently changes underfoot, and a version banner in the file, its
+filename, and what the command prints at startup can never disagree.
+Every tool's twins live flat in `releases/` - no per-tool subfolders,
+just the file itself - instead of next to the static file. Regenerate
 them after any change with:
 
 ```
@@ -110,7 +110,7 @@ not a bug in either side.
 
 | Script | What it does |
 | --- | --- |
-| `release_lisp.py` | Regenerates every `releases/<tool>/` REV twin from its `lisp/<tool>/` source's version banner |
+| `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 

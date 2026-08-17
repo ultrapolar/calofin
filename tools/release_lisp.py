@@ -2,19 +2,15 @@
 """Make dated distribution copies of the AutoLISP routines that carry a
 version banner.
 
-The repo splits every AutoLISP tool into two top-level folders that mirror
-each other's layout:
-
-  lisp/cornerstp/CORNERSTP.lsp            the current, static-named copy -
-                                          the one in the startup suite /
-                                          APPLOAD stack, so loading never
-                                          has to chase a filename
-  releases/cornerstp/CORNERSTP_MMDDYY_REV22.lsp
-                                          a dated copy under the mirrored
-                                          tool folder in releases/, whose
-                                          name says exactly which
-                                          iteration someone has in their
-                                          stack
+  lisp/cornerstp/CORNERSTP.lsp     the current, static-named copy - the
+                                   one in the startup suite / APPLOAD
+                                   stack, so loading never has to chase
+                                   a filename
+  releases/CORNERSTP_MMDDYY_REV22.lsp
+                                   a dated copy, flat in releases/ (no
+                                   per-tool subfolder), whose name says
+                                   exactly which iteration someone has
+                                   in their stack
 
 The REV number is the file's own version banner with the dot dropped
 (v2.2 -> REV22), so the filename, the load banner, and the banner the
@@ -26,10 +22,10 @@ Run this after any change to a .lsp file:
     python3 tools/release_lisp.py
 
 It re-reads each static file's version, writes the new dated copy into
-the mirrored releases/<tool>/ folder, and removes the previous dated
-copy of that routine (git history keeps the old ones). A .lsp file with
-no version banner (most tools don't use this convention) is skipped -
-that's not an error, just nothing to release.
+releases/, and removes the previous dated copy of that routine (git
+history keeps the old ones). A .lsp file with no version banner (most
+tools don't use this convention) is skipped - that's not an error, just
+nothing to release.
 """
 
 import datetime
@@ -46,6 +42,7 @@ VERSION = re.compile(r'\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"')
 
 def main():
     date = datetime.date.today().strftime("%m%d%y")
+    RELEASES_DIR.mkdir(parents=True, exist_ok=True)
     for src in sorted(LISP_DIR.rglob("*.lsp")):
         if DATED.match(src.name):
             continue
@@ -54,10 +51,8 @@ def main():
             print(f"{src.relative_to(ROOT)}: no version banner - skipped")
             continue
         rev = f"{m.group(1)}{m.group(2)}"
-        out_dir = RELEASES_DIR / src.parent.relative_to(LISP_DIR)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        dst = out_dir / f"{src.stem}_{date}_REV{rev}.lsp"
-        for old in out_dir.glob(f"{src.stem}_[0-9]*_REV[0-9]*.lsp"):
+        dst = RELEASES_DIR / f"{src.stem}_{date}_REV{rev}.lsp"
+        for old in RELEASES_DIR.glob(f"{src.stem}_[0-9]*_REV[0-9]*.lsp"):
             if old != dst:
                 old.unlink()
                 print(f"removed {old.relative_to(ROOT)}")

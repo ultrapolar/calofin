@@ -7,7 +7,7 @@ Every build exists twice:
 | File | Purpose |
 | --- | --- |
 | `lisp/dimcheck/dimcheck.lsp` | The **static name**. Your `APPLOAD` / startup suite points here, so it never has to change. |
-| `releases/dimcheck/DIMCHECK_MMDDYY_REV##.lsp` | The **same bytes**, named for the build. This is the copy you hand to someone else. |
+| `releases/DIMCHECK_MMDDYY_REV##.lsp` | The **same bytes**, named for the build. This is the copy you hand to someone else. |
 
 They are byte-identical on purpose. Both carry the same stamp *inside*
 the file:
@@ -37,7 +37,7 @@ hand:
 1. Edit `dimcheck.lsp` and test it.
 2. Bump the `*dchk-version*` stamp to the new date/REV.
 3. Copy the file byte-for-byte to
-   `releases/dimcheck/DIMCHECK_MMDDYY_REV##.lsp` (delete the previous
+   `releases/DIMCHECK_MMDDYY_REV##.lsp` (delete the previous
    dated copy for the same tool - old revisions stay in git history).
 4. Commit both files.
 

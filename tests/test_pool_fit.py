@@ -26,7 +26,7 @@ import re
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
 LISP_FILE = os.path.join(REPO_DIR, "lisp", "abhd", "abhd.lsp")
-RELEASES_DIR = os.path.join(REPO_DIR, "releases", "abhd")
+RELEASES_DIR = os.path.join(REPO_DIR, "releases")
 
 # ---- tuning constants, mirrored from abhd.lsp ------------------------
 
@@ -1619,7 +1619,7 @@ def test_lisp_file_is_well_formed():
 
 def test_versioned_copy():
     """abhd.lsp ships with an identical, version-named twin under
-    releases/abhd/ so anyone can see which iteration is loaded in a
+    releases/ so anyone can see which iteration is loaded in a
     colleague's stack."""
     twins = [f for f in os.listdir(RELEASES_DIR)
              if re.match(r"ABHD_\d{6}_REV\d{2}\.lsp$", f)]
