@@ -24,6 +24,8 @@ green lines are the all-clear (and render at 3/4 height).
 | `liner_step_without_fg` | steps drawn but liner **MISSING its Step** | the fiberglass warning |
 | `fgstep_with_liner_step` | Fiberglass Step present **and** liner HAS a Step → warn, naming the block | "liner missing its Step" (suppressed by design) |
 | `bead_missing` | Bead attachment + plan steps, **NOTHING on layer Bead Track** | bead track present |
+| `attach_undecided_unasked` | Step Attachment shows all 4 options and **NOTHING asks "to be secured?"** (red) | a confirmed attachment |
+| `attach_undecided_asked` | all 4 options shown **and** a "to be secured?" note exists — green, waiting on the customer | any red attachment line |
 | `wallht_zero` | **NONSENSICAL wall height** (0'') in red; the 40" dim NOT marked | a MISMATCH against 0 |
 | `wallht_question_asked` | WallHt `?` and a "Wall height?" note exists — **green, waiting on the customer** | any red height line |
 | `wallht_question_missing` | WallHt `?` and **NOTHING asks for it — add a 'Wall height' note** (red) | waiting-on-customer |
@@ -60,6 +62,11 @@ green lines are the all-clear (and render at 3/4 height).
   NONSENSICAL (and the side-view dim is never blamed for it); `?` is
   fine only when a "Wall height" note asks the customer. These run
   with or without steps in the drawing.
+- The two `attach_undecided_*` cases mirror the WallHt `?` rule: a
+  generic Step Attachment block still listing every option means nobody
+  chose one, which is only acceptable when a "to be secured?" note asks.
+  A block naming one option (or a combo like Bead + Rod Pockets) counts
+  as decided and is not flagged.
 - Heights are in drawing units where 1 unit = 1 inch, matching
   `*dchk-step-maxgap*` = 18 and `*dchk-bead-dist*` = 18.
 

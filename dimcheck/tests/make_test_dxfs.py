@@ -116,6 +116,17 @@ def liner_blocks():
             + block("Step Attachment", _pairs((0, "TEXT"), (8, "0"),
                                               (10, 0.0), (20, 0.0), (40, 1.0),
                                               (1, "Step Attachment")))
+            + block("Step Attachment All Options",
+                    _pairs((0, "MTEXT"), (8, "0"), (10, 0.0), (20, 0.0), (40, 1.0),
+                           (1, "Step Attachment"))
+                    + _pairs((0, "MTEXT"), (8, "0"), (10, 0.0), (20, -2.0), (40, 1.0),
+                             (1, "[ ] Bead"))
+                    + _pairs((0, "MTEXT"), (8, "0"), (10, 0.0), (20, -4.0), (40, 1.0),
+                             (1, "[ ] Flaps"))
+                    + _pairs((0, "MTEXT"), (8, "0"), (10, 0.0), (20, -6.0), (40, 1.0),
+                             (1, "[ ] Rod Pockets"))
+                    + _pairs((0, "MTEXT"), (8, "0"), (10, 0.0), (20, -8.0), (40, 1.0),
+                             (1, "[ ] No Attachment")))
             + block("Bead Step Attachment",
                     _pairs((0, "TEXT"), (8, "0"), (10, 0.0), (20, 0.0), (40, 1.0),
                            (1, "Bead Step Attachment")))
@@ -399,6 +410,31 @@ def _():
     return dxf(line((0.0, 0.0), (100.0, 0.0))
                + title("Finished Wall Ht = ?\"")
                + insert("Liner Material", (100.0, -40.0)),
+               liner_blocks())
+
+
+@case("attach_undecided_unasked")
+def _():
+    """All four attachment options still shown, nothing asks the question."""
+    geo, pts = staircase(treads=3, rise=10.0, run=12.0)
+    lo, hi = pts[-1], pts[0]
+    return dxf(geo + dim_rotated(lo, hi, 40.0, angle=1.5707963267948966)
+               + title("Finished Wall Ht = 40\"")
+               + insert("Step Attachment All Options", (60.0, -20.0))
+               + insert("Liner Material with Step", (100.0, -40.0)),
+               liner_blocks())
+
+
+@case("attach_undecided_asked")
+def _():
+    """All four options shown, but a 'To be secured?' note asks the customer."""
+    geo, pts = staircase(treads=3, rise=10.0, run=12.0)
+    lo, hi = pts[-1], pts[0]
+    return dxf(geo + dim_rotated(lo, hi, 40.0, angle=1.5707963267948966)
+               + title("Finished Wall Ht = 40\"")
+               + insert("Step Attachment All Options", (60.0, -20.0))
+               + text("Steps to be secured?", (60.0, -70.0))
+               + insert("Liner Material with Step", (100.0, -40.0)),
                liner_blocks())
 
 
