@@ -1,0 +1,135 @@
+{
+  "_comment": [
+    "Side-view bottom types, cropped from the Bottom Types chart.",
+    "",
+    "POOL.LSP draws SIX of the twelve. pool:*btypes* is the authority:",
+    "  \"Normal Sport Wedge SLope MOdflat SHallow\"",
+    "The other six are shown greyed so the chart on screen matches the",
+    "chart on paper and the gap is visible rather than silently missing.",
+    "",
+    "Keys are the sheet letters lower-cased. The plan chain (H G F E, or",
+    "E2 F2 G F1 E1 on a Sport) is keyed through pool:askseqb. The depths",
+    "C, D and C2 are NOT -- they go through pool:askh / pool:askdeep /",
+    "pool:askc2 and are keyed off the prompt's letter prefix instead.",
+    "",
+    "B is shown on every section but is never an input here: the overall",
+    "length is already settled by the plan view before a bottom is asked",
+    "for. It is listed inactive.",
+    "",
+    "C1, C3, C4 and F3 appear only on bottoms POOL cannot draw, so they",
+    "are collected nowhere and are inactive everywhere.",
+    "",
+    "x/y are FRACTIONS of the image. Seeded estimates, meant to be nudged."
+  ],
+
+  "supported": {
+    "standard-hopper": {
+      "btype": "Normal",
+      "image": "standard-hopper.png",
+      "_note": "Normal is the only style that draws no side profile, so it never asks C or D",
+      "dimensions": [
+        { "letter": "H", "key": "h", "x": 0.17, "y": 0.80,
+          "label": "H - left end to deep end" },
+        { "letter": "G", "key": "g", "x": 0.33, "y": 0.80,
+          "label": "G - hopper length" },
+        { "letter": "F", "key": "f", "x": 0.55, "y": 0.80,
+          "label": "F - hopper to slope break" },
+        { "letter": "E", "key": "e", "x": 0.80, "y": 0.80,
+          "label": "E - slope break to right end" }
+      ],
+      "inactive": ["B", "C", "D"]
+    },
+
+    "sloping-shallow-end": {
+      "btype": "SHallow",
+      "image": "sloping-shallow-end.png",
+      "dimensions": [
+        { "letter": "H",  "key": "h",  "x": 0.17, "y": 0.82 },
+        { "letter": "G",  "key": "g",  "x": 0.32, "y": 0.82 },
+        { "letter": "F",  "key": "f",  "x": 0.53, "y": 0.82 },
+        { "letter": "E",  "key": "e",  "x": 0.78, "y": 0.82 },
+        { "letter": "D",  "key": "d",  "x": 0.33, "y": 0.50,
+          "label": "D - deep end depth" },
+        { "letter": "C2", "key": "c2", "x": 0.63, "y": 0.47,
+          "label": "C2 - depth where the shallow floor meets the break" },
+        { "letter": "C",  "key": "c",  "x": 0.90, "y": 0.45,
+          "label": "C - wall height (shallow depth)", "chartLetter": "C1" }
+      ],
+      "inactive": ["B", "C3"]
+    },
+
+    "sport": {
+      "btype": "Sport",
+      "image": "sport.png",
+      "dimensions": [
+        { "letter": "E2", "key": "e2", "x": 0.12, "y": 0.83,
+          "label": "E2 - left end shallow flat" },
+        { "letter": "F2", "key": "f2", "x": 0.27, "y": 0.83,
+          "label": "F2 - left slope" },
+        { "letter": "G",  "key": "g",  "x": 0.50, "y": 0.83,
+          "label": "G - hopper length" },
+        { "letter": "F1", "key": "f1", "x": 0.71, "y": 0.83,
+          "label": "F1 - right slope" },
+        { "letter": "E1", "key": "e1", "x": 0.87, "y": 0.83,
+          "label": "E1 - right end shallow flat" },
+        { "letter": "D",  "key": "d",  "x": 0.47, "y": 0.50 },
+        { "letter": "C",  "key": "c",  "x": 0.92, "y": 0.45 }
+      ],
+      "inactive": ["B"]
+    },
+
+    "slope-bottom": {
+      "btype": "SLope",
+      "image": "slope-bottom.png",
+      "dimensions": [
+        { "letter": "H", "key": "h", "x": 0.14, "y": 0.83 },
+        { "letter": "F", "key": "f", "x": 0.42, "y": 0.83 },
+        { "letter": "E", "key": "e", "x": 0.76, "y": 0.83 },
+        { "letter": "D", "key": "d", "x": 0.25, "y": 0.52 },
+        { "letter": "C", "key": "c", "x": 0.92, "y": 0.45 }
+      ],
+      "inactive": ["B"]
+    },
+
+    "wedge": {
+      "btype": "Wedge",
+      "image": "wedge.png",
+      "_note": "G and E are pinned by the style; only H and F are asked",
+      "dimensions": [
+        { "letter": "H", "key": "h", "x": 0.15, "y": 0.87 },
+        { "letter": "F", "key": "f", "x": 0.52, "y": 0.87 },
+        { "letter": "D", "key": "d", "x": 0.24, "y": 0.62 },
+        { "letter": "C", "key": "c", "x": 0.93, "y": 0.55 }
+      ],
+      "inactive": ["B"]
+    },
+
+    "modified-flat": {
+      "btype": "MOdflat",
+      "image": "modified-flat.png",
+      "dimensions": [
+        { "letter": "H", "key": "h", "x": 0.15, "y": 0.86 },
+        { "letter": "G", "key": "g", "x": 0.45, "y": 0.86 },
+        { "letter": "F", "key": "f", "x": 0.78, "y": 0.86 },
+        { "letter": "D", "key": "d", "x": 0.45, "y": 0.52 },
+        { "letter": "C", "key": "c", "x": 0.92, "y": 0.45 }
+      ],
+      "inactive": ["B"]
+    }
+  },
+
+  "notImplemented": [
+    { "name": "multiple-depth", "title": "Multiple Depth",
+      "why": "needs C4 and the E2/F3/E1/F1 multi-break chain; no keyword in pool:*btypes*" },
+    { "name": "flat", "title": "Flat",
+      "why": "no keyword in pool:*btypes*" },
+    { "name": "straight-slope", "title": "Straight Slope",
+      "why": "no keyword in pool:*btypes*" },
+    { "name": "sport-no-hopper-pad", "title": "Sport (No Hopper Pad)",
+      "why": "POOL reaches this as Sport with G = 0 rather than as its own style" },
+    { "name": "sport-shallow-cove", "title": "Sport (Shallow Cove)",
+      "why": "needs F3 and C3; no keyword in pool:*btypes*" },
+    { "name": "modified-flat-shallow-end", "title": "Modified Flat Shallow End",
+      "why": "needs C1/C2/C3 together with F2/F1; no keyword in pool:*btypes*" }
+  ]
+}

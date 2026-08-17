@@ -929,6 +929,77 @@ def _getpoint(vm, a):
     return list(v)
 
 
+@bi('getstring')
+def _getstring(vm, a):
+    # (getstring [cr] [prompt]) -- Enter gives "", never nil
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = vm.pop_script(prompt, 'getstring')
+    return "" if v is None else str(v)
+
+
+@bi('entsel')
+def _entsel(vm, a):
+    # (entsel [prompt]) -- nil when the user just presses Enter,
+    # otherwise (ename point) as AutoLISP returns it.
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = vm.pop_script(prompt, 'entsel')
+    if v is None:
+        return NIL
+    if isinstance(v, Ent):
+        return [v, [0.0, 0.0, 0.0]]
+    return list(v)
+
+
+def _wc_re(pat):
+    """AutoCAD wcmatch pattern -> regex. Covers the constructs SPA.LSP
+    uses (* ? , ~ # @ .) plus ` escaping; enough for the taper/grade
+    string sniffing, not a full DWG-name matcher."""
+    out, i = [], 0
+    while i < len(pat):
+        c = pat[i]
+        if c == '`' and i + 1 < len(pat):
+            out.append(re.escape(pat[i + 1])); i += 2; continue
+        if c == '*':
+            out.append('.*')
+        elif c == '?':
+            out.append('.')
+        elif c == '#':
+            out.append('[0-9]')
+        elif c == '@':
+            out.append('[A-Za-z]')
+        elif c == '.':
+            out.append('[^A-Za-z0-9]')
+        else:
+            out.append(re.escape(c))
+        i += 1
+    return ''.join(out)
+
+
+@bi('wcmatch')
+def _wcmatch(vm, a):
+    s = a[0] if isinstance(a[0], str) else ""
+    pat = a[1] if len(a) > 1 and isinstance(a[1], str) else ""
+    for alt in pat.split(','):          # comma = alternation
+        neg = alt.startswith('~')
+        if neg:
+            alt = alt[1:]
+        hit = re.fullmatch(_wc_re(alt), s) is not None
+        if hit != neg:
+            return T
+    return NIL
+
+
+BUILTINS[Sym('logior')] = lambda vm, a: _logop(a, lambda x, y: x | y, 0)
+BUILTINS[Sym('logand')] = lambda vm, a: _logop(a, lambda x, y: x & y, -1)
+
+
+def _logop(args, op, unit):
+    out = unit
+    for v in args:
+        out = op(out, int(num(v, 'logop')))
+    return out
+
+
 BUILTINS[Sym('getreal')] = _getdist
 BUILTINS[Sym('getint')] = lambda vm, a: vm.pop_script(
     a[0] if a else "", 'getint')

@@ -1,0 +1,123 @@
+{
+  "_comment": [
+    "Where each dimension letter sits on its shape image, and which",
+    "SPA.LSP answer key it feeds.",
+    "",
+    "x/y are FRACTIONS of the image, so the text boxes track the image",
+    "as the palette is resized and the maps survive re-cropping.",
+    "",
+    "Three things this file has to translate rather than assume:",
+    "",
+    "  1. The chart letters are not always the Lisp keys. The OCTAGON",
+    "     and ROUND flows do line up 1:1 -- their prompts literally read",
+    "     'B - overall size ACROSS', 'S1 - corner cut up the end' -- but",
+    "     the RECTANGLE flow calls the same two overalls 'w and 'l.",
+    "",
+    "  2. SPA.LSP also uses A-D for CORNER POSITIONS (A bottom-left,",
+    "     B bottom-right, C top-right, D top-left) which collides with",
+    "     the chart's A/B dimension letters. Corner fields are keyed",
+    "     cornera-ty / cornera-sz and listed separately so the two",
+    "     senses of 'A' can never be conflated.",
+    "",
+    "  3. These are POOL charts. Every shape carries letters SPA does",
+    "     not ask for -- H, G, F, E, M, K, L are hopper, step and depth",
+    "     dimensions belonging to POOL.LSP. They are listed under",
+    "     'inactive' so the form can grey them out rather than offering",
+    "     a box that goes nowhere.",
+    "",
+    "positions are SEEDED ESTIMATES read off the cropped images, meant",
+    "to be nudged against the real artwork. Nothing downstream depends",
+    "on them being exact.",
+    "",
+    "Keys verified against the askseqb item lists in SPA.LSP."
+  ],
+
+  "shapes": {
+    "rectangle": {
+      "image": "rectangle.png",
+      "lispShape": "Rectangle",
+      "dimensions": [
+        { "letter": "B", "key": "w", "x": 0.50, "y": 0.25,
+          "required": true, "label": "Overall WIDTH across (A-B)" },
+        { "letter": "A", "key": "l", "x": 0.075, "y": 0.60,
+          "required": true, "label": "Overall LENGTH up (A-D)" }
+      ],
+      "corners": [
+        { "label": "Corner A", "position": "bottom-left",
+          "typeKey": "cornera-ty", "sizeKey": "cornera-sz",
+          "x": 0.10, "y": 0.86 },
+        { "label": "Corner B", "position": "bottom-right",
+          "typeKey": "cornerb-ty", "sizeKey": "cornerb-sz",
+          "x": 0.90, "y": 0.86 },
+        { "label": "Corner C", "position": "top-right",
+          "typeKey": "cornerc-ty", "sizeKey": "cornerc-sz",
+          "x": 0.90, "y": 0.28 },
+        { "label": "Corner D", "position": "top-left",
+          "typeKey": "cornerd-ty", "sizeKey": "cornerd-sz",
+          "x": 0.10, "y": 0.28 }
+      ],
+      "inactive": ["H", "G", "L", "F", "E", "M", "K", "Y1", "Y2"]
+    },
+
+    "octagon": {
+      "image": "octagon.png",
+      "lispShape": "OCtagon",
+      "dimensions": [
+        { "letter": "B",  "key": "b",  "x": 0.53,  "y": 0.245,
+          "required": true,  "label": "B - overall size ACROSS" },
+        { "letter": "A",  "key": "a",  "x": 0.265, "y": 0.63,
+          "required": false, "label": "A - overall size UP",
+          "suggestFrom": "b" },
+        { "letter": "T",  "key": "tt", "x": 0.545, "y": 0.30,
+          "required": false, "label": "T - flat across (top & bottom)" },
+        { "letter": "S",  "key": "ss", "x": 0.435, "y": 0.30,
+          "required": false, "label": "S - corner cut along the side" },
+        { "letter": "S1", "key": "s1", "x": 0.325, "y": 0.44,
+          "required": false, "label": "S1 - corner cut up the end" },
+        { "letter": "S2", "key": "s2", "x": 0.735, "y": 0.86,
+          "required": false,
+          "label": "S2 - corner cut FACE (the tape across the cut)" },
+        { "letter": "V",  "key": "vv", "x": 0.305, "y": 0.63,
+          "required": false, "label": "V - flat up (left & right)" }
+      ],
+      "corners": [],
+      "inactive": ["M", "L", "H", "G", "F", "E", "K"]
+    },
+
+    "round": {
+      "image": "round.png",
+      "lispShape": "ROund",
+      "_note": "a circle when the two overalls match, an ellipse when they differ",
+      "dimensions": [
+        { "letter": "B", "key": "b", "x": 0.50,  "y": 0.24,
+          "required": true,  "label": "B - overall size ACROSS" },
+        { "letter": "A", "key": "a", "x": 0.225, "y": 0.60,
+          "required": false, "label": "A - overall size UP",
+          "suggestFrom": "b" }
+      ],
+      "corners": [],
+      "inactive": ["M", "L", "H", "G", "F", "E", "K"]
+    }
+  },
+
+  "_secondOutline": {
+    "_comment": [
+      "Once the first outline is drawn SPA offers the other one (water's",
+      "edge vs cover size). Taken from Dims rather than an Offset it",
+      "asks its own overalls, which are separate keys on every shape."
+    ],
+    "fields": [
+      { "key": "b2", "required": true,  "label": "Overall ACROSS" },
+      { "key": "a2", "required": false, "label": "Overall UP",
+        "suggestFrom": "b2" },
+      { "key": "f2", "required": false, "label": "Corner cut FACE",
+        "shapes": ["octagon"] }
+    ]
+  },
+
+  "poolShapesAwaitingPhase3": [
+    "grecian-6-sided-hopper", "grecian-square-hopper", "true-oval",
+    "roman", "true-l-right", "true-l-left", "sloping-shallow-end",
+    "lazy-l-right", "lazy-l-left"
+  ]
+}

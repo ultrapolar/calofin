@@ -683,15 +683,53 @@
 ;; Run a whole block; returns the answers as an assoc list, or SPA-BACK
 ;; when the user backed out of its FIRST question (only offered when bk
 ;; is non-nil).
-(defun spa:askseqb (items bk / ans i n it v dflt asked out)
+;;; -------------------- form-supplied answers --------------------------
+;;;
+;;;  spa:*form* is nil for ordinary command-line operation and every
+;;;  prompt below behaves exactly as it always has.  When the palette
+;;;  runs the command it binds spa:*form* to an alist of (key . value):
+;;;
+;;;    key present, value non-nil   use it, ask nothing
+;;;    key present, value nil       the field was left BLANK, which is
+;;;                                 the same answer as NA at the prompt
+;;;    key absent                   not supplied at all, so ask as usual
+;;;
+;;;  The blank/absent split is the whole point: a form has no way to
+;;;  say "I did not answer" other than leaving the box empty, and an
+;;;  empty box must mean NA rather than "prompt me for it".  Mixed
+;;;  forms therefore work -- fill in what is known, get asked for the
+;;;  rest at the command line.
+
+(setq spa:*form* nil)
+
+;; (T . value) when the form carries KEY, nil when it does not.  The
+;; wrapper is what lets a supplied nil be told apart from a missing key.
+(defun spa:fhit (key / c)
+  (if (and spa:*form* (setq c (assoc key spa:*form*)))
+      (cons t (cdr c))))
+
+;; Corner questions are keyed off their label: "Corner A" -> cornera-ty
+;; / cornera-sz, so the form names line up with the drawing letters.
+(defun spa:ckey (label sfx / i c out)
+  (setq out "" i 0)
+  (while (< i (strlen label))
+    (setq c (substr label (1+ i) 1))
+    (if (/= c " ") (setq out (strcat out c)))
+    (setq i (1+ i)))
+  (read (strcat (strcase out t) "-" sfx)))
+
+(defun spa:askseqb (items bk / ans i n it v dflt asked out h)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items)
           dflt (nth 4 it))
     (if (and dflt (listp dflt))
         (setq dflt (spa:sqfirst ans dflt)))
-    (setq v (spa:asks (cadr it) (caddr it) (cadddr it) dflt
-                      (if (or asked bk) t nil)))
+    (setq h (spa:fhit (car it)))
+    (setq v (if h
+                (cdr h)
+                (spa:asks (cadr it) (caddr it) (cadddr it) dflt
+                          (if (or asked bk) t nil))))
     (if (eq v 'SPA-BACK)
         (if asked
             (setq i (car asked) asked (cdr asked))
@@ -1701,7 +1739,24 @@
 ;; treatment's setback along the walls at half the shorter adjacent
 ;; wall, so two treatments can never overlap and fold the perimeter;
 ;; too-large answers are re-asked.  Returns (type size) or SPA-BACK.
-(defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e)
+(defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e h)
+  ;; A corner supplied by the form skips both of its prompts outright:
+  ;; the treatment comes from <label>-ty and the size from <label>-sz.
+  ;; A blank treatment falls through to the prompt, so a half-filled
+  ;; form still asks for the corners it was not given.
+  (if (and (setq h (spa:fhit (spa:ckey label "ty"))) (cdr h))
+      (progn
+        (setq ty (cdr h))
+        (if (equal ty "Square") (setq ty "90"))
+        (setq sz (if (= ty "90")
+                     0.0
+                     (cdr (spa:fhit (spa:ckey label "sz")))))
+        (if (null sz) (setq sz 0.0))
+        (list ty sz))
+      (spa:askcorner-prompt label dflty dfltsz ents maxsb back)))
+
+(defun spa:askcorner-prompt (label dflty dfltsz ents maxsb back
+                             / ty sz cols sb e)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (spa:osup)
@@ -2523,6 +2578,9 @@
         (princ (strcat "\nSPA error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (spa:sysrestore)
+    ;; an aborted form run must not leave its answers armed for the
+    ;; next plain SPA at the command line
+    (setq spa:*form* nil)
     (spa:pvkill)
     (spa:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
@@ -2562,19 +2620,26 @@
         (princ "\nThermo-Light: the water's edge and the cover size are the same.")
         (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
       (spa:setmode
-        (spa:askkw "Is this drawing at the water's edge or the cover size"
-                   "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+        (cond ((cdr (spa:fhit 'mode)))
+              ((spa:askkw "Is this drawing at the water's edge or the cover size"
+                          "Watersedge Coversize" "Watersedge/Coversize"
+                          nil nil)))))
   (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
                  (if spa:*perdash* " (dashed)" "")
                  "; overalls read <measurement> over \"" spa:*sfx* "\"."))
 
   ;; ------------------------------------------------ shape
-  (initget 1 "Rectangle OCtagon ROund")
-  (setq stype (getkword "\nSpa shape [Rectangle/OCtagon/ROund]: "))
+  (if (cdr (spa:fhit 'shape))
+      (setq stype (cdr (spa:fhit 'shape)))
+      (progn
+        (initget 1 "Rectangle OCtagon ROund")
+        (setq stype (getkword "\nSpa shape [Rectangle/OCtagon/ROund]: "))))
 
   ;; the base point is picked with the user's own snaps still live;
   ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (getpoint "\nInsertion base point <0,0>: ")
+  (setq base (if (spa:fhit 'base)
+                 (cdr (spa:fhit 'base))
+                 (getpoint "\nInsertion base point <0,0>: "))
         spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
