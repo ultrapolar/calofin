@@ -5,6 +5,60 @@ from the same bones as `POOL.LSP` but cut down to what a spa template
 needs.
 
 Load it (`APPLOAD`, or drag the file into the drawing) and type **`SPA`**.
+New to it? Load `TUTORIALSPA.LSP` too and type **`TUTORIALSPA`**.
+
+## The two file names
+
+Every lisp here ships **twice, byte-identical, under two names**:
+
+| | |
+| --- | --- |
+| `SPA.LSP` | the static name — the one in your `APPLOAD` stack |
+| `SPA_081726_REV01.LSP` | the same file, named `MMDDYY_REV##` for its revision |
+| `TUTORIALSPA.LSP` / `TUTORIALSPA_081726_REV01.LSP` | likewise |
+
+The static name never changes, so an existing autoload keeps working. The
+versioned name tells you at a glance which revision is sitting in someone
+else's stack. And because the two are identical, **the version string
+travels inside both** — so a session that loaded the static name can
+still tell you what it is:
+
+```
+Command: SPAVER
+SPA 081726 REV01
+Tutorial: 081726 REV01
+```
+
+Cut a new release with:
+
+```
+python3 tools/release.py              # today's date, next revision
+python3 tools/release.py --rev 3      # force REV03
+python3 tools/release.py --check      # verify, change nothing
+```
+
+`--check` catches the three ways this goes wrong: the pair drifting
+apart, more than one versioned copy lying around, and a file whose
+version string does not match its own filename. Only one versioned copy
+is kept per lisp — git history is the archive.
+
+## Tutorial
+
+`TUTORIALSPA` (needs `SPA.LSP` loaded) offers:
+
+* **Checklist** — every question SPA asks in order, every decision it
+  makes for you, every check it runs, and what it draws on which layer.
+  Written to the text window, and optionally placed in the drawing as a
+  reference sheet you can plot.
+* **Demo** — draws a worked 140 × 110 cover a step at a time, explaining
+  each step *before* it appears: outline, overalls, flats, corner
+  callouts, water's edge, overlap, hinges, report. Nothing is asked for;
+  the measurements are canned. Enter advances, `X` stops.
+* **Both** — the checklist, then the demo.
+
+The demo drives SPA's own drawing functions, so what it shows is what
+SPA actually does. Only the *order* of the steps is duplicated — if the
+flow in `SPA.LSP` changes, walk `TUTORIALSPA.LSP` through with it.
 
 ## Shapes
 

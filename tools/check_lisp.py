@@ -1,5 +1,7 @@
 import re, sys, collections
-src = open('lisp/SPA.LSP').read()
+import sys
+files = sys.argv[1:] or ['lisp/SPA.LSP']
+src = '\n'.join(open(f).read() for f in files)
 
 # tokenize: strip ; comments (outside strings) and track strings
 i=0; depth=0; line=1; instr=False; out=[]
