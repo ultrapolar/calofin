@@ -344,6 +344,13 @@ the preservation-slider mapping, the size-relative weld threshold and
 the Taubin smoother (noise reduction, boundary locking and
 volume preservation vs. plain Laplacian).
 
+The AutoLISP routines cannot run outside AutoCAD, so
+`tests/test_cornerstp_geometry.py` mirrors their geometry helpers in
+Python and asserts the invariants the drawings rely on: tread depths held
+exactly, held widths centred on the wall opening, outermost steps landing
+wall-to-wall, polyline bulge/arc conversions round-tripping, and the
+dimension chain/nesting rules.
+
 ## License
 
 GPL-3.0-or-later (as required for Blender add-ons).
