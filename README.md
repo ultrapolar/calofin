@@ -9,6 +9,7 @@ between Blender and CAD, plus one standalone AutoCAD routine:
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
 | PERPPTS (AutoLISP, not a Blender add-on) | `perp_points.lsp` | Divides a line into points, offsets them perpendicular by typed lengths, joins them with a polyline and dimensions each offset — repeatable on the polyline it creates |
 | CPERPPTS (AutoLISP, not a Blender add-on) | `cperp_points.lsp` | The curved companion to PERPPTS: same pipeline, but offsets run perpendicular to the tangent of the selected curve, so arcs, bulged polylines and splines can be offset with variation too |
+| TUTORIALPERPPTS / TUTORIALCPERPPTS | `tutorial_perp_points.lsp`, `tutorial_cperp_points.lsp` | In-AutoCAD guided tours of the two commands for new users — a checklist of everything the command validates, a step-by-step drawn demo, or both |
 
 ## Installation (Blender add-ons)
 
@@ -187,6 +188,9 @@ properties that make them safe to run — balanced parentheses, no
 variables leaking into the global namespace, and every system variable
 they change being saved and restored — then exercise reference ports of
 the arc-length sampling helpers and of the curve tangent/normal logic.
+The tutorial lisps get the same hygiene checks, and the suite also
+verifies that the newest release in `versions/` is byte-identical to
+each root `.lsp` (see §6).
 
 ---
 
@@ -310,6 +314,56 @@ same input validation and Esc-safe cleanup apply.
 One thing to know: on a tight concave bend, normals converge — a large
 offset there can make the new curve cross itself. That is inherent to
 offsetting along normals, not a fault of the routine.
+
+---
+
+# 5. Tutorials (AutoCAD)
+
+`tutorial_perp_points.lsp` and `tutorial_cperp_points.lsp` add the
+`TUTORIALPERPPTS` and `TUTORIALCPERPPTS` commands — in-AutoCAD guided
+tours for users seeing the tools for the first time. Each offers three
+modes, because people learn differently:
+
+* **Checks** — a printed checklist of everything the command validates
+  and guarantees: what it accepts, what it rejects, what happens on
+  Esc, where output lands.
+* **Demo** — a worked example drawn in the current drawing one stage at
+  a time (insertion point and size of your choosing), narrating what
+  the command does and what the drawing looks like at each step: the
+  selected object, the direction click and its red arrow, the division
+  points, the offsets, the connecting polyline, the dimensions, and a
+  repeat round.
+* **Both** — the checklist, then the demo.
+
+At the end the demo drawing can be kept for reference or erased; either
+way each tutorial run is a single UNDO group and restores every system
+variable it touches.
+
+---
+
+# 6. Versioned releases (`versions/`)
+
+Every root `.lsp` has a dated, numbered copy in `versions/`, named
+`NAME_MMDDYY_REV##.lsp` (e.g. `PERP_POINTS_081726_REV01.lsp`). The two
+files are byte-identical; only the names differ, and each serves a
+purpose:
+
+* the **static name** (`perp_points.lsp`) never changes, so APPLOAD
+  startup suites keep pointing at it;
+* the **versioned name** tells anyone looking at a loaded stack exactly
+  which iteration of the routine they have.
+
+After changing any root `.lsp`, run:
+
+```
+python3 tools/make_release.py
+```
+
+It copies each changed file to a new versioned name — same day bumps
+the `REV` number, a new day starts that date at `REV01` — and skips
+files whose newest release already matches. The test suite fails
+whenever a root `.lsp` differs from its newest release, so the pair
+cannot drift apart unnoticed.
 
 ## License
 

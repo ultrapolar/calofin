@@ -28,6 +28,15 @@ ROUTINES = [
     (os.path.join(REPO_DIR, "cperp_points.lsp"), "c:CPERPPTS", "cperp"),
 ]
 
+# tutorials get the generic hygiene checks (parens, leaks, sysvars)
+# but not the pipeline-specific ones (dim style, output placement)
+TUTORIALS = [
+    (os.path.join(REPO_DIR, "tutorial_perp_points.lsp"),
+     "c:TUTORIALPERPPTS", "tutp"),
+    (os.path.join(REPO_DIR, "tutorial_cperp_points.lsp"),
+     "c:TUTORIALCPERPPTS", "tutc"),
+]
+
 # AutoLISP builtins the "undeclared variable" scan should not flag.
 BUILTINS = set("""
 defun setq if while foreach cond t nil and or not null car cdr cadr caddr
@@ -35,7 +44,7 @@ cons list length nth last reverse distance sqrt abs max min float itoa rtos
 strcat princ member equal eq type entsel entget entmake entmod entdel entnext
 entlast tblobjname tblsearch trans getvar setvar getint getdist getpoint
 getkword initget command exit progn logand zerop subst assoc vl-remove quote
-1+ 1- lsh guard vl-catch-all-apply vl-catch-all-error-p
+1+ 1- lsh guard getstring vl-catch-all-apply vl-catch-all-error-p
 vlax-curve-getEndParam vlax-curve-getDistAtParam vlax-curve-getPointAtDist
 vlax-curve-getClosestPointTo vlax-curve-getParamAtPoint
 vlax-curve-getParamAtDist vlax-curve-getDistAtPoint vlax-curve-getFirstDeriv
@@ -217,11 +226,51 @@ STRUCTURAL_CHECKS = [
 ]
 
 
+HYGIENE_CHECKS = [
+    check_parens_balanced,
+    check_no_global_leaks,
+    check_sysvars_saved_and_restored,
+]
+
+
 def test_structure_of_all_routines():
     for path, cmd, prefix in ROUTINES:
         print("%s:" % os.path.basename(path))
         for check in STRUCTURAL_CHECKS:
             check(path, cmd, prefix)
+    for path, cmd, prefix in TUTORIALS:
+        print("%s:" % os.path.basename(path))
+        for check in HYGIENE_CHECKS:
+            check(path, cmd, prefix)
+
+
+def test_releases_match_their_source():
+    """versions/ holds dated copies (NAME_MMDDYY_REV##.lsp); the newest
+    release of every root .lsp must be byte-identical to it -- the two
+    files stay the same going forward.  Fix a mismatch by running:
+    python3 tools/make_release.py"""
+    import glob
+    versions = os.path.join(REPO_DIR, "versions")
+    for lsp in sorted(glob.glob(os.path.join(REPO_DIR, "*.lsp"))):
+        base = os.path.splitext(os.path.basename(lsp))[0].upper()
+        best, best_key = None, None
+        for f in os.listdir(versions):
+            m = re.fullmatch(re.escape(base) +
+                             r"_(\d{2})(\d{2})(\d{2})_REV(\d+)\.lsp",
+                             f, re.IGNORECASE)
+            if m:
+                mm, dd, yy, rev = (int(g) for g in m.groups())
+                key = (yy, mm, dd, rev)
+                if best_key is None or key > best_key:
+                    best, best_key = f, key
+        assert best, "no release found for %s - run tools/make_release.py" \
+            % os.path.basename(lsp)
+        with open(lsp, "rb") as fa, \
+             open(os.path.join(versions, best), "rb") as fb:
+            assert fa.read() == fb.read(), \
+                "%s differs from its newest release %s - run " \
+                "tools/make_release.py" % (os.path.basename(lsp), best)
+        print("release current: %s == %s" % (os.path.basename(lsp), best))
 
 
 # --- reference port of the LISP geometry helpers ----------------------
@@ -504,6 +553,7 @@ def test_bulge_degenerate_cases():
 
 def main():
     test_structure_of_all_routines()
+    test_releases_match_their_source()
     test_straight_line_spacing()
     test_arc_length_spacing_across_a_corner()
     test_endpoint_never_overshoots()
