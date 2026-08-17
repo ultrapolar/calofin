@@ -10,6 +10,14 @@ entity the command left in the drawing.
 Also covers the half-filled form, which is the point of the feature: a
 key that is absent still gets prompted for, so a user can fill in the
 measurements they have and answer the rest at the command line.
+
+KNOWN FAILING as of the branch consolidation: this file was written
+against calofin_net's forked copy of SPA.LSP. lisp/spa/SPA.LSP is now
+the canonical, actively-developed version instead (see the repo
+README), and its prompt sequence has since diverged from what the
+palette's LispBridge expects. Expect this to fail until the palette is
+reconciled with the canonical SPA.LSP - that's tracked work, not a
+regression from the restructure.
 """
 
 import os
@@ -18,7 +26,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from lispvm import VM, Dot, parse_all  # noqa: E402
 
-LSP = os.path.join(os.path.dirname(__file__), '..', 'lisp', 'SPA.LSP')
+LSP = os.path.join(os.path.dirname(__file__), '..', 'lisp', 'spa', 'SPA.LSP')
 
 
 def snapshot(vm):

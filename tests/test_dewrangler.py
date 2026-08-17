@@ -10,7 +10,7 @@ import math
 import os
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-ADDON_DIR = os.path.join(os.path.dirname(TESTS_DIR), "mesh_dewrangler")
+ADDON_DIR = os.path.join(os.path.dirname(TESTS_DIR), "blender", "mesh_dewrangler")
 
 
 def _load(name):

@@ -10,7 +10,7 @@ import os
 import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-ADDON_DIR = os.path.join(os.path.dirname(TESTS_DIR), "dxf_cloud_mesher")
+ADDON_DIR = os.path.join(os.path.dirname(TESTS_DIR), "blender", "dxf_cloud_mesher")
 
 
 def _load(name):

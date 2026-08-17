@@ -1,6 +1,6 @@
 import re, sys
 import sys
-files=sys.argv[1:] or ['lisp/SPA.LSP']
+files=sys.argv[1:] or ['lisp/spa/SPA.LSP']
 src='\n'.join(open(f).read() for f in files)
 # strip strings+comments
 out=[];i=0;instr=False

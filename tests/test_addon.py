@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-ADDON_DIR = os.path.join(os.path.dirname(TESTS_DIR), "uv_layout_dxf")
+ADDON_DIR = os.path.join(os.path.dirname(TESTS_DIR), "blender", "uv_layout_dxf")
 sys.path.insert(0, TESTS_DIR)
 
 # Install the mathutils stub before importing the add-on modules.

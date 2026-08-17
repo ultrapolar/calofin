@@ -1,6 +1,14 @@
 """Form-driven POOL: prove the palette path draws what the command line
 draws, including the side-view depths.
 
+KNOWN FAILING as of the branch consolidation: this file was written
+against calofin_net's forked copy of POOL.LSP. lisp/pool/POOL.LSP is
+now the canonical, actively-developed version instead (see the repo
+README), and its prompt sequence has since diverged from what the
+palette's LispBridge expects. Expect this to fail until the palette is
+reconciled with the canonical POOL.LSP - that's tracked work, not a
+regression from the restructure.
+
 POOL is a harder case than SPA. Its plan chain (H G F E, or E2 F2 G F1
 E1 on a Sport) comes through pool:askseqb and is keyed like SPA's, but
 the DEPTHS -- C, D and C2 -- do not: they go through pool:askh /
@@ -20,7 +28,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from lispvm import VM, Dot, parse_all  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
-                   'pool_layout_lisp', 'POOL.LSP')
+                   'lisp', 'pool', 'POOL.LSP')
 
 BASE = [(0.0, 0.0, 0.0)]
 

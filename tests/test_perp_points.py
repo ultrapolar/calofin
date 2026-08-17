@@ -21,19 +21,21 @@ import re
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
+LISP_DIR = os.path.join(REPO_DIR, "lisp", "perp_points")
+RELEASES_DIR = os.path.join(REPO_DIR, "releases", "perp_points")
 
 # (path, command defun, helper prefix) for each routine under test
 ROUTINES = [
-    (os.path.join(REPO_DIR, "perp_points.lsp"), "c:PERPPTS", "perp"),
-    (os.path.join(REPO_DIR, "cperp_points.lsp"), "c:CPERPPTS", "cperp"),
+    (os.path.join(LISP_DIR, "perp_points.lsp"), "c:PERPPTS", "perp"),
+    (os.path.join(LISP_DIR, "cperp_points.lsp"), "c:CPERPPTS", "cperp"),
 ]
 
 # tutorials get the generic hygiene checks (parens, leaks, sysvars)
 # but not the pipeline-specific ones (dim style, output placement)
 TUTORIALS = [
-    (os.path.join(REPO_DIR, "tutorial_perp_points.lsp"),
+    (os.path.join(LISP_DIR, "tutorial_perp_points.lsp"),
      "c:TUTORIALPERPPTS", "tutp"),
-    (os.path.join(REPO_DIR, "tutorial_cperp_points.lsp"),
+    (os.path.join(LISP_DIR, "tutorial_cperp_points.lsp"),
      "c:TUTORIALCPERPPTS", "tutc"),
 ]
 
@@ -245,16 +247,15 @@ def test_structure_of_all_routines():
 
 
 def test_releases_match_their_source():
-    """versions/ holds dated copies (NAME_MMDDYY_REV##.lsp); the newest
-    release of every root .lsp must be byte-identical to it -- the two
-    files stay the same going forward.  Fix a mismatch by running:
-    python3 tools/make_release.py"""
+    """releases/perp_points/ holds dated copies (NAME_MMDDYY_REV##.lsp);
+    the newest release of every lisp/perp_points/*.lsp must be
+    byte-identical to it -- the two files stay the same going forward.
+    Fix a mismatch by running: python3 tools/release_lisp.py"""
     import glob
-    versions = os.path.join(REPO_DIR, "versions")
-    for lsp in sorted(glob.glob(os.path.join(REPO_DIR, "*.lsp"))):
+    for lsp in sorted(glob.glob(os.path.join(LISP_DIR, "*.lsp"))):
         base = os.path.splitext(os.path.basename(lsp))[0].upper()
         best, best_key = None, None
-        for f in os.listdir(versions):
+        for f in os.listdir(RELEASES_DIR):
             m = re.fullmatch(re.escape(base) +
                              r"_(\d{2})(\d{2})(\d{2})_REV(\d+)\.lsp",
                              f, re.IGNORECASE)
@@ -263,13 +264,13 @@ def test_releases_match_their_source():
                 key = (yy, mm, dd, rev)
                 if best_key is None or key > best_key:
                     best, best_key = f, key
-        assert best, "no release found for %s - run tools/make_release.py" \
+        assert best, "no release found for %s - run tools/release_lisp.py" \
             % os.path.basename(lsp)
         with open(lsp, "rb") as fa, \
-             open(os.path.join(versions, best), "rb") as fb:
+             open(os.path.join(RELEASES_DIR, best), "rb") as fb:
             assert fa.read() == fb.read(), \
                 "%s differs from its newest release %s - run " \
-                "tools/make_release.py" % (os.path.basename(lsp), best)
+                "tools/release_lisp.py" % (os.path.basename(lsp), best)
         print("release current: %s == %s" % (os.path.basename(lsp), best))
 
 
@@ -463,7 +464,7 @@ def test_cperppts_uses_newest_curve_and_builds_arc_polylines():
     points are joined into an LWPOLYLINE whose segments are bulge arcs
     -- built by writing group-42 bulges, never by PEDIT and never as a
     spline."""
-    path = os.path.join(REPO_DIR, "cperp_points.lsp")
+    path = os.path.join(LISP_DIR, "cperp_points.lsp")
     code = load(path)
     assert re.search(r"\(cperp:curve-pts\s+curCrv\b", code), \
         "base points must be sampled from the newest curve (curCrv)"

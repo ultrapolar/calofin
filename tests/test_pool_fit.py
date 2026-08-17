@@ -24,8 +24,9 @@ import os
 import re
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-LISP_FILE = os.path.join(os.path.dirname(TESTS_DIR),
-                         "pool_fit_lisp", "abhd.lsp")
+REPO_DIR = os.path.dirname(TESTS_DIR)
+LISP_FILE = os.path.join(REPO_DIR, "lisp", "abhd", "abhd.lsp")
+RELEASES_DIR = os.path.join(REPO_DIR, "releases", "abhd")
 
 # ---- tuning constants, mirrored from abhd.lsp ------------------------
 
@@ -1617,16 +1618,16 @@ def test_lisp_file_is_well_formed():
 
 
 def test_versioned_copy():
-    """abhd.lsp ships with an identical, version-named twin so anyone
-    can see which iteration is loaded in a colleague's stack."""
-    folder = os.path.dirname(LISP_FILE)
-    twins = [f for f in os.listdir(folder)
+    """abhd.lsp ships with an identical, version-named twin under
+    releases/abhd/ so anyone can see which iteration is loaded in a
+    colleague's stack."""
+    twins = [f for f in os.listdir(RELEASES_DIR)
              if re.match(r"ABHD_\d{6}_REV\d{2}\.lsp$", f)]
     assert len(twins) == 1, \
         "expected exactly one ABHD_MMDDYY_REV##.lsp, found %s" % twins
     twin = twins[0]
     src = open(LISP_FILE, "rb").read()
-    assert open(os.path.join(folder, twin), "rb").read() == src, \
+    assert open(os.path.join(RELEASES_DIR, twin), "rb").read() == src, \
         "%s has drifted from abhd.lsp - re-copy it" % twin
     m = re.search(rb'\*PF-VERSION\*\s+"(\d{6}) REV(\d{2})"', src)
     assert m, "abhd.lsp lost its *PF-VERSION* constant"

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from lispvm import VM, LispError  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
-                   'pool_layout_lisp', 'POOL.LSP')
+                   'lisp', 'pool', 'POOL.LSP')
 
 
 def run(script, label, dimstyles=()):

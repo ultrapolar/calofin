@@ -12,7 +12,7 @@
 import os, re, struct, sys, zlib
 
 LSP = os.path.join(os.path.dirname(__file__), "..",
-                   "drone_height_lisp", "DroneHeightGPS.lsp")
+                   "lisp", "drone_height", "DroneHeightGPS.lsp")
 
 # ---------------------------------------------------------------- lint ------
 def lint(path):
@@ -542,7 +542,7 @@ def main():
     lint(LSP)
     static_checks(LSP)
     static_checks(os.path.join(os.path.dirname(__file__), '..',
-                               'drone_height_lisp', 'DroneDistortion.lsp'))
+                               'lisp', 'drone_height', 'DroneDistortion.lsp'))
     failures = []
 
     def check(name, ok):
