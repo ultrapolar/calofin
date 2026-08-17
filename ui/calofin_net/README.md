@@ -31,7 +31,7 @@ can prove the form draws what the command line draws.
 Requires the AutoCAD .NET reference assemblies, pulled from NuGet:
 
 ```
-dotnet build calofin_net/Calofin.vbproj -c Release
+dotnet build ui/calofin_net/Calofin.vbproj -c Release
 ```
 
 | AutoCAD | TargetFramework | AutoCAD.NET |
@@ -47,7 +47,7 @@ project.
 ## Loading
 
 1. `NETLOAD` the built `Calofin.dll`.
-2. `APPLOAD` `calofin_ui/calofin.lsp` — the palette asks it which
+2. `APPLOAD` `ui/calofin_ui/calofin.lsp` — the palette asks it which
    commands exist so it can grey out the ones this session hasn't loaded.
    Without it every button stays enabled and a missing command reports
    its own absence.

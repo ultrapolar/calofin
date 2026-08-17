@@ -6,12 +6,11 @@ Every build exists twice:
 
 | File | Purpose |
 | --- | --- |
-| `dimcheck.lsp` | The **static name**. Your `APPLOAD` / startup suite points here, so it never has to change. |
-| `releases/DIMCHECK_MMDDYY_REV##.lsp` | The **same bytes**, named for the build. This is the copy you hand to someone else. |
+| `lisp/dimcheck/dimcheck.lsp` | The **static name**. Your `APPLOAD` / startup suite points here, so it never has to change. |
+| `releases/dimcheck/DIMCHECK_MMDDYY_REV##.lsp` | The **same bytes**, named for the build. This is the copy you hand to someone else. |
 
-They are byte-identical on purpose — the release script compares them
-and refuses to publish if they ever drift. Both carry the same stamp
-*inside* the file:
+They are byte-identical on purpose. Both carry the same stamp *inside*
+the file:
 
 ```lisp
 (setq *dchk-version* "DIMCHECK 081726 REV01")
@@ -24,46 +23,27 @@ report, so a printed report says which build checked the drawing.
 
 ## Cutting a release
 
-```
-python3 tools/release.py                # stamp today's next revision + write the twin
-python3 tools/release.py --rev 3        # force REV03
-python3 tools/release.py --date 090126  # stamp a different MMDDYY
-python3 tools/release.py --check        # report the stamp, verify the twin, change nothing
-```
+This tool's own `tools/release.py` (argparse, `--rev`/`--date`/`--check`,
+one-table-per-tool) was retired when the repo's release scripts were
+consolidated into the shared `python3 tools/release_lisp.py` (see the
+top-level README). That script drives off a `*name-version*
+"vMAJOR.MINOR"` banner, which is the convention `CORNERSTP`/`HEMISTEP`/
+`NORMIESTEP` use — DIMCHECK's own stamp format
+(`*dchk-version* "DIMCHECK 081726 REV01"`) isn't one it understands yet.
 
-`release.py` stamps `dimcheck.lsp` **first** and then copies it, so the
-twin can never differ from what you actually load. Revisions
-auto-increment per date: the first cut on a day is `REV01`, the next
-`REV02`, and tomorrow starts again at `REV01`.
-
-Run `--check` in CI or before handing a file out; it exits non-zero if
-the twin is missing or has drifted.
-
-### Workflow
+Until it is extended to read that format too, cut a DIMCHECK release by
+hand:
 
 1. Edit `dimcheck.lsp` and test it.
-2. `python3 tools/release.py`
-3. Commit both files — the `releases/` folder is the history of what
-   went out, so old revisions stay exactly as distributed.
+2. Bump the `*dchk-version*` stamp to the new date/REV.
+3. Copy the file byte-for-byte to
+   `releases/dimcheck/DIMCHECK_MMDDYY_REV##.lsp` (delete the previous
+   dated copy for the same tool - old revisions stay in git history).
+4. Commit both files.
 
 Old revisions are **not** re-stamped. `DIMCHECK_081726_REV01.lsp` keeps
 saying `REV01` forever, which is what makes it useful for working out
 what someone is running.
-
-## Adding another tool
-
-`release.py` is driven by one table:
-
-```python
-TOOLS = {
-    "dimcheck": ("dimcheck.lsp", "*dchk-version*", "DIMCHECK"),
-}
-```
-
-Add a row — `"pool": ("pool.lsp", "*pool-version*", "POOL")` — give the
-new file a `(setq *pool-version* "POOL 010126 REV01")` line and a
-`c:POOLVER`, and `python3 tools/release.py pool` writes
-`pool/releases/POOL_MMDDYY_REV##.lsp` the same way.
 
 ## TUTORIALDIMCHECK
 
