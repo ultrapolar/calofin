@@ -145,7 +145,8 @@ progressively relaxed tolerance** until the cap holds — the tangent
 windows stay in force, so capped results stay as smooth as the cap
 allows (a very tight cap may need more than 8° at a joint to close
 the loop; the hit report shows the cost). The cap **wins over the
-tolerance** and **binds in every mode**:
+tolerance** and **binds in every mode** — guided, ordering-sketch and
+points-only alike:
 
 * In guided mode, if the drawn perimeter needs more curves than the
   cap, the command falls back to fitting from the points — the drawn
@@ -153,6 +154,12 @@ tolerance** and **binds in every mode**:
 * If the cap is unreachably small, you get the **fewest-curves fit
   found**, never the full-size fit. A closed loop cannot go below
   **2 segments**, so that is the floor.
+
+The cap binds the **`as asked` candidate**, which is what it is for.
+It does not bind the other two: capping the fit whose whole job is to
+draw the most curves — or the fewest — would be asking a question and
+then overruling the answer. See
+[Pick the one that looks right](#pick-the-one-that-looks-right).
 
 All thresholds are constants at the top of `abhd.lsp`
 (`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-SNAP-EPS*`, `*PF-CORNER-ANG*`,
@@ -246,9 +253,20 @@ command ends.
 
 ## Pick the one that looks right
 
-You do not have to guess the tolerance. ABHD draws **three candidate
-fits at once**, in different colours, **numbers each one on screen**
-in its own colour beside the shape, and shows what each costs:
+You do not have to guess how much curve to spend on how much
+accuracy. ABHD draws **three candidate fits at once**, in different
+colours, **numbers each one on screen** in its own colour beside the
+shape, and shows what each costs. They are not three tolerances —
+they are the **two ends of that trade and the middle**:
+
+| # | Colour | Aim |
+| --- | --- | --- |
+| 1 | red | **Most curves, least error.** Fits to `*PF-TIGHT-TOL*` (0.01) and writes off no point at all, so the error goes to nothing — it ignores both the distance you typed and the curve cap |
+| 2 | yellow | **As asked.** Your settings exactly, curve cap included |
+| 3 | cyan | **Fewest curves that still hold the distance.** The same distance you typed, but with the miss allowance no longer rationed span by span, so the arcs run as long as that distance allows |
+
+All three are then **measured against the distance you typed**, so the
+columns compare like for like even though only fit 2 was built to it:
 
 ```
 Three candidate fits are now drawn on layer POOL-FIT,
@@ -256,25 +274,39 @@ each numbered on screen in its own colour:
 
    #  segs  curves  worst off  avg all  avg off  not held
    -  ----  ------  ---------  -------  -------  --------
-   1  20    20      0.49       0.07     0.34     0         tighter - hugs the points
-   2  19    19      0.87       0.12     0.55     0         as asked
-   3  16    16      1.88       0.24     0.61     3         looser - fewer curves
+   1  28    28      0.02       0.00     -        0         most curves - least error
+   2  12    12      0.60       0.12     0.38     0         as asked
+   3  9     9       0.90       0.32     0.53     0         fewest curves - still within the distance
 
   "not held" = points further than 1.000 from that fit.
   "avg all" averages every point; "avg off" averages only the points
   that are off the line (further than 0.250 from it).
+  All three are measured against the 1.000 you typed, but only one is built to it:
+  the tight fit spends curves to drive the error towards nothing (it
+  ignores that distance), the middle one is your settings exactly,
+  and the few fit holds the same distance with as few curves as it can.
 
   Click the outline you want to keep, or type its number.
   Redo refits with new settings, and lets you omit points first.
   Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:
 ```
 
+Fit 1 is the one to reach for when the drawing has to match the
+survey and the curve count is somebody else's problem; fit 3 when the
+shape has to be built and every extra radius costs money. Fit 1 is
+usually — not always — the busiest: where the points run dead
+straight it draws **lines**, which are not curves at all, so a
+squarish pool can come out of the tight fit with fewer arcs than the
+middle one and no error to speak of.
+
 **`worst off`** is one bad point; **`avg all`** averages every point,
 so the ones sitting on the line count as the zeros they are; **`avg
-off`** averages only the points that actually strayed. Read together
-they separate "one point is off" from "everything drifted": above,
-fit 3's worst more than doubles but its strays still average close to
-fit 2's, so the extra error is concentrated rather than general.
+off`** averages only the points that actually strayed (a `-` means
+nothing strayed at all). Read together they separate "one point is
+off" from "everything drifted": above, fit 3's worst is only half
+again fit 2's, but its `avg all` nearly triples — the extra error is
+general, spread over every point, which is exactly what dropping 12
+curves to 9 buys.
 
 The red `1`, yellow `2` and cyan `3` stack down the right-hand side of
 the pool, each in the same colour as its outline — and **each figure
@@ -282,12 +314,12 @@ is repeated in the drawing beside its number**, so the whole choice
 can be made on screen without reading the command line:
 
 ```
-1   20 segs    20 curves    0 not held    tighter - hugs the points
-    worst 0.49    avg all 0.07    avg off 0.34
-2   19 segs    19 curves    0 not held    as asked
-    worst 0.87    avg all 0.12    avg off 0.55
-3   16 segs    16 curves    3 not held    looser - fewer curves
-    worst 1.88    avg all 0.24    avg off 0.61
+1   28 segs    28 curves    0 not held    most curves - least error
+    worst 0.02    avg all 0.00    avg off -
+2   12 segs    12 curves    0 not held    as asked
+    worst 0.60    avg all 0.12    avg off 0.38
+3   9 segs     9 curves     0 not held    fewest curves - still within the distance
+    worst 0.90    avg all 0.32    avg off 0.53
 ```
 
 **Just click the outline you want** — press `Enter` at the keyword
@@ -319,8 +351,11 @@ new candidates are drawn from the surviving points. Walls and corners
 otherwise carry over; one anchored on an omitted point is dropped
 with a note. Redo as many times as it takes.
 
-The three tolerances are ½×, 1× and 2× what you asked for; change the
-spread by editing `*PF-COMPARE*` at the top of `abhd.lsp`.
+The three aims — `tight`, `asked`, `few` — are listed in
+`*PF-COMPARE*` at the top of `abhd.lsp`, where their colours and their
+wording can be edited (the three mode names themselves are fixed).
+`*PF-TIGHT-TOL*` next to it is what fit 1 fits to, `0.01` out of the
+box — lower it and fit 1 gets more exact and busier still.
 
 Keeping a single fit also unlocks the pool-bottom flow — see
 [The pool bottom (hopper)](#the-pool-bottom-hopper) below (`All` and
@@ -355,10 +390,12 @@ it wholesale.** Everything it draws there is stamped as its own, and
 only stamped objects are removed when the next run replaces them —
 your own geometry on that layer is left alone.
 
-If a point is beyond tolerance in **all three** candidates, ABHD says
-so before you choose — that one is almost certainly a mis-shot, a
-duplicate, or a corner that needs more points around it, and no
-tolerance setting will rescue it.
+If a point is beyond the distance in **every candidate built to that
+distance** — fits 2 and 3 — ABHD says so before you choose. That one
+is almost certainly a mis-shot, a duplicate, or a corner that needs
+more points around it, and no tolerance setting will rescue it. Fit 1
+gets no vote in that count: it threads every point it can reach, so
+counting it would empty the warning every time.
 
 The kept fit is a closed `LWPOLYLINE`: the three candidates preview
 on layer `POOL-FIT` (created if missing; if a layer exists but is

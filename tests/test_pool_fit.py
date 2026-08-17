@@ -44,6 +44,8 @@ HOP_OFF = 18.0                     # *PF-HOP-OFF* (default)
 PICKUP_EPS = 3.0                   # *PF-PICKUP-EPS*
 DIM_OFF = 12.0                     # *PF-DIM-OFF*
 BOTTOM_FIT = 0.25                  # *PF-BOTTOM-FIT*
+TIGHT_TOL = 0.01                   # *PF-TIGHT-TOL*
+COMPARE_MODES = ("tight", "asked", "few")   # *PF-COMPARE*
 
 # ---- small 2D helpers ------------------------------------------------
 
@@ -505,8 +507,12 @@ def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None):
 
 
 def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
-                corners=None):
-    """Full fit; the curve cap relaxes the tolerance and refits."""
+                corners=None, prorate=True):
+    """Full fit; the curve cap relaxes the tolerance and refits.
+
+    ALLOWANCE and PRORATE are the walk's miss budget and whether each
+    span is held to its own fair share of it - lifting both is how the
+    "few" candidate buys long arcs without touching the tolerance."""
     # start the walk at a declared wall when there is one, so no wall
     # straddles the walk's origin; otherwise at the sharpest turn
     if walls:
@@ -515,7 +521,7 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
         tour = rotate_to_point(tour, corners[0])
     else:
         tour = rotate_to_corner(tour)
-    segs, left = fit_pass(tour, tol, allowance, True, walls, corners)
+    segs, left = fit_pass(tour, tol, allowance, prorate, walls, corners)
     # the cap buys few curves with accuracy, so its refits drop both
     # the miss allowance and the per-span fair share
     if maxarcs is not None:
@@ -916,6 +922,21 @@ def fit(pts, tol=1.0, maxarcs=None, walls=None, corners=None):
     return coarse_loop(tour, tol, maxarcs, allowance, walls, corners)
 
 
+def build(tour, tol, allowance, mode, maxarcs=None, walls=None,
+          corners=None):
+    """One candidate fit in MODE (pf:build), points-driven.
+
+    TOL is always the distance the user typed - what the table judges
+    every candidate against.  The mode moves three knobs: how exactly
+    the arcs must hold their points, how many points may be written
+    off, and whether the curve cap binds."""
+    ftol = min(tol, TIGHT_TOL) if mode == "tight" else tol
+    left = {"tight": 0, "few": 10 ** 9}.get(mode, allowance)
+    cap = maxarcs if mode == "asked" else None
+    return coarse_loop(tour, ftol, cap, left, walls, corners,
+                       mode != "few")
+
+
 def closed(segs):
     return all(dist(s[1], segs[(i + 1) % len(segs)][0]) < 1.0e-9
                for i, s in enumerate(segs))
@@ -1148,6 +1169,71 @@ def test_curve_cap():
                 label, cap)
         print("  curve cap honoured on %s (cap 1 -> %d segments)"
               % (label, len(fit(pts, maxarcs=1)[0])))
+
+
+def test_three_candidates_are_three_aims():
+    """The trio spans the curves-against-accuracy trade, not tolerance.
+
+    Fit 1 ("tight") buys accuracy with curves: it fits to
+    *PF-TIGHT-TOL* and writes off no point, so its error goes to
+    nothing whatever distance was typed.  Fit 2 ("asked") is the
+    settings exactly as typed.  Fit 3 ("few") holds that same typed
+    distance with as few curves as it can, by spending a miss
+    allowance that is no longer rationed per span.
+    """
+    for label, pts, tol in (("noisy blob", blob_pts(56, 0.15), 1.0),
+                            ("blob, loose", blob_pts(56, 0.15), 4.0),
+                            ("rounded rect", rounded_rect_pts(), 1.0),
+                            ("circle", circle_pts(36), 1.0)):
+        tour = order_points(list(pts))
+        allowance = pf_ceil(MISS_PCT * len(pts))
+        got = {}
+        for mode in COMPARE_MODES:
+            segs, _ = build(tour, tol, allowance, mode)
+            assert closed(segs), (label, mode)
+            got[mode] = (segs, worst_dev(segs, pts),
+                         sum(min(seg_dist(p, s) for s in segs)
+                             for p in pts) / len(pts))
+        tight, asked, few = (got[m] for m in COMPARE_MODES)
+        # accuracy runs one way down the trio, whatever was typed
+        assert tight[1] <= asked[1] and tight[2] <= asked[2], label
+        assert asked[2] <= few[2], label
+        # the tight fit answers to *PF-TIGHT-TOL*, not to the distance
+        assert tight[1] <= 4.0 * TIGHT_TOL, (label, tight[1])
+        # ... and the few fit still holds every point to the distance
+        assert few[1] <= tol, (label, few[1])
+        # curves run the other way: few never spends more than asked
+        assert arc_count(few[0]) <= arc_count(asked[0]), label
+        print("  %s (tol %.1f): curves %d/%d/%d, worst %.3f/%.3f/%.3f"
+              % (label, tol, arc_count(tight[0]), arc_count(asked[0]),
+                 arc_count(few[0]), tight[1], asked[1], few[1]))
+
+    # on a shape with real curvature the tight fit is also the busiest.
+    # (Not a universal law: a shape whose points run dead straight
+    # comes out of the tight fit as LINES, which are not curves at all
+    # - the rounded rectangle above draws fewer arcs tight than asked.)
+    pts = blob_pts(56, 0.15)
+    tour = order_points(list(pts))
+    allowance = pf_ceil(MISS_PCT * len(pts))
+    tight, _ = build(tour, 1.0, allowance, "tight")
+    asked, _ = build(tour, 1.0, allowance, "asked")
+    assert arc_count(tight) > arc_count(asked)
+
+    # "asked" is still the fit this command has always drawn
+    assert build(tour, 1.0, allowance, "asked", maxarcs=6)[0] == \
+        coarse_loop(tour, 1.0, 6, allowance)[0]
+    # the curve cap binds "asked" alone: capping the fit whose whole
+    # job is to draw the most curves - or the fewest - would be asking
+    # a question and then overruling the answer
+    assert arc_count(build(tour, 1.0, allowance, "asked",
+                           maxarcs=4)[0]) <= 4
+    for mode in ("tight", "few"):
+        segs, _ = build(tour, 1.0, allowance, mode, maxarcs=4)
+        assert arc_count(segs) > 4, mode
+        assert segs == build(tour, 1.0, allowance, mode)[0], (
+            "%s must ignore the curve cap entirely" % mode)
+    print("  three aims: tight ignores the distance, few holds it with"
+          " fewer curves")
 
 
 def test_tolerance_scales_the_fit():
@@ -1603,6 +1689,13 @@ def test_constants_match_lisp():
     assert float(setq_value("PICKUP-EPS")) == PICKUP_EPS
     assert float(setq_value("DIM-OFF")) == DIM_OFF
     assert float(setq_value("BOTTOM-FIT")) == BOTTOM_FIT
+    assert float(setq_value("TIGHT-TOL")) == TIGHT_TOL
+    # the three candidate aims, in the order they are drawn and numbered
+    m = re.search(r"\(setq \*PF-COMPARE\*[^']*'\((.*?)\)\)\)", src,
+                  re.S)
+    assert m, "could not read *PF-COMPARE* from abhd.lsp"
+    assert tuple(re.findall(r'\(\s*"([a-z]+)"', m.group(1))) \
+        == COMPARE_MODES, "the candidate modes moved or were renamed"
     # the dimension styles picked by how an offset was typed
     assert setq_value("DIM-FTIN") == '"SIDE DIMENSION"'
     assert setq_value("DIM-IN") == '"STANDARD INCHES"'
@@ -1726,6 +1819,7 @@ def main():
     test_arcs_sit_on_the_points()
     test_nice_radii_are_preferred()
     test_curve_cap()
+    test_three_candidates_are_three_aims()
     test_tolerance_scales_the_fit()
     test_declared_straight_walls()
     test_tangency_is_defended()

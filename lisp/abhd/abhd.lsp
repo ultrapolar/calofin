@@ -78,6 +78,18 @@
 ;;; drawn shape still orders them), and an unreachably small cap
 ;;; returns the fewest-curves fit found - never the full-size one.
 ;;;
+;;; THE THREE CANDIDATES: how much curve to spend on how much accuracy
+;;; is a judgement, not a setting, so all three answers are drawn and
+;;; the user points at one (*PF-COMPARE*).  Fit 1 is the accurate end:
+;;; it fits to *PF-TIGHT-TOL*, writes off no point at all, and obeys
+;;; neither the typed distance nor the curve cap - the most curves for
+;;; the least error there is.  Fit 2 is the settings exactly as typed,
+;;; cap included.  Fit 3 is the economical end: the same typed
+;;; distance, but with the miss allowance and its per-span fair share
+;;; lifted, so arcs run as long as that distance allows - the fewest
+;;; curves that still hold it.  All three are then MEASURED against
+;;; the typed distance, so the table compares like for like.
+;;;
 ;;; The command rebuilds the perimeter as a single closed LWPOLYLINE
 ;;; (lines + arcs only, no splines); the candidates preview on layer
 ;;; "POOL-FIT" and the kept one moves onto the POOL layer:
@@ -129,7 +141,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081726 REV02") ; announced on load.  The
+(setq *PF-VERSION*      "081726 REV03") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -200,12 +212,35 @@
                                     ; the deep break line (a foot), on
                                     ; the shallow-end side
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
-  '((0.5 1 "red"    "tighter - hugs the points")
-    (1.0 2 "yellow" "as asked")
-    (2.0 4 "cyan"   "looser - fewer curves")))
-                                    ; (tolerance factor, AutoCAD colour,
-                                    ; colour name, description).  Edit
-                                    ; the factors to change the spread.
+  '(("tight" 1 "red"    "most curves - least error")
+    ("asked" 2 "yellow" "as asked")
+    ("few"   4 "cyan"   "fewest curves - still within the distance")))
+                                    ; (mode, AutoCAD colour, colour name,
+                                    ; description).  The three ask three
+                                    ; different questions of the same
+                                    ; points, so what is being chosen is
+                                    ; an aim, not a tolerance:
+                                    ;   "tight" - accuracy above all: it
+                                    ;     fits to *PF-TIGHT-TOL*, lets no
+                                    ;     point miss and ignores both the
+                                    ;     distance typed at step 2 and
+                                    ;     the curve cap, so it draws the
+                                    ;     most curves and the least error
+                                    ;   "asked" - the settings exactly as
+                                    ;     typed, curve cap and all
+                                    ;   "few" - the fewest curves that
+                                    ;     still hold every point within
+                                    ;     the distance typed: the same
+                                    ;     distance, but with the miss
+                                    ;     allowance lifted so arcs run as
+                                    ;     long as that distance permits
+                                    ; Colours and wording are yours to
+                                    ; edit; the three mode names are not
+(setq *PF-TIGHT-TOL*    0.01)       ; the "tight" candidate's accuracy
+                                    ; target (units) - what it fits to
+                                    ; instead of the distance typed at
+                                    ; step 2, or that distance when it
+                                    ; happens to be tighter still
 (setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units)
 (setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
                                     ; points by more than this, split it
@@ -1246,19 +1281,24 @@
   segs)
 
 ;; Points-only / ordering-sketch fit: arcs on the points, joints
-;; within *PF-TANG-TOL* of tangent, nice radii.  The curve cap is
-;; enforced by refitting the whole loop with a progressively relaxed
-;; tolerance, which keeps the tangent windows intact.  The
-;; fewest-curves result seen is kept, so an unreachably small cap
-;; still returns the smallest fit possible - never the biggest.
-(defun pf:coarse-loop (tour tol maxarcs / segs segs2 tol2 tries)
+;; within *PF-TANG-TOL* of tangent, nice radii.  LEFT is the miss
+;; allowance the walk may spend and PRO whether each span is held to
+;; its own fair share of it - lifting both is what buys long arcs at
+;; an unchanged tolerance, which is how the "few" candidate trades
+;; curves for nothing but slack the user already granted.  MAXARCS,
+;; when set, is enforced by refitting the whole loop with a
+;; progressively relaxed tolerance, which keeps the tangent windows
+;; intact.  The fewest-curves result seen is kept, so an unreachably
+;; small cap still returns the smallest fit possible - never the
+;; biggest.
+(defun pf:coarse-loop (tour tol maxarcs left pro / segs segs2 tol2 tries)
   ;; start the walk at a declared wall or corner when there is one, so
   ;; neither straddles the walk's origin; otherwise at the sharpest turn
   (setq tour (cond
                (pf-walls   (pf:rotate-to-point tour (car (car pf-walls))))
                (pf-corners (pf:rotate-to-point tour (car pf-corners)))
                (T          (pf:rotate-to-corner tour)))
-        segs (pf:fit-pass tour tol pf-miss-left T))
+        segs (pf:fit-pass tour tol left pro))
   ;; the cap deliberately buys few curves with accuracy, so the refits
   ;; drop both the miss allowance and the per-span fair share
   (if maxarcs
@@ -1734,12 +1774,17 @@
 ;; Re-fit the drawn perimeter LOOP through the survey points: every
 ;; vertex snaps to the nearest point within TOL, every drawn arc is
 ;; re-fitted through the points lying along it, and drawn straight
-;; walls stay straight.  If the result needs more curves than the cap
-;; allows, the fit falls back to the points-driven builder - the drawn
-;; loop still supplies the point order.
-(defun pf:guided-fit (loop pts dpts tol allow / verts used n s p1 p2 b
-                                                cands clean ns newsegs
-                                                q d)
+;; walls stay straight.  TOL and FTOL are two different jobs one number
+;; used to do: TOL is the reach - which point belongs to which vertex
+;; and which drawn arc - and is always the distance the user typed, so
+;; every candidate reads the drawn shape the same way; FTOL is how
+;; exactly the re-fit then has to hold those points, and is what a
+;; candidate varies.  If the result needs more curves than MAXARCS, the
+;; fit falls back to the points-driven builder - the drawn loop still
+;; supplies the point order.
+(defun pf:guided-fit (loop pts dpts tol ftol allow maxarcs
+                      / verts used n s p1 p2 b cands clean ns newsegs
+                        q d)
   ;; -- 1. snap each vertex to its nearest point within tol ----------
   (setq verts (mapcar '(lambda (s) (car s)) loop)
         used  nil)
@@ -1780,34 +1825,58 @@
           (if (or (null clean)
                   (> (pf:dist q (car clean)) *PF-EXACT-EPS*))
             (setq clean (cons q clean))))
-        (foreach ns (pf:fit-arc-seg p1 p2 b (reverse clean) tol)
+        (foreach ns (pf:fit-arc-seg p1 p2 b (reverse clean) ftol)
           (setq newsegs (cons ns newsegs)))))
     (setq n (1+ n)))
   (setq newsegs (reverse newsegs))
   ;; -- 3. the drawn shape is trusted, but the curve cap still wins --
-  (if (and *PF-MAX-ARCS*
-           (> (pf:arc-count newsegs) *PF-MAX-ARCS*)
+  (if (and maxarcs
+           (> (pf:arc-count newsegs) maxarcs)
            (>= (length dpts) 3))
     (progn
       (princ (strcat "\n  (the drawn perimeter needs "
                      (itoa (pf:arc-count newsegs))
-                     " curves but the cap is " (itoa *PF-MAX-ARCS*)
+                     " curves but the cap is " (itoa maxarcs)
                      " - refitting from the points instead)"))
       (setq pf-miss-left allow
             newsegs (pf:coarse-loop (pf:loop-order loop dpts)
-                                    tol *PF-MAX-ARCS*))))
+                                    ftol maxarcs allow T))))
   newsegs)
 
-;; Build one candidate fit at tolerance TOL.  A non-nil TOUR means the
+;; Build one candidate fit in MODE - "tight", "asked" or "few", the
+;; three aims listed against *PF-COMPARE*.  A non-nil TOUR means the
 ;; points drive the shape (points-only and ordering-sketch modes);
-;; otherwise the drawn LOOP is re-fitted (guided mode).  Each call gets
-;; its own miss allowance and on-the-shape threshold.
-(defun pf:build (tour loop pts dpts tol allow / pf-miss-left pf-on-eps)
-  (setq pf-miss-left allow
-        pf-on-eps    (max *PF-ON-EPS* (* 0.25 tol)))
+;; otherwise the drawn LOOP is re-fitted (guided mode).  TOL is always
+;; the distance the user typed - it is what reads the drawn shape and
+;; what the table judges every candidate against - and the mode sets
+;; the three knobs that actually differ:
+;;
+;;   FTOL  how exactly the arcs must hold their points.  "tight" fits
+;;         to *PF-TIGHT-TOL* (or to TOL when that is tighter yet),
+;;         which is what drives its error towards nothing and its
+;;         curve count up; the other two fit to TOL.
+;;   LEFT  the miss allowance.  "tight" grants none, so no point is
+;;         written off; "few" lifts it (and the per-span fair share
+;;         with it), which is the whole trick - the arcs run as long
+;;         as TOL permits instead of stopping at the standard share,
+;;         and every point is still held to TOL by the span fitter.
+;;   CAP   the curve cap.  Only "asked" honours it: capping the other
+;;         two would be asking for the most curves, or the fewest,
+;;         and then overruling the answer.
+;;
+;; Each call gets its own miss allowance and on-the-shape threshold.
+(defun pf:build (tour loop pts dpts tol allow mode
+                 / pf-miss-left pf-on-eps ftol left cap)
+  (setq ftol (if (= mode "tight") (min tol *PF-TIGHT-TOL*) tol)
+        left (cond ((= mode "tight") 0)
+                   ((= mode "few")   1000000)
+                   (T                allow))
+        cap  (if (= mode "asked") *PF-MAX-ARCS*)
+        pf-miss-left left
+        pf-on-eps    (max *PF-ON-EPS* (* 0.25 ftol)))
   (if tour
-    (pf:coarse-loop tour tol *PF-MAX-ARCS*)
-    (pf:guided-fit loop pts dpts tol allow)))
+    (pf:coarse-loop tour ftol cap left (not (= mode "few")))
+    (pf:guided-fit loop pts dpts tol ftol left cap)))
 
 ;; Deviation summary for SEGS against PTS: (worst avg avg-off).
 ;;   worst   - furthest any point sits from the line
@@ -1835,12 +1904,15 @@
   (if x (rtos x 2 2) "-"))
 
 ;; ---- offer three fits and let the user pick ---------------------------
-;; Guessing the right tolerance up front is the hardest part of the
-;; command, so instead of asking the user to imagine it, draw three
-;; candidates - tighter, as asked, looser - in different colours, show
-;; what each one costs, and keep the one they point at.  Everything is
-;; judged against the tolerance the user actually typed, so the columns
-;; compare like for like.
+;; Knowing up front how much curve to spend on how much accuracy is the
+;; hardest part of the command, so instead of asking the user to
+;; imagine it, draw the two ends of that trade and the middle: the
+;; most curves for the least error, the settings as typed, and the
+;; fewest curves that still hold the distance.  Each goes on in its own
+;; colour with what it costs, and the one they point at is kept.
+;; Everything is judged against the tolerance the user actually typed,
+;; so the columns compare like for like even though the three were not
+;; built alike.
 (defun pf:compare (tour loop pts dpts tol allow
                    / prior vars v e ent lab st onv segs bad allbad first
                      i pick idx keep ce bb hgt sel picked keyed pr res)
@@ -1861,7 +1933,7 @@
         first    T
         i        1)
   (foreach v *PF-COMPARE*
-    (setq segs (pf:build tour loop pts dpts (* tol (car v)) allow)
+    (setq segs (pf:build tour loop pts dpts tol allow (car v))
           ent  (pf:temp-add
                  (pf:make-pline
                    (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
@@ -1882,9 +1954,15 @@
           vars (cons (list segs ent bad v lab st) vars)
           i    (1+ i))
     (foreach e lab (pf:temp-add e))
-    (if first
-      (setq allbad bad first nil)
-      (setq allbad (pf:isect allbad bad))))
+    ;; the note below is about points NO fit could hold, so only the
+    ;; fits actually built to the user's distance get a vote.  The
+    ;; tight one threads every point by construction - counting it
+    ;; would empty the intersection every time and quietly retire the
+    ;; warning that catches mis-shots
+    (if (not (= (car v) "tight"))
+      (if first
+        (setq allbad bad first nil)
+        (setq allbad (pf:isect allbad bad)))))
   (setq vars (reverse vars))
   (if (null (cadr (car vars)))
     (princ "\nABHD: could not draw the result - is the drawing read-only?")
@@ -1911,11 +1989,23 @@
                      "\n  \"avg all\" averages every point; \"avg off\""
                      " averages only the points that are off the line"
                      "\n  (further than " (rtos onv 2 3) " from it)."))
+      (princ (strcat "\n  All three are measured against the "
+                     (rtos tol 2 3) " you typed, but only one is built"
+                     " to it:"
+                     "\n  the tight fit spends curves to drive the error"
+                     " towards nothing (it"
+                     "\n  ignores that distance"
+                     (if *PF-MAX-ARCS* " and the curve cap" "")
+                     "), the middle one is your settings exactly,"
+                     "\n  and the few fit holds the same distance with"
+                     " as few curves as it can."))
       (if allbad
         (princ (strcat "\n  NOTE: " (itoa (length allbad))
-                       " point(s) could not be held by ANY of the three"
-                       " - likely a mis-shot, a duplicate, or a corner"
-                       " that needs more points around it.")))
+                       " point(s) could not be held by ANY fit built to"
+                       " that distance - likely a mis-shot, a duplicate,"
+                       " or a corner that needs more points around it."
+                       "\n  (the tight fit threads every point it can"
+                       " reach, so it does not get a vote here.)")))
       ;; -- let the user choose ---------------------------------------
       ;; Clicking the outline you want beats translating a colour into
       ;; a number, so a pick on screen is offered first; typing the
@@ -1941,8 +2031,7 @@
               (if (null pick)
                 (progn
                   (princ "\n  (that is not one of the three - keeping 2)")
-                  (setq pick "2"))
-                (princ (strcat "\n  Keeping fit " pick "."))))
+                  (setq pick "2"))))
             (setq pick "2"))))
       ;; anything not explicitly kept stays registered as scaffolding
       ;; and is swept when the command ends
@@ -1972,6 +2061,12 @@
              ;; while the report is read
              (if (and (cadr v) (entget (cadr v))) (entdel (cadr v))))
            (setq i (1+ i)))
+         ;; name the aim that was kept, not just its number - the three
+         ;; were built to different ends and the report that follows is
+         ;; read against the settings as typed
+         (if keep
+           (princ (strcat "\n  Keeping fit " pick " - "
+                          (cadddr (cadddr keep)) ".")))
          (if (cadr keep)
            (progn
              (pf:temp-drop (cadr keep))
@@ -3618,16 +3713,22 @@
   (princ "\n    an arc; the loop is checked for crossing itself.")
   (pf:tut-pause)
   (princ "\nCHOOSING A FIT")
-  (princ "\n  Three candidates draw at once - red tighter (half the distance),")
-  (princ "\n  yellow as asked, cyan looser (double) - numbered on screen with")
-  (princ "\n  their figures, plus a table: segs, curves, worst off, avg all,")
-  (princ "\n  avg off, not held.  Click the one to keep, or type 1/2/3;")
+  (princ "\n  Three candidates draw at once, the two ends of the curves-against-")
+  (princ "\n  accuracy trade and the middle: red spends the most curves to get")
+  (princ "\n  the error near nothing (it ignores your distance and the curve")
+  (princ "\n  cap), yellow is your settings exactly, cyan holds that same")
+  (princ "\n  distance with the fewest curves it can.  Each is numbered on")
+  (princ "\n  screen with its figures, plus a table: segs, curves, worst off,")
+  (princ "\n  avg all, avg off, not held - all measured against the distance")
+  (princ "\n  you typed.  Click the one to keep, or type 1/2/3;")
   (princ "\n  All keeps the trio, None erases everything.")
   (princ "\n  The kept fit moves onto the POOL layer in ByLayer colour.")
   (pf:tut-pause)
   (princ "\nWHAT GETS FLAGGED")
-  (princ "\n  Points no fit can hold are called out before you choose; the")
-  (princ "\n  kept fit rings its unheld points (4 inch circles on FGStep) and")
+  (princ "\n  Points no fit built to your distance can hold are called out")
+  (princ "\n  before you choose (the tight fit threads every point it can")
+  (princ "\n  reach, so it abstains from that count).  The kept fit rings its")
+  (princ "\n  unheld points (4 inch circles on FGStep) and")
   (princ "\n  lists them beside the pool, worst first, by point number.  Only")
   (princ "\n  ABHD's own stamped objects on FGStep are ever replaced.")
   (pf:tut-pause)
@@ -3704,11 +3805,11 @@
       ;; the three candidates
       (if (and cap (entget cap)) (entdel cap))
       (setq cap (pf:tut-cap (list (car bb) (+ (cadddr bb) hgt))
-                  "3. Three candidates: red tight, yellow asked, cyan loose"
+                  "3. Three candidates: red tight, yellow asked, cyan few"
                   hgt)
             cand nil)
-      (foreach v (list (list 0.5 1) (list 1.0 2) (list 2.0 4))
-        (setq segs (pf:build tour nil pts dpts (car v) allow)
+      (foreach v *PF-COMPARE*
+        (setq segs (pf:build tour nil pts dpts 1.0 allow (car v))
               ent  (pf:temp-add (pf:tag-mine
                      (pf:make-pline
                        (mapcar '(lambda (s) (list (car s) (caddr s)))
@@ -3716,11 +3817,12 @@
                        *PF-OUT-LAYER* (cadr v))))
               cand (cons (list segs ent) cand)))
       (setq cand (reverse cand))
-      (princ "\n  3. Three fits draw at once - half, exactly, and double your")
-      (princ "\n     distance - each numbered with its figures, plus a table")
-      (princ "\n     at the command line.  Every arc runs point to point,")
-      (princ "\n     joints within 8 degrees of tangent, radii on feet and")
-      (princ "\n     inches where the points allow.")
+      (princ "\n  3. Three fits draw at once - the most curves for the least")
+      (princ "\n     error, your settings exactly, and the fewest curves that")
+      (princ "\n     still hold your distance - each numbered with its figures,")
+      (princ "\n     plus a table at the command line.  Every arc runs point to")
+      (princ "\n     point, joints within 8 degrees of tangent, radii on feet")
+      (princ "\n     and inches where the points allow.")
       (pf:tut-pause)
       ;; keep the middle one
       (if (and cap (entget cap)) (entdel cap))
