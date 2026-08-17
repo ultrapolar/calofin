@@ -7,7 +7,7 @@ working between Blender and CAD, plus an AutoCAD AutoLISP QA tool:
 | --- | --- | --- |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
 | DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
-| DIMCHECK (AutoCAD LISP) | `dimcheck/` | Interactive one-at-a-time QA review: dimensions, arc endpoints, overlapping lines, step/bench side-view & "Step Attachment" checks, Bead Track, wall-height confirmation and "Liner Material" audit, summed up in an on-drawing report. `DIMCHECK` reviews, `DIMSCAN` reports read-only, `DIMCHECKRESCUE` undoes the marks — see the `dimcheck/dimcheck.lsp` header for the full workflow (load with `APPLOAD`) and `dimcheck/tests/` for the regression drawings |
+| DIMCHECK (AutoCAD LISP) | `dimcheck/` | Interactive one-at-a-time QA review: dimensions, arc endpoints, overlapping lines, step/bench side-view & "Step Attachment" checks, Bead Track, wall-height confirmation and "Liner Material" audit, summed up in an on-drawing report. `DIMCHECK` reviews, `DIMSCAN` reports read-only, `DIMCHECKRESCUE` undoes the marks, `TUTORIALDIMCHECK` teaches it, `DIMCHECKVER` reports the build — load `dimcheck/dimcheck.lsp` with `APPLOAD`; see its header for the full workflow, `dimcheck/RELEASING.md` for the versioned-twin scheme, `dimcheck/tests/` for the regression drawings |
 
 ## Installation (either add-on)
 
