@@ -334,6 +334,34 @@ python3 tests/test_dxf_reader.py     # Merlin DXF importer parser
 python3 tests/test_mesh_layers.py    # Merlin CAD mesh exporter
 ```
 
+The drone-LISP test lints `DroneHeightGPS.lsp` (paren/string balance)
+and exercises a line-for-line Python transliteration of its byte-level
+parsers against synthetic DJI-style images — JPEG, PNG and bare TIFF:
+the XMP route (JPEG APP1 and PNG iTXt, attribute and element forms,
+DJI's `GpsLongtitude` misspelling), the binary EXIF GPS block (JPEG
+APP1, PNG `eXIf` chunk with decoy anchors in the image data, both byte
+orders), metadata parked past the 256 KB front window (tail-window
+recovery), signed-byte and truncated-file inputs, the failure
+classification behind the loud-error dialogs (no metadata / no GPS
+data / no fix / bad GPS / no altitude), the GPS hemisphere rules
+(a `W` reference must make the longitude negative; a *missing*
+reference means the sign is unknown, never positive), the US
+sanity check, the sea-level-vs-above-take-off altitude decision
+(exercised with both real files that hit it), rounding to the
+nearest foot, the `certutil` hex-dump
+parser, and the JSON number extraction for each elevation service's
+response shape.
+
+It also parses the `.lsp` files themselves and fails on functions that
+are called but never defined, calls with the wrong number of arguments
+(user functions and the built-ins these files lean on), and Common Lisp
+forms that AutoLISP does not have — mistakes the Python mirrors cannot
+see, because they only surface as runtime errors inside AutoCAD.
+
+The drawing-side behaviour (`getpoint`, the `entmake` TEXT entities,
+the UCS→WCS conversion, and the `DDFIX` handoff) needs real AutoCAD —
+it is not covered by this harness.
+
 The exporter tests mock the bmesh structures and validate the emitted
 DXF with [ezdxf](https://ezdxf.mozman.at/) when installed. The mesher
 tests exercise boundary building, interior-point detection, Delaunay
