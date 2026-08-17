@@ -17,8 +17,9 @@ a polyline.
 
 | Perimeter feature | Pads? |
 | --- | --- |
-| Concave arc / inside fillet with radius **4′-6″ (54″) or less** — all the way down to a sharp corner | **Yes** — pads spaced every ≤ 24″ along the arc |
-| Concave intersection of straight segments (inside corner, e.g. 90°) | **Yes** — one pad centered on the corner |
+| Concave arc / inside fillet with radius **4′-6″ (54″) or less** — all the way down to a sharp corner | **Yes** — a flush row of pads along the arc |
+| Concave intersection of straight segments bending **more than 10°** | **Yes** — one pad centered on the corner |
+| Connection points at 10° or less from straight | No |
 | Concave arc with radius **greater than 4′-6″** | No |
 | Convex corners and convex arcs | No |
 
@@ -35,6 +36,34 @@ bulges or ARC entities.
 4. Select the perimeter geometry (polylines, lines, arcs — any mix)
    — or just press **Enter** and PADDLE auto-detects the perimeter
    as the largest closed loop it can find in the current tab.
+
+## New users: TUTORIALPADDLE
+
+Type `TUTORIALPADDLE` for a guided tour. It first lists everything
+PADDLE checks (perimeter input and chaining, the >10° corner rule,
+the 4′-6″ radius rule, pad sizes, where pads land). Then it offers a
+**live demonstration**: it draws a labelled sample perimeter that has
+one of everything — a 2° kink (ignored), convex corners (ignored), a
+slot with two inside corners (padded), a concave 2′-6″ radius (padded
+row) and a concave 6′-0″ radius (too big — exempt) — and then runs
+the real pad-placing pipeline on it step by step, pausing so you can
+watch each rule fire. At the end it offers to erase the demo again.
+
+## Revisions
+
+The current revision is named by `*paddle-version*` inside the lisp
+(shown in the load banner) and the folder always carries **two
+identical copies** of the code:
+
+* `PADDLE.lsp` — the static name, meant for startup suites /
+  APPLOAD stacks; the name never changes.
+* `PADDLE_MMDDYY_REV##.lsp` (e.g. `PADDLE_081726_REV01.lsp`) — the
+  dated copy, renamed on every iteration, so you can tell at a
+  glance which revision someone has in their stack.
+
+When a new iteration lands, both files get the new content: the
+static file keeps its name, and the dated file is renamed for the
+new revision.
 
 PADDLE reports what it found, e.g.:
 
