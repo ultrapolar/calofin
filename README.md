@@ -1,17 +1,18 @@
 # calofin — Blender DXF add-ons
 
-Two independent Blender add-ons (Blender 4.2+ including 5.0) for
-working between Blender and CAD:
+Blender add-ons (Blender 4.2+ including 5.0) for working between
+Blender and CAD:
 
 | Add-on | Folder | What it does |
 | --- | --- | --- |
+| **Merlin Import/Export** | `merlin_import_export/` | Single package: imports AutoCAD DXFs (one object per layer, auto parent/scale/position) and exports mesh edges as a layered CAD DXF (FLOOR/WALL/STEPS objects by material), behind one *File → Merlin Import/Export* UI |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
-| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects |
+| DXF Point Cloud Mesher | `dxf_cloud_mesher/` | Automatically builds meshes from imported DXF point-cloud objects (not part of the Merlin package yet) |
 
-## Installation (either add-on)
+## Installation (any add-on)
 
-Grab/clone this repository, then for the add-on you want (`uv_layout_dxf`
-or `dxf_cloud_mesher`) either:
+Grab/clone this repository, then for the add-on you want
+(`merlin_import_export`, `uv_layout_dxf` or `dxf_cloud_mesher`) either:
 
 * **As an extension (Blender 4.2+):** zip the folder's *contents*
   (`cd uv_layout_dxf && zip -r ../uv_layout_dxf-1.0.0.zip .`) and in
@@ -20,6 +21,86 @@ or `dxf_cloud_mesher`) either:
 * **As a legacy add-on:** zip the folder itself
   (`zip -r uv_layout_dxf.zip uv_layout_dxf`) and use *Edit →
   Preferences → Add-ons → Install…*, then enable the add-on.
+
+Merlin's export half is the layered CAD mesh exporter, bundled inside
+the package under the `merlin.` operator namespace so it can be enabled
+alongside the standalone "Export CAD Mesh to DXF (Layered)" add-on
+without clashing.
+
+---
+
+# Merlin Import/Export
+
+One package bundling the Merlin CAD round-trip. **File → Merlin
+Import/Export** (bottom of the File menu) opens a dialog with two
+buttons:
+
+* **Import** — imports an AutoCAD DXF (see below).
+* **Export** — exports mesh edges as a **layered CAD DXF**: faces are
+  split by material into FLOOR / WALL / STEPS objects and every edge is
+  routed onto a WIRES / BASELINE / SLICE / PERIMETER layer by its
+  Blender marking (greyed out until there's a mesh object in the
+  scene). This is the "Export CAD Mesh to DXF (Layered)" add-on.
+
+Both operators are also available directly under the regular menus:
+*File → Import → Merlin AutoCAD DXF (.dxf)* and *File → Export →
+Merlin CAD Mesh (.dxf)*. (Blender only lets add-ons append to the
+end of the File menu, so the Merlin entry sits at the bottom rather
+than immediately below Import/Export.)
+
+### What the importer does
+
+1. Reads an **ASCII DXF** (AutoCAD R12 and newer). Supported entities:
+   `POINT`, `LINE`, `LWPOLYLINE` (incl. bulge arcs), `POLYLINE`
+   (2D/3D, polyface and polygon meshes), `3DFACE`, `SOLID`, `CIRCLE`,
+   `ARC`, `ELLIPSE`, `SPLINE` (sampled). Text, dimensions, hatches and
+   block inserts are skipped and reported.
+2. Creates **one mesh object per DXF layer** (named after the layer),
+   grouped in a new collection named after the file.
+3. The object with the **most points** becomes the **parent** of the
+   other imported objects.
+4. The parent's **origin is set to its centre of mass** and **snapped
+   to the world origin** — the rest of the drawing keeps its position
+   relative to the parent.
+5. The parent is **scaled by 0.0254** (AutoCAD inches → Blender
+   meters); children inherit the scale through the parenting.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Parent to Largest Object | on | Parent every imported object to the one with the most points |
+| Snap to World Origin | on | Origin of the parent to its centre of mass, snapped to the world origin |
+| Scale | 0.0254 | Object scale applied to the parent (children inherit); 0.0254 = inches → meters |
+| Curve Resolution | 32 | Straight segments per full circle when sampling arcs/circles/ellipses/splines/bulges |
+
+Binary DXF files are rejected with a message — re-save as ASCII DXF
+in AutoCAD (`SAVEAS` → DXF). The point-cloud *dewrangling* step (the
+DXF Point Cloud Mesher below) is intentionally **not** part of this
+package yet; run it separately after importing if needed.
+
+### What the exporter does
+
+The Export button runs the layered CAD mesh exporter (the standalone
+"Export CAD Mesh to DXF (Layered)" add-on, repackaged here under the
+Merlin operator namespace):
+
+* Faces are split by **material** into export objects — materials named
+  *floor* / *wall* / *step* map to **FLOOR / WALL / STEPS**; any other
+  material becomes its own object named after it, and faces without a
+  material go to **UNGROUPED** (nothing is silently dropped). Each
+  object is written as a DXF BLOCK + INSERT so it arrives in AutoCAD as
+  a single selectable object.
+* Every edge is routed onto a fixed **layer** by its Blender marking,
+  strongest wins: **PERIMETER** (Mark Sharp) › **SLICE** (Mark
+  Freestyle Edge) › **BASELINE** (Mark Seam) › **WIRES** (unmarked). An
+  edge shared between two objects (e.g. where a wall meets the floor)
+  is written into both.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Selected Objects Only | on | Export only selected mesh objects (falls back to the active object) instead of the whole scene |
+| Apply Modifiers | on | Export the evaluated mesh (modifiers applied) rather than the raw mesh |
+| Group as Objects (Blocks) | on | Write each group as a BLOCK + INSERT (one AutoCAD object); off writes plain lines on the marking layers only |
+| Unit | Inches | Real-world unit of one DXF unit (scene unit scale is taken into account) |
 
 ---
 
@@ -161,13 +242,16 @@ console.
 
 ## Development
 
-Both add-ons keep their geometry logic in `bpy`-free modules
-(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`), so
-they are unit-testable outside Blender:
+The add-ons keep their geometry logic in `bpy`-free modules
+(`uv_layout_dxf/uv_layout.py`, `dxf_cloud_mesher/cloud_mesh.py`,
+`merlin_import_export/dxf_reader.py`, `merlin_import_export/
+mesh_layers.py`), so they are unit-testable outside Blender:
 
 ```
 python3 tests/test_addon.py          # UV layout exporter
 python3 tests/test_cloud_mesher.py   # point cloud mesher
+python3 tests/test_dxf_reader.py     # Merlin DXF importer parser
+python3 tests/test_mesh_layers.py    # Merlin CAD mesh exporter
 ```
 
 The exporter tests mock the bmesh structures and validate the emitted
