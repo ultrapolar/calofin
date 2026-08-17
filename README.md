@@ -3,7 +3,7 @@
 Blender add-ons (Blender 4.2+ including 5.0) for working between
 Blender and CAD:
 
-| Add-on | Folder | What it does |
+| Tool | Folder | What it does |
 | --- | --- | --- |
 | **Merlin Import/Export** | `merlin_import_export/` | Single package: imports AutoCAD DXFs (one object per layer, auto parent/scale/position) and exports mesh edges as a layered CAD DXF (FLOOR/WALL/STEPS objects by material), behind one *File → Merlin Import/Export* UI |
 | Export UV Layout to DXF (AutoCAD) | `uv_layout_dxf/` | Exports UV island outlines as an AutoCAD-compatible DXF with orientation fixing and Freestyle-edge auto scaling |
