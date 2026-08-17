@@ -175,8 +175,40 @@ VLX or .NET). They are independent of the Blender add-ons above.
 | `HEMISTEP.lsp` | `HEMISTEP` | Hemisphere steps that act as chords inside a circle |
 | `NORMIESTEP.lsp` | `NORMIESTEP` | Plain straight steps, every one the same width |
 
-Load either with `APPLOAD` (or drag the file into the drawing window).
-Each command is a single undo step.
+Load any of them with `APPLOAD` (or drag the file into the drawing
+window). Each command is a single undo step.
+
+### Two names per file: static and dated
+
+Every routine ships under two byte-identical names:
+
+* the **static name** (`CORNERSTP.lsp`) — put this one in your Startup
+  Suite / APPLOAD stack, so the autoload never has to chase a filename;
+* the **dated copy** (`CORNERSTP_081726_REV22.lsp`) — hand this one
+  around: its name says exactly which iteration someone has in their
+  stack. The date is the day the snapshot was made and `REV##` is the
+  file's own version banner with the dot dropped (`v2.2` → `REV22`), so
+  the filename, the load banner, and the version the command prints at
+  start can never disagree.
+
+After changing a `.lsp`, regenerate the dated copies with
+`python3 tools/release_lisp.py` — it re-reads each file's version, writes
+the new dated copy, and drops the previous one (git keeps history).
+
+### Tutorials
+
+Each file also defines a walkthrough command for new users —
+`TUTORIALCORNERSTP`, `TUTORIALHEMISTEP`, `TUTORIALNORMIESTEP`. Every
+tutorial does both of the things different learners want: it **lists**
+what the routine asks, in order, and everything it checks and handles
+(UCS, layers, units, tolerances, dim styles, the Undo/Same/Enter
+shortcuts); and then it offers to **draw a demonstration** in the current
+drawing — sample walls plus a run of steps built one step at a time with
+the very same geometry code the real command uses, narrated at each
+pause, dimensions included. The demo is one undo step, and it ends by
+telling the user how to try the real command on the demo geometry. The
+tutorials live inside the same files, so anyone who has the routine has
+its tutorial.
 
 ### CORNERSTP
 
