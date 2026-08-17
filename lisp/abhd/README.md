@@ -446,8 +446,9 @@ layer**: a `DASHED2` stub from each wall in to its hopper corner, and
 a solid (ByLayer) run across the hopper between them. Its dimensions
 form the classic **K/L/M string**: wall-to-hopper, hopper width
 (between the two corners), and hopper-to-wall, all chained on one
-line **a foot off the deep break** (`*PF-DIM-OFF*`) on the hopper
-side.
+line **a foot off the deep break** (`*PF-DIM-OFF*`) on the **shallow
+end's side** — the string reads from the shallow end, not from over
+the deep end it measures.
 
 Each **slope line** — from a hopper end up to the shallow break point
 on its own side — is then asked about separately, again by point

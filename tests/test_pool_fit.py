@@ -889,6 +889,24 @@ def slope_pts(samps, sgn, ia, direc, cnt, pa, pb, offa, waypts=None,
     return out, [(wall, out[bk]) for wall, bk in keyed]
 
 
+def dim_side(dp1, dp2, sp1, sp2):
+    """The unit vector the K/L/M dimension string is pushed along,
+    off the deep break line (DP1-DP2) by *PF-DIM-OFF*.  The deep-end
+    dims read from the shallow end, so it points AWAY from the hopper -
+    towards the shallow break (SP1-SP2)."""
+    u = unit((-(dp2[1] - dp1[1]), dp2[0] - dp1[0]))   # pf:perp: 90 CCW
+    if u is None:
+        return None
+    dm, sm = mid(dp1, dp2), mid(sp1, sp2)
+    if u[0] * (sm[0] - dm[0]) + u[1] * (sm[1] - dm[1]) < 0.0:
+        u = (-u[0], -u[1])
+    return u
+
+
+def mid(a, b):
+    return ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+
+
 # ---- measurements used by the tests ----------------------------------
 
 
@@ -1401,6 +1419,55 @@ def test_pool_bottom_hopper():
     print("  pool bottom: back point, blended offsets, stays inside")
 
 
+def test_deep_dims_face_the_shallow_end():
+    """The K/L/M string reads from the shallow end, not over the hopper.
+
+    The three deep-break dims are pushed *PF-DIM-OFF* off the break
+    line; that push has to land them on the shallow end's side, clear
+    of the hopper and slope lines they would otherwise sit on top of.
+    """
+    r = 100.0
+    b = pf_tan(math.pi / 8.0)
+    quad = [(r, 0.0), (0.0, r), (-r, 0.0), (0.0, -r)]
+    segs = [(quad[i], quad[(i + 1) % 4], b) for i in range(4)]
+    dpts = [(r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
+            for a in range(0, 360, 10)]
+    d1, d2 = dpts[32], dpts[4]          # deep break at -40 and +40 deg
+    s1, s2 = dpts[14], dpts[22]         # shallow break ends
+    back = hopper_back(d1, d2, s1, s2, dpts)
+    samps = sample_loop(segs, BOTTOM_STEP)
+    sgn = 1.0 if loop_area(samps) > 0.0 else -1.0
+    hpts, _, _, _ = hopper_pts(samps, sgn, near_idx(d1, samps),
+                               near_idx(d2, samps),
+                               near_idx(curve_near(back, segs), samps),
+                               d1, d2, 12.0, 12.0, 12.0)
+    # the dims land on the same side of the break line as the shallow
+    # break, and the opposite side from the hopper they measure
+    for a, c in ((d1, d2), (d2, d1)):       # either pick order
+        u = dim_side(a, c, s1, s2)
+        assert u is not None
+        dm, sm = mid(a, c), mid(s1, s2)
+        toward = u[0] * (sm[0] - dm[0]) + u[1] * (sm[1] - dm[1])
+        assert toward > 0.0, "the deep-end dims must face the shallow end"
+        # how far off the break line a point sits, measured along u -
+        # every chord the string measures (wall to corner, corner to
+        # corner, corner to wall) lies on the line itself, so the three
+        # dim points all sit exactly *PF-DIM-OFF* out
+        def out_by(p):
+            return u[0] * (p[0] - dm[0]) + u[1] * (p[1] - dm[1])
+
+        for q in (mid(a, hpts[0]), mid(hpts[0], hpts[-1]),
+                  mid(hpts[-1], c)):
+            dp = (q[0] + u[0] * DIM_OFF, q[1] + u[1] * DIM_OFF)
+            assert abs(out_by(q)) < 1.0e-6, "chord is off the break line"
+            assert abs(out_by(dp) - DIM_OFF) < 1.0e-9
+        # the string leans away from the deep end it measures: the back
+        # of the hopper is the other way off the break line
+        assert out_by(curve_near(back, segs)) < 0.0, \
+            "the dim string is leaning into the deep end"
+    print("  deep-end dims: offset towards the shallow end")
+
+
 def test_guided_slope_lines():
     """Guided slope lines follow the perimeter, easing to nothing."""
     r = 100.0
@@ -1539,6 +1606,15 @@ def test_constants_match_lisp():
     # the dimension styles picked by how an offset was typed
     assert setq_value("DIM-FTIN") == '"SIDE DIMENSION"'
     assert setq_value("DIM-IN") == '"STANDARD INCHES"'
+    # the deep-end string is pushed towards the shallow break: the LISP
+    # flips U only when it already leans away from the shallow end, so
+    # dim_side()'s mirror of that sense has to stay in step
+    m = re.search(r"\(if\s+\(and\s+u\s+"
+                  r"\((<|>)\s+\(pf:dot u \(pf:sub \(pf:mid sp1 sp2\)",
+                  src)
+    assert m, "could not find the deep-end dimension side in abhd.lsp"
+    assert m.group(1) == "<", \
+        "abhd.lsp offsets the deep-end dims away from the shallow end"
     # angles are written as (/ pi N)
     for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL)):
         m = re.search(r"\(setq\s+\*PF-%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
@@ -1657,6 +1733,7 @@ def main():
     test_degenerate_point_sets()
     test_pool_bottom_geometry()
     test_pool_bottom_hopper()
+    test_deep_dims_face_the_shallow_end()
     test_guided_slope_lines()
     test_slope_waypoints()
     print("\nall tests passed")

@@ -129,7 +129,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081726 REV01") ; announced on load.  The
+(setq *PF-VERSION*      "081726 REV02") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -198,7 +198,7 @@
                                     ; (wall-to-hopper, hopper width,
                                     ; hopper-to-wall) sits this far off
                                     ; the deep break line (a foot), on
-                                    ; the hopper side
+                                    ; the shallow-end side
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
   '((0.5 1 "red"    "tighter - hugs the points")
     (1.0 2 "yellow" "as asked")
@@ -2642,14 +2642,16 @@
       ;; dimension each offset right where it applies.  The deep end
       ;; gets the K/L/M-style string: wall-to-hopper, hopper width,
       ;; hopper-to-wall, all chained on one line a foot off the deep
-      ;; break on the hopper side.  Break-point dims keep the current
-      ;; style; the back and waypoint dims get the style their typed
-      ;; format asks for, on the measured stretch itself
+      ;; break on the shallow-end side - the string reads from the
+      ;; shallow end, not from over the deep end it measures.  Break-
+      ;; point dims keep the current style; the back and waypoint dims
+      ;; get the style their typed format asks for, on the measured
+      ;; stretch itself
       (setq u (pf:unit (pf:perp (pf:sub dp2 dp1))))
       (if (and u
-               (> (pf:dot u (pf:sub (pf:mid sp1 sp2) (pf:mid dp1 dp2)))
+               (< (pf:dot u (pf:sub (pf:mid sp1 sp2) (pf:mid dp1 dp2)))
                   0.0))
-        (setq u (pf:scl u -1.0)))       ; u points to the hopper side
+        (setq u (pf:scl u -1.0)))       ; u points to the shallow side
       (setq dimfail nil)
       (foreach q (append
                    (list (list dp1 e1 nil
@@ -2687,7 +2689,7 @@
                      (rtos off3 2 2) " / " (rtos off2 2 2)
                      "), the slope lines (" desc1 " / " desc2
                      "), and every dimension - the deep-end string a"
-                     " foot off the break."))))
+                     " foot off the break, on the shallow side."))))
   (princ))
 
 ;; Ask how one slope line should run.  NM names the deep break point
@@ -3647,7 +3649,7 @@
   (pf:tut-pause)
   (princ "\n  The hopper's corners land ON the deep break line, which is drawn")
   (princ "\n  as three lines: DASHED2 stubs wall-to-corner, solid across.  Its")
-  (princ "\n  dims form the K/L/M string a foot off the line on the hopper")
+  (princ "\n  dims form the K/L/M string a foot off the line on the shallow")
   (princ "\n  side.  Each slope line to the shallow break is asked Straight,")
   (princ "\n  Guided (follows the perimeter, easing to nothing), or Points")
   (princ "\n  (pick points with pinned offsets, square off the wall, each")
@@ -3761,7 +3763,8 @@
       (princ "\n\n  5. ADAB (or the offer after keeping a fit) added the")
       (princ "\n     breaks, found the back point by itself, pulled the")
       (princ "\n     hopper in at your three offsets (asked by point number),")
-      (princ "\n     dimensioned them a foot off the deep break, and ran one")
+      (princ "\n     dimensioned them a foot off the deep break on the")
+      (princ "\n     shallow side, and ran one")
       (princ "\n     slope guided along the curve, the other straight.")
       (pf:tut-pause)
       (if (and cap (entget cap)) (entdel cap))
