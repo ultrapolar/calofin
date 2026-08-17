@@ -11,10 +11,48 @@ while the points stay in charge. Up to 15% of the points (rounded up)
 are allowed to sit about an inch off the result, and you can cap the
 number of curves outright.
 
-Two commands ship in the one file: **`ABHD`** runs the whole fit (and
-offers the pool bottom at the end), and **`ADAB`** runs just the
+Three commands ship in the one file: **`ABHD`** runs the whole fit
+(and offers the pool bottom at the end), **`ADAB`** runs just the
 pool-bottom flow over a perimeter that already exists — see
-[ADAB](#adab--the-bottom-on-its-own).
+[ADAB](#adab--the-bottom-on-its-own) — and **`TUTORIALABHD`** (alias
+`TUTORIALADAB`) teaches it all to new users, as a read-through of
+every rule or as a drawn on-screen demo.
+
+## Two files, one lisp
+
+The folder carries the same program twice, byte for byte:
+
+* **`abhd.lsp`** — the static name, for APPLOAD / autoload stacks
+  that must never change.
+* **`ABHD_MMDDYY_REV##.lsp`** (e.g. `ABHD_081726_REV01.lsp`) — the
+  versioned twin, renamed with every iteration, so you can tell at a
+  glance which revision is sitting in a colleague's stack.
+
+Both announce their version on load (`ABHD 081726 REV01 loaded.`),
+taken from `*PF-VERSION*` at the top of the file. When revising:
+edit `abhd.lsp`, bump `*PF-VERSION*` to the new date and REV, delete
+the old twin and copy `abhd.lsp` to the new name. The test suite
+fails if the twins differ, if there is more than one versioned file,
+or if the file name and `*PF-VERSION*` disagree — the convention
+enforces itself.
+
+## TUTORIALABHD — the guided introduction
+
+Type `TUTORIALABHD` (or `TUTORIALADAB`) and choose:
+
+* **`Checks`** — for readers: pages through every rule and safeguard
+  the commands apply, in the order they apply them — what the drawing
+  needs, the six questions and their ceilings, the fitter's
+  guarantees (points first, 8° tangency, nice radii, corners), the
+  three-candidate choice, what gets flagged, Redo, the whole bottom
+  flow, and the housekeeping.
+* **`Demo`** — for lookers: pick a clear spot and it draws a practice
+  44-point kidney pool, then walks the flow on screen stage by stage
+  (Enter advances): the survey, the automatic ordering, the three
+  coloured candidates, keeping one, and the full bottom — breaks,
+  auto-found back point, K/L/M dims, one guided and one straight
+  slope. At the end it sweeps everything away (or keeps it to poke
+  at, if you ask — every piece is stamped as ABHD's own).
 
 ## Setup expected in the drawing
 

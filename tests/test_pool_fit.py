@@ -1595,10 +1595,10 @@ def test_lisp_file_is_well_formed():
     called = set(re.findall(r"\((pf:[a-z0-9-]+)", src))
     missing = called - defined
     assert not missing, "abhd.lsp calls undefined: %s" % sorted(missing)
-    dead = defined - called - {"c:ABHD", "c:ADAB"}
+    dead = {d for d in defined - called if not d.startswith("c:")}
     assert not dead, "abhd.lsp defines but never calls: %s" % sorted(dead)
-    assert "c:ABHD" in defined, "abhd.lsp no longer defines c:ABHD"
-    assert "c:ADAB" in defined, "abhd.lsp no longer defines c:ADAB"
+    for cmd in ("c:ABHD", "c:ADAB", "c:TUTORIALABHD", "c:TUTORIALADAB"):
+        assert cmd in defined, "abhd.lsp no longer defines %s" % cmd
     # the pieces the interactive flow depends on
     for fn in ("pf:compare", "pf:build", "pf:guided-fit", "pf:unheld",
                "pf:mark-unheld", "pf:report", "pf:label", "pf:bbox",
@@ -1616,9 +1616,30 @@ def test_lisp_file_is_well_formed():
     print("  abhd.lsp is balanced and self-consistent")
 
 
+def test_versioned_copy():
+    """abhd.lsp ships with an identical, version-named twin so anyone
+    can see which iteration is loaded in a colleague's stack."""
+    folder = os.path.dirname(LISP_FILE)
+    twins = [f for f in os.listdir(folder)
+             if re.match(r"ABHD_\d{6}_REV\d{2}\.lsp$", f)]
+    assert len(twins) == 1, \
+        "expected exactly one ABHD_MMDDYY_REV##.lsp, found %s" % twins
+    twin = twins[0]
+    src = open(LISP_FILE, "rb").read()
+    assert open(os.path.join(folder, twin), "rb").read() == src, \
+        "%s has drifted from abhd.lsp - re-copy it" % twin
+    m = re.search(rb'\*PF-VERSION\*\s+"(\d{6}) REV(\d{2})"', src)
+    assert m, "abhd.lsp lost its *PF-VERSION* constant"
+    want = "ABHD_%s_REV%s.lsp" % (m.group(1).decode(), m.group(2).decode())
+    assert twin == want, \
+        "versioned file is %s but *PF-VERSION* says %s" % (twin, want)
+    print("  versioned twin %s matches abhd.lsp" % twin)
+
+
 def main():
     print("ABHD fitter tests")
     test_lisp_file_is_well_formed()
+    test_versioned_copy()
     test_constants_match_lisp()
     test_geometry_helpers()
     test_self_crossing_detection()
