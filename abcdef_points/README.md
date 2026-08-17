@@ -1,6 +1,6 @@
-# ABCDEF — plot measured points into AutoCAD from a spreadsheet
+# ALTABCDEF — plot measured points into AutoCAD from a spreadsheet
 
-`ABCDEF.lsp` is an AutoLISP command for AutoCAD (full AutoCAD — it uses
+`ALTABCDEF.lsp` is an AutoLISP command for AutoCAD (full AutoCAD — it uses
 Excel COM automation, so it does **not** run in LT). It reads a
 spreadsheet of points that were each measured off the four corners of a
 rectangle and drops them into the drawing at their correct location.
@@ -101,8 +101,8 @@ usually well under `0.10"`. A noticeably larger value flags a bad reading
 ## Usage
 
 1. Load the lisp: *Manage ▸ Load Application* (`APPLOAD`), pick
-   `ABCDEF.lsp`. (Add it to your Startup Suite to load it every session.)
-2. Type **`ABCDEF`** and press Enter.
+   `ALTABCDEF.lsp`. (Add it to your Startup Suite to load it every session.)
+2. Type **`ALTABCDEF`** and press Enter.
 3. Pick the spreadsheet in the file dialog.
 4. Enter the **A-B** width and the **A-D** height when prompted (e.g.
    `20'-6"`).
@@ -111,10 +111,10 @@ usually well under `0.10"`. A noticeably larger value flags a bad reading
 The command draws:
 
 * the **rectangle** A-B-C-D with the corners labelled (layer
-  `ABCDEF-FRAME`),
+  `ALTABCDEF-FRAME`),
 * a **point node + circle marker** at each computed location (layer
-  `ABCDEF-POINTS`), and
-* the **point name** beside each one (layer `ABCDEF-LABELS`),
+  `ALTABCDEF-POINTS`), and
+* the **point name** beside each one (layer `ALTABCDEF-LABELS`),
 
 then prints a results table with each point's coordinates, how many
 distances were used, and its fit error.

@@ -1,9 +1,9 @@
 ;;; ===================================================================
-;;; CHECK.LSP - Tech drawing checklist walker
+;;; CCPRECHECK.LSP - Tech drawing checklist walker
 ;;;
 ;;; Interactive AutoLISP routine that walks the "Tech Flow Chart"
 ;;; decision tree for pool/spa products.  Load with APPLOAD (or
-;;; (load "check.lsp")) and run the CHECK command.  The routine asks
+;;; (load "ccprecheck.lsp")) and run the CCPRECHECK command.  The routine asks
 ;;; the user to answer / confirm each item along the flowchart until
 ;;; every branch it enters reaches its end, then prints a summary of
 ;;; every note and confirmation that was collected on the way.
@@ -309,7 +309,7 @@
 ;;; Main command
 ;;; ------------------------------------------------------------------
 
-(defun c:CHECK (/ product)
+(defun c:CCPRECHECK (/ product)
   (setq *chk:log* nil)
   (princ "\n--- Tech Flow Chart checklist ---")
   (setq product (chk:ask "Product type" "Liner PoolCover SpaCover"))
@@ -327,5 +327,5 @@
   (princ)
 )
 
-(princ "\nCHECK.LSP loaded. Type CHECK to run the tech flow chart checklist.")
+(princ "\nCCPRECHECK.LSP loaded. Type CCPRECHECK to run the tech flow chart checklist.")
 (princ)

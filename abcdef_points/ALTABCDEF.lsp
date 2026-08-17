@@ -1,5 +1,5 @@
 ;;; ==========================================================================
-;;;  ABCDEF.lsp  -  Plot measured points into AutoCAD from an Excel sheet
+;;;  ALTABCDEF.lsp  -  Plot measured points into AutoCAD from an Excel sheet
 ;;; --------------------------------------------------------------------------
 ;;;  Points A B C D sit on the corners of a rectangle:
 ;;;
@@ -23,7 +23,7 @@
 ;;;  Distances are entered / stored as architectural feet-inches, e.g.
 ;;;      12'-3 1/2"      3 1/2"      0'-6"      5'-0 3/4"
 ;;;
-;;;  Command:  ABCDEF
+;;;  Command:  ALTABCDEF
 ;;;
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
@@ -35,7 +35,7 @@
 ;;; --------------------------------------------------------------------------
 
 ;; Trim leading / trailing blanks (spaces, tabs) from a string.
-(defun abcdef:trim (s / i n)
+(defun altabcdef:trim (s / i n)
   (if (null s) (setq s ""))
   (setq n (strlen s) i 1)
   (while (and (<= i n) (member (substr s i 1) '(" " "\t")))
@@ -47,7 +47,7 @@
   s)
 
 ;; Replace every occurrence of the single char OLD with NEW in S.
-(defun abcdef:replace (s old new / out i c)
+(defun altabcdef:replace (s old new / out i c)
   (setq out "" i 1)
   (repeat (strlen s)
     (setq c (substr s i 1))
@@ -56,11 +56,11 @@
   out)
 
 ;; Remove every occurrence of the single char CH from S.
-(defun abcdef:strip (s ch)
-  (abcdef:replace s ch ""))
+(defun altabcdef:strip (s ch)
+  (altabcdef:replace s ch ""))
 
 ;; Split S on spaces, returning a list of non-empty tokens.
-(defun abcdef:tokens (s / out tok i c)
+(defun altabcdef:tokens (s / out tok i c)
   (setq out '() tok "" i 1)
   (repeat (strlen s)
     (setq c (substr s i 1))
@@ -79,14 +79,14 @@
 ;;;    1 1'-IO 1/2"  really 11'-10 1/2" ( stray space, I->1, O->0 )
 ;;;    39'- 8 314"   really 39'-8 3/4"  ( 314 is 3/4 with / read as 1 )
 ;;;  These helpers repair that noise deterministically before parsing, and
-;;;  flag abcdef:*dirty* so the import can report what it changed.
+;;;  flag altabcdef:*dirty* so the import can report what it changed.
 ;;; --------------------------------------------------------------------------
 
-(setq abcdef:*dirty* nil)   ; set T whenever a value needed cleaning
-(setq abcdef:*fixes* nil)   ; running list of cleanup / warning messages
+(setq altabcdef:*dirty* nil)   ; set T whenever a value needed cleaning
+(setq altabcdef:*fixes* nil)   ; running list of cleanup / warning messages
 
 ;; True if S is one or more chars and every char is a digit 0-9.
-(defun abcdef:alldigits (s / ok i a)
+(defun altabcdef:alldigits (s / ok i a)
   (if (= (strlen s) 0)
     nil
     (progn
@@ -102,7 +102,7 @@
 ;; where (chr) wraps code points > 255 modulo 256 (some pre-2019 releases),
 ;; e.g. (chr 8242) -> "2", the round-trip fails and we return nil rather than
 ;; corrupt real digits.  Everything is caught so it can never raise on load/run.
-(defun abcdef:safechr (n / r a)
+(defun altabcdef:safechr (n / r a)
   (setq r (vl-catch-all-apply 'chr (list n)))
   (if (or (vl-catch-all-error-p r) (/= (type r) 'STR) (/= (strlen r) 1))
     nil
@@ -113,7 +113,7 @@
 ;; True if S contains only characters a feet-inch value may legitimately hold
 ;; (digits, space, and  "  '  -  .  / ).  Anything else after scrubbing means a
 ;; genuinely corrupt cell we should flag rather than silently mis-read.
-(defun abcdef:parseable-p (s / ok i a)
+(defun altabcdef:parseable-p (s / ok i a)
   (setq ok T i 1)
   (repeat (strlen s)
     (setq a (ascii (substr s i 1)))
@@ -128,28 +128,28 @@
 ;; and the "smart quote" glyphs Excel/Word insert.  No non-ASCII bytes are
 ;; embedded in this source (some AutoCAD builds refuse to load such files);
 ;; single-byte look-alikes use (chr), higher code points go through
-;; abcdef:safechr so a build that can't represent them simply skips that pair:
+;; altabcdef:safechr so a build that can't represent them simply skips that pair:
 ;;   U+2019 ' / U+2032 prime -> '     U+201D " / U+2033 dbl prime -> "
 ;;   U+2013 en / U+2014 em dash and CP1252 bytes 150/151 -> -
 ;; These are high-confidence fixes and are NOT flagged as "needs verifying";
 ;; only the riskier repairs (fraction rebuild, apostrophe-as-1, split feet)
-;; set abcdef:*dirty*.
-(defun abcdef:scrub (raw / s q)
+;; set altabcdef:*dirty*.
+(defun altabcdef:scrub (raw / s q)
   (setq s raw)
-  (setq s (abcdef:replace s "_" "-"))    ; underscore read for a dash
-  (setq s (abcdef:replace s "O" "0"))    ; letter O -> zero
-  (setq s (abcdef:replace s "o" "0"))
-  (setq s (abcdef:replace s "I" "1"))    ; letter I / l / bar -> one
-  (setq s (abcdef:replace s "l" "1"))
-  (setq s (abcdef:replace s "|" "1"))
-  (setq s (abcdef:replace s (chr 150) "-"))   ; CP1252 en dash byte
-  (setq s (abcdef:replace s (chr 151) "-"))   ; CP1252 em dash byte
-  (if (setq q (abcdef:safechr 8217)) (setq s (abcdef:replace s q "'")))
-  (if (setq q (abcdef:safechr 8242)) (setq s (abcdef:replace s q "'")))
-  (if (setq q (abcdef:safechr 8221)) (setq s (abcdef:replace s q "\"")))
-  (if (setq q (abcdef:safechr 8243)) (setq s (abcdef:replace s q "\"")))
-  (if (setq q (abcdef:safechr 8211)) (setq s (abcdef:replace s q "-")))
-  (if (setq q (abcdef:safechr 8212)) (setq s (abcdef:replace s q "-")))
+  (setq s (altabcdef:replace s "_" "-"))    ; underscore read for a dash
+  (setq s (altabcdef:replace s "O" "0"))    ; letter O -> zero
+  (setq s (altabcdef:replace s "o" "0"))
+  (setq s (altabcdef:replace s "I" "1"))    ; letter I / l / bar -> one
+  (setq s (altabcdef:replace s "l" "1"))
+  (setq s (altabcdef:replace s "|" "1"))
+  (setq s (altabcdef:replace s (chr 150) "-"))   ; CP1252 en dash byte
+  (setq s (altabcdef:replace s (chr 151) "-"))   ; CP1252 em dash byte
+  (if (setq q (altabcdef:safechr 8217)) (setq s (altabcdef:replace s q "'")))
+  (if (setq q (altabcdef:safechr 8242)) (setq s (altabcdef:replace s q "'")))
+  (if (setq q (altabcdef:safechr 8221)) (setq s (altabcdef:replace s q "\"")))
+  (if (setq q (altabcdef:safechr 8243)) (setq s (altabcdef:replace s q "\"")))
+  (if (setq q (altabcdef:safechr 8211)) (setq s (altabcdef:replace s q "-")))
+  (if (setq q (altabcdef:safechr 8212)) (setq s (altabcdef:replace s q "-")))
   s)
 
 ;; TOK is an all-digit run with no slash.  A fraction like 3/4 whose slash was
@@ -157,7 +157,7 @@
 ;; valid inch fraction (den in 2..32, 0<num<den) has exactly one reconstruction.
 ;; Return "num/den" if one is found (scanning candidate slash positions left to
 ;; right), else nil.
-(defun abcdef:defrac (tok / len k num den ni di best)
+(defun altabcdef:defrac (tok / len k num den ni di best)
   (setq len (strlen tok) k 1 best nil)
   (while (and (<= k len) (null best))
     (if (= (substr tok k 1) "1")
@@ -165,7 +165,7 @@
         (setq num (substr tok 1 (1- k))
               den (substr tok (1+ k)))
         (if (and (> (strlen num) 0) (> (strlen den) 0)
-                 (abcdef:alldigits num) (abcdef:alldigits den))
+                 (altabcdef:alldigits num) (altabcdef:alldigits den))
           (progn
             (setq ni (atoi num) di (atoi den))
             (if (and (member di '(2 4 8 16 32)) (> ni 0) (< ni di))
@@ -185,50 +185,50 @@
 ;;;    101-10"       foot mark read as 1  -> 10'-10"  (needs MAXD to detect)
 ;;;    20'-7 114"    "/" read as 1        -> 20'-7 1/4"
 ;;;    1 1'-IO 1/2"  split feet / O,I     -> 11'-10 1/2"
-;;;  Only the non-obvious repairs set abcdef:*dirty* (for the change report).
+;;;  Only the non-obvious repairs set altabcdef:*dirty* (for the change report).
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:ftin->in (raw maxd / s neg feet ftstr rest inch p dp tok
+(defun altabcdef:ftin->in (raw maxd / s neg feet ftstr rest inch p dp tok
                                     num den slash df val)
-  (setq s (abcdef:scrub (abcdef:trim raw)))
+  (setq s (altabcdef:scrub (altabcdef:trim raw)))
   (cond
     ((= s "") nil)                              ; blank cell
-    ((not (abcdef:parseable-p s))               ; corrupt char left over
-     (setq abcdef:*dirty* T) nil)
+    ((not (altabcdef:parseable-p s))               ; corrupt char left over
+     (setq altabcdef:*dirty* T) nil)
     (T
       (setq neg nil)
-      (if (= (substr s 1 1) "-") (setq neg T s (abcdef:trim (substr s 2))))
+      (if (= (substr s 1 1) "-") (setq neg T s (altabcdef:trim (substr s 2))))
       ;; --- split feet from inches ----------------------------------------
       (setq p (vl-string-search "'" s))
       (cond
         (p                                      ; explicit foot mark
-          (setq ftstr (abcdef:trim (substr s 1 p)))
-          (if (vl-string-search " " ftstr) (setq abcdef:*dirty* T))
-          (setq feet (atof (abcdef:strip ftstr " ")))
-          (setq rest (abcdef:trim (substr s (+ p 2)))))
+          (setq ftstr (altabcdef:trim (substr s 1 p)))
+          (if (vl-string-search " " ftstr) (setq altabcdef:*dirty* T))
+          (setq feet (atof (altabcdef:strip ftstr " ")))
+          (setq rest (altabcdef:trim (substr s (+ p 2)))))
         ((setq dp (vl-string-search "-" s))     ; no ' but a dash: it is the
-          (setq ftstr (abcdef:strip (abcdef:trim (substr s 1 dp)) " "))
-          (if (vl-string-search " " (abcdef:trim (substr s 1 dp)))
-            (setq abcdef:*dirty* T))            ; feet/inch separator
+          (setq ftstr (altabcdef:strip (altabcdef:trim (substr s 1 dp)) " "))
+          (if (vl-string-search " " (altabcdef:trim (substr s 1 dp)))
+            (setq altabcdef:*dirty* T))            ; feet/inch separator
           (setq feet (atof ftstr))
-          (setq rest (abcdef:trim (substr s (+ dp 2)))))
+          (setq rest (altabcdef:trim (substr s (+ dp 2)))))
         (T (setq feet 0.0 ftstr "" rest s)))    ; inches only
       ;; --- clean the inch remainder --------------------------------------
-      (if (= (substr rest 1 1) "-") (setq rest (abcdef:trim (substr rest 2))))
-      (setq rest (abcdef:strip rest "\""))   ; drop inch marks
-      (setq rest (abcdef:strip rest "'"))    ; and a trailing ' misused as one
-      (setq rest (abcdef:replace rest "-" " "))
-      (setq rest (abcdef:trim rest))
+      (if (= (substr rest 1 1) "-") (setq rest (altabcdef:trim (substr rest 2))))
+      (setq rest (altabcdef:strip rest "\""))   ; drop inch marks
+      (setq rest (altabcdef:strip rest "'"))    ; and a trailing ' misused as one
+      (setq rest (altabcdef:replace rest "-" " "))
+      (setq rest (altabcdef:trim rest))
       ;; --- inches: sum whole-number and fraction tokens ------------------
       (setq inch 0.0)
-      (foreach tok (abcdef:tokens rest)
+      (foreach tok (altabcdef:tokens rest)
         ;; a slash-less all-digit run of 3+ digits is very likely a fraction
         ;; whose "/" was scanned as a "1" (114 -> 1/4); reconstruct it.
         (if (and (not (vl-string-search "/" tok))
                  (>= (strlen tok) 3)
-                 (abcdef:alldigits tok)
-                 (setq df (abcdef:defrac tok)))
-          (setq tok df abcdef:*dirty* T))
+                 (altabcdef:alldigits tok)
+                 (setq df (altabcdef:defrac tok)))
+          (setq tok df altabcdef:*dirty* T))
         (setq slash (vl-string-search "/" tok))
         (if slash
           (progn
@@ -246,11 +246,11 @@
         (progn
           (setq feet (atof (substr ftstr 1 (1- (strlen ftstr))))
                 val  (+ (* feet 12.0) inch)
-                abcdef:*dirty* T)))
+                altabcdef:*dirty* T)))
       (if neg (setq val (- val)))
       ;; --- final sanity: non-positive or still impossible -> unreadable --
       (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
-        (progn (setq abcdef:*dirty* T) nil)
+        (progn (setq altabcdef:*dirty* T) nil)
         val))))
 
 ;;; --------------------------------------------------------------------------
@@ -258,7 +258,7 @@
 ;;;  nearest 1/32", reduced.  e.g. 476.75 -> 39'-8 3/4"
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:in->ftin (v / neg feet whole frac n den ft s)
+(defun altabcdef:in->ftin (v / neg feet whole frac n den ft s)
   (setq neg (< v 0.0) v (abs v))
   (setq n (fix (+ (* v 32.0) 0.5)))      ; total 1/32" units, rounded
   (setq feet (fix (/ n 384)))            ; 384 = 32*12
@@ -286,7 +286,7 @@
 ;;;  intersection is chosen.
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:solve (corners dists cx cy / n x y i c d dx dy r jx jy f
+(defun altabcdef:solve (corners dists cx cy / n x y i c d dx dy r jx jy f
                              saa sab sbb sac sbc a b cc det xr yr dr
                              jaa jab jbb ga gb ddx ddy res rms iter)
   (setq n (length corners))
@@ -349,28 +349,28 @@
 ;;; --------------------------------------------------------------------------
 
 ;; Make sure a layer exists (create it with COLOR if not).
-(defun abcdef:layer (name color)
+(defun altabcdef:layer (name color)
   (if (not (tblsearch "LAYER" name))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord") (cons 2 name)
                    '(70 . 0) (cons 62 color) '(6 . "Continuous")))))
 
-(defun abcdef:point (pt layer)
+(defun altabcdef:point (pt layer)
   (entmake (list '(0 . "POINT") (cons 8 layer)
                  (cons 10 (list (car pt) (cadr pt) 0.0)))))
 
-(defun abcdef:circle (pt rad layer)
+(defun altabcdef:circle (pt rad layer)
   (entmake (list '(0 . "CIRCLE") (cons 8 layer)
                  (cons 10 (list (car pt) (cadr pt) 0.0)) (cons 40 rad))))
 
-(defun abcdef:text (pt hgt str layer)
+(defun altabcdef:text (pt hgt str layer)
   (entmake (list '(0 . "TEXT") (cons 8 layer)
                  (cons 10 (list (car pt) (cadr pt) 0.0))
                  (cons 11 (list (car pt) (cadr pt) 0.0))
                  (cons 40 hgt) (cons 1 str) (cons 72 0) (cons 73 0))))
 
 ;; Closed 4-vertex polyline A B C D.
-(defun abcdef:frame (a b c d layer)
+(defun altabcdef:frame (a b c d layer)
   (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 layer)
                  '(100 . "AcDbPolyline") '(90 . 4) '(70 . 1)
                  (cons 10 a) (cons 10 b) (cons 10 c) (cons 10 d))))
@@ -385,14 +385,14 @@
 ;;; --------------------------------------------------------------------------
 
 ;; Coerce a COM cell value to a trimmed string.
-(defun abcdef:cellstr (v)
+(defun altabcdef:cellstr (v)
   (cond ((null v) "")
-        ((= (type v) 'STR) (abcdef:trim v))
-        ((= (type v) 'REAL) (abcdef:trim (rtos v 2 6)))
+        ((= (type v) 'STR) (altabcdef:trim v))
+        ((= (type v) 'REAL) (altabcdef:trim (rtos v 2 6)))
         ((= (type v) 'INT) (itoa v))
         (T "")))
 
-(defun abcdef:xl-cell (sheet r c / res)
+(defun altabcdef:xl-cell (sheet r c / res)
   (setq res (vl-catch-all-apply
               '(lambda ()
                  (vlax-variant-value
@@ -400,10 +400,10 @@
                      (vlax-get-property
                        (vlax-get-property sheet "Cells") "Item" r c)
                      "Text")))))
-  (if (vl-catch-all-error-p res) "" (abcdef:cellstr res)))
+  (if (vl-catch-all-error-p res) "" (altabcdef:cellstr res)))
 
 ;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
-(defun abcdef:col-of (up)
+(defun altabcdef:col-of (up)
   (cond ((vl-string-search "FROM A" up) 'a)
         ((vl-string-search "FROM B" up) 'b)
         ((vl-string-search "FROM C" up) 'c)
@@ -413,38 +413,38 @@
         (T nil)))
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
-(defun abcdef:nth-field (lst idx)
+(defun altabcdef:nth-field (lst idx)
   (if (and idx (> idx 0) (<= idx (length lst))) (nth (1- idx) lst) ""))
 
 ;; Print the accumulated cleanup / unreadable report (if any).
-(defun abcdef:report-fixes (/ m)
-  (if abcdef:*fixes*
+(defun altabcdef:report-fixes (/ m)
+  (if altabcdef:*fixes*
     (progn
       (princ "\n\n--- dirty values cleaned before import ---")
-      (foreach m (reverse abcdef:*fixes*) (princ (strcat "\n" m)))
+      (foreach m (reverse altabcdef:*fixes*) (princ (strcat "\n" m)))
       (princ "\n  ( * = auto-corrected, ? = unreadable. Verify these! )"))))
 
-;; Parse RAW to inches, logging into abcdef:*fixes* if the value had to be
+;; Parse RAW to inches, logging into altabcdef:*fixes* if the value had to be
 ;; cleaned up (a risky repair) or could not be read at all.  LABEL identifies
 ;; the cell in the log, e.g. "P3 / FROM C".  MAXD is the rectangle diagonal.
-(defun abcdef:parse-log (raw label maxd / clean v)
-  (setq clean (abcdef:trim raw))
+(defun altabcdef:parse-log (raw label maxd / clean v)
+  (setq clean (altabcdef:trim raw))
   (if (= clean "")
     nil                                     ; blank cell: not measured
     (progn
-      (setq abcdef:*dirty* nil)
-      (setq v (abcdef:ftin->in raw maxd))
+      (setq altabcdef:*dirty* nil)
+      (setq v (altabcdef:ftin->in raw maxd))
       (cond
         ((null v)                           ; nonblank but unreadable
-         (setq abcdef:*fixes*
+         (setq altabcdef:*fixes*
                (cons (strcat "  ? " label ": \"" clean
                              "\"  could not be read - left blank")
-                     abcdef:*fixes*)))
-        (abcdef:*dirty*                     ; cleaned something up
-         (setq abcdef:*fixes*
+                     altabcdef:*fixes*)))
+        (altabcdef:*dirty*                     ; cleaned something up
+         (setq altabcdef:*fixes*
                (cons (strcat "  * " label ": \"" clean "\"  ->  "
-                             (abcdef:in->ftin v))
-                     abcdef:*fixes*))))
+                             (altabcdef:in->ftin v))
+                     altabcdef:*fixes*))))
       v)))
 
 ;;; --------------------------------------------------------------------------
@@ -454,7 +454,7 @@
 
 ;; Split one CSV line into a list of field strings, honouring "quoted" fields
 ;; and "" escaped quotes.
-(defun abcdef:parse-csv-line (line / fields cur i n c inq)
+(defun altabcdef:parse-csv-line (line / fields cur i n c inq)
   (setq fields '() cur "" i 1 n (strlen line))
   ;; state: inq = inside a quoted field
   (setq inq nil)
@@ -474,7 +474,7 @@
   (setq fields (cons cur fields))
   (reverse fields))
 
-(defun abcdef:read-csv (file maxd / fp line fields i h up kind
+(defun altabcdef:read-csv (file maxd / fp line fields i h up kind
                                     name-c a-c b-c c-c d-c rows nm)
   (setq fp (open file "r"))
   (if (null fp)
@@ -483,13 +483,13 @@
       (setq name-c nil a-c nil b-c nil c-c nil d-c nil)
       ;; --- header row (skip any leading blank lines) --------------------
       (setq line (read-line fp))
-      (while (and line (= (abcdef:trim (abcdef:strip line (chr 13))) ""))
+      (while (and line (= (altabcdef:trim (altabcdef:strip line (chr 13))) ""))
         (setq line (read-line fp)))
       (if line
         (progn
-          (setq fields (abcdef:parse-csv-line (abcdef:strip line (chr 13))) i 1)
+          (setq fields (altabcdef:parse-csv-line (altabcdef:strip line (chr 13))) i 1)
           (foreach h fields
-            (setq up (strcase (abcdef:trim h)) kind (abcdef:col-of up))
+            (setq up (strcase (altabcdef:trim h)) kind (altabcdef:col-of up))
             (cond ((and (eq kind 'name) (null name-c)) (setq name-c i))
                   ((eq kind 'a) (setq a-c i))
                   ((eq kind 'b) (setq b-c i))
@@ -498,40 +498,40 @@
             (setq i (1+ i)))))
       (if (null name-c) (setq name-c 1))     ; fall back to first column
       ;; --- data rows -----------------------------------------------------
-      (setq rows '() abcdef:*fixes* '())
+      (setq rows '() altabcdef:*fixes* '())
       (while (setq line (read-line fp))
-        (setq line (abcdef:strip line (chr 13)))
-        (if (/= (abcdef:trim line) "")
+        (setq line (altabcdef:strip line (chr 13)))
+        (if (/= (altabcdef:trim line) "")
           (progn
-            (setq fields (abcdef:parse-csv-line line))
-            (setq nm (abcdef:trim (abcdef:nth-field fields name-c)))
+            (setq fields (altabcdef:parse-csv-line line))
+            (setq nm (altabcdef:trim (altabcdef:nth-field fields name-c)))
             (if (/= nm "")
               (setq rows
                 (cons (list nm
-                    (abcdef:parse-log (abcdef:nth-field fields a-c)
+                    (altabcdef:parse-log (altabcdef:nth-field fields a-c)
                                       (strcat nm " / FROM A") maxd)
-                    (abcdef:parse-log (abcdef:nth-field fields b-c)
+                    (altabcdef:parse-log (altabcdef:nth-field fields b-c)
                                       (strcat nm " / FROM B") maxd)
-                    (abcdef:parse-log (abcdef:nth-field fields c-c)
+                    (altabcdef:parse-log (altabcdef:nth-field fields c-c)
                                       (strcat nm " / FROM C") maxd)
-                    (abcdef:parse-log (abcdef:nth-field fields d-c)
+                    (altabcdef:parse-log (altabcdef:nth-field fields d-c)
                                       (strcat nm " / FROM D") maxd))
                       rows))))))
       (close fp)
-      (abcdef:report-fixes)
+      (altabcdef:report-fixes)
       (reverse rows))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Dispatcher: pick the CSV reader for .csv, else Excel COM automation.
 ;;; --------------------------------------------------------------------------
-(defun abcdef:read-file (file maxd / ext n)
+(defun altabcdef:read-file (file maxd / ext n)
   (setq n (strlen file) ext "")
   (if (> n 4) (setq ext (strcase (substr file (- n 3)))))
   (if (= ext ".CSV")
-    (abcdef:read-csv file maxd)
-    (abcdef:read-excel file maxd)))
+    (altabcdef:read-csv file maxd)
+    (altabcdef:read-excel file maxd)))
 
-(defun abcdef:read-excel (file maxd / xl created wbs wb sheet used rng nrows ncols
+(defun altabcdef:read-excel (file maxd / xl created wbs wb sheet used rng nrows ncols
                                   hdr r c txt up kind name-c a-c b-c d-c c-c
                                   rows nm da db dc dd err m)
   ;; connect to an existing Excel, else start one
@@ -567,7 +567,7 @@
           ;; --- locate columns from the header row ------------------------
           (setq name-c nil a-c nil b-c nil c-c nil d-c nil c 1)
           (while (<= c ncols)
-            (setq up (strcase (abcdef:xl-cell sheet 1 c)) kind (abcdef:col-of up))
+            (setq up (strcase (altabcdef:xl-cell sheet 1 c)) kind (altabcdef:col-of up))
             (cond ((and (eq kind 'name) (null name-c)) (setq name-c c))
                   ((eq kind 'a) (setq a-c c))
                   ((eq kind 'b) (setq b-c c))
@@ -576,23 +576,23 @@
             (setq c (1+ c)))
           (if (null name-c) (setq name-c 1))   ; fall back to first column
           ;; --- read the data rows ----------------------------------------
-          (setq rows '() abcdef:*fixes* '() r 2)
+          (setq rows '() altabcdef:*fixes* '() r 2)
           (while (<= r nrows)
-            (setq nm (abcdef:xl-cell sheet r name-c))
+            (setq nm (altabcdef:xl-cell sheet r name-c))
             (if (/= nm "")
               (setq rows
                 (cons (list nm
-                    (if a-c (abcdef:parse-log (abcdef:xl-cell sheet r a-c)
+                    (if a-c (altabcdef:parse-log (altabcdef:xl-cell sheet r a-c)
                                               (strcat nm " / FROM A") maxd))
-                    (if b-c (abcdef:parse-log (abcdef:xl-cell sheet r b-c)
+                    (if b-c (altabcdef:parse-log (altabcdef:xl-cell sheet r b-c)
                                               (strcat nm " / FROM B") maxd))
-                    (if c-c (abcdef:parse-log (abcdef:xl-cell sheet r c-c)
+                    (if c-c (altabcdef:parse-log (altabcdef:xl-cell sheet r c-c)
                                               (strcat nm " / FROM C") maxd))
-                    (if d-c (abcdef:parse-log (abcdef:xl-cell sheet r d-c)
+                    (if d-c (altabcdef:parse-log (altabcdef:xl-cell sheet r d-c)
                                               (strcat nm " / FROM D") maxd)))
                       rows)))
             (setq r (1+ r)))
-          (abcdef:report-fixes)
+          (altabcdef:report-fixes)
           ;; --- close up --------------------------------------------------
           (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
@@ -605,11 +605,11 @@
 ;;;  Prompt helper: read a feet-inch dimension from the keyboard.
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:getdim (prompt / s v)
+(defun altabcdef:getdim (prompt / s v)
   (setq v nil)
   (while (null v)
     (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\"): ")))
-    (setq v (abcdef:ftin->in s nil))
+    (setq v (altabcdef:ftin->in s nil))
     (if (or (null v) (<= v 0.0))
       (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"") (setq v nil))))
   v)
@@ -618,7 +618,7 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ABCDEF (/ file rows base bx by W H
+(defun c:ALTABCDEF (/ file rows base bx by W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
                     sol x y rms i tags placed)
@@ -631,8 +631,8 @@
     (progn
       ;; ---- rectangle dimensions ------------------------------------------
       (princ "\n--- Rectangle A(top-left) B(top-right) C(bottom-right) D(bottom-left) ---")
-      (setq W (abcdef:getdim "Dimension A-B (width across the top)"))
-      (setq H (abcdef:getdim "Dimension A-D (height down the side)"))
+      (setq W (altabcdef:getdim "Dimension A-B (width across the top)"))
+      (setq H (altabcdef:getdim "Dimension A-D (height down the side)"))
       ;; ---- where does corner A land? -------------------------------------
       ;; take the pick in WCS so the rectangle is built square to the world
       ;; axes even when the current UCS is rotated (entmake writes WCS).
@@ -650,29 +650,29 @@
       ;; corner; pass it so the parser can spot a foot mark scanned as a digit
       ;; and reject impossible readings.
       (princ "\nReading spreadsheet ... ")
-      (setq rows (abcdef:read-file file (sqrt (+ (* W W) (* H H)))))
+      (setq rows (altabcdef:read-file file (sqrt (+ (* W W) (* H H)))))
       (if (null rows)
         (progn (princ "\nNo usable rows found - nothing plotted.") (princ))
         (progn
           (princ (strcat (itoa (length rows)) " row(s) found."))
           ;; ---- layers & sizing --------------------------------------------
-          (abcdef:layer "ABCDEF-FRAME"  1)     ; red
-          (abcdef:layer "ABCDEF-POINTS" 2)     ; yellow
-          (abcdef:layer "ABCDEF-LABELS" 3)     ; green
+          (altabcdef:layer "ALTABCDEF-FRAME"  1)     ; red
+          (altabcdef:layer "ALTABCDEF-POINTS" 2)     ; yellow
+          (altabcdef:layer "ALTABCDEF-LABELS" 3)     ; green
           (setq th (/ (max W H) 120.0))        ; text height
           (if (< th 0.5) (setq th 0.5))
           (setq mrad (* th 0.4))               ; marker radius
           ;; ---- draw the rectangle + corner tags ---------------------------
-          (abcdef:frame (list Ax Ay) (list Bx By) (list Cx Cy) (list Dx Dy)
-                        "ABCDEF-FRAME")
+          (altabcdef:frame (list Ax Ay) (list Bx By) (list Cx Cy) (list Dx Dy)
+                        "ALTABCDEF-FRAME")
           (setq tags (list (list "A" Ax Ay (* -1 th) th)
                            (list "B" Bx By th th)
                            (list "C" Cx Cy th (* -1.6 th))
                            (list "D" Dx Dy (* -1 th) (* -1.6 th))))
           (foreach tg tags
-            (abcdef:text (list (+ (nth 1 tg) (nth 3 tg))
+            (altabcdef:text (list (+ (nth 1 tg) (nth 3 tg))
                                (+ (nth 2 tg) (nth 4 tg)))
-                         (* th 1.4) (car tg) "ABCDEF-FRAME"))
+                         (* th 1.4) (car tg) "ALTABCDEF-FRAME"))
           ;; ---- plot each measured point -----------------------------------
           (setq good 0 bad 0 placed '())
           (foreach r rows
@@ -689,13 +689,13 @@
                                   dists   (cons (nth 3 din) dists)))
             (if (>= (length corners) 2)
               (progn
-                (setq sol (abcdef:solve (reverse corners) (reverse dists)
+                (setq sol (altabcdef:solve (reverse corners) (reverse dists)
                                         (+ bx (/ W 2.0)) (- by (/ H 2.0))))
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
-                (abcdef:point  (list x y) "ABCDEF-POINTS")
-                (abcdef:circle (list x y) mrad "ABCDEF-POINTS")
-                (abcdef:text   (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
-                               th nm "ABCDEF-LABELS")
+                (altabcdef:point  (list x y) "ALTABCDEF-POINTS")
+                (altabcdef:circle (list x y) mrad "ALTABCDEF-POINTS")
+                (altabcdef:text   (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
+                               th nm "ALTABCDEF-LABELS")
                 (setq placed (cons (list nm x y rms (length corners)) placed))
                 (setq good (1+ good)))
               (progn
@@ -703,12 +703,12 @@
                                " : fewer than 2 distances given - skipped."))
                 (setq bad (1+ bad)))))
           ;; ---- report ------------------------------------------------------
-          (princ "\n\n===== ABCDEF results (all values in inches) =====")
+          (princ "\n\n===== ALTABCDEF results (all values in inches) =====")
           (princ "\n  POINT            X          Y      #dims   fit err (RMS)")
           (foreach p (reverse placed)
-            (princ (strcat "\n  " (abcdef:pad (nth 0 p) 14)
-                           (abcdef:padnum (nth 1 p) 10)
-                           (abcdef:padnum (nth 2 p) 11)
+            (princ (strcat "\n  " (altabcdef:pad (nth 0 p) 14)
+                           (altabcdef:padnum (nth 1 p) 10)
+                           (altabcdef:padnum (nth 2 p) 11)
                            "    " (itoa (nth 4 p))
                            "      " (rtos (nth 3 p) 2 4) "\"")))
           (princ (strcat "\n-------------------------------------------------"
@@ -735,15 +735,15 @@
   (princ))
 
 ;; right-pad a string to WIDTH
-(defun abcdef:pad (s width)
+(defun altabcdef:pad (s width)
   (while (< (strlen s) width) (setq s (strcat s " ")))
   s)
 
 ;; format a real to 3 decimals, left-padded into WIDTH
-(defun abcdef:padnum (v width / s)
+(defun altabcdef:padnum (v width / s)
   (setq s (rtos v 2 3))
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ "\nABCDEF.lsp loaded.  Type ABCDEF to plot points from a spreadsheet.")
+(princ "\nALTABCDEF.lsp loaded.  Type ALTABCDEF to plot points from a spreadsheet.")
 (princ)
