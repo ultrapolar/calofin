@@ -379,6 +379,13 @@ exactly, held widths centred on the wall opening, outermost steps landing
 wall-to-wall, polyline bulge/arc conversions round-tripping, and the
 dimension chain/nesting rules.
 
+`test_pool_fit.py` is a Python mirror of the AutoLISP fitter in
+`pool_fit_lisp/abhd.lsp` (which itself only runs inside AutoCAD): same
+algorithm, same constants, so the geometry can be regression tested on
+a workstation. It also lints the LISP — parenthesis balance, undefined
+or unused functions, and whether the tuning constants in both files
+still agree.
+
 ## License
 
 GPL-3.0-or-later (as required for Blender add-ons).
