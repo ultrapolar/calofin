@@ -172,6 +172,7 @@ class VM:
         self.prompts = []        # (prompt, answer) log
         self.commands = []       # every (command ...) call
         self.dimstyle_log = []   # every dim style made current, in order
+        self.output = []         # every string ever passed to princ/prin1/print
         self.entities = []       # Ent -> alist, in creation order
         self.entdata = {}
         self.deleted = set()
@@ -717,12 +718,26 @@ def _rtos(vm, a):
 
 BUILTINS[Sym('angtos')] = lambda vm, a: f"{num(a[0]):.6f}"
 
-# io
-BUILTINS[Sym('princ')] = lambda vm, a: (a[0] if a else NIL)
-BUILTINS[Sym('prin1')] = lambda vm, a: (a[0] if a else NIL)
-BUILTINS[Sym('print')] = lambda vm, a: (a[0] if a else NIL)
+# io -- princ'd strings are logged to vm.output so tests can assert on
+# narration text (a tutorial's whole point is what it tells the user)
+def _princ(vm, a):
+    if a and isinstance(a[0], str):
+        vm.output.append(a[0])
+    return a[0] if a else NIL
+
+
+BUILTINS[Sym('princ')] = _princ
+BUILTINS[Sym('prin1')] = _princ
+BUILTINS[Sym('print')] = _princ
 BUILTINS[Sym('terpri')] = lambda vm, a: NIL
 BUILTINS[Sym('prompt')] = lambda vm, a: NIL
+
+
+@bi('getstring')
+def _getstring(vm, a):
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = vm.pop_script(prompt, 'getstring')
+    return v if v is not None else ""
 
 
 # sysvars, tables
@@ -934,5 +949,11 @@ BUILTINS[Sym('getint')] = lambda vm, a: vm.pop_script(
     a[0] if a else "", 'getint')
 BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(
     LispError("exit called", vm))
-BUILTINS[Sym('atoms-family')] = lambda vm, a: []
+# mode 0 with no symlist (the only form this codebase uses, to guard
+# "is POOL.LSP loaded" via (member 'pool:hopcalc (atoms-family 0))):
+# every defined global symbol, so the membership check actually works.
+BUILTINS[Sym('atoms-family')] = lambda vm, a: (
+    [Sym(k) for k in vm.globals.keys()]
+    if not (len(a) > 1 and a[1]) else
+    [Sym(k) if k in vm.globals else NIL for k in a[1]])
 BUILTINS[Sym('vl-load-com')] = lambda vm, a: NIL

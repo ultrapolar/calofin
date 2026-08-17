@@ -34,6 +34,29 @@ what the tool can draw.
 Run it in a **scratch drawing** — it draws on the same layers `POOL`
 uses. It never prompts, so it is safe to re-run any time.
 
+### Learning it: `TUTORIALPOOL`
+
+`TUTORIALPOOL.LSP` is another separate, optional file. Load it after
+`POOL.LSP` and type **`TUTORIALPOOL`** for a paced, captioned
+walkthrough aimed at someone using the tool for the first time: nine
+topics, each with a short explanation, a small illustrative drawing
+where one helps, and — for the validation topic — a full checklist of
+everything the routine actually verifies before it trusts a number.
+Press **ENTER** to move to the next topic, or type **Q** then ENTER
+to stop early; either way your sysvars come back exactly as they
+were. Where `POOLDEMO` is a side-by-side reference sheet for checking
+an install, `TUTORIALPOOL` is a guided *tour* — one concept at a
+time, with the reasoning spelled out next to each.
+
+### Checking what's loaded: `POOLVERSION`
+
+Type **`POOLVERSION`** any time to print which revision of `POOL.LSP`
+is loaded in the current drawing — nothing is shown unsolicited at
+load or run time, only on demand. Handy for comparing what a coworker
+has in their stack against your own copy before troubleshooting a
+difference. See *Versioned snapshots*, below, for the filename
+convention this refers to.
+
 Drawing units are assumed to be **inches** — all tolerances below are
 in inches. The command switches to Architectural units while it runs
 (restored afterwards), so **every distance prompt** accepts feet-inch
@@ -41,6 +64,43 @@ entry regardless of the drawing's unit setting: `25'6"`,
 `25'-6-1/2"`, `25'6.5`, or plain numbers as inches (`306.5`). Note
 that AutoCAD treats a space as Enter, so type fractions with a dash
 (`25'-6-1/2"`, not `25'-6 1/2"`).
+
+## Versioned snapshots
+
+`POOL.LSP` (and `POOLDEMO.LSP` / `TUTORIALPOOL.LSP`) always keep
+their plain names — that's what `APPLOAD`, a startup suite, or a
+drag-and-drop expects, and it never changes, so nothing already
+pointing at `POOL.LSP` ever breaks.
+
+Alongside that, `pool_layout_lisp/versions/` holds an exact,
+byte-for-byte copy of every release under a name that encodes *when*
+and *which iteration* it was:
+
+```
+versions/POOL_MMDDYY_REV##.LSP
+```
+
+e.g. `versions/POOL_081726_REV01.LSP`. This is the paper trail: when
+you need to know what a coworker actually has loaded (their copy is
+still just called `POOL.LSP`), diff their file against the dated
+snapshots here to find the match, or ask them to type `POOLVERSION`
+and look up that revision directly — `POOL.LSP` carries a matching
+`pool:*version*` string internally (checked on demand only; nothing
+is printed unsolicited at load or run time).
+
+To record a new snapshot after changing a file, run:
+
+```
+pool_layout_lisp/scripts/snapshot_version.sh              # POOL.LSP
+pool_layout_lisp/scripts/snapshot_version.sh POOLDEMO.LSP
+pool_layout_lisp/scripts/snapshot_version.sh TUTORIALPOOL.LSP
+```
+
+It bumps that file's own revision counter (`versions/<NAME>.REVISION`
+— one independent sequence per source file, always increasing), and
+for `POOL.LSP` specifically it also updates the in-file
+`pool:*version*` string to match before copying, so the snapshot and
+the string it reports always agree.
 
 ## What it asks
 
