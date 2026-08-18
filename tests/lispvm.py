@@ -790,19 +790,26 @@ def _entget(vm, a):
         raise LispError(f"entget: not an entity: {e!r}", vm)
     if e in vm.deleted:
         return NIL
-    return vm.entdata[e]
+    # (-1 . <ename>) leads the list in AutoLISP, and it is what entmod
+    # follows back to the entity after subst/append have rebuilt it
+    return [Dot(-1, e)] + vm.entdata[e]
 
 
 @bi('entmod')
 def _entmod(vm, a):
     alist = a[0]
+    for g in alist or []:
+        if isinstance(g, Dot) and g.a == -1 and isinstance(g.b, Ent):
+            if g.b in vm.deleted:
+                return NIL
+            vm.entdata[g.b] = [x for x in alist
+                               if not (isinstance(x, Dot) and x.a == -1)]
+            return alist
+    # a list built from scratch, with no (-1 . ename) to follow: nothing
+    # to write it back to
     for e, data in vm.entdata.items():
         if data is alist:
             return alist
-    # match by identity failed (list was rebuilt): find the entity whose
-    # handle-free content is closest -- accept and store on entlast-like
-    # heuristic: store nothing, return the list (enough for color mods
-    # driven straight off entget results)
     return alist
 
 
@@ -853,6 +860,57 @@ BUILTINS[Sym('sslength')] = lambda vm, a: len(a[0]) - 1
 BUILTINS[Sym('ssname')] = lambda vm, a: a[0][int(a[1]) + 1]
 
 
+def _dxf(vm, e, code):
+    """One DXF group value off an entity, nil when it has no such group."""
+    for g in vm.entdata.get(e, []):
+        if isinstance(g, Dot) and g.a == code:
+            return g.b
+        if isinstance(g, list) and g and g[0] == code:
+            return g[1] if len(g) == 2 else g[1:]
+    return NIL
+
+
+@bi('ssget')
+def _ssget(vm, a):
+    """(ssget [mode] [pt] [filter]) -- scripted, like every other bit of
+    interaction here: the answer is the list of entities the user
+    highlighted, or None for "nothing" (Enter, or no pickfirst set when
+    the routine asks for "_I").  A DXF filter list is honoured, so a
+    routine that lets AutoCAD keep only the LINEs gets only LINEs here.
+    Returns nil for an empty result, exactly as AutoLISP does."""
+    mode = ' '.join(x for x in a if isinstance(x, str))
+    filt = None
+    for x in a:
+        if isinstance(x, list) and x and isinstance(x[0], (Dot, list)):
+            filt = x
+            break
+    v = vm.pop_script(('ssget ' + mode).strip(), 'ssget')
+    if v is None:
+        return NIL
+    if isinstance(v, Ent):
+        v = [v]
+    ents = [e for e in v if e not in vm.deleted]
+    if filt:
+        pairs = []
+        for g in filt:
+            if isinstance(g, Dot):
+                pairs.append((g.a, g.b))
+            elif isinstance(g, list) and len(g) >= 2:
+                pairs.append((g[0], g[1]))
+        ents = [e for e in ents
+                if all(_dxf(vm, e, c) == val for c, val in pairs)]
+    return ['<ss>'] + ents if ents else NIL
+
+
+@bi('trans')
+def _trans(vm, a):
+    """(trans pt from to [disp]) -- the VM's world is flat: WCS, UCS and
+    every entity's OCS coincide, so this is the identity.  It still
+    type-checks the point, which is the failure it exists to catch: nil
+    reaching a coordinate transform dies here as it would in AutoCAD."""
+    return list(pt(a[0]))
+
+
 # command + input
 @bi('command')
 def _command(vm, a):
@@ -863,6 +921,22 @@ def _command(vm, a):
     if a and a[0] == '_.-DIMSTYLE' and len(a) >= 3 and a[1] == '_Restore':
         vm.sysvars['DIMSTYLE'] = a[2]
         vm.dimstyle_log.append(a[2])
+    # a dimension command leaves a DIMENSION entity behind, on the
+    # current layer and in the current style -- routines that reach for
+    # (entlast) afterwards to fix those up need something to find
+    if a and a[0] in ('_.DIMALIGNED', '_.DIMLINEAR'):
+        pts = [x for x in a[1:] if isinstance(x, list) and len(x) >= 2]
+        # DIMLAYER, when the drawing sets it, overrides CLAYER for
+        # dimensions -- the very thing a routine has to undo when it
+        # wants its dims on a layer of its own choosing
+        lay = vm.sysvars.get('DIMLAYER')
+        if not (isinstance(lay, str) and lay in vm.tables['LAYER']):
+            lay = vm.sysvars.get('CLAYER', '0')
+        e = Ent()
+        vm.entities.append(e)
+        vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay),
+                         Dot(3, vm.sysvars.get('DIMSTYLE', 'STANDARD'))] + \
+            [[code] + [float(v) for v in p] for code, p in zip((13, 14, 10), pts)]
     return NIL
 
 
