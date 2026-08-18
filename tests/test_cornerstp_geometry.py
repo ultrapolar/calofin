@@ -10,12 +10,23 @@ opening, outermost steps landing wall-to-wall, and bulge/arc conversions
 round-tripping.  Keeping the maths here means a change to either .lsp can
 be re-verified without opening AutoCAD.
 
+It also guards the packaging: the three routines ship as ONE release,
+releases/STEPS_MMDDYY_REV##-##-##.lsp, holding each source verbatim.
+
 Usage:  python3 tests/test_cornerstp_geometry.py
 """
 
+import glob
 import math
+import os
+import re
 
 TOL_INCH = 0.125  # *cs-width-tol* default, 1/8"
+
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LISP_DIR = os.path.join(REPO_DIR, "lisp", "cornerstp")
+RELEASES_DIR = os.path.join(REPO_DIR, "releases")
+BUNDLE_MEMBERS = ["CORNERSTP.lsp", "HEMISTEP.lsp", "NORMIESTEP.lsp"]
 
 
 # ---------------------------------------------------------------- helpers
@@ -1277,6 +1288,70 @@ def test_normie_u_base_detection():
     assert found == [base], "only the base joins both arms"
 
 
+# ------------------------------------------------------------- the release
+# The three routines ship as ONE file, releases/STEPS_MMDDYY_REV##-##-##.lsp,
+# not one release each.  Fix any failure here by running:
+#     python3 tools/release_lisp.py
+
+
+def newest_bundle():
+    """The most recent STEPS_MMDDYY_REV##-##-##.lsp in releases/."""
+    best, best_key = None, None
+    for name in os.listdir(RELEASES_DIR):
+        m = re.fullmatch(r"STEPS_(\d{2})(\d{2})(\d{2})_REV([\d-]+)\.lsp",
+                         name, re.IGNORECASE)
+        if not m:
+            continue
+        mm, dd, yy = (int(g) for g in m.groups()[:3])
+        if best_key is None or (yy, mm, dd) > best_key:
+            best, best_key = (name, m.group(4)), (yy, mm, dd)
+    assert best, "no STEPS release found - run tools/release_lisp.py"
+    return best
+
+
+def test_the_steps_release_as_a_single_bundle():
+    """One STEPS file holds all three routines, and no member has a
+    dated release of its own."""
+    name, _ = newest_bundle()
+    with open(os.path.join(RELEASES_DIR, name)) as f:
+        bundle = f.read()
+    for member in BUNDLE_MEMBERS:
+        with open(os.path.join(LISP_DIR, member)) as f:
+            assert f.read() in bundle, \
+                "%s is not in %s verbatim - run tools/release_lisp.py" \
+                % (member, name)
+        stray = glob.glob(os.path.join(
+            RELEASES_DIR, "%s_[0-9]*_REV*.lsp" % os.path.splitext(member)[0]))
+        assert not stray, \
+            "%s still has its own release %s - the steps release as one " \
+            "file; run tools/release_lisp.py" \
+            % (member, [os.path.basename(s) for s in stray])
+    for command in ("CORNERSTP", "HEMISTEP", "NORMIESTEP",
+                    "TUTORIALCORNERSTP", "TUTORIALHEMISTEP",
+                    "TUTORIALNORMIESTEP"):
+        assert re.search(r"^\(defun\s+c:%s\b" % command, bundle, re.M), \
+            "%s is missing from %s" % (command, name)
+    print("release current: one bundle, %s" % name)
+
+
+def test_bundle_revs_match_the_source_banners():
+    """The REVs in the filename are the members' own version banners,
+    in the order the bundle concatenates them."""
+    name, revs = newest_bundle()
+    got = revs.split("-")
+    assert len(got) == len(BUNDLE_MEMBERS), \
+        "%s names %d REVs for %d routines" % (name, len(got),
+                                              len(BUNDLE_MEMBERS))
+    for member, rev in zip(BUNDLE_MEMBERS, got):
+        with open(os.path.join(LISP_DIR, member)) as f:
+            m = re.search(r'\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"', f.read())
+        assert m, "%s has no version banner" % member
+        assert m.group(1) + m.group(2) == rev, \
+            "%s is v%s.%s but %s says REV%s - run tools/release_lisp.py" \
+            % (member, m.group(1), m.group(2), name, rev)
+    print("release revs match: %s" % name)
+
+
 def main():
     test_inside_out_holds_tread_depths()
     test_held_width_is_centred_between_the_walls()
@@ -1322,6 +1397,8 @@ def main():
     test_recess_rounded_corner_is_tangent_to_both_lines()
     test_recess_flares_the_mouth_by_the_offset()
     test_recess_square_corner_leaves_the_side_at_the_wall()
+    test_the_steps_release_as_a_single_bundle()
+    test_bundle_revs_match_the_source_banners()
     print("all tests passed")
 
 

@@ -31,7 +31,8 @@ see each folder's own README for the exact steps.
 
 Each tool lives under `lisp/<name>/`, with the identically-named,
 dated copy of any versioned file living flat in `releases/` (see
-below). Load a routine with APPLOAD, or add it to your startup suite.
+below) - except the step routines, which release as one bundled file.
+Load a routine with APPLOAD, or add it to your startup suite.
 
 | Command(s) | Folder | What it does |
 | --- | --- | --- |
@@ -48,7 +49,7 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `LINCHECK` | `lisp/lincheck/` | Companion checklist routine, shipped alongside the flowchart walker |
 | `MATCHSTD`, `MATCHSTD-CFG` | `lisp/standards_checker/` | General-purpose drawing-standards matcher/checker (modular: config, cache, geometry, tolerance, UI) |
 | `LINTXTCHK` | `lisp/lintxtchk/` | Places the vinyl-liner QA checklist into the drawing as text |
-| `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners |
+| `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners - three files here, one `STEPS` release (see below) |
 | `PADDLE`, `TUTORIALPADDLE` | `lisp/paddle/` | Finds concave perimeter features and inserts pad blocks |
 | `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, with a repeat-on-the-new-polyline step |
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
@@ -77,8 +78,8 @@ consolidation:
 ## Releases (`releases/`)
 
 Some tools distribute a dated, REV-numbered twin of their static file
-(`lisp/cornerstp/CORNERSTP.lsp` alongside
-`releases/CORNERSTP_081726_REV22.lsp`) so a loaded routine never
+(`lisp/dimcheck/dimcheck.lsp` alongside
+`releases/dimcheck_081826_REV10.lsp`) so a loaded routine never
 silently changes underfoot, and a version banner in the file, its
 filename, and what the command prints at startup can never disagree.
 Every tool's twins live flat in `releases/` - no per-tool subfolders,
@@ -91,6 +92,29 @@ python3 tools/release_lisp.py
 
 Not every tool uses this convention - the script says so per file
 (`no version banner - skipped`) rather than guessing.
+
+### The step bundle
+
+The three step routines go out together, so they release as **one**
+file rather than one each:
+
+| Release | Holds |
+| --- | --- |
+| `releases/STEPS_081826_REV22-25-14.lsp` | `CORNERSTP.lsp` (REV22), `HEMISTEP.lsp` (REV25), `NORMIESTEP.lsp` (REV14) |
+
+APPLOAD that single file and all six commands (`CORNERSTP`,
+`HEMISTEP`, `NORMIESTEP` and their three `TUTORIAL...` walkthroughs)
+come with it. The REV numbers in the filename are each member's own, in
+the same order the file concatenates them, and each source is copied in
+**verbatim** - so the bundle still diffs cleanly against
+`lisp/cornerstp/`, and each routine prints its own version banner as it
+loads. The three routines already namespace their helpers apart (`cs-`,
+`hs-`, `ns-`) and guard the settings globals they share, so loading the
+bundle is the same as loading the three files back to back. Members of
+a bundle get no separate dated twin of their own.
+
+Bundles are declared in `BUNDLES` at the top of `tools/release_lisp.py`;
+everything else releases one file per source.
 
 ## Palette UI (`ui/`)
 
@@ -111,7 +135,7 @@ not a bug in either side.
 
 | Script | What it does |
 | --- | --- |
-| `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner |
+| `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 
