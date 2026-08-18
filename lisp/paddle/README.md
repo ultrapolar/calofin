@@ -51,19 +51,10 @@ watch each rule fire. At the end it offers to erase the demo again.
 
 ## Revisions
 
-The current revision is named by `*paddle-version*` inside the lisp
-(shown in the load banner) and the folder always carries **two
-identical copies** of the code:
-
-* `PADDLE.lsp` — the static name, meant for startup suites /
-  APPLOAD stacks; the name never changes.
-* `PADDLE_MMDDYY_REV##.lsp` (e.g. `PADDLE_081726_REV01.lsp`) — the
-  dated copy, renamed on every iteration, so you can tell at a
-  glance which revision someone has in their stack.
-
-When a new iteration lands, both files get the new content: the
-static file keeps its name, and the dated file is renamed for the
-new revision.
+`PADDLE.lsp` carries the auto-stamped banner `(setq *paddle-version*
+"v1.0")` that `tools/release_lisp.py` reads; run it after any change
+and the dated twin `releases/PADDLE_MMDDYY_REV10.lsp` regenerates
+itself. Bump the banner with every revision.
 
 PADDLE reports what it found, e.g.:
 

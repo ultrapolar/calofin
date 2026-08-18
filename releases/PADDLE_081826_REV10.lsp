@@ -31,11 +31,9 @@
 ;;;   optionally draws a labelled sample perimeter and pads it step by
 ;;;   step so you can watch what happens.
 ;;;
-;;; Versioning:
-;;;   *paddle-version* below names the revision. The repo carries this
-;;;   file twice: PADDLE.lsp (static name, for startup/appload stacks)
-;;;   and an identical dated copy PADDLE_MMDDYY_REV##.lsp so you can
-;;;   tell at a glance which iteration someone has loaded.
+;;; Versioning: see tools/release_lisp.py at the repo root. It reads
+;;; *paddle-version* below and stamps a dated, REV-numbered twin of
+;;; this file into releases/.
 ;;;
 ;;; Block resolution order for the chosen pad block:
 ;;;   1. A block definition already in the drawing.
@@ -53,9 +51,9 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "081726_REV01") ; revision of this lisp: the
-                             ; dated copy PADDLE_<version>.lsp in the
-                             ; repo is identical to PADDLE.lsp
+(setq *paddle-version* "v1.0") ; printed on load and at command start
+                             ; so a loaded routine and its releases/
+                             ; twin can never disagree
 ;; available pad sizes: (inches . block-name); PADDLE asks which one
 (setq *paddle-sizes* '((24 . "Pad24x24")   ; standard 2'x2' pad
                        (36 . "Pad36x36"))) ; bigger 3'x3' pad
@@ -437,6 +435,7 @@
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
 
+  (princ (strcat "\nPADDLE " *paddle-version*))
   (princ (strcat "\nPADDLE - pads at concave perimeter features (R <= "
                  (rtos *paddle-maxrad* 4 0) " and inside corners)."))
 
@@ -513,7 +512,7 @@
                            pad ncorner narc)
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
-  (princ (strcat "\n=== PADDLE TUTORIAL (rev " *paddle-version* ") ==="))
+  (princ (strcat "\n=== PADDLE TUTORIAL " *paddle-version* " ==="))
   (princ "\nPADDLE looks at the perimeter of a drawing and inserts pad blocks")
   (princ "\nwherever the perimeter caves inward. Everything it checks:")
   (princ "\n")
