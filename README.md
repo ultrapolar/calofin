@@ -46,6 +46,7 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `COVERCHECK`, `COVERSCAN`, ... | `lisp/covercheck/` | Same guided review, rules swapped for pool-cover QA |
 | `CCPRECHECK` | `lisp/ccprecheck/` | Walks the "Tech Flow Chart" product-type decision tree and prints a summary. Renamed from `CHECK` to resolve a name collision with `lisp/check/` |
 | `LINCHECK` | `lisp/lincheck/` | Companion checklist routine, shipped alongside the flowchart walker |
+| `STOCKCOVER`, `STOCKLIST`, `STOCKCOVER-CFG` | `lisp/stockcover/` | Replaces a highlighted perimeter with a stock cover drawing pulled straight out of the stock DWG folder, lined up on what was highlighted |
 | `MATCHSTD`, `MATCHSTD-CFG` | `lisp/standards_checker/` | General-purpose drawing-standards matcher/checker (modular: config, cache, geometry, tolerance, UI) |
 | `LINTXTCHK` | `lisp/lintxtchk/` | Places the vinyl-liner QA checklist into the drawing as text |
 | `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners |
@@ -73,6 +74,28 @@ consolidation:
   (with `DIMCHECK` and `COVERCHECK` already built against it) and a
   product-type flowchart walker. The audit kept `CHECK`; the flowchart
   walker is now `CCPRECHECK`.
+
+### The stock cover folder
+
+`STOCKCOVER` reads finished cover drawings out of a shared folder -
+`F:\TechTeam\2022 StockCoverTech` as shipped. Set that folder before
+handing the file out, by editing `*stock-folder*` at the top of
+`lisp/stockcover/STOCKCOVER.lsp`; anyone can override it on their own
+machine with `STOCKCOVER-CFG`, which is remembered in their AutoCAD
+profile and wins over the value in the file.
+
+You highlight the perimeter to be replaced and type the stock drawing's
+short name - `5M` finds `5M_Tech.dwg`, `20M` finds `20M_Tech.dwg`
+(`*stock-suffixes*` holds the `_Tech` part). The stock geometry is
+centred on what you highlighted. The two perimeters are meant to be the
+same shape and size, so when they are, it is dropped in untouched; when
+they are not, `STOCKCOVER` prints both sizes and asks before scaling.
+Nothing is erased until the new geometry is placed, and the whole run is
+one `U`.
+
+`STOCKCOVER` measures everything a stock DWG contains, so a stock file
+is expected to hold the cover geometry and nothing else - no border, no
+title block, no notes parked off to one side.
 
 ## Releases (`releases/`)
 
@@ -128,6 +151,7 @@ python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
 python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
+python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter

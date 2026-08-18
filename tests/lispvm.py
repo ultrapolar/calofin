@@ -180,7 +180,8 @@ class VM:
         self.sysvars = {
             'CMDECHO': 1, 'OSMODE': 4133, 'CLAYER': '0', 'LUNITS': 2,
             'LTSCALE': 1.0, 'UNDOCTL': 5, 'MIRRTEXT': 1,
-            'DIMSTYLE': 'STANDARD',
+            'DIMSTYLE': 'STANDARD', 'INSUNITS': 1, 'ATTREQ': 1,
+            'ATTDIA': 0, 'CMDACTIVE': 0,
         }
         self.tables = {'LAYER': set(), 'LTYPE': {'CONTINUOUS'},
                        'DIMSTYLE': {'STANDARD'}}
@@ -361,9 +362,13 @@ class VM:
         return r
 
     def sf_defun(self, a):
+        # A defun assigns the symbol like any other, so a name the
+        # enclosing defun localised (the (defun *error* ...) idiom, and
+        # defun-local helpers alongside it) lands in that frame and goes
+        # away with it, instead of leaking into the global namespace.
         name = a[0]
         params, locals_ = split_params(a[1])
-        self.globals[name] = ('defun', params, locals_, a[2:])
+        self.set(name, ('defun', params, locals_, a[2:]))
         return name
 
     # ---------------- program entry
