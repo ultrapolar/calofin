@@ -895,22 +895,48 @@ def normie_corner_mode(base, side, width, depths, corner=(0.0, 0.0)):
 
 
 def normie_u_mode(arm1, arm2, base, depths):
-    """A U: treads parallel to the base, trimmed to the arms."""
+    """A U: the BASE is the wall the steps come off.
+
+    The run starts on the base and marches out toward the open end,
+    treads parallel to the base and trimmed to the arms.  ARM1[0] and
+    ARM2[0] are the free ends.
+    """
     u = unit(vec(*base))
     mouth = mid2(arm1[0], arm2[0])
     base_mid = mid2(*base)
     pd = perp90(u)
-    direction = unit(scl(pd, 1.0 if dot(pd, vec(mouth, base_mid)) > 0 else -1.0))
-    prev, out, stopped = mouth, [], False
+    direction = unit(scl(pd, 1.0 if dot(pd, vec(base_mid, mouth)) > 0 else -1.0))
+    prev, out, stopped = base_mid, [], False
     for depth in depths:
         p = add(prev, scl(direction, depth))
-        if dot(vec(p, base_mid), direction) < 0.0:   # past the base of the U
+        # out past BOTH free ends: the U is used up
+        if (dot(vec(p, arm1[0]), direction) < 0.0
+                and dot(vec(p, arm2[0]), direction) < 0.0):
             stopped = True
             break
         out.append((inters(p, add(p, u), *arm1),
                     inters(p, add(p, u), *arm2), p))
         prev = p
     return u, direction, out, stopped
+
+
+def u_back_corner(base, arm, kind, off):
+    """ns-ucorner: the back corner where ARM meets the base of a U.
+
+    Returns (on_base, on_arm[, centre]) - a diagonal joins the two
+    tangent points, a fillet arc of radius OFF is tangent at them.  The
+    corner is cut INTO the U, so both points sit inboard of the square
+    corner they replace.
+    """
+    def to_arm(q):
+        return min(dist(q, arm[0]), dist(q, arm[1]))
+    b1, b2 = (base if to_arm(base[0]) < to_arm(base[1]) else base[::-1])
+    far = arm[0] if dist(arm[0], b1) > dist(arm[1], b1) else arm[1]
+    ub, ua = unit(vec(b1, b2)), unit(vec(b1, far))
+    t1, t2 = add(b1, scl(ub, off)), add(b1, scl(ua, off))
+    if kind == "Rounded":
+        return t1, t2, add(t1, scl(ua, off))
+    return t1, t2
 
 
 def test_normie_line_mode_is_centred_and_constant():
@@ -955,7 +981,7 @@ def test_normie_u_mode_trims_to_the_arms():
     arm2 = ((100.0, 200.0), (70.0, 0.0))
     base = ((-70.0, 0.0), (70.0, 0.0))
     u, direction, steps, stopped = normie_u_mode(arm1, arm2, base, [40.0] * 6)
-    assert stopped, "must stop once a tread would fall past the base"
+    assert stopped, "must stop once a tread would fall past the open end"
     assert len(steps) == 5
     widths = []
     for e1, e2, _ in steps:
@@ -963,8 +989,55 @@ def test_normie_u_mode_trims_to_the_arms():
         assert ptline(e2, *arm2) < 1e-9, "right end lies on the right arm"
         assert abs(abs(dot(unit(vec(e1, e2)), u)) - 1.0) < 1e-12
         widths.append(dist(e1, e2))
-    # converging arms narrow the treads, and no width is asked for
-    assert all(b < a for a, b in zip(widths, widths[1:])), widths
+    # the run marches out from the base, so splaying arms widen the treads
+    assert all(b > a for a, b in zip(widths, widths[1:])), widths
+
+
+def test_normie_u_mode_starts_on_the_base_not_the_mouth():
+    """The base of the U is the wall - step 1 sits one depth off it.
+
+    Regression: the run used to start at the open end of the U and march
+    back toward the base, which put the first tread at the wrong end.
+    """
+    arm1 = ((-80.0, 150.0), (-80.0, 0.0))
+    arm2 = ((80.0, 260.0), (80.0, 0.0))          # arms of unequal length
+    base = ((-80.0, 0.0), (80.0, 0.0))
+    _, direction, steps, _ = normie_u_mode(arm1, arm2, base, (12.0, 12.0, 14.0))
+    assert direction == (0.0, 1.0), "the run heads from the base outward"
+    base_mid = mid2(*base)
+    offsets = [dot(vec(base_mid, p), direction) for _, _, p in steps]
+    assert [round(o, 9) for o in offsets] == [12.0, 24.0, 38.0], offsets
+
+
+def test_normie_u_back_corner_is_cut_into_the_corner():
+    """A diagonal back corner sits inboard of the square corner it replaces."""
+    arm = ((-80.0, 150.0), (-80.0, 0.0))
+    base = ((-80.0, 0.0), (80.0, 0.0))
+    off = 9.0
+    on_base, on_arm = u_back_corner(base, arm, "Diagonal", off)
+    assert on_base == (-80.0 + off, 0.0), on_base       # in along the base
+    assert on_arm == (-80.0, off), on_arm               # out along the arm
+    assert abs(dist(on_base, on_arm) - off * ROOT2) < 1e-9, "45 degree cut"
+    # a tread at depth d < off trims to the diagonal, (off - d) inboard
+    for depth in (0.0, 3.0, 6.0, 9.0):
+        hit = inters((0.0, depth), (1.0, depth), on_base, on_arm)
+        assert abs(hit[0] - (-80.0 + off - depth)) < 1e-9, hit
+
+
+def test_normie_u_back_corner_fillet_is_tangent_to_both_legs():
+    arm = ((80.0, 150.0), (80.0, 0.0))
+    base = ((-80.0, 0.0), (80.0, 0.0))
+    rad = 12.0
+    on_base, on_arm, centre = u_back_corner(base, arm, "Rounded", rad)
+    assert abs(dist(centre, on_base) - rad) < 1e-9
+    assert abs(dist(centre, on_arm) - rad) < 1e-9
+    assert abs(centre[1] - rad) < 1e-9, "one radius off the base"
+    assert abs(abs(centre[0] - 80.0) - rad) < 1e-9, "one radius off the arm"
+    # the arc stays inboard of the square corner at every depth it covers
+    for depth in (0.0, 4.0, 8.0, 12.0):
+        half = math.sqrt(max(rad * rad - (depth - rad) ** 2, 0.0))
+        x = centre[0] + half
+        assert x <= 80.0 + 1e-9 and x >= centre[0] - 1e-9, x
 
 
 def test_normie_u_mode_handles_parallel_arms():
@@ -981,12 +1054,12 @@ ROOT2 = math.sqrt(2.0)
 
 
 def recess_corner(e, wdir, direction, kind, size):
-    """ns-side: the two points the recess corner runs between.
+    """ns-side: the two points a back corner runs between.
 
-    E is where the side of the pocket meets the wall, WDIR is the way the
+    E is where the side of the run meets the wall, WDIR is the way the
     wall carries on, DIRECTION is the way the run heads.  Returns
     (on_wall, on_side) - a diagonal joins them, a fillet arc is tangent at
-    them, and a square corner has both at E.
+    them, and a square (90 degree) corner has both at E.
     """
     off = size if kind in ("Diagonal", "Rounded") else 0.0
     return add(e, scl(wdir, off)), add(e, scl(direction, off))
