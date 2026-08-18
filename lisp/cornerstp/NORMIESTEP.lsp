@@ -99,7 +99,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.4") ; printed on load and at command start so a
+(setq *ns-version* "v1.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -777,15 +777,12 @@
         (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
                        "\" is missing or not drawable - using the"
                        " current layer.")))))
-  ;; where the depth chain sits, clear of the treads
+  ;; The depth chain runs just off the run's axis, the way the corner
+  ;; and hemisphere routines (and the shop's own example drawings) do -
+  ;; NOT outside the whole run, which would drag every chain dim's
+  ;; extension lines across the entire step field.
   (setq offd   (* 2.0 txth)
-        dimoff (cond
-                 ((= mode "LINE")   (ns-scl u (+ (* 0.5 wid) offd)))
-                 ((= mode "CORNER") (ns-scl u (+ wid offd)))
-                 (T (ns-scl u (+ (* 0.5 (max (distance f1 f2)
-                                             (distance (car base)
-                                                       (cadr base))))
-                                 offd)))))
+        dimoff (ns-scl u offd))
 
   ;; ---- 5. tread depths, one per step -----------------------------------
   (command "_.UNDO" "_Begin")
