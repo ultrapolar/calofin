@@ -54,7 +54,7 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
 | `DCE`, `DIMCONTEND` | `lisp/dim_continue/` | Chains `DIMCONTINUE` from a seed dimension out to every remaining feature point |
 | `AUTODIM`, `FLOORDIM`, `STAIRDIM`, `AUTODIMSIDEPOV` | `lisp/autodim/` | Auto-dimensions a highlighted plan, then its stairs |
-| `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Dimensions every highlighted line end to end - `CROSS DIMENSIONS` style, `DIMENSION` layer, dimension line on the line |
+| `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, source line erased |
 | `TYDRN` | `lisp/tydrn/` | Drawing cleanup: text style/height, pool-point elevations, and more in one pass |
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |

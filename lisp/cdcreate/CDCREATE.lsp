@@ -14,10 +14,15 @@
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
 ;;;       same convention POOL uses for the cross dims it draws.
+;;;    4. The line each dimension was made from is erased, so the tie
+;;;       measurement is left as a dimension and nothing else.  Only
+;;;       lines that really did get a dimension are erased, and the
+;;;       report says how many went and off which layers (they are
+;;;       normally POOL or POINTS).  Set cdc:*erase* to nil to keep
+;;;       them.
 ;;;
-;;;  The source lines are left alone: a cross dim tie normally stays in
-;;;  the drawing underneath its dimension.  Erase them yourself if the
-;;;  lines were only construction geometry.
+;;;  The whole run is one undo group: a single U puts the lines back
+;;;  and takes the dimensions away.
 ;;;
 ;;;  Usage
 ;;;    Command: CDCREATE
@@ -29,6 +34,7 @@
 ;;;    cdc:*layer*   layer to create dims on  ("DIMENSION")
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
+;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -54,6 +60,7 @@
 (setq cdc:*style*  "CROSS DIMENSIONS")
 (setq cdc:*layer*  "DIMENSION")
 (setq cdc:*offset* 0.0)
+(setq cdc:*erase*  t)
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -131,19 +138,29 @@
       (entupd en)
       t)))
 
+;; "POOL, POINTS" from a list of layer names
+(defun cdc:names (lst / out)
+  (foreach n lst
+    (setq out (if out (strcat out ", " n) n)))
+  (if out out ""))
+
 ;;; -------------------- the command --------------------------------
 
 (defun c:CDCREATE ( / *error* olderr oce ocl oos odim
                       ss i en ed typ ends pairs skipped plines
-                      havestyle pre new made p1 p2 )
+                      havestyle grouped pre new made gone lays p1 p2 )
 
-  ;; -- restore drawing state on error / Esc
+  ;; -- restore drawing state on error / Esc.  A dimension command may
+  ;;    still be open, so talk to AutoCAD through command-s -- and close
+  ;;    the undo group, or the next U would swallow the user's own work
   (setq olderr *error*)
   (defun *error* (m)
-    (cdc:restyle odim)
+    (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
     (if ocl (setvar "CLAYER"  ocl))
     (if oos (setvar "OSMODE"  oos))
     (if oce (setvar "CMDECHO" oce))
+    (if grouped (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
       (princ (strcat "\n** Error: " m)))
@@ -182,7 +199,7 @@
                    p1   (car  ends)
                    p2   (cadr ends))
              (if (> (distance p1 p2) 1e-9)
-               (setq pairs (cons (list p1 p2) pairs))
+               (setq pairs (cons (list en p1 p2 (cdr (assoc 8 ed))) pairs))
                (setq skipped (1+ skipped)))))
         (setq i (1+ i)))
       (setq pairs (reverse pairs))
@@ -190,9 +207,11 @@
       (if (null pairs)
         (princ "\nNo lines in the selection -- nothing to dimension.")
         (progn
-          ;; -- 3. layer and style
+          ;; -- 3. layer and style, all of it inside one undo group
           (setvar "CMDECHO" 0)
           (setvar "OSMODE"  0)
+          (command "_.UNDO" "_Begin")
+          (setq grouped t)
           (cdc:setlayer cdc:*layer*)
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
@@ -202,11 +221,13 @@
                            "\" instead.  Create the style (or start"
                            " from the standard template) and re-run.")))
 
-          ;; -- 4. one aligned dim per line, on the line
-          (setq made 0)
+          ;; -- 4. one aligned dim per line, on the line, and then the
+          ;;       line itself goes: the tie is the dimension now
+          (setq made 0 gone 0 lays nil)
           (foreach pr pairs
-            (setq p1  (car  pr)
-                  p2  (cadr pr)
+            (setq en  (car    pr)
+                  p1  (cadr   pr)
+                  p2  (caddr  pr)
                   pre (entlast))
             (command "_.DIMALIGNED"
                      "_non" (trans p1 0 1)
@@ -214,14 +235,25 @@
                      "_non" (trans (cdc:loc p1 p2 cdc:*offset*) 0 1))
             (setq new (entlast))
             (if (and new (not (eq new pre)))
-              (progn (cdc:fixdim new havestyle)
-                     (setq made (1+ made)))))
+              (progn
+                (cdc:fixdim new havestyle)
+                (setq made (1+ made))
+                ;; only a line that really did get its dimension is
+                ;; erased -- a dim AutoCAD refused to draw leaves its
+                ;; line in the drawing to be dealt with
+                (if (and cdc:*erase* (entget en))
+                  (progn (entdel en)
+                         (setq gone (1+ gone))
+                         (if (not (member (cadddr pr) lays))
+                           (setq lays (cons (cadddr pr) lays))))))))
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
           (setvar "CLAYER"  ocl)
           (setvar "OSMODE"  oos)
           (setvar "CMDECHO" oce)
+          (command "_.UNDO" "_End")
+          (setq grouped nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"
                          (if (= made 1) "" "s") " created on layer "
@@ -229,6 +261,11 @@
                          (if havestyle
                            (strcat " in style " cdc:*style* ".")
                            " (current style).")))
+          (if (> gone 0)
+            (princ (strcat "\n" (itoa gone) " dimensioned line"
+                           (if (= gone 1) "" "s") " erased (layer"
+                           (if (= 1 (length lays)) " " "s ")
+                           (cdc:names (reverse lays)) ").")))
           (if (> skipped 0)
             (princ (strcat "\n" (itoa skipped)
                            " selected object(s) were not lines and were"

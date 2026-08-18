@@ -18,13 +18,16 @@ end, in the **`CROSS DIMENSIONS`** dimension style, on the
    and on the `DIMENSION` layer, **ByLayer**: any per-entity colour,
    linetype or lineweight override the command left behind is stripped,
    so the dims look exactly like the cross dims `POOL` draws.
-4. The lines themselves are left alone — a cross-dim tie normally stays
-   in the drawing under its dimension. Erase them yourself if they were
-   only construction geometry.
+4. **The line each dimension was made from is erased** — the tie
+   measurement is left as a dimension and nothing else. Only lines that
+   really did get a dimension go; the report says how many, and off
+   which layers (normally `POOL` or `POINTS`). Set `cdc:*erase*` to
+   `nil` to keep them.
 
-The dimension style, current layer, `CMDECHO` and `OSMODE` in force
-before the command are restored afterwards, whether the run finishes,
-errors, or is cancelled with Esc.
+The whole run is one undo group, so a single `U` puts the lines back and
+takes the dimensions away. The dimension style, current layer,
+`CMDECHO` and `OSMODE` in force before the command are restored
+afterwards, whether the run finishes, errors, or is cancelled with Esc.
 
 ## Install & run
 
@@ -48,6 +51,7 @@ different names:
 | `cdc:*style*` | `"CROSS DIMENSIONS"` | Dimension style the new dims get |
 | `cdc:*layer*` | `"DIMENSION"` | Layer the new dims are created on |
 | `cdc:*offset*` | `0.0` | How far the dimension line is pushed perpendicular to the line it measures, in drawing units. `0.0` puts it on the line |
+| `cdc:*erase*` | `T` | Erase each line once its dimension is drawn. `nil` keeps the lines |
 
 ## Notes & limitations
 
@@ -55,7 +59,12 @@ different names:
   selection — polylines, arcs, text, blocks — is counted and reported,
   not dimensioned. Explode a polyline first if its segments need cross
   dims.
-* Zero-length lines are skipped; there is nothing to measure.
+* Erasing the line cannot disturb its dimension: the extension-line
+  points are picked as plain coordinates (`_non`, with osnaps off), so
+  the dimension is not associated with the line and keeps its
+  measurement once the line is gone.
+* Zero-length lines are skipped; there is nothing to measure — and a
+  skipped line is never erased, only a line that got its dimension is.
 * The `DIMENSION` layer is **created** when the drawing lacks it
   (colour 7, continuous).
 * A missing `CROSS DIMENSIONS` style is **not** invented. The dims are
@@ -75,4 +84,5 @@ different names:
 repo's AutoLISP VM (`tests/lispvm.py`) and drives `c:CDCREATE` with
 scripted selections — pickfirst and prompted, mixed selections, an empty
 drawing, a drawing with no `CROSS DIMENSIONS` style, a hostile
-`DIMLAYER`, and a non-zero offset.
+`DIMLAYER`, a non-zero offset, ties drawn on `POOL` and `POINTS`, and
+`cdc:*erase*` switched off.

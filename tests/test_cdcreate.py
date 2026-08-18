@@ -75,6 +75,18 @@ def dimcalls(vm):
     return [c for c in vm.commands if c and c[0] == '_.DIMALIGNED']
 
 
+def alive(vm, etype):
+    """Entities of ETYPE still in the drawing (not erased)."""
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        for g in vm.entdata[e]:
+            if isinstance(g, Dot) and g.a == 0 and g.b == etype:
+                out.append(e)
+    return out
+
+
 def near(a, b, tol=1e-9):
     return all(abs(x - y) <= tol for x, y in zip(a, b))
 
@@ -103,13 +115,21 @@ assert all(d[3] == "CROSS DIMENSIONS" for d in made), [d[3] for d in made]
 assert all(62 not in d and 6 not in d and 370 not in d for d in made), \
     "cross dims are ByLayer -- no per-entity colour/linetype/lineweight"
 assert "DIMENSION" in vm.tables['LAYER'], "DIMENSION layer created"
+assert alive(vm, 'LINE') == [], "every dimensioned line is erased"
+assert all(e in vm.deleted for e in ls)
+undo = [c for c in vm.commands if c and c[0] == '_.UNDO']
+assert [c[1] for c in undo] == ["_Begin", "_End"], undo
+assert vm.commands.index(['_.UNDO', '_Begin']) < \
+    vm.commands.index(dimcalls(vm)[0]), "undo group opens before the work"
+assert vm.commands[-1] == ['_.UNDO', '_End'], "and closes after it"
 
 # state restored
 assert vm.sysvars['CLAYER'] == "POOL", vm.sysvars['CLAYER']
 assert vm.sysvars['DIMSTYLE'] == "STANDARD", vm.sysvars['DIMSTYLE']
 assert vm.sysvars['CMDECHO'] == 1 and vm.sysvars['OSMODE'] == 4133
 assert vm.dimstyle_log == ["CROSS DIMENSIONS", "STANDARD"], vm.dimstyle_log
-print("   3 dims, DIMENSION layer, CROSS DIMENSIONS style, state restored")
+print("   3 dims, DIMENSION layer, CROSS DIMENSIONS style, lines gone,")
+print("   state restored, whole run in one undo group")
 
 
 print("== C2. a pickfirst selection is used as-is, no second prompt ==")
@@ -131,7 +151,11 @@ sel = [line(vm, (0, 0, 0), (4, 0, 0)),
 run(vm, [None, sel], "C3")
 assert len(dimcalls(vm)) == 1, dimcalls(vm)
 assert len(dims(vm)) == 1
-print("   1 dim from 4 selected objects; polyline, text, zero-length skipped")
+assert sel[0] in vm.deleted, "the dimensioned line goes"
+assert not any(e in vm.deleted for e in sel[1:]), \
+    "the polyline, the text and the zero-length line all stay"
+print("   1 dim from 4 selected objects; polyline, text, zero-length skipped,")
+print("   and only the line that got a dimension was erased")
 
 
 print("== C4. no lines at all, and nothing highlighted ==")
@@ -144,6 +168,8 @@ vm = newvm()
 run(vm, [None, None], "C4-empty")
 assert dimcalls(vm) == [] and dims(vm) == []
 assert vm.dimstyle_log == [], "no style switching when there is nothing to do"
+assert not any(c and c[0] == '_.UNDO' for c in vm.commands), \
+    "no undo group opened for a run with nothing to do"
 assert vm.sysvars['CLAYER'] == "POOL"
 assert "DIMENSION" not in vm.tables['LAYER'], \
     "an empty run does not litter the drawing with a layer"
@@ -184,7 +210,28 @@ assert near(loc, [5.0, 2.0, 0.0]), loc
 print("   offset 2.0 puts the horizontal dim line 2.0 above the line")
 
 
-print("== C8. CDCREATEVER prints the version ==")
+print("== C8. cdc:*erase* nil keeps the lines ==")
+vm = newvm()
+vm.globals[Sym('cdc:*erase*')] = None       # nil
+ls = [line(vm, (0, 0, 0), (3, 4, 0), layer="POINTS")]
+run(vm, [None, ls], "C8")
+assert len(dims(vm)) == 1
+assert alive(vm, 'LINE') == ls, "the line stays when erasing is switched off"
+print("   dim drawn, line left in place")
+
+
+print("== C9. lines come off POOL / POINTS, dims land on DIMENSION ==")
+vm = newvm()
+ls = [line(vm, (0, 0, 0), (10, 6, 0), layer="POOL"),
+      line(vm, (10, 0, 0), (0, 6, 0), layer="POINTS")]
+run(vm, [None, ls], "C9")
+assert [d[8] for d in dims(vm)] == ["DIMENSION", "DIMENSION"]
+assert all(e in vm.deleted for e in ls), "both source lines erased"
+assert alive(vm, 'LINE') == []
+print("   both ties dimensioned onto DIMENSION, both source lines erased")
+
+
+print("== C10. CDCREATEVER prints the version ==")
 vm = newvm()
 vm.run('c:CDCREATEVER', [])
 print("   ok")
