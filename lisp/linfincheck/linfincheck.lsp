@@ -135,7 +135,17 @@
 ;;;         block. A compound height ( 3'-4'' ) is still one value,
 ;;;         not several.
 ;;;
-;;;  6. LINER MATERIAL check. The selection must hold a block named
+;;;  6. TECH TITLE DATE. The "Date" attribute of the Tech Title block
+;;;     (same block as WallHt; tune *lfc-date-tag*) is checked whenever
+;;;     a Tech Title exists, steps or not: it must read a real calendar
+;;;     date in MM/DD/YYYY form — two digits, slash, two digits, slash,
+;;;     four digits, month 01-12, and a day valid for that month (leap
+;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
+;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
+;;;     "02/30" is reported in red with what is wrong; a clean date
+;;;     ("05/01/2024") is a quiet OK.
+;;;
+;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
 ;;;     with Step". Missing -> reported. Each one found is scanned
 ;;;     for the standalone words "NOT" and "ERROR" in its attributes
@@ -159,7 +169,7 @@
 ;;;         them: no liner block carrying a "Step" section (the
 ;;;         "Liner Material with Step" variant) is reported.
 ;;;
-;;;  7. TITLE BLOCK BORDER. The outer drawing on layer "border"
+;;;  8. TITLE BLOCK BORDER. The outer drawing on layer "border"
 ;;;     (tune *lfc-border-layer*) must be the nominal sheet —
 ;;;     58'-8" wide by 45'-3 5/8" tall — or a scaled-UP multiple of
 ;;;     it. Anything smaller is reported in red as
@@ -171,7 +181,7 @@
 ;;;     measure the same. The selection is used when it holds the
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
-;;;  8. A LINFINCHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;  9. A LINFINCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer LINFINCHECK-REPORT listing every dimension —
 ;;;     with its measured distance (in the drawing's units; angular
 ;;;     dims show their angle) — every arc, every overlapping line
@@ -236,6 +246,7 @@
 (setq *lfc-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
 (setq *lfc-title-block*  "Tech Title") ; title block holding the wall height (spaces optional)
 (setq *lfc-wallht-tag*   "WallHt")     ; attribute tag carrying the wall height
+(setq *lfc-date-tag*     "Date")       ; attribute tag carrying the drawing date
 (setq *lfc-height-tol*   0.25)    ; steps height vs WallHt: allowed difference (units)
 (setq *lfc-min-wallht*   1.0)     ; a WallHt below this is NONSENSICAL (0'' walls do not exist)
 (setq *lfc-ask-phrase*   "Wall height") ; the question text expected when WallHt is "?"
@@ -661,7 +672,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1464,6 +1475,47 @@
   (wcmatch (strcat " " (lfc:norm-text (lfc:after-eq s)) " ")
            "* VARIES *"))
 
+(defun lfc:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun lfc:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29) ; leap Feb
+    (t 28)))
+
+(defun lfc:date-verdict (raw / s mo dd yr)
+  ;; nil when raw is a clean MM/DD/YYYY calendar date; otherwise a
+  ;; short string saying what is wrong with it
+  (setq s (vl-string-trim " \t" (lfc:after-eq raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (lfc:all-digits-p (substr s 1 2)))
+         (not (lfc:all-digits-p (substr s 4 2)))
+         (not (lfc:all-digits-p (substr s 7 4))))
+     (strcat "'" raw "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" raw "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (lfc:days-in-month mo yr)))
+        (strcat "'" raw "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       (t nil)))))
+
 ;; --- dimension review ----------------------------------------------
 
 (defun lfc:dim-style (ent / s)
@@ -1923,6 +1975,7 @@
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
+                      datesum dateraw datebad
                       svbb hdim dimht htval htbad
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
@@ -2523,6 +2576,22 @@
                      (if hdim ", dimension marked red" ", look at it")))))
         (if htsum (princ (strcat "\n  Wall height: " htsum)))
 
+        ;; --- Tech Title Date ------------------------------------------
+        ;; runs whenever a Tech Title exists, independent of steps
+        (setq datesum nil dateraw nil datebad nil)
+        (if tins
+          (progn
+            (setq dateraw (lfc:ins-attrib-deep tins *lfc-date-tag*))
+            (setq datebad
+              (if dateraw
+                (lfc:date-verdict dateraw)
+                "is missing - expected MM/DD/YYYY"))
+            (setq datesum
+              (if datebad
+                (strcat *lfc-date-tag* " " datebad)
+                (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
+            (princ (strcat "\n  Date: " datesum))))
+
         ;; --- Liner Material check -----------------------------------
         (setq liners      (vl-remove-if-not
                             '(lambda (b) (lfc:ins-matches b "Liner Material"))
@@ -2689,7 +2758,7 @@
         (setq nlin 3.0)                          ; title, legend, separator
         (foreach l lines
           (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
-        (setq nlin (+ nlin (* 7.0 *lfc-green-scale*)))   ; the header dashboard
+        (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))   ; the header dashboard
         (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
           (progn
             (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -2729,6 +2798,9 @@
         (if htsum
           (setq hdr (append hdr (list (cons (strcat "Wall height: " htsum)
                                             (lfc:attn-p htsum))))))
+        (if datesum
+          (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
+                                            (lfc:attn-p datesum))))))
         (setq txt (strcat "LINFINCHECK REPORT - " (lfc:datestr)
                           "  [LINFINCHECK " *lfc-version* "]"
                           "\\P"
@@ -2779,6 +2851,7 @@
                          "")
                        "\nSteps: " stepsum
                        (if htsum (strcat "\nWall height: " htsum) "")
+                       (if datesum (strcat "\nDate: " datesum) "")
                        "\nLiner Material: " linersum
                        "\nTitle block border: " bordsum
                        "\nReport placed on the right side of the drawing (layer "
@@ -2802,6 +2875,7 @@
                      wallraw wallvals wallvar wallmany wallzero wallask
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
+                     datesum dateraw datebad
                      nd ndbad na nabad h m ins txt nlin ref hdr l badtags
                      bordbb bordsum attundec
                      minx miny maxx maxy p13 p14 near s b w)
@@ -3046,6 +3120,20 @@
              (t (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
                         "' (" (rtos wallht) ") - MISMATCH"))))
 
+     ;; --- Tech Title Date (read-only twin of LINFINCHECK's check)
+     (setq datesum nil dateraw nil datebad nil)
+     (if tins
+       (progn
+         (setq dateraw (lfc:ins-attrib-deep tins *lfc-date-tag*))
+         (setq datebad
+           (if dateraw
+             (lfc:date-verdict dateraw)
+             "is missing - expected MM/DD/YYYY"))
+         (setq datesum
+           (if datebad
+             (strcat *lfc-date-tag* " " datebad)
+             (strcat *lfc-date-tag* " = '" dateraw "' - OK")))))
+
      ;; --- liner
      (setq liners (vl-remove-if-not
                     '(lambda (x) (lfc:ins-matches x "Liner Material")) blks)
@@ -3113,10 +3201,13 @@
      (if htsum
        (setq hdr (append hdr (list (cons (strcat "Wall height: " htsum)
                                          (lfc:attn-p htsum))))))
+     (if datesum
+       (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
+                                         (lfc:attn-p datesum))))))
      (setq nlin 3.0)
      (foreach l lines
        (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
-     (setq nlin (+ nlin (* 7.0 *lfc-green-scale*)))
+     (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))
      (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
        (progn
          (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
@@ -3149,6 +3240,7 @@
                     "\nLiner Material: " linersum
                     "\nTitle block border: " bordsum
                     (if htsum (strcat "\nWall height: " htsum) "")
+                    (if datesum (strcat "\nDate: " datesum) "")
                     "\nReport written on layer " *lfc-report-layer*
                     "; nothing else was changed."))))
   (princ))
@@ -3225,7 +3317,14 @@
     "     Varies              -> fine, nothing to compare"
     "   A side-view height dim that disagrees is marked RED on its own."
     ""
-    "6. LINER MATERIAL"
+    "6. DATE (Tech Title)"
+    (strcat "   The '" *lfc-title-block* "' block's " *lfc-date-tag*
+            " must read a real calendar")
+    "     date as MM/DD/YYYY (e.g. 05/01/2024). Missing, blank, the wrong"
+    "     format, or an out-of-range month/day is reported in red with"
+    "     what is wrong; a clean date is a quiet OK."
+    ""
+    "7. LINER MATERIAL"
     "   A 'Liner Material' / 'Liner Material with Step' block must be"
     "     present."
     (strcat "   A pattern field reading " (lfc:join *lfc-badwords* " or ")
@@ -3235,7 +3334,7 @@
     "   A Fiberglass Step in the drawing -> the liner must NOT carry a"
     "     Step. Otherwise steps drawn -> the liner MUST have its Step."
     ""
-    "7. TITLE BLOCK BORDER"
+    "8. TITLE BLOCK BORDER"
     (strcat "   The outer drawing on layer '" *lfc-border-layer*
             "' must be " (rtos *lfc-border-w*) " x "
             (rtos *lfc-border-h*))
@@ -3243,7 +3342,7 @@
     "     'Title block should not be SCALED DOWN for Liners'."
     "     Uneven -> STRETCHED. Nothing there -> NO BORDER."
     ""
-    "8. THE REPORT"
+    "9. THE REPORT"
     "   An MTEXT sheet to the right of the drawing, sized to scale with"
     (strcat "     it. Problems in RED at full size; all-clear in green at "
             (rtos (* 100.0 *lfc-green-scale*) 2 0) "%.")

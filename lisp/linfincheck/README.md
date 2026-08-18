@@ -40,11 +40,15 @@ for exactly those three checks, standalone.
    (fine only with a "Wall height" note asking the customer), and
    flags a lone `0''` as nonsensical. A side-view height dimension
    that disagrees is marked red automatically.
-6. **Liner Material** — a pattern field reading "Not Supplied" or
+6. **Date** — the `Tech Title` block's `Date` attribute is read
+   whether or not steps are drawn, and must be a real calendar date as
+   `MM/DD/YYYY` (e.g. `05/01/2024`). Missing, blank, the wrong format,
+   or an out-of-range month/day is flagged in red with what's wrong.
+7. **Liner Material** — a pattern field reading "Not Supplied" or
    `#ERROR` is wiped back to blank (the label stays, the value goes);
    a Fiberglass Step in the drawing means the liner must *not* carry
    a Step, otherwise drawn steps mean it must.
-7. **Title block border** — the outer drawing on the `border` layer
+8. **Title block border** — the outer drawing on the `border` layer
    must be 58'-8" × 45'-3 5/8" or a scaled-**up** multiple; smaller is
    flagged as "should not be SCALED DOWN for Liners".
 
