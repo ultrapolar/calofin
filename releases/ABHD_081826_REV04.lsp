@@ -67,6 +67,16 @@
 ;;; fit as a straight LINE between exactly those two survey points -
 ;;; arcs never swallow or cross a declared wall.
 ;;;
+;;; HELD POINTS: the user may also declare points that must be held
+;;; ABSOLUTELY - control shots, tie-ins, anything surveyed as an
+;;; exact position.  A held point is never buried inside a span, so
+;;; every span ends ON it and the fitted line passes through it
+;;; exactly, in every candidate; it costs nothing from the miss
+;;; allowance and the tangency window still applies at its joint (it
+;;; is not a corner).  In guided mode the drawn shape wins, as with
+;;; declared walls - held points steer the points-built fit - and the
+;;; report flags any held point the kept fit did not land on.
+;;;
 ;;; THE CURVE CAP: the command also asks for a maximum number of
 ;;; curves ("None" = unlimited).  When a fit needs more, the whole
 ;;; loop is refitted with a progressively relaxed tolerance until the
@@ -141,7 +151,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081726 REV03") ; announced on load.  The
+(setq *PF-VERSION*      "081826 REV04") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -1123,14 +1133,16 @@
           (setq i1 i2 fwd (- n fwd)))
         (if (<= (+ i1 fwd) n)
           (setq walls (cons (list i1 (+ i1 fwd)) walls))))))
-  ;; indices ordinary spans may not swallow: sharp corners plus every
-  ;; index a declared wall covers
+  ;; indices ordinary spans may not swallow: sharp corners, every
+  ;; index a declared wall covers, and every HELD point - a span may
+  ;; end on a held point (landing on it exactly) but never bury it
   (setq nogrow nil i 0)
   (repeat n
     (setq f (nth i sharp))
     (foreach w walls
       (if (and (>= i (car w)) (<= i (cadr w))) (setq f T))
       (if (and (= (cadr w) n) (= i 0)) (setq f T)))
+    (if (pf:memb (nth i tour) pf-holds) (setq f T))
     (setq nogrow (cons f nogrow)
           i      (1+ i)))
   (setq nogrow  (reverse nogrow)
@@ -1556,6 +1568,17 @@
                   (cons 10 (list (car p) (cadr p) 0.0))
                   (cons 40 *PF-MISS-RADIUS*))))
 
+;; Draw the marker for a user-declared HELD point: a dashed ring at
+;; half the miss-ring radius, so it reads apart from corner rings.
+(defun pf:draw-hold-marker (p)
+  (pf:ensure-dashed)
+  (pf:ensure-layer *PF-WALL-LAYER* 8)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                  (cons 8 *PF-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car p) (cadr p) 0.0))
+                  (cons 40 (* 0.5 *PF-MISS-RADIUS*)))))
+
 ;; Draw the dashed marker for a user-declared straight wall.
 (defun pf:draw-wall-marker (p1 p2)
   (pf:ensure-dashed)
@@ -1667,7 +1690,7 @@
                                                 q s s2 d dmin worst sum
                                                 sumo no nice onpt inner
                                                 ns i te ts kk mk nk
-                                                pf-on-eps)
+                                                hw hq pf-on-eps)
   ;; report against the same on-the-shape threshold the fit used
   (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol)))
   (progn
@@ -1749,6 +1772,26 @@
       (if pf-walls
         (princ (strcat "\n  (" (itoa (length pf-walls))
                        " declared straight wall(s) kept dead straight)")))
+      (if pf-holds
+        (progn
+          ;; every held point must sit ON the kept fit exactly; one
+          ;; that does not means the drawn shape or a declared wall
+          ;; overruled it, and that deserves a loud line of its own
+          (setq hw 0.0)
+          (foreach q pf-holds
+            (setq dmin nil)
+            (foreach s newsegs
+              (setq d (pf:seg-dist q s))
+              (if (or (null dmin) (< d dmin)) (setq dmin d)))
+            (if (> dmin hw) (setq hw dmin hq q)))
+          (if (<= hw *PF-EXACT-EPS*)
+            (princ (strcat "\n  (" (itoa (length pf-holds))
+                           " held point(s) all landed on the line"
+                           " exactly)"))
+            (princ (strcat "\n  WARNING: held Pt." (pf:pt-name hq)
+                           " is off by " (rtos hw 2 4)
+                           " - the drawn shape or a declared wall"
+                           " overruled it.")))))
       (if (and *PF-MAX-ARCS* (> na *PF-MAX-ARCS*))
         (princ (strcat "\n  (the curve cap is " (itoa *PF-MAX-ARCS*)
                        " but " (itoa na) " curves was the fewest"
@@ -3082,21 +3125,69 @@
                    (setq best w bd (pf:dist wp1 w))))
                (setq pf-corners (pf:remove best pf-corners))
                ;; the rings share their look with the omit markers;
-               ;; redraw only the corner rings (spent omit rings go
-               ;; quietly - the omissions themselves already happened)
+               ;; redraw the corner and hold rings (spent omit rings
+               ;; go quietly - the omissions already happened)
                (pf:sweep-marks "CIRCLE")
                (foreach w pf-corners
                  (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w))))
+               (foreach w pf-holds
+                 (pf:temp-add (pf:tag-mine (pf:draw-hold-marker w))))
                (princ (strcat "\n  corner Pt." (pf:pt-name best)
                               " removed")))))))
       (T (setq ans nil)))))
 
+;; Add or remove HELD points the same way.
+(defun pf:edit-holds (dpts / ans wp1 w1 best bd w)
+  (setq ans T)
+  (while ans
+    (initget "Add Remove Keep")
+    (setq ans (getkword (strcat
+                "\n  Held points (" (itoa (length pf-holds))
+                " declared) - [Add/Remove/Keep] <Keep>: ")))
+    (cond
+      ((= ans "Add")
+       (setq pf-phase "picking a held point"
+             wp1      (getpoint "\n  Point to hold exactly: "))
+       (if wp1
+         (progn
+           (setq w1 (pf:snap-break wp1 dpts))
+           (if (pf:memb w1 pf-holds)
+             (princ "\n  (that point is already held)")
+             (progn
+               (setq pf-holds (append pf-holds (list w1)))
+               (pf:temp-add (pf:tag-mine (pf:draw-hold-marker w1)))
+               (princ (strcat "\n  held Pt." (pf:pt-name w1)
+                              " added")))))))
+      ((= ans "Remove")
+       (if (null pf-holds)
+         (princ "\n  (no held points to remove)")
+         (progn
+           (setq pf-phase "removing a held point"
+                 wp1      (getpoint "\n  Pick the held point to release: "))
+           (if wp1
+             (progn
+               (setq wp1 (pf:2d wp1) best nil bd nil)
+               (foreach w pf-holds
+                 (if (or (null bd) (< (pf:dist wp1 w) bd))
+                   (setq best w bd (pf:dist wp1 w))))
+               (setq pf-holds (pf:remove best pf-holds))
+               ;; redraw the rings to match what is left
+               (pf:sweep-marks "CIRCLE")
+               (foreach w pf-corners
+                 (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w))))
+               (foreach w pf-holds
+                 (pf:temp-add (pf:tag-mine (pf:draw-hold-marker w))))
+               (princ (strcat "\n  held Pt." (pf:pt-name best)
+                              " released")))))))
+      (T (setq ans nil)))))
+
 ;; ---- the command -----------------------------------------------------
-(defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs w w1 w2
+(defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
                     ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok stale npt
                     again omits pts2 ent ring pf-omitted
-                    pf-miss-pct pf-walls pf-corners pf-temp pf-ptnames
+                    pf-miss-pct pf-walls pf-corners pf-holds
+                    pf-temp pf-ptnames
                     pf-dim-warned *error* pf-old-err pf-phase)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
@@ -3133,7 +3224,7 @@
   ;; initget 6 refuses zero and negative values - a zero tolerance
   ;; would silently collapse the fit into single-point stubs.
   (setq pf-phase "reading the tolerance")
-  (princ "\n\n  Step 1 of 6 - how far may the fitted line sit from a survey point?")
+  (princ "\n\n  Step 1 of 7 - how far may the fitted line sit from a survey point?")
   (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
   (princ "\n  pick two points in the drawing to measure one.")
   (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
@@ -3142,7 +3233,7 @@
   ;; -- step 2: how many of the points may sit off the line? ---------
   ;; Enter means the standard share; the answer is per run, on purpose.
   (setq pf-phase "reading the miss percentage")
-  (princ "\n\n  Step 2 of 6 - what percent of the points may sit OFF the line")
+  (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
   (princ "\n  (off, but still within the distance above)?")
   (princ (strcat "\n  Press Enter for the standard "
                  (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
@@ -3151,7 +3242,7 @@
 
   ;; -- step 3: optional cap on how many curves the result may use ---
   (setq pf-phase "reading the curve limit")
-  (princ "\n\n  Step 3 of 6 - limit how many curves the result may use?")
+  (princ "\n\n  Step 3 of 7 - limit how many curves the result may use?")
   (princ "\n  Type a whole number, or None for no limit.")
   (pf:ask-cap)
 
@@ -3160,7 +3251,7 @@
   ;; comes out of the fit as a straight LINE between those two survey
   ;; points, no matter what the arcs around it are doing.
   (setq pf-phase "asking about straight lines")
-  (princ "\n\n  Step 4 of 6 - does the pool edge have any dead-straight walls?")
+  (princ "\n\n  Step 4 of 7 - does the pool edge have any dead-straight walls?")
   (princ "\n  If Yes you will pick the two end points of each (snap to the")
   (princ "\n  survey points); a dashed line marks each declared wall.")
   (initget "Yes No")
@@ -3201,7 +3292,7 @@
   ;; site.  A declared point is exempt from the tangency rule: the fit
   ;; breaks there instead of rounding it off.
   (setq pf-phase "asking about sharp corners")
-  (princ "\n\n  Step 5 of 6 - are there any sharp corners the fit must not round off?")
+  (princ "\n\n  Step 5 of 7 - are there any sharp corners the fit must not round off?")
   (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
   (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
   (initget "Yes No")
@@ -3225,8 +3316,38 @@
                        " corner(s) noted - the markers clear themselves"
                        " when the command finishes.")))))
 
-  ;; -- step 6: the selection ----------------------------------------
-  (princ "\n\n  Step 6 of 6 - select the survey points (POINTS layer or ab_pt")
+  ;; -- step 6: any points that must be held absolutely? -------------
+  ;; Control shots and tie-ins are surveyed as exact positions: a held
+  ;; point always ends a span, so the fit passes through it exactly
+  ;; and the miss allowance can never write it off.
+  (setq pf-phase "asking about held points")
+  (princ "\n\n  Step 6 of 7 - any points that must be held ABSOLUTELY?")
+  (princ "\n  A held point can never be fudged: the line passes through it")
+  (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
+  (princ "\n  (snap to the survey points); a small dashed ring marks it.")
+  (initget "Yes No")
+  (setq ans      (getkword "\n  Any held points? [Yes/No] <No>: ")
+        rawholds nil)
+  (if (= ans "Yes")
+    (progn
+      (setq go T)
+      (while go
+        (setq pf-phase "picking a held point"
+              wp1      (getpoint "\n  Point to hold exactly (Enter when done): "))
+        (if wp1
+          (progn
+            (setq wp1      (pf:2d wp1)
+                  rawholds (cons wp1 rawholds))
+            (pf:temp-add (pf:tag-mine (pf:draw-hold-marker wp1))))
+          (setq go nil)))
+      (setq rawholds (reverse rawholds))
+      (if rawholds
+        (princ (strcat "\n  " (itoa (length rawholds))
+                       " held point(s) noted - the markers clear"
+                       " themselves when the command finishes.")))))
+
+  ;; -- step 7: the selection ----------------------------------------
+  (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
   (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
   (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
@@ -3326,6 +3447,18 @@
               (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
             (setq pf-corners (cons w1 pf-corners)))))
       (setq pf-corners (reverse pf-corners))
+      ;; held points snap onto survey points the same way; duplicates
+      ;; collapse to one
+      (setq pf-holds nil)
+      (foreach w rawholds
+        (setq w1 (pf:nearest w dpts))
+        (if w1
+          (progn
+            (if (> (pf:dist w w1) (* 3.0 tol))
+              (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
+            (if (not (pf:memb w1 pf-holds))
+              (setq pf-holds (cons w1 pf-holds))))))
+      (setq pf-holds (reverse pf-holds))
       (if (> (length dpts) 150)
         (princ (strcat "\nABHD: " (itoa (length dpts))
                        " points - ordering and fitting will take a"
@@ -3368,7 +3501,12 @@
             (if pf-walls
               (princ (strcat "\n  (declared straight walls only steer"
                              " the points-built fit; here your drawn"
-                             " straight segments are already kept)")))))
+                             " straight segments are already kept)")))
+            (if pf-holds
+              (princ (strcat "\n  (held points only bind the"
+                             " points-built fit; the drawn shape wins"
+                             " here - the report flags any held point"
+                             " the kept fit missed)")))))
          (if ok
            (progn
              (setq again T)
@@ -3447,7 +3585,16 @@
                        (foreach w pf-corners
                          (if (not (pf:memb w omits))
                            (setq pts2 (cons w pts2))))
-                       (setq pf-corners (reverse pts2))))
+                       (setq pf-corners (reverse pts2)
+                             pts2       nil)
+                       ;; a held point that was just omitted is out of
+                       ;; the fit entirely - nothing left to hold
+                       (foreach w pf-holds
+                         (if (not (pf:memb w omits))
+                           (setq pts2 (cons w pts2))))
+                       (if (< (length pts2) (length pf-holds))
+                         (princ "\n  (an omitted point was held - its hold went with it)"))
+                       (setq pf-holds (reverse pts2))))
                    (if pf-omitted
                      (princ (strcat "\n  " (itoa (length pf-omitted))
                                     " point(s) omitted in total - "
@@ -3463,6 +3610,8 @@
                        (pf:edit-walls dpts)
                        (setq pf-phase "editing sharp corners")
                        (pf:edit-corners dpts)
+                       (setq pf-phase "editing held points")
+                       (pf:edit-holds dpts)
                        (princ "\n\n  New settings - Enter keeps each one as it is.")
                        (setq pf-phase "reading the tolerance"
                              tol      (pf:ask-tol))
@@ -3691,7 +3840,7 @@
   (princ "\n    lines-only connect-the-dots sketch (sets the point order).")
   (princ "\n    With neither, the points are ordered automatically.")
   (pf:tut-pause)
-  (princ "\nTHE SIX QUESTIONS")
+  (princ "\nTHE SEVEN QUESTIONS")
   (princ "\n  1. Max distance a point may sit from the line (2 inch ceiling).")
   (princ "\n  2. Percent of points allowed off the line (Enter = 15, rounded")
   (princ "\n     UP to whole points - the slack that buys longer arcs).")
@@ -3699,7 +3848,10 @@
   (princ "\n  4. Dead-straight walls: pick both ends, dashed marker, comes out")
   (princ "\n     as a straight LINE no arc may swallow or cross.")
   (princ "\n  5. Sharp corners: pick points where tangency is waived.")
-  (princ "\n  6. Select the points (and the POOL guide if you have one).")
+  (princ "\n  6. Held points: pick points the line must pass through EXACTLY -")
+  (princ "\n     never fudged, never spent from the miss allowance; tangency")
+  (princ "\n     still applies at them (they are not corners).")
+  (princ "\n  7. Select the points (and the POOL guide if you have one).")
   (pf:tut-pause)
   (princ "\nWHAT THE FITTER GUARANTEES")
   (princ "\n  * Arc endpoints sit ON survey points; arc middles pass through a")
@@ -3735,9 +3887,9 @@
   (princ "\nREDO")
   (princ "\n  Redo at the choose prompt refits without leaving the command:")
   (princ "\n  omit points by clicking them (clicking a ringed one restores")
-  (princ "\n  it - omissions carry across redos), add/remove straight walls")
-  (princ "\n  and sharp corners, then the three numbers are asked again with")
-  (princ "\n  Enter keeping each.  Repeat until a fit is kept.")
+  (princ "\n  it - omissions carry across redos), add/remove straight walls,")
+  (princ "\n  sharp corners and held points, then the three numbers are asked")
+  (princ "\n  again with Enter keeping each.  Repeat until a fit is kept.")
   (pf:tut-pause)
   (princ "\nTHE POOL BOTTOM")
   (princ "\n  After keeping one fit (or via ADAB over any existing perimeter):")
@@ -3770,7 +3922,7 @@
 (defun pf:tut-demo ( / cp tour dpts allow bb hgt cap v segs ent cand
                        kept d1 d2 s1 s2 sp1 sp2 dp1 dp2 back lines q
                        pts npt pf-ptnames pf-miss-pct pf-walls
-                       pf-corners pf-dim-warned)
+                       pf-corners pf-holds pf-dim-warned)
   (setq pf-phase "picking a spot for the demo")
   (princ "\n\n  The demo draws a practice pool about 30 ft wide, walks it")
   (princ "\n  through the whole flow, and cleans up after itself.")

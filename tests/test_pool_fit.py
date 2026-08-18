@@ -353,7 +353,7 @@ def arc_count(segs):
 
 
 def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
-              corners=None):
+              corners=None, holds=None):
     """Cover the closed TOUR with arcs anchored on its points.
 
     When PRORATE is set each span may spend only its own fair share of
@@ -388,6 +388,12 @@ def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
                 nogrow[i] = True
         if w[1] == n:
             nogrow[0] = True
+    # HELD points may end a span (landing on it exactly) but are
+    # never buried inside one - mirror of the pf-holds check
+    for h in (holds or []):
+        hi = tour_index(h, tour)
+        if hi is not None:
+            nogrow[hi] = True
     segs = []
     pos = 0
     te = None if start_sharp else te0
@@ -486,19 +492,20 @@ def seam_kink(segs):
     return abs(signed_dang(te, ts))
 
 
-def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None):
+def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None,
+             holds=None):
     """One full fit; the on-the-shape threshold tracks this tolerance."""
     global _ON_EPS
     saved, _ON_EPS = _ON_EPS, on_eps_for(tol)
     try:
         segs, l1 = span_loop(tour, tol, left, None, prorate, walls,
-                             corners)
+                             corners, holds)
         k1 = seam_kink(segs)
         if k1 > TANG_TOL + 0.001:
             s_last = segs[-1]
             te0 = ang(s_last[0], s_last[1]) + 2.0 * math.atan(s_last[2])
             segs2, l2 = span_loop(tour, tol, left, te0, prorate, walls,
-                                  corners)
+                                  corners, holds)
             if seam_kink(segs2) < k1:
                 return segs2, l2
         return segs, l1
@@ -507,7 +514,7 @@ def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None):
 
 
 def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
-                corners=None, prorate=True):
+                corners=None, prorate=True, holds=None):
     """Full fit; the curve cap relaxes the tolerance and refits.
 
     ALLOWANCE and PRORATE are the walk's miss budget and whether each
@@ -521,7 +528,8 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
         tour = rotate_to_point(tour, corners[0])
     else:
         tour = rotate_to_corner(tour)
-    segs, left = fit_pass(tour, tol, allowance, prorate, walls, corners)
+    segs, left = fit_pass(tour, tol, allowance, prorate, walls, corners,
+                          holds)
     # the cap buys few curves with accuracy, so its refits drop both
     # the miss allowance and the per-span fair share
     if maxarcs is not None:
@@ -530,7 +538,8 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
         while arc_count(segs) > maxarcs and tries < 40:
             tol2 *= 1.4
             tries += 1
-            segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls, corners)
+            segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls, corners,
+                                holds)
             if arc_count(segs2) < arc_count(segs):
                 segs = segs2
     return segs, left
@@ -1670,6 +1679,39 @@ def test_slope_waypoints():
     print("  slope waypoints: pinned offsets, off-side picks ignored")
 
 
+def test_held_points_are_hit_exactly():
+    """A held point is never buried inside a span: every span ends ON
+    it, so the fit passes through it exactly - no miss allowance, no
+    nice-radius snap, no long arc may float past it."""
+    # an oval of points with one nudged 0.8 off the true curve: within
+    # the 1.0 tolerance, so an unheld fit is free to write it off
+    pts = []
+    n = 30
+    for k in range(n):
+        t = 2.0 * math.pi * k / n
+        r = 150.0 + 40.0 * math.cos(t)
+        pts.append((r * math.cos(t), 0.7 * r * math.sin(t)))
+    bump = (pts[7][0] + 0.6, pts[7][1] + 0.5)
+    pts[7] = bump
+    tol = 1.0
+    allow = pf_ceil(MISS_PCT * len(pts))
+    segs, _ = coarse_loop(order_points(pts), tol, None, allow,
+                          holds=[bump])
+    # the held point is a span endpoint - hit exactly
+    assert any(dist(s[0], bump) < 1.0e-9 or dist(s[1], bump) < 1.0e-9
+               for s in segs), "the held point must end a span"
+    assert min(seg_dist(bump, s) for s in segs) < 1.0e-9
+    # and holding one point does not break the rest of the fit
+    for q in pts:
+        assert min(seg_dist(q, s) for s in segs) <= tol
+    # the hold binds in the "few" aim too: allowance lifted, still hit
+    segs2, _ = coarse_loop(order_points(pts), tol, None, 10 ** 6,
+                           prorate=False, holds=[bump])
+    assert min(seg_dist(bump, s) for s in segs2) < 1.0e-9, \
+        "a held point may not be fudged even when misses are free"
+    print("  held points end a span and are hit exactly, in every aim")
+
+
 def test_constants_match_lisp():
     """The LISP and this mirror must stay in step."""
     src = open(LISP_FILE).read()
@@ -1781,7 +1823,8 @@ def test_lisp_file_is_well_formed():
                "pf:get-off", "pf:dim-style", "pf:near-loop",
                "pf:ask-tol", "pf:ask-pct", "pf:ask-cap",
                "pf:ensure-dashed2", "pf:merge-arcs", "pf:arc-fits",
-               "pf:edit-walls", "pf:edit-corners", "pf:sweep-marks"):
+               "pf:edit-walls", "pf:edit-corners", "pf:edit-holds",
+               "pf:draw-hold-marker", "pf:sweep-marks"):
         assert fn in defined, "abhd.lsp no longer defines %s" % fn
     print("  abhd.lsp is balanced and self-consistent")
 
@@ -1824,6 +1867,7 @@ def main():
     test_declared_straight_walls()
     test_tangency_is_defended()
     test_declared_corners()
+    test_held_points_are_hit_exactly()
     test_degenerate_point_sets()
     test_pool_bottom_geometry()
     test_pool_bottom_hopper()

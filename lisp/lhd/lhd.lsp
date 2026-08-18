@@ -35,6 +35,13 @@
 ;;; ends fixed, and the fitter walks the path once with no seam - the
 ;;; first span starts free and the last simply ends.
 ;;;
+;;; HELD POINTS: the user may declare points that must be held
+;;; ABSOLUTELY - control shots, tie-ins, anything scanned as an exact
+;;; position.  A held point is never buried inside a span, so every
+;;; span ends ON it and the fitted line passes through it exactly, in
+;;; every candidate; it costs nothing from the miss allowance and the
+;;; tangency window still applies at its joint (it is not a corner).
+;;;
 ;;; Everything else is ABHD's behaviour, kept on purpose: the miss
 ;;; allowance, declared straight stretches and sharp corners, the
 ;;; curve cap with its relaxing refit, nice radii, and the three
@@ -45,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.0")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.1")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -873,13 +880,15 @@
           (setq i1 i2 fwd (- n fwd)))
         (if (<= (+ i1 fwd) n)
           (setq walls (cons (list i1 (+ i1 fwd)) walls))))))
-  ;; indices ordinary spans may not swallow
+  ;; indices ordinary spans may not swallow - including every HELD
+  ;; point: a span may end on one (landing exactly) but never bury it
   (setq nogrow nil i 0)
   (repeat n
     (setq f (nth i sharp))
     (foreach w walls
       (if (and (>= i (car w)) (<= i (cadr w))) (setq f T))
       (if (and (= (cadr w) n) (= i 0)) (setq f T)))
+    (if (lh:memb (nth i tour) lh-holds) (setq f T))
     (setq nogrow (cons f nogrow)
           i      (1+ i)))
   (setq nogrow  (reverse nogrow)
@@ -1033,12 +1042,14 @@
       (progn
         (if (> i1 i2) (setq f i1 i1 i2 i2 f))
         (setq walls (cons (list i1 i2) walls)))))
-  ;; indices ordinary spans may not swallow
+  ;; indices ordinary spans may not swallow - including every HELD
+  ;; point: a span may end on one (landing exactly) but never bury it
   (setq nogrow nil i 0)
   (repeat n
     (setq f (nth i sharp))
     (foreach w walls
       (if (and (>= i (car w)) (<= i (cadr w))) (setq f T)))
+    (if (lh:memb (nth i tour) lh-holds) (setq f T))
     (setq nogrow (cons f nogrow)
           i      (1+ i)))
   (setq nogrow (reverse nogrow)
@@ -1442,6 +1453,17 @@
                   (cons 10 (list (car p) (cadr p) 0.0))
                   (cons 40 *LH-MISS-RADIUS*))))
 
+;; Draw the marker for a declared HELD point: a dashed ring at half
+;; the miss-ring radius, so it reads apart from corner rings.
+(defun lh:draw-hold-marker (p)
+  (lh:ensure-dashed)
+  (lh:ensure-layer *LH-WALL-LAYER* 8)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                  (cons 8 *LH-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car p) (cadr p) 0.0))
+                  (cons 40 (* 0.5 *LH-MISS-RADIUS*)))))
+
 ;; Draw the dashed marker for a declared straight stretch.
 (defun lh:draw-wall-marker (p1 p2)
   (lh:ensure-dashed)
@@ -1535,7 +1557,7 @@
 (defun lh:report (newsegs pts tol allow prior closed
                   / nl na hiton hitok miss q s s2 d dmin worst sum
                     sumo no nice onpt inner ns nj i te ts kk mk nk
-                    lh-on-eps)
+                    hw hq lh-on-eps)
   ;; report against the same on-the-shape threshold the fit used
   (setq lh-on-eps (max *LH-ON-EPS* (* 0.25 tol)))
   (progn
@@ -1619,6 +1641,25 @@
         (princ (strcat "\n  (" (itoa (length lh-walls))
                        " declared straight stretch(es) kept dead"
                        " straight)")))
+      (if lh-holds
+        (progn
+          ;; every held point must sit ON the kept fit exactly; one
+          ;; that does not means a declared stretch overruled it, and
+          ;; that deserves a loud line of its own
+          (setq hw 0.0)
+          (foreach q lh-holds
+            (setq dmin nil)
+            (foreach s newsegs
+              (setq d (lh:seg-dist q s))
+              (if (or (null dmin) (< d dmin)) (setq dmin d)))
+            (if (> dmin hw) (setq hw dmin hq q)))
+          (if (<= hw *LH-EXACT-EPS*)
+            (princ (strcat "\n  (" (itoa (length lh-holds))
+                           " held point(s) all landed on the line"
+                           " exactly)"))
+            (princ (strcat "\n  WARNING: held Pt." (lh:pt-name hq)
+                           " is off by " (rtos hw 2 4)
+                           " - a declared stretch overruled it.")))))
       (if (and *LH-MAX-ARCS* (> na *LH-MAX-ARCS*))
         (princ (strcat "\n  (the curve cap is " (itoa *LH-MAX-ARCS*)
                        " but " (itoa na) " curves was the fewest"
@@ -2026,17 +2067,65 @@
                (lh:sweep-marks "CIRCLE")
                (foreach w lh-corners
                  (lh:temp-add (lh:tag-mine (lh:draw-corner-marker w))))
+               (foreach w lh-holds
+                 (lh:temp-add (lh:tag-mine (lh:draw-hold-marker w))))
                (princ (strcat "\n  corner Pt." (lh:pt-name best)
                               " removed")))))))
       (T (setq ans nil)))))
 
+;; Add or remove HELD points the same way.
+(defun lh:edit-holds (dpts / ans wp1 w1 best bd w)
+  (setq ans T)
+  (while ans
+    (initget "Add Remove Keep")
+    (setq ans (getkword (strcat
+                "\n  Held points (" (itoa (length lh-holds))
+                " declared) - [Add/Remove/Keep] <Keep>: ")))
+    (cond
+      ((= ans "Add")
+       (setq lh-phase "picking a held point"
+             wp1      (getpoint "\n  Point to hold exactly: "))
+       (if wp1
+         (progn
+           (setq w1 (lh:snap-break wp1 dpts))
+           (if (lh:memb w1 lh-holds)
+             (princ "\n  (that point is already held)")
+             (progn
+               (setq lh-holds (append lh-holds (list w1)))
+               (lh:temp-add (lh:tag-mine (lh:draw-hold-marker w1)))
+               (princ (strcat "\n  held Pt." (lh:pt-name w1)
+                              " added")))))))
+      ((= ans "Remove")
+       (if (null lh-holds)
+         (princ "\n  (no held points to remove)")
+         (progn
+           (setq lh-phase "removing a held point"
+                 wp1      (getpoint "\n  Pick the held point to release: "))
+           (if wp1
+             (progn
+               (setq wp1 (lh:2d wp1) best nil bd nil)
+               (foreach w lh-holds
+                 (if (or (null bd) (< (lh:dist wp1 w) bd))
+                   (setq best w bd (lh:dist wp1 w))))
+               (setq lh-holds (lh:remove best lh-holds))
+               ;; redraw the rings to match what is left
+               (lh:sweep-marks "CIRCLE")
+               (foreach w lh-corners
+                 (lh:temp-add (lh:tag-mine (lh:draw-corner-marker w))))
+               (foreach w lh-holds
+                 (lh:temp-add (lh:tag-mine (lh:draw-hold-marker w))))
+               (princ (strcat "\n  held Pt." (lh:pt-name best)
+                              " released")))))))
+      (T (setq ans nil)))))
+
 ;; ---- the command -----------------------------------------------------
-(defun c:LHD ( / tol ans go wp1 wp2 rawwalls rawcnrs w w1 w2
+(defun c:LHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
                    ss i en ed lay typ ext nunsup nocs closed
                    segs pts dpts allow tour ok stale npt chn sketch
                    texts tx q v zs elev e1 e2
                    again omits pts2 ent ring lh-omitted
-                   lh-miss-pct lh-walls lh-corners lh-temp lh-ptnames
+                   lh-miss-pct lh-walls lh-corners lh-holds
+                   lh-temp lh-ptnames
                    lh-zvals *error* lh-old-err lh-phase)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler
@@ -2098,18 +2187,29 @@
   ;; ABHD's steps 4 and 5 folded into one loop: a declared straight
   ;; stretch comes out as a dead-straight LINE between its two points;
   ;; a declared corner is exempt from the tangency rule.
-  (setq lh-phase "asking about stretches and corners"
+  (setq lh-phase "asking about stretches, corners and held points"
         rawwalls nil
         rawcnrs  nil
+        rawholds nil
         go       T)
-  (princ "\n\n  Step 5 of 6 - any dead-straight stretches or sharp corners to declare?")
-  (princ "\n  Each is picked by its point(s), snapping to the scanned points;")
-  (princ "\n  dashed markers confirm them and clear themselves afterwards.")
+  (princ "\n\n  Step 5 of 6 - any dead-straight stretches, sharp corners, or points")
+  (princ "\n  to hold ABSOLUTELY?  A held point can never be fudged: the line")
+  (princ "\n  passes through it exactly, in every candidate.  Each is picked by")
+  (princ "\n  its point(s), snapping to the scanned points; dashed markers")
+  (princ "\n  confirm them and clear themselves afterwards.")
   (while go
-    (initget "Stretch Corner Done")
+    (initget "Stretch Corner Hold Done")
     (setq ans (getkword
-                "\n  Declare a [Stretch/Corner] or [Done]? <Done>: "))
+                "\n  Declare a [Stretch/Corner/Hold] or [Done]? <Done>: "))
     (cond
+      ((= ans "Hold")
+       (setq lh-phase "picking a held point"
+             wp1      (getpoint "\n  Point to hold exactly: "))
+       (if wp1
+         (progn
+           (setq wp1      (lh:2d wp1)
+                 rawholds (cons wp1 rawholds))
+           (lh:temp-add (lh:tag-mine (lh:draw-hold-marker wp1))))))
       ((= ans "Stretch")
        (setq lh-phase "picking a straight stretch"
              wp1      (getpoint "\n  First end of the straight stretch: ")
@@ -2129,11 +2229,13 @@
            (lh:temp-add (lh:tag-mine (lh:draw-corner-marker wp1))))))
       (T (setq go nil))))
   (setq rawwalls (reverse rawwalls)
-        rawcnrs  (reverse rawcnrs))
-  (if (or rawwalls rawcnrs)
+        rawcnrs  (reverse rawcnrs)
+        rawholds (reverse rawholds))
+  (if (or rawwalls rawcnrs rawholds)
     (princ (strcat "\n  " (itoa (length rawwalls))
-                   " stretch(es) and " (itoa (length rawcnrs))
-                   " corner(s) noted - the dashed markers on "
+                   " stretch(es), " (itoa (length rawcnrs))
+                   " corner(s) and " (itoa (length rawholds))
+                   " held point(s) noted - the dashed markers on "
                    *LH-WALL-LAYER*
                    " clear themselves when the command finishes.")))
 
@@ -2250,6 +2352,18 @@
               (princ "\n  (a declared corner was picked well away from any scanned point - snapped to the nearest one)"))
             (setq lh-corners (cons w1 lh-corners)))))
       (setq lh-corners (reverse lh-corners))
+      ;; held points snap onto scanned points the same way; duplicates
+      ;; collapse to one
+      (setq lh-holds nil)
+      (foreach w rawholds
+        (setq w1 (lh:nearest w dpts))
+        (if w1
+          (progn
+            (if (> (lh:dist w w1) (* 3.0 tol))
+              (princ "\n  (a held point was picked well away from any scanned point - snapped to the nearest one)"))
+            (if (not (lh:memb w1 lh-holds))
+              (setq lh-holds (cons w1 lh-holds))))))
+      (setq lh-holds (reverse lh-holds))
       (if (> (length dpts) 150)
         (princ (strcat "\nLHD: " (itoa (length dpts))
                        " points - ordering and fitting will take a"
@@ -2370,7 +2484,16 @@
                        (foreach w lh-corners
                          (if (not (lh:memb w omits))
                            (setq pts2 (cons w pts2))))
-                       (setq lh-corners (reverse pts2))))
+                       (setq lh-corners (reverse pts2)
+                             pts2       nil)
+                       ;; a held point that was just omitted is out of
+                       ;; the fit entirely - nothing left to hold
+                       (foreach w lh-holds
+                         (if (not (lh:memb w omits))
+                           (setq pts2 (cons w pts2))))
+                       (if (< (length pts2) (length lh-holds))
+                         (princ "\n  (an omitted point was held - its hold went with it)"))
+                       (setq lh-holds (reverse pts2))))
                    (if lh-omitted
                      (princ (strcat "\n  " (itoa (length lh-omitted))
                                     " point(s) omitted in total - "
@@ -2386,6 +2509,8 @@
                        (lh:edit-walls dpts)
                        (setq lh-phase "editing sharp corners")
                        (lh:edit-corners dpts)
+                       (setq lh-phase "editing held points")
+                       (lh:edit-holds dpts)
                        ;; an open run's ends can be picked by hand
                        (if (not closed)
                          (progn

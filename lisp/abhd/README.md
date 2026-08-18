@@ -42,7 +42,7 @@ Type `TUTORIALABHD` (or `TUTORIALADAB`) and choose:
 
 * **`Checks`** — for readers: pages through every rule and safeguard
   the commands apply, in the order they apply them — what the drawing
-  needs, the six questions and their ceilings, the fitter's
+  needs, the seven questions and their ceilings, the fitter's
   guarantees (points first, 8° tangency, nice radii, corners), the
   three-candidate choice, what gets flagged, Redo, the whole bottom
   flow, and the housekeeping.
@@ -175,37 +175,43 @@ radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
 ## Usage
 
 1. `APPLOAD` → pick `abhd.lsp` (or drag it into the drawing).
-2. Type `ABHD`. It asks six plainly-worded questions:
+2. Type `ABHD`. It asks seven plainly-worded questions:
 
 ```
 ABHD - fit a pool perimeter through the surveyed points.
 
-  Step 1 of 6 - how far may the fitted line sit from a survey point?
+  Step 1 of 7 - how far may the fitted line sit from a survey point?
   Type a distance in drawing units (1 = one inch, 2 at most), or
   pick two points in the drawing to measure one.
   Smaller = hugs the points.  Bigger = smoother, with fewer curves.
   Maximum distance from a point <1.000>:
 
-  Step 2 of 6 - what percent of the points may sit OFF the line
+  Step 2 of 7 - what percent of the points may sit OFF the line
   (off, but still within the distance above)?
   Press Enter for the standard 15 percent.
   Percent of points allowed off <15>:
 
-  Step 3 of 6 - limit how many curves the result may use?
+  Step 3 of 7 - limit how many curves the result may use?
   Type a whole number, or None for no limit.
   Maximum curves <None>:
 
-  Step 4 of 6 - does the pool edge have any dead-straight walls?
+  Step 4 of 7 - does the pool edge have any dead-straight walls?
   If Yes you will pick the two end points of each (snap to the
   survey points); a dashed line marks each declared wall.
   Any straight lines? [Yes/No] <No>:
 
-  Step 5 of 6 - are there any sharp corners the fit must not round off?
+  Step 5 of 7 - are there any sharp corners the fit must not round off?
   Obvious ones are found automatically; declare the gentler ones here.
   If Yes you will pick each corner point (snap to the survey points).
   Any sharp corners? [Yes/No] <No>:
 
-  Step 6 of 6 - select the survey points (POINTS layer or ab_pt
+  Step 6 of 7 - any points that must be held ABSOLUTELY?
+  A held point can never be fudged: the line passes through it
+  exactly, in every candidate.  If Yes you will pick each one
+  (snap to the survey points); a small dashed ring marks it.
+  Any held points? [Yes/No] <No>:
+
+  Step 7 of 7 - select the survey points (POINTS layer or ab_pt
   blocks) and, if you have one, the POOL perimeter or ordering sketch.
   Select objects:
 ```
@@ -214,7 +220,7 @@ The max distance is capped at **2 inches** — anything looser is no
 longer a trace of the points, so a bigger entry is pulled back to 2
 with a note. Distance and curve cap are remembered for the session;
 the percentage resets to the standard 15% each run (`Enter` keeps it).
-So a repeat run is just `ABHD` + `Enter` × 5 + select.
+So a repeat run is just `ABHD` + `Enter` × 6 + select.
 
 ### Declaring straight walls
 
@@ -250,6 +256,24 @@ At a declared corner the **tangency rule is waived**: the fit breaks
 there, arcs never run through it, and the two sides are free to meet at
 any angle. Like the wall markers, the rings clear themselves when the
 command ends.
+
+### Held points — absolute positions
+
+Some shots are surveyed as **exact positions** — control points,
+tie-ins to existing work — and must never be fudged, not by the miss
+allowance, not by a long economical arc, not by a nice-radius snap.
+Answer `y`/`Yes` at step 6 and pick those points; each gets a small
+dashed ring (half the size of a corner ring).
+
+A held point is **never buried inside a span**: every span ends ON
+it, so the fitted line passes through it exactly — in all three
+candidates, including the "few" fit with its lifted allowance. Unlike
+a corner, the tangency window still applies at its joint, so the line
+stays smooth through it. Holds can be added or removed on a `Redo`
+(alongside walls and corners), and omitting a held point releases its
+hold with it. In guided mode the drawn shape wins, as with walls —
+held points steer the points-built fit — and the report prints a loud
+`WARNING` naming any held point the kept fit did not land on exactly.
 
 ## Pick the one that looks right
 

@@ -17,8 +17,15 @@ Load:     (load "lhd.lsp")
    percent of points allowed off (step 2), curve cap (step 3).
 2. Asks whether the result should be a **Closed** outline or an
    **Open** polyline (step 4, remembered per session).
-3. Lets you declare dead-straight stretches and sharp corners
-   (step 5, one combined loop).
+3. Lets you declare dead-straight stretches, sharp corners, and
+   **held points** (step 5, one combined loop).  A held point is an
+   absolute position - a control shot, a tie-in - that can never be
+   fudged: it is never buried inside a span, so every span ends ON it
+   and the line passes through it exactly, in all three candidates,
+   with no cost to the miss allowance.  The tangency window still
+   applies at its joint (it is not a corner), holds are editable on a
+   Redo, and the report warns loudly if a declared stretch overruled
+   one.
 4. Reads the selection (step 6), orders the points, and draws the
    three candidate fits - tight / as asked / few - to pick from,
    with Redo, point omission, and stretch/corner editing, exactly
@@ -84,9 +91,9 @@ does not have to close - an open sketch orders an open run.
 
 ## Version banner and releases
 
-`lhd.lsp` carries the auto-stamped banner `(setq *lh-version* "v1.0")`
+`lhd.lsp` carries the auto-stamped banner `(setq *lh-version* "v1.1")`
 that `tools/release_lisp.py` reads; run it after any change and the
-dated twin `releases/lhd_MMDDYY_REV10.lsp` regenerates itself. Bump
+dated twin `releases/lhd_MMDDYY_REV11.lsp` regenerates itself. Bump
 the banner with every revision.
 
 ## Tests

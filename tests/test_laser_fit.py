@@ -343,7 +343,8 @@ def sharp_flags_open(tour, corners=None):
     return out
 
 
-def span_path(tour, tol, left, prorate=True, walls=None, corners=None):
+def span_path(tour, tol, left, prorate=True, walls=None, corners=None,
+              holds=None):
     """Cover the OPEN tour with arcs anchored on its points - the
     linear-index rewrite of span_loop.  No seam, no closing span, no
     start-tangent seeding: the first span starts free and the last
@@ -365,6 +366,12 @@ def span_path(tour, tol, left, prorate=True, walls=None, corners=None):
         for i in range(n):
             if w[0] <= i <= w[1]:
                 nogrow[i] = True
+    # HELD points may end a span (landing on it exactly) but are
+    # never buried inside one - mirror of the lh-holds check
+    for h in (holds or []):
+        hi = tour_index(h, tour)
+        if hi is not None:
+            nogrow[hi] = True
     segs = []
     pos = 0
     te = None
@@ -439,22 +446,23 @@ def span_path(tour, tol, left, prorate=True, walls=None, corners=None):
 
 
 def fit_pass_open(tour, tol, left, prorate=True, walls=None,
-                  corners=None):
+                  corners=None, holds=None):
     """One full open fit; no seam, so no seam-kink re-run exists."""
     global _ON_EPS
     saved, _ON_EPS = _ON_EPS, on_eps_for(tol)
     try:
-        return span_path(tour, tol, left, prorate, walls, corners)
+        return span_path(tour, tol, left, prorate, walls, corners,
+                         holds)
     finally:
         _ON_EPS = saved
 
 
 def coarse_path(tour, tol, maxarcs, allowance, walls=None,
-                corners=None, prorate=True):
+                corners=None, prorate=True, holds=None):
     """Open fit with the curve cap.  Unlike coarse_loop the tour is
     NOT rotated: an open run's start and end are its endpoints."""
     segs, left = fit_pass_open(tour, tol, allowance, prorate, walls,
-                               corners)
+                               corners, holds)
     if maxarcs is not None:
         tol2 = tol
         tries = 0
@@ -462,7 +470,7 @@ def coarse_path(tour, tol, maxarcs, allowance, walls=None,
             tol2 *= 1.4
             tries += 1
             segs2, _ = fit_pass_open(tour, tol2, 10 ** 9, False, walls,
-                                     corners)
+                                     corners, holds)
             if arc_count(segs2) < arc_count(segs):
                 segs = segs2
     return segs, left
@@ -714,6 +722,48 @@ def test_open_self_cross_detection():
     print("  self-cross detection: open cut-backs yes, closed seams no")
 
 
+def test_held_point_splits_the_single_arc():
+    """A held point is never buried: even when one arc would cover
+    the whole open run, a hold in the middle forces the walker to
+    land on it exactly and carry on from there."""
+    pts = arc_samples(0.0, 0.0, 96.0, 0.3, math.pi - 0.3, 13)
+    hold = pts[6]
+    segs, _ = fit_pass_open(pts, 1.0, 2, holds=[hold])
+    assert len(segs) >= 2, "the hold must break the single arc"
+    assert any(s[1] == hold for s in segs) \
+        and any(s[0] == hold for s in segs), \
+        "the held point must be a span endpoint"
+    assert min(seg_dist(hold, s) for s in segs) < 1.0e-9
+    # the joint at the hold is still tangency-checked, not a corner:
+    # both spans fit the same circle, so the kink stays tiny
+    at = [s for s in segs if s[1] == hold][0]
+    nx = [s for s in segs if s[0] == hold][0]
+    te = ang(at[0], at[1]) + 2.0 * math.atan(at[2])
+    ts = ang(nx[0], nx[1]) - 2.0 * math.atan(nx[2])
+    assert abs(signed_dang(te, ts)) <= TANG_TOL * TANG_STEPS[-1] + 1e-6
+    print("  a held point splits the single arc and stays tangent")
+
+
+def test_held_point_cannot_be_fudged_open():
+    """A point nudged off the curve - one the miss allowance would
+    happily write off - must be hit exactly once held."""
+    pts = s_curve()
+    bump = (pts[10][0] + 0.5, pts[10][1] + 0.6)
+    pts[10] = bump
+    tol = 1.0
+    segs, _ = fit_pass_open(pts, tol, lh_ceil(MISS_PCT * len(pts)),
+                            holds=[bump])
+    assert min(seg_dist(bump, s) for s in segs) < 1.0e-9, \
+        "the held point must sit on the fit exactly"
+    for q in pts:
+        assert min(seg_dist(q, s) for s in segs) <= tol
+    # and with the allowance lifted ("few" aim) the hold still binds
+    segs2, _ = coarse_path(pts, tol, None, 10 ** 6, prorate=False,
+                           holds=[bump])
+    assert min(seg_dist(bump, s) for s in segs2) < 1.0e-9
+    print("  a held point is hit exactly, even with misses free")
+
+
 def test_output_height_modes():
     zs = [3.0, 9.0, 6.0]
     assert pick_elev("Top", zs) == 9.0
@@ -778,7 +828,8 @@ def test_lisp_file_is_well_formed():
                "lh:ask-tol", "lh:ask-pct", "lh:ask-cap",
                "lh:ask-shape", "lh:ask-zmode", "lh:pick-elev",
                "lh:zs-of", "lh:block-number", "lh:pt-name",
-               "lh:edit-walls", "lh:edit-corners", "lh:snap-break",
+               "lh:edit-walls", "lh:edit-corners", "lh:edit-holds",
+               "lh:draw-hold-marker", "lh:snap-break",
                "lh:tag-mine", "lh:purge-mine", "lh:temp-clear"):
         assert fn in defined, "lhd.lsp no longer defines %s" % fn
     print("  lhd.lsp is balanced and self-consistent")
@@ -856,6 +907,8 @@ def main():
     test_declared_corner_breaks_the_open_path()
     test_curve_cap_relaxes_the_open_fit()
     test_open_self_cross_detection()
+    test_held_point_splits_the_single_arc()
+    test_held_point_cannot_be_fudged_open()
     test_output_height_modes()
     print("\nall tests passed")
 
