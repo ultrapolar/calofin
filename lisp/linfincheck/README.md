@@ -1,10 +1,15 @@
-# DIMCHECK — guided dimension & arc QA review (AutoLISP)
+# LINFINCHECK — the full liner-finish drawing QA (AutoLISP)
 
 An AutoLISP toolset for full AutoCAD that walks a highlighted title
 block one item at a time — dimensions, arcs, overlapping lines, steps
 and their side views, the Tech Title's wall height, the liner pattern,
 and the title block border — fixing what it can, flagging what it
 can't, and writing everything to an on-drawing report.
+
+Just want the dimension/arc/overlap pass without the rest of the
+liner-finish gauntlet? See the sibling `lisp/dimcheck/` — it shares
+this file's Move/Keep/Pick review, marker colours and report machinery
+for exactly those three checks, standalone.
 
 ## What it checks
 
@@ -44,28 +49,28 @@ can't, and writing everything to an on-drawing report.
    flagged as "should not be SCALED DOWN for Liners".
 
 Every rule, and the exact numbers behind it, is spelled out in the
-file's own header comment and in `TUTORIALDIMCHECK` (below) — both are
-generated from the same tunables, so they can't drift out of sync with
-what the code actually does.
+file's own header comment and in `TUTORIALLINFINCHECK` (below) — both
+are generated from the same tunables, so they can't drift out of sync
+with what the code actually does.
 
 ## Install & run
 
-1. In AutoCAD run `APPLOAD`, browse to `dimcheck.lsp`, and load it
+1. In AutoCAD run `APPLOAD`, browse to `linfincheck.lsp`, and load it
    (add it to the *Startup Suite* to have it every session).
 2. Highlight the title block — the whole thing, so the border and the
    Tech Title are included — then run one of:
 
 | Command | What it does |
 | --- | --- |
-| `DIMCHECK` | The full interactive review. Fixes what you approve, flags what you don't. |
-| `DIMSCAN` | The same audits, **read-only** — reports everything, changes nothing. Good as a pre-flight. |
-| `DIMCHECKRESCUE` | Restores every colour DIMCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. |
-| `DIMCHECKVER` | Prints which build is loaded. |
-| `TUTORIALDIMCHECK` | Teaches the tool — see below. |
+| `LINFINCHECK` | The full interactive review. Fixes what you approve, flags what you don't. |
+| `LINFINSCAN` | The same audits, **read-only** — reports everything, changes nothing. Good as a pre-flight. |
+| `LINFINCHECKRESCUE` | Restores every colour LINFINCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. |
+| `LINFINCHECKVER` | Prints which build is loaded. |
+| `TUTORIALLINFINCHECK` | Teaches the tool — see below. |
 
-A single `U` undoes an entire `DIMCHECK` run, including the report.
+A single `U` undoes an entire `LINFINCHECK` run, including the report.
 
-## TUTORIALDIMCHECK
+## TUTORIALLINFINCHECK
 
 Teaches the tool two ways, because people learn differently. It asks
 up front — **List**, **Demo**, or **Both**:
@@ -77,15 +82,15 @@ up front — **List**, **Demo**, or **Both**:
   layout.
 * **Demo** — draws a small practice drawing in an empty spot you pick,
   with four faults planted in it, and walks you through each one,
-  zooming in and explaining what DIMCHECK sees:
+  zooming in and explaining what LINFINCHECK sees:
   1. two lines overlapping,
   2. a dimension point off the geometry (where the red X / green +
      and Move / Keep / Pick choice get explained),
   3. a step side view with its overall-height dimension,
   4. an arc whose ends attach to nothing.
 
-  It then offers to run `DIMSCAN` for a real report, and to erase the
-  practice drawing afterwards.
+  It then offers to run `LINFINSCAN` for a real report, and to erase
+  the practice drawing afterwards.
 * **Both** — the list, then the demo.
 
 The whole tutorial runs inside one UNDO group and never touches
@@ -97,7 +102,7 @@ existing geometry.
 python3 tests/make_test_dxfs.py     # regenerate the fixture drawings under tests/dxf/
 ```
 
-`tests/expected.md` records what a `DIMSCAN` report on each fixture
+`tests/expected.md` records what a `LINFINSCAN` report on each fixture
 must — and must not — say; `tests/run_tests.bat` + `run_tests.scr`
 drive `accoreconsole` over every fixture and write one report per
 drawing for diffing. See `tests/expected.md`'s own notes for which
@@ -111,5 +116,9 @@ read as a side view, and so on).
   **AutoCAD LT has no LISP engine and cannot run this file.**
 * The step/side-view/border/wall-height rules assume 1 drawing unit
   = 1 inch; running on a metric drawing needs the relevant tunables
-  (`*dchk-step-maxgap*`, `*dchk-bead-dist*`, `*dchk-border-w*`,
-  `*dchk-border-h*`) rescaled at the top of the file.
+  (`*lfc-step-maxgap*`, `*lfc-bead-dist*`, `*lfc-border-w*`,
+  `*lfc-border-h*`) rescaled at the top of the file.
+* Loading both `linfincheck.lsp` and `dimcheck.lsp` in the same
+  session is safe — they use distinct `lfc:`/`dchk:` function
+  prefixes, `*lfc-`/`*dchk-` globals, layer names, and xdata tags, so
+  neither one's rescue command touches the other's markers.

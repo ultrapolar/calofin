@@ -1,8 +1,8 @@
-; DIMCHECK regression runner (AutoCAD script)
+; LINFINCHECK regression runner (AutoCAD script)
 ;
-; Runs DIMSCAN over every test drawing and writes each report to a text
-; file you can diff. DIMSCAN is used rather than DIMCHECK because it
-; asks nothing and changes nothing, so it can run unattended.
+; Runs LINFINSCAN over every test drawing and writes each report to a
+; text file you can diff. LINFINSCAN is used rather than LINFINCHECK
+; because it asks nothing and changes nothing, so it can run unattended.
 ;
 ; Usage (Windows, from this folder):
 ;
@@ -12,27 +12,22 @@
 ; or for every drawing at once, run run_tests.bat.
 ;
 ; The LISP path is resolved relative to this folder; adjust APPLOAD
-; below if you keep dimcheck.lsp elsewhere.
+; below if you keep linfincheck.lsp elsewhere.
 
-(setq *dchk-testout*
+(setq *lfc-testout*
       (strcat (getvar "DWGPREFIX") "../out/" (vl-filename-base (getvar "DWGNAME")) ".txt"))
 
-(load "../dimcheck.lsp")
-
-; capture what DIMSCAN prints
-(setq *dchk-log* "")
-(defun dchk:logline (s)
-  (setq *dchk-log* (strcat *dchk-log* s "\n")))
+(load "../linfincheck.lsp")
 
 ; run the scan over everything in the drawing
 (command "_.ZOOM" "_Extents")
-(c:DIMSCAN)
+(c:LINFINSCAN)
 
 ; write the report MTEXT out so it can be diffed
-(setq ss (ssget "_X" (list (cons 8 *dchk-report-layer*))))
+(setq ss (ssget "_X" (list (cons 8 *lfc-report-layer*))))
 (if ss
   (progn
-    (setq f (open *dchk-testout* "w"))
+    (setq f (open *lfc-testout* "w"))
     (setq i 0)
     (repeat (sslength ss)
       (setq ed (entget (ssname ss i)) i (1+ i) txt "")
@@ -45,6 +40,6 @@
         (setq txt (substr txt (+ p 3))))
       (write-line txt f))
     (close f)
-    (princ (strcat "\nWrote " *dchk-testout*)))
+    (princ (strcat "\nWrote " *lfc-testout*)))
   (princ "\nNO REPORT PRODUCED"))
 (princ)

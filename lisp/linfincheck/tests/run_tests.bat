@@ -1,7 +1,7 @@
 @echo off
-rem DIMCHECK regression runner.
+rem LINFINCHECK regression runner.
 rem
-rem Loads dimcheck.lsp and runs DIMSCAN over every drawing in dxf\,
+rem Loads linfincheck.lsp and runs LINFINSCAN over every drawing in dxf\,
 rem writing one report per drawing into out\. Compare those against
 rem expected.md (or against a previous out\ folder) after changing a
 rem rule to see exactly what moved.

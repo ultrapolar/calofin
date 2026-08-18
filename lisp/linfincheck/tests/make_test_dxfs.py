@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the DIMCHECK test drawings.
+"""Generate the LINFINCHECK test drawings.
 
 Writes one minimal DXF per scenario into ./dxf/. Each drawing isolates
-one rule so a DIMSCAN report can be checked against a known answer --
+one rule so a LINFINSCAN report can be checked against a known answer --
 see expected.md for what each one should say.
 
     python3 make_test_dxfs.py

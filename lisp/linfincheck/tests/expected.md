@@ -1,4 +1,4 @@
-# DIMCHECK test drawings — what each one should report
+# LINFINCHECK test drawings — what each one should report
 
 Regenerate the drawings with `python3 make_test_dxfs.py`, then run
 `run_tests.bat` (see it for the `accoreconsole` path) to produce one
@@ -11,7 +11,7 @@ green lines are the all-clear (and render at 3/4 height).
 | Drawing | Should report | Should NOT report |
 | --- | --- | --- |
 | `stairs_ok` | side view detected, rise 40; height MATCHES `Finished Wall Ht = 40"`; liner OK | any red line |
-| `stairs_height_mismatch` | height **MISMATCH** (rise 40 vs WallHt 45) — under DIMCHECK the height dim is marked red automatically | a match |
+| `stairs_height_mismatch` | height **MISMATCH** (rise 40 vs WallHt 45) — under LINFINCHECK the height dim is marked red automatically | a match |
 | `stairs_polyline` | identical findings to `stairs_ok` — the same profile drawn as one polyline | "no step patterns detected" |
 | `bench_two_treads` | side view detected (two treads), rise 60, height MATCHES | missing the bench entirely |
 | `wallht_varies` | "height varies, not checked" in **green**; nothing flagged | any red height line |
@@ -55,7 +55,7 @@ green lines are the all-clear (and render at 3/4 height).
   separately from one that is merely the wrong size.
 - `pattern_not_supplied` vs `pattern_clean` guard the wipe: only the
   fields that never got filled in are cleared, and a real pattern name
-  is never mistaken for one. DIMSCAN reports these as NEEDS WIPING and
+  is never mistaken for one. LINFINSCAN reports these as NEEDS WIPING and
   clears nothing.
 - The three `wallht_*` question/zero cases pin the title-block states:
   more than one value -> CHECK THE WALL HEIGHT; a lone 0'' ->
