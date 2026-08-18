@@ -569,11 +569,25 @@ the hopper's virtual break frame meets E from a different direction
 than E's own real neighbour, so it stays square there regardless of
 the inner corner treatment.
 
-**Mirroring:** once every dimension is in, the L pools ask
-**`Mirror the pool [Yes/No]`** — answering Yes mirrors the finished
-pool, its dimensions and its hopper about the pool's vertical
-centreline (text stays readable; the report table is written
-afterwards, unmirrored).
+**Mirroring — the hopper stays on the left.** Once every dimension is
+in, the L pools ask **`Mirror the pool [Yes/No]`**. Answering Yes
+flips the finished pool, its dimensions and its hopper **top to
+bottom**, about the pool's horizontal centreline.
+
+Top-to-bottom rather than left-to-right, because an L's deep end is
+always the end **away from the wing**: flipping left-to-right would
+swing the wing across and carry the hopper over to the right-hand side
+of the sheet with it. Flipping top-to-bottom swaps which way the wing
+points instead — the other of the two L orientations that keep the
+deep end on the left — so the hopper stays where the convention wants
+it.
+
+Text stays readable (`MIRRTEXT` is forced off and restored), the
+report table is written afterwards and so is never mirrored, and the
+**side section is deliberately left out of the flip**: it is a
+*longitudinal* view, and turning the plan upside down does not change
+it. (A section only appears on an L when `G = 0` makes it a slope
+bottom.)
 
 The true L:
 

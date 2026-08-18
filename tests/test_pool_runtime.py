@@ -275,6 +275,10 @@ vm = run(["Insquare", "LA"] + BASE +
           "Yes"],                 # mirror
          "R9")
 assert any('_.MIRROR' in str(c) for c in vm.commands)
+# and it is a top-to-bottom flip (horizontal axis), so the deep end
+# and its hopper stay on the left -- see R23
+_mir = [c for c in vm.commands if c and c[0] == '_.MIRROR'][0]
+assert abs(_mir[3][1] - _mir[4][1]) < 1e-9, _mir[3:5]
 # in-square: the parallel pairs must be held EXACTLY -- A-B and E-F
 # both dead horizontal, B-C at +45 and D-E at 225 (parallel), closure
 # error absorbed by the E-F / F-A lengths instead of bent corners
@@ -866,5 +870,62 @@ for idx, nm in ((0, "A"), (5, "F")):
     assert not any(endpoint_near(s, p, 0.4) for s in segs), \
         f"a line still lands on the sharp corner {nm}"
 print("   skewed lazy L deep-end ties land on the real cuts, not the sharp corners")
+
+print("== R23. mirroring an L keeps the hopper on the LEFT ==")
+# An L's deep end is always the end AWAY from the wing, so a
+# left-to-right flip would swing the wing across and carry the hopper
+# to the right-hand side of the sheet with it.  The mirror is a
+# top-to-bottom flip instead: the wing swaps which way it points, the
+# deep end (and its hopper) stays left.
+#
+# lispvm records (command "_.MIRROR" ...) without executing it, so the
+# check is on the axis the command is given, not on moved geometry.
+_LSIDES = [480.0, 420.0, 180.0, 180.0, 300.0, 240.0]
+vm = run(["Insquare", "L"] + BASE + _LSIDES +
+         ["No", "Yes", 60.0, 90.0, 150.0, None, 100.0, None, "Yes"], "R23")
+_mir = [c for c in vm.commands if c and c[0] == '_.MIRROR']
+assert len(_mir) == 1, _mir
+_p1, _p2 = _mir[0][3], _mir[0][4]
+assert abs(_p1[1] - _p2[1]) < 1e-9, f"mirror axis must be HORIZONTAL: {_p1} {_p2}"
+assert abs(_p1[0] - _p2[0]) > 1e-9, f"degenerate mirror axis: {_p1} {_p2}"
+# on the pool's own horizontal centreline (this L spans y 0..420)
+assert abs(_p1[1] - 210.0) < 0.01, _p1
+# the hopper sits in the main section, left of the break line, and the
+# flip cannot move it sideways: its x range is unchanged by mirroring
+_hop = {}
+for _m in ("No", "Yes"):
+    v = run(["Insquare", "L"] + BASE + _LSIDES +
+            ["No", "Yes", 60.0, 90.0, 150.0, None, 100.0, None, _m], "R23")
+    _pts = set()
+    for d in drawn(v, 'LINE', 'POOL'):
+        _pts.add(tuple(d[10][:2]))
+        _pts.add(tuple(d[11][:2]))
+    _xs = [p[0] for p in _pts]
+    _lo, _hi = min(_xs), max(_xs)
+    _in = [p[0] for p in _pts if _lo + 1 < p[0] < _hi - 1]
+    _hop[_m] = (min(_in), max(_in), _lo, _hi)
+assert _hop["No"][:2] == _hop["Yes"][:2], _hop
+_a, _b, _lo, _hi = _hop["Yes"]
+assert (_a + _b) / 2.0 < (_lo + _hi) / 2.0, f"hopper drifted right: {_hop}"
+print("   flip is top-to-bottom on the pool centreline; hopper stays left")
+
+print("== R23b. the side section is held OUT of that flip ==")
+# G=0 turns the bottom into a slope bottom, which draws a longitudinal
+# section below the plan.  Turning the PLAN upside down does not change
+# a longitudinal section, so it must not be mirrored with it -- it would
+# land above the pool, standing on its head.
+vm = run(["Insquare", "L"] + BASE + _LSIDES +
+         ["No", "Yes",
+          60.0, 0.0, 240.0,        # H, G=0 -> slope bottom, F
+          None, 100.0, None,       # M L K
+          48.0, 96.0,              # C wall height, D deep depth
+          "Yes"], "R23b")
+_prof = vm.get(__import__('lispvm').Sym('pool:*profents*')) or []
+assert _prof, "G=0 on an L should have drawn a section"
+_sel = set(id(e) for e in [c for c in vm.commands
+                           if c and c[0] == '_.MIRROR'][0][1][1:])
+assert not [e for e in _prof if id(e) in _sel], \
+    "the side section must not be mirrored with the plan"
+print(f"   {len(_prof)} section entities recorded, none mirrored")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

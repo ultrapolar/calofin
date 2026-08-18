@@ -100,6 +100,10 @@
 (setq pool:*mlkoff*    30.0)          ; M/L/K dim line offset right of the hopper
 (setq pool:*pvents*    nil)           ; live guide-preview entities
 (setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
+;; Entities making up the side profile (section) and its depth dims.
+;; An L pool's mirror flips the PLAN top-to-bottom; a longitudinal
+;; section is unchanged by that, so these are held out of it.
+(setq pool:*profents*  nil)
 
 ;; Bottom-type keywords, shared by the rectangle / oval / grecian
 ;; dispatchers.  Normal and the four special bottoms all run through
@@ -617,25 +621,30 @@
     (if (and e (entget e)) (entdel e))
     (setq pool:*pvents* (pool:lremove e pool:*pvents*))))
 
-;; Every entity created after `after` (nil = the whole drawing), as a
-;; selection set.
-(defun pool:newents (after / e ss)
+;; Mirror everything drawn after `after` about the HORIZONTAL line
+;; y = y0 -- a top-to-bottom flip.
+;;
+;; L and Lazy L pools flip this way rather than left-to-right, because
+;; the deep end is always the end AWAY from the wing: flipping
+;; left-to-right would swing the wing across and carry the hopper over
+;; to the right-hand side of the sheet with it.  Flipping top-to-bottom
+;; swaps which way the wing points instead and leaves the deep end --
+;; and so the hopper -- on the left, where the convention wants it.
+;;
+;; The side profile is held out of it (pool:*profents*): that is a
+;; LONGITUDINAL section, and turning the plan upside down does not
+;; change it.  Text is mirrored with MIRRTEXT off so it stays readable.
+(defun pool:mirrory (after y0 / ss e mt)
   (setq ss (ssadd)
         e (if after (entnext after) (entnext)))
   (while e
-    (ssadd e ss)
+    (if (not (member e pool:*profents*)) (ssadd e ss))
     (setq e (entnext e)))
-  ss)
-
-;; Mirror everything drawn since `after` about the vertical line at
-;; world x = x0, keeping text readable.
-(defun pool:mirror (after x0 / ss mt)
-  (setq ss (pool:newents after))
   (if (> (sslength ss) 0)
       (progn
         (setq mt (getvar "MIRRTEXT"))
         (setvar "MIRRTEXT" 0)
-        (command "_.MIRROR" ss "" (list x0 0.0 0.0) (list x0 1.0 0.0) "_Y")
+        (command "_.MIRROR" ss "" (list 0.0 y0 0.0) (list 1.0 y0 0.0) "_Y")
         (setvar "MIRRTEXT" mt)))
   (princ))
 
@@ -2072,11 +2081,14 @@
                                               (* 2.2 doff))
                                            t)))))
 
-  ;; -------- all dimensions are in: offer to mirror the pool
-  (if (pool:askyn "Mirror the pool" "No" nil)
+  ;; -------- all dimensions are in: offer to mirror the pool.
+  ;; Top-to-bottom, so the wing swaps sides but the deep end (and its
+  ;; hopper) stays on the left -- see pool:mirrory.
+  (if (pool:askyn "Mirror the pool (flips the wing; deep end stays left)"
+                  "No" nil)
       (progn
-        (pool:mirror elast (car (pool:wp (list (* 0.5 (+ xmin xmax)) 0.0))))
-        (princ "\nPool mirrored.")))
+        (pool:mirrory elast (cadr (pool:wp (list 0.0 (* 0.5 (+ ymin ymax))))))
+        (princ "\nPool mirrored -- the wing swapped sides, deep end still on the left.")))
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
@@ -2935,16 +2947,22 @@
                                 (if (caddr tl) (cadr (assoc 'voff gg))
                                     (list 0.0 0.0))))
           (if (cadddr tl) (pool:dimred)))))
-  ;; profile depths: C at the shallow wall, D at the deep end
+  ;; profile depths: C at the shallow wall, D at the deep end.  These
+  ;; belong to the section, so they join pool:*profents* and stay put
+  ;; when an L pool's plan is mirrored.
   (if wh
       (progn
         (pool:dimalg (list (+ x0 toth) y0) (list (+ x0 toth) (- y0 wh))
                      (list (+ x0 toth (* 0.8 doff)) (- y0 (* 0.5 wh))))
+        (setq pool:*profents* (cons (entlast) pool:*profents*))
         (pool:dimalg (list (+ x0 h) y0) (list (+ x0 h) (- y0 dp))
                      (list (+ x0 h (* -0.5 doff)) (- y0 (* 0.5 dp))))
+        (setq pool:*profents* (cons (entlast) pool:*profents*))
         (if (cadddr sp)
-            (pool:dimalg (list (+ x0 h g f) y0) (list (+ x0 h g f) (- y0 c2))
-                         (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2)))))))
+            (progn
+              (pool:dimalg (list (+ x0 h g f) y0) (list (+ x0 h g f) (- y0 c2))
+                           (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2))))
+              (setq pool:*profents* (cons (entlast) pool:*profents*))))))
   (setvar "CLAYER" odl)
   (setq rows (list
     (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -3224,7 +3242,13 @@
         prev (car pts))
   (foreach p (cdr pts)
     ;; a break sitting exactly on a wall bottom repeats that point
-    (if (> (distance prev p) 1.0e-6) (pool:hgl prev p lay pvflag))
+    (if (> (distance prev p) 1.0e-6)
+        (progn
+          (pool:hgl prev p lay pvflag)
+          ;; remember the real (non-preview) section lines so an L
+          ;; pool's plan mirror can leave them alone
+          (if (not pvflag)
+              (setq pool:*profents* (cons (entlast) pool:*profents*)))))
     (setq prev p)))
 
 ;; Dashed lettered guide tie from p to q; returns the (lbl ent...)
@@ -5274,6 +5298,7 @@
   (pool:syssave)
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil
+        pool:*profents* nil
         pool:*dimstyle0* (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
   (pool:undobegin)
