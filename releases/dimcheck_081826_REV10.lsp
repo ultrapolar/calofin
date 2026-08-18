@@ -205,14 +205,13 @@
 
 (vl-load-com)
 
-;;; --- version ------------------------------------------------------
-;;; Stamped by tools/release.py. The static-name file and its
-;;; DIMCHECK_MMDDYY_REV##.lsp twin are byte-identical, so this tells
-;;; you which build is loaded whatever the file on disk is called.
-(setq *dchk-version* "DIMCHECK 081726 REV02")
+;; ---- configuration -------------------------------------------------
+(setq *dchk-version* "v1.0")        ; announced on load; release_lisp.py
+                                    ; reads this banner and stamps the
+                                    ; dated twin in releases/ from it
 
 (defun c:DIMCHECKVER ()
-  (princ (strcat "\n" *dchk-version*))
+  (princ (strcat "\nDIMCHECK " *dchk-version*))
   (princ))
 
 ;; --- tunables ------------------------------------------------------
@@ -2724,7 +2723,7 @@
           (setq hdr (append hdr (list (cons (strcat "Wall height: " htsum)
                                             (dchk:attn-p htsum))))))
         (setq txt (strcat "DIMCHECK REPORT - " (dchk:datestr)
-                          "  [" *dchk-version* "]"
+                          "  [DIMCHECK " *dchk-version* "]"
                           "\\P"
                           (dchk:small
                             (strcat "Items needing attention are shown in "
@@ -3122,7 +3121,7 @@
                  (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                  (list 0.0 0.0 0.0)))
      (setq txt (strcat "DIMSCAN REPORT - " (dchk:datestr)
-                       "  [" *dchk-version* "]"
+                       "  [DIMCHECK " *dchk-version* "]"
                        "\\P"
                        (dchk:small (strcat "Read-only scan - nothing in the drawing was changed. "
                                            "Items needing attention are shown in "
