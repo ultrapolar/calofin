@@ -42,7 +42,8 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
-| `DIMCHECK`, `DIMSCAN`, `DIMCHECKVER`, ... | `lisp/dimcheck/` | Guided, one-at-a-time dimension/arc QA review, grouped by dimension style |
+| `DIMCHECK`, `DIMSCAN`, `DIMCHECKVER`, ... | `lisp/dimcheck/` | Guided, one-at-a-time review of dimension placement, arc-end attachment and overlapping lines, grouped by dimension style |
+| `LINFINCHECK`, `LINFINSCAN`, ... | `lisp/linfincheck/` | `DIMCHECK`'s checks plus steps & side views, wall height, the liner pattern and the title block border - the full liner-finish drawing QA |
 | `COVERCHECK`, `COVERSCAN`, ... | `lisp/covercheck/` | Same guided review, rules swapped for pool-cover QA |
 | `CCPRECHECK` | `lisp/ccprecheck/` | Walks the "Tech Flow Chart" product-type decision tree and prints a summary. Renamed from `CHECK` to resolve a name collision with `lisp/check/` |
 | `LINCHECK` | `lisp/lincheck/` | Companion checklist routine, shipped alongside the flowchart walker |
@@ -71,9 +72,9 @@ consolidation:
   (including its `altabcdef:` helper namespace and `ALTABCDEF-*`
   layers, so loading both in one session is safe).
 * **`CHECK`** named two unrelated tools: a dimension/arc geometry audit
-  (with `DIMCHECK` and `COVERCHECK` already built against it) and a
-  product-type flowchart walker. The audit kept `CHECK`; the flowchart
-  walker is now `CCPRECHECK`.
+  (with `DIMCHECK`, `LINFINCHECK` and `COVERCHECK` already built
+  against it) and a product-type flowchart walker. The audit kept
+  `CHECK`; the flowchart walker is now `CCPRECHECK`.
 
 ## Releases (`releases/`)
 

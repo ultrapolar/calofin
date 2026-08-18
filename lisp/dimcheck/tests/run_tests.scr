@@ -1,0 +1,45 @@
+; DIMCHECK regression runner (AutoCAD script)
+;
+; Runs DIMSCAN over every test drawing and writes each report to a text
+; file you can diff. DIMSCAN is used rather than DIMCHECK because it
+; asks nothing and changes nothing, so it can run unattended.
+;
+; Usage (Windows, from this folder):
+;
+;   "C:\Program Files\Autodesk\AutoCAD 2025\accoreconsole.exe" ^
+;       /i dxf\dim_stray_point.dxf /s run_tests.scr
+;
+; or for every drawing at once, run run_tests.bat.
+;
+; The LISP path is resolved relative to this folder; adjust APPLOAD
+; below if you keep dimcheck.lsp elsewhere.
+
+(setq *dchk-testout*
+      (strcat (getvar "DWGPREFIX") "../out/" (vl-filename-base (getvar "DWGNAME")) ".txt"))
+
+(load "../dimcheck.lsp")
+
+; run the scan over everything in the drawing
+(command "_.ZOOM" "_Extents")
+(c:DIMSCAN)
+
+; write the report MTEXT out so it can be diffed
+(setq ss (ssget "_X" (list (cons 8 *dchk-report-layer*))))
+(if ss
+  (progn
+    (setq f (open *dchk-testout* "w"))
+    (setq i 0)
+    (repeat (sslength ss)
+      (setq ed (entget (ssname ss i)) i (1+ i) txt "")
+      (foreach g ed
+        (if (member (car g) '(1 3)) (setq txt (strcat txt (cdr g)))))
+      ; one report line per output line: \P is the MTEXT paragraph break
+      (while (vl-string-search "\\P" txt)
+        (setq p (vl-string-search "\\P" txt))
+        (write-line (substr txt 1 p) f)
+        (setq txt (substr txt (+ p 3))))
+      (write-line txt f))
+    (close f)
+    (princ (strcat "\nWrote " *dchk-testout*)))
+  (princ "\nNO REPORT PRODUCED"))
+(princ)
