@@ -14,7 +14,7 @@
 ;; is simply reported as missing, so the list is safe to keep ahead of
 ;; whatever a given machine has.
 (setq calofin:*commands*
-  '("SPA" "POOL" "POOLDEMO" "ABHD" "ABCDEF" "PADDLE" "AUTOBEAD"
+  '("SPA" "POOL" "POOLDEMO" "ABHD" "LHD" "ABCDEF" "PADDLE" "AUTOBEAD"
     "CHECK" "LINCHECK" "DIMCHECK" "DIMSCAN" "COVERCHECK" "COVERSCAN"
     "LINTXTCHK" "MATCHSTD" "ACADY-SCAN"
     "AUTODIM" "STAIRDIM" "FLOORDIM" "DIMCONTEND" "DIMARCCHECK"

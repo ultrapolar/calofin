@@ -63,6 +63,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("POOL", "Pool layout", "Full pool layout tool"),
             New Entry("POOLDEMO", "Pool demo", "Worked pool example"),
             New Entry("ABHD", "Pool fit (ABHD)", "Pool perimeter fit"),
+            New Entry("LHD", "Laser fit (LHD)", "Laser-point outline fit, open or closed"),
             New Entry("ABCDEF", "Rectangle plot", "Plot rectangle points"),
             New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
             New Entry("AUTOBEAD", "Auto bead", "Bead placement")

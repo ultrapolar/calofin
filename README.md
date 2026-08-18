@@ -38,6 +38,7 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `POOL`, `POOLDEMO` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements |
 | `SPA`, `SPAVER`, `TUTORIALSPA` | `lisp/spa/` | Spa/hot-tub template - Rectangle, Octagon, Round |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
+| `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
@@ -125,6 +126,7 @@ unit-testable directly:
 python3 tests/test_pool_lisp.py       # POOL geometry
 python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
+python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
