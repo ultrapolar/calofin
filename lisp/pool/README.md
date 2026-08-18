@@ -545,6 +545,21 @@ inner corner), side dims still read to the TRUE corners, and the
 drawing gets one `Typ.` callout on an outer corner plus the inner
 corner's own radius/face dim. The report lists both sizes.
 
+**Corners that aren't 90°.** How far a treatment eats along its two
+walls depends on the corner's actual angle — a `Rounded` corner sets
+back `r / tan(angle/2)`, so a 60° corner reaches **1.73 × its radius**
+while a 135° one reaches only 0.41 ×. On an L that matters in normal
+use, not just in pathological cases: a Lazy L bends 135° at B and E
+even in-square, and **out of square every corner drifts off 90°**. So
+the body is fit *before* the corner questions are asked, and the size
+cap is computed from the real fitted angles — against the sharpest of
+the five outer corners, since one answer covers them all. The inner
+corner E is then capped by what the outer cuts actually **left** on
+its two walls. (The rectangle keeps the plain 90° assumption: it asks
+its corners before its cross dims, so its true angles aren't known
+yet — and a pool still called a rectangle sits within a degree of
+square anyway.)
+
 **Hopper vs. the deep-end wall:** A and F — the two corners on the
 main section's left (deep-end) wall — are real pool corners, so when
 the outer treatment cuts them the hopper's left-corner ties land on

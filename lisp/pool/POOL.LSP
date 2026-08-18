@@ -1866,25 +1866,55 @@
 
   ;; corner treatments, like the rectangle: the five OUTER corners
   ;; take one answer; the INNER corner (E) is typically different, so
-  ;; it is asked separately (Enter reuses the outer answer)
-  (defun hx:corners ( / v)
-    (setq octy "Square" ocsz 0.0 icty "Square" icsz 0.0)
+  ;; it is asked separately (Enter reuses the outer answer).
+  ;;
+  ;; The body is FIT first, at the top of this stage rather than after
+  ;; the questions, because a treatment's setback depends on the real
+  ;; corner angle and on an L those are never all 90 degrees -- a lazy
+  ;; L bends 135 at B and E even in-square, and out-of-square every
+  ;; corner drifts.  Fitting here (not as its own stage) keeps Back
+  ;; working: an extra always-succeeding stage would swallow the Back
+  ;; out of the corner question by falling straight forward again.
+  ;; Re-entering after a Back re-fits, which is what changing a side
+  ;; or a diagonal should do.
+  (defun hx:corners ( / v k oang mins de ef icap)
+    (princ "\nFitting pool body to the measurements ...")
+    (setq res (pool:fithex sides diags lazy pool:*side-tol* pool:*cross-tol*)
+          pts (car res)
+          failed (cadr res)
+          octy "Square" ocsz 0.0 icty "Square" icsz 0.0)
     (setq v (pool:askyn "Are the corners modified (rounded / chamfered)"
                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
       ((not v) nil)
       (t
+       ;; one answer covers the five OUTER corners (0 1 2 3 5), so it
+       ;; has to hold for the SHARPEST of them -- that is the one whose
+       ;; cut reaches furthest along its walls.  Budget: half the
+       ;; shortest fitted wall, which with the sharpest angle on both
+       ;; ends of every wall can never overrun any of them.
+       (setq oang (pool:polywedge pts 0) mins nil)
+       (foreach k '(1 2 3 5)
+         (setq oang (min oang (pool:polywedge pts k))))
+       (foreach k pool:*hexsides*
+         (setq de (distance (nth (car k) pts) (nth (cadr k) pts))
+               mins (if mins (min mins de) de)))
        (setq oc (pool:askcorner "OUTER corners" nil nil nil
-                                (* 0.5 (apply 'min sides)) t))
+                                (* 0.5 mins) oang t))
        (if (eq oc 'POOL-BACK)
            'POOL-BACK
            (progn
-             (setq octy (car oc) ocsz (cadr oc)
+             (setq octy (car oc) ocsz (cadr oc))
+             ;; E is capped by what the outer cuts actually LEFT on its
+             ;; two walls, at each of those corners' own angles
+             (setq de (- (distance (nth 3 pts) (nth 4 pts))
+                         (* ocsz (pool:cornerk octy (pool:polywedge pts 3))))
+                   ef (- (distance (nth 4 pts) (nth 5 pts))
+                         (* ocsz (pool:cornerk octy (pool:polywedge pts 5))))
+                   icap (max 0.0 (min de ef))
                    ic (pool:askcorner "INNER corner (E)" octy ocsz nil
-                                      (* 0.5 (min (nth 3 sides)
-                                                  (nth 4 sides)))
-                                      t))
+                                      icap (pool:polywedge pts 4) t))
              (if (eq ic 'POOL-BACK)
                  'POOL-BACK
                  (progn (setq icty (car ic) icsz (cadr ic)) nil)))))))
@@ -1892,11 +1922,9 @@
   (pool:stages (list 'hx:sides 'hx:diags 'hx:corners))
   (pool:pvkill)
 
-  (princ "\nFitting pool body to the measurements ...")
-  (setq res (pool:fithex sides diags lazy pool:*side-tol* pool:*cross-tol*)
-        pts (car res)
-        failed (cadr res)
-        notes nil
+  ;; pts / res / failed were fit at the top of hx:corners, so the
+  ;; corner questions could be sized against the real corner angles
+  (setq notes nil
         xmin (apply 'min (mapcar 'car pts))
         xmax (apply 'max (mapcar 'car pts))
         ymin (apply 'min (mapcar 'cadr pts))
@@ -2123,11 +2151,46 @@
 ;; ctype "Ends" is the escape hatch for corners that are not a plain
 ;; treatment of this quad's corner (a Grecian's angled cut, say): size
 ;; and xtra ARE the two treatment ends, prev-side first.
-(defun pool:cornerends (p pp pn ctype size xtra / uprev unext dp ang sb bis cen)
+;; The wedge angle the two walls at p actually make (0..pi), measured
+;; from p toward its previous and next corners.  A reflex corner is
+;; measured by the wedge its walls make, not the 360-minus angle --
+;; which is what the treatment geometry wants either way.
+(defun pool:wedge (p pp pn / u v dp)
+  (setq u (pool:unit (pool:v- pp p))
+        v (pool:unit (pool:v- pn p))
+        dp (pool:dot u v))
+  (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))
+
+;; Same, for corner i of a closed polygon.
+(defun pool:polywedge (pts i / n)
+  (setq n (length pts))
+  (pool:wedge (nth i pts)
+              (nth (rem (+ i (1- n)) n) pts)
+              (nth (rem (+ i 1) n) pts)))
+
+;; How far a corner treatment eats along EACH adjacent wall, per unit
+;; of entered size, at wedge angle ang:
+;;   Rounded  radius r -> r / tan(ang/2)
+;;   Diag     face   f -> f / (2 sin(ang/2))
+;; At 90 degrees these come to 1.0 and 0.70711, which is what the old
+;; fixed arithmetic assumed -- but they diverge fast away from square
+;; (a 60-degree Rounded corner sets back 1.73 x its radius, a
+;; 135-degree one only 0.41 x), so anything sizing a treatment against
+;; the wall it has to fit on must ask for the real angle.  L and Lazy
+;; L pools are the ones that care: their bends are 135 degrees even
+;; in-square, and out-of-square every corner drifts off 90.
+(defun pool:cornerk (ctype ang / h s)
+  (setq h (* 0.5 ang) s (sin h))
+  (if (< s 1.0e-9)
+      1.0e9                             ; degenerate: treat as unusable
+      (cond ((= ctype "Rounded") (/ (cos h) s))
+            ((= ctype "Diag") (/ 1.0 (* 2.0 s)))
+            (t 0.0))))
+
+(defun pool:cornerends (p pp pn ctype size xtra / uprev unext ang sb bis cen)
   (setq uprev (pool:unit (pool:v- pp p))
         unext (pool:unit (pool:v- pn p))
-        dp (pool:dot uprev unext)
-        ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
+        ang (pool:wedge p pp pn))                          ; interior angle
   (cond
     ((= ctype "Ends") (list size xtra nil))
     ((= ctype "Diag")
@@ -2285,7 +2348,14 @@
 ;; maxsb caps the treatment's setback along the walls at half the
 ;; shorter adjacent wall, so two treatments can never overlap and fold
 ;; the perimeter; too-large answers are re-asked.
-(defun pool:askcorner (label prevty prevsz ents maxsb back / ty sz cols sb)
+;; ang = the wedge angle to size this answer against (the SHARPEST of
+;; them when one answer covers several corners, since that is the one
+;; that eats furthest into its walls).  nil means "assume square",
+;; which is right for the rectangle: it asks its corners before the
+;; cross dims, so its true angles are not known yet -- and a pool
+;; still called a rectangle is within a degree of 90 anyway.
+(defun pool:askcorner (label prevty prevsz ents maxsb ang back
+                       / ty sz cols sb wed)
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (pool:osup)
@@ -2311,13 +2381,14 @@
                                       (strcat " <" (rtos prevsz) ">") "")
                                   ": ")))
         (if (null sz) (setq sz prevsz))
-        ;; Rounded sets back r along each wall; a Diag face f sets
-        ;; back f/sqrt(2) (90-degree corners)
+        ;; how far this treatment eats along each wall, at the real
+        ;; corner angle -- so the cap holds on a 135-degree bend or a
+        ;; skewed out-of-square corner, not just on a square one
+        (setq wed (if ang ang (/ pi 2.0)))
         (while (and maxsb
-                    (> (setq sb (if (= ty "Rounded") sz (* sz 0.70711)))
-                       maxsb))
+                    (> (setq sb (* sz (pool:cornerk ty wed))) maxsb))
           (princ (strcat "\nToo large for this corner's walls -- max "
-                         (rtos (if (= ty "Rounded") maxsb (/ maxsb 0.70711)))
+                         (rtos (/ maxsb (pool:cornerk ty wed)))
                          ".  Re-enter."))
           (initget 7)
           (setq sz (getdist (strcat "\n" label
@@ -3959,7 +4030,7 @@
             (progn                      ; in-square: one answer for all 4
               (setq cc (pool:askcorner "All corners (assumed identical)" nil nil
                                        (pool:lbl pv '(lA lB lC lD))
-                                       (* 0.5 (min tp le)) t))
+                                       (* 0.5 (min tp le)) nil t))
               (if (eq cc 'POOL-BACK)
                   'POOL-BACK
                   (progn (setq corners (list cc cc cc cc))
@@ -3975,7 +4046,7 @@
                            (strcat "Corner " (car (nth i lbls))) prevty prevsz
                            (pool:lbl pv (list (pool:lblkey (car (nth i lbls)))))
                            (* 0.5 (min (cadr (nth i lbls)) (caddr (nth i lbls))))
-                           t))
+                           nil t))
                 (if (eq cc 'POOL-BACK)
                     (if (= i 0)
                         (setq back t)   ; back out of the whole stage

@@ -728,4 +728,143 @@ assert vm.dimstyle_log == ['STANDARD INCHES', 'STANDARD',   # under 24 switches
                            'STANDARD'], vm.dimstyle_log      # exactly 24 inside: stays CROSS DIMENSIONS, block closes
 print("   under 24\" switches to STANDARD INCHES; exactly 24\" keeps the current style")
 
+print("== R20. out-of-square L: corner cuts use the REAL angle, not 90 ==")
+# The nominal L sheared 0.15 in x, so no corner is square: A and C come
+# out 81.47 deg, B/D/E/F 98.53.  A treatment's setback along its walls
+# is r/tan(a/2) (Rounded) -- 27.87 at 81.47 deg for r=24, not the 24.00
+# a fixed-90 assumption gives.  The perimeter must be cut by the real
+# figure, and no wall may end up drawn backwards.
+#
+# pool:cornerends already worked from the true local wedge angle, so
+# this passes before the cap fix as well -- it is here to pin that
+# behaviour down, not to demonstrate a repair.  R21 is the one that
+# fails without the fix.
+_S = [480.0, 424.7, 180.0, 182.01, 300.0, 242.68]
+_D = [686.48, 435.99, 274.32, 373.27, 412.91, 504.71, 555.13, 279.89, 538.0]
+_P = [(0.0, 0.0), (480.0, 0.0), (543.0, 420.0),
+      (363.0, 420.0), (336.0, 240.0), (36.0, 240.0)]
+_WALLS = {'A-B': (0, 1), 'B-C': (1, 2), 'C-D': (2, 3),
+          'D-E': (3, 4), 'E-F': (4, 5), 'F-A': (5, 0)}
+
+
+def wedge_deg(P, i):
+    p = P[i]; a = P[(i - 1) % len(P)]; b = P[(i + 1) % len(P)]
+    va = (a[0] - p[0], a[1] - p[1]); vb = (b[0] - p[0], b[1] - p[1])
+    c = (va[0]*vb[0] + va[1]*vb[1]) / (_m.hypot(*va) * _m.hypot(*vb))
+    return _m.degrees(_m.acos(max(-1.0, min(1.0, c))))
+
+
+def wall_spans(segs, P, walls):
+    """For each nominal wall, the drawn piece's start/end measured
+    along the wall.  end < start means the wall was drawn backwards --
+    the two corner treatments overran each other and folded it."""
+    out = {}
+    for nm, (i, j) in walls.items():
+        a, b = P[i], P[j]
+        L = _m.dist(a, b)
+        u = ((b[0]-a[0])/L, (b[1]-a[1])/L)
+        n = (-u[1], u[0])
+        best = None
+        for s in segs:
+            off = [abs((q[0]-a[0])*n[0] + (q[1]-a[1])*n[1]) for q in s]
+            ts = [(q[0]-a[0])*u[0] + (q[1]-a[1])*u[1] for q in s]
+            if max(off) < 0.5 and min(ts) > -1.0 and max(ts) < L + 1.0:
+                if best is None or abs(ts[1]-ts[0]) > abs(best[1]-best[0]):
+                    best = ts
+        out[nm] = best
+    return out
+
+
+vm = run(["Outofsquare", "L"] + BASE + _S + _D +
+         ["Yes", "Rounded", 24.0, "Square", "No", "No"], "R20")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+spans = wall_spans(segs, _P, _WALLS)
+for nm, ts in spans.items():
+    assert ts is not None, f"{nm} not drawn"
+    assert ts[1] > ts[0], f"{nm} drawn backwards (folded): {ts}"
+# the setback really is the angle-aware figure at both ends of A-B
+_sbA = 24.0 / _m.tan(_m.radians(wedge_deg(_P, 0) / 2.0))   # 27.87 at 81.47
+_sbB = 24.0 / _m.tan(_m.radians(wedge_deg(_P, 1) / 2.0))   # 20.67 at 98.53
+assert abs(_sbA - 27.87) < 0.02 and abs(_sbB - 20.67) < 0.02, (_sbA, _sbB)
+assert abs(spans['A-B'][0] - _sbA) < 0.05, (spans['A-B'][0], _sbA)
+assert abs((480.0 - spans['A-B'][1]) - _sbB) < 0.05
+# and NOT the flat 24.00 a 90-degree assumption would have produced
+assert abs(spans['A-B'][0] - 24.0) > 3.0, spans['A-B']
+print("   cuts follow each corner's own angle; no wall folded")
+
+print("== R21. out-of-square L: the size cap knows the angle too ==")
+# The cap used to convert size->setback assuming 90 degrees, so on this
+# shape it accepted r=90 (cap = half the shortest wall = 90) while the
+# true setbacks at C and D total 2.02 x 90 = 182 on the 180" C-D wall
+# -- overrunning it and drawing that wall backwards.  It must now be
+# rejected and re-asked instead.
+vm = run(["Outofsquare", "L"] + BASE + _S + _D +
+         ["Yes", "Rounded", 90.0, 40.0, "Square", "No", "No"], "R21")
+_rad = [p for p, a in vm.prompts if 'corner radius' in str(p)]
+assert len(_rad) == 2, f"oversize radius was not re-asked: {_rad}"
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+for nm, ts in wall_spans(segs, _P, _WALLS).items():
+    assert ts is not None and ts[1] > ts[0], f"{nm} folded after re-answer: {ts}"
+# the inner corner's allowance is what the OUTER cuts left on its two
+# walls, so a bigger outer cut has to shrink it
+def inner_asked(osz, isz):
+    v = VM()
+    v.load(LSP)
+    try:
+        v.run('c:POOL', ["Outofsquare", "L"] + BASE + _S + _D +
+              ["Yes", "Diag", osz, "Rounded", isz, 10.0, "No", "No"])
+    except LispError:
+        pass          # accepted first time: the spare value hit the next prompt
+    return len([p for p, a in v.prompts if 'INNER' in str(p) and 'radius' in str(p)])
+
+
+assert inner_asked(40.0, 140.0) == 1, "r=140 fits when the outer cut is small"
+assert inner_asked(110.0, 140.0) == 2, "r=140 must NOT fit once the outer cut grows"
+print("   oversize cut rejected; inner allowance tracks the outer cut")
+
+print("== R22. out-of-square LAZY L: 135-deg bends AND skew, deep end ties ==")
+# Also a characterisation test: the hopper frame already threaded the
+# real corner treatment through for A and F, and pool:cornerends is
+# angle-correct, so the ties land right at any angle.  Pinned here
+# because "the deep end at non-90-degree corners" is exactly the thing
+# that must not silently regress.
+_u = 0.7071067812
+_LZ = [(0.0, 0.0), (296.0, 0.0)]
+_LZ.append((_LZ[1][0] + 167.6*_u, 167.6*_u))
+_LZ.append((_LZ[2][0] - 167.6*_u, _LZ[2][1] + 167.6*_u))
+_LZ.append((_LZ[3][0] - 99.0*_u, _LZ[3][1] - 99.0*_u))
+_LZ.append((0.0, _LZ[4][1]))
+_LZ = [(p[0] + 0.12*p[1], p[1]) for p in _LZ]        # shear: nothing is square
+_ang = [wedge_deg(_LZ, i) for i in range(6)]
+assert all(abs(a - 90.0) > 0.3 for a in _ang), _ang   # genuinely off-square
+assert any(a > 130.0 for a in _ang), _ang             # and the 135 bends survive
+_ls = [round(_m.dist(_LZ[i], _LZ[j]), 2)
+       for i, j in [(0,1),(1,2),(2,3),(3,4),(4,5),(5,0)]]
+_ld = [round(_m.dist(_LZ[i], _LZ[j]), 2)
+       for i, j in [(0,2),(1,3),(2,4),(3,5),(0,4),(1,5),(0,3),(2,5)]]  # no B-E
+vm = run(["Outofsquare", "LA"] + BASE + _ls + _ld +
+         ["Yes", "Rounded", 24.0, "Square",
+          "Yes", 40.0, 60.0, 90.0, "NA", None, 60.0, None, "No"], "R22")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+# A (index 0) and F (index 5) are the deep-end wall's corners: each of
+# their two cut ends must carry a hopper tie, and nothing may sit on
+# the sharp corner behind the cut
+for idx, nm in ((0, "A"), (5, "F")):
+    p = _LZ[idx]
+    sb = 24.0 / _m.tan(_m.radians(_ang[idx] / 2.0))
+    assert abs(sb - 24.0) > 1.0, f"{nm} setback should differ from the 90-deg 24.00"
+    hops = []
+    for q in (_LZ[(idx - 1) % 6], _LZ[(idx + 1) % 6]):
+        v = (q[0] - p[0], q[1] - p[1])
+        n = _m.hypot(*v)
+        e = (p[0] + v[0]/n*sb, p[1] + v[1]/n*sb)
+        touching = [s for s in segs if endpoint_near(s, e, 0.8)]
+        assert len(touching) >= 2, f"{nm}: cut end {e} has no tie ({len(touching)})"
+        hops.append(other_end(min(touching, key=lambda s: _m.dist(*s)), e, 0.8))
+    # both ties from one corner meet the SAME hopper corner
+    assert _m.dist(hops[0], hops[1]) < 0.6, (nm, hops)
+    assert not any(endpoint_near(s, p, 0.4) for s in segs), \
+        f"a line still lands on the sharp corner {nm}"
+print("   skewed lazy L deep-end ties land on the real cuts, not the sharp corners")
+
 print("\nALL RUNTIME SCENARIOS PASSED")
