@@ -36,8 +36,13 @@ import shutil
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LISP_DIR = ROOT / "lisp"
 RELEASES_DIR = ROOT / "releases"
-DATED = re.compile(r".*_\d{6}_REV\d+\.lsp$")
+DATED = re.compile(r".*_\d{6}_REV\d+\.lsp$", re.I)
 VERSION = re.compile(r'\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"')
+# The spa/ files carry "MMDDYY REV##" banners instead (spa:*version*,
+# tut:*version*).  Their banner already names its own date, so the twin
+# reuses it rather than today's -- the filename, the banner, and what
+# SPAVER prints can then never disagree, and re-running is a no-op.
+VERSION2 = re.compile(r'\*version\*\s+"(\d{6}) REV(\d{2})"')
 
 
 def main():
@@ -46,18 +51,24 @@ def main():
     for src in sorted(LISP_DIR.rglob("*.lsp")):
         if DATED.match(src.name):
             continue
-        m = VERSION.search(src.read_text())
-        if not m:
+        text = src.read_text()
+        m = VERSION.search(text)
+        m2 = VERSION2.search(text) if not m else None
+        if not m and not m2:
             print(f"{src.relative_to(ROOT)}: no version banner - skipped")
             continue
-        rev = f"{m.group(1)}{m.group(2)}"
-        dst = RELEASES_DIR / f"{src.stem}_{date}_REV{rev}.lsp"
+        if m:
+            rev = f"{m.group(1)}{m.group(2)}"
+            dst = RELEASES_DIR / f"{src.stem}_{date}_REV{rev}.lsp"
+        else:
+            dst = RELEASES_DIR / f"{src.stem}_{m2.group(1)}_REV{m2.group(2)}{src.suffix}"
         for old in RELEASES_DIR.glob(f"{src.stem}_[0-9]*_REV[0-9]*.lsp"):
             if old != dst:
                 old.unlink()
                 print(f"removed {old.relative_to(ROOT)}")
         shutil.copyfile(src, dst)
-        print(f"{src.relative_to(ROOT)} (v{m.group(1)}.{m.group(2)}) -> {dst.relative_to(ROOT)}")
+        ver = f"v{m.group(1)}.{m.group(2)}" if m else f"{m2.group(1)} REV{m2.group(2)}"
+        print(f"{src.relative_to(ROOT)} ({ver}) -> {dst.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

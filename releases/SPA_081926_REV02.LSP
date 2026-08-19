@@ -73,9 +73,9 @@
 ;;;  so every sheet is solved and scored before fewest pieces decides.
 ;;;  The longest hinge is then checked against the hinge-length chart
 ;;;  and velcro hinges / double C channel / hold down kit recommended.  The fewest hinges
-;;;  that fit are placed evenly and nudged off the no-go zones; the
-;;;  leftmost is the dashed fold "Hinge", the rest ByLayer "Velcro
-;;;  Hinge" lines, labels on the TEXT layer.  Anything out of spec --
+;;;  that fit are placed evenly and nudged off the no-go zones; fold
+;;;  vs velcro then follows the Hinge Arrangement Chart (pairs folding
+;;;  from both ends), labels on the TEXT layer.  Anything out of spec --
 ;;;  foam length exceeded, piece count not acceptable, a zone that
 ;;;  could not be dodged -- is still drawn but flagged in the report.
 ;;;
@@ -1030,10 +1030,14 @@
 ;;;      piece count is bumped, and failing everything the even layout
 ;;;      is kept and the report says which hinge is in a zone.
 ;;;
-;;;  The leftmost hinge is the FOLD hinge: a dashed line on COVER with
-;;;  "Hinge" alongside.  Any further hinges are Velcro: ByLayer lines
-;;;  on COVER reading "Velcro Hinge".  The labels go on the TEXT layer,
-;;;  parallel to their hinge.
+;;;  Fold vs velcro follows the Hinge Arrangement Chart: the pieces
+;;;  fold up in PAIRS from both ends -- a sewn FOLD hinge (dashed,
+;;;  "Hinge") inside each pair, Velcro (ByLayer, "Velcro Hinge")
+;;;  between bundles -- so a 5-piece cover reads Hinge / Velcro /
+;;;  Velcro / Hinge, and an odd count leaves one flat piece at or
+;;;  beside the centre.  The leftmost hinge is always a fold and no
+;;;  two folds are ever adjacent.  The labels go on the TEXT layer,
+;;;  parallel to their hinge.  (Thermo-Light: all velcro, as ever.)
 
 ;; Foam sheet: (grade taper ((foamW . foamL) ...) (piece counts, 5 = 5+))
 ;; A grade+taper with two width options (48" / 49-1/2") carries both;
@@ -1265,6 +1269,40 @@
 (defun spa:hallow (n allowed)
   (if (>= n 5) (member 5 allowed) (member n allowed)))
 
+;; Fold or velcro for each hinge, per the Hinge Arrangement Chart.
+;; The chart's P is the HINGE COUNT (pieces - 1), positions 0-indexed
+;; west to east.  Fold ("Normal") hinges land on even positions and
+;; velcro on odd -- across the whole row when pieces mod 4 is 0 or 2,
+;; and only up to the chart's cutoff when it is 1 or 3, with the rest
+;; MIRRORING the left half:
+;;
+;;     2  H              5  H V V H          8  H V H V H V H
+;;     3  H V            6  H V H V H       9  H V H V V H V H
+;;     4  H V H          7  H V H V V H
+;;
+;; Read as bundles: the pieces fold up in PAIRS from both ends (a fold
+;; hinge inside each pair, velcro between bundles), an odd count leaving
+;; one flat piece at or beside the centre.  The leftmost hinge is always
+;; a fold, no two folds are ever adjacent, and 2- and 3-piece covers
+;; come out exactly as they always have.  allvel (Thermo-Light) forces
+;; every hinge to velcro.  Returns a list of "H" / "V", west to east.
+(defun spa:hingetypes (n allvel / hc m zone p out)
+  (setq hc (1- n)
+        m (rem n 4)
+        zone (cond ((or (= m 0) (= m 2)) hc)
+                   ((= m 1) (/ hc 2))
+                   (t (/ (+ hc 2) 2)))
+        p 0 out nil)
+  ;; built west to east, so the mirror lookup (nth (hc-1-p)) always
+  ;; lands on a position already decided
+  (while (< p hc)
+    (setq out (append out
+                      (list (cond (allvel "V")
+                                  ((< p zone) (if (= 0 (rem p 2)) "H" "V"))
+                                  (t (nth (- hc 1 p) out)))))
+          p (1+ p)))
+  out)
+
 ;;; ---------- drawing ----------
 
 (defun spa:hdash ()
@@ -1375,7 +1413,7 @@
 ;; rows (also via spillaway rows gathered in spa:*hingerows*).
 (defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row r opts
                          allowed best bestsc cand opt fw fl nmin res n xs
-                         mc lenok pcok sc hw h nm vd allvel
+                         mc lenok pcok sc hw h nm vd allvel htys hty
                          k x ch maxch maxpc prev lbl)
   (setq spa:*hingerows* nil)
   (if (/= "Yes" (spa:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil))
@@ -1446,22 +1484,26 @@
                                 (if fl (rtos fl 2 0) "N/A")
                                 " (this taper has "
                                 (itoa (length opts)) " sheets)")))
-        ;; 4 -- draw them: leftmost = fold hinge (dashed, "Hinge"),
-        ;; the rest Velcro (ByLayer, "Velcro Hinge")
-        (setq k 0 maxch 0.0)
+        ;; 4 -- draw them per the Hinge Arrangement Chart: FOLD hinges
+        ;; (dashed, "Hinge") and Velcro (ByLayer, "Velcro Hinge") laid
+        ;; out by spa:hingetypes -- pairs folding from both ends, so a
+        ;; 5-piece cover reads Hinge / Velcro / Velcro / Hinge
+        (setq htys (spa:hingetypes n allvel)
+              k 0 maxch 0.0)
         (foreach x xs
-          (setq ch (spa:chordat desc x))
+          (setq ch (spa:chordat desc x)
+                hty (nth k htys))
           (if ch
               (progn
                 (setq maxch (max maxch (- (cadr ch) (car ch))))
-                (if (and (= k 0) (not allvel))
+                (if (= hty "H")
                     (spa:line (list x (car ch)) (list x (cadr ch))
                               "COVER" (spa:hdash))
                     (spa:line (list x (car ch)) (list x (cadr ch))
                               "COVER" nil))
                 (spa:htext (list (- x (* 2.0 th)) (* 0.5 (+ (car ch) (cadr ch))))
                            (* 1.2 th)
-                           (if (and (= k 0) (not allvel)) "Hinge" "Velcro Hinge"))
+                           (if (= hty "H") "Hinge" "Velcro Hinge"))
                 (if (and fl (> (- (cadr ch) (car ch)) (+ fl 0.01)))
                     (spa:valnote (strcat "HINGE " (itoa (1+ k))
                                          " EXCEEDS THE FOAM LENGTH ("
@@ -1499,9 +1541,8 @@
                             (list "FOAM LENGTH MAX" fl maxch))))
         (setq k 0)
         (foreach x xs
-          (setq lbl (if (and (= k 0) (not allvel))
-                        "HINGE 1 (FOLD)"
-                        (strcat "HINGE " (itoa (1+ k)) " (VELCRO)"))
+          (setq lbl (strcat "HINGE " (itoa (1+ k))
+                            (if (= (nth k htys) "H") " (FOLD)" " (VELCRO)"))
                 spa:*hingerows*
                 (append spa:*hingerows* (list (list lbl nil (- x x1))))
                 k (1+ k)))

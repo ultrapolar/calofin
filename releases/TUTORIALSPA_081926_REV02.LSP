@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "081726 REV01")
+(setq tut:*version* "081926 REV02")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -118,7 +118,12 @@
     "    one can work where the other will not.  Every sheet is solved"
     "    and scored before fewest pieces is even considered."
     "*   HOW MANY HINGES AND WHERE.  The fewest pieces that fit the foam"
-    "    width, evenly spaced, nudged off the spillaway zones."))
+    "    width, evenly spaced, nudged off the spillaway zones."
+    "*   FOLD OR VELCRO, per the Hinge Arrangement Chart: the pieces"
+    "    fold up in PAIRS from both ends -- a sewn fold hinge inside"
+    "    each pair, velcro between bundles -- so 5 pieces read Hinge /"
+    "    Velcro / Velcro / Hinge, and an odd count leaves one flat"
+    "    piece at or beside the centre.  Thermo-Light: all velcro."))
 
 (setq tut:*checks*
   (list
@@ -212,7 +217,7 @@
 ;;; -------------------- the demo ---------------------------------------
 
 (defun tut:demo ( / base w l cut gap corners quad cen doff th arcs
-                    w2 l2 c2 org2 q2 ip2 sb2 desc n xs res nmin
+                    w2 l2 c2 org2 q2 ip2 sb2 desc n xs res nmin htys
                     k x ch rows stop)
   (setq base (getpoint "\nWhere shall the demo go <0,0>: ")
         spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
@@ -360,9 +365,11 @@
             (list "Standard 4-3 foam: 48\" wide, 144\" long, 2 to 4 pieces."
                   ""
                   "140\" / 48\" needs 3 pieces, so 2 hinges, evenly spaced."
-                  "The LEFTMOST is the fold hinge -- dashed, labelled"
-                  "Hinge.  The rest are Velcro Hinge, ByLayer.  Labels go"
-                  "on the TEXT layer."
+                  "Fold vs velcro follows the Hinge Arrangement Chart:"
+                  "pieces fold up in PAIRS from both ends, a dashed fold"
+                  "Hinge inside each pair, Velcro Hinge between bundles."
+                  "3 pieces = one pair + one flat piece: Hinge, Velcro."
+                  "(5 pieces would read Hinge/Velcro/Velcro/Hinge.)"
                   ""
                   "Each hinge runs the full 110\", well inside the 144\""
                   "foam length.  Had a spillaway been declared, the even"
@@ -372,12 +379,13 @@
                (setq desc (list "RECT" quad corners)
                      nmin (max 2 (spa:ceilv (/ w tut:*fw*)))
                      res (spa:hsolve 0.0 w tut:*fw* nil nmin)
-                     n (car res) xs (cadr res) k 0)
+                     n (car res) xs (cadr res)
+                     htys (spa:hingetypes n nil) k 0)
                (foreach x xs
                  (setq ch (spa:chordat desc x))
                  (if ch
                      (progn
-                       (if (= k 0)
+                       (if (= (nth k htys) "H")
                            (spa:line (list x (car ch)) (list x (cadr ch))
                                      "COVER" (spa:hdash))
                            (spa:line (list x (car ch)) (list x (cadr ch))
@@ -385,7 +393,8 @@
                        (spa:htext (list (- x (* 2.0 th))
                                         (* 0.5 (+ (car ch) (cadr ch))))
                                   (* 1.2 th)
-                                  (if (= k 0) "Hinge" "Velcro Hinge"))))
+                                  (if (= (nth k htys) "H")
+                                      "Hinge" "Velcro Hinge"))))
                  (setq k (1+ k))))))))
 
   (if (not stop)

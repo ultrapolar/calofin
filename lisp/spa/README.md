@@ -15,7 +15,7 @@ Every lisp here ships **twice, byte-identical, under two names**:
 | --- | --- |
 | `SPA.LSP` | the static name — the one in your `APPLOAD` stack |
 | `SPA_081926_REV02.LSP` | the same file, named `MMDDYY_REV##` for its revision |
-| `TUTORIALSPA.LSP` / `TUTORIALSPA_081726_REV01.LSP` | likewise |
+| `TUTORIALSPA.LSP` / `TUTORIALSPA_081926_REV02.LSP` | likewise |
 
 The static name never changes, so an existing autoload keeps working. The
 versioned name tells you at a glance which revision is sitting in someone
@@ -26,7 +26,7 @@ still tell you what it is:
 ```
 Command: SPAVER
 SPA 081926 REV02
-Tutorial: 081726 REV01
+Tutorial: 081926 REV02
 ```
 
 Cut a new release with:
@@ -353,9 +353,23 @@ hinge-length chart and each item recommended in the report:
 These are **advisories**, printed in cyan under the report table rather
 than red — they are recommendations, not failures.
 
-**Drawing** — the leftmost hinge is the fold hinge: a **dashed** line on
-`COVER` labelled `Hinge`. Any further hinges are **ByLayer** lines on
-`COVER` labelled `Velcro Hinge`. Labels go on the `TEXT` layer, vertical,
+**Drawing** — fold vs velcro follows the **Hinge Arrangement Chart**:
+the pieces fold up in **pairs from both ends**, with a sewn fold hinge
+inside each pair (a **dashed** line on `COVER` labelled `Hinge`) and
+velcro between bundles (**ByLayer** lines labelled `Velcro Hinge`). An
+odd piece count leaves one flat piece at or beside the centre:
+
+| pieces | west → east |
+| --- | --- |
+| 2 | Hinge |
+| 3 | Hinge, Velcro |
+| 4 | Hinge, Velcro, Hinge |
+| 5 | Hinge, Velcro, Velcro, Hinge |
+| 6 | Hinge, Velcro, Hinge, Velcro, Hinge |
+| 7 | Hinge, Velcro, Hinge, Velcro, Velcro, Hinge |
+
+The leftmost hinge is always a fold, no two folds are ever adjacent, and
+Thermo-Light stays all-velcro. Labels go on the `TEXT` layer, vertical,
 beside their hinge. The report gains rows for each spillaway, the piece
 count (with grade/taper), the worst piece width vs foam width, the worst
 hinge length vs foam length, and each hinge's offset from the left edge.
