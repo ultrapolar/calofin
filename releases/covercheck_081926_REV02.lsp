@@ -10,16 +10,16 @@
 ;;;    - covercheck.lsp             the STATIC name, unchanged forever
 ;;;                                 so it stays a one-time entry in
 ;;;                                 everyone's AutoCAD app autoloader.
-;;;    - COVERCHECK_MMDDYY_REV##.lsp  a byte-identical copy saved under
+;;;    - covercheck_MMDDYY_REV##.lsp  a byte-identical copy saved under
 ;;;                                 a name that records exactly which
 ;;;                                 revision it is, so opening someone
 ;;;                                 else's support folder tells you at
 ;;;                                 a glance what they have loaded.
 ;;;  The two files must always carry the same content. Whenever
-;;;  covercheck.lsp changes, bump *cchk-version* below, save a NEW
-;;;  dated/revisioned copy alongside the old ones (never overwrite an
-;;;  earlier dated copy - they are a history, not a rolling backup),
-;;;  and keep covercheck.lsp itself byte-identical to the newest one.
+;;;  covercheck.lsp changes, bump *cchk-version* below and regenerate
+;;;  the dated twin with python3 tools/release_lisp.py (the twin's
+;;;  REV## is the version with the dot dropped, v0.2 -> REV02; git
+;;;  history keeps the earlier dated copies).
 ;;;  *cchk-version* is also stamped into the load banner, into every
 ;;;  COVERCHECK/COVERSCAN report's title line, and is available on
 ;;;  demand via the COVERCHECKVERSION command - so even a renamed or
@@ -172,7 +172,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "08-17-26 REV01")
+(setq *cchk-version* "v0.2")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -502,12 +502,13 @@
   ;; the reviewing question, with a way out of a mis-press:
   ;; 'yes 'no 'back (redo the previous item) 'skip (stop asking,
   ;; finish the run and still write the report)
-  (initget "Yes No Back Skip")
+  (initget "Yes No Back Skip Undo")   ; Undo = hidden synonym for Back
   (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
         ((= ans "Back")  'back)
+        ((= ans "Undo")  'back)
         (t               'skip)))
 
 (defun cchk:confirm-move (label orig sugg / ans newp)
@@ -2519,7 +2520,7 @@
                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
                                   (car cres))))
         (setq txt (strcat "COVERCHECK REPORT - " (cchk:datestr)
-                          " (v" *cchk-version* ")"
+                          " (" *cchk-version* ")"
                           "\\P"
                           (cchk:small
                             (strcat "Items needing attention are shown in "
@@ -2716,7 +2717,7 @@
                  (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                  (list 0.0 0.0 0.0)))
      (setq txt (strcat "COVERSCAN REPORT - " (cchk:datestr)
-                       " (v" *cchk-version* ")"
+                       " (" *cchk-version* ")"
                        "\\P"
                        (cchk:small (strcat "Read-only scan - nothing in the drawing was changed. "
                                            "Items needing attention are shown in "
@@ -2754,7 +2755,7 @@
 
 (defun cchk:tut-checklist ()
   (princ "\n\n=== What COVERCHECK / COVERSCAN check ===")
-  (princ (strcat "\n(this file: v" *cchk-version* ")"))
+  (princ (strcat "\n(this file: " *cchk-version* ")"))
   (princ "\n\nDIMENSIONS - each linear/aligned dimension's two definition")
   (princ "\n  points are checked against nearby geometry; an off-object point")
   (princ "\n  is offered Move (snap it), Keep (leave it), or Pick (place it")
@@ -3015,11 +3016,11 @@
   (princ))
 
 (defun c:COVERCHECKVERSION ()
-  (princ (strcat "\nThis file's COVERCHECK / COVERSCAN: v" *cchk-version*))
-  (princ "\n(covercheck.lsp and its dated COVERCHECK_MMDDYY_REV##.lsp twin should always match this.)")
+  (princ (strcat "\nThis file's COVERCHECK / COVERSCAN: " *cchk-version*))
+  (princ "\n(covercheck.lsp and its dated covercheck_MMDDYY_REV##.lsp twin should always match this.)")
   (princ))
 
-(princ (strcat "\ncovercheck.lsp loaded (v" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
+(princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
 (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
 (princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVERSION prints this file's version.")
 (princ)

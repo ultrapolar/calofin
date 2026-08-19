@@ -26,17 +26,19 @@
 ;;;     AUTOBEAD_MMDDYY_REV##.lsp     - dated name, so a stack can be
 ;;;                                     identified at a glance
 ;;;   Both report the same revision, so AUTOBEADVER tells you what someone
-;;;   is actually running regardless of which filename they loaded.
-;;;   Regenerate the dated copy with release.sh / release.ps1 -- do not
-;;;   hand-copy, or the two will drift.
+;;;   is actually running regardless of which filename they loaded.  The
+;;;   filename's REV## is the version below with the dot dropped
+;;;   (v0.2 -> REV02).  Regenerate the dated copy with
+;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
+;;;   will drift.
 ;;; ==========================================================================
 
 (vl-load-com)
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-rev*    "REV01"      ; revision stamp
-      *autobead-date*   "08/17/26"   ; release date, MM/DD/YY
+(setq *autobead-version* "v0.2"      ; revision stamp; the dated twin is
+                                     ; named for it (v0.2 -> REV02)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
       *autobead-filter* "POOL*"      ; selectable source layers
@@ -231,7 +233,7 @@
 
      ;; 4) report -- including what was actually built, so a bead that
      ;;    lands in the wrong place can be diagnosed from the command line
-     (prompt (strcat "\n--- AUTOBEAD " *autobead-rev* " ---"
+     (prompt (strcat "\n--- AUTOBEAD " *autobead-version* " ---"
                      "\n  source layers : "
                      (apply 'strcat
                        (mapcar '(lambda (l) (strcat l " "))
@@ -260,24 +262,38 @@
 
 ;; ---- AUTOBEAD --------------------------------------------------------------
 
-(defun c:AUTOBEAD ( / ss dirpt )
+(defun c:AUTOBEAD ( / ss dirpt stage done )
   (autobead-ensure-layer *autobead-layer*)
-  (prompt (strcat "\nSelect POOL lines to bead (layers "
-                  *autobead-filter* "): "))
-  (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
-                        (cons 8 *autobead-filter*))))
-  (cond
-    ((null ss)
-     (prompt (strcat "\nNothing selected on a " *autobead-filter* " layer.")))
-    ((null (setq dirpt (getpoint "\nClick the side to bead toward: ")))
-     (prompt "\nNo direction point picked."))
-    (T (autobead-build ss dirpt)))
+  ;; staged: Back (or Undo) at the direction click re-opens the selection
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+      ((= stage 1)
+       (prompt (strcat "\nSelect POOL lines to bead (layers "
+                       *autobead-filter* "): "))
+       (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
+                             (cons 8 *autobead-filter*))))
+       (if (null ss)
+         (progn
+           (prompt (strcat "\nNothing selected on a " *autobead-filter*
+                           " layer."))
+           (setq done T))
+         (setq stage 2)))
+      (T
+       (initget "Back Undo")
+       (setq dirpt (getpoint "\nClick the side to bead toward [Back]: "))
+       (cond
+         ((= (type dirpt) 'STR) (setq stage 1))
+         ((null dirpt)
+          (prompt "\nNo direction point picked.")
+          (setq done T))
+         (T (autobead-build ss dirpt) (setq done T))))))
   (princ))
 
 ;; ---- AUTOBEADVER -----------------------------------------------------------
 
 (defun c:AUTOBEADVER ()
-  (prompt (strcat "\nAUTOBEAD " *autobead-rev* "  (" *autobead-date* ")"
+  (prompt (strcat "\nAUTOBEAD " *autobead-version*
                   "\n  offset : " (rtos *autobead-offset*)
                   "\n  layer  : " *autobead-layer*
                   "\n  filter : " *autobead-filter*))
@@ -309,7 +325,7 @@
     (list
       ""
       "==========================================================="
-      (strcat " AUTOBEAD " *autobead-rev* " - how it works")
+      (strcat " AUTOBEAD " *autobead-version* " - how it works")
       "==========================================================="
       ""
       "WHAT IT DOES"
@@ -514,7 +530,7 @@
 
 ;; ---------------------------------------------------------------------------
 
-(prompt (strcat "\nAUTOBEAD " *autobead-rev* " (" *autobead-date* ") loaded."
+(prompt (strcat "\nAUTOBEAD " *autobead-version* " loaded."
                 "\n  AUTOBEAD          - bead selected pool lines"
                 "\n  TUTORIALAUTOBEAD  - how it works"
                 "\n  AUTOBEADVER       - revision check"))
