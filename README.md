@@ -40,6 +40,7 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
+| `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
@@ -165,6 +166,7 @@ python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
 python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
+python3 tests/test_cdcallout.py       # CDCALLOUT loaded and run in lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
