@@ -7,13 +7,14 @@
 ;;; Command:  CDCALLOUT
 ;;;
 ;;; The dimensioning sister of BPCALLOUT.  Instead of clicking points,
-;;; you name them: type the FROM point number, the TO point number,
-;;; then pick the space where the dimension line should sit, and an
-;;; aligned dimension is drawn between those two survey points -- in
-;;; the "CROSS DIMENSIONS" dimension style, on the "DIMENSION" layer,
-;;; ByLayer, the same convention CDCREATE and POOL use.  Rinse and
-;;; repeat: it keeps asking for the next FROM number until you press
-;;; Enter.
+;;; you name them: type the FROM point number and the TO point number,
+;;; and an aligned dimension is drawn between those two survey points
+;;; -- the dimension line sitting right inbetween, on the tie itself,
+;;; exactly where CDCREATE puts its (nudge cdo:*offset* to push it
+;;; off) -- in the "CROSS DIMENSIONS" dimension style, on the
+;;; "DIMENSION" layer, ByLayer, the same convention CDCREATE and POOL
+;;; use.  Rinse and repeat: it keeps asking for the next FROM number
+;;; until you press Enter.  Nothing is ever clicked.
 ;;;
 ;;; Point numbers are typed the way they read in the drawing: "35",
 ;;; "Pt.35", "pt 35", "#35" and "035" all name the same point -- the
@@ -23,9 +24,14 @@
 ;;; layer, or a plain POINT on the POINTS layer).
 ;;;
 ;;; A number that names no point in the drawing is reported and the
-;;; round starts over -- nothing is drawn from a typo.  Enter at the
-;;; TO prompt or at the pick cancels just that round.  The whole run
-;;; is one undo group: a single U takes every dimension away.
+;;; prompt re-asks -- nothing is drawn from a typo.  Enter at the TO
+;;; prompt cancels just that round.  The whole run is one undo group:
+;;; a single U takes every dimension away.
+;;;
+;;; Going back a step follows the shared Back convention (see the root
+;;; README): B/BACK/U/UNDO at the TO prompt re-asks FROM, and Back at
+;;; the FROM prompt (offered once something is drawn) un-draws the
+;;; last dimension.
 ;;;
 ;;; A missing "CROSS DIMENSIONS" style is NOT invented: the dims are
 ;;; drawn in whatever style is current and the routine says so, so a
@@ -38,11 +44,16 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.2")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
 (setq cdo:*layer*       "DIMENSION")        ; layer the dims land on
+(setq cdo:*offset*      0.0)        ; distance the dimension line is
+                                    ; pushed off the tie it measures,
+                                    ; drawing units (0.0 = right
+                                    ; inbetween, on the tie itself --
+                                    ; CDCREATE's convention)
 (setq *CDO-POINT-BLOCK* "ab_pt")    ; block name whose INSERTs mark
                                     ; points wherever they sit
 (setq *CDO-POINT-LAYER* "POINTS")   ; layer whose POINTs/INSERTs are
@@ -117,6 +128,12 @@
     (rtos (distof out 2) 2 8)
     out))
 
+;; T when a typed answer is the shared Back convention: B, BACK, U or
+;; UNDO alone, any case (typed prompts cannot take keywords, so Back
+;; is typed like a value - see "Going back a step" in the root README).
+(defun cdo:backp (s)
+  (member (strcase s) '("B" "BACK" "U" "UNDO")))
+
 ;; The survey point the typed number names, or nil.  The first match
 ;; wins when a drawing carries the same number twice.
 (defun cdo:find-point (s cands / want found c)
@@ -127,6 +144,24 @@
   found)
 
 ;; ---- dimension helpers (CDCREATE's conventions, kept) --------------
+
+;; midpoint of p1->p2, pushed perpendicular to the tie by dist
+;; (dist 0.0 puts the dimension line straight inbetween, on the tie)
+(defun cdo:loc (p1 p2 dist / dx dy d m)
+  (setq m (list (* 0.5 (+ (car  p1) (car  p2)))
+                (* 0.5 (+ (cadr p1) (cadr p2)))
+                (* 0.5 (+ (caddr p1) (caddr p2)))))
+  (if (equal dist 0.0 1e-12)
+    m
+    (progn
+      (setq dx (- (car  p2) (car  p1))
+            dy (- (cadr p2) (cadr p1))
+            d  (sqrt (+ (* dx dx) (* dy dy))))
+      (if (> d 1e-9)
+        (list (+ (car  m) (* dist (/ (- dy) d)))
+              (+ (cadr m) (* dist (/ dx d)))
+              (caddr m))
+        m))))
 
 ;; make a layer current, creating it first when the drawing lacks it
 (defun cdo:setlayer (name)
@@ -175,7 +210,8 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call (the BPCALLOUT v1.0 lesson).
 (defun c:CDCALLOUT (/ *error* olderr oce ocl oos odim grouped havestyle
-                      cands s1 s2 a b loc pre new made d)
+                      cands s1 s2 a b pre new made d dimlist stage
+                      done)
 
   ;; -- restore drawing state on error / Esc.  A dimension command may
   ;;    still be open, so talk to AutoCAD through command-s -- and close
@@ -220,48 +256,68 @@
                        "\" instead.  Create the style (or start"
                        " from the standard template) and re-run.")))
 
-      (setq made 0
-            s1   (getstring "\nFrom point number (Enter when done): "))
-      (while (/= s1 "")
-        (setq a (cdo:find-point s1 cands))
-        (if (null a)
-          (princ (strcat "\n  No point numbered \"" s1
-                         "\" in the drawing -- nothing drawn."))
-          (progn
-            (setq s2 (getstring (strcat "\nTo point number (from Pt."
-                                        (cdr a) "): ")))
-            (cond
-              ((= s2 "")
-               (princ "\n  No second point -- this one skipped."))
-              ((null (setq b (cdo:find-point s2 cands)))
-               (princ (strcat "\n  No point numbered \"" s2
-                              "\" in the drawing -- nothing drawn.")))
-              ((< (distance (car a) (car b)) 1e-9)
-               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
-                              " sit on the same spot -- nothing to"
-                              " measure.")))
-              (t
-               (setq loc (getpoint (strcat "\nPick the space for the"
-                                           " Pt." (cdr a) " - Pt."
-                                           (cdr b) " dimension line: ")))
-               (if (null loc)
-                 (princ "\n  No spot picked -- this one skipped.")
-                 (progn
-                   (setq pre (entlast))
-                   (command "_.DIMALIGNED"
-                            "_non" (trans (car a) 0 1)
-                            "_non" (trans (car b) 0 1)
-                            "_non" (trans loc 0 1))
-                   (setq new (entlast))
-                   (if (and new (not (eq new pre)))
-                     (progn
-                       (cdo:fixdim new havestyle)
-                       (setq made (1+ made)
-                             d    (distance (car a) (car b)))
-                       (princ (strcat "\n  Pt." (cdr a) " - Pt."
-                                      (cdr b) " dimensioned ("
-                                      (rtos d 4 4) ")."))))))))))
-        (setq s1 (getstring "\nFrom point number (Enter when done): ")))
+      ;; -- the rinse-repeat loop, as two stages so Back can re-ask
+      ;;    the previous question: FROM -> TO, per the shared Back
+      ;;    convention.  B/BACK/U/UNDO at TO re-asks FROM; Back at
+      ;;    FROM (offered once something is drawn) un-draws the last
+      ;;    dimension.  The dimension line goes right inbetween the
+      ;;    two points -- nothing to pick.
+      (setq made 0 dimlist nil stage 1 done nil)
+      (while (not done)
+        (cond
+          ;; -- FROM: the loop head
+          ((= stage 1)
+           (setq s1 (getstring
+                      (if dimlist
+                        "\nFrom point number (Enter when done) [Back]: "
+                        "\nFrom point number (Enter when done): ")))
+           (cond
+             ((= s1 "") (setq done t))
+             ((cdo:backp s1)
+              (if dimlist
+                (progn
+                  (entdel (car dimlist))
+                  (setq dimlist (cdr dimlist)
+                        made    (1- made))
+                  (princ "\nStepping back one dimension."))
+                (princ "\nAlready at the first dimension.")))
+             ((null (setq a (cdo:find-point s1 cands)))
+              (princ (strcat "\n  No point numbered \"" s1
+                             "\" in the drawing -- nothing drawn.")))
+             (t (setq stage 2))))
+          ;; -- TO: a good answer draws the dimension right away
+          (t
+           (setq s2 (getstring (strcat "\nTo point number (from Pt."
+                                       (cdr a) ") [Back]: ")))
+           (cond
+             ((= s2 "")
+              (princ "\n  No second point -- this one skipped.")
+              (setq stage 1))
+             ((cdo:backp s2) (setq stage 1))
+             ((null (setq b (cdo:find-point s2 cands)))
+              (princ (strcat "\n  No point numbered \"" s2
+                             "\" in the drawing -- nothing drawn.")))
+             ((< (distance (car a) (car b)) 1e-9)
+              (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
+                             " sit on the same spot -- nothing to"
+                             " measure.")))
+             (t
+              (setq pre (entlast))
+              (command "_.DIMALIGNED"
+                       "_non" (trans (car a) 0 1)
+                       "_non" (trans (car b) 0 1)
+                       "_non" (trans (cdo:loc (car a) (car b)
+                                              cdo:*offset*) 0 1))
+              (setq new (entlast))
+              (if (and new (not (eq new pre)))
+                (progn
+                  (cdo:fixdim new havestyle)
+                  (setq made    (1+ made)
+                        dimlist (cons new dimlist)
+                        d       (distance (car a) (car b)))
+                  (princ (strcat "\n  Pt." (cdr a) " - Pt." (cdr b)
+                                 " dimensioned (" (rtos d 4 4) ")."))))
+              (setq stage 1))))))
 
       ;; -- put the drawing back the way it was
       (if (and odim (not (equal odim (getvar "DIMSTYLE"))))

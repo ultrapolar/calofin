@@ -558,8 +558,9 @@ assert sum(1 for p, a in vm.prompts
 print("   falls back cleanly when the style is absent")
 
 print("== R15c. out-of-square corner dims + nesting inside CROSS DIMENSIONS ==")
-# out-of-square dims every corner, so all four 18" chamfer faces take
-# the inches style, while the two cross diagonals stay big
+# all four corners were answered identically (Enter reuse), so even
+# out-of-square they collapse to ONE Typ. callout -- a single 18"
+# chamfer dim in the inches style, not four
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,
           "Diag", 18.0,
@@ -567,9 +568,24 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           "Corner", 268.0, 268.0,
           "No"],
          "R15c", dimstyles=("STANDARD INCHES", "CROSS DIMENSIONS"))
-assert vm.dimstyle_log.count('STANDARD INCHES') == 4, vm.dimstyle_log
+assert vm.dimstyle_log.count('STANDARD INCHES') == 1, vm.dimstyle_log
+assert any(c[0] == '_.DIMALIGNED' and any('Typ.' in str(x) for x in c)
+           for c in vm.commands), "identical corners must read as one Typ."
 assert 'CROSS DIMENSIONS' in vm.dimstyle_log
 assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.dimstyle_log
+# ... but corners that genuinely DIFFER still dim individually
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 240.0, 120.0, 120.0,
+          "Diag", 18.0,
+          None, None,                    # B reuses A
+          "Rounded", 20.0,               # C differs
+          None, None,                    # D reuses C
+          "Corner", 268.0, 268.0,
+          "No"],
+         "R15c-mixed", dimstyles=("STANDARD INCHES", "CROSS DIMENSIONS"))
+assert not any(c[0] in ('_.DIMALIGNED', '_.DIMRADIUS', '_.LEADER')
+               and any('Typ.' in str(x) for x in c)
+               for c in vm.commands), "mixed corners must NOT collapse to Typ."
 # Nesting: a small dim drawn while CROSS DIMENSIONS is current must
 # come back to CROSS DIMENSIONS, not to STANDARD.  The draw order
 # never produces a small cross dim today, so drive it directly rather
@@ -927,5 +943,113 @@ _sel = set(id(e) for e in [c for c in vm.commands
 assert not [e for e in _prof if id(e) in _sel], \
     "the side section must not be mirrored with the plan"
 print(f"   {len(_prof)} section entities recorded, none mirrored")
+
+print("== R24. secondary sheet letters read in SIDE STANDARD ==")
+# Per the reference drawing (examples_of_fully_properly_dimmed_pools):
+# the letters that SUBDIVIDE an overall -- S, T, S1, V, the end radii,
+# an L's wing/step sides -- go in SIDE STANDARD; the overalls (B, A),
+# the S2 cut and the hopper chains stay in the standard style.
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0,
+          "NA", "NA", "NA", "NA", "NA",
+          "No"],
+         "R24", dimstyles=("SIDE STANDARD",))
+# in-square grecian draws 7 dims: S T B S1 V A S2 -> exactly 4 of them
+# (S, T, S1, V) switch into SIDE STANDARD and back
+assert vm.dimstyle_log.count('SIDE STANDARD') == 4, vm.dimstyle_log
+assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.dimstyle_log
+# a true L: the wing/step sides C-D, D-E, E-F are the secondary three
+vm = run(["Insquare", "L"] + BASE +
+         [480.0, 420.0, 180.0, 180.0, 300.0, 240.0,
+          "No", "No", "No"],
+         "R24-L", dimstyles=("SIDE STANDARD",))
+assert vm.dimstyle_log.count('SIDE STANDARD') == 3, vm.dimstyle_log
+# a dim inside a SIDE STANDARD block keeps that style even under 24"
+# (the reference shows a 19" S1 in SIDE STANDARD, not inches) -- and
+# with no SIDE block open, under-24" still switches to inches
+vm = VM()
+vm.load(LSP)
+for s in ("SIDE STANDARD", "STANDARD INCHES"):
+    vm.tables['DIMSTYLE'].add(s)
+vm.loads("""
+  (defun testside ( / od)
+    (setq od (pool:dimsdbeg))
+    (pool:dimalg '(0.0 0.0) '(19.0 0.0) '(9.0 5.0))
+    (pool:dimsdend od)
+    (pool:dimalg '(0.0 0.0) '(19.0 0.0) '(9.0 5.0)))
+""")
+vm.run('testside', [])
+assert vm.dimstyle_log == ['SIDE STANDARD', 'STANDARD',
+                           'STANDARD INCHES', 'STANDARD'], vm.dimstyle_log
+# missing SIDE STANDARD: no switch, and small dims fall to inches again
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0,
+          "NA", "NA", "NA", "NA", "NA",
+          "No"],
+         "R24-missing")
+assert 'SIDE STANDARD' not in vm.dimstyle_log
+print("   S/T/S1/V and the L's wing sides switch; overalls stay standard")
+
+print("== R25. report lengths follow the drawing's units ==")
+# drawing in architectural units -> TARGET/ACTUAL in feet-inches;
+# DELTA stays plain signed inches either way
+
+
+def run_units(lunits):
+    v = VM()
+    v.load(LSP)
+    v.sysvars['LUNITS'] = lunits
+    v.run('c:POOL', ["Insquare", "Rectangle"] + BASE +
+          [480.0, 240.0, "Square", "No"])
+    return [d for d in drawn(v, 'TEXT', 'POOL-NOTES')]
+
+
+_t4 = [d.get(1) for d in run_units(4)]
+assert any(t == "40'-0\"" for t in _t4), _t4
+assert any(t == "20'-0\"" for t in _t4), _t4
+assert not any(t == "480.00" for t in _t4), _t4
+_t2 = [d.get(1) for d in run_units(2)]
+assert any(t == "480.00" for t in _t2), _t2
+assert not any("'" in str(t) for t in _t2 if t), _t2
+# deltas: force a fitted mismatch so a nonzero delta appears, in inches
+vm = VM()
+vm.load(LSP)
+vm.sysvars['LUNITS'] = 4
+vm.run('c:POOL', ["Outofsquare", "Grecian"] + BASE +
+       ["Overall", 441.50, 216.00,
+        324.00, 61.00, 60.00, 96.00, 84.00,
+        "Simple", 389.00, 388.50, "No"])
+_tx = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert any(isinstance(t, str) and (t.startswith('+') or t.startswith('-'))
+           and '"' not in t and "'" not in t and '.' in t for t in _tx), \
+    "deltas must stay plain signed inches"
+assert any(isinstance(t, str) and t.endswith('"') for t in _tx), \
+    "targets/actuals must be feet-inches in an architectural drawing"
+print("   ft-in report in a ft-in drawing, inches in an inches drawing")
+
+print("== R26. corner letters live on the mini-model, not the drawing ==")
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Square", "No"], "R26")
+_letters = [d for d in drawn(vm, 'TEXT', 'POOL-NOTES')
+            if d.get(1) in ("A", "B", "C", "D")]
+assert len(_letters) == 4, [d.get(1) for d in _letters]
+# every letter sits right of the report (pool spans x 0..480; the
+# report starts at xmax + 2*doff = 533)
+assert all(d[10][0] > 533.0 for d in _letters), \
+    [(d.get(1), d[10][:2]) for d in _letters]
+# and the mini-model outline is there too: POOL-NOTES lines right of
+# the report body, forming a small closed rectangle
+_mlines = [(tuple(d[10][:2]), tuple(d[11][:2]))
+           for d in drawn(vm, 'LINE', 'POOL-NOTES')
+           if d[10][0] > 800.0 and d[11][0] > 800.0]
+assert len(_mlines) >= 4, _mlines
+# the grecian mini-model carries all 8 corner letters
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0,
+          "NA", "NA", "NA", "NA", "NA", "No"], "R26-grec")
+_g = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')
+      if d.get(1) in ("A", "B", "C", "D", "RB", "RT", "LT", "LB")]
+assert sorted(_g) == sorted(["A", "B", "C", "D", "RB", "RT", "LT", "LB"]), _g
+print("   letters beside the report; mini outline drawn; grecian has all 8")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

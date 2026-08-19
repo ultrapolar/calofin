@@ -187,10 +187,13 @@ either way.
 callout at the bottom-right corner (B) — a radius dimension reading
 `R1'-6" Typ.`, a chamfer-face dimension reading `1'-8" Typ.`, or, for
 square corners, a leader pointing at the corner reading `90° Typ.`
-An **out-of-square** pool dims **every corner individually**: radius
-dims on rounded corners, face dims on chamfers, and the **actual
-angular dimension** on square corners (showing the true fitted angle,
-e.g. `89.6°`).
+An **out-of-square** pool whose four corner answers came back
+**identical** (Enter reusing the previous corner, typically) collapses
+to that same single "Typ." callout — four copies of the same dim are
+noise, per the reference drawings. Only when the corners genuinely
+**differ** is every corner dimmed individually: radius dims on rounded
+corners, face dims on chamfers, and the **actual angular dimension**
+on square corners (showing the true fitted angle, e.g. `89.6°`).
 
 The **guide updates live**: as soon as the corner answers are in, the
 gray guide redraws its corners with the chamfers/fillets (display
@@ -762,12 +765,12 @@ zeroed state as your preference.
 | Layer | Content |
 | --- | --- |
 | `POOL` | The full pool **perimeter**, running around the whole shape — including the oval end arcs and Grecian corner cuts (individual lines/arcs, i.e. an exploded polyline). Best-fit body: sides held within **±1"**, cross dims within **±2"** of the given values (field measurements carry human error). |
-| `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under Grecian ends; ovals draw none — see *Oval ends*), plus corner labels and the report table: one row per measurement with TARGET, ACTUAL and DELTA. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
+| `POOL-NOTES` | All non-perimeter reference lines, **dashed** (the body end lines under Grecian ends; ovals draw none — see *Oval ends*), plus the report table and its perimeter mini-model. The `DASHED` linetype is auto-loaded from `acad.lin`/`acadiso.lin`; falls back to continuous if neither is found. |
 | `DIMENSION` | Aligned dimensions for all sides, cross dims and shape extras. Cross dims are drawn in the **`CROSS DIMENSIONS`** dimension style when the drawing has one (the current style is restored afterwards), ByLayer with no per-entity override; everything else uses the current dimension style. Cross dims answered `NA` are not dimensioned. |
 
 ### Dimension styles
 
-Two named styles are used when the drawing defines them, and the
+Three named styles are used when the drawing defines them, and the
 previous style is always restored right afterwards:
 
 * **`CROSS DIMENSIONS`** — every cross dim (the diagonal block, on
@@ -775,15 +778,28 @@ previous style is always restored right afterwards:
   lineweight override — so the look (dashed or otherwise) comes
   entirely from that dim style and the `DIMENSION` layer, exactly the
   way any other AutoCAD dimension does.
-* **`STANDARD INCHES`** — **every dimension measuring under 2'
-  (24")**, whatever it is: corner radii and chamfer faces, short
-  hopper offsets, end radii, profile depths. A dimension of exactly
-  2' stays in the current style (`STANDARD`, or `CROSS DIMENSIONS`
-  inside a cross-dim block) — the cutover is *under* 24", not
-  *at or under*. The switch happens per dimension, keyed on that
-  dimension's own measurement, so a 96" side and an 18" chamfer on
-  the same pool each get the right style. Angular corner dims measure
-  degrees, not inches, and are left in the current style.
+* **`SIDE STANDARD`** — the **secondary sheet letters**: the dims the
+  field sheets stack against an overall. Per the reference drawing
+  (`examples_of_fully_properly_dimmed_pools...dxf`) that is `S`, `T`,
+  `S1` and `V` on Grecians/octagons/Romans/mutts (and every edge of an
+  out-of-square Grecian except the overall chords), the Roman/oval
+  **end radii**, an L or Lazy L's **wing/step sides** (`C-D`/`D-E`/
+  `E-F` on a true L, the bends `B-C`/`D-E` and top `E-F` on a lazy),
+  and the six-sided hopper's `W`/`L1`/`X`. The overalls (`B`, `A`, the
+  principal walls), the `S2` cut, the corner-treatment `Typ.` callouts
+  and the `H/G/F/E` + `M/L/K` hopper chains stay in the standard
+  style. A dim inside a `SIDE STANDARD` block **keeps that style even
+  under 24"** — the reference shows a 19" `S1` in `SIDE STANDARD`,
+  not in inches.
+* **`STANDARD INCHES`** — **every other dimension measuring under 2'
+  (24")**: corner radii and chamfer faces, short hopper offsets,
+  profile depths. A dimension of exactly 2' stays in the current
+  style (`STANDARD`, or `CROSS DIMENSIONS` inside a cross-dim block) —
+  the cutover is *under* 24", not *at or under*. The switch happens
+  per dimension, keyed on that dimension's own measurement, so a 96"
+  side and an 18" chamfer on the same pool each get the right style.
+  Angular corner dims measure degrees, not inches, and are left in
+  the current style.
 
 If a style is missing from the drawing the dimension is simply drawn
 in the current style (the routine says so once per run for
@@ -792,6 +808,32 @@ small dimension drawn inside the cross-dim block returns to
 `CROSS DIMENSIONS`, not to whatever was current before it — and the
 style in effect when `POOL` started is restored even if the command
 errors out part-way.
+
+### The report and its mini-model
+
+One row per measurement: **MEASUREMENT / TARGET / ACTUAL / DELTA**.
+
+* **TARGET and ACTUAL follow the units the crew works in**: if the
+  drawing was in **architectural or engineering units** when `POOL`
+  started, they print as feet-inches (`25'-6 1/2"`, to the nearest
+  1/16"); a decimal-units drawing gets plain inches (`306.50`).
+  (`getdist` keeps only the value, never the text typed, so the
+  drawing's own units are the crew's declared preference — `POOL`
+  switches the drawing to architectural during its prompts either
+  way, so `25'6"` can always be *typed*.) The columns spread out in
+  feet-inches mode so the longer strings never collide.
+* **DELTA is always plain signed inches** (`+1.00`, `-0.25`) — a
+  delta is a small number and reads best that way whichever units the
+  lengths are in.
+
+**The corner letters live on a perimeter mini-model to the right of
+the report**, not in the corners of the drawing itself. The
+mini-model is the pool's outline (arcs and all — a round pool shows
+its circle) at a small fixed size, with each corner letter placed
+just outside it; the full-size drawing stays clean, and the letters
+still read directly against the report rows that name them. When an
+L pool is mirrored, the mini-model flips with it, so it always shows
+the pool as built.
 
 ### Fitting logic
 

@@ -136,11 +136,25 @@
 ;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
 ;; note is printed at most once per run.  Cross dims (the diagonal
 ;; block, any shape) use pool:*crossstyle* instead -- see pool:dimxbegin.
+;;
+;; The SECONDARY perimeter letters -- the ones the field sheets stack
+;; against an overall (S, S1, T, V, the end radii, an L's wing/step
+;; sides, the six-sided hopper's W/L1/X) -- go in pool:*sidestyle*
+;; ("SIDE STANDARD"), per the reference drawings.  A dim inside a
+;; SIDE STANDARD block keeps that style even under 24 inches: the
+;; reference sheets show a 19" S1 in SIDE STANDARD, not inches.
 (setq pool:*smalldim*    24.0)
 (setq pool:*smallstyle*  "STANDARD INCHES")
 (setq pool:*smallwarned* nil)
 (setq pool:*crossstyle*  "CROSS DIMENSIONS")
+(setq pool:*sidestyle*   "SIDE STANDARD")
+(setq pool:*sideon*      nil)         ; a SIDE STANDARD block is open
 (setq pool:*dimstyle0*   nil)         ; dim style current when POOL started
+;; T = report lengths in feet-inches; set per run from the units the
+;; DRAWING was in before POOL switched to architectural for its
+;; prompts (getdist keeps only the value, never how it was typed, so
+;; the drawing's own units are the crew's declared preference).
+(setq pool:*ftin*        nil)
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -334,7 +348,10 @@
 ;;; not inches, so they are left alone.)
 
 (defun pool:dimsbegin (d / odim)
-  (if (< d pool:*smalldim*)
+  ;; inside a SIDE STANDARD block the letter keeps that style however
+  ;; small it is -- the reference sheets show a 19" S1 in SIDE
+  ;; STANDARD, not in inches
+  (if (and (< d pool:*smalldim*) (not pool:*sideon*))
       (if (tblsearch "DIMSTYLE" pool:*smallstyle*)
           (progn
             (setq odim (getvar "DIMSTYLE"))
@@ -402,6 +419,37 @@
 (defun pool:dimxend (odim)
   (if (and odim (tblsearch "DIMSTYLE" odim))
       (command "_.-DIMSTYLE" "_Restore" odim)))
+
+;; Switch to the SIDE STANDARD dim style (the secondary sheet
+;; letters) when the drawing has one -- see the note above
+;; pool:*sidestyle*.  While the block is open, the under-24" switch is
+;; suppressed (pool:*sideon*).  Missing style -> current style, and
+;; the under-24" rule stays live.
+(defun pool:dimsdbeg ( / odim)
+  (if (tblsearch "DIMSTYLE" pool:*sidestyle*)
+      (progn
+        (setq odim (getvar "DIMSTYLE"))
+        (if (= (strcase odim) (strcase pool:*sidestyle*))
+            (setq odim nil)
+            (command "_.-DIMSTYLE" "_Restore" pool:*sidestyle*))
+        (setq pool:*sideon* t)
+        odim)))
+
+(defun pool:dimsdend (odim)
+  (setq pool:*sideon* nil)
+  (if (and odim (tblsearch "DIMSTYLE" odim))
+      (command "_.-DIMSTYLE" "_Restore" odim)))
+
+;; One aligned dim / radius dim in the SIDE STANDARD style.
+(defun pool:dimalgs (p1 p2 pt / od)
+  (setq od (pool:dimsdbeg))
+  (pool:dimalg p1 p2 pt)
+  (pool:dimsdend od))
+
+(defun pool:dimrads (ent tip outd doff / od)
+  (setq od (pool:dimsdbeg))
+  (pool:dimrad ent tip outd doff)
+  (pool:dimsdend od))
 
 ;; Point offset outward (away from cen) from the midpoint of p->q.
 ;; A negative dist offsets inward instead.
@@ -1207,7 +1255,8 @@
                        a b c d cen0 ml mr lend rend seed
                        res pts failed notes
                        xmin xmax ymin ymax w hh doff th cen odim
-                       e p qq cc nm tgt act rows k fedge fcross)
+                       e p qq cc nm tgt act rows k fedge fcross
+                       rbox mprims mlbls)
   (setq oldclay (getvar "CLAYER"))
 
   ;; perimeter input method first: measure every edge, or the overall
@@ -1497,29 +1546,33 @@
   ;; bottom-right cut.  Every corner is the same corner in square, so
   ;; one of each keeps the sheet clean.  Out-of-square: every edge
   ;; differs, so every edge is dimensioned as before.
+  ;; Style split per the reference sheet: the letters that SUBDIVIDE
+  ;; an overall (S, T, S1, V -- and out of square, every edge) read in
+  ;; SIDE STANDARD; the overalls themselves (B, A / the end chords)
+  ;; and the S2 corner cut stay in the standard style.
   (setvar "CLAYER" "DIMENSION")
   (if pool:*insq*
       (progn
         ;; S: pool's left extreme to the top side start (row 1)
         (setq p (nth 6 pts) qq (nth 5 pts))              ; LT, D
-        (pool:dimalg (list (car p) ymax) qq
-                     (list (* 0.5 (+ (car p) (car qq))) (+ ymax doff)))
+        (pool:dimalgs (list (car p) ymax) qq
+                      (list (* 0.5 (+ (car p) (car qq))) (+ ymax doff)))
         ;; T: the top side D-C (row 1)
-        (pool:dimalg (nth 5 pts) (nth 4 pts)
-                     (list (car (pool:mid (nth 5 pts) (nth 4 pts)))
-                           (+ ymax doff)))
+        (pool:dimalgs (nth 5 pts) (nth 4 pts)
+                      (list (car (pool:mid (nth 5 pts) (nth 4 pts)))
+                            (+ ymax doff)))
         ;; B: overall, tip to tip LT-RT (row 2, outboard)
         (pool:dimalg (nth 6 pts) (nth 3 pts)
                      (list (car (pool:mid (nth 6 pts) (nth 3 pts)))
                            (+ ymax (* 1.9 doff))))
         ;; S1: top down to the left tip (column 1)
-        (pool:dimalg (list xmin ymax) (nth 6 pts)
-                     (list (- xmin doff)
-                           (* 0.5 (+ ymax (cadr (nth 6 pts))))))
+        (pool:dimalgs (list xmin ymax) (nth 6 pts)
+                      (list (- xmin doff)
+                            (* 0.5 (+ ymax (cadr (nth 6 pts))))))
         ;; V: the left end LT-LB (column 1)
-        (pool:dimalg (nth 6 pts) (nth 7 pts)
-                     (list (- xmin doff)
-                           (cadr (pool:mid (nth 6 pts) (nth 7 pts)))))
+        (pool:dimalgs (nth 6 pts) (nth 7 pts)
+                      (list (- xmin doff)
+                            (cadr (pool:mid (nth 6 pts) (nth 7 pts)))))
         ;; A: overall, the A-D chord (column 2, outboard)
         (pool:dimalg (nth 0 pts) (nth 5 pts)
                      (list (- xmin (* 1.9 doff))
@@ -1535,7 +1588,7 @@
           ((= (caddr e) 'bc)            ; right end chord -> outboard right
            (pool:dimalg p qq (list (+ xmax (* 0.6 doff)) (cadr (pool:mid p qq)))))
           (t
-           (pool:dimalg p qq (pool:outoffp p qq pts doff))))))
+           (pool:dimalgs p qq (pool:outoffp p qq pts doff))))))
   ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach cc crosscons
@@ -1550,11 +1603,8 @@
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
-  ;; -------- corner labels (kept outside the shape)
-  (setq k 0)
-  (foreach p pts
-    (pool:text (pool:lbloff p cen pts (* 2.0 th)) th (nth k pool:*grecnames*) "POOL-NOTES")
-    (setq k (1+ k)))
+  ;; corner letters live on the mini-model beside the report, not in
+  ;; the corners of the drawing itself -- see the pool:minimap call
 
   ;; -------- report table
   (setq rows nil)
@@ -1595,7 +1645,18 @@
   (setq rows (append rows (pool:hopgrecdsp pts doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the report
+  (setq mprims nil k 0)
+  (foreach e pool:*grecedges*
+    (if (not (member (caddr e) '(ad bc)))
+        (setq mprims (cons (list 'l (nth (car e) pts) (nth (cadr e) pts))
+                           mprims))))
+  (setq mlbls nil)
+  (foreach p pts
+    (setq mlbls (append mlbls (list (cons p (nth (length mlbls) pool:*grecnames*))))))
+  (pool:minimap mprims pts mlbls (+ (car rbox) (* 3.0 th)) (cadr rbox)
+                (* 24.0 th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -1826,7 +1887,8 @@
 (defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes ans hxr
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast
-                            octy ocsz icty icsz oc ic hcs hce hcarcs)
+                            octy ocsz icty icsz oc ic hcs hce hcarcs
+                            rbox mprims mlbls)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
   (command "_.ZOOM" "_Window"
@@ -1998,12 +2060,22 @@
   (setq hcarcs (reverse hcarcs))
 
   ;; dimensions (layer DIMENSION) -- side dims read to the TRUE
-  ;; corners, same convention as the rectangle
+  ;; corners, same convention as the rectangle.  Per the reference
+  ;; sheet, the wing/step detail sides read in SIDE STANDARD while the
+  ;; principal walls (main run, far end, deep end) stay standard:
+  ;; true L -> C-D, D-E, E-F secondary; lazy L -> the bends B-C, D-E
+  ;; and the top E-F.
   (setvar "CLAYER" "DIMENSION")
+  (setq k 0)
   (foreach pr pool:*hexsides*
-    (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
-                 (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
-                               pts doff)))
+    (if (member k (if lazy '(1 3 4) '(2 3 4)))
+        (pool:dimalgs (nth (car pr) pts) (nth (cadr pr) pts)
+                      (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
+                                    pts doff))
+        (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
+                     (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
+                                   pts doff)))
+    (setq k (1+ k)))
   ;; corner annotations: one Typ. callout on an outer corner (B), the
   ;; inner corner E dimensioned on its own
   (if (/= octy "Square")
@@ -2031,11 +2103,9 @@
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
-  ;; corner labels (kept outside the shape -- D is a reflex corner)
-  (setq lbls (list "A" "B" "C" "D" "E" "F") k 0)
-  (foreach p pts
-    (pool:text (pool:lbloff p cen pts (* 2.0 th)) th (nth k lbls) "POOL-NOTES")
-    (setq k (1+ k)))
+  ;; corner letters live on the mini-model beside the report, not in
+  ;; the corners of the drawing itself -- see the pool:minimap call
+  (setq lbls (list "A" "B" "C" "D" "E" "F"))
 
   ;; report table
   (setq rows nil k 0)
@@ -2105,11 +2175,25 @@
                   "No" nil)
       (progn
         (pool:mirrory elast (cadr (pool:wp (list 0.0 (* 0.5 (+ ymin ymax))))))
+        ;; the mini-model must show the pool as BUILT, so its points
+        ;; flip with the plan
+        (setq pts (mapcar '(lambda (p) (list (car p)
+                                             (- (+ ymin ymax) (cadr p))))
+                          pts))
         (princ "\nPool mirrored -- the wing swapped sides, deep end still on the left.")))
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the report
+  (setq mprims nil k 0)
+  (foreach pr pool:*hexsides*
+    (setq mprims (cons (list 'l (nth (car pr) pts) (nth (cadr pr) pts)) mprims)))
+  (setq mlbls nil)
+  (foreach p pts
+    (setq mlbls (append mlbls (list (cons p (nth (length mlbls) lbls))))))
+  (pool:minimap mprims pts mlbls (+ (car rbox) (* 3.0 th)) (cadr rbox)
+                (* 24.0 th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -2123,18 +2207,37 @@
 
 ;; rows  = list of (label target actual [red])
 ;; notes = list of failure strings (written big and red)
-(defun pool:report (rows notes x y h lay / lh ytop y0 xr r tgt act dl ds n)
+;; TARGET / ACTUAL lengths in the crew's own units: feet-inches when
+;; the drawing was in architectural or engineering units before POOL
+;; switched to architectural for its prompts, plain inches otherwise.
+;; (getdist keeps only the value, never the text typed, so the
+;; drawing's own units are the crew's declared preference.)
+(defun pool:fmtlen (v)
+  (if pool:*ftin* (rtos v 4 4) (rtos v 2 2)))
+
+;; DELTA is always plain signed inches -- a delta is a small number
+;; and reads best that way whichever units the lengths are in.
+(defun pool:fmtdelta (dl)
+  (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
+
+;; Returns the table's box as (xr ytop y0) so the caller can hang the
+;; perimeter mini-model off its right edge (pool:minimap).
+(defun pool:report (rows notes x y h lay / lh ytop y0 xr r tgt act c2 c3 n)
+  ;; feet-inch strings run longer than decimal inches, so the TARGET/
+  ;; ACTUAL/DELTA columns spread out when the report is in feet-inches
   (setq lh (* 2.2 h)
         ytop (+ y lh)
-        xr (+ x (* 46.0 h))
+        c2 (if pool:*ftin* 33.0 29.0)
+        c3 (if pool:*ftin* 46.0 38.0)
+        xr (+ x (* (if pool:*ftin* 54.0 46.0) h))
         y ytop)
   (setq y (- y lh))
   (pool:text (list x y) (* 1.25 h) "POOL LAYOUT REPORT" lay)
   (setq y (- y lh))
   (pool:text (list x y) h "MEASUREMENT" lay)
   (pool:text (list (+ x (* 20.0 h)) y) h "TARGET" lay)
-  (pool:text (list (+ x (* 29.0 h)) y) h "ACTUAL" lay)
-  (pool:text (list (+ x (* 38.0 h)) y) h "DELTA" lay)
+  (pool:text (list (+ x (* c2 h)) y) h "ACTUAL" lay)
+  (pool:text (list (+ x (* c3 h)) y) h "DELTA" lay)
   ;; a 4th row element flags the row RED: the validator adjusted it
   (foreach r rows
     (setq y (- y lh)
@@ -2143,15 +2246,14 @@
     (pool:rtext (list x y) h (car r) lay (nth 3 r))
     (if tgt
         (progn
-          (setq dl (- act tgt)
-                ds (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
-          (pool:rtext (list (+ x (* 20.0 h)) y) h (rtos tgt 2 2) lay (nth 3 r))
-          (pool:rtext (list (+ x (* 38.0 h)) y) h ds lay (nth 3 r)))
+          (pool:rtext (list (+ x (* 20.0 h)) y) h (pool:fmtlen tgt) lay (nth 3 r))
+          (pool:rtext (list (+ x (* c3 h)) y) h (pool:fmtdelta (- act tgt))
+                      lay (nth 3 r)))
         ;; NA target: measurement was not taken in the field
         (progn
           (pool:rtext (list (+ x (* 20.0 h)) y) h "N/A" lay (nth 3 r))
-          (pool:rtext (list (+ x (* 38.0 h)) y) h "-" lay (nth 3 r))))
-    (pool:rtext (list (+ x (* 29.0 h)) y) h (rtos act 2 2) lay (nth 3 r)))
+          (pool:rtext (list (+ x (* c3 h)) y) h "-" lay (nth 3 r))))
+    (pool:rtext (list (+ x (* c2 h)) y) h (pool:fmtlen act) lay (nth 3 r)))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
     (pool:textc (list x y) (* 1.4 h) n lay 1))
@@ -2161,6 +2263,71 @@
   (pool:line (list xr y0) (list xr ytop) lay)
   (pool:line (list xr ytop) (list (- x h) ytop) lay)
   (pool:line (list (- x h) ytop) (list (- x h) y0) lay)
+  (list xr ytop y0))
+
+;; Map a pool-space point into the mini-model's box.  Called only from
+;; pool:minimap -- sc / ox / oy / xmin / ymax are ITS locals, seen here
+;; through dynamic scope (top-left anchored, y measured downward).
+(defun pool:mms (p)
+  (list (+ ox (* sc (- (car p) xmin)))
+        (- oy (* sc (- ymax (cadr p))))))
+
+;; The perimeter mini-model drawn beside the report: the pool outline
+;; at a small fixed size with the corner LETTERS on it.  The letters
+;; used to sit in the corners of the full-size drawing; they live here
+;; now, so the drawing itself stays clean.
+;;   prims  ('l p1 p2) line | ('a p1 pmid p2) arc as three points
+;;          (uniform scaling keeps an arc an arc) | ('rb cen b a) a
+;;          round/elliptical body
+;;   poly   the corner ring, for keeping letters outside the outline
+;;          (nil -> plain outward-from-centre offsets)
+;;   lbls   ((pt . "A") ...)
+;;   x y    top-left anchor (pool-report space); size = fit box
+(defun pool:minimap (prims poly lbls x y size th / pts p l xmin xmax ymin ymax
+                                                   sc ox oy w hh spoly cen tx
+                                                   lth)
+  (setq pts nil)
+  (foreach p prims
+    (if (eq (car p) 'rb)
+        (setq pts (cons (pool:v- (cadr p) (list (* 0.5 (caddr p))
+                                                (* 0.5 (cadddr p))))
+                        (cons (pool:v+ (cadr p) (list (* 0.5 (caddr p))
+                                                      (* 0.5 (cadddr p))))
+                              pts)))
+        (setq pts (append (cdr p) pts))))
+  (foreach l lbls (setq pts (cons (car l) pts)))
+  (if pts
+      (progn
+        (setq xmin (apply 'min (mapcar 'car pts))
+              xmax (apply 'max (mapcar 'car pts))
+              ymin (apply 'min (mapcar 'cadr pts))
+              ymax (apply 'max (mapcar 'cadr pts))
+              w (max 1.0e-6 (- xmax xmin))
+              hh (max 1.0e-6 (- ymax ymin))
+              sc (min (/ size w) (/ size hh))
+              ox x oy y
+              lth (* 1.4 th))
+        (foreach p prims
+          (cond
+            ((eq (car p) 'l)
+             (pool:line (pool:mms (cadr p)) (pool:mms (caddr p)) "POOL-NOTES"))
+            ((eq (car p) 'a)
+             (pool:arc3p (pool:mms (cadr p)) (pool:mms (caddr p))
+                         (pool:mms (cadddr p)) "POOL-NOTES"))
+            ((eq (car p) 'rb)
+             (pool:roundbody (pool:mms (cadr p)) (* sc (caddr p))
+                             (* sc (cadddr p)) "POOL-NOTES"))))
+        (setq spoly (if poly (mapcar 'pool:mms poly))
+              cen (list 0.0 0.0))
+        (foreach l lbls (setq cen (pool:v+ cen (pool:mms (car l)))))
+        (if lbls (setq cen (pool:v* cen (/ 1.0 (length lbls)))))
+        (foreach l lbls
+          (setq tx (pool:mms (car l)))
+          (pool:text (if spoly
+                         (pool:lbloff tx cen spoly (* 1.6 lth))
+                         (pool:v+ tx (pool:v* (pool:unit (pool:v- tx cen))
+                                              (* 1.6 lth))))
+                     lth (cdr l) "POOL-NOTES"))))
   (princ))
 
 
@@ -2310,8 +2477,17 @@
      (pool:dimsend od))))
 
 (defun pool:dimcorners (quad corners arcs cen doff / ilist sfx i cc ce p pp pn
-                                                    ty outd fm p1 p2)
-  (if pool:*insq*
+                                                    ty outd fm p1 p2 same)
+  ;; out-of-square, the corners are asked one at a time -- but when
+  ;; every answer came back the SAME treatment at the SAME size (Enter
+  ;; reusing the previous corner, typically), one "Typ." callout reads
+  ;; cleaner than four identical dims, exactly like in-square
+  (setq same t)
+  (foreach cc (cdr corners)
+    (if (not (and (equal (car cc) (car (car corners)))
+                  (equal (cadr cc) (cadr (car corners)) 1.0e-6)))
+        (setq same nil)))
+  (if (or pool:*insq* same)
       (setq ilist (list 1) sfx " Typ.")
       (setq ilist (list 0 1 2 3) sfx ""))
   (foreach i ilist
@@ -3765,7 +3941,9 @@
           (if (cadddr tl) (pool:dimred)))
         (if six
             (if (= mode "Offsets")
-                ;; one offset dim per cut face, square off the pool cut
+                ;; one offset dim per cut face, square off the pool
+                ;; cut -- hopper cut letters read in SIDE STANDARD,
+                ;; per the reference sheet
                 (foreach tl (list (list 'ct1 'ct2 'dd 'ltp)
                                   (list 'cb1 'cb2 'aa 'lbp))
                   (setq mm (pool:mid (cadr (assoc (car tl) gg))
@@ -3776,18 +3954,19 @@
                                       (pool:v* ud (pool:dot
                                         (pool:v- mm (cadr (assoc (caddr tl) gg)))
                                         ud))))
-                  (pool:dimalg proj mm (pool:mid proj mm))
+                  (pool:dimalgs proj mm (pool:mid proj mm))
                   (if sixbad (pool:dimred)))
-                ;; the sheet letters: W flat, L1 left edge, X on a face
+                ;; the sheet letters: W flat, L1 left edge, X on a
+                ;; face -- all SIDE STANDARD, per the reference sheet
                 (progn
-                  (pool:dimalg (cadr (assoc 'ct1 gg)) (cadr (assoc 'htr gg))
-                               (pool:mid (cadr (assoc 'ct1 gg)) (cadr (assoc 'htr gg))))
+                  (pool:dimalgs (cadr (assoc 'ct1 gg)) (cadr (assoc 'htr gg))
+                                (pool:mid (cadr (assoc 'ct1 gg)) (cadr (assoc 'htr gg))))
                   (if sixbad (pool:dimred))
-                  (pool:dimalg (cadr (assoc 'ct2 gg)) (cadr (assoc 'cb2 gg))
-                               (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'cb2 gg))))
+                  (pool:dimalgs (cadr (assoc 'ct2 gg)) (cadr (assoc 'cb2 gg))
+                                (pool:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'cb2 gg))))
                   (if sixbad (pool:dimred))
-                  (pool:dimalg (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))
-                               (pool:mid (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))))
+                  (pool:dimalgs (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))
+                                (pool:mid (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))))
                   (if sixbad (pool:dimred)))))
         (setvar "CLAYER" odl)
         (setq rows (list
@@ -3984,7 +4163,7 @@
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
                              ores lrfit rrfit larc rarc
-                             allpts xmax ymax ymin rows)
+                             allpts xmax ymax ymin rows rbox mprims)
   (setq oldclay (getvar "CLAYER"))
 
   ;; -------------------------------------- guide preview + input
@@ -4277,15 +4456,16 @@
           ;; oval in-square, per the field sheet: T above the top side
           ;; and A outside the left arc -- the bottom side and right
           ;; chord repeat them, so they are not dimensioned (B joins
-          ;; from the tip-to-tip dim below)
+          ;; from the tip-to-tip dim below).  T subdivides B, so it
+          ;; reads in SIDE STANDARD; A is an overall and stays put.
           (progn
-            (pool:dimalg d c (pool:outoff d c cen doff))
+            (pool:dimalgs d c (pool:outoff d c cen doff))
             (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
                                    (cadr (pool:mid a d)))))
           (progn
             (setq endoff (* -0.6 doff))
-            (pool:dimalg a b (pool:outoff a b cen doff))
-            (pool:dimalg d c (pool:outoff d c cen doff))
+            (pool:dimalgs a b (pool:outoff a b cen doff))
+            (pool:dimalgs d c (pool:outoff d c cen doff))
             (pool:dimalg a d (pool:outoff a d cen endoff))
             (pool:dimalg b c (pool:outoff b c cen endoff)))))
   ;; corner annotations: one "Typ." at B when in-square, every corner
@@ -4293,11 +4473,12 @@
   (if (= ptype "Rectangle")
       (pool:dimcorners quad corners arcs cen doff))
   ;; oval: radius dims read on the ARC from outside it (no line back to
-  ;; the circle centre), plus the tip-to-tip overall
+  ;; the circle centre), plus the tip-to-tip overall.  End radii are
+  ;; sheet letters -> SIDE STANDARD, like the roman reference.
   (if (= ptype "Oval")
       (progn
-        (pool:dimrad larc tipl ml doff)
-        (pool:dimrad rarc tipr mr doff)
+        (pool:dimrads larc tipl ml doff)
+        (pool:dimrads rarc tipr mr doff)
         ;; B tip-to-tip: on top per the field sheet when in-square,
         ;; below the pool (clear of the 4 side dims) out-of-square
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
@@ -4320,11 +4501,8 @@
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
-  ;; ------------------------------------------------ corner labels
-  (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
-    (pool:text (pool:v+ (car pr)
-                        (pool:v* (pool:unit (pool:v- (car pr) cen)) (* 1.5 th)))
-               th (cadr pr) "POOL-NOTES"))
+  ;; corner letters live on the mini-model beside the report, not in
+  ;; the corners of the drawing itself -- see the pool:minimap call
 
   ;; ------------------------------------------------ report table
   (setq rows (list (list "TOP SIDE (D-C)" tp (cadr meas))
@@ -4367,7 +4545,16 @@
                                                (cadr (nth (cadr lbl) corners))))))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the report
+  (setq mprims (list (list 'l a b) (list 'l d c)))
+  (if (= ptype "Oval")
+      (setq mprims (append mprims (list (list 'a a tipl d)
+                                        (list 'a b tipr c))))
+      (setq mprims (append mprims (list (list 'l a d) (list 'l b c)))))
+  (pool:minimap mprims quad
+                (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
+                (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -4415,7 +4602,7 @@
 
 ;; Full guided flow for round pools.
 (defun pool:roundflow ( / oldclay pv ans braw araw b a cen quad tipl tipr
-                          doff th rows notes xmax ymax)
+                          doff th rows notes xmax ymax rbox)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:roundpreview))
   (command "_.ZOOM" "_Window"
@@ -4463,7 +4650,11 @@
   (setq rows (list (list "OV B" braw b) (list "OV A" araw a))
         rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (setq notes (append notes pool:*valnotes*))
-  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  ;; mini-model beside the report -- a round pool has no corner
+  ;; letters, but the outline keeps the report set consistent
+  (pool:minimap (list (list 'rb cen b a)) nil nil
+                (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (princ "\nPool layout complete -- see the report table.")
   (princ))
 
@@ -4550,7 +4741,7 @@
                           hres sl tv sr lres rres s1l vl s1r vr
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
-                          allpts xmax ymax ymin rows xcol xa)
+                          allpts xmax ymax ymin rows xcol xa rbox)
   (setq oldclay (getvar "CLAYER"))
   (defun rm:perfect ( / v)
     (if pool:*insq*
@@ -4709,37 +4900,40 @@
       ;; top with B outboard of them (S shows at BOTH ends), and
       ;; S1+V+S1 share a column beside the left end with A outboard
       ;; (S1 shows at BOTH corners); the bottom side repeats T and is
-      ;; not dimensioned
+      ;; not dimensioned.  The stacked letters (S, T, S1, V) subdivide
+      ;; their overalls, so they read in SIDE STANDARD; B and A stay
+      ;; in the standard style.
       (progn
         (setq xcol (- (car tipl) (* 0.9 doff))
               xa (- (car tipl) (* 1.9 doff)))
         ;; row 1: S (left tip to side start), T, S (side end to right tip)
-        (pool:dimalg (list (car tipl) ymax) d
-                     (list (* 0.5 (+ (car tipl) (car d))) (+ ymax doff)))
-        (pool:dimalg d c (list (car (pool:mid d c)) (+ ymax doff)))
-        (pool:dimalg c (list (car tipr) ymax)
-                     (list (* 0.5 (+ (car c) (car tipr))) (+ ymax doff)))
+        (pool:dimalgs (list (car tipl) ymax) d
+                      (list (* 0.5 (+ (car tipl) (car d))) (+ ymax doff)))
+        (pool:dimalgs d c (list (car (pool:mid d c)) (+ ymax doff)))
+        (pool:dimalgs c (list (car tipr) ymax)
+                      (list (* 0.5 (+ (car c) (car tipr))) (+ ymax doff)))
         ;; row 2: B, tip to tip
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (+ ymax (* 1.9 doff))))
         ;; column 1: S1, V, S1 down the left end line
-        (pool:dimalg d (cadr lend)
-                     (list xcol (* 0.5 (+ (cadr d) (cadr (cadr lend))))))
-        (pool:dimalg (cadr lend) (caddr lend)
-                     (list xcol (cadr (pool:mid (cadr lend) (caddr lend)))))
-        (pool:dimalg (caddr lend) a
-                     (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
+        (pool:dimalgs d (cadr lend)
+                      (list xcol (* 0.5 (+ (cadr d) (cadr (cadr lend))))))
+        (pool:dimalgs (cadr lend) (caddr lend)
+                      (list xcol (cadr (pool:mid (cadr lend) (caddr lend)))))
+        (pool:dimalgs (caddr lend) a
+                      (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
         ;; column 2: A, the overall width
         (pool:dimalg a d (list xa (cadr (pool:mid a d)))))
       (progn
-        (pool:dimalg a b (pool:outoff a b cen doff))
-        (pool:dimalg d c (pool:outoff d c cen doff))
+        (pool:dimalgs a b (pool:outoff a b cen doff))
+        (pool:dimalgs d c (pool:outoff d c cen doff))
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))
         (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
                                (cadr (pool:mid a d))))))
-  (pool:dimrad (nth 3 lend) tipl ml doff)
-  (pool:dimrad (nth 3 rend) tipr mr doff)
+  ;; end radii are sheet letters too -> SIDE STANDARD, per the example
+  (pool:dimrads (nth 3 lend) tipl ml doff)
+  (pool:dimrads (nth 3 rend) tipr mr doff)
   (setq odim (pool:dimxbegin))
   (if dac
       (pool:dimalg a c (pool:v+ (pool:mid a c)
@@ -4752,11 +4946,8 @@
   (pool:dimxend odim)
   (setvar "CLAYER" oldclay)
 
-  ;; body corner labels
-  (foreach pr (list (list a "A") (list b "B") (list c "C") (list d "D"))
-    (pool:text (pool:v+ (car pr)
-                        (pool:v* (pool:unit (pool:v- (car pr) cen)) (* 1.5 th)))
-               th (cadr pr) "POOL-NOTES"))
+  ;; corner letters live on the mini-model beside the report, not in
+  ;; the corners of the drawing itself -- see the pool:minimap call
 
   ;; report
   (setq rows (list
@@ -4788,7 +4979,18 @@
   (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the report:
+  ;; the two sides, the S1 stubs and the end arcs
+  (pool:minimap
+    (list (list 'l a b) (list 'l d c)
+          (list 'l d (cadr lend)) (list 'l a (caddr lend))
+          (list 'a (cadr lend) tipl (caddr lend))
+          (list 'l c (cadr rend)) (list 'l b (caddr rend))
+          (list 'a (cadr rend) tipr (caddr rend)))
+    quad
+    (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
+    (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -4950,7 +5152,7 @@
                          dac dbd fq quad failed a b c d cen meas notes
                          uab udc ml mr lend rend tipl tipr
                          pab0 pab1 pdc0 pdc1 doff th odim
-                         allpts xmax ymax ymin rows xcol xa)
+                         allpts xmax ymax ymin rows xcol xa rbox)
   (setq oldclay (getvar "CLAYER"))
 
   (defun mu:ends ( / v)
@@ -5099,36 +5301,38 @@
       ;; field-sheet set: each end's letters where its home sheet puts
       ;; them -- S row + top side under B along the top, S1/V columns
       ;; beside their ends, A outboard left, S2 on grecian cuts, R on
-      ;; the arcs (below)
+      ;; the arcs (below).  The stacked letters (S, the top side, S1,
+      ;; V) subdivide the overalls and read in SIDE STANDARD; B, A and
+      ;; the S2 cut faces stay in the standard style, per the example.
       (progn
         (if (or (= dstyle "Grecian") (= dstyle "ROman"))
-            (pool:dimalg (list (car tipl) ymax) pdc0
-                         (list (* 0.5 (+ (car tipl) (car pdc0)))
-                               (+ ymax doff))))
-        (pool:dimalg pdc0 pdc1
-                     (list (car (pool:mid pdc0 pdc1)) (+ ymax doff)))
+            (pool:dimalgs (list (car tipl) ymax) pdc0
+                          (list (* 0.5 (+ (car tipl) (car pdc0)))
+                                (+ ymax doff))))
+        (pool:dimalgs pdc0 pdc1
+                      (list (car (pool:mid pdc0 pdc1)) (+ ymax doff)))
         (if (or (= sstyle "Grecian") (= sstyle "ROman"))
-            (pool:dimalg pdc1 (list (car tipr) ymax)
-                         (list (* 0.5 (+ (car pdc1) (car tipr)))
-                               (+ ymax doff))))
+            (pool:dimalgs pdc1 (list (car tipr) ymax)
+                          (list (* 0.5 (+ (car pdc1) (car tipr)))
+                                (+ ymax doff))))
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (+ ymax (* 1.9 doff))))
         (setq xcol (- (car tipl) (* 0.9 doff))
               xa (- (car tipl) (* 1.9 doff)))
         (if (or (= dstyle "Grecian") (= dstyle "ROman"))
             (progn
-              (pool:dimalg d (cadr lend)
-                           (list xcol (* 0.5 (+ (cadr d) (cadr (cadr lend))))))
-              (pool:dimalg (cadr lend) (caddr lend)
-                           (list xcol (cadr (pool:mid (cadr lend) (caddr lend)))))))
+              (pool:dimalgs d (cadr lend)
+                            (list xcol (* 0.5 (+ (cadr d) (cadr (cadr lend))))))
+              (pool:dimalgs (cadr lend) (caddr lend)
+                            (list xcol (cadr (pool:mid (cadr lend) (caddr lend)))))))
         (if (or (= sstyle "Grecian") (= sstyle "ROman"))
             (progn
-              (pool:dimalg c (cadr rend)
-                           (list (+ (car tipr) (* 0.9 doff))
-                                 (* 0.5 (+ (cadr c) (cadr (cadr rend))))))
-              (pool:dimalg (cadr rend) (caddr rend)
-                           (list (+ (car tipr) (* 0.9 doff))
-                                 (cadr (pool:mid (cadr rend) (caddr rend)))))))
+              (pool:dimalgs c (cadr rend)
+                            (list (+ (car tipr) (* 0.9 doff))
+                                  (* 0.5 (+ (cadr c) (cadr (cadr rend))))))
+              (pool:dimalgs (cadr rend) (caddr rend)
+                            (list (+ (car tipr) (* 0.9 doff))
+                                  (cadr (pool:mid (cadr rend) (caddr rend)))))))
         (pool:dimalg a d (list xa (cadr (pool:mid a d))))
         (if (= dstyle "Grecian")
             (pool:dimalg pab0 (caddr lend)
@@ -5140,14 +5344,15 @@
                                        (list pab0 pab1 pdc1 pdc0) doff))))
       ;; out-of-square: the simple roman-style set + dashed crosses
       (progn
-        (pool:dimalg pab0 pab1 (pool:outoff pab0 pab1 cen doff))
-        (pool:dimalg pdc0 pdc1 (pool:outoff pdc0 pdc1 cen doff))
+        (pool:dimalgs pab0 pab1 (pool:outoff pab0 pab1 cen doff))
+        (pool:dimalgs pdc0 pdc1 (pool:outoff pdc0 pdc1 cen doff))
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))
         (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
                                (cadr (pool:mid a d))))))
-  (pool:dimrad (nth 3 lend) tipl ml doff)
-  (pool:dimrad (nth 3 rend) tipr mr doff)
+  ;; end radii are sheet letters -> SIDE STANDARD, like the roman
+  (pool:dimrads (nth 3 lend) tipl ml doff)
+  (pool:dimrads (nth 3 rend) tipr mr doff)
   (if (not pool:*insq*)
       (progn
         (setq odim (pool:dimxbegin))
@@ -5162,11 +5367,8 @@
         (pool:dimxend odim)))
   (setvar "CLAYER" oldclay)
 
-  ;; -------- body corner labels
-  (foreach fq (list (list a "A") (list b "B") (list c "C") (list d "D"))
-    (pool:text (pool:v+ (car fq)
-                        (pool:v* (pool:unit (pool:v- (car fq) cen)) (* 1.5 th)))
-               th (cadr fq) "POOL-NOTES"))
+  ;; corner letters live on the mini-model beside the report, not in
+  ;; the corners of the drawing itself -- see the pool:minimap call
 
   ;; -------- report: one block per end, in its own sheet's letters
   (defun mu:endrows (nm style res ends pbot ptop pb2 sraw s1raw vraw
@@ -5211,11 +5413,35 @@
   (setq rows (append rows (pool:hopmuttdsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES")
+  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the
+  ;; report: sides + each end in its own style
+  (pool:minimap
+    (append (list (list 'l pab0 pab1) (list 'l pdc0 pdc1))
+            (pool:muttmmend dstyle a d pab0 pdc0 lend tipl)
+            (pool:muttmmend sstyle b c pab1 pdc1 rend tipr))
+    quad
+    (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
+    (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
   (princ))
+
+;; One mutt end as mini-model primitives, per its style (ends =
+;; muttend's (tip springT springB arcent rfit) return).
+(defun pool:muttmmend (style pbot ptop pb2 pt2 ends tip)
+  (cond
+    ((= style "Grecian")
+     (list (list 'l pb2 (caddr ends))
+           (list 'l (caddr ends) (cadr ends))
+           (list 'l (cadr ends) pt2)))
+    ((= style "ROman")
+     (list (list 'l ptop (cadr ends)) (list 'l pbot (caddr ends))
+           (list 'a (cadr ends) tip (caddr ends))))
+    ((= style "Oval")
+     (list (list 'a ptop tip pbot)))
+    (t (list (list 'l pbot ptop)))))
 
 ;; Mutt bottom dispatcher: the standard rectangle pipeline on the
 ;; tip-to-tip frame (H closes from the deep tip, E to the shallow
@@ -5300,8 +5526,9 @@
     ;; user settings come back FIRST so nothing below can skip them
     (pool:sysrestore)
     ;; DIMSTYLE is read-only to setvar, so it is put back the only way
-    ;; it can be: dying inside a small-dim or cross-dim block must not
-    ;; leave that style current in the user's drawing
+    ;; it can be: dying inside a small-dim, cross-dim or SIDE STANDARD
+    ;; block must not leave that style current in the user's drawing
+    (setq pool:*sideon* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
     (pool:undoend)
@@ -5316,7 +5543,12 @@
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil
         pool:*profents* nil
-        pool:*dimstyle0* (getvar "DIMSTYLE"))
+        pool:*sideon* nil
+        pool:*dimstyle0* (getvar "DIMSTYLE")
+        ;; report lengths follow the units the DRAWING was in before
+        ;; POOL switches to architectural for its prompts: a crew whose
+        ;; drawing is in feet-inches gets a feet-inches report
+        pool:*ftin* (member (cdr (assoc "LUNITS" pool:*sysold*)) '(3 4)))
   (setvar "CMDECHO" 0)
   (pool:undobegin)
   ;; architectural units while prompting so every distance can be

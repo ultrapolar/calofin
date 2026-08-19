@@ -82,8 +82,9 @@ never offers Back.
 
 In loops that draw as they go - `PERPPTS`/`CPERPPTS` offset points,
 `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` treads, `ABHD`/`ADAB` slope
-waypoints - Back also removes the just-committed point or step (its
-lines and its dimensions) before re-asking. `BPCALLOUT` works by
+waypoints, `CDCALLOUT` dimensions - Back also removes the
+just-committed point or step (its lines and its dimensions) before
+re-asking. `BPCALLOUT` works by
 reselection instead: clicking a ringed point again un-rings it.
 Feedback wording is shared too: `Stepping back one
 <point|step|dimension>.` on the way back, `Already at the first
