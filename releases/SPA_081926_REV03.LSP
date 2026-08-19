@@ -165,7 +165,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "081926 REV02")
+(setq spa:*version* "081926 REV03")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -183,6 +183,15 @@
 (setq spa:*flatoff*   18.0)     ; outline -> the inboard flat dims
 (setq spa:*insetfrac* 0.3333)   ; water's edge dims, a third of the way in
 (setq spa:*lapoff*    14.0)     ; how far under the cover the lap note sits
+
+;; Hinge lettering and linework, matched to the office template's
+;; before/after sample: labels are MTEXT in the Attributes style at a
+;; fixed 5" height, bottom-centred 3" off the line; the fold hinge is
+;; drawn in the stock DASHED2 linetype at an effective 5" dash.
+(setq spa:*hingetxth*  5.0)     ; hinge label height
+(setq spa:*hingetxw*  60.0)     ; hinge label MTEXT frame width
+(setq spa:*hingestyle* "Attributes")  ; label style (Standard when absent)
+(setq spa:*hdashmult* 20.0)     ; DASHED2 0.25" dash x 20 = 5" on paper
 
 (setq spa:*sfx-water* "Water's Edge")
 (setq spa:*sfx-cover* "Cover Size")
@@ -1031,13 +1040,17 @@
 ;;;      is kept and the report says which hinge is in a zone.
 ;;;
 ;;;  Fold vs velcro follows the Hinge Arrangement Chart: the pieces
-;;;  fold up in PAIRS from both ends -- a sewn FOLD hinge (dashed,
-;;;  "Hinge") inside each pair, Velcro (ByLayer, "Velcro Hinge")
-;;;  between bundles -- so a 5-piece cover reads Hinge / Velcro /
-;;;  Velcro / Hinge, and an odd count leaves one flat piece at or
-;;;  beside the centre.  The leftmost hinge is always a fold and no
-;;;  two folds are ever adjacent.  The labels go on the TEXT layer,
-;;;  parallel to their hinge.  (Thermo-Light: all velcro, as ever.)
+;;;  fold up in PAIRS from both ends -- a sewn FOLD hinge inside each
+;;;  pair, Velcro between bundles -- so a 5-piece cover reads Hinge /
+;;;  Velcro / Velcro / Hinge, and an odd count leaves one flat piece
+;;;  at or beside the centre.  The leftmost hinge is always a fold and
+;;;  no two folds are ever adjacent.  (Thermo-Light: all velcro.)
+;;;
+;;;  The linework matches the office template's sample: the fold hinge
+;;;  is a DASHED2 line on COVER scaled to a 5" dash, velcro hinges are
+;;;  ByLayer lines on COVER, and every label is a vertical MTEXT in
+;;;  the Attributes style (Standard when absent) at a fixed 5" height,
+;;;  bottom-centred 3" west of its hinge, on the TEXT layer.
 
 ;; Foam sheet: (grade taper ((foamW . foamL) ...) (piece counts, 5 = 5+))
 ;; A grade+taper with two width options (48" / 49-1/2") carries both;
@@ -1305,21 +1318,37 @@
 
 ;;; ---------- drawing ----------
 
-(defun spa:hdash ()
-  (if (/= spa:*dashlt* "CONTINUOUS")
-      (list (cons 6 spa:*dashlt*) (cons 48 (spa:ltsc)))))
+;; The fold hinge draws in the stock DASHED2 pattern (0.25 dash, 0.125
+;; gap), defined here when the drawing lacks it, and scaled so the dash
+;; plots 5" long no matter how the host drawing's LTSCALE is set --
+;; ent-scale x LTSCALE x 0.25 = 5.  In the office template (LTSCALE 50)
+;; that lands the sample drawing's exact 0.4.
+(defun spa:hdash ( / lt)
+  (setq lt (spa:ltmake "DASHED2"
+                       "Dashed (.5x) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _"
+                       '(0.25 -0.125)))
+  (if (/= lt "CONTINUOUS")
+      (list (cons 6 lt) (cons 48 (* spa:*hdashmult* (spa:ltsc))))))
 
-;; Vertical label beside a hinge, middle-centred, reading upward.
-(defun spa:htext (pt h str)
-  (entmake (list '(0 . "TEXT")
+;; Label beside a hinge, per the template sample: MTEXT in the
+;; Attributes style (Standard when the drawing has no such style),
+;; fixed 5" height, reading upward via the (0 1) direction vector,
+;; bottom-centred so its underside faces the hinge line, inserted 3"
+;; west of the line at the hinge's midpoint.
+(defun spa:htext (x ymid str)
+  (entmake (list '(0 . "MTEXT")
+                 '(100 . "AcDbEntity")
                  '(8 . "TEXT")
-                 (cons 10 (spa:wp pt))
-                 (cons 40 h)
+                 '(100 . "AcDbMText")
+                 (cons 10 (spa:wp (list (- x (* 0.6 spa:*hingetxth*)) ymid)))
+                 (cons 40 spa:*hingetxth*)
+                 (cons 41 spa:*hingetxw*)
+                 '(71 . 8)              ; bottom centre
+                 '(72 . 5)              ; drawing direction: by style
                  (cons 1 str)
-                 (cons 50 (* 0.5 pi))
-                 '(72 . 1)
-                 (cons 11 (spa:wp pt))
-                 '(73 . 2))))
+                 (cons 7 (if (tblsearch "STYLE" spa:*hingestyle*)
+                             spa:*hingestyle* "Standard"))
+                 (cons 11 '(0.0 1.0 0.0)))))
 
 ;;; ---------- the guided flow ----------
 
@@ -1501,8 +1530,7 @@
                               "COVER" (spa:hdash))
                     (spa:line (list x (car ch)) (list x (cadr ch))
                               "COVER" nil))
-                (spa:htext (list (- x (* 2.0 th)) (* 0.5 (+ (car ch) (cadr ch))))
-                           (* 1.2 th)
+                (spa:htext x (* 0.5 (+ (car ch) (cadr ch)))
                            (if (= hty "H") "Hinge" "Velcro Hinge"))
                 (if (and fl (> (- (cadr ch) (car ch)) (+ fl 0.01)))
                     (spa:valnote (strcat "HINGE " (itoa (1+ k))

@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "081926 REV02")
+(setq tut:*version* "081926 REV03")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -390,9 +390,7 @@
                                      "COVER" (spa:hdash))
                            (spa:line (list x (car ch)) (list x (cadr ch))
                                      "COVER" nil))
-                       (spa:htext (list (- x (* 2.0 th))
-                                        (* 0.5 (+ (car ch) (cadr ch))))
-                                  (* 1.2 th)
+                       (spa:htext x (* 0.5 (+ (car ch) (cadr ch)))
                                   (if (= (nth k htys) "H")
                                       "Hinge" "Velcro Hinge"))))
                  (setq k (1+ k))))))))

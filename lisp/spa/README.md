@@ -14,8 +14,8 @@ Every lisp here ships **twice, byte-identical, under two names**:
 | | |
 | --- | --- |
 | `SPA.LSP` | the static name — the one in your `APPLOAD` stack |
-| `SPA_081926_REV02.LSP` | the same file, named `MMDDYY_REV##` for its revision |
-| `TUTORIALSPA.LSP` / `TUTORIALSPA_081926_REV02.LSP` | likewise |
+| `SPA_081926_REV03.LSP` | the same file, named `MMDDYY_REV##` for its revision |
+| `TUTORIALSPA.LSP` / `TUTORIALSPA_081926_REV03.LSP` | likewise |
 
 The static name never changes, so an existing autoload keeps working. The
 versioned name tells you at a glance which revision is sitting in someone
@@ -25,8 +25,8 @@ still tell you what it is:
 
 ```
 Command: SPAVER
-SPA 081926 REV02
-Tutorial: 081926 REV02
+SPA 081926 REV03
+Tutorial: 081926 REV03
 ```
 
 Cut a new release with:
@@ -355,9 +355,13 @@ than red — they are recommendations, not failures.
 
 **Drawing** — fold vs velcro follows the **Hinge Arrangement Chart**:
 the pieces fold up in **pairs from both ends**, with a sewn fold hinge
-inside each pair (a **dashed** line on `COVER` labelled `Hinge`) and
-velcro between bundles (**ByLayer** lines labelled `Velcro Hinge`). An
-odd piece count leaves one flat piece at or beside the centre:
+inside each pair (a **`DASHED2`** line on `COVER`, scaled to a 5" dash
+in any drawing) and velcro between bundles (**ByLayer** lines). Labels
+match the template sample: vertical **MTEXT** in the `Attributes` style
+(`Standard` when the drawing has no such style) at a fixed 5" height,
+bottom-centred 3" west of the hinge — `Hinge` on folds, `Velcro Hinge`
+on the rest. An odd piece count leaves one flat piece at or beside the
+centre:
 
 | pieces | west → east |
 | --- | --- |
