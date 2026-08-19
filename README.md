@@ -36,7 +36,7 @@ Load a routine with APPLOAD, or add it to your startup suite.
 
 | Command(s) | Folder | What it does |
 | --- | --- | --- |
-| `POOL`, `POOLDEMO` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements |
+| `POOL`, `POOLDEMO`, `POOLVER`, `TUTORIALPOOL` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements |
 | `SPA`, `SPAVER`, `TUTORIALSPA` | `lisp/spa/` | Spa/hot-tub template - Rectangle, Octagon, Round |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
@@ -208,6 +208,7 @@ unit-testable directly:
 ```
 python3 tests/test_pool_lisp.py       # POOL geometry
 python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
+python3 tests/test_tutorialpool.py    # TUTORIALPOOL, run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
 python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS

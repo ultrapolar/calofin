@@ -34,6 +34,28 @@ what the tool can draw.
 Run it in a **scratch drawing** — it draws on the same layers `POOL`
 uses. It never prompts, so it is safe to re-run any time.
 
+### Learning it: `TUTORIALPOOL`
+
+`TUTORIALPOOL.LSP` is a third optional file. Load it after `POOL.LSP`
+and type **`TUTORIALPOOL`** for a paced, captioned walkthrough: nine
+topics, each printing a short explanation (guided input, in-square vs
+out-of-square, corner treatments, the hopper, validation, dimension
+styles, the report and mirroring), drawing a small focused example,
+and waiting for Enter before moving on (`X` then Enter stops early).
+Where `POOLDEMO` is a side-by-side reference sheet, the tutorial is
+one concept at a time with the reasoning spelled out next to each.
+Safe in a scratch drawing; it draws on the same layers `POOL` uses.
+
+### Versions: `POOLVER`
+
+All three files carry a `MMDDYY REV##` version banner and ship twice
+with identical contents — the static name for the APPLOAD stack, and a
+dated twin in `releases/` named for its revision
+(`POOL_081926_REV01.LSP`, ...). Type **`POOLVER`** in AutoCAD to see
+which revision of each is loaded — handy for comparing stacks between
+machines. After changing any of the files, bump its banner and
+regenerate the twins with `python3 tools/release_lisp.py`.
+
 Drawing units are assumed to be **inches** — all tolerances below are
 in inches. The command switches to Architectural units while it runs
 (restored afterwards), so **every distance prompt** accepts feet-inch
