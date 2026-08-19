@@ -47,8 +47,16 @@ def drawn(vm, etype, layer=None):
     return out
 
 
-def dimcalls(vm, name='_.DIMALIGNED'):
-    return [c for c in vm.commands if c and c[0] == name]
+def dimcalls(vm, name=('_.DIMALIGNED', '_.DIMLINEAR')):
+    names = (name,) if isinstance(name, str) else name
+    return [c for c in vm.commands if c and c[0] in names]
+
+
+def dimloc(c):
+    """Dimension-line placement point: the last point in the command
+    (DIMLINEAR carries an _H/_V/_R keyword between the ext-line
+    origins and the location, so a fixed index won't do)."""
+    return [x for x in c if isinstance(x, list)][-1]
 
 
 BASE = [(0.0, 0.0, 0.0)]      # insertion point pick
@@ -79,7 +87,7 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           40.0, 60.0],                        # C, D depths
          "R2")
 assert drawn(vm, 'DIMENSION') or True         # dims go through (command)
-assert any('_.DIMALIGNED' in c or '_.dimaligned' in str(c).lower()
+assert any(c and c[0] in ('_.DIMALIGNED', '_.DIMLINEAR')
            for c in vm.commands)
 print("   crossing Ends ties + wedge bottom + section drawn")
 
@@ -120,7 +128,7 @@ assert not any(abs(c[1][1]) < 0.01 and abs(c[2][1]) < 0.01 for c in _dc), \
     "bottom side must not be dimensioned in-square"
 _bt = [c for c in _dc
        if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 0.5]
-assert _bt and all(c[3][1] > 240.0 for c in _bt), _bt
+assert _bt and all(dimloc(c)[1] > 240.0 for c in _bt), _bt
 print("   NA radius derived; tangent hopper end drawn; B on top, no bottom dim")
 
 print("== R5. grecian, out-of-square, Measured, Center detail ==")
@@ -181,10 +189,10 @@ _dc = dimcalls(vm)
 assert len(_dc) == 7, len(_dc)
 # B = the tip-to-tip 480, dimensioned once, ABOVE the pool
 _bt = [c for c in _dc if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 1.5]
-assert len(_bt) == 1 and _bt[0][3][1] > 200.0, _bt
+assert len(_bt) == 1 and dimloc(_bt[0])[1] > 200.0, _bt
 # A = the 200 overall, dimensioned once, LEFT of the pool
 _at = [c for c in _dc if abs(_m.dist(c[1][:2], c[2][:2]) - 200.0) < 1.5]
-assert len(_at) == 1 and _at[0][3][0] < 0.0, _at
+assert len(_at) == 1 and dimloc(_at[0])[0] < 0.0, _at
 print("   grecian keeps its own A and B: drawn 480 x 200; 7 sheet dims")
 
 print("== R6. octagon from A and B alone (Overall default), hopper ==")
@@ -315,8 +323,8 @@ assert drawn(vm, 'CIRCLE', 'POOL')
 # per the sheet: B reads across the TOP, A up the left side
 _bt = [c for c in dimcalls(vm)
        if abs(_m.dist(c[1][:2], c[2][:2]) - 420.0) < 0.5]
-_top = [c for c in _bt if c[3][1] > 420.0]
-_left = [c for c in _bt if c[3][0] < 0.0]
+_top = [c for c in _bt if dimloc(c)[1] > 420.0]
+_left = [c for c in _bt if dimloc(c)[0] < 0.0]
 assert _top and _left, _bt
 print("   circle drawn from one measurement; hopper attached; B top, A left")
 
@@ -369,7 +377,7 @@ assert hasseg((440.0, 40.0), (440.0, 200.0)), "grecian shallow wall"
 assert hasseg((0.0, 0.0), (390.0, 0.0)), "bottom side stops at the cut"
 # B reads tip to tip (480) and sits above the pool, in-square style
 _bt = [c for c in dimcalls(vm) if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 0.5]
-assert _bt and all(c[3][1] > 240.0 for c in _bt), _bt
+assert _bt and all(dimloc(c)[1] > 240.0 for c in _bt), _bt
 # the bottom chain closes against the tip-to-tip 480, from the tip
 assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 60.0) < 0.5 and
            abs(c[1][0] - -40.0) < 0.5 or abs(c[2][0] - -40.0) < 0.5
@@ -524,7 +532,7 @@ def styled(vm):
     for c in vm.commands:
         if c and c[0] == '_.-DIMSTYLE' and len(c) >= 3 and c[1] == '_Restore':
             cur = c[2]
-        elif c and c[0] == '_.DIMALIGNED':
+        elif c and c[0] in ('_.DIMALIGNED', '_.DIMLINEAR'):
             out.append((_m.dist(c[1][:2], c[2][:2]), cur))
         elif c and c[0] == '_.DIMRADIUS':
             out.append(('R', cur))
@@ -583,7 +591,8 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           "Corner", 268.0, 268.0,
           "No"],
          "R15c-mixed", dimstyles=("STANDARD INCHES", "CROSS DIMENSIONS"))
-assert not any(c[0] in ('_.DIMALIGNED', '_.DIMRADIUS', '_.LEADER')
+assert not any(c[0] in ('_.DIMALIGNED', '_.DIMLINEAR', '_.DIMRADIUS',
+                        '_.LEADER')
                and any('Typ.' in str(x) for x in c)
                for c in vm.commands), "mixed corners must NOT collapse to Typ."
 # Nesting: a small dim drawn while CROSS DIMENSIONS is current must
@@ -1051,5 +1060,56 @@ _g = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')
       if d.get(1) in ("A", "B", "C", "D", "RB", "RT", "LT", "LB")]
 assert sorted(_g) == sorted(["A", "B", "C", "D", "RB", "RT", "LT", "LB"]), _g
 print("   letters beside the report; mini outline drawn; grecian has all 8")
+
+print("== R27. axis-aligned dims are true linear, skewed stay aligned ==")
+
+
+def check_linear(vm, label):
+    """Every _H dim spans equal-y points, every _V equal-x, and no
+    axis-aligned pair slipped through as DIMALIGNED."""
+    for c in dimcalls(vm, '_.DIMLINEAR'):
+        p1, p2 = c[1][:2], c[2][:2]
+        if '_H' in c:
+            assert abs(p1[1] - p2[1]) < 1e-6, (label, c)
+        elif '_V' in c:
+            assert abs(p1[0] - p2[0]) < 1e-6, (label, c)
+        # pool:dimrot's rotated dims carry '_R' -- their hook points
+        # are deliberately off-axis, nothing to check here
+    for c in dimcalls(vm, '_.DIMALIGNED'):
+        p1, p2 = c[1][:2], c[2][:2]
+        assert abs(p1[0] - p2[0]) > 1e-6 and abs(p1[1] - p2[1]) > 1e-6, \
+            (label, "axis-aligned pair drawn as DIMALIGNED", c)
+
+
+# in-square rectangle, square corners: every plan/section dim is
+# horizontal or vertical, so NO aligned dims at all
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Square",
+          "Yes", "Normal",
+          60.0, 90.0, 240.0, 90.0,
+          60.0, 120.0, 60.0], "R27")
+_lin = dimcalls(vm, '_.DIMLINEAR')
+assert _lin and not dimcalls(vm, '_.DIMALIGNED'), \
+    [c[0] for c in dimcalls(vm)]
+assert any('_H' in c for c in _lin) and any('_V' in c for c in _lin), _lin
+check_linear(vm, "R27-rect")
+
+# out-of-square rectangle with unequal sides: the skewed walls still
+# need DIMALIGNED, and none of them is secretly axis-aligned
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 236.0, 120.0, 118.0,
+          "Square", None, None, None,
+          266.0, 264.0,
+          "No"], "R27-oos")
+assert dimcalls(vm, '_.DIMALIGNED'), "OOS skewed walls must stay aligned"
+check_linear(vm, "R27-oos")
+
+# grecian: corner-cut chords are skewed (aligned), overalls linear
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0,
+          "NA", "NA", "NA", "NA", "NA", "No"], "R27-grec")
+assert dimcalls(vm, '_.DIMLINEAR'), "grecian overalls must be linear"
+check_linear(vm, "R27-grec")
+print("   _H spans equal-y, _V equal-x, aligned only on real skew")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

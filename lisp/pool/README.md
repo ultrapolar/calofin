@@ -770,6 +770,14 @@ zeroed state as your preference.
 
 ### Dimension styles
 
+**Linear where linear belongs**: a dimension between two points that
+sit on the same horizontal or vertical is drawn as a true **linear**
+dimension (`DIMLINEAR`, orientation forced so the placement point
+can't flip it) — overalls, sheet letters on straight rows/columns,
+hopper chains, profile depths. Only a genuinely skewed edge — an
+out-of-square wall, a Grecian corner chord, a chamfer face — is drawn
+**aligned** (`DIMALIGNED`).
+
 Three named styles are used when the drawing defines them, and the
 previous style is always restored right afterwards:
 

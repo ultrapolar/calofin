@@ -374,9 +374,20 @@
   (if (and odim (tblsearch "DIMSTYLE" odim))
       (command "_.-DIMSTYLE" "_Restore" odim)))
 
+;; One dimension between two drawn points.  A horizontal or vertical
+;; pair comes out as a true linear dimension (DIMLINEAR, orientation
+;; forced so the placement point can't flip it); only a genuinely
+;; skewed edge -- an out-of-square wall, a grecian chord -- still needs
+;; DIMALIGNED.
 (defun pool:dimalg (p1 p2 pt / od)
   (setq od (pool:dimsbegin (distance p1 p2)))
-  (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt))
+  (cond
+    ((< (abs (- (cadr p1) (cadr p2))) 1.0e-6)
+     (command "_.DIMLINEAR" (pool:wp p1) (pool:wp p2) "_H" (pool:wp pt)))
+    ((< (abs (- (car p1) (car p2))) 1.0e-6)
+     (command "_.DIMLINEAR" (pool:wp p1) (pool:wp p2) "_V" (pool:wp pt)))
+    (t
+     (command "_.DIMALIGNED" (pool:wp p1) (pool:wp p2) (pool:wp pt))))
   (pool:dimsend od))
 
 ;; Radius dimension ON the arc, read from OUTSIDE it: the arc is picked
