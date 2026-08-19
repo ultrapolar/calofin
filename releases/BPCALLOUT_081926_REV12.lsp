@@ -23,8 +23,9 @@
 ;;;
 ;;; A click that lands nowhere near a survey point is still ringed -
 ;;; exactly where you clicked - and reported as "Pt.?", so a stray
-;;; shot with no block under it can be called out too.  Clicking the
-;;; same point twice is ignored with a note, not ringed twice.
+;;; shot with no block under it can be called out too.  Clicking a
+;;; ringed point AGAIN un-rings it: the circle is erased and the point
+;;; leaves the callout - reselect a point to undo it.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *bpcallout-version* below and stamps a dated, REV-numbered twin of
@@ -35,7 +36,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.2")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -54,8 +55,8 @@
                                     ; always points
 (setq *BP-PT-TAG*      "number")    ; attribute tag on the point block
                                     ; naming the point, as in "Pt.17"
-(setq *BP-EXACT-EPS*   0.001)       ; two picks this close ring the
-                                    ; same spot - the second is skipped
+(setq *BP-EXACT-EPS*   0.001)       ; two picks this close land on the
+                                    ; same spot - the second un-rings it
 
 ;; ---- helpers -------------------------------------------------------
 
@@ -153,12 +154,28 @@
       (setq best c bd d)))
   best)
 
-;; T when CTR is (as good as) a spot already ringed this run.
-(defun bp:already-ringed (ctr picked / hit q)
+;; The picked-list entry a new click lands on, when it lands on one:
+;; either its snapped centre CTR is (as good as) an already-ringed
+;; spot, or - for a pick with no survey point under it - the raw pick
+;; PK is inside an existing ring.  Entries are (ctr name ring-ename);
+;; nil when the click is somewhere new.
+(defun bp:ringed-at (pk ctr picked / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (bp:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit T)))
+    (if (< (bp:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
+  (if (null hit)
+    (progn                              ; nearest ring the pick sits in
+      (setq bd nil)
+      (foreach q picked
+        (setq d (bp:dist pk (car q)))
+        (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
+          (setq hit q bd d)))))
   hit)
+
+;; Remove the entry whose ring is ENT from LST, keeping the order.
+(defun bp:drop-entry (ent lst / out q)
+  (foreach q lst (if (not (eq (caddr q) ent)) (setq out (cons q out))))
+  (reverse out))
 
 ;; The callout sentence: "Pt.12 is bad", "Pt.12 and Pt.15 are bad",
 ;; "Pt.12, Pt.15 and Pt.20 are bad" - commas between all but the last
@@ -195,7 +212,7 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
-(defun c:BPCALLOUT (/ *error* cands pk hit ctr nm picked names txtpt
+(defun c:BPCALLOUT (/ *error* cands pk hit ctr nm old picked names txtpt
                       phrase lastpt)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
@@ -212,17 +229,22 @@
                    " will be ringed where picked and named \"?\".")))
 
   (setq picked nil)
-  (while (setq pk (getpoint "\nClick a bad point (Enter when done): "))
+  (while (setq pk (getpoint
+                    "\nClick a bad point (a ringed one un-rings it, Enter when done): "))
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
       (setq ctr (list (car pk) (cadr pk)) nm "?"))
-    (if (bp:already-ringed ctr picked)
-      (princ (strcat "\n  Pt." nm " is already ringed - skipped."))
+    (setq old (bp:ringed-at pk ctr picked))
+    (if old
+      (progn                            ; reselecting a point undoes it
+        (if (and (caddr old) (entget (caddr old)))
+          (entdel (caddr old)))
+        (setq picked (bp:drop-entry (caddr old) picked))
+        (princ (strcat "\n  Pt." (cadr old) " un-ringed.")))
       (progn
         (bp:ensure-layer *BP-LAYER* 1)
-        (bp:draw-ring ctr)
-        (setq picked (cons (cons ctr nm) picked))
+        (setq picked (cons (list ctr nm (bp:draw-ring ctr)) picked))
         (if hit
           (princ (strcat "\n  Pt." nm " ringed."))
           (princ (strcat "\n  No survey point within "
@@ -234,7 +256,7 @@
     (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
     (progn
       (setq picked (reverse picked)             ; back to click order
-            names  (mapcar 'cdr picked)
+            names  (mapcar 'cadr picked)
             phrase (bp:phrase names)
             lastpt (car (last picked)))
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"

@@ -67,21 +67,32 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 Interactive tools share one convention for backing out of a mis-typed
 answer: the keyword is **Back** (type `B`), it is always shown in the
 prompt's bracketed options (`[Back]`, `[Yes/No/Back/Skip rest]`, ...),
-and it re-asks the previous question. The first question of a flow has
-nothing to go back to, so it never offers Back. In loops that draw as
-they go - `PERPPTS`/`CPERPPTS` offset points, `CORNERSTP`/`HEMISTEP`/
-`NORMIESTEP` treads - Back also removes the just-committed point or
-step (its lines and its dimensions) before re-asking; those loops still
-accept `Undo`, their old keyword, as a hidden synonym. Feedback wording
-is shared too: `Stepping back one <point|step|dimension>.` on the way
-back, `Already at the first <point|step|dimension>.` when there is
-nowhere left to go.
+and it re-asks the previous question - re-running whatever lookup or
+computation sits in between, and backing out of a sub-block (a `POOL`
+measurement block, a `CCPRECHECK` branch) into the question that
+opened it. **Undo** (`U`) is accepted everywhere Back is, as an
+unlisted synonym. Typed prompts - notes, offsets, feet-inch
+dimensions - cannot take keywords, so there Back is typed like a
+value: `B`, `BACK`, `U` or `UNDO` alone, any case (the prompt says
+so). The first question of a command has nothing to go back to, so it
+never offers Back.
 
-`POOL` and `SPA` carry the fullest form (stage runners, where Back at
-a block's first question backs out into the previous block), and
-`DIMCHECK`/`LINFINCHECK`/`COVERCHECK` use it in their dimension-review
-loop. Not every multi-step tool has a back path yet; new prompts
-should follow this convention.
+In loops that draw as they go - `PERPPTS`/`CPERPPTS` offset points,
+`CORNERSTP`/`HEMISTEP`/`NORMIESTEP` treads, `ABHD`/`ADAB` slope
+waypoints - Back also removes the just-committed point or step (its
+lines and its dimensions) before re-asking. `BPCALLOUT` works by
+reselection instead: clicking a ringed point again un-rings it.
+Feedback wording is shared too: `Stepping back one
+<point|step|dimension>.` on the way back, `Already at the first
+<point|step|dimension>.` when there is nowhere left to go.
+
+Every interactive multi-step tool supports this, with one boundary:
+AutoCAD object selections cannot take keywords, so a command whose
+only remaining input is a selection (`PADDLE`, `DIMCONTEND`) has no
+prompt left that could offer Back - and Back cannot be *typed at* a
+selection either, though several tools (`WCALST`, `XFTCONV`,
+`AUTOBEAD`, `AUTODIM`) re-open their selection when you Back at the
+prompt after it. New prompts should follow this convention.
 
 ### `ABCDEF` vs `ALTABCDEF`, and `CHECK` vs `CCPRECHECK`
 

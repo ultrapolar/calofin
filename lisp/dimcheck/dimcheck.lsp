@@ -104,7 +104,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.0")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.1")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -411,12 +411,13 @@
   ;; the reviewing question, with a way out of a mis-press:
   ;; 'yes 'no 'back (redo the previous item) 'skip (stop asking,
   ;; finish the run and still write the report)
-  (initget "Yes No Back Skip")
+  (initget "Yes No Back Skip Undo")   ; Undo = hidden synonym for Back
   (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
         ((= ans "Back")  'back)
+        ((= ans "Undo")  'back)
         (t               'skip)))
 
 (defun dchk:confirm-move (label orig sugg / ans newp)

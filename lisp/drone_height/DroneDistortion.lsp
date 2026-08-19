@@ -108,15 +108,23 @@
      (if (and num den (/= den 0.0)) (/ num den)))
     (t (distof s 2))))                                  ; plain decimal
 
+;; T when a typed string means "go back a step" (typed prompts cannot
+;; take initget keywords, so Back is typed like a value)
+(defun dd-back-word (s)
+  (member (strcase s) '("B" "BACK" "U" "UNDO")))
+
 ;; -- ask for a height in feet & inches; return decimal FEET (nil if blank/bad) -
 ;; Accepts:  6"   18   2'   2'6"   1'6-1/2"   18'6.5"   -3'4"
 ;; A leading - means BELOW the deck; a bare number is read as inches. Splits on
 ;; the ' and " by hand, so it does not depend on the drawing's unit settings.
-(defun dd-parse-height (prompt / s sign fpos ftxt itxt feet inch)
+;; With BACK non-nil, typing B (Back; Undo works too) returns the symbol
+;; DD-BACK instead - the caller re-opens its previous question.
+(defun dd-parse-height (prompt back / s sign fpos ftxt itxt feet inch)
   (setq s (getstring T prompt))
-  (if (or (null s) (= (vl-string-trim " \t" s) ""))
-    nil
-    (progn
+  (cond
+    ((or (null s) (= (vl-string-trim " \t" s) "")) nil)
+    ((and back (dd-back-word s)) 'DD-BACK)
+    (T
       (setq s (vl-string-trim " \t" s) sign 1.0)
       (while (member (substr s 1 1) '("-" "+"))
         (if (= (substr s 1 1) "-") (setq sign (- sign)))
@@ -135,7 +143,7 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDFIX : correct a selected off-deck feature
 ;; ---------------------------------------------------------------------------
-(defun c:DDFIX ( / *error* cmd ss h cur-h z base factor appf)
+(defun c:DDFIX ( / *error* cmd ss h cur-h z base factor appf stage done)
   (setq cmd (getvar "CMDECHO"))
   (defun *error* (m)
     (setvar "CMDECHO" cmd)
@@ -143,56 +151,75 @@
       (princ (strcat "\nError: " m)))
     (princ))
 
-  ;; 1) select the spa / obstacle (one or more objects)
-  (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
-  (setq ss (ssget))
-  (cond
-    ((null ss) (princ "\nNothing selected."))
-    (t
-      ;; 2) drone height above the deck - remembered; press Enter to keep last value
-      (setq cur-h (dd-get "H"))
-      (setq h (getreal (strcat "\nDrone height above the deck, in FEET"
-                               (if cur-h (strcat " <" (dd-num cur-h) ">") "")
-                               ": ")))
-      (if (and (null h) cur-h) (setq h cur-h))
-      (cond
-        ((or (null h) (<= h 0.0))
-         (princ "\nNeed a drone height greater than 0 - aborting."))
-        (t
-          (dd-put "H" h)
-          ;; 3) spa / obstacle height in feet & inches
-          (setq z (dd-parse-height
-                    (strcat "\nSpa / obstacle height relative to deck"
-                            "\n  e.g. 6\"  2'  1'6-1/2\"  18'6.5\"   (- in front = below deck): ")))
-          (cond
-            ((null z) (princ "\nNo valid height (try like 1'6\") - aborting."))
-            ((equal z 0.0 1e-9)
-             (princ "\nHeight is 0 - feature is at deck level, no change."))
-            ((>= (abs z) h)
-             (princ (strcat "\n|height| (" (dd-num z) " ft) >= drone height ("
-                            (dd-num h) " ft). Check your value - aborting.")))
-            (t
-              ;; 4) scale about the centre of the selection
-              (setq base (dd-ss-center ss))
-              (cond
-                ((null base) (princ "\nCould not work out a centre point - aborting."))
-                (t
-                  (setq base   (trans base 0 1)             ; WCS centre -> current UCS
-                        factor (/ (- h z) h))               ; (H - z) / H
-                  (setvar "CMDECHO" 0)
-                  ;; "_non" overrides any running osnap; vl-cmdf returns nil on failure
-                  (if (vl-cmdf "_.SCALE" ss "" "_non" base factor)
-                    (progn
-                      (setq appf (/ h (- h z)))             ; apparent / true
-                      (princ (strcat "\nApplied scale " (rtos factor 2 5) " ("
-                                     (rtos (* 100.0 (- factor 1.0)) 2 2) "% size change)."))
-                      (if (> z 0.0)
-                        (princ (strcat "\nRaised feature: it was traced ~"
-                                       (rtos (* 100.0 (- appf 1.0)) 2 2) "% too BIG."))
-                        (princ (strcat "\nSunken feature: it was traced ~"
-                                       (rtos (* 100.0 (- 1.0 appf)) 2 2) "% too SMALL."))))
-                    (princ "\nSCALE did not run - are the objects on a locked layer?"))
-                  (setvar "CMDECHO" cmd)))))))))
+  ;; The three questions are staged: Back (Undo works too) at the
+  ;; height prompts re-opens the previous one, and a bad value re-asks
+  ;; instead of aborting the command.
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+
+      ;; 1) select the spa / obstacle (one or more objects)
+      ((= stage 1)
+       (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
+       (setq ss (ssget))
+       (if (null ss)
+         (progn (princ "\nNothing selected.") (setq done T))
+         (setq stage 2)))
+
+      ;; 2) drone height above the deck - remembered; Enter keeps last value
+      ((= stage 2)
+       (setq cur-h (dd-get "H"))
+       (initget "Back Undo")
+       (setq h (getreal (strcat "\nDrone height above the deck, in FEET"
+                                (if cur-h (strcat " <" (dd-num cur-h) ">") "")
+                                " [Back]: ")))
+       (cond
+         ((= (type h) 'STR) (setq stage 1))
+         (t
+          (if (and (null h) cur-h) (setq h cur-h))
+          (if (or (null h) (<= h 0.0))
+            (princ "\nNeed a drone height greater than 0.")
+            (progn (dd-put "H" h) (setq stage 3))))))
+
+      ;; 3) spa / obstacle height in feet & inches
+      ((= stage 3)
+       (setq z (dd-parse-height
+                 (strcat "\nSpa / obstacle height relative to deck"
+                         "\n  e.g. 6\"  2'  1'6-1/2\"  18'6.5\"   (- in front = below deck) [Back]: ")
+                 T))
+       (cond
+         ((eq z 'DD-BACK) (setq stage 2))
+         ((null z) (princ "\nNo valid height (try like 1'6\")."))
+         ((equal z 0.0 1e-9)
+          (princ "\nHeight is 0 - feature is at deck level, no change.")
+          (setq done T))
+         ((>= (abs z) h)
+          (princ (strcat "\n|height| (" (dd-num z) " ft) >= drone height ("
+                         (dd-num h) " ft). Check your value.")))
+         (t (setq stage 4))))
+
+      ;; 4) scale about the centre of the selection
+      (t
+       (setq base (dd-ss-center ss))
+       (cond
+         ((null base) (princ "\nCould not work out a centre point - aborting."))
+         (t
+          (setq base   (trans base 0 1)             ; WCS centre -> current UCS
+                factor (/ (- h z) h))               ; (H - z) / H
+          (setvar "CMDECHO" 0)
+          ;; "_non" overrides any running osnap; vl-cmdf returns nil on failure
+          (if (vl-cmdf "_.SCALE" ss "" "_non" base factor)
+            (progn
+              (setq appf (/ h (- h z)))             ; apparent / true
+              (princ (strcat "\nApplied scale " (rtos factor 2 5) " ("
+                             (rtos (* 100.0 (- factor 1.0)) 2 2) "% size change)."))
+              (if (> z 0.0)
+                (princ (strcat "\nRaised feature: it was traced ~"
+                               (rtos (* 100.0 (- appf 1.0)) 2 2) "% too BIG."))
+                (princ (strcat "\nSunken feature: it was traced ~"
+                               (rtos (* 100.0 (- 1.0 appf)) 2 2) "% too SMALL."))))
+            (princ "\nSCALE did not run - are the objects on a locked layer?"))))
+       (setq done T))))
   (setvar "CMDECHO" cmd)
   (princ))
 
@@ -220,11 +247,23 @@
 ;;          (independent cross-check on the logged altitude)
 ;;          H = Lapp * z / (Lapp - Ltrue)
 ;; ---------------------------------------------------------------------------
-(defun c:DDCAL ( / lapp ltrue z h)
+(defun c:DDCAL ( / lapp ltrue z h stage done)
   (princ "\nCalibrate drone height from a feature of known true size.")
-  (setq lapp  (getdist "\nApparent (traced) size in the drawing - type it or pick 2 points: "))
-  (setq ltrue (getreal "\nTrue size measured on site: "))
-  (setq z (dd-parse-height "\nHeight of that feature, e.g. 6\"  2'  18'6.5\"  (- for sunken): "))
+  ;; staged: Back (or Undo) at the later prompts re-opens the previous one
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+      ((= stage 1)
+       (setq lapp (getdist "\nApparent (traced) size in the drawing - type it or pick 2 points: "))
+       (setq stage 2))
+      ((= stage 2)
+       (initget "Back Undo")
+       (setq ltrue (getreal "\nTrue size measured on site [Back]: "))
+       (if (= (type ltrue) 'STR) (setq stage 1) (setq stage 3)))
+      (t
+       (setq z (dd-parse-height
+                 "\nHeight of that feature, e.g. 6\"  2'  18'6.5\"  (- for sunken) [Back]: " T))
+       (if (eq z 'DD-BACK) (setq stage 2) (setq done T)))))
   (cond
     ((or (null lapp) (null ltrue) (null z))
      (princ "\nMissing input - aborting."))
@@ -331,46 +370,67 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDALT : read RelativeAltitude from a drone image and (optionally) set H
 ;; ---------------------------------------------------------------------------
-(defun c:DDALT ( / file m ft off h ans)
-  (setq file (getfiled "Select the ORIGINAL drone image (PNG / JPG / TIF)" ""
-                       "png;jpg;jpeg;tif;tiff" 20))
-  (cond
-    ((null file) (princ "\nNo file selected."))
-    ((null (setq m (dd-jpg-relalt file)))
-     (alert (strcat "NO RelativeAltitude IN THIS FILE"
-                    "\nFile: " (vl-filename-base file)
-                    (if (vl-filename-extension file) (vl-filename-extension file) "")
-                    "\n\nCould not find dji:RelativeAltitude in the file."
-                    "\nIs it the ORIGINAL camera file?  Screenshots / edited /"
-                    "\nexported copies lose the metadata."
-                    "\n\n(DDGPS reads more formats and also falls back to the"
-                    "\nEXIF GPS block - try that.)"))
-     (princ "\nCould not find dji:RelativeAltitude in that file.")
-     (princ "\n  Is it the ORIGINAL camera file?  Screenshots / edited / exported copies lose it."))
-    (t
-     (setq ft (* m 3.280839895))
-     (princ "\nRelativeAltitude (drone height above the TAKE-OFF point):")
-     (princ (strcat "\n   " (dd-num m) " m   =   " (dd-num ft) " ft"))
-     (initget "Yes No")
-     (setq ans (getkword "\nUse this to set the drone height H? [Yes/No] <Yes>: "))
-     (if (null ans) (setq ans "Yes"))
-     (if (= ans "No")
-       (princ "\nH not changed.")
-       (progn
-         (setq off (getreal (strcat "\nTake-off point vs deck, in FEET"
-                                    "\n  (+ if take-off ABOVE deck, - if BELOW, Enter if it took off FROM the deck): ")))
-         (if (null off) (setq off 0.0))
-         (setq h (+ ft off))
-         (if (<= h 0.0)
-           (princ (strcat "\nThat gives H = " (dd-num h) " ft (<= 0) - not saved. Check the offset."))
-           (progn
-             (dd-put "H" h)
-             (princ (strcat "\nSaved drone height  H = " (dd-num h) " ft"))
-             (if (/= off 0.0)
-               (princ (strcat "   (" (dd-num ft) " ft relative "
-                              (if (> off 0.0) "+ " "- ") (dd-num (abs off)) " ft offset)")))
-             (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
-                            "% size change per unit of height."))))))))
+(defun c:DDALT ( / file m ft off h ans stage done)
+  ;; staged: Back (or Undo) at a later prompt re-opens the previous
+  ;; one, all the way back to the file dialog
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+
+      ((= stage 1)
+       (setq file (getfiled "Select the ORIGINAL drone image (PNG / JPG / TIF)" ""
+                            "png;jpg;jpeg;tif;tiff" 20))
+       (cond
+         ((null file) (princ "\nNo file selected.") (setq done T))
+         ((null (setq m (dd-jpg-relalt file)))
+          (alert (strcat "NO RelativeAltitude IN THIS FILE"
+                         "\nFile: " (vl-filename-base file)
+                         (if (vl-filename-extension file) (vl-filename-extension file) "")
+                         "\n\nCould not find dji:RelativeAltitude in the file."
+                         "\nIs it the ORIGINAL camera file?  Screenshots / edited /"
+                         "\nexported copies lose the metadata."
+                         "\n\n(DDGPS reads more formats and also falls back to the"
+                         "\nEXIF GPS block - try that.)"))
+          (princ "\nCould not find dji:RelativeAltitude in that file.")
+          (princ "\n  Is it the ORIGINAL camera file?  Screenshots / edited / exported copies lose it.")
+          (setq done T))
+         (t
+          (setq ft (* m 3.280839895))
+          (princ "\nRelativeAltitude (drone height above the TAKE-OFF point):")
+          (princ (strcat "\n   " (dd-num m) " m   =   " (dd-num ft) " ft"))
+          (setq stage 2))))
+
+      ((= stage 2)
+       (initget "Yes No Back Undo")
+       (setq ans (getkword
+                   "\nUse this to set the drone height H? [Yes/No/Back] <Yes>: "))
+       (if (null ans) (setq ans "Yes"))
+       (cond
+         ((member ans '("Back" "Undo")) (setq stage 1))
+         ((= ans "No") (princ "\nH not changed.") (setq done T))
+         (t (setq stage 3))))
+
+      (t
+       (initget "Back Undo")
+       (setq off (getreal (strcat "\nTake-off point vs deck, in FEET"
+                                  "\n  (+ if take-off ABOVE deck, - if BELOW, Enter if it took off FROM the deck) [Back]: ")))
+       (if (= (type off) 'STR)
+         (setq stage 2)
+         (progn
+           (if (null off) (setq off 0.0))
+           (setq h (+ ft off))
+           (if (<= h 0.0)
+             (princ (strcat "\nThat gives H = " (dd-num h)
+                            " ft (<= 0) - not saved. Check the offset."))
+             (progn
+               (dd-put "H" h)
+               (princ (strcat "\nSaved drone height  H = " (dd-num h) " ft"))
+               (if (/= off 0.0)
+                 (princ (strcat "   (" (dd-num ft) " ft relative "
+                                (if (> off 0.0) "+ " "- ") (dd-num (abs off)) " ft offset)")))
+               (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
+                              "% size change per unit of height."))))
+           (setq done T))))))
   (princ))
 
 (princ "\nDrone Distortion tool v3.4 loaded  (DDALT accepts PNG / JPG / TIF and fails loud).")

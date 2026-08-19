@@ -434,33 +434,70 @@
     (ad:dimchain chain loc)
     0))
 
+;; erase everything drawn after entity MARK (nil = an empty drawing) -
+;; the rollback when a Back re-opens an earlier dimensioning step
+(defun ad:eraseafter (mark / en nx)
+  (setq en (if mark (entnext mark) (entnext)))
+  (while en
+    (setq nx (entnext en))
+    (if (entget en) (entdel en))
+    (setq en nx)))
+
 ;; prompt the user to draw one floor dims line and dimension it,
-;; breaking at the given obstacles (nil = all model space geometry)
-(defun ad:getfloor (tag obstacles / p1 p2 loc n)
-  (setq p1 (getpoint (strcat "\n" tag
-                             " - pick the START point of the line to measure"
-                             " along (Enter to skip): ")))
-  (if p1
-    (progn
-      (setq p2 (getpoint p1 (strcat "\n" tag " - pick the END point: ")))
-      (if (and p2 (> (distance p1 p2) 1e-8))
-        (progn
-          (setq loc (getpoint (strcat "\n" tag
-                                      " - pick where the dimension chain"
-                                      " should sit <on the drawn line>: ")))
-          (if (null loc) (setq loc (ad:mid p1 p2)))
-          (setq n (ad:floorchain (trans p1 1 0) (trans p2 1 0)
-                                 (trans loc 1 0) obstacles))
-          (if (> n 0)
-            (prompt (strcat "\n" tag ": " (itoa n) " dimension(s) placed."))
-            (prompt (strcat "\n" tag ": the drawn line lies outside the"
-                            " plan - no dimensions placed.")))
-          n)
-        (prompt "\nNothing drawn - skipped.")))))
+;; breaking at the given obstacles (nil = all model space geometry).
+;; The three picks step back through each other with Back (Undo is
+;; accepted too); with BACK non-nil, Back at the START pick returns
+;; the symbol AD-BACK so the caller can re-open its previous step.
+;; Returns the dimension count, or nil when the line was skipped.
+(defun ad:getfloor (tag obstacles back / p1 p2 loc n stage out)
+  (setq stage 1 out nil)
+  (while (null out)
+    (cond
+      ((= stage 1)
+       (if back (initget "Back Undo") (initget ""))
+       (setq p1 (getpoint (strcat "\n" tag
+                                  " - pick the START point of the line to"
+                                  " measure along (Enter to skip"
+                                  (if back ", or Back" "") "): ")))
+       (cond
+         ((null p1) (prompt "\nNothing drawn - skipped.") (setq out 'skip))
+         ((= (type p1) 'STR) (setq out 'AD-BACK))
+         (T (setq stage 2))))
+      ((= stage 2)
+       (initget "Back Undo")
+       (setq p2 (getpoint p1 (strcat "\n" tag
+                                     " - pick the END point [Back]: ")))
+       (cond
+         ((= (type p2) 'STR) (setq stage 1))
+         ((or (null p2) (<= (distance p1 p2) 1e-8))
+          (prompt "\nNothing drawn - skipped.")
+          (setq out 'skip))
+         (T (setq stage 3))))
+      (T
+       (initget "Back Undo")
+       (setq loc (getpoint (strcat "\n" tag
+                                   " - pick where the dimension chain"
+                                   " should sit <on the drawn line> [Back]: ")))
+       (if (= (type loc) 'STR)
+         (setq stage 2)
+         (progn
+           (if (null loc) (setq loc (ad:mid p1 p2)))
+           (setq n (ad:floorchain (trans p1 1 0) (trans p2 1 0)
+                                  (trans loc 1 0) obstacles))
+           (if (> n 0)
+             (prompt (strcat "\n" tag ": " (itoa n) " dimension(s) placed."))
+             (prompt (strcat "\n" tag ": the drawn line lies outside the"
+                             " plan - no dimensions placed.")))
+           (setq out (list n)))))))
+  (cond
+    ((eq out 'AD-BACK) 'AD-BACK)
+    ((eq out 'skip) nil)
+    (T (car out))))
 
 ;; --------------------------------------------------------------- commands
 
-(defun c:AUTODIM (/ *error* oldcmd olddim plan nper nstair)
+(defun c:AUTODIM (/ *error* oldcmd olddim plan nper nstair
+                    stage mark3 mark4 v)
   (defun *error* (msg)
     (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
     (if olddim
@@ -488,17 +525,41 @@
       (setq nper (ad:dimperim plan))
       (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
       (ad:setdimstyle olddim)
-      (prompt "\n=== AUTODIM step 3 of 4: stairs ===")
-      (setq nstair (ad:dimstairs))
-      (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
-      (ad:setdimstyle olddim)
-      (prompt (strcat "\n=== AUTODIM step 4 of 4: floor dims ==="
-                      "\nDraw two lines across the plan.  Each becomes a"
-                      " dimension chain that breaks at every highlighted"
-                      " object it crosses."))
-      (ad:setdimstyle "STANDARD")
-      (ad:getfloor "Floor dims 1 of 2" plan)
-      (ad:getfloor "Floor dims 2 of 2" plan)
+      ;; steps 3 and 4 walk back through each other: Back at a floor
+      ;; line's START re-opens the previous step, erasing what it drew
+      (setq stage 3)
+      (while (< stage 6)
+        (cond
+          ((= stage 3)
+           (prompt "\n=== AUTODIM step 3 of 4: stairs ===")
+           (ad:setdimstyle olddim)
+           (setq mark3  (entlast)
+                 nstair (ad:dimstairs))
+           (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
+           (ad:setdimstyle olddim)
+           (prompt (strcat "\n=== AUTODIM step 4 of 4: floor dims ==="
+                           "\nDraw two lines across the plan.  Each becomes a"
+                           " dimension chain that breaks at every highlighted"
+                           " object it crosses."))
+           (ad:setdimstyle "STANDARD")
+           (setq stage 4))
+          ((= stage 4)
+           (setq mark4 (entlast)
+                 v     (ad:getfloor "Floor dims 1 of 2" plan T))
+           (if (eq v 'AD-BACK)
+             (progn
+               (ad:eraseafter mark3)
+               (prompt "\nStepping back to the stairs.")
+               (setq stage 3))
+             (setq stage 5)))
+          (T
+           (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
+           (if (eq v 'AD-BACK)
+             (progn
+               (ad:eraseafter mark4)
+               (prompt "\nStepping back one floor line.")
+               (setq stage 4))
+             (setq stage 6)))))
       (ad:setdimstyle olddim)
       (command "_.UNDO" "_End")
       (setvar "CMDECHO" oldcmd)
@@ -539,7 +600,7 @@
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (ad:setdimstyle "STANDARD")
-  (ad:getfloor "Floor dims" nil)
+  (ad:getfloor "Floor dims" nil nil)
   (ad:setdimstyle olddim)
   (command "_.UNDO" "_End")
   (setvar "CMDECHO" oldcmd)

@@ -14,7 +14,7 @@ Every lisp here ships **twice, byte-identical, under two names**:
 | | |
 | --- | --- |
 | `SPA.LSP` | the static name — the one in your `APPLOAD` stack |
-| `SPA_081726_REV01.LSP` | the same file, named `MMDDYY_REV##` for its revision |
+| `SPA_081926_REV02.LSP` | the same file, named `MMDDYY_REV##` for its revision |
 | `TUTORIALSPA.LSP` / `TUTORIALSPA_081726_REV01.LSP` | likewise |
 
 The static name never changes, so an existing autoload keeps working. The
@@ -25,7 +25,7 @@ still tell you what it is:
 
 ```
 Command: SPAVER
-SPA 081726 REV01
+SPA 081926 REV02
 Tutorial: 081726 REV01
 ```
 

@@ -449,8 +449,9 @@
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (pool:osup)
-  (setq kw (cond ((eq kind 'REQ) (if back "Back" nil))
-                 (back "NA Back")
+  ;; Undo is accepted everywhere Back is, as a hidden synonym
+  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+                 (back "NA Back Undo")
                  (t "NA")))
   (if kw
       ;; REQ always rejects zero (bit 7) - offering Back must not
@@ -471,7 +472,7 @@
                     ": ")))
   (pool:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  (cond ((and (= (type v) 'STR) (= v "Back")) 'POOL-BACK)
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'POOL-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
         (t v)))
@@ -481,11 +482,11 @@
 ;; (nil = an answer is required).  Returns the keyword or POOL-BACK.
 (defun pool:askkw (msg kws shown dflt back / v)
   (initget (if dflt 0 (if back 0 1))
-           (if back (strcat kws " Back") kws))
+           (if back (strcat kws " Back Undo") kws))
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((= v "Back") 'POOL-BACK)
+  (cond ((member v '("Back" "Undo")) 'POOL-BACK)
         ((null v) (if dflt dflt (pool:askkw msg kws shown dflt back)))
         (t v)))
 

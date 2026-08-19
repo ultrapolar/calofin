@@ -605,13 +605,21 @@
 ;;;  Prompt helper: read a feet-inch dimension from the keyboard.
 ;;; --------------------------------------------------------------------------
 
-(defun altabcdef:getdim (prompt / s v)
+;; With BACK non-nil, typing B (Back; Undo works too) returns the
+;; symbol AB-BACK so the caller can re-open its previous question.
+(defun altabcdef:getdim (prompt back / s v)
   (setq v nil)
   (while (null v)
-    (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\"): ")))
-    (setq v (altabcdef:ftin->in s nil))
-    (if (or (null v) (<= v 0.0))
-      (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"") (setq v nil))))
+    (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\""
+                                 (if back ", B = back" "") "): ")))
+    (cond
+      ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
+       (setq v 'AB-BACK))
+      (T
+       (setq v (altabcdef:ftin->in s nil))
+       (if (or (null v) (<= v 0.0))
+         (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"")
+                (setq v nil))))))
   v)
 
 ;;; --------------------------------------------------------------------------
@@ -621,22 +629,39 @@
 (defun c:ALTABCDEF (/ file rows base bx by W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
-                    sol x y rms i tags placed)
+                    sol x y rms i tags placed stage done)
   (vl-load-com)
-  ;; ---- get the spreadsheet ----------------------------------------------
-  (setq file (getfiled "Select points spreadsheet"
-                       "" "xlsx;xls;xlsm;csv" 16))
-  (if (null file)
-    (progn (princ "\nCancelled.") (princ))
-    (progn
-      ;; ---- rectangle dimensions ------------------------------------------
-      (princ "\n--- Rectangle A(top-left) B(top-right) C(bottom-right) D(bottom-left) ---")
-      (setq W (altabcdef:getdim "Dimension A-B (width across the top)"))
-      (setq H (altabcdef:getdim "Dimension A-D (height down the side)"))
+  ;; ---- the questions, staged: Back (or Undo) at a later prompt
+  ;; ---- re-opens the previous one, back to the file dialog itself
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+      ;; ---- get the spreadsheet ------------------------------------------
+      ((= stage 1)
+       (setq file (getfiled "Select points spreadsheet"
+                            "" "xlsx;xls;xlsm;csv" 16))
+       (if (null file)
+         (setq done 'quit)
+         (progn
+           ;; ---- rectangle dimensions ------------------------------------
+           (princ "\n--- Rectangle A(top-left) B(top-right) C(bottom-right) D(bottom-left) ---")
+           (setq stage 2))))
+      ((= stage 2)
+       (setq W (altabcdef:getdim "Dimension A-B (width across the top)" T))
+       (if (eq W 'AB-BACK) (setq stage 1) (setq stage 3)))
+      ((= stage 3)
+       (setq H (altabcdef:getdim "Dimension A-D (height down the side)" T))
+       (if (eq H 'AB-BACK) (setq stage 2) (setq stage 4)))
       ;; ---- where does corner A land? -------------------------------------
       ;; take the pick in WCS so the rectangle is built square to the world
       ;; axes even when the current UCS is rotated (entmake writes WCS).
-      (setq base (getpoint "\nInsertion point for corner A <0,0>: "))
+      (T
+       (initget "Back Undo")
+       (setq base (getpoint "\nInsertion point for corner A <0,0> [Back]: "))
+       (if (= (type base) 'STR) (setq stage 3) (setq done T)))))
+  (if (eq done 'quit)
+    (progn (princ "\nCancelled.") (princ))
+    (progn
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
       (setq bx (car base) by (cadr base))
       ;; corner coordinates: A top-left, clockwise, Y up (A-D goes down).

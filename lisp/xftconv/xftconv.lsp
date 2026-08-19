@@ -24,7 +24,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.0") ; printed on load and at command start so a
+(setq *xft-version* "v1.1") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -247,7 +247,7 @@
                      ss base sf i en ed typ
                      markers names g nm e
                      ctr best bestd bestr rank txth d reach num
-                     nmade nblank nleft)
+                     nmade nblank nleft stage done)
 
   (defun xft:restore ()
     (if oscm   (setvar "CMDECHO" oscm))
@@ -272,24 +272,40 @@
   (princ (strcat "\nXFTCONV " *xft-version*
                  " - scale the survey and swap the Leica points for blocks."))
 
-  ;; ---- selection -------------------------------------------------
-  (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-  (setq ss (ssget))
-  (if (not ss)
-    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
-  )
+  ;; ---- selection, scale and base point - staged: Back (or Undo)
+  ;; ---- at a later prompt re-opens the previous one ---------------
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+      ((= stage 1)
+       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
+       (setq ss (ssget))
+       (if (not ss)
+         (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
+       (if (not ss)
+         (setq done 'quit)
+         (setq stage 2)))
+      ((= stage 2)
+       (initget 6 "Back Undo")
+       (setq sf (getreal (strcat "\nScale factor <" (rtos *xft-scale* 2 4)
+                                 "> [Back]: ")))
+       (cond
+         ((= (type sf) 'STR) (setq stage 1))
+         (T
+          (if (not sf) (setq sf *xft-scale*))
+          (setq stage 3))))
+      (T
+       (initget "Back Undo")
+       (setq base (getpoint "\nBase point for the scale <0,0> [Back]: "))
+       (if (= (type base) 'STR)
+         (setq stage 2)
+         (progn
+           (if (not base) (setq base (list 0.0 0.0 0.0)))
+           (setq done T))))))
 
-  (if (not ss)
+  (if (eq done 'quit)
     (progn (princ "\nNothing to work on.") (xft:restore) (princ))
     (progn
-
-      ;; ---- scale factor and base point ---------------------------
-      (initget 6)
-      (setq sf (getreal (strcat "\nScale factor <" (rtos *xft-scale* 2 4) ">: ")))
-      (if (not sf) (setq sf *xft-scale*))
-
-      (setq base (getpoint "\nBase point for the scale <0,0>: "))
-      (if (not base) (setq base (list 0.0 0.0 0.0)))
 
       ;; ---- locked layers would break the swap --------------------
       (if (or (xft:locked *xft-marker-layer*)

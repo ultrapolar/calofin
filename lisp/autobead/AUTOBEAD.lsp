@@ -260,18 +260,32 @@
 
 ;; ---- AUTOBEAD --------------------------------------------------------------
 
-(defun c:AUTOBEAD ( / ss dirpt )
+(defun c:AUTOBEAD ( / ss dirpt stage done )
   (autobead-ensure-layer *autobead-layer*)
-  (prompt (strcat "\nSelect POOL lines to bead (layers "
-                  *autobead-filter* "): "))
-  (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
-                        (cons 8 *autobead-filter*))))
-  (cond
-    ((null ss)
-     (prompt (strcat "\nNothing selected on a " *autobead-filter* " layer.")))
-    ((null (setq dirpt (getpoint "\nClick the side to bead toward: ")))
-     (prompt "\nNo direction point picked."))
-    (T (autobead-build ss dirpt)))
+  ;; staged: Back (or Undo) at the direction click re-opens the selection
+  (setq stage 1 done nil)
+  (while (not done)
+    (cond
+      ((= stage 1)
+       (prompt (strcat "\nSelect POOL lines to bead (layers "
+                       *autobead-filter* "): "))
+       (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
+                             (cons 8 *autobead-filter*))))
+       (if (null ss)
+         (progn
+           (prompt (strcat "\nNothing selected on a " *autobead-filter*
+                           " layer."))
+           (setq done T))
+         (setq stage 2)))
+      (T
+       (initget "Back Undo")
+       (setq dirpt (getpoint "\nClick the side to bead toward [Back]: "))
+       (cond
+         ((= (type dirpt) 'STR) (setq stage 1))
+         ((null dirpt)
+          (prompt "\nNo direction point picked.")
+          (setq done T))
+         (T (autobead-build ss dirpt) (setq done T))))))
   (princ))
 
 ;; ---- AUTOBEADVER -----------------------------------------------------------

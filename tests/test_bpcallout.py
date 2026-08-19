@@ -122,6 +122,8 @@ def run(vm, script, label):
 def made(vm, etype):
     out = []
     for e in vm.entities:
+        if e in vm.deleted:        # un-ringed circles are entdel'd
+            continue
         d = _alist_dict(vm.entdata[e])
         if d.get(0) == etype and 40 in d:
             out.append(d)
@@ -188,16 +190,39 @@ def test_far_click_is_unknown():
     print("ok  far click   -> ring at the pick, 'Pt.? is bad'")
 
 
-def test_duplicate_click_skipped():
+def test_reclick_unrings():
+    # clicking a ringed point again removes its ring and drops it from
+    # the callout - reselecting a point is how you undo it
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 5), ab_pt(vm, 50, 0, 6)]
-    run(vm, [pts, (1.0, 0.0), (0.0, 1.0), (50.0, 0.0), None,
-             (25.0, 25.0)], 'duplicate')
+    run(vm, [pts, (1.0, 0.0), (50.0, 0.0), (0.0, 1.0), None,
+             (25.0, 25.0)], 'reclick')
     circles = made(vm, 'CIRCLE')
-    assert len(circles) == 2, circles
+    assert len(circles) == 1, circles
     texts = made(vm, 'TEXT')
-    assert texts[0][1] == 'Pt.5 and Pt.6 are bad', texts
-    print("ok  duplicate   -> second click on Pt.5 skipped")
+    assert texts[0][1] == 'Pt.6 is bad', texts
+    print("ok  reclick     -> second click on Pt.5 un-rings it")
+
+
+def test_unring_then_rering():
+    # un-ring, then a third click rings the point again
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 7)]
+    run(vm, [pts, (0.0, 0.0), (0.0, 0.0), (1.0, 1.0), None,
+             (9.0, 9.0)], 'rering')
+    assert len(made(vm, 'CIRCLE')) == 1
+    assert made(vm, 'TEXT')[0][1] == 'Pt.7 is bad'
+    print("ok  re-ring     -> third click rings Pt.7 again")
+
+
+def test_unring_far_pick_inside_ring():
+    # a "Pt.?" ring (no survey point under it) is un-rung by clicking
+    # inside the ring, even though the raw picks differ
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 3)]
+    run(vm, [pts, (30.0, 0.0), (33.0, 0.0), None], 'far unring')
+    assert made(vm, 'CIRCLE') == [] and made(vm, 'TEXT') == []
+    print("ok  far unring  -> click inside a Pt.? ring removes it")
 
 
 def test_default_text_spot():
@@ -256,7 +281,9 @@ if __name__ == '__main__':
     test_one_point()
     test_two_points()
     test_far_click_is_unknown()
-    test_duplicate_click_skipped()
+    test_reclick_unrings()
+    test_unring_then_rering()
+    test_unring_far_pick_inside_ring()
     test_default_text_spot()
     test_no_clicks()
     test_empty_drawing()

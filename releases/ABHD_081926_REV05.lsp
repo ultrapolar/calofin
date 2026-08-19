@@ -142,16 +142,20 @@
 ;;; perimeter's curve, the offset easing to nothing at the shallow
 ;;; break), or through POINTS the user picks along that side, each
 ;;; with its own offset measured square off the wall - the line still
-;;; runs guided between them.  The hopper and the guided slopes are
-;;; merged into as FEW long arcs as hold their shape (within
-;;; *PF-BOTTOM-FIT*) - curves, not facets, and not many of them.
+;;; runs guided between them.  Every prompt in the flow after the
+;;; first offers Back ([Back] at the picks and choices, B typed at
+;;; the offsets; Undo works too), re-opening the previous question -
+;;; and in the POINTS loop, Back un-picks the last waypoint.  The
+;;; hopper and the guided slopes are merged into as FEW long arcs as
+;;; hold their shape (within *PF-BOTTOM-FIT*) - curves, not facets,
+;;; and not many of them.
 ;;; Everything - the bottom's lines, the dimensions, and the kept
 ;;; perimeter itself - ends up on *PF-POOL-LAYER* (the deep break
 ;;; stubs dashed).
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081826 REV04") ; announced on load.  The
+(setq *PF-VERSION*      "081926 REV05") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -1514,6 +1518,17 @@
     (if (and en (entget en)) (entdel en)))
   (setq pf-temp nil))
 
+;; Scaffolding removed early - when a Back re-opens the step that
+;; drew it - rather than at command end.
+(defun pf:temp-kill (en)
+  (if (and en (entget en)) (entdel en))
+  (pf:temp-drop en))
+
+;; T when a typed string means "go back a step" (typed prompts cannot
+;; take initget keywords, so Back is typed like a value).
+(defun pf:back-word (s)
+  (member (strcase s) '("B" "BACK" "U" "UNDO")))
+
 ;; ---- "this one is mine" stamping -------------------------------------
 ;; ABHD writes onto layers the drawing may already be using - FGStep in
 ;; particular - so it must never clear a layer wholesale.  Everything it
@@ -2419,13 +2434,16 @@
 ;; feet-and-inches, (value . nil) for inches; Enter takes DEF, a
 ;; (value . ftin) pair from the previous entry.  Negative input is
 ;; refused, zero too unless ALLOWZERO (a waypoint may pin the line
-;; to the wall).
-(defun pf:get-off (msg def allowzero / s v res)
+;; to the wall).  With BACK non-nil, typing B (Back; Undo works too)
+;; returns the symbol PF-BACK instead.
+(defun pf:get-off (msg def allowzero back / s v res)
   (setq res nil)
   (while (null res)
-    (setq s (getstring T (strcat msg " <" (pf:fmt-off def) ">: ")))
+    (setq s (getstring T (strcat msg " <" (pf:fmt-off def) ">"
+                                 (if back " [Back]" "") ": ")))
     (cond
       ((= s "") (setq res def))
+      ((and back (pf:back-word s)) (setq res 'PF-BACK))
       (T
        (setq v (distof s 4))
        (cond
@@ -2836,12 +2854,14 @@
 ;; nil for straight, T for guided, or a list of (surveyPt offset
 ;; ftin) waypoints for a guided line that passes through picked
 ;; points at pinned offsets.
-(defun pf:ask-slope (nm dpts defo / ans wp spec o seed)
-  (initget "Straight Guided Points")
+(defun pf:ask-slope (nm dpts defo / ans wp spec o seed marks mk done)
+  (initget "Straight Guided Points Back Undo")
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
-              " [Straight/Guided/Points] <Straight>: ")))
+              " [Straight/Guided/Points/Back] <Straight>: ")))
+  (setq slopemarks nil)     ; the caller's register of this side's rings
   (cond
+    ((member ans '("Back" "Undo")) 'PF-BACK)
     ((= ans "Guided") T)
     ((/= ans "Points") nil)
     (T
@@ -2849,27 +2869,54 @@
      (princ "\n  gets its own offset, measured square off the wall.  The line")
      (princ "\n  follows the curve through them and eases to the shallow break.")
      (setq spec     nil
+           marks    nil
            seed     defo
+           done     nil
            pf-phase "picking slope waypoints")
-     (while (setq wp (getpoint (strcat
-                       "\n  Point on the Pt." nm
-                       " side (Enter when done): ")))
-       (setq wp (pf:snap-break wp dpts))
-       ;; the dashed ring is scaffolding: it confirms the pick and
-       ;; clears itself when the command ends
-       (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp)))
-       (setq pf-phase "reading a slope waypoint offset")
-       (setq o (pf:get-off (strcat "\n  What is the offset at Pt."
-                                   (pf:pt-name wp) "?")
-                           seed T))
-       (setq spec     (cons (list wp (car o) (cdr o)) spec)
-             seed     o
-             pf-phase "picking slope waypoints"))
-     (if spec
-       (reverse spec)
-       (progn
-         (princ "\n  (no points picked - guiding along the curve instead)")
-         T)))))
+     (while (not done)
+       (initget "Back Undo")
+       (setq wp (getpoint (strcat
+                  "\n  Point on the Pt." nm
+                  " side (Enter when done) [Back]: ")))
+       (cond
+         ((null wp) (setq done T))
+         ((= (type wp) 'STR)             ; Back: un-pick the last waypoint
+          (if spec
+            (progn
+              (pf:temp-kill (car marks))
+              (setq marks (cdr marks)
+                    spec  (cdr spec)
+                    seed  (if spec
+                            (cons (cadr (car spec)) (caddr (car spec)))
+                            defo))
+              (princ "\n  Stepping back one point."))
+            (setq done 'PF-BACK)))       ; none yet: back to the choice
+         (T
+          (setq wp (pf:snap-break wp dpts))
+          ;; the dashed ring is scaffolding: it confirms the pick and
+          ;; clears itself when the command ends (or on a Back)
+          (setq mk (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp))))
+          (setq pf-phase "reading a slope waypoint offset")
+          (setq o (pf:get-off (strcat "\n  What is the offset at Pt."
+                                      (pf:pt-name wp) "?")
+                              seed T T))
+          (if (eq o 'PF-BACK)
+            (progn                       ; un-pick this waypoint, re-ask
+              (pf:temp-kill mk)
+              (princ "\n  Stepping back one point."))
+            (setq spec  (cons (list wp (car o) (cdr o)) spec)
+                  marks (cons mk marks)
+                  seed  o))
+          (setq pf-phase "picking slope waypoints"))))
+     (cond
+       ((eq done 'PF-BACK)               ; re-ask Straight/Guided/Points
+        (pf:ask-slope nm dpts defo))
+       (spec
+        (setq slopemarks marks)
+        (reverse spec))
+       (T
+        (princ "\n  (no points picked - guiding along the curve instead)")
+        T)))))
 
 ;; The interactive flow, run once a perimeter is in hand.  SEGS is
 ;; the closed loop, DPTS the survey points.  With ASK the user is
@@ -2878,99 +2925,173 @@
 ;; exists only for this).
 (defun pf:bottom (segs dpts ask / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2
                                    back off1 off2 off3 o1 o2 o3 bfl
-                                   lines nm1 nm2 g1 g2)
-  (setq ans "Yes")
-  (if ask
-    (progn
-      (setq pf-phase "asking about the pool bottom")
-      (initget "Yes No")
-      (setq ans (getkword
-                  "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))))
-  (if (= ans "Yes")
-    (progn
-      (princ "\n\n  SHALLOW BREAK - where the flat shallow floor starts sloping down.")
-      (princ "\n  Pick its two ends (snap to the survey points).")
-      (setq pf-phase "picking the shallow break"
-            s1       (getpoint "\n  First shallow break point: "))
-      (if s1 (setq s2 (getpoint s1 "\n  Second shallow break point: ")))
-      (if s2
-        (progn
-          (princ "\n  DEEP BREAK - where the slope levels out into the hopper.")
-          (setq pf-phase "picking the deep break"
-                d1       (getpoint "\n  First deep break point: "))))
-      (if d1 (setq d2 (getpoint d1 "\n  Second deep break point: ")))
-      (cond
-        ((null d2)
-         (princ "\n  (point pick cancelled - the pool bottom was not added)"))
-        (T
-         ;; break ends snap to survey points, like declared walls do
-         (setq s1 (pf:snap-break s1 dpts) s2 (pf:snap-break s2 dpts)
-               d1 (pf:snap-break d1 dpts) d2 (pf:snap-break d2 dpts))
-         (cond
-           ((or (< (pf:dist s1 s2) *PF-EXACT-EPS*)
-                (< (pf:dist d1 d2) *PF-EXACT-EPS*))
-            (princ "\n  (both ends of a break line landed on the same survey point - the pool bottom was not added)"))
-           (T
-            ;; the break ends land exactly on the kept perimeter
-            (setq sp1  (pf:curve-near s1 segs)
-                  sp2  (pf:curve-near s2 segs)
-                  dp1  (pf:curve-near d1 segs)
-                  dp2  (pf:curve-near d2 segs)
-                  back (pf:hopper-back dp1 dp2 sp1 sp2 dpts))
-            (cond
-              ((null back)
-               (princ (strcat "\n  (no survey point lies beyond the"
-                              " deep break - are the two break lines"
-                              " swapped?  The pool bottom was not"
-                              " added)")))
-              (T
-               ;; both break lines go down now, solid, so what was
-               ;; declared is visible while the offsets are typed;
-               ;; they stay scaffolding until the whole flow lands
-               (pf:ensure-layer *PF-POOL-LAYER* 4)
-               (setq lines (list (pf:temp-add (pf:tag-mine
-                                   (pf:make-line sp1 sp2 nil nil)))
-                                 (pf:temp-add (pf:tag-mine
-                                   (pf:make-line dp1 dp2 nil nil)))))
-               (princ (strcat "\n  Back of the hopper: Pt."
-                              (pf:pt-name back)
-                              " (the survey point straight out from"
-                              " the deep break)."))
-               (setq pf-phase "reading the hopper offsets"
-                     nm1      (pf:pt-name d1)
-                     nm2      (pf:pt-name d2))
-               (princ "\n  Three offsets pull the hopper in from the perimeter;")
-               (princ "\n  they blend gradually where they differ.  Type inches (42)")
-               (princ "\n  or feet and inches (3'6).")
-               (setq o1   (pf:get-off (strcat
-                            "\n  What is the deep end offset at Pt."
-                            nm1 "?")
-                            (cons *PF-HOP-OFF* nil) nil)
-                     off1 (car o1)
-                     o2   (pf:get-off (strcat
-                            "\n  What is the deep end offset at Pt."
-                            nm2 "?")
-                            o1 nil)
-                     off2 (car o2)
-                     o3   (pf:get-off (strcat
-                            "\n  What is the offset at the back of the"
-                            " hopper (Pt." (pf:pt-name back) ")?")
-                            o1 nil)
-                     off3 (car o3)
-                     bfl  (cdr o3))
-               (setq *PF-HOP-OFF* off1)
-               ;; each slope line can run straight to the shallow
-               ;; break, follow the perimeter's curve gently in, or
-               ;; pass through picked points at pinned offsets
-               (setq pf-phase "asking about the slope lines")
-               (princ "\n  Each slope line can run STRAIGHT to the shallow break, be GUIDED")
-               (princ "\n  by the perimeter - easing in along its curve - or pass through")
-               (princ "\n  POINTS you pick along that side, each with its own offset.")
-               (setq g1 (pf:ask-slope nm1 dpts o1)
-                     g2 (pf:ask-slope nm2 dpts o2))
-               (pf:bottom-draw segs sp1 sp2 dp1 dp2 back
-                               off1 off2 off3 bfl lines
-                               (list g1 g2))))))))))
+                                   lines nm1 nm2 g1 g2 g1m g2m
+                                   slopemarks stage go quit v e)
+  ;; Staged so every prompt after the first offers Back - [Back] at
+  ;; the point picks, B typed at the offsets - re-opening the previous
+  ;; question and removing the scaffolding it drew.  Enter at a pick
+  ;; still cancels the whole bottom, as before.  A break line whose
+  ;; ends land wrong re-opens its own pick instead of aborting.
+  (setq stage (if ask 0 1) go T quit nil)
+  (while (and go (not quit))
+    (cond
+      ;; -- offer the bottom (the ABHD ending; ADAB starts at 1)
+      ((= stage 0)
+       (setq pf-phase "asking about the pool bottom")
+       (initget "Yes No")
+       (setq ans (getkword
+                   "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+       (if (= ans "Yes") (setq stage 1) (setq go nil)))
+
+      ;; -- the shallow break, one end per stage
+      ((= stage 1)
+       (princ "\n\n  SHALLOW BREAK - where the flat shallow floor starts sloping down.")
+       (princ "\n  Pick its two ends (snap to the survey points).")
+       (setq pf-phase "picking the shallow break")
+       (if ask (initget "Back Undo") (initget ""))
+       (setq v (getpoint (strcat "\n  First shallow break point"
+                                 (if ask " [Back]" "") ": ")))
+       (cond
+         ((null v)
+          (princ "\n  (point pick cancelled - the pool bottom was not added)")
+          (setq quit T))
+         ((= (type v) 'STR) (setq stage 0))
+         (T (setq s1 v stage 2))))
+      ((= stage 2)
+       (initget "Back Undo")
+       (setq v (getpoint s1 "\n  Second shallow break point [Back]: "))
+       (cond
+         ((null v)
+          (princ "\n  (point pick cancelled - the pool bottom was not added)")
+          (setq quit T))
+         ((= (type v) 'STR) (setq stage 1))
+         (T (setq s2 v stage 3))))
+
+      ;; -- the deep break
+      ((= stage 3)
+       (princ "\n  DEEP BREAK - where the slope levels out into the hopper.")
+       (setq pf-phase "picking the deep break")
+       (initget "Back Undo")
+       (setq v (getpoint "\n  First deep break point [Back]: "))
+       (cond
+         ((null v)
+          (princ "\n  (point pick cancelled - the pool bottom was not added)")
+          (setq quit T))
+         ((= (type v) 'STR) (setq stage 2))
+         (T (setq d1 v stage 4))))
+      ((= stage 4)
+       (initget "Back Undo")
+       (setq v (getpoint d1 "\n  Second deep break point [Back]: "))
+       (cond
+         ((null v)
+          (princ "\n  (point pick cancelled - the pool bottom was not added)")
+          (setq quit T))
+         ((= (type v) 'STR) (setq stage 3))
+         (T
+          (setq d2 v)
+          ;; break ends snap to survey points, like declared walls do
+          (setq s1 (pf:snap-break s1 dpts) s2 (pf:snap-break s2 dpts)
+                d1 (pf:snap-break d1 dpts) d2 (pf:snap-break d2 dpts))
+          (cond
+            ((< (pf:dist s1 s2) *PF-EXACT-EPS*)
+             (princ "\n  (both ends of the shallow break landed on the same survey point - pick it again)")
+             (setq stage 1))
+            ((< (pf:dist d1 d2) *PF-EXACT-EPS*)
+             (princ "\n  (both ends of the deep break landed on the same survey point - pick it again)")
+             (setq stage 3))
+            (T
+             ;; the break ends land exactly on the kept perimeter
+             (setq sp1  (pf:curve-near s1 segs)
+                   sp2  (pf:curve-near s2 segs)
+                   dp1  (pf:curve-near d1 segs)
+                   dp2  (pf:curve-near d2 segs)
+                   back (pf:hopper-back dp1 dp2 sp1 sp2 dpts))
+             (cond
+               ((null back)
+                (princ (strcat "\n  (no survey point lies beyond the"
+                               " deep break - are the two break lines"
+                               " swapped?  Pick the deep break again)"))
+                (setq stage 3))
+               (T
+                ;; both break lines go down now, solid, so what was
+                ;; declared is visible while the offsets are typed;
+                ;; they stay scaffolding until the whole flow lands.
+                ;; A re-commit (after a Back) sweeps the old pair first.
+                (foreach e lines (pf:temp-kill e))
+                (pf:ensure-layer *PF-POOL-LAYER* 4)
+                (setq lines (list (pf:temp-add (pf:tag-mine
+                                    (pf:make-line sp1 sp2 nil nil)))
+                                  (pf:temp-add (pf:tag-mine
+                                    (pf:make-line dp1 dp2 nil nil)))))
+                (princ (strcat "\n  Back of the hopper: Pt."
+                               (pf:pt-name back)
+                               " (the survey point straight out from"
+                               " the deep break)."))
+                (setq nm1 (pf:pt-name d1)
+                      nm2 (pf:pt-name d2))
+                (princ "\n  Three offsets pull the hopper in from the perimeter;")
+                (princ "\n  they blend gradually where they differ.  Type inches (42)")
+                (princ "\n  or feet and inches (3'6).")
+                (setq stage 5))))))))
+
+      ;; -- the three hopper offsets
+      ((= stage 5)
+       (setq pf-phase "reading the hopper offsets")
+       (setq o1 (pf:get-off (strcat "\n  What is the deep end offset at Pt."
+                                    nm1 "?")
+                            (cons *PF-HOP-OFF* nil) nil T))
+       (if (eq o1 'PF-BACK)
+         (setq stage 4)
+         (setq off1 (car o1) stage 6)))
+      ((= stage 6)
+       (setq o2 (pf:get-off (strcat "\n  What is the deep end offset at Pt."
+                                    nm2 "?")
+                            o1 nil T))
+       (if (eq o2 'PF-BACK)
+         (setq stage 5)
+         (setq off2 (car o2) stage 7)))
+      ((= stage 7)
+       (setq o3 (pf:get-off (strcat "\n  What is the offset at the back of the"
+                                    " hopper (Pt." (pf:pt-name back) ")?")
+                            o1 nil T))
+       (if (eq o3 'PF-BACK)
+         (setq stage 6)
+         (progn
+           (setq off3 (car o3)
+                 bfl  (cdr o3))
+           (setq *PF-HOP-OFF* off1)
+           ;; each slope line can run straight to the shallow break,
+           ;; follow the perimeter's curve gently in, or pass through
+           ;; picked points at pinned offsets
+           (setq pf-phase "asking about the slope lines")
+           (princ "\n  Each slope line can run STRAIGHT to the shallow break, be GUIDED")
+           (princ "\n  by the perimeter - easing in along its curve - or pass through")
+           (princ "\n  POINTS you pick along that side, each with its own offset.")
+           (setq stage 8))))
+
+      ;; -- one slope choice per side; Back at a choice re-opens the
+      ;; -- previous question, sweeping that side's waypoint rings
+      ((= stage 8)
+       (foreach e g1m (pf:temp-kill e))
+       (setq g1m nil
+             v   (pf:ask-slope nm1 dpts o1))
+       (if (eq v 'PF-BACK)
+         (setq stage 7)
+         (setq g1 v g1m slopemarks stage 9)))
+      ((= stage 9)
+       (foreach e g2m (pf:temp-kill e))
+       (setq g2m nil
+             v   (pf:ask-slope nm2 dpts o2))
+       (if (eq v 'PF-BACK)
+         (setq stage 8)
+         (setq g2 v g2m slopemarks stage 10)))
+
+      ;; -- everything is in hand: draw the bottom
+      (T
+       (pf:bottom-draw segs sp1 sp2 dp1 dp2 back
+                       off1 off2 off3 bfl lines
+                       (list g1 g2))
+       (setq go nil))))
   (princ))
 
 ;; ---- the numeric parameters ------------------------------------------

@@ -432,7 +432,7 @@
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy dfeats run stairrng)
+                 stdy dfeats run stairrng stage)
 
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
@@ -444,164 +444,216 @@
   )
   (setq oldlay (getvar "CLAYER"))
 
-  ;; ---- 1. selection --------------------------------------------------
-  (princ "\nSelect the band of lines (two long sides + rungs): ")
-  (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
-  (if (not ss) (progn (princ "\nNothing selected.") (exit)))
+  ;; ---- 1.-7. the questions, staged so every prompt after the first
+  ;; offers Back (Undo works too): the side pick returns to the band
+  ;; selection, the numeric prompts to the side pick - the trace is
+  ;; recomputed from whatever is re-answered.  A trace that fails now
+  ;; re-opens the pick it came from instead of ending the command.
+  (setq stage 1)
+  (while (< stage 6)
+    (cond
 
-  (setq segs (wc:build-segs ss))
-  (if (< (length segs) 6)
-    (progn (princ "\nToo few segments to form a band.") (exit))
-  )
-  (setq nodes (wc:build-nodes segs))
+      ;; ---- 1. selection ----------------------------------------------
+      ((= stage 1)
+       (princ "\nSelect the band of lines (two long sides + rungs): ")
+       (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+       (if (not ss) (progn (princ "\nNothing selected.") (exit)))
+       (setq segs (wc:build-segs ss))
+       (if (< (length segs) 6)
+         (princ "\nToo few segments to form a band - select again.")
+         (progn
+           (setq nodes (wc:build-nodes segs))
+           (setq stage 2)
+         )
+       ))
 
-  ;; ---- 2. pick the side to straighten -------------------------------
-  (setq pick nil)
-  (while (not pick)
-    (setq pick (entsel "\nClick the long side to STRAIGHTEN: "))
-    (if (and pick (not (ssmemb (car pick) ss)))
-      (progn (princ "  (that entity is not in the selection)") (setq pick nil))
-    )
-  )
-  (setq en (car pick) pk (cadr pick))
-
-  ;; seed = the segment of the picked entity nearest the pick point
-  (setq seed nil d2min 1.0e18 i 0)
-  (foreach sg segs
-    (if (eq (cadddr sg) en)
-      (progn
-        (setq d2c (wc:d2 pk (mapcar '(lambda (u v) (/ (+ u v) 2.0))
-                                    (car sg) (cadr sg))))
-        (if (< d2c d2min) (setq d2min d2c seed i))
-      )
-    )
-    (setq i (1+ i))
-  )
-  (if (not seed)
-    (progn (princ "\nCould not locate a segment at that pick.") (exit))
-  )
-
-  ;; ---- 3. trace the chosen chain -------------------------------------
-  (setq r (wc:full-chain segs nodes seed)
-        ids (car r)
-        pts (cdr r)
-  )
-  (if (< (length ids) 3)
-    (progn (princ "\nCould not trace a long side from that pick.") (exit))
-  )
-  (setq chainkeys (mapcar 'wc:key pts))
-
-  ;; arc length of each chain node
-  (setq s (list 0.0))
-  (setq p0 (car pts))
-  (foreach p1 (cdr pts)
-    (setq s (cons (+ (car s) (distance p0 p1)) s) p0 p1)
-  )
-  (setq s (reverse s)
-        n (length pts)
-  )
-
-  ;; ---- 4. rungs -------------------------------------------------------
-  ;; conns records every segment hanging off the chosen chain (rungs,
-  ;; diagonal braces, chords) so none of them is later mistaken for a
-  ;; free-standing reference mark
-  (setq rungs nil conns nil ni 0)
-  (foreach p pts
-    (setq p0 (nth (max 0 (1- ni)) pts)
-          p1 (nth (min (1- n) (1+ ni)) pts)
-          dch (wc:dir p0 p1)
-    )
-    (foreach j (cdr (assoc (wc:key p) nodes))
-      (if (not (member j ids))
-        (progn
-          (setq conns (cons j conns)
-                far (wc:other-end (nth j segs) p)
-          )
-          (if (not (wc:member-key far chainkeys))
-            (progn
-              (setq ang (abs (wc:turn dch (wc:dir p far)))
-                    ang (min ang (- pi ang))
-              )
-              (if (> ang 0.7854)                 ; > 45 deg off the chain
-                (setq rungs (cons (list ni p far) rungs))
+      ;; ---- 2. pick the side to straighten ----------------------------
+      ((= stage 2)
+       (initget "Back Undo")
+       (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
+       (cond
+         ((= (type pick) 'STR) (setq stage 1))
+         ((not pick)
+          (princ "  (nothing picked - click a line of the selection)"))
+         ((not (ssmemb (car pick) ss))
+          (princ "  (that entity is not in the selection)"))
+         (T
+          (setq en (car pick) pk (cadr pick))
+          ;; seed = the segment of the picked entity nearest the pick
+          (setq seed nil d2min 1.0e18 i 0)
+          (foreach sg segs
+            (if (eq (cadddr sg) en)
+              (progn
+                (setq d2c (wc:d2 pk (mapcar '(lambda (u v) (/ (+ u v) 2.0))
+                                            (car sg) (cadr sg))))
+                (if (< d2c d2min) (setq d2min d2c seed i))
               )
             )
+            (setq i (1+ i))
           )
-        )
-      )
-    )
-    (setq ni (1+ ni))
-  )
-  (setq rungs (reverse rungs))
-  (if (< (length rungs) 2)
-    (progn (princ "\nCould not find the rungs between the two sides.") (exit))
-  )
+          (if (not seed)
+            (princ "\nCould not locate a segment at that pick.")
+            (setq stage 3)
+          )
+         )
+       ))
 
-  ;; band width = median rung length
-  (setq widths (vl-sort (mapcar '(lambda (r) (distance (cadr r) (caddr r)))
-                                rungs)
-                        '<)
-        w (nth (/ (length widths) 2) widths)
-  )
+      ;; ---- 3.-6. trace, rungs, orientation, turn debt (no input) -----
+      ((= stage 3)
+       (setq r (wc:full-chain segs nodes seed)
+             ids (car r)
+             pts (cdr r)
+       )
+       (if (< (length ids) 3)
+         (progn
+           (princ "\nCould not trace a long side from that pick - pick again.")
+           (setq stage 2)
+         )
+         (progn
+           (setq chainkeys (mapcar 'wc:key pts))
 
-  ;; ---- 5. normalize orientation: far side below the travel direction --
-  (setq side 0)
-  (foreach f rungs
-    (setq ni (car f) p (cadr f) far (caddr f)
-          p0 (nth (max 0 (1- ni)) pts)
-          p1 (nth (min (1- n) (1+ ni)) pts)
-          cross (- (* (- (car p1) (car p0)) (- (cadr far) (cadr p)))
-                   (* (- (cadr p1) (cadr p0)) (- (car far) (car p))))
-    )
-    (setq side (+ side (if (> cross 0) 1 -1)))
-  )
-  (if (> side 0)                       ; far side is left -> walk the other way
-    (progn
-      (setq pts (reverse pts)
-            mid (car (reverse s))
-            s (reverse (mapcar '(lambda (v) (- mid v)) s))
-            chainkeys (reverse chainkeys)
-            rungs (mapcar '(lambda (f) (list (- n 1 (car f)) (cadr f) (caddr f)))
-                          rungs)
-            rungs (reverse rungs)
-      )
-    )
-  )
+           ;; arc length of each chain node
+           (setq s (list 0.0))
+           (setq p0 (car pts))
+           (foreach p1 (cdr pts)
+             (setq s (cons (+ (car s) (distance p0 p1)) s) p0 p1)
+           )
+           (setq s (reverse s)
+                 n (length pts)
+           )
 
-  ;; ---- 6. turn angles and per-interval correction debt ----------------
-  (setq turns (list 0.0) k 1)
-  (while (< k (1- n))
-    (setq d0 (wc:dir (nth (1- k) pts) (nth k pts))
-          d1 (wc:dir (nth k pts) (nth (1+ k) pts))
-          turns (cons (wc:turn d0 d1) turns)
-          k (1+ k)
-    )
-  )
-  (setq turns (reverse (cons 0.0 turns)))
+           ;; ---- 4. rungs --------------------------------------------
+           ;; conns records every segment hanging off the chosen chain
+           ;; (rungs, diagonal braces, chords) so none of them is later
+           ;; mistaken for a free-standing reference mark
+           (setq rungs nil conns nil ni 0)
+           (foreach p pts
+             (setq p0 (nth (max 0 (1- ni)) pts)
+                   p1 (nth (min (1- n) (1+ ni)) pts)
+                   dch (wc:dir p0 p1)
+             )
+             (foreach j (cdr (assoc (wc:key p) nodes))
+               (if (not (member j ids))
+                 (progn
+                   (setq conns (cons j conns)
+                         far (wc:other-end (nth j segs) p)
+                   )
+                   (if (not (wc:member-key far chainkeys))
+                     (progn
+                       (setq ang (abs (wc:turn dch (wc:dir p far)))
+                             ang (min ang (- pi ang))
+                       )
+                       (if (> ang 0.7854)          ; > 45 deg off the chain
+                         (setq rungs (cons (list ni p far) rungs))
+                       )
+                     )
+                   )
+                 )
+               )
+             )
+             (setq ni (1+ ni))
+           )
+           (setq rungs (reverse rungs))
+           (if (< (length rungs) 2)
+             (progn
+               (princ "\nCould not find the rungs between the two sides - pick again.")
+               (setq stage 2)
+             )
+             (progn
+               ;; band width = median rung length
+               (setq widths (vl-sort (mapcar '(lambda (r)
+                                                (distance (cadr r) (caddr r)))
+                                             rungs)
+                                     '<)
+                     w (nth (/ (length widths) 2) widths)
+               )
 
-  (setq idebt nil k 0)
-  (while (< k (1- (length rungs)))
-    (setq i0 (car (nth k rungs))
-          i1 (car (nth (1+ k) rungs))
-          tsum 0.0
-          j (1+ i0)
-    )
-    (while (<= j i1)
-      (setq tsum (+ tsum (nth j turns)) j (1+ j))
-    )
-    (setq idebt (cons (* tsum w) idebt) k (1+ k))
-  )
-  (setq idebt (reverse idebt)
-        total (apply '+ (mapcar 'abs idebt))
-  )
+               ;; ---- 5. normalize orientation: far side below the
+               ;; ---- travel direction
+               (setq side 0)
+               (foreach f rungs
+                 (setq ni (car f) p (cadr f) far (caddr f)
+                       p0 (nth (max 0 (1- ni)) pts)
+                       p1 (nth (min (1- n) (1+ ni)) pts)
+                       cross (- (* (- (car p1) (car p0))
+                                   (- (cadr far) (cadr p)))
+                                (* (- (cadr p1) (cadr p0))
+                                   (- (car far) (car p))))
+                 )
+                 (setq side (+ side (if (> cross 0) 1 -1)))
+               )
+               (if (> side 0)          ; far side is left -> walk the other way
+                 (progn
+                   (setq pts (reverse pts)
+                         mid (car (reverse s))
+                         s (reverse (mapcar '(lambda (v) (- mid v)) s))
+                         chainkeys (reverse chainkeys)
+                         rungs (mapcar '(lambda (f)
+                                          (list (- n 1 (car f)) (cadr f) (caddr f)))
+                                       rungs)
+                         rungs (reverse rungs)
+                   )
+                 )
+               )
 
-  ;; ---- 7. feature threshold (conservative, capped) ---------------------
-  (setq maxfeat (getint "\nMaximum darts + inserts <20>: "))
-  (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat 20))
-  ;; a tile of this height sits along the straightened edge: cuts may
-  ;; only come up to (width - tile height - 1") from the far edge
-  (setq tileh (getreal "\nTile height along the straightened edge <none>: "))
-  (if (and tileh (< tileh 0.0)) (setq tileh nil))
+               ;; ---- 6. turn angles and per-interval correction debt --
+               (setq turns (list 0.0) k 1)
+               (while (< k (1- n))
+                 (setq d0 (wc:dir (nth (1- k) pts) (nth k pts))
+                       d1 (wc:dir (nth k pts) (nth (1+ k) pts))
+                       turns (cons (wc:turn d0 d1) turns)
+                       k (1+ k)
+                 )
+               )
+               (setq turns (reverse (cons 0.0 turns)))
+
+               (setq idebt nil k 0)
+               (while (< k (1- (length rungs)))
+                 (setq i0 (car (nth k rungs))
+                       i1 (car (nth (1+ k) rungs))
+                       tsum 0.0
+                       j (1+ i0)
+                 )
+                 (while (<= j i1)
+                   (setq tsum (+ tsum (nth j turns)) j (1+ j))
+                 )
+                 (setq idebt (cons (* tsum w) idebt) k (1+ k))
+               )
+               (setq idebt (reverse idebt)
+                     total (apply '+ (mapcar 'abs idebt))
+               )
+               (setq stage 4)
+             )
+           )
+         )
+       ))
+
+      ;; ---- 7. feature threshold (conservative, capped) ---------------
+      ((= stage 4)
+       (initget "Back Undo")
+       (setq maxfeat (getint "\nMaximum darts + inserts <20> [Back]: "))
+       (if (= (type maxfeat) 'STR)
+         (setq stage 2)
+         (progn
+           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat 20))
+           (setq stage 5)
+         )
+       ))
+      ;; a tile of this height sits along the straightened edge: cuts
+      ;; may only come up to (width - tile height - 1") from the far edge
+      (T
+       (initget "Back Undo")
+       (setq tileh (getreal
+                     "\nTile height along the straightened edge <none> [Back]: "))
+       (if (= (type tileh) 'STR)
+         (setq stage 4)
+         (progn
+           (if (and tileh (< tileh 0.0)) (setq tileh nil))
+           (setq stage 6)
+         )
+       ))
+    )
+  )
   ;; stair sections: the bottom line wraps around steps there; each
   ;; windowed section is developed rigidly as one piece so every tread
   ;; length and riser rise is kept exactly (treads come out level,

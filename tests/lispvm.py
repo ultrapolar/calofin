@@ -1114,3 +1114,6 @@ BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(
     LispError("exit called", vm))
 BUILTINS[Sym('atoms-family')] = lambda vm, a: []
 BUILTINS[Sym('vl-load-com')] = lambda vm, a: NIL
+# (vl-string-translate source-chars dest-chars str)
+BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
+    str.maketrans(str(a[0]), str(a[1])))
