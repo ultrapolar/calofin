@@ -124,16 +124,16 @@ profile and wins over the value in the file.
 
 You highlight the perimeter to be replaced and type the stock drawing's
 short name - `5M` finds `5M_Tech.dwg`, `20M` finds `20M_Tech.dwg`
-(`*stock-suffixes*` holds the `_Tech` part). The stock geometry is
-centred on what you highlighted. The two perimeters are meant to be the
-same shape and size, so when they are, it is dropped in untouched; when
-they are not, `STOCKCOVER` prints both sizes and asks before scaling.
-Nothing is erased until the new geometry is placed, and the whole run is
-one `U`.
-
-`STOCKCOVER` measures everything a stock DWG contains, so a stock file
-is expected to hold the cover geometry and nothing else - no border, no
-title block, no notes parked off to one side.
+(`*stock-suffixes*` holds the `_Tech` part). Alignment is by the anchor
+POINTs both sides carry - one at the bottom left, one at the top right,
+in the highlighted area and in every stock drawing. The stock lands in
+one move, bottom-left anchor onto bottom-left anchor, and stays exactly
+there: no fit prompt, no scaling, no shuffling afterwards. A side
+without anchor points falls back to its bounding-box corners, and
+`STOCKCOVER` says so. If the two anchor spans disagree (the wrong file
+was probably named) it prints how far off the stock is, loudly, but
+still places anchored - nothing is erased until the new geometry is
+placed, and the whole run is one `U`.
 
 ## Releases (`releases/`)
 

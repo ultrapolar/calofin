@@ -21,20 +21,19 @@
 ;;;   4. The highlighted entities are erased and the scratch block
 ;;;      definition is purged.
 ;;;
-;;; Alignment is by bounding box: the stock geometry is centred on the
-;;; centre of what you highlighted.  Because the two perimeters are
-;;; meant to be the same shape, the sizes should already agree -- if
-;;; they do not, STOCKCOVER prints both and asks whether to scale the
-;;; stock to fit or to drop it in at 1:1.  Nothing is scaled behind
-;;; your back, and nothing is erased until the new geometry is placed.
+;;; Alignment is by the anchor POINTs both sides carry: the highlighted
+;;; area and every stock drawing have a point at the bottom left and a
+;;; point at the top right.  The stock is placed in ONE move, its
+;;; bottom-left anchor onto the highlighted bottom-left anchor, and
+;;; then left exactly there -- no fit prompt, no scaling, no shuffling
+;;; afterwards.  When either side has no anchor points, the corners of
+;;; its bounding box stand in and STOCKCOVER says so.  If the two
+;;; anchor spans disagree by more than *stock-anchor-tol*, the wrong
+;;; file was probably named: STOCKCOVER prints how far off it is, loud,
+;;; but still places anchored -- one U rolls the whole run back.
+;;; Nothing is erased until the new geometry is placed.
 ;;;
 ;;; The whole run is one UNDO step.
-;;;
-;;; ASSUMPTION: a stock DWG holds the cover geometry and nothing else
-;;; (no border, no title block, no stray notes off to one side), since
-;;; the alignment measures everything the file contains.  STOCKLIST and
-;;; the size report before the erase are there to catch a file that
-;;; breaks that rule.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *stockcover-version* below and stamps a dated, REV-numbered twin of
@@ -49,7 +48,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.1") ; printed on load and at command
+(setq *stockcover-version* "v1.2") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -64,8 +63,9 @@
                            ;      geometry merges into the drawing
                            ; nil = leave it as a single block reference
 
-(setq *stock-fittol* 0.001) ; 0.1% - sizes closer than this count as
-                            ; "same size", and are placed untouched
+(setq *stock-anchor-tol* 0.25) ; inches - the two anchor spans may
+                            ; differ this much before STOCKCOVER
+                            ; shouts that the wrong file was named
 
 (setq *stock-env-folder* "StockCover_Folder") ; profile keys used to
 (setq *stock-env-last*   "StockCover_Last")   ; remember folder + name
@@ -160,17 +160,38 @@
     (setq i (1+ i)))
   (if (and mn mx) (list mn mx)))
 
-(defun stock:centre (bb)                  ; XY centre, Z left alone
-  (list (/ (+ (car (car bb)) (car (cadr bb))) 2.0)
-        (/ (+ (cadr (car bb)) (cadr (cadr bb))) 2.0)
-        0.0))
-
 (defun stock:size (bb)                    ; (width height)
   (list (- (car (cadr bb)) (car (car bb)))
         (- (cadr (cadr bb)) (cadr (car bb)))))
 
 (defun stock:fmt (wh)
   (strcat (rtos (car wh) 2 3) " x " (rtos (cadr wh) 2 3)))
+
+;;; The bottom-left / top-right anchor POINTs of a selection: of all
+;;; POINT entities in it, the ones lowest and highest along x+y.
+;;; -> (bl tr) as 3D points, or nil when the selection holds fewer
+;;; than two POINTs.
+(defun stock:anchors (ss / i en ed p pts bl tr)
+  (setq i 0)
+  (while (< i (sslength ss))
+    (setq en (ssname ss i)
+          ed (entget en))
+    (if (= (cdr (assoc 0 ed)) "POINT")
+      (setq pts (cons (cdr (assoc 10 ed)) pts)))
+    (setq i (1+ i)))
+  (if (>= (length pts) 2)
+    (progn
+      (setq bl (car pts) tr (car pts))
+      (foreach p (cdr pts)
+        (if (< (+ (car p) (cadr p)) (+ (car bl) (cadr bl))) (setq bl p))
+        (if (> (+ (car p) (cadr p)) (+ (car tr) (cadr tr))) (setq tr p)))
+      (list (list (car bl) (cadr bl) 0.0)
+            (list (car tr) (cadr tr) 0.0)))))
+
+;;; Span of an anchor pair: (width height) bottom-left -> top-right.
+(defun stock:span (an)
+  (list (- (car (cadr an)) (car (car an)))
+        (- (cadr (cadr an)) (cadr (car an)))))
 
 ;;; -------------------------------------------------------------------
 ;;;  reading the stock DWG in
@@ -251,8 +272,9 @@
 
 (defun c:STOCKCOVER (/ *error* stock:restore
                        oscm osos osclay osiu osareq osadia undone
-                       folder files ss-old tbb tsz name last hits pick i
-                       file path bname mark ss-new sbb ssz fx fy ans f)
+                       folder files ss-old tbb tsz tanch name last hits
+                       pick i file path bname mark ss-new sbb ssz sanch
+                       dx dy f)
 
   (defun stock:restore ()
     (if oscm   (setvar "CMDECHO"  oscm))
@@ -309,6 +331,12 @@
             (progn
               (setq tsz (stock:size tbb))
               (stock:say (strcat "highlighted area: " (stock:fmt tsz)))
+              (setq tanch (stock:anchors ss-old))
+              (if tanch
+                (stock:say "anchor points found on the highlighted area.")
+                (progn
+                  (setq tanch (list (car tbb) (cadr tbb)))
+                  (stock:say "no anchor points highlighted - using the box corners.")))
 
               ;; ------------------------------------- which stock file
               (setq last (stock:getenv *stock-env-last*))
@@ -376,64 +404,44 @@
                                      (stock:say (strcat "stock geometry: "
                                                         (stock:fmt ssz)))
 
-                                     ;; ---------------------- fit check
-                                     (setq fx (if (> (abs (car ssz)) 1e-9)
-                                                (/ (car tsz) (car ssz)) 0.0)
-                                           fy (if (> (abs (cadr ssz)) 1e-9)
-                                                (/ (cadr tsz) (cadr ssz)) 0.0))
-                                     (cond
-                                       ((or (<= fx 0.0) (<= fy 0.0))
-                                        (setq ans "Asis")
-                                        (stock:say "one side measures zero - placing at 1:1."))
-                                       ((and (< (abs (- fx 1.0)) *stock-fittol*)
-                                             (< (abs (- fy 1.0)) *stock-fittol*))
-                                        (setq ans "Asis")
-                                        (stock:say "same size - placing as-is."))
-                                       (t
-                                        (if (> (abs (- fx fy))
-                                               (* *stock-fittol* (max fx fy)))
-                                          (progn
-                                            (stock:say
-                                              (strcat "SHAPES DO NOT MATCH: would need "
-                                                      (rtos fx 2 4) "x across and "
-                                                      (rtos fy 2 4) "x up."))
-                                            (stock:say "check you named the right stock drawing.")
-                                            (initget "Fit Asis Cancel")
-                                            (setq ans (getkword "\nScale to fit anyway? [Fit/Asis/Cancel] <Asis>: "))
-                                            (if (null ans) (setq ans "Asis")))
-                                          (progn
-                                            (stock:say (strcat "stock is "
-                                                               (rtos (/ 1.0 fx) 2 4)
-                                                               "x the highlighted size."))
-                                            (initget "Fit Asis Cancel")
-                                            (setq ans (getkword "\nScale it to fit? [Fit/Asis/Cancel] <Fit>: "))
-                                            (if (null ans) (setq ans "Fit"))))))
+                                     ;; ------------------ anchor check
+                                     (setq sanch (stock:anchors ss-new))
+                                     (if (null sanch)
+                                       (progn
+                                         (setq sanch (list (car sbb) (cadr sbb)))
+                                         (stock:say "no anchor points in the stock file - using its box corners.")))
+                                     ;; the bottom-left -> top-right
+                                     ;; spans should agree; when they do
+                                     ;; not, the wrong file was probably
+                                     ;; named - say so, loudly, but the
+                                     ;; placement stays anchored as-is
+                                     (setq dx (- (car (stock:span sanch))
+                                                 (car (stock:span tanch)))
+                                           dy (- (cadr (stock:span sanch))
+                                                 (cadr (stock:span tanch))))
+                                     (if (or (> (abs dx) *stock-anchor-tol*)
+                                             (> (abs dy) *stock-anchor-tol*))
+                                       (progn
+                                         (stock:say (strcat "ANCHORS DO NOT AGREE: the stock's span is off by "
+                                                            (rtos dx 2 3) " across and "
+                                                            (rtos dy 2 3) " up."))
+                                         (stock:say "check you named the right stock drawing - one U rolls this back.")))
 
-                                     ;; ------------------------- place
-                                     (if (= ans "Cancel")
-                                       (progn
-                                         (command "_.ERASE" ss-new "")
-                                         (command "_.-PURGE" "_B" bname "_N")
-                                         (stock:say "cancelled - nothing changed."))
-                                       (progn
-                                         (if (= ans "Fit")
-                                           (progn
-                                             (command "_.SCALE" ss-new ""
-                                                      (stock:centre sbb)
-                                                      (/ (+ fx fy) 2.0))
-                                             (setq sbb (stock:bbox ss-new))))
-                                         (command "_.MOVE" ss-new ""
-                                                  (stock:centre sbb)
-                                                  (stock:centre tbb))
-                                         (command "_.ERASE" ss-old "")
-                                         (if *stock-explode*
-                                           (command "_.-PURGE" "_B" bname "_N"))
-                                         (stock:say
-                                           (strcat (vl-filename-base file) " placed - "
-                                                   (itoa (sslength ss-new))
-                                                   " object(s) in, "
-                                                   (itoa (sslength ss-old))
-                                                   " out."))))))))))
+                                     ;; ------------------------- place:
+                                     ;; ONE move, bottom-left anchor to
+                                     ;; bottom-left anchor, and it stays
+                                     ;; exactly there
+                                     (command "_.MOVE" ss-new ""
+                                              (car sanch) (car tanch))
+                                     (command "_.ERASE" ss-old "")
+                                     (if *stock-explode*
+                                       (command "_.-PURGE" "_B" bname "_N"))
+                                     (stock:say
+                                       (strcat (vl-filename-base file) " placed on the anchor - "
+                                               (itoa (sslength ss-new))
+                                               " object(s) in, "
+                                               (itoa (sslength ss-old))
+                                               " out."))))))))
                          (command "_.UNDO" "_End")
                          (setq undone nil)))))))))))))
 

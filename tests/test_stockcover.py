@@ -13,10 +13,12 @@ Three kinds of check, all runnable without AutoCAD:
   pins the matching rules, including the ones that must NOT fire.
 * Runtime checks drive the actual LISP through tests/lispvm.py with a
   stub AutoCAD underneath it: a fake stock folder, a fake -INSERT that
-  brings in geometry of a known size, and SCALE/MOVE/ERASE that really
-  move the fake entities.  These assert where the stock lands, that the
-  old perimeter is erased only after the new geometry is placed, and
-  that a size or shape mismatch stops instead of guessing.
+  brings in geometry of a known size, and MOVE/ERASE that really move
+  the fake entities.  These assert where the stock lands (anchored on
+  the shared POINT entities, bottom-left onto bottom-left), that the
+  old perimeter is erased only after the new geometry is placed, that
+  no prompt fires after the name, and that an anchor-span mismatch is
+  shouted about but never silently rescaled.
 
 Usage:  python3 tests/test_stockcover.py
 """
@@ -33,7 +35,7 @@ LSP = os.path.join(REPO_DIR, "lisp", "stockcover", "STOCKCOVER.lsp")
 RELEASES_DIR = os.path.join(REPO_DIR, "releases")
 
 import lispvm
-from lispvm import VM, Sym, Ent, NIL, T, LispError
+from lispvm import VM, Sym, Ent, Dot, NIL, T, LispError
 
 failures = []
 
@@ -300,6 +302,7 @@ class Fake:
         self.undo = []
         self.said = []
         self.insert_broken = False
+        self.ref_pts = {}       # block ref -> anchor points inside it
 
     def told(self, text):
         return any(text in s for s in self.said)
@@ -310,6 +313,11 @@ class Fake:
         self.vm.entities.append(e)
         self.vm.entdata[e] = []
         self.bbox[e] = list(box)
+        return e
+
+    def make_point(self, x, y):
+        e = self.make([x, y, x, y])
+        self.vm.entdata[e] = [Dot(0, "POINT"), Dot(10, [x, y, 0.0])]
         return e
 
     def live(self, ss):
@@ -351,14 +359,20 @@ class Fake:
         self.read(path.strip('"'), bname)
 
     def read(self, path, bname):
+        # a stock entry is ((min)(max)) or {"box": ..., "pts": [(x,y),..]}
         base = path.replace("\\", "/").rsplit("/", 1)[-1]
-        box = self.stock.get(base)
-        if box is None:
+        entry = self.stock.get(base)
+        if entry is None:
             return NIL
+        box = entry["box"] if isinstance(entry, dict) else entry
+        pts = entry.get("pts", []) if isinstance(entry, dict) else []
         self.blocks.add(bname.upper())
         self.vm.tables.setdefault("BLOCK", set()).add(bname)
-        # one block reference, sized as the file's contents
-        return self.make([box[0][0], box[0][1], box[1][0], box[1][1]])
+        # one block reference, sized as the file's contents; the anchor
+        # POINTs it holds come out when it is exploded
+        ref = self.make([box[0][0], box[0][1], box[1][0], box[1][1]])
+        self.ref_pts[ref] = list(pts)
+        return ref
 
     def explode(self, e):
         b = self.bbox[e]
@@ -366,6 +380,8 @@ class Fake:
         mid = (b[0] + b[2]) / 2.0
         self.make([b[0], b[1], mid, b[3]])      # two halves, same union
         self.make([mid, b[1], b[2], b[3]])
+        for x, y in self.ref_pts.pop(e, []):    # the file's anchor POINTs
+            self.make_point(x, y)
 
     def scale(self, ents, base, f):
         bx, by = base[0], base[1]
@@ -411,11 +427,16 @@ def build(files=None, stock=None, env=None, selection=None):
 
     # the selection the user highlights
     def _ssget(vm, a):
+        # a selection entry is ((min)(max)) for geometry, or
+        # ("pt", x, y) for an anchor POINT
         if selection is None:
             return NIL
         ss = ["<ss>"]
-        for box in selection:
-            ss.append(fake.make(list(box[0]) + list(box[1])))
+        for item in selection:
+            if item[0] == "pt":
+                ss.append(fake.make_point(item[1], item[2]))
+            else:
+                ss.append(fake.make(list(item[0]) + list(item[1])))
         return ss
     reg("ssget", _ssget)
 
@@ -468,11 +489,15 @@ def cmd_names(vm):
 
 
 def runtime():
-    print("runtime -- same size, straight swap")
-    # highlighted perimeter: 100x50 centred on (500, 300)
-    sel = [((450.0, 275.0), (550.0, 325.0))]
-    # the stock file holds the same 100x50 shape, drawn around the origin
-    stock = {"5M_Tech.dwg": ((-50.0, -25.0), (50.0, 25.0))}
+    print("runtime -- anchored swap, same span")
+    # highlighted: a 100x50 box centred on (500, 300), plus the two
+    # anchor POINTs at its bottom left and top right
+    sel = [((450.0, 275.0), (550.0, 325.0)),
+           ("pt", 450.0, 275.0), ("pt", 550.0, 325.0)]
+    # the stock file: the same 100x50 shape around the origin, with its
+    # own anchor points on the matching corners
+    stock = {"5M_Tech.dwg": {"box": ((-50.0, -25.0), (50.0, 25.0)),
+                             "pts": [(-50.0, -25.0), (50.0, 25.0)]}}
     vm, fake = build(stock=stock, selection=sel,
                      files=["5M_Tech.dwg", "20M_Tech.dwg"])
     run(vm, ["5M"])
@@ -480,7 +505,7 @@ def runtime():
     names = cmd_names(vm)
     check("the stock DWG was inserted", "_.-INSERT" in names)
     check("it was exploded", "_.EXPLODE" in names)
-    check("no SCALE when the sizes already agree", "_.SCALE" not in names)
+    check("nothing is ever rescaled", "_.SCALE" not in names)
     check("the old perimeter was erased", "_.ERASE" in names)
     check("the scratch block was purged", fake.purged == ["STOCK$0"],
           fake.purged)
@@ -488,6 +513,8 @@ def runtime():
           fake.undo)
     check("erase comes after the new geometry is placed",
           names.index("_.ERASE") > names.index("_.MOVE"))
+    check("only the name prompt fired - no fit questions",
+          len(vm.prompts) == 1, vm.prompts)
 
     placed = [e for e in fake.bbox if e not in vm.deleted]
     box = fake.union(placed)
@@ -495,7 +522,28 @@ def runtime():
     eq("stock landed on the highlighted perimeter, bottom", box[1], 275.0)
     eq("stock landed on the highlighted perimeter, right", box[2], 550.0)
     eq("stock landed on the highlighted perimeter, top", box[3], 325.0)
+    check("the stock's anchor points survive in the drawing",
+          sorted([fake.bbox[e][0], fake.bbox[e][1]] for e in placed
+                 if fake.vm.entdata[e])[0] == [450.0, 275.0])
     eq("the last name is remembered", fake.env.get("StockCover_Last"), "5M")
+
+    print("runtime -- anchoring follows the POINTs, not the box")
+    # anchor points sit OUTSIDE the geometry box on both sides, and the
+    # highlighted box is deliberately off-centre relative to its
+    # anchors: only true point-to-point anchoring lands this right
+    sel2 = [((452.0, 275.0), (548.0, 320.0)),
+            ("pt", 445.0, 270.0), ("pt", 555.0, 330.0)]
+    stock2 = {"5M_Tech.dwg": {"box": ((-48.0, -25.0), (48.0, 20.0)),
+                              "pts": [(-55.0, -30.0), (55.0, 30.0)]}}
+    vm, fake = build(stock=stock2, selection=sel2, files=["5M_Tech.dwg"])
+    run(vm, ["5M"])
+    check("matching spans raise no warning",
+          not fake.told("ANCHORS DO NOT AGREE"), fake.said)
+    # shift = target BL anchor - stock BL anchor = (500, 300)
+    placed = [e for e in fake.bbox if e not in vm.deleted
+              and not fake.vm.entdata[e]]
+    eq("geometry follows the anchor shift", fake.union(placed),
+       [452.0, 275.0, 548.0, 320.0])
 
     print("runtime -- Enter reuses the last name")
     vm, fake = build(stock=stock, selection=sel,
@@ -504,51 +552,48 @@ def runtime():
     check("Enter alone re-inserted the remembered stock",
           "_.-INSERT" in cmd_names(vm))
 
-    print("runtime -- a whole-drawing unit mismatch, scaled to fit")
-    # same shape, but the stock file is drawn in feet: 1/12 the size
-    stock12 = {"5M_Tech.dwg": ((-50.0 / 12, -25.0 / 12), (50.0 / 12, 25.0 / 12))}
-    vm, fake = build(stock=stock12, selection=sel, files=["5M_Tech.dwg"])
-    run(vm, ["5M", "Fit"])
-    check("a uniform mismatch offers Fit and takes it",
-          "_.SCALE" in cmd_names(vm))
+    print("runtime -- a span mismatch is shouted about, never rescaled")
+    # this stock is half the size: the wrong file for this perimeter
+    half = {"5M_Tech.dwg": {"box": ((-25.0, -12.5), (25.0, 12.5)),
+                            "pts": [(-25.0, -12.5), (25.0, 12.5)]}}
+    vm, fake = build(stock=half, selection=sel, files=["5M_Tech.dwg"])
+    run(vm, ["5M"])
+    check("the warning names the disagreement",
+          fake.told("ANCHORS DO NOT AGREE"), fake.said)
+    check("it points at U to roll back", fake.told("one U rolls this back"),
+          fake.said)
+    check("no prompt fired for it either", len(vm.prompts) == 1, vm.prompts)
+    check("and nothing was rescaled", "_.SCALE" not in cmd_names(vm))
+    placed = [e for e in fake.bbox if e not in vm.deleted
+              and not fake.vm.entdata[e]]
+    eq("placed anchored at its own size", fake.union(placed),
+       [450.0, 275.0, 500.0, 300.0])
+
+    print("runtime -- no anchor points anywhere falls back to box corners")
+    plain_sel = [((450.0, 275.0), (550.0, 325.0))]
+    plain_stock = {"5M_Tech.dwg": ((-50.0, -25.0), (50.0, 25.0))}
+    vm, fake = build(stock=plain_stock, selection=plain_sel,
+                     files=["5M_Tech.dwg"])
+    run(vm, ["5M"])
+    check("it says the highlight had no anchors",
+          fake.told("no anchor points highlighted"), fake.said)
+    check("and that the stock had none",
+          fake.told("no anchor points in the stock file"), fake.said)
     placed = [e for e in fake.bbox if e not in vm.deleted]
-    box = fake.union(placed)
-    eq("scaled stock fills the highlighted width", box[2] - box[0], 100.0, 1e-6)
-    eq("scaled stock fills the highlighted height", box[3] - box[1], 50.0, 1e-6)
-    eq("and is centred on it", (box[0] + box[2]) / 2.0, 500.0, 1e-6)
+    eq("box-corner fallback still lands it", fake.union(placed),
+       [450.0, 275.0, 550.0, 325.0])
 
-    print("runtime -- Asis leaves the stock at 1:1")
-    vm, fake = build(stock=stock12, selection=sel, files=["5M_Tech.dwg"])
-    run(vm, ["5M", "Asis"])
-    check("Asis skips the scale", "_.SCALE" not in cmd_names(vm))
-    check("Asis still erases the old perimeter", "_.ERASE" in cmd_names(vm))
-    placed = [e for e in fake.bbox if e not in vm.deleted]
-    box = fake.union(placed)
-    eq("1:1 stock keeps its own width", box[2] - box[0], 100.0 / 12, 1e-6)
-    eq("but is centred where it was wanted", (box[0] + box[2]) / 2.0, 500.0, 1e-6)
-
-    print("runtime -- Cancel changes nothing")
-    vm, fake = build(stock=stock12, selection=sel, files=["5M_Tech.dwg"])
-    run(vm, ["5M", "Cancel"])
-    erases = [c for c in vm.commands if c and c[0] == "_.ERASE"]
-    check("Cancel erases only the stock it brought in", len(erases) == 1,
-          erases)
-    survivors = [e for e in fake.bbox if e not in vm.deleted]
-    check("the highlighted perimeter is still there", len(survivors) == 1)
-    eq("untouched", fake.bbox[survivors[0]], [450.0, 275.0, 550.0, 325.0])
-    check("and the scratch block definition goes with it",
-          fake.purged == ["STOCK$0"], fake.purged)
-
-    print("runtime -- a shape mismatch defaults to leaving it alone")
-    # 100x50 highlighted, but this file is 100x80: not the same cover
-    wrong = {"5M_Tech.dwg": ((-50.0, -40.0), (50.0, 40.0))}
-    vm, fake = build(stock=wrong, selection=sel, files=["5M_Tech.dwg"])
-    run(vm, ["5M", "Cancel"])
-    prompts = " ".join(str(p) for p, _ in vm.prompts)
-    check("the mismatch prompt defaults to Asis, not Fit",
-          "<Asis>" in prompts, prompts)
-    check("Cancel after a mismatch keeps the old perimeter",
-          len([e for e in fake.bbox if e not in vm.deleted]) == 1)
+    print("runtime -- anchors on one side only")
+    vm, fake = build(stock=plain_stock, selection=sel, files=["5M_Tech.dwg"])
+    run(vm, ["5M"])
+    check("the highlighted anchors are found",
+          fake.told("anchor points found"), fake.said)
+    check("the stock falls back to its corners",
+          fake.told("no anchor points in the stock file"), fake.said)
+    placed = [e for e in fake.bbox if e not in vm.deleted
+              and not fake.vm.entdata[e]]
+    eq("mixed anchoring still lands it", fake.union(placed),
+       [450.0, 275.0, 550.0, 325.0])
 
     print("runtime -- nothing highlighted, nothing touched")
     vm, fake = build(stock=stock, selection=None, files=["5M_Tech.dwg"])
@@ -565,7 +610,7 @@ def runtime():
 
     print("runtime -- an ambiguous name asks which one")
     both = dict(stock)
-    both["5MB_Tech.dwg"] = ((-50.0, -25.0), (50.0, 25.0))
+    both["5MB_Tech.dwg"] = stock["5M_Tech.dwg"]
     vm, fake = build(stock=both, selection=sel,
                      files=["5M_Tech.dwg", "5MB_Tech.dwg"])
     run(vm, ["5", 2])
@@ -581,7 +626,7 @@ def runtime():
     check("and purged the definition ActiveX actually made",
           fake.purged == ["5M_Tech"], fake.purged)
     placed = [e for e in fake.bbox if e not in vm.deleted]
-    eq("landed in the right place", fake.union(placed),
+    eq("landed anchored in the right place", fake.union(placed),
        [450.0, 275.0, 550.0, 325.0])
 
     print("runtime -- a name collision on the fallback path is refused")
