@@ -24,11 +24,11 @@ The folder carries the same program twice, byte for byte:
 
 * **`abhd.lsp`** — the static name, for APPLOAD / autoload stacks
   that must never change.
-* **`ABHD_MMDDYY_REV##.lsp`** (e.g. `ABHD_081726_REV01.lsp`) — the
+* **`ABHD_MMDDYY_REV##.lsp`** (e.g. `ABHD_081926_REV05.lsp`) — the
   versioned twin, renamed with every iteration, so you can tell at a
   glance which revision is sitting in a colleague's stack.
 
-Both announce their version on load (`ABHD 081726 REV01 loaded.`),
+Both announce their version on load (`ABHD 081926 REV05 loaded.`),
 taken from `*PF-VERSION*` at the top of the file. When revising:
 edit `abhd.lsp`, bump `*PF-VERSION*` to the new date and REV, delete
 the old twin and copy `abhd.lsp` to the new name. The test suite

@@ -138,7 +138,7 @@ title block, no notes parked off to one side.
 
 Some tools distribute a dated, REV-numbered twin of their static file
 (`lisp/dimcheck/dimcheck.lsp` alongside
-`releases/dimcheck_081826_REV10.lsp`) so a loaded routine never
+`releases/dimcheck_081926_REV11.lsp`) so a loaded routine never
 silently changes underfoot, and a version banner in the file, its
 filename, and what the command prints at startup can never disagree.
 Every tool's twins live flat in `releases/` - no per-tool subfolders,
