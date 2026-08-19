@@ -34,11 +34,23 @@ Only the dot right after `Pt` is treated as a prefix — a point
 genuinely named `40.5` keeps its decimal and is typed `40.5` (or
 `Pt.40.5`).
 
-A number that names no point in the drawing is reported and the round
-starts over — **nothing is drawn from a typo**. Enter at the TO
+A number that names no point in the drawing is reported and the
+prompt re-asks — **nothing is drawn from a typo**. Enter at the TO
 prompt or at the pick cancels just that round; naming the same point
 twice is caught too. When a drawing carries a duplicate number, the
 first match wins.
+
+## Going back a step
+
+The shared Back convention (see the root README) applies:
+
+* `B`, `BACK`, `U` or `UNDO` (any case) at the **TO** prompt re-asks
+  FROM;
+* the **Back** keyword at the pick re-asks TO;
+* Back at the **FROM** prompt — offered as `[Back]` once something is
+  drawn — **un-draws the last dimension** (`Stepping back one
+  dimension.`, or `Already at the first dimension.` when there is
+  nothing left to remove).
 
 ## Usage
 
@@ -69,10 +81,15 @@ DIMENSION layer.
 ## Revisions
 
 `CDCALLOUT.lsp` carries the auto-stamped banner
-`(setq *cdcallout-version* "v1.0")` that `tools/release_lisp.py`
+`(setq *cdcallout-version* "v1.1")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/CDCALLOUT_MMDDYY_REV10.lsp` regenerates itself. Bump the
+`releases/CDCALLOUT_MMDDYY_REV11.lsp` regenerates itself. Bump the
 banner with every revision.
+
+* **v1.1** — the shared Back convention: Back at TO/pick re-asks the
+  previous question, Back at FROM un-draws the last dimension. A
+  mis-typed TO number now re-asks TO instead of restarting the round.
+* **v1.0** — first release.
 
 ## Assumptions / configuration
 

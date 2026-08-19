@@ -6,8 +6,9 @@ reaching (distance ...) has to die.
 Script values answer the interactive calls in order: the "_X" point
 sweep (ssget), then per round a FROM number (getstring), a TO number
 (getstring) and the dimension-line pick (getpoint); None at the FROM
-prompt is the Enter that ends the loop.  Run:
-python3 tests/test_cdcallout.py
+prompt is the Enter that ends the loop.  Typed 'b'/'undo' answers and
+a scripted "Back" at the pick exercise the shared Back convention.
+Run: python3 tests/test_cdcallout.py
 """
 
 import os
@@ -63,7 +64,8 @@ def run(vm, script, label):
 
 
 def dims(vm):
-    """Every DIMENSION entity, as {code: value} in creation order."""
+    """Every DIMENSION entity, as {code: value} in creation order
+    (deleted ones included -- pair with dim_ents to filter)."""
     out = []
     for e in vm.entities:
         d = {}
@@ -75,6 +77,13 @@ def dims(vm):
         if d.get(0) == 'DIMENSION':
             out.append(d)
     return out
+
+
+def dim_ents(vm):
+    """The DIMENSION entity names, in the same order as dims(vm)."""
+    return [e for e in vm.entities
+            if any(isinstance(g, Dot) and g.a == 0 and g.b == 'DIMENSION'
+                   for g in vm.entdata[e])]
 
 
 # ---- tests -----------------------------------------------------------
@@ -154,7 +163,8 @@ def test_cancelled_rounds():
     run(vm, [pts,
              '1', None,               # Enter at TO: round skipped
              '1', '2', None,          # Enter at the pick: round skipped
-             '1', '1',                # same point both ends: skipped
+             '1', '1',                # same point both ends: TO re-asked
+             None,                    # Enter at the re-asked TO: skipped
              None], 'cancels')
     assert dims(vm) == [], dims(vm)
     print("ok  Enter at TO / at the pick, same point twice -> no dims")
@@ -171,6 +181,47 @@ def test_missing_style():
     assert ds[0][3] == 'STANDARD', ds
     assert ds[0][8] == 'DIMENSION', ds
     print("ok  no CROSS DIMENSIONS style -> current style kept, warned")
+
+
+def test_back_undraws_last_dim():
+    """Back at the FROM prompt (B/BACK/U/UNDO, any case) removes the
+    just-drawn dimension, per the shared Back convention."""
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
+           ab_pt(vm, 100, 100, 3)]
+    run(vm, [pts,
+             '1', '2', (50.0, -12.0),
+             '2', '3', (112.0, 50.0),
+             'b',                      # un-draw the 2-3 dim
+             'undo',                   # un-draw the 1-2 dim
+             'B',                      # nothing left: "Already at..."
+             '1', '3', (40.0, 60.0),
+             None], 'back at FROM')
+    live = [d for d, e in zip(dims(vm), dim_ents(vm))
+            if e not in vm.deleted]
+    assert len(live) == 1, live
+    assert live[0][13] == [0.0, 0.0, 0.0] and \
+        live[0][14] == [100.0, 100.0, 0.0], live
+    print("ok  Back at FROM -> last dim un-drawn, twice, then re-drawn")
+
+
+def test_back_reasks_previous_prompt():
+    """B at TO re-asks FROM; the Back keyword at the pick re-asks TO."""
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
+           ab_pt(vm, 100, 100, 3)]
+    run(vm, [pts,
+             '1', 'back',              # B at TO: back to FROM
+             '2', '3', 'Back',         # Back keyword at the pick
+             '1', (10.0, 10.0),        # ...re-asks TO: swap the target
+             None], 'back mid-round')
+    ds = [d for d, e in zip(dims(vm), dim_ents(vm))
+          if e not in vm.deleted]
+    assert len(ds) == 1, ds
+    # the round ended up 2 -> 1, not 2 -> 3
+    assert ds[0][13] == [100.0, 0.0, 0.0] and \
+        ds[0][14] == [0.0, 0.0, 0.0], ds
+    print("ok  Back at TO / at the pick -> previous question re-asked")
 
 
 def test_no_points():
@@ -207,6 +258,8 @@ if __name__ == '__main__':
     test_unknown_number()
     test_cancelled_rounds()
     test_missing_style()
+    test_back_undraws_last_dim()
+    test_back_reasks_previous_prompt()
     test_no_points()
     test_no_local_shadows_a_function()
     print("all CDCALLOUT tests passed")

@@ -1033,6 +1033,14 @@ def _getpoint(vm, a):
     v = vm.pop_script(prompt, 'getpoint')
     if v is None:
         return NIL
+    # a scripted string is keyword input -- getpoint honours initget
+    # keywords exactly as getdist does ("Back" at a pick prompt)
+    if isinstance(v, str):
+        kw = _match_kw(vm, v)
+        if kw is None:
+            raise LispError(f"getpoint: keyword {v!r} not among "
+                            f"{vm.initget_kws!r} at {prompt!r}", vm)
+        return kw
     return list(v)
 
 
