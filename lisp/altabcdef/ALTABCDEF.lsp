@@ -626,7 +626,7 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ALTABCDEF (/ file rows base bx by W H
+(defun c:ALTABCDEF (/ file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
                     sol x y rms i tags placed stage done)
@@ -663,13 +663,13 @@
     (progn (princ "\nCancelled.") (princ))
     (progn
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
-      (setq bx (car base) by (cadr base))
+      (setq bpx (car base) bpy (cadr base))
       ;; corner coordinates: A top-left, clockwise, Y up (A-D goes down).
       ;; A-B is horizontal, A-D is vertical -> all four corners are 90 degrees.
-      (setq Ax bx        Ay by
-            Bx (+ bx W)  By by
-            Cx (+ bx W)  Cy (- by H)
-            Dx bx        Dy (- by H))
+      (setq Ax bpx        Ay bpy
+            Bx (+ bpx W)  By bpy
+            Cx (+ bpx W)  Cy (- bpy H)
+            Dx bpx        Dy (- bpy H))
       ;; ---- read the sheet ------------------------------------------------
       ;; the rectangle diagonal is the largest distance any point can be from a
       ;; corner; pass it so the parser can spot a foot mark scanned as a digit
@@ -715,7 +715,7 @@
             (if (>= (length corners) 2)
               (progn
                 (setq sol (altabcdef:solve (reverse corners) (reverse dists)
-                                        (+ bx (/ W 2.0)) (- by (/ H 2.0))))
+                                        (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
                 (altabcdef:point  (list x y) "ALTABCDEF-POINTS")
                 (altabcdef:circle (list x y) mrad "ALTABCDEF-POINTS")

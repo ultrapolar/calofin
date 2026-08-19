@@ -114,7 +114,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.6") ; printed on load and at command start so a
+(setq *hs-version* "v2.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -518,7 +518,7 @@
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
                       oldce oldstyle ea eb crown pts reflen lastdep
-                      dimflag slog mark scum sP sN sEA sEB rec pc oldlu
+                      dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       wallA wallB lastwid kx fx)
 
   (defun *error* (msg)
@@ -808,7 +808,7 @@
         (setq stopf T))
       (progn
         (setq mark (entlast)
-              scum cum sP pprev sN n sEA ea sEB eb
+              svcum cum svp pprev svn n svea ea sveb eb
               lastdep dep
               ;; each step sits DEP past the PREVIOUS step edge, never
               ;; a running total from the start
@@ -878,7 +878,7 @@
                         (hs-add (hs-mid2 pprev p) (hs-scl u offd)))))
             (setq pprev p drawn (1+ drawn)
                   lastwid (distance e1 e2)
-                  slog  (cons (list (hs-since mark) scum sP sN sEA sEB)
+                  slog  (cons (list (hs-since mark) svcum svp svn svea sveb)
                               slog))))
         (setq n (1+ n)))))
 

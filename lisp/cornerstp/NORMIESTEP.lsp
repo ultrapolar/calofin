@@ -100,7 +100,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.6") ; printed on load and at command start so a
+(setq *ns-version* "v1.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -471,7 +471,7 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd
-                        pprev oldce oldstyle oldlu slog mark scum sP sN
+                        pprev oldce oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e)
@@ -720,10 +720,12 @@
     (princ (strcat "\nBack corners: already drawn on the U - using them"
                    " as they are."))
     (progn
-      (initget "Square 90 Rounded Diagonal")
+      ;; bracket options are what a click sends, so they must match the
+      ;; keywords exactly - "90" stays as a hidden typed alias for Square
+      (initget "Square Rounded Diagonal 90")
       (setq rtype (cond ((getkword (strcat "\nBack corners of the steps"
-                                           " [Square(90)/Rounded/Diagonal]"
-                                           " <Square>: ")))
+                                           " [Square/Rounded/Diagonal]"
+                                           " <Square = 90 degrees>: ")))
                         ("Square")))
       (if (= rtype "90") (setq rtype "Square"))
       (cond
@@ -819,7 +821,7 @@
                  (T (setq dep 'RETRY)))))
            dep))
     (setq mark (entlast)
-          scum cum sP pprev sN n
+          svcum cum svp pprev svn n
           lastdep dep
           ;; each tread sits DEP past the PREVIOUS one, never a total
           p    (ns-add pprev (ns-scl dir dep))
@@ -881,7 +883,7 @@
           (ns-dim *cs-depth-dimstyle* pprev p
                   (ns-add (ns-mid2 pprev p) dimoff)))
         (setq pprev p drawn (1+ drawn)
-              slog  (cons (list (ns-since mark) scum sP sN) slog))))
+              slog  (cons (list (ns-since mark) svcum svp svn) slog))))
     (setq n (1+ n)))
 
   ;; ---- 6. sides of the run (with the back corners) and the width dim --

@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_081926_REV23-26-16.lsp
+;;; STEPS_081926_REV24-27-17.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v2.3 -> REV23   CORNERSTP, TUTORIALCORNERSTP
-;;;     HEMISTEP.lsp    v2.6 -> REV26   HEMISTEP, TUTORIALHEMISTEP
-;;;     NORMIESTEP.lsp  v1.6 -> REV16   NORMIESTEP, TUTORIALNORMIESTEP
+;;;     CORNERSTP.lsp   v2.4 -> REV24   CORNERSTP, TUTORIALCORNERSTP
+;;;     HEMISTEP.lsp    v2.7 -> REV27   HEMISTEP, TUTORIALHEMISTEP
+;;;     NORMIESTEP.lsp  v1.7 -> REV17   NORMIESTEP, TUTORIALNORMIESTEP
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v2.3) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v2.4) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -138,7 +138,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.3") ; printed on load and at command start so a
+(setq *cs-version* "v2.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -419,7 +419,7 @@
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
                        prevL prevR dimflag w offd oldce oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
-                       slog mark sdist sL sR sP sT sN s)
+                       slog mark svdist svl svr svp svt svn s)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -738,8 +738,8 @@
                     wid  nil)          ; the first step fits the walls
               (while (and (not stopf) tout)
                 (setq mark  (entlast)
-                      sdist dist sL prevL sR prevR sP pprev
-                      sT    tprev sN n)
+                      svdist dist svl prevL svr prevR svp pprev
+                      svt   tprev svn n)
                 (setq p   (cs-add corner (cs-scl bis tout))
                       h1  (inters p (cs-add p perp) (car w1) (cadr w1) nil)
                       h2  (inters p (cs-add p perp) (car w2) (cadr w2) nil)
@@ -788,8 +788,8 @@
                                           (cs-scl perp offd))))))
                     (setq prevL e1 prevR e2 pprev p tprev tout
                           drawn (1+ drawn)
-                          slog  (cons (list (cs-since mark) sdist sL sR
-                                            sP sT sN)
+                          slog  (cons (list (cs-since mark) svdist svl svr
+                                            svp svt svn)
                                       slog))))
                 ;; next step inward: depth, then width - same rules as
                 ;; inside out (a held width breaks from the walls)
@@ -846,7 +846,7 @@
               (T (setq dep 'RETRY)))))
         dep)
       (setq mark  (entlast)
-            sdist dist sL prevL sR prevR sP pprev sT tprev sN n
+            svdist dist svl prevL svr prevR svp pprev svt tprev svn n
             lastdep dep)
       (initget 6)
       (setq wid (getdist (strcat "\nStep " (itoa n)
@@ -894,7 +894,7 @@
                       (cs-add corner
                               (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
           (setq prevL e1 prevR e2 pprev p drawn (1+ drawn)
-                slog (cons (list (cs-since mark) sdist sL sR sP sT sN)
+                slog (cons (list (cs-since mark) svdist svl svr svp svt svn)
                            slog))))
       (setq n (1+ n))))
 
@@ -1066,7 +1066,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v2.6) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v2.7) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1184,7 +1184,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.6") ; printed on load and at command start so a
+(setq *hs-version* "v2.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1588,7 +1588,7 @@
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
                       oldce oldstyle ea eb crown pts reflen lastdep
-                      dimflag slog mark scum sP sN sEA sEB rec pc oldlu
+                      dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       wallA wallB lastwid kx fx)
 
   (defun *error* (msg)
@@ -1878,7 +1878,7 @@
         (setq stopf T))
       (progn
         (setq mark (entlast)
-              scum cum sP pprev sN n sEA ea sEB eb
+              svcum cum svp pprev svn n svea ea sveb eb
               lastdep dep
               ;; each step sits DEP past the PREVIOUS step edge, never
               ;; a running total from the start
@@ -1948,7 +1948,7 @@
                         (hs-add (hs-mid2 pprev p) (hs-scl u offd)))))
             (setq pprev p drawn (1+ drawn)
                   lastwid (distance e1 e2)
-                  slog  (cons (list (hs-since mark) scum sP sN sEA sEB)
+                  slog  (cons (list (hs-since mark) svcum svp svn svea sveb)
                               slog))))
         (setq n (1+ n)))))
 
@@ -2173,7 +2173,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v1.6) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v1.7) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -2277,7 +2277,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.6") ; printed on load and at command start so a
+(setq *ns-version* "v1.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2648,7 +2648,7 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd
-                        pprev oldce oldstyle oldlu slog mark scum sP sN
+                        pprev oldce oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e)
@@ -2897,10 +2897,12 @@
     (princ (strcat "\nBack corners: already drawn on the U - using them"
                    " as they are."))
     (progn
-      (initget "Square 90 Rounded Diagonal")
+      ;; bracket options are what a click sends, so they must match the
+      ;; keywords exactly - "90" stays as a hidden typed alias for Square
+      (initget "Square Rounded Diagonal 90")
       (setq rtype (cond ((getkword (strcat "\nBack corners of the steps"
-                                           " [Square(90)/Rounded/Diagonal]"
-                                           " <Square>: ")))
+                                           " [Square/Rounded/Diagonal]"
+                                           " <Square = 90 degrees>: ")))
                         ("Square")))
       (if (= rtype "90") (setq rtype "Square"))
       (cond
@@ -2996,7 +2998,7 @@
                  (T (setq dep 'RETRY)))))
            dep))
     (setq mark (entlast)
-          scum cum sP pprev sN n
+          svcum cum svp pprev svn n
           lastdep dep
           ;; each tread sits DEP past the PREVIOUS one, never a total
           p    (ns-add pprev (ns-scl dir dep))
@@ -3058,7 +3060,7 @@
           (ns-dim *cs-depth-dimstyle* pprev p
                   (ns-add (ns-mid2 pprev p) dimoff)))
         (setq pprev p drawn (1+ drawn)
-              slog  (cons (list (ns-since mark) scum sP sN) slog))))
+              slog  (cons (list (ns-since mark) svcum svp svn) slog))))
     (setq n (1+ n)))
 
   ;; ---- 6. sides of the run (with the back corners) and the width dim --

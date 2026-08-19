@@ -112,7 +112,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.3") ; printed on load and at command start so a
+(setq *cs-version* "v2.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -393,7 +393,7 @@
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
                        prevL prevR dimflag w offd oldce oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
-                       slog mark sdist sL sR sP sT sN s)
+                       slog mark svdist svl svr svp svt svn s)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -712,8 +712,8 @@
                     wid  nil)          ; the first step fits the walls
               (while (and (not stopf) tout)
                 (setq mark  (entlast)
-                      sdist dist sL prevL sR prevR sP pprev
-                      sT    tprev sN n)
+                      svdist dist svl prevL svr prevR svp pprev
+                      svt   tprev svn n)
                 (setq p   (cs-add corner (cs-scl bis tout))
                       h1  (inters p (cs-add p perp) (car w1) (cadr w1) nil)
                       h2  (inters p (cs-add p perp) (car w2) (cadr w2) nil)
@@ -762,8 +762,8 @@
                                           (cs-scl perp offd))))))
                     (setq prevL e1 prevR e2 pprev p tprev tout
                           drawn (1+ drawn)
-                          slog  (cons (list (cs-since mark) sdist sL sR
-                                            sP sT sN)
+                          slog  (cons (list (cs-since mark) svdist svl svr
+                                            svp svt svn)
                                       slog))))
                 ;; next step inward: depth, then width - same rules as
                 ;; inside out (a held width breaks from the walls)
@@ -820,7 +820,7 @@
               (T (setq dep 'RETRY)))))
         dep)
       (setq mark  (entlast)
-            sdist dist sL prevL sR prevR sP pprev sT tprev sN n
+            svdist dist svl prevL svr prevR svp pprev svt tprev svn n
             lastdep dep)
       (initget 6)
       (setq wid (getdist (strcat "\nStep " (itoa n)
@@ -868,7 +868,7 @@
                       (cs-add corner
                               (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
           (setq prevL e1 prevR e2 pprev p drawn (1+ drawn)
-                slog (cons (list (cs-since mark) sdist sL sR sP sT sN)
+                slog (cons (list (cs-since mark) svdist svl svr svp svt svn)
                            slog))))
       (setq n (1+ n))))
 

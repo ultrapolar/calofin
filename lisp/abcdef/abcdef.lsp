@@ -40,7 +40,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the rev you
 ;; think you loaded - two separate field failures turned out to be a stale or
 ;; hand-edited copy of this file still loaded in AutoCAD.
-(setq abcdef:*version* "3")
+(setq abcdef:*version* "4")
 
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
@@ -716,7 +716,7 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ABCDEF (/ file rows base bx by W H
+(defun c:ABCDEF (/ file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r k rr nm din g corners dists
                     sol x y rms tags tg tx ty placed p flag
@@ -755,16 +755,16 @@
     (progn (princ "\nCancelled.") (princ))
     (progn
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
-      (setq bx (car base) by (cadr base))
+      (setq bpx (car base) bpy (cadr base))
       ;; Corner coordinates.  A-B runs across the top; C and D sit DIRECTLY
       ;; BELOW A and B (the sheet's "Z" order), so every side is horizontal
       ;; or vertical and all four corners are true right angles:
       ;;    A = (bx, by)       B = (bx+W, by)
       ;;    C = (bx, by-H)     D = (bx+W, by-H)
-      (setq Ax bx        Ay by
-            Bx (+ bx W)  By by
-            Cx bx        Cy (- by H)
-            Dx (+ bx W)  Dy (- by H))
+      (setq Ax bpx        Ay bpy
+            Bx (+ bpx W)  By bpy
+            Cx bpx        Cy (- bpy H)
+            Dx (+ bpx W)  Dy (- bpy H))
       ;; ---- corner self-check ----------------------------------------------
       ;; refuse to plot anything if the corner variables above no longer form
       ;; the W x H rectangle (i.e. this file was edited or a stale copy is
@@ -804,11 +804,11 @@
               (progn
                 (setq rr (abcdef:row-rms din (list Ax Ay) (list Bx By)
                                          (list Cx Cy) (list Dx Dy)
-                                         (+ bx (/ W 2.0)) (- by (/ H 2.0))))
+                                         (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
                 (if rr (setq totn (+ totn rr)))
                 (setq rr (abcdef:row-rms din (list Ax Ay) (list Bx By)
                                          (list Dx Dy) (list Cx Cy)
-                                         (+ bx (/ W 2.0)) (- by (/ H 2.0))))
+                                         (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
                 (if rr (setq tots (+ tots rr)))
                 (setq n3 (1+ n3)))))
           (setq swapcd nil)
@@ -851,18 +851,18 @@
           ;; ---- draw the rectangle + corner tags ---------------------------
           ;; perimeter order TL -> TR -> BR -> BL, by position (so the frame
           ;; stays a rectangle no matter which naming the sheet used).
-          (abcdef:frame (list bx by)
-                        (list (+ bx W) by)
-                        (list (+ bx W) (- by H))
-                        (list bx (- by H))
+          (abcdef:frame (list bpx bpy)
+                        (list (+ bpx W) bpy)
+                        (list (+ bpx W) (- bpy H))
+                        (list bpx (- bpy H))
                         "ABCDEF-FRAME")
           ;; corner name tags, offset outward from whichever corner each
           ;; letter ended up on.
           (setq tags (list (list "A" Ax Ay) (list "B" Bx By)
                            (list "C" Cx Cy) (list "D" Dx Dy)))
           (foreach tg tags
-            (setq tx (if (> (cadr tg)  (+ bx (* 0.5 W))) th (* -1 th))
-                  ty (if (> (caddr tg) (- by (* 0.5 H))) th (* -1.6 th)))
+            (setq tx (if (> (cadr tg)  (+ bpx (* 0.5 W))) th (* -1 th))
+                  ty (if (> (caddr tg) (- bpy (* 0.5 H))) th (* -1.6 th)))
             (abcdef:text (list (+ (cadr tg) tx) (+ (caddr tg) ty))
                          (* th 1.4) (car tg) "ABCDEF-FRAME"))
           ;; ---- plot each measured point -----------------------------------
@@ -875,7 +875,7 @@
             (if (>= (length corners) 2)
               (progn
                 (setq sol (abcdef:solve corners dists
-                                        (+ bx (/ W 2.0)) (- by (/ H 2.0))))
+                                        (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
                 ;; signed leftover error against each supplied distance, in
                 ;; sheet order A B C D ("--" = not measured) - shows how the
@@ -891,8 +891,8 @@
                 (abcdef:circle (list x y) mrad "ABCDEF-POINTS")
                 (setq flag "")
                 (if (> rms 0.25) (setq flag "  **CHECK"))
-                (if (or (< x (- bx 0.1)) (> x (+ bx W 0.1))
-                        (> y (+ by 0.1)) (< y (- by H 0.1)))
+                (if (or (< x (- bpx 0.1)) (> x (+ bpx W 0.1))
+                        (> y (+ bpy 0.1)) (< y (- bpy H 0.1)))
                   (setq flag (strcat flag "  (outside frame)")))
                 ;; a doubtful fit gets its label in red so the problem is
                 ;; visible in the drawing, not only in this report
@@ -935,10 +935,10 @@
           ;; rather than asserting them - so a future corner-math regression
           ;; shows up right here instead of printing a reassuring constant.
           (setq angs (list
-            (abcdef:corner-ang bx by (+ bx W) by bx (- by H))
-            (abcdef:corner-ang (+ bx W) by bx by (+ bx W) (- by H))
-            (abcdef:corner-ang (+ bx W) (- by H) (+ bx W) by bx (- by H))
-            (abcdef:corner-ang bx (- by H) bx by (+ bx W) (- by H))))
+            (abcdef:corner-ang bpx bpy (+ bpx W) bpy bpx (- bpy H))
+            (abcdef:corner-ang (+ bpx W) bpy bpx bpy (+ bpx W) (- bpy H))
+            (abcdef:corner-ang (+ bpx W) (- bpy H) (+ bpx W) bpy bpx (- bpy H))
+            (abcdef:corner-ang bpx (- bpy H) bpx bpy (+ bpx W) (- bpy H))))
           (princ (strcat "\n\n  Frame: " (rtos W 2 2) "\" (A-B) x "
                          (rtos H 2 2) "\" (A-C); measured corner angles "
                          (rtos (nth 0 angs) 2 2) " / " (rtos (nth 1 angs) 2 2)
