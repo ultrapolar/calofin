@@ -49,7 +49,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.0") ; printed on load and at command
+(setq *stockcover-version* "v1.1") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -177,15 +177,18 @@
 ;;; -------------------------------------------------------------------
 
 ;;; -INSERT with an explicit block name reads the file off disk rather
-;;; than reusing anything already in the drawing.  The stock folder name
-;;; has a space in it, so the path is quoted and slashed forward.  If
-;;; that still comes back empty (older builds parse the = form
-;;; differently), fall back to ActiveX, which takes the raw path.
+;;; than reusing anything already in the drawing.  2015+ engines refuse
+;;; to route (command) through vl-catch-all-apply, so the insert goes
+;;; through command-s, which runs the command to completion in one call
+;;; and turns a failed insert into a catchable error instead of leaving
+;;; the command hanging.  Each string travels as one input token, so the
+;;; space in the stock folder's name needs no quoting.  If the insert
+;;; still comes back empty, fall back to ActiveX, which takes the raw
+;;; path.
 (defun stock:insert (path bname / spec used stem)
-  (setq spec (strcat bname "=\"" (stock:fwd path) "\""))
+  (setq spec (strcat bname "=" (stock:fwd path)))
   (vl-catch-all-apply
-    'command (list "_.-INSERT" spec '(0.0 0.0 0.0) 1.0 1.0 0.0))
-  (while (> (getvar "CMDACTIVE") 0) (command))
+    'command-s (list "_.-INSERT" spec '(0.0 0.0 0.0) 1.0 1.0 0.0))
   (if (tblsearch "BLOCK" bname) (setq used bname))
   (if (null used)
     (progn
@@ -259,14 +262,16 @@
     (if osareq (setvar "ATTREQ"   osareq))
     (if osadia (setvar "ATTDIA"   osadia)))
 
+  ;; 2015+ engines forbid (command) inside *error* unless the error
+  ;; mode was pushed beforehand; command-s is the sanctioned
+  ;; replacement and needs no setup, so the handler uses only that.
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
       (princ (strcat "\nSTOCKCOVER error: " msg)))
-    (while (> (getvar "CMDACTIVE") 0) (command))
     (stock:restore)
     (if undone
       (progn
-        (command "_.UNDO" "_End")
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
         (princ "\nNothing was left half done - use U to roll the run back.")))
     (princ))
 
@@ -358,9 +363,7 @@
                            (stock:say (strcat "could not read " path))
                            (progn
                              (if *stock-explode*
-                               (progn
-                                 (command "_.EXPLODE" (entlast))
-                                 (while (> (getvar "CMDACTIVE") 0) (command))))
+                               (command "_.EXPLODE" (entlast) ""))
                              (setq ss-new (stock:new-ents mark))
                              (if (null ss-new)
                                (stock:say (strcat path " brought nothing in."))

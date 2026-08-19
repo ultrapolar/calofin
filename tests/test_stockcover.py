@@ -184,6 +184,46 @@ def structural():
     for cmd in ("c:STOCKCOVER", "c:STOCKLIST", "c:STOCKCOVER-CFG"):
         check(f"{cmd} defined", f"(defun {cmd} " in CLEAN)
 
+    # two rules AutoCAD 2015+ enforces at runtime, caught statically:
+    # (command ...) may not run inside *error* without a prior
+    # *push-error-using-command*, and may not be routed through
+    # vl-catch-all-apply at all -- command-s is the replacement for both
+    err = re.search(r"\(defun \*error\* \(msg\)(.*?)\n\n", CLEAN, re.S)
+    check("*error* exists", err is not None)
+    if err:
+        check("*error* never calls bare (command)",
+              not re.search(r"\(command[\s)]", err.group(1)))
+    check("(command) is never routed through vl-catch-all-apply",
+          not re.search(r"vl-catch-all-apply\s+'command[\s)]", CLEAN))
+    # (command) with no arguments is Esc: the old back-out idiom cancels
+    # whatever command is pending.  CLEAN blanks string bodies, which
+    # makes every real call look bare, so scan a strings-kept view.
+    code = []
+    in_str = False
+    i = 0
+    while i < len(SRC):
+        ch = SRC[i]
+        if in_str:
+            code.append(ch)
+            if ch == "\\":
+                code.append(SRC[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+            code.append(ch)
+        elif ch == ";":
+            while i < len(SRC) and SRC[i] != "\n":
+                i += 1
+            continue
+        else:
+            code.append(ch)
+        i += 1
+    check("no bare (command) cancel loops",
+          not re.search(r"\(command\s*\)", "".join(code)))
+
 
 # ======================================================= name resolution ====
 
@@ -304,7 +344,7 @@ class Fake:
         return NIL
 
     def insert(self, spec):
-        # "STOCK$0=\"F:/.../5M_Tech.dwg\"" -- exactly what the LISP builds
+        # "STOCK$0=F:/.../5M_Tech.dwg" -- exactly what the LISP builds
         if self.insert_broken:
             return          # an AutoCAD that will not take the = form
         bname, _, path = spec.partition("=")
@@ -409,6 +449,7 @@ def build(files=None, stock=None, env=None, selection=None):
     reg("vl-catch-all-error-p", lambda vm, a: T if isinstance(a[0], Err) else NIL)
 
     reg("command", fake.command)
+    reg("command-s", fake.command)
 
     vm.load(LSP)
     return vm, fake
@@ -557,10 +598,14 @@ def runtime():
     vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
     run(vm, ["5M"])
     spec = [c for c in vm.commands if c and c[0] == "_.-INSERT"][0][1]
-    check("the path is quoted", spec.count('"') == 2, spec)
+    check("the spec is one unquoted token (command strings need none)",
+          '"' not in spec, spec)
     check("and slashed forward", "\\" not in spec.split("=", 1)[1], spec)
     check("into a scratch block name, never redefining an existing one",
           spec.startswith("STOCK$0="), spec)
+    explode = [c for c in vm.commands if c and c[0] == "_.EXPLODE"][0]
+    check("EXPLODE ends its selection with Enter, not Esc",
+          explode[-1] == "", explode)
 
     print("runtime -- an unreachable folder is reported, not crashed through")
     vm, fake = build(stock=stock, selection=sel, files=[])
