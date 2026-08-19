@@ -76,10 +76,11 @@
 ;;;       If a style is missing the current style is used and a note is
 ;;;       printed.
 ;;;   7.  Enter at a tread depth prompt means no more steps are
-;;;       required.  Undo at a tread depth prompt removes the step just
-;;;       drawn (its lines and its dimensions) so a mistyped number
-;;;       does not cost the whole run.  Same repeats the previous tread
-;;;       depth.  Side (riser) lines are drawn between successive step
+;;;       required.  Back at a tread depth prompt steps back one step:
+;;;       it removes the step just drawn (its lines and its dimensions)
+;;;       so a mistyped number does not cost the whole run (Undo, the
+;;;       old keyword, is still accepted).  Same repeats the previous
+;;;       tread depth.  Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
@@ -111,7 +112,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.2") ; printed on load and at command start so a
+(setq *cs-version* "v2.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -407,7 +408,7 @@
   ;; remove the most recently drawn step and roll the state back
   (defun cs-popstep ( / rec e)
     (cond
-      ((null slog) (princ "\n  Nothing to undo.") nil)
+      ((null slog) (princ "\n  Already at the first step.") nil)
       ((and outflag (= 1 (length slog)))
        (princ (strcat "\n  The outermost step sets the layout - restart"
                       " the command to change its width."))
@@ -424,7 +425,7 @@
              drawn (1- drawn)
              slog  (cdr slog))
        (redraw)                  ; clear the erased step from the screen
-       (princ "\n  Last step removed.")
+       (princ "\n  Stepping back one step.")
        T)))
 
   ;; ---- 0. environment checks ------------------------------------------
@@ -770,14 +771,15 @@
                   (progn
                     (setq n (1+ n) dep 'RETRY)
                     (while (eq dep 'RETRY)
-                      (initget 6 (if lastdep "Undo Same" "Undo"))
+                      ;; Undo is the old keyword, kept as a hidden synonym
+                      (initget 6 (if lastdep "Back Same Undo" "Back Undo"))
                       (setq dep (getdist (strcat "\nStep " (itoa n)
                                   " - tread depth (going in) ["
-                                  (if lastdep "Undo/Same" "Undo")
+                                  (if lastdep "Back/Same" "Back")
                                   "] <Enter = done>: ")))
                       (if (= (type dep) 'STR)
                         (cond
-                          ((= dep "Undo")
+                          ((or (= dep "Back") (= dep "Undo"))
                            (cs-popstep)
                            (setq dep 'RETRY))
                           ((= dep "Same")
@@ -803,13 +805,14 @@
       (progn
         (setq dep 'RETRY)
         (while (eq dep 'RETRY)
-          (initget 6 (if lastdep "Undo Same" "Undo"))
+          ;; Undo is the old keyword, kept as a hidden synonym
+          (initget 6 (if lastdep "Back Same Undo" "Back Undo"))
           (setq dep (getdist (strcat "\nStep " (itoa n) " - tread depth ["
-                                     (if lastdep "Undo/Same" "Undo")
+                                     (if lastdep "Back/Same" "Back")
                                      "] <Enter = done>: ")))
           (if (= (type dep) 'STR)
             (cond
-              ((= dep "Undo") (cs-popstep) (setq dep 'RETRY))
+              ((or (= dep "Back") (= dep "Undo")) (cs-popstep) (setq dep 'RETRY))
               ((= dep "Same")
                (if lastdep
                  (setq dep lastdep)
@@ -932,8 +935,8 @@
   (princ "\n     corner, and treads Parallel to the diagonal or square to")
   (princ "\n     the true-angle bisector.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
-  (princ "\n  At any depth prompt: Enter = done, Undo = remove the last")
-  (princ "\n  step, Same = repeat the previous depth.")
+  (princ "\n  At any depth prompt: Enter = done, Back = step back one")
+  (princ "\n  step (removes it), Same = repeat the previous depth.")
   (cs-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns when the UCS is tilted, a line is not flat, or the")

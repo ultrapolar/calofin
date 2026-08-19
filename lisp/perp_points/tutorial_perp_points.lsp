@@ -23,6 +23,10 @@
 ;;; ---------------------------------------------------------------------
 
 ;; arc-length helpers (they match perp_points.lsp)
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *tutperp-version* "v0.2")
+
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
         (+ (cadr a)  (* tt (- (cadr b)  (cadr a))))
@@ -139,7 +143,7 @@
                   "  * lengths must be positive - zero and negative values"
                   "    are rejected"
                   "  * Enter repeats the previous length (handy for runs of"
-                  "    equal values); typing U steps back one point"
+                  "    equal values); typing B (Back) steps back one point"
                   ""
                   "Output"
                   "  * the offset polyline takes the layer, colour, linetype,"
@@ -254,8 +258,8 @@
                   "You type a length for each point, START to FINISH - here"
                   "20, 30, 45, 35 and 25 (per 100 of demo size).  Each point"
                   "moves perpendicular to the line by its length, toward the"
-                  "clicked side.  Enter repeats the previous length; U steps"
-                  "back one point; zero and negatives are refused."))
+                  "clicked side.  Enter repeats the previous length; Back"
+                  "steps back one point; zero and negatives are refused."))
       (tutp:pause)
 
       ;; stage 5: the connecting polyline
@@ -326,5 +330,6 @@
               "Tutorial finished.  Type PERPPTS to try it for real."))
   (princ))
 
-(princ "\ntutorial_perp_points.lsp loaded.  Type TUTORIALPERPPTS to run.")
+(princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
+               " loaded.  Type TUTORIALPERPPTS to run."))
 (princ)

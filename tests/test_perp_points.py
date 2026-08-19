@@ -55,6 +55,12 @@ vlax-curve-getStartPoint vlax-curve-getEndPoint
 
 KEYWORDS = {"T", "Yes", "No", "Undo", "STR"}
 
+# Version banners: deliberate globals set once at load time and read by
+# the load message; tools/release_lisp.py stamps the dated releases/
+# twins from them.  Not leaks.
+VERSION_GLOBALS = {"*perp-version*", "*cperp-version*",
+                   "*tutperp-version*", "*tutcperp-version*"}
+
 
 def strip_comments(src):
     """Drop ;-comments without being fooled by semicolons inside strings.
@@ -140,7 +146,8 @@ def check_no_global_leaks(path, cmd, prefix):
     leaked = sorted(
         name for name in used - called
         if name not in declared and name not in BUILTINS
-        and name not in KEYWORDS and name != cmd
+        and name not in KEYWORDS and name not in VERSION_GLOBALS
+        and name != cmd
     )
     assert not leaked, "undeclared (global) variables: %s" % leaked
     unused = sorted(

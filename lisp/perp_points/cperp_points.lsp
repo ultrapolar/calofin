@@ -31,7 +31,8 @@
 ;;;   3. Enter how many values (points) are required  (>= 2).
 ;;;   4. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
-;;;      type U to step back and re-enter the previous point.
+;;;      type B (Back) to step back and re-enter the previous point
+;;;      (U, the old keyword, is still accepted).
 ;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 4 with the new polyline as
 ;;;      the path.
@@ -82,6 +83,10 @@
 ;;; ---------------------------------------------------------------------
 
 (vl-load-com)
+
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *cperp-version* "v0.2")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -434,7 +439,7 @@
     ;; new points stay paired even when a point is skipped; tangs holds
     ;; the travel tangent under each created point (it becomes the arc
     ;; direction of the new polyline there); idxs records each created
-    ;; point's position so U returns to the right prompt even across
+    ;; point's position so Back returns to the right prompt even across
     ;; skipped points.
     (setvar "CLAYER" "PERPPTS-TEMP")
     (setq newPts '() usedBases '() tangs '() idxs '() guideEnts '() i 0)
@@ -450,13 +455,13 @@
                         ": the curve direction cannot be read there."))
          (setq i (1+ i)))
         (t
-         (initget 6 "Undo")
+         (initget 6 "Back Undo")     ; Undo kept as a hidden synonym
          (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
                                     " of " (itoa n)
                                     (if lastLen
                                       (strcat " <" (rtos lastLen) ">")
                                       "")
-                                    " [Undo]: ")))
+                                    " [Back]: ")))
          (if (null len) (setq len lastLen))
          (cond
            ((eq (type len) 'STR)
@@ -468,8 +473,9 @@
                       newPts    (cdr newPts)
                       usedBases (cdr usedBases)
                       tangs     (cdr tangs)
-                      idxs      (cdr idxs)))
-              (princ "\nNothing to undo - this is the first point.")))
+                      idxs      (cdr idxs))
+                (princ "\nStepping back one point."))
+              (princ "\nAlready at the first point.")))
            ((null len)
             (princ "\nA length is required."))
            (t
@@ -559,5 +565,6 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ "\ncperp_points.lsp loaded.  Type CPERPPTS to run.")
+(princ (strcat "\ncperp_points.lsp " *cperp-version*
+               " loaded.  Type CPERPPTS to run."))
 (princ)

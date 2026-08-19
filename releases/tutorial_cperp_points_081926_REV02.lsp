@@ -22,6 +22,10 @@
 
 (vl-load-com)
 
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *tutcperp-version* "v0.2")
+
 ;; curve helpers (they match cperp_points.lsp)
 
 ;; unit tangent of the curve (current UCS) at the point closest to pt;
@@ -198,7 +202,7 @@
                   "  * point count: whole number, at least 2; Enter reuses"
                   "    the previous round's count; over 100 asks first"
                   "  * lengths must be positive; Enter repeats the previous"
-                  "    length; U steps back one point"
+                  "    length; B (Back) steps back one point"
                   "  * a point where the curve direction cannot be read"
                   "    (a cusp) is skipped with a message, never offset in"
                   "    an arbitrary direction"
@@ -350,5 +354,6 @@
               "Tutorial finished.  Type CPERPPTS to try it for real."))
   (princ))
 
-(princ "\ntutorial_cperp_points.lsp loaded.  Type TUTORIALCPERPPTS to run.")
+(princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
+               " loaded.  Type TUTORIALCPERPPTS to run."))
 (princ)

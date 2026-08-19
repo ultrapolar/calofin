@@ -61,9 +61,10 @@
 ;;;       read architectural style: a bare number is inches (drawing
 ;;;       units) and feet-inch entry like 1'4 (= 16") works whatever the
 ;;;       units setting.
-;;;   5.  Enter at a depth prompt = done.  Undo removes the step just
-;;;       drawn (its line and its dimensions).  Same repeats the previous
-;;;       depth, which is what most runs want.
+;;;   5.  Enter at a depth prompt = done.  Back steps back one step:
+;;;       it removes the step just drawn (its line and its dimensions).
+;;;       Undo, the old keyword, is still accepted.  Same repeats the
+;;;       previous depth, which is what most runs want.
 ;;;   6.  The side lines of the run - with the back corners worked in -
 ;;;       are drawn for the one-line and corner modes.  In corner mode
 ;;;       only the outer side is drawn, since the steps run outward from
@@ -99,7 +100,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.5") ; printed on load and at command start so a
+(setq *ns-version* "v1.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -488,7 +489,7 @@
   ;; remove the most recently drawn step and roll the state back
   (defun ns-popstep ( / e)
     (if (null slog)
-      (progn (princ "\n  Nothing to undo.") nil)
+      (progn (princ "\n  Already at the first step.") nil)
       (progn
         (setq rec (car slog))
         (foreach e (car rec) (if (and e (entget e)) (entdel e)))
@@ -498,7 +499,7 @@
               drawn (1- drawn)
               slog  (cdr slog))
         (redraw)
-        (princ "\n  Last step removed.")
+        (princ "\n  Stepping back one step.")
         T)))
 
   ;; ---- 0. environment checks -------------------------------------------
@@ -796,10 +797,11 @@
          (progn
            (setq dep 'RETRY)
            (while (eq dep 'RETRY)
-             (initget 6 (strcat "Undo" (if lastdep " Same" "")))
+             ;; Undo is the old keyword, kept as a hidden synonym
+             (initget 6 (strcat "Back" (if lastdep " Same" "") " Undo"))
              (setq dep (getdist
                          (strcat "\nStep " (itoa n)
-                                 " - tread depth [Undo"
+                                 " - tread depth [Back"
                                  (if lastdep "/Same" "") "]"
                                  (if lastdep
                                    (strcat " <Enter = done, Same = "
@@ -807,7 +809,8 @@
                                    " <Enter = done>: "))))
              (if (= (type dep) 'STR)
                (cond
-                 ((= dep "Undo") (ns-popstep) (setq dep 'RETRY))
+                 ((or (= dep "Back") (= dep "Undo"))
+                  (ns-popstep) (setq dep 'RETRY))
                  ((= dep "Same")
                   (if lastdep
                     (setq dep lastdep)
@@ -972,8 +975,8 @@
   (princ "\n     already has its back corners drawn is not asked.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
   (princ "\n  4. Tread depths, one per step, each from the previous")
-  (princ "\n     tread.  Enter = done, Undo = remove the last, Same =")
-  (princ "\n     repeat the previous depth.")
+  (princ "\n     tread.  Enter = done, Back = step back one (removes")
+  (princ "\n     it), Same = repeat the previous depth.")
   (ns-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns on tilted UCS / non-flat lines / unusable layer")

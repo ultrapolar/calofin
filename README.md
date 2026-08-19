@@ -62,6 +62,27 @@ below). Load a routine with APPLOAD, or add it to your startup suite.
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 
+### Going back a step
+
+Interactive tools share one convention for backing out of a mis-typed
+answer: the keyword is **Back** (type `B`), it is always shown in the
+prompt's bracketed options (`[Back]`, `[Yes/No/Back/Skip rest]`, ...),
+and it re-asks the previous question. The first question of a flow has
+nothing to go back to, so it never offers Back. In loops that draw as
+they go - `PERPPTS`/`CPERPPTS` offset points, `CORNERSTP`/`HEMISTEP`/
+`NORMIESTEP` treads - Back also removes the just-committed point or
+step (its lines and its dimensions) before re-asking; those loops still
+accept `Undo`, their old keyword, as a hidden synonym. Feedback wording
+is shared too: `Stepping back one <point|step|dimension>.` on the way
+back, `Already at the first <point|step|dimension>.` when there is
+nowhere left to go.
+
+`POOL` and `SPA` carry the fullest form (stage runners, where Back at
+a block's first question backs out into the previous block), and
+`DIMCHECK`/`LINFINCHECK`/`COVERCHECK` use it in their dimension-review
+loop. Not every multi-step tool has a back path yet; new prompts
+should follow this convention.
+
 ### `ABCDEF` vs `ALTABCDEF`, and `CHECK` vs `CCPRECHECK`
 
 Two pairs of tools collided on the same command name during

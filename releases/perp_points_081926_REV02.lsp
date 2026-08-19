@@ -27,7 +27,8 @@
 ;;;   3. Enter how many values (points) are required  (>= 2).
 ;;;   4. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
-;;;      type U to step back and re-enter the previous point.
+;;;      type B (Back) to step back and re-enter the previous point
+;;;      (U, the old keyword, is still accepted).
 ;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 4 with the new polyline as
 ;;;      the path.
@@ -62,6 +63,10 @@
 ;;; ---------------------------------------------------------------------
 
 (vl-load-com)
+
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *perp-version* "v0.2")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -407,31 +412,34 @@
     ;; --- length per point + build the new perpendicular points -------
     ;; Enter reuses the last length entered (shown as the prompt
     ;; default), since runs of equal lengths are common; the last value
-    ;; carries across rounds.  U steps back a point.  Zero and negative
-    ;; lengths are rejected, so a dimension is never degenerate and the
-    ;; offset can never flip to the wrong side.
+    ;; carries across rounds.  Back steps back a point (Undo is kept as
+    ;; a hidden synonym for old habits).  Zero and negative lengths are
+    ;; rejected, so a dimension is never degenerate and the offset can
+    ;; never flip to the wrong side.
     (setvar "CLAYER" "PERPPTS-TEMP")
     (setq newPts '() guideEnts '() i 0)
     (while (< i n)
       (setq base (nth i basePts))
-      (initget 6 "Undo")                     ; no zero, no negative
+      (initget 6 "Back Undo")                ; no zero, no negative
       (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
                                  " of " (itoa n)
                                  (if lastLen
                                    (strcat " <" (rtos lastLen) ">")
                                    "")
-                                 " [Undo]: ")))
+                                 " [Back]: ")))
       (if (null len) (setq len lastLen))     ; Enter = same as last time
       (cond
-        ;; step back one point and re-enter it (getdist returned "Undo")
+        ;; step back one point and re-enter it (getdist returned "Back",
+        ;; or "Undo" - the old keyword, kept as a synonym)
         ((eq (type len) 'STR)
          (if (> i 0)
            (progn
              (setq i (1- i))
              (perp:kill (car guideEnts))
              (setq guideEnts (cdr guideEnts)
-                   newPts    (cdr newPts)))
-           (princ "\nNothing to undo - this is the first point.")))
+                   newPts    (cdr newPts))
+             (princ "\nStepping back one point."))
+           (princ "\nAlready at the first point.")))
         ((null len)
          (princ "\nA length is required."))
         (t
@@ -504,5 +512,6 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ "\nperp_points.lsp loaded.  Type PERPPTS to run.")
+(princ (strcat "\nperp_points.lsp " *perp-version*
+               " loaded.  Type PERPPTS to run."))
 (princ)

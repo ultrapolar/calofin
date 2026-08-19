@@ -453,9 +453,10 @@
                  (back "NA Back")
                  (t "NA")))
   (if kw
+      ;; REQ always rejects zero (bit 7) - offering Back must not
+      ;; loosen what counts as a valid measurement; ZER alone admits 0
       (initget (cond ((eq kind 'ZER) 5)
                      ((and (eq kind 'SUG) dflt) 6)
-                     ((eq kind 'REQ) (if back 5 7))
                      (t 7))
                kw)
       (initget 7))

@@ -66,8 +66,10 @@
 ;;;       whatever the units setting.
 ;;;   6.  Ending and shortcuts:
 ;;;         - Enter at a depth prompt = done.
-;;;         - Undo at a depth prompt removes the step just drawn (its
-;;;           line and its dimensions); Same repeats the previous depth.
+;;;         - Back at a depth prompt steps back one step: it removes
+;;;           the step just drawn (its line and its dimensions).  Undo,
+;;;           the old keyword, is still accepted.  Same repeats the
+;;;           previous depth.
 ;;;         - Enter at a width prompt fits that step to the curve in
 ;;;           the curve modes, or repeats the previous width in LINE
 ;;;           mode.
@@ -112,7 +114,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.5") ; printed on load and at command start so a
+(setq *hs-version* "v2.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -532,7 +534,7 @@
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)
     (if (null slog)
-      (progn (princ "\n  Nothing to undo.") nil)
+      (progn (princ "\n  Already at the first step.") nil)
       (progn
         (setq rec (car slog))
         (foreach e (car rec) (if (and e (entget e)) (entdel e)))
@@ -544,7 +546,7 @@
               drawn (1- drawn)
               slog  (cdr slog))
         (redraw)
-        (princ "\n  Last step removed.")
+        (princ "\n  Stepping back one step.")
         T)))
 
   ;; ---- 0. environment checks -------------------------------------------
@@ -767,15 +769,17 @@
          (progn
            (setq dep 'RETRY)
            (while (eq dep 'RETRY)
-             (initget 6 (strcat "Undo" (if lastdep " Same" "")))
+             ;; Undo is the old keyword, kept as a hidden synonym
+             (initget 6 (strcat "Back" (if lastdep " Same" "") " Undo"))
              (setq dep (getdist
                          (strcat "\nStep " (itoa n)
-                                 " - depth from the previous step [Undo"
+                                 " - depth from the previous step [Back"
                                  (if lastdep "/Same" "") "]"
                                  " <Enter = done>: ")))
              (if (= (type dep) 'STR)
                (cond
-                 ((= dep "Undo") (hs-popstep) (setq dep 'RETRY))
+                 ((or (= dep "Back") (= dep "Undo"))
+                  (hs-popstep) (setq dep 'RETRY))
                  ((= dep "Same")
                   (if lastdep
                     (setq dep lastdep)
@@ -994,7 +998,7 @@
   (princ "\n     it anchors the boundary; no chord is drawn there.")
   (princ "\n  2. Then DEPTH, WIDTH, repeating.  Every depth is from the")
   (princ "\n     previous step - never a running total.  Enter at a depth")
-  (princ "\n     = done; Undo removes the last step; Same repeats.")
+  (princ "\n     = done; Back steps back one step; Same repeats.")
   (princ "\n     Enter at a width fits the step to the curve (curve modes)")
   (princ "\n     or repeats the previous width (line mode).")
   (princ "\n  3. One last depth to the back of the curve places the crown,")
