@@ -60,10 +60,20 @@ BPCALLOUT: 3 point(s) ringed on layer FGStep;  "Pt.12, Pt.15 and Pt.20 are bad"
 ## Revisions
 
 `BPCALLOUT.lsp` carries the auto-stamped banner
-`(setq *bpcallout-version* "v1.0")` that `tools/release_lisp.py`
+`(setq *bpcallout-version* "v1.1")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/BPCALLOUT_MMDDYY_REV10.lsp` regenerates itself. Bump the
+`releases/BPCALLOUT_MMDDYY_REV11.lsp` regenerates itself. Bump the
 banner with every revision.
+
+* **v1.1** — fixed a fatal bug: `c:BPCALLOUT` declared a local named
+  `last`, which in AutoLISP shadows the built-in `last` for the whole
+  call, so the run died with `no function definition: LAST` the
+  moment it finished picking and went to place the text. The rings
+  were already drawn, but the callout never got written. The local is
+  now `lastpt`. `tests/lispvm.py` models the shadowing rule now, so
+  this class of bug fails in the test suite instead of at the command
+  line.
+* **v1.0** — first release.
 
 ## Assumptions / configuration
 

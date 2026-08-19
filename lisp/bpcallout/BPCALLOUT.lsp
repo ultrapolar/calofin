@@ -35,7 +35,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.1")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -191,8 +191,12 @@
                   (cons 1 str))))
 
 ;; ---- command -------------------------------------------------------
+;; NOTE: no local here may be named after a function this routine
+;; calls - an AutoLISP local SHADOWS the function of the same name for
+;; the whole call, so a local called "last" turns every (last ...) in
+;; the body into "no function definition: LAST" at runtime.
 (defun c:BPCALLOUT (/ *error* cands pk hit ctr nm picked names txtpt
-                      phrase last)
+                      phrase lastpt)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
@@ -232,12 +236,12 @@
       (setq picked (reverse picked)             ; back to click order
             names  (mapcar 'cdr picked)
             phrase (bp:phrase names)
-            last   (car (last picked)))
+            lastpt (car (last picked)))
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring>: ")))
       (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car last) (* 2.0 *BP-RADIUS*))
-                          (- (cadr last) (* 2.0 *BP-RADIUS*)))))
+        (setq txtpt (list (+ (car lastpt) (* 2.0 *BP-RADIUS*))
+                          (- (cadr lastpt) (* 2.0 *BP-RADIUS*)))))
       (bp:draw-text txtpt phrase)
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
                      " point(s) ringed on layer " *BP-LAYER*

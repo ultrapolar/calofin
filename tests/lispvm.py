@@ -201,6 +201,15 @@ class VM:
                 return frame[name]
         return self.globals.get(name, NIL)
 
+    def bound_local(self, name):
+        """T when NAME is bound by some active call frame - an argument,
+        a declared local, or a foreach variable.  Such a binding hides
+        any function of the same name for as long as it is live."""
+        for frame in self.stack:
+            if name in frame:
+                return True
+        return False
+
     def set(self, name, val):
         for frame in reversed(self.stack):
             if name in frame:
@@ -234,6 +243,19 @@ class VM:
             if isinstance(fn, tuple) and fn[0] == 'defun':
                 return self.call_defun(head, fn,
                                        [self.eval(a) for a in x[1:]])
+            # A LOCAL SHADOWS THE FUNCTION OF THE SAME NAME.  Declaring
+            # "last" in a defun's local list makes (last ...) inside
+            # that call "no function definition: LAST" in AutoCAD, even
+            # though last is a built-in -- the local binding is what the
+            # name resolves to.  Without this the VM would happily call
+            # the built-in and a routine that dies at the command line
+            # would pass its tests.
+            if self.bound_local(head):
+                raise LispError(
+                    f"no function definition: {head.upper()} -- it is "
+                    f"declared as a local variable (or argument) of the "
+                    f"defun being run, which shadows the function",
+                    self)
             b = BUILTINS.get(head)
             if b is not None:
                 return b(self, [self.eval(a) for a in x[1:]])
@@ -363,7 +385,18 @@ class VM:
     def sf_defun(self, a):
         name = a[0]
         params, locals_ = split_params(a[1])
-        self.globals[name] = ('defun', params, locals_, a[2:])
+        fn = ('defun', params, locals_, a[2:])
+        # A defun whose name is a declared LOCAL of the call in progress
+        # defines it into that local binding, not globally - which is
+        # exactly why routines here list their inner helpers (and
+        # *error*) among their locals: the helper lives for the command
+        # and reverts when it ends.  Writing it straight to globals
+        # would leave the local sitting at nil and make the helper look
+        # like a name that shadows a function it never defines.
+        if self.bound_local(name):
+            self.set(name, fn)
+        else:
+            self.globals[name] = fn
         return name
 
     # ---------------- program entry

@@ -218,6 +218,30 @@ def test_no_clicks():
     print("ok  no clicks   -> nothing drawn")
 
 
+def test_no_local_shadows_a_function():
+    """The bug that shipped in v1.0: c:BPCALLOUT declared a local named
+    "last", which in AutoLISP shadows the built-in for the whole call,
+    so (last picked) died with "no function definition: LAST" the
+    moment a run got as far as placing the text.  Every name any defun
+    here declares must stay clear of the functions the file calls."""
+    import re
+    src = open(LSP).read()
+    src = re.sub(r';[^\n]*', '', src)            # strip comments
+    src = re.sub(r'"(\\.|[^"\\])*"', '""', src)  # and string literals
+    arglists = re.findall(r'\(defun\s+[^\s()]+\s*\(([^)]*)\)', src)
+    # the arglists themselves are parenthesised, so they have to come
+    # out before heads-of-lists are read as the functions being called
+    bodies = re.sub(r'\(defun\s+[^\s()]+\s*\([^)]*\)', '(defun', src)
+    called = set(re.findall(r'\(\s*([a-zA-Z][\w:*<>=+/-]*)', bodies))
+    bad = []
+    for arglist in arglists:
+        for name in arglist.replace('/', ' ').split():
+            if name.lower() in called:
+                bad.append(name)
+    assert not bad, f"locals shadowing functions they call: {sorted(set(bad))}"
+    print("ok  no shadow   -> no local hides a function the file calls")
+
+
 def test_empty_drawing():
     vm = newvm()
     run(vm, [None, (5.0, 5.0), None, (0.0, 0.0)], 'empty drawing')
@@ -236,4 +260,5 @@ if __name__ == '__main__':
     test_default_text_spot()
     test_no_clicks()
     test_empty_drawing()
+    test_no_local_shadows_a_function()
     print("all BPCALLOUT tests passed")
