@@ -100,7 +100,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "081926 REV01")
+(setq pool:*version* "081926 REV02")
 
 ;;; -------------------- adjustable constants --------------------------
 
