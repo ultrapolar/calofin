@@ -744,7 +744,24 @@ def _substr(vm, a):
 @bi('rtos')
 def _rtos(vm, a):
     v = num(a[0])
+    mode = int(a[1]) if len(a) > 1 else 2
     prec = int(a[2]) if len(a) > 2 else 4
+    if mode == 4:
+        # architectural: F'-I" with the fraction at 1/2^prec inches,
+        # matching AutoCAD's 25'-6 1/2" formatting
+        neg = v < 0
+        v = abs(v)
+        den = 2 ** prec
+        total = round(v * den)
+        inches, frac = divmod(total, den)
+        feet, whole = divmod(inches, 12)
+        s = f"{feet}'"
+        if frac:
+            g = math.gcd(frac, den)
+            s += f"-{whole} {frac // g}/{den // g}\""
+        else:
+            s += f"-{whole}\""
+        return ('-' if neg else '') + s
     return f"{v:.{prec}f}"
 
 
