@@ -143,9 +143,14 @@ placed, and the whole run is one `U`.
 ## Shared build (`shared/`)
 
 The same tools built against one common helper library instead of each
-embedding its own copies. APPLOAD `shared/CALOFIN-LOADER.lsp` and
-every command loads in one go - the folder assumes everything is
-loaded together, so a shared tool file is not loadable on its own.
+embedding its own copies. APPLOAD `shared/CALOFIN-ALL.lsp` - the whole
+build concatenated into one file, so there is nothing for it to find on
+disk - and every command loads in one go. (`CALOFIN-LOADER.lsp` is the
+multi-file alternative for when you are editing the files; it has to
+locate its own folder first. Never APPLOAD `CALOFIN-LIB.lsp` alone: it
+is the helper library and brings no tools with it.) The folder assumes
+everything is loaded together, so a shared tool file is not loadable on
+its own.
 `shared/CALOFIN-LIB.lsp` holds the shared helpers under the `cal:`
 prefix; the per-tool files are twins of their `lisp/` sources minus
 the helpers the library now provides. See `shared/README.md` for the
@@ -216,6 +221,7 @@ not a bug in either side.
 | Script | What it does |
 | --- | --- |
 | `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
+| `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/CALOFIN-ALL.lsp` |
 | `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |

@@ -46,6 +46,10 @@ def mirrored(p):
     """False for a source the grouped tier deliberately does not carry."""
     return not (set(p.parts) & UNMIRRORED_DIRS)
 
+#: Generated, and a copy of everything else here, so the per-file rules
+#: below do not apply to it -- it is checked as a whole instead.
+GENERATED = {"CALOFIN-ALL.lsp"}
+
 #: Files that may define cal: symbols.  The loader needs a couple of
 #: private cal-- helpers and cal:*dir* to find its siblings.
 LIBRARY_FILES = {"CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"}
@@ -68,6 +72,11 @@ def lsp_files(d):
                   if p.is_file() and p.suffix.lower() == ".lsp")
 
 
+def shared_members():
+    """The hand-written files in shared/, bundle excluded."""
+    return [p for p in lsp_files(SHARED_DIR) if p.name not in GENERATED]
+
+
 def read(p):
     return p.read_text(encoding="utf-8", errors="replace")
 
@@ -88,7 +97,7 @@ def check_twins(problems):
     if not SHARED_DIR.is_dir():
         problems.append("shared/ is missing - the grouped tier is gone")
         return
-    have = {p.name for p in lsp_files(SHARED_DIR)}
+    have = {p.name for p in shared_members()}
     for p in lsp_files(LISP_DIR):
         if not mirrored(p):
             continue
@@ -104,7 +113,7 @@ def check_twins(problems):
 
 def check_library_owns_cal(problems):
     """Only the library defines cal: - a tool defining one has forked it."""
-    for p in lsp_files(SHARED_DIR):
+    for p in shared_members():
         if p.name in LIBRARY_FILES:
             continue
         for sym in set(CAL_SYM.findall(read(p))):
@@ -116,7 +125,7 @@ def check_library_owns_cal(problems):
 def check_no_collisions(problems):
     """The grouped tier loads as one session, so no name may repeat."""
     owner = {}
-    for p in lsp_files(SHARED_DIR):
+    for p in shared_members():
         for name in set(DEFUN.findall(read(p))):
             if name.lower() == "*error*":
                 continue          # every command nests its own, localized
@@ -132,7 +141,7 @@ def check_no_collisions(problems):
 def check_command_parity(problems):
     """No command may be lost on the way into the grouped tier."""
     grouped = set()
-    for p in lsp_files(SHARED_DIR):
+    for p in shared_members():
         grouped.update(c.upper() for c in COMMAND.findall(read(p)))
     for p in lisp_files_with_commands():
         for cmd in COMMAND.findall(read(p)):
@@ -152,7 +161,7 @@ def check_loader_lists_everything(problems):
     if not loader.is_file():
         return
     listed = read(loader)
-    for p in lsp_files(SHARED_DIR):
+    for p in shared_members():
         if p.name == "CALOFIN-LOADER.lsp":
             continue
         if ('"%s"' % p.name) not in listed:
@@ -181,6 +190,24 @@ def check_release_twins(problems):
                 "python3 tools/release_lisp.py" % (p.relative_to(ROOT), rev))
 
 
+def check_bundle_current(problems):
+    """The one-file bundle carries exactly today's members."""
+    bundle = SHARED_DIR / "CALOFIN-ALL.lsp"
+    if not bundle.is_file():
+        problems.append(
+            "shared/CALOFIN-ALL.lsp is missing - run "
+            "python3 tools/build_shared_bundle.py")
+        return
+    text = read(bundle)
+    for p in shared_members():
+        if p.name == "CALOFIN-LOADER.lsp":
+            continue                       # the bundle needs no loader
+        if (";;; >>> %s" % p.name) not in text:
+            problems.append(
+                "shared/%s is not in CALOFIN-ALL.lsp - rebuild it with "
+                "python3 tools/build_shared_bundle.py" % p.name)
+
+
 def check_wip(problems):
     """The bench tier, when it exists: drafts only, nothing stamped."""
     for p in lsp_files(WIP_DIR):
@@ -198,6 +225,7 @@ def main():
     check_command_parity(problems)
     check_loader_lists_everything(problems)
     check_release_twins(problems)
+    check_bundle_current(problems)
     check_wip(problems)
 
     tiers = ["lisp/ %d" % len(lsp_files(LISP_DIR)),

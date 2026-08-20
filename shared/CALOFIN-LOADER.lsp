@@ -77,6 +77,7 @@
     (princ "\n[calofin] cal:*dir* to that folder before loading this file."))
   (progn
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
+    (setq cal:*build-loading* T)   ; the library arrives as part of a build
     ;; The library first -- every tool below calls into it.  POOL and SPA
     ;; precede their demo/tutorial satellites.
     (foreach m '("CALOFIN-LIB.lsp"

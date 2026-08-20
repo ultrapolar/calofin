@@ -55,8 +55,15 @@ expected, not a failure.
 A behavior change to a tool in `lisp/<tool>/` must also be mirrored into
 its shared twin `shared/<FILE>.lsp` in the same commit — the diff between
 the two should only ever be the helper copies the library replaces and
-the `cal:` call sites. Then run `python3 tests/test_shared.py` and, for
-tools with a VM test, the same test with `CALOFIN_LISP_ROOT=shared`.
+the `cal:` call sites. Then rebuild the one-file bundle and test:
+
+```
+python3 tools/build_shared_bundle.py   # regenerates shared/CALOFIN-ALL.lsp
+python3 tests/test_shared.py
+```
+
+and, for tools with a VM test, the same test with
+`CALOFIN_LISP_ROOT=shared`.
 
 ## Checks
 

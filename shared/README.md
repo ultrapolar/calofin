@@ -3,8 +3,8 @@
 Every AutoLISP tool in this repo, built against one common helper
 library instead of each embedding its own copies. The assumption in
 this folder is that **everything loads together in one AutoCAD
-session**: APPLOAD `CALOFIN-LOADER.lsp` and every command from the
-whole toolset is available at once.
+session**: APPLOAD `CALOFIN-ALL.lsp` and every command from the whole
+toolset is available at once.
 
 The standalone builds live in `lisp/` -- one self-contained file per
 tool, loadable alone. Do not mix the two in a session; the shared
@@ -14,7 +14,8 @@ without `CALOFIN-LIB.lsp` loaded is broken by design.
 ## Layout
 
 ```
-CALOFIN-LOADER.lsp   APPLOAD this one file - loads everything below in order
+CALOFIN-ALL.lsp      APPLOAD THIS - the whole build concatenated into one file
+CALOFIN-LOADER.lsp   the multi-file alternative: loads the files below in order
 CALOFIN-LIB.lsp      the shared helpers, namespace cal: (see STANDARDS.md)
 <TOOL>.lsp           one file per tool, same basename as its lisp/ source
                      (extension lowercased), minus the helpers now in the lib
@@ -26,8 +27,35 @@ on its own, from `lisp/standards_checker/src/acady-loader.lsp`.
 
 ## Loading it
 
-APPLOAD `CALOFIN-LOADER.lsp`. It finds the rest of the folder itself,
-trying four things in order and asking for nothing it can work out:
+**APPLOAD `CALOFIN-ALL.lsp`.** That is the whole build in a single
+file, so there is nothing for it to find on disk and it does not matter
+what folder you run it from. It prints
+
+```
+CALOFIN: shared build loaded - 78 commands in one session.
+```
+
+Rebuild it after changing anything here:
+
+```
+python3 tools/build_shared_bundle.py
+```
+
+### Do not APPLOAD CALOFIN-LIB.lsp on its own
+
+It is the helper library: it defines the `cal:` helpers and exactly one
+command (`CALVER`). Loaded alone it looks like it worked -- it prints
+`CALOFIN-LIB v1.0 loaded` -- but not one tool comes with it, so `POOL`,
+`SPA` and the rest are all still undefined. It now says so when that
+happens.
+
+### The multi-file alternative
+
+`CALOFIN-LOADER.lsp` keeps the folder as 37 separate files and loads
+them in order, which is friendlier when you are editing them. It has to
+locate its own folder first, and AutoCAD only lets it look along the
+support file search path -- which is *not* where APPLOAD's file dialog
+just sent you. So it tries four things in order:
 
 1. `cal:*dir*`, if you set it before loading,
 2. the support file search path, if the folder is on it,
@@ -38,23 +66,15 @@ trying four things in order and asking for nothing it can work out:
 
 It prints the folder it settled on, then either
 `shared build loaded - every command in one session` or a count of what
-is missing.
-
-**If it says it could not locate the build folder**, the folder is not
-somewhere AutoCAD searches and the dialog was cancelled. Either add the
-folder to *Options > Files > Support File Search Path* (the permanent
-fix -- step 2 then finds it every time), or run
+is missing. If it reports that it could not locate the build folder,
+add that folder to *Options > Files > Support File Search Path*, or run
 
 ```
 (setq cal:*dir* "C:\\path\\to\\shared")
 ```
 
-before APPLOADing the loader.
-
-Note that `findfile` alone is not enough for this: APPLOAD takes a full
-path out of its own file dialog but does not add that folder to the
-support path, so a build APPLOADed from, say, a Downloads folder cannot
-see its own siblings without one of the four routes above.
+before APPLOADing it. If none of that appeals, use `CALOFIN-ALL.lsp` --
+it cannot hit any of these problems.
 
 ## What the library owns
 

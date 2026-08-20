@@ -117,4 +117,22 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:SPAVER'):
     vm.run(cmd, [])
 print('  CALVER / POOLVER / SPAVER ok')
 
+print('shared -- the one-file bundle carries the whole build')
+BUNDLE = os.path.join(SHARED, 'CALOFIN-ALL.lsp')
+if not os.path.exists(BUNDLE):
+    fail('CALOFIN-ALL.lsp missing - run python3 tools/build_shared_bundle.py')
+bvm = VM()
+try:
+    bvm.load(BUNDLE)                        # ONE file, nothing beside it
+except Exception as e:                      # noqa: BLE001 - report the file
+    fail('CALOFIN-ALL.lsp failed to load: %s' % e)
+bundle_cmds = {str(k)[2:] for k in bvm.globals if str(k).startswith('c:')}
+short = sorted(shared_cmds - bundle_cmds)
+if short:
+    fail('commands missing from CALOFIN-ALL.lsp: %s (rebuild it with '
+         'python3 tools/build_shared_bundle.py)' % short)
+for cmd in ('c:CALVER', 'c:POOLVER', 'c:SPAVER'):
+    bvm.run(cmd, [])
+print('  %d commands from one APPLOAD' % len(bundle_cmds))
+
 print('ALL SHARED-BUILD CHECKS PASSED')
