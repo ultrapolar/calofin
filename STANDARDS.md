@@ -28,7 +28,7 @@ Every interactive prompt has one shape:
 concretely, e.g.:
 
 ```
-How should Corner A be treated? [Square/Radius/Cut] <Radius>:
+How should Corner A be treated? [Square/Radius/Cut/NotGiven] <Radius>:
 Dimension the steps? [Yes/No] <Yes>:
 B - overall length [Back]:
 ```
@@ -78,23 +78,30 @@ Anywhere a feature gets a categorical style choice -- today that is
 corners -- the question is a **Treatment**:
 
 ```
-How should <subject> be treated? [Square/Radius/Cut] <previous>:
+How should <subject> be treated? [Square/Radius/Cut/NotGiven] <previous>:
 ```
 
 * `<subject>` reads like prose: `Corner A`, `the back corners`,
   `the pool corners`, `the reverse corners`.
-* The three answers, stored exactly as spelled:
+* The four answers, stored exactly as spelled; `NotGiven` is always
+  listed last:
 
-  | Keyword  | Meaning                              | Old words (hidden aliases) |
-  | -------- | ------------------------------------ | -------------------------- |
-  | `Square` | true 90-degree corner                | `90`                       |
-  | `Radius` | rounded / filleted corner            | `ROUNDED`                  |
-  | `Cut`    | straight diagonal (chamfered) corner | `DIAG`, `DIAGONAL`         |
+  | Keyword    | Meaning                              | Hidden aliases     |
+  | ---------- | ------------------------------------ | ------------------ |
+  | `Square`   | true 90-degree corner                | `90`               |
+  | `Radius`   | rounded / filleted corner            | `ROUNDED`          |
+  | `Cut`      | straight diagonal (chamfered) corner | `DIAG`, `DIAGONAL` |
+  | `NotGiven` | treatment not recorded on the order sheet -- drawn as a square corner and flagged (see below) | `NG` |
 
   The old words stay accepted typed in full (muscle memory from the
   pre-standard tools) and are normalized to the canonical word inside
   the ask helper. Drawing/sheet output may still print `90%%d` for a
   Square corner -- display text is not the keyword.
+
+  `NotGiven` is one token because keywords cannot contain a space; it
+  is typed in full or as `NG`. `NG` rides along as its own ALL-CAPS
+  hidden keyword and is normalized like the legacy words, so the short
+  form works regardless of how AutoCAD reads the mid-word capital.
 * Follow-up size questions are fixed too:
 
   ```
@@ -103,9 +110,31 @@ How should <subject> be treated? [Square/Radius/Cut] <previous>:
   ```
 
   A remembered default is only offered when the new treatment matches
-  the previous one -- a radius is not a cut face.
+  the previous one -- a radius is not a cut face. `NotGiven` takes no
+  size follow-up: nothing was measured.
 * When the same question repeats per corner (A, B, C, D), corner A's
   answer becomes the suggested default for the rest.
+
+### How square corners are drawn
+
+The mark for a square corner is a small circle on the corner point
+with a leader out along the corner's outward diagonal -- the
+`spa:dim90` idiom (`lisp/spa/SPA.LSP:1671`), which is the reference
+implementation. What the leader says depends on how many corners
+share the treatment (per the approved sample drawing
+`square_and_not_given.dxf`):
+
+| Case                              | Marks drawn                          | Leader text  |
+| --------------------------------- | ------------------------------------ | ------------ |
+| every corner Square (or all same) | one, at the reference corner         | `90%%d Typ.` |
+| some corners Square               | one per Square corner                | `90%%d`      |
+| corner NotGiven                   | one per NotGiven corner              | `?`          |
+
+A `NotGiven` corner's geometry is drawn square, and next to its `?`
+mark a second leader note reads `Not Given` -- the sheet must show the
+treatment was never recorded, not silently claim a 90. The `Typ.`
+logic applies to NotGiven the same way: if every corner is NotGiven,
+one `?` mark with the `Not Given` note carries the `Typ.` suffix.
 
 ## 3. Canonical keyword sets and shared wordings
 
@@ -114,7 +143,7 @@ One question, one vocabulary, repo-wide:
 | Purpose                    | Keywords (initget)          | Default rule                          |
 | -------------------------- | --------------------------- | ------------------------------------- |
 | Confirmation               | `Yes No`                    | Always shown; destructive asks default `<No>` |
-| Treatment                  | `Square Radius Cut`         | Previous answer, or none on the first |
+| Treatment                  | `Square Radius Cut NotGiven` | Previous answer, or none on the first |
 | Review navigation          | `Yes No Back Skip`          | `<Yes>` (bracket is `[Yes/No/Back/Skip]`, not `Skip rest`) |
 | Fix triage                 | `Merge Flag Leave` / `Flag Leave` | `<Merge>` / `<Flag>`            |
 | Defpoint fix               | `Move Keep Pick`            | `<Move>`; explain the choices in the question text, not the bracket |
@@ -200,14 +229,16 @@ today each standalone file embeds these under its own prefix; the
 
 ;; The Treatment question: "How should <subject> be treated?"
 ;; subject reads like prose: "Corner A", "the back corners".  Returns
-;; "Square", "Radius" or "Cut" - the old words are accepted typed in
-;; full and normalized HERE, never downstream - or TOOL-BACK.
+;; "Square", "Radius", "Cut" or "NotGiven" - the old words and NG are
+;; accepted typed in full and normalized HERE, never downstream - or
+;; TOOL-BACK.
 (defun tool:asktreat (subject dflt back / v)
   (setq v (tool:askkw (strcat "How should " subject " be treated?")
-                      "Square Radius Cut"
-                      "90 ROUNDED DIAG DIAGONAL"
+                      "Square Radius Cut NotGiven"
+                      "NG 90 ROUNDED DIAG DIAGONAL"
                       dflt back))
-  (cond ((= v "90") "Square")
+  (cond ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
         ((= v "ROUNDED") "Radius")
         ((member v '("DIAG" "DIAGONAL")) "Cut")
         (t v)))
@@ -457,21 +488,36 @@ POOL/SPA duplicate the whole ask layer. First candidates for
 The worklist for the modify-the-lisps phase. Line numbers are as of
 the commit this file landed on.
 
-### 7.1 Corner treatment -> `Square / Radius / Cut`
+### 7.1 Corner treatment -> `Square / Radius / Cut / NotGiven`
 
 | File | Today | Change |
 | --- | --- | --- |
-| `lisp/spa/SPA.LSP:1778` | `"Radius Diagonal 90 Square"` shown `Radius/Diagonal/90`, stores `"90"`, `Square` hidden | canonical set; store `Square`; sheet still prints `90%%d` |
-| `lisp/pool/POOL.LSP:2578` | `"Square Rounded Diag"`, stores `Rounded`/`Diag`; size asks "chamfer face length" | canonical set; size asks "Cut face length" |
-| `lisp/cornerstp/NORMIESTEP.lsp:725` | `"Square Rounded Diagonal 90"`, `<Square = 90 degrees>` prose default | canonical set; default `<Square>` |
+| `lisp/spa/SPA.LSP:1778` | `"Radius Diagonal 90 Square"` shown `Radius/Diagonal/90`, stores `"90"`, `Square` hidden | canonical set + `NotGiven`; store `Square`; sheet still prints `90%%d` |
+| `lisp/pool/POOL.LSP:2578` | `"Square Rounded Diag"`, stores `Rounded`/`Diag`; size asks "chamfer face length" | canonical set + `NotGiven`; size asks "Cut face length" |
+| `lisp/cornerstp/NORMIESTEP.lsp:725` | `"Square Rounded Diagonal 90"`, `<Square = 90 degrees>` prose default | canonical set + `NotGiven`; default `<Square>` |
 | `lisp/spa/TUTORIALSPA.LSP:235`, `lisp/pool/TUTORIALPOOL.LSP:135,151` | hard-code the old stored values / prose | follow their parent tool |
 | `lisp/lincheck/lincheck.lsp:249` | `"Straight Radius"` -- a different axis (step face straight vs curved), not a corner treatment | review in migration; not auto-renamed |
 
+Square-corner depiction (section 2 "How square corners are drawn"):
+`spa:dim90` (`lisp/spa/SPA.LSP:1671`) already draws the circled corner
++ `90%%d` leader and is the donor implementation. To migrate:
+
+* POOL's lone-square-corner `_.DIMANGULAR` branch and its bare
+  `LEADER "90%%d Typ."` branch (`lisp/pool/POOL.LSP:2521-2525`) both
+  become the circle+leader mark.
+* SPA's current policy of giving a plain all-square rectangle **no**
+  corner notes at all (comment above `spa:dimcorner1`,
+  `lisp/spa/SPA.LSP:1683-1697`) changes: all square now gets one
+  `90%%d Typ.` mark.
+* All three treatment tools grow the `NotGiven` branch: square
+  geometry, `?` leader, `Not Given` note.
+
 Downstream of the rename (must move in the same commit as SPA/POOL):
 `ui/calofin_net/SpaFormView.vb` + `ui/calofin_net/assets/shapes/fieldmap.json`
-send corner values `90`/`Radius`/`Diagonal` over the wire;
-`tests/test_spa_form.py` scripts them; `lisp/spa/README.md:164` and
-`lisp/pool/README.md:110` describe the old words.
+send corner values `90`/`Radius`/`Diagonal` over the wire and gain
+`NotGiven` alongside the rename; `tests/test_spa_form.py` scripts
+them; `lisp/spa/README.md:164` and `lisp/pool/README.md:110` describe
+the old words.
 
 ### 7.2 Bracket text that a click cannot send
 
@@ -524,7 +570,7 @@ the bare keywords (section 1 rule 1).
 * 12 files have no `*error*` handler (`abcdef`, `altabcdef`,
   `ccprecheck`, `lincheck`, 8 of 9 `acady-*`); 3 handlers restore
   nothing (`bpcallout`, `DroneHeightGPS`, `paddle`);
-  `AUTOBEAD.lsp:160` closes an undo group unguarded;
+  `AUTOBEAD.lsp:270` closes an undo group unguarded;
   `BPCALLOUT.lsp:218` has a wildcard typo (`*break,` missing its
   closing `*`).
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
