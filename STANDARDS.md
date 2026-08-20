@@ -467,9 +467,9 @@ shared/      BUILT - the loaded-together build: CALOFIN-LIB.lsp (the
              section-4 helpers plus ensure-layer, the vector sets,
              circumcenter, bboxes, trim/pad/datestr, block-number and
              more, all under cal:), CALOFIN-LOADER.lsp (APPLOAD this
-             one file), one <TOOL>.lsp twin per tool with its embedded
-             helper copies replaced by cal: calls, and acady/ (the
-             drawing-standards matcher, verbatim).  See
+             one file), and one <TOOL>.lsp twin per tool with its
+             embedded helper copies replaced by cal: calls.  The
+             deprecated acady matcher is not carried here.  See
              shared/README.md for the full roster, the deliberately
              NOT-absorbed divergent helpers, and the accepted behavior
              deltas.

@@ -151,7 +151,9 @@ prefix; the per-tool files are twins of their `lisp/` sources minus
 the helpers the library now provides. See `shared/README.md` for the
 helper roster and `STANDARDS.md` section 6 for the rules (including
 how `lisp/` changes get mirrored here). The standalone files in
-`lisp/` are unchanged and still load alone, one file at a time.
+`lisp/` are unchanged and still load alone, one file at a time. The
+deprecated acady matcher (`lisp/standards_checker/`) is not part of
+this build and still loads on its own.
 
 ## Releases (`releases/`)
 

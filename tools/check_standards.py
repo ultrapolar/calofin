@@ -36,9 +36,15 @@ LISP_DIR = ROOT / "lisp"
 RELEASES_DIR = ROOT / "releases"
 SHARED_DIR = ROOT / "shared"
 
-#: The grouped tier replaces the matcher's own loader with its own, so
-#: this is the one source file that is deliberately not mirrored.
-NO_TWIN = {"acady-loader.lsp"}
+#: Not carried into the grouped tier: the acady drawing-standards
+#: matcher is a deprecated project, so lisp/standards_checker/ has no
+#: twin and its commands are not expected in shared/.
+UNMIRRORED_DIRS = {"standards_checker"}
+
+
+def mirrored(p):
+    """False for a source the grouped tier deliberately does not carry."""
+    return not (set(p.parts) & UNMIRRORED_DIRS)
 
 #: Files that may define cal: symbols.  The loader needs a couple of
 #: private cal-- helpers and cal:*dir* to find its siblings.
@@ -84,7 +90,7 @@ def check_twins(problems):
         return
     have = {p.name for p in lsp_files(SHARED_DIR)}
     for p in lsp_files(LISP_DIR):
-        if p.name in NO_TWIN:
+        if not mirrored(p):
             continue
         want = p.stem + ".lsp"
         if want not in have:
@@ -137,7 +143,7 @@ def check_command_parity(problems):
 
 
 def lisp_files_with_commands():
-    return [p for p in lsp_files(LISP_DIR) if p.name not in NO_TWIN]
+    return [p for p in lsp_files(LISP_DIR) if mirrored(p)]
 
 
 def check_loader_lists_everything(problems):

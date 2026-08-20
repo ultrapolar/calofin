@@ -8,14 +8,15 @@ loaded-together assumptions:
   * no top-level defun is defined by two different files (the per-tool
     prefixes are the collision guard; the library owns cal: alone)
   * every command the lisp/ tree defines exists in the shared build
-    (except ACADY-DUMPSIG, a dev command that lives in the standalone
-    standards_checker loader only)
+    (lisp/standards_checker/ excepted - the acady matcher is a
+    deprecated project and is not carried into the shared build)
   * the smoke commands run
 
 The behavioral-parity check is separate: run the ordinary VM-driven
 tests with CALOFIN_LISP_ROOT=shared (see lispvm.VM._remap_root).
 """
 import os
+import pathlib
 import re
 import sys
 
@@ -43,11 +44,9 @@ ORDER = [
     'tutorial_perp_points.lsp', 'tutorial_cperp_points.lsp',
     'STOCKCOVER.lsp', 'tydrn.lsp', 'wcalst.lsp', 'xftconv.lsp',
 ]
-ACADY = ['acady-util.lsp', 'acady-config.lsp', 'acady-geom.lsp',
-         'acady-dbx.lsp', 'acady-tol.lsp', 'acady-cache.lsp',
-         'acady-match.lsp', 'acady-ui.lsp']
-
-DEV_ONLY = {'acady-dumpsig'}   # standalone standards_checker loader only
+#: Not carried into the shared build: the acady drawing-standards
+#: matcher is a deprecated project and stays in lisp/ only.
+UNMIRRORED_DIRS = {'standards_checker'}
 
 
 def top_level_defuns(path):
@@ -66,7 +65,6 @@ def fail(msg):
 
 
 paths = [os.path.join(SHARED, f) for f in ORDER]
-paths += [os.path.join(SHARED, 'acady', f) for f in ACADY]
 missing = [p for p in paths if not os.path.exists(p)]
 if missing:
     fail('missing shared files: %s' % [os.path.relpath(p, REPO) for p in missing])
@@ -101,13 +99,15 @@ print('  %d distinct top-level defuns, cal: owned by the library alone' % len(ow
 print('shared -- every lisp/ command exists in the shared build')
 lisp_cmds = set()
 for root, _dirs, files in os.walk(LISP):
+    if set(pathlib.PurePath(root).parts) & UNMIRRORED_DIRS:
+        continue
     for f in files:
         if f.lower().endswith('.lsp'):
             src = open(os.path.join(root, f), errors='replace').read()
             for m in re.finditer(r'^\(defun\s+[cC]:([^\s()]+)', src, re.M):
                 lisp_cmds.add(m.group(1).lower())
 shared_cmds = {n[2:] for n in owner if n.startswith('c:')}
-lost = sorted(lisp_cmds - shared_cmds - DEV_ONLY)
+lost = sorted(lisp_cmds - shared_cmds)
 if lost:
     fail('commands in lisp/ but not in shared/: %s' % lost)
 print('  %d commands present' % len(shared_cmds))

@@ -18,12 +18,43 @@ CALOFIN-LOADER.lsp   APPLOAD this one file - loads everything below in order
 CALOFIN-LIB.lsp      the shared helpers, namespace cal: (see STANDARDS.md)
 <TOOL>.lsp           one file per tool, same basename as its lisp/ source
                      (extension lowercased), minus the helpers now in the lib
-acady/               the drawing-standards matcher's modules, verbatim from
-                     lisp/standards_checker/src/ (its own acady- namespace)
 ```
 
-`ACADY-DUMPSIG`, a dev command defined in the standalone matcher's own
-loader, is not part of the shared build; everything else is.
+The acady drawing-standards matcher (`lisp/standards_checker/`) is a
+deprecated project and is not carried here. It still loads the old way,
+on its own, from `lisp/standards_checker/src/acady-loader.lsp`.
+
+## Loading it
+
+APPLOAD `CALOFIN-LOADER.lsp`. It finds the rest of the folder itself,
+trying four things in order and asking for nothing it can work out:
+
+1. `cal:*dir*`, if you set it before loading,
+2. the support file search path, if the folder is on it,
+3. the folder a previous session found (remembered under
+   `HKEY_CURRENT_USER\Software\Calofin`),
+4. a one-time file dialog -- pick `CALOFIN-LIB.lsp` out of the folder
+   and it is remembered from then on.
+
+It prints the folder it settled on, then either
+`shared build loaded - every command in one session` or a count of what
+is missing.
+
+**If it says it could not locate the build folder**, the folder is not
+somewhere AutoCAD searches and the dialog was cancelled. Either add the
+folder to *Options > Files > Support File Search Path* (the permanent
+fix -- step 2 then finds it every time), or run
+
+```
+(setq cal:*dir* "C:\\path\\to\\shared")
+```
+
+before APPLOADing the loader.
+
+Note that `findfile` alone is not enough for this: APPLOAD takes a full
+path out of its own file dialog but does not add that folder to the
+support path, so a build APPLOADed from, say, a Downloads folder cannot
+see its own siblings without one of the four routes above.
 
 ## What the library owns
 

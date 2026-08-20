@@ -98,8 +98,8 @@ top of `session-start.sh`.
 see, because they read one file at a time:
 
 - every tool in `lisp/` has a twin in `shared/`
-  (`acady-loader.lsp` is the one deliberate exception - the grouped
-  build replaces it with `CALOFIN-LOADER.lsp`),
+  (`lisp/standards_checker/` excepted - the deprecated acady matcher is
+  not carried into the grouped build),
 - only `CALOFIN-LIB.lsp` defines `cal:` symbols,
 - no two files in `shared/` define the same function, since they all
   load into one session,
