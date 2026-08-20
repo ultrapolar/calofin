@@ -49,8 +49,10 @@ echo "  releases/  dated REV twins, generated           $(find releases -iname '
 echo "  shared/    grouped, all load together on cal:   $(find shared -iname '*.lsp' | wc -l) files"
 echo
 echo "Rules that bite (STANDARDS.md is the full text):"
-echo "  - a behavior change in lisp/<tool>/ is mirrored into shared/<FILE>.lsp"
-echo "    in the SAME commit, then regenerate: python3 tools/release_lisp.py"
+echo "  - tool logic lives in lisp/; shared/ is its twin, never where a change starts"
+echo "  - mirror a lisp/ change into shared/<FILE>.lsp in the SAME commit, then"
+echo "    python3 tools/release_lisp.py && python3 tools/build_shared_bundle.py"
+echo "  - never hand-edit releases/ or shared/CALOFIN-ALL.lsp - both are generated"
 echo "  - only shared/CALOFIN-LIB.lsp defines cal: symbols"
 echo "  - corner treatments are Square/Radius/Cut/NotGiven, nothing else"
 if [ "$BRANCH" != "$TRUNK" ]; then

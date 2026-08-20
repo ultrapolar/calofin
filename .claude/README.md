@@ -78,7 +78,8 @@ nothing to download. Each session it:
 1. exports the variables above through `$CLAUDE_ENV_FILE`,
 2. prints the tier map with live file counts, the rules that bite, and
    the commands for checking and testing,
-3. names the two tests that fail on a clean checkout
+3. names the tier map, the rules that bite, and the two tests that fail
+   on a clean checkout
    (`test_pool_form.py`, `test_spa_form.py`) so nobody spends a session
    "fixing" a known gap,
 4. runs `tools/check_standards.py` and, if the tiers have drifted,
@@ -105,6 +106,8 @@ see, because they read one file at a time:
   load into one session,
 - no command is lost between the tiers,
 - `CALOFIN-LOADER.lsp` lists every file beside it,
+- the one-file bundle `shared/CALOFIN-ALL.lsp` exists and is not behind
+  its members (rebuild: `python3 tools/build_shared_bundle.py`),
 - a versioned file's dated twin in `releases/` is not stale,
 - `wip/`, once it exists, holds drafts and no dated releases.
 

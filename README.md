@@ -8,13 +8,57 @@ checkout.
 
 ```
 blender/    Blender add-ons (DXF import/export, mesh tools)
-lisp/       AutoLISP routines, current static-named files (standalone)
-shared/     The loaded-together build: CALOFIN-LIB + every tool on it
-releases/   Dated REV-stamped twins of the lisp/ files, flat (no subfolders)
+lisp/       AutoLISP tools, one self-contained file each - the source of truth
+releases/   Dated REV-stamped twins of the lisp/ files, flat, GENERATED
+shared/     The loaded-together build on CALOFIN-LIB.lsp (bundle GENERATED)
 ui/         The Calofin AutoCAD palette (VB.NET) and its LISP glue
-tools/      Shared dev tooling (release stamping, static checks)
-tests/      Python test suite - runs without AutoCAD or Blender installed
+tools/      Dev tooling (release stamping, bundle building, static checks)
+tests/      Python test suite - stdlib only, no AutoCAD or Blender needed
 ```
+
+## Working in this repo
+
+A tool exists at up to four levels of packaging, and they have to stay
+in step:
+
+| Tier | Folder | What it is | Hand-edited? |
+| --- | --- | --- | --- |
+| draft | `wip/` | being drafted, no version banner yet. Optional - absent until a first draft lands. | yes |
+| standalone | `lisp/<tool>/` | one self-contained file, loads alone with APPLOAD. **All tool logic starts here.** | yes |
+| released | `releases/` | dated `REV`-stamped twin, so a loaded routine never changes underfoot | no - generated |
+| grouped | `shared/` | the same tools on one helper library (`cal:`), all loading together | mirrored by hand, bundle generated |
+
+Change a tool in `lisp/`, mirror it into `shared/<FILE>.lsp` in the same
+commit, then regenerate both artifacts:
+
+```
+python3 tools/release_lisp.py          # releases/ dated twins
+python3 tools/build_shared_bundle.py   # shared/CALOFIN-ALL.lsp
+python3 tools/check_standards.py       # did anything drift?
+```
+
+Never hand-edit `releases/` or `shared/CALOFIN-ALL.lsp`.
+
+### Running the tests
+
+No dependencies - `tests/lispvm.py` is a pure-Python AutoLISP
+interpreter, so the suite needs only the standard library. One
+environment variable matters:
+
+| Variable | Meaning |
+| --- | --- |
+| `CALOFIN_LISP_ROOT` | which tier the VM tests read. **Unset means `lisp/`**, which is the default every test must keep. Set it per command, never globally - exported globally it points the whole suite at `shared/` and hides a standalone regression. |
+
+```
+python3 tests/test_pool_runtime.py                          # standalone tier
+CALOFIN_LISP_ROOT=shared python3 tests/test_pool_runtime.py # grouped tier
+python3 tests/test_shared.py     # whole grouped build + the one-file bundle
+```
+
+Running a test both ways is the parity check that keeps the two builds
+honest. `CLAUDE.md` is the same contract written for Claude Code
+sessions; `.claude/README.md` covers the hook and the cloud environment
+panels.
 
 ## Blender add-ons (`blender/`)
 
