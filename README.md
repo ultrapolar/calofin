@@ -33,6 +33,9 @@ Each tool lives under `lisp/<name>/`, with the identically-named,
 dated copy of any versioned file living flat in `releases/` (see
 below) - except the step routines, which release as one bundled file.
 Load a routine with APPLOAD, or add it to your startup suite.
+Prompt wording, keyword sets and file structure follow the shared
+standard in [STANDARDS.md](STANDARDS.md) - read it before adding or
+changing a routine.
 
 | Command(s) | Folder | What it does |
 | --- | --- | --- |
@@ -96,7 +99,8 @@ only remaining input is a selection (`PADDLE`, `DIMCONTEND`) has no
 prompt left that could offer Back - and Back cannot be *typed at* a
 selection either, though several tools (`WCALST`, `XFTCONV`,
 `AUTOBEAD`, `AUTODIM`) re-open their selection when you Back at the
-prompt after it. New prompts should follow this convention.
+prompt after it. New prompts should follow this convention - it is
+part of the shared prompt standard in [STANDARDS.md](STANDARDS.md).
 
 ### `ABCDEF` vs `ALTABCDEF`, and `CHECK` vs `CCPRECHECK`
 

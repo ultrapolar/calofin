@@ -30,6 +30,15 @@ tests/      Python test suite - runs without AutoCAD or Blender installed
 
 See `README.md` for the per-tool command tables.
 
+## Standards
+
+`STANDARDS.md` at the repo root is the prompt and code standard for the
+AutoLISP tools — question wording, canonical keyword sets (e.g. corner
+treatments are `Square/Radius/Cut`), prompt format, file structure, and
+the target `wip/` / `standalone/` / `shared/` layout. Every new or
+modified `.lsp` follows it; read it before writing one. (It is not
+`lisp/standards_checker/`, which matches drawing geometry.)
+
 ## After changing a `.lsp` file
 
 Regenerate the dated twins in `releases/` — they are generated artifacts, not

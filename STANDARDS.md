@@ -1,0 +1,563 @@
+# Calofin AutoLISP standards
+
+This file is the standard every new or modified routine under `lisp/`
+follows: how prompts are worded, which keywords they offer, and how the
+files themselves are structured. It exists because the tools grew up on
+~29 separate branches and ask the same questions in different words --
+the corner question alone shipped in four vocabularies.
+
+> Not to be confused with `lisp/standards_checker/`, which matches
+> *drawing geometry* against reference DWGs. This file is about the
+> LISP source and its prompts.
+
+Rules for **new work are mandatory**. Existing files are brought in
+line by the migration phase (section 7 is its worklist); until a file
+is migrated, its old wording stands -- do not half-convert a file in
+passing.
+
+---
+
+## 1. Prompt format
+
+Every interactive prompt has one shape:
+
+```
+\n<Message> [Option1/Option2/Back] <Default>:
+```
+
+concretely, e.g.:
+
+```
+How should Corner A be treated? [Square/Radius/Cut] <Radius>:
+Dimension the steps? [Yes/No] <Yes>:
+B - overall length [Back]:
+```
+
+The rules, in order of how often they are currently broken:
+
+1. **The bracket text is exactly the `initget` keyword list.** A click
+   on a bracketed option sends that text to the command, so any
+   difference (`[Skip rest]` for keyword `Skip`, `[Inside out]` for
+   `Inside`) makes the click fail. Build the bracket from the keyword
+   string -- `(vl-string-translate " " "/" kws)` -- so the two cannot
+   drift; never hand-write it a second time.
+2. **Capitals are the hotkey.** The capitalized letters of a keyword
+   are its typed abbreviation (`Yes` = `Y`, `SHallow` = `SH`). Every
+   keyword in a set must have a unique abbreviation; use a single
+   capital unless disambiguation forces more. The same word is
+   capitalized the same way in every tool (no `ROUnd` here, `ROund`
+   there).
+3. **Hidden aliases are allowed but never shown.** `Undo` is accepted
+   wherever `Back` is, unlisted. Legacy words (section 2) are accepted
+   typed in full, unlisted. Spell hidden aliases ALL-CAPS in the
+   `initget` string -- an all-caps keyword must be typed out in full,
+   so an alias can never steal a canonical option's hotkey.
+4. **The `<default>` is what Enter produces** -- a keyword, a number,
+   `0,0` -- rendered after the bracket, immediately before the colon:
+   `[...] <Default>: `. Prose inside the angle brackets
+   (`<Enter = done>`) is allowed only on typed/numeric loop prompts
+   where Enter ends the loop rather than supplying a value.
+5. **No default means re-ask.** A prompt with no `<default>` uses
+   `initget 1` (or re-asks on nil) -- Enter never silently picks an
+   answer the user didn't see.
+6. **Terminator is colon-space** (`": "`), always. Leading `\n`,
+   always. Main prompts start flush after the `\n`; prompts about a
+   sub-item inside a review loop indent two spaces.
+7. **Questions read as questions.** If the message is a sentence, it
+   ends with `?` before the bracket (`Dimension the steps? [Yes/No]`).
+   Short labels (`Bottom type`, `B - overall length`) take no
+   punctuation before the bracket.
+8. **Compare variable-first, and normalize at the ask site.** Answers
+   are tested with `(= ans "Keyword")`; alias-to-canonical mapping
+   (`"90"` -> `"Square"`) happens inside the ask helper, never
+   downstream where one site will forget it.
+
+## 2. The Treatment question
+
+Anywhere a feature gets a categorical style choice -- today that is
+corners -- the question is a **Treatment**:
+
+```
+How should <subject> be treated? [Square/Radius/Cut] <previous>:
+```
+
+* `<subject>` reads like prose: `Corner A`, `the back corners`,
+  `the pool corners`, `the reverse corners`.
+* The three answers, stored exactly as spelled:
+
+  | Keyword  | Meaning                              | Old words (hidden aliases) |
+  | -------- | ------------------------------------ | -------------------------- |
+  | `Square` | true 90-degree corner                | `90`                       |
+  | `Radius` | rounded / filleted corner            | `ROUNDED`                  |
+  | `Cut`    | straight diagonal (chamfered) corner | `DIAG`, `DIAGONAL`         |
+
+  The old words stay accepted typed in full (muscle memory from the
+  pre-standard tools) and are normalized to the canonical word inside
+  the ask helper. Drawing/sheet output may still print `90%%d` for a
+  Square corner -- display text is not the keyword.
+* Follow-up size questions are fixed too:
+
+  ```
+  Radius for <subject> <default>:
+  Cut face length for <subject> <default>:
+  ```
+
+  A remembered default is only offered when the new treatment matches
+  the previous one -- a radius is not a cut face.
+* When the same question repeats per corner (A, B, C, D), corner A's
+  answer becomes the suggested default for the rest.
+
+## 3. Canonical keyword sets and shared wordings
+
+One question, one vocabulary, repo-wide:
+
+| Purpose                    | Keywords (initget)          | Default rule                          |
+| -------------------------- | --------------------------- | ------------------------------------- |
+| Confirmation               | `Yes No`                    | Always shown; destructive asks default `<No>` |
+| Treatment                  | `Square Radius Cut`         | Previous answer, or none on the first |
+| Review navigation          | `Yes No Back Skip`          | `<Yes>` (bracket is `[Yes/No/Back/Skip]`, not `Skip rest`) |
+| Fix triage                 | `Merge Flag Leave` / `Flag Leave` | `<Merge>` / `<Flag>`            |
+| Defpoint fix               | `Move Keep Pick`            | `<Move>`; explain the choices in the question text, not the bracket |
+| Declared-feature edit loop | `Add Remove Keep`           | `<Keep>`                              |
+| Tutorial selector          | `Checks Demo Both`          | `<Both>`                              |
+| Demo cleanup               | `Keep Erase`                | `<Keep>`                              |
+| Multi-fit pick             | `1 2 3 All None Redo`       | `<2>`                                 |
+
+Tool-specific vocabularies (POOL's shape list, SPA's spillaway walls)
+are fine -- they just obey section 1, and reuse this table's word
+whenever the concept already has one.
+
+**Back / Undo.** The root `README.md` section "Going back a step" is
+part of this standard, verbatim: `Back` is shown, `Undo` is its hidden
+synonym, typed prompts accept `B`, `BACK`, `U`, `UNDO` alone in any
+case (and say so), the first question of a command never offers Back.
+Feedback wording on the way back:
+
+```
+Stepping back one <point|step|dimension>.
+Already at the first <point|step|dimension>.
+```
+
+**Pause.** One spelling, everywhere (indent to match a tutorial's
+layout if needed; the text never varies):
+
+```
+--- press Enter to continue ---
+```
+
+**Selection.** `Select` is the verb for picking objects
+(`Select the base line...`, `Select a line or polyline: `);
+`Highlight` is reserved for window-the-work sweeps
+(`Highlight the drawing to DIMCHECK (Enter = whole drawing): `).
+When Enter means "everything", the prompt says so in parentheses.
+
+**Placement.** Generated drawings ask
+`Insertion base point <0,0>: `; demos ask
+`Pick a clear spot for the demo <0,0>: ` (append
+`(about 250 x 250 needed)` style guidance when it matters).
+
+**Numeric entry.** Measurement prompts use the POOL/SPA kind system:
+
+| Kind  | Meaning                             | Prompt suffix                 | initget |
+| ----- | ----------------------------------- | ----------------------------- | ------- |
+| `REQ` | value required                      | none                          | `7`     |
+| `NAX` | NA accepted (returns nil)           | ` (or NA if not measured)`    | `7` + `NA` |
+| `ZER` | NA accepted, zero accepted          | ` (or NA if not measured)`    | `5` + `NA` |
+| `SUG` | suggested default, Enter takes it   | ` <n> (or NA)`                | `6` + `NA` |
+
+Offering Back never loosens what counts as a valid measurement -- a
+`REQ` prompt with Back still rejects null/zero/negative numbers.
+
+## 4. Reference ask helpers
+
+The canonical implementations. `tool:` stands for the file's own
+namespace prefix and `TOOL` / `TOOLNAME` for its command name --
+today each standalone file embeds these under its own prefix; the
+`shared/` library (section 6) will export them once. Proven originals:
+`pool:askkw` / `pool:asks` (`lisp/pool/POOL.LSP:522-570`),
+`pf:ensure-layer` (`lisp/abhd/abhd.lsp:1402`),
+`pool:syssave` / `pool:sysrestore` (`lisp/pool/POOL.LSP:5514`).
+
+```lisp
+;; Keyword question.  kws is the canonical keyword string - it is BOTH
+;; the initget list and the bracket text, so the two can never drift.
+;; hidden holds extra accepted spellings that are never shown; spell
+;; them ALL-CAPS so they must be typed in full and cannot steal a
+;; canonical hotkey.  dflt nil = an answer is required.  Returns the
+;; keyword, or TOOL-BACK for Back/Undo.
+(defun tool:askkw (msg kws hidden dflt back / v)
+  (initget (if dflt 0 (if back 0 1))
+           (strcat kws
+                   (if hidden (strcat " " hidden) "")
+                   (if back " Back Undo" "")))
+  (setq v (getkword (strcat "\n" msg " ["
+                            (vl-string-translate " " "/" kws)
+                            (if back "/Back" "") "]"
+                            (if dflt (strcat " <" dflt ">") "") ": ")))
+  (cond ((member v '("Back" "Undo")) 'TOOL-BACK)
+        ((null v) (if dflt dflt (tool:askkw msg kws hidden dflt back)))
+        (t v)))
+
+;; The Treatment question: "How should <subject> be treated?"
+;; subject reads like prose: "Corner A", "the back corners".  Returns
+;; "Square", "Radius" or "Cut" - the old words are accepted typed in
+;; full and normalized HERE, never downstream - or TOOL-BACK.
+(defun tool:asktreat (subject dflt back / v)
+  (setq v (tool:askkw (strcat "How should " subject " be treated?")
+                      "Square Radius Cut"
+                      "90 ROUNDED DIAG DIAGONAL"
+                      dflt back))
+  (cond ((= v "90") "Square")
+        ((= v "ROUNDED") "Radius")
+        ((member v '("DIAG" "DIAGONAL")) "Cut")
+        (t v)))
+
+;; Yes/No.  dflt is "Yes" or "No" and is always shown; destructive
+;; actions default "No".  Returns T, nil or TOOL-BACK.
+(defun tool:askyn (msg dflt back / v)
+  (setq v (tool:askkw msg "Yes No" nil dflt back))
+  (if (eq v 'TOOL-BACK) v (= v "Yes")))
+
+;; Distance entry with the kind system of section 3.  Returns the
+;; number, nil for NA, or TOOL-BACK.
+(defun tool:askdist (kind msg dflt back / v kw)
+  ;; Undo is accepted everywhere Back is, as a hidden synonym
+  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+                 (back "NA Back Undo")
+                 (t "NA")))
+  ;; REQ always rejects zero - offering Back must not loosen what
+  ;; counts as a valid measurement; ZER alone admits 0
+  (if kw
+      (initget (cond ((eq kind 'ZER) 5)
+                     ((and (eq kind 'SUG) dflt) 6)
+                     (t 7))
+               kw)
+      (initget 7))
+  (setq v (getdist
+            (strcat "\n" msg
+                    (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUG)
+                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                               " (or NA)"))
+                          (t " (or NA if not measured)"))
+                    (if back " [Back]" "")
+                    ": ")))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'TOOL-BACK)
+        ((= (type v) 'STR) nil)               ; NA
+        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        (t v)))
+
+;; Typed prompts cannot take keywords, so Back is typed like a value.
+(defun tool:back-word-p (s)
+  (member (strcase s) '("B" "BACK" "U" "UNDO")))
+
+;; Free-text entry (notes, feet-inch dimensions).  The prompt says how
+;; to back out because nothing else will.  Returns the string (Enter =
+;; dflt when one is given) or TOOL-BACK.
+(defun tool:askstr (msg dflt back / v)
+  (setq v (getstring T (strcat "\n" msg
+                               (if dflt (strcat " <" dflt ">") "")
+                               (if back " (B = back)" "") ": ")))
+  (cond ((and back (tool:back-word-p v)) 'TOOL-BACK)
+        ((= v "") (if dflt dflt v))
+        (t v)))
+
+;; The one pause wording (section 3).
+(defun tool:pause ()
+  (getstring "\n--- press Enter to continue ---")
+  (princ))
+```
+
+## 5. Code structure
+
+**File.** One tool per `lisp/<tool>/` folder; the file is named after
+the primary command, uppercase stem, lowercase extension:
+`TOOLNAME.lsp`. ASCII only (`--`, not em dashes), spaces not tabs,
+2-space base indent, closing parens stacked on the last line of the
+form. `;;;` for the header and section rules, `;;` for in-code
+comments, `;` only for end-of-line remarks.
+
+**Header banner** -- `;;; ` + 70 `=` rule (74 characters), name and
+one-line purpose, platform, commands:
+
+```lisp
+;;; ======================================================================
+;;; TOOLNAME.lsp  --  one-line purpose of the tool
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  TOOLNAME       what it does
+;;;            TOOLNAMEVER    print the loaded version
+;;; ======================================================================
+```
+
+**Version banner** -- one form only, read by `tools/release_lisp.py`
+(regex: `\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"`; lowercase name, `v`,
+one dot). Bump it with every change and regenerate `releases/`:
+
+```lisp
+(setq *toolname-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; reads this banner and stamps the
+                                   ; dated twin in releases/ from it
+```
+
+**Namespace.** Every helper and global carries the file's unique
+prefix, colon-separated: `tool:helper-name`, globals with earmuffs
+`tool:*name*`. One prefix per file, no prefix reused across files.
+(AutoLISP symbols are case-insensitive -- `sP` IS `sp`; that is why
+`tools/check_scope.py` has a case-collision check. Pick one spelling
+per name and keep it.)
+
+**Commands.** `(defun c:TOOLNAME ...)` -- `c:` lowercase, name
+uppercase. Secondary commands by fixed suffix:
+
+| Role                | Name                  |
+| ------------------- | --------------------- |
+| version reporter    | `TOOLNAMEVER`         |
+| tutorial            | `TUTORIALTOOLNAME`    |
+| read-only scan      | `TOOLNAMESCAN`        |
+| undo-the-marks      | `TOOLNAMERESCUE`      |
+| configuration       | `TOOLNAME-CFG`        |
+
+**Command skeleton** -- localized `*error*`, table-driven sysvar
+save/restore, one undo group, `(princ)` exit:
+
+```lisp
+(defun tool:syssave ()
+  (if (not tool:*sysold*)
+    (setq tool:*sysold*
+          (mapcar '(lambda (v) (cons v (getvar v)))
+                  '("OSMODE" "CMDECHO" "CLAYER")))))  ; list what you change
+
+(defun tool:sysrestore ( / v p)
+  ;; OSMODE first -- object snaps are the setting the user misses most
+  ;; if a run is ever cut short partway
+  (foreach v '("OSMODE" "CMDECHO" "CLAYER")
+    (setq p (assoc v tool:*sysold*))
+    (if p (setvar v (cdr p))))
+  (setq tool:*sysold* nil))
+
+(defun c:TOOLNAME ( / *error* undo-open)
+  (defun *error* (msg)
+    ;; user settings come back FIRST so nothing below can skip them
+    (tool:sysrestore)
+    (if undo-open (command "_.UNDO" "_End"))
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTOOLNAME error: " msg)))
+    (princ))
+  (tool:syssave)
+  (setvar "CMDECHO" 0)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
+  ;; ... the tool ...
+  (command "_.UNDO" "_End")
+  (setq undo-open nil)
+  (tool:sysrestore)
+  (princ))
+```
+
+The canonical cancel test is exactly
+`(wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")` -- ten
+variants of it exist today; new code uses this one. Undo grouping is
+`(command "_.UNDO" "_Begin")` / `"_End"` in that casing, tracked in a
+local `undo-open`. `DIMSTYLE` cannot be `setvar`'d back -- restore it
+with `(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
+
+**Locals.** Every variable a defun sets is a parameter or declared
+after ` / ` (space each side) in the arglist -- `check_scope.py` is
+the referee. `(vl-load-com)` once at the top of the file when ActiveX
+is used, not inside command bodies.
+
+**Layers.** Output layers go through the canonical `ensure-layer` --
+create, and un-freeze/unlock/switch-on when it already exists, telling
+the user when it had to:
+
+```lisp
+;; Create the output layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked.  Without this a successful run onto a
+;; frozen or switched-off layer looks like the command did nothing.
+(defun tool:ensure-layer (name color / rec ed flags col fixed)
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nTOOLNAME: layer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible.")))))))
+```
+
+**File ending.** A load announcement naming the version and the
+command, then a bare `(princ)` as the very last form; every command
+defun also ends `(princ)`:
+
+```lisp
+(princ (strcat "\nTOOLNAME " *toolname-version*
+               " loaded.  Type TOOLNAME to run."))
+(princ)
+```
+
+**Per-tool README.** `lisp/<tool>/README.md` with the established
+sections: `# NAME -- one-line purpose (AutoLISP / AutoCAD 2018+)`,
+`## What it does`, `## Install & run`, `## Tunables` (or
+`## Assumptions`), `## Notes & limitations`, `## Tests`. Keyword lists
+quoted in a README must match the code -- they are part of the
+migration checklist when a keyword changes.
+
+## 6. Target folder layout (defined now, moved later)
+
+The end state the migration phase builds toward:
+
+```
+wip/         editable sources, one folder per tool, no date stamps
+             (today: lisp/)
+standalone/  generated, self-contained, dated REV-stamped twins - one
+             file per tool, loadable with nothing else present
+             (today: releases/)
+shared/      CALOFIN-LIB.lsp - the ask helpers, ensure-layer, vector
+             math, back-word, pause etc. exported once - plus compact
+             builds of the tools that require the library instead of
+             embedding copies
+```
+
+Nothing moves in this phase. When the move happens, these must change
+in lockstep: `tools/release_lisp.py` paths, `tools/check_lisp.py` /
+`check_scope.py` defaults, every `tests/` path, the README tables, and
+`CLAUDE.md`'s layout section. Until then, `wip/` rules apply to
+`lisp/` and `standalone/` rules to `releases/`.
+
+The shared library exists because the duplication is measured, not
+suspected: `ensure-layer` has 12 copies in 3 behavioral families,
+`dimcheck`/`linfincheck`/`covercheck` share ~40 helper names and
+1,200-1,400 identical lines pairwise, `abhd`/`lhd` share ~1,259 lines,
+POOL/SPA duplicate the whole ask layer. First candidates for
+`CALOFIN-LIB.lsp`: the section-4 helpers, `ensure-layer`,
+`back-word-p`, the 2-D vector set (`dot` `unit` `mid` `perp` `scl`),
+`circumcenter`, `bbox`, string `trim`, `block-number`.
+
+## 7. Migration appendix -- current divergences
+
+The worklist for the modify-the-lisps phase. Line numbers are as of
+the commit this file landed on.
+
+### 7.1 Corner treatment -> `Square / Radius / Cut`
+
+| File | Today | Change |
+| --- | --- | --- |
+| `lisp/spa/SPA.LSP:1778` | `"Radius Diagonal 90 Square"` shown `Radius/Diagonal/90`, stores `"90"`, `Square` hidden | canonical set; store `Square`; sheet still prints `90%%d` |
+| `lisp/pool/POOL.LSP:2578` | `"Square Rounded Diag"`, stores `Rounded`/`Diag`; size asks "chamfer face length" | canonical set; size asks "Cut face length" |
+| `lisp/cornerstp/NORMIESTEP.lsp:725` | `"Square Rounded Diagonal 90"`, `<Square = 90 degrees>` prose default | canonical set; default `<Square>` |
+| `lisp/spa/TUTORIALSPA.LSP:235`, `lisp/pool/TUTORIALPOOL.LSP:135,151` | hard-code the old stored values / prose | follow their parent tool |
+| `lisp/lincheck/lincheck.lsp:249` | `"Straight Radius"` -- a different axis (step face straight vs curved), not a corner treatment | review in migration; not auto-renamed |
+
+Downstream of the rename (must move in the same commit as SPA/POOL):
+`ui/calofin_net/SpaFormView.vb` + `ui/calofin_net/assets/shapes/fieldmap.json`
+send corner values `90`/`Radius`/`Diagonal` over the wire;
+`tests/test_spa_form.py` scripts them; `lisp/spa/README.md:164` and
+`lisp/pool/README.md:110` describe the old words.
+
+### 7.2 Bracket text that a click cannot send
+
+| Site | Bracket says | Keyword is |
+| --- | --- | --- |
+| `lisp/cornerstp/CORNERSTP.lsp:592` | `Inside out/Outside in` | `Inside Outside` |
+| `lisp/cornerstp/CORNERSTP.lsp:600` | `Middle of diagonal/True corner` | `Middle True` |
+| `lisp/cornerstp/CORNERSTP.lsp:621,626` | `Parallel to diagonal/...` | `Parallel Equidistant` / `Parallel True` |
+| `covercheck.lsp:506`, `dimcheck.lsp:415`, `linfincheck.lsp:563` | `Skip rest` | `Skip` |
+| `covercheck.lsp:533`, `dimcheck.lsp:442`, `linfincheck.lsp:593` | `Move to the green +/...` | `Move Keep Pick` |
+| `lisp/pool/POOL.LSP:3811` | `SIX-sided` | `SIX` |
+| `lisp/spa/SPA.LSP:1366` | `Wall(centred)` | `Wall` |
+| `lisp/lhd/lhd.lsp:2203` | `[Stretch/Corner/Hold] or [Done]` | one list |
+| `lisp/abhd/abhd.lsp:4174` | two bracket groups | `Checks Demo` |
+
+Fix: move the explanation into the question text, leave the bracket as
+the bare keywords (section 1 rule 1).
+
+### 7.3 Keyword spelling conflicts
+
+* `ROUnd` (POOL, `POOL.LSP:5582`) vs `ROund` (SPA, `SPA.LSP:2642`) --
+  standardize on `ROUnd` (POOL needs `RO` for `ROman`).
+* `spa/SPA.LSP:1370` `BottomLeft BottomRight TopRight TopLeft` -- no
+  usable hotkeys (all collide until 7 letters in); re-keyword in
+  migration.
+* Tutorial selectors: `Checks/Demo/Both` (perp_points) vs
+  `List/Demo/Both` (dimcheck, linfincheck) vs `Read/Demo/Both`
+  (autobead) vs `Checklist/Demo/Both` (TUTORIALSPA) vs `Checks/Demo`
+  (abhd) -- all become `Checks Demo Both` per section 3.
+* Pause: 9 spellings (`--- press Enter to continue ---` with varying
+  dashes/brackets/case across cornerstp, perp_points, abhd, dimcheck,
+  linfincheck, paddle, autobead, acady-ui, TUTORIALPOOL/SPA) -- all
+  become section 3's one spelling.
+
+### 7.4 Structure stragglers
+
+* Version banners that `release_lisp.py` cannot see:
+  `lisp/abhd/abhd.lsp:158` `*PF-VERSION*` (uppercase -- its
+  `releases/ABHD_*.lsp` twin is currently an orphan the tool neither
+  regenerates nor prunes), `lisp/abcdef/abcdef.lsp:43`
+  `abcdef:*version* "4"` (no `vN.N`), `lisp/altabcdef/ALTABCDEF.lsp`
+  (none at all). The pool/spa `"MMDDYY REV##"` form stays supported
+  but new tools use `vN.N`.
+* `lisp/tydrn/tydrn.lsp:161` `C:TYDRN` -- lowercase the `c:`.
+* `COVERCHECKVERSION` -> `COVERCHECKVER` (the one `...VERSION` outlier).
+* Prefix styles: 15 files use `prefix-`, `paddle--` uses a double
+  hyphen; new work uses `tool:`. Existing prefixes migrate only if
+  their file is otherwise being reworked -- a rename touches every
+  line.
+* 12 files have no `*error*` handler (`abcdef`, `altabcdef`,
+  `ccprecheck`, `lincheck`, 8 of 9 `acady-*`); 3 handlers restore
+  nothing (`bpcallout`, `DroneHeightGPS`, `paddle`);
+  `AUTOBEAD.lsp:160` closes an undo group unguarded;
+  `BPCALLOUT.lsp:218` has a wildcard typo (`*break,` missing its
+  closing `*`).
+* Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
+  rename to `.lsp` when those files are next touched.
+
+### 7.5 What breaks when a keyword or prompt changes
+
+Check these before renaming anything -- the tests validate scripted
+answers against the live `initget` list
+(`tests/lispvm.py` `_match_kw`), so a keyword rename fails loudly, and
+several assert prompt text:
+
+* Keyword scripts: `test_pool_runtime.py`, `test_pool_lisp.py`,
+  `test_cornerstp_geometry.py`, `test_lincheck.py`,
+  `test_ccprecheck.py`, `test_laser_fit.py`,
+  `test_perp_points.py`, `test_spa_form.py`, `test_pool_form.py`.
+  Changing only capitalization (`SHallow` -> `Shallow`) also breaks
+  any script that types the short form.
+* Prompt-text asserts: `test_pool_runtime.py` (`"B - overall length"`,
+  `"Cross dim body A-C"`, `"corner radius"`...),
+  `test_spa_form.py` / `test_pool_form.py` (`'Corner C'`,
+  `'Bottom type'`, the `"<letter> - "` prefix contract of
+  `pool:fkeyof` per `ui/calofin_net/README.md:110`),
+  `test_cdcreate.py:141` (`"ssget _I"`), `test_lincheck.py` /
+  `test_ccprecheck.py` (exact report lines).
+* Palette wire values: `PoolFormView.vb:354` +
+  `assets/bottoms/fieldmap.json` (the six `pool:*btypes*` keywords),
+  `SpaFormView.vb` + `assets/shapes/fieldmap.json` (corner
+  `90`/`Radius`/`Diagonal`).
+* Prose: root `README.md` POOL/SPA sections, `lisp/pool/README.md`,
+  `lisp/spa/README.md`, `lisp/cdcallout/README.md` (Back),
+  `ui/calofin_net/README.md`.
+* Tooling gap to close during migration: `tools/check_lisp.py` and
+  `tools/check_scope.py` hardcode the `spa:` prefix -- take the
+  prefix from the file (or an argument) so every tool gets the
+  undefined-function/global checks, not just SPA.
