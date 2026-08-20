@@ -214,6 +214,7 @@ not a bug in either side.
 | Script | What it does |
 | --- | --- |
 | `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
+| `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 

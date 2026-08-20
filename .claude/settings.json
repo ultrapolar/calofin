@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 tools/check_lisp.py:*)",
+      "Bash(python3 tools/check_scope.py:*)",
+      "Bash(python3 tools/check_standards.py:*)",
+      "Bash(python3 tools/release_lisp.py:*)",
+      "Bash(python3 tests/:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
+    ]
+  }
+}

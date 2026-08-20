@@ -61,9 +61,16 @@ tools with a VM test, the same test with `CALOFIN_LISP_ROOT=shared`.
 ## Checks
 
 ```
+python3 tools/check_standards.py # tiers in step, cal: namespace clean, no collisions
 python3 tools/check_lisp.py     # unbalanced parens, undefined funcs/globals, unused defuns
 python3 tools/check_scope.py    # locals used without being declared in a defun arglist
 ```
+
+`check_standards.py` covers what the other two cannot see, because they
+read one file at a time: a `lisp/` tool with no `shared/` twin, a tool
+that has started defining `cal:` symbols, two grouped files claiming the
+same name, a stale twin in `releases/`. The session-start hook runs it,
+so drift shows up when a session opens. See `.claude/README.md`.
 
 Tests are individual scripts under `tests/` — run the ones covering what you
 touched (see `README.md` for the full list).

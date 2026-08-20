@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Standards check: does the tree still hold the shape STANDARDS.md describes?
+
+The other two checkers read one .lsp at a time -- parens, scope, names.
+This one checks the things that only go wrong BETWEEN files, which is
+where the tree drifts:
+
+  * every tool in the single-file tier has a twin in the grouped tier,
+  * only the library owns the cal: namespace,
+  * nothing in the grouped tier collides when it all loads at once,
+  * every command survives the trip from one tier to the other,
+  * the loader actually lists what is in its own folder,
+  * a versioned file's dated twin in releases/ is not stale.
+
+Run it with no arguments to check the whole tree:
+
+    python3 tools/check_standards.py
+
+Exits 0 when clean, 1 when something drifted, and prints one line per
+problem saying what to do about it.  The session-start hook runs it, so
+a drift shows up when a session opens rather than in review.
+"""
+
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+#: The tiers, in the order a tool moves through them.  wip/ is the
+#: bench: files being drafted, no version banner, nothing generated
+#: from them yet.  It is optional -- absent until the first draft
+#: lands -- so every check below skips it when it does not exist.
+WIP_DIR = ROOT / "wip"
+LISP_DIR = ROOT / "lisp"
+RELEASES_DIR = ROOT / "releases"
+SHARED_DIR = ROOT / "shared"
+
+#: The grouped tier replaces the matcher's own loader with its own, so
+#: this is the one source file that is deliberately not mirrored.
+NO_TWIN = {"acady-loader.lsp"}
+
+#: Files that may define cal: symbols.  The loader needs a couple of
+#: private cal-- helpers and cal:*dir* to find its siblings.
+LIBRARY_FILES = {"CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"}
+
+#: Released as one concatenated file, so they have no twin of their own.
+BUNDLED = {"CORNERSTP.lsp", "HEMISTEP.lsp", "NORMIESTEP.lsp"}
+
+VERSION = re.compile(r'\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"')
+VERSION2 = re.compile(r'\*version\*\s+"(\d{6}) REV(\d{2})"')
+DEFUN = re.compile(r"^\(defun\s+([^\s()]+)", re.MULTILINE)
+COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
+CAL_SYM = re.compile(r"^\((?:defun|setq)\s+(cal:[^\s()]+)", re.MULTILINE)
+
+
+def lsp_files(d):
+    """Every .lsp under d, in a stable order, whatever the extension case."""
+    if not d.is_dir():
+        return []
+    return sorted(p for p in d.rglob("*")
+                  if p.is_file() and p.suffix.lower() == ".lsp")
+
+
+def read(p):
+    return p.read_text(encoding="utf-8", errors="replace")
+
+
+def rev_of(text):
+    """The REV a file's own version banner asks to be stamped with."""
+    m = VERSION.search(text)
+    if m:
+        return "REV%s%s" % (m.group(1), m.group(2))
+    m = VERSION2.search(text)
+    if m:
+        return "REV%s" % m.group(2)
+    return None
+
+
+def check_twins(problems):
+    """Every single-file tool is mirrored in the grouped tier."""
+    if not SHARED_DIR.is_dir():
+        problems.append("shared/ is missing - the grouped tier is gone")
+        return
+    have = {p.name for p in lsp_files(SHARED_DIR)}
+    for p in lsp_files(LISP_DIR):
+        if p.name in NO_TWIN:
+            continue
+        want = p.stem + ".lsp"
+        if want not in have:
+            problems.append(
+                "%s has no shared twin - add shared/%s calling the cal: "
+                "helpers, per CLAUDE.md" % (p.relative_to(ROOT), want))
+    for name in ("CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"):
+        if name not in have:
+            problems.append("shared/%s is missing" % name)
+
+
+def check_library_owns_cal(problems):
+    """Only the library defines cal: - a tool defining one has forked it."""
+    for p in lsp_files(SHARED_DIR):
+        if p.name in LIBRARY_FILES:
+            continue
+        for sym in set(CAL_SYM.findall(read(p))):
+            problems.append(
+                "shared/%s defines %s - the cal: namespace belongs to "
+                "CALOFIN-LIB.lsp" % (p.name, sym))
+
+
+def check_no_collisions(problems):
+    """The grouped tier loads as one session, so no name may repeat."""
+    owner = {}
+    for p in lsp_files(SHARED_DIR):
+        for name in set(DEFUN.findall(read(p))):
+            if name.lower() == "*error*":
+                continue          # every command nests its own, localized
+            first = owner.get(name.lower())
+            if first:
+                problems.append(
+                    "%s is defined in both shared/%s and shared/%s - one "
+                    "wins when they load together" % (name, first, p.name))
+            else:
+                owner[name.lower()] = p.name
+
+
+def check_command_parity(problems):
+    """No command may be lost on the way into the grouped tier."""
+    grouped = set()
+    for p in lsp_files(SHARED_DIR):
+        grouped.update(c.upper() for c in COMMAND.findall(read(p)))
+    for p in lisp_files_with_commands():
+        for cmd in COMMAND.findall(read(p)):
+            if cmd.upper() not in grouped:
+                problems.append(
+                    "%s defines %s, which no shared/ file does" %
+                    (p.relative_to(ROOT), cmd.upper()))
+
+
+def lisp_files_with_commands():
+    return [p for p in lsp_files(LISP_DIR) if p.name not in NO_TWIN]
+
+
+def check_loader_lists_everything(problems):
+    """A file the loader forgets is a file nobody loads."""
+    loader = SHARED_DIR / "CALOFIN-LOADER.lsp"
+    if not loader.is_file():
+        return
+    listed = read(loader)
+    for p in lsp_files(SHARED_DIR):
+        if p.name == "CALOFIN-LOADER.lsp":
+            continue
+        if ('"%s"' % p.name) not in listed:
+            problems.append(
+                "shared/%s is not listed in CALOFIN-LOADER.lsp, so loading "
+                "the folder skips it" % p.relative_to(SHARED_DIR))
+
+
+def check_release_twins(problems):
+    """A versioned file whose dated twin is behind means a forgotten run."""
+    if not RELEASES_DIR.is_dir():
+        return
+    released = [p.name for p in RELEASES_DIR.iterdir() if p.is_file()]
+    for p in lsp_files(LISP_DIR):
+        if p.name in BUNDLED:
+            continue                       # released as the STEPS bundle
+        rev = rev_of(read(p))
+        if not rev:
+            continue                       # no banner, nothing to release
+        stem = p.stem.lower()
+        want = "%s.lsp" % rev.lower()
+        if not any(r.lower().startswith(stem + "_") and r.lower().endswith(want)
+                   for r in released):
+            problems.append(
+                "%s is at %s with no matching twin in releases/ - run "
+                "python3 tools/release_lisp.py" % (p.relative_to(ROOT), rev))
+
+
+def check_wip(problems):
+    """The bench tier, when it exists: drafts only, nothing stamped."""
+    for p in lsp_files(WIP_DIR):
+        if re.match(r".*_\d{6}_REV[\d-]+\.lsp$", p.name, re.IGNORECASE):
+            problems.append(
+                "wip/%s looks like a dated release - those belong in "
+                "releases/" % p.name)
+
+
+def main():
+    problems = []
+    check_twins(problems)
+    check_library_owns_cal(problems)
+    check_no_collisions(problems)
+    check_command_parity(problems)
+    check_loader_lists_everything(problems)
+    check_release_twins(problems)
+    check_wip(problems)
+
+    tiers = ["lisp/ %d" % len(lsp_files(LISP_DIR)),
+             "shared/ %d" % len(lsp_files(SHARED_DIR))]
+    if WIP_DIR.is_dir():
+        tiers.insert(0, "wip/ %d" % len(lsp_files(WIP_DIR)))
+    print("standards: " + ", ".join(tiers) + " files")
+
+    if problems:
+        print("\n%d problem(s):" % len(problems))
+        for line in problems:
+            print("  - " + line)
+        return 1
+    print("standards: tiers in step, cal: namespace clean, no collisions")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
