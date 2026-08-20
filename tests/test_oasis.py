@@ -592,6 +592,71 @@ def test_tilted_ucs_is_refused():
     print("ok  tilted UCS  -> refused before a single question is asked")
 
 
+
+def test_radius_dim_text_lands_outside_the_water():
+    """The leader is dragged away from the centre on a bulge and towards
+    it on a reverse arc -- whose own centre is outside the pool -- so
+    both put the text clear of the water rather than across it."""
+    vm = newvm()
+    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'radius drag')
+    doff = max(12.0, max(REF_X, REF_Y) / 18.0)
+    bulge = dict((n, n in ('left', 'right', 'top'))
+                 for n, _, _, _, _ in REF_ARCS)
+    seen = 0
+    for c in cmds(vm, '_.DIMRADIUS'):
+        ent, tip, loc = c[1][0], c[1][1], c[2]
+        d = _alist_dict(vm.entdata[ent])
+        cen, r = d[10][:2], d[40]
+        name = [n for n, _, rr, _, _ in REF_ARCS if close(rr, r)][0]
+        drag = math.dist(loc[:2], cen) - r
+        want = 0.9 * doff * (1.0 if bulge[name] else -1.0)
+        assert close(drag, want, 1.0e-6), (name, drag, want)
+        # and the pick itself is still on the arc it dimensions
+        assert close(math.dist(tip[:2], cen), r), (name, tip)
+        seen += 1
+    assert seen == 6, seen
+    print("ok  dim drag    -> radius text pulled clear of the water on all"
+          " six")
+
+
+def test_overall_dims_hook_the_touch_points_at_the_right_standoff():
+    """The extension lines start where the pool really touches the
+    envelope, and the dimension line sits at POOL's own stand-off, so an
+    oasis reads the same as a rectangle drawn beside it."""
+    vm = newvm()
+    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'standoff')
+    doff = max(12.0, max(REF_X, REF_Y) / 18.0)
+    horiz = [c for c in cmds(vm, '_.DIMLINEAR') if '_H' in c][0]
+    vert = [c for c in cmds(vm, '_.DIMLINEAR') if '_V' in c][0]
+    # X: the left bulge's leftmost point to the right bulge's rightmost
+    assert [round(v, 9) for v in horiz[1][:2]] == [0.0, REF_BULGES[0]], horiz
+    assert [round(v, 9) for v in horiz[2][:2]] == [REF_X, REF_BULGES[2]], horiz
+    assert close(horiz[4][1], REF_Y + doff), horiz
+    # Y: the top bulge's highest point to the left bulge's lowest
+    assert [round(v, 9) for v in vert[1][:2]] == [REF_X / 2.0, REF_Y], vert
+    assert [round(v, 9) for v in vert[2][:2]] == [REF_BULGES[0], 0.0], vert
+    assert close(vert[4][0], -doff), vert
+    print("ok  standoff    -> overall dims hook the touch points at %g\""
+          % doff)
+
+
+def test_every_measurement_rejects_zero_and_negative():
+    """Not just the first: all eight are REQ, so initget must reject a
+    zero or a negative at each of them."""
+    for k in range(8):
+        for bad in (0.0, -12.0):
+            vm = newvm()
+            script = list(REF_SCRIPT)
+            script[k] = bad
+            try:
+                vm.run('c:OASIS', script + ['Yes', (0.0, 0.0)])
+            except LispError:
+                continue
+            raise AssertionError("question %d accepted %r" % (k, bad))
+    print("ok  all REQ     -> zero and negative refused at all eight"
+          " measurements")
+
+
 def test_version_command():
     vm = newvm()
     vm.run('c:OASISVER', [])
@@ -691,6 +756,9 @@ if __name__ == '__main__':
     test_overrun_names_the_arc_that_is_out()
     test_arcs_follow_a_rotated_ucs()
     test_tilted_ucs_is_refused()
+    test_radius_dim_text_lands_outside_the_water()
+    test_overall_dims_hook_the_touch_points_at_the_right_standoff()
+    test_every_measurement_rejects_zero_and_negative()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
