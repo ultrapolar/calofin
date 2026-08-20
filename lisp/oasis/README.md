@@ -101,8 +101,10 @@ Insertion base point <0,0>:
 
 Every measurement is required — Enter, zero and a negative are all
 refused — and every question after the first offers `Back` (`Undo` is
-accepted too, unlisted) to step up one and re-answer. Backing up
-re-checks everything after the answer you changed.
+accepted too, unlisted) to step up one and re-answer, right through the
+dimension question. Backing up re-checks everything after the answer you
+changed. The base point pick at the end is the one prompt with no
+`Back`: nothing has been drawn yet, so Esc there costs nothing.
 
 Measurements are read with `getdist`, so they are typed in the
 drawing's own units (`8'` in an architectural drawing, or picked as two
@@ -146,10 +148,10 @@ Three things make the shape **impossible** rather than merely unusual,
 and each is caught at the question that causes it rather than after all
 eight answers are in — the question simply comes back, with the reason:
 
-* **a side bulge taller than the Y bound** (`2 × radius > Y`). A side
-  bulge is tangent to the bottom edge, so its top sits at twice its
-  radius; any more than half the Y bound and it breaks out through the
-  top edge.
+* **a side bulge that does not fit the envelope.** It is tangent to the
+  bottom edge *and* to its own side, so it is twice its radius both
+  ways: more than half the Y bound and it breaks out through the top,
+  more than half the X bound and it breaks out through the far side.
 * **one bulge circle wholly inside another.** No tangent radius of any
   size can bridge that pair: raising the radius grows both circles'
   reach by exactly the same amount, so they stay nested forever.
@@ -157,15 +159,24 @@ eight answers are in — the question simply comes back, with the reason:
   minimum the two circles it would have to touch never meet. The
   routine names the smallest radius that will.
 
+A fourth refusal is not about the radii at all: a **UCS tilted out of
+the world plan** is turned away before the first question, because an
+`ARC` in a tilted plane needs an extrusion of its own and a flat plan
+pool has no business being drawn in one. Set the UCS back to World — or
+to any plan UCS — and run it again.
+
 Anything merely unusual is **drawn and reported**, not refused. Two
 things are measured on the finished outline and named if they are
 wrong:
 
-* **the true extents**, against the envelope that was asked for. Any
-  difference is named side by side. In practice the one way to get
-  there is a top bulge wide enough to swing out past the left or right
-  edge before its tangent arcs catch it — a top radius under `X/2`
-  always stays in.
+* **whether it stays inside the envelope.** Each bound that is broken
+  is named, with how far past it the outline reaches **and which arc
+  takes it there** — because the radius behind an overrun is not
+  reliably the one you would guess. A long shallow envelope with an
+  oversized bottom-center tangent, for instance, reports the
+  *top-right* arc hanging below the bottom bound and the
+  *bottom-center* arc reaching above the top one, while every bulge
+  fits the envelope perfectly well on its own.
 * **whether the outline runs through itself.** Radii wildly out of
   proportion with each other can send one arc clean through another
   even though all six exist and close up — a 10'×10' pool with 6"
@@ -184,6 +195,12 @@ away.
 
 * **Drawing units are the drawing's own.** Nothing here assumes inches;
   the arcs are built from the numbers `getdist` returns.
+* **The pool is laid out in the current UCS**, so it follows the way you
+  are working and the dimensions read the X and Y you typed. An `ARC`
+  is the one entity that cannot follow — its centre is stored in world
+  coordinates and its angles are measured from the world X axis — so
+  both are carried across on the way out. The base point keeps its own
+  elevation. A tilted UCS is refused (above).
 * The six arcs are **plain `ARC` entities**, not a polyline. Join them
   with `PEDIT` if a closed polyline is wanted — the endpoints coincide
   exactly, so the join is clean.
@@ -221,7 +238,13 @@ sysvar restore, and a frozen-locked-off `POOL` layer being revived.
 Three more drive the self-crossing test directly: the reference outline
 is simple, a deliberately out-of-proportion one is caught and its
 crossing pairs named, and the six tangent joints — where neighbouring
-arcs touch by construction — are not miscounted as crossings.
+arcs touch by construction — are not miscounted as crossings. Four more
+cover the frames and the bounds: a bulge too wide for `X` is re-asked,
+an overrun names the arc that causes it, a rotated UCS puts the arc
+centres and angles into world while the dimension points stay in the
+UCS, and a tilted UCS is refused before a single question is asked.
+(The VM's own `trans` is the identity, so those last two swap in a real
+one for the length of the test.)
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_oasis.py` reruns the whole
 file against the grouped build in `shared/`, as a parity check.

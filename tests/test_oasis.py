@@ -162,6 +162,49 @@ def crossing_pairs(vm, *dims):
     return set() if r is None else {tuple(sorted(p)) for p in r}
 
 
+def overruns(vm, w, h, *radii):
+    """What oasis:overruns says reaches past the envelope."""
+    r = vm.loads("(oasis:overruns (oasis:solve %s oasis:*topfrac*) %.6f %.6f)"
+                 % (" ".join("%.6f" % v for v in (w, h) + radii), w, h))
+    return [] if r is None else [(x[0], x[2], x[1]) for x in r]
+
+
+class fake_trans(object):
+    """Swap the VM's identity `trans` for a real UCS while a test runs.
+
+    zdir is the UCS Z axis in world terms (tilted when it is not (0,0,1));
+    rot turns the UCS about Z and org shifts its origin, so a point coming
+    back is what AutoCAD would hand a routine under that UCS."""
+
+    def __init__(self, rot=0.0, org=(0.0, 0.0, 0.0), zdir=(0.0, 0.0, 1.0)):
+        self.rot, self.org, self.zdir = rot, org, zdir
+
+    def __enter__(self):
+        self.saved = BUILTINS.get(Sym('trans'))
+        rot, org, zdir = self.rot, self.org, self.zdir
+
+        def _t(vm, a):
+            p = [float(v) for v in a[0]]
+            while len(p) < 3:
+                p.append(0.0)
+            if list(a[1:3]) != [1, 0]:          # only UCS -> WCS is modelled
+                return p
+            if p[:3] == [0.0, 0.0, 1.0] and len(a) > 3 and a[3] is not NIL:
+                return list(zdir)
+            c, s = math.cos(rot), math.sin(rot)
+            q = [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]]
+            if len(a) > 3 and a[3] is not NIL:
+                return q                        # a displacement: no origin
+            return [q[0] + org[0], q[1] + org[1], q[2] + org[2]]
+
+        BUILTINS[Sym('trans')] = _t
+        return self
+
+    def __exit__(self, *exc):
+        BUILTINS[Sym('trans')] = self.saved
+        return False
+
+
 # ---- tests ------------------------------------------------------------
 
 def test_reference_drawing():
@@ -479,6 +522,76 @@ def test_crossings_ignores_the_tangent_joints():
           " crossings")
 
 
+
+def test_wide_bulge_is_reasked():
+    """A side bulge is tangent to the bottom edge AND to its own side, so
+    it is twice its radius across as well as tall.  More than half the X
+    bound and it breaks out through the far side."""
+    vm = newvm()
+    # 200 wide envelope, 400 deep: a 150 left bulge is 300 across -- it
+    # fits the depth easily and still cannot fit the width
+    run(vm, [200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
+             120.0, 120.0, 120.0, 'No', (0.0, 0.0)], 'wide bulge')
+    assert close(arcs_of(vm)[0][1], 60.0), arcs_of(vm)[0]
+    print("ok  wide bulge  -> a bulge wider than X is re-asked")
+
+
+def test_overrun_names_the_arc_that_is_out():
+    """When the outline does leave the envelope, the report names the arc
+    that takes it there -- which is not always the one you would guess
+    from the radii."""
+    vm = newvm()
+    # a long shallow envelope with an oversized bottom-center tangent:
+    # every bulge fits on its own, and yet two arcs swing out
+    got = overruns(vm, 589.0477, 62.5513, 19.6315, 154.7235, 23.3675,
+                   135.6825, 68.2843, 403.0810)
+    assert {(side, name) for side, name, _ in got} == {
+        ('the bottom', 'top-right'), ('the top', 'bottom-center')}, got
+    assert close(dict((s, a) for s, _, a in got)['the bottom'],
+                 29.8396407702, 1.0e-8), got
+    # the reference pool leaves nothing hanging out
+    assert overruns(vm, REF_X, REF_Y, *(REF_BULGES + REF_TANGENTS)) == []
+    print("ok  overrun     -> the arc that leaves the envelope is named")
+
+
+def test_arcs_follow_a_rotated_ucs():
+    """The dimensions are read in the UCS but an ARC's centre is stored in
+    world coordinates and its angles measured from the world X axis.  Both
+    have to be carried across, or the pool detaches from its own dims."""
+    with fake_trans(rot=math.radians(30.0), org=(1000.0, -400.0, 12.0)):
+        vm = newvm()
+        run(vm, REF_SCRIPT + ['Yes', (50.0, 20.0, 5.0)], 'rotated ucs')
+        c, s = math.cos(math.radians(30.0)), math.sin(math.radians(30.0))
+        for (name, lc, r, a0, a1), (gc, gr, ga0, ga1) in zip(REF_ARCS,
+                                                             arcs_of(vm)):
+            # the centre: pool -> UCS -> world
+            ux, uy = lc[0] + 50.0, lc[1] + 20.0
+            assert close(gc[0], ux * c - uy * s + 1000.0, 1.0e-6), (name, gc)
+            assert close(gc[1], ux * s + uy * c - 400.0, 1.0e-6), (name, gc)
+            # the angles: turned by the same 30 degrees
+            for got_a, want_a in ((ga0, a0 + 30.0), (ga1, a1 + 30.0)):
+                d = abs((got_a - want_a + 180.0) % 360.0 - 180.0)
+                assert d <= 1.0e-6, (name, got_a, want_a)
+        # the dimension points stay in the UCS, untransformed
+        horiz = [x for x in cmds(vm, '_.DIMLINEAR') if '_H' in x][0]
+        assert close(abs(horiz[1][0] - horiz[2][0]), REF_X), horiz
+        assert close(horiz[1][2], 5.0), horiz      # the pick's own elevation
+    print("ok  rotated UCS -> arcs go to world, dims stay in the UCS")
+
+
+def test_tilted_ucs_is_refused():
+    """A UCS tilted out of the world plan cannot carry a flat plan pool --
+    each arc would need an extrusion of its own -- so nothing is asked and
+    nothing is drawn."""
+    with fake_trans(zdir=(0.0, 0.7071067811865476, 0.7071067811865476)):
+        vm = newvm()
+        vm.run('c:OASIS', [])          # not one prompt may be reached
+        assert vm.prompts == [], vm.prompts
+        assert made(vm, 'ARC') == []
+        assert vm.commands == [], vm.commands
+    print("ok  tilted UCS  -> refused before a single question is asked")
+
+
 def test_version_command():
     vm = newvm()
     vm.run('c:OASISVER', [])
@@ -574,6 +687,10 @@ if __name__ == '__main__':
     test_reference_outline_does_not_cross_itself()
     test_self_crossing_is_detected()
     test_crossings_ignores_the_tangent_joints()
+    test_wide_bulge_is_reasked()
+    test_overrun_names_the_arc_that_is_out()
+    test_arcs_follow_a_rotated_ucs()
+    test_tilted_ucs_is_refused()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
