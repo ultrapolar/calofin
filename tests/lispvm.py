@@ -20,6 +20,7 @@ over, is a test failure -- the prompt log tells you where.
 """
 
 import math
+import os
 import re
 
 
@@ -406,7 +407,29 @@ class VM:
 
     # ---------------- program entry
     def load(self, path):
-        self.loads(open(path).read())
+        self.loads(open(self._remap_root(path)).read())
+
+    def _remap_root(self, path):
+        """CALOFIN_LISP_ROOT=shared reruns any VM-driven test against the
+        loaded-together build: a path under lisp/ is remapped to
+        <repo>/<root>/<basename> (flat folder, extension lowercased) and
+        CALOFIN-LIB.lsp is loaded first, once per VM.  Unset, this is a
+        no-op and every test loads the standalone lisp/ files as before."""
+        root = os.environ.get('CALOFIN_LISP_ROOT')
+        if not root:
+            return path
+        ap = os.path.abspath(path)
+        parts = ap.split(os.sep)
+        if 'lisp' not in parts:
+            return path
+        repo = os.sep.join(parts[:parts.index('lisp')])
+        stem, ext = os.path.splitext(os.path.basename(ap))
+        if not getattr(self, '_shared_lib_loaded', False):
+            self._shared_lib_loaded = True
+            lib = os.path.join(repo, root, 'CALOFIN-LIB.lsp')
+            if os.path.exists(lib):
+                self.loads(open(lib).read())
+        return os.path.join(repo, root, stem + ext.lower())
 
     def loads(self, src):
         """Evaluate LISP source text (for test fixtures / extra defuns)."""
@@ -485,13 +508,17 @@ def _div(a, b):
     return a / b
 
 
-def _cmp(op, args):
+def _cmp(op, args, eq=False):
     for x, y in zip(args, args[1:]):
         if isinstance(x, str) and isinstance(y, str):
             if not op(x, y):
                 return NIL
         elif x is NIL or y is NIL:
-            return NIL
+            # AutoCAD's = and /= accept nil ((/= nil 4) is T, (= nil nil)
+            # is T); the ordering comparators reject it, and the lenient
+            # stance for those stays NIL rather than a hard error.
+            if not eq or not op(x, y):
+                return NIL
         else:
             if not op(num(x), num(y)):
                 return NIL
@@ -515,8 +542,8 @@ BUILTINS[Sym('/')] = lambda vm, a: (_div(1, num(a[0])) if len(a) == 1
                                     else _arith(_div, a, 1))
 BUILTINS[Sym('1+')] = lambda vm, a: num(a[0]) + 1
 BUILTINS[Sym('1-')] = lambda vm, a: num(a[0]) - 1
-BUILTINS[Sym('=')] = lambda vm, a: _cmp(lambda x, y: x == y, a)
-BUILTINS[Sym('/=')] = lambda vm, a: _cmp(lambda x, y: x != y, a)
+BUILTINS[Sym('=')] = lambda vm, a: _cmp(lambda x, y: x == y, a, eq=True)
+BUILTINS[Sym('/=')] = lambda vm, a: _cmp(lambda x, y: x != y, a, eq=True)
 BUILTINS[Sym('<')] = lambda vm, a: _cmp(lambda x, y: x < y, a)
 BUILTINS[Sym('<=')] = lambda vm, a: _cmp(lambda x, y: x <= y, a)
 BUILTINS[Sym('>')] = lambda vm, a: _cmp(lambda x, y: x > y, a)

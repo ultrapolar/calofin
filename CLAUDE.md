@@ -21,7 +21,8 @@ instruction in the request itself does take precedence.
 
 ```
 blender/    Blender add-ons (DXF import/export, mesh tools)
-lisp/       AutoLISP routines, current static-named files
+lisp/       AutoLISP routines, current static-named files (standalone)
+shared/     Loaded-together build: CALOFIN-LIB.lsp (cal: helpers) + twins
 releases/   Dated REV-stamped twins of the lisp/ files, flat (no subfolders)
 ui/         The Calofin AutoCAD palette (VB.NET) and its LISP glue
 tools/      Shared dev tooling (release stamping, static checks)
@@ -50,6 +51,12 @@ python3 tools/release_lisp.py
 
 Files without a version banner are skipped and reported as such; that is
 expected, not a failure.
+
+A behavior change to a tool in `lisp/<tool>/` must also be mirrored into
+its shared twin `shared/<FILE>.lsp` in the same commit — the diff between
+the two should only ever be the helper copies the library replaces and
+the `cal:` call sites. Then run `python3 tests/test_shared.py` and, for
+tools with a VM test, the same test with `CALOFIN_LISP_ROOT=shared`.
 
 ## Checks
 

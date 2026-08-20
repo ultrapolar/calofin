@@ -200,9 +200,12 @@ Offering Back never loosens what counts as a valid measurement -- a
 ## 4. Reference ask helpers
 
 The canonical implementations. `tool:` stands for the file's own
-namespace prefix and `TOOL` / `TOOLNAME` for its command name --
-today each standalone file embeds these under its own prefix; the
-`shared/` library (section 6) will export them once. Proven originals:
+namespace prefix and `TOOL` / `TOOLNAME` for its command name. In the
+`shared/` build these are exported once by `shared/CALOFIN-LIB.lsp`
+under the `cal:` prefix (Back sentinel `CAL-BACK`) and a shared-build
+tool calls `cal:` instead of embedding copies -- a NEW tool starts
+there. A standalone file in `lisp/` embeds them under its own prefix,
+copied from the library so the two never drift. Proven originals:
 `pool:askkw` / `pool:asks` (`lisp/pool/POOL.LSP:522-570`),
 `pf:ensure-layer` (`lisp/abhd/abhd.lsp:1402`),
 `pool:syssave` / `pool:sysrestore` (`lisp/pool/POOL.LSP:5514`).
@@ -452,36 +455,52 @@ sections: `# NAME -- one-line purpose (AutoLISP / AutoCAD 2018+)`,
 quoted in a README must match the code -- they are part of the
 migration checklist when a keyword changes.
 
-## 6. Target folder layout (defined now, moved later)
-
-The end state the migration phase builds toward:
+## 6. Folder layout
 
 ```
 wip/         editable sources, one folder per tool, no date stamps
-             (today: lisp/)
+             (today: lisp/ - the rename is still pending)
 standalone/  generated, self-contained, dated REV-stamped twins - one
              file per tool, loadable with nothing else present
-             (today: releases/)
-shared/      CALOFIN-LIB.lsp - the ask helpers, ensure-layer, vector
-             math, back-word, pause etc. exported once - plus compact
-             builds of the tools that require the library instead of
-             embedding copies
+             (today: releases/ - the rename is still pending)
+shared/      BUILT - the loaded-together build: CALOFIN-LIB.lsp (the
+             section-4 helpers plus ensure-layer, the vector sets,
+             circumcenter, bboxes, trim/pad/datestr, block-number and
+             more, all under cal:), CALOFIN-LOADER.lsp (APPLOAD this
+             one file), one <TOOL>.lsp twin per tool with its embedded
+             helper copies replaced by cal: calls, and acady/ (the
+             drawing-standards matcher, verbatim).  See
+             shared/README.md for the full roster, the deliberately
+             NOT-absorbed divergent helpers, and the accepted behavior
+             deltas.
 ```
 
-Nothing moves in this phase. When the move happens, these must change
-in lockstep: `tools/release_lisp.py` paths, `tools/check_lisp.py` /
-`check_scope.py` defaults, every `tests/` path, the README tables, and
-`CLAUDE.md`'s layout section. Until then, `wip/` rules apply to
-`lisp/` and `standalone/` rules to `releases/`.
+Rules of the shared build:
 
-The shared library exists because the duplication is measured, not
-suspected: `ensure-layer` has 12 copies in 3 behavioral families,
+* Everything in `shared/` loads together -- `CALOFIN-LOADER.lsp` loads
+  the library first, then every tool.  A shared tool file must define
+  no `cal:` symbol and no top-level name another file defines
+  (`tests/test_shared.py` enforces both).
+* `lisp/` stays the development home of tool logic.  A behavior change
+  in `lisp/<tool>/` is mirrored into `shared/<TOOL>.lsp` in the same
+  commit; the diff between the twins should only ever be the deleted
+  helper copies and the `cal:` call sites.
+* Parity is testable: `CALOFIN_LISP_ROOT=shared` reruns any VM-driven
+  test in `tests/` against the shared build.
+* A NEW tool is written against `cal:` in `shared/` first; its
+  standalone `lisp/` twin embeds copies of the library helpers it uses
+  (same bodies, its own prefix).
+
+When the `wip/` / `standalone/` renames eventually happen, these must
+change in lockstep: `tools/release_lisp.py` paths, `tools/check_lisp.py`
+/ `check_scope.py` defaults, every `tests/` path, the README tables,
+and `CLAUDE.md`'s layout section.
+
+The library exists because the duplication was measured, not
+suspected: `ensure-layer` had 12 copies in 4 behavioral families,
 `dimcheck`/`linfincheck`/`covercheck` share ~40 helper names and
 1,200-1,400 identical lines pairwise, `abhd`/`lhd` share ~1,259 lines,
-POOL/SPA duplicate the whole ask layer. First candidates for
-`CALOFIN-LIB.lsp`: the section-4 helpers, `ensure-layer`,
-`back-word-p`, the 2-D vector set (`dot` `unit` `mid` `perp` `scl`),
-`circumcenter`, `bbox`, string `trim`, `block-number`.
+POOL/SPA duplicated the whole ask layer.
 
 ## 7. Migration appendix -- current divergences
 

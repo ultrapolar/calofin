@@ -1,0 +1,1249 @@
+;;; ============================================================================
+;;;  Drone Height from GPS + Ground Elevation                (DroneHeightGPS.lsp)
+;;; ----------------------------------------------------------------------------
+;;;  Companion to DroneDistortion.lsp. Instead of guessing the drone height
+;;;  above grade (the office default of "100 ft"), DDGPS works it out from the
+;;;  photo itself:
+;;;
+;;;     1. File picker   - pick the ORIGINAL drone photo (starts on H:, then
+;;;                        remembers the last folder you used).
+;;;     2. Read the GPS  - latitude / longitude / AbsoluteAltitude straight
+;;;                        out of the file. The DJI XMP text packet is tried
+;;;                        first; if it is missing the binary EXIF GPS block
+;;;                        is parsed instead. EXIF stores the hemisphere
+;;;                        separately (GPSLatitudeRef / GPSLongitudeRef); if
+;;;                        a file omits the E/W one, WEST is assumed, since
+;;;                        every job is in the United States, and the run
+;;;                        says so. A position that does not land in the US
+;;;                        is flagged - that is what a wrong hemisphere
+;;;                        looks like.
+;;;     3. Click a point - pick where in the drawing to place the result.
+;;;     4. Elevation     - ask a free online elevation service for the ground
+;;;                        elevation at that latitude / longitude (HTTP
+;;;                        request via the Windows MSXML2.XMLHTTP object).
+;;;     5. The delta     - drone height above grade:
+;;;
+;;;              H  =  AbsoluteAltitude(ft)  -  ground elevation(ft)
+;;;
+;;;                    ...but only when the photo's altitude really is
+;;;                    referenced to sea level. XMP AbsoluteAltitude always
+;;;                    is; EXIF GPSAltitude often is NOT - plenty of DJI
+;;;                    models put the height above the TAKE-OFF point in
+;;;                    that tag. So both readings are worked out and the
+;;;                    physically possible one is used: a drone cannot fly
+;;;                    below the ground, and cannot legally fly above
+;;;                    400 ft AGL. The run says which one it took, and so
+;;;                    does the text placed in the drawing.
+;;;
+;;;        rounded to the nearest foot, written as text at the picked point,
+;;;        AND saved to the SAME per-drawing store DroneDistortion.lsp uses,
+;;;        so DDFIX immediately offers it as its default. This file also
+;;;        works on its own - DroneDistortion.lsp does not need to be loaded.
+;;;
+;;;  FILE TYPES
+;;;  ----------
+;;;  PNG, JPG/JPEG and TIFF are all understood, PROVIDED the file still
+;;;  carries its original camera metadata - this only works on an original
+;;;  drone photo, not a video frame grab, screenshot, or an export that
+;;;  stripped it. The reader does not trust the file extension - it looks for
+;;;  the metadata containers themselves:
+;;;    * XMP text packet   - JPEG APP1, PNG iTXt chunk, or anywhere else the
+;;;                          "<x:xmpmeta" packet appears; both DJI's normal
+;;;                          attribute form (Tag="...") and the element form
+;;;                          (<ns:Tag>...</ns:Tag>) some converters re-write.
+;;;    * binary EXIF GPS   - JPEG "Exif\0\0" APP1 block, PNG eXIf chunk, or a
+;;;                          bare TIFF header (a .TIF file), either byte order.
+;;;  The first 256 KB of the file is scanned; if nothing is found there the
+;;;  LAST 256 KB is scanned too (PNG writers may park metadata after the
+;;;  image data). If neither container has a usable GPS position and
+;;;  altitude, DDGPS fails loudly and stops - use the file exactly as it
+;;;  came off the drone.
+;;;
+;;;  ANNOTATION
+;;;  ----------
+;;;  After you click a point, DDGPS drops 5 lines of plain single-line TEXT
+;;;  at that point (GPS position, drone altitude, ground elevation + source,
+;;;  the subtraction, and the final rounded height) on the current layer, in
+;;;  the current text style. Text height defaults to the drawing's current
+;;;  TEXTSIZE the first time; after that it is remembered per drawing (same
+;;;  store as H below) and offered as the default - press Enter to keep it,
+;;;  or type a new height to change it.
+;;;
+;;;  ELEVATION SERVICES (tried in order until one answers; no API keys)
+;;;  ------------------
+;;;    1. USGS EPQS      - 3DEP ~1-10 m bare-earth model, answers in FEET
+;;;                        (NAVD88). US only, public domain, no rate limits
+;;;                        that matter at office volumes.
+;;;    2. OpenTopoData   - NED 10 m dataset, metres. US only.
+;;;    3. Open-Elevation - SRTM ~30 m grid, metres. Worldwide fallback.
+;;;  If none can be reached, DDGPS lets you type a known site elevation
+;;;  instead (e.g. from the survey) rather than losing the whole run.
+;;;
+;;;  ACCURACY - READ THIS ONCE
+;;;  -------------------------
+;;;  * The ground elevation is solid (USGS bare-earth is good to a couple of
+;;;    feet). The weak link is the drone's ABSOLUTE altitude: consumer GPS
+;;;    vertical error is routinely 10-30 ft, and DJI's sea-level reference
+;;;    does not exactly match the USGS datum (a few more feet).
+;;;  * That is still far better than a blind 100 ft guess.
+;;;  * The GPS method shines exactly where the guess fails hardest: hillside
+;;;    lots where the drone launched well above or below the pool deck.
+;;;  * Remember 1/H: at H = 100 ft, 10 ft of H error changes a correction
+;;;    that is itself only ~1% per foot of feature height - for a 2 ft raised
+;;;    spa that is a 0.2% size difference. H does not need to be perfect.
+;;;  * For a hard number, DDCAL (in DroneDistortion.lsp) back-solves H from
+;;;    one feature of known true size. DDALT (also in DroneDistortion.lsp)
+;;;    remains available as a no-internet, barometric-only alternative.
+;;;
+;;;  FAILURE REPORTING
+;;;  -----------------
+;;;  Every failure is LOUD: a dialog box pops up saying exactly WHAT failed
+;;;  and HOW - "no camera metadata in this file", "no GPS data found",
+;;;  "no GPS fix (position is 0,0)", "no altitude data", or which elevation
+;;;  service failed and why (no answer / HTTP error / outside coverage) -
+;;;  and the same detail is printed on the command line for the record.
+;;;  The only quiet exits are the ones you choose yourself (cancelling the
+;;;  file dialog, declining a point, or pressing Enter at an abort prompt).
+;;;
+;;;  REQUIREMENTS
+;;;  ------------
+;;;  Windows AutoCAD (uses ADODB.Stream + MSXML2.XMLHTTP ActiveX), internet
+;;;  access for the elevation lookup, and an ORIGINAL drone photo that still
+;;;  carries the camera metadata (see FILE TYPES above).
+;;;
+;;;  NOTE: the HTTP request is synchronous - AutoCAD sits for a second or two
+;;;  while the service answers. If the network is down it can take ~30 s to
+;;;  give up; Esc cannot interrupt an in-flight request.
+;;;
+;;;  COMMANDS
+;;;  --------
+;;;     DDGPS   - pick the drone photo, click a point, place the height
+;;;               report there, and save H for DDFIX
+;;;     DDELEV  - type a latitude / longitude, print the ground elevation
+;;;               (handy as an internet-connectivity test)
+;;;     DDTEST  - diagnose a photo that will not read: walks every step
+;;;               (find the file, ADODB.Stream, local copy, certutil hex
+;;;               dump, plain read), reports what this PC actually allows,
+;;;               then says whether the file carries any GPS metadata at all
+;;;
+;;;  UNITS
+;;;  -----
+;;;  Altitude in the file is metres (DJI writes metres); everything is
+;;;  reported and saved in FEET to match DroneDistortion.lsp.
+;;; ============================================================================
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+
+(vl-load-com)
+
+(setq *DDG-STORE* "DRONE_DISTORTION")  ; same per-drawing LDATA dictionary as
+                                       ; DroneDistortion.lsp, so DDFIX sees H
+(setq ddg-m->ft 3.280839895)
+
+;; -- persistent storage helpers ---------------------------------------------
+(defun ddg-get (key)     (vlax-ldata-get *DDG-STORE* key))
+(defun ddg-put (key val) (vlax-ldata-put *DDG-STORE* key val))
+
+;; -- formatting helpers -----------------------------------------------------
+(defun ddg-n1 (x) (rtos x 2 1))        ; feet, 1 decimal
+(defun ddg-n7 (x) (rtos x 2 7))        ; lat/long, 7 decimals (~1/2 inch)
+
+;; file name without the folder, for messages
+(defun ddg-fname (f / e)
+  (setq e (vl-filename-extension f))
+  (strcat (vl-filename-base f) (if e e "")))
+
+;; -- loud failure -----------------------------------------------------------
+;; Pops a modal alert box saying WHAT failed (title) and HOW (lines), and
+;; prints the same detail on the command line for the record.
+(defun ddg-fail (title lines / msg)
+  (setq msg title)
+  (foreach l lines (setq msg (strcat msg "\n" l)))
+  (princ (strcat "\n*** " title " ***"))
+  (foreach l lines (if (/= l "") (princ (strcat "\n  " l))))
+  (alert msg)
+  (princ))
+
+;; same, without the failure framing - for DDTEST's report
+(defun ddg-report (title lines / msg)
+  (setq msg title)
+  (foreach l lines (setq msg (strcat msg "\n" l)))
+  (princ (strcat "\n--- " title " ---"))
+  (foreach l lines (if (/= l "") (princ (strcat "\n  " l))))
+  (alert msg)
+  (princ))
+
+;; "yes"/"no" for the report
+(defun ddg-yn (x) (if x "yes" "NO"))
+
+;; ===========================================================================
+;;  Binary file access (Windows ADODB.Stream - same technique as DDALT;
+;;  plain (open ... "r") is text mode and stops at the first 0x1A byte)
+;; ===========================================================================
+
+;; Windows AutoCAD has no binary file mode in plain AutoLISP, so the primary
+;; reader is the ADODB.Stream ActiveX object. EVERY COM step is caught on its
+;; own, so when it breaks we can say exactly which step failed and what
+;; Windows said about it - run DDTEST to see the whole sequence.
+;;
+;; TAIL nil = read from the start of the file; TAIL non-nil = the LAST cnt
+;; bytes (PNG writers may park the metadata chunks after the image data).
+;; Returns (list bytes failed-step errmsg) - bytes nil if any step failed.
+;;
+;; NOTE on the order below: Type is set BEFORE Open. ADODB.Stream only allows
+;; the mode to be changed while the stream is closed (or empty and at
+;; position 0), and setting it first is the order every working example uses.
+(defun ddg-adodb-read (file cnt tail / stm out steps err failed)
+  (setq steps
+    (list
+      (cons "create the ADODB.Stream object"
+            '(lambda () (setq stm (vlax-create-object "ADODB.Stream"))))
+      (cons "switch the stream to binary mode"
+            '(lambda () (vlax-put-property stm 'Type 1)))    ; 1 = adTypeBinary
+      (cons "open the stream"
+            ;; AutoLISP's COM bridge refuses to call a method whose parameters
+            ;; are ALL optional unless they are supplied - a bare (Open) comes
+            ;; back as "too few actual parameters". Stream.Open takes
+            ;; (Source, Mode, OpenOptions, UserName, Password), so pass the
+            ;; documented defaults: an empty variant, adModeUnknown (0),
+            ;; adOpenStreamUnspecified (-1) and two empty strings. The bare
+            ;; call is kept as a last resort for builds that accept it.
+            '(lambda ( / e)
+               (setq e (vl-catch-all-apply
+                         '(lambda ()
+                            (vlax-invoke-method stm 'Open
+                              (vlax-make-variant) 0 -1 "" ""))
+                         '()))
+               (if (vl-catch-all-error-p e)
+                 (setq e (vl-catch-all-apply
+                           '(lambda ()
+                              (vlax-invoke-method stm 'Open nil 0 -1 "" ""))
+                           '())))
+               (if (vl-catch-all-error-p e)
+                 (vlax-invoke-method stm 'Open))))
+      (cons "load the file into the stream"
+            '(lambda () (vlax-invoke-method stm 'LoadFromFile file)))
+      (cons "seek to the right place in the file"
+            '(lambda ( / pos)
+               (if tail
+                 (progn
+                   (setq pos (- (vlax-get-property stm 'Size) cnt))
+                   (if (< pos 0) (setq pos 0))
+                   (vlax-put-property stm 'Position pos)))))
+      (cons "read the bytes out of the stream"
+            '(lambda ( / raw sa tmp)
+               (setq raw (vlax-invoke-method stm 'Read cnt))
+               (cond
+                 ((listp raw) (setq out raw))            ; some builds return a list
+                 (t
+                  (setq tmp (vl-catch-all-apply 'vlax-variant-value (list raw)))
+                  (setq sa  (if (vl-catch-all-error-p tmp) raw tmp))
+                  (setq out (vlax-safearray->list sa))))))))
+  (foreach s steps
+    (if (null failed)
+      (progn
+        (setq err (vl-catch-all-apply (cdr s) '()))
+        (if (vl-catch-all-error-p err)
+          (setq failed (list (car s) (vl-catch-all-error-message err)))))))
+  (if stm (vl-catch-all-apply 'vlax-release-object (list stm)))
+  (if failed
+    (list nil (car failed) (cadr failed))
+    (list out nil nil)))
+
+;; plain byte list, or nil - the shape the rest of the file expects
+(defun ddg-file-bytes (file cnt tail)
+  (car (ddg-adodb-read file cnt tail)))
+
+;; walk LST until the byte pattern TGT has just been matched;
+;; return the remainder of the list AFTER the pattern, or nil if never found
+(defun ddg-scan-to (lst tgt / tlen m b)
+  (setq tlen (length tgt) m 0)
+  (while (and lst (< m tlen))
+    (setq b (car lst) lst (cdr lst))
+    (if (< b 0) (setq b (+ b 256)))                    ; normalise if signed
+    (if (= b (nth m tgt))
+      (setq m (1+ m))
+      (setq m (if (= b (car tgt)) 1 0))))
+  (if (= m tlen) lst))
+
+;; take up to N bytes off LST as a plain string (non-printables become spaces)
+(defun ddg-grab-text (lst n / out chunk b)
+  (setq out '() chunk "")
+  (while (and lst (> n 0))
+    (setq b (car lst) lst (cdr lst) n (1- n))
+    (if (< b 0) (setq b (+ b 256)))
+    (setq chunk (strcat chunk (if (and (> b 31) (< b 127)) (chr b) " ")))
+    (if (>= (strlen chunk) 128)                        ; chunked to keep strcat cheap
+      (setq out (cons chunk out) chunk "")))
+  (apply 'strcat (reverse (cons chunk out))))
+
+;; Fallback for when ADODB.Stream is not usable at all (blocked by policy on
+;; locked-down PCs, or not registered). Plain AutoLISP file I/O is TEXT mode -
+;; it stops at the first 0x1A byte, of which JPEGs have plenty - so this is no
+;; use for the binary EXIF block. It is still worth trying, because it often
+;; reaches the XMP text packet, which is all DDGPS really needs.
+;; Returns (list bytes stopped-early-flag).
+(defun ddg-plain-read (file cnt / f b out n fsz)
+  (setq out '() n 0)
+  (cond
+    ((null (setq f (open file "r"))) (list nil nil))
+    (t
+     (while (and (< n cnt) (setq b (read-char f)))
+       (setq out (cons b out) n (1+ n)))
+     (close f)
+     (setq fsz (vl-file-size file))
+     (list (reverse out)
+           (if (and fsz (< n (min cnt fsz))) T)))))     ; hit a 0x1A, not the end
+
+(defun ddg-tohex (b / h)
+  (setq h "0123456789abcdef")
+  (strcat (substr h (1+ (/ b 16)) 1) (substr h (1+ (rem b 16)) 1)))
+
+;; first N bytes of LST as "ff d8 ff e1" - so a report can show whether a
+;; reader actually returned the file, or returned mush
+(defun ddg-firstbytes (lst n / out b)
+  (setq out "")
+  (while (and lst (> n 0))
+    (setq b (car lst) lst (cdr lst) n (1- n))
+    (if (< b 0) (setq b (+ b 256)))
+    (setq out (strcat out (if (= out "") "" " ") (ddg-tohex b))))
+  out)
+
+;; every JPEG starts FF D8; a reader that does not produce that is mangling
+(defun ddg-looks-jpeg (lst)
+  (and (equal (ddg-b lst 0) 255) (equal (ddg-b lst 1) 216)))
+
+;; local temp folder, always with a trailing backslash ("" if unknown)
+(defun ddg-tempdir ( / dir)
+  (setq dir (getvar "TEMPPREFIX"))
+  (if (or (null dir) (= dir "")) (setq dir (getenv "TEMP")))
+  (cond
+    ((or (null dir) (= dir "")) "")
+    ((member (substr dir (strlen dir) 1) '("/" "\\")) dir)
+    (t (strcat dir "\\"))))
+
+;; split S on spaces; returns the non-empty pieces
+(defun ddg-split (s / out pos tok)
+  (setq out '())
+  (while (setq pos (vl-string-search " " s))
+    (setq tok (substr s 1 pos) s (substr s (+ pos 2)))
+    (if (/= tok "") (setq out (cons tok out))))
+  (if (/= s "") (setq out (cons s out)))
+  (reverse out))
+
+;; hex digit character code -> value, nil if not a hex digit
+(defun ddg-hexval (b)
+  (cond ((and (>= b 48) (<= b 57))  (- b 48))     ; 0-9
+        ((and (>= b 97) (<= b 102)) (- b 87))     ; a-f
+        ((and (>= b 65) (<= b 70))  (- b 55))))   ; A-F
+
+;; "ff" -> 255; nil unless the token is exactly two hex digits
+(defun ddg-hexbyte (s / a b)
+  (if (= (strlen s) 2)
+    (progn
+      (setq a (ddg-hexval (ascii (substr s 1 1)))
+            b (ddg-hexval (ascii (substr s 2 1))))
+      (if (and a b) (+ (* 16 a) b)))))
+
+;; one line of a certutil hex dump -> its byte values. Lines look like
+;;   0000  ff d8 ff e1 00 18 45 78  69 66 00 00 49 49 2a 00   ......Exif..II*.
+;; so drop the leading offset and take at most 16 two-hex-digit tokens, which
+;; stops cleanly before the ASCII column on the right.
+(defun ddg-hexline (line / toks out v n stop)
+  (setq toks (ddg-split line))
+  ;; Drop the leading offset column ONLY if it is not itself a byte. Dropping
+  ;; it unconditionally shifts every line by one byte when the dump has no
+  ;; address column, which corrupts the whole stream while still looking like
+  ;; a successful read.
+  (if (and toks (null (ddg-hexbyte (car toks)))) (setq toks (cdr toks)))
+  (setq out '() n 0)
+  (while (and toks (< n 16) (null stop))
+    (setq v (ddg-hexbyte (car toks)) toks (cdr toks))
+    (if v (setq out (cons v out) n (1+ n)) (setq stop T)))
+  (reverse out))
+
+;; Third-tier reader: have Windows' own certutil rewrite the file as a HEX
+;; TEXT dump, then read that back with plain AutoLISP. The dump is pure ASCII,
+;; so none of the binary-file problems apply - this is the fallback for PCs
+;; where ADODB.Stream is blocked outright. Returns a byte list, or nil.
+(defun ddg-certutil-read (file cnt / sh dst err f line out n dir)
+  (setq dir (ddg-tempdir))
+  (cond
+    ((= dir "") nil)
+    (t
+     (setq dst (strcat dir "DDGPS_hex.txt"))
+     (if (findfile dst) (vl-file-delete dst))
+     (setq err
+       (vl-catch-all-apply
+         '(lambda ()
+            (setq sh (vlax-create-object "WScript.Shell"))
+            (vlax-invoke-method sh 'Run
+              (strcat "cmd /c certutil -encodehex \"" file "\" \"" dst "\"")
+              0 :vlax-true))                       ; 0 = hidden, T = wait for it
+         '()))
+     (if sh (vl-catch-all-apply 'vlax-release-object (list sh)))
+     (cond
+       ((vl-catch-all-error-p err) nil)
+       ((null (setq f (open dst "r"))) nil)
+       (t
+        (setq out '() n 0)
+        (while (and (< n cnt) (setq line (read-line f)))
+          (foreach b (ddg-hexline line)
+            (if (< n cnt) (setq out (cons b out) n (1+ n)))))
+        (close f)
+        (if out (reverse out)))))))
+
+;; copy FILE into the local temp folder and return the local path, or nil.
+;; Reading straight off a mapped drive can fail for reasons that have nothing
+;; to do with the photo; a plain local copy sidesteps those.
+(defun ddg-local-copy (file / dir dst)
+  (setq dir (ddg-tempdir))
+  (if (/= dir "")
+    (progn
+      (setq dst (strcat dir "DDGPS_photo"
+                        (if (vl-filename-extension file)
+                          (vl-filename-extension file) ".dat")))
+      (if (findfile dst) (vl-file-delete dst))    ; vl-file-copy won't overwrite
+      (if (vl-file-copy file dst) dst))))
+
+;; Get the first CNT bytes of the photo, trying, in order: a straight ADODB
+;; read; an ADODB read of a local copy (unreadable network paths); a plain
+;; text-mode read (ADODB blocked).
+;;   success -> (list bytes path note)   PATH = what actually got read, so the
+;;              tail scan reads the same thing; NOTE = a line to print, or nil
+;;   failure -> (list nil nil nil reason-lines)   for the loud alert
+(defun ddg-open-photo (file cnt / r lst path note tmp step msg pr)
+  (setq r (ddg-adodb-read file cnt nil))
+  (if (car r)
+    (setq lst (car r) path file)
+    (setq step (cadr r) msg (caddr r)))
+  ;; ADODB worked but on a copy? (mapped drive / locked original)
+  (if (null lst)
+    (progn
+      (setq tmp (ddg-local-copy file))
+      (if tmp
+        (progn
+          (setq r (ddg-adodb-read tmp cnt nil))
+          (if (car r)
+            (setq lst  (car r) path tmp
+                  note "\n  (could not read it in place - used a local copy)"))))))
+  ;; ADODB unusable entirely - let certutil turn the file into hex text
+  (if (null lst)
+    (progn
+      (setq lst (ddg-certutil-read (if tmp tmp file) cnt))
+      (if lst
+        (setq path (if tmp tmp file)
+              note "\n  (ADODB.Stream failed - read it through certutil instead)"))))
+  ;; last resort: a plain text-mode read, which may stop early
+  (if (null lst)
+    (progn
+      (setq pr (ddg-plain-read (if tmp tmp file) cnt))
+      (if (car pr)
+        (setq lst  (car pr) path (if tmp tmp file)
+              note (strcat "\n  (ADODB.Stream failed - fell back to a plain read"
+                           (if (cadr pr)
+                             ", which stopped early at a 0x1A byte)"
+                             ")"))))))
+  (if lst
+    (list lst path note)
+    (list nil nil nil
+      (append
+        (list (strcat "File: " file) "")
+        (if (findfile file)
+          (list "AutoCAD CAN see the file, so this is not a missing path -"
+                "it could not be read into memory."
+                "")
+          (list "AutoCAD cannot even find that path."
+                ""))
+        (if step
+          (list (strcat "ADODB.Stream failed trying to " step ".")
+                (if msg (strcat "Windows said: " msg) ""))
+          '())
+        (list ""
+              "Run DDTEST on this same file - it walks every step and"
+              "reports exactly what your PC allows.")))))
+
+;; ===========================================================================
+;;  XMP route (all modern DJI aircraft) - the image carries a text packet like
+;;    drone-dji:AbsoluteAltitude="+247.66"
+;;    drone-dji:GpsLatitude="+32.7157380"  drone-dji:GpsLongtitude="-117.16..."
+;;  ("GpsLongtitude" is DJI's own long-standing typo; newer firmware also
+;;   writes the correctly-spelt tag - both are checked.)
+;;  The packet is found by content, not by container, so JPEG APP1 and PNG
+;;  iTXt chunks both work: anchor on "<x:xmpmeta" (any container), then the
+;;  JPEG APP1 signature, then the DJI namespace itself as a last resort.
+;; ===========================================================================
+
+;; the XMP packet (as one printable string), or "" if the file has none
+(defun ddg-xmp-text (lst / rest)
+  (setq rest (ddg-scan-to lst (vl-string->list "<x:xmpmeta")))
+  (if (null rest)
+    (setq rest (ddg-scan-to lst (vl-string->list "ns.adobe.com/xap/1.0/"))))
+  (if (null rest)
+    (setq rest (ddg-scan-to lst (vl-string->list "drone-dji:"))))
+  (if rest (ddg-grab-text rest 6144) ""))
+
+;; value of   TAG="..."   (DJI's attribute form) or   <ns:TAG>...</ns:TAG>
+;; (the element form some converters re-write XMP into), or nil
+(defun ddg-xmp-attr (txt tag / pos rest end)
+  (setq pos (vl-string-search (strcat tag "=\"") txt))
+  (if pos
+    (progn
+      (setq rest (substr txt (+ pos (strlen tag) 3)))  ; just past the ="
+      (setq end (vl-string-search "\"" rest))
+      (if end (substr rest 1 end)))
+    (progn
+      (setq pos (vl-string-search (strcat tag ">") txt))
+      (if pos
+        (progn
+          (setq rest (substr txt (+ pos (strlen tag) 2)))   ; just past the >
+          (setq end (vl-string-search "<" rest))
+          (if end (substr rest 1 end)))))))
+
+;; "+18.90" / "-117.16" / "18.90" -> real, or nil
+(defun ddg-numstr (s)
+  (setq s (vl-string-trim " " s))
+  (if (and (> (strlen s) 0) (= "+" (substr s 1 1))) (setq s (substr s 2)))
+  (if (> (strlen s) 0) (distof s 2)))
+
+(defun ddg-xmp-num (txt tag / s)
+  (if (setq s (ddg-xmp-attr txt tag)) (ddg-numstr s)))
+
+;; ===========================================================================
+;;  EXIF route (fallback) - parse the binary GPS IFD out of the APP1 segment.
+;;  Handles both byte orders; every read is nil-safe so a truncated or odd
+;;  file just returns nils instead of crashing.
+;; ===========================================================================
+
+;; byte at OFF (0-255), or nil past the end
+(defun ddg-b (lst off / b)
+  (if (setq b (nth off lst))
+    (if (< b 0) (+ b 256) b)))
+
+(defun ddg-u16 (lst off le / a b)
+  (setq a (ddg-b lst off) b (ddg-b lst (1+ off)))
+  (if (and a b) (if le (+ a (* 256 b)) (+ (* 256 a) b))))
+
+;; 32-bit value as a REAL (AutoLISP ints are 32-bit signed - a raw u32 can overflow)
+(defun ddg-u32 (lst off le / a b c d)
+  (setq a (ddg-b lst off)       b (ddg-b lst (+ off 1))
+        c (ddg-b lst (+ off 2)) d (ddg-b lst (+ off 3)))
+  (if (and a b c d)
+    (if le
+      (+ a (* 256.0 b) (* 65536.0 c) (* 16777216.0 d))
+      (+ d (* 256.0 c) (* 65536.0 b) (* 16777216.0 a)))))
+
+;; 32-bit value as an INT for use as an offset; nil if missing or absurd
+(defun ddg-u32i (lst off le / r)
+  (if (and (setq r (ddg-u32 lst off le)) (< r 1.0e9)) (fix r)))
+
+;; unsigned rational (u32 numerator, u32 denominator) -> real, or nil
+(defun ddg-rat (lst off le / n d)
+  (if off
+    (progn
+      (setq n (ddg-u32 lst off le) d (ddg-u32 lst (+ off 4) le))
+      (if (and n d (/= d 0.0)) (/ n d)))))
+
+;; find TAG in the IFD at offset IFD; return the offset of its 12-byte entry
+(defun ddg-ifd-find (lst ifd le tag / n i e r)
+  (if (setq n (ddg-u16 lst ifd le))
+    (progn
+      (setq i 0)
+      (while (and (< i n) (null r))
+        (setq e (+ ifd 2 (* 12 i)))
+        (if (equal (ddg-u16 lst e le) tag) (setq r e))
+        (setq i (1+ i)))))
+  r)
+
+;; GPS coordinate entry (3 rationals: deg min sec) -> decimal degrees
+(defun ddg-gps-coord (lst ent le / off d m s)
+  (if (setq off (ddg-u32i lst (+ ent 8) le))
+    (progn
+      (setq d (ddg-rat lst off le)
+            m (ddg-rat lst (+ off 8) le)
+            s (ddg-rat lst (+ off 16) le))
+      (if (and d m s) (+ d (/ m 60.0) (/ s 3600.0))))))
+
+;; the character of a GPS*Ref entry ("N"/"S"/"E"/"W"), or nil if absent.
+;; These are ASCII fields of count 2, so the value sits inline in the entry.
+(defun ddg-refchar (lst ent / b)
+  (if (setq b (ddg-b lst (+ ent 8)))
+    (if (and (> b 32) (< b 127)) (chr b))))
+
+;; does REST start with a TIFF header?  ("II" 42 0  /  "MM" 0 42) -> REST or nil
+(defun ddg-tiff-at (rest / b0 b1)
+  (setq b0 (ddg-b rest 0) b1 (ddg-b rest 1))
+  (cond
+    ((and (equal b0 73) (equal b1 73)
+          (equal (ddg-b rest 2) 42) (equal (ddg-b rest 3) 0)) rest)
+    ((and (equal b0 77) (equal b1 77)
+          (equal (ddg-b rest 2) 0) (equal (ddg-b rest 3) 42)) rest)))
+
+;; find the EXIF TIFF block whatever the container:
+;;   * a bare .TIF file        - TIFF header at byte 0
+;;   * JPEG (and HEIC) style   - "Exif" 0 0, then the TIFF header
+;;   * PNG eXIf chunk          - the TIFF header directly follows the type
+;; A match is only accepted if a valid TIFF magic follows, so a stray "Exif"
+;; inside compressed image data is skipped and the scan continues.
+(defun ddg-find-tiff (lst / tif rest)
+  (setq tif (ddg-tiff-at lst))
+  (setq rest lst)
+  (while (and (null tif)
+              (setq rest (ddg-scan-to rest (vl-string->list "Exif"))))
+    (if (and (equal (ddg-b rest 0) 0) (equal (ddg-b rest 1) 0))
+      (setq tif (ddg-tiff-at (cddr rest)))))
+  (setq rest lst)
+  (while (and (null tif)
+              (setq rest (ddg-scan-to rest (vl-string->list "eXIf"))))
+    (setq tif (ddg-tiff-at rest)))
+  tif)
+
+;; TIFF header -> IFD0 -> GPS IFD; returns (lat lon alt-metres), any may be nil
+(defun ddg-exif-gps (lst / tif le ifd0 ent gps lat lon altm latref lonref r)
+  (setq tif (ddg-find-tiff lst))
+  (if tif
+    (progn
+      (setq le (equal (ddg-b tif 0) 73))       ; "II" little / "MM" big endian
+      (setq ifd0 (ddg-u32i tif 4 le))
+      (if ifd0 (setq ent (ddg-ifd-find tif ifd0 le 34853)))  ; 0x8825 GPS IFD
+      (if ent  (setq gps (ddg-u32i tif (+ ent 8) le)))
+      (if gps
+        (progn
+          (if (setq ent (ddg-ifd-find tif gps le 2))         ; GPSLatitude
+            (setq lat (ddg-gps-coord tif ent le)))
+          (if (and (setq ent (ddg-ifd-find tif gps le 1))    ; GPSLatitudeRef
+                   (setq r (ddg-refchar tif ent)))
+            (setq latref (strcase r)))
+          (if (and lat (equal latref "S")) (setq lat (- lat)))
+          (if (setq ent (ddg-ifd-find tif gps le 4))         ; GPSLongitude
+            (setq lon (ddg-gps-coord tif ent le)))
+          (if (and (setq ent (ddg-ifd-find tif gps le 3))    ; GPSLongitudeRef
+                   (setq r (ddg-refchar tif ent)))
+            (setq lonref (strcase r)))
+          (if (and lon (equal lonref "W")) (setq lon (- lon)))
+          (if (setq ent (ddg-ifd-find tif gps le 6))         ; GPSAltitude
+            (setq altm (ddg-rat tif (ddg-u32i tif (+ ent 8) le) le)))
+          (if (and altm (setq ent (ddg-ifd-find tif gps le 5))
+                   (equal (ddg-b tif (+ ent 8)) 1))          ; below sea level
+            (setq altm (- altm)))))))
+  ;; 4th: was an EXIF block found at all?  5th/6th: the hemisphere letters,
+  ;; nil when the file simply does not record them - in which case the SIGN
+  ;; of the coordinate is unknown, not positive.
+  (list lat lon altm (if tif T) latref lonref))
+
+;; everything the file tells us: (absalt-m lat lon xmp-found exif-found)
+;; XMP text packet first (JPEG APP1 / PNG iTXt), the binary EXIF GPS block
+;; filling any gaps (JPEG APP1 / PNG eXIf / bare TIFF). The last two flags
+;; say whether an XMP packet / EXIF block was present at all - failure
+;; reporting uses them to tell "stripped file" apart from "metadata without
+;; GPS".
+(defun ddg-read-meta (lst / xtxt exif absm lat lon xmpf tiff lonok altmsl)
+  (setq xtxt (ddg-xmp-text lst))
+  (setq xmpf (> (strlen xtxt) 0))
+  (setq absm (ddg-xmp-num xtxt "AbsoluteAltitude")
+        lat  (ddg-xmp-num xtxt "GpsLatitude")
+        lon  (ddg-xmp-num xtxt "GpsLongitude"))
+  (if (null lon) (setq lon (ddg-xmp-num xtxt "GpsLongtitude")))
+  (if lon (setq lonok T))              ; XMP writes the sign into the number
+  (if absm (setq altmsl T))            ; XMP AbsoluteAltitude IS sea-level
+  (if (or (null lat) (null lon) (null absm))
+    (progn
+      (setq exif (ddg-exif-gps lst))
+      (if (null lat)  (setq lat  (nth 0 exif)))
+      (if (null lon)
+        (progn
+          (setq lon (nth 1 exif))
+          (if (nth 5 exif) (setq lonok T))))   ; only if E/W was recorded
+      ;; EXIF GPSAltitude is left un-flagged: plenty of DJI models write the
+      ;; height above the TAKE-OFF point into it rather than height above sea
+      ;; level, so which one it is has to be worked out from the numbers.
+      (if (null absm) (setq absm (nth 2 exif)))
+      (setq tiff (nth 3 exif))))
+  (list absm lat lon xmpf tiff lonok altmsl))
+
+;; ===========================================================================
+;;  HTTP + JSON (MSXML2.XMLHTTP ActiveX; synchronous GET)
+;; ===========================================================================
+
+;; one attempt with a given ProgID.  Returns (list rank payload):
+;;   rank 2 - HTTP 200, payload = the response text
+;;   rank 1 - reached a server but got a bad answer (payload = how it failed)
+;;   rank 0 - the request never completed        (payload = how it failed)
+(defun ddg-http-try (prog url / xh err txt sts)
+  (setq err
+    (vl-catch-all-apply
+      '(lambda ()
+         (setq xh (vlax-create-object prog))
+         (vlax-invoke-method xh 'Open "GET" url :vlax-false)
+         ;; some builds want (Send) bare, some want an (empty) body argument
+         (if (vl-catch-all-error-p
+               (vl-catch-all-apply '(lambda () (vlax-invoke-method xh 'Send)) '()))
+           (vlax-invoke-method xh 'Send ""))
+         (setq sts (vlax-get-property xh 'Status))
+         (setq txt (vlax-get-property xh 'ResponseText)))
+      '()))
+  (if xh (vl-catch-all-apply 'vlax-release-object (list xh)))
+  (cond
+    ((vl-catch-all-error-p err)
+     (list 0 (if xh
+               "no answer (no internet / DNS / firewall / timeout)"
+               (strcat prog " is not available on this PC"))))
+    ((not (and (numberp sts) (= sts 200)))
+     (list 1 (strcat "server answered HTTP "
+                     (if (numberp sts) (itoa (fix sts)) "?")
+                     " instead of 200")))
+    ((or (null txt) (= (strlen txt) 0))
+     (list 1 "server sent back an empty response"))
+    (t (list 2 txt))))
+
+;; GET URL trying several ProgIDs (XMLHTTP follows the office/IE proxy
+;; settings; ServerXMLHTTP is the last resort).
+;; Returns (list T text) on success, else (list nil how-it-failed) - the
+;; reason kept is from the attempt that got the furthest.
+(defun ddg-http-get (url / best r)
+  (foreach prog '("MSXML2.XMLHTTP.6.0" "MSXML2.XMLHTTP" "MSXML2.ServerXMLHTTP.6.0")
+    (if (or (null best) (< (car best) 2))
+      (progn
+        (setq r (ddg-http-try prog url))
+        (if (or (null best) (> (car r) (car best)))
+          (setq best r)))))
+  (if (= (car best) 2)
+    (list T (cadr best))
+    (list nil (cadr best))))
+
+;; first number that follows KEY in TXT - skips :, =, [, quotes and blanks in
+;; between; nil on null / absent
+(defun ddg-num-after (txt key / pos rest len i numstr)
+  (setq pos (vl-string-search key txt))
+  (if pos
+    (progn
+      (setq rest (substr txt (+ pos (strlen key) 1))   ; just past the key
+            len  (strlen rest)
+            i    1)
+      (while (and (<= i len)
+                  (member (substr rest i 1) '(" " ":" "=" "[" "\"" "\t")))
+        (setq i (1+ i)))
+      (setq numstr "")
+      (while (and (<= i len)
+                  (member (substr rest i 1)
+                          '("-" "+" "." "0" "1" "2" "3" "4"
+                            "5" "6" "7" "8" "9" "e" "E")))
+        (setq numstr (strcat numstr (substr rest i 1)))
+        (setq i (1+ i)))
+      (if (> (strlen numstr) 0) (ddg-numstr numstr)))))
+
+;; JSON flavour: the key sits in quotes ("value":"296.61" / "elevation": 251.3)
+(defun ddg-json-num (txt key)
+  (ddg-num-after txt (strcat "\"" key "\"")))
+
+;; ground elevation in FEET at LAT/LON. Services tried in order; each answer
+;; is sanity-ranged before being trusted.
+;;   success -> (list feet source-name)
+;;   failure -> (list nil notes)   notes = one "service: how it failed" line
+;;                                 for every service that was tried
+(defun ddg-ground-elev (lat lon / la lo r v res notes)
+  (setq la (ddg-n7 lat) lo (ddg-n7 lon) notes '())
+  ;; 1) USGS EPQS - 3DEP bare earth, NAVD88, answers in FEET. US only.
+  (setq r (ddg-http-get (strcat "https://epqs.nationalmap.gov/v1/json?x=" lo
+                                "&y=" la "&wkid=4326&units=Feet")))
+  (if (car r)
+    (progn
+      (setq v (ddg-json-num (cadr r) "value"))
+      (if (and v (> v -1500.0) (< v 25000.0))          ; filters the -1000000
+        (setq res (list v "USGS 3DEP"))                ; no-data flag
+        (setq notes (cons "USGS EPQS: answered, but has no elevation for this spot (outside US coverage?)"
+                          notes))))
+    (setq notes (cons (strcat "USGS EPQS: " (cadr r)) notes)))
+  ;; 2) OpenTopoData NED 10 m - metres. US only.
+  (if (null res)
+    (progn
+      (setq r (ddg-http-get (strcat "https://api.opentopodata.org/v1/ned10m?locations="
+                                    la "," lo)))
+      (if (car r)
+        (progn
+          (setq v (ddg-json-num (cadr r) "elevation"))
+          (if (and v (> v -500.0) (< v 7000.0))
+            (setq res (list (* v ddg-m->ft) "OpenTopoData NED10m"))
+            (setq notes (cons "OpenTopoData: answered, but has no elevation for this spot (outside US coverage?)"
+                              notes))))
+        (setq notes (cons (strcat "OpenTopoData: " (cadr r)) notes)))))
+  ;; 3) Open-Elevation - SRTM ~30 m, metres. Worldwide fallback.
+  (if (null res)
+    (progn
+      (setq r (ddg-http-get (strcat "https://api.open-elevation.com/api/v1/lookup?locations="
+                                    la "," lo)))
+      (if (car r)
+        (progn
+          (setq v (ddg-json-num (cadr r) "elevation"))
+          (if (and v (> v -500.0) (< v 7000.0))
+            (setq res (list (* v ddg-m->ft) "Open-Elevation SRTM"))
+            (setq notes (cons "Open-Elevation: answered without a usable elevation"
+                              notes))))
+        (setq notes (cons (strcat "Open-Elevation: " (cadr r)) notes)))))
+  (if res res (list nil (reverse notes))))
+
+;; ===========================================================================
+;;  Drawing annotation helpers
+;; ===========================================================================
+
+;; round-half-away-from-zero (AutoLISP has no built-in ROUND; FIX truncates
+;; toward zero, so nudge by +/- 0.5 first)
+(defun ddg-round (x) (fix (+ x (if (>= x 0.0) 0.5 -0.5))))
+
+;; annotation text height: defaults to the drawing's current TEXTSIZE, then
+;; remembers a per-drawing override under the same store as H - same
+;; "current value in <brackets>, Enter keeps it" idiom as DDSET/DDFIX/DDALT.
+;; With BACK non-nil the prompt also takes Back (Undo works too),
+;; returning the symbol DDG-BACK.
+(defun ddg-txt-height (back / cur ht)
+  (setq cur (ddg-get "TXTHT"))
+  (if (null cur) (setq cur (getvar "TEXTSIZE")))
+  (if (or (null cur) (<= cur 0.0)) (setq cur 1.0))   ; TEXTSIZE can legitimately be 0
+  (if back (initget "Back Undo"))
+  (setq ht (getreal (strcat "\nAnnotation text height <" (ddg-n1 cur) ">"
+                            (if back " [Back]" "") ": ")))
+  (if (= (type ht) 'STR)
+    'DDG-BACK
+    (progn
+      (if (or (null ht) (<= ht 0.0)) (setq ht cur))
+      (ddg-put "TXTHT" ht)
+      ht)))
+
+;; erase everything created after entity MARK (nil = an empty drawing)
+;; - the rollback when a Back takes a placed report down again
+(defun ddg-eraseafter (mark / en nx)
+  (setq en (if mark (entnext mark) (entnext)))
+  (while en
+    (setq nx (entnext en))
+    (if (entget en) (entdel en))
+    (setq en nx)))
+
+;; place LINES (strings, top to bottom) as stacked single-line TEXT entities
+;; starting at BASEPT-UCS (a point in the CURRENT UCS, e.g. straight out of
+;; getpoint). Each point is converted UCS -> WCS right before entmake (entity
+;; data needs WCS; mirrors the (trans base 0 1) idiom DroneDistortion.lsp
+;; uses the other way around before feeding a point to a command). Returns T
+;; if every line was created.
+(defun ddg-place-text (basept-ucs lines height layer style / y pt ok)
+  (setq y 0.0 ok T)
+  (foreach ln lines
+    (setq pt (list (car basept-ucs) (- (cadr basept-ucs) y) (caddr basept-ucs)))
+    (if (null (entmake (list '(0 . "TEXT")
+                              (cons 8 layer)
+                              (cons 10 (trans pt 1 0))     ; UCS -> WCS
+                              (cons 40 height)
+                              (cons 1 ln)
+                              (cons 7 style))))
+      (setq ok nil))
+    (setq y (+ y (* height 1.667))))   ; AutoCAD's standard single-line spacing
+  ok)
+
+;; ---------------------------------------------------------------------------
+;;  DDGPS : pick the drone photo -> read GPS -> click a point -> look up
+;;          ground elevation -> place the height report -> save H
+;; ---------------------------------------------------------------------------
+(defun c:DDGPS ( / *error* def c file rd rpath lst meta fsize absm lat lon xmpf tiff lonok
+                   altmsl hmsl hrel okmsl okrel mode
+                   pt g gft gsrc absft hraw hsel ht lines placed ans
+                   stage done manual mark)
+  (defun *error* (m)
+    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+      (princ (strcat "\nError: " m)))
+    (princ))
+
+  ;; 1) pick the photo - start in the last-used folder, else the H: drive
+  (setq def (getenv "DDGPS_LastDir"))
+  (if (or (null def) (= def "") (not (vl-file-directory-p def)))
+    (setq def (if (vl-file-directory-p "H:/") "H:/" "")))
+  (if (> (strlen def) 0)
+    (progn
+      (setq c (substr def (strlen def) 1))
+      (if (and (/= c "/") (/= c "\\")) (setq def (strcat def "\\")))))
+  (setq file (getfiled "Select the ORIGINAL drone photo (PNG / JPG / TIF)" def
+                       "png;jpg;jpeg;tif;tiff" 16))
+  (cond
+    ((null file) (princ "\nNo file selected."))
+    (t
+     (if (vl-filename-directory file)
+       (setenv "DDGPS_LastDir" (vl-filename-directory file)))
+     (princ "\nReading the photo ...")
+     ;; metadata usually sits up front; ddg-open-photo falls back to a local
+     ;; copy if the file cannot be read where it sits (mapped-drive trouble)
+     (setq rd    (ddg-open-photo file 262144)
+           lst   (nth 0 rd)
+           rpath (nth 1 rd))
+     (cond
+       ((null lst)
+        (ddg-fail "COULD NOT READ THE FILE" (nth 3 rd)))
+       (t
+        (if (nth 2 rd) (princ (nth 2 rd)))
+        ;; 2) XMP first (every modern DJI), binary EXIF GPS block as fallback
+        (setq meta (ddg-read-meta lst)
+              absm (nth 0 meta) lat  (nth 1 meta) lon  (nth 2 meta)
+              xmpf (nth 3 meta) tiff (nth 4 meta) lonok (nth 5 meta)
+              altmsl (nth 6 meta))
+        ;; some PNG writers park the metadata after the image data - if the
+        ;; front window came up short, scan the tail of the file too
+        (if (and (or (null lat) (null lon) (null absm))
+                 (setq fsize (vl-file-size rpath))
+                 (> fsize 262144)
+                 (setq lst (car (ddg-file-bytes rpath 262144 T))))
+          (progn
+            (setq meta (ddg-read-meta lst))
+            (if (null absm) (setq absm (nth 0 meta)))
+            (if (null lat)  (setq lat  (nth 1 meta)))
+            (if (null lon)  (setq lon  (nth 2 meta)))
+            (if (nth 3 meta) (setq xmpf T))
+            (if (nth 4 meta) (setq tiff T))
+            (if (nth 5 meta) (setq lonok T))
+            (if (nth 6 meta) (setq altmsl T))))
+        ;; 2b) say EXACTLY what is wrong if the file cannot be used - this is
+        ;; a hard stop, no rescue: use the file exactly as it came off the
+        ;; drone. Everything past this point lives in the final (t ...)
+        ;; branch below, so a failure here truly stops the command.
+        (cond
+          ((and (or (null lat) (null lon)) (not xmpf) (not tiff))
+           (ddg-fail "NO CAMERA METADATA IN THIS FILE"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   "No XMP packet and no EXIF block anywhere in the file"
+                   "(searched the first 256 KB and the last 256 KB)."
+                   ""
+                   "This copy was saved WITHOUT metadata - screenshots,"
+                   "video frame grabs and most export / share / convert"
+                   "steps strip it. Use the file exactly as it came off"
+                   "the drone.")))
+          ((or (null lat) (null lon))
+           (ddg-fail "NO GPS DATA FOUND"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   (strcat "The file DOES contain camera metadata ("
+                           (cond ((and xmpf tiff) "an XMP packet and an EXIF block")
+                                 (xmpf "an XMP packet")
+                                 (t "an EXIF block"))
+                           ")")
+                   "but there is no GPS position in it."
+                   ""
+                   "Either the drone had no GPS fix recorded, or the"
+                   "conversion that made this file kept only part of the"
+                   "metadata. Use the file exactly as it came off the drone.")))
+          ((and (equal lat 0.0 1e-9) (equal lon 0.0 1e-9))
+           (ddg-fail "NO GPS FIX"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   "The GPS position stored in the file is 0, 0 - the drone"
+                   "had no satellite fix when this shot was taken."
+                   ""
+                   "Pick a different shot from the same flight.")))
+          ((or (> (abs lat) 90.0) (> (abs lon) 180.0))
+           (ddg-fail "BAD GPS DATA"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   (strcat "The stored GPS position (" (ddg-n7 lat) ", "
+                           (ddg-n7 lon) ")")
+                   "is not a valid latitude / longitude - corrupt metadata.")))
+          ((null absm)
+           (ddg-fail "NO ALTITUDE DATA"
+             (list (strcat "File: " (ddg-fname file))
+                   ""
+                   (strcat "GPS position found (" (ddg-n7 lat) ", "
+                           (ddg-n7 lon) "), but the file holds no")
+                   "AbsoluteAltitude / EXIF GPSAltitude."
+                   ""
+                   "Use the file exactly as it came off the drone, or set H"
+                   "manually with DDSET.")))
+          (t
+           ;; 2c) all good - show what came from the file
+           ;; Some files record the coordinate but not the E/W hemisphere, so
+           ;; the sign is unknown. Every job this tool is used for is in the
+           ;; United States, so take the western hemisphere - the alternative
+           ;; silently moves a Pennsylvania pool to China. Assumed, not asked,
+           ;; but said out loud, because it IS an assumption.
+           (if (null lonok)
+             (progn
+               (setq lon (- (abs lon)))
+               (princ "\n  NOTE: the photo does not record E/W - assuming WEST (United States).")))
+           (princ "\n--- position & altitude ------------------------------------")
+           (princ (strcat "\n  GPS position     : " (ddg-n7 lat) ", " (ddg-n7 lon)))
+           ;; Jobs are in the United States, so anything outside it is worth
+           ;; flagging - it usually means a hemisphere or a datum is wrong.
+           ;; A warning only: the lookup still runs, and the worldwide service
+           ;; will answer if the site really is abroad.
+           (if (not (and (> lat 17.0) (< lat 72.0)
+                         (> lon -180.0) (< lon -64.0)))
+             (princ (strcat "\n  WARNING: that position is not in the United States."
+                            "\n           Check the photo - a wrong E/W reference looks exactly like this.")))
+           (princ (strcat "\n  AbsoluteAltitude : " (ddg-n1 (* absm ddg-m->ft))
+                          " ft above sea level   (" (ddg-n1 absm) " m)"))
+           ;; 3)-7) staged: Back (or Undo) at a later prompt re-opens
+           ;; the previous one - the lookup and the altitude reasoning
+           ;; re-run on the way forward
+           (setq stage 1 done nil manual nil)
+           (while (not done)
+             (cond
+
+               ;; 3) click a point in the drawing for the report
+               ((= stage 1)
+                (setq pt (getpoint "\nPick a point in the drawing for the height report: "))
+                (if (null pt)
+                  (progn (princ "\nAborted - no point picked.") (setq done T))
+                  (setq stage 2)))
+
+               ;; 4) ground elevation at the photo position
+               ((= stage 2)
+                (princ "\nLooking up ground elevation (internet, a few seconds) ...")
+                (setq g (ddg-ground-elev lat lon) manual nil)
+                (if (car g)
+                  (setq gft (car g) gsrc (cadr g) stage 4)
+                  (progn
+                    (ddg-fail "ELEVATION LOOKUP FAILED"
+                      (append
+                        (list (strcat "No ground elevation could be fetched for "
+                                      (ddg-n7 lat) ", " (ddg-n7 lon) ":")
+                              "")
+                        (cadr g)
+                        (list ""
+                              "Check the internet connection (DDELEV is a quick"
+                              "test), or type the site elevation by hand at the"
+                              "next prompt.")))
+                    (setq stage 3))))
+               ((= stage 3)
+                (initget "Back Undo")
+                (setq gft (getreal "\nGround elevation at the site in FEET, if you know it (Enter to abort) [Back]: "))
+                (cond
+                  ((= (type gft) 'STR) (setq stage 1))
+                  ((null gft) (princ "\nAborted - H unchanged.") (setq done T))
+                  (t (setq gsrc "entered by hand" manual T stage 4))))
+
+               ((= stage 4)
+                (princ (strcat "\n  Ground elevation : " (ddg-n1 gft) " ft   [" gsrc "]"))
+                ;; 5) work out WHICH altitude the photo actually recorded.
+                ;; XMP AbsoluteAltitude is sea-level by definition. EXIF
+                ;; GPSAltitude is not so simple: many DJI models write the
+                ;; height above the TAKE-OFF point into that tag instead. Both
+                ;; readings are computed and the physically possible one wins
+                ;; - a drone cannot fly below the ground, and cannot legally
+                ;; fly above 400 ft AGL.
+                (setq absft (* absm ddg-m->ft)
+                      hmsl  (- absft gft)          ; if it is above sea level
+                      hrel  absft                  ; if it is above take-off
+                      okmsl (and (> hmsl 1.0) (<= hmsl 400.0))
+                      okrel (and (> hrel 1.0) (<= hrel 400.0)))
+                (cond
+                  ((or altmsl (and okmsl (not okrel)))
+                   (setq hraw hmsl mode "MSL"))
+                  ((and okrel (not okmsl))
+                   (setq hraw hrel mode "REL"))
+                  (okmsl                            ; both possible - prefer MSL
+                   (setq hraw hmsl mode "MSL?"))
+                  (t (setq hraw nil)))
+                (setq hsel (if hraw (float (ddg-round hraw))))
+                (cond
+                  ((or (null hsel) (<= hsel 0.0))
+                   (ddg-fail "ALTITUDE DOES NOT MAKE SENSE"
+                     (list (strcat "Photo altitude    : " (ddg-n1 absft) " ft")
+                           (strcat "Ground elevation  : " (ddg-n1 gft) " ft")
+                           ""
+                           "Neither reading of that altitude is possible:"
+                           (strcat "  as above sea level -> " (ddg-n1 hmsl)
+                                   " ft above ground")
+                           (strcat "  as above take-off  -> " (ddg-n1 hrel) " ft")
+                           ""
+                           "Nothing was saved or drawn. Set H with DDSET, or"
+                           "back-solve it with DDCAL."))
+                   (setq done T))
+                  (t
+                   (if (= mode "REL")
+                     (progn
+                       (princ "\n  The photo altitude is BELOW the ground here, so it is not a")
+                       (princ "\n  sea-level figure - it is the height above the TAKE-OFF point.")
+                       (princ (strcat "\n  Using it directly:  H = " (ddg-n1 hsel) " ft"))
+                       (princ "\n  (true if the drone took off at deck level - see DDALT/DDCAL)"))
+                     (progn
+                       (if (= mode "MSL?")
+                         (princ "\n  NOTE: both readings of the altitude are possible; taking it as sea-level."))
+                       (princ (strcat "\n  " (ddg-n1 absft) " - " (ddg-n1 gft) " = "
+                                      (ddg-n1 hraw) " ft  ->  H = " (ddg-n1 hsel) " ft"))))
+                   (setq stage 5))))
+
+               ;; 6) place the report in the drawing
+               ((= stage 5)
+                (setq ht (ddg-txt-height T))
+                (if (eq ht 'DDG-BACK)
+                  (setq stage (if manual 3 1))
+                  (progn
+                    ;; the middle lines say which reading of the altitude
+                    ;; was used, so the drawing carries its own
+                    ;; justification
+                    (setq lines
+                      (if (= mode "REL")
+                        (list
+                          (strcat "GPS position: " (ddg-n7 lat) ", " (ddg-n7 lon))
+                          (strcat "Drone altitude: " (ddg-n1 absft) " ft above take-off")
+                          (strcat "Ground elevation (MSL): " (ddg-n1 gft) " ft   [" gsrc "]")
+                          "Photo altitude is not sea-level referenced - used as-is"
+                          (strcat "Height above grade: " (itoa (fix hsel)) " ft"))
+                        (list
+                          (strcat "GPS position: " (ddg-n7 lat) ", " (ddg-n7 lon))
+                          (strcat "Drone altitude (MSL): " (ddg-n1 absft) " ft")
+                          (strcat "Ground elevation (MSL): " (ddg-n1 gft) " ft   [" gsrc "]")
+                          (strcat (ddg-n1 absft) " - " (ddg-n1 gft) " = " (ddg-n1 hraw) " ft")
+                          (strcat "Height above grade: " (itoa (fix hsel)) " ft"))))
+                    (setq mark (entlast))
+                    (setq placed (ddg-place-text pt lines ht (getvar "CLAYER") (getvar "TEXTSTYLE")))
+                    (if (null placed)
+                      (ddg-fail "COULD NOT CREATE THE ANNOTATION TEXT"
+                        (list "entmake failed partway through - check whether"
+                              "the current layer is locked or frozen, or the"
+                              "current text style is invalid."
+                              ""
+                              "H is still valid below - you can still save it.")))
+                    (setq stage 6))))
+
+               ;; 7) save H for DDFIX - Back takes the placed report
+               ;; down again and re-asks the text height
+               (t
+                (initget "Yes No Back Undo")
+                (setq ans (getkword (strcat "\nSave H = " (ddg-n1 hsel)
+                                            " ft for DDFIX? [Yes/No/Back] <Yes>: ")))
+                (if (null ans) (setq ans "Yes"))
+                (cond
+                  ((member ans '("Back" "Undo"))
+                   (ddg-eraseafter mark)
+                   (setq stage 5))
+                  ((= ans "Yes")
+                   (ddg-put "H" hsel)
+                   (ddg-put "GPS_LAT" lat)
+                   (ddg-put "GPS_LON" lon)
+                   (ddg-put "GPS_GROUND" gft)
+                   (ddg-put "GPS_SRC" gsrc)
+                   (princ (strcat "\nSaved drone height  H = " (ddg-n1 hsel)
+                                  " ft   (DDFIX now offers it as the default)"))
+                   (princ (strcat "\nDistortion rate: ~" (rtos (/ 100.0 hsel) 2 3)
+                                  "% size change per unit of height."))
+                   (setq done T))
+                  (t (princ "\nH unchanged.") (setq done T))))))))))))
+  (princ))
+
+;; ---------------------------------------------------------------------------
+;;  DDELEV : ground elevation at a typed latitude / longitude
+;; ---------------------------------------------------------------------------
+(defun c:DDELEV ( / lat lon g stage done)
+  ;; staged: Back (or Undo) at the longitude re-asks the latitude
+  (setq stage 1 done nil)
+  (while (not done)
+    (if (= stage 1)
+      (progn
+        (setq lat (getreal "\nLatitude  (decimal degrees, negative = South): "))
+        (setq stage 2))
+      (progn
+        (initget "Back Undo")
+        (setq lon (getreal "\nLongitude (decimal degrees, negative = West) [Back]: "))
+        (if (= (type lon) 'STR) (setq stage 1) (setq done T)))))
+  (cond
+    ((or (null lat) (null lon)) (princ "\nNeed both numbers."))
+    ((or (> (abs lat) 90.0) (> (abs lon) 180.0))
+     (princ "\nThat is not a valid latitude / longitude."))
+    (t
+     (princ "\nLooking up ground elevation ...")
+     (setq g (ddg-ground-elev lat lon))
+     (if (car g)
+       (princ (strcat "\nGround elevation: " (ddg-n1 (car g)) " ft   ("
+                      (ddg-n1 (/ (car g) ddg-m->ft)) " m)   [" (cadr g) "]"))
+       (ddg-fail "ELEVATION LOOKUP FAILED"
+         (append
+           (list (strcat "No ground elevation could be fetched for "
+                         (ddg-n7 lat) ", " (ddg-n7 lon) ":")
+                 "")
+           (cadr g)
+           (list ""
+                 "Check the internet connection / firewall, then try again."))))))
+  (princ))
+
+;; ---------------------------------------------------------------------------
+;;  DDTEST : why can't this PC read the photo?
+;;  Walks every step DDGPS uses and reports what your machine actually allows.
+;;  Run this once on a file that fails and send the report.
+;; ---------------------------------------------------------------------------
+(defun c:DDTEST ( / file out fsz r pr cu tmp lst n m)
+  (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
+  (cond
+    ((null file) (princ "\nNo file selected."))
+    (t
+     (setq out (list (strcat "File: " file) ""))
+     ;; --- what AutoCAD itself can see ---
+     (setq fsz (vl-file-size file))
+     (setq out (append out
+       (list (strcat "AutoCAD can find it   : " (ddg-yn (findfile file)))
+             (strcat "Size on disk          : "
+                     (if fsz (strcat (itoa fsz) " bytes") "unknown"))
+             "")))
+     ;; --- ADODB, step by step ---
+     (setq r (ddg-adodb-read file 262144 nil))
+     (setq out (append out
+       (if (car r)
+         (list (strcat "ADODB.Stream read     : OK, "
+                       (itoa (length (car r))) " bytes"))
+         (list "ADODB.Stream read     : FAILED"
+               (strcat "   failed trying to " (cadr r))
+               (if (caddr r) (strcat "   Windows said: " (caddr r)) "")))))
+     (if (car r) (setq lst (car r)))
+     ;; --- local copy ---
+     (setq tmp (ddg-local-copy file))
+     (setq out (append out
+       (list (strcat "Copy to local temp    : " (ddg-yn tmp)))))
+     (if (and (null lst) tmp)
+       (progn
+         (setq r (ddg-adodb-read tmp 262144 nil))
+         (setq out (append out
+           (list (strcat "ADODB on the copy     : "
+                         (if (car r) "OK" "FAILED")))))
+         (if (car r) (setq lst (car r)))))
+     ;; --- certutil hex dump (works where ADODB is blocked) ---
+     (setq cu (ddg-certutil-read (if tmp tmp file) 262144))
+     (setq out (append out
+       (list (strcat "certutil hex read     : "
+                     (if cu (strcat "OK, " (itoa (length cu)) " bytes") "FAILED")))))
+     (if cu (setq out (append out
+       (list (strcat "   first bytes        : " (ddg-firstbytes cu 8)
+                     (if (ddg-looks-jpeg cu)
+                       "   (valid JPEG start)"
+                       "   (NOT a JPEG start - these bytes are wrong)"))))))
+     (if (null lst) (setq lst cu))
+     ;; --- plain AutoLISP read ---
+     (setq pr (ddg-plain-read (if tmp tmp file) 262144))
+     (setq n (length (car pr)))
+     (setq out (append out
+       (list (strcat "Plain AutoLISP read   : "
+                     (if (car pr) (strcat "OK, " (itoa n) " bytes") "FAILED")
+                     (if (cadr pr) "  (stopped early at a 0x1A byte)" "")))))
+     (if (car pr) (setq out (append out
+       (list (strcat "   first bytes        : " (ddg-firstbytes (car pr) 8)
+                     (if (ddg-looks-jpeg (car pr))
+                       "   (valid JPEG start)"
+                       "   (NOT a JPEG start)"))))))
+     (if (null lst) (setq lst (car pr)))
+     ;; --- does the file even carry metadata? ---
+     (setq out (append out (list "")))
+     (if lst
+       (progn
+         (setq m (ddg-read-meta lst))
+         (setq out (append out
+           (list (strcat "XMP packet in it      : "
+                         (ddg-yn (> (strlen (ddg-xmp-text lst)) 0)))
+                 (strcat "EXIF block in it      : "
+                         (ddg-yn (ddg-find-tiff lst)))
+                 (strcat "GPS position found    : "
+                         (ddg-yn (and (nth 1 m) (nth 2 m))))
+                 (strcat "   E/W recorded?      : " (ddg-yn (nth 5 m))
+                         (if (and (nth 2 m) (null (nth 5 m)))
+                           "  (sign unknown - DDGPS will ask)" ""))
+                 (strcat "Altitude found        : "
+                         (ddg-yn (nth 0 m)))))))
+       (setq out (append out (list "Could not get ANY bytes out of this file."))))
+     (ddg-report "DDGPS READ TEST" out)))
+  (princ))
+
+(princ "\nDrone Height from GPS v2.6 loaded  (pick a photo, click a point, place the height report).")
+(princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
+(princ)

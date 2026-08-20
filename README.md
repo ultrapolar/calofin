@@ -8,7 +8,8 @@ checkout.
 
 ```
 blender/    Blender add-ons (DXF import/export, mesh tools)
-lisp/       AutoLISP routines, current static-named files
+lisp/       AutoLISP routines, current static-named files (standalone)
+shared/     The loaded-together build: CALOFIN-LIB + every tool on it
 releases/   Dated REV-stamped twins of the lisp/ files, flat (no subfolders)
 ui/         The Calofin AutoCAD palette (VB.NET) and its LISP glue
 tools/      Shared dev tooling (release stamping, static checks)
@@ -139,6 +140,19 @@ was probably named) it prints how far off the stock is, loudly, but
 still places anchored - nothing is erased until the new geometry is
 placed, and the whole run is one `U`.
 
+## Shared build (`shared/`)
+
+The same tools built against one common helper library instead of each
+embedding its own copies. APPLOAD `shared/CALOFIN-LOADER.lsp` and
+every command loads in one go - the folder assumes everything is
+loaded together, so a shared tool file is not loadable on its own.
+`shared/CALOFIN-LIB.lsp` holds the shared helpers under the `cal:`
+prefix; the per-tool files are twins of their `lisp/` sources minus
+the helpers the library now provides. See `shared/README.md` for the
+helper roster and `STANDARDS.md` section 6 for the rules (including
+how `lisp/` changes get mirrored here). The standalone files in
+`lisp/` are unchanged and still load alone, one file at a time.
+
 ## Releases (`releases/`)
 
 Some tools distribute a dated, REV-numbered twin of their static file
@@ -230,7 +244,12 @@ python3 tests/test_mesh_layers.py     # Merlin layered export
 python3 tests/test_dewrangler.py      # mesh dewrangler
 python3 tests/test_pool_form.py       # palette <-> POOL (currently failing, see above)
 python3 tests/test_spa_form.py        # palette <-> SPA (currently failing, see above)
+python3 tests/test_shared.py          # shared/ build - everything loads together
 ```
+
+Setting `CALOFIN_LISP_ROOT=shared` reruns any VM-driven test above
+against the `shared/` build instead of `lisp/`, as a behavioral-parity
+check.
 
 ## License
 
