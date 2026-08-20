@@ -88,7 +88,7 @@ Public NotInheritable Class CommandCatalog
         }},
         {"Points", {
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular points"),
-            New Entry("TYDRN", "Tydrn", "Tydrn routine"),
+            New Entry("DRONE", "Drone", "Drone cleanup routine"),
             New Entry("CORNERSTP", "Corner step", "Corner step"),
             New Entry("HEMISTEP", "Hemi step", "Hemi step"),
             New Entry("WCALST", "Wcalst", "Wcalst routine"),

@@ -1,9 +1,9 @@
 ;;; ===================================================================
-;;; TYDRN.LSP                                          AutoCAD 2018
+;;; DRONE.LSP                                          AutoCAD 2018
 ;;; -------------------------------------------------------------------
-;;; Command: TYDRN
+;;; Command: DRONE
 ;;;
-;;; Drawing cleanup routine that applies three fixes in one pass:
+;;; Drawing cleanup routine that applies five fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
 ;;;              switched to style ROMANC at height 4.5, with color,
@@ -12,27 +12,37 @@
 ;;;              are prompted to select text; pressing Enter at that
 ;;;              prompt processes ALL text in the drawing.
 ;;;
-;;;   2. POOL POINTS - every POINT entity on layer POOL is moved to
-;;;              layer POINTS with color / linetype / lineweight all
-;;;              set to BYLAYER (POINTS is magenta, so they show pink).
+;;;   2. POOL / SPA POINTS - every POINT entity on layer POOL or on
+;;;              layer SPA is moved to layer POINTS with color /
+;;;              linetype / lineweight all set to BYLAYER (POINTS is
+;;;              magenta, so they show pink).  The pool's points and
+;;;              the spa's share the one POINTS layer.
 ;;;
-;;;   3. ANCHOR POINTS - every POINT entity on layer ANCHORS is given
+;;;   3. SPA PERIMETER - the spa outline - lines, arcs, circles,
+;;;              ellipses, polylines and splines on layer SPA - is
+;;;              moved to layer POOL, so the pool perimeter and the
+;;;              spa perimeter share it, and forced to BYLAYER so the
+;;;              moved geometry picks up POOL's own appearance.
+;;;              Points are swept off SPA by step 2 first, so only
+;;;              the outline is left to move.
+;;;
+;;;   4. ANCHOR POINTS - every POINT entity on layer ANCHORS is given
 ;;;              an explicit magenta (ACI 6) color - the same pink as
 ;;;              the points - but stays on the ANCHORS layer.
 ;;;
-;;;   4. ORIENT - after the conversion the processed text is rotated
+;;;   5. ORIENT - after the conversion the processed text is rotated
 ;;;              flat so it reads west -> east, right side up
 ;;;              (absolute angle 0).  Each text pivots about its own
 ;;;              insertion point - the labels share that point in
 ;;;              space with the POINT they belong to - so every label
 ;;;              stays anchored to its point.  Set
-;;;              *tydrn-orient-angle* to nil to only flip upside-down
+;;;              *drone-orient-angle* to nil to only flip upside-down
 ;;;              text instead ("Most readable").
 ;;;
-;;; The ROMANC text style and the POINTS layer are created if they do
-;;; not already exist.  Locked layers are unlocked for the duration of
-;;; the command and re-locked afterwards.  The whole run is wrapped in
-;;; a single undo group.
+;;; The ROMANC text style and the POINTS and POOL layers are created
+;;; if they do not already exist.  Locked layers are unlocked for the
+;;; duration of the command and re-locked afterwards.  The whole run
+;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
 (vl-load-com)
@@ -40,14 +50,18 @@
 ;; ---------------------------------------------------------------
 ;; Configuration
 ;; ---------------------------------------------------------------
-(setq *tydrn-text-style*  "ROMANC"
-      *tydrn-text-font*   "romanc.shx"
-      *tydrn-text-height* 4.5
-      *tydrn-pool-layer*  "POOL"
-      *tydrn-dest-layer*  "POINTS"
-      *tydrn-anch-layer*  "ANCHORS"
-      *tydrn-pink*        6           ; ACI 6 = magenta / pink
-      *tydrn-orient-angle* 0.0)       ; absolute text angle in degrees
+(setq *drone-text-style*  "ROMANC"
+      *drone-text-font*   "romanc.shx"
+      *drone-text-height* 4.5
+      *drone-pt-layers*   '("POOL" "SPA")   ; POINTs found on these...
+      *drone-dest-layer*  "POINTS"          ; ...move to this one
+      *drone-perim-src*   '("SPA")          ; outlines found on these...
+      *drone-perim-layer* "POOL"            ; ...move to this one
+      *drone-perim-types* "LINE,ARC,CIRCLE,ELLIPSE,LWPOLYLINE,POLYLINE,SPLINE"
+      *drone-perim-color* 4          ; ACI 4 = cyan, POOL's own color
+      *drone-anch-layer*  "ANCHORS"
+      *drone-pink*        6           ; ACI 6 = magenta / pink
+      *drone-orient-angle* 0.0)       ; absolute text angle in degrees
                                       ; (0 = read west->east, right
                                       ; side up); nil = only flip
                                       ; upside-down text ("Most
@@ -58,7 +72,7 @@
 ;; ---------------------------------------------------------------
 
 ;; Make sure the target text style exists.
-(defun tydrn:ensure-style (name font)
+(defun drone:ensure-style (name font)
   (if (null (tblsearch "STYLE" name))
     (entmake
       (list '(0 . "STYLE")
@@ -75,7 +89,7 @@
   (tblsearch "STYLE" name))
 
 ;; Make sure the target layer exists.
-(defun tydrn:ensure-layer (name color)
+(defun drone:ensure-layer (name color)
   (if (null (tblsearch "LAYER" name))
     (entmake
       (list '(0 . "LAYER")
@@ -89,7 +103,7 @@
 
 ;; Unlock every layer in NAMES that is currently locked and return the
 ;; list of layer objects that were unlocked (so they can be re-locked).
-(defun tydrn:unlock-layers (names doc / layers obj unlocked)
+(defun drone:unlock-layers (names doc / layers obj unlocked name)
   (setq layers (vla-get-Layers doc))
   (foreach name names
     (if (and name (tblsearch "LAYER" name))
@@ -101,11 +115,11 @@
             (setq unlocked (cons obj unlocked)))))))
   unlocked)
 
-(defun tydrn:relock-layers (objs)
+(defun drone:relock-layers (objs / obj)
   (foreach obj objs (vla-put-Lock obj :vlax-true)))
 
 ;; Reset color / linetype / lineweight of a vla-object to BYLAYER.
-(defun tydrn:force-bylayer (obj)
+(defun drone:force-bylayer (obj)
   (vla-put-Color obj acByLayer)
   (vla-put-Linetype obj "ByLayer")
   (vla-put-Lineweight obj acLnWtByLayer))
@@ -114,24 +128,31 @@
 ;; property pivots the text about its insertion/alignment point; the
 ;; point labels share that point in space with the POINT entity they
 ;; belong to, so each label swings around its own point and stays
-;; anchored to it.  With *tydrn-orient-angle* set, the text is turned
+;; anchored to it.  With *drone-orient-angle* set, the text is turned
 ;; to that absolute angle; with it nil, only upside-down text (angle
 ;; in (90, 270] degrees) is flipped 180.
-(defun tydrn:orient (obj / cur target)
+(defun drone:orient (obj / cur target)
   (setq cur (rem (vla-get-Rotation obj) (* 2.0 pi)))   ; radians
   (if (< cur 0.0) (setq cur (+ cur (* 2.0 pi))))
   (setq target
-        (if *tydrn-orient-angle*
-          (* pi (/ *tydrn-orient-angle* 180.0))
+        (if *drone-orient-angle*
+          (* pi (/ *drone-orient-angle* 180.0))
           (if (and (> cur (* 0.5 pi)) (<= cur (* 1.5 pi)))
             (rem (+ cur pi) (* 2.0 pi))
             cur)))
   (if (not (equal cur target 1e-8))
     (vla-put-Rotation obj target)))
 
+;; Join layer names into the comma-separated form an ssget filter
+;; wants: ("POOL" "SPA") -> "POOL,SPA".
+(defun drone:csv (names / out name)
+  (foreach name names
+    (setq out (if out (strcat out "," name) name)))
+  out)
+
 ;; Collect the distinct layer names used by the entities of a
 ;; selection set.
-(defun tydrn:sel-layers (ss / i lay result)
+(defun drone:sel-layers (ss / i lay result)
   (if ss
     (progn
       (setq i 0)
@@ -146,32 +167,33 @@
 ;; Error handler - restore locked layers and close the undo group
 ;; even if the user hits Esc or something fails mid-run.
 ;; ---------------------------------------------------------------
-(defun tydrn:error (msg)
-  (if *tydrn-unlocked* (tydrn:relock-layers *tydrn-unlocked*))
-  (setq *tydrn-unlocked* nil)
-  (if *tydrn-doc* (vla-EndUndoMark *tydrn-doc*))
+(defun drone:error (msg)
+  (if *drone-unlocked* (drone:relock-layers *drone-unlocked*))
+  (setq *drone-unlocked* nil)
+  (if *drone-doc* (vla-EndUndoMark *drone-doc*))
   (if (and msg (/= (strcase msg t) "function cancelled"))
-    (princ (strcat "\nTYDRN error: " msg)))
-  (if *tydrn-old-error* (setq *error* *tydrn-old-error*))
+    (princ (strcat "\nDRONE error: " msg)))
+  (if *drone-old-error* (setq *error* *drone-old-error*))
   (princ))
 
 ;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
-(defun C:TYDRN (/ ss-text ss-pool ss-anch i ent obj
-                  n-text n-pool n-anch)
+(defun c:DRONE (/ ss-text ss-pt ss-perim ss-anch i ent obj
+                  n-text n-pt n-perim n-anch)
 
-  (setq *tydrn-old-error* *error*
-        *error*           tydrn:error
-        *tydrn-doc*       (vla-get-ActiveDocument (vlax-get-acad-object))
-        *tydrn-unlocked*  nil
-        n-text 0  n-pool 0  n-anch 0)
+  (setq *drone-old-error* *error*
+        *error*           drone:error
+        *drone-doc*       (vla-get-ActiveDocument (vlax-get-acad-object))
+        *drone-unlocked*  nil
+        n-text 0  n-pt 0  n-perim 0  n-anch 0)
 
-  (vla-StartUndoMark *tydrn-doc*)
+  (vla-StartUndoMark *drone-doc*)
 
-  ;; Make sure the style and destination layer are available.
-  (tydrn:ensure-style *tydrn-text-style* *tydrn-text-font*)
-  (tydrn:ensure-layer *tydrn-dest-layer* *tydrn-pink*)
+  ;; Make sure the style and both destination layers are available.
+  (drone:ensure-style *drone-text-style* *drone-text-font*)
+  (drone:ensure-layer *drone-dest-layer* *drone-pink*)
+  (drone:ensure-layer *drone-perim-layer* *drone-perim-color*)
 
   ;; ------------------------------------------------------------
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
@@ -185,19 +207,26 @@
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
   ;; ------------------------------------------------------------
-  ;; 2/3. Points on POOL and ANCHORS, anywhere in the drawing
+  ;; 2/3/4. Points on POOL / SPA, the spa outline, and the ANCHORS
+  ;;        points - anywhere in the drawing
   ;; ------------------------------------------------------------
-  (setq ss-pool (ssget "_X" (list '(0 . "POINT") (cons 8 *tydrn-pool-layer*)))
-        ss-anch (ssget "_X" (list '(0 . "POINT") (cons 8 *tydrn-anch-layer*))))
+  (setq ss-pt    (ssget "_X" (list '(0 . "POINT")
+                                   (cons 8 (drone:csv *drone-pt-layers*))))
+        ss-perim (ssget "_X" (list (cons 0 *drone-perim-types*)
+                                   (cons 8 (drone:csv *drone-perim-src*))))
+        ss-anch  (ssget "_X" (list '(0 . "POINT")
+                                   (cons 8 *drone-anch-layer*))))
 
   ;; Unlock every layer we are about to touch.
-  (setq *tydrn-unlocked*
-        (tydrn:unlock-layers
-          (append (list *tydrn-pool-layer*
-                        *tydrn-anch-layer*
-                        *tydrn-dest-layer*)
-                  (tydrn:sel-layers ss-text))
-          *tydrn-doc*))
+  (setq *drone-unlocked*
+        (drone:unlock-layers
+          (append *drone-pt-layers*
+                  *drone-perim-src*
+                  (list *drone-perim-layer*
+                        *drone-anch-layer*
+                        *drone-dest-layer*)
+                  (drone:sel-layers ss-text))
+          *drone-doc*))
 
   ;; Text -> ROMANC / 4.5 / BYLAYER
   (if ss-text
@@ -206,22 +235,34 @@
       (while (< i (sslength ss-text))
         (setq ent (ssname ss-text i)
               obj (vlax-ename->vla-object ent))
-        (vla-put-StyleName obj *tydrn-text-style*)
-        (vla-put-Height obj *tydrn-text-height*)
-        (tydrn:force-bylayer obj)
+        (vla-put-StyleName obj *drone-text-style*)
+        (vla-put-Height obj *drone-text-height*)
+        (drone:force-bylayer obj)
         (setq n-text (1+ n-text)
               i      (1+ i)))))
 
-  ;; POOL points -> POINTS layer, everything BYLAYER
-  (if ss-pool
+  ;; POOL / SPA points -> POINTS layer, everything BYLAYER
+  (if ss-pt
     (progn
       (setq i 0)
-      (while (< i (sslength ss-pool))
-        (setq obj (vlax-ename->vla-object (ssname ss-pool i)))
-        (vla-put-Layer obj *tydrn-dest-layer*)
-        (tydrn:force-bylayer obj)
-        (setq n-pool (1+ n-pool)
-              i      (1+ i)))))
+      (while (< i (sslength ss-pt))
+        (setq obj (vlax-ename->vla-object (ssname ss-pt i)))
+        (vla-put-Layer obj *drone-dest-layer*)
+        (drone:force-bylayer obj)
+        (setq n-pt (1+ n-pt)
+              i    (1+ i)))))
+
+  ;; Spa outline -> POOL layer, everything BYLAYER so it takes POOL's
+  ;; color and linetype rather than carrying the spa layer's over.
+  (if ss-perim
+    (progn
+      (setq i 0)
+      (while (< i (sslength ss-perim))
+        (setq obj (vlax-ename->vla-object (ssname ss-perim i)))
+        (vla-put-Layer obj *drone-perim-layer*)
+        (drone:force-bylayer obj)
+        (setq n-perim (1+ n-perim)
+              i       (1+ i)))))
 
   ;; ANCHORS points -> pink (ACI 6), same layer
   (if ss-anch
@@ -229,12 +270,12 @@
       (setq i 0)
       (while (< i (sslength ss-anch))
         (setq obj (vlax-ename->vla-object (ssname ss-anch i)))
-        (vla-put-Color obj *tydrn-pink*)
+        (vla-put-Color obj *drone-pink*)
         (setq n-anch (1+ n-anch)
               i      (1+ i)))))
 
   ;; ------------------------------------------------------------
-  ;; 4. Orient the converted text to read west -> east, right side
+  ;; 5. Orient the converted text to read west -> east, right side
   ;;    up, each label pivoting about its insertion point (= the
   ;;    point it labels).
   ;; ------------------------------------------------------------
@@ -243,24 +284,26 @@
       (setq i 0)
       (while (< i (sslength ss-text))
         (vl-catch-all-apply
-          'tydrn:orient
+          'drone:orient
           (list (vlax-ename->vla-object (ssname ss-text i))))
         (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
-  (tydrn:relock-layers *tydrn-unlocked*)
-  (setq *tydrn-unlocked* nil)
-  (vla-EndUndoMark *tydrn-doc*)
-  (setq *error* *tydrn-old-error*)
+  (drone:relock-layers *drone-unlocked*)
+  (setq *drone-unlocked* nil)
+  (vla-EndUndoMark *drone-doc*)
+  (setq *error* *drone-old-error*)
 
-  (princ (strcat "\nTYDRN done: "
-                 (itoa n-text) " text -> " *tydrn-text-style*
-                 " h" (rtos *tydrn-text-height* 2 2)
+  (princ (strcat "\nDRONE done: "
+                 (itoa n-text) " text -> " *drone-text-style*
+                 " h" (rtos *drone-text-height* 2 2)
                  " oriented W->E, "
-                 (itoa n-pool) " point(s) POOL -> " *tydrn-dest-layer*
+                 (itoa n-pt) " point(s) -> " *drone-dest-layer*
+                 ", "
+                 (itoa n-perim) " perimeter -> " *drone-perim-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
   (princ))
 
-(princ "\nTYDRN.LSP loaded.  Type TYDRN to run.")
+(princ "\nDRONE.LSP loaded.  Type DRONE to run.")
 (princ)
