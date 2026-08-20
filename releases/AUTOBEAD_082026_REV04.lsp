@@ -19,10 +19,12 @@
 ;;; ends - are recognized automatically and always bead full length.
 ;;;
 ;;; After the direction click, AUTOBEAD asks whether the side walls are
-;;; beaded.  Answer Yes and click each step (tread) that has beaded side
-;;; walls: the wall bead is then kept only across those treads' spans, cut
-;;; flush at the step lines, and removed everywhere else.  Answer No to
-;;; bead every selected wall full length.
+;;; beaded.  Answer Yes and click each step that has beaded side walls:
+;;; each click assumes its breakline - the next step line from the click
+;;; in the direction the bead is heading (toward the direction click).
+;;; The wall bead is cut flush at that line, kept on the clicked side,
+;;; and removed everywhere else.  Answer No to bead every selected wall
+;;; full length.
 ;;;
 ;;; The finished beads land on the "Bead Track" layer.  The original pool
 ;;; geometry is never modified, and the whole run undoes with one U.
@@ -38,7 +40,7 @@
 ;;;   Both report the same revision, so AUTOBEADVER tells you what someone
 ;;;   is actually running regardless of which filename they loaded.  The
 ;;;   filename's REV## is the version below with the dot dropped
-;;;   (v0.3 -> REV03).  Regenerate the dated copy with
+;;;   (v0.4 -> REV04).  Regenerate the dated copy with
 ;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
 ;;;   will drift.
 ;;; ==========================================================================
@@ -47,8 +49,8 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.3"      ; revision stamp; the dated twin is
-                                     ; named for it (v0.3 -> REV03)
+(setq *autobead-version* "v0.4"      ; revision stamp; the dated twin is
+                                     ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
       *autobead-filter* "POOL*"      ; selectable source layers
@@ -182,18 +184,52 @@
           (setq hit T)))))
   hit)
 
-(defun autobead-sig (pt steps / res a b cr)
-  ;; Compartment signature of pt: which side of each step line it is on.
-  ;; The step lines cut the pool into compartments (treads); two points with
-  ;; equal signatures are in the same compartment.
-  (setq res '())
-  (foreach s steps
-    (setq a  (car s)
-          b  (cadr s)
-          cr (- (* (- (car b) (car a)) (- (cadr pt) (cadr a)))
-                (* (- (cadr b) (cadr a)) (- (car pt) (car a)))))
-    (setq res (cons (if (minusp cr) -1 1) res)))
-  (reverse res))
+(defun autobead-dot (u v)
+  ;; 2D dot product.
+  (+ (* (car u) (car v)) (* (cadr u) (cadr v))))
+
+(defun autobead-side (pt a b / cr)
+  ;; Which side of line a->b the point is on: -1 or 1.
+  (setq cr (- (* (- (car b) (car a)) (- (cadr pt) (cadr a)))
+              (* (- (cadr b) (cadr a)) (- (car pt) (car a)))))
+  (if (minusp cr) -1 1))
+
+(defun autobead-breakline (p dirw steplines / h len far best bestd i s a b
+                                              ab abl x t1 t2)
+  ;; The assumed breakline for a clicked step: cast a ray from the click p
+  ;; toward the direction click dirw (the way the bead is heading) and
+  ;; return the index of the FIRST step line it meets, or nil.  Step lines
+  ;; are given 6" of slop past their drawn ends.
+  (setq h   (list (- (car dirw) (car p)) (- (cadr dirw) (cadr p)) 0.0)
+        len (distance '(0.0 0.0 0.0) h))
+  (if (< len 1e-6)
+    nil
+    (progn
+      (setq h     (mapcar '(lambda (v) (/ v len)) h)
+            far   (mapcar '+ p (mapcar '(lambda (v) (* v 1e6)) h))
+            best  nil
+            bestd 1e99
+            i     0)
+      (foreach s steplines
+        (setq a (car s)
+              b (cadr s)
+              x (inters p far a b nil))       ; both extended; filter below
+        (if x
+          (progn
+            (setq ab  (mapcar '- b a)
+                  abl (distance a b)
+                  t1  (autobead-dot (mapcar '- x p) h)
+                  t2  (if (> abl 1e-6)
+                        (/ (autobead-dot (mapcar '- x a) ab) abl)
+                        -1e99))
+            ;; ahead of the click, within the (padded) step segment,
+            ;; and nearer than anything found so far
+            (if (and (> t1 0.5)
+                     (>= t2 -6.0) (<= t2 (+ abl 6.0))
+                     (< t1 bestd))
+              (setq best i bestd t1))))
+        (setq i (1+ i)))
+      best)))
 
 (defun autobead-ixpoints (bead step / o1 o2 v a l res)
   ;; WCS points where 'step' (extended to infinity) crosses 'bead'.
@@ -253,7 +289,8 @@
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
-                         perimbeads sigs bps pieces mp kept culled filtered)
+                         perimbeads bps pieces mp kept culled filtered
+                         misses brks dirw hit p)
 
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
@@ -355,35 +392,54 @@
            (setq beadcount (1+ beadcount)))
          (setq failcount (1+ failcount))))
 
-     ;; 5) side walls: keep wall bead only across the clicked treads.
-     ;;    Break each wall bead where the step lines cross it, then keep a
-     ;;    piece only if its midpoint shares a compartment with a clicked
-     ;;    tread point.  Step-face beads are never touched.
-     (setq kept 0 culled 0 filtered nil)
+     ;; 5) side walls: each clicked step ASSUMES its breakline - the next
+     ;;    step line from the click in the direction the bead is heading
+     ;;    (toward the direction click).  Wall bead is broken at those
+     ;;    lines and kept only on the clicked side of them; everything
+     ;;    past a breakline, and every unclicked span, is removed.
+     ;;    Step-face beads are never touched.
+     (setq kept 0 culled 0 filtered nil misses 0 brks '())
      (if (and sidewalls treadpts steplines perimbeads)
        (progn
-         (setq filtered T
-               sigs (mapcar '(lambda (p) (autobead-sig p steplines))
-                            treadpts))
-         (foreach e perimbeads
-           (setq bps '())
-           (foreach c stepchains
-             (if (entget c)
-               (setq bps (append bps (autobead-ixpoints e c)))))
-           (setq pieces (list e))
-           (foreach g bps
-             (setq pieces (autobead-break-at pieces g)))
-           (foreach c pieces
-             (if (entget c)
-               (progn
-                 (setq mp (autobead-midpt-of c))
-                 (if (and mp (member (autobead-sig mp steplines) sigs))
-                   (setq kept (1+ kept))
+         (setq dirw (trans dirpt 1 0))
+         (foreach p treadpts
+           (setq hit (autobead-breakline p dirw steplines))
+           (if hit
+             (setq brks (cons (list (nth hit stepchains)
+                                    (car (nth hit steplines))
+                                    (cadr (nth hit steplines))
+                                    (autobead-side p
+                                      (car (nth hit steplines))
+                                      (cadr (nth hit steplines))))
+                              brks))
+             (setq misses (1+ misses))))
+         (if brks
+           (progn
+             (setq filtered T)
+             (foreach e perimbeads
+               (setq bps '())
+               (foreach c brks
+                 (if (entget (car c))
+                   (setq bps (append bps (autobead-ixpoints e (car c))))))
+               (setq pieces (list e))
+               (foreach g bps
+                 (setq pieces (autobead-break-at pieces g)))
+               (foreach c pieces
+                 (if (entget c)
                    (progn
-                     (entdel c)
-                     (setq culled (1+ culled))))))))
-         ;; recount: step beads + surviving wall pieces
-         (setq beadcount (+ (- beadcount (length perimbeads)) kept))))
+                     (setq mp (autobead-midpt-of c))
+                     (if (and mp
+                              (vl-some
+                                '(lambda (k)
+                                   (= (autobead-side mp (cadr k) (caddr k))
+                                      (cadddr k)))
+                                brks))
+                       (setq kept (1+ kept))
+                       (progn
+                         (entdel c)
+                         (setq culled (1+ culled))))))))
+             ;; recount: step beads + surviving wall pieces
+             (setq beadcount (+ (- beadcount (length perimbeads)) kept))))))
 
      ;; 6) discard the temporary chains
      (foreach c chains
@@ -405,10 +461,14 @@
                      (cond
                        (filtered
                         (strcat "beaded at " (itoa (length treadpts))
-                                " clicked step(s) -- kept " (itoa kept)
-                                " wall piece(s), removed " (itoa culled)))
+                                " clicked step(s), " (itoa (length brks))
+                                " assumed breakline(s) -- kept "
+                                (itoa kept) " wall piece(s), removed "
+                                (itoa culled)))
                        ((and sidewalls (null steplines))
                         "requested, but no step lines were recognized")
+                       ((and sidewalls treadpts)
+                        "requested, but no breakline was found toward the direction click")
                        (T "full length (not restricted)"))
                      "\n  offset asked  : " (rtos beadoff)
                      "\n  offset measured: "
@@ -418,6 +478,10 @@
                        "n/a")
                      "\n  beads created : " (itoa beadcount)
                      " on " layname))
+     (if (> misses 0)
+       (prompt (strcat "\n  " (itoa misses)
+                       " clicked step(s) found no step line toward the"
+                       " direction click - ignored.")))
      (if (> failcount 0)
        (prompt (strcat "\n  " (itoa failcount)
                        " chain(s) could not be offset -- try clicking"
@@ -540,10 +604,12 @@
       "  4. Answer: are the side walls beaded?"
       "       No  - every selected wall beads full length."
       "       Yes - click each step (tread) that has beaded side"
-      "             walls, then Enter. The wall bead is kept only"
-      "             across those treads, cut flush at the step"
-      "             lines, and removed everywhere else. Step-face"
-      "             beads always draw either way."
+      "             walls, then Enter. Each click assumes its"
+      "             breakline: the next step line from the click"
+      "             toward the direction click (the way the bead"
+      "             is heading). Wall bead is cut flush there,"
+      "             kept on your side, removed everywhere else."
+      "             Step-face beads always draw either way."
       ""
       "CURRENT SETTINGS"
       (strcat "  offset distance : " (rtos *autobead-offset*)
@@ -570,9 +636,9 @@
       "      the split is printed in the report."
       "   9. Each chain offsets successfully. Any chain that fails is"
       "      counted and reported instead of failing silently."
-      "  10. With beaded side walls, wall bead outside the clicked"
-      "      treads is removed, and the kept/removed counts are"
-      "      reported."
+      "  10. With beaded side walls, each click resolves to a"
+      "      breakline; clicks that find none are counted and"
+      "      ignored, and kept/removed pieces are reported."
       "  11. The finished bead is measured back against the chain it"
       "      came from, and the real distance is reported."
       "  12. Temporary geometry is deleted."
@@ -681,8 +747,11 @@
 
       (autobead-say
         (list "STEP 3 - the direction click"
-              "      One click decides which side every bead goes on."
-              "      Click INSIDE the pool (between the walls)."))
+              "      One click decides which side every bead goes on,"
+              "      and it is also the direction the bead is heading -"
+              "      step clicks find their breakline by looking this"
+              "      way. Click INSIDE the pool, out in the main body"
+              "      (away from the step lines)."))
       (setq dirpt (getpoint "\n      Click a side to bead toward: "))
 
       (if (null dirpt)
@@ -694,8 +763,11 @@
                     " beaded?\n"
                     "      For this demo the answer is Yes, with the top"
                     " step\n      (between the end wall and the first"
-                    " step line)\n      clicked as the beaded one - so"
-                    " wall bead survives\n      only across that tread."))
+                    " step line)\n      clicked as the beaded one. That"
+                    " click assumes its\n      breakline - the next step"
+                    " line toward your direction\n      click - so wall"
+                    " bead survives only on the click's\n      side of"
+                    " that line."))
 
           (setq made (autobead-build ss dirpt T
                        (list (list (+ x 267.0) (+ y 72.0) 0.0))))
