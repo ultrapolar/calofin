@@ -23,7 +23,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.0")
+(setq cal:*version* "v1.1")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -50,6 +50,39 @@
 (defun cal:askyn (msg dflt back / v)
   (setq v (cal:askkw msg "Yes No" "Yes/No" dflt back))
   (if (eq v 'CAL-BACK) v (= v "Yes")))
+
+;; Distance entry with the kind system of STANDARDS.md section 3:
+;; REQ required, NAX accepts NA, ZER accepts NA and zero, SUG offers a
+;; default that Enter takes.  Returns the number, nil for NA, or
+;; CAL-BACK.  (From pool:asks / spa:asks, POOL.LSP:522, with the
+;; order-sheet highlighting left behind in POOL -- a generated drawing
+;; has no entity to light up.)
+(defun cal:askdist (kind msg dflt back / v kw)
+  ;; Undo is accepted everywhere Back is, as a hidden synonym
+  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+                 (back "NA Back Undo")
+                 (t "NA")))
+  ;; REQ always rejects zero - offering Back must not loosen what
+  ;; counts as a valid measurement; ZER alone admits 0
+  (if kw
+      (initget (cond ((eq kind 'ZER) 5)
+                     ((and (eq kind 'SUG) dflt) 6)
+                     (t 7))
+               kw)
+      (initget 7))
+  (setq v (getdist
+            (strcat "\n" msg
+                    (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUG)
+                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                               " (or NA)"))
+                          (t " (or NA if not measured)"))
+                    (if back " [Back]" "")
+                    ": ")))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+        ((= (type v) 'STR) nil)               ; NA
+        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        (t v)))
 
 ;; The Treatment question of STANDARDS.md section 2: "How should
 ;; <subject> be treated?"  Returns "Square", "Radius", "Cut" or

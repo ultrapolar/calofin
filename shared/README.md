@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-CALOFIN: shared build loaded - 78 commands in one session.
+CALOFIN: shared build loaded - 80 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -58,7 +58,7 @@ happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 37 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 38 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
@@ -87,8 +87,8 @@ it cannot hit any of these problems.
 
 `CALOFIN-LIB.lsp` holds the helpers that used to be duplicated per
 tool -- the ask layer (`cal:askkw`, `cal:askyn`, `cal:ask-yn`,
-`cal:ask-yn-nav`, `cal:asktreat`, `cal:askstr`, `cal:back-word-p`,
-`cal:pause`, sentinel `CAL-BACK`), sysvar save/restore
+`cal:ask-yn-nav`, `cal:asktreat`, `cal:askdist`, `cal:askstr`,
+`cal:back-word-p`, `cal:pause`, sentinel `CAL-BACK`), sysvar save/restore
 (`cal:syssave` / `cal:sysrestore` / `cal:osup` / `cal:osdown`,
 `cal:dimstysave` / `cal:dimstyrestore`), `cal:ensure-layer` /
 `cal:layer-usable-p`, the 2-D vector set (`cal:v+ v- v* dot mid perp

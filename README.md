@@ -86,6 +86,7 @@ changing a routine.
 | --- | --- | --- |
 | `POOL`, `POOLDEMO`, `POOLVER`, `TUTORIALPOOL` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements |
 | `SPA`, `SPAVER`, `TUTORIALSPA` | `lisp/spa/` | Spa/hot-tub template - Rectangle, Octagon, Round |
+| `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool - six arcs, no corners - from an X/Y envelope, three bulge radii and three tangent radii |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
@@ -281,6 +282,7 @@ unit-testable directly:
 python3 tests/test_pool_lisp.py       # POOL geometry
 python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
 python3 tests/test_tutorialpool.py    # TUTORIALPOOL, run in lispvm
+python3 tests/test_oasis.py           # OASIS loaded and run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
 python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
