@@ -580,7 +580,6 @@ the bare keywords (section 1 rule 1).
   `abcdef:*version* "4"` (no `vN.N`), `lisp/altabcdef/ALTABCDEF.lsp`
   (none at all). The pool/spa `"MMDDYY REV##"` form stays supported
   but new tools use `vN.N`.
-* `lisp/tydrn/tydrn.lsp:161` `C:TYDRN` -- lowercase the `c:`.
 * `COVERCHECKVERSION` -> `COVERCHECKVER` (the one `...VERSION` outlier).
 * Prefix styles: 15 files use `prefix-`, `paddle--` uses a double
   hyphen; new work uses `tool:`. Existing prefixes migrate only if

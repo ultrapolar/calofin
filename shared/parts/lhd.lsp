@@ -25,7 +25,7 @@
 ;;;   * any other INSERT sitting on the POINTS layer
 ;;;   * a TEXT entity whose value reads as a number and that sits
 ;;;     within *LH-TEXT-EPS* of a point names that point's elevation
-;;;     (the TYDRN convention: elevation labels share the point's spot)
+;;;     (the DRONE convention: elevation labels share the point's spot)
 ;;;
 ;;; CLOSED OR OPEN - asked per run.  Closed is ABHD's loop engine
 ;;; unchanged: nearest-neighbour tour + 2-opt, arcs grown span by span

@@ -43,7 +43,7 @@ ORDER = [
     'lhd.lsp', 'lincheck.lsp', 'linfincheck.lsp', 'LINTXTCHK.lsp',
     'PADDLE.lsp', 'perp_points.lsp', 'cperp_points.lsp',
     'tutorial_perp_points.lsp', 'tutorial_cperp_points.lsp',
-    'STOCKCOVER.lsp', 'tydrn.lsp', 'wcalst.lsp', 'xftconv.lsp',
+    'STOCKCOVER.lsp', 'drone.lsp', 'wcalst.lsp', 'xftconv.lsp',
 ]
 #: Not carried into the shared build: the acady drawing-standards
 #: matcher is a deprecated project and stays in lisp/ only.

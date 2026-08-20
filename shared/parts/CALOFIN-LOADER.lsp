@@ -92,7 +92,7 @@
                  "lhd.lsp" "lincheck.lsp" "linfincheck.lsp" "LINTXTCHK.lsp"
                  "PADDLE.lsp" "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
-                 "STOCKCOVER.lsp" "tydrn.lsp" "wcalst.lsp" "xftconv.lsp")
+                 "STOCKCOVER.lsp" "drone.lsp" "wcalst.lsp" "xftconv.lsp")
       (cal--load m))
     (if (> cal:*missing* 0)
       (princ (strcat "\n[calofin] " (itoa cal:*missing*)
