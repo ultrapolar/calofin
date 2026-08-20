@@ -69,14 +69,27 @@
 ;;; of the six arcs, on the DIMENSION layer.  The envelope box itself is
 ;;; construction and is NOT drawn.
 ;;;
+;;; Which frame it is drawn in
+;;; -------------------------
+;;; The pool is laid out in the CURRENT UCS, so it follows the way the
+;;; user is working and the dimensions read the X and Y that were typed.
+;;; An ARC entity is the one thing that cannot follow: its centre is
+;;; stored in WORLD coordinates and its angles are measured from the
+;;; world X axis, so oasis:draw carries both across.  A UCS tilted out of
+;;; the world plan is refused outright -- the arcs would each need an
+;;; extrusion of their own, and a plan pool has no business in one.
+;;;
 ;;; What it refuses
 ;;; ---------------
 ;;; Three things make the shape impossible rather than merely ugly, and
 ;;; each is caught at the question that causes it rather than after all
 ;;; eight answers are in:
 ;;;
-;;;   * a side bulge taller than the Y bound (2 x radius > Y): it would
-;;;     push out through the top edge;
+;;;   * a side bulge that does not fit the envelope.  It is tangent to
+;;;     the bottom edge AND to its own side, so it is twice its radius
+;;;     both ways: more than half the Y bound and it pushes out through
+;;;     the top, more than half the X bound and it pushes out through
+;;;     the far side;
 ;;;   * one bulge circle wholly inside another: no tangent radius of any
 ;;;     size can bridge them, because raising it grows both reaches
 ;;;     equally;
@@ -84,15 +97,16 @@
 ;;;     bulges -- the routine says the smallest one that will.
 ;;;
 ;;; Anything that is merely unusual is drawn and reported, not refused.
-;;; Two things are measured on the finished outline and named if they
-;;; are wrong: its true extents against the box that was asked for, and
-;;; whether it runs through itself -- radii wildly out of proportion can
-;;; send one arc clean through another even though all six exist and
-;;; close.  Both are drawn anyway, so the problem is on the screen where
-;;; it can be seen, and one U takes it away.
+;;; Two things are measured on the finished outline and named if they are
+;;; wrong: whether it stays inside the envelope, and whether it runs
+;;; through itself -- radii wildly out of proportion can send one arc
+;;; clean through another even though all six exist and close.  Both
+;;; reports name the ARC at fault rather than guess at the radius behind
+;;; it, and both are drawn anyway, so the problem is on the screen where
+;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v1.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -286,33 +300,48 @@
                 i   (1+ i)))
         (reverse out))))
 
-;; Every point the drawn outline can reach: each arc's two ends, plus
-;; the compass point of any quadrant its sweep actually crosses.  The
-;; bounding box of these is the bounding box of the pool.
-(defun oasis:hullpts (arcs / out a c r s w k ang)
-  (setq out nil)
-  (foreach a arcs
-    (setq c   (nth 1 a)
-          r   (nth 2 a)
-          s   (nth 3 a)
-          w   (oasis:angnorm (- (nth 4 a) s))
-          out (cons (polar c s r) (cons (polar c (nth 4 a) r) out))
-          k   0)
-    (while (< k 4)
-      (setq ang (* k (/ pi 2.0)))
-      (if (<= (oasis:angnorm (- ang s)) w)
-          (setq out (cons (polar c ang r) out)))
-      (setq k (1+ k))))
-  out)
+;; Note an overrun of AMOUNT past SIDE by arc NM, keeping the worst one
+;; seen for that side.  Anything within the fuzz is not an overrun.
+(defun oasis:worst (lst side amount nm / p out hit)
+  (if (<= amount oasis:*fuzz*)
+      lst
+      (progn
+        (setq out nil hit nil)
+        (foreach p lst
+          (if (= (car p) side)
+              (setq hit T
+                    out (cons (if (> amount (cadr p)) (list side amount nm) p)
+                              out))
+              (setq out (cons p out))))
+        (if hit (reverse out) (cons (list side amount nm) lst)))))
 
-;; (xmin ymin xmax ymax) of a list of points.
-(defun oasis:bbox (pts / x0 y0 x1 y1 p)
-  (setq x0 (car (car pts))  x1 x0
-        y0 (cadr (car pts)) y1 y0)
-  (foreach p pts
-    (setq x0 (min x0 (car p))  x1 (max x1 (car p))
-          y0 (min y0 (cadr p)) y1 (max y1 (cadr p))))
-  (list x0 y0 x1 y1))
+;; How far the outline reaches past each bound of the envelope, and which
+;; arc takes it there.  Every arc end and the compass point of every
+;; quadrant a sweep crosses is tested -- between them they hold every
+;; extreme the outline has -- so the report can name the arc that is out
+;; instead of guessing at the radius behind it.  Returns a list of
+;; (side amount arc-name), only for bounds that are really broken.
+(defun oasis:overruns (arcs w h / over a c r s sw k ang p nm)
+  (setq over nil)
+  (foreach a arcs
+    (setq nm (nth 0 a)
+          c  (nth 1 a)
+          r  (nth 2 a)
+          s  (nth 3 a)
+          sw (oasis:angnorm (- (nth 4 a) s))
+          k  -2)
+    (while (< k 4)
+      (setq ang (cond ((= k -2) s)
+                      ((= k -1) (nth 4 a))
+                      (t (* k (/ pi 2.0)))))
+      (if (or (minusp k) (<= (oasis:angnorm (- ang s)) sw))
+          (setq p    (polar c ang r)
+                over (oasis:worst over "the left"   (- 0.0 (car p)) nm)
+                over (oasis:worst over "the bottom" (- 0.0 (cadr p)) nm)
+                over (oasis:worst over "the right"  (- (car p) w) nm)
+                over (oasis:worst over "the top"    (- (cadr p) h) nm)))
+      (setq k (1+ k))))
+  over)
 
 ;; T when the angle ANG falls inside ARC's counter-clockwise sweep.
 (defun oasis:on-arc-p (a ang)
@@ -347,26 +376,56 @@
     (setq i (1+ i)))
   (reverse out))
 
+;;; -------------------- the drawing frame --------------------------------
+;;; The pool is laid out in the CURRENT UCS, so it lines up with the way
+;;; the user is working, and the dimension commands -- which read their
+;;; points in the UCS -- need no conversion at all.  An ARC entity is the
+;;; awkward one: its centre is stored in WORLD coordinates and its start
+;;; and end angles are measured from the WORLD X axis, so both have to be
+;;; carried across on the way into entmake.  Mixing the two frames is how
+;;; a pool ends up detached from its own dimensions.
+;;;
+;;; A UCS tilted out of the world plan cannot be carried this way -- each
+;;; arc would need an extrusion of its own -- so c:OASIS refuses to run
+;;; in one rather than draw something wrong.
+
+;; T when the current UCS lies flat in the world plan, i.e. its Z axis is
+;; parallel to the world Z.  Every plan-drafting UCS is.
+(defun oasis:ucs-flat-p ( / z)
+  (setq z (trans '(0.0 0.0 1.0) 1 0 T))
+  (< (abs (- (abs (caddr z)) 1.0)) 1.0e-8))
+
+;; How far the current UCS is turned from the world X axis.  Read off the
+;; components rather than with (angle ...), which projects onto the UCS
+;; plane and would answer zero however far the UCS is turned.
+(defun oasis:ucsang ( / x)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr x) (car x)))
+
 ;;; -------------------- drawing -----------------------------------------
 
 ;; A point in pool coordinates moved to where the pool is being drawn.
+;; The result is a point in the current UCS, at the base point's own
+;; elevation -- which is what the dimension commands want; oasis:draw
+;; converts it for entmake.
 (defun oasis:wp (p base)
   (list (+ (car p) (car base))
         (+ (cadr p) (cadr base))
-        0.0))
+        (caddr base)))
 
 ;; The six arcs, drawn in the order they run round the pool.  Returns
 ;; their entity names in that same order, so the radius dimensions can
 ;; hook onto them afterwards.
-(defun oasis:draw (arcs base lay / out a)
-  (setq out nil)
+(defun oasis:draw (arcs base lay / out a rot)
+  (setq out nil
+        rot (oasis:ucsang))       ; UCS -> world, for the angles
   (foreach a arcs
     (entmake (list '(0 . "ARC")
                    (cons 8 lay)
-                   (cons 10 (oasis:wp (nth 1 a) base))
+                   (cons 10 (trans (oasis:wp (nth 1 a) base) 1 0))
                    (cons 40 (nth 2 a))
-                   (cons 50 (nth 3 a))
-                   (cons 51 (nth 4 a))))
+                   (cons 50 (oasis:angnorm (+ (nth 3 a) rot)))
+                   (cons 51 (oasis:angnorm (+ (nth 4 a) rot)))))
     (setq out (cons (entlast) out)))
   (reverse out))
 
@@ -432,14 +491,20 @@
 ;; A side bulge's radius, re-asked until it fits inside the Y bound.
 ;; A bulge is tangent to the bottom edge, so its top sits at twice its
 ;; radius: any more than half the Y bound and it breaks out of the top.
-(defun oasis:ask-bulge (msg side h / v)
+(defun oasis:ask-bulge (msg side w h / v)
   (setq v (oasis:askdist 'REQ msg nil T))
   (while (and (not (eq v 'OASIS-BACK))
-              (> (* 2.0 v) (+ h oasis:*fuzz*)))
-    (princ (strcat "\nA " (rtos v) " " side " bulge stands "
-                   (rtos (* 2.0 v)) " tall and breaks out through the top"
-                   " of a " (rtos h) " envelope.  " (rtos (/ h 2.0))
-                   " or less."))
+              (or (> (* 2.0 v) (+ h oasis:*fuzz*))
+                  (> (* 2.0 v) (+ w oasis:*fuzz*))))
+    (if (> (* 2.0 v) (+ h oasis:*fuzz*))
+        (princ (strcat "\nA " (rtos v) " " side " bulge stands "
+                       (rtos (* 2.0 v)) " tall and breaks out through the"
+                       " top of a " (rtos h) " envelope.  "
+                       (rtos (/ h 2.0)) " or less."))
+        (princ (strcat "\nA " (rtos v) " " side " bulge is "
+                       (rtos (* 2.0 v)) " across and breaks out through the"
+                       " far side of a " (rtos w) " envelope.  "
+                       (rtos (/ w 2.0)) " or less.")))
     (setq v (oasis:askdist 'REQ msg nil T)))
   v)
 
@@ -487,9 +552,9 @@
   (cond
     ((= k 0) (oasis:askdist 'REQ "X - overall left-to-right bounds" nil nil))
     ((= k 1) (oasis:askdist 'REQ "Y - overall front-to-back bounds" nil T))
-    ((= k 2) (oasis:ask-bulge "Left bulge radius" "left" h))
+    ((= k 2) (oasis:ask-bulge "Left bulge radius" "left" w h))
     ((= k 3) (oasis:ask-top "Top bulge radius" w h rl oasis:*topfrac*))
-    ((= k 4) (oasis:ask-bulge "Right bulge radius" "right" h))
+    ((= k 4) (oasis:ask-bulge "Right bulge radius" "right" w h))
     ((= k 5) (oasis:ask-tangent "Top-left tangent radius" ct rt cl rl))
     ((= k 6) (oasis:ask-tangent "Top-right tangent radius" cr rr ct rt))
     ((= k 7) (oasis:ask-tangent "Bottom-center tangent radius" cl rl cr rr))
@@ -507,10 +572,6 @@
 
 ;;; -------------------- reporting ---------------------------------------
 
-;; Say how the finished outline compares with the envelope it was asked
-;; to fill.  Everything impossible was refused at the question that
-;; caused it, so anything left here is legal but worth knowing about --
-;; a top bulge wide enough to swing out past the sides, most often.
 ;; Say when the outline runs through itself.  Nothing that gets this far
 ;; was impossible to build -- every arc exists and the six of them close
 ;; -- but radii wildly out of proportion with each other can send one arc
@@ -528,23 +589,23 @@
         (princ "\n       smaller radius on either of the arcs named.")))
   (princ))
 
-(defun oasis:report-extents (arcs w h / bb over s)
-  (setq bb   (oasis:bbox (oasis:hullpts arcs))
-        over nil)
-  (if (< (car bb)   (- 0.0 oasis:*fuzz*))
-      (setq over (cons (strcat (rtos (abs (car bb))) " past the left") over)))
-  (if (< (cadr bb)  (- 0.0 oasis:*fuzz*))
-      (setq over (cons (strcat (rtos (abs (cadr bb))) " past the bottom") over)))
-  (if (> (caddr bb) (+ w oasis:*fuzz*))
-      (setq over (cons (strcat (rtos (- (caddr bb) w)) " past the right") over)))
-  (if (> (cadddr bb) (+ h oasis:*fuzz*))
-      (setq over (cons (strcat (rtos (- (cadddr bb) h)) " past the top") over)))
+;; Say how the finished outline compares with the envelope it was asked
+;; to fill.  Everything impossible was refused at the question that
+;; caused it, so anything left here is legal but worth knowing about -- a
+;; top bulge wide enough to swing out past a side before its tangent arcs
+;; catch it, most often.  The arc that is out is named, because the
+;; radius behind an overrun is not always the one you would guess.
+(defun oasis:report-extents (arcs w h / over p)
+  (setq over (oasis:overruns arcs w h))
   (if over
       (progn
         (princ "\nOASIS: the outline does NOT stay inside the envelope --")
-        (foreach s (reverse over) (princ (strcat "\n         " s)))
-        (princ (strcat "\n       Drawn as asked; a smaller top bulge (under "
-                       (rtos (/ w 2.0)) ") keeps it in."))))
+        (foreach p over
+          (princ (strcat "\n         the " (caddr p) " arc goes "
+                         (rtos (cadr p)) " past " (car p))))
+        (princ "\n       Drawn as asked; try a smaller radius on the arc")
+        (princ "\n       named, and on the bulge either side of it."))
+  )
   (princ))
 
 ;;; -------------------- the command -------------------------------------
@@ -584,82 +645,98 @@
 
   (oasis:syssave)
 
-  ;; -- the eight measurements and the dimension question, with Back
-  ;;    between them.  Every check reads the answers already given, so
-  ;;    backing up to change one re-checks everything that follows it.
-  (setq ans '(nil nil nil nil nil nil nil nil nil)
-        i   0)
-  (while (< i 9)
-    (setq v (oasis:askstep i ans))
-    (if (eq v 'OASIS-BACK)
-        (if (> i 0)
-            (progn (princ "\nStepping back one step.")
-                   (setq i (1- i)))
-            (princ "\nAlready at the first step."))
-        (progn
-          (setq ans (oasis:put ans i v)
-                i   (1+ i))
-          ;; the right bulge is the last of the three, so it is where a
-          ;; nesting with EITHER of the others finally shows up
-          (if (= i 5)
-              (progn
-                (setq nests (oasis:right-nests (nth 0 ans) (nth 1 ans)
-                                               (nth 2 ans) (nth 3 ans)
-                                               (nth 4 ans) oasis:*topfrac*))
-                (if nests
-                    (progn
-                      (princ (strcat "\nThat right bulge and the " nests
-                                     " bulge lie one inside the other, so no"
-                                     " tangent radius can join them.  Asking"
-                                     " again."))
-                      (setq i 4))))))))
+  (cond
+    ;; -- a plan pool has nothing sensible to draw in a UCS that is not
+    ;;    flat in the world plan, and half of what it draws (the arcs)
+    ;;    could not follow it there anyway
+    ((not (oasis:ucs-flat-p))
+     (princ (strcat "\nOASIS: the current UCS is tilted out of the world"
+                    " plan, so a flat plan pool"))
+     (princ (strcat "\n       cannot be laid out in it.  Set the UCS back"
+                    " to World (or to any"))
+     (princ "\n       plan UCS) and run OASIS again.")
+     (oasis:sysrestore))
+    (t
 
-  (setq w    (nth 0 ans) h   (nth 1 ans)
-        rl   (nth 2 ans) rt  (nth 3 ans) rr (nth 4 ans)
-        ftl  (nth 5 ans) ftr (nth 6 ans) fbc (nth 7 ans)
-        dims (nth 8 ans)
-        arcs (oasis:solve w h rl rt rr ftl ftr fbc oasis:*topfrac*))
+     ;; -- the eight measurements and the dimension question, with Back
+     ;;    between them.  Every check reads the answers already given, so
+     ;;    backing up to change one re-checks everything that follows it.
+     (setq ans '(nil nil nil nil nil nil nil nil nil)
+           i   0)
+     (while (< i 9)
+       (setq v (oasis:askstep i ans))
+       (if (eq v 'OASIS-BACK)
+           (if (> i 0)
+               (progn (princ "\nStepping back one step.")
+                      (setq i (1- i)))
+               (princ "\nAlready at the first step."))
+           (progn
+             (setq ans (oasis:put ans i v)
+                   i   (1+ i))
+             ;; the right bulge is the last of the three, so it is where a
+             ;; nesting with EITHER of the others finally shows up
+             (if (= i 5)
+                 (progn
+                   (setq nests (oasis:right-nests (nth 0 ans) (nth 1 ans)
+                                                  (nth 2 ans) (nth 3 ans)
+                                                  (nth 4 ans) oasis:*topfrac*))
+                   (if nests
+                       (progn
+                         (princ (strcat "\nThat right bulge and the " nests
+                                        " bulge lie one inside the other, so no"
+                                        " tangent radius can join them.  Asking"
+                                        " again."))
+                         (setq i 4))))))))
 
-  (if (not arcs)
-      (progn
-        (princ (strcat "\nOASIS: those radii do not make a closed outline"
-                       " -- nothing drawn."))
-        (oasis:sysrestore))
-      (progn
-        ;; the base point is picked with the user's own snaps still
-        ;; live; only afterwards do snaps drop for the drawing work
-        (setq base (getpoint "\nInsertion base point <0,0>: ")
-              base (if base (list (car base) (cadr base)) (list 0.0 0.0)))
-        (setvar "CMDECHO" 0)
-        (setvar "OSMODE" 0)
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+     (setq w    (nth 0 ans) h   (nth 1 ans)
+           rl   (nth 2 ans) rt  (nth 3 ans) rr (nth 4 ans)
+           ftl  (nth 5 ans) ftr (nth 6 ans) fbc (nth 7 ans)
+           dims (nth 8 ans)
+           arcs (oasis:solve w h rl rt rr ftl ftr fbc oasis:*topfrac*))
 
-        (oasis:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-        (setq ents (oasis:draw arcs base oasis:*poollayer*))
-        (if dims
-            (progn
-              (oasis:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
-              (oasis:dimension arcs ents base w h rl rr oasis:*topfrac*
-                               oasis:*dimlayer*)))
+     (if (not arcs)
+         (progn
+           (princ (strcat "\nOASIS: those radii do not make a closed outline"
+                          " -- nothing drawn."))
+           (oasis:sysrestore))
+         (progn
+           ;; the base point is picked with the user's own snaps still
+           ;; live; only afterwards do snaps drop for the drawing work
+           (setq base (getpoint "\nInsertion base point <0,0>: ")
+                 base (if base
+                          (list (car base) (cadr base)
+                                (if (caddr base) (caddr base) 0.0))
+                          (list 0.0 0.0 0.0)))
+           (setvar "CMDECHO" 0)
+           (setvar "OSMODE" 0)
+           (command "_.UNDO" "_Begin")
+           (setq undo-open T)
 
-        (command "_.UNDO" "_End")
-        (setq undo-open nil)
-        (oasis:sysrestore)
+           (oasis:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
+           (setq ents (oasis:draw arcs base oasis:*poollayer*))
+           (if dims
+               (progn
+                 (oasis:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
+                 (oasis:dimension arcs ents base w h rl rr oasis:*topfrac*
+                                  oasis:*dimlayer*)))
 
-        (princ (strcat "\nOASIS " *oasis-version* ": " (rtos w) " x "
-                       (rtos h) " continuous-tangent pool on layer "
-                       oasis:*poollayer* "."))
-        (princ (strcat "\n  Bulges: " (rtos rl) " left, " (rtos rt)
-                       " top, " (rtos rr) " right."))
-        (princ (strcat "\n  Tangent radii: " (rtos ftl) " top-left, "
-                       (rtos ftr) " top-right, " (rtos fbc)
-                       " bottom-center."))
-        (if dims
-            (princ (strcat "\n  8 dimensions on layer " oasis:*dimlayer*
-                           " (overall X and Y, and a radius on each arc).")))
-        (oasis:report-extents arcs w h)
-        (oasis:report-crossings arcs)))
+           (command "_.UNDO" "_End")
+           (setq undo-open nil)
+           (oasis:sysrestore)
+
+           (princ (strcat "\nOASIS " *oasis-version* ": " (rtos w) " x "
+                          (rtos h) " continuous-tangent pool on layer "
+                          oasis:*poollayer* "."))
+           (princ (strcat "\n  Bulges: " (rtos rl) " left, " (rtos rt)
+                          " top, " (rtos rr) " right."))
+           (princ (strcat "\n  Tangent radii: " (rtos ftl) " top-left, "
+                          (rtos ftr) " top-right, " (rtos fbc)
+                          " bottom-center."))
+           (if dims
+               (princ (strcat "\n  8 dimensions on layer " oasis:*dimlayer*
+                              " (overall X and Y, and a radius on each arc).")))
+           (oasis:report-extents arcs w h)
+           (oasis:report-crossings arcs)))))
   (princ))
 
 (defun c:OASISVER ()
