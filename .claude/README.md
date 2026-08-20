@@ -98,10 +98,10 @@ top of `session-start.sh`.
 *between* files - the ones `check_lisp.py` and `check_scope.py` cannot
 see, because they read one file at a time:
 
-- every tool in `lisp/` has a twin in `shared/`
+- every tool in `lisp/` has a twin in `shared/parts/`
   (`lisp/standards_checker/` excepted - the deprecated acady matcher is
   not carried into the grouped build),
-- only `CALOFIN-LIB.lsp` defines `cal:` symbols,
+- only `parts/CALOFIN-LIB.lsp` defines `cal:` symbols,
 - no two files in `shared/` define the same function, since they all
   load into one session,
 - no command is lost between the tiers,

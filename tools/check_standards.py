@@ -35,6 +35,8 @@ WIP_DIR = ROOT / "wip"
 LISP_DIR = ROOT / "lisp"
 RELEASES_DIR = ROOT / "releases"
 SHARED_DIR = ROOT / "shared"
+#: the member files; shared/ itself holds only the generated bundle
+PARTS_DIR = SHARED_DIR / "parts"
 
 #: Not carried into the grouped tier: the acady drawing-standards
 #: matcher is a deprecated project, so lisp/standards_checker/ has no
@@ -73,8 +75,8 @@ def lsp_files(d):
 
 
 def shared_members():
-    """The hand-written files in shared/, bundle excluded."""
-    return [p for p in lsp_files(SHARED_DIR) if p.name not in GENERATED]
+    """The hand-written files in shared/parts/."""
+    return [p for p in lsp_files(PARTS_DIR) if p.name not in GENERATED]
 
 
 def read(p):
@@ -104,11 +106,11 @@ def check_twins(problems):
         want = p.stem + ".lsp"
         if want not in have:
             problems.append(
-                "%s has no shared twin - add shared/%s calling the cal: "
-                "helpers, per CLAUDE.md" % (p.relative_to(ROOT), want))
+                "%s has no shared twin - add shared/parts/%s calling the "
+                "cal: helpers, per CLAUDE.md" % (p.relative_to(ROOT), want))
     for name in ("CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"):
         if name not in have:
-            problems.append("shared/%s is missing" % name)
+            problems.append("shared/parts/%s is missing" % name)
 
 
 def check_library_owns_cal(problems):
@@ -118,8 +120,8 @@ def check_library_owns_cal(problems):
             continue
         for sym in set(CAL_SYM.findall(read(p))):
             problems.append(
-                "shared/%s defines %s - the cal: namespace belongs to "
-                "CALOFIN-LIB.lsp" % (p.name, sym))
+                "shared/parts/%s defines %s - the cal: namespace belongs "
+                "to CALOFIN-LIB.lsp" % (p.name, sym))
 
 
 def check_no_collisions(problems):
@@ -132,8 +134,9 @@ def check_no_collisions(problems):
             first = owner.get(name.lower())
             if first:
                 problems.append(
-                    "%s is defined in both shared/%s and shared/%s - one "
-                    "wins when they load together" % (name, first, p.name))
+                    "%s is defined in both shared/parts/%s and "
+                    "shared/parts/%s - one wins when they load together"
+                    % (name, first, p.name))
             else:
                 owner[name.lower()] = p.name
 
@@ -157,7 +160,7 @@ def lisp_files_with_commands():
 
 def check_loader_lists_everything(problems):
     """A file the loader forgets is a file nobody loads."""
-    loader = SHARED_DIR / "CALOFIN-LOADER.lsp"
+    loader = PARTS_DIR / "CALOFIN-LOADER.lsp"
     if not loader.is_file():
         return
     listed = read(loader)
@@ -166,8 +169,8 @@ def check_loader_lists_everything(problems):
             continue
         if ('"%s"' % p.name) not in listed:
             problems.append(
-                "shared/%s is not listed in CALOFIN-LOADER.lsp, so loading "
-                "the folder skips it" % p.relative_to(SHARED_DIR))
+                "shared/parts/%s is not listed in CALOFIN-LOADER.lsp, so "
+                "loading the folder skips it" % p.name)
 
 
 def check_release_twins(problems):
@@ -204,7 +207,7 @@ def check_bundle_current(problems):
             continue                       # the bundle needs no loader
         if (";;; >>> %s" % p.name) not in text:
             problems.append(
-                "shared/%s is not in CALOFIN-ALL.lsp - rebuild it with "
+                "shared/parts/%s is not in CALOFIN-ALL.lsp - rebuild it with "
                 "python3 tools/build_shared_bundle.py" % p.name)
 
 
@@ -229,7 +232,7 @@ def main():
     check_wip(problems)
 
     tiers = ["lisp/ %d" % len(lsp_files(LISP_DIR)),
-             "shared/ %d" % len(lsp_files(SHARED_DIR))]
+             "shared/parts/ %d" % len(shared_members())]
     if WIP_DIR.is_dir():
         tiers.insert(0, "wip/ %d" % len(lsp_files(WIP_DIR)))
     print("standards: " + ", ".join(tiers) + " files")

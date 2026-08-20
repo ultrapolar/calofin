@@ -14,12 +14,19 @@ without `CALOFIN-LIB.lsp` loaded is broken by design.
 ## Layout
 
 ```
-CALOFIN-ALL.lsp      APPLOAD THIS - the whole build concatenated into one file
-CALOFIN-LOADER.lsp   the multi-file alternative: loads the files below in order
-CALOFIN-LIB.lsp      the shared helpers, namespace cal: (see STANDARDS.md)
-<TOOL>.lsp           one file per tool, same basename as its lisp/ source
-                     (extension lowercased), minus the helpers now in the lib
+CALOFIN-ALL.lsp        APPLOAD THIS - the whole build in one file. The only
+                       .lsp at this level, so there is nothing else to pick.
+parts/                 what it is built FROM - do not APPLOAD these:
+  CALOFIN-LIB.lsp        the shared helpers, namespace cal:
+  CALOFIN-LOADER.lsp     the multi-file alternative, for editing
+  <TOOL>.lsp             one file per tool, same basename as its lisp/
+                         source, minus the helpers now in the lib
 ```
+
+`parts/` exists so the folder you point AutoCAD at contains exactly one
+loadable file. The members still have to be there: `CALOFIN-ALL.lsp` is
+*generated from them*, they are where a `lisp/` change gets mirrored, and
+they are what gives git a per-tool diff instead of one 1.8 MB blob.
 
 The acady drawing-standards matcher (`lisp/standards_checker/`) is a
 deprecated project and is not carried here. It still loads the old way,
@@ -35,13 +42,13 @@ what folder you run it from. It prints
 CALOFIN: shared build loaded - 78 commands in one session.
 ```
 
-Rebuild it after changing anything here:
+Rebuild it after changing anything in `parts/`:
 
 ```
 python3 tools/build_shared_bundle.py
 ```
 
-### Do not APPLOAD CALOFIN-LIB.lsp on its own
+### Do not APPLOAD parts/CALOFIN-LIB.lsp on its own
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
@@ -51,7 +58,7 @@ happens.
 
 ### The multi-file alternative
 
-`CALOFIN-LOADER.lsp` keeps the folder as 37 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 37 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
@@ -61,7 +68,7 @@ just sent you. So it tries four things in order:
 2. the support file search path, if the folder is on it,
 3. the folder a previous session found (remembered under
    `HKEY_CURRENT_USER\Software\Calofin`),
-4. a one-time file dialog -- pick `CALOFIN-LIB.lsp` out of the folder
+4. a one-time file dialog -- pick `CALOFIN-LIB.lsp` out of `parts/`
    and it is remembered from then on.
 
 It prints the folder it settled on, then either
@@ -70,7 +77,7 @@ is missing. If it reports that it could not locate the build folder,
 add that folder to *Options > Files > Support File Search Path*, or run
 
 ```
-(setq cal:*dir* "C:\\path\\to\\shared")
+(setq cal:*dir* "C:\\path\\to\\shared\\parts")
 ```
 
 before APPLOADing it. If none of that appeals, use `CALOFIN-ALL.lsp` --

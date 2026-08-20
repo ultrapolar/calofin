@@ -26,9 +26,9 @@ in step:
 | draft | `wip/` | being drafted, no version banner yet. Optional - absent until a first draft lands. | yes |
 | standalone | `lisp/<tool>/` | one self-contained file, loads alone with APPLOAD. **All tool logic starts here.** | yes |
 | released | `releases/` | dated `REV`-stamped twin, so a loaded routine never changes underfoot | no - generated |
-| grouped | `shared/` | the same tools on one helper library (`cal:`), all loading together | mirrored by hand, bundle generated |
+| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | mirrored by hand, bundle generated |
 
-Change a tool in `lisp/`, mirror it into `shared/<FILE>.lsp` in the same
+Change a tool in `lisp/`, mirror it into `shared/parts/<FILE>.lsp` in the same
 commit, then regenerate both artifacts:
 
 ```

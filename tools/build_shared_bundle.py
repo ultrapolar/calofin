@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Concatenate the shared build into one APPLOAD-able file.
 
-shared/CALOFIN-LOADER.lsp has to find its 36 siblings on disk, and
+shared/parts/CALOFIN-LOADER.lsp has to find its 36 siblings on disk, and
 AutoCAD only lets it look along the support file search path -- which
 is not where APPLOAD's file dialog just sent you.  A single file has
 nothing to find, so this is the build to hand someone:
@@ -18,7 +18,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
-LOADER = SHARED / "CALOFIN-LOADER.lsp"
+PARTS = SHARED / "parts"
+LOADER = PARTS / "CALOFIN-LOADER.lsp"
 BUNDLE = SHARED / "CALOFIN-ALL.lsp"
 
 RULE = ";;; " + "=" * 70
@@ -37,13 +38,13 @@ def members():
 
 def main():
     names = members()
-    missing = [n for n in names if not (SHARED / n).is_file()]
+    missing = [n for n in names if not (PARTS / n).is_file()]
     if missing:
-        sys.exit("missing from shared/: %s" % missing)
+        sys.exit("missing from shared/parts/: %s" % missing)
 
     commands = []
     for n in names:
-        commands.extend(COMMAND.findall((SHARED / n).read_text(
+        commands.extend(COMMAND.findall((PARTS / n).read_text(
             encoding="utf-8", errors="replace")))
 
     out = [
@@ -74,7 +75,7 @@ def main():
 
     for n in names:
         out += ["", RULE, ";;; >>> %s" % n, RULE, ""]
-        out.append((SHARED / n).read_text(encoding="utf-8", errors="replace"))
+        out.append((PARTS / n).read_text(encoding="utf-8", errors="replace"))
 
     out += [
         "",

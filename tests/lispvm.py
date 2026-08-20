@@ -424,12 +424,23 @@ class VM:
             return path
         repo = os.sep.join(parts[:parts.index('lisp')])
         stem, ext = os.path.splitext(os.path.basename(ap))
+
+        def under(name):
+            # the members sit in <root>/parts/; <root>/ itself is kept as a
+            # fallback so CALOFIN_LISP_ROOT=shared/parts works too
+            for base in (os.path.join(repo, root, 'parts'),
+                         os.path.join(repo, root)):
+                cand = os.path.join(base, name)
+                if os.path.exists(cand):
+                    return cand
+            return os.path.join(repo, root, name)
+
         if not getattr(self, '_shared_lib_loaded', False):
             self._shared_lib_loaded = True
-            lib = os.path.join(repo, root, 'CALOFIN-LIB.lsp')
+            lib = under('CALOFIN-LIB.lsp')
             if os.path.exists(lib):
                 self.loads(open(lib).read())
-        return os.path.join(repo, root, stem + ext.lower())
+        return under(stem + ext.lower())
 
     def loads(self, src):
         """Evaluate LISP source text (for test fixtures / extra defuns)."""

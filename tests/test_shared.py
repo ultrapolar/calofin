@@ -26,9 +26,10 @@ from lispvm import VM, Sym, parse_all
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SHARED = os.path.join(REPO, 'shared')
+PARTS = os.path.join(SHARED, 'parts')
 LISP = os.path.join(REPO, 'lisp')
 
-# Must mirror the foreach lists in shared/CALOFIN-LOADER.lsp.
+# Must mirror the foreach list in shared/parts/CALOFIN-LOADER.lsp.
 ORDER = [
     'CALOFIN-LIB.lsp',
     'POOL.lsp', 'POOLDEMO.lsp', 'TUTORIALPOOL.lsp',
@@ -64,7 +65,7 @@ def fail(msg):
     sys.exit(1)
 
 
-paths = [os.path.join(SHARED, f) for f in ORDER]
+paths = [os.path.join(PARTS, f) for f in ORDER]
 missing = [p for p in paths if not os.path.exists(p)]
 if missing:
     fail('missing shared files: %s' % [os.path.relpath(p, REPO) for p in missing])
