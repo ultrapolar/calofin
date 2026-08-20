@@ -4,7 +4,7 @@
 ;;; Commands:
 ;;;   AUTOBEAD          - bead the selected POOL lines
 ;;;   TUTORIALAUTOBEAD  - guided walkthrough (read it, or watch a live demo)
-;;;   AUTOBEADVER       - report which revision is loaded
+;;;   AUTOBEADVER       - report which version is loaded
 ;;;
 ;;; Select POOL lines to "bead" (LINEs, ARCs, and polylines on any POOL*
 ;;; layer), then click the side to bead toward.  The selection is copied,
@@ -14,6 +14,16 @@
 ;;;   - convex (outside) corners have the excess trimmed
 ;;;   - concave (inside) corners are extended to meet
 ;;;   - arc / radius corners offset as true concentric arcs
+;;;
+;;; Step lines - selected lines that cross the pool, touching walls at both
+;;; ends - are recognized automatically and always bead full length.
+;;;
+;;; After the direction click, AUTOBEAD asks whether the side walls are
+;;; beaded.  Answer Yes and click each step (tread) that has beaded side
+;;; walls: the wall bead is then kept only across those treads' spans, cut
+;;; flush at the step lines, and removed everywhere else.  Answer No to
+;;; bead every selected wall full length.
+;;;
 ;;; The finished beads land on the "Bead Track" layer.  The original pool
 ;;; geometry is never modified, and the whole run undoes with one U.
 ;;;
@@ -28,7 +38,7 @@
 ;;;   Both report the same revision, so AUTOBEADVER tells you what someone
 ;;;   is actually running regardless of which filename they loaded.  The
 ;;;   filename's REV## is the version below with the dot dropped
-;;;   (v0.2 -> REV02).  Regenerate the dated copy with
+;;;   (v0.3 -> REV03).  Regenerate the dated copy with
 ;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
 ;;;   will drift.
 ;;; ==========================================================================
@@ -37,8 +47,8 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.2"      ; revision stamp; the dated twin is
-                                     ; named for it (v0.2 -> REV02)
+(setq *autobead-version* "v0.3"      ; revision stamp; the dated twin is
+                                     ; named for it (v0.3 -> REV03)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
       *autobead-filter* "POOL*"      ; selectable source layers
@@ -134,16 +144,116 @@
                    (cons 62 1)                   ; color: red
                    (cons 6 "Continuous")))))
 
+;; ---- side-wall geometry helpers -------------------------------------------
+
+(defun autobead-curve-end (e which / p)
+  ;; Start or end point of a curve, or nil.  which: 'start or 'end.
+  (setq p (vl-catch-all-apply
+            (if (eq which 'start)
+              'vlax-curve-getStartPoint
+              'vlax-curve-getEndPoint)
+            (list e)))
+  (if (vl-catch-all-error-p p) nil p))
+
+(defun autobead-midpt-of (e / ep len p)
+  ;; Point halfway along a curve's length, or nil.
+  (setq ep (vl-catch-all-apply 'vlax-curve-getEndParam (list e)))
+  (if (vl-catch-all-error-p ep)
+    nil
+    (progn
+      (setq len (vl-catch-all-apply 'vlax-curve-getDistAtParam (list e ep)))
+      (if (or (vl-catch-all-error-p len) (null len))
+        nil
+        (progn
+          (setq p (vl-catch-all-apply 'vlax-curve-getPointAtDist
+                    (list e (/ len 2.0))))
+          (if (or (vl-catch-all-error-p p) (null p)) nil p))))))
+
+(defun autobead-on-other-p (pt chains self / hit cp o)
+  ;; T if pt lies on some chain other than self (within drafting slop).
+  (setq hit nil)
+  (foreach o chains
+    (if (and (null hit) (not (eq o self)) (entget o))
+      (progn
+        (setq cp (vl-catch-all-apply 'vlax-curve-getClosestPointTo
+                   (list o pt)))
+        (if (and (not (vl-catch-all-error-p cp)) cp
+                 (< (distance cp pt) 0.05))
+          (setq hit T)))))
+  hit)
+
+(defun autobead-sig (pt steps / res a b cr)
+  ;; Compartment signature of pt: which side of each step line it is on.
+  ;; The step lines cut the pool into compartments (treads); two points with
+  ;; equal signatures are in the same compartment.
+  (setq res '())
+  (foreach s steps
+    (setq a  (car s)
+          b  (cadr s)
+          cr (- (* (- (car b) (car a)) (- (cadr pt) (cadr a)))
+                (* (- (cadr b) (cadr a)) (- (car pt) (car a)))))
+    (setq res (cons (if (minusp cr) -1 1) res)))
+  (reverse res))
+
+(defun autobead-ixpoints (bead step / o1 o2 v a l res)
+  ;; WCS points where 'step' (extended to infinity) crosses 'bead'.
+  (setq o1 (vlax-ename->vla-object bead)
+        o2 (vlax-ename->vla-object step)
+        v  (vl-catch-all-apply 'vla-IntersectWith (list o1 o2 2))) ; 2 = acExtendOtherEntity
+  (setq res '())
+  (if (not (vl-catch-all-error-p v))
+    (progn
+      (setq a (vl-catch-all-apply 'vlax-variant-value (list v)))
+      (if (not (vl-catch-all-error-p a))
+        (progn
+          (setq l (vl-catch-all-apply 'vlax-safearray->list (list a)))
+          (if (vl-catch-all-error-p l) (setq l nil))
+          (while (and l (cddr l))               ; flat (x y z x y z ...)
+            (setq res (cons (list (car l) (cadr l) 0.0) res)
+                  l   (cdddr l))))))
+    )
+  (reverse res))
+
+(defun autobead-break-at (pieces pt / host cp sp ep mark p)
+  ;; Break whichever piece passes through pt (strictly mid-span) at pt.
+  ;; Returns the updated piece list; a pt at a piece boundary is a no-op.
+  (setq host nil)
+  (foreach p pieces
+    (if (and (null host) (entget p))
+      (progn
+        (setq cp (vl-catch-all-apply 'vlax-curve-getClosestPointTo
+                   (list p pt))
+              sp (autobead-curve-end p 'start)
+              ep (autobead-curve-end p 'end))
+        (if (and (not (vl-catch-all-error-p cp)) cp
+                 (< (distance cp pt) 1e-4)
+                 sp (> (distance pt sp) 1e-6)
+                 ep (> (distance pt ep) 1e-6))
+          (setq host p)))))
+  (if host
+    (progn
+      (setq mark (entlast))
+      ;; BREAK takes UCS points; intersections are WCS
+      (command "._break" host "_f"
+               "_non" (trans pt 0 1) "_non" (trans pt 0 1))
+      (autobead-flush)
+      (append (vl-remove-if-not '(lambda (x) (entget x)) pieces)
+              (autobead-newents mark)))
+    pieces))
+
 ;; ---- engine ----------------------------------------------------------------
 ;; Everything that touches the drawing lives here, so AUTOBEAD and the
-;; tutorial exercise exactly the same code path.  Returns the number of bead
-;; objects created.
+;; tutorial exercise exactly the same code path.  sidewalls / treadpts come
+;; from the side-wall question (treadpts in WCS); pass nil nil to bead every
+;; selected wall full length.  Returns the number of bead objects created.
 
-(defun autobead-build (ss dirpt / *error* beadoff layname fuzz
-                                  oldcmd oldos oldpa temps
-                                  mark copies ss2 chains mark2 news
-                                  beadcount failcount c e i src dup drift
-                                  gaps g)
+(defun autobead-build (ss dirpt sidewalls treadpts
+                       / *error* beadoff layname fuzz
+                         oldcmd oldos oldpa temps
+                         mark copies ss2 chains mark2 news
+                         beadcount failcount c e i src dup drift
+                         gaps g sp ep perimchains stepchains steplines
+                         perimbeads sigs bps pieces mp kept culled filtered)
 
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
@@ -210,9 +320,24 @@
      (setq chains (autobead-newents mark)
            temps  chains)
 
-     ;; 3) offset each chain toward the click; native offset trims
+     ;; 3) classify: a chain whose BOTH endpoints land mid-span on other
+     ;;    chains is a step line crossing the pool; the rest are walls
+     (setq perimchains '() stepchains '() steplines '())
+     (if (> (length chains) 1)
+       (foreach c chains
+         (setq sp (autobead-curve-end c 'start)
+               ep (autobead-curve-end c 'end))
+         (if (and sp ep
+                  (autobead-on-other-p sp chains c)
+                  (autobead-on-other-p ep chains c))
+           (setq stepchains (cons c stepchains)
+                 steplines  (cons (list sp ep) steplines))
+           (setq perimchains (cons c perimchains))))
+       (setq perimchains chains))
+
+     ;; 4) offset every chain toward the click; native offset trims
      ;;    convex corners and extends concave ones automatically
-     (setq failcount 0 gaps '())
+     (setq failcount 0 gaps '() perimbeads '())
      (foreach c chains
        (setq mark2 (entlast))
        (command "._offset" beadoff c "_non" dirpt "")
@@ -225,13 +350,47 @@
                           (entget e)))
            ;; measure before the source chain is deleted
            (if (setq g (autobead-gap c e)) (setq gaps (cons g gaps)))
+           (if (member c perimchains)
+             (setq perimbeads (cons e perimbeads)))
            (setq beadcount (1+ beadcount)))
-         (setq failcount (1+ failcount)))
-       ;; discard the temporary chain
+         (setq failcount (1+ failcount))))
+
+     ;; 5) side walls: keep wall bead only across the clicked treads.
+     ;;    Break each wall bead where the step lines cross it, then keep a
+     ;;    piece only if its midpoint shares a compartment with a clicked
+     ;;    tread point.  Step-face beads are never touched.
+     (setq kept 0 culled 0 filtered nil)
+     (if (and sidewalls treadpts steplines perimbeads)
+       (progn
+         (setq filtered T
+               sigs (mapcar '(lambda (p) (autobead-sig p steplines))
+                            treadpts))
+         (foreach e perimbeads
+           (setq bps '())
+           (foreach c stepchains
+             (if (entget c)
+               (setq bps (append bps (autobead-ixpoints e c)))))
+           (setq pieces (list e))
+           (foreach g bps
+             (setq pieces (autobead-break-at pieces g)))
+           (foreach c pieces
+             (if (entget c)
+               (progn
+                 (setq mp (autobead-midpt-of c))
+                 (if (and mp (member (autobead-sig mp steplines) sigs))
+                   (setq kept (1+ kept))
+                   (progn
+                     (entdel c)
+                     (setq culled (1+ culled))))))))
+         ;; recount: step beads + surviving wall pieces
+         (setq beadcount (+ (- beadcount (length perimbeads)) kept))))
+
+     ;; 6) discard the temporary chains
+     (foreach c chains
        (if (entget c) (entdel c)))
      (setq temps '())
 
-     ;; 4) report -- including what was actually built, so a bead that
+     ;; 7) report -- including what was actually built, so a bead that
      ;;    lands in the wrong place can be diagnosed from the command line
      (prompt (strcat "\n--- AUTOBEAD " *autobead-version* " ---"
                      "\n  source layers : "
@@ -240,6 +399,17 @@
                                (autobead-layers ss)))
                      "\n  objects picked: " (itoa (sslength ss))
                      "\n  joined chains : " (itoa (length chains))
+                     "  (" (itoa (length perimchains)) " wall, "
+                     (itoa (length stepchains)) " step)"
+                     "\n  side walls    : "
+                     (cond
+                       (filtered
+                        (strcat "beaded at " (itoa (length treadpts))
+                                " clicked step(s) -- kept " (itoa kept)
+                                " wall piece(s), removed " (itoa culled)))
+                       ((and sidewalls (null steplines))
+                        "requested, but no step lines were recognized")
+                       (T "full length (not restricted)"))
                      "\n  offset asked  : " (rtos beadoff)
                      "\n  offset measured: "
                      (if gaps
@@ -262,9 +432,9 @@
 
 ;; ---- AUTOBEAD --------------------------------------------------------------
 
-(defun c:AUTOBEAD ( / ss dirpt stage done )
+(defun c:AUTOBEAD ( / ss dirpt stage done ans sidewalls treadpts p )
   (autobead-ensure-layer *autobead-layer*)
-  ;; staged: Back (or Undo) at the direction click re-opens the selection
+  ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage 1 done nil)
   (while (not done)
     (cond
@@ -279,7 +449,7 @@
                            " layer."))
            (setq done T))
          (setq stage 2)))
-      (T
+      ((= stage 2)
        (initget "Back Undo")
        (setq dirpt (getpoint "\nClick the side to bead toward [Back]: "))
        (cond
@@ -287,7 +457,30 @@
          ((null dirpt)
           (prompt "\nNo direction point picked.")
           (setq done T))
-         (T (autobead-build ss dirpt) (setq done T))))))
+         (T (setq stage 3))))
+      (T
+       (initget "Yes No Back Undo")
+       (setq ans (getkword
+                   "\nAre the side walls beaded? [Yes/No/Back] <No>: "))
+       (cond
+         ((member ans '("Back" "Undo")) (setq stage 2))
+         (T
+          (setq sidewalls (= ans "Yes")
+                treadpts  '())
+          (if sidewalls
+            (progn
+              (prompt (strcat "\nClick each step (tread) that has beaded"
+                              " side walls."))
+              (while (setq p (getpoint
+                               "\n  Click a step <Enter = done>: "))
+                (setq treadpts (cons (trans p 1 0) treadpts)))
+              (if (null treadpts)
+                (progn
+                  (prompt (strcat "\nNo steps clicked - side walls will"
+                                  " be beaded full length."))
+                  (setq sidewalls nil)))))
+          (autobead-build ss dirpt sidewalls treadpts)
+          (setq done T))))))
   (princ))
 
 ;; ---- AUTOBEADVER -----------------------------------------------------------
@@ -333,6 +526,8 @@
       (strcat "  on the \"" *autobead-layer* "\" layer. Corners are resolved for")
       "  you: outside corners get trimmed, inside corners get"
       "  extended to meet, and radius corners stay concentric."
+      "  Lines that cross the pool touching walls at both ends are"
+      "  recognized as STEP lines and always bead full length."
       ""
       "USING IT"
       "  1. Type AUTOBEAD."
@@ -342,6 +537,13 @@
       "     text and hatch are ignored."
       "  3. Click the side you want the bead on. One click sets the"
       "     direction for everything you selected."
+      "  4. Answer: are the side walls beaded?"
+      "       No  - every selected wall beads full length."
+      "       Yes - click each step (tread) that has beaded side"
+      "             walls, then Enter. The wall bead is kept only"
+      "             across those treads, cut flush at the step"
+      "             lines, and removed everywhere else. Step-face"
+      "             beads always draw either way."
       ""
       "CURRENT SETTINGS"
       (strcat "  offset distance : " (rtos *autobead-offset*)
@@ -364,12 +566,17 @@
       "      than leaving geometry in the wrong place."
       "   7. Copies join into continuous chains, so corners can be"
       "      resolved across segment boundaries."
-      "   8. Each chain offsets successfully. Any chain that fails is"
+      "   8. Chains are classified into walls and step lines, and"
+      "      the split is printed in the report."
+      "   9. Each chain offsets successfully. Any chain that fails is"
       "      counted and reported instead of failing silently."
-      "   9. The finished bead is measured back against the chain it"
+      "  10. With beaded side walls, wall bead outside the clicked"
+      "      treads is removed, and the kept/removed counts are"
+      "      reported."
+      "  11. The finished bead is measured back against the chain it"
       "      came from, and the real distance is reported."
-      "  10. Temporary geometry is deleted."
-      "  11. OSMODE, PEDITACCEPT and CMDECHO are restored."
+      "  12. Temporary geometry is deleted."
+      "  13. OSMODE, PEDITACCEPT and CMDECHO are restored."
       ""
       "IF SOMETHING GOES WRONG"
       "  The run is wrapped in a single undo group - one U undoes all"
@@ -377,16 +584,17 @@
       "  cleaned up and your settings are restored."
       ""
       "READING THE REPORT"
-      "  Every run prints a summary. The two lines worth reading:"
+      "  Every run prints a summary. The lines worth reading:"
       "    offset asked / offset measured - if these disagree, the"
       "      offset distance is not being applied as requested."
-      "    objects picked / joined chains - one closed pool outline"
-      "      should collapse to 1 chain. Many chains means the join"
-      "      failed; 1 chain from two separate pools means the join"
-      "      merged things it should not have."
+      "    joined chains (wall, step) - check the tool recognized"
+      "      your step lines; a step counted as a wall will bead"
+      "      full length and drag wall bead with it."
+      "    side walls - confirms which treads were honored and how"
+      "      many wall pieces were kept vs removed."
       ""
       "OTHER COMMANDS"
-      "  AUTOBEADVER      - which revision is loaded"
+      "  AUTOBEADVER      - which version is loaded"
       "  TUTORIALAUTOBEAD - this walkthrough"
       "==========================================================="
       "")))
@@ -412,16 +620,16 @@
                   (cons 11 b))))
 
 (defun autobead-tutorial-demo ( / base lay pts prev ents ss dirpt
-                                  x y w h made e )
+                                  x y made e )
   (setq lay "POOL-TUTORIAL")
 
   (autobead-say
     (list ""
           "DEMO MODE"
-          "  A sample L-shaped pool will be drawn in your drawing and"
-          "  beaded for real, using the same code AUTOBEAD uses."
-          "  It goes on a temporary layer and you will be offered a"
-          "  cleanup at the end. Undo (U) also removes all of it."))
+          "  A sample pool with two step lines will be drawn in your"
+          "  drawing and beaded for real, using the same code AUTOBEAD"
+          "  uses. It goes on a temporary layer and you will be offered"
+          "  a cleanup at the end. Undo (U) also removes all of it."))
 
   (if (null (setq base (getpoint
                          "\nPick an empty spot for the demo pool: ")))
@@ -432,40 +640,41 @@
       (setq x (car base)
             y (cadr base))
 
-      ;; L-shaped pool: has convex corners AND one concave corner, so the
-      ;; demo shows trimming and extending in the same run.
-      (setq pts (list
-                  (list x y 0.0)
-                  (list (+ x 240.0) y 0.0)
-                  (list (+ x 240.0) (+ y 144.0) 0.0)
-                  (list (+ x 120.0) (+ y 144.0) 0.0)
-                  (list (+ x 120.0) (+ y 240.0) 0.0)
-                  (list x (+ y 240.0) 0.0)))
-
-      (setq ents '() prev nil)
-      (foreach p pts
-        (if prev (setq ents (cons (autobead-demo-line prev p lay) ents)))
-        (setq prev p))
-      ;; close the loop
-      (setq ents (cons (autobead-demo-line prev (car pts) lay) ents))
+      ;; open-ended pool run: bottom wall, end wall, top wall, plus two
+      ;; step lines crossing the pool near the end wall
+      (setq ents
+        (list
+          (autobead-demo-line (list x y 0.0)
+                              (list (+ x 300.0) y 0.0) lay)
+          (autobead-demo-line (list (+ x 300.0) y 0.0)
+                              (list (+ x 300.0) (+ y 144.0) 0.0) lay)
+          (autobead-demo-line (list (+ x 300.0) (+ y 144.0) 0.0)
+                              (list x (+ y 144.0) 0.0) lay)
+          ;; step lines at 66" and 90" from the end wall
+          (autobead-demo-line (list (+ x 234.0) y 0.0)
+                              (list (+ x 234.0) (+ y 144.0) 0.0) lay)
+          (autobead-demo-line (list (+ x 210.0) y 0.0)
+                              (list (+ x 210.0) (+ y 144.0) 0.0) lay)))
 
       (command "._zoom" "_window"
                (list (- x 60.0) (- y 60.0))
-               (list (+ x 300.0) (+ y 300.0)))
+               (list (+ x 360.0) (+ y 204.0)))
 
       (autobead-pause
         (strcat "STEP 1 - the pool\n"
-                "      An L-shaped pool outline, 6 separate LINE objects on\n"
-                "      layer " lay ". The inside corner is deliberate: it is\n"
-                "      where a naive offset would leave a gap."))
+                "      A pool run on layer " lay ": bottom wall, end wall,\n"
+                "      top wall, and two step lines crossing the pool near\n"
+                "      the end. The step lines touch the walls at both"
+                " ends,\n      which is how AUTOBEAD recognizes them as"
+                " steps."))
 
       (autobead-pause
         (strcat "STEP 2 - selecting\n"
-                "      AUTOBEAD would now ask you to select. Only objects on\n"
-                "      a " *autobead-filter* " layer are selectable, so a window "
-                "select\n      cannot pick up dimensions, text or hatch by "
-                "accident.\n"
-                "      Here all 6 lines are selected for you."))
+                "      AUTOBEAD would now ask you to select. Only objects"
+                " on\n      a " *autobead-filter* " layer are selectable,"
+                " so a window select\n      cannot pick up dimensions,"
+                " text or hatch by accident.\n"
+                "      Here all 5 lines are selected for you."))
 
       (setq ss (ssadd))
       (foreach e ents (if (entget e) (ssadd e ss)))
@@ -473,35 +682,36 @@
       (autobead-say
         (list "STEP 3 - the direction click"
               "      One click decides which side every bead goes on."
-              "      Click INSIDE the pool to bead inward, or outside to"
-              "      bead around it."))
+              "      Click INSIDE the pool (between the walls)."))
       (setq dirpt (getpoint "\n      Click a side to bead toward: "))
 
       (if (null dirpt)
         (prompt "\nDemo cancelled.")
         (progn
           (autobead-pause
-            (strcat "STEP 4 - building the bead\n"
-                    "      Copies are made in place, joined into one chain,\n"
-                    "      offset " (rtos *autobead-offset*)
-                    " toward your click, and moved to the\n"
-                    "      \"" *autobead-layer* "\" layer. Watch the corners."))
+            (strcat "STEP 4 - the side-wall question\n"
+                    "      AUTOBEAD would now ask: are the side walls"
+                    " beaded?\n"
+                    "      For this demo the answer is Yes, with the top"
+                    " step\n      (between the end wall and the first"
+                    " step line)\n      clicked as the beaded one - so"
+                    " wall bead survives\n      only across that tread."))
 
-          (setq made (autobead-build ss dirpt))
+          (setq made (autobead-build ss dirpt T
+                       (list (list (+ x 267.0) (+ y 72.0) 0.0))))
 
           (autobead-say
             (list ""
                   "STEP 5 - the result"
                   (strcat "      " (itoa made) " bead object(s) on \""
                           *autobead-layer* "\".")
-                  "      Note what happened at the corners:"
-                  "        - outside corners: excess trimmed away"
-                  "        - inside corner  : extended to meet, no gap"
-                  "      The original pool lines are untouched."
+                  "      Note what happened:"
+                  "        - both step lines got full-length beads"
+                  "        - wall bead survives only around the top"
+                  "          tread, cut flush at the first step line"
+                  "        - the rest of the walls have no bead"
                   ""
                   "      The report above is printed on every real run."
-                  "      Compare 'offset asked' with 'offset measured' -"
-                  "      they should agree."
                   ""))))
 
       ;; cleanup
@@ -533,5 +743,5 @@
 (prompt (strcat "\nAUTOBEAD " *autobead-version* " loaded."
                 "\n  AUTOBEAD          - bead selected pool lines"
                 "\n  TUTORIALAUTOBEAD  - how it works"
-                "\n  AUTOBEADVER       - revision check"))
+                "\n  AUTOBEADVER       - version check"))
 (princ)
