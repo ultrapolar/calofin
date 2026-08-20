@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_081926_REV24-27-17.lsp
+;;; STEPS_082026_REV25-28-18.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v2.4 -> REV24   CORNERSTP, TUTORIALCORNERSTP
-;;;     HEMISTEP.lsp    v2.7 -> REV27   HEMISTEP, TUTORIALHEMISTEP
-;;;     NORMIESTEP.lsp  v1.7 -> REV17   NORMIESTEP, TUTORIALNORMIESTEP
+;;;     CORNERSTP.lsp   v2.5 -> REV25   CORNERSTP, TUTORIALCORNERSTP
+;;;     HEMISTEP.lsp    v2.8 -> REV28   HEMISTEP, TUTORIALHEMISTEP
+;;;     NORMIESTEP.lsp  v1.8 -> REV18   NORMIESTEP, TUTORIALNORMIESTEP
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v2.4) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v2.5) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -35,9 +35,11 @@
 ;;;
 ;;; WHAT IT DOES
 ;;;   Draws a run of parallel corner steps (tread edges) fanning out from
-;;;   a pool corner toward the pool.  Tread depths are always held
-;;;   exactly; step widths are held to within the width tolerance of the
-;;;   wall opening (1/8" by default).
+;;;   a pool corner toward the pool.  Step treads (the plan-view spacing
+;;;   of each step) are always held exactly; step widths are held to
+;;;   within the width tolerance of the wall opening (1/8" by default).
+;;;   The step DEPTH, by contrast, is the vertical drop of a step - it is
+;;;   only asked for by the optional side profile at the end of the run.
 ;;;
 ;;; WORKFLOW
 ;;;   1.  Select the two walls that form the corner.  Walls may be LINEs
@@ -49,14 +51,14 @@
 ;;;       the starting point.
 ;;;   3.  Choose the draw direction [Inside out/Outside in]:
 ;;;         INSIDE OUT (default) - steps are built from the corner out
-;;;         toward the pool from given tread depths and step widths.
+;;;         toward the pool from given step treads and step widths.
 ;;;         OUTSIDE IN - the furthest (outermost) step is placed first
 ;;;         from its given width, bounded to the provided walls, and
 ;;;         the remaining steps walk back in toward the corner.
 ;;;
 ;;;   INSIDE OUT:
-;;;   4a. If a diagonal/arc was selected, you are asked whether tread
-;;;       depths are measured from the Middle of the diagonal/arc or
+;;;   4a. If a diagonal/arc was selected, you are asked whether step
+;;;       treads are measured from the Middle of the diagonal/arc or
 ;;;       from the True corner.  The true corner is found by extending
 ;;;       the two walls surrounding the diagonal/arc to their apparent
 ;;;       intersection.
@@ -64,13 +66,13 @@
 ;;;       treads run Parallel to the diagonal, or perpendicular to the
 ;;;       bisector of the TRUE ANGLE the walls make (equal angle from
 ;;;       both walls).  With no diagonal the true-angle bisector is
-;;;       always used.  Tread depths are measured from the starting
+;;;       always used.  Step treads are measured from the starting
 ;;;       point toward the pool, square to the treads, so all steps are
 ;;;       parallel to each other either way.
-;;;   4c. For each step you are prompted for the tread depth, then the
+;;;   4c. For each step you are prompted for the step tread, then the
 ;;;       step width:
-;;;         - The tread depth is ALWAYS held exactly.
-;;;         - If the wall opening at that depth is within the width
+;;;         - The step tread is ALWAYS held exactly.
+;;;         - If the wall opening at that distance is within the width
 ;;;           tolerance of the requested width, the step is trimmed to
 ;;;           the walls.
 ;;;         - Otherwise the requested width is held, centered between
@@ -87,13 +89,13 @@
 ;;;   5b. You give the width of the furthest (outermost) step.  That
 ;;;       step is bounded to the provided walls, so its width alone
 ;;;       places it - it is just the starting point.  Each following
-;;;       step asks for a tread depth (walking back in toward the
+;;;       step asks for a step tread (walking back in toward the
 ;;;       corner), then a step width, under the same rules as inside
 ;;;       out.  Drawing stops if the corner is reached.
 ;;;
 ;;;   6.  You are asked whether to dimension the steps [Yes/No].  If
 ;;;       Yes, aligned dimensions are added:
-;;;         - Tread depths are chained along the bisector out from the
+;;;         - Step treads are chained along the bisector out from the
 ;;;           starting point, in dim style "STANDARD INCHES".
 ;;;         - Step widths are the full width of each tread edge, placed
 ;;;           just outside the corner and nested so the wider (deeper)
@@ -101,19 +103,29 @@
 ;;;           "SIDE STANDARD".
 ;;;       If a style is missing the current style is used and a note is
 ;;;       printed.
-;;;   7.  Enter at a tread depth prompt means no more steps are
-;;;       required.  Back at a tread depth prompt steps back one step:
+;;;   7.  Enter at a step tread prompt means no more steps are
+;;;       required.  Back at a step tread prompt steps back one step:
 ;;;       it removes the step just drawn (its lines and its dimensions)
 ;;;       so a mistyped number does not cost the whole run (Undo, the
 ;;;       old keyword, is still accepted).  Same repeats the previous
-;;;       tread depth.  Side (riser) lines are drawn between successive step
+;;;       step tread.  Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
+;;;   8.  When at least one step was drawn you may add a SIDE PROFILE.
+;;;       If Yes, you give each step's step depth (its vertical drop),
+;;;       top step first - Enter repeats the previous drop, Back (or
+;;;       Undo) steps back - then pick the top of the wall and which
+;;;       side the steps descend.  The staircase silhouette (drop, then
+;;;       tread, per step) is drawn from the pick; when dimensioning is
+;;;       on the drops are chained vertically behind the wall and the
+;;;       step treads horizontally below the profile, in the depth dim
+;;;       style.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      step width tolerance in drawing units.  When
 ;;;                       nil (the default) it is 1/8" converted through
 ;;;                       the drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for tread-depth dims.
+;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (also used by
+;;;                       the side-profile dims).
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
@@ -138,7 +150,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.4") ; printed on load and at command start so a
+(setq *cs-version* "v2.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -419,7 +431,9 @@
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
                        prevL prevR dimflag w offd oldce oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
-                       slog mark svdist svl svr svp svt svn s)
+                       slog mark svdist svl svr svp svt svn s
+                       tlist tvals tds drops pd ix ppt pw p2 dx sgn
+                       px py totr totd)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -449,7 +463,8 @@
              tprev (nth 5 rec)   ; outside-in walks from here again
              n     (nth 6 rec)
              drawn (1- drawn)
-             slog  (cdr slog))
+             slog  (cdr slog)
+             tlist (cdr tlist))
        (redraw)                  ; clear the erased step from the screen
        (princ "\n  Stepping back one step.")
        T)))
@@ -623,12 +638,12 @@
     (progn
       (initget "Middle True")
       (setq key (getkword
-        "\nMeasure tread depths from [Middle of diagonal/True corner] <Middle>: "))
+        "\nMeasure step treads from [Middle of diagonal/True corner] <Middle>: "))
       (setq start (if (= key "True") corner mid)))
     (setq start corner))
 
   ;; ---- 6. tread orientation / measuring direction toward the pool ----
-  ;; BIS  = direction the tread depths are measured along
+  ;; BIS  = direction the step treads are measured along
   ;; PERP = direction the step edges run (treads are drawn along PERP)
   (setq d1  (cs-unit (cs-vec corner (cs-far w1 corner)))
         d2  (cs-unit (cs-vec corner (cs-far w2 corner)))
@@ -652,7 +667,7 @@
             "\nTreads [Parallel to diagonal/True angle] <Parallel>: "))))
       (if (not (member key '("True" "Equidistant")))
         (progn
-          ;; treads parallel to the diagonal; depths measured square to it
+          ;; treads parallel to the diagonal; step treads measured square to it
           (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
                 bis  (cs-perp90 perp))
           (if (< (cs-dot bis (cs-vec corner mid)) 0.0)
@@ -700,7 +715,7 @@
       (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
       (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
         (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                       "\" not found - tread depths use the current style.")))
+                       "\" not found - step treads use the current style.")))
       (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
         (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
                        "\" not found - step widths use the current style.")))
@@ -780,7 +795,7 @@
                                         (cs-scl bis
                                                 (- (+ (* 0.5 w)
                                                       (* 1.5 txth))))))
-                        ;; tread depth: chain link back out to the
+                        ;; step tread: chain link back out to the
                         ;; previous (next-further-out) tread
                         (if pprev
                           (cs-dim *cs-depth-dimstyle* p pprev
@@ -790,8 +805,9 @@
                           drawn (1+ drawn)
                           slog  (cons (list (cs-since mark) svdist svl svr
                                             svp svt svn)
-                                      slog))))
-                ;; next step inward: depth, then width - same rules as
+                                      slog)
+                          tlist (cons tout tlist))))
+                ;; next step inward: step tread, then width - same rules as
                 ;; inside out (a held width breaks from the walls)
                 (if (not stopf)
                   (progn
@@ -800,7 +816,7 @@
                       ;; Undo is the old keyword, kept as a hidden synonym
                       (initget 6 (if lastdep "Back Same Undo" "Back Undo"))
                       (setq dep (getdist (strcat "\nStep " (itoa n)
-                                  " - tread depth (going in) ["
+                                  " - step tread (going in) ["
                                   (if lastdep "Back/Same" "Back")
                                   "] <Enter = done>: ")))
                       (if (= (type dep) 'STR)
@@ -811,7 +827,7 @@
                           ((= dep "Same")
                            (if lastdep
                              (setq dep lastdep)
-                             (progn (princ "\n  No previous depth.")
+                             (progn (princ "\n  No previous step tread.")
                                     (setq dep 'RETRY))))
                           (T (setq dep 'RETRY)))))
                     (cond
@@ -833,7 +849,7 @@
         (while (eq dep 'RETRY)
           ;; Undo is the old keyword, kept as a hidden synonym
           (initget 6 (if lastdep "Back Same Undo" "Back Undo"))
-          (setq dep (getdist (strcat "\nStep " (itoa n) " - tread depth ["
+          (setq dep (getdist (strcat "\nStep " (itoa n) " - step tread ["
                                      (if lastdep "Back/Same" "Back")
                                      "] <Enter = done>: ")))
           (if (= (type dep) 'STR)
@@ -842,7 +858,7 @@
               ((= dep "Same")
                (if lastdep
                  (setq dep lastdep)
-                 (progn (princ "\n  No previous depth.") (setq dep 'RETRY))))
+                 (progn (princ "\n  No previous step tread.") (setq dep 'RETRY))))
               (T (setq dep 'RETRY)))))
         dep)
       (setq mark  (entlast)
@@ -851,7 +867,7 @@
       (initget 6)
       (setq wid (getdist (strcat "\nStep " (itoa n)
                                  " - step width <Enter = fit to walls>: ")))
-      (setq dist (+ dist dep)                       ; tread depth held exactly
+      (setq dist (+ dist dep)                       ; step tread held exactly
             p    (cs-add start (cs-scl bis dist))
             h1   (inters p (cs-add p perp) (car w1) (cadr w1) nil)
             h2   (inters p (cs-add p perp) (car w2) (cadr w2) nil)
@@ -878,9 +894,9 @@
           (if dimflag
             (progn
               (setq w (distance e1 e2))
-              ;; fix the depth chain's side offset once, off the bisector
+              ;; fix the tread chain's side offset once, off the bisector
               (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
-              ;; tread depth: link of a chain along the bisector, from the
+              ;; step tread: link of a chain along the bisector, from the
               ;; previous tread crossing (p - bis*dep) to this one (p)
               (cs-dim *cs-depth-dimstyle*
                       (cs-add p (cs-scl bis (- dep))) p
@@ -895,14 +911,111 @@
                               (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
           (setq prevL e1 prevR e2 pprev p drawn (1+ drawn)
                 slog (cons (list (cs-since mark) svdist svl svr svp svt svn)
-                           slog))))
+                           slog)
+                tlist (cons dist tlist))))
       (setq n (1+ n))))
 
-  ;; ---- 9. done ---------------------------------------------------------
+  ;; ---- 9. optional side profile ---------------------------------------
+  ;; Drawn while the UNDO group is still open and before the entry dim
+  ;; style is restored - the profile places its own dims.
+  (if (> drawn 0)
+    (progn
+      (initget "Yes No")
+      (if (/= "No" (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+        (progn
+          ;; treads, top step first: sort the axis distances ascending
+          ;; (outside-in entered them outermost first) and take the
+          ;; first value, then each successive difference
+          (setq tvals (vl-sort tlist '<) tds nil pd 0.0)
+          (foreach s tvals
+            (if (> (- s pd) 1e-6) (setq tds (cons (- s pd) tds)))
+            (setq pd s))
+          (setq tds (reverse tds))
+          (if (null tds)
+            (princ "\nNo usable tread spacing - side profile skipped.")
+            (progn
+              ;; ask each step's drop, top step first, with Back support
+              (setq drops nil ix 0)
+              (while (< ix (length tds))
+                (setq pd 'RETRY)
+                (while (eq pd 'RETRY)
+                  (if (zerop ix)
+                    (progn
+                      ;; Back/Undo hidden here: typing them only gets
+                      ;; the already-at-the-first-step feedback
+                      (initget 7 "Back Undo")
+                      (setq pd (getdist "\nStep 1 - step depth (the drop): ")))
+                    (progn
+                      ;; Undo is the old keyword, kept as a hidden synonym
+                      (initget 6 "Back Undo")
+                      (setq pd (getdist (strcat "\nStep " (itoa (1+ ix))
+                                  " - step depth [Back] <"
+                                  (rtos (car drops)) ">: ")))))
+                  (cond
+                    ((= (type pd) 'STR)             ; Back or Undo
+                     (if (zerop ix)
+                       (princ "\n  Already at the first step.")
+                       (progn (setq drops (cdr drops) ix (1- ix))
+                              (princ "\n  Stepping back one step.")))
+                     (setq pd 'RETRY))
+                    ((null pd) (setq pd (car drops))))) ; Enter = previous
+                (setq drops (cons pd drops) ix (1+ ix)))
+              (setq drops (reverse drops))
+              ;; place the profile
+              (setq ppt (getpoint
+                "\nPick the top of the wall for the side profile: "))
+              (if (null ppt)
+                (princ "\nNo point picked - side profile skipped.")
+                (progn
+                  (setq pw (trans ppt 1 0) sgn 0.0)
+                  (while (and (zerop sgn)
+                              (setq p2 (getpoint ppt
+                                "\nPick a point on the side the steps descend: ")))
+                    (setq dx (- (car (trans p2 1 0)) (car pw)))
+                    (if (< (abs dx) 1e-10)
+                      (princ "\nPick left or right of the wall, not on it.")
+                      (setq sgn (if (> dx 0.0) 1.0 -1.0))))
+                  (if (zerop sgn)
+                    (princ "\nNo side picked - side profile skipped.")
+                    (progn
+                      ;; alternating drop/tread silhouette in world X/Y
+                      (setq totd (apply '+ drops)
+                            totr (apply '+ tds)
+                            px   (car pw)
+                            py   (cadr pw)
+                            ix   0)
+                      (foreach s tds
+                        (setq pd (nth ix drops))
+                        (cs-mkline (list px py 0.0)
+                                   (list px (- py pd) 0.0))
+                        (if dimflag   ; drop dims: one chain behind the wall
+                          (cs-dim *cs-depth-dimstyle*
+                                  (list px py 0.0)
+                                  (list px (- py pd) 0.0)
+                                  (list (- (car pw) (* sgn 2.0 txth))
+                                        (- py (* 0.5 pd)) 0.0)))
+                        (setq py (- py pd))
+                        (cs-mkline (list px py 0.0)
+                                   (list (+ px (* sgn s)) py 0.0))
+                        (if dimflag   ; tread dims: one chain along the bottom
+                          (cs-dim *cs-depth-dimstyle*
+                                  (list px py 0.0)
+                                  (list (+ px (* sgn s)) py 0.0)
+                                  (list (+ px (* sgn 0.5 s))
+                                        (- (- (cadr pw) totd) (* 2.0 txth))
+                                        0.0)))
+                        (setq px (+ px (* sgn s)) ix (1+ ix)))
+                      (princ (strcat "\nSide profile drawn: "
+                                     (itoa (length tds))
+                                     " step(s), total run " (rtos totr)
+                                     ", total drop " (rtos totd)
+                                     "."))))))))))))
+
+  ;; ---- 10. done --------------------------------------------------------
   (if (zerop drawn)
     (princ "\nNo steps drawn.")
     (princ (strcat "\n" (itoa drawn)
-                   " step(s) drawn - tread depths held exactly.")))
+                   " step(s) drawn - step treads held exactly.")))
   (foreach s lines (if (nth 3 s) (redraw (nth 3 s) 4)))
   (if (and diag (nth 3 diag)) (redraw (nth 3 diag) 4))
   (redraw)
@@ -941,7 +1054,7 @@
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
                  " ================"))
   (princ "\nCORNERSTP draws parallel corner steps fanning out of a pool")
-  (princ "\ncorner toward the pool.  Tread depths are always held exactly;")
+  (princ "\ncorner toward the pool.  Step treads are always held exactly;")
   (princ "\nstep widths are held to within 1/8\" of the wall opening -")
   (princ "\ncloser than that and the step trims to the walls, further and")
   (princ "\nit holds your width and BREAKS from the walls, running equally")
@@ -953,16 +1066,19 @@
   (princ "\n  - more than two straight walls: it asks you to pick the two")
   (princ "\nTHE PROMPTS, IN ORDER")
   (princ "\n  1. Draw steps [Inside out/Outside in]")
-  (princ "\n     Inside out: corner outward - each step asks tread depth,")
+  (princ "\n     Inside out: corner outward - each step asks step tread,")
   (princ "\n       then width (Enter fits the step to the walls).")
   (princ "\n     Outside in: the width of the furthest step places it")
-  (princ "\n       wall-to-wall, then depth/width pairs walk back in.")
+  (princ "\n       wall-to-wall, then tread/width pairs walk back in.")
   (princ "\n  2. With a diagonal/arc: measure from its Middle or the True")
   (princ "\n     corner, and treads Parallel to the diagonal or square to")
   (princ "\n     the true-angle bisector.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
-  (princ "\n  At any depth prompt: Enter = done, Back = step back one")
-  (princ "\n  step (removes it), Same = repeat the previous depth.")
+  (princ "\n  4. Add a side profile? [Yes/No] - give each step's drop")
+  (princ "\n     (its step depth), top step first, then pick the wall top")
+  (princ "\n     and which side the steps descend.")
+  (princ "\n  At any step tread prompt: Enter = done, Back = step back one")
+  (princ "\n  step (removes it), Same = repeat the previous step tread.")
   (cs-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns when the UCS is tilted, a line is not flat, or the")
@@ -975,7 +1091,7 @@
   (princ "\n    what it classified before asking anything")
   (princ "\n  - reads arcs from their own geometry (mirrored arcs behave)")
   (princ "\n  - notes when a wall had to be extended to meet a step")
-  (princ "\n  - dims go in \"STANDARD INCHES\" (depths) and")
+  (princ "\n  - dims go in \"STANDARD INCHES\" (step treads) and")
   (princ "\n    \"SIDE STANDARD\" (widths), falling back to the current")
   (princ "\n    style if missing; the whole run is ONE undo")
   (cs-tut-pause)
@@ -1036,15 +1152,16 @@
             (cs-add org (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))
     (cond
       ((= n 1)
-       (princ "\n[2] Step 1: tread depth 24, width 48.  The wall opening")
-       (princ "\n    at that depth IS 48, so it trims to the walls.  Its")
-       (princ "\n    depth dim starts the chain along the bisector; its")
+       (princ "\n[2] Step 1: step tread 24, width 48.  The wall opening")
+       (princ "\n    at that distance IS 48, so it trims to the walls.  Its")
+       (princ "\n    tread dim starts the chain along the bisector; its")
        (princ "\n    width dim nests outside the corner."))
       ((= n 2)
-       (princ "\n[3] Step 2: depth 12, width 72 - also fits.  Depths are")
-       (princ "\n    each measured from the previous step, never a total."))
+       (princ "\n[3] Step 2: step tread 12, width 72 - also fits.  Step")
+       (princ "\n    treads are each measured from the previous step,")
+       (princ "\n    never a total."))
       (T
-       (princ "\n[4] Step 3: depth 12, width 100 - but the opening here is")
+       (princ "\n[4] Step 3: step tread 12, width 100 - the opening here is")
        (princ "\n    only 96.  More than 1/8\" apart, so the width is HELD")
        (princ "\n    and the step breaks the walls, running 2 past each")
        (princ "\n    side.  Riser lines close its ends.")))
@@ -1066,7 +1183,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v2.7) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v2.8) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1089,12 +1206,12 @@
 ;;;                      drawn for you (see step 6).
 ;;;   CURVE + LINE ..... inside-out mode with an axis line.  The line
 ;;;                      (through the curve or ending on it) is where
-;;;                      the tread depths are measured from: depths run
+;;;                      the step treads are measured from: treads run
 ;;;                      along the line starting where it meets the
 ;;;                      curve, going INTO the curve, and the step
 ;;;                      widths sit perpendicular to the line.
 ;;;   CURVE only ....... inside-out mode from the middle of the curve.
-;;;                      Depths are measured from there going INTO the
+;;;                      Treads are measured from there going INTO the
 ;;;                      curve, and the step widths sit along the
 ;;;                      tangent at that point.
 ;;;
@@ -1106,8 +1223,8 @@
 ;;;
 ;;;   In the curve modes the routine holds as true to the curve as it
 ;;;   can, the same way CORNERSTP holds to the walls: a step width
-;;;   within the width tolerance of the curve's opening at that depth is
-;;;   snapped to the curve; any other width is held, centered on the
+;;;   within the width tolerance of the curve's opening at that distance
+;;;   is snapped to the curve; any other width is held, centered on the
 ;;;   opening so it breaks the curve equally on both sides.
 ;;;
 ;;; WORKFLOW
@@ -1120,7 +1237,7 @@
 ;;;         - Step widths across each chord, nested behind the start of
 ;;;           the measuring axis (wider steps further out), in dim style
 ;;;           "SIDE STANDARD".
-;;;         - Step depths chained along the axis (start to step 1, step
+;;;         - Step treads chained along the axis (start to step 1, step
 ;;;           1 to step 2, ...), in dim style "STANDARD INCHES".
 ;;;       If a style is missing the current style is used instead.
 ;;;   4.  LINE mode starts with the width of the step AT THE WALL: that
@@ -1128,38 +1245,46 @@
 ;;;       already is one), but it is dimensioned and it anchors both
 ;;;       ends of the boundary curve.  The curve modes skip it, since
 ;;;       the width at the start is set by the curve itself.
-;;;   5.  From there both modes run DEPTH then WIDTH, repeating.  Every
-;;;       depth is measured FROM THE PREVIOUS STEP EDGE (from the start
-;;;       of the axis for the first step) - never a running total.
+;;;   5.  From there both modes run STEP TREAD then WIDTH, repeating.
+;;;       Every step tread is measured FROM THE PREVIOUS STEP EDGE (from
+;;;       the start of the axis for the first step) - never a running
+;;;       total.
 ;;;       Distances read architectural style: a bare number is inches
 ;;;       (drawing units) and feet-inch entry like 1'4 (= 16") works
 ;;;       whatever the units setting.
 ;;;   6.  Ending and shortcuts:
-;;;         - Enter at a depth prompt = done.
-;;;         - Back at a depth prompt steps back one step: it removes
-;;;           the step just drawn (its line and its dimensions).  Undo,
-;;;           the old keyword, is still accepted.  Same repeats the
-;;;           previous depth.
+;;;         - Enter at a step tread prompt = done.
+;;;         - Back at a step tread prompt steps back one step: it
+;;;           removes the step just drawn (its line and its dimensions).
+;;;           Undo, the old keyword, is still accepted.  Same repeats
+;;;           the previous step tread.
 ;;;         - Enter at a width prompt fits that step to the curve in
 ;;;           the curve modes, or repeats the previous width in LINE
 ;;;           mode.
 ;;;   7.  The hemisphere is then rebuilt as one polyline of arc segments
 ;;;       through every step end.  In LINE mode you are asked for one
-;;;       last depth from the last step to the back of the curve, and
+;;;       last distance from the last step to the back of the curve, and
 ;;;       the polyline runs wall - side A - crown - side B - wall (the
-;;;       last depth also gets the final link of the depth-dim chain).
+;;;       last distance also gets the final link of the tread-dim chain).
 ;;;       In the curve modes the polyline runs from the deepest step
 ;;;       around the first one and back, and the segment spanning the
 ;;;       first step carries the SELECTED CURVE'S OWN bulge: a first
 ;;;       step sitting on the curve reproduces that curve exactly, and
 ;;;       a wider one still follows its curvature instead of spiking in
 ;;;       to the point where the axis met it.
+;;;   8.  When steps were drawn you may add a SIDE PROFILE [Yes/No]:
+;;;       give each step's step depth (the vertical drop), top step
+;;;       first, with Back to re-ask the previous one; then pick the
+;;;       top of the wall and the side the steps descend.  The
+;;;       alternating drop/tread silhouette is drawn as lines and, when
+;;;       the plan steps are dimensioned, every drop and tread is too.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
 ;;;                       (the default) it is 1/8" converted through the
 ;;;                       drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for step-depth dims.
+;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (the side
+;;;                       profile's dims use it too).
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
@@ -1184,7 +1309,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.7") ; printed on load and at command start so a
+(setq *hs-version* "v2.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1589,7 +1714,9 @@
                       p op nat cen e1 e2 drawn tol txth offd pprev
                       oldce oldstyle ea eb crown pts reflen lastdep
                       dimflag slog mark svcum svp svn svea sveb rec pc oldlu
-                      wallA wallB lastwid kx fx)
+                      wallA wallB lastwid kx fx
+                      tlist srt treads pv drops dd jx tcount ptop pu
+                      pcancel pside dxs sgn px py lowy totrun totdrop td)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -1614,13 +1741,14 @@
               ea    (nth 4 rec)
               eb    (nth 5 rec)
               drawn (1- drawn)
+              tlist (cdr tlist)
               slog  (cdr slog))
         (redraw)
         (princ "\n  Stepping back one step.")
         T)))
 
   ;; ---- 0. environment checks -------------------------------------------
-  (princ (strcat "\nHEMISTEP " *hs-version* " - each depth is measured"
+  (princ (strcat "\nHEMISTEP " *hs-version* " - each step tread is measured"
                  " from the previous step."))
   (setq tol  (hs-tolerance)
         txth (hs-txth))
@@ -1690,7 +1818,7 @@
           lp2 (list (car lp2) (cadr lp2) 0.0)))
 
   ;; ---- 2. measuring axis -----------------------------------------------
-  ;; SP  = start point of the axis (depths measured from here)
+  ;; SP  = start point of the axis (treads measured from here)
   ;; DIR = direction the steps march (unit)
   ;; U   = direction the step widths run (unit, perpendicular to DIR)
   (cond
@@ -1698,7 +1826,7 @@
     ;; CURVE selected: steps go INTO the curve
     (cmode
      (if lin
-       ;; axis line given: start where the line meets the curve, depths
+       ;; axis line given: start where the line meets the curve, treads
        ;; run along the line, widths perpendicular to it
        (progn
          (setq dir (hs-unit (hs-vec lp1 lp2)))
@@ -1797,7 +1925,7 @@
       (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
       (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
         (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                       "\" not found - step depths use the current style.")))
+                       "\" not found - step treads use the current style.")))
       (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
         (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
                        "\" not found - step widths use the current style.")))
@@ -1806,11 +1934,11 @@
                        "\" is missing or not drawable - using the"
                        " current layer.")))))
 
-  ;; ---- 4. widths and depths, chord by chord ----------------------------
+  ;; ---- 4. widths and step treads, chord by chord -----------------------
   (command "_.UNDO" "_Begin")
   (setq undoflag T cum 0.0 n 1 drawn 0
-        pprev sp                        ; depth chain starts at the axis
-        offd  (* 2.0 txth)              ; depth-dim offset off the axis
+        pprev sp                        ; tread chain starts at the axis
+        offd  (* 2.0 txth)              ; tread-dim offset off the axis
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
 
@@ -1818,7 +1946,7 @@
   ;; of the run, so no chord is drawn there (the wall already is one),
   ;; but it is dimensioned and it anchors both ends of the boundary.
   ;; In the curve modes the width at the start is set by the curve, so
-  ;; the run begins straight away with a depth.
+  ;; the run begins straight away with a step tread.
   (if (not cmode)
     (progn
       (initget 6)
@@ -1843,7 +1971,7 @@
              (initget 6 (strcat "Back" (if lastdep " Same" "") " Undo"))
              (setq dep (getdist
                          (strcat "\nStep " (itoa n)
-                                 " - depth from the previous step [Back"
+                                 " - step tread [Back"
                                  (if lastdep "/Same" "") "]"
                                  " <Enter = done>: ")))
              (if (= (type dep) 'STR)
@@ -1853,7 +1981,7 @@
                  ((= dep "Same")
                   (if lastdep
                     (setq dep lastdep)
-                    (progn (princ "\n  No previous depth.")
+                    (progn (princ "\n  No previous step tread.")
                            (setq dep 'RETRY))))
                  (T (setq dep 'RETRY)))))
            dep))
@@ -1874,7 +2002,7 @@
              (setq wid 'RETRY)))))
     (if (null dep)
       (progn
-        (princ "\nNo depth given - step discarded; finishing.")
+        (princ "\nNo step tread given - step discarded; finishing.")
         (setq stopf T))
       (progn
         (setq mark (entlast)
@@ -1900,7 +2028,7 @@
                                   ": fitted to the curve, width = "
                                   (rtos (caddr op)) ".")))
                  (princ (strcat "\n  Step " (itoa n)
-                                ": the curve does not reach this depth"
+                                ": the curve does not reach this distance"
                                 " - step skipped."))))
               ((and nat (<= (abs (- nat wid)) tol))
                (setq e1 (car op) e2 (cadr op))
@@ -1917,7 +2045,7 @@
                               " held"
                               (if nat
                                 (strcat " (curve opening " (rtos nat) ")")
-                                " (the curve does not reach this depth)")
+                                " (the curve does not reach this distance)")
                               " - step breaks from the curve.")))))
           ;; classic base-line mode: centered on the axis as given
           (progn
@@ -1925,7 +2053,7 @@
                   e2 (hs-add p (hs-scl u (* -0.5 wid))))))
         (if (and e1 e2)
           (progn
-            (setq cum (+ cum dep))             ; running total (echo only)
+            (setq cum (+ cum dep))             ; running total (echo + profile)
             (princ (strcat "\n  Step " (itoa n) ": " (rtos dep)
                            " past the previous step ("
                            (rtos cum) " from the start)."))
@@ -1942,12 +2070,13 @@
                                 (hs-scl dir
                                         (- (+ (* 0.5 (distance e1 e2))
                                               (* 1.5 txth))))))
-                ;; step depth: chain link along the axis, from the
+                ;; step tread: chain link along the axis, from the
                 ;; previous step edge (the start for step 1) to here
                 (hs-dim *cs-depth-dimstyle* pprev p
                         (hs-add (hs-mid2 pprev p) (hs-scl u offd)))))
             (setq pprev p drawn (1+ drawn)
                   lastwid (distance e1 e2)
+                  tlist (cons cum tlist)       ; axis distances, newest first
                   slog  (cons (list (hs-since mark) svcum svp svn svea sveb)
                               slog))))
         (setq n (1+ n)))))
@@ -1956,7 +2085,7 @@
   ;; The hemisphere is rebuilt as one polyline of arc segments running
   ;; through every step end.  In base-line mode it starts and finishes
   ;; at the wall (the width given at the wall) and bulges out to a crown
-  ;; set by one last depth.  In the curve modes the crown is the point
+  ;; set by one last distance.  In the curve modes the crown is the point
   ;; where the measuring axis meets the selected curve, so the arc
   ;; beside it is fitted through that original point.
   (if (> drawn 0)
@@ -1964,12 +2093,12 @@
       (if (not cmode)
         (progn
           (initget 6)
-          (setq dep (getdist (strcat "\nDepth from the last step to the back"
+          (setq dep (getdist (strcat "\nDistance from the last step to the back"
                                      " of the curve <Enter = none>: ")))
           (if (and dep (= (type dep) 'REAL))
             (progn
               (setq crown (hs-add pprev (hs-scl dir dep)))
-              (if dimflag                    ; last link of the depth chain
+              (if dimflag                    ; last link of the tread chain
                 (hs-dim *cs-depth-dimstyle* pprev crown
                         (hs-add (hs-mid2 pprev crown)
                                 (hs-scl u offd))))))
@@ -2009,7 +2138,107 @@
                                (T ", held to the original point"))
                          "."))))))
 
-  ;; ---- 6. done ---------------------------------------------------------
+  ;; ---- 6. side profile -------------------------------------------------
+  ;; The plan run seen from the side: alternating vertical drops (the
+  ;; step depths) and horizontal step treads, drawn in world X/Y from a
+  ;; picked top-of-wall point.  Still inside the command's UNDO group,
+  ;; and before the entry dim style is restored - the profile dims use
+  ;; *cs-depth-dimstyle* too.
+  (if (> drawn 0)
+    (progn
+      (initget "Yes No")
+      (if (/= "No" (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+        (progn
+          ;; step treads, top step first: sort the logged axis distances
+          ;; ascending and take successive differences
+          (setq srt    (vl-sort tlist '<)
+                treads (list (car srt))
+                pv     (car srt))
+          (foreach td (cdr srt)
+            (if (> (- td pv) 1e-6)
+              (setq treads (append treads (list (- td pv)))))
+            (setq pv td))
+          (setq tcount (length treads))
+          ;; the drops, top step first, with Back (Undo accepted too)
+          (setq jx 1 drops nil)
+          (while (<= jx tcount)
+            (if (= jx 1)
+              (initget 7 "Back Undo")
+              (initget 6 "Back Undo"))
+            (setq dd (getdist
+                       (if (= jx 1)
+                         "\nStep 1 - step depth (the drop): "
+                         (strcat "\nStep " (itoa jx)
+                                 " - step depth [Back] <"
+                                 (rtos (car drops)) ">: "))))
+            (cond
+              ((and (= (type dd) 'STR)
+                    (or (= dd "Back") (= dd "Undo")))
+               (if (= jx 1)
+                 (princ "\n  Already at the first step.")
+                 (progn (princ "\n  Stepping back one step.")
+                        (setq drops (cdr drops) jx (1- jx)))))
+              ((null dd)                       ; Enter = same as previous
+               (setq drops (cons (car drops) drops) jx (1+ jx)))
+              (T
+               (setq drops (cons dd drops) jx (1+ jx)))))
+          (setq drops (reverse drops))
+          ;; placement: the top of the wall, then which side it descends
+          (setq ptop (getpoint
+                       "\nPick the top of the wall for the side profile: "))
+          (if (null ptop)
+            (princ "\nNo point picked - side profile skipped.")
+            (progn
+              (setq pu      ptop               ; the pick, still in UCS
+                    ptop    (trans ptop 1 0)
+                    sgn     nil
+                    pcancel nil)
+              (while (and (null sgn) (not pcancel))
+                (setq pside (getpoint pu
+                              "\nPick a point on the side the steps descend: "))
+                (cond
+                  ((null pside)
+                   (princ "\nNo side picked - side profile skipped.")
+                   (setq pcancel T))
+                  (T
+                   (setq dxs (- (car (trans pside 1 0)) (car ptop)))
+                   (if (< (abs dxs) 1e-10)
+                     (princ "\nPick left or right of the wall, not on it.")
+                     (setq sgn (if (< dxs 0.0) -1.0 1.0))))))
+              (if sgn
+                (progn
+                  (setq totdrop 0.0 totrun 0.0)
+                  (foreach dd drops (setq totdrop (+ totdrop dd)))
+                  (foreach td treads (setq totrun (+ totrun td)))
+                  (setq lowy (- (cadr ptop) totdrop)
+                        px   (car ptop)
+                        py   (cadr ptop)
+                        jx   0)
+                  (foreach td treads
+                    (setq dd (nth jx drops)
+                          e1 (list px py 0.0)
+                          e2 (list px (- py dd) 0.0))
+                    (hs-mkline e1 e2)          ; the drop
+                    (if dimflag                ; one vertical chain, behind
+                      (hs-dim *cs-depth-dimstyle* e1 e2   ; the wall
+                              (list (- (car ptop) (* sgn 2.0 txth))
+                                    (- py (* 0.5 dd)) 0.0)))
+                    (setq py (- py dd)
+                          e1 (list px py 0.0)
+                          e2 (list (+ px (* sgn td)) py 0.0))
+                    (hs-mkline e1 e2)          ; the tread
+                    (if dimflag                ; one horizontal chain, below
+                      (hs-dim *cs-depth-dimstyle* e1 e2
+                              (list (+ px (* sgn 0.5 td))
+                                    (- lowy (* 2.0 txth)) 0.0)))
+                    (setq px (+ px (* sgn td))
+                          jx (1+ jx)))
+                  (princ (strcat "\nSide profile drawn: " (itoa tcount)
+                                 " step(s), total run " (rtos totrun)
+                                 ", total drop " (rtos totdrop)
+                                 "."))))))))))
+
+  ;; ---- 7. done ---------------------------------------------------------
   (if (zerop drawn)
     (princ "\nNo steps drawn.")
     (princ (strcat "\n" (itoa drawn)
@@ -2058,7 +2287,7 @@
   (princ "\nWHAT YOU SELECT DECIDES THE MODE")
   (princ "\n  LINE only ....... steps centered on the line, marching away")
   (princ "\n                    from it on the side you pick")
-  (princ "\n  CURVE + LINE .... the line is the measuring axis; depths")
+  (princ "\n  CURVE + LINE .... the line is the measuring axis; treads")
   (princ "\n                    start where it meets the curve, going in")
   (princ "\n  CURVE only ...... from the middle of the arc, going in")
   (princ "\n  (a curve may be an arc, circle, or polyline - including a")
@@ -2066,13 +2295,16 @@
   (princ "\nTHE PROMPTS, IN ORDER")
   (princ "\n  1. LINE mode first asks the width of the step AT THE WALL -")
   (princ "\n     it anchors the boundary; no chord is drawn there.")
-  (princ "\n  2. Then DEPTH, WIDTH, repeating.  Every depth is from the")
-  (princ "\n     previous step - never a running total.  Enter at a depth")
-  (princ "\n     = done; Back steps back one step; Same repeats.")
+  (princ "\n  2. Then STEP TREAD, WIDTH, repeating.  Every step tread is")
+  (princ "\n     from the previous step - never a running total.  Enter at")
+  (princ "\n     a step tread = done; Back steps back one step; Same repeats.")
   (princ "\n     Enter at a width fits the step to the curve (curve modes)")
   (princ "\n     or repeats the previous width (line mode).")
-  (princ "\n  3. One last depth to the back of the curve places the crown,")
+  (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
+  (princ "\n  4. Finally you may add a SIDE PROFILE: give each step depth")
+  (princ "\n     (the vertical drop, top step first, Back supported), then")
+  (princ "\n     pick the top of the wall and the side the steps descend.")
   (hs-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns on tilted UCS / non-flat lines / unusable layer")
@@ -2084,7 +2316,7 @@
   (princ "\n    curve it lands on, nearest the axis")
   (princ "\n  - the boundary's arcs are fitted so the crown sits inside")
   (princ "\n    ONE arc, and a segment that would fold back is refused")
-  (princ "\n  - dims: depths chained along the axis (STANDARD INCHES),")
+  (princ "\n  - dims: step treads chained along the axis (STANDARD INCHES),")
   (princ "\n    widths nested behind the start (SIDE STANDARD); one undo")
   (hs-tut-pause)
 
@@ -2151,7 +2383,7 @@
   (setq pts (append (list wallA) ea (list crown) (reverse eb) (list wallB))
         kx  (+ 1 (length ea)))
   (hs-mkpoly pts (hs-blgs pts kx nil))
-  (princ "\n[6] One last depth (9.45) places the CROWN, and the boundary")
+  (princ "\n[6] One last distance (9.45) places the CROWN, and the boundary")
   (princ "\n    polyline is drawn: wall - step ends - crown - step ends -")
   (princ "\n    wall, in arc segments fitted so the apex sits inside one")
   (princ "\n    arc.  This is the hemisphere the steps sit in.")
@@ -2173,7 +2405,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v1.7) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v1.8) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -2191,7 +2423,7 @@
 ;;;
 ;;;   ONE LINE ......... the steps are CENTERED on that line.  You pick
 ;;;                      which side they go, give the width once, then
-;;;                      the tread depths.
+;;;                      the step treads.
 ;;;   TWO LINES (a corner)
 ;;;                      the steps sit against the corner and always run
 ;;;                      OUTWARD from it.  You are asked which of the two
@@ -2233,29 +2465,36 @@
 ;;;       mouth of the recess the run sits in by that offset; in a U it
 ;;;       is cut into the corner and the treads trim to it.  A U that
 ;;;       already has its back corners drawn is not asked.
-;;;   4.  Then tread depths, one per step, each measured FROM THE
-;;;       PREVIOUS TREAD (from the base line for the first).  Distances
-;;;       read architectural style: a bare number is inches (drawing
-;;;       units) and feet-inch entry like 1'4 (= 16") works whatever the
-;;;       units setting.
-;;;   5.  Enter at a depth prompt = done.  Back steps back one step:
-;;;       it removes the step just drawn (its line and its dimensions).
-;;;       Undo, the old keyword, is still accepted.  Same repeats the
-;;;       previous depth, which is what most runs want.
+;;;   4.  Then step treads, one per step - each the plan-view spacing
+;;;       measured FROM THE PREVIOUS TREAD (from the base line for the
+;;;       first).  Distances read architectural style: a bare number is
+;;;       inches (drawing units) and feet-inch entry like 1'4 (= 16")
+;;;       works whatever the units setting.
+;;;   5.  Enter at a step tread prompt = done.  Back steps back one
+;;;       step: it removes the step just drawn (its line and its
+;;;       dimensions).  Undo, the old keyword, is still accepted.  Same
+;;;       repeats the previous step tread, which is what most runs want.
 ;;;   6.  The side lines of the run - with the back corners worked in -
 ;;;       are drawn for the one-line and corner modes.  In corner mode
 ;;;       only the outer side is drawn, since the steps run outward from
 ;;;       the corner and the picked line closes the inner side.  The U
 ;;;       already has its arms, so only a back corner asked for there is
 ;;;       drawn.
-;;;   7.  Optional dimensions: the depths chained along the run, plus the
-;;;       step width once (it is the same for every step).
+;;;   7.  Optional dimensions: the step treads chained along the run,
+;;;       plus the step width once (it is the same for every step).
+;;;   8.  Optionally a SIDE PROFILE: you give each step's STEP DEPTH -
+;;;       its vertical drop, top step first (Enter repeats the previous
+;;;       one, Back steps back) - then pick the top of the wall and the
+;;;       side the steps descend, and the staircase silhouette is drawn
+;;;       in world X/Y, with a drop-dim chain behind the wall and a
+;;;       tread-dim chain along the bottom when dims are on.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
 ;;;                       (the default) it is 1/8" converted through the
 ;;;                       drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for tread-depth dims.
+;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (the side
+;;;                       profile's dims use it too).
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
@@ -2277,7 +2516,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.7") ; printed on load and at command start so a
+(setq *ns-version* "v1.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2651,7 +2890,10 @@
                         pprev oldce oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
-                        basepc side1 side2 pc qc e)
+                        basepc side1 side2 pc qc e
+                        tlist svals treads prevv nsteps drops k dv
+                        wpu wpt spt dx sgn totrun totdrop px0 cx cy
+                        lowy tt)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -2674,7 +2916,8 @@
               pprev (nth 2 rec)
               n     (nth 3 rec)
               drawn (1- drawn)
-              slog  (cdr slog))
+              slog  (cdr slog)
+              tlist (cdr tlist))
         (redraw)
         (princ "\n  Stepping back one step.")
         T)))
@@ -2785,7 +3028,7 @@
            dir (ns-unit (ns-vec corner (ns-far side corner))))
      (if (or (null u) (null dir))
        (progn (princ "\nA selected line has zero length.") (exit)))
-     ;; keep DIR square to the treads so depths measure true
+     ;; keep DIR square to the treads so step treads measure true
      (setq dir (ns-unit (ns-scl (ns-perp u)
                                 (if (< (ns-dot (ns-perp u) dir) 0.0)
                                   -1.0 1.0)))
@@ -2949,7 +3192,7 @@
       (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
       (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
         (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                       "\" not found - tread depths use the current style.")))
+                       "\" not found - step treads use the current style.")))
       (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
         (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
                        "\" not found - the step width uses the current style.")))
@@ -2957,14 +3200,14 @@
         (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
                        "\" is missing or not drawable - using the"
                        " current layer.")))))
-  ;; The depth chain runs just off the run's axis, the way the corner
+  ;; The step-tread chain runs just off the run's axis, the way the corner
   ;; and hemisphere routines (and the shop's own example drawings) do -
   ;; NOT outside the whole run, which would drag every chain dim's
   ;; extension lines across the entire step field.
   (setq offd   (* 2.0 txth)
         dimoff (ns-scl u offd))
 
-  ;; ---- 5. tread depths, one per step -----------------------------------
+  ;; ---- 5. step treads, one per step ------------------------------------
   (command "_.UNDO" "_Begin")
   (setq undoflag T cum 0.0 n 1 drawn 0
         pprev sp
@@ -2980,7 +3223,7 @@
              (initget 6 (strcat "Back" (if lastdep " Same" "") " Undo"))
              (setq dep (getdist
                          (strcat "\nStep " (itoa n)
-                                 " - tread depth [Back"
+                                 " - step tread [Back"
                                  (if lastdep "/Same" "") "]"
                                  (if lastdep
                                    (strcat " <Enter = done, Same = "
@@ -2993,7 +3236,7 @@
                  ((= dep "Same")
                   (if lastdep
                     (setq dep lastdep)
-                    (progn (princ "\n  No previous depth.")
+                    (progn (princ "\n  No previous step tread.")
                            (setq dep 'RETRY))))
                  (T (setq dep 'RETRY)))))
            dep))
@@ -3060,7 +3303,8 @@
           (ns-dim *cs-depth-dimstyle* pprev p
                   (ns-add (ns-mid2 pprev p) dimoff)))
         (setq pprev p drawn (1+ drawn)
-              slog  (cons (list (ns-since mark) svcum svp svn) slog))))
+              slog  (cons (list (ns-since mark) svcum svp svn) slog)
+              tlist (cons cum tlist))))
     (setq n (1+ n)))
 
   ;; ---- 6. sides of the run (with the back corners) and the width dim --
@@ -3088,6 +3332,108 @@
         (ns-dim *cs-width-dimstyle* first1 first2
                 (ns-add sp (ns-scl dir (- (+ (* 0.5 (distance first1 first2))
                                              (* 1.5 txth)))))))))
+
+  ;; ---- 6b. side profile ------------------------------------------------
+  ;; The plan run gave each step's STEP TREAD; here each step's STEP
+  ;; DEPTH - its vertical drop - is asked, top step first, and the
+  ;; staircase silhouette is drawn in world X/Y off a picked wall-top
+  ;; point.  Still inside the command's undo group, and its dims use
+  ;; the depth dim style like the tread chain.
+  (if (> drawn 0)
+    (progn
+      (initget "Yes No")
+      (if (/= "No" (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+        (progn
+          ;; the treads, top step first: sort the recorded distances
+          ;; from the run start ascending - the first is the first
+          ;; tread, each successive difference the next
+          (setq svals  (vl-sort tlist '<)
+                prevv  0.0
+                treads nil)
+          (foreach tt svals
+            (if (> (- tt prevv) 1e-6)
+              (setq treads (cons (- tt prevv) treads)))
+            (setq prevv tt))
+          (setq treads (reverse treads)
+                nsteps (length treads))
+          ;; the drops, top step first, with Back (Undo, the old
+          ;; keyword, is a hidden synonym)
+          (setq drops nil k 1)
+          (while (<= k nsteps)
+            (if (= k 1)
+              (progn
+                (initget 7 "Back Undo")
+                (setq dv (getdist "\nStep 1 - step depth (the drop): ")))
+              (progn
+                (initget 6 "Back Undo")
+                (setq dv (getdist
+                           (strcat "\nStep " (itoa k)
+                                   " - step depth [Back] <"
+                                   (rtos (car drops)) ">: ")))))
+            (cond
+              ((and (= (type dv) 'STR)
+                    (or (= dv "Back") (= dv "Undo")))
+               (if (= k 1)
+                 (princ "\n  Already at the first step.")
+                 (progn
+                   (setq k (1- k) drops (cdr drops))
+                   (princ "\n  Stepping back one step."))))
+              ((null dv)                         ; Enter = same as previous
+               (setq drops (cons (car drops) drops) k (1+ k)))
+              (T
+               (setq drops (cons dv drops) k (1+ k)))))
+          (setq drops (reverse drops))
+          ;; where the profile goes and which way the steps descend
+          (setq wpu (getpoint
+                      "\nPick the top of the wall for the side profile: "))
+          (if (null wpu)
+            (princ "\nNo point picked - no side profile drawn.")
+            (progn
+              (setq wpt (ns-flat (trans wpu 1 0))
+                    sgn nil)
+              (while (and (null sgn)
+                          (setq spt (getpoint wpu
+                                      (strcat "\nPick a point on the side"
+                                              " the steps descend: "))))
+                (setq dx (- (car (trans spt 1 0)) (car wpt)))
+                (if (< (abs dx) 1e-10)
+                  (princ "\nPick left or right of the wall, not on it.")
+                  (setq sgn (if (< dx 0.0) -1.0 1.0))))
+              (if (null sgn)
+                (princ "\nNo side picked - no side profile drawn.")
+                (progn
+                  (setq totrun  (apply '+ treads)
+                        totdrop (apply '+ drops)
+                        px0     (car wpt)
+                        cx      px0
+                        cy      (cadr wpt)
+                        lowy    (- (cadr wpt) totdrop)
+                        k       0)
+                  (foreach tt treads
+                    (setq dv (nth k drops))
+                    ;; the drop, straight down ...
+                    (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                    (if dimflag                  ; one chain behind the wall
+                      (ns-dim *cs-depth-dimstyle*
+                              (list cx cy 0.0) (list cx (- cy dv) 0.0)
+                              (list (- px0 (* sgn offd))
+                                    (- cy (* 0.5 dv)) 0.0)))
+                    (setq cy (- cy dv))
+                    ;; ... then the tread, out the way the steps descend
+                    (ns-mkline (list cx cy 0.0)
+                               (list (+ cx (* sgn tt)) cy 0.0))
+                    (if dimflag                  ; one chain along the bottom
+                      (ns-dim *cs-depth-dimstyle*
+                              (list cx cy 0.0)
+                              (list (+ cx (* sgn tt)) cy 0.0)
+                              (list (+ cx (* sgn 0.5 tt))
+                                    (- lowy offd) 0.0)))
+                    (setq cx (+ cx (* sgn tt))
+                          k  (1+ k)))
+                  (princ (strcat "\nSide profile drawn: " (itoa nsteps)
+                                 " step(s), total run " (rtos totrun)
+                                 ", total drop " (rtos totdrop)
+                                 "."))))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
   (if (zerop drawn)
@@ -3153,20 +3499,24 @@
   (princ "\n     one derives the other: cut = offset x root 2).  A U that")
   (princ "\n     already has its back corners drawn is not asked.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
-  (princ "\n  4. Tread depths, one per step, each from the previous")
+  (princ "\n  4. Step treads, one per step, each from the previous")
   (princ "\n     tread.  Enter = done, Back = step back one (removes")
-  (princ "\n     it), Same = repeat the previous depth.")
+  (princ "\n     it), Same = repeat the previous step tread.")
+  (princ "\n  5. Add a side profile? [Yes/No] - each step's STEP DEPTH")
+  (princ "\n     (its vertical drop), top step first, then pick the top")
+  (princ "\n     of the wall and the side the steps descend; the")
+  (princ "\n     silhouette is drawn in world X/Y, dims and all.")
   (ns-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns on tilted UCS / non-flat lines / unusable layer")
   (princ "\n  - bare numbers read as inches; 1'4 style works anywhere")
-  (princ "\n  - corner mode keeps depths square to the picked line, so a")
-  (princ "\n    skewed corner still measures true")
-  (princ "\n  - U treads trim to whatever the side is at that depth -")
+  (princ "\n  - corner mode keeps step treads square to the picked line,")
+  (princ "\n    so a skewed corner still measures true")
+  (princ "\n  - U treads trim to whatever the side is at that distance -")
   (princ "\n    arm, diagonal or arc - and the run stops at the open end")
   (princ "\n  - a back corner deeper than the run falls back to square")
   (princ "\n  - notes when a line had to be extended to meet a tread")
-  (princ "\n  - dims: the depth chain plus the width once; all one undo")
+  (princ "\n  - dims: the step-tread chain plus the width once; all one undo")
   (ns-tut-pause)
 
   (initget "Yes No")
