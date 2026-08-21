@@ -110,6 +110,24 @@ def script(base=(0.0, 0.0), measure=None, variant='Center'):
 TR_X, TR_Y = 443.0, 344.0
 TR_MEASURE = [TR_X, TR_Y, 108.0, 96.0, 108.0, 96.0, 96.0, 120.0]
 
+#: the drawing the two CLOUD shapes were read off: 30'-0" x 20'-0", a 7'
+#: right bulge, a 6' top tangent and -- on the rounded one -- a 12'
+#: bottom.  The left bulge is not in the list: three bounds pin it at
+#: half the Y bound, 10'-0" here, and it is never asked for.
+CL_X, CL_Y = 360.0, 240.0
+CL_RLEFT = CL_Y / 2.0
+CL_FLAT = [CL_X, CL_Y, 84.0, 72.0]                 # StraightBottom
+CL_ROUND = [CL_X, CL_Y, 84.0, 72.0, 144.0]         # RoundedBottom
+
+#: what the DXF has for those two, in ring order, centres relative to the
+#: envelope's bottom-left corner and angles in degrees
+CL_REF = {
+    'left':   ((120.0, 120.0), 120.0, 38.6376800, None),
+    'right':  ((276.0, 84.0), 84.0, 270.0, 92.2141060),
+    'top':    ((269.9731235, 239.8835357), 72.0, 218.6376800, 272.2141060),
+    'bottom': ((200.9334869, -131.2882219), 144.0, 70.7774020, 107.8524170),
+}
+
 
 # ---- scaffolding ------------------------------------------------------
 
@@ -146,7 +164,7 @@ def cmds(vm, name):
     return [c for c in vm.commands if c and c[0] == name]
 
 
-def arcs_of(vm):
+def arcs_of(vm, n=6):
     """The POOL's six arcs as (centre, radius, start, end), in creation
     order, angles in degrees so they read against the reference table.
 
@@ -158,16 +176,16 @@ def arcs_of(vm):
         c = d[10]
         out.append(((c[0], c[1]), d[40],
                     math.degrees(d[50]) % 360.0, math.degrees(d[51]) % 360.0))
-    return out[:6]
+    return out[:n]
 
 
-def check_arcs_of(vm):
-    """The check drawing's six, which follow the pool's."""
+def check_arcs_of(vm, n=6):
+    """The check drawing's, which follow the pool's."""
     out = []
     for d in made(vm, 'ARC'):
         c = d[10]
         out.append(((c[0], c[1]), d[40]))
-    return out[6:]
+    return out[n:]
 
 
 def pt_on(c, r, deg):
@@ -902,8 +920,9 @@ def test_the_shape_is_the_first_question():
     vm = newvm()
     run(vm, script(), 'shape question')
     first = vm.prompts[0][0]
-    assert first == '\nWhere is the top bulge? [Center/TopRight] <Center>: ', \
-        repr(first)
+    assert first == ('\nWhich shape is it? '
+                     '[Center/TopRight/StraightBottom/RoundedBottom] '
+                     '<Center>: '), repr(first)
     assert '[Back]' in vm.prompts[1][0], vm.prompts[1][0]   # the base point
     print("ok  shape first -> %r" % first.strip())
 
@@ -1033,6 +1052,143 @@ def test_top_right_preview_starts_from_its_own_proportions():
     print("ok  tr start    -> corner bulge sized off the short bound")
 
 
+
+def test_straight_bottom_matches_its_reference_drawing():
+    """The two-bulge cloud: a left bulge tangent to three bounds at once,
+    a right bulge tangent to two, a reverse arc over the top -- and a
+    flat run of the bottom bound between them."""
+    vm = newvm()
+    run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat cloud')
+    arcs = arcs_of(vm, 3)
+    assert len(arcs) == 3, arcs
+    left, right, top = arcs
+    for got, name in ((left, 'left'), (right, 'right'), (top, 'top')):
+        c, r, a0, a1 = CL_REF[name]
+        assert close(got[0][0], c[0]) and close(got[0][1], c[1]), (name, got)
+        assert close(got[1], r), (name, got)
+        assert close(got[2], a0, 1.0e-6), (name, got[2], a0)
+        if a1 is not None:
+            assert close(got[3], a1, 1.0e-6), (name, got[3], a1)
+    assert close(left[1], CL_RLEFT), left      # Y/2, never asked for
+    # the flat bottom, drawn as a LINE between the two bulges' feet
+    line = [d for d in made(vm, 'LINE')][0]
+    assert [round(v, 6) for v in line[10][:2]] == [120.0, 0.0], line
+    assert [round(v, 6) for v in line[11][:2]] == [276.0, 0.0], line
+    print("ok  flat cloud  -> three arcs and a flat run, on the drawing")
+
+
+def test_rounded_bottom_matches_its_reference_drawing():
+    """Same cloud with the bottom joined by a reverse arc instead."""
+    vm = newvm()
+    run(vm, script(measure=CL_ROUND, variant='RoundedBottom'), 'round cloud')
+    arcs = arcs_of(vm, 4)
+    assert len(arcs) == 4, arcs
+    for got, name in zip(arcs, ('left', 'bottom', 'right', 'top')):
+        c, r, a0, a1 = CL_REF[name]
+        assert close(got[0][0], c[0]) and close(got[0][1], c[1]), (name, got)
+        assert close(got[1], r), (name, got)
+    # its left bulge runs further round than the flat one's, to meet the
+    # bottom arc rather than the bottom bound
+    assert close(arcs[0][3], 287.8524170, 1.0e-6), arcs[0]
+    assert close(arcs[1][2], 70.7774020, 1.0e-6), arcs[1]
+    assert close(arcs[1][3], 107.8524170, 1.0e-6), arcs[1]
+    print("ok  round cloud -> four arcs, on the drawing")
+
+
+def test_both_clouds_fill_their_envelope():
+    """The left bulge alone holds three of the four bounds, which is what
+    takes its radius out of the questions."""
+    for variant, measure, nring in (('StraightBottom', CL_FLAT, 3),
+                                    ('RoundedBottom', CL_ROUND, 4)):
+        vm = newvm()
+        run(vm, script(measure=measure, variant=variant), variant)
+        over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f %.4f 0.0 %.4f'
+                        ' %.4f 0.0 %.4f "%s") %.4f %.4f)'
+                        % (CL_X, CL_Y, CL_RLEFT, measure[2], measure[3],
+                           measure[4] if len(measure) > 4 else 0.0, variant,
+                           CL_X, CL_Y))
+        assert over is None, (variant, over)
+        assert len(arcs_of(vm, nring)) == nring
+    print("ok  cloud bounds-> both fill 0,0 - %g,%g exactly" % (CL_X, CL_Y))
+
+
+def test_the_flat_bottom_is_the_bound_itself():
+    """It is not a special case bolted on: the straight run comes out of
+    the same external-tangent construction every joiner uses, and lands on
+    the Y-min bound because both bulges are tangent to it."""
+    vm = newvm()
+    m = vm.loads('(oasis:extnorm (list 120.0 120.0) 120.0'
+                 ' (list 276.0 84.0) 84.0)')
+    assert close(m[0], 0.0, 1.0e-12) and close(m[1], -1.0, 1.0e-12), m
+    ring = vm.loads('(oasis:solve %.1f %.1f %.1f 0.0 84.0 72.0 0.0 0.0'
+                    ' "StraightBottom")' % (CL_X, CL_Y, CL_RLEFT))
+    flat = ring[1]
+    assert flat[0] == 'bottom' and flat[5] == 'LINE', flat
+    assert close(flat[1][1], 0.0) and close(flat[2][1], 0.0), flat
+    assert close(flat[1][0], CL_RLEFT), flat          # under the left centre
+    assert close(flat[2][0], CL_X - 84.0), flat       # and the right one
+    print("ok  flat run    -> the external tangent lands on the Y-min bound")
+
+
+def test_the_clouds_ask_four_or_five_measurements():
+    """A cloud's left bulge is pinned, and a straight bottom has no radius
+    at all, so the two of them ask fewer questions than an oasis."""
+    for variant, measure, want in (
+            ('StraightBottom', CL_FLAT,
+             ['Which shape is it?', 'Insertion base point',
+              'X - overall left-to-right bounds',
+              'Y - overall front-to-back bounds',
+              'Right bulge radius', 'Top tangent radius']),
+            ('RoundedBottom', CL_ROUND,
+             ['Which shape is it?', 'Insertion base point',
+              'X - overall left-to-right bounds',
+              'Y - overall front-to-back bounds',
+              'Right bulge radius', 'Top tangent radius', 'Bottom radius'])):
+        vm = newvm()
+        run(vm, script(measure=measure, variant=variant), variant)
+        asked = [p.lstrip('\n').split(' [')[0].split(' <')[0].rstrip(': ')
+                 for p, _ in vm.prompts]
+        assert asked == want, (variant, asked)
+        assert not any('Left bulge' in a for a in asked), asked
+    print("ok  cloud asks  -> 6 questions flat, 7 rounded, no left bulge")
+
+
+def test_the_flat_run_is_dimensioned_by_length_not_radius():
+    """A straight run has no radius to call out, so it takes an aligned
+    dimension of its length instead -- and the check drawing has one
+    centre fewer to tie."""
+    vm = newvm()
+    run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat dims')
+    assert len(cmds(vm, '_.DIMRADIUS')) == 3, vm.commands   # the three arcs
+    aligned = cmds(vm, '_.DIMALIGNED')
+    assert len(aligned) == 1 + 9, len(aligned)   # the run, then 3 x (2 + 1)
+    run_dim = aligned[0]
+    assert close(math.dist(run_dim[1][:2], run_dim[2][:2]),
+                 CL_X - 84.0 - CL_RLEFT), run_dim
+    print("ok  flat dims   -> the run is dimensioned %g\" long, not by radius"
+          % (CL_X - 84.0 - CL_RLEFT))
+
+
+def test_the_cloud_preview_shows_no_circle_behind_the_flat_run():
+    """Three bulge circles behind three arcs on a rounded cloud; on a flat
+    one the bottom has no circle and no ?, because the envelope box
+    already shows the bound it lies on."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat pv')
+    # shots are the getdist prompts: 0 = X, 1 = Y, 2 = right bulge, 3 = top
+    assert len(p.shot(2, 'ARC')) == 3, p.shot(2, 'ARC')
+    assert len(p.shot(2, 'LINE')) == 5, p.shot(2, 'LINE')   # box + the run
+    assert len(p.shot(2, 'CIRCLE')) == 3, p.shot(2, 'CIRCLE')
+    labels = [d[1] for d in p.shot(2, 'TEXT')]
+    assert len(labels) == 3, labels
+    assert labels.count('?') == 2, labels     # right bulge and top tangent
+    # the left bulge is pinned, so it shows its value from the start
+    assert any(t != '?' and close(float(t), CL_RLEFT) for t in labels), labels
+    print("ok  cloud pv    -> no circle or ? behind the flat run, and the"
+          " pinned bulge reads its value")
+
+
 def test_version_command():
     vm = newvm()
     vm.run('c:OASISVER', [])
@@ -1152,6 +1308,13 @@ if __name__ == '__main__':
     test_top_right_asks_its_own_questions()
     test_a_corner_bulge_too_big_for_the_envelope_is_reasked()
     test_top_right_preview_starts_from_its_own_proportions()
+    test_straight_bottom_matches_its_reference_drawing()
+    test_rounded_bottom_matches_its_reference_drawing()
+    test_both_clouds_fill_their_envelope()
+    test_the_flat_bottom_is_the_bound_itself()
+    test_the_clouds_ask_four_or_five_measurements()
+    test_the_flat_run_is_dimensioned_by_length_not_radius()
+    test_the_cloud_preview_shows_no_circle_behind_the_flat_run()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
