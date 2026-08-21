@@ -98,9 +98,11 @@ REF_MEASURE = [REF_X, REF_Y] + list(REF_BULGES) + list(REF_TANGENTS)
 
 
 def script(base=(0.0, 0.0), measure=None, variant='Center'):
-    """A whole run: which shape, where it goes, then the eight
-    measurements."""
-    return [variant, base] + list(REF_MEASURE if measure is None else measure)
+    """A whole run: which shape -- and, for a cloud, which bottom --
+    then where it goes and the measurements."""
+    head = {'StraightBottom': ['CLoud', 'Straight'],
+            'RoundedBottom': ['CLoud', 'Rounded']}.get(variant, [variant])
+    return head + [base] + list(REF_MEASURE if measure is None else measure)
 
 
 #: the drawing the TOP RIGHT BULGE variant was read off: 36'-11" x 28'-8",
@@ -376,7 +378,7 @@ def test_layers_and_dimensions():
     assert all(d[8] == 'DIMENSION' for d in dims), dims
     assert len(cmds(vm, '_.DIMLINEAR')) == 2, vm.commands     # overall X, Y
     assert len(cmds(vm, '_.DIMRADIUS')) == 6, vm.commands     # one per arc
-    assert len(cmds(vm, '_.DIMALIGNED')) == 18, vm.commands   # check drawing
+    assert len(cmds(vm, '_.DIMALIGNED')) == 21, vm.commands   # check drawing
     for lay in ('POOL', 'DIMENSION', 'POOL-GUIDE'):
         assert lay in vm.tables['LAYER'], vm.tables['LAYER']
     print("ok  layers      -> arcs on POOL, 2 linear + 6 radius + 18 check"
@@ -837,13 +839,13 @@ def test_check_drawing_ties_every_centre_to_its_two_nearest_corners():
 
 
 def test_check_drawing_ties_neighbouring_centres():
-    """The last six tie each centre to the next one round the ring -- and
-    because neighbouring circles are externally tangent, each of those
-    dimensions must read exactly the two radii added together."""
+    """Six tie each centre to the next one round the ring -- and because
+    neighbouring circles are externally tangent, each of those must read
+    exactly the two radii added together."""
     vm = newvm()
     run(vm, script(), 'centre ties')
     chk = check_arcs_of(vm)
-    ties = cmds(vm, '_.DIMALIGNED')[12:]
+    ties = cmds(vm, '_.DIMALIGNED')[12:18]
     assert len(ties) == 6, len(ties)
     for i, t in enumerate(ties):
         a, b = chk[i], chk[(i + 1) % 6]
@@ -854,6 +856,30 @@ def test_check_drawing_ties_neighbouring_centres():
           " together")
 
 
+def test_check_drawing_ties_the_bulges_to_each_other():
+    """The lobes are what a pool is read by, so their centres are tied to
+    each other as well -- across whatever reverse arc sits between them,
+    which the ring ties alone never cross."""
+    vm = newvm()
+    run(vm, script(), 'bulge ties')
+    chk = check_arcs_of(vm)
+    bulges = [chk[i] for i in (0, 2, 4)]       # left, right, top
+    ties = cmds(vm, '_.DIMALIGNED')[18:]
+    assert len(ties) == 3, len(ties)
+    got = {tuple(sorted((round(t[1][0], 6), round(t[2][0], 6))))
+           for t in ties}
+    want = {tuple(sorted((round(bulges[i][0][0], 6),
+                          round(bulges[(i + 1) % 3][0][0], 6))))
+            for i in range(3)}
+    assert got == want, (got, want)
+    # and they are NOT the tangency ties: a bulge pair is not tangent
+    for t in ties:
+        d = math.dist(t[1][:2], t[2][:2])
+        assert not any(close(d, a[1] + b[1]) for a in bulges for b in bulges
+                       if a is not b), d
+    print("ok  bulge ties  -> 3 more, left-right, right-top and top-left")
+
+
 def test_the_two_drawings_take_their_own_dim_styles():
     """The pool is a plan and is dimensioned in the drawing's ordinary
     style; the check drawing beside it is nothing but tie measurements
@@ -861,7 +887,7 @@ def test_the_two_drawings_take_their_own_dim_styles():
     vm = newvm()
     run(vm, script(), 'dim styles')
     dims = made(vm, 'DIMENSION')
-    assert len(dims) == 20, len(dims)
+    assert len(dims) == 23, len(dims)
     # the pool's two linear dims come first (DIMRADIUS makes no entity
     # in the VM), then the check drawing's eighteen
     assert all(d[3] == 'Standard' for d in dims[:2]), dims[:2]
@@ -880,7 +906,7 @@ def test_a_drawing_without_the_cross_style_still_gets_its_pool():
     run(vm, script(), 'no style')
     assert len(made(vm, 'ARC')) == 12
     dims = made(vm, 'DIMENSION')
-    assert len(dims) == 20, len(dims)
+    assert len(dims) == 23, len(dims)
     assert all(d[3] == 'Standard' for d in dims), dims[2]
     print("ok  no style    -> drawn in the current style rather than"
           " refused")
@@ -920,8 +946,7 @@ def test_the_shape_is_the_first_question():
     vm = newvm()
     run(vm, script(), 'shape question')
     first = vm.prompts[0][0]
-    assert first == ('\nWhich shape is it? '
-                     '[Center/TopRight/StraightBottom/RoundedBottom] '
+    assert first == ('\nWhich shape is it? [Center/TopRight/CLoud] '
                      '<Center>: '), repr(first)
     assert '[Back]' in vm.prompts[1][0], vm.prompts[1][0]   # the base point
     print("ok  shape first -> %r" % first.strip())
@@ -1135,12 +1160,12 @@ def test_the_clouds_ask_four_or_five_measurements():
     at all, so the two of them ask fewer questions than an oasis."""
     for variant, measure, want in (
             ('StraightBottom', CL_FLAT,
-             ['Which shape is it?', 'Insertion base point',
+             ['Which shape is it?', 'Cloud bottom?', 'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Right bulge radius', 'Top tangent radius']),
             ('RoundedBottom', CL_ROUND,
-             ['Which shape is it?', 'Insertion base point',
+             ['Which shape is it?', 'Cloud bottom?', 'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Right bulge radius', 'Top tangent radius', 'Bottom radius'])):
@@ -1150,7 +1175,7 @@ def test_the_clouds_ask_four_or_five_measurements():
                  for p, _ in vm.prompts]
         assert asked == want, (variant, asked)
         assert not any('Left bulge' in a for a in asked), asked
-    print("ok  cloud asks  -> 6 questions flat, 7 rounded, no left bulge")
+    print("ok  cloud asks  -> 7 questions flat, 8 rounded, no left bulge")
 
 
 def test_the_flat_run_is_dimensioned_by_length_not_radius():
@@ -1161,7 +1186,7 @@ def test_the_flat_run_is_dimensioned_by_length_not_radius():
     run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat dims')
     assert len(cmds(vm, '_.DIMRADIUS')) == 3, vm.commands   # the three arcs
     aligned = cmds(vm, '_.DIMALIGNED')
-    assert len(aligned) == 1 + 9, len(aligned)   # the run, then 3 x (2 + 1)
+    assert len(aligned) == 1 + 9, len(aligned)   # the run, 6 corner, 3 tie
     run_dim = aligned[0]
     assert close(math.dist(run_dim[1][:2], run_dim[2][:2]),
                  CL_X - 84.0 - CL_RLEFT), run_dim
@@ -1187,6 +1212,53 @@ def test_the_cloud_preview_shows_no_circle_behind_the_flat_run():
     assert any(t != '?' and close(float(t), CL_RLEFT) for t in labels), labels
     print("ok  cloud pv    -> no circle or ? behind the flat run, and the"
           " pinned bulge reads its value")
+
+
+
+def test_a_cloud_is_one_shape_with_two_bottoms():
+    """The first question offers three, not four: a cloud is one shape
+    and which bottom it has is a question of its own, asked straight
+    after -- and it decides whether a bottom radius gets asked for at
+    all."""
+    vm = newvm()
+    run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat ask')
+    assert vm.prompts[1][0] == '\nCloud bottom? [Straight/Rounded/Back]' \
+        ' <Straight>: ', repr(vm.prompts[1][0])
+    assert len(vm.prompts) == 7, len(vm.prompts)
+    vm = newvm()
+    run(vm, script(measure=CL_ROUND, variant='RoundedBottom'), 'round ask')
+    assert len(vm.prompts) == 8, len(vm.prompts)      # plus the bottom radius
+    # the two answers together name the ring
+    for a, b, want in (('Center', None, 'Center'),
+                       ('Cloud', 'Straight', 'StraightBottom'),
+                       ('Cloud', 'Rounded', 'RoundedBottom')):
+        got = vm.loads('(oasis:variant (list "%s" nil nil nil nil nil nil nil'
+                       ' nil nil %s))'
+                       % (a, ('"%s"' % b) if b else 'nil'))
+        assert got == want, (a, b, got, want)
+    # an oasis never reaches the bottom question, a cloud always does
+    assert vm.loads('(oasis:steps (list "Center" nil nil nil nil nil nil nil'
+                    ' nil nil nil))') == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert vm.loads('(oasis:steps (list "Cloud" nil nil nil nil nil nil nil'
+                    ' nil nil nil))') == [0, 10, 1, 2, 3, 6, 7]
+    assert vm.loads('(oasis:steps (list "Cloud" nil nil nil nil nil nil nil'
+                    ' nil nil "Rounded"))') == [0, 10, 1, 2, 3, 6, 7, 9]
+    print("ok  cloud bottom-> asked after the shape, and it decides the rest")
+
+
+def test_backing_out_of_the_bottom_reaches_the_shape():
+    """Which bottom is the second question, so Back from it lands on the
+    shape -- and answering that differently rebuilds every question after
+    it."""
+    vm = newvm()
+    run(vm, ['CLoud', 'Back', 'Center', (0.0, 0.0)] + REF_MEASURE, 'back out')
+    assert len(arcs_of(vm)) == 6, arcs_of(vm)       # an oasis, not a cloud
+    assert close(arcs_of(vm)[4][1], REF_BULGES[1]), arcs_of(vm)[4]
+    asked = [p.lstrip('\n').split(' [')[0] for p, _ in vm.prompts]
+    assert asked[:3] == ['Which shape is it?', 'Cloud bottom?',
+                         'Which shape is it?'], asked
+    assert 'Left bulge radius' in asked, asked   # only an oasis asks this
+    print("ok  bottom back -> Back from the bottom re-asks the shape")
 
 
 def test_version_command():
@@ -1297,6 +1369,7 @@ if __name__ == '__main__':
     test_check_drawing_sits_clear_to_the_right()
     test_check_drawing_ties_every_centre_to_its_two_nearest_corners()
     test_check_drawing_ties_neighbouring_centres()
+    test_check_drawing_ties_the_bulges_to_each_other()
     test_the_two_drawings_take_their_own_dim_styles()
     test_a_drawing_without_the_cross_style_still_gets_its_pool()
     test_the_preview_starts_from_the_usual_proportions()
@@ -1315,6 +1388,8 @@ if __name__ == '__main__':
     test_the_clouds_ask_four_or_five_measurements()
     test_the_flat_run_is_dimensioned_by_length_not_radius()
     test_the_cloud_preview_shows_no_circle_behind_the_flat_run()
+    test_a_cloud_is_one_shape_with_two_bottoms()
+    test_backing_out_of_the_bottom_reaches_the_shape()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
