@@ -619,7 +619,7 @@
 (defun c:ALTABCDEF (/ file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
-                    sol x y rms i tags placed stage done)
+                    sol x y rms i tags tg p placed stage done)
   (vl-load-com)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
@@ -741,10 +741,15 @@
           (princ (strcat "\n\n  Frame A-B-C-D: true rectangle "
                          (rtos W 2 2) "\" (A-B) x " (rtos H 2 2)
                          "\" (A-D), all corners 90.00 deg."))
+          ;; vl-catch-all-apply takes the argument list as its second argument;
+          ;; called with only the lambda it raises "too few arguments" and
+          ;; takes the end of the run down with it, which is exactly what
+          ;; the catch was there to prevent.
           (vl-catch-all-apply
             '(lambda ()
                (vl-cmdf "_.plan" "_World")
-               (vl-cmdf "_.zoom" "_Extents")))
+               (vl-cmdf "_.zoom" "_Extents"))
+            '())
           (princ "\n  View reset to plan (top) so the rectangle shows square.")
           (princ)))))
   (princ))

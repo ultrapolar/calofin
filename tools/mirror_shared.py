@@ -59,6 +59,28 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
+    # ABCDEF and XYPLOT carry the same feet-inch parser, so the same two
+    # generic helpers come out of both.  Mirrored rather than hand-copied
+    # because the twins were drifting: the shared abcdef.lsp still had
+    # abcdef:trim spelled out while lisp/ had moved on.
+    'abcdef': {
+        'src': 'lisp/abcdef/abcdef.lsp',
+        'swap': {
+            'abcdef:trim': 'cal:trim',
+            'abcdef:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+    },
+    'XYPLOT': {
+        'src': 'lisp/xyplot/XYPLOT.lsp',
+        'swap': {
+            'xyp:trim': 'cal:trim',
+            'xyp:pad': 'cal:pad',
+            'xyp:layer': 'cal:ensure-layer',
+            'xyp:text': 'cal:text',
+        },
+        'drop_globals': [],
+    },
     'xftconv': {
         'src': 'lisp/xftconv/xftconv.lsp',
         'swap': {

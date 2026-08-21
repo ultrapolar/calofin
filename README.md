@@ -101,8 +101,9 @@ changing a routine.
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
 | `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each. `ABMOVE` also offers every place the point lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow and tagged by the tape they move (`1A`, `-3B`) - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
-| `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
+| `ABCDEF`, `ABCDEFVER` | `lisp/abcdef/` | Locates Excel-measured points inside rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom).  Two tapes place a point, three fix it, four cross-check it; a fourth tape is dropped only when leaving it out settles the other three **and** the runner-up triple is clearly worse, so a point near a diagonal keeps all four rather than discarding a good tape.  Reports per point how many tapes placed it, which, and a measured 1-99% confidence, to the command line and to a text file beside the sheet.  Plots as `ab_pt` blocks on `POINTS` and offers `ABHD` the set |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
+| `XYPLOT`, `XYPLOTVER` | `lisp/xyplot/` | `ABCDEF`'s sister for a survey that arrives already reduced: a sheet of X/Y offsets, one picked origin, drawn twice - graph 1 the points as given (`ab_pt` on `POINTS`, ready for `ABHD`), graph 2 the same points with the X and Y offsets dimensioned as two continuous linear chains |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
 | `DIMCHECK`, `DIMSCAN`, `DIMCHECKVER`, ... | `lisp/dimcheck/` | Guided, one-at-a-time review of dimension placement, arc-end attachment and overlapping lines, grouped by dimension style |
 | `LINFINCHECK`, `LINFINSCAN`, ... | `lisp/linfincheck/` | `DIMCHECK`'s checks plus steps & side views, wall height, the liner pattern and the title block border - the full liner-finish drawing QA |
@@ -171,6 +172,9 @@ consolidation:
   name; the older, clockwise-reading version is now `ALTABCDEF`
   (including its `altabcdef:` helper namespace and `ALTABCDEF-*`
   layers, so loading both in one session is safe).
+  `XYPLOT` is a third member of the family rather than a fourth
+  convention: it takes X/Y offsets instead of corner distances, so
+  there are no corners to disagree about.
 * **`CHECK`** named two unrelated tools: a dimension/arc geometry audit
   (with `DIMCHECK`, `LINFINCHECK` and `COVERCHECK` already built
   against it) and a product-type flowchart walker. The audit kept
@@ -311,6 +315,8 @@ python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
 python3 tests/test_cdcallout.py       # CDCALLOUT loaded and run in lispvm
 python3 tests/test_abfind.py          # ABFIND / ABMOVE, run in lispvm
+python3 tests/test_abcdef.py          # ABCDEF, run in lispvm against a known survey
+python3 tests/test_xyplot.py          # XYPLOT, run in lispvm
 python3 tests/test_autodim.py         # AUTODIM styles, dedupe, overall/step/floor dims
 python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
                                       # own sorted(), then the whole tour

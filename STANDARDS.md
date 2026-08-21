@@ -576,10 +576,11 @@ the bare keywords (section 1 rule 1).
 * Version banners that `release_lisp.py` cannot see:
   `lisp/abhd/abhd.lsp:158` `*PF-VERSION*` (uppercase -- its
   `releases/ABHD_*.lsp` twin is currently an orphan the tool neither
-  regenerates nor prunes), `lisp/abcdef/abcdef.lsp:43`
-  `abcdef:*version* "4"` (no `vN.N`), `lisp/altabcdef/ALTABCDEF.lsp`
-  (none at all). The pool/spa `"MMDDYY REV##"` form stays supported
-  but new tools use `vN.N`.
+  regenerates nor prunes) and `lisp/altabcdef/ALTABCDEF.lsp` (none at
+  all). `lisp/abcdef/abcdef.lsp` carried `abcdef:*version* "4"` until
+  v5.0 moved it to `*abcdef-version* "v5.0"`, which is why it now has a
+  `releases/` twin at all. The pool/spa `"MMDDYY REV##"` form stays
+  supported but new tools use `vN.N`.
 * `COVERCHECKVERSION` -> `COVERCHECKVER` (the one `...VERSION` outlier).
 * Prefix styles: 15 files use `prefix-`, `paddle--` uses a double
   hyphen; new work uses `tool:`. Existing prefixes migrate only if
