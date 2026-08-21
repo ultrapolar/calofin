@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "081926 REV03")
+(setq tut:*version* "082126 REV04")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -88,8 +88,11 @@
     "4.  Insertion base point (Enter = 0,0).  Your own object snaps stay"
     "    live for this pick, and for every measurement prompt after it."
     "5.  The measurements, against a grey guide spa whose matching piece"
-    "    turns RED while it is being asked for.  Back re-asks the"
-    "    previous question, right across the whole input phase."
+    "    turns RED while it is being asked for.  Back (B, or Undo/U)"
+    "    re-asks the previous question, right across the input phase."
+    "    A ROUND spa takes ONE measurement -- the diameter; type O at"
+    "    it only if the spa measured out of round.  A RECTANGLE offers"
+    "    the width back as the length, so Enter makes it square."
     "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
     "    Corner A's answer autofills B, C and D -- Enter accepts."
     "7.  Draw the other outline as well?  By Offset (give the lap) or by"

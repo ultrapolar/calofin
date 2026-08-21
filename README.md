@@ -273,6 +273,11 @@ not a bug in either side.
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 
+`tests/test_pool_runtime.py` and `tests/test_spa_runtime.py` load the
+real `POOL.LSP` / `SPA.LSP` into the AutoLISP VM in `tests/lispvm.py`
+and drive the commands end-to-end with scripted answers, so a change
+that would die at the AutoCAD command line dies there first.
+
 ## Tests (`tests/`)
 
 Runs without AutoCAD or Blender installed - `lispvm.py` is a pure-Python
