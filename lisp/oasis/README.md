@@ -10,14 +10,19 @@ is smooth: the outline changes direction without ever changing tangent,
 which is why the whole thing can be given as a handful of radii and two
 overall dimensions.
 
-Four shapes come out of that, and the first question is which:
+Three shapes come out of that, and the first question is which:
 
 | | Bulges | The top | The bottom |
 | --- | --- | --- | --- |
 | **Center** | left, right, top — centred | reverse arcs either side | reverse arc |
 | **TopRight** | left, right, top — in the corner | reverse arcs either side | reverse arc |
-| **StraightBottom** | left, right | one reverse arc | the flat run of the bound |
-| **RoundedBottom** | left, right | one reverse arc | reverse arc |
+| **Cloud** | left, right | one reverse arc | see below |
+
+A cloud is one shape with two bottoms rather than two shapes, so which
+bottom it has is a question of its own, asked straight after — **Straight**,
+the flat run of the Y-min bound between the two bulges, or **Rounded**, a
+reverse arc like any other joiner. The pair of answers together names one
+of four rings.
 
 Nothing downstream of the solver knows which shape it is looking at — it
 reads the ring. The four differ only in how many bulges there are, where
@@ -45,8 +50,8 @@ joiner on one shape and the bulge itself on another:
 | --- | --- | --- |
 | Center | Left, Top, Right | Top-left, Top-right, Bottom-center |
 | TopRight | Left, **Top-right**, Right | Top-left, **Right-side**, Bottom-center |
-| StraightBottom | Right | Top |
-| RoundedBottom | Right | Top, Bottom |
+| Cloud, straight | Right | Top |
+| Cloud, rounded | Right | Top, Bottom |
 
 ### Answering it, with the pool on screen
 
@@ -107,15 +112,24 @@ cross dimensions:
 | --- | --- |
 | 12 | each circle centre to the **two envelope corners nearest it** |
 | 6 | each circle centre to **the next one round the ring** |
+| 3 | each **bulge** centre to the next bulge, across whatever sits between |
+
+(Those counts are a `Center` or `TopRight` pool's 21. A rounded cloud
+draws 13 and a straight-bottom one 9, having fewer centres — and a pair
+that is both a ring neighbour and a bulge neighbour is only dimensioned
+once.)
 
 Between them those pin all six centres against the box and against one
 another, so a transcription slip in any single radius shows up as a
 dimension that does not agree with the order sheet. The
-centre-to-centre ties have a second use: neighbouring circles are
-externally tangent by construction, so **each of those must read
-exactly the two radii added together** — 8'-0" + 5'-0" = 13'-0" where
+ring ties have a second use: neighbouring circles are externally
+tangent by construction, so **each of those must read exactly the two
+radii added together** — 8'-0" + 5'-0" = 13'-0" where
 the left bulge meets the bottom-center tangent, and so on round the
-six. Anything else means the outline is not tangent-continuous.
+six. Anything else means the outline is not tangent-continuous. The
+bulge ties are the lobe-to-lobe measurements a pool is actually read by,
+which the ring ties never give because they stop at each reverse arc in
+between.
 
 ### Where the circles come from
 
@@ -176,7 +190,7 @@ computed closed and drawn closed.
 ### The questions
 
 ```
-Which shape is it? [Center/TopRight/StraightBottom/RoundedBottom] <Center>:
+Which shape is it? [Center/TopRight/CLoud] <Center>:
 Insertion base point <0,0> [Back]:
 X - overall left-to-right bounds [Back]:
 Y - overall front-to-back bounds [Back]:
@@ -190,8 +204,13 @@ Bottom-center tangent radius [Back]:
 
 (A **TopRight** pool asks the same ten, with `Top-right bulge radius` in
 place of `Top bulge radius` and `Right-side tangent radius` in place of
-`Top-right tangent radius`. The clouds drop the left and top bulges and
-the two extra joiners — see the table above.)
+`Top-right tangent radius`. A **CLoud** asks `Cloud bottom?
+[Straight/Rounded/Back] <Straight>:` second, and then drops the left and
+top bulges and the two extra joiners — see the table above.)
+
+`CLoud` takes two capitals because `Center` already has the `C`; the
+routine normalizes it back to `Cloud` at the ask site, so nothing else
+ever sees that spelling.
 
 Every measurement is required — Enter, zero and a negative are all
 refused — and every question after the first offers `Back` (`Undo` is
@@ -241,7 +260,8 @@ and a 6' top — four numbers, because three bounds already pin the left
 bulge at 10'-0":
 
 ```
-Which shape is it? [...] <Center>: S
+Which shape is it? [...] <Center>: CL
+Cloud bottom? [Straight/Rounded/Back] <Straight>: Straight
 Insertion base point <0,0> [Back]: (pick)
 X - overall left-to-right bounds [Back]: 30'
 Y - overall front-to-back bounds [Back]: 20'
@@ -378,7 +398,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 58 of them. The reference case is checked against the drawing OASIS was
+answers — 61 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -430,7 +450,11 @@ bound rather than a special case bolted on; they ask six and seven
 questions with no left-bulge question among them; the flat run is
 dimensioned by its length rather than by a radius it has not got; and
 their preview draws no circle and no `?` behind that run while showing
-the pinned left bulge's value from the very first question. The preview
+the pinned left bulge's value from the very first question. Two more
+cover the shape being asked in two parts — the bottom question decides
+whether a bottom radius is asked for at all, and `Back` from it lands on
+the shape and rebuilds every question after it — and one covers the
+bulge-to-bulge ties in the check drawing. The preview
 ones wrap `getdist` to photograph the drawing at the moment each question
 is put — it is erased before the next one, so there is no other way to
 see it.

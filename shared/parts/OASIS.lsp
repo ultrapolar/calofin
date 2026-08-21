@@ -18,15 +18,19 @@
 ;;; ever changing tangent, which is why the whole thing can be given as a
 ;;; handful of radii and two overall dimensions.
 ;;;
-;;; Four shapes come out of that, and the first question is which:
+;;; Three shapes come out of that, and the first question is which:
 ;;;
-;;;   Center          three bulges -- left, right and one across the top,
-;;;                   centred -- joined by three reverse arcs.
-;;;   TopRight        the same, with the third bulge tucked into the
-;;;                   top-right corner instead.
-;;;   StraightBottom  two bulges, joined over the top by a reverse arc and
-;;;                   along the bottom by the flat run of the bound.
-;;;   RoundedBottom   the same, with the bottom a reverse arc as well.
+;;;   Center    three bulges -- left, right and one across the top,
+;;;             centred -- joined by three reverse arcs.
+;;;   TopRight  the same, with the third bulge tucked into the top-right
+;;;             corner instead.
+;;;   Cloud     two bulges, joined over the top by a reverse arc.
+;;;
+;;; A cloud's bottom is a question of its own, asked straight after,
+;;; because a cloud is one shape with two bottoms rather than two shapes:
+;;; Straight, the flat run of the Y-min bound between the two bulges, or
+;;; Rounded, a reverse arc like any other joiner.  The pair of answers
+;;; together names one of four rings.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________                  ___________
@@ -117,13 +121,16 @@
 ;;;   * a CHECK DRAWING clear to the right, dimensioned the way a layout
 ;;;     is checked rather than the way it is built: every circle centre
 ;;;     tied back to the two envelope corners nearest it, and every pair
-;;;     of neighbouring centres tied to each other.  Eighteen dimensions
-;;;     that between them pin all six centres against the box and against
+;;;     of neighbouring centres tied to each other, and every pair of
+;;;     neighbouring BULGES tied across whatever sits between them.
+;;;     Between them those pin every centre against the box and against
 ;;;     one another, so a transcription slip in any single radius shows
 ;;;     up as a dimension that does not agree with the order sheet.  The
-;;;     centre-to-centre ties have a second use: neighbouring circles are
-;;;     externally tangent by construction, so each of those must read
-;;;     exactly the two radii added together.
+;;;     ring ties have a second use: neighbouring circles are externally
+;;;     tangent by construction, so each of those must read exactly the
+;;;     two radii added together.  The bulge ties are the lobe-to-lobe
+;;;     measurements a pool is actually read by, and the ring ties never
+;;;     cross a reverse arc to give them.
 ;;;
 ;;; The check drawing's eighteen are drawn in the CROSS DIMENSIONS
 ;;; style, since that is what they are; the pool's own eight are left in
@@ -175,7 +182,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *oasis-version* "v4.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v4.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -249,6 +256,15 @@
 (defun oasis:cloud-p (variant)
   (member variant '("StraightBottom" "RoundedBottom")))
 
+;; The shape, resolved.  The first question offers three -- the two oasis
+;; shapes and Cloud -- because a cloud is one shape with two bottoms, not
+;; two shapes; which bottom is a question of its own, asked straight
+;; after.  The pair of answers together names one of the four rings.
+(defun oasis:variant (ans)
+  (if (= (nth 0 ans) "Cloud")
+      (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom")
+      (nth 0 ans)))
+
 ;; The left bulge's radius.  On a cloud shape three bounds pin it at once
 ;; -- left, bottom and top -- so it is half the Y bound and is never
 ;; asked for; on an oasis it is whatever was typed.
@@ -293,10 +309,10 @@
 ;; Which answer slots this shape asks for, in the order it asks them.
 ;; The rest are either pinned by the envelope (a cloud's left bulge) or
 ;; are no part of the shape at all.
-(defun oasis:steps (variant)
-  (cond ((= variant "StraightBottom") '(0 1 2 3 6 7))
-        ((= variant "RoundedBottom")  '(0 1 2 3 6 7 9))
-        (t                            '(0 1 2 3 4 5 6 7 8 9))))
+(defun oasis:steps (ans)
+  (cond ((/= (nth 0 ans) "Cloud")      '(0 1 2 3 4 5 6 7 8 9))
+        ((= (nth 10 ans) "Rounded")    '(0 10 1 2 3 6 7 9))
+        (t                             '(0 10 1 2 3 6 7))))
 
 ;; How the shape is named on the command line and in the report.
 (defun oasis:vlabel (variant)
@@ -758,6 +774,17 @@
           ((or (null rd) (< d rd)) (setq rest c rd d))))
   (list best rest))
 
+;; Add a tie between two centres unless it is already there.  A pair of
+;; bulges that happen to be ring neighbours as well would otherwise be
+;; dimensioned twice, one dim on top of the other.
+(defun oasis:addtie (ties p q / e hit)
+  (setq hit nil)
+  (foreach e ties
+    (if (or (and (equal (car e) p 1e-8) (equal (cadr e) q 1e-8))
+            (and (equal (car e) q 1e-8) (equal (cadr e) p 1e-8)))
+        (setq hit T)))
+  (if hit ties (append ties (list (list p q)))))
+
 ;; One cross dimension between two drawn points, its dimension line
 ;; sitting on the line it measures -- the look POOL and CDCREATE give a
 ;; tie measurement.
@@ -770,7 +797,7 @@
 
 ;; The whole check drawing, placed at CBASE.  Returns nothing; the caller
 ;; has already put the layers and the dim style in place.
-(defun oasis:checkdraw (arcs cbase w h lt / mark cens a i n near)
+(defun oasis:checkdraw (arcs cbase w h lt / mark cens bul ties a e i n near)
   (oasis:dimstyle-on oasis:*crossstyle*)
   (setvar "CLAYER" oasis:*guidelayer*)
   (oasis:pv-box w h cbase lt)
@@ -778,12 +805,17 @@
   ;; the outline itself, so the centres have something to belong to
   (oasis:draw arcs cbase oasis:*poollayer*)
   (setvar "CLAYER" oasis:*guidelayer*)
-  ;; a straight run has no centre to check, so it drops out here and the
-  ;; ring closes over it
-  (setq cens nil)
+  ;; every circle centre in ring order, and the BULGE centres again on
+  ;; their own.  A straight run has no centre, so it drops out of both
+  ;; and the ring closes over it.
+  (setq cens nil bul nil)
   (foreach a arcs
-    (if (not (oasis:line-p a)) (setq cens (cons (nth 1 a) cens))))
+    (if (not (oasis:line-p a))
+        (progn
+          (setq cens (cons (nth 1 a) cens))
+          (if (nth 5 a) (setq bul (cons (nth 1 a) bul))))))
   (setq cens (reverse cens)
+        bul  (reverse bul)
         n    (length cens)
         i    0)
   (while (< i n)
@@ -797,14 +829,22 @@
     (oasis:crossdim (nth i cens) (car near) cbase)
     (oasis:crossdim (nth i cens) (cadr near) cbase)
     (setq i (1+ i)))
-  ;; and every centre to the one next round the ring -- where the two
-  ;; circles really are neighbours, each of these must read the two radii
-  ;; added together, because they are externally tangent
-  (setq i 0)
+  ;; then the ties between centres: each circle to the next one round the
+  ;; ring, AND each bulge to the next bulge.  The ring ties check the
+  ;; tangency -- neighbours are externally tangent, so each of those must
+  ;; read the two radii added together -- and the bulge ties check the
+  ;; lobes against each other, across whatever sits between them.
+  (setq ties nil i 0)
   (while (< i n)
-    (oasis:crossdim (nth i cens) (nth (rem (1+ i) n) cens) cbase)
-    (setq i (1+ i)))
-  (princ))
+    (setq ties (oasis:addtie ties (nth i cens) (nth (rem (1+ i) n) cens))
+          i    (1+ i)))
+  (setq i 0)
+  (while (< i (length bul))
+    (setq ties (oasis:addtie ties (nth i bul)
+                             (nth (rem (1+ i) (length bul)) bul))
+          i    (1+ i)))
+  (foreach e ties (oasis:crossdim (car e) (cadr e) cbase))
+  (+ (* 2 n) (length ties)))
 
 ;; Where the check drawing goes: clear to the right of the pool and of
 ;; the radius dimensions on that side.
@@ -850,7 +890,7 @@
 ;; entirely on the three bulges -- so it takes a quarter of the short
 ;; bound, lifted clear of its own minimum when that is larger.
 (defun oasis:fillin (ans / var w h rl rt rr cl ct cr side top g big)
-  (setq var  (nth 0 ans)
+  (setq var  (oasis:variant ans)
         w    (nth 2 ans)
         h    (nth 3 ans)
         side (* 0.5 oasis:*startside* (min w h))
@@ -942,7 +982,7 @@
                       / var base w h full arcs lt out ring n i a md txt
                         hgt slot hi)
   (oasis:pv-clear old)
-  (setq var  (nth 0 ans)
+  (setq var  (oasis:variant ans)
         base (nth 1 ans)
         w    (nth 2 ans)
         h    (nth 3 ans)
@@ -1087,11 +1127,11 @@
 ;;
 ;;   0 which shape      3 Y bound         6 right bulge   8 joiner right
 ;;   1 base point       4 left bulge      7 joiner top    9 joiner bottom
-;;   2 X bound          5 top bulge
+;;   2 X bound          5 top bulge                      10 a cloud's bottom
 ;;
 ;; A shape asks only the slots oasis:steps lists for it.
-(defun oasis:askstep (k ans / var w h rl rt rr cl ct cr)
-  (setq var (nth 0 ans)
+(defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr)
+  (setq var (oasis:variant ans)
         w   (nth 2 ans) h  (nth 3 ans)
         rl  (oasis:leftrad var h (nth 4 ans))
         rt  (nth 5 ans) rr (nth 6 ans)
@@ -1099,10 +1139,15 @@
         ct  (if (and w h rt) (oasis:topcen w h rt var))
         cr  (if (and w h rr) (list (- w rr) rr)))
   (cond
-    ((= k 0) (cal:askkw "Which shape is it?"
-                          "Center TopRight StraightBottom RoundedBottom"
-                          "Center/TopRight/StraightBottom/RoundedBottom"
-                          "Center" nil))
+    ;; CLoud takes two capitals because Center already has the C.  The
+    ;; keyword comes back spelled that way, so it is normalized here and
+    ;; nothing downstream ever sees it.
+    ((= k 0)
+     (setq v (cal:askkw "Which shape is it?" "Center TopRight CLoud"
+                          "Center/TopRight/CLoud" "Center" nil))
+     (if (= v "CLoud") "Cloud" v))
+    ((= k 10) (cal:askkw "Cloud bottom?" "Straight Rounded"
+                           "Straight/Rounded" "Straight" T))
     ((= k 1) (oasis:askbase T))
     ((= k 2) (cal:askdist 'REQ "X - overall left-to-right bounds" nil T))
     ((= k 3) (cal:askdist 'REQ "Y - overall front-to-back bounds" nil T))
@@ -1131,14 +1176,6 @@
          "top")))
 
 ;;; -------------------- reporting ---------------------------------------
-
-;; How many of the ring's elements are circles -- the check drawing ties
-;; each of them to two corners and to the next one round, so this is a
-;; third of the dimensions it draws.
-(defun oasis:ncircles (arcs / n a)
-  (setq n 0)
-  (foreach a arcs (if (not (oasis:line-p a)) (setq n (1+ n))))
-  n)
 
 ;; s padded out to w characters, so the report's rows line up.
 (defun oasis:pad (s w)
@@ -1185,7 +1222,7 @@
 ;;; -------------------- the command -------------------------------------
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
-                   rl rt rr ftl ftr fbc cbase arcs ents nests prev lt a)
+                   rl rt rr ftl ftr fbc cbase arcs ents nests prev lt a nchk)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:dimstyrestore)
@@ -1238,9 +1275,9 @@
      ;;    business -- so the step list is re-read every time round,
      ;;    and changing the shape at the first question changes every
      ;;    question after it.
-     (setq ans '(nil nil nil nil nil nil nil nil nil nil)
+     (setq ans '(nil nil nil nil nil nil nil nil nil nil nil)
            pos 0)
-     (while (progn (setq steps (oasis:steps (nth 0 ans)))
+     (while (progn (setq steps (oasis:steps ans))
                    (< pos (length steps)))
        (setq k    (nth pos steps)
              prev (oasis:preview prev ans k)
@@ -1260,7 +1297,8 @@
                  (progn
                    (setq nests (oasis:right-nests (nth 2 ans) (nth 3 ans)
                                                   (nth 4 ans) (nth 5 ans)
-                                                  (nth 6 ans) (nth 0 ans)))
+                                                  (nth 6 ans)
+                                                  (oasis:variant ans)))
                    (if nests
                        (progn
                          (princ (strcat "\nThat right bulge and the " nests
@@ -1270,9 +1308,9 @@
                          (setq pos (1- pos)))))))))
 
      (setq prev (oasis:pv-clear prev)
-           var  (nth 0 ans) base (nth 1 ans)
+           var  (oasis:variant ans) base (nth 1 ans)
            w    (nth 2 ans) h    (nth 3 ans)
-           rl   (oasis:leftrad (nth 0 ans) (nth 3 ans) (nth 4 ans))
+           rl   (oasis:leftrad var (nth 3 ans) (nth 4 ans))
            rt   (nth 5 ans) rr (nth 6 ans)
            ftl  (nth 7 ans) ftr  (nth 8 ans) fbc (nth 9 ans)
            arcs (oasis:solve w h rl rt rr ftl ftr fbc var))
@@ -1291,7 +1329,7 @@
            (setvar "CLAYER" oasis:*poollayer*)
            (setq ents (oasis:draw arcs base oasis:*poollayer*))
            (oasis:dimension arcs ents base w h rl rr oasis:*dimlayer*)
-           (oasis:checkdraw arcs cbase w h lt)
+           (setq nchk (oasis:checkdraw arcs cbase w h lt))
            (cal:dimstyrestore)
 
            (command "_.UNDO" "_End")
@@ -1311,8 +1349,7 @@
                             (if (nth 6 a) "" "   (pinned by the envelope)"))))
            (princ (strcat "\n  " (itoa (+ 2 (length arcs)))
                           " dimensions on the pool in the " oasis:*dimstyle*
-                          " style, and " (itoa (* 3 (oasis:ncircles arcs)))
-                          " on the"))
+                          " style, and " (itoa nchk) " on the"))
            (princ (strcat "\n  check drawing beside it in " oasis:*crossstyle*
                           " -- all on layer " oasis:*dimlayer* "."))
            (oasis:report-extents arcs w h)
