@@ -87,9 +87,11 @@
 ;;;  measures rather than by which step placed it (a style the drawing
 ;;;  does not have falls back to the style that was current when the
 ;;;  command started, and that style is restored when it finishes):
-;;;    * Every plan dim          -> "SIDE STANDARD"
-;;;    * ...measuring under 12"  -> "STANDARD INCHES" instead
+;;;    * Perimeter and stairs    -> "SIDE STANDARD"
+;;;    * The floor dims chains   -> "STANDARD"
 ;;;    * The two overall dims    -> "STANDARD"
+;;;    * ...measuring under 12"  -> "STANDARD INCHES", whichever of the
+;;;                                 three it would otherwise have been
 ;;;    * Steps in side view      -> "STANDARD INCHES", depths and the
 ;;;                                 overall alike, in AUTODIM and in
 ;;;                                 AUTODIMSIDEPOV
@@ -175,11 +177,13 @@
 
 ;; ------------------------------------------------ dimension styles
 
-;; The three styles the tool asks for.  Every plan dimension goes in
-;; ad:*style-plan*, anything measuring less than a foot goes in
-;; ad:*style-short* instead - a sub-foot dim reads better in inches -
-;; and the two overall dims go in ad:*style-over*.
+;; The styles the tool asks for.  The perimeter and the stairs go in
+;; ad:*style-plan*, the floor dims chains in ad:*style-floor* and the
+;; two overall dims in ad:*style-over*; whichever of those it is,
+;; anything measuring less than a foot goes in ad:*style-short*
+;; instead, a sub-foot dim reading better in inches.
 (setq ad:*style-plan*  "SIDE STANDARD"
+      ad:*style-floor* "STANDARD"
       ad:*style-short* "STANDARD INCHES"
       ad:*style-over*  "STANDARD")
 
@@ -687,7 +691,7 @@
       (prompt (strcat "\n  (end point was not on an object - the chain"
                       " stops at the last one the line crosses)"))))
   (if (cdr chain)
-    (ad:dimchain chain loc ad:*style-plan*)
+    (ad:dimchain chain loc ad:*style-floor*)
     0))
 
 ;; erase everything drawn after entity MARK (nil = an empty drawing) -
@@ -982,10 +986,11 @@
       ((= stage 4)
        (prompt (strcat "\n=== AUTODIM step 4 of 5: floor dims ==="
                        "\nTwo lines drawn across the plan, each becoming a"
-                       " dimension chain that breaks at every highlighted"
-                       " object it crosses.  A start or end point that is"
-                       " not on an object pulls back to the last object"
-                       " before it, so every dim runs object to object."))
+                       " dimension chain in \"" ad:*style-floor* "\" that"
+                       " breaks at every highlighted object it crosses.  A"
+                       " start or end point that is not on an object pulls"
+                       " back to the last object before it, so every dim"
+                       " runs object to object."))
        (setq v (cal:askyn "Would you like floor dims?" "Yes" T))
        (cond
          ((eq v 'CAL-BACK)

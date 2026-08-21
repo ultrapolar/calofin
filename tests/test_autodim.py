@@ -437,38 +437,50 @@ def floorchain(crossings, p1=(0, 0), p2=(60, 0)):
             cont.append(tuple(c[1][:2]))
         elif run:
             run = False
-    return n, [(d[1], d[2]) for d in dims(vm)], cont
+    return n, [(d[1], d[2]) for d in dims(vm)], cont, [d[0] for d in dims(vm)]
 
 
 # both ends landed on an object: every break point is dimensioned
-n, spans, cont = floorchain([0, 20, 40, 60])
+n, spans, cont, styles = floorchain([0, 20, 40, 60])
 assert n == 3, (n, spans, cont)
 assert spans == [((0.0, 0.0), (20.0, 0.0))], spans
 assert cont == [(40.0, 0.0), (60.0, 0.0)], cont
 print('   both ends on an object: 3 dims, 0 -> 20 -> 40 -> 60')
 
 # neither end on one: the chain pulls back to the objects it crossed
-n, spans, cont = floorchain([20, 40])
+n, spans, cont, styles = floorchain([20, 40])
 assert n == 1, (n, spans, cont)
 assert spans == [((20.0, 0.0), (40.0, 0.0))] and cont == [], (spans, cont)
 print('   neither end on one: it starts and stops at the objects it crossed')
 
 # the end alone in open drawing: it stops at the previous object
-n, spans, cont = floorchain([0, 20, 40])
+n, spans, cont, styles = floorchain([0, 20, 40])
 assert n == 2, (n, spans, cont)
 assert spans == [((0.0, 0.0), (20.0, 0.0))] and cont == [(40.0, 0.0)], cont
 print('   the end in open drawing: it stops at the previous object')
 
 # the start alone in open drawing: it begins at the first object
-n, spans, cont = floorchain([20, 40, 60])
+n, spans, cont, styles = floorchain([20, 40, 60])
 assert n == 2, (n, spans, cont)
 assert spans == [((20.0, 0.0), (40.0, 0.0))] and cont == [(60.0, 0.0)], cont
 print('   the start in open drawing: it begins at the first object')
 
 # a line that crosses nothing, or only one thing, dimensions nothing
-assert floorchain([]) == (0, [], [])
-assert floorchain([30]) == (0, [], [])
+assert floorchain([]) == (0, [], [], [])
+assert floorchain([30]) == (0, [], [], [])
 print('   a line crossing nothing, or one object: no dims at all')
+
+# the chains go in "STANDARD", and a span under a foot still drops into
+# inches the way every other dim the tool places does
+n, spans, cont, styles = floorchain([0, 20, 60])
+assert styles == ['STANDARD'], styles
+print('   the chain goes in STANDARD')
+
+n, spans, cont, styles = floorchain([0, 20, 26, 60])
+assert n == 3, (n, spans, cont)
+assert styles == ['STANDARD', 'STANDARD INCHES', 'STANDARD'], styles
+assert cont == [], cont                       # the short span broke the run
+print('   a 6" span in the middle of one still breaks out into inches')
 
 
 print('== AUTODIMSIDEPOV keeps stepping its dims out with the stairs ==')
