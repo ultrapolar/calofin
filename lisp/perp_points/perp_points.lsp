@@ -5,8 +5,9 @@
 ;;; Splits a selected line into N equally-spaced points (both endpoints
 ;;; included), then for each division point creates a new point offset
 ;;; perpendicular to the line by a user-supplied length.  The new points
-;;; are joined with a polyline, and an aligned dimension is drawn from
-;;; each new point back to its base point on the line.
+;;; are joined with a polyline -- straight segments, arcs, or a mix of
+;;; the two -- and an aligned dimension is drawn from each new point
+;;; back to its base point on the line.
 ;;;
 ;;; The routine then offers to REPEAT on the polyline it just created:
 ;;; you are asked again for a number of points, which are spaced equally
@@ -29,15 +30,38 @@
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
 ;;;      (U, the old keyword, is still accepted).
-;;;   5. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   5. Say how the points are joined: Straight (every segment a
+;;;      line, which is what the routine has always drawn), Arcs (every
+;;;      segment an arc), or Mixed, which then asks which segment
+;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
+;;;      The question is only asked once there are three points or
+;;;      more, and the answer becomes the default for the next round.
+;;;   6. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 4 with the new polyline as
 ;;;      the path.
-;;;   6. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   7. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 2 and
 ;;; reused for every round, so all offsets stay on the same side of the
 ;;; original line and every dimension stays perpendicular to it.
+;;;
+;;; Straight lines, arcs, or both
+;;;   A measured wall is rarely all one or all the other: a radiused
+;;;   stretch reads as an arc, a straight run reads as a line, and one
+;;;   profile often needs both -- which is why step 5 asks instead of
+;;;   assuming.  An arc segment is a bulge written onto the same
+;;;   LWPOLYLINE, so whatever the answer the round produces one
+;;;   editable polyline through the measured points: never a spline and
+;;;   never a curve-fit heavy polyline.  Every point takes a direction
+;;;   from the circle through it and its two neighbours, and a segment
+;;;   is bent to the angle its two ends agree on, so points taken off a
+;;;   real radius come back as that radius and every arc still passes
+;;;   exactly through the two points it joins.
+;;;   Once a round has drawn arcs, the next round spaces its base
+;;;   points along the drawn curve rather than along the chords -- the
+;;;   arcs bow away from their chords, so chord spacing would put the
+;;;   base points off the polyline they are dimensioned from.
 ;;;
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
@@ -66,7 +90,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.2")
+(setq *perp-version* "v0.3")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -188,17 +212,233 @@
                    '(6 . "Continuous"))))
   nm)
 
+;; --- arcs through the points -----------------------------------------
+;; Straight segments need nothing: PLINE already draws them.  An arc
+;; segment is a bulge (group 42) written onto the same LWPOLYLINE, so
+;; the round's output is one polyline either way.  Each vertex is given
+;; a travel tangent, read off the circle through it and its two
+;; neighbours, and each segment is then bent to the angle its two ends
+;; agree on.  Points sampled off a real radius therefore reproduce that
+;; radius exactly, every arc passes through both of its own points, and
+;; a run of points reversed end for end draws the same curve.
+
+;; centre of the circle through three points (plan view, z taken from
+;; p1); nil when the three are collinear.  Matches cal:circumcenter.
+(defun perp:circumcenter (p1 p2 p3 / ax ay bx by cx cy d)
+  (setq ax (car p1) ay (cadr p1)
+        bx (car p2) by (cadr p2)
+        cx (car p3) cy (cadr p3)
+        d  (* 2.0 (+ (* ax (- by cy)) (* bx (- cy ay)) (* cx (- ay by)))))
+  (if (> (abs d) 1e-12)
+    (list (/ (+ (* (+ (* ax ax) (* ay ay)) (- by cy))
+                (* (+ (* bx bx) (* by by)) (- cy ay))
+                (* (+ (* cx cx) (* cy cy)) (- ay by)))
+             d)
+          (/ (+ (* (+ (* ax ax) (* ay ay)) (- cx bx))
+                (* (+ (* bx bx) (* by by)) (- ax cx))
+                (* (+ (* cx cx) (* cy cy)) (- bx ax)))
+             d)
+          (caddr p1))))
+
+;; Unit tangent at pt for the circle centred on ctr, turned to face the
+;; way the polyline travels (toward nxt).  nil when there is no circle
+;; or pt sits on its centre -- both mean "draw this segment straight".
+(defun perp:tan-at (pt ctr nxt / tx ty l)
+  (if (null ctr)
+    nil
+    (progn
+      ;; the radius turned 90 degrees is the tangent
+      (setq tx (- (cadr ctr) (cadr pt))
+            ty (- (car pt)   (car ctr))
+            l  (sqrt (+ (* tx tx) (* ty ty))))
+      (if (< l 1e-12)
+        nil
+        (progn
+          (setq tx (/ tx l) ty (/ ty l))
+          (if (< (+ (* tx (- (car nxt)  (car pt)))
+                    (* ty (- (cadr nxt) (cadr pt))))
+                 0.0)
+            (setq tx (- tx) ty (- ty)))
+          (list tx ty))))))
+
+;; the point one more step along from a to b -- b's own heading, for the
+;; last vertex, which has nothing in front of it to face
+(defun perp:ahead (a b)
+  (list (- (* 2.0 (car b))  (car a))
+        (- (* 2.0 (cadr b)) (cadr a))
+        (caddr b)))
+
+;; Travel tangent at EVERY vertex, in travel order.  An interior vertex
+;; takes its direction from the circle through it and its two
+;; neighbours; the two end vertices borrow the circle of the triple they
+;; sit in.  nil where that circle does not exist -- collinear
+;; neighbours, or fewer than three points -- which is how "nothing to
+;; curve to" is carried through the rest of the fit.
+(defun perp:tangents (pts / n i a p1 p2 p3 nxt ctr out)
+  (setq n (length pts) out '() i 0)
+  (if (>= n 3)
+    (while (< i n)
+      ;; a is the first of the three points whose circle points this
+      ;; vertex: itself and its neighbours, or the end triple it sits in
+      (setq a   (cond ((= i 0) 0) ((= i (1- n)) (- n 3)) (t (1- i)))
+            p1  (nth a pts)
+            p2  (nth (1+ a) pts)
+            p3  (nth (+ a 2) pts)
+            ctr (perp:circumcenter p1 p2 p3)
+            ;; the last vertex has nothing in front of it to face, so it
+            ;; takes its heading from the point before it
+            nxt (if (= i (1- n))
+                  (perp:ahead (nth (- n 2) pts) (nth (1- n) pts))
+                  (nth (1+ i) pts))
+            out (cons (perp:tan-at (nth i pts) ctr nxt) out)
+            i   (1+ i))))
+  (reverse out))
+
+;; signed angle from vector u to vector v, -pi..pi
+(defun perp:vang (u v)
+  (atan (- (* (car u) (cadr v)) (* (cadr u) (car v)))
+        (+ (* (car u) (car v))  (* (cadr u) (cadr v)))))
+
+;; Bulge of the arc from a to b, given the travel tangents at a and at
+;; b: tan(alpha/2), where alpha is half the arc's included angle.  Each
+;; end asks for an alpha of its own -- the angle from a's tangent to the
+;; chord, and from the chord to b's tangent -- and the two agree exactly
+;; when the points came off a real circle, so a sampled arc is returned
+;; unchanged.  Where they disagree the average is taken, which keeps the
+;; fit symmetric: reverse the run of points and every bulge does no more
+;; than change sign.  Straight (bulge 0) when neither end has a tangent,
+;; which is the middle of a straight run, or when there is no chord.
+(defun perp:bulge (ta tb a b / cx cy n alpha lim)
+  (setq cx (- (car b)  (car a))
+        cy (- (cadr b) (cadr a))
+        alpha 0.0
+        n     0)
+  (cond
+    ((< (sqrt (+ (* cx cx) (* cy cy))) 1e-12) 0.0)
+    (t
+     (if ta (setq alpha (+ alpha (perp:vang ta (list cx cy))) n (1+ n)))
+     (if tb (setq alpha (+ alpha (perp:vang (list cx cy) tb)) n (1+ n)))
+     (cond
+       ((= n 0) 0.0)
+       (t
+        (setq alpha (/ alpha (float n)))
+        ;; a chord folding back on a tangent would blow the bulge up
+        ;; toward infinity; cap the included angle at ~342 degrees
+        (setq lim 2.98)
+        (if (> alpha lim)     (setq alpha lim))
+        (if (< alpha (- lim)) (setq alpha (- lim)))
+        (/ (sin (/ alpha 2.0)) (cos (/ alpha 2.0))))))))
+
+;; Write the bulges onto the straight LWPOLYLINE en drawn through pts.
+;; tangs holds one tangent per vertex.  Segment i (numbered from 1) is
+;; arced when picks is nil -- every segment -- or when its number is in
+;; picks; the rest are written straight, so one call covers an all-arc
+;; round and a mixed one alike.  The entity stays an LWPOLYLINE: only
+;; bulges are written, and the vertices are left where they were
+;; measured.
+(defun perp:arcs (en pts tangs picks / d out g i b)
+  (setq d (entget en) out '() i 0)
+  (foreach g d
+    (cond
+      ((= 42 (car g)))                       ; drop existing bulges
+      ((= 10 (car g))
+       (setq b (if (and (< (1+ i) (length pts))
+                        (or (null picks) (member (1+ i) picks)))
+                 (perp:bulge (nth i tangs) (nth (1+ i) tangs)
+                             (nth i pts) (nth (1+ i) pts))
+                 0.0))
+       (setq out (cons (cons 42 b) (cons g out))
+             i   (1+ i)))
+      (t (setq out (cons g out)))))
+  (entmod (reverse out)))
+
+;; n points equally spaced by TRUE arc length along an existing polyline
+;; entity, in the current UCS (both endpoints included).  This is what a
+;; round after an arc round measures along: perp:sample walks the chords
+;; between the points, which is the same thing only while the segments
+;; are straight.  nil if the entity cannot be measured, so the caller
+;; can fall back to the chords.
+(defun perp:ent-pts (en n / tot i d p out ok)
+  (setq tot (vlax-curve-getDistAtParam en (vlax-curve-getEndParam en))
+        out '() i 0 ok T)
+  (while (and ok (< i n))
+    (setq d (if (> n 1) (* (/ (float i) (float (1- n))) tot) 0.0))
+    (if (> d tot) (setq d tot))
+    (if (setq p (vlax-curve-getPointAtDist en d))
+      (setq out (cons (trans p 0 1) out)
+            i   (1+ i))
+      (setq ok nil)))
+  (if ok (reverse out)))
+
+;; --- reading a typed segment list ------------------------------------
+
+;; T when s is one or more digits and nothing else.
+(defun perp:digits-p (s / i n ok)
+  (setq n (strlen s) i 1 ok (> n 0))
+  (while (and ok (<= i n))
+    (if (null (member (substr s i 1)
+                      '("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")))
+      (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+;; "3" -> (3 3), "3-5" -> (3 5), anything else -> nil.
+(defun perp:range (tok / i n p lft rgt)
+  (setq n (strlen tok) i 1 p nil)
+  (while (and (null p) (<= i n))
+    (if (= "-" (substr tok i 1)) (setq p i))
+    (setq i (1+ i)))
+  (cond
+    ((null p)
+     (if (perp:digits-p tok) (list (atoi tok) (atoi tok))))
+    (t
+     (setq lft (substr tok 1 (1- p))
+           rgt (substr tok (1+ p)))
+     (if (and (perp:digits-p lft) (perp:digits-p rgt))
+       (list (atoi lft) (atoi rgt))))))
+
+;; Read a typed segment list -- "1 3-5, 8" -- into a list of segment
+;; numbers.  Spaces and commas both separate.  Returns nil for an empty
+;; answer, a malformed token or a number outside 1..maxn, so a bad
+;; answer re-asks instead of quietly drawing the wrong thing.
+(defun perp:parse-segs (s maxn / i n ch tok toks out bad r a b)
+  (setq n (strlen s) i 1 tok "" toks '())
+  (while (<= i n)
+    (setq ch (substr s i 1))
+    (if (or (= ch " ") (= ch ","))
+      (progn
+        (if (/= tok "") (setq toks (cons tok toks)))
+        (setq tok ""))
+      (setq tok (strcat tok ch)))
+    (setq i (1+ i)))
+  (if (/= tok "") (setq toks (cons tok toks)))
+  (setq out '() bad (null toks))
+  (foreach tok toks
+    (setq r (perp:range tok))
+    (if (null r)
+      (setq bad T)
+      (progn
+        (setq a (car r) b (cadr r))
+        (if (or (< a 1) (> b maxn) (> a b))
+          (setq bad T)
+          (while (<= a b)
+            (if (not (member a out)) (setq out (cons a out)))
+            (setq a (1+ a)))))))
+  (if bad nil out))
+
 ;; --- command ---------------------------------------------------------
 
 (defun c:PERPPTS (/ *error* perp:kill perp:finish
-                    os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
+                    os ce pd plt clay cec celt celw celts cdim undoOpen
+                    tmpEnts
                     srcData srcLayer srcColor srcLtype srcLw srcLts
                     dimPairs dimStyle pr
                     sel ent etype verts p1 p2 pStart pFinish click
                     dx dy dlen ux uy cross fuzz nx ny sz
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
-                    path n lastN basePts newPts guideEnts total
-                    len lastLen i base np again ans iter p e seg)
+                    path pathEnt n lastN basePts newPts guideEnts total
+                    len lastLen i base np again ans iter p e seg
+                    join lastJoin kws nseg picks reply tangs)
 
   ;; erase one temporary entity and forget it
   (defun perp:kill (e)
@@ -225,6 +465,7 @@
     (if clay (setvar "CLAYER"  clay))
     (if pd   (setvar "PDMODE"  pd))
     (if os   (setvar "OSMODE"  os))
+    (if plt  (setvar "PLINETYPE" plt))
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (command "._UNDO" "_End") (setq undoOpen nil))))
@@ -240,6 +481,7 @@
   (setq os    (getvar "OSMODE")
         ce    (getvar "CMDECHO")
         pd    (getvar "PDMODE")
+        plt   (getvar "PLINETYPE")
         clay  (getvar "CLAYER")
         cec   (getvar "CECOLOR")
         celt  (getvar "CELTYPE")
@@ -248,6 +490,9 @@
         cdim  (getvar "DIMSTYLE")
         tmpEnts '())
   (setvar "CMDECHO" 0)
+  ;; PLINE must produce a lightweight polyline, the only kind an arc
+  ;; bulge can be written onto
+  (setvar "PLINETYPE" 2)
   (command "._UNDO" "_Begin")
   (setq undoOpen T)
   ;; guide points must be visible whatever the drawing's PDMODE is
@@ -406,8 +651,12 @@
 
     ;; base points, equally spaced along the current path.  The offset
     ;; side (nx,ny) was fixed from the direction click and is reused for
-    ;; every round, so all rounds offset to the same side.
-    (setq basePts (perp:sample path n))
+    ;; every round, so all rounds offset to the same side.  A path drawn
+    ;; with arcs is measured along the curve itself (pathEnt); a
+    ;; straight one is measured along its own points, which is the same
+    ;; walk over the chords.
+    (setq basePts (cond ((and pathEnt (perp:ent-pts pathEnt n)))
+                        ((perp:sample path n))))
 
     ;; --- length per point + build the new perpendicular points -------
     ;; Enter reuses the last length entered (shown as the prompt
@@ -455,6 +704,45 @@
          (setq i (1+ i)))))
     (setq newPts (reverse newPts))
 
+    ;; --- straight lines, arcs, or both -------------------------------
+    ;; Straight is what this routine has always drawn and stays the
+    ;; opening default; Arcs curves every segment; Mixed asks which
+    ;; segment numbers to curve and leaves the rest as lines.  Two
+    ;; points make one segment with no neighbouring point to take a
+    ;; curvature from, so below three points there is nothing to ask.
+    ;; The answer carries across rounds as the offered default.
+    (setq nseg  (1- n)
+          kws   "Straight Arcs Mixed"
+          picks nil)
+    (if (null lastJoin) (setq lastJoin "Straight"))
+    (if (< n 3)
+      (progn
+        (princ "\nTwo points make one straight segment - nothing to curve.")
+        (setq join "Straight"))
+      (setq join nil))
+    (while (null join)
+      (initget kws)
+      (setq join (getkword (strcat "\nRound " (itoa iter)
+                                   " - how should the points be joined? ["
+                                   (vl-string-translate " " "/" kws)
+                                   "] <" lastJoin ">: ")))
+      (if (null join) (setq join lastJoin))   ; Enter = same as last round
+      ;; Mixed is not an answer on its own - it needs the segment list,
+      ;; and Back returns to the question above rather than guessing
+      (if (equal join "Mixed")
+        (while (and join (null picks))
+          (setq reply (getstring T
+                        (strcat "\nWhich segments are arcs (1 to "
+                                (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
+          (cond
+            ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
+             (setq join nil))
+            ((setq picks (perp:parse-segs reply nseg)))
+            (t (princ (strcat "\nSegment numbers run 1 to " (itoa nseg)
+                              " - single numbers, ranges like 3-5, or"
+                              " both.")))))))
+    (setq lastJoin join)
+
     ;; --- connect the new points with a polyline ----------------------
     ;; drawn with the source object's layer and line properties
     (setvar "CLAYER"    srcLayer)
@@ -465,6 +753,21 @@
     (command "._PLINE")
     (foreach p newPts (command p))
     (command "")
+    ;; One tangent per vertex; perp:arcs turns the segments picks names
+    ;; into arcs and writes the rest straight, so the same call draws an
+    ;; all-arc round and a mixed one.  The polyline keeps its vertices,
+    ;; so every arc still runs through the measured points and every
+    ;; dimension still lands on the curve.
+    (setq tangs (if (equal join "Straight") nil (perp:tangents newPts)))
+    (if tangs (perp:arcs (entlast) newPts tangs picks))
+    ;; a round that drew arcs is the next round's curve to measure along
+    (setq pathEnt (if tangs (entlast)))
+    (princ (strcat "\nRound " (itoa iter) ": polyline drawn "
+                   (cond ((equal join "Straight") "with straight segments")
+                         ((equal join "Arcs")     "with arcs through the points")
+                         (t (strcat "with arcs on " (itoa (length picks))
+                                    " of " (itoa nseg) " segments")))
+                   "."))
 
     ;; --- erase this round's point guides -----------------------------
     (foreach e guideEnts (perp:kill e))

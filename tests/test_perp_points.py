@@ -11,6 +11,10 @@ Two kinds of check, both runnable without AutoCAD:
   helpers and of the curve tangent/normal logic, pinning the behaviour
   the LISP is meant to implement.  Keep the ports in step with the LISP
   helpers when either changes.
+* Runtime checks load the real perp_points.lsp into the repo's AutoLISP
+  interpreter and answer c:PERPPTS from a script, so the prompt
+  sequence, the Straight/Arcs/Mixed question and the bulges that come
+  out the other end are checked against the file that actually ships.
 
 Usage:  python3 tests/test_perp_points.py
 """
@@ -18,6 +22,11 @@ Usage:  python3 tests/test_perp_points.py
 import math
 import os
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lispvm import (VM, Ent, Dot, Sym, NIL,  # noqa: E402
+                    BUILTINS as VM_BUILTINS)
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
@@ -559,6 +568,257 @@ def test_bulge_degenerate_cases():
     print("bulge degenerate cases handled")
 
 
+# --- driving the real command through the AutoLISP VM ------------------
+# A structural check cannot see a prompt that is never asked, a loop
+# that cannot be left, or a bulge that lands on the wrong segment.
+# These runs load the real perp_points.lsp and answer c:PERPPTS from a
+# script; the VM validates every scripted keyword against the live
+# initget list, so a renamed keyword fails here too.
+
+PERP_LSP = os.path.join(LISP_DIR, "perp_points.lsp")
+
+#: a bowed profile with no three consecutive points in a line, so every
+#: segment has a curvature to take, symmetric about x = 50
+BOW = [10.0, 15.0, 22.0, 15.0, 10.0]
+BOW_PTS = [(0.0, 10.0), (25.0, 15.0), (50.0, 22.0), (75.0, 15.0),
+           (100.0, 10.0)]
+
+#: clicked well above the line, so the offsets run +y
+CLICK = [50.0, 30.0, 0.0]
+
+
+def dxf(data, code):
+    for g in data:
+        if isinstance(g, Dot) and g.a == code:
+            return g.b
+        if isinstance(g, list) and g and g[0] == code:
+            return g[1:] if len(g) > 2 else g[1]
+    return None
+
+
+def poly_verts(vm, e):
+    return [(float(g[1]), float(g[2]))
+            for g in vm.entdata[e] if isinstance(g, list) and g[0] == 10]
+
+
+def poly_bulges(vm, e):
+    """One bulge per SEGMENT.  The trailing vertex carries a 42 as well,
+    and on an open polyline that one belongs to no segment."""
+    every = [float(g.b) for g in vm.entdata[e]
+             if isinstance(g, Dot) and g.a == 42]
+    return every[:max(0, len(poly_verts(vm, e)) - 1)]
+
+
+def install_entity_builtins():
+    """The one table call perp_points makes that the shared VM does not
+    carry.  Every layer the routine touches is created rather than
+    repaired, so the lookup guarding the repair branch finds nothing --
+    which is also what a fresh drawing looks like."""
+    VM_BUILTINS[Sym('tblobjname')] = lambda vm, a: NIL
+
+
+def install_command(vm):
+    """PLINE and POINT have to leave entities behind: the routine reaches
+    for (entlast) straight after both."""
+    pending = {'pts': None}
+
+    def command(vm_, a):
+        vm_.commands.append(list(a))
+        if a and a[0] == '._PLINE':
+            pending['pts'] = []
+        elif pending['pts'] is not None and a and isinstance(a[0], list):
+            pending['pts'].append([float(v) for v in a[0]])
+        elif pending['pts'] is not None:
+            pts, pending['pts'] = pending['pts'], None
+            e = Ent()
+            vm_.entities.append(e)
+            # AutoCAD writes a 42 alongside every vertex, so perp:arcs
+            # has to replace them rather than add a second set
+            vm_.entdata[e] = [
+                Dot(0, 'LWPOLYLINE'), Dot(100, 'AcDbPolyline'),
+                Dot(8, vm_.sysvars.get('CLAYER', '0')),
+                Dot(90, len(pts)), Dot(70, 0),
+                Dot(38, pts[0][2] if pts and len(pts[0]) > 2 else 0.0),
+            ] + [g for p in pts for g in ([10, p[0], p[1]], Dot(42, 0.0))]
+        elif a and a[0] == '._POINT':
+            e = Ent()
+            vm_.entities.append(e)
+            vm_.entdata[e] = [Dot(0, 'POINT'),
+                              Dot(8, vm_.sysvars.get('CLAYER', '0')),
+                              [10] + [float(v) for v in a[1]]]
+        elif a and a[0] == '._-DIMSTYLE' and len(a) >= 3:
+            vm_.sysvars['DIMSTYLE'] = a[2]
+        elif a and a[0] == '._DIMALIGNED':
+            vm_.dims.append([list(p) for p in a[1:]])
+        return NIL
+
+    vm.dims = []
+    VM_BUILTINS[Sym('command')] = command
+
+
+def segment_shape(a, b, bulge):
+    """(length, point-at-fraction) for one polyline segment."""
+    chord = math.dist(a, b)
+    if chord < 1e-12:
+        return 0.0, lambda t: a
+    if abs(bulge) < 1e-15:
+        return chord, lambda t: (a[0] + (b[0] - a[0]) * t,
+                                 a[1] + (b[1] - a[1]) * t)
+    delta = 4.0 * math.atan(bulge)               # included angle, signed
+    r = (chord / 2.0) / math.sin(delta / 2.0)    # signed radius
+    ux, uy = (b[0] - a[0]) / chord, (b[1] - a[1]) / chord
+    mx, my = (a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0
+    # a positive bulge travels counter-clockwise, so the centre is to
+    # the LEFT of the chord and the arc bows to the right of it
+    cx = mx - uy * (r * math.cos(delta / 2.0))
+    cy = my + ux * (r * math.cos(delta / 2.0))
+    rad = math.hypot(a[0] - cx, a[1] - cy)
+    phi = math.atan2(a[1] - cy, a[0] - cx)
+    return abs(r * delta), (lambda t: (cx + rad * math.cos(phi + delta * t),
+                                       cy + rad * math.sin(phi + delta * t)))
+
+
+def poly_segments(vm, e):
+    vs, bs = poly_verts(vm, e), poly_bulges(vm, e)
+    return [(vs[i], vs[i + 1]) + segment_shape(vs[i], vs[i + 1], bs[i])
+            for i in range(len(vs) - 1)]
+
+
+def install_curve_builtins():
+    """vlax-curve-* over an LWPOLYLINE that may carry bulges -- what
+    perp:ent-pts measures a following round along."""
+    def end_param(vm, a):
+        return float(len(poly_segments(vm, a[0])))
+
+    def dist_at_param(vm, a):
+        total, prm = 0.0, float(a[1])
+        for i, seg in enumerate(poly_segments(vm, a[0])):
+            if prm >= i + 1:
+                total += seg[2]
+            elif prm > i:
+                total += seg[2] * (prm - i)
+        return total
+
+    def point_at_dist(vm, a):
+        segs, d = poly_segments(vm, a[0]), float(a[1])
+        if not segs:
+            return NIL
+        if d <= 0:
+            return [segs[0][0][0], segs[0][0][1], 0.0]
+        for seg in segs:
+            if d <= seg[2] + 1e-12:
+                p = seg[3](d / seg[2] if seg[2] > 1e-12 else 0.0)
+                return [p[0], p[1], 0.0]
+            d -= seg[2]
+        return [segs[-1][1][0], segs[-1][1][1], 0.0]
+
+    VM_BUILTINS[Sym('vlax-curve-getendparam')] = end_param
+    VM_BUILTINS[Sym('vlax-curve-getdistatparam')] = dist_at_param
+    VM_BUILTINS[Sym('vlax-curve-getpointatdist')] = point_at_dist
+
+
+def run_perppts(script):
+    """One scripted PERPPTS run on a 100-unit line, left to right.
+    Returns the VM and the polylines the run left behind, in order."""
+    install_entity_builtins()
+    install_curve_builtins()
+    vm = VM()
+    install_command(vm)
+    vm.load(PERP_LSP)
+    line = Ent()
+    vm.entities.append(line)
+    vm.entdata[line] = [Dot(0, 'LINE'), Dot(8, 'WALLS'), Dot(62, 3),
+                        [10, 0.0, 0.0, 0.0], [11, 100.0, 0.0, 0.0]]
+    vm.tables['LAYER'].add('WALLS')
+    vm.tables['DIMSTYLE'].add('STANDARD INCHES')
+    vm.run('c:PERPPTS', [line] + list(script))
+    return vm, [e for e in vm.entities
+                if e not in vm.deleted
+                and dxf(vm.entdata[e], 0) == 'LWPOLYLINE']
+
+
+def test_perppts_asks_how_to_join_the_points():
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", "No", "STandard"])
+    assert len(pl) == 1, "one round draws one polyline, got %d" % len(pl)
+    assert poly_verts(vm, pl[0]) == BOW_PTS, poly_verts(vm, pl[0])
+    assert poly_bulges(vm, pl[0]) == [0.0] * 4, "Straight must not bulge"
+    assert dxf(vm.entdata[pl[0]], 8) == 'WALLS', \
+        "the polyline still inherits the source object's layer"
+    assert len(vm.dims) == 5, "one dimension per point, got %d" % len(vm.dims)
+    print("PERPPTS Straight: every segment a line, source layer kept")
+
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Arcs", "No", "STandard"])
+    b = poly_bulges(vm, pl[0])
+    assert len(b) == 4 and all(abs(x) > 1e-6 for x in b), b
+    assert poly_verts(vm, pl[0]) == BOW_PTS, \
+        "an arc round must not move the measured points"
+    # mirroring the profile reverses travel as well as position, so the
+    # mirrored pair of segments carries the same bulge
+    assert abs(b[0] - b[3]) < 1e-12 and abs(b[1] - b[2]) < 1e-12, b
+    print("PERPPTS Arcs: every segment bulged, points unmoved, fit symmetric")
+
+    # 10/14/18/14/10 puts three points in a line twice over, and no
+    # circle passes through those, so a segment with a straight run at
+    # both ends stays straight; only the turn is rounded
+    vm, pl = run_perppts([CLICK, 5, 10.0, 14.0, 18.0, 14.0, 10.0, "Arcs",
+                          "No", "STandard"])
+    b = poly_bulges(vm, pl[0])
+    assert b[0] == 0.0 and b[3] == 0.0, b
+    assert abs(b[1]) > 1e-6 and abs(b[1] - b[2]) < 1e-12, b
+    print("PERPPTS Arcs: a straight run stays straight, the turn rounds over")
+
+    # two points make one segment with no neighbour to curve to, so the
+    # question is skipped: the script has no answer for it
+    vm, pl = run_perppts([CLICK, 2, 10.0, 20.0, "No", "STandard"])
+    assert poly_verts(vm, pl[0]) == [(0.0, 10.0), (100.0, 20.0)]
+    print("PERPPTS: below three points the join question is not asked")
+
+
+def test_perppts_mixed_takes_a_segment_list():
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Mixed", "2-3", "No",
+                                             "STandard"])
+    b = poly_bulges(vm, pl[0])
+    assert b[0] == 0.0 and b[3] == 0.0, b
+    assert abs(b[1]) > 1e-6 and abs(b[2]) > 1e-6, b
+    print("PERPPTS Mixed '2-3': segments 2 and 3 arced, 1 and 4 left straight")
+
+    # out of range, then junk, then Back to the join question itself
+    vm, pl = run_perppts([CLICK, 5] + BOW +
+                         ["Mixed", "9", "zz", "B", "Straight", "No",
+                          "STandard"])
+    assert poly_bulges(vm, pl[0]) == [0.0] * 4, poly_bulges(vm, pl[0])
+    print("PERPPTS Mixed: a bad list re-asks, B returns to the question")
+
+
+def test_perppts_rounds_follow_the_curve_they_offset_from():
+    # Enter on the second round takes the first round's answer
+    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs", "Yes",
+                          3, 4.0, 4.0, 4.0, None, "No", "STandard"])
+    assert len(pl) == 2, len(pl)
+    assert all(abs(x) > 1e-6 for x in poly_bulges(vm, pl[1])), \
+        "Enter must repeat the previous round's Arcs"
+    print("PERPPTS: Enter reuses the previous round's join answer")
+
+    # after an arc round the next round's base points are spaced along
+    # the CURVE, not its chords, so each one lands on the polyline it is
+    # dimensioned from -- and the offset is still the fixed +y normal of
+    # the original line
+    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs", "Yes",
+                          3, 4.0, 4.0, 4.0, "Straight", "No", "STandard"])
+    segs = poly_segments(vm, pl[0])
+    total = sum(seg[2] for seg in segs)
+    for i, (x, y) in enumerate(poly_verts(vm, pl[1])):
+        d, base = total * i / 2.0, None
+        for seg in segs:
+            if d <= seg[2] + 1e-12:
+                base = seg[3](d / seg[2])
+                break
+            d -= seg[2]
+        assert abs(x - base[0]) < 1e-9, (i, x, base[0])
+        assert abs(y - base[1] - 4.0) < 1e-9, (i, y, base[1])
+    print("PERPPTS: a round after arcs measures along the curve itself")
+
+
 def main():
     test_structure_of_all_routines()
     test_releases_match_their_source()
@@ -573,6 +833,9 @@ def main():
     test_cperppts_uses_newest_curve_and_builds_arc_polylines()
     test_bulge_arcs_reproduce_a_circle()
     test_bulge_degenerate_cases()
+    test_perppts_asks_how_to_join_the_points()
+    test_perppts_mixed_takes_a_segment_list()
+    test_perppts_rounds_follow_the_curve_they_offset_from()
     print("\nall tests passed")
 
 
