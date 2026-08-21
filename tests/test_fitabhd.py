@@ -58,6 +58,10 @@ BOW_PTS_MIN = 4                    # fit:*bow-pts-min*
 OOS_MAX = math.pi / 36.0           # fit:*oos-max*  (5 degrees: a wall
                                    # swung further than this is not the
                                    # template's wall any more)
+ARC_MAX = 6                        # fit:*arc-max*  (most arcs one end
+                                   # may be broken into)
+ARC_PTS_MIN = 3                    # fit:*arc-pts-min*  (points each arc
+                                   # of a chain needs to mean anything)
 OOS_MIN = 1.0                      # fit:*oos-min*  (the drift from one
                                    # end of a wall to the other, below
                                    # which the wall reads as true)
@@ -855,14 +859,16 @@ def fit_cap_bows(pts, prm, both):
     return prm, bows
 
 
-def endcap_segs(prm, kind, both, bows=None):
+def endcap_segs(prm, kind, both, bows=None, chains=None):
     """Outline segments of the fitted end-capped body, frame coords.
-    prm = dict with By Ty Lx Re cx r (and Re2 cx2 r2 when BOTH)."""
+    prm = dict with By Ty Lx Re cx r (and Re2 cx2 r2 when BOTH).
+    CHAINS, when given, is (right left): each end's single arc replaced
+    by a run of arcs that follows the points."""
     by, ty = prm["By"], prm["Ty"]
     cy = (by + ty) / 2.0
     verts = []
 
-    def cap(re, cx, r, sign):
+    def cap(re, cx, r, sign, chain=None):
         """Vertex run for one end cap; SIGN +1 = the +x end (walked
         bottom to top), -1 = the -x end (walked top to bottom)."""
         h = endcap_h(re, cx, cy, r, by, ty)
@@ -874,7 +880,7 @@ def endcap_segs(prm, kind, both, bows=None):
             b = math.tan(norm_ang(a2 - a1) / 4.0)
             if stub:
                 out.append(((re, by), 0.0))
-            out.append((lo, b))
+            out.extend(chain if chain else [(lo, b)])
             if stub:
                 out.append((hi, 0.0))
                 out.append(((re, ty), 0.0))
@@ -886,7 +892,7 @@ def endcap_segs(prm, kind, both, bows=None):
             b = math.tan(norm_ang(a2 - a1) / 4.0)
             if stub:
                 out.append(((re, ty), 0.0))
-            out.append((hi, b))
+            out.extend(chain if chain else [(hi, b)])
             if stub:
                 out.append((lo, 0.0))
                 out.append(((re, by), 0.0))
@@ -894,10 +900,12 @@ def endcap_segs(prm, kind, both, bows=None):
                 out.append((lo, 0.0))
         return out
 
-    verts.extend(cap(prm["Re"], prm["cx"], prm["r"], +1))
+    verts.extend(cap(prm["Re"], prm["cx"], prm["r"], +1,
+                     chains[0] if chains else None))
     itop = len(verts) - 1                  # the TOP wall leaves here
     if both:
-        verts.extend(cap(prm["Re2"], prm["cx2"], prm["r2"], -1))
+        verts.extend(cap(prm["Re2"], prm["cx2"], prm["r2"], -1,
+                         chains[1] if chains else None))
     else:
         verts.append(((prm["Lx"], ty), 0.0))
         verts.append(((prm["Lx"], by), 0.0))
@@ -1047,7 +1055,146 @@ def fit_round(pts):
     return {"cx": cx, "cy": cy, "r": r}
 
 
-def round_segs(prm):
+# ---- arcs that are not one arc ---------------------------------------
+#
+# A drawn end is one clean radius.  A built one very often is not: a
+# gunite shell caves in a little as it cures, and a single arc through
+# those points either misses them or lies about them.  So an end that a
+# single arc cannot hold within the distance the user typed is rebuilt
+# as a POLYLINE OF ARCS - each joint sitting on a survey point, so the
+# chain is continuous by construction and every joint is a real
+# measurement.  Extra arcs have to earn their place: the run keeps the
+# fewest that hold the points.
+
+
+def bulge_3pt(p1, q, p2):
+    """Bulge of the arc P1 -> Q -> P2; 0.0 when degenerate.  ABHD's,
+    unchanged."""
+    c = circumcenter(p1, q, p2)
+    if c is None:
+        return 0.0
+    a1, a2, aq = ang(c, p1), ang(c, p2), ang(c, q)
+    dccw = norm_ang(a2 - a1)
+    dq = norm_ang(aq - a1)
+    if dccw < 1.0e-9 or dccw > 2.0 * math.pi - 1.0e-9:
+        return 0.0
+    if dq <= dccw:
+        return fit_tan(dccw / 4.0)
+    return -fit_tan((2.0 * math.pi - dccw) / 4.0)
+
+
+def fit_tan(x):
+    x = max(-1.5697, min(1.5697, x))
+    return math.tan(x)
+
+
+def best_bulge(a, b, qs):
+    """The one arc from A to B that best fits QS: the exact 3-point
+    arcs through each point, plus their average, judged on worst
+    deviation."""
+    if not qs:
+        return 0.0
+    bls = [bulge_3pt(a, q, b) for q in qs]
+    cands = bls + [sum(bls) / len(bls)]
+    best, bd = 0.0, None
+    for bl in cands:
+        d = span_dev(a, b, bl, qs)
+        if bd is None or d < bd:
+            best, bd = bl, d
+    return best
+
+
+def span_dev(a, b, bul, qs):
+    return max((seg_dist(q, (a, b, bul)) for q in qs), default=0.0)
+
+
+def chain_segs(chain, z):
+    """The (p1 p2 bulge) segments of a (point bulge) run ending at Z."""
+    pts = [c[0] for c in chain] + [z]
+    return [(pts[i], pts[i + 1], chain[i][1]) for i in range(len(chain))]
+
+
+def round_chain_of(qs, k):
+    """The whole outline of a Round pool as one closed run of K arcs,
+    the joints spaced evenly round the (already rotated) survey."""
+    n = len(qs)
+    trial = [(qs[s * n // k], 0.0) for s in range(k)]
+    for s in range(k):
+        lo = s * n // k
+        hi = (s + 1) * n // k if s < k - 1 else n
+        nxt = trial[(s + 1) % k][0]
+        trial[s] = (trial[s][0], best_bulge(trial[s][0], nxt, qs[lo:hi]))
+    return trial
+
+
+def arc_chain(qs, a, z, k):
+    """A run of K arcs from A to Z through the ordered points QS.  The
+    K-1 joints are survey points themselves."""
+    n = len(qs)
+    bounds = [0] + [s * n // k for s in range(1, k)] + [n]
+    out = []
+    for s in range(k):
+        lo, hi = bounds[s], bounds[s + 1]
+        start = a if s == 0 else qs[lo]
+        end = z if s == k - 1 else qs[hi]
+        out.append((start, best_bulge(start, end, qs[lo:hi])))
+    return out
+
+
+def chain_worst(chain, z, qs):
+    segs = chain_segs(chain, z)
+    return max((min(seg_dist(q, s) for s in segs) for q in qs),
+               default=0.0)
+
+
+def fit_arc_run(qs, a, z, tol):
+    """The fewest arcs from A to Z that hold the ordered points QS.
+    One if it can; more only while each extra arc clearly earns it.
+    Returns the (point, bulge) run from A up to but not including Z."""
+    best = [(a, best_bulge(a, z, qs))]
+    if not qs:
+        return best
+    worst = chain_worst(best, z, qs)
+    kmax = min(ARC_MAX, max(1, len(qs) // ARC_PTS_MIN))
+    k = 1
+    while worst > tol and k < kmax:
+        k += 1
+        trial = arc_chain(qs, a, z, k)
+        w = chain_worst(trial, z, qs)
+        if w > worst * BOTH_EDGE:          # not a clear enough gain
+            break
+        best, worst = trial, w
+    return best
+
+
+def order_along_arc(qs, seg):
+    """The points sorted along the arc SEG, start to end."""
+    g = arc_geom(seg[0], seg[1], seg[2])
+    if g is None:
+        return list(qs)
+    c, _r, a1, _a2 = g
+    ccw = seg[2] > 0.0
+    return sorted(qs, key=lambda p: (norm_ang(ang(c, p) - a1) if ccw
+                                     else norm_ang(a1 - ang(c, p))))
+
+
+def nearest_seg(p, segs):
+    best, bd = 0, None
+    for i, s in enumerate(segs):
+        d = seg_dist(p, s)
+        if bd is None or d < bd:
+            best, bd = i, d
+    return best
+
+
+def arc_seg_points(pts, segs, i):
+    """The points whose nearest piece of the outline is segment I."""
+    return [p for p in pts if nearest_seg(p, segs) == i]
+
+
+def round_segs(prm, chain=None):
+    if chain:
+        return chain_segs(chain, chain[0][0])
     c = (prm["cx"], prm["cy"])
     a = (c[0] + prm["r"], c[1])
     b = (c[0] - prm["r"], c[1])
@@ -1191,8 +1338,9 @@ def frame_segs(res):
     if res["kind"] == "poly":
         return verts_to_segs(res["verts"])
     if res["kind"] == "cap":
-        return endcap_segs(res["prm"], res["type"], res["both"])
-    return round_segs(res["prm"])
+        return endcap_segs(res["prm"], res["type"], res["both"],
+                           res.get("bows"), res.get("chains"))
+    return round_segs(res["prm"], res.get("chain"))
 
 
 # ---- nice dimensions -------------------------------------------------
@@ -1436,11 +1584,12 @@ def set_dim(res, key, v):
             prm["r"] = v
             if res["both"]:
                 prm["r2"] = v
-        res["segs"] = endcap_segs(prm, t, res["both"], res.get("bows"))
+        res["segs"] = endcap_segs(prm, t, res["both"], res.get("bows"),
+                                  res.get("chains"))
         return res
     if res["kind"] == "round" and key == "RAD":
         res["prm"]["r"] = v
-        res["segs"] = round_segs(res["prm"])
+        res["segs"] = round_segs(res["prm"], res.get("chain"))
     return res
 
 
@@ -1564,6 +1713,66 @@ def apply_refinement(res, fpts, oos, bowed):
     return res                              # a round pool has no walls
 
 
+def apply_arc_chains(res, fpts, tol):
+    """Rebuild any arc a single radius cannot hold as a run of arcs
+    through the points.  This runs LAST, after the dimensions are
+    settled: a chain changes no dimension, it just stops the outline
+    lying about where the shell actually went."""
+    if res["kind"] not in ("cap", "round"):
+        return res
+    segs = frame_segs(res)
+    bulged = [i for i, s in enumerate(segs) if abs(s[2]) > 1.0e-9]
+    if not bulged:
+        return res
+    if res["kind"] == "round":
+        qs = list(fpts)
+        if len(qs) < 2 * ARC_PTS_MIN:
+            return res
+        c = (res["prm"]["cx"], res["prm"]["cy"])
+        # AutoLISP's (angle) runs 0..2pi, so the ring starts where the
+        # LISP starts it - a closed run is sensitive to that
+        qs.sort(key=lambda p: norm_ang(ang(c, p)))
+        best, worst = None, max(min(seg_dist(q, s) for s in segs)
+                                for q in qs)
+        n = len(qs)
+        k = 2
+        while worst > tol and k < min(ARC_MAX, n // ARC_PTS_MIN):
+            k += 1
+            # a closed ring has no natural first joint, and where the
+            # joints land decides how well they bracket the cave-in, so
+            # try the aligned run and one shifted half a span
+            tw, tc = None, None
+            for off in (0, n // (2 * k)):
+                trial = round_chain_of(qs[off:] + qs[:off], k)
+                w = chain_worst(trial, trial[0][0], qs)
+                if tw is None or w < tw:
+                    tw, tc = w, trial
+            if tw > worst * BOTH_EDGE:
+                break
+            best, worst = tc, tw
+        if best is None:
+            return res
+        res = dict(res)
+        res["chain"] = best
+        res["segs"] = round_segs(res["prm"], best)
+        return res
+    chains = [None, None]
+    for side, i in enumerate(bulged[:2]):
+        qs = order_along_arc(arc_seg_points(fpts, segs, i), segs[i])
+        if len(qs) < 2 * ARC_PTS_MIN:
+            continue
+        run = fit_arc_run(qs, segs[i][0], segs[i][1], tol)
+        if len(run) > 1:
+            chains[side] = run
+    if not any(chains):
+        return res
+    res = dict(res)
+    res["chains"] = chains
+    res["segs"] = endcap_segs(res["prm"], res["type"], res["both"],
+                              res.get("bows"), chains)
+    return res
+
+
 def fit_and_snap(pts, ptype, treat, tol, pct, oos, bowed):
     """The whole engine: configuration search, the bow refinement when
     the walls may be bowed, then nice-dim snapping against the share of
@@ -1576,6 +1785,7 @@ def fit_and_snap(pts, ptype, treat, tol, pct, oos, bowed):
     if oos or bowed:
         res = apply_refinement(res, fpts, oos, bowed)
     res = snap_result(res, fpts, tol, allow)
+    res = apply_arc_chains(res, fpts, tol)
     res["worst"], res["rms"] = outline_dev(fpts, res["segs"])
     res["allow"] = allow
     if res["kind"] != "round":
@@ -2078,6 +2288,106 @@ def test_bowtie_configs_are_rejected():
     print("  collapsed template placements are rejected")
 
 
+OVAL_PRM = {"By": 0.0, "Ty": 168.0, "cx": 300.0, "r": 84.0,
+            "Re": 300.0, "cx2": 84.0, "r2": 84.0, "Re2": 84.0}
+
+
+def caved_oval(depth, peak=0.3, seed=101):
+    """A true oval whose right end has caved in off-centre - the dip a
+    shell takes when it slumps to one side as it cures.  A symmetric
+    cave-in is still a circle and a single arc handles it; this one no
+    single radius can hold."""
+    pts = survey(endcap_segs(OVAL_PRM, "Oval", True), 12.0, 0.2, seed)
+    c = (OVAL_PRM["cx"], (OVAL_PRM["By"] + OVAL_PRM["Ty"]) / 2.0)
+    out = []
+    for p in pts:
+        if p[0] > c[0]:
+            rel = (ang(c, p) + math.pi / 2.0) / math.pi
+            pull = depth * math.exp(-((rel - peak) / 0.18) ** 2)
+            d = dist(c, p)
+            out.append((c[0] + (p[0] - c[0]) * (d - pull) / d,
+                        c[1] + (p[1] - c[1]) * (d - pull) / d))
+        else:
+            out.append(p)
+    return out
+
+
+def no_chains(pts, ptype, treat, tol):
+    """The same fit with the arc-chain pass held off, for comparison."""
+    keep = globals()["apply_arc_chains"]
+    globals()["apply_arc_chains"] = lambda r, f, t2: r
+    try:
+        return fit_and_snap(pts, ptype, treat, tol, 0.15, False, False)
+    finally:
+        globals()["apply_arc_chains"] = keep
+
+
+def test_a_caved_end_becomes_a_run_of_arcs():
+    pts = caved_oval(3.0)
+    one = no_chains(pts, "Oval", "Square", 1.0)
+    run = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False, False)
+    assert one["worst"] > 2.0, one["worst"]
+    assert run["worst"] < 1.0, run["worst"]
+    chains = run["chains"]
+    assert sum(1 for c in chains if c) == 1, chains
+    assert max(len(c) for c in chains if c) >= 2
+    # a chain changes the shape of the end, never the pool's dimensions
+    assert close(get_dim(run, "WID"), 168.0, 1e-6), get_dim(run, "WID")
+    assert close(get_dim(run, "WID"), get_dim(one, "WID"), 1e-6)
+    print("  a caved end: one arc %.2f\" off, a run of arcs %.2f\""
+          % (one["worst"], run["worst"]))
+
+
+def test_a_true_end_stays_one_arc():
+    pts = caved_oval(0.0)
+    res = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False, False)
+    assert not res.get("chains"), res.get("chains")
+    assert close(get_dim(res, "WID"), 168.0, 1e-6)
+    assert close(get_dim(res, "BLEN"), 216.0, 1e-6)
+    print("  an end that really is one radius stays one arc")
+
+
+def test_arc_chain_joints_sit_on_survey_points():
+    pts = caved_oval(6.0)
+    res = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False, False)
+    fpts = to_frame(dedupe(pts), res["angle"], res["mirror"])
+    joints = [v for c in res["chains"] if c for v in c[1:]]
+    assert joints, "expected a chain with at least one joint"
+    for q, _b in joints:
+        assert min(dist(q, p) for p in fpts) < 1.0e-9, q
+    print("  every joint of a run sits on a surveyed point")
+
+
+def test_a_caved_round_pool():
+    c = (77.0, -33.0)
+    circle = [((c[0] + 108.0, c[1]), (c[0] - 108.0, c[1]), 1.0),
+              ((c[0] - 108.0, c[1]), (c[0] + 108.0, c[1]), 1.0)]
+    base = survey(circle, 14.0, 0.2, seed=17)
+
+    def dip(depth):
+        out = []
+        for p in base:
+            rel = (ang(c, p) + math.pi) / (2.0 * math.pi)
+            pull = depth * math.exp(-((rel - 0.35) / 0.10) ** 2)
+            d = dist(c, p)
+            out.append((c[0] + (p[0] - c[0]) * (d - pull) / d,
+                        c[1] + (p[1] - c[1]) * (d - pull) / d))
+        return out
+
+    true = fit_and_snap(dip(0.0), "ROUnd", "Square", 1.0, 0.15, False,
+                        False)
+    assert not true.get("chain"), true.get("chain")
+    assert close(get_dim(true, "RAD"), 108.0, 1e-6)
+    caved = dip(5.0)
+    one = no_chains(caved, "ROUnd", "Square", 1.0)
+    run = fit_and_snap(caved, "ROUnd", "Square", 1.0, 0.15, False, False)
+    assert one["worst"] > 2.0 and run["worst"] < 1.0, \
+        (one["worst"], run["worst"])
+    assert len(run["chain"]) >= 3, run["chain"]
+    print("  a caved round pool: one circle %.2f\" off, %d arcs %.2f\""
+          % (one["worst"], len(run["chain"]), run["worst"]))
+
+
 def test_hopper_layout():
     pts, lines = hopper_layout(96.0, 240.0, 0.0, 192.0, 18.0, 24.0)
     # the deep break is three collinear pieces spanning wall to wall
@@ -2217,6 +2527,35 @@ def test_lisp_engine_matches_mirror():
     assert "Diagonal A-C" in labels and "Diagonal B-D" in labels
     assert labels[-1] == "Out of square by", labels
 
+    # a caved end, and a caved round pool: the arc-chain pass end to end
+    pts = caved_oval(6.0)
+    py = fit_and_snap(pts, "Oval", "Square", 1.0, MISS_PCT, False, False)
+    vm = vmfit(pts, "Oval", "Square", MISS_PCT, False, False)
+    lw = vm.loads("(fit:rget fit-test-res 'worst)")
+    assert abs(lw - py["worst"]) < 1.0e-6, (lw, py["worst"])
+    lc = vm.loads("(fit:rget fit-test-res 'chains)")
+    assert lc and [0 if c is None else len(c) for c in lc] == \
+        [0 if c is None else len(c) for c in py["chains"]], lc
+    lines = vm.loads("(fit:chain-lines fit-test-res)")
+    assert lines and all("run of" in str(x.a) for x in lines), lines
+
+    c = (77.0, -33.0)
+    circle = [((c[0] + 108.0, c[1]), (c[0] - 108.0, c[1]), 1.0),
+              ((c[0] - 108.0, c[1]), (c[0] + 108.0, c[1]), 1.0)]
+    pts = []
+    for p in survey(circle, 14.0, 0.2, seed=17):
+        rel = (ang(c, p) + math.pi) / (2.0 * math.pi)
+        pull = 5.0 * math.exp(-((rel - 0.35) / 0.10) ** 2)
+        d = dist(c, p)
+        pts.append((c[0] + (p[0] - c[0]) * (d - pull) / d,
+                    c[1] + (p[1] - c[1]) * (d - pull) / d))
+    py = fit_and_snap(pts, "ROUnd", "Square", 1.0, MISS_PCT, False, False)
+    vm = vmfit(pts, "ROUnd", "Square", MISS_PCT, False, False)
+    lw = vm.loads("(fit:rget fit-test-res 'worst)")
+    assert abs(lw - py["worst"]) < 1.0e-6, (lw, py["worst"])
+    assert len(vm.loads("(fit:rget fit-test-res 'chain)")) == \
+        len(py["chain"])
+
     # the standard-hopper layout, straight out of the LISP
     lay = vm.loads("(fit:hopper-layout 96.0 240.0 0.0 192.0 18.0 24.0)")
     pts_l, lines = lay
@@ -2355,6 +2694,10 @@ def test_lisp_file_is_well_formed():
                "fit:solve-lin", "fit:swung-wall", "fit:flat-rms",
                "fit:grec-cut-dir", "fit:grec-axis-corners",
                "fit:square-lines", "fit:corner-zone-of",
+               "fit:fit-arc-run", "fit:arc-chain", "fit:round-chain",
+               "fit:cap-chains", "fit:apply-arc-chains",
+               "fit:best-bulge", "fit:bulge-3pt", "fit:chain-lines",
+               "fit:order-along-arc",
                "fit:bow-bulge", "fit:fit-cap-bows", "fit:apply-refinement",
                "fit:held-worst", "fit:snap-ok", "fit:on-eps",
                "fit:ask-settings", "fit:omit-choose", "fit:omit-loop",
@@ -2417,6 +2760,8 @@ def test_constants_match_lisp():
     assert float(setq_value("bow-max-frac")) == BOW_MAX_FRAC
     assert int(setq_value("bow-pts-min")) == BOW_PTS_MIN
     assert float(setq_value("oos-min")) == OOS_MIN
+    assert int(setq_value("arc-max")) == ARC_MAX
+    assert int(setq_value("arc-pts-min")) == ARC_PTS_MIN
     m = re.search(r"\(setq\s+fit:\*oos-max\*\s+\(/\s+pi\s+([0-9.]+)\)", src)
     assert m and abs(math.pi / float(m.group(1)) - OOS_MAX) < 1e-12
     assert '"Insquare Outofsquare"' in src, \
@@ -2465,6 +2810,10 @@ def main():
     test_a_straight_wall_stays_straight()
     test_bow_never_moves_a_corner()
     test_oval_side_walls_bow()
+    test_a_caved_end_becomes_a_run_of_arcs()
+    test_a_true_end_stays_one_arc()
+    test_arc_chain_joints_sit_on_survey_points()
+    test_a_caved_round_pool()
     test_hopper_layout()
     test_lisp_engine_matches_mirror()
     test_the_questions_run_and_step_back()

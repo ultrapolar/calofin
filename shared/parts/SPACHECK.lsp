@@ -10,6 +10,9 @@
 ;;;            TUTORIALSPACHECK   the checklist, a worked demo, or both
 ;;; ======================================================================
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Highlight the spa drawing TOGETHER WITH its "Spa Cover Details"
 ;;;  block; SPACHECK reads the block for the grade and taper, then holds
 ;;;  the drawing against the rules SPA.LSP builds to.  Every audit is
