@@ -40,6 +40,12 @@ ICP_ITERS = 12                     # fit:*icp-iters*
 RAD_ITERS = 15                     # fit:*rad-iters*
 RAD_MAX = 120.0                    # fit:*rad-max*   (10' fillet ceiling)
 BOTH_EDGE = 0.8                    # fit:*both-edge*
+VSIZE_MIN = 1.0                    # fit:*vsize-min*  (a smaller fitted
+                                   # vertex easing reads as sharp)
+FEAT_SNAP = 0.1                    # fit:*feat-snap*  (snapping a measured
+                                   # feature may grow the worst deviation
+                                   # by at most this - a tenth of an inch)
+FEATURE_KEYS = ("SIZE", "VSIZE", "RAD")
 RAD_TURN_MIN = math.pi / 3.0       # fit:*rad-turn-min* (gentler corners
                                    # cannot be measured for a radius)
 NICE_DIMS = (12.0, 6.0, 1.0, 0.5)  # fit:*nice-dims*
@@ -344,10 +350,13 @@ def corner_err(allpts, corners, dirs, r):
     for i, p in allpts:
         turn, bis = corner_frame(dirs, i)
         half = abs(turn) / 2.0
-        if math.sin(half) < 1.0e-9:
+        if math.cos(half) < 1.0e-9:
             continue
-        cc = (corners[i][0] + bis[0] * r / math.sin(half),
-              corners[i][1] + bis[1] * r / math.sin(half))
+        # centre distance from the vertex is r / cos(turn/2) - the
+        # interior half-angle is 90 - turn/2, so this equals the
+        # familiar r*sqrt(2) only at a square corner
+        cc = (corners[i][0] + bis[0] * r / math.cos(half),
+              corners[i][1] + bis[1] * r / math.cos(half))
         e = dist(p, cc) - r
         ssum += e * e
         n += 1
@@ -401,9 +410,11 @@ def fit_corner_cut(pts_by_corner, corners, dirs, which):
     h = hsum / n
     if h <= 0.0:
         return None
-    # face length from the perpendicular inset (f = 2h tan(half))
+    # face length from the perpendicular inset: f = 2h / tan(turn/2)
+    # (the interior half-angle is 90 - turn/2; at a square corner this
+    # is the familiar f = 2h)
     turn, _ = corner_frame(dirs, which[0])
-    return 2.0 * h * math.tan(abs(turn) / 2.0)
+    return 2.0 * h / math.tan(abs(turn) / 2.0)
 
 
 # ---- building the drawn outline --------------------------------------
@@ -421,7 +432,7 @@ def corner_verts(vprev, v, vnext, turn, treat, size):
         b = math.tan(turn / 4.0)
         return [(t1, b), (t2, 0.0)]
     if treat == "Cut" and size and size > 1.0e-6 and turn > 0.0:
-        s = size / (2.0 * math.sin(abs(turn) / 2.0))
+        s = size / (2.0 * math.cos(abs(turn) / 2.0))
         u1 = ang(vprev, v)
         u2 = ang(v, vnext)
         t1 = (v[0] - math.cos(u1) * s, v[1] - math.sin(u1) * s)
@@ -742,14 +753,28 @@ def round_segs(prm):
 
 
 def poly_result(ptype, fpts, dirs, offs0, treat):
-    offs, size = fit_polytype(fpts, dirs, offs0, treat)
-    which = set(range(len(dirs))) if treat in ("Radius", "Cut") else set()
     if len(dirs) == 8:
         # the cut corners are walls of their own here (Grecian, and a
-        # Rectangle whose corners are Cut) - one shared face for all 4
+        # Rectangle whose corners are Cut) - one shared face for all
+        # 4.  TREAT is the treatment of the eight VERTICES: a nominal
+        # grecian is sharp, an as-built may well be rounded, so Radius
+        # (or Cut) measures a shared easing from the points.
+        offs, _ = fit_polytype(fpts, dirs, offs0, "Square")
         size = grec_face(offs)
         offs = grec_cuts(offs, size)
-        which = set()
+        vsize = None
+        if treat in ("Radius", "Cut"):
+            vsize, offs, size = fit_vertex_feature(fpts, dirs, offs,
+                                                   treat)
+        which = set(range(8)) if vsize else set()
+        verts = build_polygon(dirs, offs, treat, vsize, which)
+        return {"kind": "poly", "type": ptype, "dirs": dirs,
+                "offs": offs, "treat": treat, "size": size,
+                "vsize": vsize, "which": which, "verts": verts,
+                "valid": poly_valid(dirs, offs),
+                "segs": verts_to_segs(verts)}
+    offs, size = fit_polytype(fpts, dirs, offs0, treat)
+    which = set(range(len(dirs))) if treat in ("Radius", "Cut") else set()
     verts = build_polygon(dirs, offs, treat, size, which)
     return {"kind": "poly", "type": ptype, "dirs": dirs, "offs": offs,
             "treat": treat, "size": size, "which": which, "verts": verts,
@@ -772,7 +797,7 @@ def fit_config(ptype, fpts, treat, both):
         return poly_result(ptype, fpts, RECT_DIRS, rect_init(fpts), treat)
     if ptype == "Grecian":
         return poly_result(ptype, fpts, GREC_DIRS, grec_init(fpts),
-                           "Square")
+                           treat)
     if ptype == "L":
         return poly_result(ptype, fpts, L_DIRS, l_init(fpts, False),
                            treat)
@@ -906,12 +931,65 @@ def grec_face(offs):
     return 2.0 * hsum / 4.0
 
 
+def fit_vertex_feature(pts, dirs, offs, treat):
+    """The as-built easing of an 8-wall template's vertices: one shared
+    fillet radius (or chamfer face) over all eight 45-degree corners.
+    A nominal grecian is drawn sharp, but an as-built very often is
+    not.  The corner zone is sized to the 45-degree turn (tangent
+    length 0.414r), so wall points stay out of the vote, and the
+    easing is kept only when it beats the sharp outline on the corner
+    points by a clear margin - noise is not evidence, and neither is
+    a fit below VSIZE_MIN.  Returns (vsize, offs, face)."""
+    tanh = math.tan(math.pi / 8.0)
+    cosh = math.cos(math.pi / 8.0)
+    which = list(range(8))
+    zone = CORNER_ZONE * tanh
+    vs = None
+    cpts = None
+    face = grec_face(offs)
+    for _ in range(2):
+        _, cpts = assign_walls(pts, dirs, offs, zone)
+        corners = poly_corners(dirs, offs)
+        if treat == "Radius":
+            vs = fit_corner_radius(cpts, corners, dirs, which)
+        else:
+            vs = fit_corner_cut(cpts, corners, dirs, which)
+        if not vs:
+            break
+        # a fillet longer than the cut face cannot exist
+        vs = min(vs, face / (2.0 * tanh))
+        zone = (1.2 * vs * tanh + ZONE_PAD if treat == "Radius"
+                else 1.2 * vs / (2.0 * cosh) + ZONE_PAD)
+        offs = fit_polygon(pts, dirs, offs, zone)
+        face = grec_face(offs)
+        offs = grec_cuts(offs, face)
+    if vs and vs >= VSIZE_MIN and cpts:
+        czpts = [p for bucket in cpts for p in bucket]
+        if czpts:
+            sharp = verts_to_segs(build_polygon(dirs, offs, treat,
+                                                None, set()))
+            eased = verts_to_segs(build_polygon(dirs, offs, treat, vs,
+                                                set(which)))
+            _, rms_s = outline_dev(czpts, sharp)
+            _, rms_e = outline_dev(czpts, eased)
+            if rms_e > rms_s * BOTH_EDGE:
+                vs = None
+        else:
+            vs = None
+    else:
+        vs = None
+    return vs, offs, face
+
+
 def dim_keys(res):
     ptype = res["type"]
     if ptype == "Rectangle":
         return ["LEN", "WID", "SIZE"]
     if ptype == "Grecian":
-        return ["LEN", "WID", "CUT"]
+        keys = ["LEN", "WID", "CUT"]
+        if res.get("vsize"):
+            keys.append("VSIZE")
+        return keys
     if ptype == "L":
         return ["LEN", "WID", "WINGX", "WINGY", "SIZE"]
     if ptype == "LAzyl":
@@ -936,6 +1014,8 @@ def get_dim(res, key):
                 return offs[4] + offs[0]
             if key in ("CUT", "SIZE"):
                 return res.get("size")
+            if key == "VSIZE":
+                return res.get("vsize")
         if key == "LEN":
             return offs[1] + offs[5 if t in ("L", "LAzyl") else 3]
         if key == "WID":
@@ -978,6 +1058,8 @@ def set_dim(res, key, v):
                 offs[0] += d
             elif key in ("CUT", "SIZE"):
                 res["size"] = v
+            elif key == "VSIZE":
+                res["vsize"] = v
             res["offs"] = grec_cuts(offs, res["size"])
         elif key == "LEN":
             j = 5 if t in ("L", "LAzyl") else 3
@@ -999,7 +1081,10 @@ def set_dim(res, key, v):
         elif key == "SIZE":
             res["size"] = v
         res["verts"] = build_polygon(res["dirs"], res["offs"],
-                                     res["treat"], res["size"],
+                                     res["treat"],
+                                     res.get("vsize")
+                                     if len(res["offs"]) == 8
+                                     else res["size"],
                                      res["which"])
         res["segs"] = verts_to_segs(res["verts"])
         return res
@@ -1035,23 +1120,39 @@ def set_dim(res, key, v):
 
 
 def snap_result(res, fpts, tol):
-    """Snap each headline dimension to the first increment that the
-    points allow; the free value stays when none do."""
-    worst0, _ = outline_dev(fpts, res["segs"])
-    limit = max(tol, worst0 + SNAP_EPS)
+    """Snap each headline dimension to the first friendly increment the
+    points allow; the free value stays when none do.  Whole dimensions
+    may spend the run tolerance, but a measured FEATURE - a corner
+    radius, a cut face, a roman end radius - may only grow the worst
+    deviation by FEAT_SNAP: an 8-inch as-built corner must not become
+    a foot just because the tolerance would absorb it.  On each tier
+    the two neighbouring multiples are both tried and the one that
+    fits the points better wins."""
     for key in dim_keys(res):
         v = get_dim(res, key)
         if v is None or v <= 0.0:
             continue
+        worst_cur, _ = outline_dev(fpts, res["segs"])
+        if key in FEATURE_KEYS:
+            limit = worst_cur + FEAT_SNAP
+        else:
+            limit = max(tol, worst_cur + SNAP_EPS)
+        done = False
         for inc in NICE_DIMS:
-            v2 = math.floor(v / inc + 0.5) * inc  # LISP rounds fix(x+0.5)
-            if v2 <= 0.0:
-                continue
-            trial = set_dim(res, key, v2)
-            w, _ = outline_dev(fpts, trial["segs"])
-            if w <= limit:
-                res = trial
+            if done:
                 break
+            lo = math.floor(v / inc) * inc
+            best_w, best_trial = None, None
+            for v2 in (lo, lo + inc):
+                if v2 <= 0.0:
+                    continue
+                trial = set_dim(res, key, v2)
+                w, _ = outline_dev(fpts, trial["segs"])
+                if w <= limit and (best_w is None or w < best_w):
+                    best_w, best_trial = w, trial
+            if best_trial is not None:
+                res = best_trial
+                done = True
     return res
 
 
@@ -1234,6 +1335,35 @@ def test_grecian_cut_face():
           % res["worst"])
 
 
+def test_grecian_rounded_as_built():
+    # a nominal grecian is sharp, but an as-built may well ease the
+    # eight cut corners - answering Radius measures one shared easing
+    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Radius", 8.0,
+                                       set(range(8))))
+    pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=23)
+    res = fit_and_snap(pts, "Grecian", "Radius", 1.0)
+    assert close(get_dim(res, "LEN"), 350.0, 1e-6), get_dim(res, "LEN")
+    assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
+    assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
+    assert close(get_dim(res, "VSIZE"), 8.0, 1e-6), get_dim(res, "VSIZE")
+    assert res["worst"] <= 1.0, res["worst"]
+    print("  grecian as-built: 8\" eased cut corners found and held")
+
+
+def test_grecian_sharp_stays_sharp():
+    # answering Radius on a genuinely sharp grecian must not invent an
+    # easing: noise is not evidence
+    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Square", None,
+                                       set()))
+    pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=13)
+    res = fit_and_snap(pts, "Grecian", "Radius", 1.0)
+    assert get_dim(res, "VSIZE") is None, get_dim(res, "VSIZE")
+    assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
+    print("  a sharp grecian answered Radius stays sharp")
+
+
 def test_roman_end_is_found():
     prm = {"By": -96.0, "Ty": 96.0, "Lx": 0.0, "cx": 300.0, "r": 120.0,
            "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
@@ -1397,6 +1527,17 @@ def test_lisp_engine_matches_mirror():
     lv = vm.loads("(fit:rget fit-test-res 'worst)")
     assert abs(lv - py["worst"]) < 1.0e-6, lv
 
+    # a grecian with eased as-built corners - the vertex-easing path
+    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Radius", 8.0,
+                                       set(range(8))))
+    pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=23)
+    py = fit_and_snap(pts, "Grecian", "Radius", 1.0)
+    vm = vmfit(pts, "Grecian", "Radius")
+    for key in ("LEN", "WID", "CUT", "VSIZE"):
+        lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
+        assert abs(lv - get_dim(py, key)) < 1.0e-6, (key, lv)
+
     # the standard-hopper layout, straight out of the LISP
     lay = vm.loads("(fit:hopper-layout 96.0 240.0 0.0 192.0 18.0 24.0)")
     pts_l, lines = lay
@@ -1452,6 +1593,7 @@ def test_lisp_file_is_well_formed():
                "fit:fit-corner-radius", "fit:fit-corner-cut",
                "fit:corner-verts", "fit:build-polygon",
                "fit:fit-polytype", "fit:grec-face", "fit:grec-cuts",
+               "fit:fit-vertex-feature",
                "fit:endcap-h", "fit:endcap-verts", "fit:fit-endcap",
                "fit:fit-round", "fit:configs-for", "fit:fit-type",
                "fit:get-dim", "fit:set-dim", "fit:snap-result",
@@ -1507,6 +1649,8 @@ def test_constants_match_lisp():
     assert float(setq_value("snap-eps")) == SNAP_EPS
     assert float(setq_value("rad-max")) == RAD_MAX
     assert float(setq_value("both-edge")) == BOTH_EDGE
+    assert float(setq_value("vsize-min")) == VSIZE_MIN
+    assert float(setq_value("feat-snap")) == FEAT_SNAP
     assert int(setq_value("icp-iters")) == ICP_ITERS
     m = re.search(r"\(setq\s+fit:\*rad-turn-min\*\s+\(/\s+pi\s+([0-9.]+)\)",
                   src)
@@ -1534,6 +1678,8 @@ def main():
     test_rectangle_cut_corners()
     test_rectangle_off_nice_stays_honest()
     test_grecian_cut_face()
+    test_grecian_rounded_as_built()
+    test_grecian_sharp_stays_sharp()
     test_roman_end_is_found()
     test_oval_both_ends()
     test_true_l()

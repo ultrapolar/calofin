@@ -31,9 +31,21 @@ Knowing the type does half the work:
   (`Square/Radius/Cut/NotGiven`) and the *size* is never asked: one
   shared fillet radius (or cut face) is measured from the points, over
   every corner that turns hard enough to measure (60 degrees or more --
-  a 45-degree bend's fillet cannot be told from its walls). A
+  a Lazy L bend's own 45-degree kink cannot be told from its walls). A
   Rectangle with `Cut` corners rides the same eight-wall template as a
   Grecian. `NotGiven` draws square, per the standard.
+* **A Grecian's cut corners may be eased.** The nominal drawing is
+  sharp, but an as-built very often rounds the eight vertices where
+  the cuts meet the walls. The corner question covers the Grecian too
+  (subject: *the cut corners*, default `Radius`): answer `Radius` (or
+  `Cut`) and one shared easing is measured over all eight 45-degree
+  corners, with the corner zone sized to that gentler turn. The easing
+  is kept only when it beats the sharp outline on the corner points by
+  a clear margin and comes out at least 1" -- noise never invents a
+  radius on a genuinely sharp pool, and a sharp answer on a rounded
+  pool simply shows up as points beyond tolerance. The report prints
+  it as `Corner easing radius` (or notes `none measurable - drawn
+  sharp`).
 * **Roman and Oval ends are found, not declared**: square-end and
   arc-end placements (one end and both ends) all compete, and a
   both-ends fit must beat a single-ended one by a clear margin --
@@ -46,8 +58,8 @@ Knowing the type does half the work:
   tolerance. **The points outrank pretty numbers**: a pool measured at
   380" stays 380", it does not become 32'.
 
-The four questions: the pool type, the corner treatment (only for
-Rectangle / L / Lazy L -- a Grecian's corners are cut by definition,
+The four questions: the pool type, the corner treatment (for
+Rectangle / L / Lazy L, and for the Grecian's cut-corner vertices --
 the arc-ended and round templates keep theirs square), the max
 distance a point may sit from the fitted outline (capped at 2",
 remembered per session), and the selection. Survey points are read
@@ -114,6 +126,14 @@ mirror agree on the ones that shape the fit.
 * The corner radius / cut face is *shared* across the corners (that is
   what "typical" means on an order sheet). Corners that genuinely
   differ will show as strays.
+* Snapping treats measured *features* (corner radius, cut face, roman
+  end radius) more strictly than whole dimensions: a feature snap may
+  grow the worst deviation by at most a tenth of an inch, so an 8"
+  as-built corner is reported as 8", never rounded up to a foot just
+  because the tolerance would absorb it.
+* A Rectangle whose corners are `Cut` keeps those cut vertices sharp
+  (one treatment per run); a cut-and-also-rounded corner is beyond the
+  template.
 * At least 6 survey points are needed (3 for Round); corner radii can
   only be measured if the corner arcs were actually shot -- a corner
   with no points on the arc fits whatever the walls allow.

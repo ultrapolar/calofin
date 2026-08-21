@@ -30716,6 +30716,13 @@
 ;;;     shared fillet radius (or cut face) fitted over every corner
 ;;;     that turns hard enough to measure.  A Rectangle with Cut
 ;;;     corners rides the same eight-wall template as a Grecian.
+;;;   * A GRECIAN'S CUT CORNERS MAY BE EASED: the nominal drawing is
+;;;     sharp, but an as-built very often rounds the eight vertices.
+;;;     Answer Radius (or Cut) at step 2 and one shared easing is
+;;;     measured over all eight 45-degree corners, with the zone sized
+;;;     to that gentler turn - and kept only when it beats the sharp
+;;;     outline on the corner points by a clear margin, so noise never
+;;;     invents a radius on a genuinely sharp pool.
 ;;;   * Roman and Oval ends are found, not declared: square-end and
 ;;;     arc-end placements (one end and both ends) all compete, and a
 ;;;     both-ends fit must beat a single-ended one by a clear margin -
@@ -30755,7 +30762,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.0")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.1")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -30804,6 +30811,15 @@
                                    ; at most this far beyond where it
                                    ; already sat when a stray point is
                                    ; past the tolerance anyway
+(setq fit:*vsize-min*   1.0)       ; a fitted corner easing smaller
+                                   ; than this reads as sharp
+(setq fit:*feat-snap*   0.1)       ; snapping a MEASURED feature (a
+                                   ; corner radius, a cut face, a
+                                   ; roman end radius) may grow the
+                                   ; worst deviation by at most this -
+                                   ; an 8" as-built corner must not
+                                   ; become a foot just because the
+                                   ; tolerance would absorb it
 (setq fit:*nice-dims* '(12.0 6.0 1.0 0.5)) ; snapping increments, tried
                                    ; in order: whole feet, half feet,
                                    ; inches, half inches
@@ -31160,10 +31176,13 @@
           turn (car cf)
           bis  (cadr cf)
           half (/ (abs turn) 2.0))
-    (if (>= (sin half) 1.0e-9)
+    ;; the centre sits r / cos(turn/2) from the vertex - the interior
+    ;; half-angle is 90 - turn/2, so this equals the familiar r*sqrt(2)
+    ;; only at a square corner
+    (if (>= (cos half) 1.0e-9)
       (progn
         (setq cc (cal:v+ (nth (car ip) corners)
-                         (cal:v* bis (/ r (sin half))))
+                         (cal:v* bis (/ r (cos half))))
               e  (- (cal:dist (cdr ip) cc) r))
         (setq ssum (+ ssum (* e e))
               n    (1+ n)))))
@@ -31220,9 +31239,11 @@
     nil
     (progn
       (setq h (/ hsum n))
+      ;; face length from the perpendicular inset: f = 2h / tan(turn/2)
+      ;; (the familiar f = 2h only at a square corner)
       (if (<= h 0.0)
         nil
-        (* 2.0 h (cal:tan (/ (abs turn) 2.0)))))))
+        (/ (* 2.0 h) (cal:tan (/ (abs turn) 2.0)))))))
 
 ;; ---- building the drawn outline --------------------------------------
 
@@ -31242,7 +31263,7 @@
     ((and (= treat "Cut") size (> size 1.0e-6) (> turn 0.0))
      (setq u1 (angle vprev v)
            u2 (angle v vnext)
-           s  (/ size (* 2.0 (sin (/ (abs turn) 2.0))))
+           s  (/ size (* 2.0 (cos (/ (abs turn) 2.0))))
            p1 (list (- (car v) (* (cos u1) s))
                     (- (cadr v) (* (sin u1) s)))
            p2 (list (+ (car v) (* (cos u2) s))
@@ -31385,6 +31406,62 @@
     (setq out (cons (if (= k i) v x) out)
           k   (1+ k)))
   (reverse out))
+
+;; The as-built easing of an 8-wall template's vertices: one shared
+;; fillet radius (or chamfer face) over all eight 45-degree corners.
+;; A nominal grecian is drawn sharp, but an as-built very often is
+;; not.  The corner zone is sized to the 45-degree turn (tangent
+;; length 0.414r), so wall points stay out of the vote, and the easing
+;; is kept only when it beats the sharp outline on the corner points
+;; by a clear margin - noise is not evidence, and neither is a fit
+;; below fit:*vsize-min*.  Returns (vsize offs face).
+(defun fit:fit-vertex-feature (pts dirs offs treat / tanh cosh which zone
+                                                    vs cpts face asg
+                                                    corners czpts b p
+                                                    sharp eased rs re2)
+  (setq tanh  (cal:tan (/ pi 8.0))
+        cosh  (cos (/ pi 8.0))
+        which '(0 1 2 3 4 5 6 7)
+        zone  (* fit:*corner-zone* tanh)
+        vs    nil
+        cpts  nil
+        face  (fit:grec-face offs))
+  (repeat 2
+    (setq asg     (fit:assign-walls pts dirs offs zone)
+          cpts    (cadr asg)
+          corners (fit:poly-corners dirs offs)
+          vs      (if (= treat "Radius")
+                    (fit:fit-corner-radius cpts corners dirs which)
+                    (fit:fit-corner-cut cpts corners dirs which)))
+    (if vs
+      (progn
+        ;; a fillet longer than the cut face cannot exist
+        (setq vs   (min vs (/ face (* 2.0 tanh)))
+              zone (if (= treat "Radius")
+                     (+ (* 1.2 vs tanh) fit:*zone-pad*)
+                     (+ (/ (* 1.2 vs) (* 2.0 cosh)) fit:*zone-pad*))
+              offs (fit:fit-polygon pts dirs offs zone fit:*icp-iters*)
+              face (fit:grec-face offs)
+              offs (fit:grec-cuts offs face)))))
+  (if (and vs (>= vs fit:*vsize-min*) cpts)
+    (progn
+      (setq czpts nil)
+      (foreach b cpts
+        (foreach p b (setq czpts (cons p czpts))))
+      (if czpts
+        (progn
+          (setq sharp (fit:verts-to-segs
+                        (fit:build-polygon dirs offs treat nil nil))
+                eased (fit:verts-to-segs
+                        (fit:build-polygon dirs offs treat vs T))
+                rs    (cadr (fit:outline-dev czpts sharp))
+                re2   (cadr (fit:outline-dev czpts eased)))
+          (if (> re2 (* rs fit:*both-edge*)) (setq vs nil)))
+        (setq vs nil)))
+    (setq vs nil))
+  (setq face (fit:grec-face offs)
+        offs (fit:grec-cuts offs face))
+  (list vs offs face))
 
 ;; Shared fit for the all-straight-wall types: walls, then the corner
 ;; feature, then walls again with the zone sized to it.  Returns
@@ -31709,22 +31786,40 @@
   (reverse out))
 
 (defun fit:poly-result (ptype fpts dirs offs0 treat / fitres offs size
-                                                      which verts)
-  (setq fitres (fit:fit-polytype fpts dirs offs0 treat)
-        offs   (car fitres)
-        size   (cadr fitres)
-        which  (if (member treat '("Radius" "Cut")) T nil))
+                                                      vsize which verts)
   (if (= 8 (length dirs))
-    ;; the cut corners are walls of their own here (Grecian, and a
-    ;; Rectangle whose corners are Cut) - one shared face for all 4
-    (setq size  (fit:grec-face offs)
-          offs  (fit:grec-cuts offs size)
-          which nil))
-  (setq verts (fit:build-polygon dirs offs treat size which))
-  (list (cons 'kind 'poly) (cons 'type ptype) (cons 'dirs dirs)
-        (cons 'offs offs) (cons 'treat treat) (cons 'size size)
-        (cons 'which which) (cons 'verts verts)
-        (cons 'valid (fit:poly-valid dirs offs))))
+    (progn
+      ;; the cut corners are walls of their own here (Grecian, and a
+      ;; Rectangle whose corners are Cut) - one shared face for all 4.
+      ;; TREAT is the treatment of the eight VERTICES: a nominal
+      ;; grecian is sharp, an as-built may well be rounded, so Radius
+      ;; (or Cut) measures a shared easing from the points.
+      (setq fitres (fit:fit-polytype fpts dirs offs0 "Square")
+            offs   (car fitres)
+            size   (fit:grec-face offs)
+            offs   (fit:grec-cuts offs size)
+            vsize  nil)
+      (if (member treat '("Radius" "Cut"))
+        (setq fitres (fit:fit-vertex-feature fpts dirs offs treat)
+              vsize  (car fitres)
+              offs   (cadr fitres)
+              size   (caddr fitres)))
+      (setq which (if vsize T nil)
+            verts (fit:build-polygon dirs offs treat vsize which))
+      (list (cons 'kind 'poly) (cons 'type ptype) (cons 'dirs dirs)
+            (cons 'offs offs) (cons 'treat treat) (cons 'size size)
+            (cons 'vsize vsize) (cons 'which which) (cons 'verts verts)
+            (cons 'valid (fit:poly-valid dirs offs))))
+    (progn
+      (setq fitres (fit:fit-polytype fpts dirs offs0 treat)
+            offs   (car fitres)
+            size   (cadr fitres)
+            which  (if (member treat '("Radius" "Cut")) T nil)
+            verts  (fit:build-polygon dirs offs treat size which))
+      (list (cons 'kind 'poly) (cons 'type ptype) (cons 'dirs dirs)
+            (cons 'offs offs) (cons 'treat treat) (cons 'size size)
+            (cons 'which which) (cons 'verts verts)
+            (cons 'valid (fit:poly-valid dirs offs))))))
 
 (defun fit:cap-result (ptype fpts both / prm)
   (setq prm (fit:fit-endcap fpts ptype both))
@@ -31742,7 +31837,7 @@
                         treat)))
     ((= ptype "Grecian")
      (fit:poly-result ptype fpts fit:*grec-dirs* (fit:grec-init fpts)
-                      "Square"))
+                      treat))
     ((= ptype "L")
      (fit:poly-result ptype fpts fit:*l-dirs* (fit:l-init fpts nil)
                       treat))
@@ -31846,7 +31941,8 @@
   (setq t2 (fit:rget res 'type))
   (cond
     ((= t2 "Rectangle") '(LEN WID SIZE))
-    ((= t2 "Grecian")   '(LEN WID CUT))
+    ((= t2 "Grecian")
+     (if (fit:rget res 'vsize) '(LEN WID CUT VSIZE) '(LEN WID CUT)))
     ((= t2 "L")         '(LEN WID WINGX WINGY SIZE))
     ((= t2 "LAzyl")     '(SIZE))
     ((= t2 "ROman")     '(WID BLEN RAD))
@@ -31863,7 +31959,8 @@
        (cond
          ((eq key 'LEN) (+ (nth 2 offs) (nth 6 offs)))
          ((eq key 'WID) (+ (nth 4 offs) (nth 0 offs)))
-         ((member key '(CUT SIZE)) (fit:rget res 'size)))
+         ((member key '(CUT SIZE)) (fit:rget res 'size))
+         ((eq key 'VSIZE) (fit:rget res 'vsize)))
        (cond
          ((eq key 'LEN)
           (+ (nth 1 offs)
@@ -31902,7 +31999,9 @@
                   offs (fit:setnth offs 4 (+ (nth 4 offs) d))
                   offs (fit:setnth offs 0 (+ (nth 0 offs) d))))
            ((member key '(CUT SIZE))
-            (setq res (fit:rput res 'size v))))
+            (setq res (fit:rput res 'size v)))
+           ((eq key 'VSIZE)
+            (setq res (fit:rput res 'vsize v))))
          (setq offs (fit:grec-cuts offs (fit:rget res 'size))))
        (cond
          ((eq key 'LEN)
@@ -31928,7 +32027,9 @@
      (fit:rput res 'verts
                (fit:build-polygon (fit:rget res 'dirs) offs
                                   (fit:rget res 'treat)
-                                  (fit:rget res 'size)
+                                  (if (= 8 (length offs))
+                                    (fit:rget res 'vsize)
+                                    (fit:rget res 'size))
                                   (fit:rget res 'which))))
     ((eq (fit:rget res 'kind) 'cap)
      (setq prm (fit:rget res 'prm))
@@ -31963,28 +32064,40 @@
            res (fit:rput res 'prm prm))
      (fit:rput res 'verts (fit:round-verts prm)))))
 
-;; Snap each headline dimension to the first increment that the points
-;; allow; the free value stays when none do.
-(defun fit:snap-result (res fpts tol / worst0 limit key v inc v2 trial w
-                                       done)
-  (setq worst0 (car (fit:outline-dev fpts (fit:res-fsegs res)))
-        limit  (max tol (+ worst0 fit:*snap-eps*)))
+;; Snap each headline dimension to the first friendly increment the
+;; points allow; the free value stays when none do.  Whole dimensions
+;; may spend the run tolerance, but a MEASURED feature - a corner
+;; radius, a cut face, a roman end radius - may only grow the worst
+;; deviation by fit:*feat-snap*: an 8-inch as-built corner must not
+;; become a foot just because the tolerance would absorb it.  On each
+;; tier the two neighbouring multiples are both tried and the one
+;; that fits the points better wins.
+(defun fit:snap-result (res fpts tol / worst0 limit key v inc lo v2
+                                       trial w done bw bt)
   (foreach key (fit:dim-keys res)
     (setq v (fit:get-dim res key))
     (if (and v (> v 0.0))
       (progn
-        (setq done nil)
+        (setq worst0 (car (fit:outline-dev fpts (fit:res-fsegs res)))
+              limit  (if (member key '(SIZE VSIZE RAD))
+                       (+ worst0 fit:*feat-snap*)
+                       (max tol (+ worst0 fit:*snap-eps*)))
+              done   nil)
         (foreach inc fit:*nice-dims*
           (if (not done)
             (progn
-              (setq v2 (* inc (fix (+ (/ v inc) 0.5))))
-              (if (> v2 0.0)
-                (progn
-                  (setq trial (fit:set-dim res key v2)
-                        w     (car (fit:outline-dev
-                                     fpts (fit:res-fsegs trial))))
-                  (if (<= w limit)
-                    (setq res trial done T))))))))))
+              (setq lo (* inc (fix (/ v inc)))
+                    bw nil bt nil)
+              (foreach v2 (list lo (+ lo inc))
+                (if (> v2 0.0)
+                  (progn
+                    (setq trial (fit:set-dim res key v2)
+                          w     (car (fit:outline-dev
+                                       fpts (fit:res-fsegs trial))))
+                    (if (and (<= w limit)
+                             (or (null bw) (< w bw)))
+                      (setq bw w bt trial)))))
+              (if bt (setq res bt done T))))))))
   res)
 
 ;; The whole engine: configuration search, then nice-dim snapping,
@@ -32175,8 +32288,19 @@
        (setq out (list (cons "Width" (fit:ftin (fit:get-dim res 'WID)))
                        (cons "Length" (fit:ftin (fit:get-dim res 'LEN))))))
      (setq size (fit:rget res 'size))
+     (if (fit:rget res 'vsize)
+       (setq out (cons (cons (if (= (fit:rget res 'treat) "Cut")
+                               "Corner easing (cut)"
+                               "Corner easing radius")
+                             (fit:ftin (fit:rget res 'vsize)))
+                       out)))
      (cond
        ((and (= 8 (length (fit:rget res 'offs))) size (> size 0.01))
+        (if (and (member (fit:rget res 'treat) '("Radius" "Cut"))
+                 (null (fit:rget res 'vsize)))
+          (setq out (cons (cons "Corner easing"
+                                "none measurable - drawn sharp")
+                          out)))
         (setq out (cons (cons "Corner cut face" (fit:ftin size)) out)))
        ((and size (= (fit:rget res 'treat) "Radius"))
         (setq out (cons (cons "Corner radius" (fit:ftin size)) out)))
@@ -32552,22 +32676,33 @@
        (setq fit:*ptype* ptype)
        (setq step 2))
       ((= step 2)
-       ;; the corner question only where the template has free corners:
-       ;; a Grecian's are cut by definition, the arc-ended and round
-       ;; templates keep theirs square
-       (if (member ptype '("Rectangle" "L" "LAzyl"))
-         (progn
-           (princ "\n\n  Step 2 of 4 - the pool corners.  The SIZE is not asked:")
-           (princ "\n  the radius or cut face is measured from the points.")
-           (setq treat (cal:asktreat "the pool corners"
-                                     (if fit:*treat* fit:*treat* "Radius")
-                                     T)))
-         (setq treat "Square"))
+       ;; the corner question - for a Grecian it asks about the eight
+       ;; CUT-corner vertices: the nominal drawing is sharp, but an
+       ;; as-built may well ease them, and Radius measures that easing
+       ;; from the points (a fit too small to believe stays sharp).
+       ;; The arc-ended and round templates keep their corners square.
+       (cond
+         ((member ptype '("Rectangle" "L" "LAzyl"))
+          (princ "\n\n  Step 2 of 4 - the pool corners.  The SIZE is not asked:")
+          (princ "\n  the radius or cut face is measured from the points.")
+          (setq treat (cal:asktreat "the pool corners"
+                                    (if fit:*treat* fit:*treat* "Radius")
+                                    T)))
+         ((= ptype "Grecian")
+          (princ "\n\n  Step 2 of 4 - the cut corners.  Nominal grecians are sharp,")
+          (princ "\n  but an as-built may ease them - Radius measures that easing")
+          (princ "\n  from the points (too small to believe stays sharp).")
+          (setq treat (cal:asktreat "the cut corners"
+                                    (if fit:*gtreat* fit:*gtreat* "Radius")
+                                    T)))
+         (T (setq treat "Square")))
        (if (eq treat 'CAL-BACK)
          (progn (princ "\nStepping back one step.")
                 (setq treat "Square" step 1))
          (progn (if (member ptype '("Rectangle" "L" "LAzyl"))
                   (setq fit:*treat* treat))
+                (if (= ptype "Grecian")
+                  (setq fit:*gtreat* treat))
                 (setq step 3))))
       ((= step 3)
        (princ "\n\n  Step 3 of 4 - how far may the fitted outline sit from a")
