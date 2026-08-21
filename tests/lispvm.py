@@ -309,6 +309,12 @@ class VM:
     def sf_function(self, a):
         return a[0]
 
+    def sf_lambda(self, a):
+        """(lambda (args) body ...) evaluates to the function itself, so
+        it can be stored and called later -- how a command installs its
+        own *error* handler without giving it a global name."""
+        return [Sym('lambda')] + list(a)
+
     def sf_setq(self, a):
         if len(a) % 2:
             raise LispError("setq: odd number of arguments", self)
@@ -473,7 +479,7 @@ class VM:
 
 SPECIAL = {Sym(s) for s in
            ['quote', 'function', 'setq', 'if', 'progn', 'cond', 'and', 'or',
-            'while', 'repeat', 'foreach', 'defun']}
+            'while', 'repeat', 'foreach', 'defun', 'lambda']}
 
 
 def split_params(plist):
@@ -973,6 +979,23 @@ def _dxf(vm, e, code):
     return NIL
 
 
+def _filt_match(have, want):
+    """One (code . value) of an ssget filter against an entity's own.  A
+    string filter is a wildcard pattern with comma alternation, exactly
+    as AutoCAD reads it -- (0 . "LINE,ARC") is how nearly every routine
+    here asks for more than one entity type, and matching it literally
+    would hand the routine an empty selection set instead."""
+    if isinstance(want, str) and isinstance(have, str):
+        for alt in want.split(','):
+            neg = alt.startswith('~')
+            if neg:
+                alt = alt[1:]
+            if (re.fullmatch(_wc_re(alt), have) is not None) != neg:
+                return True
+        return False
+    return have == want
+
+
 @bi('ssget')
 def _ssget(vm, a):
     """(ssget [mode] [pt] [filter]) -- scripted, like every other bit of
@@ -1001,7 +1024,8 @@ def _ssget(vm, a):
             elif isinstance(g, list) and len(g) >= 2:
                 pairs.append((g[0], g[1]))
         ents = [e for e in ents
-                if all(_dxf(vm, e, c) == val for c, val in pairs)]
+                if all(_filt_match(_dxf(vm, e, c), val)
+                       for c, val in pairs)]
     return ['<ss>'] + ents if ents else NIL
 
 
