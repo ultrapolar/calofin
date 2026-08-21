@@ -79,8 +79,7 @@
 ;;;     python3 tools/build_shared_bundle.py
 
 (setq cal:*held-back*
-  '(("CABHD.lsp" . "WIP")              ; not written yet
-    ("LISPLAB.lsp" . "OMITTED")))     ; teaching tool - never part of calofin
+  '(("LISPLAB.lsp" . "OMITTED")))     ; teaching tool - never part of calofin
 
 ;;; -------------------- the build ---------------------------------------
 
@@ -99,7 +98,7 @@
                  "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
                  "TUTORIALPOOL.lsp" "SPA.lsp" "TUTORIALSPA.lsp"
                  "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
-                 "ALTABCDEF.lsp" "abhd.lsp" "AUTOBEAD.lsp"
+                 "ALTABCDEF.lsp" "abhd.lsp" "CABHD.lsp" "AUTOBEAD.lsp"
                  "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
