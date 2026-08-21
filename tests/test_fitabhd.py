@@ -45,7 +45,17 @@ VSIZE_MIN = 1.0                    # fit:*vsize-min*  (a smaller fitted
 FEAT_SNAP = 0.1                    # fit:*feat-snap*  (snapping a measured
                                    # feature may grow the worst deviation
                                    # by at most this - a tenth of an inch)
-FEATURE_KEYS = ("SIZE", "VSIZE", "RAD")
+MISS_PCT = 0.15                    # fit:*miss-pct*   (share of the points
+                                   # allowed beyond the distance)
+BOW_MIN = 1.0                      # fit:*bow-min*    (a shallower bow reads
+                                   # as a straight wall - an inch over
+                                   # thirty feet is drafting noise, and
+                                   # survey scatter alone can fake it)
+BOW_MAX = 12.0                     # fit:*bow-max*    (a wall bowed more than
+                                   # a foot is not a straight wall)
+BOW_MAX_FRAC = 0.04                # fit:*bow-max-frac*
+BOW_PTS_MIN = 4                    # fit:*bow-pts-min*
+FEATURE_KEYS = ("SIZE", "VSIZE", "CUT", "RAD")
 RAD_TURN_MIN = math.pi / 3.0       # fit:*rad-turn-min* (gentler corners
                                    # cannot be measured for a radius)
 NICE_DIMS = (12.0, 6.0, 1.0, 0.5)  # fit:*nice-dims*
@@ -142,14 +152,29 @@ def seg_dist(p, seg):
     return min(dist(p, p1), dist(p, p2))
 
 
+def outline_dists(pts, segs):
+    """Every point's distance to the nearest piece of the outline."""
+    return [min(seg_dist(q, s) for s in segs) for q in pts]
+
+
 def outline_dev(pts, segs):
     """(worst, rms) distance of the points from the outline."""
-    worst, ssum = 0.0, 0.0
-    for q in pts:
-        d = min(seg_dist(q, s) for s in segs)
-        worst = max(worst, d)
-        ssum += d * d
-    return worst, math.sqrt(ssum / len(pts))
+    ds = outline_dists(pts, segs)
+    return max(ds), math.sqrt(sum(d * d for d in ds) / len(ds))
+
+
+def held_worst(dists, allow):
+    """The worst deviation once the ALLOW worst points are set aside -
+    what the fit actually has to hold.  ALLOW = 0 is the plain worst.
+    This is where the percent answered at step 4 is spent: a snap to a
+    whole foot only has to convince all but that share of the points."""
+    ds = sorted(dists, reverse=True)
+    return ds[allow] if allow < len(ds) else 0.0
+
+
+def fit_ceil(x):
+    f = int(x)
+    return f + 1 if x > f else f
 
 
 # ---- ordering (ABHD's, unchanged) ------------------------------------
@@ -447,12 +472,34 @@ def verts_to_segs(verts):
             for i in range(n)]
 
 
-def build_polygon(dirs, offs, treat, size, which):
+def bow_bulge(s, cfit, a, b):
+    """Bulge for the drawn chord A->B carrying the bow fitted as
+    sagitta S over the corner-to-corner chord CFIT.  The RADIUS is what
+    is preserved, so an eased corner shortening the wall does not
+    deepen its bow.  A positive sagitta bows outward: on a CCW ring a
+    positive bulge puts the apex to the right of travel, which is the
+    outward side."""
+    c = dist(a, b)
+    if not s or cfit < 1.0e-9 or c < 1.0e-9:
+        return 0.0
+    r = cfit * cfit / (8.0 * abs(s)) + abs(s) / 2.0
+    x = c / (2.0 * r)
+    if x >= 1.0:
+        return 0.0
+    half = math.atan(x / math.sqrt(1.0 - x * x))      # = asin(x)
+    bl = math.tan(half / 2.0)
+    return bl if s > 0.0 else -bl
+
+
+def build_polygon(dirs, offs, treat, size, which, bows=None):
     """Closed vertex list for the fitted polygon with the corner
-    treatment applied to the corners in WHICH."""
+    treatment applied to the corners in WHICH and, when BOWS is given,
+    each wall carrying its own fitted bow.  A bow never moves a corner:
+    it vanishes at both ends of its wall by construction."""
     corners = poly_corners(dirs, offs)
     n = len(corners)
     verts = []
+    leaves = []
     for i in range(n):
         turn, _ = corner_frame(dirs, i)
         if i in which:
@@ -461,7 +508,111 @@ def build_polygon(dirs, offs, treat, size, which):
                                       treat, size))
         else:
             verts.append((corners[i], 0.0))
+        leaves.append(len(verts) - 1)      # wall i leaves this vertex
+    if bows:
+        m = len(verts)
+        for i in range(n):
+            if not bows[i]:
+                continue
+            k = leaves[i]
+            a, b = verts[k][0], verts[(k + 1) % m][0]
+            cfit = dist(corners[i], corners[(i + 1) % n])
+            verts[k] = (a, bow_bulge(bows[i], cfit, a, b))
     return verts
+
+
+# ---- bowed walls -----------------------------------------------------
+#
+# "Straight" is a drafting convention, not a site measurement: a gunite
+# wall shot dead straight on the order sheet is very often a very long
+# radius on the ground.  When the user says the walls may be bowed,
+# each wall is refitted as a constant offset plus a parabolic bow that
+# vanishes at both corners - so the corners, and every design dimension
+# taken between them, stay exactly where the straight fit put them, and
+# only the wall between them breathes.
+
+
+def fit_wall_bow(wpts, a, b):
+    """Least squares (chord shift outward, sagitta outward) for the
+    wall A->B over its own points.  None when the wall has too few
+    points to tell a bow from noise."""
+    c = dist(a, b)
+    if c < 1.0e-9 or len(wpts) < BOW_PTS_MIN:
+        return None
+    ux, uy = (b[0] - a[0]) / c, (b[1] - a[1]) / c
+    nx, ny = uy, -ux                       # right of travel = outward
+    s11 = s1g = sgg = sy = sgy = 0.0
+    for p in wpts:
+        dx, dy = p[0] - a[0], p[1] - a[1]
+        x = (dx * ux + dy * uy) / c
+        g = 4.0 * x * (1.0 - x)            # 1 at mid-wall, 0 at both ends
+        y = dx * nx + dy * ny
+        s11 += 1.0
+        s1g += g
+        sgg += g * g
+        sy += y
+        sgy += g * y
+    det = s11 * sgg - s1g * s1g
+    if abs(det) < 1.0e-9:
+        return None
+    return ((sy * sgg - s1g * sgy) / det,
+            (s11 * sgy - s1g * sy) / det)
+
+
+def keep_bow(wpts, a, b, s):
+    """A bow is kept only when it is deep enough to read, shallow
+    enough to still be a wall, and beats the straight wall on that
+    wall's own points by a clear margin.  Noise is not a bow."""
+    c = dist(a, b)
+    if not s or c < 1.0e-9 or len(wpts) < BOW_PTS_MIN or abs(s) < BOW_MIN:
+        return 0.0
+    _, rms_s = outline_dev(wpts, [(a, b, 0.0)])
+    _, rms_b = outline_dev(wpts, [(a, b, bow_bulge(s, c, a, b))])
+    return s if rms_b <= rms_s * BOTH_EDGE else 0.0
+
+
+def bow_cap(s, c):
+    smax = min(BOW_MAX, BOW_MAX_FRAC * c)
+    return max(-smax, min(smax, s))
+
+
+def fit_wall_bows(pts, dirs, offs, zone):
+    """Refit every wall of a settled polygon as a shallow arc through
+    its own points.  Returns (offs, bows), with 0.0 on every wall the
+    points do not prove bowed - and that wall's offset put back to the
+    plain straight-wall mean, so a dropped bow leaves no trace."""
+    n = len(dirs)
+    bows = [0.0] * n
+    for _ in range(2):
+        wallpts, _ = assign_walls(pts, dirs, offs, zone)
+        corners = poly_corners(dirs, offs)
+        if corners is None:
+            return offs, [0.0] * n
+        new, bows = list(offs), [0.0] * n
+        for i in range(n):
+            a, b = corners[i], corners[(i + 1) % n]
+            got = fit_wall_bow(wallpts[i], a, b)
+            if got is None:
+                continue
+            new[i] = offs[i] + got[0]
+            bows[i] = bow_cap(got[1], dist(a, b))
+        if poly_corners(dirs, new):
+            offs = new
+    wallpts, _ = assign_walls(pts, dirs, offs, zone)
+    corners = poly_corners(dirs, offs)
+    if corners is None:
+        return offs, [0.0] * n
+    offs = list(offs)
+    for i in range(n):
+        bows[i] = keep_bow(wallpts[i], corners[i], corners[(i + 1) % n],
+                           bows[i])
+        if not bows[i] and wallpts[i]:
+            # the bow term biases the offset it was fitted beside, so a
+            # wall that stays straight goes back to the straight mean
+            nrm = wall_normal(dirs[i])
+            offs[i] = sum(nrm[0] * p[0] + nrm[1] * p[1]
+                          for p in wallpts[i]) / len(wallpts[i])
+    return offs, bows
 
 
 # ---- type templates --------------------------------------------------
@@ -559,7 +710,42 @@ def endcap_h(re, cx, cy, r, by, ty):
     return min(math.sqrt(d), (ty - by) / 2.0 - 1.0e-6)
 
 
-def endcap_segs(prm, kind, both):
+def cap_wall_span(prm, both):
+    """(xl, xr) - the x range the two side walls run over."""
+    return ((prm["Re2"] if both else prm["Lx"]), prm["Re"])
+
+
+def fit_cap_bows(pts, prm, both):
+    """The Roman/Oval side walls, refitted as shallow arcs.  Returns
+    (prm, (bow_bottom, bow_top)); the cap ends are untouched."""
+    xl, xr = cap_wall_span(prm, both)
+    lo, hi = min(xl, xr), max(xl, xr)
+    by, ty = prm["By"], prm["Ty"]
+    bot = [p for p in pts
+           if lo <= p[0] <= hi and abs(p[1] - by) < abs(p[1] - ty)]
+    top = [p for p in pts
+           if lo <= p[0] <= hi and abs(p[1] - ty) <= abs(p[1] - by)]
+    prm = dict(prm)
+    bows = [0.0, 0.0]
+    for k, (wpts, a, b) in enumerate(
+            ((bot, (lo, by), (hi, by)), (top, (hi, ty), (lo, ty)))):
+        got = fit_wall_bow(wpts, a, b)
+        if got is None:
+            continue
+        shift, s = got[0], bow_cap(got[1], dist(a, b))
+        if k == 0:
+            a = (a[0], by - shift)
+            b = (b[0], by - shift)
+            prm["By"] = by - shift
+        else:
+            a = (a[0], ty + shift)
+            b = (b[0], ty + shift)
+            prm["Ty"] = ty + shift
+        bows[k] = keep_bow(wpts, a, b, s)
+    return prm, bows
+
+
+def endcap_segs(prm, kind, both, bows=None):
     """Outline segments of the fitted end-capped body, frame coords.
     prm = dict with By Ty Lx Re cx r (and Re2 cx2 r2 when BOTH)."""
     by, ty = prm["By"], prm["Ty"]
@@ -599,11 +785,20 @@ def endcap_segs(prm, kind, both):
         return out
 
     verts.extend(cap(prm["Re"], prm["cx"], prm["r"], +1))
+    itop = len(verts) - 1                  # the TOP wall leaves here
     if both:
         verts.extend(cap(prm["Re2"], prm["cx2"], prm["r2"], -1))
     else:
         verts.append(((prm["Lx"], ty), 0.0))
         verts.append(((prm["Lx"], by), 0.0))
+    ibot = len(verts) - 1                  # the BOTTOM wall leaves here
+    if bows:
+        m = len(verts)
+        for k, i in ((1, itop), (0, ibot)):
+            if not bows[k]:
+                continue
+            a, b = verts[i][0], verts[(i + 1) % m][0]
+            verts[i] = (a, bow_bulge(bows[k], dist(a, b), a, b))
     return verts_to_segs(verts)
 
 
@@ -771,14 +966,14 @@ def poly_result(ptype, fpts, dirs, offs0, treat):
         return {"kind": "poly", "type": ptype, "dirs": dirs,
                 "offs": offs, "treat": treat, "size": size,
                 "vsize": vsize, "which": which, "verts": verts,
-                "valid": poly_valid(dirs, offs),
+                "bows": None, "valid": poly_valid(dirs, offs),
                 "segs": verts_to_segs(verts)}
     offs, size = fit_polytype(fpts, dirs, offs0, treat)
     which = set(range(len(dirs))) if treat in ("Radius", "Cut") else set()
     verts = build_polygon(dirs, offs, treat, size, which)
     return {"kind": "poly", "type": ptype, "dirs": dirs, "offs": offs,
             "treat": treat, "size": size, "which": which, "verts": verts,
-            "valid": poly_valid(dirs, offs),
+            "bows": None, "valid": poly_valid(dirs, offs),
             "segs": verts_to_segs(verts)}
 
 
@@ -786,7 +981,7 @@ def endcap_result(ptype, fpts, both):
     prm = fit_endcap(fpts, ptype, both)
     segs = endcap_segs(prm, ptype, both)
     return {"kind": "cap", "type": ptype, "prm": prm, "both": both,
-            "segs": segs}
+            "bows": None, "segs": segs}
 
 
 def fit_config(ptype, fpts, treat, both):
@@ -1085,7 +1280,7 @@ def set_dim(res, key, v):
                                      res.get("vsize")
                                      if len(res["offs"]) == 8
                                      else res["size"],
-                                     res["which"])
+                                     res["which"], res.get("bows"))
         res["segs"] = verts_to_segs(res["verts"])
         return res
     if res["kind"] == "cap":
@@ -1111,7 +1306,7 @@ def set_dim(res, key, v):
             prm["r"] = v
             if res["both"]:
                 prm["r2"] = v
-        res["segs"] = endcap_segs(prm, t, res["both"])
+        res["segs"] = endcap_segs(prm, t, res["both"], res.get("bows"))
         return res
     if res["kind"] == "round" and key == "RAD":
         res["prm"]["r"] = v
@@ -1119,7 +1314,39 @@ def set_dim(res, key, v):
     return res
 
 
-def snap_result(res, fpts, tol):
+def on_eps(tol):
+    """What counts as ON the outline for this run.  It scales with the
+    tolerance (a quarter of it, never below ON_EPS), exactly as ABHD's
+    does: if the user accepts 2 inches of error, a point half an inch
+    off is plainly still on the wall, and counting it against the
+    allowance would spend the whole budget on the first snap."""
+    return max(ON_EPS, tol / 4.0)
+
+
+def snap_ok(before, after, tol, allow, feature):
+    """Can the points live with this snap?
+
+    A measured FEATURE - a corner radius, a cut face, an end radius -
+    may not grow the worst deviation at all beyond FEAT_SNAP: it is
+    what it is.  A DESIGN dimension may spend the allowance: at most
+    ALLOW points may end up further than on_eps from the outline, and
+    the snap may never push a point past the tolerance that was not
+    already there.  That is the percentage answered at step 4 doing
+    its job - buying whole-foot dimensions with the points that do not
+    object."""
+    if feature:
+        return held_worst(after, 0) <= held_worst(before, 0) + FEAT_SNAP
+    on = on_eps(tol)
+    # what matters is what the snap CHANGES, not where the survey noise
+    # already sits: a point the snap pushes more than on_eps further
+    # off has been spent, and only ALLOW of them may be
+    pushed = sum(1 for b, a in zip(before, after) if a > b + on)
+    bad_b = sum(1 for d in before if d > tol)
+    bad_a = sum(1 for d in after if d > tol)
+    return pushed <= allow and bad_a <= bad_b
+
+
+def snap_result(res, fpts, tol, allow):
     """Snap each headline dimension to the first friendly increment the
     points allow; the free value stays when none do.  Whole dimensions
     may spend the run tolerance, but a measured FEATURE - a corner
@@ -1132,11 +1359,9 @@ def snap_result(res, fpts, tol):
         v = get_dim(res, key)
         if v is None or v <= 0.0:
             continue
-        worst_cur, _ = outline_dev(fpts, res["segs"])
-        if key in FEATURE_KEYS:
-            limit = worst_cur + FEAT_SNAP
-        else:
-            limit = max(tol, worst_cur + SNAP_EPS)
+        feature = key in FEATURE_KEYS
+        spend = 0 if feature else allow
+        before = outline_dists(fpts, res["segs"])
         done = False
         for inc in NICE_DIMS:
             if done:
@@ -1147,8 +1372,11 @@ def snap_result(res, fpts, tol):
                 if v2 <= 0.0:
                     continue
                 trial = set_dim(res, key, v2)
-                w, _ = outline_dev(fpts, trial["segs"])
-                if w <= limit and (best_w is None or w < best_w):
+                after = outline_dists(fpts, trial["segs"])
+                if not snap_ok(before, after, tol, allow, feature):
+                    continue
+                w = held_worst(after, spend)
+                if best_w is None or w < best_w:
                     best_w, best_trial = w, trial
             if best_trial is not None:
                 res = best_trial
@@ -1156,19 +1384,59 @@ def snap_result(res, fpts, tol):
     return res
 
 
-def fit_and_snap(pts, ptype, treat, tol):
-    """The whole engine: configuration search, then nice-dim snapping,
-    then the outline in world coordinates."""
-    res = fit_type(pts, ptype, treat)
+def apply_bows(res, fpts):
+    """Fit the bows on the placement that already won.  Bows are a
+    refinement of the chosen template, never a competitor in the
+    search: extra freedom would let a wrong rotation bend its way to a
+    good score."""
+    if res["kind"] == "poly":
+        zone = (CORNER_ZONE if res["treat"] in ("Radius", "Cut")
+                else 0.0)
+        if res.get("vsize"):
+            zone = 1.2 * res["vsize"] * math.tan(math.pi / 8.0) + ZONE_PAD
+        elif res.get("size"):
+            zone = 1.2 * res["size"] + ZONE_PAD
+        offs, bows = fit_wall_bows(fpts, res["dirs"], res["offs"], zone)
+        if not any(bows):
+            return res
+        res = dict(res)
+        res["offs"], res["bows"] = offs, bows
+        if len(offs) == 8:
+            res["size"] = grec_face(offs)
+        res["verts"] = build_polygon(
+            res["dirs"], offs, res["treat"],
+            res.get("vsize") if len(offs) == 8 else res["size"],
+            res["which"], bows)
+        res["segs"] = verts_to_segs(res["verts"])
+        return res
+    if res["kind"] == "cap":
+        prm, bows = fit_cap_bows(fpts, res["prm"], res["both"])
+        if not any(bows):
+            return res
+        res = dict(res)
+        res["prm"], res["bows"] = prm, bows
+        res["segs"] = endcap_segs(prm, res["type"], res["both"], bows)
+        return res
+    return res                              # a round pool has no walls
+
+
+def fit_and_snap(pts, ptype, treat, tol, pct, bowed):
+    """The whole engine: configuration search, the bow refinement when
+    the walls may be bowed, then nice-dim snapping against the share of
+    the points the user allows beyond the distance."""
+    dpts = dedupe(pts)
+    allow = fit_ceil(pct * len(dpts))
+    res = fit_type(dpts, ptype, treat)
+    fpts = (dpts if res["kind"] == "round"
+            else to_frame(dpts, res["angle"], res["mirror"]))
+    if bowed:
+        res = apply_bows(res, fpts)
+    res = snap_result(res, fpts, tol, allow)
+    res["worst"], res["rms"] = outline_dev(fpts, res["segs"])
+    res["allow"] = allow
     if res["kind"] != "round":
-        fpts = to_frame(dedupe(pts), res["angle"], res["mirror"])
-        res = snap_result(res, fpts, tol)
-        res["worst"], res["rms"] = outline_dev(fpts, res["segs"])
         res["fsegs"] = res["segs"]
         res["segs"] = world_segs(res)
-    else:
-        res = snap_result(res, dedupe(pts), tol)
-        res["worst"], res["rms"] = outline_dev(dedupe(pts), res["segs"])
     return res
 
 # ---- the standard-hopper bottom --------------------------------------
@@ -1287,7 +1555,7 @@ def test_rectangle_radius_corners():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Radius", 24.0,
         set(range(4))))
     pts = survey(place(true, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
-    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0)
+    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False)
     assert close(get_dim(res, "LEN"), 384.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 192.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "SIZE"), 24.0, 1e-6), get_dim(res, "SIZE")
@@ -1301,7 +1569,7 @@ def test_rectangle_cut_corners():
         RECT_DIRS, [90.0, 180.0, 90.0, 180.0], "Cut", 30.0,
         set(range(4))))
     pts = survey(place(true, -12.0, 0.0, 0.0), 18.0, 0.3, seed=21)
-    res = fit_and_snap(pts, "Rectangle", "Cut", 1.0)
+    res = fit_and_snap(pts, "Rectangle", "Cut", 1.0, MISS_PCT, False)
     assert close(get_dim(res, "LEN"), 360.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "SIZE"), 30.0, 1.5), get_dim(res, "SIZE")
@@ -1316,7 +1584,7 @@ def test_rectangle_off_nice_stays_honest():
     true = verts_to_segs(build_polygon(
         RECT_DIRS, [84.0, 190.0, 84.0, 190.0], "Square", None, set()))
     pts = survey(place(true, 5.0, 0.0, 0.0), 20.0, 0.2, seed=31)
-    res = fit_and_snap(pts, "Rectangle", "Square", 1.0)
+    res = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, False)
     assert close(get_dim(res, "LEN"), 380.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 168.0, 1e-6), get_dim(res, "WID")
     print("  the points outrank nice numbers: 380\" stays 380\"")
@@ -1327,7 +1595,7 @@ def test_grecian_cut_face():
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Square", None,
                                        set()))
     pts = survey(place(true, 71.0, -50.0, 800.0), 16.0, 0.3, seed=13)
-    res = fit_and_snap(pts, "Grecian", "Square", 1.0)
+    res = fit_and_snap(pts, "Grecian", "Square", 1.0, MISS_PCT, False)
     assert close(get_dim(res, "LEN"), 350.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
@@ -1342,7 +1610,7 @@ def test_grecian_rounded_as_built():
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Radius", 8.0,
                                        set(range(8))))
     pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=23)
-    res = fit_and_snap(pts, "Grecian", "Radius", 1.0)
+    res = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False)
     assert close(get_dim(res, "LEN"), 350.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
@@ -1358,7 +1626,7 @@ def test_grecian_sharp_stays_sharp():
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Square", None,
                                        set()))
     pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=13)
-    res = fit_and_snap(pts, "Grecian", "Radius", 1.0)
+    res = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False)
     assert get_dim(res, "VSIZE") is None, get_dim(res, "VSIZE")
     assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
     print("  a sharp grecian answered Radius stays sharp")
@@ -1369,7 +1637,7 @@ def test_roman_end_is_found():
            "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
     true = endcap_segs(prm, "ROman", False)
     pts = survey(place(true, 197.0, 500.0, 300.0), 22.0, 0.3, seed=11)
-    res = fit_and_snap(pts, "ROman", "Square", 1.0)
+    res = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, False)
     assert not res["both"], "a square end was read as a roman end"
     assert close(get_dim(res, "WID"), 192.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "BLEN"), 396.0, 1e-6), get_dim(res, "BLEN")
@@ -1394,7 +1662,7 @@ def test_oval_both_ends():
            "cx2": 84.0, "r2": 84.0, "Re2": 84.0}
     true = endcap_segs(prm, "Oval", True)
     pts = survey(place(true, 40.0, -200.0, 100.0), 20.0, 0.3, seed=5)
-    res = fit_and_snap(pts, "Oval", "Square", 1.0)
+    res = fit_and_snap(pts, "Oval", "Square", 1.0, MISS_PCT, False)
     assert res["both"], "both radius ends expected"
     assert close(get_dim(res, "WID"), 168.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "BLEN"), 216.0, 1e-6), get_dim(res, "BLEN")
@@ -1407,7 +1675,7 @@ def test_true_l():
         L_DIRS, [0.0, 400.0, 200.0, -220.0, 100.0, 0.0], "Radius",
         18.0, set(range(6))))
     pts = survey(place(true, 107.0, 50.0, -400.0), 20.0, 0.3, seed=3)
-    res = fit_and_snap(pts, "L", "Radius", 1.0)
+    res = fit_and_snap(pts, "L", "Radius", 1.0, MISS_PCT, False)
     want = sorted([400.0, 200.0, 180.0, 100.0, 220.0, 100.0])
     got = sorted(ring_sides(res))
     assert all(close(a, b) for a, b in zip(got, want)), got
@@ -1422,7 +1690,7 @@ def test_lazy_l():
     true = verts_to_segs(build_polygon(LAZY_DIRS, offs, "Radius", 12.0,
                                        set(range(6))))
     pts = survey(place(true, -23.0, 900.0, 100.0), 18.0, 0.3, seed=9)
-    res = fit_and_snap(pts, "LAzyl", "Radius", 1.0)
+    res = fit_and_snap(pts, "LAzyl", "Radius", 1.0, MISS_PCT, False)
     want = sorted([300.0, 240.0, 96.0, 200.18, 260.18, 96.0])
     got = sorted(ring_sides(res))
     assert all(close(a, b, 1.0) for a, b in zip(got, want)), got
@@ -1432,12 +1700,111 @@ def test_lazy_l():
           " recovered")
 
 
+def test_percent_buys_nice_dimensions():
+    # 383" is an inch off a whole foot: at the standard 15% the end
+    # walls outvote the snap and it stays 383; raise the share of
+    # points allowed off and the same survey rounds to 32'-0".
+    true = verts_to_segs(build_polygon(
+        RECT_DIRS, [84.0, 191.5, 84.0, 191.5], "Square", None, set()))
+    pts = survey(place(true, 5.0, 0.0, 0.0), 20.0, 0.2, seed=31)
+    tight = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False)
+    loose = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.40, False)
+    assert close(get_dim(tight, "LEN"), 383.0, 1e-6), get_dim(tight, "LEN")
+    assert close(get_dim(loose, "LEN"), 384.0, 1e-6), get_dim(loose, "LEN")
+    assert loose["allow"] > tight["allow"]
+    print("  the percent answered buys nice dimensions: 383 or 384,"
+          " the user's call")
+
+
+def test_snap_never_pushes_past_the_tolerance():
+    dists = [0.1, 0.2, 0.9]
+    assert snap_ok(dists, [0.1, 0.2, 0.95], 1.0, 3, False)
+    # a snap that shoves a point beyond the distance is refused however
+    # generous the allowance
+    assert not snap_ok(dists, [0.1, 0.2, 1.4], 1.0, 99, False)
+    # and the allowance caps how many points a snap may push off
+    assert snap_ok(dists, [0.6, 0.7, 0.9], 1.0, 2, False)
+    assert not snap_ok(dists, [0.6, 0.7, 0.9], 1.0, 1, False)
+    # a measured feature spends no allowance at all: it may only grow
+    # the worst deviation by FEAT_SNAP, however many points agree
+    assert snap_ok(dists, [0.1, 0.2, 0.95], 1.0, 0, True)
+    assert not snap_ok(dists, [0.1, 0.2, 1.2], 1.0, 99, True)
+    print("  a snap may spend the allowance, never the tolerance")
+
+
+def test_bowed_walls_are_found():
+    # a 32' x 16' rectangle whose two long walls bow 3" out - the wall
+    # a field crew would call straight and a laser calls R 205'
+    true = verts_to_segs(build_polygon(
+        RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Square", None, set(),
+        [3.0, 0.0, 3.0, 0.0]))
+    pts = survey(place(true, 17.0, 100.0, 50.0), 18.0, 0.25, seed=41)
+    straight = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False)
+    bowed = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, True)
+    # held straight, the fit is dragged out by the bulging middles
+    assert straight["worst"] > 1.5, straight["worst"]
+    assert close(get_dim(straight, "WID"), 196.0, 1e-6)
+    # allowed to bow, it recovers the true body and both bows
+    assert close(get_dim(bowed, "LEN"), 384.0, 1e-6), get_dim(bowed, "LEN")
+    assert close(get_dim(bowed, "WID"), 192.0, 1e-6), get_dim(bowed, "WID")
+    assert bowed["worst"] < 0.5, bowed["worst"]
+    got = sorted(abs(b) for b in bowed["bows"])
+    assert got[0] == got[1] == 0.0 and all(close(b, 3.0, 0.3)
+                                          for b in got[2:]), got
+    print("  bowed walls: 3\" bows found, the body comes out true")
+
+
+def test_a_straight_wall_stays_straight():
+    # answering Yes on a genuinely straight pool must not invent bows
+    true = verts_to_segs(build_polygon(
+        RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Radius", 24.0,
+        set(range(4))))
+    pts = survey(place(true, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
+    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, 0.15, True)
+    assert not res.get("bows"), res.get("bows")
+    assert close(get_dim(res, "LEN"), 384.0, 1e-6)
+    assert close(get_dim(res, "SIZE"), 24.0, 1e-6)
+    print("  a straight wall answered Yes stays straight")
+
+
+def test_bow_never_moves_a_corner():
+    # the bow vanishes at both ends by construction, so every design
+    # dimension taken between corners survives it untouched
+    offs = [96.0, 192.0, 96.0, 192.0]
+    sharp = poly_corners(RECT_DIRS, offs)
+    verts = build_polygon(RECT_DIRS, offs, "Square", None, set(),
+                          [3.0, -2.0, 0.0, 1.5])
+    assert [v[0] for v in verts] == sharp, "a bow moved a corner"
+    # and the bow is exactly as deep as it was fitted, on the outside
+    segs = verts_to_segs(verts)
+    mid = ((sharp[0][0] + sharp[1][0]) / 2.0,
+           (sharp[0][1] + sharp[1][1]) / 2.0)
+    out = (mid[0], mid[1] - 3.0)            # wall 0 runs +x, outward -y
+    assert seg_dist(out, segs[0]) < 1.0e-6, seg_dist(out, segs[0])
+    print("  a bow bulges the wall and leaves the corners alone")
+
+
+def test_oval_side_walls_bow():
+    prm = {"By": 0.0, "Ty": 168.0, "cx": 300.0, "r": 84.0, "Re": 300.0,
+           "cx2": 84.0, "r2": 84.0, "Re2": 84.0}
+    true = endcap_segs(prm, "Oval", True, [2.0, 2.0])
+    pts = survey(place(true, 40.0, -200.0, 100.0), 16.0, 0.25, seed=5)
+    straight = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False)
+    bowed = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, True)
+    assert straight["worst"] > 1.5, straight["worst"]
+    assert close(get_dim(bowed, "WID"), 168.0, 1e-6), get_dim(bowed, "WID")
+    assert close(get_dim(bowed, "BLEN"), 216.0, 1e-6)
+    assert all(close(b, 2.0, 0.4) for b in bowed["bows"]), bowed["bows"]
+    assert bowed["worst"] < 0.6, bowed["worst"]
+    print("  an oval's side walls bow too, its ends left alone")
+
+
 def test_round():
     c = (77.0, -33.0)
     true = [((c[0] + 108.0, c[1]), (c[0] - 108.0, c[1]), 1.0),
             ((c[0] - 108.0, c[1]), (c[0] + 108.0, c[1]), 1.0)]
     pts = survey(true, 20.0, 0.3, seed=17)
-    res = fit_and_snap(pts, "ROUnd", "Square", 1.0)
+    res = fit_and_snap(pts, "ROUnd", "Square", 1.0, MISS_PCT, False)
     assert close(get_dim(res, "RAD"), 108.0, 1e-6), get_dim(res, "RAD")
     assert dist((res["prm"]["cx"], res["prm"]["cy"]), c) < 0.5
     print("  round: 18' spa, centre within half an inch")
@@ -1480,13 +1847,14 @@ def test_lisp_engine_matches_mirror():
     reruns this against the grouped build."""
     from lispvm import VM
 
-    def vmfit(pts, ptype, treat):
+    def vmfit(pts, ptype, treat, pct=MISS_PCT, bowed=False):
         vm = VM()
         vm.load(LISP_FILE)
         lst = "(list " + " ".join("(list %r %r)" % (p[0], p[1])
                                   for p in pts) + ")"
-        vm.loads('(setq fit-test-res (fit:fit-and-snap %s "%s" "%s" 1.0))'
-                 % (lst, ptype, treat))
+        vm.loads('(setq fit-test-res (fit:fit-and-snap %s "%s" "%s" '
+                 '1.0 %r %s))'
+                 % (lst, ptype, treat, pct, "T" if bowed else "nil"))
         return vm
 
     # rectangle with radius corners
@@ -1494,7 +1862,7 @@ def test_lisp_engine_matches_mirror():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Radius", 24.0,
         set(range(4))))
     pts = survey(place(true, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
-    py = fit_and_snap(pts, "Rectangle", "Radius", 1.0)
+    py = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False)
     vm = vmfit(pts, "Rectangle", "Radius")
     for key in ("LEN", "WID", "SIZE"):
         lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
@@ -1507,7 +1875,7 @@ def test_lisp_engine_matches_mirror():
            "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
     pts = survey(place(endcap_segs(prm, "ROman", False),
                        197.0, 500.0, 300.0), 22.0, 0.3, seed=11)
-    py = fit_and_snap(pts, "ROman", "Square", 1.0)
+    py = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, False)
     vm = vmfit(pts, "ROman", "Square")
     assert vm.loads("(fit:rget fit-test-res 'both)") is None
     for key in ("WID", "BLEN", "RAD"):
@@ -1520,7 +1888,7 @@ def test_lisp_engine_matches_mirror():
     true = verts_to_segs(build_polygon(LAZY_DIRS, offs, "Radius", 12.0,
                                        set(range(6))))
     pts = survey(place(true, -23.0, 900.0, 100.0), 18.0, 0.3, seed=9)
-    py = fit_and_snap(pts, "LAzyl", "Radius", 1.0)
+    py = fit_and_snap(pts, "LAzyl", "Radius", 1.0, MISS_PCT, False)
     vm = vmfit(pts, "LAzyl", "Radius")
     lv = vm.loads("(fit:get-dim fit-test-res 'SIZE)")
     assert abs(lv - get_dim(py, "SIZE")) < 1.0e-6, lv
@@ -1532,11 +1900,37 @@ def test_lisp_engine_matches_mirror():
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Radius", 8.0,
                                        set(range(8))))
     pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=23)
-    py = fit_and_snap(pts, "Grecian", "Radius", 1.0)
+    py = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False)
     vm = vmfit(pts, "Grecian", "Radius")
     for key in ("LEN", "WID", "CUT", "VSIZE"):
         lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
         assert abs(lv - get_dim(py, key)) < 1.0e-6, (key, lv)
+
+    # bowed walls - the whole bow pass through the real .lsp
+    true = verts_to_segs(build_polygon(
+        RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Square", None, set(),
+        [3.0, 0.0, 3.0, 0.0]))
+    pts = survey(place(true, 17.0, 100.0, 50.0), 18.0, 0.25, seed=41)
+    py = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, True)
+    vm = vmfit(pts, "Rectangle", "Square", MISS_PCT, True)
+    for key in ("LEN", "WID"):
+        lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
+        assert abs(lv - get_dim(py, key)) < 1.0e-6, (key, lv)
+    lb = vm.loads("(fit:rget fit-test-res 'bows)")
+    assert lb and len(lb) == 4, lb
+    for a, b in zip(lb, py["bows"]):
+        assert abs(a - b) < 1.0e-6, (lb, py["bows"])
+
+    # and the percent knob, which only the LISP's own allowance can show
+    true = verts_to_segs(build_polygon(
+        RECT_DIRS, [84.0, 191.5, 84.0, 191.5], "Square", None, set()))
+    pts = survey(place(true, 5.0, 0.0, 0.0), 20.0, 0.2, seed=31)
+    for pct in (0.15, 0.40):
+        py = fit_and_snap(pts, "Rectangle", "Square", 1.0, pct, False)
+        vm = vmfit(pts, "Rectangle", "Square", pct, False)
+        lv = vm.loads("(fit:get-dim fit-test-res 'LEN)")
+        assert abs(lv - get_dim(py, "LEN")) < 1.0e-6, (pct, lv)
+        assert vm.loads("(fit:rget fit-test-res 'allow)") == py["allow"]
 
     # the standard-hopper layout, straight out of the LISP
     lay = vm.loads("(fit:hopper-layout 96.0 240.0 0.0 192.0 18.0 24.0)")
@@ -1544,6 +1938,78 @@ def test_lisp_engine_matches_mirror():
     assert pts_l[2] == [96.0, 18.0] and pts_l[3] == [96.0, 174.0]
     assert len([ln for ln in lines if ln[2]]) == 2
     print("  the LISP engine agrees with this mirror in the VM")
+
+
+def test_the_questions_run_and_step_back():
+    """Drive fit:ask-settings in the VM: the five questions, and Back
+    re-opening the previous one with the answers already given as its
+    defaults."""
+    from lispvm import VM
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.script = ["Rectangle", "Radius", 1.5, 25, "Yes"]
+    vm.prompts = []
+    got = vm.loads('(fit:ask-settings (list "Rectangle" "Square" 1.0'
+                   ' 0.15 nil) 6)')
+    assert got[0] == "Rectangle" and got[1] == "Radius"
+    assert abs(got[2] - 1.5) < 1e-9 and abs(got[3] - 0.25) < 1e-9
+    assert got[4] and not vm.script, (got, vm.script)
+    asked = " ".join(p for p, _ in vm.prompts)
+    for want in ("Step 1 of 6", "Percent of points allowed beyond",
+                 "Any bowed walls?"):
+        assert want in asked, want
+
+    # Back steps back exactly one question, every time
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.script = ["Grecian", "Cut", "Back", "Radius", 2.0, "Back",
+                 2.0, 40, "Back", 55, "No"]
+    vm.prompts = []
+    got = vm.loads('(fit:ask-settings (list "Rectangle" "Square" 1.0'
+                   ' 0.15 nil) 5)')
+    assert got[0] == "Grecian" and got[1] == "Radius"
+    assert abs(got[2] - 2.0) < 1e-9 and abs(got[3] - 0.55) < 1e-9
+    assert got[4] is None and not vm.script, (got, vm.script)
+    # the way back offers what was already answered
+    assert any("<40>" in p for p, _ in vm.prompts), \
+        "the percent question did not offer the previous answer"
+    # a round pool is never asked about bowed walls
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.script = ["ROUnd", 1.0, None]
+    vm.prompts = []
+    got = vm.loads('(fit:ask-settings (list "ROUnd" "Square" 1.0 0.15'
+                   ' nil) 5)')
+    assert got[4] is None and not vm.script
+    assert not any("bowed" in p for p, _ in vm.prompts)
+    print("  the questions run, and Back re-opens the last one")
+
+
+def test_leaving_points_out_toggles():
+    """Every pick in the Redo omit loop toggles: a point in the fit
+    goes out, a ringed one comes back in."""
+    from lispvm import VM
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.loads("(setq fit-pts (list (list 0.0 0.0) (list 100.0 0.0)"
+             " (list 100.0 50.0)) fit-omit nil)")
+    assert len(vm.loads("(fit:active)")) == 3
+    pick = vm.loads("(fit:omit-choose (list 98.0 3.0))")
+    assert pick[0] == "omit" and pick[1:] == [100.0, 0.0], pick
+    # set it aside, and the fit no longer sees it
+    vm.loads("(setq fit-omit (list (list (list 100.0 0.0) nil)))")
+    assert len(vm.loads("(fit:active)")) == 2
+    assert vm.loads("(fit:omitted-p (list 100.0 0.0))")
+    # the same pick now restores it
+    pick = vm.loads("(fit:omit-choose (list 98.0 3.0))")
+    assert pick[0] == "restore" and pick[1:] == [100.0, 0.0], pick
+    # while a pick elsewhere still omits
+    pick = vm.loads("(fit:omit-choose (list 2.0 2.0))")
+    assert pick[0] == "omit" and pick[1:] == [0.0, 0.0], pick
+    vm.loads("(setq fit-omit (fit:omit-drop (list 100.0 0.0)))")
+    assert len(vm.loads("(fit:active)")) == 3
+    assert vm.loads("fit-omit") is None
+    print("  points can be left out of a Redo, and put back")
 
 
 def paren_depth(src):
@@ -1599,6 +2065,11 @@ def test_lisp_file_is_well_formed():
                "fit:get-dim", "fit:set-dim", "fit:snap-result",
                "fit:fit-and-snap", "fit:outline-dev", "fit:seg-dist",
                "fit:hopper-layout", "fit:gather", "fit:report",
+               "fit:fit-wall-bow", "fit:fit-wall-bows", "fit:keep-bow",
+               "fit:bow-bulge", "fit:fit-cap-bows", "fit:apply-bows",
+               "fit:held-worst", "fit:snap-ok", "fit:on-eps",
+               "fit:ask-settings", "fit:omit-choose", "fit:omit-loop",
+               "fit:active", "fit:bow-lines",
                "fit:make-pline", "fit:ensure-layer", "fit:askkw",
                "fit:asktreat", "fit:tag-mine", "fit:purge-mine",
                "fit:bottom"):
@@ -1651,6 +2122,11 @@ def test_constants_match_lisp():
     assert float(setq_value("both-edge")) == BOTH_EDGE
     assert float(setq_value("vsize-min")) == VSIZE_MIN
     assert float(setq_value("feat-snap")) == FEAT_SNAP
+    assert float(setq_value("miss-pct")) == MISS_PCT
+    assert float(setq_value("bow-min")) == BOW_MIN
+    assert float(setq_value("bow-max")) == BOW_MAX
+    assert float(setq_value("bow-max-frac")) == BOW_MAX_FRAC
+    assert int(setq_value("bow-pts-min")) == BOW_PTS_MIN
     assert int(setq_value("icp-iters")) == ICP_ITERS
     m = re.search(r"\(setq\s+fit:\*rad-turn-min\*\s+\(/\s+pi\s+([0-9.]+)\)",
                   src)
@@ -1685,8 +2161,16 @@ def main():
     test_true_l()
     test_lazy_l()
     test_round()
+    test_percent_buys_nice_dimensions()
+    test_snap_never_pushes_past_the_tolerance()
+    test_bowed_walls_are_found()
+    test_a_straight_wall_stays_straight()
+    test_bow_never_moves_a_corner()
+    test_oval_side_walls_bow()
     test_hopper_layout()
     test_lisp_engine_matches_mirror()
+    test_the_questions_run_and_step_back()
+    test_leaving_points_out_toggles()
     print("\nall tests passed")
 
 

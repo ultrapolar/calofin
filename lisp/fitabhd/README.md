@@ -51,21 +51,82 @@ Knowing the type does half the work:
   both-ends fit must beat a single-ended one by a clear margin --
   extra freedom is not evidence. A Roman end reports its bulge (S) and
   stubs (S1) the way POOL draws them.
+* **Straight walls may be bowed.** "Straight" is a drafting
+  convention, not a site measurement: a gunite wall shot dead straight
+  on the order sheet is very often a very long radius on the ground.
+  Answer `Yes` at step 5 and every wall is refitted as a constant
+  offset plus a shallow bow, and the report gives each bowed wall its
+  depth and the radius it implies (`Wall A-B bowed 3" out (R 205'-4")`).
+  **A bow never moves a corner** -- it vanishes at both ends of its
+  wall by construction, so every dimension taken between corners, and
+  the whole hopper flow, are untouched. A bow is kept only where the
+  points prove one: at least an inch deep (below that is drafting
+  noise), no deeper than a wall can bow and still be a wall
+  (`fit:*bow-max*` / `fit:*bow-max-frac*`), on a wall shot at least
+  `fit:*bow-pts-min*` times, and beating the straight wall on that
+  wall's own points by a clear margin. A wall that really is straight
+  stays straight. Roman and Oval side walls bow too; their arc ends
+  are left alone, and a Round pool is never asked.
 * **Nice dimensions**: each headline dimension -- length, width,
   corner radius, cut face, body length -- is snapped to the first
   friendly increment (whole feet, half feet, inches, half inches) the
-  points can live with; the snapped outline must stay within the run
-  tolerance. **The points outrank pretty numbers**: a pool measured at
-  380" stays 380", it does not become 32'.
+  points can live with. **The points outrank pretty numbers**: a pool
+  measured at 380" stays 380", it does not become 32'. Two rules
+  decide, and they are deliberately different:
+  * a **design dimension** may spend the allowance answered at step 4
+    -- a snap is kept when it pushes no more than that share of the
+    points further off, and never pushes one past the distance that
+    was not already beyond it. So the same 383" survey stays 383" at
+    the standard 15% and rounds to 32'-0" at 40%: **your call, not the
+    program's**;
+  * a **measured feature** -- a corner radius, a cut face, an end
+    radius -- spends no allowance at all and may only grow the worst
+    deviation by a tenth of an inch. An 8" as-built corner is reported
+    as 8".
 
-The four questions: the pool type, the corner treatment (for
-Rectangle / L / Lazy L, and for the Grecian's cut-corner vertices --
-the arc-ended and round templates keep theirs square), the max
-distance a point may sit from the fitted outline (capped at 2",
-remembered per session), and the selection. Survey points are read
-exactly as ABHD reads them: `ab_pt` block inserts on any layer, or
-`POINT` entities (and other blocks) on the `POINTS` layer. Every
-prompt after the first offers `Back` (`Undo` works too).
+The six questions:
+
+1. the **pool type**;
+2. the **corner treatment** (for Rectangle / L / Lazy L, and for the
+   Grecian's cut-corner vertices -- the arc-ended and round templates
+   keep theirs square);
+3. the **max distance** a point may sit from the fitted outline
+   (capped at 2", remembered per session);
+4. the **percent of points allowed beyond** that distance (standard
+   15%) -- the slack that buys whole-foot dimensions;
+5. whether the **straight walls may be bowed** (skipped for a Round
+   pool, which has none);
+6. the **selection**.
+
+Survey points are read exactly as ABHD reads them: `ab_pt` block
+inserts on any layer, or `POINT` entities (and other blocks) on the
+`POINTS` layer. Every prompt after the first offers `Back` (`Undo`
+works too), and each step back re-opens the previous question with
+what you already answered as its default.
+
+## Redo -- when the fit came out wrong
+
+The fit is not take-it-or-leave-it:
+
+```
+  Keep this fit, or Redo it? [Keep/Redo/Erase] <Keep>:
+```
+
+`Redo` throws the preview away and refits **without leaving the
+command or re-selecting the points**. First it offers to leave points
+out -- pick each one (mis-shots, duplicates, a shot that plainly
+dragged a wall) and it gets a dashed red ring; **the pick is a
+toggle**, so clicking a ringed point puts it back in. Then all five
+settings are asked again with your last answers as the defaults, so
+changing just the tolerance is `Redo`, `Enter`×2, a number,
+`Enter`×2. Redo as many times as it takes. `Erase` throws the
+preview away and leaves the drawing untouched.
+
+The report calls out the case Redo exists for: when more points sit
+beyond the distance than the percentage allows, it says so in capitals
+and names the ways out -- a looser distance, a bigger percentage,
+leaving the strays out, or the survey simply not being that type of
+pool.
 
 The fitted outline previews on `POOL-FIT` with a report -- the fitted
 dimensions in feet-and-inches, the pool's rotation, points on the
@@ -110,8 +171,10 @@ ceiling (`fit:*tol-max*`, 2"), the snapping increments
 (`fit:*nice-dims*`, feet / half feet / inches / half inches), the
 corner-zone sizing (`fit:*corner-zone*`, `fit:*zone-pad*`,
 `fit:*rad-turn-min*`), the fit depth (`fit:*icp-iters*`), the
-both-ends evidence margin (`fit:*both-edge*`) and the K/L/M offset
-(`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
+both-ends evidence margin (`fit:*both-edge*`), the standard share of
+points allowed off (`fit:*miss-pct*`), what counts as a bow at all
+(`fit:*bow-min*`, `fit:*bow-max*`, `fit:*bow-max-frac*`,
+`fit:*bow-pts-min*`) and the K/L/M offset (`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
 
 ## Notes & limitations
@@ -134,6 +197,13 @@ mirror agree on the ones that shape the fit.
 * A Rectangle whose corners are `Cut` keeps those cut vertices sharp
   (one treatment per run); a cut-and-also-rounded corner is beyond the
   template.
+* A bowed wall's corner easing is computed on the wall's chord, so a
+  filleted corner on a bowed wall is tangent to the chord rather than
+  to the arc. At realistic bows (an inch or two over thirty feet) the
+  difference is far inside the fit tolerance.
+* Bows are reported, not snapped: a wall's radius is whatever the
+  ground made it, so it is printed as measured rather than rounded to
+  a friendly number.
 * At least 6 survey points are needed (3 for Round); corner radii can
   only be measured if the corner arcs were actually shot -- a corner
   with no points on the arc fits whatever the walls allow.
