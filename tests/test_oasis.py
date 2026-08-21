@@ -1457,6 +1457,91 @@ def test_kidney_check_drawing_counts():
           " ties r1+r2")
 
 
+def test_backing_up_through_a_kidney():
+    """Back walks the kidney's own step list, not the oasis one: out of
+    the top radius it lands on Y, out of the right bulge on the left, and
+    out of the type question on the shape -- where a different answer
+    rebuilds every question after it."""
+    vm = newvm()
+    run(vm, ['Kidney', 'True', (0.0, 0.0), KD_X, 200.0, 'Back', KD_Y,
+             KD_TOP, KD_BOT], 'kd back Y')
+    assert close(arcs_of(vm, 4)[3][1], KD_TOP), arcs_of(vm, 4)[3]
+    # the re-answered Y is the one the envelope is built on
+    assert close(arcs_of(vm, 4)[3][0][1], KD_Y - KD_TOP), arcs_of(vm, 4)[3]
+
+    vm = newvm()
+    run(vm, ['Kidney', 'Asymmetric', (0.0, 0.0), KD_X, KD_Y, 84.0, 'Back',
+             96.0, 72.0, KD_BOT], 'kd back left')
+    asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
+    assert asked[5:9] == ['Left bulge radius', 'Right bulge radius',
+                          'Left bulge radius', 'Right bulge radius'], asked
+    assert close(arcs_of(vm, 4)[0][1], 96.0), arcs_of(vm, 4)[0]
+
+    vm = newvm()
+    run(vm, ['Kidney', 'Back', 'Center', (0.0, 0.0)] + REF_MEASURE,
+        'kd back shape')
+    assert len(arcs_of(vm)) == 6, arcs_of(vm)      # an oasis, not a kidney
+    print("ok  kd back     -> Back walks the kidney's own steps, up to the"
+          " shape itself")
+
+
+def test_the_first_kidney_preview_is_never_blank():
+    """The provisionals a kidney starts from have to make a ring.
+
+    Every radius is provisional at the first radius question, and the
+    bottom joiner's provisional is the one that can land under its own
+    minimum -- below that there is no fillet, oasis:solve gives back nil
+    and the user is asked to picture a pool from an empty box.  Sweep the
+    envelopes the questions actually admit."""
+    vm = newvm()
+
+    def first_preview(w, h, kind):
+        tail = '"Asymmetric"' if kind == 'Asym' else '"True"'
+        return vm.loads(
+            '(progn (setq $a (list "Kidney" (list 0.0 0.0) %.6f %.6f'
+            '                      nil nil nil nil nil nil %s)'
+            '             $f (oasis:fillin $a))'
+            ' (oasis:solve (nth 0 $f) (nth 1 $f) (nth 2 $f) (nth 3 $f)'
+            '              (nth 4 $f) (nth 5 $f) (nth 6 $f) (nth 7 $f)'
+            '              (oasis:variant $a)))' % (w, h, tail))
+
+    blank, n = [], 0
+    for wf in range(8, 68, 2):
+        for hf in range(6, 46, 2):
+            w, h = wf * 12.0, hf * 12.0
+            for kind in ('True', 'Asym'):
+                # a true kidney's Y question turns away Y >= X, so those
+                # envelopes never reach a preview at all
+                if kind == 'True' and h >= w:
+                    continue
+                n += 1
+                if not first_preview(w, h, kind):
+                    blank.append((kind, wf, hf))
+    assert not blank, f"{len(blank)} of {n} blank, e.g. {blank[:5]}"
+    print("ok  kd preview  -> all %d starting kidneys draw a ring" % n)
+
+
+def test_a_true_kidney_needs_a_y_smaller_than_its_x():
+    """Its matching sides are derived, not given: they come out less than
+    Y across together whatever top radius they are derived from, so they
+    fit inside X only while Y is under X.  No radius rescues a square
+    envelope, so the Y question is where it has to be caught."""
+    vm = newvm()
+    # 240 x 240 is refused, 240 x 216 accepted in its place
+    run(vm, ['Kidney', 'True', (0.0, 0.0), 240.0, 240.0, 216.0,
+             264.0, 60.0], 'square Y')
+    arcs = arcs_of(vm, 4)
+    assert len(arcs) == 4, arcs
+    assert close(arcs[3][1], 264.0), arcs[3]        # the re-answered top
+    # and the two derived sides really do meet dead centre on the square
+    # -- 2r == X exactly, which is why nothing downstream can join them
+    for rt in (200.0, 300.0, 1000.0):
+        g = vm.loads('(oasis:ktrue-side 240.0 240.0 %.4f)' % rt)
+        assert close(g, 120.0, 1e-9), (rt, g)
+    print("ok  kd Y < X    -> a Y at or over X is re-asked, not carried"
+          " into a shape that cannot close")
+
+
 def test_version_command():
     vm = newvm()
     vm.run('c:OASISVER', [])
@@ -1595,6 +1680,9 @@ if __name__ == '__main__':
     test_asym_kidney_unreachable_sides_are_reasked()
     test_kidney_preview_labels_the_derived_circles()
     test_kidney_check_drawing_counts()
+    test_backing_up_through_a_kidney()
+    test_the_first_kidney_preview_is_never_blank()
+    test_a_true_kidney_needs_a_y_smaller_than_its_x()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")

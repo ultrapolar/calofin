@@ -191,7 +191,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *oasis-version* "v5.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v5.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -1061,7 +1061,7 @@
 ;; A tangent radius has no such rule of thumb -- what looks right depends
 ;; entirely on the three bulges -- so it takes a quarter of the short
 ;; bound, lifted clear of its own minimum when that is larger.
-(defun oasis:fillin (ans / var w h rl rt rr cl ct cr side top g big)
+(defun oasis:fillin (ans / var w h rl rt rr cl ct cr gl gr side g big)
   (setq var  (oasis:variant ans)
         w    (nth 2 ans)
         h    (nth 3 ans))
@@ -1080,9 +1080,22 @@
                      (cond ((nth 6 ans)) ((* 0.45 (min w h)))))
               g  (if (= var "TrueKidney")
                      (cond ((oasis:ktrue-side w h rt)) (48.0))
-                     (min rl rr)))
+                     (min rl rr))
+              ;; the two circles the bottom joiner will actually span --
+              ;; the matching pair derived on a true kidney, the two given
+              ;; sides on an asymmetric one
+              cl (if (= var "TrueKidney") (list g g) (list rl rl))
+              gl (if (= var "TrueKidney") g rl)
+              cr (if (= var "TrueKidney") (list (- w g) g) (list (- w rr) rr))
+              gr (if (= var "TrueKidney") g rr))
         (list w h rl rt rr nil nil
-              (cond ((nth 9 ans)) ((* 0.6 g)))))
+              ;; and lifted clear of its own minimum, like every other
+              ;; joiner provisional -- below it there is no fillet, and
+              ;; the preview would have nothing to draw until the very
+              ;; last question was answered
+              (cond ((nth 9 ans))
+                    ((max (* 0.6 g)
+                          (* 1.25 (oasis:filmin cl gl cr gr)))))))
       (progn
   (setq side (* 0.5 oasis:*startside* (min w h))
         rl   (cond ((oasis:leftrad var h (nth 4 ans))) (side))
@@ -1297,29 +1310,45 @@
     (setq v (cal:askdist 'REQ msg nil T)))
   v)
 
+;; The Y bound.  It is asked the same way for every shape but one: a
+;; TRUE kidney is the one the envelope's own proportions can rule out,
+;; because its two matching sides are not given but derived.  Whatever
+;; top radius they are derived from, they come out less than Y across
+;; together and grow towards exactly that as the top circle grows -- so
+;; they fit inside X only while Y is less than X, and on a Y that is not,
+;; no top radius rescues the shape.  That is why it is caught here,
+;; where the user can still change the number that caused it, rather
+;; than at a radius question that would refuse every answer.
+(defun oasis:ask-ybound (msg w var / v)
+  (setq v (cal:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'CAL-BACK))
+              (= var "TrueKidney")
+              (> (+ v oasis:*fuzz*) w))
+    (princ (strcat "\nA true kidney " (rtos v) " deep in a " (rtos w)
+                   " envelope closes on itself -- its two matching"
+                   " sides always meet"))
+    (princ (strcat "\nbefore they reach the sides of the box.  Y has to"
+                   " be less than X here; an asymmetric kidney takes any"
+                   " envelope."))
+    (setq v (cal:askdist 'REQ msg nil T)))
+  v)
+
 ;; A true kidney's top-center radius, re-asked until a kidney can be
 ;; built on it.  Below a minimum the top circle cannot reach both sides
 ;; -- at the minimum it passes through the two bottom corners and the
-;; matching sides shrink to nothing -- and on a tall narrow envelope a
-;; radius can be so big the derived sides meet in the middle.
-(defun oasis:ask-ktop (msg w h / v r bad)
+;; matching sides shrink to nothing.  There is no maximum to check
+;; against: the derived sides never span more than Y together, and
+;; oasis:ask-ybound has already turned away any Y that is not less
+;; than X.
+(defun oasis:ask-ktop (msg w h / v r)
   (setq v (cal:askdist 'REQ msg nil T))
   (while (and (not (eq v 'CAL-BACK))
-              (progn
-                (setq r   (if (> v (+ (oasis:ktrue-min w h) oasis:*fuzz*))
-                              (oasis:ktrue-side w h v))
-                      bad (cond ((null r) "small")
-                                ((> (* 2.0 r) (+ w oasis:*fuzz*)) "big")))
-                bad))
-    (if (= bad "small")
-        (princ (strcat "\nA " (rtos v) " top circle cannot reach both"
-                       " sides of a " (rtos w) " x " (rtos h)
-                       " envelope -- it has to be more than "
-                       (rtos (oasis:ktrue-min w h)) "."))
-        (princ (strcat "\nA " (rtos v) " top circle makes the matching"
-                       " sides " (rtos r) " each -- " (rtos (* 2.0 r))
-                       " across together, more than the " (rtos w)
-                       " envelope.  Smaller keeps them apart.")))
+              (null (setq r (if (> v (+ (oasis:ktrue-min w h) oasis:*fuzz*))
+                                (oasis:ktrue-side w h v)))))
+    (princ (strcat "\nA " (rtos v) " top circle cannot reach both"
+                   " sides of a " (rtos w) " x " (rtos h)
+                   " envelope -- it has to be more than "
+                   (rtos (oasis:ktrue-min w h)) "."))
     (setq v (cal:askdist 'REQ msg nil T)))
   v)
 
@@ -1379,7 +1408,7 @@
                       "Straight/Rounded" "Straight" T)))
     ((= k 1) (oasis:askbase T))
     ((= k 2) (cal:askdist 'REQ "X - overall left-to-right bounds" nil T))
-    ((= k 3) (cal:askdist 'REQ "Y - overall front-to-back bounds" nil T))
+    ((= k 3) (oasis:ask-ybound "Y - overall front-to-back bounds" w var))
     ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4) "left" w h))
     ((= k 5) (if (oasis:kidney-p var)
                  (oasis:ask-ktop (oasis:sprompt var 5) w h)

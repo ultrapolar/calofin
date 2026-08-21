@@ -73,6 +73,16 @@ each real answer lands. On a true kidney the top radius has a hard
 minimum the re-ask names — `Y/2 + X²/8Y`, the circle through the two
 bottom corners, where the matching sides shrink to nothing.
 
+A true kidney is also the one shape the **envelope alone** can rule out,
+and for the same reason: sides that are derived rather than given. They
+always come out less than Y across together, growing towards exactly
+that as the top circle grows, so they fit inside X only while **Y is
+less than X**. No top radius rescues a Y that is not — on a square
+envelope the two sides meet dead centre whatever radius they are derived
+from — so the Y question is where it is caught, while the number that
+caused it is still the one being asked for. (An asymmetric kidney takes
+any envelope; its sides are given.)
+
 ### Answering it, with the pool on screen
 
 Before every question the preview is redrawn, with three things
@@ -436,7 +446,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 70 of them. The reference case is checked against the drawing OASIS was
+answers — 71 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -494,7 +504,7 @@ whether a bottom radius is asked for at all, and `Back` from it lands on
 the shape and rebuilds every question after it — and one covers the
 bulge-to-bulge ties in the check drawing.
 
-Nine are the two **kidney** shapes: the true kidney reproduces its
+Twelve are the two **kidney** shapes: the true kidney reproduces its
 customer drawing arc for arc, with the sides deriving at 95.9167; the
 seams hand over at the exact internal tangency with nothing drawn
 between; it fills its envelope simply; the asymmetric one derives its
@@ -502,8 +512,12 @@ top circle to the same tangencies; each asks its own questions (7 and
 8); a top radius under the named minimum is re-asked; the one degenerate
 side pair (both exactly half of Y — a cloud, not a kidney) is caught and
 re-asked; the derived circles label themselves with values, never `?`;
-and the check drawing's seam ties read `R − r` where external ties read
-`r₁ + r₂`. The preview
+the check drawing's seam ties read `R − r` where external ties read
+`r₁ + r₂`; `Back` walks the kidney's own step list up to the shape
+question itself; a Y at or over X is re-asked rather than carried into a
+shape that cannot close; and every one of the 1,010 envelopes the
+questions admit draws a ring from its starting provisionals, so the
+first preview is never an empty box. The preview
 ones wrap `getdist` to photograph the drawing at the moment each question
 is put — it is erased before the next one, so there is no other way to
 see it.
