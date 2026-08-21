@@ -274,6 +274,10 @@ with a different prompt sequence, so `tests/test_pool_form.py` and
 (reconciling the palette's `LispBridge` with the canonical POOL/SPA),
 not a bug in either side.
 
+`ui/PLAN.md` is the execution plan for closing it - what is built, what
+is missing, and the day-by-day for making the forms actually drive the
+routines.
+
 ## Tools (`tools/`)
 
 | Script | What it does |
