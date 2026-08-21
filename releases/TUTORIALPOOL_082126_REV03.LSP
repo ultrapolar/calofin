@@ -24,7 +24,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "082126 REV02")
+(setq tutorial:*version* "082126 REV03")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -128,29 +128,37 @@
 
 ;;; -------------------- topic 4: corner treatments -----------------------
 
-(defun tutorial:c4 ( / q cs arcs cen)
+(defun tutorial:c4 ( / q cs arcs cen k c)
   (tutorial:cap "4  CORNER TREATMENTS")
   (setq q (list (list 0.0 0.0) (list 300.0 0.0)
                (list 300.0 180.0) (list 0.0 180.0))
-        cs (list (list "Rounded" 30.0) (list "Diag" 40.0)
-                 (list "Square" 0.0) (list "Square" 0.0))
+        cs (list (list "Radius" 30.0) (list "Cut" 40.0)
+                 (list "NotGiven" 0.0) (list "Square" 0.0))
         cen (pool:v* (pool:v+ (pool:v+ (nth 0 q) (nth 1 q))
                               (pool:v+ (nth 2 q) (nth 3 q))) 0.25)
         arcs (pool:drawrect q cs))
+  ;; one pane showing all four treatments at once: the radius dim, the
+  ;; cut-face dim, the circled "?" with its Not Given note, and the
+  ;; circled 90 on the plain square corner
   (setvar "CLAYER" "DIMENSION")
-  (pool:dimcorner1 (pool:cornerends (nth 0 q) (nth 3 q) (nth 1 q) "Rounded" 30.0 nil)
-                   "Rounded" (nth 0 arcs)
-                   (pool:unit (pool:v- (nth 0 q) cen)) 20.0 "")
-  (pool:dimcorner1 (pool:cornerends (nth 1 q) (nth 0 q) (nth 2 q) "Diag" 40.0 nil)
-                   "Diag" (nth 1 arcs)
-                   (pool:unit (pool:v- (nth 1 q) cen)) 20.0 "")
+  (setq k 0)
+  (foreach c cs
+    (pool:dimtreat1 (pool:cornerends (nth k q)
+                                     (nth (rem (+ k 3) 4) q)
+                                     (nth (rem (+ k 1) 4) q)
+                                     (car c) (cadr c) nil)
+                    (car c) (nth k arcs) (nth k q)
+                    (pool:unit (pool:v- (nth k q) cen)) 20.0 ""
+                    (pool:polywedge q k))
+    (setq k (1+ k)))
   (setvar "CLAYER" "POOL")
   (tutorial:frame (list -40.0 -40.0) (list 400.0 300.0))
   (princ "\n\n=== 4. CORNER TREATMENTS ===")
   (princ "\nRectangle, Grecian/Octagon, Roman and L/Lazy L corners can each be:")
-  (tutorial:bullet "Square  -- the plain sharp corner (nothing drawn).")
-  (tutorial:bullet "Rounded -- you give the RADIUS; a fillet arc is drawn (bottom-left, above).")
-  (tutorial:bullet "Diag    -- you give the CHAMFER FACE length; a straight cut is drawn (bottom-right, above).")
+  (tutorial:bullet "Square   -- a true sharp corner; circled on the drawing with a 90%%d leader (top-left, above).")
+  (tutorial:bullet "Radius   -- you give the RADIUS; a fillet arc is drawn (bottom-left, above).")
+  (tutorial:bullet "Cut      -- you give the CUT FACE length; a straight chamfer is drawn (bottom-right, above).")
+  (tutorial:bullet "NotGiven -- the order sheet never said. Built square, but circled with a \"?\" and a Not Given note (top-right, above) so nobody reads it as a measured 90.")
   (princ "\nSide lengths always read to the TRUE (sharp) corner -- the")
   (princ "\ntreatment cuts inward from there, so a measured wall length never")
   (princ "\nchanges because you added a radius.")
@@ -160,7 +168,7 @@
   (tutorial:bullet "L/Lazy L: the five OUTER corners take one answer, the INNER corner (E) is asked separately since it's usually different (Enter reuses the outer answer).")
   (tutorial:bullet "Grecian/Octagon: the four BODY corners (A/B/C/D, where a side runs into a cut face) take one answer and the four END TIPS (LT/LB/RT/RB) another, Enter on the tips reusing the body answer.")
   (tutorial:bullet "Roman: the four true corners A/B/C/D take one answer; the S1 stubs then spring from the cut, and sizes are capped at the corner drop so a treatment cannot run past the arc spring.")
-  (tutorial:bullet "Every shape asks 'Are the corners modified (rounded / chamfered)?' first, defaulting to No -- square is always the assumption.")
+  (tutorial:bullet "Every shape except the rectangle asks 'Anything to record about the corners (radius / cut / not given)?' first, defaulting to No -- square is always the assumption.")
   (tutorial:bullet "The pool bottom's hopper ties connect to the ACTUAL corner cut on the deep-end wall, not the sharp corner behind it -- see topic 5.")
   (princ))
 
@@ -264,7 +272,7 @@
   (princ "\nwas already current (a one-time note for STANDARD INCHES, then")
   (princ "\nit stays quiet for the rest of the run).")
   (tutorial:bullet "CROSS DIMENSIONS -- every cross dim, on every shape. Pure ByLayer: no per-entity color/linetype/lineweight override, so the look comes entirely from that style and the DIMENSION layer.")
-  (tutorial:bullet "STANDARD INCHES -- any dimension measuring UNDER 2' (24\"): corner radii, chamfer faces, short hopper offsets, end radii, profile depths. A dimension of EXACTLY 2' stays in the current style, not inches.")
+  (tutorial:bullet "STANDARD INCHES -- any dimension measuring UNDER 2' (24\"): corner radii, cut faces, short hopper offsets, end radii, profile depths. A dimension of EXACTLY 2' stays in the current style, not inches.")
   (tutorial:bullet "SIDE STANDARD -- the secondary sheet letters (Grecian/Octagon S/T/S1/V, Roman and Oval end radii, L wing and step sides, the six-sided hopper's W/L1/X). Wins over the under-24\" rule: a 19\" S1 stays in SIDE STANDARD, not inches.")
   (princ "\nThe styles nest correctly -- a small dimension drawn inside the")
   (princ "\ncross-dim block returns to CROSS DIMENSIONS afterward, not to")

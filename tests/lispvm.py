@@ -199,6 +199,7 @@ class VM:
         self.blocks = {}         # block name -> its definition entities
         self.script = []
         self.prompts = []        # (prompt, answer) log
+        self.printed = []        # everything princ'd, in order
         self.commands = []       # every (command ...) call
         self.dimstyle_log = []   # every dim style made current, in order
         self.entities = []       # Ent -> alist, in creation order
@@ -871,7 +872,17 @@ def _rtos(vm, a):
 BUILTINS[Sym('angtos')] = lambda vm, a: f"{num(a[0]):.6f}"
 
 # io
-BUILTINS[Sym('princ')] = lambda vm, a: (a[0] if a else NIL)
+def _princ(vm, a):
+    """(princ [x]) -- returns x, and keeps what was written.  What a
+    command tells the user is behaviour like any other: a run that ends
+    saying nothing is a bug, and a test can only see that if the VM
+    remembers the words."""
+    if a and a[0] is not NIL:
+        vm.printed.append(a[0] if isinstance(a[0], str) else str(a[0]))
+    return a[0] if a else NIL
+
+
+BUILTINS[Sym('princ')] = _princ
 BUILTINS[Sym('prin1')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('print')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('terpri')] = lambda vm, a: NIL
@@ -937,6 +948,16 @@ def _entmake(vm, a):
         lay = d.get(8, '0')
         if lay != '0' and lay not in vm.tables['LAYER']:
             raise LispError(f"entmake on missing layer {lay!r}", vm)
+    if etype == 'LWPOLYLINE':
+        # AutoCAD refuses a polyline of fewer than two vertices and
+        # RETURNS NIL rather than erroring, so a routine that builds an
+        # empty outline gets a quiet nil back and has to notice.  The VM
+        # used to accept it, which hid exactly that class of bug.
+        verts = sum(1 for p in alist
+                    if (isinstance(p, Dot) and p.a == 10)
+                    or (isinstance(p, list) and p and p[0] == 10))
+        if verts < 2:
+            return NIL
     e = Ent()
     vm.entities.append(e)
     vm.entdata[e] = list(alist)

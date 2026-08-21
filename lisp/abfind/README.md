@@ -6,15 +6,19 @@ wherever those two distances cross. These two commands work that way
 round.
 
 * **`ABFIND`** — type a point number, get the two ties: an aligned
-  dimension from A to the point and one from B to it.
-* **`ABMOVE`** — the same, and then the question `ABFIND` raises: *if
-  this point is in the wrong place, where should it be?* One tape is
+  dimension from A to the point and one from B to it. Then it asks
+  whether that point wants moving, and if you say Yes it runs
+  everything `ABMOVE` does before coming back for the next number.
+* **`ABMOVE`** — that flow on its own, without the question, for when
+  you already know a point is wrong: *if this point is in the wrong
+  place, where should it be?* One tape is
   held exactly as it is and the other's reading is walked — a foot at a
   time, ten feet each way, plus every number the reading could have
   been misread as. Each candidate is drawn **yellow** on the POINTS
   layer and tagged by the tape it moves and how far: `1A`, `-3B`.
   Type the tag you believe and the point moves there, renamed, ringed
-  and noted.
+  and noted — **one point per run**: moving a point is a decision, not
+  a sweep, so the command ends as soon as that point is settled.
 
 ## What it does
 
@@ -31,12 +35,22 @@ and `CDCREATE` make cross dims:
 * the dimension line sitting **right on the tie** (nudge
   `abf:*offset*` to push it off).
 
-It keeps asking for the next number until you press **Enter**, and
-prints both readings as it goes:
+It prints both readings as it goes:
 
 ```
   Pt.17:  A 21'-1"   B 18'-6"  dimensioned.
 ```
+
+Then it asks:
+
+```
+  Move Pt.17 to a different reading? [Yes/No/Back] <No>:
+```
+
+**No** (the Enter answer) moves on to the next point number. **Yes**
+runs everything under `ABMOVE` below — the readings, the pick, the
+move — and then `ABFIND` comes back and asks for the next number.
+Either way it keeps going until you press **Enter** at the number.
 
 Nothing is clicked — unless the drawing does not name its stakes (see
 below).
@@ -115,6 +129,14 @@ beside it, and listed nearest miss first within each group:
    -10B  A     B      18'-6"        8'-6"         10'-9 15/16" SE
 ```
 
+Each group also gets **the line it sits on**, dashed and grey. A held
+tape is a fixed radius off its stake, so everything that holds it lies
+on one arc centred there: the readings that move A all sit on B's arc,
+the ones that move B all sit on A's, and the two cross at the point as
+it is drawn now. Each arc runs out to the furthest suggestion its
+group reaches, either way round. They are scaffolding like the
+markers, and go when the round does.
+
 Forty-five rows for this point: twenty sweep steps per moved tape, plus
 three look-alike readings of A and two of B, each sitting where its own
 miss puts it — an inch out sorts above a foot out, which is why the
@@ -140,9 +162,14 @@ generated and five collapsed into the sweep: `18'` read as `16'` or
 `13'`, and `21'` read as `24'`, `27'` or `12'`, are all whole feet the
 sweep already carries.
 
-Answer with the number, or `Pick` and click the one you want. `None`
-(the Enter answer) leaves the point alone and keeps the two
-dimensions — `ABMOVE` has then done exactly what `ABFIND` does.
+Answer with a tag, or `Pick` and click the one you want. `None` (the
+Enter answer) leaves the point alone and keeps the two dimensions —
+`ABMOVE` has then done exactly what `ABFIND` does.
+
+Either way that is the end of the run. `ABMOVE` settles **one** point
+and stops; run it again for the next one. `ABFIND`, which only
+measures, keeps asking until you press Enter. Enter at `ABMOVE`'s
+point number cancels the run outright.
 
 Pick one and four things happen:
 
@@ -167,9 +194,8 @@ Pick one and four things happen:
    sheet measures the position it is claiming. The old reading is not
    lost — the note carries it.
 
-`Pt.17m` joins the lookup as it is made, so you can name it in a later
-round of the same run — and Back forgets it again along with the rest
-of its round.
+`Pt.17m` is a survey point like any other once it is made, so the next
+`ABFIND` or `ABMOVE` run finds it by its new number.
 
 ## Finding the stakes
 
@@ -200,15 +226,20 @@ When a drawing carries a duplicate number, the first match wins.
 
 The shared Back convention (see the root README) applies:
 
-* `B`, `BACK`, `U` or `UNDO` (any case) typed at the **point number**
-  un-does the whole of the last round — its dimensions, and, if it
-  moved a point, the moved point, the ring and the note, with the
-  original dimensions put back (`Stepping back one point.`, or
+* in `ABFIND`, `B`, `BACK`, `U` or `UNDO` (any case) typed at the
+  **point number** undoes the whole of the last round — its ties, and,
+  if that round moved a point, the moved point, its ring and its note,
+  with the original ties put back (`Stepping back one point.`, or
   `Already at the first point.` when there is nothing left);
-* `Back` at **which suggestion** takes that round's dimensions away and
-  re-asks the number;
+* `Back` at **`Move Pt.17 to a different reading?`** un-draws that
+  point's ties and re-asks the number;
+* `Back` at **which suggestion** re-asks the move question — in
+  `ABMOVE`, which never asked it, it re-asks the point number instead;
 * `Back` at **the note** re-asks which suggestion, with the
   suggestions still on screen.
+
+`ABMOVE`'s first question has nothing to go back to, and once its point
+is settled the run is over — to undo that move, `U`.
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -220,12 +251,15 @@ error, or Esc.
 1. Load `ABFIND.lsp` (`APPLOAD`, or drag it into the drawing). Both
    commands come with the one file.
 2. `ABFIND` → `Point number <Enter = done>:` → `17` → the two ties are
-   drawn → next number, or Enter to finish.
-3. `ABMOVE` → `Point number <Enter = done>:` → `17` → read the table
+   drawn → `Move Pt.17 to a different reading? [Yes/No/Back] <No>:` →
+   Enter to move on, or `Yes` to go through step 3 → next number, or
+   Enter to finish.
+3. `ABMOVE` → `Point number (Enter to cancel):` → `17` → read the table
    (`F2` opens the text window if it runs off the command line) →
    `Move Pt.17 - type a tag from the table [Pick/None/Back] <None>:`
    → a tag such as `-1B`, or `Pick` and click the marker → `Place the
-   note for Pt.17 [Auto/Back] <Auto>:` → Enter.
+   note for Pt.17 [Auto/Back] <Auto>:` → Enter, and the command is
+   done.
 4. `ABFINDVER` prints the loaded version.
 
 ## Tunables
@@ -250,6 +284,8 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*sug-radius*   3.0)           ; suggestion marker radius
 (setq abf:*sug-color*    2)             ; suggestion colour: yellow
 (setq abf:*sug-hgt*      6.0)           ; suggestion tag height
+(setq abf:*locus-color*  8)             ; guide-line colour: grey
+(setq abf:*locus-ltype*  "DASHED")      ; and its linetype
 (setq abf:*foot-steps*   10)            ; 1-foot steps offered each way
 (setq abf:*max-shift*    120.0)         ; furthest a suggestion may sit
 (setq abf:*max-sugg*     nil)           ; most per held stake, nil = all
@@ -293,6 +329,14 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.5** — `ABFIND` asks `Move Pt.## to a different reading?` after
+  each pair of ties and runs `ABMOVE`'s flow on a Yes, then carries on
+  to the next point; Back undoes a moved round whole again.
+* **v1.4** — each group of suggestions gets the dashed grey arc it
+  lies on (`abf:*locus-color*` / `abf:*locus-ltype*`), created at pool
+  scale when the drawing has no linetype by that name.
+* **v1.3** — `ABMOVE` settles one point and ends; `ABFIND` still
+  loops. Enter at `ABMOVE`'s point number cancels.
 * **v1.2** — the suggestions are drawn yellow (`abf:*sug-color*`) and
   tagged by the tape they move and how far (`1A`, `-3B`, `R1A`) rather
   than numbered 1..n; the readings that move A are listed first.
@@ -312,8 +356,9 @@ ByLayer fixup, number spellings, unknown numbers, stake lookup and the
 click fallback, the misreading arithmetic (readings, look-alike digits,
 transpositions, the shift cap and the suggestion cap), the circle
 crossing, the whole move (new point, ring, note wording, redrawn ties),
-the `None` and `Pick` answers, all three Back steps and the
-no-point-block fallback:
+the yellow markers and their tags, the dashed grey guide lines and
+what they span, the `None` and `Pick` answers, the Back steps, the
+one-shot shape and the no-point-block fallback:
 
 ```
 python3 tests/test_abfind.py                          # standalone tier

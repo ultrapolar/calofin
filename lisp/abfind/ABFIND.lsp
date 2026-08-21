@@ -4,10 +4,13 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP; needs the Visual LISP
 ;;; engine that ships with full AutoCAD -- LT cannot run this).
 ;;;
-;;; Commands:  ABFIND      dimension Pt.## from A and from B
-;;;            ABMOVE      the same, and then offer every place the
-;;;                        point could sit if one of the two tapes was
-;;;                        written down wrong; pick one and it moves
+;;; Commands:  ABFIND      dimension Pt.## from A and from B, point
+;;;                        after point until Enter - and offer to move
+;;;                        each one before it asks for the next
+;;;            ABMOVE      ONE point: the same two ties, and then every
+;;;                        place it could sit if one of the two tapes
+;;;                        was written down wrong; pick one, it moves,
+;;;                        and the command is done
 ;;;            ABFINDVER   print the loaded version
 ;;; ======================================================================
 ;;;
@@ -25,8 +28,17 @@
 ;;;   is clicked: the stakes are found by name and the point by number.
 ;;;
 ;;; ABMOVE
-;;;   Everything ABFIND does, and then the question ABFIND raises: if
-;;;   this point is in the wrong place, where SHOULD it be?  One tape
+;;;   ABFIND asks this itself, once its two ties are drawn:
+;;;
+;;;       Move Pt.17 to a different reading? [Yes/No] <No>:
+;;;
+;;;   Yes runs everything below, and when the point is settled ABFIND
+;;;   asks for the next number as usual.  ABMOVE is the same flow
+;;;   without the question -- it was typed to move a point, so it goes
+;;;   straight to the readings and ends when that point is settled.
+;;;
+;;;   Either way: if this point is in the wrong place, where SHOULD it
+;;;   be?  One tape
 ;;;   is held exactly as it is and the other's reading is varied, and
 ;;;   each pair of distances is crossed back to a position.  Two
 ;;;   families of reading are tried:
@@ -60,6 +72,14 @@
 ;;;   listed on the command line nearest miss first within each group.
 ;;;   Type a tag, or Pick and click the marker you want.
 ;;;
+;;;   Each group also gets the line it sits on, dashed and grey: a
+;;;   held tape is a fixed radius off its stake, so everything that
+;;;   holds it lies on one arc centred there - through the point as it
+;;;   is drawn now, and out to the furthest suggestion each way.  Two
+;;;   arcs, then: one through all the A readings and one through all
+;;;   the B readings, crossing at the point itself.  They are
+;;;   scaffolding like the markers and go when the round does.
+;;;
 ;;;   Picking one:
 ;;;     * a new point is made there, numbered "17m" -- the original
 ;;;       number with abf:*moved-suffix* on it, so the drawing says
@@ -81,6 +101,12 @@
 ;;;   None (the Enter answer) leaves the point alone and keeps the two
 ;;;   dimensions -- ABMOVE has then done exactly what ABFIND does.
 ;;;
+;;;   For ABMOVE that is the end of the run: it settles ONE point and
+;;;   stops -- run it again for the next one.  ABFIND carries on to the
+;;;   next point number, and the point it has just made is a point like
+;;;   any other from there: it can be named in a later round of the
+;;;   same run.
+;;;
 ;;; THE STAKES.  A and B are looked up by name among the survey points,
 ;;; the same way any other point is: an "ab_pt" INSERT anywhere or any
 ;;; other INSERT on the POINTS layer, named by its "number" attribute
@@ -94,10 +120,16 @@
 ;;; nothing is drawn from a typo.
 ;;;
 ;;; Going back a step follows the shared Back convention (see the root
-;;; README): B/BACK/U/UNDO typed at the point number un-does the whole
-;;; of the last round -- its dimensions, and, if it moved a point, the
-;;; moved point, the ring and the note, with the original dimensions
-;;; put back.  Back at ABMOVE's later questions re-asks the one before.
+;;; README).  In ABFIND, B/BACK/U/UNDO typed at the point number undoes
+;;; the whole of the last round -- its ties, and, if that round moved a
+;;; point, the moved point, its ring and its note, with the original
+;;; ties put back.  Back at "Move Pt.17?" un-draws that point's ties
+;;; and re-asks the number; Back at the suggestions re-asks "Move
+;;; Pt.17?"; Back at the note re-asks the suggestion.  ABMOVE is the
+;;; same minus its own question: Back at the suggestions re-asks the
+;;; point number, its first question has nothing to go back to, and
+;;; once the point is settled the run is over.  A single U undoes a
+;;; whole run either way -- it is one undo group.
 ;;;
 ;;; A missing "CROSS DIMENSIONS" style is NOT invented: the dims are
 ;;; drawn in whatever style is current and the routine says so, so a
@@ -118,7 +150,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.2")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.5")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -156,6 +188,13 @@
                                     ; so a suggestion never reads as one
                                     ; of the drawing's own POINTS
 (setq abf:*sug-hgt*      6.0)       ; height of a suggestion's tag
+(setq abf:*locus-color*  8)         ; colour of the guide line each
+                                    ; group of suggestions sits on:
+                                    ; grey, so it reads as a guide and
+                                    ; not as drawn work
+(setq abf:*locus-ltype*  "DASHED")  ; and its linetype - created at
+                                    ; pool scale when the drawing has
+                                    ; no linetype by that name
 (setq abf:*foot-steps*   10)        ; how many 1-foot steps are offered
                                     ; each way when a tape is swept: 10
                                     ; up and 10 down, per held stake
@@ -198,6 +237,13 @@
   (cond ((member v '("Back" "Undo")) 'ABF-BACK)
         ((null v) (if dflt dflt (abf:askkw msg kws shown dflt back)))
         (t v)))
+
+;; Yes/No.  dflt is "Yes" or "No" and is always shown; a change to the
+;; drawing defaults "No".  Returns T, nil or ABF-BACK.
+;; (cal:askyn, copied under this file's prefix.)
+(defun abf:askyn (msg dflt back / v)
+  (setq v (abf:askkw msg "Yes No" "Yes/No" dflt back))
+  (if (eq v 'ABF-BACK) v (= v "Yes")))
 
 ;; Typed prompts cannot take keywords, so Back is typed like a value.
 (defun abf:back-word-p (s)
@@ -365,6 +411,12 @@
   (while (< a 0.0) (setq a (+ a pi pi)))
   (while (>= a (+ pi pi)) (setq a (- a pi pi)))
   a)
+
+;; Smallest signed angular difference (to - from), in (-pi, pi].
+;; (cal:signed-dang, copied under this file's prefix.)
+(defun abf:signed-dang (from to / d)
+  (setq d (abf:angnorm (- to from)))
+  (if (> d pi) (- d (* 2.0 pi)) d))
 
 ;; The 8-point compass name for ANG (0 = east), reading the drawing the
 ;; way it is plotted: plan north is +Y.
@@ -725,6 +777,52 @@
   (setq out (cons (entlast) out))
   (reverse out))
 
+;; Make sure the guide line's linetype exists, with dashes sized for a
+;; drawing in inches so they read at pool scale.  Pure entmake, no
+;; command calls.  (pf:ensure-dashed, abhd.lsp:1566.)  A drawing that
+;; already has a linetype by that name keeps its own.
+(defun abf:ensure-dashed ()
+  (if (not (tblsearch "LTYPE" abf:*locus-ltype*))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   (cons 2 abf:*locus-ltype*) '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0)))))
+
+;; The guide line one group of suggestions lies on.  Every candidate
+;; that HELD the same tape sits at exactly that tape's reading off its
+;; stake - and so does the point as it is drawn now - so the whole
+;; group is on one circle centred there.  The arc runs from the
+;; furthest candidate one way round to the furthest the other, through
+;; the point itself: a dashed grey line through all of them.  Returns
+;; what it made, in a list, or nil when the group is empty.
+(defun abf:draw-locus (ctr rad pp sugs held / a0 lo hi c d)
+  (setq a0 (angle (abf:2d ctr) (abf:2d pp))
+        lo 0.0
+        hi 0.0)
+  (foreach c sugs
+    (if (= (cadr c) held)
+      (progn
+        (setq d (abf:signed-dang
+                  a0 (angle (abf:2d ctr) (abf:2d (nth 5 c)))))
+        (if (< d lo) (setq lo d))
+        (if (> d hi) (setq hi d)))))
+  (if (> (- hi lo) abf:*fuzz*)
+    (progn
+      (abf:ensure-dashed)
+      (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
+                     (cons 8 abf:*point-layer*)
+                     (cons 62 abf:*locus-color*)
+                     (cons 6 abf:*locus-ltype*)
+                     '(100 . "AcDbCircle")
+                     (list 10 (car ctr) (cadr ctr) 0.0)
+                     (cons 40 rad)
+                     '(100 . "AcDbArc")
+                     (cons 50 (+ a0 lo)) (cons 51 (+ a0 hi))))
+      (list (entlast)))))
+
 ;; Erase a list of entities, skipping any that has gone already.
 (defun abf:drop (lst / e)
   (foreach e lst (if (and e (entget e)) (entdel e))))
@@ -742,9 +840,16 @@
 ;;; is - it is localized in the arglist just the same, so the previous
 ;;; handler comes back when the run ends (STANDARDS.md section 5).
 ;;;
-;;; A round is remembered as ("DIM" pair) or as
-;;; ("MOVE" old-pair new-pair moved-point-ents ring note) so Back can
-;;; undo the whole of it, the erased dimensions included.
+;;; The two differ in shape as well as in questions.  ABFIND rinses and
+;;; repeats, so it keeps a history and Back takes the last round away
+;;; again, whatever that round did:
+;;;
+;;;     ("DIM"  pair)
+;;;     ("MOVE" old-pair new-pair moved-point-ents ring note)
+;;;
+;;; ABMOVE does ONE point - it was typed to move one - and ends as soon
+;;; as that point is settled, so it keeps no history.  A single U
+;;; undoes the whole run either way.
 
 (defun abf:undo-round (r)
   (if (= (car r) "DIM")
@@ -760,8 +865,8 @@
 ;; whole call (the BPCALLOUT v1.0 lesson).
 (defun abf:run (movep / *error* undo-open oce ocl oos odim cmd cands
                         pa pb hist stage done made moves s hit nm pp
-                        pair sugs temps c i kws shown ans sug havestyle
-                        np newpt ments ring note tried lasthold)
+                        pair sugs temps c kws shown ans sug havestyle
+                        np newpt tried lasthold ments ring note npair)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -820,10 +925,19 @@
                           "\" instead.  Create the style (or start"
                           " from the standard template) and re-run.")))
 
-         ;; -- the round loop.  Stage 1 is the point number and is all
-         ;;    ABFIND has; ABMOVE goes on to stage 2 (which suggestion)
-         ;;    and stage 3 (where the note goes), each backing out into
-         ;;    the one before it.
+         ;; -- the round loop.  A round is one point:
+         ;;      1  which point       -- its two ties are drawn
+         ;;      2  move it?          -- ABFIND only: it measures, so
+         ;;                              it asks before going looking.
+         ;;                              ABMOVE was typed to move a
+         ;;                              point and goes straight on
+         ;;      3  work out where it could go, and show it (no
+         ;;         question of its own)
+         ;;      4  which suggestion
+         ;;      5  where the note goes, and then the move itself
+         ;;    Each question backs out into the one before it.  ABFIND
+         ;;    goes round again after every round, moved or not;
+         ;;    ABMOVE settles its one point and ends.
          (setq hist nil stage 1 done nil made 0 moves 0 temps nil)
          (while (not done)
            (cond
@@ -831,16 +945,18 @@
              ;; -- 1: which point
              ((= stage 1)
               (setq s (getstring
-                        (strcat "\nPoint number"
-                                (if hist " [Back]" "")
-                                " <Enter = done>: ")))
+                        (if movep
+                          "\nPoint number (Enter to cancel): "
+                          (strcat "\nPoint number"
+                                  (if hist " [Back]" "")
+                                  " <Enter = done>: "))))
               (cond
                 ((= s "") (setq done T))
                 ((abf:back-word-p s)
                  (if hist
                    (progn
                      (abf:undo-round (car hist))
-                     ;; a MOVE round added exactly one point to the
+                     ;; a MOVE round put exactly one point into the
                      ;; lookup, and Back always pops the newest round,
                      ;; so the newest entry is the one it added
                      (if (= (car (car hist)) "MOVE")
@@ -865,88 +981,104 @@
                    (princ (strcat "\n  Pt." nm " sits on a stake - "
                                   "there is nothing to measure."))
                    (progn
-                     (setq made (1+ made))
+                     (setq made  (1+ made)
+                           stage (if movep 3 2))
                      (princ (strcat "\n  Pt." nm ":  " abf:*a-name* " "
                                     (abf:fmt (abf:dist pa pp)) "   "
                                     abf:*b-name* " "
                                     (abf:fmt (abf:dist pb pp))
-                                    "  dimensioned."))
-                     (if (not movep)
-                       (setq hist (cons (list "DIM" pair) hist))
-                       (progn
-                         ;; -- where else could this point be?
-                         (setq sugs  (abf:candidates pa pb pp)
-                               temps nil)
-                         (if (null sugs)
-                           (progn
-                             (princ (strcat
-                                      "\n  No reading within "
-                                      (abf:fmt abf:*max-shift*)
-                                      " puts Pt." nm " anywhere the"
-                                      " other tape can reach - left"
-                                      " where it is."))
-                             (setq hist (cons (list "DIM" pair) hist)))
-                           (progn
-                             (abf:ensure-layer abf:*point-layer* 2)
-                             (foreach c sugs
-                               (setq temps
-                                     (append temps
-                                             (abf:draw-sug (nth 5 c)
-                                                           (nth 6 c)))))
-                             (setq tried
-                                   (+ (length (abf:deltas
-                                                (abf:dist pa pp)))
-                                      (length (abf:deltas
-                                                (abf:dist pb pp)))))
-                             (princ (strcat
-                                      "\n\n  Where Pt." nm
-                                      " lands if one tape was read"
-                                      " wrong - the ones that move "
-                                      abf:*a-name* " first, then "
-                                      abf:*b-name*
-                                      " (nearest miss first):"))
-                             (if (> tried (length sugs))
-                               (princ (strcat
-                                        "\n  " (itoa (- tried
-                                                        (length sugs)))
-                                        " of the " (itoa tried)
-                                        " readings are not offered:"
-                                        " out of the other tape's"
-                                        " reach"
-                                        (if abf:*max-sugg*
-                                          ", or past the list cap" "")
-                                        ".")))
-                             (princ (strcat
-                                      "\n   tag   held  moved  from"
-                                      "          to            the point"
-                                      " moves"))
-                             (princ (strcat
-                                      "\n   ----  ----  -----  ---------"
-                                      "--   -----------   -------------"
-                                      "--"))
-                             (setq lasthold nil)
-                             (foreach c sugs
-                               ;; a blank line where the held stake
-                               ;; changes: the two answers read as two
-                               ;; blocks, not one long list
-                               (if (and lasthold (/= lasthold (cadr c)))
-                                 (princ "\n"))
-                               (setq lasthold (cadr c))
-                               (princ (strcat
-                                        "\n   " (abf:pad (nth 6 c) 6)
-                                        (abf:pad (cadr c) 6)
-                                        (abf:pad (caddr c) 7)
-                                        (abf:pad (abf:fmt (cadddr c)) 14)
-                                        (abf:pad (abf:fmt (nth 4 c)) 14)
-                                        (abf:fmt (abf:dist pp (nth 5 c)))
-                                        " "
-                                        (abf:compass
-                                          (angle (abf:2d pp)
-                                                 (abf:2d (nth 5 c)))))))
-                             (setq stage 2))))))))))
+                                    "  dimensioned.")))))))
 
-             ;; -- 2: which suggestion (ABMOVE only)
+             ;; -- 2: does this one want moving?  (ABFIND only)
              ((= stage 2)
+              (setq ans (abf:askyn (strcat "  Move Pt." nm
+                                           " to a different reading?")
+                                   "No" T))
+              (cond
+                ((eq ans 'ABF-BACK)
+                 (abf:drop pair)
+                 (setq made  (1- made)
+                       stage 1)
+                 (princ "\nStepping back one point."))
+                (ans (setq stage 3))
+                (t (setq hist  (cons (list "DIM" pair) hist)
+                         stage 1))))
+
+             ;; -- 3: where else could this point be?  Nothing is asked
+             ;;       here - the readings are worked out and drawn, and
+             ;;       the next stage is the one that asks.
+             ((= stage 3)
+              (setq sugs  (abf:candidates pa pb pp)
+                    temps nil)
+              (if (null sugs)
+                (progn
+                  (princ (strcat "\n  No reading within "
+                                 (abf:fmt abf:*max-shift*)
+                                 " puts Pt." nm " anywhere the other"
+                                 " tape can reach - left where it is."))
+                  (if movep
+                    (setq done T)
+                    (setq hist  (cons (list "DIM" pair) hist)
+                          stage 1)))
+                (progn
+                  (abf:ensure-layer abf:*point-layer* 2)
+                  (foreach c sugs
+                    (setq temps (append temps
+                                        (abf:draw-sug (nth 5 c)
+                                                      (nth 6 c)))))
+                  ;; and the line each group sits on, in the order the
+                  ;; table lists them
+                  (setq temps (append temps
+                                      (abf:draw-locus
+                                        pb (abf:dist pb pp) pp sugs
+                                        abf:*b-name*)
+                                      (abf:draw-locus
+                                        pa (abf:dist pa pp) pp sugs
+                                        abf:*a-name*)))
+                  (setq tried (+ (length (abf:deltas (abf:dist pa pp)))
+                                 (length (abf:deltas (abf:dist pb pp)))))
+                  (princ (strcat "\n\n  Where Pt." nm
+                                 " lands if one tape was read wrong -"
+                                 " the ones that move " abf:*a-name*
+                                 " first, then " abf:*b-name*
+                                 " (nearest miss first):"))
+                  (if (> tried (length sugs))
+                    (princ (strcat "\n  "
+                                   (itoa (- tried (length sugs)))
+                                   " of the " (itoa tried)
+                                   " readings are not offered: out of"
+                                   " the other tape's reach"
+                                   (if abf:*max-sugg*
+                                     ", or past the list cap" "")
+                                   ".")))
+                  (princ (strcat "\n   tag   held  moved  from"
+                                 "          to            the point"
+                                 " moves"))
+                  (princ (strcat "\n   ----  ----  -----  ---------"
+                                 "--   -----------   -------------"
+                                 "--"))
+                  (setq lasthold nil)
+                  (foreach c sugs
+                    ;; a blank line where the held stake changes: the
+                    ;; two answers read as two blocks, not one long
+                    ;; list
+                    (if (and lasthold (/= lasthold (cadr c)))
+                      (princ "\n"))
+                    (setq lasthold (cadr c))
+                    (princ (strcat "\n   " (abf:pad (nth 6 c) 6)
+                                   (abf:pad (cadr c) 6)
+                                   (abf:pad (caddr c) 7)
+                                   (abf:pad (abf:fmt (cadddr c)) 14)
+                                   (abf:pad (abf:fmt (nth 4 c)) 14)
+                                   (abf:fmt (abf:dist pp (nth 5 c)))
+                                   " "
+                                   (abf:compass
+                                     (angle (abf:2d pp)
+                                            (abf:2d (nth 5 c)))))))
+                  (setq stage 4))))
+
+             ;; -- 4: which suggestion
+             ((= stage 4)
               ;; every tag is a keyword, so any of them can be typed -
               ;; but a bracket listing forty-odd of them is unreadable,
               ;; so the bracket shows only the words that are not in
@@ -963,17 +1095,25 @@
               (cond
                 ((eq ans 'ABF-BACK)
                  (abf:drop temps)
-                 (abf:drop pair)
-                 (setq temps nil
-                       made  (1- made)
-                       stage 1)
-                 (princ "\nStepping back one point."))
+                 (setq temps nil)
+                 ;; ABFIND came here from its own question, so Back
+                 ;; re-asks that; ABMOVE came straight from the point
+                 ;; number, so Back re-asks that instead
+                 (if movep
+                   (progn
+                     (abf:drop pair)
+                     (setq made  (1- made)
+                           stage 1)
+                     (princ "\nStepping back one point."))
+                   (setq stage 2)))
                 ((= ans "None")
                  (abf:drop temps)
-                 (setq temps nil
-                       hist  (cons (list "DIM" pair) hist)
-                       stage 1)
-                 (princ (strcat "\n  Pt." nm " left where it is.")))
+                 (setq temps nil)
+                 (princ (strcat "\n  Pt." nm " left where it is."))
+                 (if movep
+                   (setq done T)
+                   (setq hist  (cons (list "DIM" pair) hist)
+                         stage 1)))
                 ((= ans "Pick")
                  (initget "Back Undo")
                  (setq np (getpoint "\n  Click the one you want [Back]: "))
@@ -989,7 +1129,7 @@
                                (<= (abf:dist np (nth 5 c)) abf:*snap*))
                         (setq sug c)))
                     (if sug
-                      (setq stage 3)
+                      (setq stage 5)
                       (princ (strcat "\n  No suggestion within "
                                      (rtos abf:*snap* 4 0)
                                      " of that click - try again."))))))
@@ -1001,18 +1141,18 @@
                  (foreach c sugs
                    (if (and (null sug) (= (nth 6 c) ans)) (setq sug c)))
                  (if sug
-                   (setq stage 3)
+                   (setq stage 5)
                    (princ (strcat "\n  \"" ans "\" is not one of the"
                                   " tags - nothing moved."))))))
 
-             ;; -- 3: where the note goes, and then the move itself
+             ;; -- 5: where the note goes, and then the move itself
              (t
               (princ "\n  Auto tucks the note beside the ring.")
               (initget "Auto Back Undo")
               (setq np (getpoint (strcat "\n  Place the note for Pt." nm
                                          " [Auto/Back] <Auto>: ")))
               (if (and np (member np '("Back" "Undo")))
-                (setq stage 2)
+                (setq stage 4)
                 (progn
                   ;; nil is Enter and a string is the Auto keyword;
                   ;; only a real list is a spot the user clicked
@@ -1020,10 +1160,10 @@
                     (setq np (abf:note-spot pp)))
                   ;; the suggestions have done their job
                   (abf:drop temps)
-                  (setq temps  nil
-                        newpt  (nth 5 sug)
-                        ments  (abf:make-point
-                                 newpt (strcat nm abf:*moved-suffix*)))
+                  (setq temps nil
+                        newpt (nth 5 sug)
+                        ments (abf:make-point
+                                newpt (strcat nm abf:*moved-suffix*)))
                   (abf:ensure-layer abf:*ring-layer* 1)
                   (setq ring (abf:ring pp)
                         note (abf:note np
@@ -1033,17 +1173,22 @@
                   ;; the ties belong to where the point is now; the old
                   ;; reading is not lost - the note carries it
                   (abf:drop pair)
-                  ;; the moved point joins the lookup, so it can be
-                  ;; named again later in this same run
-                  (setq cands (cons (cons newpt
-                                          (strcat nm abf:*moved-suffix*))
-                                    cands))
-                  (setq hist (cons (list "MOVE" pair
-                                         (abf:dim-pair pa pb newpt havestyle)
-                                         ments ring note)
-                                   hist)
-                        moves (1+ moves)
-                        stage 1)
+                  (setq npair (abf:dim-pair pa pb newpt havestyle)
+                        moves (1+ moves))
+                  (if movep
+                    ;; that point is settled, and settling one is all
+                    ;; ABMOVE is for
+                    (setq done T)
+                    ;; ABFIND carries on, and the point it just made is
+                    ;; a point like any other from here
+                    (setq hist  (cons (list "MOVE" pair npair ments
+                                            ring note)
+                                      hist)
+                          cands (cons (cons newpt
+                                            (strcat nm
+                                                    abf:*moved-suffix*))
+                                      cands)
+                          stage 1))
                   (princ (strcat "\n  Pt." nm " moved to Pt." nm
                                  abf:*moved-suffix* " - " (cadr sug)
                                  " held at "
@@ -1066,13 +1211,15 @@
          (command "_.UNDO" "_End")
          (setq undo-open nil)
 
-         (princ (strcat "\n" cmd ": " (itoa made) " point"
-                        (if (= made 1) "" "s") " tied to "
-                        abf:*a-name* " and " abf:*b-name*
-                        " on layer " abf:*layer*
-                        (if havestyle
-                          (strcat " in style " abf:*style* ".")
-                          " (current style).")))
+         (if (= made 0)
+           (princ (strcat "\n" cmd ": nothing dimensioned."))
+           (princ (strcat "\n" cmd ": " (itoa made) " point"
+                          (if (= made 1) "" "s") " tied to "
+                          abf:*a-name* " and " abf:*b-name*
+                          " on layer " abf:*layer*
+                          (if havestyle
+                            (strcat " in style " abf:*style* ".")
+                            " (current style)."))))
          (if (> moves 0)
            (princ (strcat "\n" cmd ": " (itoa moves) " point"
                           (if (= moves 1) "" "s") " moved - ringed on "

@@ -575,10 +575,10 @@ def cornerends(P,Pp,Pn,typ,size):
     up=_u(P,Pp); un=_u(P,Pn)
     dp=up[0]*un[0]+up[1]*un[1]
     ang=math.atan2(math.sqrt(max(0.0,1-dp*dp)), dp)
-    if typ=="Diag":
+    if typ=="Cut":
         t=size/(2.0*math.sin(ang/2.0))
         return (_vadd(P,up,t), _vadd(P,un,t), None)
-    if typ=="Rounded":
+    if typ=="Radius":
         t=size*math.cos(ang/2.0)/math.sin(ang/2.0)
         bx,by=up[0]+un[0], up[1]+un[1]
         bl=math.hypot(bx,by); bis=(bx/bl,by/bl)
@@ -643,40 +643,40 @@ def refmatch(q, corners, xmeas):
         mx=max(mx, abs(act-val))
     return mx
 
-print("== 27. Rounded corners, reference = true CORNER ==")
-cor=[("Rounded",18.0)]*4
+print("== 27. Radius corners, reference = true CORNER ==")
+cor=[("Radius",18.0)]*4
 q,xm,sides=rect_fit(RECT,cor,"Corner"); check(q,RECT,sides)
 print(f"   ref match {refmatch(q,cor,xm):.4f}")
 assert refmatch(q,cor,xm)<0.06
 
-print("== 28. Diag (chamfer face) corners, reference = MIDDLE ==")
-cor=[("Diag",24.0)]*4
+print("== 28. Cut (cut face) corners, reference = MIDDLE ==")
+cor=[("Cut",24.0)]*4
 q,xm,sides=rect_fit(RECT,cor,"Middle"); check(q,RECT,sides)
 print(f"   ref match {refmatch(q,cor,xm):.4f}")
 assert refmatch(q,cor,xm)<0.10
 
-print("== 29. Rounded corners, reference = ENDS (4 ties) ==")
-cor=[("Rounded",20.0)]*4
+print("== 29. Radius corners, reference = ENDS (4 ties) ==")
+cor=[("Radius",20.0)]*4
 q,xm,sides=rect_fit(RECT,cor,"Ends"); check(q,RECT,sides)
 print(f"   {len(xm)} ties, ref match {refmatch(q,cor,xm):.4f}")
 assert len(xm)==4 and refmatch(q,cor,xm)<0.10
 
-print("== 30. Mixed corners (2 square, 1 diag, 1 rounded), ENDS ==")
-cor=[("Square",0.0),("Diag",22.0),("Rounded",16.0),("Square",0.0)]
+print("== 30. Mixed corners (2 square, 1 cut, 1 radius), ENDS ==")
+cor=[("Square",0.0),("Cut",22.0),("Radius",16.0),("Square",0.0)]
 q,xm,sides=rect_fit(RECT,cor,"Ends"); check(q,RECT,sides)
 print(f"   ref match {refmatch(q,cor,xm):.4f}")
 assert refmatch(q,cor,xm)<0.12
 
 print("== 31. Chamfer face-length geometry sanity (90deg corner) ==")
 # square corner, face f -> setback f/sqrt2 along each edge
-ce=cornerends((0,0),(0,100),(100,0),"Diag",20.0)  # P origin, prev up, next right
+ce=cornerends((0,0),(0,100),(100,0),"Cut",20.0)  # P origin, prev up, next right
 import math as _m
 assert abs(dist((0,0),ce[0]) - 20.0/_m.sqrt(2))<1e-6
 assert abs(dist(ce[0],ce[1]) - 20.0)<1e-6   # face length reproduced
 print("   setback = face/sqrt2 and face length reproduced")
 
-print("== 32. Rounded tangent geometry sanity (90deg corner) ==")
-ce=cornerends((0,0),(0,100),(100,0),"Rounded",15.0)
+print("== 32. Radius tangent geometry sanity (90deg corner) ==")
+ce=cornerends((0,0),(0,100),(100,0),"Radius",15.0)
 assert abs(dist((0,0),ce[0]) - 15.0)<1e-6   # tangent dist = r on square corner
 print("   tangent dist = r on a square corner")
 
@@ -741,8 +741,8 @@ assert abs(dist(gg['phb'],gg['pht'])-145)<1e-9    # L check
 assert abs(dist(gg['pb'],gg['phb'])-50)<1e-9      # K
 print("   all seven chain values exact")
 
-print("== 34. hopper ties honor rounded/diag corner end-wall points ==")
-COR=[("Rounded",20.0),("Square",0.0),("Square",0.0),("Diag",24.0)]
+print("== 34. hopper ties honor radius/cut corner end-wall points ==")
+COR=[("Radius",20.0),("Square",0.0),("Square",0.0),("Cut",24.0)]
 gg=hopcalc(Q,COR,30,60,100,45,50)
 assert abs(gg['lab1'][0]-0)<1e-9 and abs(gg['lab1'][1]-20.0)<1e-9  # tangent point on end wall
 dsb=24.0/math.sqrt(2)
@@ -1291,20 +1291,20 @@ def cornerends(p,pp,pn,ctype,size,xtra=None):
     up=_unit(_sub(pp,p)); un=_unit(_sub(pn,p))
     dp=up[0]*un[0]+up[1]*un[1]
     ang=math.atan2(math.sqrt(max(0.0,1-dp*dp)),dp)
-    if ctype=="Diag":
+    if ctype=="Cut":
         sb=size/(2*math.sin(ang/2))
         return ((p[0]+up[0]*sb,p[1]+up[1]*sb),(p[0]+un[0]*sb,p[1]+un[1]*sb),None)
     return (p,p,None)
 # a square corner still resolves to the corner itself
 assert cornerends((0,0),(0,10),(10,0),"Square",0.0)[:2]==((0,0),(0,0))
-# a 90-degree Diag of face 10 sets back 10/sqrt(2) on each edge
-e=cornerends((0,0),(0,100),(100,0),"Diag",10.0)
+# a 90-degree Cut of face 10 sets back 10/sqrt(2) on each edge
+e=cornerends((0,0),(0,100),(100,0),"Cut",10.0)
 assert abs(e[0][1]-10/math.sqrt(2))<1e-9 and abs(e[1][0]-10/math.sqrt(2))<1e-9
 # "Ends" hands back the two supplied points verbatim, prev side first --
 # a Grecian's bottom-left cut runs LB (on the end line) -> A (on the side)
 LB,A=(0.0,40.0),(40.0,0.0)
 assert cornerends((0,0),(0,100),(100,0),"Ends",LB,A)[:2]==(LB,A)
-print("   Square/Diag unchanged; Ends passes the cut's real endpoints through")
+print("   Square/Cut unchanged; Ends passes the cut's real endpoints through")
 
 print("== 52. E = 0 breaks to the RIGHT corner treatment ends ==")
 Q=[(0,0),(480,0),(480,240),(0,240)]
@@ -1325,7 +1325,7 @@ b,c=right_ties(Q,[("Square",0.0)]*4)
 assert b==[(480,0)] and c==[(480,240)]
 # a 12" diagonal corner: two ties per corner, on the chamfer's ENDS --
 # never the sharp corner behind it
-b,c=right_ties(Q,[("Square",0.0),("Diag",12.0),("Diag",12.0),("Square",0.0)])
+b,c=right_ties(Q,[("Square",0.0),("Cut",12.0),("Cut",12.0),("Square",0.0)])
 off=12.0/math.sqrt(2)
 assert len(b)==2 and len(c)==2
 assert abs(b[0][0]-(480-off))<1e-9 and abs(b[1][1]-off)<1e-9
@@ -1408,13 +1408,20 @@ assert vals[1]==12.0 and fixed==[1,0] and abs(sum(vals)-240.0)<1e-9
 print("   floor+donor preserves the chain total; zeros stay pinned")
 
 print("== 56. corner-size cap and depth-order rules ==")
-def corner_setback(ty,sz): return sz if ty=="Rounded" else sz*0.70711
+# mirrors pool:cornerk at 90 degrees: Square and NotGiven cut nothing,
+# so they set back 0 -- only Radius and Cut eat into a wall
+def corner_setback(ty,sz):
+    if ty=="Radius": return sz
+    if ty=="Cut":    return sz*0.70711
+    return 0.0
 # a 3' radius on a 5' wall: setback 36 > 30 -> re-asked
-assert corner_setback("Rounded",36.0) > 0.5*60.0
-assert corner_setback("Rounded",29.0) < 0.5*60.0
-# a diag face sets back f/sqrt(2): a 40" face fits where a 36" radius won't
-assert corner_setback("Diag",40.0) < 0.5*60.0
-assert abs(corner_setback("Diag",40.0)-40.0/math.sqrt(2.0))<1e-3
+assert corner_setback("Radius",36.0) > 0.5*60.0
+assert corner_setback("Radius",29.0) < 0.5*60.0
+# a cut face sets back f/sqrt(2): a 40" face fits where a 36" radius won't
+assert corner_setback("Cut",40.0) < 0.5*60.0
+assert abs(corner_setback("Cut",40.0)-40.0/math.sqrt(2.0))<1e-3
+# a corner nobody measured takes no room at all
+assert corner_setback("NotGiven",0.0) == 0.0 and corner_setback("Square",0.0) == 0.0
 # depth order: D must beat C, C2 must land between them
 def deep_ok(dp,wh): return dp>wh
 def c2_ok(c2,wh,dp): return wh<=c2<=dp
@@ -1609,7 +1616,7 @@ def seg_cross(p1,p2,p3,p4):
     return (((o(p3,p4,p1)>0)!=(o(p3,p4,p2)>0)) and
             ((o(p1,p2,p3)>0)!=(o(p1,p2,p4)>0)))
 QR=[(0,0),(480,0),(480,240),(0,240)]
-CS=[("Diag",40.0)]*4
+CS=[("Cut",40.0)]*4
 def cp(i,which):
     p=QR[i]; pp=QR[(i+3)%4]; pn=QR[(i+1)%4]
     e=cornerends(p,pp,pn,CS[i][0],CS[i][1])
@@ -1815,10 +1822,10 @@ def cornerends(p, pp, pn, ctype, size):
     up = unit(sub(pp, p)); un = unit(sub(pn, p))
     dp = up[0]*un[0] + up[1]*un[1]
     ang = math.atan2(math.sqrt(max(0.0, 1.0 - dp*dp)), dp)
-    if ctype == "Diag":
+    if ctype == "Cut":
         sb = size / (2.0 * math.sin(ang / 2.0))
         return add(p, mul(up, sb)), add(p, mul(un, sb)), None
-    if ctype == "Rounded":
+    if ctype == "Radius":
         sb = size * math.cos(ang/2.0) / math.sin(ang/2.0)
         bis = unit(add(up, un))
         cen = add(p, mul(bis, size / math.sin(ang/2.0)))
@@ -1829,7 +1836,7 @@ def cornerends(p, pp, pn, ctype, size):
 # a 24" fillet must sit tangent to BOTH walls with its centre in the
 # notch, and the arc mid must land between centre and corner
 E, D, F = (300.0, 240.0), (300.0, 420.0), (0.0, 240.0)
-e1, e2, am = cornerends(E, D, F, "Rounded", 24.0)
+e1, e2, am = cornerends(E, D, F, "Radius", 24.0)
 assert abs(e1[0]-300.0) < 1e-9 and abs(e1[1]-264.0) < 1e-9   # on wall D-E
 assert abs(e2[0]-276.0) < 1e-9 and abs(e2[1]-240.0) < 1e-9   # on wall E-F
 cen = (300.0-24.0, 240.0+24.0)                               # in the notch
@@ -1838,7 +1845,7 @@ assert dist(am, E) < dist(cen, E)                            # bulges toward E
 # lazy L bend corner B (135-degree wedge): an 18" chamfer face keeps
 # its full 18" length and sets back f/(2 sin 67.5) along each wall
 A, B, C = (0.0, 0.0), (296.0, 0.0), (296.0+167.6*0.7071067812, 167.6*0.7071067812)
-e1, e2, _ = cornerends(B, A, C, "Diag", 18.0)
+e1, e2, _ = cornerends(B, A, C, "Cut", 18.0)
 assert abs(dist(e1, e2) - 18.0) < 1e-9
 assert abs(dist(e1, B) - 18.0/(2.0*math.sin(math.radians(67.5)))) < 1e-9
 # square corners degenerate to the true corner: nothing cut
@@ -1914,7 +1921,7 @@ def cornerpoint(q, corners, i, spec):
 
 # the FIXED corner spec: real outer treatment at A (0) and F (3),
 # Square at dv (1) and E (2)
-fixed = [("Rounded", 24.0), ("Square", 0.0), ("Square", 0.0), ("Rounded", 24.0)]
+fixed = [("Radius", 24.0), ("Square", 0.0), ("Square", 0.0), ("Radius", 24.0)]
 lab1 = cornerpoint(mquad, fixed, 0, 'prev')   # toward F
 lab2 = cornerpoint(mquad, fixed, 0, 'next')   # toward dv (== toward B)
 lat1 = cornerpoint(mquad, fixed, 3, 'next')   # toward A
@@ -1926,10 +1933,10 @@ assert dist(lat2, (24.0, 240.0)) < 1e-6, lat2
 # and this is IDENTICAL to computing A/F's treatment against the REAL
 # hexagon neighbours (F/B for A, E/A for F) -- proving dv's
 # collinearity with B makes the virtual frame geometrically exact
-lab1_real = cornerends(A, F, B, "Rounded", 24.0)[0]
-lab2_real = cornerends(A, F, B, "Rounded", 24.0)[1]
-lat1_real = cornerends(F, E, A, "Rounded", 24.0)[1]
-lat2_real = cornerends(F, E, A, "Rounded", 24.0)[0]
+lab1_real = cornerends(A, F, B, "Radius", 24.0)[0]
+lab2_real = cornerends(A, F, B, "Radius", 24.0)[1]
+lat1_real = cornerends(F, E, A, "Radius", 24.0)[1]
+lat2_real = cornerends(F, E, A, "Radius", 24.0)[0]
 assert dist(lab1, lab1_real) < 1e-9 and dist(lab2, lab2_real) < 1e-9
 assert dist(lat1, lat1_real) < 1e-9 and dist(lat2, lat2_real) < 1e-9
 # the OLD (buggy) behaviour: hardcoded Square everywhere collapses

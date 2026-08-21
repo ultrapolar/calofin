@@ -12,8 +12,9 @@
 ;;;  cross dims (diagonals) are asked for or drawn.  An out-of-square
 ;;;  pool takes the full cross-dim route described below.
 ;;;
-;;;  Rectangle corners may be Square, Rounded (radius) or Diag
-;;;  (chamfer, sized by its face length).  Side lengths are always to
+;;;  Rectangle corners may be Square, Radius, Cut (a chamfer, sized
+;;;  by its face length) or NotGiven -- not recorded on the order
+;;;  sheet, so drawn square and flagged.  Side lengths are always to
 ;;;  the TRUE corner; the treatment cuts inward.  In-square assumes all
 ;;;  four corners identical; out-of-square asks per corner (Enter
 ;;;  reuses the previous corner).  When corners are cut and the pool is
@@ -106,7 +107,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082126 REV04")
+(setq pool:*version* "082126 REV05")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -135,6 +136,15 @@
 (setq pool:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
 (setq pool:*sq4* (list (list "Square" 0.0) (list "Square" 0.0)
                        (list "Square" 0.0) (list "Square" 0.0)))
+;; How far off 90 a corner may sit and still be marked "90%%d" on the
+;; sheet.  This separates two POPULATIONS, so it wants to sit between
+;; them rather than hug either: a pool the crew still calls a
+;; rectangle can fit several degrees off square (240x120 with cross
+;; dims 12" apart fits at 86.8 / 93.2), while the corners this gate
+;; exists to refuse -- a grecian's cut corners and an L's bend -- are
+;; 135, a full 45 degrees away.  20 degrees clears any real rectangle
+;; and still leaves more than twice that margin to 135.
+(setq pool:*sq90-tol* (* pi (/ 20.0 180.0)))
 (setq pool:*valnotes* nil)            ; validation problems for the report
 (setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
@@ -574,6 +584,71 @@
 (defun pool:askyn (msg dflt back / v)
   (setq v (pool:askkw msg "Yes No" "Yes/No" dflt back))
   (if (eq v 'POOL-BACK) v (= v "Yes")))
+
+;; The Treatment question (STANDARDS.md section 2), the one vocabulary
+;; every corner in this file is answered in:
+;;
+;;   How should <subject> be treated? [Square/Radius/Cut/NotGiven] <prev>:
+;;
+;; subject reads like prose -- "Corner A", "the outer corners" -- and
+;; is reused verbatim in the size follow-up, so the two questions read
+;; as one.  The four answers mean:
+;;   Square   a true sharp corner, nothing cut
+;;   Radius   a filleted corner, sized by its RADIUS
+;;   Cut      a straight chamfer, sized by its FACE length
+;;   NotGiven the order sheet never recorded this corner -- drawn
+;;            square, but flagged on the sheet rather than silently
+;;            claimed as a 90
+;; The pre-standard words this tool used to ask for (ROUNDED, DIAG,
+;; DIAGONAL) and SPA's 90 stay accepted typed in full, unlisted, as
+;; does NG for NotGiven; they are normalized to the canonical word
+;; HERE so nothing downstream ever sees an old spelling.  The bracket
+;; deliberately shows only the four canonical words.
+;; Returns "Square", "Radius", "Cut", "NotGiven" or POOL-BACK.
+(defun pool:asktreat (subject dflt back / v kws)
+  ;; the bracket is DERIVED from the visible words (STANDARDS section 1
+  ;; rule 1: a click sends the bracket text, so the two must not be
+  ;; able to drift); the hidden aliases are appended to the initget
+  ;; list only, never to the bracket
+  (setq kws "Square Radius Cut NotGiven")
+  (setq v (pool:askkw (strcat "How should " subject " be treated?")
+                      (strcat kws " NG 90 ROUNDED DIAG DIAGONAL")
+                      (vl-string-translate " " "/" kws)
+                      dflt back))
+  (cond ((eq v 'POOL-BACK) v)
+        ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
+        ((= v "ROUNDED") "Radius")
+        ((member v '("DIAG" "DIAGONAL")) "Cut")
+        (t v)))
+
+;; Does this treatment cut real geometry off the corner?  NotGiven
+;; does NOT: its corner is built square, so everything that asks
+;; "is there a cut here" -- the setback caps, the cross-dim reference
+;; modes, the hopper ties -- must answer no.  Only the report and the
+;; corner marks care that it is not a plain Square.
+;; The same question with the two SIZED answers withheld, for a corner
+;; whose walls leave no room for a cut at all.  Square and NotGiven are
+;; the only truthful answers there, and both take no size.
+(defun pool:asktreatng (subject dflt back / v kws)
+  (setq kws "Square NotGiven")
+  (setq v (pool:askkw (strcat "How should " subject " be treated?")
+                      (strcat kws " NG 90")
+                      (vl-string-translate " " "/" kws)
+                      dflt back))
+  (cond ((eq v 'POOL-BACK) v)
+        ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
+        (t v)))
+
+(defun pool:cutp (ty) (member ty '("Radius" "Cut")))
+
+;; Does any corner carry something the SHEET must record -- a cut, or
+;; a NotGiven?  The wider question pool:cutp deliberately does not
+;; answer, for the report rows and the corner marks.
+(defun pool:anytreat (corners / out c)
+  (foreach c corners (if (/= (car c) "Square") (setq out t)))
+  out)
 
 ;; Run a list of input stages with Back between them: a stage that
 ;; returns POOL-BACK sends the user to the previous stage, which is
@@ -1568,7 +1643,7 @@
     (setq gcs (list (list "Square" 0.0) (list "Square" 0.0) (list "Square" 0.0)
                     (list "Square" 0.0) (list "Square" 0.0) (list "Square" 0.0)
                     (list "Square" 0.0) (list "Square" 0.0)))
-    (setq v (pool:askyn "Are the corners modified (rounded / chamfered)"
+    (setq v (pool:askyn "Anything to record about the corners (radius / cut / not given)?"
                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
@@ -1580,7 +1655,7 @@
        ;; budgeted half the shortest wall it touches -- which leaves
        ;; the other half of every cut face for the tip on its far end.
        (setq bcap (pool:groupcap pts pool:*grecbody*)
-             bc (pool:askcorner "BODY corners (A/B/C/D)" nil nil
+             bc (pool:askcorner "the body corners A, B, C and D" nil nil
                                 (pool:lbl pv '(lA lB lC lD))
                                 (car bcap) (cadr bcap) t))
        (if (eq bc 'POOL-BACK)
@@ -1597,7 +1672,7 @@
              (foreach k pool:*grecwalls*
                (setq v2 (* 0.5 (distance (nth (car k) pts) (nth (cadr k) pts)))
                      tcap (min tcap v2)))
-             (setq tc (pool:askcorner "END TIP corners (LT/LB/RT/RB)"
+             (setq tc (pool:askcorner "the end-tip corners LT, LB, RT and RB"
                                       (car bc) (cadr bc)
                                       (pool:lbl pv '(lLT lLB lRT lRB))
                                       (max 0.0 tcap)
@@ -1722,10 +1797,13 @@
   ;; corner treatments: one Typ. per family in square (body / tips),
   ;; each treated corner its own dim out of square (collapsing back to
   ;; Typ. when Enter reused one answer all the way round)
+  ;; out of square the eight are their own groups -- but B leads the
+  ;; list, as it does in square, so an all-same answer puts its one
+  ;; Typ. mark on the same corner either way
   (pool:dimringcorners pts gcs gce gcarcs cen doff
                        (if pool:*insq*
                            (list '(1 0 4 5) '(2 3 6 7))
-                           (mapcar 'list '(0 1 2 3 4 5 6 7))))
+                           (mapcar 'list '(1 0 2 3 4 5 6 7))))
   (setvar "CLAYER" oldclay)
 
   ;; corner letters live on the mini-model beside the report, not in
@@ -2020,7 +2098,7 @@
 (defun pool:hexflow (lazy / oldclay pv sides diags res pts failed notes ans hxr
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast
-                            octy ocsz icty icsz oc ic hcs hce hcarcs
+                            octy ocsz icty icsz oc ic hcs hce hcarcs ock
                             rbox mprims mlbls)
   (setq oldclay (getvar "CLAYER"))
   (setq pv (pool:hexpreview lazy))
@@ -2104,7 +2182,7 @@
           pts (car res)
           failed (cadr res)
           octy "Square" ocsz 0.0 icty "Square" icsz 0.0)
-    (setq v (pool:askyn "Are the corners modified (rounded / chamfered)"
+    (setq v (pool:askyn "Anything to record about the corners (radius / cut / not given)?"
                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
@@ -2121,7 +2199,7 @@
        (foreach k pool:*hexsides*
          (setq de (distance (nth (car k) pts) (nth (cadr k) pts))
                mins (if mins (min mins de) de)))
-       (setq oc (pool:askcorner "OUTER corners" nil nil nil
+       (setq oc (pool:askcorner "the outer corners" nil nil nil
                                 (* 0.5 mins) oang t))
        (if (eq oc 'POOL-BACK)
            'POOL-BACK
@@ -2134,7 +2212,7 @@
                    ef (- (distance (nth 4 pts) (nth 5 pts))
                          (* ocsz (pool:cornerk octy (pool:polywedge pts 5))))
                    icap (max 0.0 (min de ef))
-                   ic (pool:askcorner "INNER corner (E)" octy ocsz nil
+                   ic (pool:askcorner "the inner corner E" octy ocsz nil
                                       icap (pool:polywedge pts 4) t))
              (if (eq ic 'POOL-BACK)
                  'POOL-BACK
@@ -2181,10 +2259,10 @@
   (setq hcarcs nil k 0)
   (foreach p hcs
     (cond
-      ((= (car p) "Diag")
+      ((= (car p) "Cut")
        (pool:line (car (nth k hce)) (cadr (nth k hce)) "POOL")
        (setq hcarcs (cons nil hcarcs)))
-      ((= (car p) "Rounded")
+      ((= (car p) "Radius")
        (pool:arc3p (car (nth k hce)) (caddr (nth k hce)) (cadr (nth k hce))
                    "POOL")
        (setq hcarcs (cons (entlast) hcarcs)))
@@ -2210,16 +2288,30 @@
                                    pts doff)))
     (setq k (1+ k)))
   ;; corner annotations: one Typ. callout on an outer corner (B), the
-  ;; inner corner E dimensioned on its own
-  (if (/= octy "Square")
-      (pool:dimcorner1 (nth 1 hce) octy (nth 1 hcarcs)
-                       (pool:unit (pool:v- (nth 1 pts) cen)) doff " Typ."))
-  (if (/= icty "Square")
-      (pool:dimcorner1 (nth 4 hce) icty (nth 4 hcarcs)
-                       (pool:unit
-                         (pool:v+ (pool:unit (pool:v- (nth 3 pts) (nth 4 pts)))
-                                  (pool:unit (pool:v- (nth 5 pts) (nth 4 pts)))))
-                       doff ""))
+  ;; inner corner E dimensioned on its own.  B carries its own fitted
+  ;; angle, so a true L's square corners are marked 90 and a lazy L's
+  ;; 135-degree bend is not.  E passes nil: it is the REFLEX corner,
+  ;; and pool:wedge is unsigned -- 270 degrees measures back as 90, so
+  ;; the mark has to be forbidden outright rather than angle-tested.
+  ;; one answer covers five outer corners, so the single Typ. mark has
+  ;; to sit on one that can actually carry it: B is the convention, but
+  ;; a lazy L bends B 135 degrees, and marking it 90 would be a lie --
+  ;; so fall through to whichever outer corner is genuinely square
+  (setq ock 1)
+  (if (> (abs (- (pool:polywedge pts 1) (/ pi 2.0))) pool:*sq90-tol*)
+      (foreach k '(0 2 3 5)
+        (if (and (= ock 1)
+                 (<= (abs (- (pool:polywedge pts k) (/ pi 2.0)))
+                     pool:*sq90-tol*))
+            (setq ock k))))
+  (pool:dimtreat1 (nth ock hce) octy (nth ock hcarcs) (nth ock pts)
+                  (pool:unit (pool:v- (nth ock pts) cen)) doff " Typ."
+                  (pool:polywedge pts ock))
+  (pool:dimtreat1 (nth 4 hce) icty (nth 4 hcarcs) (nth 4 pts)
+                  (pool:unit
+                    (pool:v+ (pool:unit (pool:v- (nth 3 pts) (nth 4 pts)))
+                             (pool:unit (pool:v- (nth 5 pts) (nth 4 pts)))))
+                  doff "" nil)
   ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach pr pool:*hexdiags*
@@ -2258,14 +2350,9 @@
                            rows)
                 k (1+ k)))))
   (setq rows (reverse rows))
-  (if (/= octy "Square")
-      (setq rows (append rows (list
-        (list (if (= octy "Rounded") "OUTER CORNER RAD" "OUTER CORNER FACE")
-              ocsz ocsz)))))
-  (if (/= icty "Square")
-      (setq rows (append rows (list
-        (list (if (= icty "Rounded") "INNER CORNER RAD" "INNER CORNER FACE")
-              icsz icsz)))))
+  (setq rows (append rows
+                     (pool:cornerrows (list "OUTER CORNER" "INNER CORNER")
+                                      (list (list octy ocsz) (list icty icsz)))))
 
   ;; -------- standard hopper in the main section (no sport for L).
   ;; dv = the virtual main-section corner where the break line (down
@@ -2377,16 +2464,21 @@
           tgt (cadr r)
           act (caddr r))
     (pool:rtext (list x y) h (car r) lay (nth 3 r))
-    (if tgt
+    (if (and tgt act)
         (progn
           (pool:rtext (list (+ x (* 20.0 h)) y) h (pool:fmtlen tgt) lay (nth 3 r))
           (pool:rtext (list (+ x (* c3 h)) y) h (pool:fmtdelta (- act tgt))
                       lay (nth 3 r)))
-        ;; NA target: measurement was not taken in the field
+        ;; NA target: measurement was not taken in the field.  A row
+        ;; may also carry no ACTUAL -- a NotGiven corner records that
+        ;; the sheet never said, so there is nothing to compare and
+        ;; nothing was built to a size
         (progn
-          (pool:rtext (list (+ x (* 20.0 h)) y) h "N/A" lay (nth 3 r))
+          (pool:rtext (list (+ x (* 20.0 h)) y) h
+                      (if tgt (pool:fmtlen tgt) "N/A") lay (nth 3 r))
           (pool:rtext (list (+ x (* c3 h)) y) h "-" lay (nth 3 r))))
-    (pool:rtext (list (+ x (* c2 h)) y) h (pool:fmtlen act) lay (nth 3 r)))
+    (pool:rtext (list (+ x (* c2 h)) y) h
+                (if act (pool:fmtlen act) "N/A") lay (nth 3 r)))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
     (pool:textc (list x y) (* 1.4 h) n lay 1))
@@ -2466,16 +2558,18 @@
 
 ;;; -------------------- rectangle corner treatments --------------------
 ;;;
-;;;  A rectangle corner may be Square, Rounded (radius) or Diag
-;;;  (chamfer).  Side lengths are always measured to the TRUE (sharp)
+;;;  A rectangle corner may be Square, Radius, Cut (a chamfer) or
+;;;  NotGiven.  Side lengths are always measured to the TRUE (sharp)
 ;;;  corner; the treatment cuts inward from there.  The size typed is:
-;;;    Rounded -> the corner RADIUS
-;;;    Diag    -> the CHAMFER FACE length (the cut itself)
+;;;    Radius -> the corner RADIUS
+;;;    Cut    -> the CUT FACE length (the chamfer itself)
+;;;  Square and NotGiven have no size: nothing was cut, and in the
+;;;  NotGiven case nothing was measured either.
 ;;;  In-square pools assume all four corners identical; out-of-square
 ;;;  pools ask per corner (Enter reuses the previous corner's answer).
 
 ;; The two points where a corner's treatment meets the straight sides
-;; (toward the previous / next corner) plus, for Rounded, the arc mid.
+;; (toward the previous / next corner) plus, for Radius, the arc mid.
 ;; Returns (ePrev eNext arcMid|nil).  Square -> (P P nil).
 ;; ctype "Ends" is the escape hatch for corners that are not a plain
 ;; treatment of this quad's corner (a Grecian's angled cut, say): size
@@ -2517,11 +2611,11 @@
 
 ;; How far a corner treatment eats along EACH adjacent wall, per unit
 ;; of entered size, at wedge angle ang:
-;;   Rounded  radius r -> r / tan(ang/2)
-;;   Diag     face   f -> f / (2 sin(ang/2))
+;;   Radius  radius r -> r / tan(ang/2)
+;;   Cut     face   f -> f / (2 sin(ang/2))
 ;; At 90 degrees these come to 1.0 and 0.70711, which is what the old
 ;; fixed arithmetic assumed -- but they diverge fast away from square
-;; (a 60-degree Rounded corner sets back 1.73 x its radius, a
+;; (a 60-degree Radius corner sets back 1.73 x its radius, a
 ;; 135-degree one only 0.41 x), so anything sizing a treatment against
 ;; the wall it has to fit on must ask for the real angle.  L and Lazy
 ;; L pools are the ones that care: their bends are 135 degrees even
@@ -2530,8 +2624,8 @@
   (setq h (* 0.5 ang) s (sin h))
   (if (< s 1.0e-9)
       1.0e9                             ; degenerate: treat as unusable
-      (cond ((= ctype "Rounded") (/ (cos h) s))
-            ((= ctype "Diag") (/ 1.0 (* 2.0 s)))
+      (cond ((= ctype "Radius") (/ (cos h) s))
+            ((= ctype "Cut") (/ 1.0 (* 2.0 s)))
             (t 0.0))))
 
 (defun pool:cornerends (p pp pn ctype size xtra / uprev unext ang sb bis cen)
@@ -2540,11 +2634,11 @@
         ang (pool:wedge p pp pn))                          ; interior angle
   (cond
     ((= ctype "Ends") (list size xtra nil))
-    ((= ctype "Diag")
+    ((= ctype "Cut")
      (setq sb (/ size (* 2.0 (sin (/ ang 2.0)))))           ; face -> edge setback
      (list (pool:v+ p (pool:v* uprev sb))
            (pool:v+ p (pool:v* unext sb)) nil))
-    ((= ctype "Rounded")
+    ((= ctype "Radius")
      (setq sb (/ (* size (cos (/ ang 2.0))) (sin (/ ang 2.0)))  ; r/tan(ang/2)
            bis (pool:unit (pool:v+ uprev unext))
            cen (pool:v+ p (pool:v* bis (/ size (sin (/ ang 2.0))))))
@@ -2584,27 +2678,74 @@
   (foreach i (list 0 1 2 3)             ; corner treatments
     (setq tyi (car (nth i corners)))
     (cond
-      ((= tyi "Diag")
+      ((= tyi "Cut")
        (pool:line (car (nth i ce)) (cadr (nth i ce)) "POOL")
        (setq arcs (cons nil arcs)))
-      ((= tyi "Rounded")
+      ((= tyi "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) "POOL")
        (setq arcs (cons (entlast) arcs)))
       (t (setq arcs (cons nil arcs)))))
   (reverse arcs))
 
-;; Corner annotations for the rectangle.  In-square pools get a single
-;; "Typ." note at the bottom-right corner (B): the radius or chamfer
-;; measurement with a Typ. suffix, or a 90-degree leader for square
-;; corners.  Out-of-square pools dim every corner individually --
-;; radius dim, chamfer dim, or the ACTUAL angular dimension for a
-;; square corner.  Assumes CLAYER is already DIMENSION.
 ;; One corner-treatment annotation: a radius dim on a fillet arc or an
-;; aligned dim on a chamfer face, dropped outward along outd, with an
+;; aligned dim on a cut face, dropped outward along outd, with an
 ;; optional " Typ." suffix.  Square corners are not this helper's job.
+;; The square-corner mark of STANDARDS.md section 2: a small circle on
+;; the corner point with a leader out along the corner's outward
+;; diagonal.  Ported from spa:dim90 (lisp/spa/SPA.LSP), the reference
+;; implementation, so the two tools' sheets match.  txt is what the
+;; leader says -- "90%%d" on a square corner, "?" on a NotGiven one,
+;; either with a " Typ." suffix when one mark speaks for several.
+(defun pool:dim90 (p outd doff txt / r)
+  (setq r (* 0.18 doff))
+  (entmake (list '(0 . "CIRCLE")
+                 (cons 8 "DIMENSION")
+                 (cons 10 (pool:wp p))
+                 (cons 40 r)))
+  (command "_.LEADER" (pool:wp (pool:v+ p (pool:v* outd r)))
+           (pool:wp (pool:v+ p (pool:v* outd (* 1.2 doff))))
+           "" txt ""))
+
+;; A NotGiven corner: the same circled mark, but the leader asks a
+;; question instead of asserting an angle, and a note under it spells
+;; the reason out.  The sheet has to SAY the treatment was never
+;; recorded -- drawing a bare 90 would claim a measurement nobody took.
+(defun pool:dimng (p outd doff sfx / h tp)
+  (pool:dim90 p outd doff (strcat "?" sfx))
+  ;; the note sits just past the leader tip, and is pulled back by its
+  ;; own width when the corner points LEFT -- text runs left-to-right
+  ;; from its insertion point, so an unadjusted note on a left-hand
+  ;; corner would read back across its own leader and into the pool
+  (setq h (* 0.25 doff)
+        tp (pool:v+ p (pool:v* outd (* 1.45 doff))))
+  (if (< (car outd) 0.0)
+      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
+  (pool:text tp h "Not Given" "DIMENSION"))
+
+;; One corner's annotation, whichever of the four treatments it
+;; carries.  ang is the corner's real wedge angle, and it decides
+;; whether a plain Square corner may be marked at all:
+;;
+;;   the "90%%d" mark ASSERTS a right angle, so it is only drawn where
+;;   the corner really is one.  A grecian's corners sit at ~135 and an
+;;   L's bend at 135, and stamping 90 on those would be a lie -- they
+;;   stay unmarked, exactly as before.  Pass ang = nil to forbid the
+;;   mark outright, which is what the L's INNER corner needs: it is
+;;   reflex, and pool:wedge is unsigned, so a 270-degree corner
+;;   measures back as 90 and would otherwise be marked.
+;;
+;;   "?" asserts nothing about the angle, so a NotGiven corner is
+;;   flagged on every shape at every angle, no exceptions.
+(defun pool:dimtreat1 (ce ty arc p outd doff sfx ang)
+  (cond
+    ((pool:cutp ty) (pool:dimcorner1 ce ty arc outd doff sfx))
+    ((= ty "NotGiven") (pool:dimng p outd doff sfx))
+    ((and ang (< (abs (- ang (/ pi 2.0))) pool:*sq90-tol*))
+     (pool:dim90 p outd doff (strcat "90%%d" sfx)))))
+
 (defun pool:dimcorner1 (ce ty arc outd doff sfx / am fm od)
   (cond
-    ((= ty "Rounded")
+    ((= ty "Radius")
      (setq am (caddr ce)
            od (pool:dimsbegin (if (and arc (entget arc))
                                   (cdr (assoc 40 (entget arc)))
@@ -2616,7 +2757,7 @@
                   "_T" (strcat "<>" sfx)
                   (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff))))))
      (pool:dimsend od))
-    ((= ty "Diag")
+    ((= ty "Cut")
      (setq fm (pool:mid (car ce) (cadr ce))
            od (pool:dimsbegin (distance (car ce) (cadr ce))))
      (if (= sfx "")
@@ -2627,8 +2768,14 @@
                   (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff))))))
      (pool:dimsend od))))
 
+;; Corner annotations for the rectangle.  In-square pools get a single
+;; "Typ." note at the bottom-right corner (B): the radius or cut-face
+;; measurement with a Typ. suffix, or the circled 90 mark for square
+;; corners.  Out-of-square pools dim every corner individually --
+;; radius dim, cut-face dim, or its own circled mark.  Assumes CLAYER
+;; is already DIMENSION.
 (defun pool:dimcorners (quad corners arcs cen doff / ilist sfx i cc ce p pp pn
-                                                    ty outd fm p1 p2 same)
+                                                    ty outd same)
   ;; out-of-square, the corners are asked one at a time -- but when
   ;; every answer came back the SAME treatment at the SAME size (Enter
   ;; reusing the previous corner, typically), one "Typ." callout reads
@@ -2649,46 +2796,34 @@
           ty (car cc)
           ce (pool:cornerends p pp pn ty (cadr cc) (caddr cc))
           outd (pool:unit (pool:v- p cen)))
-    (cond
-      ((or (= ty "Rounded") (= ty "Diag"))
-       (pool:dimcorner1 ce ty (nth i arcs) outd doff sfx))
-      (t                                ; Square
-       (if (= sfx "")
-           (progn                       ; the actual corner angle
-             (setq p1 (pool:v+ p (pool:v* (pool:unit (pool:v- pp p)) (* 0.8 doff)))
-                   p2 (pool:v+ p (pool:v* (pool:unit (pool:v- pn p)) (* 0.8 doff)))
-                   fm (pool:v+ p (pool:v* (pool:unit (pool:v- cen p)) doff)))
-             (command "_.DIMANGULAR" ""
-                      (pool:wp p) (pool:wp p1) (pool:wp p2) (pool:wp fm)))
-           (command "_.LEADER" (pool:wp p)
-                    (pool:wp (pool:v+ p (pool:v* outd (* 1.2 doff))))
-                    "" "90%%d Typ." ""))))))
+    ;; a rectangle's corners are square by definition -- out of square
+    ;; they drift a fraction of a degree -- so the 90 mark is earned
+    ;; here and pool:dimtreat1 draws it
+    (pool:dimtreat1 ce ty (nth i arcs) p outd doff sfx
+                    (pool:wedge p pp pn))))
 
 ;; Corner-treatment annotations for a ring with more corners than the
 ;; rectangle's four.  groups = the index groups that were answered
 ;; TOGETHER, each ordered reference-corner first (a grecian's body
 ;; family and tip family in square; eight singletons out of square).
-;; Square corners take no annotation here -- a grecian's corners are
-;; never 90, so the rectangle's circled-90 marks would mislead.
-;;   every treated answer identical  -> one Typ. on the first treated
-;;                                      group's reference corner
-;;   else, per group all-same        -> one Typ. on its reference
-;;   else (members differ)           -> each treated corner its own dim
+;; Whether a plain Square corner earns the circled 90 mark is decided
+;; per corner from its own fitted angle inside pool:dimtreat1, so a
+;; roman's true 90s are marked while a grecian's 135s are not; a
+;; NotGiven corner is flagged on any shape at any angle.
+;;   every corner in the ring identical -> one Typ. on the first
+;;                                         group's reference corner
+;;   else, per group all-same           -> one Typ. on its reference
+;;   else (members differ)              -> each corner its own mark
 (defun pool:dimringcorners (pts corners ces arcs cen doff groups
-                            / allsame first g i cc same ref)
-  (setq allsame t first nil)
-  (foreach i (apply 'append groups)
-    (setq cc (nth i corners))
-    (if (/= (car cc) "Square")
-        (if first
-            (if (not (and (equal (car cc) (car first))
-                          (equal (cadr cc) (cadr first) 1.0e-6)))
-                (setq allsame nil))
-            (setq first cc))))
-  (foreach i (apply 'append groups)     ; a mixed square/treated ring
-    (if (and first (= (car (nth i corners)) "Square"))
+                            / allsame ord g i cc same ref)
+  (setq ord (apply 'append groups)
+        allsame t)
+  (foreach i (cdr ord)
+    (if (not (and (equal (car (nth i corners)) (car (nth (car ord) corners)))
+                  (equal (cadr (nth i corners)) (cadr (nth (car ord) corners))
+                         1.0e-6)))
         (setq allsame nil)))
-  (foreach g (if allsame (list (apply 'append groups)) groups)
+  (foreach g (if allsame (list ord) groups)
     (setq same t ref (car g))
     (foreach i (cdr g)
       (if (not (and (equal (car (nth i corners)) (car (nth ref corners)))
@@ -2697,10 +2832,10 @@
           (setq same nil)))
     (foreach i (if same (list ref) g)
       (setq cc (nth i corners))
-      (if (/= (car cc) "Square")
-          (pool:dimcorner1 (nth i ces) (car cc) (nth i arcs)
-                           (pool:unit (pool:v- (nth i pts) cen)) doff
-                           (if (and same (> (length g) 1)) " Typ." ""))))))
+      (pool:dimtreat1 (nth i ces) (car cc) (nth i arcs) (nth i pts)
+                      (pool:unit (pool:v- (nth i pts) cen)) doff
+                      (if (and same (> (length g) 1)) " Typ." "")
+                      (pool:polywedge pts i)))))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
 ;; the visual matches what will be built.  gq = the guide quad,
@@ -2729,9 +2864,9 @@
   (setq i 0)
   (foreach cc corners
     (cond
-      ((= (car cc) "Diag")
+      ((= (car cc) "Cut")
        (pool:pvadd (pool:pvline (car (nth i ce)) (cadr (nth i ce)))))
-      ((= (car cc) "Rounded")
+      ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    "POOL-NOTES")
        (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
@@ -2748,24 +2883,32 @@
 ;; which is right for the rectangle: it asks its corners before the
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
-(defun pool:askcorner (label prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed)
-  ;; A corner whose walls leave no room at all cannot carry a
-  ;; treatment: asking would re-ask every answer forever, since none
-  ;; can fit.  Say so once and hold it square.
+(defun pool:askcorner (subject prevty prevsz ents maxsb ang back
+                       / ty sz cols sb wed dflt szmsg nofit)
+  ;; A corner whose walls leave no room for a cut cannot be given one:
+  ;; every size would be rejected and re-asked forever.  That is a fact
+  ;; about the GEOMETRY, though, and it must not answer the question
+  ;; the sheet asks -- "nobody wrote this corner down" is still a
+  ;; truthful answer here.  So the two sized options are withheld and
+  ;; the question is still put.
   (if (and maxsb (< maxsb 0.125))
       (progn
-        (princ (strcat "\n" label
-                       ": no room for a treatment on these walls -- held square."))
-        (setq maxsb nil ty "Square" sz 0.0)))
-  (if ty
-      (list ty sz)
+        (princ (strcat "\nNo room for a cut on " subject
+                       " -- Radius and Cut are not offered."))
+        (setq maxsb nil nofit t)))
   (progn
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (pool:osup)
-  (setq ty (pool:askkw label "Square Rounded Diag" "Square/Rounded/Diag"
-                       prevty back))
+  (setq ty (if nofit
+               ;; a remembered Radius/Cut is not among the offered
+               ;; words, and pool:askkw hands a default straight back
+               ;; on Enter without checking it -- so drop it
+               (pool:asktreatng subject
+                                (if (member prevty '("Square" "NotGiven"))
+                                    prevty nil)
+                                back)
+               (pool:asktreat subject prevty back)))
   (pool:osdown)
   (if (eq ty 'POOL-BACK)
       (progn (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
@@ -2775,17 +2918,25 @@
              (setq sz nil)))
   (if (null ty)
       nil
-  (if (= ty "Square")
+  ;; Square has no size, and NotGiven has none either -- nothing was
+  ;; measured, so there is no number to ask for
+  (if (not (pool:cutp ty))
       (setq sz 0.0)
       (progn
+        ;; the remembered size is only offered back when the answer
+        ;; MATCHES the one it was measured for: a radius is not a cut
+        ;; face, so carrying 24" across from one to the other would be
+        ;; a wrong default, not a convenient one
+        (setq dflt (if (and prevsz (> prevsz 0.0) (= ty prevty)) prevsz nil)
+              szmsg (strcat "\n" (if (= ty "Radius") "Radius for "
+                                     "Cut face length for ")
+                            subject))
         (pool:osup)
-        (initget (if (and prevsz (> prevsz 0.0)) 6 7))
-        (setq sz (getdist (strcat "\n" label
-                                  (if (= ty "Rounded") " corner radius" " chamfer face length")
-                                  (if (and prevsz (> prevsz 0.0))
-                                      (strcat " <" (rtos prevsz) ">") "")
+        (initget (if dflt 6 7))
+        (setq sz (getdist (strcat szmsg
+                                  (if dflt (strcat " <" (rtos dflt) ">") "")
                                   ": ")))
-        (if (null sz) (setq sz prevsz))
+        (if (null sz) (setq sz dflt))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
         ;; skewed out-of-square corner, not just on a square one
@@ -2796,13 +2947,10 @@
                          (rtos (/ maxsb (pool:cornerk ty wed)))
                          ".  Re-enter."))
           (initget 7)
-          (setq sz (getdist (strcat "\n" label
-                                    (if (= ty "Rounded") " corner radius"
-                                        " chamfer face length")
-                                    ": "))))
+          (setq sz (getdist (strcat szmsg ": "))))
         (pool:osdown))))
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  (if ty (list ty sz) 'POOL-BACK))))
+  (if ty (list ty sz) 'POOL-BACK)))
 
 ;; Ask one treatment per corner, in order, Enter reusing the previous
 ;; corner's answer -- the out-of-square pattern.  labels / caps / angs
@@ -2854,10 +3002,10 @@
   (setq k 0 out nil)
   (foreach cc corners
     (cond
-      ((= (car cc) "Diag")
+      ((= (car cc) "Cut")
        (pool:line (car (nth k ce)) (cadr (nth k ce)) lay)
        (setq out (cons nil out)))
-      ((= (car cc) "Rounded")
+      ((= (car cc) "Radius")
        (pool:arc3p (car (nth k ce)) (caddr (nth k ce)) (cadr (nth k ce)) lay)
        (setq out (cons (entlast) out)))
       (t (setq out (cons nil out))))
@@ -2870,11 +3018,17 @@
 (defun pool:cornerrows (labels corners / out k cc)
   (setq k 0 out nil)
   (foreach cc corners
-    (if (/= (car cc) "Square")
-        (setq out (cons (list (strcat (nth k labels)
-                                      (if (= (car cc) "Rounded") " RAD" " FACE"))
-                              (cadr cc) (cadr cc))
-                        out)))
+    (cond
+      ((pool:cutp (car cc))
+       (setq out (cons (list (strcat (nth k labels)
+                                     (if (= (car cc) "Radius") " RAD" " FACE"))
+                             (cadr cc) (cadr cc))
+                       out)))
+      ;; nothing was measured, so both columns read N/A -- the row
+      ;; exists to record that the sheet never said
+      ((= (car cc) "NotGiven")
+       (setq out (cons (list (strcat (nth k labels) " NotGiven") nil nil)
+                       out))))
     (setq k (1+ k)))
   (reverse out))
 
@@ -4588,7 +4742,7 @@
           nil)
         (if pool:*insq*
             (progn                      ; in-square: one answer for all 4
-              (setq cc (pool:askcorner "All corners (assumed identical)" nil nil
+              (setq cc (pool:askcorner "all four corners" nil nil
                                        (pool:lbl pv '(lA lB lC lD))
                                        (* 0.5 (min tp le)) nil t))
               (if (eq cc 'POOL-BACK)
@@ -4629,7 +4783,7 @@
   ;; guide redraw.  Re-runnable, so backing in and out is safe.
   (defun qf:aftercorners ( / c)
     (setq anycut nil)
-    (foreach c corners (if (/= (car c) "Square") (setq anycut t)))
+    (foreach c corners (if (pool:cutp (car c)) (setq anycut t)))
     (setq gq (list (list 0.0 0.0) (list 360.0 0.0)
                    (list 360.0 180.0) (list 0.0 180.0))
           gcorners (mapcar '(lambda (c) (list (car c) (min (cadr c) 60.0)))
@@ -4643,7 +4797,10 @@
     (setq cmode "Corner")
     (if (and (not pool:*insq*) anycut)
         (progn
-          (setq v (pool:askkw "Cut corners -- cross dims measured from"
+          ;; a bare "Cut corners" would now read as the Cut keyword, and
+          ;; this gate covers Radius corners too -- but NOT NotGiven,
+          ;; which has no treatment ends to tape between
+          (setq v (pool:askkw "Radius/Cut corners -- cross dims measured from"
                               "Corner Middle Ends" "Corner/Middle/Ends" nil t))
           (if (eq v 'POOL-BACK) v (progn (setq cmode v) nil)))
         nil))
@@ -4875,17 +5032,27 @@
     ((= ptype "Oval")
      (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))))
   ;; corner treatments
-  (if (and (= ptype "Rectangle") anycut)
+  ;; corner treatments.  Gated on pool:anytreat, not on anycut: anycut
+  ;; asks the GEOMETRY question and so misses a NotGiven corner, which
+  ;; is the one the report most needs to carry -- nothing else on the
+  ;; sheet records it.  A NotGiven row has no size, so both number
+  ;; columns read N/A rather than a fabricated 0.
+  (if (and (= ptype "Rectangle") (pool:anytreat corners))
       (if pool:*insq*
           (setq rows (append rows
                              (list (list (strcat "CORNERS " (car (car corners)))
-                                         (cadr (car corners)) (cadr (car corners))))))
+                                         (if (pool:cutp (car (car corners)))
+                                             (cadr (car corners)) nil)
+                                         (if (pool:cutp (car (car corners)))
+                                             (cadr (car corners)) nil)))))
           (foreach lbl (list (list "A" 0) (list "B" 1) (list "C" 2) (list "D" 3))
             (if (/= (car (nth (cadr lbl) corners)) "Square")
                 (setq rows (append rows
                                    (list (list (strcat "COR " (car lbl) " " (car (nth (cadr lbl) corners)))
-                                               (cadr (nth (cadr lbl) corners))
-                                               (cadr (nth (cadr lbl) corners))))))))))
+                                               (if (pool:cutp (car (nth (cadr lbl) corners)))
+                                                   (cadr (nth (cadr lbl) corners)) nil)
+                                               (if (pool:cutp (car (nth (cadr lbl) corners)))
+                                                   (cadr (nth (cadr lbl) corners)) nil)))))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
   (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
@@ -5228,13 +5395,13 @@
     (rm:resolve)
     (setq rcs (list (list "Square" 0.0) (list "Square" 0.0)
                     (list "Square" 0.0) (list "Square" 0.0)))
-    (setq v (pool:askyn "Are the corners modified (rounded / chamfered)"
+    (setq v (pool:askyn "Anything to record about the corners (radius / cut / not given)?"
                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
       ((not v) nil)
       (pool:*insq*
-       (setq cc (pool:askcorner "All corners (assumed identical)" nil nil nil
+       (setq cc (pool:askcorner "all four corners" nil nil nil
                                 (min (* 0.5 tv) s1l s1r) nil t))
        (if (eq cc 'POOL-BACK)
            'POOL-BACK
@@ -5347,10 +5514,12 @@
   ;; corner treatments: one Typ. at B in square, each treated corner
   ;; its own dim out of square (collapsing back to Typ. when Enter
   ;; reused one answer all the way round)
+  ;; B leads out of square too, so the all-same Typ. mark lands on the
+  ;; same corner as it does in square
   (pool:dimringcorners quad rcs rce rcarcs cen doff
                        (if pool:*insq*
                            (list '(1 0 2 3))
-                           (mapcar 'list '(0 1 2 3))))
+                           (mapcar 'list '(1 0 2 3))))
   (setvar "CLAYER" oldclay)
 
   ;; corner letters live on the mini-model beside the report, not in

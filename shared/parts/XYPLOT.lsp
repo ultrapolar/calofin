@@ -6,6 +6,9 @@
 ;;; Commands:  XYPLOT      draw both graphs from a spreadsheet of X/Y offsets
 ;;;            XYPLOTVER   print the loaded version
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; ABCDEF's sister command, for the survey that arrives already reduced.
 ;;; Where ABCDEF is handed four tape distances per point and has to work out
 ;;; where the point is, XYPLOT is handed the answer - an X and a Y off one

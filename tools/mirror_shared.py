@@ -90,6 +90,31 @@ TOOLS = {
         },
         'drop_globals': [],
     },
+    'FITABHD': {
+        'src': 'lisp/fitabhd/FITABHD.lsp',
+        'swap': {
+            'fit:askkw': 'cal:askkw', 'fit:askyn': 'cal:askyn',
+            'fit:asktreat': 'cal:asktreat',
+            'fit:syssave': 'cal:syssave',
+            'fit:sysrestore': 'cal:sysrestore',
+            'fit:ensure-layer': 'cal:ensure-layer',
+            'fit:2d': 'cal:2d', 'fit:dist': 'cal:dist',
+            'fit:v-': 'cal:v-', 'fit:v+': 'cal:v+', 'fit:v*': 'cal:v*',
+            'fit:dot': 'cal:dot', 'fit:mid': 'cal:mid',
+            'fit:perp': 'cal:perp', 'fit:angnorm': 'cal:angnorm',
+            'fit:signed-dang': 'cal:signed-dang',
+            'fit:dedupe': 'cal:dedupe', 'fit:tan': 'cal:tan',
+            'fit:ceil': 'cal:ceil',
+            'fit:block-number': 'cal:block-number',
+        },
+        'drop_globals': [],
+        # fit:askkw already takes the SHOWN bracket third, like the
+        # library's, and fit:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helpers, and
+        # every caller tests for it by name
+        'symbols': {'FIT-BACK': 'CAL-BACK'},
+    },
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
@@ -237,7 +262,10 @@ def mirror(tool, spec):
     src = open(src_path).read()
 
     # the shared-build note goes under the Command: line of the header
-    m = re.search(r'^;;;\s+Commands?:.*\n;;;\n', src, re.M)
+    # the Commands: block may run to several lines; [ \t] not \s, or
+    # the continuation creeps across the blank ;;; line into the prose
+    m = re.search(r'^;;;\s+Commands?:.*(?:\n;;;[ \t]+\S[^\n]*)*\n;;;\n',
+                  src, re.M)
     if m and 'SHARED BUILD' not in src:
         src = src[:m.end()] + BANNER + src[m.end():]
 
@@ -260,7 +288,11 @@ def mirror(tool, spec):
             src = src[:span[0]] + blank + src[span[1]:]
 
     for old, new in sorted(spec['swap'].items(), key=lambda kv: -len(kv[0])):
-        src = re.sub(r'\(' + re.escape(old) + r'(?=[\s)])', '(' + new, src)
+        # a call site is "(name", but a helper handed to mapcar or apply
+        # is "'name" - miss the quoted form and the grouped build dies
+        # at the first (mapcar 'tool:2d ...) with an undefined function
+        src = re.sub(r"([('])" + re.escape(old) + r"(?=[\s)])",
+                     lambda m: m.group(1) + new, src)
 
     src = expand_calls(src, EXPAND.get(tool, {}))
 

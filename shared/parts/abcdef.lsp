@@ -6,6 +6,9 @@
 ;;; Commands:  ABCDEF      read the sheet, place every point, report the fit
 ;;;            ABCDEFVER   print the loaded version
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Points A B C D sit on the corners of a rectangle:
 ;;;
 ;;;        A --------- B         A = top-left      B = top-right

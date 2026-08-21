@@ -5,6 +5,9 @@
 ;;;  Command:  XFTCONV   - highlight the import, that is the only answer
 ;;;                        it needs
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  What it does, to the objects you highlight:
 ;;;    1. scales the whole selection by 12 (feet -> inches), about the
 ;;;       middle of everything highlighted

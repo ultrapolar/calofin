@@ -25,7 +25,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.2")
+(setq *tutperp-version* "v0.3")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -126,6 +126,22 @@
                   "    else re-prompts instead of cancelling the command"
                   "  * zero-length and closed objects are rejected"
                   ""
+                  "Overall width"
+                  "  * right after the selection you are asked whether the"
+                  "    overall width has changed: Grew, Shrank, New, or"
+                  "    Unchanged (the default, and Enter)"
+                  "  * the width meant is the distance straight ACROSS, end"
+                  "    to end - never the length of the OBJECT, which on"
+                  "    anything bowed runs further than the width it spans"
+                  "  * half of any difference is added to, or taken off,"
+                  "    EACH end: the OBJECT in the drawing is resized to"
+                  "    match, so the base points and their dimensions still"
+                  "    land on it.  One U puts the width back"
+                  "  * shrinking away the whole width is rejected, and a"
+                  "    resize the drawing will not take - a locked, frozen"
+                  "    or switched-off layer - stops the command rather"
+                  "    than measuring off geometry that is not there"
+                  ""
                   "Direction click"
                   "  * the end nearest your click becomes START - lengths are"
                   "    then entered in order START -> FINISH (a red arrow"
@@ -144,6 +160,18 @@
                   "    are rejected"
                   "  * Enter repeats the previous length (handy for runs of"
                   "    equal values); typing B (Back) steps back one point"
+                  ""
+                  "Joining the points"
+                  "  * Straight, Arcs or Mixed, asked once a round has three"
+                  "    points or more; the default is the previous round's"
+                  "    answer, and Straight to begin with"
+                  "  * Mixed then asks which segment numbers are arcs, as"
+                  "    single numbers or ranges - 1 3-5 - and leaves the"
+                  "    rest straight; a list it cannot read re-asks, and B"
+                  "    goes back to the question"
+                  "  * an arc is a bulge on the same polyline, running"
+                  "    through the measured points - never a spline, and"
+                  "    never a curve-fit heavy polyline"
                   ""
                   "Output"
                   "  * the offset polyline takes the layer, colour, linetype,"

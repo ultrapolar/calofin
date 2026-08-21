@@ -95,12 +95,12 @@ changing a routine.
 | `SPA`, `SPAVER`, `TUTORIALSPA` | `lisp/spa/` | Spa/hot-tub template - Rectangle, Octagon, Round |
 | `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool - centre bulge, top-right bulge, cloud (straight or rounded bottom) or kidney (true or asymmetric) - drawn live as its X/Y envelope and radii are answered, with a centre-to-corner check drawing beside it.  A `Complex` run takes a straight tangent run in place of any joiner and moves the centre hump off centre |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
-| `CABHD` | `lisp/cabhd/` | ABHD's perimeter half, for a survey that runs past the pool: asks the LAST point number belonging to the pool edge and leaves everything past it out entirely.  No pool bottom |
+| `CABHD`, `CABHDVER` | `lisp/cabhd/` | ABHD's perimeter half, for a survey that runs past the pool: asks the LAST point number belonging to the pool edge and leaves everything past it out entirely.  No pool bottom |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
-| `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- out-of-square walls, corner sizes and bows all measured from the survey, Redo to refit -- then a standard-hopper bottom |
+| `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- out-of-square walls, corner sizes, bows and caved-in arcs all measured from the survey, Redo to refit -- then a standard-hopper bottom |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
-| `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each. `ABMOVE` also offers every place the point lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow and tagged by the tape they move (`1A`, `-3B`) - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
+| `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each, then asks whether that point wants moving. `ABMOVE` takes one point and also offers every place it lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow, tagged by the tape they move (`1A`, `-3B`), each group on the dashed grey arc it sits on - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
 | `ABCDEF`, `ABCDEFVER` | `lisp/abcdef/` | Locates Excel-measured points inside rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom).  Two tapes place a point, three fix it, four cross-check it; a fourth tape is dropped only when leaving it out settles the other three **and** the runner-up triple is clearly worse, so a point near a diagonal keeps all four rather than discarding a good tape.  Reports per point how many tapes placed it, which, and a measured 1-99% confidence, to the command line and to a text file beside the sheet.  Plots as `ab_pt` blocks on `POINTS` and offers `ABHD` the set |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `XYPLOT`, `XYPLOTVER` | `lisp/xyplot/` | `ABCDEF`'s sister for a survey that arrives already reduced: a sheet of X/Y offsets, one picked origin, drawn twice - graph 1 the points as given (`ab_pt` on `POINTS`, ready for `ABHD`), graph 2 the same points with the X and Y offsets dimensioned as two continuous linear chains |
@@ -116,10 +116,10 @@ changing a routine.
 | `LINTXTCHK` | `lisp/lintxtchk/` | Places the vinyl-liner QA checklist into the drawing as text |
 | `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners - three files here, one `STEPS` release (see below) |
 | `PADDLE`, `TUTORIALPADDLE` | `lisp/paddle/` | Finds concave perimeter features and inserts pad blocks |
-| `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, joined with straight segments, arcs or a mix of both, with a repeat-on-the-new-polyline step |
+| `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, joined with straight segments, arcs or a mix of both; asks whether the overall width has been re-measured, and has a repeat-on-the-new-polyline step |
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
 | `DCE`, `DIMCONTEND` | `lisp/dim_continue/` | Chains `DIMCONTINUE` from a seed dimension out to every remaining feature point |
-| `AUTODIM`, `FLOORDIM`, `STAIRDIM`, `AUTODIMSIDEPOV` | `lisp/autodim/` | Auto-dimensions a highlighted plan, then its stairs, then the two overall dims - `SIDE STANDARD`, or `STANDARD INCHES` under 12", the overall pair `STANDARD`; a place that is dimensioned already is left alone. Highlight a flight of steps drawn in side view instead and `AUTODIM` recognises it and dimensions the depth of every step down the right in `STANDARD INCHES` |
+| `AUTODIM`, `FLOORDIM`, `STAIRDIM`, `AUTODIMSIDEPOV` | `lisp/autodim/` | Auto-dimensions a highlighted plan - perimeter sides and arc radii, stairs, the floor dims it asks about, two overall dims. A size that repeats is called out once and noted `Typ.` (from two equal sides, or four equal radii). Perimeter and stairs `SIDE STANDARD`, floor and overall dims `STANDARD`, anything under 12" `STANDARD INCHES`; a place that is dimensioned already is left alone. Highlight a flight of steps drawn in side view instead and `AUTODIM` recognises it and dimensions the depth of every step down the right in `STANDARD INCHES` |
 | `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, source line erased |
 | `DRONE` | `lisp/drone/` | Drawing cleanup: text style/height, pool/spa points onto `POINTS`, spa perimeter onto `POOL`, and more in one pass |
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
@@ -144,7 +144,7 @@ never offers Back.
 
 In loops that draw as they go - `PERPPTS`/`CPERPPTS` offset points,
 `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` treads, `ABHD`/`ADAB` slope
-waypoints, `CDCALLOUT` dimensions, `ABFIND`/`ABMOVE` ties - Back
+waypoints, `CDCALLOUT` dimensions, `ABFIND` ties - Back
 also removes the
 just-committed point or step (its lines and its dimensions) before
 re-asking. `BPCALLOUT` works by
@@ -277,6 +277,10 @@ with a different prompt sequence, so `tests/test_pool_form.py` and
 `tests/test_spa_form.py` currently fail - that's a known, open gap
 (reconciling the palette's `LispBridge` with the canonical POOL/SPA),
 not a bug in either side.
+
+`ui/PLAN.md` is the execution plan for closing it - what is built, what
+is missing, and the day-by-day for making the forms actually drive the
+routines.
 
 ## Tools (`tools/`)
 

@@ -8,10 +8,14 @@
 ;;;                is recognised as one - see "Steps in side view"
 ;;;                below - and steps 2 to 5 are skipped, being all
 ;;;                about a plan.
-;;;             Step 2. Dimensions the straight lines about the
-;;;                perimeter of the highlighted geometry (LINE entities
-;;;                and straight LWPOLYLINE segments) with aligned
-;;;                dimensions placed at least a foot outside the plan.
+;;;             Step 2. Dimensions the perimeter of the highlighted
+;;;                geometry, at least a foot outside the plan: its
+;;;                straight sides (LINE entities and straight
+;;;                LWPOLYLINE segments) with aligned dimensions, then
+;;;                its arcs (ARC and CIRCLE entities and bulged
+;;;                LWPOLYLINE segments) with radius dimensions.  A
+;;;                measurement that repeats is called out once and
+;;;                noted "Typ." - see "One dim per size" below.
 ;;;             Step 3. Asks the user to highlight the stairs.  The
 ;;;                treads (the largest group of parallel lines in the
 ;;;                selection) get their widths dimensioned and the
@@ -87,25 +91,45 @@
 ;;;  measures rather than by which step placed it (a style the drawing
 ;;;  does not have falls back to the style that was current when the
 ;;;  command started, and that style is restored when it finishes):
-;;;    * Every plan dim          -> "SIDE STANDARD"
-;;;    * ...measuring under 12"  -> "STANDARD INCHES" instead
+;;;    * Perimeter and stairs    -> "SIDE STANDARD"
+;;;    * The floor dims chains   -> "STANDARD"
 ;;;    * The two overall dims    -> "STANDARD"
+;;;    * ...measuring under 12"  -> "STANDARD INCHES", whichever of the
+;;;                                 three it would otherwise have been
 ;;;    * Steps in side view      -> "STANDARD INCHES", depths and the
 ;;;                                 overall alike, in AUTODIM and in
 ;;;                                 AUTODIMSIDEPOV
 ;;;
+;;;  One dim per size - the "Typ." rule:
+;;;    A measurement that repeats around the perimeter is called out
+;;;    once, with " Typ." after it, and the others are left to that
+;;;    note rather than dimensioned again.  The one that carries it is
+;;;    the first of its size the tool comes across, so a re-run marks
+;;;    the same side or arc it marked before.
+;;;      * straight sides -> from two equal ones up
+;;;      * arcs, by radius -> from four equal ones up; a pair or a trio
+;;;        of matching curves reads better dimensioned where each one
+;;;        is, so those are left alone
+;;;    Two lengths, or two radii, within a sixteenth of an inch count
+;;;    as the same measurement.  The counts and the wording are
+;;;    ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* at the top of
+;;;    the file.
+;;;
 ;;;  One dimension per place:
-;;;    Before placing anything the tool reads every linear and aligned
-;;;    dimension already in model space.  A dim is skipped when one is
-;;;    already there for that place - same two extension line origins
-;;;    (either way round) and a dimension line within a foot of where
-;;;    the new one would sit.  So a second run over a plan that has
+;;;    Before placing anything the tool reads every linear, aligned and
+;;;    radius dimension already in model space.  A dim is skipped when
+;;;    one is already there for that place - same two extension line
+;;;    origins (either way round) and a dimension line within a foot of
+;;;    where the new one would sit, or for a radius dim, the same
+;;;    centre and the same radius.  So a second run over a plan that has
 ;;;    grown dimensions the new geometry only, while the overall dims,
 ;;;    two feet further out, are still placed even when a side of the
 ;;;    plan happens to measure the same thing.
 ;;;
 ;;;  Notes:
 ;;;    * All dims go on the current layer.
+;;;    * Ellipses and splines have no one radius to call out, so the
+;;;      perimeter step passes over them.
 ;;;    * Perimeter dims are placed at least one foot away from the
 ;;;      perimeter, heading outwards (or 2 x DIMTXT x DIMSCALE when
 ;;;      that is larger).
@@ -175,16 +199,31 @@
 
 ;; ------------------------------------------------ dimension styles
 
-;; The three styles the tool asks for.  Every plan dimension goes in
-;; ad:*style-plan*, anything measuring less than a foot goes in
-;; ad:*style-short* instead - a sub-foot dim reads better in inches -
-;; and the two overall dims go in ad:*style-over*.
+;; The styles the tool asks for.  The perimeter and the stairs go in
+;; ad:*style-plan*, the floor dims chains in ad:*style-floor* and the
+;; two overall dims in ad:*style-over*; whichever of those it is,
+;; anything measuring less than a foot goes in ad:*style-short*
+;; instead, a sub-foot dim reading better in inches.
 (setq ad:*style-plan*  "SIDE STANDARD"
+      ad:*style-floor* "STANDARD"
       ad:*style-short* "STANDARD INCHES"
       ad:*style-over*  "STANDARD")
 
+;; Repeated measurements are called out once and noted, rather than
+;; dimensioned over and over.  ad:*typ-note* is the suffix the one dim
+;; that stands for its group carries - the wording POOL.LSP already
+;; uses for the same job.  The two counts are how many equal ones it
+;; takes before that happens: two equal straight sides are enough,
+;; while equal radii are left alone until there are more than three of
+;; them, a pair or a trio of matching curves reading better dimensioned
+;; where they are.
+(setq ad:*typ-note*   " Typ."
+      ad:*typ-lines*  2
+      ad:*typ-curves* 4)
+
 ;; per-run state, all reset by ad:begin
 (setq ad:*dims*      nil    ; the places that already carry a dimension
+      ad:*rads*      nil    ; the arcs that already carry a radius dim
       ad:*skipped*   0      ; how many dims this run left to what was there
       ad:*curstyle*  nil    ; the dimension style in force right now
       ad:*homestyle* nil)   ; what to fall back on when a style is missing
@@ -241,16 +280,52 @@
 (defun ad:remember (p1 p2 loc)
   (setq ad:*dims* (cons (list p1 p2 loc) ad:*dims*)))
 
-;; read what the drawing already carries into ad:*dims*
-(defun ad:dimscan (/ ss i q)
+;; a radius dimension as (centre radius), nil for anything else.  Only
+;; radius dims are read: a diameter dim writes two points on the circle
+;; into 10 and 15 rather than the centre and one, and is not what this
+;; tool places anyway.
+(defun ad:raddimpts (en / el c)
+  (setq el (entget en))
+  (if (and el
+           (= "DIMENSION" (cdr (assoc 0 el)))
+           (assoc 70 el)
+           (= 4 (logand 7 (cdr (assoc 70 el))))
+           (assoc 10 el)
+           (assoc 15 el))
+    (progn
+      (setq c (cdr (assoc 10 el)))
+      (list c (distance c (cdr (assoc 15 el)))))))
+
+;; note that the arc at centre with this radius now carries one
+(defun ad:remrad (centre rad)
+  (setq ad:*rads* (cons (list centre rad) ad:*rads*)))
+
+;; T when that arc is dimensioned already - same centre, same radius
+(defun ad:raddimmed-p (centre rad / tol lst q hit)
+  (setq tol (ad:dupetol)
+        lst ad:*rads*)
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (and (ad:samept (car q) centre tol)
+             (<= (abs (- (cadr q) rad)) tol))
+      (setq hit t)))
+  hit)
+
+;; read what the drawing already carries into ad:*dims* and ad:*rads*
+(defun ad:dimscan (/ ss i en q)
   (setq ad:*dims* nil
+        ad:*rads* nil
         ss        (ad:dimss)
         i         0)
   (if ss
     (repeat (sslength ss)
-      (setq q (ad:dimpts (ssname ss i))
-            i (1+ i))
-      (if q (setq ad:*dims* (cons q ad:*dims*)))))
+      (setq en (ssname ss i)
+            i  (1+ i))
+      (if (setq q (ad:dimpts en))
+        (setq ad:*dims* (cons q ad:*dims*)))
+      (if (setq q (ad:raddimpts en))
+        (setq ad:*rads* (cons q ad:*rads*)))))
   ad:*dims*)
 
 ;; start a run: remember the style to fall back on and what is current,
@@ -299,6 +374,25 @@
       (setq hit t)))
   hit)
 
+;; Split records whose car is the measurement into groups of equal
+;; measurement, within tol.  Order is kept both ways: a group sits
+;; where its first member was found, and its members keep the order
+;; they were found in - so "the one that gets the note" is the first
+;; one the tool came across, every run.
+(defun ad:groupsame (recs tol / out r g hit new)
+  (setq out '())
+  (foreach r recs
+    (setq hit nil
+          new '())
+    (foreach g out
+      (if (and (not hit) (<= (abs (- (car r) (car (car g)))) tol))
+        (setq g   (append g (list r))
+              hit t))
+      (setq new (cons g new)))
+    (if (not hit) (setq new (cons (list r) new)))
+    (setq out (reverse new)))
+  out)
+
 ;; count one dim left to the one already there
 (defun ad:skip ()
   (setq ad:*skipped* (1+ ad:*skipped*))
@@ -313,12 +407,19 @@
 
 ;; -------------------------------------------------- placing dimensions
 
-;; place one aligned dimension - all points expected in WCS
-(defun ad:aligned (p1 p2 loc)
-  (command "_.DIMALIGNED"
-           "_non" (trans p1 0 1)
-           "_non" (trans p2 0 1)
-           "_non" (trans loc 0 1)))
+;; place one aligned dimension - all points expected in WCS.  note is
+;; appended to the measurement, "" leaving it as measured.
+(defun ad:aligned (p1 p2 loc note)
+  (if (= note "")
+    (command "_.DIMALIGNED"
+             "_non" (trans p1 0 1)
+             "_non" (trans p2 0 1)
+             "_non" (trans loc 0 1))
+    (command "_.DIMALIGNED"
+             "_non" (trans p1 0 1)
+             "_non" (trans p2 0 1)
+             "_T" (strcat "<>" note)
+             "_non" (trans loc 0 1))))
 
 ;; place one linear dimension - dir is "_H" or "_V", points in WCS
 (defun ad:lindim (p1 p2 loc dir)
@@ -329,15 +430,16 @@
            "_non" (trans loc 0 1)))
 
 ;; place one aligned dimension across p1-p2, in the style its length
-;; calls for, unless that place is dimensioned already.
+;; calls for, unless that place is dimensioned already.  note is what
+;; follows the measurement - "" for the measurement alone.
 ;; Returns 1 when a dimension was placed, 0 when it was not.
-(defun ad:putaligned (p1 p2 loc base / len)
+(defun ad:putaligned (p1 p2 loc base note / len)
   (setq len (distance p1 p2))
   (cond
     ((<= len 1e-8) 0)
     ((ad:dimmed-p p1 p2 loc) (ad:skip))
     (t (ad:usestyle (ad:styfor len base))
-       (ad:aligned p1 p2 loc)
+       (ad:aligned p1 p2 loc note)
        (ad:remember p1 p2 loc)
        1)))
 
@@ -356,12 +458,32 @@
        (ad:remember p1 p2 loc)
        1)))
 
+;; place one radius dimension on the arc en, its leader reaching from
+;; the point on it out to loc, unless that arc is dimensioned already.
+;; note follows the measurement, "" leaving it as measured.
+;; Returns 1 when a dimension was placed, 0 when it was not.
+(defun ad:putradius (rad en on centre loc base note)
+  (cond
+    ((<= rad 1e-8) 0)
+    ((ad:raddimmed-p centre rad) (ad:skip))
+    (t (ad:usestyle (ad:styfor rad base))
+       (if (= note "")
+         (command "_.DIMRADIUS"
+                  (list en (trans on 0 1))
+                  "_non" (trans loc 0 1))
+         (command "_.DIMRADIUS"
+                  (list en (trans on 0 1))
+                  "_T" (strcat "<>" note)
+                  "_non" (trans loc 0 1)))
+       (ad:remrad centre rad)
+       1)))
+
 ;; one contiguous run of a chain, all of it in style sty: a first
 ;; aligned dim, then DIMCONTINUE through the rest.
 ;; Returns the number of dimensions placed.
 (defun ad:putrun (pts loc sty / p prev)
   (ad:usestyle sty)
-  (ad:aligned (car pts) (cadr pts) loc)
+  (ad:aligned (car pts) (cadr pts) loc "")
   (ad:remember (car pts) (cadr pts) loc)
   (if (cddr pts)
     (progn
@@ -431,6 +553,82 @@
          (setq segs (cons (list (nth n pts) (nth (1+ n) pts)) segs)))
        (setq n (1+ n)))
      (reverse segs))))
+
+;; The arc a bulged polyline segment describes, as (centre radius mid)
+;; with mid the point half way round it - nil for a straight one.  The
+;; bulge is tan(sweep/4), signed + for counter-clockwise, so the sweep
+;; and the radius come straight back out of it and the centre sits on
+;; the chord's perpendicular bisector, the signed radius putting it on
+;; the correct side.
+(defun ad:bulgearc (p1 p2 b / chord sweep rad cen)
+  (setq chord (distance p1 p2))
+  (if (and (> chord 1e-8) (> (abs b) 1e-8))
+    (progn
+      (setq sweep (* 4.0 (atan b))
+            rad   (/ chord (* 2.0 (sin (/ sweep 2.0))))
+            cen   (polar (cal:midn p1 p2)
+                         (+ (angle p1 p2) (* 0.5 pi))
+                         (* rad (cos (/ sweep 2.0)))))
+      (list cen
+            (abs rad)
+            (polar cen (+ (angle cen p1) (/ sweep 2.0)) (abs rad))))))
+
+;; every curved piece of every entity in ss, as
+;; (radius entity point-on-it centre) - one per ARC and CIRCLE and one
+;; per bulged segment of an LWPOLYLINE.  Radius first, so the records
+;; group by size the same way the straight ones do.  Ellipses and
+;; splines have no one radius to call out and are passed over.
+(defun ad:arcs (ss / out i en el ty c r a1 a2 pts blg n p1 p2 arc)
+  (setq out '()
+        i   0)
+  (if ss
+    (repeat (sslength ss)
+      (setq en (ssname ss i)
+            i  (1+ i)
+            el (entget en)
+            ty (cdr (assoc 0 el)))
+      (cond
+        ((= ty "ARC")
+         (setq c  (cdr (assoc 10 el))
+               r  (cdr (assoc 40 el))
+               a1 (cdr (assoc 50 el))
+               a2 (cdr (assoc 51 el)))
+         (if (< a2 a1) (setq a2 (+ a2 (* 2.0 pi))))
+         (setq out (cons (list r en (polar c (* 0.5 (+ a1 a2)) r) c) out)))
+        ((= ty "CIRCLE")
+         (setq c (cdr (assoc 10 el))
+               r (cdr (assoc 40 el)))
+         (setq out (cons (list r en (polar c 0.0 r) c) out)))
+        ((and (= ty "LWPOLYLINE")
+              (or (null (assoc 210 el))
+                  (equal (cdr (assoc 210 el)) '(0.0 0.0 1.0) 1e-6)))
+         (setq pts '()
+               blg '())
+         (foreach c el
+           (cond ((= 10 (car c)) (setq pts (cons (append (cdr c) '(0.0)) pts)))
+                 ((= 42 (car c)) (setq blg (cons (cdr c) blg)))))
+         (setq pts (reverse pts)
+               blg (reverse blg))
+         (if (= 1 (logand 1 (cdr (assoc 70 el))))
+           (setq pts (append pts (list (car pts)))))
+         (setq n 0)
+         (while (< (1+ n) (length pts))
+           (setq p1  (nth n pts)
+                 p2  (nth (1+ n) pts)
+                 arc (if (nth n blg) (ad:bulgearc p1 p2 (nth n blg))))
+           (if arc
+             (setq out (cons (list (cadr arc) en (caddr arc) (car arc)) out)))
+           (setq n (1+ n)))))))
+  (reverse out))
+
+;; if the arc at centre with this radius lies on the perimeter, return
+;; the angle from its centre out through mid to the clear side, else
+;; nil.  Radially out first, then radially in, the way a straight
+;; segment's two sides are tried.
+(defun ad:arcang (centre mid diag eps ss / a)
+  (setq a (angle centre mid))
+  (cond ((ad:sideclear mid a diag eps ss) a)
+        ((ad:sideclear mid (+ a pi) diag eps ss) (+ a pi))))
 
 ;; every straight segment of every entity in ss, as (p1 p2) pairs
 (defun ad:allsegs (ss / i en s out)
@@ -507,29 +705,69 @@
   (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps ss) (+ a (* 0.5 pi)))
         ((ad:sideclear mid (- a (* 0.5 pi)) diag eps ss) (- a (* 0.5 pi)))))
 
-;; dimension every straight segment about the perimeter of the
-;; highlighted geometry in ss, return how many
-(defun ad:dimperim (ss / box diag eps off cnt i en seg pa)
-  (setq box  (cal:bbox-ss ss)
-        cnt  0
-        i    0)
+;; every straight segment on the perimeter of ss, as
+;; (length p1 p2 where-its-dim-goes).  Length first, so the records
+;; group by size.
+(defun ad:perimsegs (ss diag eps off / out i en seg len pa)
+  (setq out '()
+        i   0)
+  (repeat (sslength ss)
+    (setq en (ssname ss i)
+          i  (1+ i))
+    (foreach seg (ad:segs en)
+      (setq len (distance (car seg) (cadr seg)))
+      (if (and (> len 1e-8)
+               (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
+        (setq out (cons (list len (car seg) (cadr seg)
+                              (polar (cal:midn (car seg) (cadr seg)) pa off))
+                        out)))))
+  (reverse out))
+
+;; every arc on the perimeter of ss, as
+;; (radius entity point-on-it centre where-its-dim-goes)
+(defun ad:perimarcs (ss diag eps off / out rec pa)
+  (setq out '())
+  (foreach rec (ad:arcs ss)
+    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps ss))
+      (setq out (cons (append rec (list (polar (caddr rec) pa off))) out))))
+  (reverse out))
+
+;; Dimension the perimeter of the highlighted geometry in ss: its
+;; straight sides, then its arcs by radius.  A measurement that repeats
+;; is called out once, on the first one found, with ad:*typ-note* after
+;; it, and the rest are left to that note - from ad:*typ-lines* equal
+;; sides up, and from ad:*typ-curves* equal radii up.  Below those
+;; counts every one is dimensioned where it is.
+;; Returns how many dimensions were placed.
+(defun ad:dimperim (ss / box diag eps off cnt g rec)
+  (setq box (cal:bbox-ss ss)
+        cnt 0)
   (if box
     (progn
       (setq diag (* 2.0 (distance (car box) (cadr box)))
             eps  (* 1e-6 diag)
             ;; at least a foot away from the perimeter, heading outwards
             off  (max (ad:dimoff) (ad:onefoot)))
-      (repeat (sslength ss)
-        (setq en (ssname ss i)
-              i  (1+ i))
-        (foreach seg (ad:segs en)
-          (if (and (> (distance (car seg) (cadr seg)) 1e-8)
-                   (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
-            (setq cnt (+ cnt
-                         (ad:putaligned
-                           (car seg) (cadr seg)
-                           (polar (cal:midn (car seg) (cadr seg)) pa off)
-                           ad:*style-plan*))))))))
+      ;; the straight sides
+      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
+        (if (>= (length g) ad:*typ-lines*)
+          (setq rec (car g)
+                cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
+                                          ad:*style-plan* ad:*typ-note*)))
+          (foreach rec g
+            (setq cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
+                                            ad:*style-plan* ""))))))
+      ;; the arcs, by radius
+      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
+        (if (>= (length g) ad:*typ-curves*)
+          (setq rec (car g)
+                cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
+                                         (cadddr rec) (nth 4 rec)
+                                         ad:*style-plan* ad:*typ-note*)))
+          (foreach rec g
+            (setq cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
+                                           (cadddr rec) (nth 4 rec)
+                                           ad:*style-plan* ""))))))))
   cnt)
 
 ;; --------------------------------------------- part 2: stairs dimensions
@@ -596,7 +834,7 @@
                 (setq mid (cal:midn (cadr td) (caddr td))
                       loc (mapcar '(lambda (m vv) (- m (* off vv))) mid v))
                 (setq cnt   (+ cnt (ad:putaligned (cadr td) (caddr td) loc
-                                                  ad:*style-plan*))
+                                                  ad:*style-plan* ""))
                       lastw w))))
           ;; distances between the steps, chained beside the stair
           (setq ts   '()
@@ -687,7 +925,7 @@
       (prompt (strcat "\n  (end point was not on an object - the chain"
                       " stops at the last one the line crosses)"))))
   (if (cdr chain)
-    (ad:dimchain chain loc ad:*style-plan*)
+    (ad:dimchain chain loc ad:*style-floor*)
     0))
 
 ;; erase everything drawn after entity MARK (nil = an empty drawing) -
@@ -982,10 +1220,11 @@
       ((= stage 4)
        (prompt (strcat "\n=== AUTODIM step 4 of 5: floor dims ==="
                        "\nTwo lines drawn across the plan, each becoming a"
-                       " dimension chain that breaks at every highlighted"
-                       " object it crosses.  A start or end point that is"
-                       " not on an object pulls back to the last object"
-                       " before it, so every dim runs object to object."))
+                       " dimension chain in \"" ad:*style-floor* "\" that"
+                       " breaks at every highlighted object it crosses.  A"
+                       " start or end point that is not on an object pulls"
+                       " back to the last object before it, so every dim"
+                       " runs object to object."))
        (setq v (cal:askyn "Would you like floor dims?" "Yes" T))
        (cond
          ((eq v 'CAL-BACK)
