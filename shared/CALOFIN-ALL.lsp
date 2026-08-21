@@ -8,24 +8,24 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 42 files, 91 commands:
+;;; 42 files, 92 commands:
 ;;;
 ;;;   ABCDEF  ABFIND  ABFINDVER  ABHD  ABMOVE  ADAB
 ;;;   ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV  BPCALLOUT
-;;;   CABHD  CALVER  CCPRECHECK  CDCALLOUT  CDCREATE  CDCREATEVER
-;;;   CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVERSION  COVERSCAN
-;;;   CPERPPTS  DCE  DDALT  DDCAL  DDELEV  DDFIX
-;;;   DDGPS  DDINFO  DDSET  DDTEST  DIMARCCHECK  DIMCHECK
-;;;   DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN  DRONE  FITABHD
-;;;   FITABHDVER  FLOORDIM  HEMISTEP  LHD  LINCHECK  LINFINCHECK
-;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  NORMIESTEP  OASIS
-;;;   OASISVER  PADDLE  PERPPTS  POOL  POOLDEMO  POOLVER
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
-;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB
-;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
-;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
-;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  WCALST  XFTCONV
-;;;   XFTCONV-SETUP
+;;;   CABHD  CABHDVER  CALVER  CCPRECHECK  CDCALLOUT  CDCREATE
+;;;   CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVERSION
+;;;   COVERSCAN  CPERPPTS  DCE  DDALT  DDCAL  DDELEV
+;;;   DDFIX  DDGPS  DDINFO  DDSET  DDTEST  DIMARCCHECK
+;;;   DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN  DRONE
+;;;   FITABHD  FITABHDVER  FLOORDIM  HEMISTEP  LHD  LINCHECK
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  NORMIESTEP
+;;;   OASIS  OASISVER  PADDLE  PERPPTS  POOL  POOLDEMO
+;;;   POOLVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD
+;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
+;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
+;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  WCALST
+;;;   XFTCONV  XFTCONV-SETUP
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -19832,6 +19832,19 @@
 ;;; through exactly, how many are within tolerance, how many missed.
 ;;; The points the cutoff left out are in none of those counts.
 ;;;
+;;; WHEN A CANDIDATE WILL NOT DRAW: a fit can come out too degenerate
+;;; for AutoCAD to accept - fewer than two segments is no closed
+;;; outline, and AutoCAD answers entmake with nil rather than an error.
+;;; The tight fit is the likeliest, since it must thread every point at
+;;; *CAB-TIGHT-TOL* with no miss allowance and no curve cap, and a
+;;; survey read whole (Enter at the cutoff) is where it happens.  One
+;;; candidate failing costs only that candidate: the table marks it
+;;; "would not draw", Enter defaults to one that did, and picking the
+;;; missing one says so.  Only when NONE of them draws is that a dead
+;;; end, and it says which cutoff to try.  Nothing here is ever silent:
+;;; every run signs off naming the last step it reached, and the error
+;;; handler names that step for cancels too.
+;;;
 ;;; REDO: at the choose prompt, Redo refits without leaving the
 ;;; command.  Points can be omitted by clicking them (clicking a ringed
 ;;; one puts it back), the cutoff can move either way, straight walls,
@@ -19848,10 +19861,10 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.0")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.1")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
-                                    ; from it (v1.0 -> CABHD_MMDDYY_
-                                    ; REV10), so the filename and the
+                                    ; from it (vN.N -> CABHD_MMDDYY_
+                                    ; REVNN), so the filename and the
                                     ; banner can never disagree - bump
                                     ; it with every revision
 (setq *CAB-POOL-LAYER*   "POOL")     ; layer holding the drawn perimeter
@@ -21681,9 +21694,21 @@
 ;; Everything is judged against the tolerance the user actually typed,
 ;; so the columns compare like for like even though the three were not
 ;; built alike.
+
+;; The candidates that actually reached the screen.  A fit can come out
+;; too degenerate for AutoCAD to accept - fewer than two segments is no
+;; closed outline - and the tight one is the likeliest to, since it must
+;; thread every point at *CAB-TIGHT-TOL*.  Losing it is no reason to
+;; throw away the two that drew, so this is what the chooser works from
+;; and only an empty list is a dead end.
+(defun cab:drawn (vars / out v)
+  (foreach v vars (if (cadr v) (setq out (cons v out))))
+  (reverse out))
+
 (defun cab:compare (tour loop pts dpts tol allow
                    / prior vars v e ent lab st onv segs bad allbad first
-                     i pick idx keep ce bb hgt sel picked keyed pr res)
+                     i pick idx keep ce bb hgt sel picked keyed pr res
+                     dflt)
   (setq prior (cab:prior-fits))
   (cal:ensure-layer *CAB-OUT-LAYER* 3)
   ;; every candidate is judged against the distance the user typed, so
@@ -21732,10 +21757,21 @@
         (setq allbad bad first nil)
         (setq allbad (cab:isect allbad bad)))))
   (setq vars (reverse vars))
-  (if (null (cadr (car vars)))
-    (princ "\nCABHD: could not draw the result - is the drawing read-only?")
+  (if (null (cab:drawn vars))
     (progn
-      (princ (strcat "\n\nThree candidate fits are now drawn on layer "
+      (princ (strcat "\nCABHD: none of the " (itoa (length vars))
+                     " candidate fits would draw ("
+                     (itoa (length (car (car vars))))
+                     " segment(s) in the first)."))
+      (princ "\n  A closed outline needs at least two segments, so this is")
+      (princ "\n  nearly always the points rather than the drawing: too few")
+      (princ "\n  left after the cutoff, or points that all sit on one line.")
+      (princ (strcat "\n  Check the cutoff (All puts every point back), and"
+                     " that layer\n  " *CAB-OUT-LAYER*
+                     " is not locked or read-only.")))
+    (progn
+      (princ (strcat "\n\n" (itoa (length (cab:drawn vars)))
+                     " candidate fit(s) are now drawn on layer "
                      *CAB-OUT-LAYER*
                      ",\neach numbered on screen in its own colour:\n"))
       (princ "\n   #  segs  curves  worst off  avg all  avg off  not held  ")
@@ -21750,7 +21786,8 @@
                        (cal:pad (cab:fmt-dev (cadr st)) 9)
                        (cal:pad (cab:fmt-dev (caddr st)) 9)
                        (cal:pad (itoa (length bad)) 10)
-                       (cadddr ce)))
+                       (cadddr ce)
+                       (if (cadr v) "" "   -- would not draw")))
         (setq i (1+ i)))
       (princ (strcat "\n\n  \"not held\" = points further than "
                      (rtos tol 2 3) " from that fit."
@@ -21779,15 +21816,27 @@
       ;; a number, so a pick on screen is offered first; typing the
       ;; number still works for anyone who prefers the keyboard.
       (setq cab-phase "waiting for the choice of fit")
+      ;; Enter has to produce something that is actually on screen.  The
+      ;; middle fit - the settings as typed - stays the default exactly
+      ;; as long as it drew; only when it did not does the default move
+      ;; to the first one that did.
+      (setq dflt (if (and (nth 1 vars) (cadr (nth 1 vars)))
+                   "2"
+                   (itoa (1+ (- (length vars)
+                                (length (member (car (cab:drawn vars))
+                                                vars)))))))
       (princ "\n\n  Click the outline you want to keep, or type its number.")
       (princ "\n  Redo refits with new settings, and lets you omit points first.")
       (initget "1 2 3 All None Redo")
       (setq pick (getkword
-                   "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
+                   (strcat "\n  Keep which fit - click one, or"
+                           " [1/2/3/All/None/Redo] <" dflt ">: ")))
       (if (null pick)
-        ;; no keyword typed: give them a click, and fall back to 2
+        ;; no keyword typed: give them a click, and fall back to the
+        ;; default above
         (progn
-          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
+                                    dflt "): ")))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -21798,9 +21847,10 @@
                 (setq i (1+ i)))
               (if (null pick)
                 (progn
-                  (princ "\n  (that is not one of the three - keeping 2)")
-                  (setq pick "2"))))
-            (setq pick "2"))))
+                  (princ (strcat "\n  (that is not one of the three - keeping "
+                                 dflt ")"))
+                  (setq pick dflt))))
+            (setq pick dflt))))
       ;; anything not explicitly kept stays registered as scaffolding
       ;; and is swept when the command ends
       (cond
@@ -21813,10 +21863,12 @@
              (if (and e (entget e)) (entdel e))))
          (setq res 'REDO))
         ((= pick "All")
-         (foreach v vars
+         (foreach v (cab:drawn vars)
            (cab:temp-drop (cadr v))
            (foreach e (nth 4 v) (cab:temp-drop e)))
-         (princ "\nKeeping all three, in their preview colours.")
+         (princ (strcat "\nKeeping all "
+                        (itoa (length (cab:drawn vars)))
+                        " that drew, in their preview colours."))
          (princ "\n  (the number labels are kept too - erase them when done)"))
         ((= pick "None")
          (princ "\nAll three erased - nothing was added to the drawing."))
@@ -21832,11 +21884,16 @@
          ;; name the aim that was kept, not just its number - the three
          ;; were built to different ends and the report that follows is
          ;; read against the settings as typed
-         (if keep
-           (princ (strcat "\n  Keeping fit " pick " - "
-                          (cadddr (cadddr keep)) ".")))
-         (if (cadr keep)
+         (if (and keep (null (cadr keep)))
            (progn
+             (princ (strcat "\n  Fit " pick
+                            " never drew - there is nothing to keep."))
+             (princ "\n  Pick one the table shows on screen.")
+             (setq keep nil)))
+         (if keep
+           (progn
+             (princ (strcat "\n  Keeping fit " pick " - "
+                            (cadddr (cadddr keep)) "."))
              (cab:temp-drop (cadr keep))
              (cab:set-bylayer (cadr keep))))))
       (if keep
@@ -22076,6 +22133,12 @@
                               " released")))))))
       (T (setq ans nil)))))
 
+;; Which build is loaded - the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:CABHDVER ()
+  (princ (strcat "\nCABHD " *cabhd-version* " loaded."))
+  (princ))
+
 ;; ---- CABHD: the perimeter, and nothing but ---------------------------
 (defun c:CABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
                     ss i en ed lay typ ext nunsup nocs dall cut0 ent
@@ -22093,13 +22156,17 @@
         cab-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
-              (princ (strcat "\nCABHD stopped while "
-                             (if cab-phase cab-phase "starting up")
-                             " -- " m)))
+            ;; ALWAYS say where it stopped, cancels included: a
+            ;; command that vanishes without a word is the one thing
+            ;; nobody can debug from the other end of a phone
+            (princ (strcat "\nCABHD stopped while "
+                           (if cab-phase cab-phase "starting up")
+                           (if (and m
+                                    (/= m "Function cancelled")
+                                    (/= m "quit / exit abort")
+                                    (/= m "console break"))
+                             (strcat " -- " m)
+                             " (cancelled).")))
             (cab:temp-clear)
             (setq *error* cab-old-err)
             (princ)))
@@ -22349,7 +22416,8 @@
                           "\n  order they came out of the drawing -"
                           " usually the order they were created,"
                           "\n  but check the result before trusting it.")))
-         (setq cab-cut (cab:ask-cut dall nil)
+         (setq cab-cut  (cab:ask-cut dall nil)
+               cab-phase "applying the point cutoff"
                pts     (cab:live-pts)
                dpts    (cal:dedupe pts *CAB-EXACT-EPS*))
          (if cab-cut
@@ -22367,7 +22435,8 @@
          (setq allow (cal:ceil (* (cab:misspct) (length dpts))))
          ;; snap the declared straight-wall ends onto actual survey
          ;; points - arc and wall endpoints always sit ON points
-         (setq cab-walls nil)
+         (setq cab-phase "checking the declared walls, corners and holds"
+               cab-walls nil)
          (foreach w rawwalls
            (setq w1 (cab:nearest (car w) dpts)
                  w2 (cab:nearest (cadr w) dpts))
@@ -22417,7 +22486,18 @@
          ;; work out the mode, then hand all three modes to the same
          ;; compare-and-choose step
          (setq tour nil loop nil ok T)
+         ;; below three points there is no perimeter to draw in ANY
+         ;; mode; say so here rather than let the fitter hand back an
+         ;; outline AutoCAD will refuse
+         (if (< (length dpts) 3)
+           (progn
+             (princ (strcat "\nCABHD: only " (itoa (length dpts))
+                            " point(s) are in the fit and a perimeter"
+                            " needs at least 3."))
+             (princ "\n  Run it again and give a higher cutoff, or All.")
+             (setq ok nil)))
          (cond
+           ((null ok) nil)
            ((null segs)
             ;; ---- POINTS-ONLY: order the points ourselves ----------
             (princ "\nNo POOL geometry selected - ordering the points automatically.")
@@ -22560,6 +22640,10 @@
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (cab:temp-clear)
+  ;; and sign off, naming the last step reached: a run that ends with
+  ;; nothing on screen still has to say that it ended on purpose
+  (princ (strcat "\nCABHD done (last step: "
+                 (if cab-phase cab-phase "start") ")."))
   (setq *error* cab-old-err)   ; restore the previous error handler
   (princ))
 
@@ -22568,6 +22652,7 @@
                " loaded.  Type CABHD to fit a pool perimeter through"
                " the surveyed"))
 (princ "\npoints, up to the point number where the pool edge stops.")
+(princ "\nCABHDVER prints the version.")
 (princ)
 
 
@@ -53460,5 +53545,5 @@
 
 
 ;;; ======================================================================
-(princ (strcat "\nCALOFIN: shared build loaded - 91 commands in one session."))
+(princ (strcat "\nCALOFIN: shared build loaded - 92 commands in one session."))
 (princ)
