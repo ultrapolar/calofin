@@ -14,7 +14,8 @@ round.
   been misread as. Each candidate is drawn **yellow** on the POINTS
   layer and tagged by the tape it moves and how far: `1A`, `-3B`.
   Type the tag you believe and the point moves there, renamed, ringed
-  and noted.
+  and noted — **one point per run**: moving a point is a decision, not
+  a sweep, so the command ends as soon as that point is settled.
 
 ## What it does
 
@@ -140,9 +141,14 @@ generated and five collapsed into the sweep: `18'` read as `16'` or
 `13'`, and `21'` read as `24'`, `27'` or `12'`, are all whole feet the
 sweep already carries.
 
-Answer with the number, or `Pick` and click the one you want. `None`
-(the Enter answer) leaves the point alone and keeps the two
-dimensions — `ABMOVE` has then done exactly what `ABFIND` does.
+Answer with a tag, or `Pick` and click the one you want. `None` (the
+Enter answer) leaves the point alone and keeps the two dimensions —
+`ABMOVE` has then done exactly what `ABFIND` does.
+
+Either way that is the end of the run. `ABMOVE` settles **one** point
+and stops; run it again for the next one. `ABFIND`, which only
+measures, keeps asking until you press Enter. Enter at `ABMOVE`'s
+point number cancels the run outright.
 
 Pick one and four things happen:
 
@@ -167,9 +173,8 @@ Pick one and four things happen:
    sheet measures the position it is claiming. The old reading is not
    lost — the note carries it.
 
-`Pt.17m` joins the lookup as it is made, so you can name it in a later
-round of the same run — and Back forgets it again along with the rest
-of its round.
+`Pt.17m` is a survey point like any other once it is made, so the next
+`ABFIND` or `ABMOVE` run finds it by its new number.
 
 ## Finding the stakes
 
@@ -200,15 +205,15 @@ When a drawing carries a duplicate number, the first match wins.
 
 The shared Back convention (see the root README) applies:
 
-* `B`, `BACK`, `U` or `UNDO` (any case) typed at the **point number**
-  un-does the whole of the last round — its dimensions, and, if it
-  moved a point, the moved point, the ring and the note, with the
-  original dimensions put back (`Stepping back one point.`, or
-  `Already at the first point.` when there is nothing left);
-* `Back` at **which suggestion** takes that round's dimensions away and
-  re-asks the number;
-* `Back` at **the note** re-asks which suggestion, with the
-  suggestions still on screen.
+* in `ABFIND`, `B`, `BACK`, `U` or `UNDO` (any case) typed at the
+  **point number** un-draws the last pair of ties (`Stepping back one
+  point.`, or `Already at the first point.` when there is nothing
+  left);
+* in `ABMOVE`, `Back` at **which suggestion** takes that point's
+  dimensions away and re-asks the number, and `Back` at **the note**
+  re-asks which suggestion with the suggestions still on screen.
+  `ABMOVE`'s first question has nothing to go back to, and once the
+  point is settled the run is over — to undo a move, `U`.
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -221,11 +226,12 @@ error, or Esc.
    commands come with the one file.
 2. `ABFIND` → `Point number <Enter = done>:` → `17` → the two ties are
    drawn → next number, or Enter to finish.
-3. `ABMOVE` → `Point number <Enter = done>:` → `17` → read the table
+3. `ABMOVE` → `Point number (Enter to cancel):` → `17` → read the table
    (`F2` opens the text window if it runs off the command line) →
    `Move Pt.17 - type a tag from the table [Pick/None/Back] <None>:`
    → a tag such as `-1B`, or `Pick` and click the marker → `Place the
-   note for Pt.17 [Auto/Back] <Auto>:` → Enter.
+   note for Pt.17 [Auto/Back] <Auto>:` → Enter, and the command is
+   done.
 4. `ABFINDVER` prints the loaded version.
 
 ## Tunables
@@ -293,6 +299,8 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.3** — `ABMOVE` settles one point and ends; `ABFIND` still
+  loops. Enter at `ABMOVE`'s point number cancels.
 * **v1.2** — the suggestions are drawn yellow (`abf:*sug-color*`) and
   tagged by the tape they move and how far (`1A`, `-3B`, `R1A`) rather
   than numbered 1..n; the readings that move A are listed first.

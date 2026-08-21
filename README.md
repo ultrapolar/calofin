@@ -92,7 +92,7 @@ changing a routine.
 | `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points, then a standard-hopper bottom |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
-| `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each. `ABMOVE` also offers every place the point lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow and tagged by the tape they move (`1A`, `-3B`) - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
+| `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each. `ABMOVE` takes one point and also offers every place it lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow and tagged by the tape they move (`1A`, `-3B`) - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
@@ -134,7 +134,7 @@ never offers Back.
 
 In loops that draw as they go - `PERPPTS`/`CPERPPTS` offset points,
 `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` treads, `ABHD`/`ADAB` slope
-waypoints, `CDCALLOUT` dimensions, `ABFIND`/`ABMOVE` ties - Back
+waypoints, `CDCALLOUT` dimensions, `ABFIND` ties - Back
 also removes the
 just-committed point or step (its lines and its dimensions) before
 re-asking. `BPCALLOUT` works by
