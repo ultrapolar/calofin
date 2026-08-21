@@ -8,6 +8,7 @@ Script values: numbers answer distance prompts, strings answer keyword
 prompts (or NA/Back), None is Enter, tuples are picked points.
 """
 
+import math as _m
 import os
 import sys
 
@@ -57,6 +58,26 @@ def dimloc(c):
     (DIMLINEAR carries an _H/_V/_R keyword between the ext-line
     origins and the location, so a fixed index won't do)."""
     return [x for x in c if isinstance(x, list)][-1]
+
+
+def reportrow(vm, label):
+    """One report row as its column strings: label, target, actual, delta
+    (everything drawn on the row's own baseline, left to right)."""
+    txt = drawn(vm, 'TEXT', 'POOL-NOTES')
+    hit = [d for d in txt if d.get(1) == label]
+    assert hit, f"no report row {label!r}"
+    y = hit[0][10][1]
+    return [d.get(1) for d in sorted((d for d in txt
+                                      if abs(d[10][1] - y) < 0.01),
+                                     key=lambda d: d[10][0])]
+
+
+def hasseg(pa, pb, tol=0.01):
+    """Is this segment among the ones the scenario last collected?
+    Reads the module-level `segs` each block rebuilds for its shape."""
+    return any((_m.dist(a, pa) < tol and _m.dist(b, pb) < tol) or
+               (_m.dist(a, pb) < tol and _m.dist(b, pa) < tol)
+               for a, b in segs)
 
 
 BASE = [(0.0, 0.0, 0.0)]      # insertion point pick
@@ -122,7 +143,6 @@ vm = run(["Insquare", "Oval"] + BASE +
 assert drawn(vm, 'ARC', 'POOL')
 # in-square oval exterior per the field sheet: no bottom-side dim (T
 # reads once, on top) and the tip-to-tip B sits ABOVE the pool
-import math as _m
 _dc = [c for c in dimcalls(vm)]
 assert not any(abs(c[1][1]) < 0.01 and abs(c[2][1]) < 0.01 for c in _dc), \
     "bottom side must not be dimensioned in-square"
@@ -130,6 +150,68 @@ _bt = [c for c in _dc
        if abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 0.5]
 assert _bt and all(dimloc(c)[1] > 240.0 for c in _bt), _bt
 print("   NA radius derived; tangent hopper end drawn; B on top, no bottom dim")
+
+print("== R4b. oval, in-square: side NA -- read back off the overall ==")
+# the radius is NA too, so both ends are taken tangent to the box the
+# pool sits in (a semicircle each) and the side is overall - width
+vm = run(["Insquare", "Oval"] + BASE +
+         ["NA", 240.0,            # side pair NOT taped; end pair
+          480.0, "NA",            # total; radius NA -> semicircle ends
+          "No"],                  # no bottom
+         "R4b")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert len(segs) == 2 and len(drawn(vm, 'ARC', 'POOL')) == 2, segs
+assert hasseg((0.0, 0.0), (240.0, 0.0)), segs        # 480 - 240 = 240
+assert hasseg((0.0, 240.0), (240.0, 240.0)), segs
+# tip to tip still measures the overall that was given
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 480.0) < 0.01 for c in dimcalls(vm))
+# a side that was never taped reports N/A, like any other NA
+assert reportrow(vm, "TOP SIDE (D-C)")[1] == "N/A"
+assert reportrow(vm, "BOTTOM SIDE (A-B)")[1] == "N/A"
+assert reportrow(vm, "LEFT END (A-D)")[1] == "240.00"
+print("   overall less the width gives the side; ends come out semicircles")
+
+print("== R4c. oval, out-of-square: both sides NA against measured radii ==")
+# sag(200, 240) = 40 a side, so the body is 480 - 80 = 400 both sides
+vm = run(["Outofsquare", "Oval"] + BASE +
+         ["NA", "NA", 240.0, 240.0,   # TOP and BOTTOM not taped; ends
+          480.0, 200.0, 200.0,        # total; both radii measured
+          "NA", "NA",                 # cross dims not taped
+          "No"],
+         "R4c")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((0.0, 0.0), (400.0, 0.0)), segs
+assert hasseg((0.0, 240.0), (400.0, 240.0)), segs
+assert reportrow(vm, "TOTAL LENGTH")[1] == "480.00"
+print("   a measured radius spends its own bulge out of the overall")
+
+print("== R4d. oval, out-of-square: one side NA, mirrored about the midline ==")
+# the overall pins the MIDLINE at 400, so a 404 top makes the bottom 396
+vm = run(["Outofsquare", "Oval"] + BASE +
+         [404.0, "NA", 240.0, 240.0,  # TOP taped, BOTTOM not
+          480.0, 200.0, 200.0,
+          "NA", "NA",
+          "No"],
+         "R4d")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+_L = sorted(_m.dist(a, b) for a, b in segs)
+assert len(_L) == 2 and abs(_L[0] - 396.0) < 0.05 and abs(_L[1] - 404.0) < 0.05, _L
+assert reportrow(vm, "TOP SIDE (D-C)")[1] == "404.00"     # taped, so a target
+assert reportrow(vm, "BOTTOM SIDE (A-B)")[1] == "N/A"     # derived, so none
+print("   the taped side stands; the missing one closes the overall")
+
+print("== R4e. oval: a side NA makes the overall compulsory ==")
+vm = run(["Insquare", "Oval"] + BASE +
+         ["NA", 240.0,            # side pair NOT taped
+          "NA", "NA",             # total NA as well, radius NA
+          480.0,                  # ... so the total is asked again, NA gone
+          "No"],
+         "R4e")
+_tot = [p for p, a in vm.prompts if "Total pool length" in p]
+assert len(_tot) == 2 and "NA" not in _tot[1], _tot
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((0.0, 0.0), (240.0, 0.0)), segs
+print("   nothing to close the chain -- the overall is re-asked, no NA")
 
 print("== R5. grecian, out-of-square, Measured, Center detail ==")
 vm = run(["Outofsquare", "Grecian"] + BASE +
@@ -364,12 +446,6 @@ assert drawn(vm, 'ARC', 'POOL'), "roman deep end must draw an arc"
 # geometry: ext(roman)=S=40 so the body is 440 long; the grecian cut
 # runs from the side start (390,0) up to the wall at (440,40)
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
-
-
-def hasseg(pa, pb, tol=0.01):
-    return any((_m.dist(a, pa) < tol and _m.dist(b, pb) < tol) or
-               (_m.dist(a, pb) < tol and _m.dist(b, pa) < tol)
-               for a, b in segs)
 
 
 assert hasseg((390.0, 0.0), (440.0, 40.0)), "grecian shallow cut"

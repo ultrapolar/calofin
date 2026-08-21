@@ -106,6 +106,8 @@ are added to the guide the moment the last perimeter answer is in.
 Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
 shows `N/A` for its target/delta (the as-drawn value is still listed).
+An **oval's side lengths** take `NA` as well — the overall and the
+width give them back (see *Oval ends*).
 
 ### Rectangle corners (Square / Rounded / Diag)
 
@@ -878,6 +880,27 @@ something has to close the chain.) An **in-square** oval asks for the
 end radius **once** and uses it at both ends, so "both radii `NA`" is
 a single `NA` there. The radii and the overall each get a report row,
 so any derived or clamped value is visible.
+
+**The side lengths may be `NA` too** — the same chain read the other
+way. A sheet that gives the overall and the width but never taped the
+straight side is still complete: each end spends its own bulge out of
+the overall and what is left over is the body.
+
+* a radius that **was** measured spends its own sagitta;
+* one that wasn't is taken **tangent to the box the pool sits in** —
+  the arc meets the sides square, which is the semicircle a true oval
+  has — so the side is simply **overall − width**;
+* **both sides `NA`** → the body is that length and the oval comes out
+  symmetric;
+* **one side `NA`** (out-of-square) → the overall pins the **midline**
+  between the two ends, so the missing side is the derived body
+  mirrored about the one that was taped: a 40'-0" overall on a 20'-0"
+  width with a 20'-4" top gives a 19'-8" bottom.
+
+The overall stops accepting `NA` once a side is `NA` (something has to
+close the chain), and a side read back this way reports **`N/A`** as
+its target like any other measurement that was never taken — the
+`ACTUAL` column shows what it came out at.
 
 Nothing is drawn but the pool: the end chords and the old radius
 construction lines are gone, so an oval is two side lines plus the two

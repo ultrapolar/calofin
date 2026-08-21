@@ -59,7 +59,13 @@
 ;;;
 ;;;  Oval:    adds a radius line perpendicular to each end and a
 ;;;           three-point arc (end corner -> radius tip -> other end
-;;;           corner) on both ends, plus a total-length check.
+;;;           corner) on both ends, plus a total-length check.  A SIDE
+;;;           length that was not taped may be answered NA: the
+;;;           overall spends its length on the two end bulges and the
+;;;           straight body, so the side reads back off it.  An end
+;;;           radius that was not given either is taken TANGENT to the
+;;;           box around the pool -- the semicircle a true oval has --
+;;;           which makes the side the overall less the width.
 ;;;  Grecian: 8-corner pool (body A/B/C/D plus angled-end tips
 ;;;           LT/LB left and RT/RB right).  Prompts for the six body
 ;;;           sides/ends, the four end diagonals and two end widths,
@@ -102,7 +108,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "081926 REV02")
+(setq pool:*version* "082126 REV03")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -4080,6 +4086,22 @@
   (setq half (* 0.5 c))
   (if (<= s 1.0e-9) nil (/ (+ (* s s) (* half half)) (* 2.0 s))))
 
+;; The straight body the overall leaves -- the same chain read the
+;; other way, for the sheet that gives the overall and the width but
+;; never taped the sides.  Each end spends its own bulge out of the
+;; overall and what is left over is the side.  A radius that WAS given
+;; sets its own bulge; one that was not is taken TANGENT to the box the
+;; pool sits in -- an arc that meets the sides square, i.e. the
+;; semicircle s = c/2, which is exactly what a true oval is.  Returns
+;; nil when the overall does not reach past the two ends at all.
+(defun pool:ovalaxis (totl lraw rraw lc rc / v)
+  (if totl
+      (progn
+        (setq v (- totl
+                   (+ (if lraw (pool:sag lraw lc) (* 0.5 lc))
+                      (if rraw (pool:sag rraw rc) (* 0.5 rc)))))
+        (if (> v 1.0e-6) v nil))))
+
 ;; Resolve the two end arcs against the overall length.  The overall
 ;; closes the chain  s_left + axis + s_right = TOTAL, so any one of
 ;; TOTAL / R1 / R2 may be NA:
@@ -4123,7 +4145,7 @@
 ;; Full guided flow for the quad-based pools: preview, prompts, fit,
 ;; draw, dimension and report.  Caller handles sysvars/undo/zoom.
 (defun pool:quadflow (ptype / oldclay pv arcs
-                             tp bo le ri dac dbd totl lrad rrad
+                             tp bo le ri dac dbd totl lrad rrad tpna bona
                              corners cmode anycut cc prevty prevsz lbl
                              gq gcorners xmeas tm hl val m rpa rpb pass
                              ans xitems cc2
@@ -4143,10 +4165,14 @@
 
   ;; in-square: opposing sides are equal, ask each pair once
   (princ "\n(Back re-asks the previous question, right back to the start)")
-  (defun qf:sides ( / ans)
+  ;; An OVAL's sides are the one pair that may be NA: the overall and
+  ;; the two ends read them back (qf:ovalsides).  The ends themselves
+  ;; are always required -- they are the chords the arcs spring from.
+  (defun qf:sides ( / ans sk)
+  (setq sk (if (= ptype "Oval") 'NAX 'REQ))
   (if pool:*insq*
       (setq ans (pool:askseqb
-                  (list (list 'tp 'REQ "Side length (top & bottom)"
+                  (list (list 'tp sk "Side length (top & bottom)"
                               (append (cdr (assoc 'dc pv)) (cdr (assoc 'ab pv))
                                       (pool:lbl pv '(lA lB lC lD))))
                         (list 'le 'REQ "End length (left & right)"
@@ -4156,9 +4182,9 @@
             tp (pool:sq ans 'tp) bo tp
             le (pool:sq ans 'le) ri le)
       (setq ans (pool:askseqb
-                  (list (list 'tp 'REQ "Side length TOP (D-C)"
+                  (list (list 'tp sk "Side length TOP (D-C)"
                               (append (cdr (assoc 'dc pv)) (pool:lbl pv '(lD lC))))
-                        (list 'bo 'REQ "Side length BOTTOM (A-B)"
+                        (list 'bo sk "Side length BOTTOM (A-B)"
                               (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
                         (list 'le 'REQ "End length LEFT (A-D)"
                               (append (cdr (assoc 'da pv)) (pool:lbl pv '(lA lD))))
@@ -4167,6 +4193,8 @@
                   nil)
             tp (pool:sq ans 'tp) bo (pool:sq ans 'bo)
             le (pool:sq ans 'le) ri (pool:sq ans 'ri)))
+    ;; re-flagged on every run, so backing in and out re-derives cleanly
+    (setq tpna (null tp) bona (null bo))
     ans)
 
   ;; -------- oval ends.  Any ONE of total / left radius / right radius
@@ -4198,12 +4226,56 @@
               (setq totl (pool:sq ans 'tot)
                     lrad (pool:sq ans 'lr)
                     rrad (if pool:*insq* lrad (pool:sq ans 'rr)))
-              (if (and (null totl) (or (null lrad) (null rrad)))
+              (if (and (null totl)
+                       (or (null lrad) (null rrad) tpna bona))
                   (progn
-                    (princ "\nThe total length is needed when an end radius is NA.")
+                    (princ (if (or tpna bona)
+                               "\nThe total length is needed when a side length is NA."
+                               "\nThe total length is needed when an end radius is NA."))
                     (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
                                           (cdr (assoc 'tot pv))))))
+              (if (or tpna bona) (qf:ovalsides))
               nil)))))
+
+  ;; -------- sides that were never taped.  An oval spends its overall
+  ;; on the two end bulges plus the straight body, so a side that was
+  ;; NA reads back out of the overall and the ends (pool:ovalaxis --
+  ;; a radius that was not given is taken tangent, i.e. a semicircle,
+  ;; so overall - width is the side).  BOTH NA -> the body is that
+  ;; length and the oval comes out symmetric; ONE NA -> the overall
+  ;; pins the MIDLINE between the ends, so the missing side is the
+  ;; derived length mirrored about the one that was measured.
+  (defun qf:ovalsides ( / ax v)
+    (setq ax (pool:ovalaxis totl lrad rrad le ri))
+    (cond
+      ;; the overall does not even reach past the two ends -- nothing
+      ;; to read the side out of, so it has to be measured
+      ((null ax)
+       (princ "\nThe total length does not reach past the ends -- measure the side.")
+       (if pool:*insq*
+           (setq tp (pool:askh "Side length (top & bottom)"
+                               (append (cdr (assoc 'dc pv))
+                                       (cdr (assoc 'ab pv))))
+                 bo tp)
+           (progn
+             (if tpna (setq tp (pool:askh "Side length TOP (D-C)"
+                                          (cdr (assoc 'dc pv)))))
+             (if bona (setq bo (pool:askh "Side length BOTTOM (A-B)"
+                                          (cdr (assoc 'ab pv)))))))
+       (setq tpna nil bona nil))
+      ((and tpna bona)
+       (setq tp ax bo ax)
+       (princ (strcat "\nSide length not measured -- " (pool:fmtlen ax)
+                      " off the overall and the ends.")))
+      (t
+       (setq v (- (* 2.0 ax) (if tpna bo tp)))
+       (if (<= v 1.0e-6)
+           (progn
+             (pool:valnote "SIDE AND TOTAL LENGTH DISAGREE - MISSING SIDE TAKEN OFF THE TOTAL")
+             (setq v ax)))
+       (if tpna (setq tp v) (setq bo v))
+       (princ (strcat "\n" (if tpna "TOP" "BOTTOM") " side not measured -- "
+                      (pool:fmtlen v) " closes the overall against the other side.")))))
 
   ;; -------- corner treatments (rectangle only; side lengths are to
   ;; the TRUE corner, treatments cut inward)
@@ -4473,8 +4545,11 @@
   ;; the corners of the drawing itself -- see the pool:minimap call
 
   ;; ------------------------------------------------ report table
-  (setq rows (list (list "TOP SIDE (D-C)" tp (cadr meas))
-                   (list "BOTTOM SIDE (A-B)" bo (car meas))
+  ;; a side that was read back out of the overall was never measured,
+  ;; so it reports N/A like any other NA -- the ACTUAL column shows
+  ;; what it came out at
+  (setq rows (list (list "TOP SIDE (D-C)" (if tpna nil tp) (cadr meas))
+                   (list "BOTTOM SIDE (A-B)" (if bona nil bo) (car meas))
                    (list "LEFT END (A-D)" le (caddr meas))
                    (list "RIGHT END (B-C)" ri (cadddr meas))))
   ;; each cross measurement vs the actual distance between its

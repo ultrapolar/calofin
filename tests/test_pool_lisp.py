@@ -1142,7 +1142,7 @@ run_pool(ac)                         # and stays correct thereafter
 assert ac.vars["OSMODE"]==4133 and ac.vars["CMDECHO"]==1
 print("   crash between save and restore no longer wipes the user's snaps")
 
-print("== 49. oval ends: true radii, NA chain, both-arcs-equal in-square ==")
+print("== 49. oval ends: true radii, NA chain, sides read back off the overall ==")
 def sag(r,c):
     half=c/2.0
     return half if r<=half else r-math.sqrt(r*r-half*half)
@@ -1189,7 +1189,40 @@ assert abs(sl-sr)<1e-9 and lr!=rr and not notes
 # an overall too short for the body falls back to semicircles + a note
 lr,rr,sl,sr,tot,notes = ovalends(360.0,None,None,360.0,120.0,120.0)
 assert notes and abs(lr-60.0)<1e-9 and abs(rr-60.0)<1e-9
-print("   radii round-trip through the arc; NA closes on the overall")
+
+# the same chain read the OTHER way (pool:ovalaxis): the sides were
+# never taped, so the overall and the ends give them back
+def ovalaxis(totl,lraw,rraw,lc,rc):
+    if totl is None: return None
+    v = totl - ((sag(lraw,lc) if lraw is not None else lc/2.0) +
+                (sag(rraw,rc) if rraw is not None else rc/2.0))
+    return v if v>1e-6 else None
+
+# no radius either -> both ends tangent to the box the pool sits in,
+# i.e. a semicircle each, so the side is simply overall - width
+assert abs(ovalaxis(480.0,None,None,240.0,240.0)-240.0)<1e-9
+# and that side puts the ends back exactly where ovalends wants them
+lr,rr,sl,sr,tot,notes = ovalends(480.0,None,None,240.0,240.0,240.0)
+assert not notes and abs(tot-480.0)<1e-9
+assert abs(sl-120.0)<1e-9 and abs(lr-120.0)<1e-9   # R = half the width
+# a radius that WAS measured spends its own bulge instead
+assert abs(sag(200.0,240.0)-40.0)<1e-9
+assert abs(ovalaxis(480.0,200.0,200.0,240.0,240.0)-400.0)<1e-9
+# unequal ends each spend their own half; ovalends splits the leftover
+# evenly rather than per end, but the chain closes on the same overall
+ax = ovalaxis(480.0,None,None,240.0,200.0)
+assert abs(ax-(480.0-120.0-100.0))<1e-9
+lr,rr,sl,sr,tot,notes = ovalends(480.0,None,None,ax,240.0,200.0)
+assert not notes and abs(tot-480.0)<1e-9
+# one side taped and one not: the overall pins the MIDLINE, so the
+# missing side is the derived body mirrored about the measured one
+assert abs((2.0*ovalaxis(480.0,200.0,200.0,240.0,240.0)-404.0)-396.0)<1e-9
+# nothing to read a side out of: no overall, or one that does not even
+# reach past the two ends
+assert ovalaxis(None,200.0,200.0,240.0,240.0) is None
+assert ovalaxis(240.0,None,None,240.0,240.0) is None
+print("   radii round-trip through the arc; NA closes on the overall,")
+print("   and an untaped side reads back out of it")
 
 print("== 50. special bottoms (wedge / modified flat / slope / sloping shallow) ==")
 # Mirrors of pool:btmspec / pool:btmbrks and the hopcalc plan points,
