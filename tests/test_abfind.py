@@ -166,6 +166,19 @@ def live(vm, etype, layer=None):
     return out
 
 
+def ever(vm, etype, layer=None):
+    """Every entity of a type ever made, erased ones included."""
+    out = []
+    for e in vm.entities:
+        d = _alist_dict(vm.entdata[e])
+        if d.get(0) != etype:
+            continue
+        if layer is not None and str(d.get(8, '')).upper() != layer.upper():
+            continue
+        out.append(d)
+    return out
+
+
 def dims(vm):
     return [d for _, d in live(vm, 'DIMENSION')]
 
@@ -374,7 +387,7 @@ def test_abmove_suggestions_drawn():
     run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'suggestions')
     got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
                    f"'({P17[0]} {P17[1]} 0.0))")
-    assert len(got) == 45, len(got)          # 22 A-held + 23 B-held
+    assert len(got) == 45, len(got)          # 23 B-held + 22 A-held
     # ... and none of them left in the drawing once the round is over
     assert sug_positions(vm) == [], sug_positions(vm)
     assert texts(vm, 'POINTS') == [], texts(vm, 'POINTS')
@@ -390,7 +403,7 @@ def test_abmove_two_groups():
     got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
                    f"'({P17[0]} {P17[1]} 0.0))")
     held = [c[1] for c in got]
-    assert held == ['A'] * 22 + ['B'] * 23, held        # grouped, not mixed
+    assert held == ['B'] * 23 + ['A'] * 22, held        # grouped, not mixed
     for c in got:
         p = (c[5][0], c[5][1])
         if c[1] == 'A':                                 # A held exactly...
@@ -399,7 +412,7 @@ def test_abmove_two_groups():
         else:
             assert near(math.dist(B, p), PB), c
             assert near(math.dist(A, p), c[4]), c
-    for g in (got[:22], got[22:]):
+    for g in (got[:23], got[23:]):
         assert [round(c[0], 6) for c in g] == sorted(round(c[0], 6)
                                                     for c in g), g
     print("ok  ABMOVE offers two groups, each holding its own tape exactly")
@@ -417,11 +430,91 @@ def test_abmove_reaches_ten_feet_each_way():
     print("ok  ABMOVE sweeps 10 feet up and 10 down, per held stake")
 
 
+def test_abmove_tags():
+    """Every suggestion is named for the tape it moves and by how far."""
+    vm = newvm()
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    tags = [c[6] for c in got]
+    assert len(set(tags)) == len(tags), tags          # a tag names one place
+    for c in got:
+        assert c[6].endswith(c[2]), c                 # ... the tape it MOVES
+    # the sweep is named by the feet it moved, up and down
+    for letter, was in (('A', PA), ('B', PB)):
+        step = {c[6]: round((c[4] - was) / 12.0, 6)
+                for c in got if c[2] == letter and not c[6].startswith('R')}
+        assert step == {f'{k}{letter}': float(k)
+                        for k in list(range(1, 11)) + list(range(-10, 0))}, step
+    # a reading that is not a whole foot is R1, R2 ... in the same order
+    assert [c[6] for c in got if c[6].startswith('R')] == \
+        ['R1A', 'R2A', 'R3A', 'R1B', 'R2B'], tags
+    # R1A is 21'-1" read as 21'-4", the nearest look-alike of A
+    r1a = [c for c in got if c[6] == 'R1A'][0]
+    assert near(r1a[4], PA + 3.0), r1a
+    print("ok  tags name the moved tape: 1A -1A 2A ... and R1A for a"
+          " look-alike")
+
+
+def test_abmove_tag_order_is_stable():
+    """Up before down at the same miss - never 2B before -2B one run
+    and after it the next."""
+    vm = newvm()
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    for letter in ('A', 'B'):
+        sweep = [c[6] for c in got
+                 if c[2] == letter and not c[6].startswith('R')]
+        assert sweep == [f'{s}{k}{letter}'
+                         for k in range(1, 11) for s in ('', '-')], sweep
+    print("ok  the sweep always reads 1, -1, 2, -2 ... in both groups")
+
+
+def test_abmove_markers_are_yellow():
+    """The suggestions are yellow, so they never read as real points."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'yellow')
+    marks = (ever(vm, 'POINT', 'POINTS') + ever(vm, 'CIRCLE', 'POINTS')
+             + ever(vm, 'TEXT', 'POINTS'))
+    assert len(marks) == 45 * 3, len(marks)      # a point, a ring, a tag
+    assert all(m.get(62) == 2 for m in marks), \
+        [m for m in marks if m.get(62) != 2][:2]
+    assert sorted(m[1] for m in ever(vm, 'TEXT', 'POINTS'))[:3] == \
+        ['-10A', '-10B', '-1A'], ever(vm, 'TEXT', 'POINTS')[:3]
+    print("ok  ABMOVE draws its suggestions yellow, tag and all")
+
+
+def test_abmove_the_marks_it_keeps_are_bylayer():
+    """What ABMOVE leaves behind is the drawing's own colour, not yellow."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, None], 'bylayer')
+    ring = live(vm, 'CIRCLE', 'FGStep')[0][1]
+    note = live(vm, 'TEXT', 'FGStep')[0][1]
+    moved = live(vm, 'INSERT', 'POINTS')[-1][1]
+    for d in (ring, note, moved):
+        assert 62 not in d, d
+    print("ok  the ring, the note and the moved point stay ByLayer")
+
+
+def test_abmove_prompt_stays_short():
+    """Forty-five tags would swamp the command line, so the bracket
+    shows only the words that are not already in the table."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'prompt')
+    asked = [q for q, _ in vm.prompts if 'type a tag' in q]
+    assert len(asked) == 1, asked
+    assert asked[0].endswith('[Pick/None/Back] <None>: '), asked[0]
+    assert '1A' not in asked[0], asked[0]
+    print("ok  ABMOVE's choice prompt shows Pick/None/Back, not 45 tags")
+
+
 def test_abmove_moves_the_point():
     """Pick one and the point moves, is renamed, ringed and noted."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '1', None, None], 'move')
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, None], 'move')
 
     # 1) a new point numbered 17m, on POINTS, where the suggestion was
     ins = [(e, d) for e, d in live(vm, 'INSERT', 'POINTS')]
@@ -460,7 +553,8 @@ def test_abmove_moves_the_point():
 def test_abmove_note_placed_by_hand():
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '2', (900.0, 900.0, 0.0), None], 'note')
+    run(vm, 'c:ABMOVE', [pts, '17', 'R2B', (900.0, 900.0, 0.0), None],
+        'note')
     note = [(e, d) for e, d in live(vm, 'TEXT', 'FGStep')]
     assert len(note) == 1 and pt3(note[0][1][10]) == (900.0, 900.0), note
     assert note[0][1][40] == 6.0, note[0][1]
@@ -480,7 +574,7 @@ def test_abmove_pick_on_screen():
         'pick')
     ins = live(vm, 'INSERT', 'POINTS')
     assert pt3(ins[-1][1][10]) == pt3(want), ins[-1][1]
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"']
     print("ok  ABMOVE a click on a suggestion picks it")
 
 
@@ -509,7 +603,7 @@ def test_abmove_back_from_the_note():
     """Back at the note re-asks the choice, suggestions still up."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '1', 'Back', 'None', None], 'back 3')
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', 'Back', 'None', None], 'back 3')
     assert texts(vm, 'FGStep') == []
     assert len(dims(vm)) == 2, dims(vm)
     assert sug_positions(vm) == []
@@ -520,7 +614,7 @@ def test_abmove_back_undoes_a_move():
     """Back at the point number puts a moved point all the way back."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '1', None, 'b', None], 'undo move')
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, 'b', None], 'undo move')
     assert texts(vm, 'FGStep') == []
     assert live(vm, 'CIRCLE', 'FGStep') == []
     assert len(live(vm, 'INSERT', 'POINTS')) == 3        # 17m is gone
@@ -535,7 +629,7 @@ def test_abmove_without_the_block():
     """No ab_pt block in the drawing: a POINT and a label instead."""
     vm = newvm(block=False)
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '1', None, None], 'no block')
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, None], 'no block')
     pointed = live(vm, 'POINT', 'POINTS')
     assert len(pointed) == 1, pointed
     assert texts(vm, 'POINTS') == ['17m'], texts(vm, 'POINTS')
@@ -557,7 +651,7 @@ def test_abmove_moved_point_is_tieable():
     """Pt.17m can be named in the same run, and Back forgets it again."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '1', None, '17m', 'None', None],
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, '17m', 'None', None],
         'tie the moved point')
     ds = dims(vm)
     assert len(ds) == 4, ds                    # the move's pair, then 17m's
@@ -565,7 +659,7 @@ def test_abmove_moved_point_is_tieable():
     # and Back all the way out leaves nothing of either round
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', '1', None, 'b', '17m', 'None', None],
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, 'b', '17m', 'None', None],
         'forget the moved point')
     assert len(dims(vm)) == 2, dims(vm)        # 17m is unknown again
     assert pt3(dims(vm)[0][14]) == pt3(P17), dims(vm)
@@ -591,7 +685,7 @@ def test_abmove_cap():
     got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
                    f"'({P17[0]} {P17[1]} 0.0))")
     assert len(got) == 8, got
-    assert [c[1] for c in got] == ['A'] * 4 + ['B'] * 4, got
+    assert [c[1] for c in got] == ['B'] * 4 + ['A'] * 4, got
     assert [round(c[0], 3) for c in got[:4]] == sorted(round(c[0], 3)
                                                       for c in got[:4]), got
     print("ok  the suggestion cap applies per held stake, nearest miss first")

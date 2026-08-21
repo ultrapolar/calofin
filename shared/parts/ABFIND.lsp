@@ -43,15 +43,22 @@
 ;;;           4/9, 7/9), in the inches or in the feet
 ;;;         two feet digits changed places            21' -> 12'
 ;;;
-;;;   Both ways round, as two groups: A held while B's reading moves,
-;;;   then B held while A's moves.  Nothing further than
+;;;   Both ways round, as two groups: the readings that move A (B
+;;;   held), then the ones that move B.  Nothing further than
 ;;;   abf:*max-shift* (10 feet, the reach of the foot sweep) is
 ;;;   offered, and a reading the held tape can no longer reach has no
 ;;;   crossing and is left out.  A look-alike that lands on a whole
-;;;   foot is already in the sweep and is not listed twice.  The
-;;;   candidates are drawn on the POINTS layer, numbered on screen and
-;;;   listed on the command line nearest miss first within each group,
-;;;   and you pick one by number or by clicking it.
+;;;   foot is already in the sweep and is not listed twice.
+;;;
+;;;   Every suggestion carries a TAG, which is both its label on screen
+;;;   and the answer you type: the moved tape's letter after the number
+;;;   of feet it moved -- 1A, 2A, -1A, -2A for the sweep on A, 1B, -1B
+;;;   for the sweep on B -- or R1A, R2A for a look-alike reading of A
+;;;   that is not a whole foot out, in the same nearest-first order.
+;;;   The candidates are drawn on the POINTS layer in abf:*sug-color*
+;;;   (yellow), so they never read as the drawing's own points, and
+;;;   listed on the command line nearest miss first within each group.
+;;;   Type a tag, or Pick and click the marker you want.
 ;;;
 ;;;   Picking one:
 ;;;     * a new point is made there, numbered "17m" -- the original
@@ -113,7 +120,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.1")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.2")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -146,7 +153,11 @@
                                     ; circle - smaller than the ring so
                                     ; the two never read as the same
                                     ; mark
-(setq abf:*sug-hgt*      6.0)       ; height of a suggestion's number
+(setq abf:*sug-color*    2)         ; colour the suggestions are drawn
+                                    ; in, as an entity override: yellow,
+                                    ; so a suggestion never reads as one
+                                    ; of the drawing's own POINTS
+(setq abf:*sug-hgt*      6.0)       ; height of a suggestion's tag
 (setq abf:*foot-steps*   10)        ; how many 1-foot steps are offered
                                     ; each way when a tape is swept: 10
                                     ; up and 10 down, per held stake
@@ -366,10 +377,15 @@
     (setq i (1+ i)))
   (reverse out))
 
-;; V inserted into the already-sorted LST, smallest miss first.
+;; V inserted into the already-sorted LST, smallest miss first.  A tie
+;; goes up before down, so the sweep always reads 1, -1, 2, -2 ... and
+;; never flips a pair round because a look-alike happened to land on
+;; that foot first.
 (defun abf:ins-delta (v lst)
   (cond ((null lst) (list v))
         ((< (abs v) (abs (car lst))) (cons v lst))
+        ((and (equal (abs v) (abs (car lst)) 1e-9) (> v 0.0))
+         (cons v lst))
         (t (cons (car lst) (abf:ins-delta v (cdr lst))))))
 
 ;; Every reading D could have been instead, as a signed shift in
@@ -432,19 +448,35 @@
 ;; One group of candidates: one stake's reading is HELD exactly as it
 ;; is and the other's is walked through abf:deltas.  movea non-nil
 ;; varies A's reading and holds B's; nil is the other way round.  Each
-;; entry is (miss held moved old-reading new-reading point), smallest
-;; miss first, capped at abf:*max-sugg* (nil = uncapped).  A reading
-;; the held tape can no longer reach has no crossing and is left out.
-(defun abf:group (pa a pb b pp held moved movea / was out dl nd np n cut one)
-  (setq was (if movea a b)
-        out nil)
+;; entry is (miss held moved old-reading new-reading point tag),
+;; smallest miss first, capped at abf:*max-sugg* (nil = uncapped).  A
+;; reading the held tape can no longer reach has no crossing and is
+;; left out.
+(defun abf:group (pa a pb b pp held moved movea
+                  / was out dl nd np n cut one k tag reads)
+  (setq was   (if movea a b)
+        out   nil
+        reads 0)
   (foreach dl (abf:deltas was)
     (setq nd (+ was dl)
           np (if movea
                (abf:circint pa nd pb b pp)
                (abf:circint pa a pb nd pp)))
     (if (and np (not (abf:seen-p np pp out)))
-      (setq out (abf:ins-cand (list (abs dl) held moved was nd np) out))))
+      (progn
+        ;; the tag is the answer the user types, so it says what the
+        ;; suggestion IS: the moved tape's letter, after either the
+        ;; number of feet it moved (2B, -3B) or, for a reading that is
+        ;; not a whole foot, its place in this tape's look-alikes
+        ;; (R1B).  Numbering only what is actually offered keeps the
+        ;; R numbers unbroken when a reading is out of reach.
+        (setq k (/ dl 12.0))
+        (if (equal k (float (fix k)) 1e-9)
+          (setq tag (strcat (itoa (fix k)) moved))
+          (setq reads (1+ reads)
+                tag   (strcat "R" (itoa reads) moved)))
+        (setq out (abf:ins-cand
+                    (list (abs dl) held moved was nd np tag) out)))))
   (if (and abf:*max-sugg* (> (length out) abf:*max-sugg*))
     (progn
       (setq cut nil n 0)
@@ -455,17 +487,17 @@
   out)
 
 ;; Every place PP could sit if ONE of its two tapes was read wrong, in
-;; the two groups that answer separately: A held while B's reading
-;; moves, then B held while A's does.  A candidate can never appear in
-;; both - an A-held one keeps its distance from A exactly and a B-held
-;; one does not - so the groups are simply run together, each nearest
-;; miss first.
+;; the two groups that answer separately: the ones that move A (B held)
+;; first, so their tags run 1A, -1A, R1A ..., then the ones that move
+;; B.  A candidate can never appear in both - a B-held one keeps its
+;; distance from B exactly and an A-held one does not - so the groups
+;; are simply run together, each nearest miss first.
 (defun abf:candidates (pa pb pp / a b)
   (setq a (cal:dist pa pp)
         b (cal:dist pb pp))
   (if (and (> a abf:*fuzz*) (> b abf:*fuzz*))
-    (append (abf:group pa a pb b pp abf:*a-name* abf:*b-name* nil)
-            (abf:group pa a pb b pp abf:*b-name* abf:*a-name* T))))
+    (append (abf:group pa a pb b pp abf:*b-name* abf:*a-name* T)
+            (abf:group pa a pb b pp abf:*a-name* abf:*b-name* nil))))
 
 ;;; ---------------------- what gets drawn -------------------------------
 
@@ -582,24 +614,29 @@
   (reverse out))
 
 ;; One suggestion on screen: a point where it would sit, a small circle
-;; so it can be seen and clicked, and its number in the list.  All on
-;; the points layer, all swept again as soon as the round ends.
-(defun abf:draw-sug (p idx / out)
+;; so it can be seen and clicked, and its tag beside it.  On the points
+;; layer, but in abf:*sug-color* rather than ByLayer - a suggestion is
+;; not one of the drawing's own points and must not read as one - and
+;; all of it swept again as soon as the round ends.
+(defun abf:draw-sug (p tag / out)
   (setq out nil)
   (entmake (list '(0 . "POINT") '(100 . "AcDbEntity")
-                 (cons 8 abf:*point-layer*) '(100 . "AcDbPoint")
+                 (cons 8 abf:*point-layer*)
+                 (cons 62 abf:*sug-color*) '(100 . "AcDbPoint")
                  (list 10 (car p) (cadr p) 0.0)))
   (setq out (cons (entlast) out))
   (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                 (cons 8 abf:*point-layer*) '(100 . "AcDbCircle")
+                 (cons 8 abf:*point-layer*)
+                 (cons 62 abf:*sug-color*) '(100 . "AcDbCircle")
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*sug-radius*)))
   (setq out (cons (entlast) out))
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                 (cons 8 abf:*point-layer*) '(100 . "AcDbText")
+                 (cons 8 abf:*point-layer*)
+                 (cons 62 abf:*sug-color*) '(100 . "AcDbText")
                  (list 10 (+ (car  p) abf:*sug-radius*)
                           (+ (cadr p) abf:*sug-radius*) 0.0)
-                 (cons 40 abf:*sug-hgt*) (cons 1 (itoa idx))))
+                 (cons 40 abf:*sug-hgt*) (cons 1 tag)))
   (setq out (cons (entlast) out))
   (reverse out))
 
@@ -638,7 +675,7 @@
 ;; whole call (the BPCALLOUT v1.0 lesson).
 (defun abf:run (movep / *error* undo-open oce ocl oos odim cmd cands
                         pa pb hist stage done made moves s hit nm pp
-                        pair sugs temps c i kws shown ans idx sug havestyle
+                        pair sugs temps c i kws shown ans sug havestyle
                         np newpt ments ring note tried lasthold)
 
   (defun *error* (m)
@@ -766,11 +803,11 @@
                              (setq hist (cons (list "DIM" pair) hist)))
                            (progn
                              (cal:ensure-layer abf:*point-layer* 2)
-                             (setq i 1)
                              (foreach c sugs
-                               (setq temps (append temps
-                                                   (abf:draw-sug (nth 5 c) i))
-                                     i     (1+ i)))
+                               (setq temps
+                                     (append temps
+                                             (abf:draw-sug (nth 5 c)
+                                                           (nth 6 c)))))
                              (setq tried
                                    (+ (length (abf:deltas
                                                 (cal:dist pa pp)))
@@ -779,7 +816,9 @@
                              (princ (strcat
                                       "\n\n  Where Pt." nm
                                       " lands if one tape was read"
-                                      " wrong - A held first, then B"
+                                      " wrong - the ones that move "
+                                      abf:*a-name* " first, then "
+                                      abf:*b-name*
                                       " (nearest miss first):"))
                              (if (> tried (length sugs))
                                (princ (strcat
@@ -793,13 +832,14 @@
                                           ", or past the list cap" "")
                                         ".")))
                              (princ (strcat
-                                      "\n   #  held  moved  from"
+                                      "\n   tag   held  moved  from"
                                       "          to            the point"
                                       " moves"))
                              (princ (strcat
-                                      "\n   -  ----  -----  -----------"
-                                      "   -----------   ---------------"))
-                             (setq i 1 lasthold nil)
+                                      "\n   ----  ----  -----  ---------"
+                                      "--   -----------   -------------"
+                                      "--"))
+                             (setq lasthold nil)
                              (foreach c sugs
                                ;; a blank line where the held stake
                                ;; changes: the two answers read as two
@@ -808,7 +848,7 @@
                                  (princ "\n"))
                                (setq lasthold (cadr c))
                                (princ (strcat
-                                        "\n   " (cal:pad (itoa i) 3)
+                                        "\n   " (cal:pad (nth 6 c) 6)
                                         (cal:pad (cadr c) 6)
                                         (cal:pad (caddr c) 7)
                                         (cal:pad (abf:fmt (cadddr c)) 14)
@@ -817,19 +857,23 @@
                                         " "
                                         (abf:compass
                                           (angle (cal:2d pp)
-                                                 (cal:2d (nth 5 c))))))
-                               (setq i (1+ i)))
+                                                 (cal:2d (nth 5 c)))))))
                              (setq stage 2))))))))))
 
              ;; -- 2: which suggestion (ABMOVE only)
              ((= stage 2)
-              (setq kws "" i 1)
-              (repeat (length sugs)
-                (setq kws (strcat kws (itoa i) " ") i (1+ i)))
+              ;; every tag is a keyword, so any of them can be typed -
+              ;; but a bracket listing forty-odd of them is unreadable,
+              ;; so the bracket shows only the words that are not in
+              ;; the table.  Everything it DOES show is a keyword, so
+              ;; nothing shown fails when it is clicked.
+              (setq kws "")
+              (foreach c sugs (setq kws (strcat kws (nth 6 c) " ")))
               (setq kws   (strcat kws "Pick None")
-                    shown (vl-string-translate " " "/" kws)
+                    shown "Pick/None"
                     ans   (cal:askkw
-                            (strcat "  Move Pt." nm " to which?")
+                            (strcat "  Move Pt." nm
+                                    " - type a tag from the table")
                             kws shown "None" T))
               (cond
                 ((eq ans 'CAL-BACK)
@@ -854,22 +898,30 @@
                    ((member np '("Back" "Undo"))
                     (princ "\n  Back to the list."))
                    (t
-                    (setq idx nil i 1)
+                    (setq sug nil)
                     (foreach c sugs
-                      (if (and (null idx)
+                      (if (and (null sug)
                                (<= (cal:dist np (nth 5 c)) abf:*snap*))
-                        (setq idx i))
-                      (setq i (1+ i)))
-                    (if idx
+                        (setq sug c)))
+                    (if sug
                       (setq stage 3)
                       (princ (strcat "\n  No suggestion within "
                                      (rtos abf:*snap* 4 0)
                                      " of that click - try again."))))))
-                (t (setq idx (atoi ans) stage 3))))
+                (t
+                 ;; initget refuses anything that is not one of the
+                 ;; tags, so the lookup cannot miss - the guard is
+                 ;; there so a future keyword cannot walk off the list
+                 (setq sug nil)
+                 (foreach c sugs
+                   (if (and (null sug) (= (nth 6 c) ans)) (setq sug c)))
+                 (if sug
+                   (setq stage 3)
+                   (princ (strcat "\n  \"" ans "\" is not one of the"
+                                  " tags - nothing moved."))))))
 
              ;; -- 3: where the note goes, and then the move itself
              (t
-              (setq sug (nth (1- idx) sugs))
               (princ "\n  Auto tucks the note beside the ring.")
               (initget "Auto Back Undo")
               (setq np (getpoint (strcat "\n  Place the note for Pt." nm
