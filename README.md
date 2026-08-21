@@ -89,7 +89,7 @@ changing a routine.
 | `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool - centre bulge, top-right bulge or cloud (straight or rounded bottom) - drawn live as its X/Y envelope and radii are answered, with a centre-to-corner check drawing beside it |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
-| `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- corner sizes and bowed walls measured from the survey, Redo to refit -- then a standard-hopper bottom |
+| `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- out-of-square walls, corner sizes and bows all measured from the survey, Redo to refit -- then a standard-hopper bottom |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |

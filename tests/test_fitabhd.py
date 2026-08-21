@@ -55,6 +55,12 @@ BOW_MAX = 12.0                     # fit:*bow-max*    (a wall bowed more than
                                    # a foot is not a straight wall)
 BOW_MAX_FRAC = 0.04                # fit:*bow-max-frac*
 BOW_PTS_MIN = 4                    # fit:*bow-pts-min*
+OOS_MAX = math.pi / 36.0           # fit:*oos-max*  (5 degrees: a wall
+                                   # swung further than this is not the
+                                   # template's wall any more)
+OOS_MIN = 1.0                      # fit:*oos-min*  (the drift from one
+                                   # end of a wall to the other, below
+                                   # which the wall reads as true)
 FEATURE_KEYS = ("SIZE", "VSIZE", "CUT", "RAD")
 RAD_TURN_MIN = math.pi / 3.0       # fit:*rad-turn-min* (gentler corners
                                    # cannot be measured for a radius)
@@ -532,31 +538,174 @@ def build_polygon(dirs, offs, treat, size, which, bows=None):
 # only the wall between them breathes.
 
 
-def fit_wall_bow(wpts, a, b):
-    """Least squares (chord shift outward, sagitta outward) for the
-    wall A->B over its own points.  None when the wall has too few
-    points to tell a bow from noise."""
+def solve_lin(m, rhs):
+    """Small Gauss-Jordan with partial pivoting; None when singular."""
+    n = len(rhs)
+    aug = [list(m[i]) + [rhs[i]] for i in range(n)]
+    for c in range(n):
+        piv = c
+        for r in range(c, n):
+            if abs(aug[r][c]) > abs(aug[piv][c]):
+                piv = r
+        if abs(aug[piv][c]) < 1.0e-12:
+            return None
+        aug[c], aug[piv] = aug[piv], aug[c]
+        d = aug[c][c]
+        aug[c] = [v / d for v in aug[c]]
+        for r in range(n):
+            if r != c:
+                f = aug[r][c]
+                if f != 0.0:
+                    aug[r] = [v - f * w for v, w in zip(aug[r], aug[c])]
+    return [aug[i][n] for i in range(n)]
+
+
+def fit_wall_line(wpts, a, b, want_swing, want_bow):
+    """Least-squares wall through its own points, in the wall's own
+    frame (t along the chord A->B, y outward).
+
+        y = A + B*t + C*4t(1-t)
+
+    A is where the wall sits, B how far it DRIFTS from one end to the
+    other - the wall swinging off the template direction, which is what
+    an out-of-square pool is made of - and C how far it BOWS at
+    mid-wall.  Terms not asked for are held at zero and left out of the
+    solve.  Returns (A B C), or None when the wall has too few points
+    to tell any of it from noise."""
     c = dist(a, b)
-    if c < 1.0e-9 or len(wpts) < BOW_PTS_MIN:
+    if c < 1.0e-9:
+        return None
+    use = [0] + ([1] if want_swing else []) + ([2] if want_bow else [])
+    if len(wpts) < max(BOW_PTS_MIN, len(use) + 1):
         return None
     ux, uy = (b[0] - a[0]) / c, (b[1] - a[1]) / c
     nx, ny = uy, -ux                       # right of travel = outward
-    s11 = s1g = sgg = sy = sgy = 0.0
+    k = len(use)
+    m = [[0.0] * k for _ in range(k)]
+    rhs = [0.0] * k
     for p in wpts:
         dx, dy = p[0] - a[0], p[1] - a[1]
-        x = (dx * ux + dy * uy) / c
-        g = 4.0 * x * (1.0 - x)            # 1 at mid-wall, 0 at both ends
+        t = (dx * ux + dy * uy) / c
+        f = (1.0, t, 4.0 * t * (1.0 - t))
         y = dx * nx + dy * ny
-        s11 += 1.0
-        s1g += g
-        sgg += g * g
-        sy += y
-        sgy += g * y
-    det = s11 * sgg - s1g * s1g
-    if abs(det) < 1.0e-9:
+        for i in range(k):
+            rhs[i] += f[use[i]] * y
+            for j in range(k):
+                m[i][j] += f[use[i]] * f[use[j]]
+    got = solve_lin(m, rhs)
+    if got is None:
         return None
-    return ((sy * sgg - s1g * sgy) / det,
-            (s11 * sgy - s1g * sy) / det)
+    out = [0.0, 0.0, 0.0]
+    for i in range(k):
+        out[use[i]] = got[i]
+    return out
+
+
+def swung_wall(a, b, d, coef):
+    """The wall line A->B (template direction D) after its fitted
+    offset and drift are applied: (new direction, new outward offset).
+    The drift is a rotation, so the wall stays a straight line - the
+    pool goes out of square, it does not go crooked."""
+    c = dist(a, b)
+    ux, uy = (b[0] - a[0]) / c, (b[1] - a[1]) / c
+    nx, ny = uy, -ux
+    d2 = d - math.atan2(coef[1], c)        # drift B over chord c
+    q = (a[0] + nx * coef[0], a[1] + ny * coef[0])   # a point on it
+    n2 = wall_normal(d2)
+    return d2, n2[0] * q[0] + n2[1] * q[1]
+
+
+def wall_rms(wpts, a, b, bulge):
+    if not wpts:
+        return 0.0
+    return outline_dev(wpts, [(a, b, bulge)])[1]
+
+
+def refine_walls(pts, dirs, offs, zone, oos, bowed):
+    """Let every wall answer to its own points.
+
+    The template fixed each wall's DIRECTION, which is what makes the
+    type mean anything - but a real as-built is never true, and holding
+    a rectangle perfectly square just pushes the error into the points.
+    So each wall is refitted here: its offset always, its direction when
+    the pool may be out of square, its bow when the walls may be bowed.
+    Each of those is then kept only where the points prove it, so a pool
+    that really is square comes out square.
+
+    Returns (dirs, offs, bows)."""
+    n = len(dirs)
+    base = list(dirs)
+    dirs, offs = list(dirs), list(offs)
+    coefs = [None] * n
+    for _ in range(3):
+        wallpts, _ = assign_walls(pts, dirs, offs, zone)
+        corners = poly_corners(dirs, offs)
+        if corners is None:
+            return base, offs, None
+        nd, no = list(dirs), list(offs)
+        for i in range(n):
+            a, b = corners[i], corners[(i + 1) % n]
+            got = fit_wall_line(wallpts[i], a, b, oos, bowed)
+            if got is None:
+                continue
+            coefs[i] = got
+            d2, o2 = swung_wall(a, b, dirs[i], got)
+            if abs(signed_dang(base[i], d2)) <= OOS_MAX:
+                nd[i], no[i] = d2, o2
+            else:
+                no[i] = offs[i] + got[0]
+        if n == 8:
+            # the cut corners are not free walls: each bisects its own
+            # corner and all four share one face, however the axis
+            # walls have swung
+            nd, no = grec_cuts(nd, no, grec_face(nd, no))
+        if poly_valid(nd, no):
+            dirs, offs = nd, no
+    # ---- what did the points actually earn? --------------------------
+    wallpts, _ = assign_walls(pts, dirs, offs, zone)
+    corners = poly_corners(dirs, offs)
+    if corners is None:
+        return base, offs, None
+    bows = [0.0] * n
+    for i in range(n):
+        wpts = wallpts[i]
+        a, b = corners[i], corners[(i + 1) % n]
+        # the drift the TOTAL swing represents, end to end, in inches -
+        # not the residual the last pass measured, which is near zero
+        # once the wall has already been swung onto its points
+        swing = signed_dang(base[i], dirs[i])
+        drift = abs(math.tan(swing)) * dist(a, b)
+        if n == 8 and i % 2 == 1:
+            swing = 0.0                     # a derived cut wall
+        if abs(swing) > 1.0e-9:
+            # measure this wall both ways: swung as fitted, and held to
+            # the template direction at its own best offset
+            nrm = wall_normal(base[i])
+            flat = (sum(nrm[0] * p[0] + nrm[1] * p[1] for p in wpts)
+                    / len(wpts)) if wpts else offs[i]
+            keep = (drift >= OOS_MIN and wpts
+                    and wall_rms(wpts, a, b, 0.0)
+                    <= flat_rms(wpts, base[i], flat) * BOTH_EDGE)
+            if not keep:
+                dirs[i], offs[i] = base[i], flat
+        if bowed and coefs[i]:
+            bows[i] = keep_bow(wpts, a, b,
+                               bow_cap(coefs[i][2], dist(a, b)))
+    if n == 8:
+        dirs, offs = grec_cuts(dirs, offs, grec_face(dirs, offs))
+    if not poly_valid(dirs, offs):
+        return base, offs, None
+    return dirs, offs, (bows if any(bows) else None)
+
+
+def flat_rms(wpts, d, off):
+    """RMS of the points about the straight line with direction D at
+    outward offset OFF - the wall as the template would hold it."""
+    nrm = wall_normal(d)
+    if not wpts:
+        return 0.0
+    return math.sqrt(sum((nrm[0] * p[0] + nrm[1] * p[1] - off) ** 2
+                         for p in wpts) / len(wpts))
 
 
 def keep_bow(wpts, a, b, s):
@@ -574,45 +723,6 @@ def keep_bow(wpts, a, b, s):
 def bow_cap(s, c):
     smax = min(BOW_MAX, BOW_MAX_FRAC * c)
     return max(-smax, min(smax, s))
-
-
-def fit_wall_bows(pts, dirs, offs, zone):
-    """Refit every wall of a settled polygon as a shallow arc through
-    its own points.  Returns (offs, bows), with 0.0 on every wall the
-    points do not prove bowed - and that wall's offset put back to the
-    plain straight-wall mean, so a dropped bow leaves no trace."""
-    n = len(dirs)
-    bows = [0.0] * n
-    for _ in range(2):
-        wallpts, _ = assign_walls(pts, dirs, offs, zone)
-        corners = poly_corners(dirs, offs)
-        if corners is None:
-            return offs, [0.0] * n
-        new, bows = list(offs), [0.0] * n
-        for i in range(n):
-            a, b = corners[i], corners[(i + 1) % n]
-            got = fit_wall_bow(wallpts[i], a, b)
-            if got is None:
-                continue
-            new[i] = offs[i] + got[0]
-            bows[i] = bow_cap(got[1], dist(a, b))
-        if poly_corners(dirs, new):
-            offs = new
-    wallpts, _ = assign_walls(pts, dirs, offs, zone)
-    corners = poly_corners(dirs, offs)
-    if corners is None:
-        return offs, [0.0] * n
-    offs = list(offs)
-    for i in range(n):
-        bows[i] = keep_bow(wallpts[i], corners[i], corners[(i + 1) % n],
-                           bows[i])
-        if not bows[i] and wallpts[i]:
-            # the bow term biases the offset it was fitted beside, so a
-            # wall that stays straight goes back to the straight mean
-            nrm = wall_normal(dirs[i])
-            offs[i] = sum(nrm[0] * p[0] + nrm[1] * p[1]
-                          for p in wallpts[i]) / len(wallpts[i])
-    return offs, bows
 
 
 # ---- type templates --------------------------------------------------
@@ -729,10 +839,10 @@ def fit_cap_bows(pts, prm, both):
     bows = [0.0, 0.0]
     for k, (wpts, a, b) in enumerate(
             ((bot, (lo, by), (hi, by)), (top, (hi, ty), (lo, ty)))):
-        got = fit_wall_bow(wpts, a, b)
+        got = fit_wall_line(wpts, a, b, False, True)
         if got is None:
             continue
-        shift, s = got[0], bow_cap(got[1], dist(a, b))
+        shift, s = got[0], bow_cap(got[2], dist(a, b))
         if k == 0:
             a = (a[0], by - shift)
             b = (b[0], by - shift)
@@ -955,8 +1065,8 @@ def poly_result(ptype, fpts, dirs, offs0, treat):
         # grecian is sharp, an as-built may well be rounded, so Radius
         # (or Cut) measures a shared easing from the points.
         offs, _ = fit_polytype(fpts, dirs, offs0, "Square")
-        size = grec_face(offs)
-        offs = grec_cuts(offs, size)
+        size = grec_face(dirs, offs)
+        dirs, offs = grec_cuts(dirs, offs, size)
         vsize = None
         if treat in ("Radius", "Cut"):
             vsize, offs, size = fit_vertex_feature(fpts, dirs, offs,
@@ -1096,31 +1206,50 @@ def frame_segs(res):
 SNAP_EPS = 0.02                    # fit:*snap-eps*
 
 
-def grec_cuts(offs, face):
-    """Recompute the four 45-degree cut walls so each sits the same
-    perpendicular inset (face/2) from its own nominal square corner."""
-    sq = poly_corners(RECT_DIRS, [offs[0], offs[2], offs[4], offs[6]])
+def grec_axis_corners(dirs, offs):
+    """Where the four AXIS walls of an eight-wall template would meet
+    if the cuts were not there - the pool's nominal corners.  Taken
+    from the walls themselves, so it still means something once they
+    have swung out of square."""
+    return poly_corners([dirs[0], dirs[2], dirs[4], dirs[6]],
+                        [offs[0], offs[2], offs[4], offs[6]])
+
+
+def grec_cut_dir(dirs, k):
+    """A cut wall bisects the corner it crosses, whatever the two axis
+    walls are doing - exactly 45 degrees on a true pool, and still a
+    real cut on an out-of-square one."""
+    d0, d1 = dirs[2 * k], dirs[(2 * k + 2) % 8]
+    return d0 + signed_dang(d0, d1) / 2.0
+
+
+def grec_cuts(dirs, offs, face):
+    """Re-derive the four cut walls from the four axis walls: each
+    bisects its corner and sits the same perpendicular inset (face/2)
+    in from where the axis walls would meet."""
+    sq = grec_axis_corners(dirs, offs)
     if sq is None:
-        return offs
-    out = list(offs)
+        return dirs, offs
+    dirs, offs = list(dirs), list(offs)
     h = face / 2.0
     for k in range(4):
         i = 2 * k + 1
-        n = wall_normal(GREC_DIRS[i])
+        dirs[i] = grec_cut_dir(dirs, k)
+        n = wall_normal(dirs[i])
         vc = sq[(k + 1) % 4]
-        out[i] = n[0] * vc[0] + n[1] * vc[1] - h
-    return out
+        offs[i] = n[0] * vc[0] + n[1] * vc[1] - h
+    return dirs, offs
 
 
-def grec_face(offs):
+def grec_face(dirs, offs):
     """The mean cut-face length the four fitted cut walls imply."""
-    sq = poly_corners(RECT_DIRS, [offs[0], offs[2], offs[4], offs[6]])
+    sq = grec_axis_corners(dirs, offs)
     if sq is None:
         return 0.0
     hsum = 0.0
     for k in range(4):
         i = 2 * k + 1
-        n = wall_normal(GREC_DIRS[i])
+        n = wall_normal(dirs[i])
         vc = sq[(k + 1) % 4]
         hsum += n[0] * vc[0] + n[1] * vc[1] - offs[i]
     return 2.0 * hsum / 4.0
@@ -1141,7 +1270,7 @@ def fit_vertex_feature(pts, dirs, offs, treat):
     zone = CORNER_ZONE * tanh
     vs = None
     cpts = None
-    face = grec_face(offs)
+    face = grec_face(dirs, offs)
     for _ in range(2):
         _, cpts = assign_walls(pts, dirs, offs, zone)
         corners = poly_corners(dirs, offs)
@@ -1156,8 +1285,8 @@ def fit_vertex_feature(pts, dirs, offs, treat):
         zone = (1.2 * vs * tanh + ZONE_PAD if treat == "Radius"
                 else 1.2 * vs / (2.0 * cosh) + ZONE_PAD)
         offs = fit_polygon(pts, dirs, offs, zone)
-        face = grec_face(offs)
-        offs = grec_cuts(offs, face)
+        face = grec_face(dirs, offs)
+        dirs, offs = grec_cuts(dirs, offs, face)
     if vs and vs >= VSIZE_MIN and cpts:
         czpts = [p for bucket in cpts for p in bucket]
         if czpts:
@@ -1255,7 +1384,8 @@ def set_dim(res, key, v):
                 res["size"] = v
             elif key == "VSIZE":
                 res["vsize"] = v
-            res["offs"] = grec_cuts(offs, res["size"])
+            res["dirs"], res["offs"] = grec_cuts(res["dirs"], offs,
+                                                 res["size"])
         elif key == "LEN":
             j = 5 if t in ("L", "LAzyl") else 3
             d = (v - (offs[1] + offs[j])) / 2.0
@@ -1384,32 +1514,46 @@ def snap_result(res, fpts, tol, allow):
     return res
 
 
-def apply_bows(res, fpts):
-    """Fit the bows on the placement that already won.  Bows are a
-    refinement of the chosen template, never a competitor in the
-    search: extra freedom would let a wrong rotation bend its way to a
-    good score."""
+def corner_zone_of(res):
+    """How far from a corner a point belongs to the corner feature
+    rather than to a wall."""
+    if res.get("vsize"):
+        return 1.2 * res["vsize"] * math.tan(math.pi / 8.0) + ZONE_PAD
+    if len(res["offs"]) == 8:
+        # on an eight-wall template the cut corners ARE walls, and
+        # "size" is their face length - not a corner feature at all
+        return 0.0
+    if res.get("size"):
+        return 1.2 * res["size"] + ZONE_PAD
+    return CORNER_ZONE if res["treat"] in ("Radius", "Cut") else 0.0
+
+
+def apply_refinement(res, fpts, oos, bowed):
+    """Refine the placement that already WON: let the walls answer to
+    the points.  A refinement is never a competitor in the search - the
+    extra freedom would let a wrong rotation bend its way to a good
+    score - so it runs once, on the winner."""
     if res["kind"] == "poly":
-        zone = (CORNER_ZONE if res["treat"] in ("Radius", "Cut")
-                else 0.0)
-        if res.get("vsize"):
-            zone = 1.2 * res["vsize"] * math.tan(math.pi / 8.0) + ZONE_PAD
-        elif res.get("size"):
-            zone = 1.2 * res["size"] + ZONE_PAD
-        offs, bows = fit_wall_bows(fpts, res["dirs"], res["offs"], zone)
-        if not any(bows):
+        dirs, offs, bows = refine_walls(fpts, res["dirs"], res["offs"],
+                                        corner_zone_of(res), oos, bowed)
+        swung = any(abs(signed_dang(a, b)) > 1.0e-9
+                    for a, b in zip(res["dirs"], dirs))
+        if not swung and not bows:
             return res
         res = dict(res)
-        res["offs"], res["bows"] = offs, bows
+        res["dirs"], res["offs"], res["bows"] = dirs, offs, bows
+        res["swung"] = swung
         if len(offs) == 8:
-            res["size"] = grec_face(offs)
+            res["size"] = grec_face(dirs, offs)
         res["verts"] = build_polygon(
-            res["dirs"], offs, res["treat"],
+            dirs, offs, res["treat"],
             res.get("vsize") if len(offs) == 8 else res["size"],
             res["which"], bows)
         res["segs"] = verts_to_segs(res["verts"])
         return res
-    if res["kind"] == "cap":
+    if res["kind"] == "cap" and bowed:
+        # an arc-ended body's SIDE walls can bow; swinging them would
+        # take the end caps with them, so out-of-square stops here
         prm, bows = fit_cap_bows(fpts, res["prm"], res["both"])
         if not any(bows):
             return res
@@ -1420,7 +1564,7 @@ def apply_bows(res, fpts):
     return res                              # a round pool has no walls
 
 
-def fit_and_snap(pts, ptype, treat, tol, pct, bowed):
+def fit_and_snap(pts, ptype, treat, tol, pct, oos, bowed):
     """The whole engine: configuration search, the bow refinement when
     the walls may be bowed, then nice-dim snapping against the share of
     the points the user allows beyond the distance."""
@@ -1429,8 +1573,8 @@ def fit_and_snap(pts, ptype, treat, tol, pct, bowed):
     res = fit_type(dpts, ptype, treat)
     fpts = (dpts if res["kind"] == "round"
             else to_frame(dpts, res["angle"], res["mirror"]))
-    if bowed:
-        res = apply_bows(res, fpts)
+    if oos or bowed:
+        res = apply_refinement(res, fpts, oos, bowed)
     res = snap_result(res, fpts, tol, allow)
     res["worst"], res["rms"] = outline_dev(fpts, res["segs"])
     res["allow"] = allow
@@ -1555,7 +1699,7 @@ def test_rectangle_radius_corners():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Radius", 24.0,
         set(range(4))))
     pts = survey(place(true, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
-    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False, False)
     assert close(get_dim(res, "LEN"), 384.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 192.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "SIZE"), 24.0, 1e-6), get_dim(res, "SIZE")
@@ -1569,7 +1713,7 @@ def test_rectangle_cut_corners():
         RECT_DIRS, [90.0, 180.0, 90.0, 180.0], "Cut", 30.0,
         set(range(4))))
     pts = survey(place(true, -12.0, 0.0, 0.0), 18.0, 0.3, seed=21)
-    res = fit_and_snap(pts, "Rectangle", "Cut", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Rectangle", "Cut", 1.0, MISS_PCT, False, False)
     assert close(get_dim(res, "LEN"), 360.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "SIZE"), 30.0, 1.5), get_dim(res, "SIZE")
@@ -1584,18 +1728,20 @@ def test_rectangle_off_nice_stays_honest():
     true = verts_to_segs(build_polygon(
         RECT_DIRS, [84.0, 190.0, 84.0, 190.0], "Square", None, set()))
     pts = survey(place(true, 5.0, 0.0, 0.0), 20.0, 0.2, seed=31)
-    res = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, False, False)
     assert close(get_dim(res, "LEN"), 380.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 168.0, 1e-6), get_dim(res, "WID")
     print("  the points outrank nice numbers: 380\" stays 380\"")
 
 
 def test_grecian_cut_face():
-    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    offs = grec_cuts(GREC_DIRS,
+                     [0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0],
+                     36.0)[1]
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Square", None,
                                        set()))
     pts = survey(place(true, 71.0, -50.0, 800.0), 16.0, 0.3, seed=13)
-    res = fit_and_snap(pts, "Grecian", "Square", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Grecian", "Square", 1.0, MISS_PCT, False, False)
     assert close(get_dim(res, "LEN"), 350.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
@@ -1606,11 +1752,13 @@ def test_grecian_cut_face():
 def test_grecian_rounded_as_built():
     # a nominal grecian is sharp, but an as-built may well ease the
     # eight cut corners - answering Radius measures one shared easing
-    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    offs = grec_cuts(GREC_DIRS,
+                     [0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0],
+                     36.0)[1]
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Radius", 8.0,
                                        set(range(8))))
     pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=23)
-    res = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False, False)
     assert close(get_dim(res, "LEN"), 350.0, 1e-6), get_dim(res, "LEN")
     assert close(get_dim(res, "WID"), 180.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
@@ -1622,11 +1770,13 @@ def test_grecian_rounded_as_built():
 def test_grecian_sharp_stays_sharp():
     # answering Radius on a genuinely sharp grecian must not invent an
     # easing: noise is not evidence
-    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    offs = grec_cuts(GREC_DIRS,
+                     [0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0],
+                     36.0)[1]
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Square", None,
                                        set()))
     pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=13)
-    res = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False, False)
     assert get_dim(res, "VSIZE") is None, get_dim(res, "VSIZE")
     assert close(get_dim(res, "CUT"), 36.0, 1e-6), get_dim(res, "CUT")
     print("  a sharp grecian answered Radius stays sharp")
@@ -1637,7 +1787,7 @@ def test_roman_end_is_found():
            "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
     true = endcap_segs(prm, "ROman", False)
     pts = survey(place(true, 197.0, 500.0, 300.0), 22.0, 0.3, seed=11)
-    res = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, False, False)
     assert not res["both"], "a square end was read as a roman end"
     assert close(get_dim(res, "WID"), 192.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "BLEN"), 396.0, 1e-6), get_dim(res, "BLEN")
@@ -1662,7 +1812,7 @@ def test_oval_both_ends():
            "cx2": 84.0, "r2": 84.0, "Re2": 84.0}
     true = endcap_segs(prm, "Oval", True)
     pts = survey(place(true, 40.0, -200.0, 100.0), 20.0, 0.3, seed=5)
-    res = fit_and_snap(pts, "Oval", "Square", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "Oval", "Square", 1.0, MISS_PCT, False, False)
     assert res["both"], "both radius ends expected"
     assert close(get_dim(res, "WID"), 168.0, 1e-6), get_dim(res, "WID")
     assert close(get_dim(res, "BLEN"), 216.0, 1e-6), get_dim(res, "BLEN")
@@ -1675,7 +1825,7 @@ def test_true_l():
         L_DIRS, [0.0, 400.0, 200.0, -220.0, 100.0, 0.0], "Radius",
         18.0, set(range(6))))
     pts = survey(place(true, 107.0, 50.0, -400.0), 20.0, 0.3, seed=3)
-    res = fit_and_snap(pts, "L", "Radius", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "L", "Radius", 1.0, MISS_PCT, False, False)
     want = sorted([400.0, 200.0, 180.0, 100.0, 220.0, 100.0])
     got = sorted(ring_sides(res))
     assert all(close(a, b) for a, b in zip(got, want)), got
@@ -1690,7 +1840,7 @@ def test_lazy_l():
     true = verts_to_segs(build_polygon(LAZY_DIRS, offs, "Radius", 12.0,
                                        set(range(6))))
     pts = survey(place(true, -23.0, 900.0, 100.0), 18.0, 0.3, seed=9)
-    res = fit_and_snap(pts, "LAzyl", "Radius", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "LAzyl", "Radius", 1.0, MISS_PCT, False, False)
     want = sorted([300.0, 240.0, 96.0, 200.18, 260.18, 96.0])
     got = sorted(ring_sides(res))
     assert all(close(a, b, 1.0) for a, b in zip(got, want)), got
@@ -1700,6 +1850,114 @@ def test_lazy_l():
           " recovered")
 
 
+def skew_rect(skew_deg, wall=1):
+    """A 32' x 16' rectangle with one wall swung out of square - the
+    classic as-built: three walls true, the fourth off."""
+    dirs = list(RECT_DIRS)
+    dirs[wall] = dirs[wall] + math.radians(skew_deg)
+    return dirs, [96.0, 192.0, 96.0, 192.0]
+
+
+def sides_of(dirs, offs):
+    co = poly_corners(dirs, offs)
+    n = len(co)
+    return [dist(co[i], co[(i + 1) % n]) for i in range(n)]
+
+
+def test_out_of_square_is_honoured():
+    # AB pools are built, not drawn: nothing comes out true.  Held
+    # square, the template pushes its error into the points; allowed
+    # out of square, the walls swing to answer them.
+    dirs, offs = skew_rect(2.5)
+    true = sides_of(dirs, offs)
+    segs = verts_to_segs(build_polygon(dirs, offs, "Square", None, set()))
+    pts = survey(place(segs, 17.0, 100.0, 50.0), 18.0, 0.25, seed=61)
+    square = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False,
+                          False)
+    swung = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, True,
+                         False)
+    assert square["worst"] > 3.0, square["worst"]
+    assert swung["worst"] < 0.6, swung["worst"]
+    # held square every side comes out the same; swung, each side is
+    # its own length again
+    got = sides_of(swung["dirs"], swung["offs"])
+    assert all(close(a, b) for a, b in zip(got, true)), (got, true)
+    assert swung["swung"], "the fit did not record that it swung"
+    print("  out of square: 2.5 degrees of skew answered, %.2f\" -> "
+          "%.2f\"" % (square["worst"], swung["worst"]))
+
+
+def test_a_square_pool_stays_square():
+    # the same permission on a pool that really is true must change
+    # nothing - the walls stay exactly on the template
+    dirs, offs = skew_rect(0.0)
+    segs = verts_to_segs(build_polygon(dirs, offs, "Radius", 24.0,
+                                       set(range(4))))
+    pts = survey(place(segs, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
+    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, 0.15, True,
+                       False)
+    for a, b in zip(RECT_DIRS, res["dirs"]):
+        assert abs(signed_dang(a, b)) < 1.0e-9, res["dirs"]
+    assert close(get_dim(res, "LEN"), 384.0, 1e-6)
+    assert close(get_dim(res, "WID"), 192.0, 1e-6)
+    assert close(get_dim(res, "SIZE"), 24.0, 1e-6)
+    print("  a pool that really is square stays square")
+
+
+def test_a_swing_too_far_is_refused():
+    # 9 degrees is not an out-of-square rectangle, it is a different
+    # shape: the cap holds and the error is reported loudly rather
+    # than quietly swallowed
+    dirs, offs = skew_rect(9.0)
+    segs = verts_to_segs(build_polygon(dirs, offs, "Square", None, set()))
+    pts = survey(place(segs, 17.0, 100.0, 50.0), 18.0, 0.25, seed=61)
+    res = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, True,
+                       False)
+    worst_swing = max(abs(signed_dang(a, b))
+                      for a, b in zip(RECT_DIRS, res["dirs"]))
+    assert worst_swing <= OOS_MAX + 1.0e-9, math.degrees(worst_swing)
+    assert res["worst"] > 5.0, res["worst"]
+    print("  a swing past the cap is refused, and says so")
+
+
+def test_out_of_square_l_and_grecian():
+    # the concave corner of an L, and a grecian whose cut corners have
+    # to follow their axis walls out of square
+    dirs = list(L_DIRS)
+    dirs[1] += math.radians(1.8)
+    dirs[4] -= math.radians(1.2)
+    offs = [0.0, 400.0, 200.0, -220.0, 100.0, 0.0]
+    segs = verts_to_segs(build_polygon(dirs, offs, "Radius", 18.0,
+                                       set(range(6))))
+    pts = survey(place(segs, 107.0, 50.0, -400.0), 18.0, 0.25, seed=71)
+    square = fit_and_snap(pts, "L", "Radius", 1.0, 0.15, False, False)
+    swung = fit_and_snap(pts, "L", "Radius", 1.0, 0.15, True, False)
+    assert square["worst"] > 2.0 and swung["worst"] < 0.8, \
+        (square["worst"], swung["worst"])
+    assert close(get_dim(swung, "SIZE"), 18.0, 1e-6)
+
+    dirs, offs = grec_cuts(GREC_DIRS,
+                           [0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0],
+                           36.0)
+    dirs = list(dirs)
+    dirs[2] += math.radians(1.5)
+    dirs, offs = grec_cuts(dirs, offs, 36.0)
+    segs = verts_to_segs(build_polygon(dirs, offs, "Square", None, set()))
+    pts = survey(place(segs, 71.0, -50.0, 800.0), 14.0, 0.25, seed=91)
+    square = fit_and_snap(pts, "Grecian", "Square", 1.0, 0.15, False,
+                          False)
+    swung = fit_and_snap(pts, "Grecian", "Square", 1.0, 0.15, True,
+                         False)
+    assert square["worst"] > 1.5 and swung["worst"] < 0.8, \
+        (square["worst"], swung["worst"])
+    # the four cuts still share one face and still bisect their corners
+    assert close(get_dim(swung, "CUT"), 36.0, 1e-6), get_dim(swung, "CUT")
+    for k in range(4):
+        assert abs(signed_dang(grec_cut_dir(swung["dirs"], k),
+                               swung["dirs"][2 * k + 1])) < 1.0e-9
+    print("  an out-of-square L and grecian: cuts follow their walls")
+
+
 def test_percent_buys_nice_dimensions():
     # 383" is an inch off a whole foot: at the standard 15% the end
     # walls outvote the snap and it stays 383; raise the share of
@@ -1707,8 +1965,8 @@ def test_percent_buys_nice_dimensions():
     true = verts_to_segs(build_polygon(
         RECT_DIRS, [84.0, 191.5, 84.0, 191.5], "Square", None, set()))
     pts = survey(place(true, 5.0, 0.0, 0.0), 20.0, 0.2, seed=31)
-    tight = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False)
-    loose = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.40, False)
+    tight = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False, False)
+    loose = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.40, False, False)
     assert close(get_dim(tight, "LEN"), 383.0, 1e-6), get_dim(tight, "LEN")
     assert close(get_dim(loose, "LEN"), 384.0, 1e-6), get_dim(loose, "LEN")
     assert loose["allow"] > tight["allow"]
@@ -1739,8 +1997,8 @@ def test_bowed_walls_are_found():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Square", None, set(),
         [3.0, 0.0, 3.0, 0.0]))
     pts = survey(place(true, 17.0, 100.0, 50.0), 18.0, 0.25, seed=41)
-    straight = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False)
-    bowed = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, True)
+    straight = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False, False)
+    bowed = fit_and_snap(pts, "Rectangle", "Square", 1.0, 0.15, False, True)
     # held straight, the fit is dragged out by the bulging middles
     assert straight["worst"] > 1.5, straight["worst"]
     assert close(get_dim(straight, "WID"), 196.0, 1e-6)
@@ -1760,7 +2018,7 @@ def test_a_straight_wall_stays_straight():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Radius", 24.0,
         set(range(4))))
     pts = survey(place(true, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
-    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, 0.15, True)
+    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, 0.15, False, True)
     assert not res.get("bows"), res.get("bows")
     assert close(get_dim(res, "LEN"), 384.0, 1e-6)
     assert close(get_dim(res, "SIZE"), 24.0, 1e-6)
@@ -1789,8 +2047,8 @@ def test_oval_side_walls_bow():
            "cx2": 84.0, "r2": 84.0, "Re2": 84.0}
     true = endcap_segs(prm, "Oval", True, [2.0, 2.0])
     pts = survey(place(true, 40.0, -200.0, 100.0), 16.0, 0.25, seed=5)
-    straight = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False)
-    bowed = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, True)
+    straight = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False, False)
+    bowed = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False, True)
     assert straight["worst"] > 1.5, straight["worst"]
     assert close(get_dim(bowed, "WID"), 168.0, 1e-6), get_dim(bowed, "WID")
     assert close(get_dim(bowed, "BLEN"), 216.0, 1e-6)
@@ -1804,7 +2062,7 @@ def test_round():
     true = [((c[0] + 108.0, c[1]), (c[0] - 108.0, c[1]), 1.0),
             ((c[0] - 108.0, c[1]), (c[0] + 108.0, c[1]), 1.0)]
     pts = survey(true, 20.0, 0.3, seed=17)
-    res = fit_and_snap(pts, "ROUnd", "Square", 1.0, MISS_PCT, False)
+    res = fit_and_snap(pts, "ROUnd", "Square", 1.0, MISS_PCT, False, False)
     assert close(get_dim(res, "RAD"), 108.0, 1e-6), get_dim(res, "RAD")
     assert dist((res["prm"]["cx"], res["prm"]["cy"]), c) < 0.5
     print("  round: 18' spa, centre within half an inch")
@@ -1847,14 +2105,15 @@ def test_lisp_engine_matches_mirror():
     reruns this against the grouped build."""
     from lispvm import VM
 
-    def vmfit(pts, ptype, treat, pct=MISS_PCT, bowed=False):
+    def vmfit(pts, ptype, treat, pct=MISS_PCT, oos=False, bowed=False):
         vm = VM()
         vm.load(LISP_FILE)
         lst = "(list " + " ".join("(list %r %r)" % (p[0], p[1])
                                   for p in pts) + ")"
         vm.loads('(setq fit-test-res (fit:fit-and-snap %s "%s" "%s" '
-                 '1.0 %r %s))'
-                 % (lst, ptype, treat, pct, "T" if bowed else "nil"))
+                 '1.0 %r %s %s))'
+                 % (lst, ptype, treat, pct, "T" if oos else "nil",
+                    "T" if bowed else "nil"))
         return vm
 
     # rectangle with radius corners
@@ -1862,7 +2121,7 @@ def test_lisp_engine_matches_mirror():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Radius", 24.0,
         set(range(4))))
     pts = survey(place(true, 17.0, 100.0, 50.0), 22.0, 0.35, seed=7)
-    py = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False)
+    py = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False, False)
     vm = vmfit(pts, "Rectangle", "Radius")
     for key in ("LEN", "WID", "SIZE"):
         lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
@@ -1875,7 +2134,7 @@ def test_lisp_engine_matches_mirror():
            "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
     pts = survey(place(endcap_segs(prm, "ROman", False),
                        197.0, 500.0, 300.0), 22.0, 0.3, seed=11)
-    py = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, False)
+    py = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, False, False)
     vm = vmfit(pts, "ROman", "Square")
     assert vm.loads("(fit:rget fit-test-res 'both)") is None
     for key in ("WID", "BLEN", "RAD"):
@@ -1888,7 +2147,7 @@ def test_lisp_engine_matches_mirror():
     true = verts_to_segs(build_polygon(LAZY_DIRS, offs, "Radius", 12.0,
                                        set(range(6))))
     pts = survey(place(true, -23.0, 900.0, 100.0), 18.0, 0.3, seed=9)
-    py = fit_and_snap(pts, "LAzyl", "Radius", 1.0, MISS_PCT, False)
+    py = fit_and_snap(pts, "LAzyl", "Radius", 1.0, MISS_PCT, False, False)
     vm = vmfit(pts, "LAzyl", "Radius")
     lv = vm.loads("(fit:get-dim fit-test-res 'SIZE)")
     assert abs(lv - get_dim(py, "SIZE")) < 1.0e-6, lv
@@ -1896,11 +2155,13 @@ def test_lisp_engine_matches_mirror():
     assert abs(lv - py["worst"]) < 1.0e-6, lv
 
     # a grecian with eased as-built corners - the vertex-easing path
-    offs = grec_cuts([0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0], 36.0)
+    offs = grec_cuts(GREC_DIRS,
+                     [0.0, 0.0, 350.0, 0.0, 180.0, 0.0, 0.0, 0.0],
+                     36.0)[1]
     true = verts_to_segs(build_polygon(GREC_DIRS, offs, "Radius", 8.0,
                                        set(range(8))))
     pts = survey(place(true, 71.0, -50.0, 800.0), 14.0, 0.3, seed=23)
-    py = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False)
+    py = fit_and_snap(pts, "Grecian", "Radius", 1.0, MISS_PCT, False, False)
     vm = vmfit(pts, "Grecian", "Radius")
     for key in ("LEN", "WID", "CUT", "VSIZE"):
         lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
@@ -1911,8 +2172,8 @@ def test_lisp_engine_matches_mirror():
         RECT_DIRS, [96.0, 192.0, 96.0, 192.0], "Square", None, set(),
         [3.0, 0.0, 3.0, 0.0]))
     pts = survey(place(true, 17.0, 100.0, 50.0), 18.0, 0.25, seed=41)
-    py = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, True)
-    vm = vmfit(pts, "Rectangle", "Square", MISS_PCT, True)
+    py = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, False, True)
+    vm = vmfit(pts, "Rectangle", "Square", MISS_PCT, False, True)
     for key in ("LEN", "WID"):
         lv = vm.loads("(fit:get-dim fit-test-res '%s)" % key)
         assert abs(lv - get_dim(py, key)) < 1.0e-6, (key, lv)
@@ -1926,11 +2187,35 @@ def test_lisp_engine_matches_mirror():
         RECT_DIRS, [84.0, 191.5, 84.0, 191.5], "Square", None, set()))
     pts = survey(place(true, 5.0, 0.0, 0.0), 20.0, 0.2, seed=31)
     for pct in (0.15, 0.40):
-        py = fit_and_snap(pts, "Rectangle", "Square", 1.0, pct, False)
-        vm = vmfit(pts, "Rectangle", "Square", pct, False)
+        py = fit_and_snap(pts, "Rectangle", "Square", 1.0, pct, False,
+                          False)
+        vm = vmfit(pts, "Rectangle", "Square", pct, False, False)
         lv = vm.loads("(fit:get-dim fit-test-res 'LEN)")
         assert abs(lv - get_dim(py, "LEN")) < 1.0e-6, (pct, lv)
         assert vm.loads("(fit:rget fit-test-res 'allow)") == py["allow"]
+
+    # out of square - the whole wall-swing refinement through the .lsp
+    dirs = list(RECT_DIRS)
+    dirs[1] += math.radians(2.5)
+    true = verts_to_segs(build_polygon(dirs, [96.0, 192.0, 96.0, 192.0],
+                                       "Square", None, set()))
+    pts = survey(place(true, 17.0, 100.0, 50.0), 18.0, 0.25, seed=61)
+    py = fit_and_snap(pts, "Rectangle", "Square", 1.0, MISS_PCT, True,
+                      False)
+    vm = vmfit(pts, "Rectangle", "Square", MISS_PCT, True, False)
+    ld = vm.loads("(fit:rget fit-test-res 'dirs)")
+    for a, b in zip(ld, py["dirs"]):
+        assert abs(a - b) < 1.0e-9, (ld, py["dirs"])
+    lw = vm.loads("(fit:rget fit-test-res 'worst)")
+    assert abs(lw - py["worst"]) < 1.0e-6, (lw, py["worst"])
+    assert lw < 0.6, lw
+    # and the report it drives: every side, the diagonals, the skew
+    lines = vm.loads("(fit:square-lines fit-test-res)")
+    labels = [str(x.a) for x in lines]
+    assert labels[:4] == ["Side A-B", "Side B-C", "Side C-D",
+                          "Side D-A"], labels
+    assert "Diagonal A-C" in labels and "Diagonal B-D" in labels
+    assert labels[-1] == "Out of square by", labels
 
     # the standard-hopper layout, straight out of the LISP
     lay = vm.loads("(fit:hopper-layout 96.0 240.0 0.0 192.0 18.0 24.0)")
@@ -1947,29 +2232,30 @@ def test_the_questions_run_and_step_back():
     from lispvm import VM
     vm = VM()
     vm.load(LISP_FILE)
-    vm.script = ["Rectangle", "Radius", 1.5, 25, "Yes"]
+    vm.script = ["Rectangle", "Radius", 1.5, 25, "Outofsquare", "Yes"]
     vm.prompts = []
     got = vm.loads('(fit:ask-settings (list "Rectangle" "Square" 1.0'
-                   ' 0.15 nil) 6)')
+                   ' 0.15 nil nil) 7)')
     assert got[0] == "Rectangle" and got[1] == "Radius"
     assert abs(got[2] - 1.5) < 1e-9 and abs(got[3] - 0.25) < 1e-9
-    assert got[4] and not vm.script, (got, vm.script)
+    assert got[4] and got[5] and not vm.script, (got, vm.script)
     asked = " ".join(p for p, _ in vm.prompts)
-    for want in ("Step 1 of 6", "Percent of points allowed beyond",
-                 "Any bowed walls?"):
+    for want in ("Step 1 of 7", "Percent of points allowed beyond",
+                 "Insquare/Outofsquare", "Any bowed walls?"):
         assert want in asked, want
 
     # Back steps back exactly one question, every time
     vm = VM()
     vm.load(LISP_FILE)
     vm.script = ["Grecian", "Cut", "Back", "Radius", 2.0, "Back",
-                 2.0, 40, "Back", 55, "No"]
+                 2.0, 40, "Back", 55, "Insquare", "Back", "Outofsquare",
+                 "No"]
     vm.prompts = []
     got = vm.loads('(fit:ask-settings (list "Rectangle" "Square" 1.0'
-                   ' 0.15 nil) 5)')
+                   ' 0.15 nil nil) 6)')
     assert got[0] == "Grecian" and got[1] == "Radius"
     assert abs(got[2] - 2.0) < 1e-9 and abs(got[3] - 0.55) < 1e-9
-    assert got[4] is None and not vm.script, (got, vm.script)
+    assert got[4] and got[5] is None and not vm.script, (got, vm.script)
     # the way back offers what was already answered
     assert any("<40>" in p for p, _ in vm.prompts), \
         "the percent question did not offer the previous answer"
@@ -1979,9 +2265,9 @@ def test_the_questions_run_and_step_back():
     vm.script = ["ROUnd", 1.0, None]
     vm.prompts = []
     got = vm.loads('(fit:ask-settings (list "ROUnd" "Square" 1.0 0.15'
-                   ' nil) 5)')
-    assert got[4] is None and not vm.script
-    assert not any("bowed" in p for p, _ in vm.prompts)
+                   ' nil nil) 6)')
+    assert got[4] is None and got[5] is None and not vm.script
+    assert not any("bowed" in p or "square" in p for p, _ in vm.prompts)
     print("  the questions run, and Back re-opens the last one")
 
 
@@ -2065,8 +2351,11 @@ def test_lisp_file_is_well_formed():
                "fit:get-dim", "fit:set-dim", "fit:snap-result",
                "fit:fit-and-snap", "fit:outline-dev", "fit:seg-dist",
                "fit:hopper-layout", "fit:gather", "fit:report",
-               "fit:fit-wall-bow", "fit:fit-wall-bows", "fit:keep-bow",
-               "fit:bow-bulge", "fit:fit-cap-bows", "fit:apply-bows",
+               "fit:fit-wall-line", "fit:refine-walls", "fit:keep-bow",
+               "fit:solve-lin", "fit:swung-wall", "fit:flat-rms",
+               "fit:grec-cut-dir", "fit:grec-axis-corners",
+               "fit:square-lines", "fit:corner-zone-of",
+               "fit:bow-bulge", "fit:fit-cap-bows", "fit:apply-refinement",
                "fit:held-worst", "fit:snap-ok", "fit:on-eps",
                "fit:ask-settings", "fit:omit-choose", "fit:omit-loop",
                "fit:active", "fit:bow-lines",
@@ -2127,6 +2416,11 @@ def test_constants_match_lisp():
     assert float(setq_value("bow-max")) == BOW_MAX
     assert float(setq_value("bow-max-frac")) == BOW_MAX_FRAC
     assert int(setq_value("bow-pts-min")) == BOW_PTS_MIN
+    assert float(setq_value("oos-min")) == OOS_MIN
+    m = re.search(r"\(setq\s+fit:\*oos-max\*\s+\(/\s+pi\s+([0-9.]+)\)", src)
+    assert m and abs(math.pi / float(m.group(1)) - OOS_MAX) < 1e-12
+    assert '"Insquare Outofsquare"' in src, \
+        "the squareness question no longer uses POOL's vocabulary"
     assert int(setq_value("icp-iters")) == ICP_ITERS
     m = re.search(r"\(setq\s+fit:\*rad-turn-min\*\s+\(/\s+pi\s+([0-9.]+)\)",
                   src)
@@ -2161,6 +2455,10 @@ def main():
     test_true_l()
     test_lazy_l()
     test_round()
+    test_out_of_square_is_honoured()
+    test_a_square_pool_stays_square()
+    test_a_swing_too_far_is_refused()
+    test_out_of_square_l_and_grecian()
     test_percent_buys_nice_dimensions()
     test_snap_never_pushes_past_the_tolerance()
     test_bowed_walls_are_found()

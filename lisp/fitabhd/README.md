@@ -51,6 +51,23 @@ Knowing the type does half the work:
   both-ends fit must beat a single-ended one by a clear margin --
   extra freedom is not evidence. A Roman end reports its bulge (S) and
   stubs (S1) the way POOL draws them.
+* **The pool may be out of square** -- and by default it is assumed to
+  be. An AB pool is *built*, not drawn: almost none come out true, and
+  holding a rectangle perfectly square just pushes that error into the
+  points. Answer `Outofsquare` at step 5 (POOL's own question, in
+  POOL's own words) and each wall may **swing a little to answer its
+  own points**, so the survey is respected as far as the type allows.
+  A wall's swing is kept only where the points prove it -- at least an
+  inch of drift end to end (`fit:*oos-min*`) and a clear improvement
+  on that wall's own points -- so **a pool that really is square still
+  comes out square**. A swing past `fit:*oos-max*` (5°) is refused
+  outright: that is not an out-of-square rectangle, it is a different
+  shape, and the report says so rather than quietly absorbing it.
+  `Insquare` holds the template exactly and shows you the error
+  instead. On a Grecian the four cut corners are not free walls: each
+  **bisects its own corner** and all four keep one shared face,
+  however far the axis walls have swung. The arc-ended types are not
+  asked (swinging their side walls would take the end caps with them).
 * **Straight walls may be bowed.** "Straight" is a drafting
   convention, not a site measurement: a gunite wall shot dead straight
   on the order sheet is very often a very long radius on the ground.
@@ -94,9 +111,11 @@ The six questions:
    (capped at 2", remembered per session);
 4. the **percent of points allowed beyond** that distance (standard
    15%) -- the slack that buys whole-foot dimensions;
-5. whether the **straight walls may be bowed** (skipped for a Round
+5. whether the pool is **in-square or out of square** (default
+   `Outofsquare`; not asked for the arc-ended or round types);
+6. whether the **straight walls may be bowed** (skipped for a Round
    pool, which has none);
-6. the **selection**.
+7. the **selection**.
 
 Survey points are read exactly as ABHD reads them: `ab_pt` block
 inserts on any layer, or `POINT` entities (and other blocks) on the
@@ -131,7 +150,23 @@ pool.
 The fitted outline previews on `POOL-FIT` with a report -- the fitted
 dimensions in feet-and-inches, the pool's rotation, points on the
 outline / off within tolerance / beyond it, the strays ringed on
-`FGStep` and named worst-first by their `number` attribute. Keep it
+`FGStep` and named worst-first by their `number` attribute. When the
+pool came out **out of square** the report drops the two headline
+dimensions in favour of what an as-built actually needs: **every side
+by name, both diagonals** (POOL's cross dims, which are what pin an
+out-of-square shape down) and how far off square the worst wall came
+out.
+
+```
+  Side A-B          32'-4 5/8"
+  Side B-C          16'-0 1/8"
+  Side C-D          31'-8 3/8"
+  Side D-A          16'-0"
+  Diagonal A-C      35'-6"
+  Diagonal B-D      36'-1 1/2"
+  Out of square by  2.13 deg at the worst wall
+```
+ Keep it
 and it moves to the `POOL` layer in ByLayer colour, like ABHD's.
 Only FITABHD's own stamped objects are ever erased from `FGStep` or
 `POOL-FIT`; your geometry there is never touched.
@@ -174,7 +209,9 @@ corner-zone sizing (`fit:*corner-zone*`, `fit:*zone-pad*`,
 both-ends evidence margin (`fit:*both-edge*`), the standard share of
 points allowed off (`fit:*miss-pct*`), what counts as a bow at all
 (`fit:*bow-min*`, `fit:*bow-max*`, `fit:*bow-max-frac*`,
-`fit:*bow-pts-min*`) and the K/L/M offset (`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
+`fit:*bow-pts-min*`), how far out of square a wall may go
+(`fit:*oos-max*`, `fit:*oos-min*`) and the K/L/M offset
+(`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
 
 ## Notes & limitations
@@ -183,9 +220,19 @@ mirror agree on the ones that shape the fit.
 * The type list is deliberately the *typical* pools: Octagon rides the
   Grecian template (same eight corners); mixed-end ("mutt") and
   freeform/kidney shapes are what ABHD is for.
-* A Lazy L's bend is held at exactly 45 degrees -- that is the point
-  of declaring the type. A pool bent at some other angle will show up
-  in the report as points beyond tolerance; trace it with ABHD.
+* Out of square is a *swing*, not a bend: each wall stays a straight
+  line, it just no longer sits at exactly 0/45/90 degrees to its
+  neighbours. A wall that is genuinely curved is what the bow question
+  is for; a pool whose walls need more than 5 degrees of swing is not
+  the type it was declared as.
+* Out of square is not offered for Roman, Oval or Round: swinging an
+  arc-ended body's side walls would take its end caps with them. Those
+  types still get the bow refinement, and a genuinely out-of-square one
+  is ABHD's job.
+* A Lazy L's bend is nominally 45 degrees -- that is the point of
+  declaring the type -- and `Outofsquare` lets it swing up to 5 degrees
+  off that. A pool bent much further will show up in the report as
+  points beyond tolerance; trace it with ABHD.
 * The corner radius / cut face is *shared* across the corners (that is
   what "typical" means on an order sheet). Corners that genuinely
   differ will show as strays.

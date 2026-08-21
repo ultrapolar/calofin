@@ -75,7 +75,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.2")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.3")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -140,6 +140,13 @@
                                    ; of its own length
 (setq fit:*bow-pts-min* 4)         ; and one shot fewer times than this
                                    ; cannot tell a bow from noise
+(setq fit:*oos-max* (/ pi 36.0))   ; how far a wall may swing off its
+                                   ; template direction (5 degrees):
+                                   ; further than that and the survey
+                                   ; is not this type of pool at all
+(setq fit:*oos-min*     1.0)       ; the drift from one end of a wall
+                                   ; to the other below which the wall
+                                   ; reads as true and is held there
 (setq fit:*feat-snap*   0.1)       ; snapping a MEASURED feature (a
                                    ; corner radius, a cut face, a
                                    ; roman end radius) may grow the
@@ -158,6 +165,7 @@
 (setq fit:*dim-off*     12.0)      ; the K/L/M string sits this far off
                                    ; the deep break, on the shallow side
 (if (null fit:*tol*) (setq fit:*tol* 1.0))       ; remembered per session
+(if (null fit:*oos*) (setq fit:*oos* T))  ; as-builts are never true
 (if (null fit:*brk-deep*) (setq fit:*brk-deep* (cons 96.0 T)))
 (if (null fit:*brk-shal*) (setq fit:*brk-shal* (cons 240.0 T)))
 (if (null fit:*hop-side*) (setq fit:*hop-side* (cons 18.0 nil)))
@@ -757,36 +765,159 @@
 ;; every dimension taken between them, stay exactly where the straight
 ;; fit put them, and only the wall between them breathes.
 
-;; Least squares (chord shift outward, sagitta outward) for the wall
-;; A->B over its own points.  nil when the wall has too few points to
-;; tell a bow from noise.
-(defun fit:fit-wall-bow (wpts a b / c ux uy nx ny s11 s1g sgg sy sgy p
-                                    dx dy x g y det)
-  (setq c (cal:dist a b))
-  (if (or (< c 1.0e-9) (< (length wpts) fit:*bow-pts-min*))
+;; Small Gauss-Jordan with partial pivoting; nil when singular.  MAT is
+;; a list of rows, RHS a list; both N long.
+(defun fit:solve-lin (mat rhs n / aug i c r piv d f row cr out)
+  (setq aug nil i 0)
+  (while (< i n)
+    (setq aug (cons (append (nth i mat) (list (nth i rhs))) aug)
+          i   (1+ i)))
+  (setq aug (reverse aug) c 0)
+  (while (and aug (< c n))
+    (setq piv c r c)
+    (while (< r n)
+      (if (> (abs (nth c (nth r aug))) (abs (nth c (nth piv aug))))
+        (setq piv r))
+      (setq r (1+ r)))
+    (if (< (abs (nth c (nth piv aug))) 1.0e-12)
+      (setq aug nil)                        ; singular
+      (progn
+        ;; swap rows c and piv
+        (setq row (nth c aug)
+              aug (fit:setnth aug c (nth piv aug))
+              aug (fit:setnth aug piv row)
+              d   (nth c (nth c aug))
+              aug (fit:setnth aug c
+                              (mapcar '(lambda (v) (/ v d)) (nth c aug)))
+              cr  (nth c aug)
+              r   0)
+        (while (< r n)
+          (if (/= r c)
+            (progn
+              (setq f (nth c (nth r aug)))
+              (if (/= f 0.0)
+                (setq aug (fit:setnth
+                            aug r
+                            (mapcar '(lambda (v w) (- v (* f w)))
+                                    (nth r aug) cr))))))
+          (setq r (1+ r)))
+        (setq c (1+ c)))))
+  (if (null aug)
     nil
     (progn
-      (setq ux  (/ (- (car b) (car a)) c)
-            uy  (/ (- (cadr b) (cadr a)) c)
-            nx  uy                        ; right of travel = outward
-            ny  (- ux)
-            s11 0.0 s1g 0.0 sgg 0.0 sy 0.0 sgy 0.0)
-      (foreach p wpts
-        (setq dx  (- (car p) (car a))
-              dy  (- (cadr p) (cadr a))
-              x   (/ (+ (* dx ux) (* dy uy)) c)
-              g   (* 4.0 x (- 1.0 x))   ; 1 at mid-wall, 0 at both ends
-              y   (+ (* dx nx) (* dy ny))
-              s11 (+ s11 1.0)
-              s1g (+ s1g g)
-              sgg (+ sgg (* g g))
-              sy  (+ sy y)
-              sgy (+ sgy (* g y))))
-      (setq det (- (* s11 sgg) (* s1g s1g)))
-      (if (< (abs det) 1.0e-9)
+      (setq out nil i 0)
+      (while (< i n)
+        (setq out (cons (nth n (nth i aug)) out) i (1+ i)))
+      (reverse out))))
+
+;; Least-squares wall through its own points, in the wall's own frame
+;; (t along the chord A->B, y outward):
+;;
+;;     y = A + B*t + C*4t(1-t)
+;;
+;; A is where the wall sits, B how far it DRIFTS from one end to the
+;; other - the wall swinging off its template direction, which is what
+;; an out-of-square pool is made of - and C how far it BOWS at
+;; mid-wall.  Terms not asked for are held at zero and left out of the
+;; solve.  Returns (A B C), or nil when the wall has too few points to
+;; tell any of it from noise.
+(defun fit:fit-wall-line (wpts a b want-swing want-bow / c ux uy nx ny use
+                                                        k mat rhs row i j
+                                                        p dx dy tt f y got
+                                                        out)
+  (setq c (cal:dist a b))
+  (if (< c 1.0e-9)
+    nil
+    (progn
+      (setq use (list 0))
+      (if want-swing (setq use (append use (list 1))))
+      (if want-bow (setq use (append use (list 2))))
+      (setq k (length use))
+      (if (< (length wpts) (max fit:*bow-pts-min* (1+ k)))
         nil
-        (list (/ (- (* sy sgg) (* s1g sgy)) det)
-              (/ (- (* s11 sgy) (* s1g sy)) det))))))
+        (progn
+          (setq ux (/ (- (car b) (car a)) c)
+                uy (/ (- (cadr b) (cadr a)) c)
+                nx uy                       ; right of travel = outward
+                ny (- ux)
+                mat nil rhs nil i 0)
+          (while (< i k)
+            (setq row nil j 0)
+            (while (< j k) (setq row (cons 0.0 row) j (1+ j)))
+            (setq mat (cons row mat)
+                  rhs (cons 0.0 rhs)
+                  i   (1+ i)))
+          (foreach p wpts
+            (setq dx (- (car p) (car a))
+                  dy (- (cadr p) (cadr a))
+                  tt (/ (+ (* dx ux) (* dy uy)) c)
+                  f  (list 1.0 tt (* 4.0 tt (- 1.0 tt)))
+                  y  (+ (* dx nx) (* dy ny))
+                  i  0)
+            (while (< i k)
+              (setq rhs (fit:setnth
+                          rhs i (+ (nth i rhs)
+                                   (* (nth (nth i use) f) y)))
+                    j   0)
+              (while (< j k)
+                (setq mat (fit:setnth
+                            mat i
+                            (fit:setnth (nth i mat) j
+                                        (+ (nth j (nth i mat))
+                                           (* (nth (nth i use) f)
+                                              (nth (nth j use) f)))))
+                      j   (1+ j)))
+              (setq i (1+ i))))
+          (setq got (fit:solve-lin mat rhs k))
+          (if (null got)
+            nil
+            (progn
+              (setq out (list 0.0 0.0 0.0) i 0)
+              (while (< i k)
+                (setq out (fit:setnth out (nth i use) (nth i got))
+                      i   (1+ i)))
+              out)))))))
+
+;; The wall line A->B (template direction D) after its fitted offset
+;; and drift are applied: (new-direction new-outward-offset).  The
+;; drift is a ROTATION, so the wall stays a straight line - the pool
+;; goes out of square, it does not go crooked.
+(defun fit:swung-wall (a b d coef / c ux uy nx ny d2 q n2)
+  (setq c  (cal:dist a b)
+        ux (/ (- (car b) (car a)) c)
+        uy (/ (- (cadr b) (cadr a)) c)
+        nx uy
+        ny (- ux)
+        d2 (- d (atan (cadr coef) c))
+        q  (list (+ (car a) (* nx (car coef)))
+                 (+ (cadr a) (* ny (car coef))))
+        n2 (fit:wall-normal d2))
+  (list d2 (cal:dot n2 q)))
+
+;; RMS of the points about the straight line with direction D at
+;; outward offset OFF - the wall as the template would hold it.
+(defun fit:flat-rms (wpts d off / nrm ssum p e)
+  (setq nrm (fit:wall-normal d) ssum 0.0)
+  (if (null wpts)
+    0.0
+    (progn
+      (foreach p wpts
+        (setq e (- (cal:dot nrm p) off) ssum (+ ssum (* e e))))
+      (sqrt (/ ssum (length wpts))))))
+
+;; RMS of the points about the drawn segment A->B with this bulge.
+(defun fit:wall-rms (wpts a b bulge)
+  (if (null wpts) 0.0 (cadr (fit:outline-dev wpts (list (list a b bulge))))))
+
+;; The mean outward offset of a wall's own points - the wall as the
+;; template holds it, with no drift and no bow.
+(defun fit:flat-off (wpts d dflt / nrm ssum p)
+  (if (null wpts)
+    dflt
+    (progn
+      (setq nrm (fit:wall-normal d) ssum 0.0)
+      (foreach p wpts (setq ssum (+ ssum (cal:dot nrm p))))
+      (/ ssum (length wpts)))))
 
 ;; A bow may not be deeper than a wall can bow and still be a wall.
 (defun fit:bow-cap (s c / smax)
@@ -808,53 +939,6 @@
                        wpts
                        (list (list a b (fit:bow-bulge s c a b))))))
       (if (<= rb (* rs fit:*both-edge*)) s 0.0))))
-
-;; Refit every wall of a settled polygon as a shallow arc through its
-;; own points.  Returns (offs bows), with 0.0 on every wall the points
-;; do not prove bowed - and that wall's offset put back to the plain
-;; straight-wall mean, so a dropped bow leaves no trace of the bow term
-;; it was fitted beside.
-(defun fit:fit-wall-bows (pts dirs offs zone / n bows raw wallpts corners
-                                               new i a b got nrm ssum c)
-  (setq n (length dirs) bows nil)
-  (repeat 2
-    (setq wallpts (car (fit:assign-walls pts dirs offs zone))
-          corners (fit:poly-corners dirs offs))
-    (if corners
-      (progn
-        (setq new offs bows nil i 0)
-        (while (< i n)
-          (setq a   (nth i corners)
-                b   (nth (rem (1+ i) n) corners)
-                got (fit:fit-wall-bow (nth i wallpts) a b))
-          (if got
-            (setq new  (fit:setnth new i (+ (nth i offs) (car got)))
-                  bows (cons (fit:bow-cap (cadr got) (cal:dist a b))
-                             bows))
-            (setq bows (cons 0.0 bows)))
-          (setq i (1+ i)))
-        (setq bows (reverse bows))
-        (if (fit:poly-corners dirs new) (setq offs new)))))
-  (setq wallpts (car (fit:assign-walls pts dirs offs zone))
-        corners (fit:poly-corners dirs offs))
-  (if (or (null corners) (null bows))
-    (list offs nil)
-    (progn
-      (setq i 0 raw bows bows nil)
-      (while (< i n)
-        (setq c (fit:keep-bow (nth i wallpts) (nth i corners)
-                              (nth (rem (1+ i) n) corners) (nth i raw))
-              bows (cons c bows))
-        (if (and (equal c 0.0 1.0e-12) (nth i wallpts))
-          (progn
-            (setq nrm  (fit:wall-normal (nth i dirs))
-                  ssum 0.0)
-            (foreach a (nth i wallpts)
-              (setq ssum (+ ssum (cal:dot nrm a))))
-            (setq offs (fit:setnth offs i
-                                   (/ ssum (length (nth i wallpts)))))))
-        (setq i (1+ i)))
-      (list offs (reverse bows)))))
 
 ;; ---- template starting guesses ---------------------------------------
 
@@ -916,43 +1000,57 @@
           i    (1+ i)))
   (reverse offs))
 
-;; The mean cut-face length the four fitted cut walls of an 8-wall
-;; template imply, measured from its own nominal square corners.
-(defun fit:grec-face (offs / sq k i nrm vc hsum)
-  (setq sq (fit:poly-corners fit:*rect-dirs*
-                             (list (nth 0 offs) (nth 2 offs)
-                                   (nth 4 offs) (nth 6 offs))))
+;; Where the four AXIS walls of an eight-wall template would meet if
+;; the cuts were not there - the pool's nominal corners.  Taken from
+;; the walls themselves, so it still means something once they have
+;; swung out of square.
+(defun fit:grec-axis-corners (dirs offs)
+  (fit:poly-corners (list (nth 0 dirs) (nth 2 dirs)
+                          (nth 4 dirs) (nth 6 dirs))
+                    (list (nth 0 offs) (nth 2 offs)
+                          (nth 4 offs) (nth 6 offs))))
+
+;; A cut wall bisects the corner it crosses, whatever the two axis
+;; walls are doing - exactly 45 degrees on a true pool, and still a
+;; real cut on an out-of-square one.
+(defun fit:grec-cut-dir (dirs k / d0 d1)
+  (setq d0 (nth (* 2 k) dirs)
+        d1 (nth (rem (+ (* 2 k) 2) 8) dirs))
+  (+ d0 (/ (cal:signed-dang d0 d1) 2.0)))
+
+;; The mean cut-face length the four fitted cut walls imply.
+(defun fit:grec-face (dirs offs / sq k i nrm vc hsum)
+  (setq sq (fit:grec-axis-corners dirs offs))
   (if (null sq)
     0.0
     (progn
       (setq hsum 0.0 k 0)
       (while (< k 4)
         (setq i   (1+ (* 2 k))
-              nrm (fit:wall-normal (nth i fit:*grec-dirs*))
+              nrm (fit:wall-normal (nth i dirs))
               vc  (nth (rem (1+ k) 4) sq))
         (setq hsum (+ hsum (- (cal:dot nrm vc) (nth i offs)))
               k    (1+ k)))
       (* 2.0 (/ hsum 4.0)))))
 
-;; Recompute the four 45-degree cut walls so each sits the same
-;; perpendicular inset (face/2) from its own nominal square corner.
-(defun fit:grec-cuts (offs face / sq out k i nrm vc h)
-  (setq sq (fit:poly-corners fit:*rect-dirs*
-                             (list (nth 0 offs) (nth 2 offs)
-                                   (nth 4 offs) (nth 6 offs))))
+;; Re-derive the four cut walls from the four axis walls: each bisects
+;; its corner and sits the same perpendicular inset (face/2) in from
+;; where the axis walls would meet.  Returns (dirs offs).
+(defun fit:grec-cuts (dirs offs face / sq k i nrm vc h)
+  (setq sq (fit:grec-axis-corners dirs offs))
   (if (null sq)
-    offs
+    (list dirs offs)
     (progn
-      (setq out offs h (/ face 2.0) k 0)
+      (setq h (/ face 2.0) k 0)
       (while (< k 4)
-        (setq i   (1+ (* 2 k))
-              nrm (fit:wall-normal (nth i fit:*grec-dirs*))
-              vc  (nth (rem (1+ k) 4) sq)
-              out (fit:setnth out i (- (cal:dot nrm vc) h))
-              k   (1+ k)))
-      out)))
+        (setq i    (1+ (* 2 k))
+              dirs (fit:setnth dirs i (fit:grec-cut-dir dirs k))
+              nrm  (fit:wall-normal (nth i dirs))
+              vc   (nth (rem (1+ k) 4) sq)
+              offs (fit:setnth offs i (- (cal:dot nrm vc) h))
+              k    (1+ k)))
+      (list dirs offs))))
 
-;; LST with element I replaced by V.
 (defun fit:setnth (lst i v / out k x)
   (setq out nil k 0)
   (foreach x lst
@@ -969,7 +1067,7 @@
 ;; by a clear margin - noise is not evidence, and neither is a fit
 ;; below fit:*vsize-min*.  Returns (vsize offs face).
 (defun fit:fit-vertex-feature (pts dirs offs treat / tanh cosh which zone
-                                                    vs cpts face asg
+                                                    vs cpts face asg got2
                                                     corners czpts b p
                                                     sharp eased rs re2)
   (setq tanh  (cal:tan (/ pi 8.0))
@@ -978,7 +1076,7 @@
         zone  (* fit:*corner-zone* tanh)
         vs    nil
         cpts  nil
-        face  (fit:grec-face offs))
+        face  (fit:grec-face dirs offs))
   (repeat 2
     (setq asg     (fit:assign-walls pts dirs offs zone)
           cpts    (cadr asg)
@@ -994,8 +1092,10 @@
                      (+ (* 1.2 vs tanh) fit:*zone-pad*)
                      (+ (/ (* 1.2 vs) (* 2.0 cosh)) fit:*zone-pad*))
               offs (fit:fit-polygon pts dirs offs zone fit:*icp-iters*)
-              face (fit:grec-face offs)
-              offs (fit:grec-cuts offs face)))))
+              face (fit:grec-face dirs offs)
+              got2 (fit:grec-cuts dirs offs face)
+              dirs (car got2)
+              offs (cadr got2)))))
   (if (and vs (>= vs fit:*vsize-min*) cpts)
     (progn
       (setq czpts nil)
@@ -1013,8 +1113,10 @@
           (if (> re2 (* rs fit:*both-edge*)) (setq vs nil)))
         (setq vs nil)))
     (setq vs nil))
-  (setq face (fit:grec-face offs)
-        offs (fit:grec-cuts offs face))
+  (setq face (fit:grec-face dirs offs)
+        got2 (fit:grec-cuts dirs offs face)
+        dirs (car got2)
+        offs (cadr got2))
   (list vs offs face))
 
 ;; Shared fit for the all-straight-wall types: walls, then the corner
@@ -1056,6 +1158,101 @@
                 size    (fit:fit-corner-radius cpts corners dirs
                                                voters))))))
   (list offs size))
+
+;; Let every wall answer to its own points.
+;;
+;; The template fixed each wall's DIRECTION, which is what makes the
+;; type mean anything - but a real as-built is never true, and holding
+;; a rectangle perfectly square just pushes the error into the points.
+;; So each wall is refitted here: its offset always, its direction when
+;; the pool may be out of square, its bow when the walls may be bowed.
+;; Each of those is then kept only where the points prove it, so a pool
+;; that really is square comes out square.
+;;
+;; Returns (dirs offs bows).
+(defun fit:refine-walls (pts dirs offs zone oos bowed / n base coefs
+                                                       wallpts corners nd
+                                                       no i a b got d2o
+                                                       bows wpts swing
+                                                       drift flat got2)
+  (setq n     (length dirs)
+        base  dirs
+        coefs nil
+        i     0)
+  (repeat n (setq coefs (cons nil coefs)))
+  (repeat 3
+    (setq wallpts (car (fit:assign-walls pts dirs offs zone))
+          corners (fit:poly-corners dirs offs))
+    (if corners
+      (progn
+        (setq nd dirs no offs i 0)
+        (while (< i n)
+          (setq a   (nth i corners)
+                b   (nth (rem (1+ i) n) corners)
+                got (fit:fit-wall-line (nth i wallpts) a b oos bowed))
+          (if got
+            (progn
+              (setq coefs (fit:setnth coefs i got)
+                    d2o   (fit:swung-wall a b (nth i dirs) got))
+              (if (<= (abs (cal:signed-dang (nth i base) (car d2o)))
+                      fit:*oos-max*)
+                (setq nd (fit:setnth nd i (car d2o))
+                      no (fit:setnth no i (cadr d2o)))
+                (setq no (fit:setnth no i (+ (nth i offs) (car got)))))))
+          (setq i (1+ i)))
+        ;; on an eight-wall template the cut corners are not free
+        ;; walls: each bisects its own corner and all four share one
+        ;; face, however far the axis walls have swung
+        (if (= n 8)
+          (setq got2 (fit:grec-cuts nd no (fit:grec-face nd no))
+                nd   (car got2)
+                no   (cadr got2)))
+        (if (fit:poly-valid nd no) (setq dirs nd offs no)))))
+  ;; ---- what did the points actually earn? --------------------------
+  (setq wallpts (car (fit:assign-walls pts dirs offs zone))
+        corners (fit:poly-corners dirs offs))
+  (if (null corners)
+    (list base offs nil)
+    (progn
+      (setq bows nil i 0)
+      (while (< i n)
+        (setq wpts  (nth i wallpts)
+              a     (nth i corners)
+              b     (nth (rem (1+ i) n) corners)
+              swing (cal:signed-dang (nth i base) (nth i dirs))
+              ;; the drift the TOTAL swing represents, end to end, in
+              ;; inches - not the residual the last pass measured,
+              ;; which is near zero once the wall has already been
+              ;; swung onto its points
+              drift (* (abs (cal:tan swing)) (cal:dist a b)))
+        (if (and (= n 8) (= 1 (rem i 2)))
+          (setq swing 0.0))                 ; a derived cut wall
+        (if (> (abs swing) 1.0e-9)
+          (progn
+            (setq flat (fit:flat-off wpts (nth i base) (nth i offs)))
+            (if (not (and (>= drift fit:*oos-min*)
+                          wpts
+                          (<= (fit:wall-rms wpts a b 0.0)
+                              (* (fit:flat-rms wpts (nth i base) flat)
+                                 fit:*both-edge*))))
+              (setq dirs (fit:setnth dirs i (nth i base))
+                    offs (fit:setnth offs i flat)))))
+        (setq bows (cons (if (and bowed (nth i coefs))
+                           (fit:keep-bow wpts a b
+                                         (fit:bow-cap
+                                           (caddr (nth i coefs))
+                                           (cal:dist a b)))
+                           0.0)
+                         bows)
+              i    (1+ i)))
+      (setq bows (reverse bows))
+      (if (= n 8)
+        (setq got2 (fit:grec-cuts dirs offs (fit:grec-face dirs offs))
+              dirs (car got2)
+              offs (cadr got2)))
+      (if (fit:poly-valid dirs offs)
+        (list dirs offs (if (fit:any-bow bows) bows nil))
+        (list base offs nil)))))
 
 ;; ---- the arc-ended types (Roman / Oval) ------------------------------
 
@@ -1167,11 +1364,11 @@
   (foreach wpts (list bot top)
     (setq a   (if (= k 0) (list lo yb) (list hi yt))
           b   (if (= k 0) (list hi yb) (list lo yt))
-          got (fit:fit-wall-bow wpts a b))
+          got (fit:fit-wall-line wpts a b nil T))
     (if got
       (progn
         (setq shift (car got)
-              s     (fit:bow-cap (cadr got) (cal:dist a b)))
+              s     (fit:bow-cap (caddr got) (cal:dist a b)))
         (if (= k 0)
           (setq yb  (- yb shift)
                 prm (fit:pput prm 'By yb)
@@ -1400,7 +1597,7 @@
   (reverse out))
 
 (defun fit:poly-result (ptype fpts dirs offs0 treat / fitres offs size
-                                                      vsize which verts)
+                                                      vsize which verts got2)
   (if (= 8 (length dirs))
     (progn
       ;; the cut corners are walls of their own here (Grecian, and a
@@ -1410,8 +1607,10 @@
       ;; (or Cut) measures a shared easing from the points.
       (setq fitres (fit:fit-polytype fpts dirs offs0 "Square")
             offs   (car fitres)
-            size   (fit:grec-face offs)
-            offs   (fit:grec-cuts offs size)
+            size   (fit:grec-face dirs offs)
+            got2   (fit:grec-cuts dirs offs size)
+            dirs   (car got2)
+            offs   (cadr got2)
             vsize  nil)
       (if (member treat '("Radius" "Cut"))
         (setq fitres (fit:fit-vertex-feature fpts dirs offs treat)
@@ -1596,7 +1795,7 @@
 
 ;; A copy of RES with the dimension forced to V and its outline
 ;; rebuilt.  Symmetric dims move both walls, keeping the centre.
-(defun fit:set-dim (res key v / t2 offs prm d j w)
+(defun fit:set-dim (res key v / t2 offs prm d j w got2)
   (setq t2 (fit:rget res 'type))
   (cond
     ((eq (fit:rget res 'kind) 'poly)
@@ -1616,7 +1815,10 @@
             (setq res (fit:rput res 'size v)))
            ((eq key 'VSIZE)
             (setq res (fit:rput res 'vsize v))))
-         (setq offs (fit:grec-cuts offs (fit:rget res 'size))))
+         (setq got2 (fit:grec-cuts (fit:rget res 'dirs) offs
+                                   (fit:rget res 'size))
+               res  (fit:rput res 'dirs (car got2))
+               offs (cadr got2)))
        (cond
          ((eq key 'LEN)
           (setq j (if (member t2 '("L" "LAzyl")) 5 3)
@@ -1718,40 +1920,59 @@
               (if bt (setq res bt done T))))))))
   res)
 
-;; Fit the bows on the placement that already WON.  Bows are a
-;; refinement of the chosen template, never a competitor in the
-;; search: the extra freedom would let a wrong rotation bend its way
-;; to a good score.
-(defun fit:apply-bows (res fpts / zone got offs bows prm)
+;; How far from a corner a point belongs to the corner feature rather
+;; than to a wall.
+(defun fit:corner-zone-of (res)
+  (cond
+    ((fit:rget res 'vsize)
+     (+ (* 1.2 (fit:rget res 'vsize) (cal:tan (/ pi 8.0)))
+        fit:*zone-pad*))
+    ;; on an eight-wall template the cut corners ARE walls, and "size"
+    ;; is their face length - not a corner feature at all
+    ((= 8 (length (fit:rget res 'offs))) 0.0)
+    ((fit:rget res 'size) (+ (* 1.2 (fit:rget res 'size))
+                             fit:*zone-pad*))
+    ((member (fit:rget res 'treat) '("Radius" "Cut")) fit:*corner-zone*)
+    (T 0.0)))
+
+;; Refine the placement that already WON: let the walls answer to the
+;; points.  A refinement is never a competitor in the search - the
+;; extra freedom would let a wrong rotation bend its way to a good
+;; score - so it runs once, on the winner.
+(defun fit:apply-refinement (res fpts oos bowed / got dirs offs bows
+                                                 swung prm a b)
   (cond
     ((eq (fit:rget res 'kind) 'poly)
-     (setq zone (if (member (fit:rget res 'treat) '("Radius" "Cut"))
-                  fit:*corner-zone* 0.0))
-     (cond
-       ((fit:rget res 'vsize)
-        (setq zone (+ (* 1.2 (fit:rget res 'vsize) (cal:tan (/ pi 8.0)))
-                      fit:*zone-pad*)))
-       ((fit:rget res 'size)
-        (setq zone (+ (* 1.2 (fit:rget res 'size)) fit:*zone-pad*))))
-     (setq got  (fit:fit-wall-bows fpts (fit:rget res 'dirs)
-                                   (fit:rget res 'offs) zone)
-           offs (car got)
-           bows (cadr got))
-     (if (null (fit:any-bow bows))
+     (setq got  (fit:refine-walls fpts (fit:rget res 'dirs)
+                                  (fit:rget res 'offs)
+                                  (fit:corner-zone-of res) oos bowed)
+           dirs (car got)
+           offs (cadr got)
+           bows (caddr got)
+           swung nil)
+     (setq a (fit:rget res 'dirs) b dirs)
+     (while a
+       (if (> (abs (cal:signed-dang (car a) (car b))) 1.0e-9)
+         (setq swung T))
+       (setq a (cdr a) b (cdr b)))
+     (if (and (null swung) (null bows))
        res
        (progn
-         (setq res (fit:rput res 'offs offs)
-               res (fit:rput res 'bows bows))
+         (setq res (fit:rput res 'dirs dirs)
+               res (fit:rput res 'offs offs)
+               res (fit:rput res 'bows bows)
+               res (fit:rput res 'swung swung))
          (if (= 8 (length offs))
-           (setq res (fit:rput res 'size (fit:grec-face offs))))
+           (setq res (fit:rput res 'size (fit:grec-face dirs offs))))
          (fit:rput res 'verts
-                   (fit:build-polygon (fit:rget res 'dirs) offs
-                                      (fit:rget res 'treat)
+                   (fit:build-polygon dirs offs (fit:rget res 'treat)
                                       (if (= 8 (length offs))
                                         (fit:rget res 'vsize)
                                         (fit:rget res 'size))
                                       (fit:rget res 'which) bows)))))
-    ((eq (fit:rget res 'kind) 'cap)
+    ((and (eq (fit:rget res 'kind) 'cap) bowed)
+     ;; an arc-ended body's SIDE walls can bow; swinging them would
+     ;; take the end caps with them, so out-of-square stops here
      (setq got  (fit:fit-cap-bows fpts (fit:rget res 'prm)
                                   (fit:rget res 'both))
            prm  (car got)
@@ -1776,8 +1997,8 @@
 ;; walls may be bowed, then nice-dim snapping against the share of the
 ;; points the user allows beyond the distance, then the final figures.  The outline stays in frame
 ;; coordinates under 'verts; fit:res-world-verts carries it out.
-(defun fit:fit-and-snap (pts ptype treat tol pct bowed / dpts allow res
-                                                        fpts dev)
+(defun fit:fit-and-snap (pts ptype treat tol pct oos bowed / dpts allow
+                                                            res fpts dev)
   (setq dpts  (cal:dedupe pts fit:*exact-eps*)
         allow (cal:ceil (* pct (length dpts)))
         res   (fit:fit-type dpts ptype treat))
@@ -1785,7 +2006,8 @@
     (setq fpts dpts)
     (setq fpts (fit:to-frame dpts (fit:rget res 'angle)
                              (fit:rget res 'mirror))))
-  (if bowed (setq res (fit:apply-bows res fpts)))
+  (if (or oos bowed)
+    (setq res (fit:apply-refinement res fpts oos bowed)))
   (setq res (fit:snap-result res fpts tol allow)
         dev (fit:outline-dev fpts (fit:res-fsegs res))
         res (fit:rput res 'worst (car dev))
@@ -2026,6 +2248,58 @@
 (defun fit:bow-radius (s c)
   (+ (/ (* c c) (* 8.0 (abs s))) (/ (abs s) 2.0)))
 
+;; The lines an OUT-OF-SQUARE fit needs: every side by name, the
+;; diagonals that pin the shape down (POOL's cross dims), and how far
+;; off square the worst wall came out.  A pool held square needs none
+;; of this - its sides are its two dimensions.
+(defun fit:square-lines (res / dirs offs corners n i j out worst sw base
+                               names)
+  (setq dirs (fit:rget res 'dirs)
+        offs (fit:rget res 'offs)
+        out  nil)
+  (if (or (null dirs) (null (fit:rget res 'swung)))
+    nil
+    (progn
+      (setq corners (fit:poly-corners dirs offs)
+            n       (length corners)
+            base    (fit:template-dirs (fit:rget res 'type)
+                                       (fit:rget res 'treat) n)
+            worst   0.0
+            i       0)
+      (while (< i n)
+        (setq sw (abs (cal:signed-dang (nth i base) (nth i dirs))))
+        (if (> sw worst) (setq worst sw))
+        (setq out (cons (cons (strcat "Side " (fit:wall-name i n))
+                              (fit:ftin (cal:dist
+                                          (nth i corners)
+                                          (nth (rem (1+ i) n) corners))))
+                        out)
+              i   (1+ i)))
+      ;; the diagonals: every corner to the one opposite it
+      (setq i 0)
+      (while (< i (/ n 2))
+        (setq j (rem (+ i (/ n 2)) n)
+              out (cons (cons (strcat "Diagonal "
+                                      (chr (+ 65 i)) "-" (chr (+ 65 j)))
+                              (fit:ftin (cal:dist (nth i corners)
+                                                  (nth j corners))))
+                        out)
+              i   (1+ i)))
+      (setq out (cons (cons "Out of square by"
+                            (strcat (rtos (/ (* 180.0 worst) pi) 2 2)
+                                    " deg at the worst wall"))
+                      out))
+      (reverse out))))
+
+;; The template directions a type started from, for measuring how far
+;; a wall has swung.
+(defun fit:template-dirs (ptype treat n)
+  (cond
+    ((= n 8) fit:*grec-dirs*)
+    ((= ptype "L") fit:*l-dirs*)
+    ((= ptype "LAzyl") fit:*lazy-dirs*)
+    (T fit:*rect-dirs*)))
+
 ;; One report line per wall the fit found bowed.
 (defun fit:bow-lines (res / bows out i n corners s c span nm)
   (setq bows (fit:rget res 'bows) out nil)
@@ -2090,7 +2364,8 @@
                  (rtos (rem (/ (* 180.0 (fit:rget res 'angle)) pi) 180.0)
                        2 2)
                  " degrees."))
-  (foreach pr (append (fit:dims-lines res) (fit:bow-lines res))
+  (foreach pr (append (fit:dims-lines res) (fit:square-lines res)
+                      (fit:bow-lines res))
     (setq line (car pr))
     (while (< (strlen line) 18) (setq line (strcat line " ")))
     (princ (strcat "\n  " line (cdr pr))))
@@ -2382,15 +2657,17 @@
 ;; bowed); Enter keeps each answer.  TOTAL is how many steps the run
 ;; has, so the labels read true on a first run (6, the selection last)
 ;; and on a Redo (5, the points already in hand).
-(defun fit:ask-settings (def total / step ptype treat tol pct bowed v n)
+(defun fit:ask-settings (def total / step ptype treat tol pct oos bowed v
+                                    n)
   (setq ptype (nth 0 def)
         treat (nth 1 def)
         tol   (nth 2 def)
         pct   (nth 3 def)
-        bowed (nth 4 def)
+        oos   (nth 4 def)
+        bowed (nth 5 def)
         n     (itoa total)
         step  1)
-  (while (<= step 5)
+  (while (<= step 6)
     (cond
       ((= step 1)
        (setq v (cal:askkw (strcat "\n  Step 1 of " n
@@ -2471,10 +2748,34 @@
           (setq pct 1.0 step 5))
          (T (setq pct (/ v 100.0) step 5))))
       ((= step 5)
+       ;; POOL asks the same question of the same pools, in the same
+       ;; words: an AB pool is built, not drawn, and almost none of
+       ;; them come out true.  Outofsquare lets each wall swing a
+       ;; little to answer its own points - and a pool that really is
+       ;; square still comes out square, because a swing is kept only
+       ;; where the points prove it.
+       (if (member ptype '("ROman" "Oval" "ROUnd"))
+         (setq v nil)                      ; no free straight walls
+         (progn
+           (princ (strcat "\n\n  Step 5 of " n
+                          " - is the pool in-square, or out of square?"))
+           (princ "\n  Outofsquare lets each wall swing a little to honour the")
+           (princ "\n  points; Insquare holds the template true and shows you")
+           (princ "\n  the error instead.")
+           (setq v (cal:askkw "Is the pool in-square or out-of-square?"
+                              "Insquare Outofsquare"
+                              "Insquare/Outofsquare"
+                              (if oos "Outofsquare" "Insquare") T))
+           (if (not (eq v 'CAL-BACK)) (setq v (= v "Outofsquare")))))
+       (if (eq v 'CAL-BACK)
+         (progn (princ "\nStepping back one step.")
+                (setq step 4))
+         (setq oos v step 6)))
+      ((= step 6)
        (if (= ptype "ROUnd")
          (setq v nil)                      ; a round pool has no walls
          (progn
-           (princ (strcat "\n\n  Step 5 of " n
+           (princ (strcat "\n\n  Step 6 of " n
                           " - may the straight walls be bowed?"))
            (princ "\n  A wall drawn dead straight is very often a very long")
            (princ "\n  radius on site.  Yes measures a bow on every wall from")
@@ -2485,10 +2786,10 @@
                               (if bowed "Yes" "No") T))))
        (if (eq v 'CAL-BACK)
          (progn (princ "\nStepping back one step.")
-                (setq step 4))
-         (setq bowed v step 6)))))
-  (setq fit:*bowed* bowed)
-  (list ptype treat tol pct bowed))
+                (setq step 5))
+         (setq bowed v step 7)))))
+  (setq fit:*oos* oos fit:*bowed* bowed)
+  (list ptype treat tol pct oos bowed))
 
 ;; ---- leaving points out ----------------------------------------------
 ;; A fit that came out wrong is usually one bad shot dragging a wall.
@@ -2575,8 +2876,8 @@
   (princ (strcat "\nFITABHD " *fitabhd-version* " loaded."))
   (princ))
 
-(defun c:FITABHD ( / *error* undo-open set ptype treat tol pct bowed ss n
-                    res verts en swept ans again dpts
+(defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
+                    ss n res verts en swept ans again dpts
                     fit-pts fit-npt fit-ptnames fit-omit)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -2598,10 +2899,10 @@
   (princ "\n\nFITABHD - fit a typical pool's template through the survey points.")
   (setq fit-pts nil fit-npt 0 fit-ptnames nil fit-omit nil
         set (fit:ask-settings (list fit:*ptype* "Square" fit:*tol*
-                                    fit:*miss-pct* fit:*bowed*)
-                              6)
+                                    fit:*miss-pct* fit:*oos* fit:*bowed*)
+                              7)
         ptype (nth 0 set))
-  (princ (strcat "\n\n  Step 6 of 6 - select the survey points (POINTS layer or"
+  (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
                  "\n  " fit:*point-block* " blocks)."))
   (princ "\n  Select objects: ")
   (setq ss (ssget '((0 . "POINT,INSERT"))))
@@ -2623,7 +2924,7 @@
      (while again
        (setq again nil
              ptype (nth 0 set) treat (nth 1 set) tol (nth 2 set)
-             pct   (nth 3 set) bowed (nth 4 set)
+             pct   (nth 3 set) oos   (nth 4 set) bowed (nth 5 set)
              dpts  (cal:dedupe (fit:active) fit:*exact-eps*))
        (if (< (length dpts) (if (= ptype "ROUnd") 3 6))
          (princ (strcat "\nToo few points left in the fit ("
@@ -2633,7 +2934,8 @@
            (princ (strcat "\nFitting the " ptype
                           " template every way it can sit, keeping the"
                           " best..."))
-           (setq res   (fit:fit-and-snap dpts ptype treat tol pct bowed)
+           (setq res   (fit:fit-and-snap dpts ptype treat tol pct oos
+                                         bowed)
                  verts (fit:res-world-verts res))
            (cal:ensure-layer fit:*out-layer* 2)
            (setq en (fit:tag-mine (fit:make-pline verts fit:*out-layer* 2)))
@@ -2650,7 +2952,7 @@
           (setq en nil res nil)
           (princ "\n\nRedoing the fit - the same points, new settings.")
           (fit:omit-loop)
-          (setq set   (fit:ask-settings set 5)
+          (setq set   (fit:ask-settings set 6)
                 again T))
          ((and (= ans "Keep") res)
           (fit:omit-clear)
