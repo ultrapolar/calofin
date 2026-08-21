@@ -26,12 +26,13 @@ in step:
 | draft | `wip/` | being drafted, no version banner yet. Optional - absent until a first draft lands. | yes |
 | standalone | `lisp/<tool>/` | one self-contained file, loads alone with APPLOAD. **All tool logic starts here.** | yes |
 | released | `releases/` | dated `REV`-stamped twin, so a loaded routine never changes underfoot | no - generated |
-| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | mirrored by hand, bundle generated |
+| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | generated for the tools in `tools/mirror_shared.py`, by hand otherwise; bundle generated |
 
 Change a tool in `lisp/`, mirror it into `shared/parts/<FILE>.lsp` in the same
 commit, then regenerate both artifacts:
 
 ```
+python3 tools/mirror_shared.py <TOOL>  # the shared/parts/ twin, where generated
 python3 tools/release_lisp.py          # releases/ dated twins
 python3 tools/build_shared_bundle.py   # shared/CALOFIN-ALL.lsp
 python3 tools/check_standards.py       # did anything drift?
@@ -277,8 +278,9 @@ not a bug in either side.
 | --- | --- |
 | `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
 | `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/CALOFIN-ALL.lsp` |
-| `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
-| `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
+| `mirror_shared.py` | Regenerates a `shared/parts/` twin from its `lisp/` original - drops the helpers the library provides and rewrites the call sites onto `cal:`. Table-driven, one entry per tool |
+| `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin **and that twin carries the same version banner**, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
+| `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 
 `tests/test_pool_runtime.py` and `tests/test_spa_runtime.py` load the

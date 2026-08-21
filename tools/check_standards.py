@@ -124,6 +124,25 @@ def check_twins(problems):
     for name in ("CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"):
         if name not in have:
             problems.append("shared/parts/%s is missing" % name)
+    check_twins_current(problems)
+
+
+def check_twins_current(problems):
+    """...and mirrors the version it was mirrored FROM.  Presence alone
+    says nothing: a twin left behind while lisp/ moved on still loads,
+    still passes every one-file check, and quietly gives the grouped
+    build different behaviour from the standalone one."""
+    byname = {p.name: p for p in shared_members()}
+    for p in lsp_files(LISP_DIR):
+        twin = byname.get(p.stem + ".lsp")
+        if twin is None:
+            continue
+        a, b = rev_of(read(p)), rev_of(read(twin))
+        if a and b and a != b:
+            problems.append(
+                "shared/parts/%s is at %s but %s is at %s - mirror the "
+                "change into the twin, per CLAUDE.md"
+                % (twin.name, b, p.relative_to(ROOT), a))
 
 
 def check_library_owns_cal(problems):
