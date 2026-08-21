@@ -827,27 +827,63 @@ def test_check_drawing_ties_neighbouring_centres():
           " together")
 
 
-def test_every_dimension_is_drawn_in_the_cross_style():
+def test_the_two_drawings_take_their_own_dim_styles():
+    """The pool is a plan and is dimensioned in the drawing's ordinary
+    style; the check drawing beside it is nothing but tie measurements
+    and goes in the cross-dimension style."""
     vm = newvm()
-    run(vm, script(), 'cross style')
-    assert vm.dimstyle_log[0] == 'CROSS DIMENSIONS', vm.dimstyle_log
-    assert all(d[3] == 'CROSS DIMENSIONS' for d in made(vm, 'DIMENSION')), \
-        made(vm, 'DIMENSION')[:2]
+    run(vm, script(), 'dim styles')
+    dims = made(vm, 'DIMENSION')
+    assert len(dims) == 20, len(dims)
+    # the pool's two linear dims come first (DIMRADIUS makes no entity
+    # in the VM), then the check drawing's eighteen
+    assert all(d[3] == 'Standard' for d in dims[:2]), dims[:2]
+    assert all(d[3] == 'CROSS DIMENSIONS' for d in dims[2:]), dims[2]
+    assert vm.dimstyle_log == ['Standard', 'CROSS DIMENSIONS', 'STANDARD'], \
+        vm.dimstyle_log
     assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.sysvars['DIMSTYLE']
-    print("ok  cross style -> every dim in CROSS DIMENSIONS, the old style"
-          " back after")
+    print("ok  dim styles  -> pool in Standard, check drawing in CROSS"
+          " DIMENSIONS, old style back")
 
 
-def test_a_drawing_without_the_style_still_gets_its_pool():
-    """A missing CROSS DIMENSIONS style is not invented -- the dims come
-    out in whatever is current and the routine says so."""
+def test_a_drawing_without_the_cross_style_still_gets_its_pool():
+    """A missing style is not invented -- those dims come out in whatever
+    is current and the routine says so."""
     vm = newvm(style=False)
     run(vm, script(), 'no style')
     assert len(made(vm, 'ARC')) == 12
-    assert len(made(vm, 'DIMENSION')) == 20
-    assert all(d[3] == 'STANDARD' for d in made(vm, 'DIMENSION'))
+    dims = made(vm, 'DIMENSION')
+    assert len(dims) == 20, len(dims)
+    assert all(d[3] == 'Standard' for d in dims), dims[2]
     print("ok  no style    -> drawn in the current style rather than"
           " refused")
+
+
+
+def test_the_preview_starts_from_the_usual_proportions():
+    """Before any radius is given the preview has to show SOMETHING, and
+    what it shows is the shape an oasis usually comes in -- a side bulge
+    three quarters of the way across the short bound, the top bulge half
+    way across the long one -- so the first question is already looking
+    at a familiar size rather than something to look past."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(), 'starting shape')
+    radii = [r for _, r, _, _ in
+             [((d[10][0], d[10][1]), d[40],
+               math.degrees(d[50]) % 360, math.degrees(d[51]) % 360)
+              for d in p.shot(2, 'ARC')]]
+    left, bottom, right, topright, top, topleft = radii
+    assert close(2.0 * left, 0.75 * REF_Y), left      # 7'-6" on a 40 x 20
+    assert close(2.0 * right, 0.75 * REF_Y), right
+    assert close(2.0 * top, 0.5 * REF_X), top         # 10'-0"
+    # and the bulges really are the bigger circles, which is the point
+    for tangent in (bottom, topright, topleft):
+        assert tangent < min(left, right, top), (tangent, radii)
+    # every one of them is provisional, so every one is still a ?
+    assert [d[1] for d in p.shot(2, 'TEXT')] == ['?'] * 6, p.shot(2, 'TEXT')
+    print("ok  start shape -> side bulges %g\" and a %g\" top, all six ?"
+          % (left, top))
 
 
 def test_version_command():
@@ -958,8 +994,9 @@ if __name__ == '__main__':
     test_check_drawing_sits_clear_to_the_right()
     test_check_drawing_ties_every_centre_to_its_two_nearest_corners()
     test_check_drawing_ties_neighbouring_centres()
-    test_every_dimension_is_drawn_in_the_cross_style()
-    test_a_drawing_without_the_style_still_gets_its_pool()
+    test_the_two_drawings_take_their_own_dim_styles()
+    test_a_drawing_without_the_cross_style_still_gets_its_pool()
+    test_the_preview_starts_from_the_usual_proportions()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
