@@ -59,6 +59,15 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
+    'xftconv': {
+        'src': 'lisp/xftconv/xftconv.lsp',
+        'swap': {
+            'xft:trim': 'cal:trim',
+            'xft:ensure-layer': 'cal:ensure-layer',
+            'xft:d2': 'cal:d2',
+        },
+        'drop_globals': [],
+    },
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
