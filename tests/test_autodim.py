@@ -58,18 +58,8 @@ def dims(vm):
 
 
 def rescan(vm):
-    """Re-read the drawing the way a second command run would.  The VM's
-    dim stub does not stamp group 410, so the test supplies the
-    model-space mark AutoCAD would report before ad:dimss filters on it."""
-    ents = []
-    for e in vm.entities:
-        data = vm.entdata.get(e, [])
-        if any(isinstance(g, Dot) and g.a == 0 and g.b == 'DIMENSION'
-               for g in data):
-            if not any(isinstance(g, Dot) and g.a == 410 for g in data):
-                data.append(Dot(410, 'Model'))
-            ents.append(e)
-    vm.script = [ents or None]
+    """Re-read the drawing the way a second command run would."""
+    vm.script = [list(vm.entities) or None]
     vm.loads('(ad:dimscan)')
 
 
@@ -212,6 +202,167 @@ assert aligned(vm, (0, 60), (60, 60), (30, 72)) == 1    # wants SIDE STANDARD
 got = [d[0] for d in dims(vm)]
 assert got == ['STANDARD', 'STANDARD INCHES', 'STANDARD'], got
 print('   the long dims keep the style the run started in, both times')
+
+
+def draw(vm, segs):
+    """Draw the segments as LINEs and hand them back as a selection set."""
+    for (x1, y1), (x2, y2) in segs:
+        vm.loads('(entmake (list (cons 0 "LINE") '
+                 '(cons 10 (list %.4f %.4f 0.0)) '
+                 '(cons 11 (list %.4f %.4f 0.0))))' % (x1, y1, x2, y2))
+    ents = list(vm.entities)                    # whatever else was drawn too
+    vm.script = [ents]
+    vm.loads('(setq SS (ssget))')
+    return ents
+
+
+#: Three 10"-deep steps on a 12" run, descending to the right, drawn
+#: top down from the waterline: riser, tread, riser, tread, ...
+FLIGHT = [((0, 0), (0, -10)), ((0, -10), (12, -10)),
+          ((12, -10), (12, -20)), ((12, -20), (24, -20)),
+          ((24, -20), (24, -30)), ((24, -30), (36, -30))]
+
+#: The same flight the other way round - the top step on the right.
+MIRRORED = [((36, 0), (36, -10)), ((36, -10), (24, -10)),
+            ((24, -10), (24, -20)), ((24, -20), (12, -20)),
+            ((12, -20), (12, -30)), ((12, -30), (0, -30))]
+
+#: A plain rectangular pool in plan: 10ft x 5ft, drawn square.
+PLAN = [((0, 0), (0, 60)), ((0, 60), (120, 60)),
+        ((120, 60), (120, 0)), ((120, 0), (0, 0))]
+
+
+def looks_like_steps(segs, extra=''):
+    vm = fresh()
+    if extra:
+        vm.loads(extra)                         # drawn first, so it is selected
+    draw(vm, segs)
+    return vm, vm.loads('(ad:stepprofile-p SS)')
+
+
+print('== it only takes the side-view route when it looks like steps ==')
+_, risers = looks_like_steps(FLIGHT)
+assert risers and len(risers) == 3, risers
+print('   a flight of three steps: recognised')
+
+_, risers = looks_like_steps(MIRRORED)
+assert risers and len(risers) == 3, risers
+print('   the same flight facing the other way: recognised')
+
+# a sloping pool floor at the foot of the flight is still a flight
+_, risers = looks_like_steps(FLIGHT + [((36, -30), (60, -40))])
+assert risers and len(risers) == 3, risers
+print('   with a sloping floor at its foot: still recognised')
+
+# closed against a back wall: the full-height vertical is the wall
+_, risers = looks_like_steps(FLIGHT + [((36, -30), (36, 0)), ((36, 0), (0, 0))])
+assert risers and len(risers) == 3, risers
+print('   closed against a back wall: the wall is not counted as a step')
+
+assert looks_like_steps(PLAN)[1] is None
+print('   a rectangular plan: not steps')
+
+# two verticals at the same level are not a staircase
+assert looks_like_steps([((0, 0), (0, 10)), ((20, 0), (20, 10)),
+                         ((0, 30), (20, 30))])[1] is None
+print('   two verticals side by side at the same level: not steps')
+
+# one riser is not a flight
+assert looks_like_steps([((0, 0), (0, -10)), ((0, -10), (12, -10))])[1] is None
+print('   a single riser: not steps')
+
+# anything curved and it is not read as a square-drawn profile
+assert looks_like_steps(
+    FLIGHT,
+    '(entmake (list (cons 0 "ARC") (cons 10 (list 40.0 -30.0 0.0)) '
+    '(cons 40 5.0) (cons 50 0.0) (cons 51 3.14)))')[1] is None
+print('   one arc anywhere in the selection: not steps')
+
+# a staircase with the risers left disconnected is not one either
+assert looks_like_steps([((0, 0), (0, -10)), ((0, -10), (12, -10)),
+                         ((12, -14), (12, -24)), ((12, -24), (24, -24)),
+                         ((0, -40), (24, -40))])[1] is None
+print('   risers that do not join up: not steps')
+
+
+print('== AUTODIM dimensions the step depths on the right ==')
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48                      # 2 x 0.125 x 48 = 12" < 2ft
+ents = draw(vm, FLIGHT)
+# the plan pick, then ad:begin's read of the drawing's dims
+vm.run('c:AUTODIM', [ents, None])
+placed = dims(vm)
+assert len(placed) == 4, placed
+assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
+print('   3 step depths + 1 overall, all in STANDARD INCHES')
+
+# every depth dim sits on one line two feet right of the flight (max x
+# 24 + 24), the overall two feet right of that again
+assert [d[3][0] for d in placed[:3]] == [48.0, 48.0, 48.0], placed
+assert placed[3][3][0] == 72.0, placed[3]
+print('   the depths on one line to the right, the overall further right')
+
+# each one measures a step, the last one the whole flight
+assert [(d[1], d[2]) for d in placed] == [
+    ((0.0, 0.0), (0.0, -10.0)),
+    ((0.0, -10.0), (12.0, -20.0)),
+    ((12.0, -20.0), (24.0, -30.0)),
+    ((24.0, -30.0), (0.0, 0.0))], placed
+assert all('_V' in c for c in vm.commands if c[0] == '_.DIMLINEAR')
+print('   three 10" depths and a 30" overall, all vertical')
+
+# no perimeter, stairs or floor dims were asked for - the script would
+# have been exhausted at the first prompt if they had been
+assert not [c for c in vm.commands if c[0] == '_.DIMALIGNED']
+print('   the plan steps were skipped, as they are about a plan')
+
+# and it is idempotent, like everything else the tool places
+vm.run('c:AUTODIM', [ents, list(vm.entities)])
+assert len(dims(vm)) == 4
+print('   a second run over the same flight adds nothing')
+
+
+print('== the branch: a plan goes the plan route, a flight does not ==')
+#: The plan route needs ActiveX for its bounding boxes, which the VM has
+#: no stub for, so each step is replaced by a note of having been run.
+TRACE = """
+  (setq ran '())
+  (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
+  (defun ad:dimstairs ()  (setq ran (cons "stairs" ran)) 0)
+  (defun ad:getfloor (tag obstacles back) (setq ran (cons "floor" ran)) 0)
+  (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
+  (defun ad:runsteps (risers) (setq ran (cons "step depths" ran)) (princ))"""
+
+
+def route(segs):
+    vm = fresh()
+    ents = draw(vm, segs)
+    vm.loads(TRACE)
+    vm.run('c:AUTODIM', [ents, None])
+    return [str(x) for x in reversed(vm.globals['ran'])]
+
+
+assert route(PLAN) == ['perimeter', 'stairs', 'floor', 'floor', 'overall']
+print('   a rectangular plan: all five plan steps, no step depths')
+assert route(FLIGHT) == ['step depths']
+print('   a flight of steps: the step depths alone, no plan steps')
+
+
+print('== AUTODIMSIDEPOV keeps stepping its dims out with the stairs ==')
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIMSIDEPOV', [ents, None])
+placed = dims(vm)
+assert len(placed) == 4, placed
+assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
+# the flight descends to the right, so its high side is the left: each
+# dim sits 2ft left of its own step and they walk down with the stairs
+assert [d[3][0] for d in placed] == [-24.0, -24.0, -12.0, -48.0], placed
+assert vm.layer_of(vm.entities[-1]) == 'DIMENSION'
+print('   dims on the high side, one per step, overall furthest out')
 
 
 print('ALL AUTODIM CHECKS PASSED')

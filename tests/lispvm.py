@@ -990,8 +990,17 @@ def _ssget(vm, a):
                 pairs.append((g.a, g.b))
             elif isinstance(g, list) and len(g) >= 2:
                 pairs.append((g[0], g[1]))
+        def _match(e, code, val):
+            got = _dxf(vm, e, code)
+            # AutoCAD reads a comma-separated entity type as the list of
+            # types it is -- (0 . "LINE,LWPOLYLINE") keeps both
+            if code == 0 and isinstance(val, str) and ',' in val:
+                return (isinstance(got, str) and got.upper() in
+                        {t.strip().upper() for t in val.split(',')})
+            return got == val
+
         ents = [e for e in ents
-                if all(_dxf(vm, e, c) == val for c, val in pairs)]
+                if all(_match(e, c, val) for c, val in pairs)]
     return ['<ss>'] + ents if ents else NIL
 
 
@@ -1027,7 +1036,9 @@ def _command(vm, a):
             lay = vm.sysvars.get('CLAYER', '0')
         e = Ent()
         vm.entities.append(e)
-        vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay),
+        # 410 is the space the dim lives in -- these are made in model
+        # space, and routines that re-read the drawing filter on it
+        vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay), Dot(410, 'Model'),
                          Dot(3, vm.sysvars.get('DIMSTYLE', 'STANDARD'))] + \
             [[code] + [float(v) for v in p] for code, p in zip((13, 14, 10), pts)]
     return NIL
@@ -1182,6 +1193,32 @@ BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(
     LispError("exit called", vm))
 BUILTINS[Sym('atoms-family')] = lambda vm, a: []
 BUILTINS[Sym('vl-load-com')] = lambda vm, a: NIL
+
+
+@bi('vl-sort')
+def _vl_sort(vm, a):
+    """(vl-sort lst less) -- sort by the given comparison function.
+
+    AutoLISP DROPS any element the function reports as equal to one
+    already in the result (neither before it nor after it), and routines
+    here lean on that to dedupe as they sort - so the VM has to drop
+    them too or a deduping sort would look like it kept everything.
+    An insertion sort: the comparison is a LISP call and the lists are
+    short."""
+    fn = a[1]
+
+    def less(x, y):
+        return vm.call_value(fn, [x, y]) is not NIL
+
+    out = []
+    for item in (a[0] or []):
+        i = 0
+        while i < len(out) and less(out[i], item):
+            i += 1
+        if i < len(out) and not less(item, out[i]):
+            continue                            # equal to one already in
+        out.insert(i, item)
+    return out or NIL
 # (vl-string-translate source-chars dest-chars str)
 BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
     str.maketrans(str(a[0]), str(a[1])))
