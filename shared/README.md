@@ -58,7 +58,7 @@ happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 39 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 41 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
