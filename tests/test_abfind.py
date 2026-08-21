@@ -486,6 +486,66 @@ def test_abmove_markers_are_yellow():
     print("ok  ABMOVE draws its suggestions yellow, tag and all")
 
 
+def test_abmove_locus_lines():
+    """A dashed grey line through each group, on the points layer."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'locus')
+    arcs = ever(vm, 'ARC', 'POINTS')
+    assert len(arcs) == 2, arcs
+    # the readings that move A hold B, so their line is B's own reading
+    # swung round B; the ones that move B are A's swung round A
+    movea, moveb = arcs
+    assert pt3(movea[10]) == pt3(B) and near(movea[40], PB), movea
+    assert pt3(moveb[10]) == pt3(A) and near(moveb[40], PA), moveb
+    for d in arcs:
+        assert d.get(8) == 'POINTS', d
+        assert d.get(62) == 8, d                   # grey
+        assert d.get(6) == 'DASHED', d             # dashed
+    assert 'DASHED' in {x.upper() for x in vm.tables['LTYPE']}
+    assert live(vm, 'ARC') == []                   # swept with the markers
+    print("ok  ABMOVE draws a dashed grey line through each group")
+
+
+def test_abmove_locus_covers_its_group():
+    """The line really does go through all of them - and through the
+    point as it is drawn now, which is where the two cross."""
+    vm = newvm()
+    pts = survey(vm)
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'locus span')
+    arcs = ever(vm, 'ARC', 'POINTS')
+    for arc, held, ctr, rad in ((arcs[0], 'B', B, PB), (arcs[1], 'A', A, PA)):
+        start = arc[50]
+        span = (arc[51] - start) % (2 * math.pi)
+        for c in got:
+            if c[1] != held:
+                continue
+            p = (c[5][0], c[5][1])
+            assert near(math.dist(ctr, p), rad), (c[6], math.dist(ctr, p))
+            off = (math.atan2(p[1] - ctr[1], p[0] - ctr[0]) - start) \
+                % (2 * math.pi)
+            assert off <= span + 1e-9, (c[6], off, span)
+        off = (math.atan2(P17[1] - ctr[1], P17[0] - ctr[0]) - start) \
+            % (2 * math.pi)
+        assert off <= span + 1e-9, (held, off, span)
+    print("ok  each line spans its whole group and the point itself")
+
+
+def test_abmove_locus_linetype_is_tunable():
+    """A drawing with its own dashed linetype can be pointed at it."""
+    vm = newvm()
+    pts = survey(vm)
+    vm.loads('(setq abf:*locus-ltype* "PHANTOM2")')
+    vm.loads('(setq abf:*locus-color* 9)')
+    run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'ltype')
+    for d in ever(vm, 'ARC', 'POINTS'):
+        assert d.get(6) == 'PHANTOM2' and d.get(62) == 9, d
+    assert 'PHANTOM2' in {x.upper() for x in vm.tables['LTYPE']}
+    print("ok  the guide line's linetype and colour are tunable")
+
+
 def test_abmove_the_marks_it_keeps_are_bylayer():
     """What ABMOVE leaves behind is the drawing's own colour, not yellow."""
     vm = newvm()

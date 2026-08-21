@@ -116,6 +116,14 @@ beside it, and listed nearest miss first within each group:
    -10B  A     B      18'-6"        8'-6"         10'-9 15/16" SE
 ```
 
+Each group also gets **the line it sits on**, dashed and grey. A held
+tape is a fixed radius off its stake, so everything that holds it lies
+on one arc centred there: the readings that move A all sit on B's arc,
+the ones that move B all sit on A's, and the two cross at the point as
+it is drawn now. Each arc runs out to the furthest suggestion its
+group reaches, either way round. They are scaffolding like the
+markers, and go when the round does.
+
 Forty-five rows for this point: twenty sweep steps per moved tape, plus
 three look-alike readings of A and two of B, each sitting where its own
 miss puts it — an inch out sorts above a foot out, which is why the
@@ -256,6 +264,8 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*sug-radius*   3.0)           ; suggestion marker radius
 (setq abf:*sug-color*    2)             ; suggestion colour: yellow
 (setq abf:*sug-hgt*      6.0)           ; suggestion tag height
+(setq abf:*locus-color*  8)             ; guide-line colour: grey
+(setq abf:*locus-ltype*  "DASHED")      ; and its linetype
 (setq abf:*foot-steps*   10)            ; 1-foot steps offered each way
 (setq abf:*max-shift*    120.0)         ; furthest a suggestion may sit
 (setq abf:*max-sugg*     nil)           ; most per held stake, nil = all
@@ -299,6 +309,9 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.4** — each group of suggestions gets the dashed grey arc it
+  lies on (`abf:*locus-color*` / `abf:*locus-ltype*`), created at pool
+  scale when the drawing has no linetype by that name.
 * **v1.3** — `ABMOVE` settles one point and ends; `ABFIND` still
   loops. Enter at `ABMOVE`'s point number cancels.
 * **v1.2** — the suggestions are drawn yellow (`abf:*sug-color*`) and
@@ -320,8 +333,9 @@ ByLayer fixup, number spellings, unknown numbers, stake lookup and the
 click fallback, the misreading arithmetic (readings, look-alike digits,
 transpositions, the shift cap and the suggestion cap), the circle
 crossing, the whole move (new point, ring, note wording, redrawn ties),
-the `None` and `Pick` answers, all three Back steps and the
-no-point-block fallback:
+the yellow markers and their tags, the dashed grey guide lines and
+what they span, the `None` and `Pick` answers, the Back steps, the
+one-shot shape and the no-point-block fallback:
 
 ```
 python3 tests/test_abfind.py                          # standalone tier
