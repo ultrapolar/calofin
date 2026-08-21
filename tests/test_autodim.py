@@ -19,6 +19,7 @@ DIMENSION entity behind carrying groups 13, 14 and 10 and the style
 that was current - which is exactly what these rules are made of.
 """
 
+import math
 import os
 import sys
 
@@ -84,9 +85,9 @@ def pt(x, y):
     return '(list %.4f %.4f 0.0)' % (x, y)
 
 
-def aligned(vm, p1, p2, loc, base='ad:*style-plan*'):
-    return vm.loads('(ad:putaligned %s %s %s %s)'
-                    % (pt(*p1), pt(*p2), pt(*loc), base))
+def aligned(vm, p1, p2, loc, base='ad:*style-plan*', note=''):
+    return vm.loads('(ad:putaligned %s %s %s %s "%s")'
+                    % (pt(*p1), pt(*p2), pt(*loc), base, note))
 
 
 print('== the style follows what the dim measures ==')
@@ -481,6 +482,163 @@ assert n == 3, (n, spans, cont)
 assert styles == ['STANDARD', 'STANDARD INCHES', 'STANDARD'], styles
 assert cont == [], cont                       # the short span broke the run
 print('   a 6" span in the middle of one still breaks out into inches')
+
+
+print('== a size that repeats is called out once and noted Typ. ==')
+#: The perimeter step reaches ActiveX twice - for the plan's bounding
+#: box and for the rays that decide which side of a segment is clear.
+#: Both are replaced: every segment is on the perimeter, dimensioned
+#: outwards along +Y, and every arc outwards from its centre.
+PERIM = """
+  (defun ad:ssbox (ss)    (list (list 0.0 0.0 0.0) (list 240.0 240.0 0.0)))
+  (defun cal:bbox-ss (ss) (list (list 0.0 0.0 0.0) (list 240.0 240.0 0.0)))
+  (defun ad:perimang (p1 p2 diag eps ss) (* 0.5 pi))
+  (defun ad:arcang (centre mid diag eps ss) (angle centre mid))"""
+
+
+def perim(segs=(), arcs=()):
+    """Dimension a perimeter of the given straight sides and arcs, and
+    report what came out as (note, measurement) per dim, in order."""
+    vm = fresh()
+    vm.sysvars['DIMTXT'] = 0.125
+    vm.sysvars['DIMSCALE'] = 48
+    for (x1, y1), (x2, y2) in segs:
+        vm.loads('(entmake (list (cons 0 "LINE") '
+                 '(cons 10 (list %.4f %.4f 0.0)) '
+                 '(cons 11 (list %.4f %.4f 0.0))))' % (x1, y1, x2, y2))
+    for (cx, cy), r in arcs:
+        vm.loads('(entmake (list (cons 0 "CIRCLE") '
+                 '(cons 10 (list %.4f %.4f 0.0)) (cons 40 %.4f)))'
+                 % (cx, cy, r))
+    ents = list(vm.entities)
+    vm.script = [ents]
+    vm.loads('(setq SS (ssget))')
+    vm.loads(PERIM)
+    n = vm.loads('(ad:dimperim SS)')
+    out = []
+    for c in vm.commands:
+        if not c or c[0] not in ('_.DIMALIGNED', '_.DIMRADIUS'):
+            continue
+        note = c[c.index('_T') + 1] if '_T' in c else ''
+        if c[0] == '_.DIMALIGNED':
+            a, b = c[2], c[4]
+            out.append((note, round(math.dist(a[:2], b[:2]), 4)))
+        else:
+            out.append((note, 'radius'))
+    return n, out
+
+
+# two sides the same: one dim, noted, and the second side left to it
+n, got = perim(segs=[((0, 0), (60, 0)), ((0, 40), (60, 40))])
+assert n == 1, (n, got)
+assert got == [('<> Typ.', 60.0)], got
+print('   two equal sides: one dim, noted Typ., the other left to it')
+
+# sides of their own are dimensioned where they are, with no note
+n, got = perim(segs=[((0, 0), (60, 0)), ((0, 40), (36, 40))])
+assert n == 2, (n, got)
+assert got == [('', 60.0), ('', 36.0)], got
+print('   two sides of different lengths: both dimensioned, neither noted')
+
+# the note goes on the first of its size, and the odd one out still
+# gets its own dim
+n, got = perim(segs=[((0, 0), (60, 0)), ((0, 20), (36, 20)),
+                     ((0, 40), (60, 40)), ((0, 60), (60, 60))])
+assert n == 2, (n, got)
+assert got == [('<> Typ.', 60.0), ('', 36.0)], got
+print('   three equal and one odd: one noted dim and one plain one')
+
+
+print('== curves wait until there are more than three of a size ==')
+n, got = perim(arcs=[((0, 0), 18.0), ((80, 0), 18.0)])
+assert n == 2 and got == [('', 'radius'), ('', 'radius')], (n, got)
+print('   two equal radii: both dimensioned, neither noted')
+
+n, got = perim(arcs=[((0, 0), 18.0), ((80, 0), 18.0), ((160, 0), 18.0)])
+assert n == 3 and [g[0] for g in got] == ['', '', ''], (n, got)
+print('   three equal radii: still all three, still no note')
+
+n, got = perim(arcs=[((0, 0), 18.0), ((80, 0), 18.0),
+                     ((160, 0), 18.0), ((0, 80), 18.0)])
+assert n == 1, (n, got)
+assert got == [('<> Typ.', 'radius')], got
+print('   four equal radii: one dim, noted Typ.')
+
+# a size below the count is unaffected by another size that is over it
+n, got = perim(arcs=[((0, 0), 18.0), ((80, 0), 18.0), ((160, 0), 18.0),
+                     ((0, 80), 18.0), ((80, 80), 9.0), ((160, 80), 9.0)])
+assert n == 3, (n, got)
+assert [g[0] for g in got] == ['<> Typ.', '', ''], got
+print('   four of one radius and two of another: noted once, then both')
+
+
+print('== a radius dim counts as dimensioning that arc ==')
+vm = fresh()
+put = ('(ad:putradius 18.0 (entlast) (list 18.0 0.0 0.0) (list 0.0 0.0 0.0) '
+       '(list 40.0 40.0 0.0) ad:*style-plan* "%s")')
+vm.loads('(entmake (list (cons 0 "CIRCLE") (cons 10 (list 0.0 0.0 0.0)) '
+         '(cons 40 18.0)))')
+assert vm.loads(put % '') == 1
+assert vm.loads(put % '') == 0                  # the same arc again
+assert vm.loads('ad:*skipped*') == 1
+print('   the same arc twice in one run: the second is skipped')
+
+# and one already in the drawing is read back out of it
+vm = fresh()
+vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 410 "Model") '
+         '(cons 70 4) (cons 10 (list 0.0 0.0 0.0)) '
+         '(cons 15 (list 18.0 0.0 0.0))))')
+rescan(vm)
+vm.loads('(entmake (list (cons 0 "CIRCLE") (cons 10 (list 0.0 0.0 0.0)) '
+         '(cons 40 18.0)))')
+assert vm.loads(put % '') == 0
+assert vm.loads('(ad:raddimmed-p (list 0.0 0.0 0.0) 18.0)')
+assert not vm.loads('(ad:raddimmed-p (list 0.0 0.0 0.0) 24.0)')
+print('   a radius dim already in the drawing is read back and respected')
+
+
+print('== the arc a polyline bulge describes ==')
+vm = fresh()
+# A bulge of 1 from (0,0) to (2,0) is a counter-clockwise semicircle:
+# centre (1,0), radius 1.  Counter-clockwise means it leaves (0,0)
+# heading DOWN and comes back up to (2,0), so it bulges to the right of
+# the chord and the point half way round it is (1,-1).
+c, r, m = vm.loads('(ad:bulgearc (list 0.0 0.0 0.0) (list 2.0 0.0 0.0) 1.0)')
+assert round(r, 6) == 1.0, r
+assert [round(v, 6) for v in c[:2]] == [1.0, 0.0], c
+assert [round(v, 6) for v in m[:2]] == [1.0, -1.0], m
+print('   a semicircle: centre, radius and the point half way round it')
+
+# a quarter of the same turn puts the centre a full radius off the chord
+c, r, m = vm.loads('(ad:bulgearc (list 0.0 0.0 0.0) (list 2.0 0.0 0.0) %.10f)'
+                   % math.tan(math.pi / 8))
+assert round(r, 6) == round(math.sqrt(2), 6), r
+assert [round(v, 6) for v in c[:2]] == [1.0, 1.0], c
+assert round(math.dist(c[:2], m[:2]), 6) == round(math.sqrt(2), 6), (c, m)
+print('   a counter-clockwise quarter: centre to the left of the chord')
+
+# and the other way round it lands on the other side
+c, r, m = vm.loads('(ad:bulgearc (list 0.0 0.0 0.0) (list 2.0 0.0 0.0) %.10f)'
+                   % -math.tan(math.pi / 8))
+assert round(r, 6) == round(math.sqrt(2), 6), r
+assert [round(v, 6) for v in c[:2]] == [1.0, -1.0], c
+print('   a clockwise quarter: the centre lands on the other side')
+
+assert vm.loads('(ad:bulgearc (list 0.0 0.0 0.0) (list 2.0 0.0 0.0) 0.0)') is None
+print('   a straight segment: no arc')
+
+# and a bulged polyline hands its arcs to the perimeter step
+vm = fresh()
+vm.loads('(entmake (list (cons 0 "LWPOLYLINE") (cons 90 3) (cons 70 0) '
+         '(cons 10 (list 0.0 0.0)) (cons 42 1.0) '
+         '(cons 10 (list 2.0 0.0)) (cons 42 0.0) '
+         '(cons 10 (list 6.0 0.0)) (cons 42 0.0)))')
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+found = vm.loads('(ad:arcs SS)')
+assert len(found) == 1, found
+assert round(found[0][0], 6) == 1.0, found        # radius first, to group by
+print('   one bulged segment of a polyline: one arc, radius first')
 
 
 print('== AUTODIMSIDEPOV keeps stepping its dims out with the stairs ==')
