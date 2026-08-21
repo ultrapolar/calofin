@@ -79,13 +79,7 @@
 ;;;     python3 tools/build_shared_bundle.py
 
 (setq cal:*held-back*
-  '(("SPA.lsp" . "WIP")                ; still being worked on
-    ("TUTORIALSPA.lsp" . "WIP")        ; rides with SPA
-    ("OASIS.lsp" . "WIP")              ; still being worked on
-    ("CORNERSTP.lsp" . "WIP")          ; the step family is in flux
-    ("HEMISTEP.lsp" . "WIP")           ; rides with CORNERSTP
-    ("NORMIESTEP.lsp" . "WIP")         ; rides with CORNERSTP
-    ("CABHD.lsp" . "WIP")              ; not written yet
+  '(("CABHD.lsp" . "WIP")              ; not written yet
     ("LISPLAB.lsp" . "OMITTED")))     ; teaching tool - never part of calofin
 
 ;;; -------------------- the build ---------------------------------------
@@ -103,10 +97,12 @@
     ;; precede their demo/tutorial satellites.
     (foreach m '(
                  "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
-                 "TUTORIALPOOL.lsp" "abcdef.lsp" "ABFIND.lsp"
+                 "TUTORIALPOOL.lsp" "SPA.lsp" "TUTORIALSPA.lsp"
+                 "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
                  "ALTABCDEF.lsp" "abhd.lsp" "AUTOBEAD.lsp"
                  "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
+                 "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
                  "covercheck.lsp" "dimcheck.lsp" "dim_continue.lsp"
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
                  "FITABHD.lsp" "lhd.lsp" "lincheck.lsp"
