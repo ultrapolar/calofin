@@ -92,6 +92,7 @@
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
                  "FITABHD.lsp"
                  "lhd.lsp" "lincheck.lsp" "linfincheck.lsp" "LINTXTCHK.lsp"
+                 "LISPLAB.lsp"
                  "PADDLE.lsp" "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "wcalst.lsp" "xftconv.lsp")
