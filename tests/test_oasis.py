@@ -101,7 +101,9 @@ def script(base=(0.0, 0.0), measure=None, variant='Center'):
     """A whole run: which shape -- and, for a cloud, which bottom --
     then where it goes and the measurements."""
     head = {'StraightBottom': ['CLoud', 'Straight'],
-            'RoundedBottom': ['CLoud', 'Rounded']}.get(variant, [variant])
+            'RoundedBottom': ['CLoud', 'Rounded'],
+            'TrueKidney': ['Kidney', 'True'],
+            'AsymKidney': ['Kidney', 'Asymmetric']}.get(variant, [variant])
     return head + [base] + list(REF_MEASURE if measure is None else measure)
 
 
@@ -120,6 +122,28 @@ CL_X, CL_Y = 360.0, 240.0
 CL_RLEFT = CL_Y / 2.0
 CL_FLAT = [CL_X, CL_Y, 84.0, 72.0]                 # StraightBottom
 CL_ROUND = [CL_X, CL_Y, 84.0, 72.0, 144.0]         # RoundedBottom
+
+#: the drawing the two KIDNEY shapes were read off: a 388 x 214 envelope,
+#: a 324 top-center circle and a 48 bottom reverse.  The two matching
+#: sides are DERIVED -- tangent to their own side and the bottom, and
+#: touching the top circle from inside -- and come out at 95.9166563.
+KD_X, KD_Y = 388.0, 214.0
+KD_TOP, KD_BOT = 324.0, 48.0
+KD_SIDE = 95.9166563301
+KD_TRUE = [KD_X, KD_Y, KD_TOP, KD_BOT]
+#: an asymmetric case (no reference drawing): 8' left, 6' right -- the
+#: top circle is derived, landing at cx=175.029655, R=248.947416
+KD_ASYM = [KD_X, KD_Y, 96.0, 72.0, KD_BOT]
+#: the true-kidney DXF's four arcs, ring order, centres relative to the
+#: envelope's bottom-left corner, angles in degrees
+KD_REF = [
+    ('left',          (95.916657, 95.916657), 95.9167,
+     115.4696486, 312.9632234),
+    ('bottom-center', (194.0, -9.400301), 48.0, 47.0367766, 132.9632234),
+    ('right',         (292.083344, 95.916657), 95.9167,
+     227.0367766, 64.5303514),
+    ('top-center',    (194.0, -110.0), 324.0, 64.5303514, 115.4696486),
+]
 
 #: what the DXF has for those two, in ring order, centres relative to the
 #: envelope's bottom-left corner and angles in degrees
@@ -946,7 +970,7 @@ def test_the_shape_is_the_first_question():
     vm = newvm()
     run(vm, script(), 'shape question')
     first = vm.prompts[0][0]
-    assert first == ('\nWhich shape is it? [Center/TopRight/CLoud] '
+    assert first == ('\nWhich shape is it? [Center/TopRight/CLoud/Kidney] '
                      '<Center>: '), repr(first)
     assert '[Back]' in vm.prompts[1][0], vm.prompts[1][0]   # the base point
     print("ok  shape first -> %r" % first.strip())
@@ -1261,6 +1285,178 @@ def test_backing_out_of_the_bottom_reaches_the_shape():
     print("ok  bottom back -> Back from the bottom re-asks the shape")
 
 
+
+def test_true_kidney_matches_its_reference_drawing():
+    """Three bulges and one reverse arc.  The user gives only the
+    top-center radius and the bottom reverse; the two matching sides are
+    derived from having to touch the top circle from inside, and every
+    centre and angle must land on the customer drawing."""
+    vm = newvm()
+    run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'true kidney')
+    arcs = arcs_of(vm, 4)
+    assert len(arcs) == 4, arcs
+    for (name, c, r, a0, a1), (gc, gr, ga0, ga1) in zip(KD_REF, arcs):
+        assert close(gc[0], c[0], 1e-4) and close(gc[1], c[1], 1e-4), (name, gc)
+        assert close(gr, r, 1e-4), (name, gr)
+        for got_a, want_a in ((ga0, a0), (ga1, a1)):
+            d = abs((got_a - want_a + 180.0) % 360.0 - 180.0)
+            assert d <= 1e-5, (name, got_a, want_a)
+    assert close(arcs[0][1], KD_SIDE, 1e-6), arcs[0]
+    print("ok  true kidney -> four arcs on the customer drawing, sides"
+          " derived at %.4f" % arcs[0][1])
+
+
+def test_true_kidney_seams_hand_over_exactly():
+    """At an internal tangency both arcs meet the joint at the SAME angle
+    -- the side centre sits on the top circle's radius -- so the outline
+    hands straight over with nothing drawn between."""
+    vm = newvm()
+    run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'seams')
+    left, bottom, right, top = arcs_of(vm, 4)
+    # right bulge ends where the top starts; top ends where left starts
+    assert close(right[3], top[2], 1e-9), (right[3], top[2])
+    assert close(top[3], left[2], 1e-9), (top[3], left[2])
+    # and the joint really is the internal tangency point of both circles
+    for side in (left, right):
+        d = math.dist(side[0], top[0])
+        assert close(d, top[1] - side[1], 1e-6), (d, top[1] - side[1])
+    print("ok  seams       -> arcs hand over at the internal tangency,"
+          " nothing between")
+
+
+def test_true_kidney_fills_its_envelope():
+    vm = newvm()
+    run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'kidney bounds')
+    over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f nil %.4f nil nil'
+                    ' nil %.4f "TrueKidney") %.4f %.4f)'
+                    % (KD_X, KD_Y, KD_TOP, KD_BOT, KD_X, KD_Y))
+    assert over is None, over
+    cross = vm.loads('(oasis:crossings (oasis:solve %.4f %.4f nil %.4f nil'
+                     ' nil nil %.4f "TrueKidney"))'
+                     % (KD_X, KD_Y, KD_TOP, KD_BOT))
+    assert cross is None, cross
+    print("ok  kd envelope -> fills 0,0 - %g,%g, simple, no crossings"
+          % (KD_X, KD_Y))
+
+
+def test_asym_kidney_derives_its_top_circle():
+    """The two sides are given, unequal; the top circle is derived --
+    tangent to the top bound and touching both sides from outside them,
+    its centre landing wherever those three contacts put it."""
+    vm = newvm()
+    run(vm, script(measure=KD_ASYM, variant='AsymKidney'), 'asym kidney')
+    arcs = arcs_of(vm, 4)
+    left, bottom, right, top = arcs
+    assert close(left[1], 96.0) and close(right[1], 72.0), (left, right)
+    assert close(top[0][0], 175.029655, 1e-4), top
+    assert close(top[1], 248.947416, 1e-4), top
+    # tangent to the top bound: centre y + R = H
+    assert close(top[0][1] + top[1], KD_Y, 1e-6), top
+    # internal tangency to both sides
+    for side in (left, right):
+        assert close(math.dist(side[0], top[0]), top[1] - side[1], 1e-6), side
+    # and the whole thing still fills the envelope exactly
+    over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f 96.0 nil 72.0'
+                    ' nil nil %.4f "AsymKidney") %.4f %.4f)'
+                    % (KD_X, KD_Y, KD_BOT, KD_X, KD_Y))
+    assert over is None, over
+    print("ok  asym kidney -> top circle derived at cx=%.3f R=%.3f,"
+          " tangencies exact" % (top[0][0], top[1]))
+
+
+def test_kidney_asks_its_own_questions():
+    for variant, measure, want in (
+            ('TrueKidney', KD_TRUE,
+             ['Which shape is it?', 'Kidney type?', 'Insertion base point',
+              'X - overall left-to-right bounds',
+              'Y - overall front-to-back bounds',
+              'Top-center radius', 'Bottom-center tangent radius']),
+            ('AsymKidney', KD_ASYM,
+             ['Which shape is it?', 'Kidney type?', 'Insertion base point',
+              'X - overall left-to-right bounds',
+              'Y - overall front-to-back bounds',
+              'Left bulge radius', 'Right bulge radius',
+              'Bottom-center tangent radius'])):
+        vm = newvm()
+        run(vm, script(measure=measure, variant=variant), variant)
+        asked = [p.lstrip('\n').split(' [')[0].split(' <')[0].rstrip(': ')
+                 for p, _ in vm.prompts]
+        assert asked == want, (variant, asked)
+    print("ok  kd asks     -> true 7 questions, asymmetric 8")
+
+
+def test_true_kidney_top_radius_is_validated():
+    """Below the minimum the top circle cannot reach both sides -- at the
+    minimum it passes through the two bottom corners and the sides shrink
+    to nothing -- so a too-small radius is re-asked with that minimum
+    named."""
+    vm = newvm()
+    # min for 388 x 214 is 194.9346; 150 cannot work, 324 can
+    run(vm, ['Kidney', 'True', (0.0, 0.0), KD_X, KD_Y, 150.0, KD_TOP,
+             KD_BOT], 'small top')
+    assert close(arcs_of(vm, 4)[3][1], KD_TOP), arcs_of(vm, 4)[3]
+    mn = vm.loads('(oasis:ktrue-min %.4f %.4f)' % (KD_X, KD_Y))
+    assert close(mn, KD_Y/2.0 + KD_X*KD_X/(8.0*KD_Y), 1e-9), mn
+    print("ok  kd min top  -> a top circle under %.4f is re-asked" % mn)
+
+
+def test_asym_kidney_unreachable_sides_are_reasked():
+    """Within what ask-bulge admits, only one side pair has no top circle
+    at all: both sides exactly half the Y bound -- that is a cloud, not a
+    kidney, and its top circle degenerates.  The right-bulge hook catches
+    it and re-asks, same as a nesting on the oasis."""
+    vm = newvm()
+    assert vm.loads('(oasis:kidney-top %.4f %.4f %.4f %.4f)'
+                    % (KD_X, KD_Y, KD_Y/2.0, KD_Y/2.0)) is None
+    run(vm, ['Kidney', 'Asymmetric', (0.0, 0.0), KD_X, KD_Y,
+             KD_Y/2.0, KD_Y/2.0, 72.0, KD_BOT], 'degenerate pair')
+    arcs = arcs_of(vm, 4)
+    assert len(arcs) == 4, arcs
+    assert close(arcs[2][1], 72.0), arcs[2]      # the re-answered right
+    print("ok  kd reask    -> the degenerate half-Y side pair is re-asked")
+
+
+def test_kidney_preview_labels_the_derived_circles():
+    """The derived circles read their computed value from the start --
+    the true kidney's sides while only the top has been given, the
+    asymmetric one's top once the sides are in."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'kd labels')
+    # at the top-radius question everything is provisional: 1 ? (the
+    # top), 1 ? (the bottom) -- wait: top is ?, bottom is ?, sides show
+    # their derived value
+    labels = [d[1] for d in p.shot(2, 'TEXT')]
+    assert len(labels) == 4, labels
+    assert labels.count('?') == 2, labels          # top + bottom asked
+    derived = [t for t in labels if t != '?']
+    assert len(derived) == 2 and derived[0] == derived[1], labels
+    print("ok  kd labels   -> derived sides show a value, asked circles"
+          " show ?")
+
+
+def test_kidney_check_drawing_counts():
+    """Four circles: 8 corner ties, 4 ring ties, and of the three bulge
+    ties two duplicate the seams' ring ties, leaving left-right.  13
+    dims, all in the cross style."""
+    vm = newvm()
+    run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'kd check')
+    aligned = cmds(vm, '_.DIMALIGNED')
+    assert len(aligned) == 13, len(aligned)
+    dims = made(vm, 'DIMENSION')
+    assert len(dims) == 15, len(dims)              # 2 pool + 13 check
+    assert all(d[3] == 'Standard' for d in dims[:2]), dims[:2]
+    assert all(d[3] == 'CROSS DIMENSIONS' for d in dims[2:]), dims[2]
+    # the seam ring ties read the DIFFERENCE of the radii -- internal
+    # tangency -- where every external pair reads the sum
+    chk = check_arcs_of(vm, 4)
+    left, bottom, right, top = chk
+    assert close(math.dist(right[0], top[0]), top[1] - right[1], 1e-6)
+    assert close(math.dist(left[0], bottom[0]), left[1] + bottom[1], 1e-6)
+    print("ok  kd check    -> 13 cross dims; seam ties read R-r, external"
+          " ties r1+r2")
+
+
 def test_version_command():
     vm = newvm()
     vm.run('c:OASISVER', [])
@@ -1390,6 +1586,15 @@ if __name__ == '__main__':
     test_the_cloud_preview_shows_no_circle_behind_the_flat_run()
     test_a_cloud_is_one_shape_with_two_bottoms()
     test_backing_out_of_the_bottom_reaches_the_shape()
+    test_true_kidney_matches_its_reference_drawing()
+    test_true_kidney_seams_hand_over_exactly()
+    test_true_kidney_fills_its_envelope()
+    test_asym_kidney_derives_its_top_circle()
+    test_kidney_asks_its_own_questions()
+    test_true_kidney_top_radius_is_validated()
+    test_asym_kidney_unreachable_sides_are_reasked()
+    test_kidney_preview_labels_the_derived_circles()
+    test_kidney_check_drawing_counts()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")

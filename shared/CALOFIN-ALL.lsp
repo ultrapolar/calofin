@@ -10044,19 +10044,28 @@
 ;;; ever changing tangent, which is why the whole thing can be given as a
 ;;; handful of radii and two overall dimensions.
 ;;;
-;;; Three shapes come out of that, and the first question is which:
+;;; Four families come out of that, and the first question is which:
 ;;;
 ;;;   Center    three bulges -- left, right and one across the top,
 ;;;             centred -- joined by three reverse arcs.
 ;;;   TopRight  the same, with the third bulge tucked into the top-right
 ;;;             corner instead.
 ;;;   Cloud     two bulges, joined over the top by a reverse arc.
+;;;   Kidney    three bulges and ONE reverse arc: the two side circles
+;;;             sit INSIDE the big top circle, touching it from within,
+;;;             and the outline hands straight over at each touch --
+;;;             a SEAM, the one joint with nothing drawn between.
 ;;;
-;;; A cloud's bottom is a question of its own, asked straight after,
-;;; because a cloud is one shape with two bottoms rather than two shapes:
+;;; The two families that come two ways get a second question of their
+;;; own, asked straight after.  A cloud is one shape with two bottoms:
 ;;; Straight, the flat run of the Y-min bound between the two bulges, or
-;;; Rounded, a reverse arc like any other joiner.  The pair of answers
-;;; together names one of four rings.
+;;; Rounded, a reverse arc like any other joiner.  A kidney is one shape
+;;; whose sides are either matched or not: on a TRUE kidney the top
+;;; radius is given and the two equal sides are DERIVED from having to
+;;; touch it; on an ASYMMETRIC one the two unequal sides are given and
+;;; the top circle is derived -- tangent to the top bound and both
+;;; sides, its centre landing wherever those three contacts put it.
+;;; The pair of answers together names one of six rings.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________                  ___________
@@ -10208,7 +10217,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *oasis-version* "v4.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v5.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -10282,14 +10291,22 @@
 (defun oasis:cloud-p (variant)
   (member variant '("StraightBottom" "RoundedBottom")))
 
-;; The shape, resolved.  The first question offers three -- the two oasis
-;; shapes and Cloud -- because a cloud is one shape with two bottoms, not
-;; two shapes; which bottom is a question of its own, asked straight
-;; after.  The pair of answers together names one of the four rings.
+;; T for the kidney shapes.
+(defun oasis:kidney-p (variant)
+  (member variant '("TrueKidney" "AsymKidney")))
+
+;; The shape, resolved.  The first question offers four families --
+;; Center, TopRight, Cloud and Kidney -- and the two families that come
+;; two ways get a second question of their own, asked straight after: a
+;; cloud is one shape with two bottoms, a kidney one shape whose sides
+;; are either matched or not.  The pair of answers together names one of
+;; the six rings.
 (defun oasis:variant (ans)
-  (if (= (nth 0 ans) "Cloud")
-      (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom")
-      (nth 0 ans)))
+  (cond ((= (nth 0 ans) "Cloud")
+         (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom"))
+        ((= (nth 0 ans) "Kidney")
+         (if (= (nth 10 ans) "Asymmetric") "AsymKidney" "TrueKidney"))
+        ((nth 0 ans))))
 
 ;; The left bulge's radius.  On a cloud shape three bounds pin it at once
 ;; -- left, bottom and top -- so it is half the Y bound and is never
@@ -10304,10 +10321,16 @@
       (list (* w oasis:*topfrac*) (- h rt))))
 
 ;; What the ring's elements are called, in the order they run round the
-;; pool: bulges at the even positions, joiners at the odd ones.
+;; pool: bulges at the even positions, joiners at the odd ones.  A seam
+;; -- the direct handover where a kidney's side circle touches the top
+;; circle from inside -- is a joiner with nothing to draw, so its name
+;; never reaches the drawing.
 (defun oasis:names (variant)
   (cond ((oasis:cloud-p variant)
          '("left" "bottom" "right" "top"))
+        ((oasis:kidney-p variant)
+         '("left" "bottom-center" "right" "right-seam" "top-center"
+           "left-seam"))
         ((= variant "TopRight")
          '("left" "bottom-center" "right" "right-side" "top-right"
            "top-left"))
@@ -10318,10 +10341,17 @@
 ;; the shape, because "top-right" is the joiner on one and the bulge
 ;; itself on another.
 (defun oasis:sprompt (variant slot)
-  (if (oasis:cloud-p variant)
+  (cond
+    ((oasis:cloud-p variant)
       (cond ((= slot 6) "Right bulge radius")
             ((= slot 7) "Top tangent radius")
-            ((= slot 9) "Bottom radius"))
+            ((= slot 9) "Bottom radius")))
+    ((oasis:kidney-p variant)
+      (cond ((= slot 4) "Left bulge radius")
+            ((= slot 5) "Top-center radius")
+            ((= slot 6) "Right bulge radius")
+            ((= slot 9) "Bottom-center tangent radius")))
+    (t
       (cond ((= slot 4) "Left bulge radius")
             ((= slot 5) (if (= variant "TopRight")
                             "Top-right bulge radius" "Top bulge radius"))
@@ -10330,21 +10360,28 @@
             ((= slot 8) (if (= variant "TopRight")
                             "Right-side tangent radius"
                             "Top-right tangent radius"))
-            ((= slot 9) "Bottom-center tangent radius"))))
+            ((= slot 9) "Bottom-center tangent radius")))))
 
 ;; Which answer slots this shape asks for, in the order it asks them.
 ;; The rest are either pinned by the envelope (a cloud's left bulge) or
 ;; are no part of the shape at all.
-(defun oasis:steps (ans)
-  (cond ((/= (nth 0 ans) "Cloud")      '(0 1 2 3 4 5 6 7 8 9))
-        ((= (nth 10 ans) "Rounded")    '(0 10 1 2 3 6 7 9))
-        (t                             '(0 10 1 2 3 6 7))))
+(defun oasis:steps (ans / fam)
+  (setq fam (nth 0 ans))
+  (cond ((= fam "Cloud")
+         (if (= (nth 10 ans) "Rounded") '(0 10 1 2 3 6 7 9)
+             '(0 10 1 2 3 6 7)))
+        ((= fam "Kidney")
+         (if (= (nth 10 ans) "Asymmetric") '(0 10 1 2 3 4 6 9)
+             '(0 10 1 2 3 5 9)))
+        (t '(0 1 2 3 4 5 6 7 8 9))))
 
 ;; How the shape is named on the command line and in the report.
 (defun oasis:vlabel (variant)
   (cond ((= variant "TopRight")       "top-right-bulge")
         ((= variant "StraightBottom") "straight-bottom cloud")
         ((= variant "RoundedBottom")  "rounded-bottom cloud")
+        ((= variant "TrueKidney")     "true kidney")
+        ((= variant "AsymKidney")     "asymmetric kidney")
         (t                            "center-bulge")))
 
 ;; T when the shape's third bulge has to fit the envelope the way a side
@@ -10470,14 +10507,26 @@
 ;; where the first bulge hands over, angle-in where the second picks up.
 ;; nil when the two cannot be joined at all.
 (defun oasis:joiner (c1 r1 c2 r2 rf / cf m a)
-  (if rf
-      (progn
-        (setq cf (oasis:fillet c1 r1 c2 r2 rf))
-        (if cf (list nil cf (angle c1 cf) (angle c2 cf))))
-      (progn
-        (setq m (oasis:extnorm c1 r1 c2 r2))
-        (if m (progn (setq a (atan (cadr m) (car m)))
-                     (list "LINE" m a a))))))
+  (cond
+    ;; a SEAM: one circle inside the other, touching -- the internal
+    ;; tangency of a kidney's side against its top circle.  The touch
+    ;; point lies along the line of centres, so BOTH arcs meet it at the
+    ;; same angle -- from the bigger centre towards the smaller -- and
+    ;; the outline hands straight over with nothing drawn between.
+    ((and (= (type rf) 'STR) (= rf "SEAM"))
+     (setq a (if (> r1 r2) (angle c1 c2) (angle c2 c1)))
+     (list "SEAM" nil a a))
+    (rf
+     (setq cf (oasis:fillet c1 r1 c2 r2 rf))
+     (if cf (list nil cf (angle c1 cf) (angle c2 cf))))
+    (t
+     (setq m (oasis:extnorm c1 r1 c2 r2))
+     (if m (progn (setq a (atan (cadr m) (car m)))
+                  (list "LINE" m a a))))))
+
+;; T when a joiner is a seam.
+(defun oasis:seam-p (j)
+  (and (= (type (nth 0 j)) 'STR) (= (nth 0 j) "SEAM")))
 
 ;; T when a ring element is a straight run rather than an arc.
 (defun oasis:line-p (a)
@@ -10494,6 +10543,91 @@
 ;; both circles' reach by the same amount, so they stay nested for ever.
 (defun oasis:nested-p (c1 r1 c2 r2)
   (<= (distance c1 c2) (+ (abs (- r1 r2)) oasis:*fuzz*)))
+
+;;; -------------------- kidney geometry ---------------------------------
+;;; A kidney is three bulges and ONE reverse arc.  The two side circles
+;;; sit inside the big top circle, touching it from within -- an internal
+;;; tangency, where the outline hands straight over from one arc to the
+;;; other with nothing drawn between.  The bottom is the ordinary
+;;; external fillet.  What is given and what is derived depends on which
+;;; kidney it is:
+;;;
+;;;   TrueKidney   the TOP-CENTER radius is given; the two sides come out
+;;;                equal, derived from having to touch it.  The top
+;;;                circle is tangent to the Y-max bound, centred.
+;;;   AsymKidney   the two SIDE radii are given, unequal; the top circle
+;;;                is derived -- tangent to the Y-max bound and touching
+;;;                both sides from outside them, its centre landing
+;;;                wherever those three contacts put it.
+
+;; The smallest top-center radius a true kidney can take: the circle
+;; through the two bottom corners tangent to the top bound -- where the
+;; matching sides shrink to nothing.
+(defun oasis:ktrue-min (w h)
+  (+ (/ h 2.0) (/ (* w w) (* 8.0 h))))
+
+;; The matching side radius a true kidney derives from its top circle,
+;; or nil.  The discriminant is exactly 4(2R-w)(2R-h), so any R past
+;; oasis:ktrue-min has one.
+(defun oasis:ktrue-side (w h rt / b c disc r)
+  (setq b    (+ w (* 2.0 h) (* -4.0 rt))
+        c    (+ (/ (* w w) 4.0) (* (- h rt) (- h rt)) (- (* rt rt)))
+        disc (- (* b b) (* 4.0 c)))
+  (if (>= disc 0.0)
+      (progn
+        (setq r (/ (+ b (sqrt disc)) 2.0))
+        (if (> r oasis:*fuzz*) r))))
+
+;; The asymmetric kidney's top circle: tangent to the Y-max bound and
+;; internally tangent to both given sides.  Eliminating its radius from
+;; the two tangency equations leaves a quadratic in its centre's X; a
+;; root is legal when the circle contains both sides and the point where
+;; it touches the top bound lies ON the arc between the two seams --
+;; that arc is the drawn top, so the touch must be on it.  Of the legal
+;; roots the one nearest the middle wins.  Returns (cx R) or nil.
+(defun oasis:kidney-top (w h rl rr
+                         / sl sr a1 a2 b1 b2 qa qb qc d sd roots cx rt
+                           ty al ar sw best bin cin)
+  (setq sl (float rl)
+        sr (- w rr)
+        a1 (- h (* 2.0 rl))
+        a2 (- h (* 2.0 rr))
+        b1 (+ (* sl sl) (* (- h rl) (- h rl)) (- (* rl rl)))
+        b2 (+ (* sr sr) (* (- h rr) (- h rr)) (- (* rr rr)))
+        qa (- a2 a1)
+        qb (* -2.0 (- (* sl a2) (* sr a1)))
+        qc (- (* a2 b1) (* a1 b2))
+        roots nil)
+  (if (< (abs qa) oasis:*fuzz*)
+      (if (> (abs qb) oasis:*fuzz*)
+          (setq roots (list (/ (- qc) qb))))
+      (progn
+        (setq d (- (* qb qb) (* 4.0 qa qc)))
+        (if (>= d 0.0)
+            (setq sd    (sqrt d)
+                  roots (list (/ (+ (- qb) sd) (* 2.0 qa))
+                              (/ (- (- qb) sd) (* 2.0 qa)))))))
+  (setq best nil)
+  (foreach cx roots
+    (setq rt (cond ((> (abs a1) oasis:*fuzz*)
+                    (/ (+ (* cx cx) (* -2.0 sl cx) b1) (* 2.0 a1)))
+                   ((> (abs a2) oasis:*fuzz*)
+                    (/ (+ (* cx cx) (* -2.0 sr cx) b2) (* 2.0 a2)))))
+    (if (and rt (> rt (+ (max rl rr) oasis:*fuzz*)))
+        (progn
+          (setq ty (- h rt)
+                al (angle (list cx ty) (list sl rl))
+                ar (angle (list cx ty) (list sr rr))
+                sw (cal:angnorm (- al ar)))
+          (if (<= (cal:angnorm (- (/ pi 2.0) ar)) sw)
+              (progn
+                (setq cin (and (<= sl cx) (<= cx sr)))
+                (if (or (null best)
+                        (and cin (not (nth 2 best)))
+                        (and (eq cin (nth 2 best))
+                             (< (abs (- cx (/ w 2.0))) (abs (- (car best) (/ w 2.0))))))
+                    (setq best (list cx rt cin))))))))
+  (if best (list (car best) (cadr best))))
 
 ;; The outline, in the counter-clockwise order it runs round the pool.
 ;; Each element comes back as
@@ -10512,22 +10646,43 @@
 ;; checks for that before it ever gets here, so a nil return means an
 ;; input slipped past the checks, not a user mistake.
 (defun oasis:solve (w h rl rt rr ftl ftr fbc variant
-                    / nm bc br bs jr js n i j js2 jj ok jp jn out)
-  (setq nm (oasis:names variant))
-  (if (oasis:cloud-p variant)
-      (setq rl (oasis:leftrad variant h rl)
-            bc (list (list rl rl) (list (- w rr) rr))
-            br (list rl rr)
-            bs (list nil 6)
-            jr (list (if (= variant "StraightBottom") nil fbc) ftl)
-            js (list 9 7))
-      (setq bc (list (list rl rl) (list (- w rr) rr)
-                     (oasis:topcen w h rt variant))
-            br (list rl rr rt)
-            bs (list 4 6 5)
-            jr (list fbc ftr ftl)
-            js (list 9 8 7)))
-  (setq n (length br) i 0 js2 nil ok T)
+                    / nm bc br bs jr js kt n i j js2 jj ok jp jn out)
+  (setq nm (oasis:names variant) ok T)
+  (cond
+    ((oasis:cloud-p variant)
+     (setq rl (oasis:leftrad variant h rl)
+           bc (list (list rl rl) (list (- w rr) rr))
+           br (list rl rr)
+           bs (list nil 6)
+           jr (list (if (= variant "StraightBottom") nil fbc) ftl)
+           js (list 9 7)))
+    ((oasis:kidney-p variant)
+     ;; the sides or the top come DERIVED, whichever the shape did not
+     ;; ask for -- and when the derivation has no answer there is no
+     ;; kidney to build
+     (if (= variant "TrueKidney")
+         (setq rl (oasis:ktrue-side w h rt)
+               rr rl
+               kt (if rl (list (* 0.5 w) rt)))
+         (setq kt (oasis:kidney-top w h rl rr)))
+     (if (and rl rr kt)
+         (setq bc (list (list rl rl) (list (- w rr) rr)
+                        (list (car kt) (- h (cadr kt))))
+               br (list rl rr (cadr kt))
+               bs (if (= variant "TrueKidney")
+                      (list nil nil 5)
+                      (list 4 6 nil))
+               jr (list fbc "SEAM" "SEAM")
+               js (list 9 nil nil))
+         (setq ok nil br '())))
+    (t
+     (setq bc (list (list rl rl) (list (- w rr) rr)
+                    (oasis:topcen w h rt variant))
+           br (list rl rr rt)
+           bs (list 4 6 5)
+           jr (list fbc ftr ftl)
+           js (list 9 8 7))))
+  (setq n (length br) i 0 js2 nil)
   (while (< i n)
     (setq j  (rem (1+ i) n)
           jj (oasis:joiner (nth i bc) (nth i br) (nth j bc) (nth j br)
@@ -10547,21 +10702,28 @@
                 out (cons (list (nth (* 2 i) nm) (nth i bc) (nth i br)
                                 (nth 3 jp) (nth 2 jn) T (nth i bs))
                           out)
-                ;; then that joiner -- a reverse arc curves the other way
-                ;; round its own circle, so its two ends swap over
-                out (cons (if (= (nth 0 jn) "LINE")
-                              (list (nth (1+ (* 2 i)) nm)
-                                    (oasis:v+ (nth i bc)
-                                              (oasis:v* (nth 1 jn) (nth i br)))
-                                    (oasis:v+ (nth j bc)
-                                              (oasis:v* (nth 1 jn) (nth j br)))
-                                    (nth 2 jn) nil "LINE" nil)
-                              (list (nth (1+ (* 2 i)) nm) (nth 1 jn)
-                                    (nth i jr)
-                                    (angle (nth 1 jn) (nth j bc))
-                                    (angle (nth 1 jn) (nth i bc))
-                                    nil (nth i js)))
-                          out)
+                ;; then that joiner.  A seam draws nothing -- the two
+                ;; arcs hand straight over at the touch point.  A reverse
+                ;; arc curves the other way round its own circle, so its
+                ;; two ends swap over.
+                out (cond
+                      ((oasis:seam-p jn) out)
+                      ((and (= (type (nth 0 jn)) 'STR)
+                            (= (nth 0 jn) "LINE"))
+                       (cons (list (nth (1+ (* 2 i)) nm)
+                                   (oasis:v+ (nth i bc)
+                                             (oasis:v* (nth 1 jn) (nth i br)))
+                                   (oasis:v+ (nth j bc)
+                                             (oasis:v* (nth 1 jn) (nth j br)))
+                                   (nth 2 jn) nil "LINE" nil)
+                             out))
+                      (t
+                       (cons (list (nth (1+ (* 2 i)) nm) (nth 1 jn)
+                                   (nth i jr)
+                                   (angle (nth 1 jn) (nth j bc))
+                                   (angle (nth 1 jn) (nth i bc))
+                                   nil (nth i js))
+                             out)))
                 i   (1+ i)))
         (reverse out))))
 
@@ -10736,22 +10898,32 @@
 ;; envelope -- the left and right bulges' outermost points for X, the
 ;; top bulge's highest point and the left bulge's lowest for Y -- so
 ;; they measure the bounds the user was asked for, not a chord of them.
-(defun oasis:dimension (arcs ents base w h rl rr lay / doff i a e md)
+(defun oasis:dimension (arcs ents base w h lay / doff i a e md yl yr top)
   (setvar "CLAYER" lay)
   (oasis:dimstyle-on oasis:*dimstyle*)
-  (setq doff (oasis:dimoff w h))
+  (setq doff (oasis:dimoff w h)
+        ;; the ring starts at the left bulge and the right bulge is two
+        ;; along, on every shape; each touches its own bound level with
+        ;; its centre, so those are the points the overall X hooks
+        yl   (cadr (nth 1 (nth 0 arcs)))
+        yr   (cadr (nth 1 (nth 2 arcs)))
+        ;; and the overall Y hooks the bulge that actually reaches the
+        ;; top bound -- the one whose centre plus radius lands on it
+        top  (nth 0 arcs))
+  (foreach a arcs
+    (if (and (not (oasis:line-p a))
+             (nth 5 a)
+             (> (+ (cadr (nth 1 a)) (nth 2 a))
+                (+ (cadr (nth 1 top)) (nth 2 top))))
+        (setq top a)))
   (command "_.DIMLINEAR"
-           (oasis:wp (list 0.0 rl) base)
-           (oasis:wp (list w rr) base)
+           (oasis:wp (list 0.0 yl) base)
+           (oasis:wp (list w yr) base)
            "_H"
            (oasis:wp (list (* 0.5 w) (+ h doff)) base))
-  ;; the highest bulge's own top point, wherever that bulge sits: the
-  ;; third one on an oasis, the left one on a cloud (three bounds pin it,
-  ;; so it is the one that reaches the top)
   (command "_.DIMLINEAR"
-           (oasis:wp (list (car (nth 1 (nth (if (> (length arcs) 4) 4 0) arcs)))
-                           h) base)
-           (oasis:wp (list rl 0.0) base)
+           (oasis:wp (list (car (nth 1 top)) h) base)
+           (oasis:wp (list yl 0.0) base)
            "_V"
            (oasis:wp (list (- 0.0 doff) (* 0.5 h)) base))
   ;; walked by index so each arc keeps the entity oasis:draw made for it
@@ -10918,8 +11090,27 @@
 (defun oasis:fillin (ans / var w h rl rt rr cl ct cr side top g big)
   (setq var  (oasis:variant ans)
         w    (nth 2 ans)
-        h    (nth 3 ans)
-        side (* 0.5 oasis:*startside* (min w h))
+        h    (nth 3 ans))
+  (if (oasis:kidney-p var)
+      ;; the kidney: what was not asked for is derived by the solver, so
+      ;; only the asked slots need filling -- the true one's top circle
+      ;; half again over its minimum, the asymmetric one's sides a
+      ;; kidney-ish fraction of the short bound, and the bottom off the
+      ;; sides the way every joiner is
+      (progn
+        (setq rt (if (= var "TrueKidney")
+                     (cond ((nth 5 ans)) ((* 1.5 (oasis:ktrue-min w h)))))
+              rl (if (= var "AsymKidney")
+                     (cond ((nth 4 ans)) ((* 0.40 (min w h)))))
+              rr (if (= var "AsymKidney")
+                     (cond ((nth 6 ans)) ((* 0.45 (min w h)))))
+              g  (if (= var "TrueKidney")
+                     (cond ((oasis:ktrue-side w h rt)) (48.0))
+                     (min rl rr)))
+        (list w h rl rt rr nil nil
+              (cond ((nth 9 ans)) ((* 0.6 g)))))
+      (progn
+  (setq side (* 0.5 oasis:*startside* (min w h))
         rl   (cond ((oasis:leftrad var h (nth 4 ans))) (side))
         rr   (cond ((nth 6 ans)) (side))
         ;; the centred bulge is measured across the long bound, the
@@ -10949,7 +11140,7 @@
               ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
         (cond ((nth 9 ans))
               ((oasis:cloud-p var) (max big (* 1.25 (oasis:filmin cl rl cr rr))))
-              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))))
+              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
 ;; a stray U in the middle of the questions cannot break the next redraw.
@@ -11132,6 +11323,32 @@
     (setq v (cal:askdist 'REQ msg nil T)))
   v)
 
+;; A true kidney's top-center radius, re-asked until a kidney can be
+;; built on it.  Below a minimum the top circle cannot reach both sides
+;; -- at the minimum it passes through the two bottom corners and the
+;; matching sides shrink to nothing -- and on a tall narrow envelope a
+;; radius can be so big the derived sides meet in the middle.
+(defun oasis:ask-ktop (msg w h / v r bad)
+  (setq v (cal:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'CAL-BACK))
+              (progn
+                (setq r   (if (> v (+ (oasis:ktrue-min w h) oasis:*fuzz*))
+                              (oasis:ktrue-side w h v))
+                      bad (cond ((null r) "small")
+                                ((> (* 2.0 r) (+ w oasis:*fuzz*)) "big")))
+                bad))
+    (if (= bad "small")
+        (princ (strcat "\nA " (rtos v) " top circle cannot reach both"
+                       " sides of a " (rtos w) " x " (rtos h)
+                       " envelope -- it has to be more than "
+                       (rtos (oasis:ktrue-min w h)) "."))
+        (princ (strcat "\nA " (rtos v) " top circle makes the matching"
+                       " sides " (rtos r) " each -- " (rtos (* 2.0 r))
+                       " across together, more than the " (rtos w)
+                       " envelope.  Smaller keeps them apart.")))
+    (setq v (cal:askdist 'REQ msg nil T)))
+  v)
+
 ;; A tangent radius, re-asked until it is big enough to span its two
 ;; bulges.  Below the minimum the two circles it would have to touch
 ;; never meet, and there is no such arc at any position.
@@ -11160,25 +11377,39 @@
   (setq var (oasis:variant ans)
         w   (nth 2 ans) h  (nth 3 ans)
         rl  (oasis:leftrad var h (nth 4 ans))
-        rt  (nth 5 ans) rr (nth 6 ans)
-        cl  (if (and w h rl) (list rl rl))
-        ct  (if (and w h rt) (oasis:topcen w h rt var))
+        rt  (nth 5 ans) rr (nth 6 ans))
+  ;; a true kidney's sides are derived from its top circle, so by the
+  ;; time the bottom joiner is asked for they are known without ever
+  ;; having been asked about
+  (if (and (= var "TrueKidney") w h rt)
+      (setq rl (oasis:ktrue-side w h rt)
+            rr rl))
+  (setq cl  (if (and w h rl) (list rl rl))
+        ct  (if (and w h rt (not (oasis:kidney-p var)))
+                (oasis:topcen w h rt var))
         cr  (if (and w h rr) (list (- w rr) rr)))
   (cond
     ;; CLoud takes two capitals because Center already has the C.  The
     ;; keyword comes back spelled that way, so it is normalized here and
     ;; nothing downstream ever sees it.
     ((= k 0)
-     (setq v (cal:askkw "Which shape is it?" "Center TopRight CLoud"
-                          "Center/TopRight/CLoud" "Center" nil))
+     (setq v (cal:askkw "Which shape is it?"
+                          "Center TopRight CLoud Kidney"
+                          "Center/TopRight/CLoud/Kidney" "Center" nil))
      (if (= v "CLoud") "Cloud" v))
-    ((= k 10) (cal:askkw "Cloud bottom?" "Straight Rounded"
-                           "Straight/Rounded" "Straight" T))
+    ((= k 10)
+     (if (= (nth 0 ans) "Kidney")
+         (cal:askkw "Kidney type?" "True Asymmetric"
+                      "True/Asymmetric" "True" T)
+         (cal:askkw "Cloud bottom?" "Straight Rounded"
+                      "Straight/Rounded" "Straight" T)))
     ((= k 1) (oasis:askbase T))
     ((= k 2) (cal:askdist 'REQ "X - overall left-to-right bounds" nil T))
     ((= k 3) (cal:askdist 'REQ "Y - overall front-to-back bounds" nil T))
     ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4) "left" w h))
-    ((= k 5) (oasis:ask-top (oasis:sprompt var 5) w h rl var))
+    ((= k 5) (if (oasis:kidney-p var)
+                 (oasis:ask-ktop (oasis:sprompt var 5) w h)
+                 (oasis:ask-top (oasis:sprompt var 5) w h rl var)))
     ((= k 6) (oasis:ask-bulge (oasis:sprompt var 6) "right" w h))
     ;; on a cloud the top joiner runs straight from the right bulge back
     ;; to the left one; on an oasis it stops at the third bulge first
@@ -11317,21 +11548,34 @@
              (setq ans (oasis:put ans k v)
                    pos (1+ pos))
              ;; the right bulge is the last one asked for on every shape,
-             ;; so it is where a nesting with any of the others finally
-             ;; shows up
+             ;; so it is where anything the sides do TOGETHER finally
+             ;; shows up: a nesting on the oasis shapes, an unreachable
+             ;; top circle on the asymmetric kidney
              (if (= k 6)
-                 (progn
-                   (setq nests (oasis:right-nests (nth 2 ans) (nth 3 ans)
-                                                  (nth 4 ans) (nth 5 ans)
-                                                  (nth 6 ans)
-                                                  (oasis:variant ans)))
-                   (if nests
-                       (progn
-                         (princ (strcat "\nThat right bulge and the " nests
-                                        " bulge lie one inside the other, so no"
-                                        " tangent radius can join them.  Asking"
-                                        " again."))
-                         (setq pos (1- pos)))))))))
+                 (cond
+                   ((= (oasis:variant ans) "AsymKidney")
+                    (if (not (oasis:kidney-top (nth 2 ans) (nth 3 ans)
+                                               (nth 4 ans) (nth 6 ans)))
+                        (progn
+                          (princ (strcat "\nNo circle can be tangent to the"
+                                         " top of the envelope and touch"
+                                         " both those sides from outside"
+                                         " them.  Sides more alike (or"
+                                         " larger) usually fix it.  Asking"
+                                         " again."))
+                          (setq pos (1- pos)))))
+                   ((not (oasis:kidney-p (oasis:variant ans)))
+                    (setq nests (oasis:right-nests (nth 2 ans) (nth 3 ans)
+                                                   (nth 4 ans) (nth 5 ans)
+                                                   (nth 6 ans)
+                                                   (oasis:variant ans)))
+                    (if nests
+                        (progn
+                          (princ (strcat "\nThat right bulge and the " nests
+                                         " bulge lie one inside the other, so no"
+                                         " tangent radius can join them.  Asking"
+                                         " again."))
+                          (setq pos (1- pos))))))))))
 
      (setq prev (oasis:pv-clear prev)
            var  (oasis:variant ans) base (nth 1 ans)
@@ -11354,7 +11598,7 @@
                  cbase (oasis:checkbase base w h))
            (setvar "CLAYER" oasis:*poollayer*)
            (setq ents (oasis:draw arcs base oasis:*poollayer*))
-           (oasis:dimension arcs ents base w h rl rr oasis:*dimlayer*)
+           (oasis:dimension arcs ents base w h oasis:*dimlayer*)
            (setq nchk (oasis:checkdraw arcs cbase w h lt))
            (cal:dimstyrestore)
 
@@ -11372,7 +11616,10 @@
                                         (rtos (distance (nth 1 a) (nth 2 a))))
                                 (strcat (if (nth 5 a) "bulge  R" "reverse R")
                                         (rtos (nth 2 a))))
-                            (if (nth 6 a) "" "   (pinned by the envelope)"))))
+                            (cond ((nth 6 a) "")
+                                  ((oasis:kidney-p var)
+                                   "   (derived from the tangency)")
+                                  (t "   (pinned by the envelope)")))))
            (princ (strcat "\n  " (itoa (+ 2 (length arcs)))
                           " dimensions on the pool in the " oasis:*dimstyle*
                           " style, and " (itoa nchk) " on the"))

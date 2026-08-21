@@ -10,19 +10,31 @@ is smooth: the outline changes direction without ever changing tangent,
 which is why the whole thing can be given as a handful of radii and two
 overall dimensions.
 
-Three shapes come out of that, and the first question is which:
+Four families come out of that, and the first question is which:
 
 | | Bulges | The top | The bottom |
 | --- | --- | --- | --- |
 | **Center** | left, right, top — centred | reverse arcs either side | reverse arc |
 | **TopRight** | left, right, top — in the corner | reverse arcs either side | reverse arc |
-| **Cloud** | left, right | one reverse arc | see below |
+| **Cloud** | left, right | one reverse arc | flat run or reverse arc |
+| **Kidney** | left, right, top-center | **seams** — see below | reverse arc |
 
-A cloud is one shape with two bottoms rather than two shapes, so which
-bottom it has is a question of its own, asked straight after — **Straight**,
-the flat run of the Y-min bound between the two bulges, or **Rounded**, a
-reverse arc like any other joiner. The pair of answers together names one
-of four rings.
+The kidney brings the one joint the other families don't have: its two
+side circles sit **inside** the big top circle, touching it from within.
+At an internal tangency both arcs meet the touch point at the same angle,
+so the outline hands straight over with nothing drawn between — a
+**seam**. That is why a kidney is four arcs from three bulges and a
+single reverse arc.
+
+The two families that come two ways get a second question of their own,
+asked straight after. A cloud's bottom is **Straight** — the flat run of
+the Y-min bound — or **Rounded**. A kidney is **True** — the top-center
+radius is given, and the two *equal* sides are **derived** from having to
+touch it — or **Asymmetric** — the two *unequal* sides are given, and the
+**top circle is derived**: tangent to the top bound and touching both
+sides from outside them, its centre landing wherever those three contacts
+put it (leaning toward the bigger side). The pair of answers together
+names one of six rings.
 
 Nothing downstream of the solver knows which shape it is looking at — it
 reads the ring. The four differ only in how many bulges there are, where
@@ -52,6 +64,14 @@ joiner on one shape and the bulge itself on another:
 | TopRight | Left, **Top-right**, Right | Top-left, **Right-side**, Bottom-center |
 | Cloud, straight | Right | Top |
 | Cloud, rounded | Right | Top, Bottom |
+| Kidney, true | **Top-center** (sides derive) | Bottom-center |
+| Kidney, asymmetric | Left, Right (top derives) | Bottom-center |
+
+A derived circle is never asked about and never reads `?` — its label
+shows the computed value from the very first question, re-solving as
+each real answer lands. On a true kidney the top radius has a hard
+minimum the re-ask names — `Y/2 + X²/8Y`, the circle through the two
+bottom corners, where the matching sides shrink to nothing.
 
 ### Answering it, with the pool on screen
 
@@ -115,9 +135,12 @@ cross dimensions:
 | 3 | each **bulge** centre to the next bulge, across whatever sits between |
 
 (Those counts are a `Center` or `TopRight` pool's 21. A rounded cloud
-draws 13 and a straight-bottom one 9, having fewer centres — and a pair
-that is both a ring neighbour and a bulge neighbour is only dimensioned
-once.)
+draws 13 and a straight-bottom one 9, having fewer centres; a kidney
+draws 13 — and a pair that is both a ring neighbour and a bulge
+neighbour is only dimensioned once.) On a kidney the two seam ties read
+the **difference** of the radii rather than the sum, because those
+circles touch from inside — either way, a wrong radius shows as a tie
+that disagrees with the order sheet.
 
 Between them those pin all six centres against the box and against one
 another, so a transcription slip in any single radius shows up as a
@@ -142,6 +165,8 @@ The X and Y are absolute, and that alone pins all three bulges:
 | right | the X-max and Y-min bounds | `(X - rR, rR)` |
 | top, **Center** | the Y-max bound, centred across X | `(X/2, Y - rT)` |
 | top, **TopRight** | the Y-max **and** the X-max bounds | `(X - rT, Y - rT)` |
+| top-center, **True kidney** | the Y-max bound, centred | `(X/2, Y - rT)` |
+| top-center, **Asymmetric** | the Y-max bound **and** both sides, from inside | derived |
 
 A cloud's left bulge is tangent to **three** bounds at once, and three
 tangencies leave nothing free: its radius *is* half the Y bound. So it
@@ -190,7 +215,7 @@ computed closed and drawn closed.
 ### The questions
 
 ```
-Which shape is it? [Center/TopRight/CLoud] <Center>:
+Which shape is it? [Center/TopRight/CLoud/Kidney] <Center>:
 Insertion base point <0,0> [Back]:
 X - overall left-to-right bounds [Back]:
 Y - overall front-to-back bounds [Back]:
@@ -267,6 +292,19 @@ X - overall left-to-right bounds [Back]: 30'
 Y - overall front-to-back bounds [Back]: 20'
 Right bulge radius [Back]: 7'
 Top tangent radius [Back]: 6'
+```
+
+and a true kidney is your 388 × 214 drawing in just four numbers — the
+sides derive themselves at 95.9167:
+
+```
+Which shape is it? [...] <Center>: K
+Kidney type? [True/Asymmetric/Back] <True>: True
+Insertion base point <0,0> [Back]: (pick)
+X - overall left-to-right bounds [Back]: 388
+Y - overall front-to-back bounds [Back]: 214
+Top-center radius [Back]: 27'
+Bottom-center tangent radius [Back]: 4'
 ```
 
 ## Tunables
@@ -398,7 +436,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 61 of them. The reference case is checked against the drawing OASIS was
+answers — 70 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -454,7 +492,18 @@ the pinned left bulge's value from the very first question. Two more
 cover the shape being asked in two parts — the bottom question decides
 whether a bottom radius is asked for at all, and `Back` from it lands on
 the shape and rebuilds every question after it — and one covers the
-bulge-to-bulge ties in the check drawing. The preview
+bulge-to-bulge ties in the check drawing.
+
+Nine are the two **kidney** shapes: the true kidney reproduces its
+customer drawing arc for arc, with the sides deriving at 95.9167; the
+seams hand over at the exact internal tangency with nothing drawn
+between; it fills its envelope simply; the asymmetric one derives its
+top circle to the same tangencies; each asks its own questions (7 and
+8); a top radius under the named minimum is re-asked; the one degenerate
+side pair (both exactly half of Y — a cloud, not a kidney) is caught and
+re-asked; the derived circles label themselves with values, never `?`;
+and the check drawing's seam ties read `R − r` where external ties read
+`r₁ + r₂`. The preview
 ones wrap `getdist` to photograph the drawing at the moment each question
 is put — it is erased before the next one, so there is no other way to
 see it.
