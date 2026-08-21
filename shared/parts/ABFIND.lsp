@@ -27,24 +27,31 @@
 ;;; ABMOVE
 ;;;   Everything ABFIND does, and then the question ABFIND raises: if
 ;;;   this point is in the wrong place, where SHOULD it be?  One tape
-;;;   is held and the other's reading is varied to every number it
-;;;   could have been misread from, and each pair of distances is
-;;;   crossed to a position:
+;;;   is held exactly as it is and the other's reading is varied, and
+;;;   each pair of distances is crossed back to a position.  Two
+;;;   families of reading are tried:
 ;;;
-;;;     * the feet came out one out       21'-1"  ->  20'-1" / 22'-1"
-;;;     * the inches lost or gained a leading 1     1"  <->  11"
-;;;     * a digit was read as a look-alike          21'-1" -> 21'-7"
-;;;       (abf:*digit-pairs*: 1/7, 1/4, 3/8, 3/5, 5/6, 6/8, 0/9, 4/9,
-;;;       7/9), in the inches or in the feet
-;;;     * two feet digits changed places            21' -> 12'
+;;;     * THE FOOT SWEEP -- the moved tape a whole foot out, a foot at
+;;;       a time, abf:*foot-steps* of them EACH WAY (10 up and 10 down
+;;;       as shipped).  A foot is the unit a tape gets miscounted in,
+;;;       so every foot within reach is worth seeing whether or not
+;;;       the number looks like another one.
+;;;     * THE LOOK-ALIKES -- a reading that could be read as this one:
+;;;         the inches lost or gained a leading 1     1"  <->  11"
+;;;         a digit read as its look-alike            21'-1" -> 21'-7"
+;;;           (abf:*digit-pairs*: 1/7, 1/4, 3/8, 3/5, 5/6, 6/8, 0/9,
+;;;           4/9, 7/9), in the inches or in the feet
+;;;         two feet digits changed places            21' -> 12'
 ;;;
-;;;   Both ways round: A held while B's reading moves, then B held
-;;;   while A's moves.  Only misses up to abf:*max-shift* (2 feet as
-;;;   shipped) are offered -- a bigger one is a different mistake, and
-;;;   the feet-digit and transposed-digit cases only show up at all
-;;;   when that is raised.  The candidates are drawn on the POINTS
-;;;   layer, numbered on screen and listed on the command line nearest
-;;;   miss first, and you pick one by number or by clicking it.
+;;;   Both ways round, as two groups: A held while B's reading moves,
+;;;   then B held while A's moves.  Nothing further than
+;;;   abf:*max-shift* (10 feet, the reach of the foot sweep) is
+;;;   offered, and a reading the held tape can no longer reach has no
+;;;   crossing and is left out.  A look-alike that lands on a whole
+;;;   foot is already in the sweep and is not listed twice.  The
+;;;   candidates are drawn on the POINTS layer, numbered on screen and
+;;;   listed on the command line nearest miss first within each group,
+;;;   and you pick one by number or by clicking it.
 ;;;
 ;;;   Picking one:
 ;;;     * a new point is made there, numbered "17m" -- the original
@@ -106,7 +113,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.0")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.1")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -140,13 +147,17 @@
                                     ; the two never read as the same
                                     ; mark
 (setq abf:*sug-hgt*      6.0)       ; height of a suggestion's number
-(setq abf:*max-shift*    24.0)      ; biggest misreading offered, in
-                                    ; inches.  2 feet covers a foot
-                                    ; out, the 1"/11" slip and every
-                                    ; look-alike inch digit; raise it
-                                    ; to let the feet digits in too
-                                    ; (a 3 read as an 8 is 5 feet)
-(setq abf:*max-sugg*     12)        ; most suggestions offered at once
+(setq abf:*foot-steps*   10)        ; how many 1-foot steps are offered
+                                    ; each way when a tape is swept: 10
+                                    ; up and 10 down, per held stake
+(setq abf:*max-shift*    120.0)     ; furthest a suggestion may sit from
+                                    ; the reading, in inches.  It bounds
+                                    ; BOTH families, so the shipped 10
+                                    ; feet is exactly the reach of the
+                                    ; foot sweep; lower it and the sweep
+                                    ; shortens with the look-alikes
+(setq abf:*max-sugg*     nil)       ; most suggestions per held stake,
+                                    ; nil = as many as there are
 (setq abf:*prec*         4)         ; rtos precision for every distance
                                     ; printed or written: 4 = 1/16"
 (setq abf:*same-eps*     0.125)     ; two suggestions this close are
@@ -361,16 +372,33 @@
         ((< (abs v) (abs (car lst))) (cons v lst))
         (t (cons (car lst) (abf:ins-delta v (cdr lst))))))
 
-;; Every way D's reading could have been written down for a different
-;; number, as a signed shift in inches: a foot out either way, the
-;; inches losing or gaining a leading 1, a look-alike digit in the
-;; inches or in the feet, and two feet digits changing places.  Only
-;; misses up to abf:*max-shift* survive, nearest miss first.
-(defun abf:deltas (d / r ft inch raw out v)
+;; Every reading D could have been instead, as a signed shift in
+;; inches.  Two families:
+;;
+;;   * THE FOOT SWEEP - the tape read a whole number of feet out, one
+;;     foot at a time, abf:*foot-steps* of them each way.  It does not
+;;     care whether the number looks like another one: a foot is the
+;;     unit a tape gets miscounted in, so every foot within reach is
+;;     worth seeing.
+;;   * THE LOOK-ALIKES - the reading was written down as a number that
+;;     resembles it: the inches losing or gaining a leading 1
+;;     (1" <-> 11"), a digit read as its look-alike in the inches or
+;;     in the feet (abf:*digit-pairs*), and two feet digits changing
+;;     places (21' -> 12').
+;;
+;; Only shifts up to abf:*max-shift* survive - it bounds both families
+;; - and a reading that would come out at or below zero is dropped.
+;; Nearest miss first, no repeats: a look-alike that lands on a whole
+;; foot is already in the sweep and is not listed twice.
+(defun abf:deltas (d / r ft inch raw out v k)
   (setq r    (abf:reading d)
         ft   (car  r)
         inch (cadr r)
-        raw  (list 12.0 -12.0))
+        raw  nil
+        k    1)
+  (repeat abf:*foot-steps*                       ; the foot sweep
+    (setq raw (cons (* 12.0 k) (cons (* -12.0 k) raw))
+          k   (1+ k)))
   (foreach v '(10.0 -10.0)
     (if (and (>= (+ inch v) 0.0) (<= (+ inch v) 11.0))
       (setq raw (cons v raw))))
@@ -401,31 +429,23 @@
     (if (< (cal:dist p (nth 5 c)) abf:*same-eps*) (setq hit T)))
   hit)
 
-;; Every place PP could sit if ONE of its two tapes was written down
-;; wrong: A held while B's reading moves, then B held while A's does.
-;; Each entry is (miss held moved old-reading new-reading point), the
-;; smallest miss first, capped at abf:*max-sugg*.
-(defun abf:candidates (pa pb pp / a b out dl nd np n cut one)
-  (setq a   (cal:dist pa pp)
-        b   (cal:dist pb pp)
+;; One group of candidates: one stake's reading is HELD exactly as it
+;; is and the other's is walked through abf:deltas.  movea non-nil
+;; varies A's reading and holds B's; nil is the other way round.  Each
+;; entry is (miss held moved old-reading new-reading point), smallest
+;; miss first, capped at abf:*max-sugg* (nil = uncapped).  A reading
+;; the held tape can no longer reach has no crossing and is left out.
+(defun abf:group (pa a pb b pp held moved movea / was out dl nd np n cut one)
+  (setq was (if movea a b)
         out nil)
-  (if (and (> a abf:*fuzz*) (> b abf:*fuzz*))
-    (progn
-      (foreach dl (abf:deltas b)                    ; hold A, move B
-        (setq nd (+ b dl)
-              np (abf:circint pa a pb nd pp))
-        (if (and np (not (abf:seen-p np pp out)))
-          (setq out (abf:ins-cand
-                      (list (abs dl) abf:*a-name* abf:*b-name* b nd np)
-                      out))))
-      (foreach dl (abf:deltas a)                    ; hold B, move A
-        (setq nd (+ a dl)
-              np (abf:circint pa nd pb b pp))
-        (if (and np (not (abf:seen-p np pp out)))
-          (setq out (abf:ins-cand
-                      (list (abs dl) abf:*b-name* abf:*a-name* a nd np)
-                      out))))))
-  (if (> (length out) abf:*max-sugg*)
+  (foreach dl (abf:deltas was)
+    (setq nd (+ was dl)
+          np (if movea
+               (abf:circint pa nd pb b pp)
+               (abf:circint pa a pb nd pp)))
+    (if (and np (not (abf:seen-p np pp out)))
+      (setq out (abf:ins-cand (list (abs dl) held moved was nd np) out))))
+  (if (and abf:*max-sugg* (> (length out) abf:*max-sugg*))
     (progn
       (setq cut nil n 0)
       (foreach one out
@@ -433,6 +453,19 @@
         (setq n (1+ n)))
       (setq out (reverse cut))))
   out)
+
+;; Every place PP could sit if ONE of its two tapes was read wrong, in
+;; the two groups that answer separately: A held while B's reading
+;; moves, then B held while A's does.  A candidate can never appear in
+;; both - an A-held one keeps its distance from A exactly and a B-held
+;; one does not - so the groups are simply run together, each nearest
+;; miss first.
+(defun abf:candidates (pa pb pp / a b)
+  (setq a (cal:dist pa pp)
+        b (cal:dist pb pp))
+  (if (and (> a abf:*fuzz*) (> b abf:*fuzz*))
+    (append (abf:group pa a pb b pp abf:*a-name* abf:*b-name* nil)
+            (abf:group pa a pb b pp abf:*b-name* abf:*a-name* T))))
 
 ;;; ---------------------- what gets drawn -------------------------------
 
@@ -606,7 +639,7 @@
 (defun abf:run (movep / *error* undo-open oce ocl oos odim cmd cands
                         pa pb hist stage done made moves s hit nm pp
                         pair sugs temps c i kws shown ans idx sug havestyle
-                        np newpt ments ring note)
+                        np newpt ments ring note tried lasthold)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -725,10 +758,11 @@
                          (if (null sugs)
                            (progn
                              (princ (strcat
-                                      "\n  No misreading within "
+                                      "\n  No reading within "
                                       (abf:fmt abf:*max-shift*)
-                                      " puts Pt." nm " anywhere else -"
-                                      " left where it is."))
+                                      " puts Pt." nm " anywhere the"
+                                      " other tape can reach - left"
+                                      " where it is."))
                              (setq hist (cons (list "DIM" pair) hist)))
                            (progn
                              (cal:ensure-layer abf:*point-layer* 2)
@@ -737,11 +771,27 @@
                                (setq temps (append temps
                                                    (abf:draw-sug (nth 5 c) i))
                                      i     (1+ i)))
+                             (setq tried
+                                   (+ (length (abf:deltas
+                                                (cal:dist pa pp)))
+                                      (length (abf:deltas
+                                                (cal:dist pb pp)))))
                              (princ (strcat
                                       "\n\n  Where Pt." nm
-                                      " lands if one tape was written"
-                                      " down wrong (nearest miss"
-                                      " first):"))
+                                      " lands if one tape was read"
+                                      " wrong - A held first, then B"
+                                      " (nearest miss first):"))
+                             (if (> tried (length sugs))
+                               (princ (strcat
+                                        "\n  " (itoa (- tried
+                                                        (length sugs)))
+                                        " of the " (itoa tried)
+                                        " readings are not offered:"
+                                        " out of the other tape's"
+                                        " reach"
+                                        (if abf:*max-sugg*
+                                          ", or past the list cap" "")
+                                        ".")))
                              (princ (strcat
                                       "\n   #  held  moved  from"
                                       "          to            the point"
@@ -749,8 +799,14 @@
                              (princ (strcat
                                       "\n   -  ----  -----  -----------"
                                       "   -----------   ---------------"))
-                             (setq i 1)
+                             (setq i 1 lasthold nil)
                              (foreach c sugs
+                               ;; a blank line where the held stake
+                               ;; changes: the two answers read as two
+                               ;; blocks, not one long list
+                               (if (and lasthold (/= lasthold (cadr c)))
+                                 (princ "\n"))
+                               (setq lasthold (cadr c))
                                (princ (strcat
                                         "\n   " (cal:pad (itoa i) 3)
                                         (cal:pad (cadr c) 6)

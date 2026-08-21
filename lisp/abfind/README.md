@@ -9,8 +9,9 @@ round.
   dimension from A to the point and one from B to it.
 * **`ABMOVE`** — the same, and then the question `ABFIND` raises: *if
   this point is in the wrong place, where should it be?* One tape is
-  held and the other's reading is varied to every number it could have
-  been misread from. Pick the position you believe and the point moves
+  held exactly as it is and the other's reading is walked — a foot at a
+  time, ten feet each way, plus every number the reading could have
+  been misread as. Pick the position you believe and the point moves
   there, renamed, ringed and noted.
 
 ## What it does
@@ -40,42 +41,65 @@ below).
 
 ### `ABMOVE`
 
-Everything `ABFIND` does, and then the suggestions. A misreading is one
-of these, applied to whichever reading is **not** being held:
+Everything `ABFIND` does, and then the suggestions. One stake's
+reading is **held exactly as it is** and the other's is varied; each
+pair of distances is crossed back to a position. Two families of
+reading are tried:
+
+**The foot sweep.** The moved tape a whole foot out, a foot at a time,
+`abf:*foot-steps*` of them **each way** — ten up and ten down as
+shipped. A foot is the unit a tape gets miscounted in, so every foot
+within reach is worth seeing whether or not the number looks like
+another one.
+
+**The look-alikes.** A reading that could be *read* as this one:
 
 | The mistake | `21'-1"` could have been |
 | --- | --- |
-| the feet came out one out | `20'-1"`, `22'-1"` |
 | the inches lost or gained a leading 1 | `21'-11"` |
 | a digit read as a look-alike (`abf:*digit-pairs*`: 1/7, 1/4, 3/8, 3/5, 5/6, 6/8, 0/9, 4/9, 7/9) | `21'-7"`, `21'-4"` |
 | two feet digits changed places | `12'-1"` |
 
-Both ways round: A held while B's reading moves, then B held while A's
-does. Each pair of distances is crossed back to a position — the
-crossing on the side the point is already on, because a misread tape
-does not flip a point across the stakes. Only misses up to
-`abf:*max-shift*` (**2 feet** as shipped) are offered, so the
-feet-digit and transposed-digit cases only show up at all when that is
-raised.
+Both ways round, as **two groups**: A held while B's reading moves,
+then B held while A's does. Nothing further than `abf:*max-shift*`
+(10 feet — the reach of the foot sweep) is offered, and a reading the
+held tape can no longer reach has no crossing, is left out, and is
+counted in a line under the table. A look-alike that lands on a whole
+foot (`21'` read as `27'`) is already in the sweep and is not listed
+twice.
 
 What comes out is drawn on the **POINTS** layer, numbered on screen,
-and listed nearest miss first:
+and listed nearest miss first within each group:
 
 ```
-  Where Pt.17 lands if one tape was written down wrong (nearest miss first):
+  Where Pt.17 lands if one tape was read wrong - A held first, then B
+  (nearest miss first):
    #  held  moved  from          to            the point moves
    -  ----  -----  -----------   -----------   ---------------
    1  A     B      18'-6"        18'-5"        0'-1 1/8" SE
    2  A     B      18'-6"        18'-8"        0'-2 5/16" NW
-   3  B     A      21'-1"        21'-4"        0'-3 7/16" NE
-   4  B     A      21'-1"        21'-7"        0'-6 15/16" NE
-   5  B     A      21'-1"        21'-11"       0'-11 5/8" E
-   6  A     B      18'-6"        19'-6"        1'-1 15/16" NW
-   7  A     B      18'-6"        17'-6"        1'-1 3/4" SE
-   8  B     A      21'-1"        22'-1"        1'-1 15/16" E
-   9  B     A      21'-1"        20'-1"        1'-1 11/16" SW
-  10  A     B      18'-6"        16'-6"        2'-3 1/4" SE
+   3  A     B      18'-6"        19'-6"        1'-1 15/16" NW
+   4  A     B      18'-6"        17'-6"        1'-1 3/4" SE
+   5  A     B      18'-6"        16'-6"        2'-3 1/4" SE
+   ...                                             (to 8'-6" / 28'-6")
+  22  A     B      18'-6"        8'-6"         10'-9 15/16" SE
+
+  23  B     A      21'-1"        21'-4"        0'-3 7/16" NE
+  24  B     A      21'-1"        21'-7"        0'-6 15/16" NE
+  25  B     A      21'-1"        21'-11"       0'-11 5/8" E
+  26  B     A      21'-1"        22'-1"        1'-1 15/16" E
+  27  B     A      21'-1"        20'-1"        1'-1 11/16" SW
+   ...                                            (to 11'-1" / 31'-1")
+  45  B     A      21'-1"        11'-1"        10'-6 1/2" SW
 ```
+
+Forty-five rows for this point: twenty sweep steps per held stake,
+with the look-alike readings (`18'-5"`, `18'-8"`, `21'-4"`, `21'-7"`,
+`21'-11"`) sitting where their own miss puts them — at the top of their
+group, since an inch out is nearer than a foot. Fifty readings were
+generated and five collapsed into the sweep: `18'` read as `16'` or
+`13'`, and `21'` read as `24'`, `27'` or `12'`, are all whole feet the
+sweep already carries.
 
 Answer with the number, or `Pick` and click the one you want. `None`
 (the Enter answer) leaves the point alone and keeps the two
@@ -158,9 +182,11 @@ error, or Esc.
    commands come with the one file.
 2. `ABFIND` → `Point number <Enter = done>:` → `17` → the two ties are
    drawn → next number, or Enter to finish.
-3. `ABMOVE` → `Point number <Enter = done>:` → `17` → read the table →
-   `Move Pt.17 to which? [1/2/3/4/5/6/7/8/9/10/Pick/None/Back] <None>:`
-   → `1` → `Place the note for Pt.17 [Auto/Back] <Auto>:` → Enter.
+3. `ABMOVE` → `Point number <Enter = done>:` → `17` → read the table
+   (`F2` opens the text window if it runs off the command line) →
+   `Move Pt.17 to which? [1/2/.../45/Pick/None/Back] <None>:` → `1`, or
+   `Pick` and click the marker → `Place the note for Pt.17
+   [Auto/Back] <Auto>:` → Enter.
 4. `ABFINDVER` prints the loaded version.
 
 ## Tunables
@@ -184,17 +210,23 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*moved-suffix* "m")           ; Pt.17 -> Pt.17m
 (setq abf:*sug-radius*   3.0)           ; suggestion marker radius
 (setq abf:*sug-hgt*      6.0)           ; suggestion number height
-(setq abf:*max-shift*    24.0)          ; biggest misreading offered
-(setq abf:*max-sugg*     12)            ; most suggestions at once
+(setq abf:*foot-steps*   10)            ; 1-foot steps offered each way
+(setq abf:*max-shift*    120.0)         ; furthest a suggestion may sit
+(setq abf:*max-sugg*     nil)           ; most per held stake, nil = all
 (setq abf:*prec*         4)             ; rtos precision, 4 = 1/16"
 (setq abf:*same-eps*     0.125)         ; two suggestions this close
                                         ; are one place
 ```
 
-Raising `abf:*max-shift*` is the interesting one: at 2 feet you get a
-foot out, the 1"/11" slip and the look-alike inch digits. Raise it and
-the look-alike **feet** digits arrive too — a 3 read as an 8 is five
-feet, and a transposed `21'` → `12'` is nine.
+`abf:*foot-steps*` and `abf:*max-shift*` work together: the sweep
+reaches `12 x foot-steps` inches, and `max-shift` is the hard bound on
+*everything*. Shipped they agree at ten feet. Lower `max-shift` to
+`24.0` and you get a two-foot list — a foot out either way, the
+`1"`/`11"` slip and the look-alike inch digits; the look-alike **feet**
+digits (a 3 read as an 8 is five feet, a transposed `21'` → `12'` is
+nine) drop out with the rest of the sweep. `abf:*max-sugg*` caps each
+**group**, not the pair of them, so shortening the list never costs you
+one of the two answers.
 
 ## Notes & limitations
 
@@ -218,9 +250,15 @@ feet, and a transposed `21'` → `12'` is nine.
 ## Versioning
 
 `tools/release_lisp.py` reads the `*abfind-version*` banner and stamps
-`releases/ABFIND_MMDDYY_REV10.lsp`; run it after any change and bump
+`releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.1** — `ABMOVE` sweeps the moved tape a foot at a time,
+  `abf:*foot-steps*` (10) each way per held stake, with the look-alike
+  readings woven in at their own miss distance; the suggestions are
+  shown as two groups, A held then B; `abf:*max-shift*` is 10 feet and
+  bounds both families; `abf:*max-sugg*` caps each group and defaults
+  to no cap.
 * **v1.0** — first release.
 
 ## Tests

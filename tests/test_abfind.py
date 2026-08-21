@@ -301,17 +301,48 @@ def test_digit_swaps():
 
 
 def test_deltas():
-    """21'-1" could have been 20'-1", 22'-1", 21'-11", 21'-7", 21'-4"."""
+    """The foot sweep, 10 each way, with the look-alikes woven in."""
     vm = newvm()
-    assert vm.loads('(abf:deltas 253.0)') == [3.0, 6.0, 10.0, 12.0, -12.0]
-    # 18'-6": 18'-5", 18'-8", 19'-6", 17'-6" and the 18'->16' look-alike
-    assert vm.loads('(abf:deltas 222.0)') == [-1.0, 2.0, 12.0, -12.0, -24.0]
-    # nothing bigger than the cap, and nothing that would go negative
-    for d in vm.loads('(abf:deltas 222.0)'):
-        assert abs(d) <= 24.0 and 222.0 + d > 0
-    # 6": a foot below zero is not a reading, so only +12 survives there
-    assert vm.loads('(abf:deltas 6.0)') == [-1.0, 2.0, 12.0]
-    print("ok  the misreading set: a foot out, the 1/11 slip, look-alikes")
+    # 21'-1": the sweep, plus 21'-4" (1 read as 4), 21'-7" (1 as 7) and
+    # 21'-11" (the leading 1).  21'->27' and 21'->12' are look-alikes
+    # too, but they land on whole feet the sweep already carries.
+    a = vm.loads('(abf:deltas 253.0)')
+    assert a[:5] == [3.0, 6.0, 10.0, 12.0, -12.0], a
+    assert len(a) == 23, a
+    # 18'-6": the sweep, plus 18'-5" (6 read as 5) and 18'-8" (6 as 8)
+    b = vm.loads('(abf:deltas 222.0)')
+    assert b[:4] == [-1.0, 2.0, 12.0, -12.0], b
+    assert len(b) == 22, b
+    for d in (a, b):
+        # ten feet each way, every one of them
+        for k in range(1, 11):
+            assert 12.0 * k in d and -12.0 * k in d, (k, d)
+        # sorted by how big the miss is, nothing past the cap, and no
+        # reading that would come out at or below zero
+        assert [abs(v) for v in d] == sorted(abs(v) for v in d), d
+        assert max(abs(v) for v in d) <= 120.0, d
+    assert all(222.0 + v > 0 for v in b), b
+    # a short tape cannot go a foot below zero: only the way up
+    assert vm.loads('(abf:deltas 6.0)')[:3] == [-1.0, 2.0, 12.0]
+    assert -12.0 not in vm.loads('(abf:deltas 6.0)')
+    print("ok  the readings tried: 10 feet each way, plus the look-alikes")
+
+
+def test_deltas_cap_shortens_both():
+    """abf:*max-shift* bounds the sweep and the look-alikes alike."""
+    vm = newvm()
+    vm.loads('(setq abf:*max-shift* 24.0)')
+    assert vm.loads('(abf:deltas 253.0)') == [3.0, 6.0, 10.0, 12.0, -12.0,
+                                              24.0, -24.0]
+    # with a 2-foot sweep the whole-feet look-alikes are no longer
+    # covered by it, so they come back in their own right: 21'->24',
+    # 21'->27' and the transposed 21'->12'
+    vm.loads('(setq abf:*max-shift* 120.0)')
+    vm.loads('(setq abf:*foot-steps* 2)')
+    assert vm.loads('(abf:deltas 253.0)') == [3.0, 6.0, 10.0, 12.0, -12.0,
+                                              24.0, -24.0, 36.0, 72.0,
+                                              -108.0]
+    print("ok  the shift cap and the step count each shorten the list")
 
 
 def test_circint():
@@ -337,13 +368,13 @@ def sug_positions(vm):
 
 
 def test_abmove_suggestions_drawn():
-    """Every misreading is offered, on the POINTS layer, numbered."""
+    """Every reading is offered, on the POINTS layer, numbered."""
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'suggestions')
-    # 5 misreadings each way round, all of them reachable
-    assert len(vm.loads('(abf:candidates \'(0.0 0.0) \'(240.0 0.0) '
-                        f"'({P17[0]} {P17[1]} 0.0))")) == 10
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    assert len(got) == 45, len(got)          # 22 A-held + 23 B-held
     # ... and none of them left in the drawing once the round is over
     assert sug_positions(vm) == [], sug_positions(vm)
     assert texts(vm, 'POINTS') == [], texts(vm, 'POINTS')
@@ -351,6 +382,39 @@ def test_abmove_suggestions_drawn():
     # None keeps the two dims: ABMOVE has then done exactly ABFIND's job
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  ABMOVE draws its suggestions on POINTS and sweeps them again")
+
+
+def test_abmove_two_groups():
+    """A held first, then B - and each group holds its own tape exactly."""
+    vm = newvm()
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    held = [c[1] for c in got]
+    assert held == ['A'] * 22 + ['B'] * 23, held        # grouped, not mixed
+    for c in got:
+        p = (c[5][0], c[5][1])
+        if c[1] == 'A':                                 # A held exactly...
+            assert near(math.dist(A, p), PA), c
+            assert near(math.dist(B, p), c[4]), c       # ...B is the reading
+        else:
+            assert near(math.dist(B, p), PB), c
+            assert near(math.dist(A, p), c[4]), c
+    for g in (got[:22], got[22:]):
+        assert [round(c[0], 6) for c in g] == sorted(round(c[0], 6)
+                                                    for c in g), g
+    print("ok  ABMOVE offers two groups, each holding its own tape exactly")
+
+
+def test_abmove_reaches_ten_feet_each_way():
+    """The whole 1-foot sweep is there, up and down, for both stakes."""
+    vm = newvm()
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    for held, was in (('A', PB), ('B', PA)):
+        reach = {round(c[4] - was, 6) for c in got if c[1] == held}
+        for k in range(1, 11):
+            assert 12.0 * k in reach and -12.0 * k in reach, (held, k, reach)
+    print("ok  ABMOVE sweeps 10 feet up and 10 down, per held stake")
 
 
 def test_abmove_moves_the_point():
@@ -520,17 +584,17 @@ def test_abmove_no_suggestions():
 
 
 def test_abmove_cap():
-    """Never more suggestions than abf:*max-sugg*."""
+    """abf:*max-sugg* caps each group, so both answers survive it."""
     vm = newvm()
     survey(vm)
-    vm.loads('(setq abf:*max-shift* 200.0)')
     vm.loads('(setq abf:*max-sugg* 4)')
     got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
                    f"'({P17[0]} {P17[1]} 0.0))")
-    assert len(got) == 4, got
-    assert [round(c[0], 3) for c in got] == sorted(round(c[0], 3)
-                                                  for c in got), got
-    print("ok  the suggestion list is capped, nearest miss first")
+    assert len(got) == 8, got
+    assert [c[1] for c in got] == ['A'] * 4 + ['B'] * 4, got
+    assert [round(c[0], 3) for c in got[:4]] == sorted(round(c[0], 3)
+                                                      for c in got[:4]), got
+    print("ok  the suggestion cap applies per held stake, nearest miss first")
 
 
 def test_no_points_at_all():
