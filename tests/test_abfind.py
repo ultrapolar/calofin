@@ -3,11 +3,13 @@ c:ABFIND / c:ABMOVE with scripted typing.  AutoLISP cannot run outside
 AutoCAD, so this is where a wrong arity, an unbound function or a nil
 reaching (distance ...) has to die.
 
-Script values answer the interactive calls in order: the "_X" point
-sweep (ssget), a click per unnamed stake (getpoint), then per round a
-point number (getstring), and - under ABMOVE - which suggestion
-(getkword) and where the note goes (getpoint, None = the Auto default).
-None at the point-number prompt is the Enter that ends the loop.
+Script values answer the interactive calls in order: a click per
+unnamed stake (getpoint), then per round a point number (getstring),
+and - under ABMOVE - which suggestion (getkword) and where the note
+goes (getpoint, None = the Auto default).  None at the point-number
+prompt is the Enter that ends the loop.  The "_X" point sweep takes no
+scripted answer: ssget "_X" reads the drawing and never prompts, so the
+points the scenario builds are what it finds.
 
 Run: python3 tests/test_abfind.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_abfind.py
@@ -201,7 +203,7 @@ def test_abfind_pair():
     """One number, two dims: A to the point and B to the point."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, '17', None], 'abfind pair')
+    run(vm, 'c:ABFIND', ['17', None], 'abfind pair')
     ds = dims(vm)
     assert len(ds) == 2, ds
     # first from A, second from B; both end on the point
@@ -229,7 +231,7 @@ def test_abfind_spellings_and_repeat():
     ab_pt(vm, 100.0, 300.0, 18)
     pts = [e for e in vm.entities
            if _alist_dict(vm.entdata[e]).get(0) == 'INSERT']
-    run(vm, 'c:ABFIND', [pts, 'Pt.17', '#018', None], 'spellings')
+    run(vm, 'c:ABFIND', ['Pt.17', '#018', None], 'spellings')
     assert len(dims(vm)) == 4, dims(vm)
     print("ok  ABFIND 'Pt.17' / '#018' resolve, and the loop repeats")
 
@@ -241,7 +243,7 @@ def test_abfind_back():
     ab_pt(vm, 100.0, 300.0, 18)
     pts = [e for e in vm.entities
            if _alist_dict(vm.entdata[e]).get(0) == 'INSERT']
-    run(vm, 'c:ABFIND', [pts, '17', '18', 'b', None], 'back')
+    run(vm, 'c:ABFIND', ['17', '18', 'b', None], 'back')
     ds = dims(vm)
     assert len(ds) == 2, ds
     assert pt3(ds[0][14]) == pt3(P17), ds[0]     # Pt.18's pair is gone
@@ -252,7 +254,7 @@ def test_abfind_unknown_number():
     """A typo draws nothing and re-asks."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, '99', '17', None], 'typo')
+    run(vm, 'c:ABFIND', ['99', '17', None], 'typo')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  ABFIND an unknown number draws nothing and re-asks")
 
@@ -261,7 +263,7 @@ def test_abfind_stake_by_click():
     """A drawing that does not name B asks for it, and snaps the click."""
     vm = newvm()
     pts = survey(vm, stakes=('A',))
-    run(vm, 'c:ABFIND', [pts, (B[0] + 3.0, B[1] + 2.0, 0.0), '17', None],
+    run(vm, 'c:ABFIND', [(B[0] + 3.0, B[1] + 2.0, 0.0), '17', None],
         'stake click')
     ds = dims(vm)
     assert len(ds) == 2, ds
@@ -276,7 +278,7 @@ def test_abfind_stake_snaps_to_point():
     e = ab_pt(vm, A[0], A[1], 'A')
     b = ab_pt(vm, B[0], B[1], 'BEE')          # named, but not "B"
     p = ab_pt(vm, P17[0], P17[1], 17)
-    run(vm, 'c:ABFIND', [[e, b, p], (B[0] + 3.0, B[1] + 2.0, 0.0), '17',
+    run(vm, 'c:ABFIND', [(B[0] + 3.0, B[1] + 2.0, 0.0), '17',
                          None], 'stake snap')
     ds = dims(vm)
     assert pt3(ds[1][13]) == pt3(B), ds[1]
@@ -287,7 +289,7 @@ def test_abfind_no_style():
     """A drawing without the style still gets its dims, and is told."""
     vm = newvm(styles=())
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, '17', None], 'no style')
+    run(vm, 'c:ABFIND', ['17', None], 'no style')
     ds = dims(vm)
     assert len(ds) == 2 and ds[0][3] == 'STANDARD', ds
     assert ds[0][8] == 'DIMENSION', ds
@@ -384,7 +386,7 @@ def test_abmove_suggestions_drawn():
     """Every reading is offered, on the POINTS layer, numbered."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'suggestions')
+    run(vm, 'c:ABMOVE', ['17', 'None', None], 'suggestions')
     got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
                    f"'({P17[0]} {P17[1]} 0.0))")
     assert len(got) == 45, len(got)          # 23 B-held + 22 A-held
@@ -473,7 +475,7 @@ def test_abmove_markers_are_yellow():
     """The suggestions are yellow, so they never read as real points."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'yellow')
+    run(vm, 'c:ABMOVE', ['17', 'None', None], 'yellow')
     marks = (ever(vm, 'POINT', 'POINTS') + ever(vm, 'CIRCLE', 'POINTS')
              + ever(vm, 'TEXT', 'POINTS'))
     assert len(marks) == 45 * 3, len(marks)      # a point, a ring, a tag
@@ -488,7 +490,7 @@ def test_abmove_the_marks_it_keeps_are_bylayer():
     """What ABMOVE leaves behind is the drawing's own colour, not yellow."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, None], 'bylayer')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None, None], 'bylayer')
     ring = live(vm, 'CIRCLE', 'FGStep')[0][1]
     note = live(vm, 'TEXT', 'FGStep')[0][1]
     moved = live(vm, 'INSERT', 'POINTS')[-1][1]
@@ -502,7 +504,7 @@ def test_abmove_prompt_stays_short():
     shows only the words that are not already in the table."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'None', None], 'prompt')
+    run(vm, 'c:ABMOVE', ['17', 'None', None], 'prompt')
     asked = [q for q, _ in vm.prompts if 'type a tag' in q]
     assert len(asked) == 1, asked
     assert asked[0].endswith('[Pick/None/Back] <None>: '), asked[0]
@@ -514,7 +516,7 @@ def test_abmove_moves_the_point():
     """Pick one and the point moves, is renamed, ringed and noted."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, None], 'move')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None, None], 'move')
 
     # 1) a new point numbered 17m, on POINTS, where the suggestion was
     ins = [(e, d) for e, d in live(vm, 'INSERT', 'POINTS')]
@@ -553,7 +555,7 @@ def test_abmove_moves_the_point():
 def test_abmove_note_placed_by_hand():
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R2B', (900.0, 900.0, 0.0), None],
+    run(vm, 'c:ABMOVE', ['17', 'R2B', (900.0, 900.0, 0.0), None],
         'note')
     note = [(e, d) for e, d in live(vm, 'TEXT', 'FGStep')]
     assert len(note) == 1 and pt3(note[0][1][10]) == (900.0, 900.0), note
@@ -570,7 +572,7 @@ def test_abmove_pick_on_screen():
     want = vm.loads("(nth 5 (car (abf:candidates '(0.0 0.0) '(240.0 0.0) "
                     f"'({P17[0]} {P17[1]} 0.0))))")
     run(vm, 'c:ABMOVE',
-        [pts, '17', 'Pick', (want[0] + 2.0, want[1] - 1.0, 0.0), None, None],
+        ['17', 'Pick', (want[0] + 2.0, want[1] - 1.0, 0.0), None, None],
         'pick')
     ins = live(vm, 'INSERT', 'POINTS')
     assert pt3(ins[-1][1][10]) == pt3(want), ins[-1][1]
@@ -583,7 +585,7 @@ def test_abmove_pick_miss():
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE',
-        [pts, '17', 'Pick', (9000.0, 9000.0, 0.0), 'None', None], 'pick miss')
+        ['17', 'Pick', (9000.0, 9000.0, 0.0), 'None', None], 'pick miss')
     assert texts(vm, 'FGStep') == [], texts(vm, 'FGStep')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  ABMOVE a click that hits nothing re-asks")
@@ -593,7 +595,7 @@ def test_abmove_back_from_the_choice():
     """Back at the choice takes the dims away and re-asks the number."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'Back', '17', 'None', None], 'back 2')
+    run(vm, 'c:ABMOVE', ['17', 'Back', '17', 'None', None], 'back 2')
     assert len(dims(vm)) == 2, dims(vm)          # one pair, not two
     assert sug_positions(vm) == []
     print("ok  ABMOVE Back at the choice re-asks the point number")
@@ -603,7 +605,7 @@ def test_abmove_back_from_the_note():
     """Back at the note re-asks the choice, suggestions still up."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', 'Back', 'None', None], 'back 3')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', 'Back', 'None', None], 'back 3')
     assert texts(vm, 'FGStep') == []
     assert len(dims(vm)) == 2, dims(vm)
     assert sug_positions(vm) == []
@@ -614,7 +616,7 @@ def test_abmove_back_undoes_a_move():
     """Back at the point number puts a moved point all the way back."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, 'b', None], 'undo move')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None, 'b', None], 'undo move')
     assert texts(vm, 'FGStep') == []
     assert live(vm, 'CIRCLE', 'FGStep') == []
     assert len(live(vm, 'INSERT', 'POINTS')) == 3        # 17m is gone
@@ -629,7 +631,7 @@ def test_abmove_without_the_block():
     """No ab_pt block in the drawing: a POINT and a label instead."""
     vm = newvm(block=False)
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, None], 'no block')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None, None], 'no block')
     pointed = live(vm, 'POINT', 'POINTS')
     assert len(pointed) == 1, pointed
     assert texts(vm, 'POINTS') == ['17m'], texts(vm, 'POINTS')
@@ -642,7 +644,7 @@ def test_abfind_a_stake_is_not_a_point():
     """Typing a stake's own name is refused, not dimensioned to itself."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, 'A', '17', None], 'stake as point')
+    run(vm, 'c:ABFIND', ['A', '17', None], 'stake as point')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  ABFIND naming a stake ties nothing - it is what ties are from")
 
@@ -651,7 +653,7 @@ def test_abmove_moved_point_is_tieable():
     """Pt.17m can be named in the same run, and Back forgets it again."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, '17m', 'None', None],
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None, '17m', 'None', None],
         'tie the moved point')
     ds = dims(vm)
     assert len(ds) == 4, ds                    # the move's pair, then 17m's
@@ -659,7 +661,7 @@ def test_abmove_moved_point_is_tieable():
     # and Back all the way out leaves nothing of either round
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None, 'b', '17m', 'None', None],
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None, 'b', '17m', 'None', None],
         'forget the moved point')
     assert len(dims(vm)) == 2, dims(vm)        # 17m is unknown again
     assert pt3(dims(vm)[0][14]) == pt3(P17), dims(vm)
@@ -671,7 +673,7 @@ def test_abmove_no_suggestions():
     vm = newvm()
     pts = survey(vm)
     vm.loads('(setq abf:*max-shift* 0.5)')
-    run(vm, 'c:ABMOVE', [pts, '17', None], 'no suggestions')
+    run(vm, 'c:ABMOVE', ['17', None], 'no suggestions')
     assert len(dims(vm)) == 2, dims(vm)
     assert texts(vm, 'FGStep') == []
     print("ok  ABMOVE with nothing to offer just leaves the two dims")
@@ -693,7 +695,7 @@ def test_abmove_cap():
 
 def test_no_points_at_all():
     vm = newvm()
-    run(vm, 'c:ABFIND', [None], 'empty drawing')
+    run(vm, 'c:ABFIND', [], 'empty drawing')
     assert dims(vm) == []
     print("ok  an empty drawing is reported, not crashed on")
 

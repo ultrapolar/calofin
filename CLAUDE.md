@@ -131,7 +131,7 @@ In order, in one commit:
 1. Edit the file in `lisp/<tool>/`.
 2. Bump its version banner if it has one (`(setq *<tool>-version* "vN.N")`).
 3. Mirror the change into `shared/parts/<FILE>.lsp`. For a tool listed
-   in `tools/mirror_shared.py` (SPA, TUTORIALSPA, SPACHECK) that twin is
+   in `tools/mirror_shared.py`'s `TOOLS` table that twin is
    **generated** — run `python3 tools/mirror_shared.py <TOOL>` and do not
    hand-edit it. For any other tool it is still by hand; if you find
    yourself doing that twice, add it to `TOOLS` there instead.
