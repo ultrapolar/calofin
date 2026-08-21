@@ -2,10 +2,23 @@
 
 An AutoLISP routine for full AutoCAD that draws an **oasis** pool: six
 arcs and nothing else — no straight runs, no corners. Three bulge
-outward, one off the left of the pool, one off the top and one off the
-right; between each neighbouring pair a smaller **reverse** arc curves
+outward, one off the left of the pool, one off the right and one off the
+top; between each neighbouring pair a smaller **reverse** arc curves
 back in, so the perimeter changes direction without ever changing
 tangent.
+
+They come two ways, and the first question is which:
+
+| | The third bulge | Touches |
+| --- | --- | --- |
+| **centre bulge** | across the top, centred | the top bound |
+| **top right bulge** | tucked into the top-right corner | the top **and** the right bound |
+
+That is the **only** difference. Same six arcs, same ring, same solver,
+same checks — only where the third bulge's centre lands, and the names
+the arcs go by because of it. On a top-right pool the right-hand bound
+is touched twice, once by each of the two right-hand bulges, with a
+reverse curve dipping in between them.
 
 ```
                    top bulge
@@ -25,15 +38,21 @@ six radii — which is exactly what OASIS asks for.
 
 ## What it does
 
-1. Asks **where it goes**, first — because the pool is drawn as it is
-   answered.
-2. Asks for the **absolute X and Y bounds** — the envelope the pool
+1. Asks **which of the two shapes** it is — everything else follows from
+   that.
+2. Asks **where it goes** — the pool is drawn as it is answered.
+3. Asks for the **absolute X and Y bounds** — the envelope the pool
    touches on all four sides and crosses on none.
-3. Asks the three **bulge radii**, left, top, then right.
-4. Asks the three **tangent radii** that join them, top-left,
-   top-right, then bottom-center.
-5. Draws the finished pool, its dimensions, and a **check drawing**
+4. Asks the three **bulge radii**, left, top, then right.
+5. Asks the three **tangent radii** that join them, top-left, then the
+   one on the right, then bottom-center.
+6. Draws the finished pool, its dimensions, and a **check drawing**
    beside it.
+
+The middle four questions are named for the shape: a centre-bulge pool
+asks for a *Top bulge* and a *Top-right tangent*, a top-right one for a
+*Top-right bulge* and a *Right-side tangent* — because "top-right" means
+the tangent arc on one and the bulge itself on the other.
 
 ### Answering it, with the pool on screen
 
@@ -112,13 +131,16 @@ The X and Y are absolute, and that alone pins all three bulges:
 | --- | --- | --- |
 | left | the X-min and Y-min bounds | `(rL, rL)` |
 | right | the X-max and Y-min bounds | `(X - rR, rR)` |
-| top | the Y-max bound, centred across X | `(X/2, Y - rT)` |
+| top, **centre bulge** | the Y-max bound, centred across X | `(X/2, Y - rT)` |
+| top, **top right bulge** | the Y-max **and** the X-max bounds | `(X - rT, Y - rT)` |
 
 So the bottom edge of the envelope is held by the two side bulges
-together — each dips down to it — the left and right edges by their own
-bulge, and the top edge by the top bulge. The only freedom left is
-where the top bulge sits along X, and that is spent centring it (see
-[Tunables](#tunables)).
+together — each dips down to it — the left edge by the left bulge, the
+top edge by the top bulge, and the right edge by the right bulge alone
+on a centre-bulge pool or by the right bulge *and* the corner bulge on a
+top-right one. On a centre-bulge pool the top bulge has one degree of
+freedom left and it is spent centring it (see [Tunables](#tunables));
+the corner bulge has none — two tangencies pin it.
 
 Each tangent radius is then the circle of that radius sitting
 **externally tangent to both** of its neighbouring bulges. Two such
@@ -154,8 +176,9 @@ computed closed and drawn closed.
 ### The questions
 
 ```
-Insertion base point <0,0>:
-X - overall left-to-right bounds:
+Where is the top bulge? [Center/TopRight] <Center>:
+Insertion base point <0,0> [Back]:
+X - overall left-to-right bounds [Back]:
 Y - overall front-to-back bounds [Back]:
 Left bulge radius [Back]:
 Top bulge radius [Back]:
@@ -165,12 +188,16 @@ Top-right tangent radius [Back]:
 Bottom-center tangent radius [Back]:
 ```
 
+(A **top right bulge** pool asks the same ten, with `Top-right bulge
+radius` in place of `Top bulge radius` and `Right-side tangent radius`
+in place of `Top-right tangent radius`.)
+
 Every measurement is required — Enter, zero and a negative are all
-refused — and every one of them offers `Back` (`Undo` is accepted too,
-unlisted) to step up one and re-answer. Backing up re-checks everything
-after the answer you changed, and redraws the preview from it. The base
-point pick is the one prompt with no `Back`: it is the first question,
-and nothing has been drawn yet.
+refused — and every question after the first offers `Back` (`Undo` is
+accepted too, unlisted) to step up one and re-answer, the base-point
+pick included, right back to the shape itself. Backing up re-checks
+everything after the answer you changed, and redraws the preview from
+it.
 
 Measurements are read with `getdist`, so they are typed in the
 drawing's own units (`8'` in an architectural drawing, or picked as two
@@ -180,8 +207,9 @@ The worked example the routine was written from is a 40'-0" × 20'-0"
 pool with 8'/11'/9' bulges and 6'/3'/5' tangent radii:
 
 ```
-Insertion base point <0,0>: (pick)
-X - overall left-to-right bounds: 40'
+Where is the top bulge? [Center/TopRight] <Center>: Center
+Insertion base point <0,0> [Back]: (pick)
+X - overall left-to-right bounds [Back]: 40'
 Y - overall front-to-back bounds [Back]: 20'
 Left bulge radius [Back]: 8'
 Top bulge radius [Back]: 11'
@@ -189,6 +217,22 @@ Right bulge radius [Back]: 9'
 Top-left tangent radius [Back]: 6'
 Top-right tangent radius [Back]: 3'
 Bottom-center tangent radius [Back]: 5'
+```
+
+and the top-right one it was extended for is a 36'-11" × 28'-8" with
+9'/8'/9' bulges and 8'/8'/10' tangents:
+
+```
+Where is the top bulge? [Center/TopRight] <Center>: T
+Insertion base point <0,0> [Back]: (pick)
+X - overall left-to-right bounds [Back]: 36'11
+Y - overall front-to-back bounds [Back]: 28'8
+Left bulge radius [Back]: 9'
+Top-right bulge radius [Back]: 8'
+Right bulge radius [Back]: 9'
+Top-left tangent radius [Back]: 8'
+Right-side tangent radius [Back]: 8'
+Bottom-center tangent radius [Back]: 10'
 ```
 
 ## Tunables
@@ -223,10 +267,13 @@ Three things make the shape **impossible** rather than merely unusual,
 and each is caught at the question that causes it rather than after all
 eight answers are in — the question simply comes back, with the reason:
 
-* **a side bulge that does not fit the envelope.** It is tangent to the
-  bottom edge *and* to its own side, so it is twice its radius both
+* **a bulge that does not fit the envelope.** A side bulge is tangent to
+  the bottom edge *and* to its own side, so it is twice its radius both
   ways: more than half the Y bound and it breaks out through the top,
   more than half the X bound and it breaks out through the far side.
+  The **top right** corner bulge is checked the same way, for the same
+  reason; the **centre** one is not, because it is trimmed away long
+  before it reaches anything.
 * **one bulge circle wholly inside another.** No tangent radius of any
   size can bridge that pair: raising the radius grows both circles'
   reach by exactly the same amount, so they stay nested forever.
@@ -317,7 +364,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 43 of them. The reference case is checked against the drawing OASIS was
+answers — 51 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -349,7 +396,18 @@ pool's dims come out in `Standard` and the check drawing's in
 without a style still gets its pool. A tenth pins the starting
 proportions: the side bulges span three quarters of `Y`, the top bulge
 half of `X`, the bulges really are the bigger circles, and all six read
-`?`. The preview
+`?`.
+
+Eight more are the **top right bulge** variant: the shape is the first
+question and offers no `Back` while the base-point pick after it does;
+the corner variant reproduces its own reference drawing arc for arc; it
+fills a 36'-11" × 28'-8" envelope and touches the right bound twice; its
+outline is still closed, tangent-continuous and simple; the two shapes
+name their six arcs apart; it asks for a top-right bulge and a
+right-side tangent rather than a top bulge and a top-right tangent; a
+corner bulge too big for the envelope is re-asked while a centred one of
+the same size is not; and its preview starts from the short bound
+because a corner bulge has to fit both ways. The preview
 ones wrap `getdist` to photograph the drawing at the moment each question
 is put — it is erased before the next one, so there is no other way to
 see it.

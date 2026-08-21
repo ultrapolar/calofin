@@ -97,9 +97,18 @@ REF_ARCS = [
 REF_MEASURE = [REF_X, REF_Y] + list(REF_BULGES) + list(REF_TANGENTS)
 
 
-def script(base=(0.0, 0.0), measure=None):
-    """A whole run: where it goes, then the eight measurements."""
-    return [base] + list(REF_MEASURE if measure is None else measure)
+def script(base=(0.0, 0.0), measure=None, variant='Center'):
+    """A whole run: which shape, where it goes, then the eight
+    measurements."""
+    return [variant, base] + list(REF_MEASURE if measure is None else measure)
+
+
+#: the drawing the TOP RIGHT BULGE variant was read off: 36'-11" x 28'-8",
+#: bulges 9' left / 8' top-right / 9' right, tangents 8' top-left,
+#: 8' right-side, 10' bottom-center.  Its third bulge is tucked into the
+#: corner, tangent to the top AND the right bound.
+TR_X, TR_Y = 443.0, 344.0
+TR_MEASURE = [TR_X, TR_Y, 108.0, 96.0, 108.0, 96.0, 96.0, 120.0]
 
 
 # ---- scaffolding ------------------------------------------------------
@@ -172,21 +181,21 @@ def close(a, b, tol=TOL):
 
 def solved(vm, w, h, rl, rt, rr, ftl, ftr, fbc):
     """Call oasis:solve inside the VM and hand back what it built."""
-    return vm.loads("(oasis:solve %s oasis:*topfrac*)"
+    return vm.loads('(oasis:solve %s "Center")'
                     % " ".join("%.10f" % v
                                for v in (w, h, rl, rt, rr, ftl, ftr, fbc)))
 
 
 def crossing_pairs(vm, *dims):
     """The pairs of arcs oasis:crossings says run through each other."""
-    r = vm.loads("(oasis:crossings (oasis:solve %s oasis:*topfrac*))"
+    r = vm.loads('(oasis:crossings (oasis:solve %s "Center"))'
                  % " ".join("%.10f" % v for v in dims))
     return set() if r is None else {tuple(sorted(p)) for p in r}
 
 
 def overruns(vm, w, h, *radii):
     """What oasis:overruns says reaches past the envelope."""
-    r = vm.loads("(oasis:overruns (oasis:solve %s oasis:*topfrac*) %.6f %.6f)"
+    r = vm.loads('(oasis:overruns (oasis:solve %s "Center") %.6f %.6f)'
                  % (" ".join("%.6f" % v for v in (w, h) + radii), w, h))
     return [] if r is None else [(x[0], x[2], x[1]) for x in r]
 
@@ -408,7 +417,7 @@ def test_back_reasks():
     """Back steps one question up and the re-answer is the one used."""
     vm = newvm()
     # answer Y as 300, back out of the left bulge, give Y as 240 instead
-    run(vm, [(0.0, 0.0), REF_X, 300.0, 'Back', REF_Y]
+    run(vm, ['Center', (0.0, 0.0), REF_X, 300.0, 'Back', REF_Y]
         + REF_MEASURE[2:], 'back')
     top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
     assert close(top[0][1], REF_Y - 132.0), top
@@ -431,7 +440,7 @@ def test_oversize_bulge_is_reasked():
     the top, so the question comes back."""
     vm = newvm()
     # 150 on a 240 envelope stands 300 tall -- rejected, then 96 taken
-    run(vm, [(0.0, 0.0), REF_X, REF_Y, 150.0, 96.0]
+    run(vm, ['Center', (0.0, 0.0), REF_X, REF_Y, 150.0, 96.0]
         + REF_MEASURE[3:], 'oversize bulge')
     assert close(arcs_of(vm)[0][1], 96.0), arcs_of(vm)[0]
     print("ok  big bulge   -> a bulge taller than Y is re-asked")
@@ -453,7 +462,7 @@ def test_nested_bulges_are_reasked():
     vm = newvm()
     # a 480 top bulge on a 480 x 240 envelope is centred at (240, -240)
     # and swallows the 96 left bulge whole; 132 is taken instead
-    run(vm, [(0.0, 0.0), REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
+    run(vm, ['Center', (0.0, 0.0), REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
         + list(REF_TANGENTS), 'nested top')
     assert close([a for a in arcs_of(vm) if close(a[1], 132.0)][0][0][1],
                  REF_Y - 132.0)
@@ -467,7 +476,7 @@ def test_right_bulge_nesting_is_caught():
     # on a 480 x 800 envelope a 384 right bulge is centred at (96, 384)
     # -- directly above the 96 left bulge and swallowing it -- so it is
     # re-asked, and 108 is taken instead
-    run(vm, [(0.0, 0.0), REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
+    run(vm, ['Center', (0.0, 0.0), REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
              200.0, 200.0, 60.0], 'nested right')
     assert close([a for a in arcs_of(vm) if close(a[1], 108.0)][0][0][0],
                  REF_X - 108.0)
@@ -574,7 +583,7 @@ def test_wide_bulge_is_reasked():
     vm = newvm()
     # 200 wide envelope, 400 deep: a 150 left bulge is 300 across -- it
     # fits the depth easily and still cannot fit the width
-    run(vm, [(0.0, 0.0), 200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
+    run(vm, ['Center', (0.0, 0.0), 200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
              120.0, 120.0, 120.0], 'wide bulge')
     assert close(arcs_of(vm)[0][1], 60.0), arcs_of(vm)[0]
     print("ok  wide bulge  -> a bulge wider than X is re-asked")
@@ -886,6 +895,144 @@ def test_the_preview_starts_from_the_usual_proportions():
           % (left, top))
 
 
+
+def test_the_shape_is_the_first_question():
+    """Which of the two an oasis is decides everything else, so it is
+    asked before anything -- and being first, it offers no Back."""
+    vm = newvm()
+    run(vm, script(), 'shape question')
+    first = vm.prompts[0][0]
+    assert first == '\nWhere is the top bulge? [Center/TopRight] <Center>: ', \
+        repr(first)
+    assert '[Back]' in vm.prompts[1][0], vm.prompts[1][0]   # the base point
+    print("ok  shape first -> %r" % first.strip())
+
+
+def test_top_right_bulge_matches_its_reference_drawing():
+    """The corner variant reads off a 36'-11" x 28'-8" drawing with 9'/8'/9'
+    bulges and 8'/8'/10' tangents.  The third bulge is tangent to the TOP
+    and the RIGHT bound; everything else is the centre variant's logic
+    untouched."""
+    vm = newvm()
+    run(vm, script(measure=TR_MEASURE, variant='TopRight'), 'top right')
+    arcs = arcs_of(vm)
+    assert len(arcs) == 6, arcs
+    left, bottom, right, side, top, upper = arcs
+    # the corner bulge really is in the corner
+    assert close(top[0][0], TR_X - 96.0) and close(top[0][1], TR_Y - 96.0), top
+    # the two side bulges are where they always were
+    assert close(left[0][0], 108.0) and close(left[0][1], 108.0), left
+    assert close(right[0][0], TR_X - 108.0) and close(right[0][1], 108.0), right
+    assert [round(r, 4) for _, r, _, _ in arcs] == \
+        [108.0, 120.0, 108.0, 96.0, 96.0, 96.0], arcs
+    print("ok  top-right   -> the corner bulge lands at (X-r, Y-r)")
+
+
+def test_top_right_bulge_fills_its_envelope():
+    """Absolute bounds hold for the corner variant too -- and its right
+    bound is touched twice, once by each of the two right-hand bulges."""
+    vm = newvm()
+    run(vm, script(measure=TR_MEASURE, variant='TopRight'), 'tr envelope')
+    xs, ys, right_touch = [], [], 0
+    for c, r, a0, a1 in arcs_of(vm):
+        sweep = (a1 - a0) % 360.0
+        for a in [a0, a1] + [k for k in (0.0, 90.0, 180.0, 270.0)
+                             if (k - a0) % 360.0 <= sweep]:
+            p = pt_on(c, r, a)
+            xs.append(p[0])
+            ys.append(p[1])
+            if close(p[0], TR_X):
+                right_touch += 1
+    assert close(min(xs), 0.0) and close(min(ys), 0.0), (min(xs), min(ys))
+    assert close(max(xs), TR_X) and close(max(ys), TR_Y), (max(xs), max(ys))
+    assert right_touch == 2, right_touch      # the corner and the right bulge
+    print("ok  tr envelope -> fills 0,0 - %g,%g, right bound touched twice"
+          % (TR_X, TR_Y))
+
+
+def test_top_right_outline_is_still_tangent_continuous_and_simple():
+    vm = newvm()
+    run(vm, script(measure=TR_MEASURE, variant='TopRight'), 'tr tangency')
+    arcs = arcs_of(vm)
+    bulge = [True, False, True, False, True, False]
+    worst = 0.0
+    for i, (c, r, a0, a1) in enumerate(arcs):
+        j = (i + 1) % 6
+        nc, nr, na0, na1 = arcs[j]
+        joint = pt_on(c, r, a1 if bulge[i] else a0)
+        arrive = pt_on(nc, nr, na0 if bulge[j] else na1)
+        assert close(math.dist(joint, arrive), 0.0), (i, joint, arrive)
+        v1 = (c[0] - joint[0], c[1] - joint[1])
+        v2 = (nc[0] - joint[0], nc[1] - joint[1])
+        worst = max(worst, abs(v1[0] * v2[1] - v1[1] * v2[0]) / (r * nr))
+    assert worst <= 1.0e-9, worst
+    r = vm.loads('(oasis:crossings (oasis:solve %s "TopRight"))'
+                 % " ".join("%.10f" % v for v in TR_MEASURE))
+    assert r is None, r
+    print("ok  tr tangency -> closed, tangent-continuous and simple")
+
+
+def test_the_two_shapes_name_their_arcs_apart():
+    """"top-right" is the tangent arc on one shape and the bulge itself on
+    the other, so the names have to move with the shape -- they are what
+    the reports and the ? labels read from."""
+    vm = newvm()
+    assert vm.loads('(oasis:names "Center")') == \
+        ['left', 'bottom-center', 'right', 'top-right', 'top', 'top-left']
+    assert vm.loads('(oasis:names "TopRight")') == \
+        ['left', 'bottom-center', 'right', 'right-side', 'top-right',
+         'top-left']
+    print("ok  arc names   -> the two shapes name their six apart")
+
+
+def test_top_right_asks_its_own_questions():
+    vm = newvm()
+    run(vm, script(measure=TR_MEASURE, variant='TopRight'), 'tr prompts')
+    asked = [p.lstrip('\n').rstrip() for p, _ in vm.prompts]
+    assert 'Top-right bulge radius [Back]:' in asked, asked
+    assert 'Right-side tangent radius [Back]:' in asked, asked
+    assert not any(a.startswith('Top bulge') for a in asked), asked
+    assert not any(a.startswith('Top-right tangent') for a in asked), asked
+    print("ok  tr prompts  -> asks for a top-right bulge and a right-side"
+          " tangent")
+
+
+def test_a_corner_bulge_too_big_for_the_envelope_is_reasked():
+    """The corner bulge is tangent to two bounds, so it is twice its
+    radius BOTH ways and can break out of either -- a check the centred
+    bulge does not need, because it is trimmed long before it reaches
+    anything."""
+    vm = newvm()
+    # 200 short bound: a 150 corner bulge is 300 both ways
+    run(vm, ['TopRight', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 80.0, 60.0,
+             90.0, 90.0, 90.0], 'big corner')
+    top = arcs_of(vm)[4]
+    assert close(top[1], 80.0), top
+    # and the centred bulge of the same size is accepted, because there
+    # it is trimmed rather than breaking out
+    vm = newvm()
+    run(vm, ['Center', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 60.0,
+             90.0, 90.0, 90.0], 'big centre')
+    assert close(arcs_of(vm)[4][1], 150.0), arcs_of(vm)[4]
+    print("ok  big corner  -> a corner bulge over the envelope is re-asked,"
+          " a centred one is not")
+
+
+def test_top_right_preview_starts_from_its_own_proportions():
+    """The centred bulge is measured across the long bound; the corner one
+    across the short, because it has to fit both ways."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(measure=TR_MEASURE, variant='TopRight'), 'tr start')
+    radii = [d[40] for d in p.shot(2, 'ARC')]
+    assert close(2.0 * radii[0], 0.75 * TR_Y), radii      # side bulges
+    assert close(2.0 * radii[4], 0.5 * TR_Y), radii       # the corner one
+    assert close(2.0 * radii[2], 0.75 * TR_Y), radii
+    for tangent in (radii[1], radii[3], radii[5]):
+        assert tangent < min(radii[0], radii[2], radii[4]), radii
+    print("ok  tr start    -> corner bulge sized off the short bound")
+
+
 def test_version_command():
     vm = newvm()
     vm.run('c:OASISVER', [])
@@ -997,6 +1144,14 @@ if __name__ == '__main__':
     test_the_two_drawings_take_their_own_dim_styles()
     test_a_drawing_without_the_cross_style_still_gets_its_pool()
     test_the_preview_starts_from_the_usual_proportions()
+    test_the_shape_is_the_first_question()
+    test_top_right_bulge_matches_its_reference_drawing()
+    test_top_right_bulge_fills_its_envelope()
+    test_top_right_outline_is_still_tangent_continuous_and_simple()
+    test_the_two_shapes_name_their_arcs_apart()
+    test_top_right_asks_its_own_questions()
+    test_a_corner_bulge_too_big_for_the_envelope_is_reasked()
+    test_top_right_preview_starts_from_its_own_proportions()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
