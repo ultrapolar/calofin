@@ -26,7 +26,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "081926 REV01")
+(setq tutorial:*version* "082126 REV02")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -149,7 +149,7 @@
   (setvar "CLAYER" "POOL")
   (tutorial:frame (list -40.0 -40.0) (list 400.0 300.0))
   (princ "\n\n=== 4. CORNER TREATMENTS ===")
-  (princ "\nRectangle, and now L/Lazy L, corners can each be:")
+  (princ "\nRectangle, Grecian/Octagon, Roman and L/Lazy L corners can each be:")
   (tutorial:bullet "Square  -- the plain sharp corner (nothing drawn).")
   (tutorial:bullet "Rounded -- you give the RADIUS; a fillet arc is drawn (bottom-left, above).")
   (tutorial:bullet "Diag    -- you give the CHAMFER FACE length; a straight cut is drawn (bottom-right, above).")
@@ -160,6 +160,9 @@
   (tutorial:bullet "Out-of-square: every corner is asked individually -- but if all four answers come back the same type and size, they collapse to that same single \"Typ.\" callout instead of four separate dims.")
   (tutorial:bullet "Sizes are capped so two treatments on the same wall can never overlap and fold it -- too-large answers are re-asked with the max shown.")
   (tutorial:bullet "L/Lazy L: the five OUTER corners take one answer, the INNER corner (E) is asked separately since it's usually different (Enter reuses the outer answer).")
+  (tutorial:bullet "Grecian/Octagon: the four BODY corners (A/B/C/D, where a side runs into a cut face) take one answer and the four END TIPS (LT/LB/RT/RB) another, Enter on the tips reusing the body answer.")
+  (tutorial:bullet "Roman: the four true corners A/B/C/D take one answer; the S1 stubs then spring from the cut, and sizes are capped at the corner drop so a treatment cannot run past the arc spring.")
+  (tutorial:bullet "Every shape asks 'Are the corners modified (rounded / chamfered)?' first, defaulting to No -- square is always the assumption.")
   (tutorial:bullet "The pool bottom's hopper ties connect to the ACTUAL corner cut on the deep-end wall, not the sharp corner behind it -- see topic 5.")
   (princ))
 

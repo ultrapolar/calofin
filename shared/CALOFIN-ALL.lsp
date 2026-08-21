@@ -665,7 +665,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082126 REV03")
+(setq pool:*version* "082126 REV04")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1559,6 +1559,16 @@
             '(0 5 ad  1.0)     ; A-D  left end (internal chord)
             '(1 4 bc  1.0)))   ; B-C  right end (internal chord)
 
+;; The 8 corners in the two families a treatment is answered by: the
+;; BODY corners, where a long wall runs into a cut face, and the END
+;; TIPS, where that cut face lands on the end wall.  With them, the
+;; walls a tip treatment has to share -- the four cut faces (one body
+;; corner and one tip on each) and the two end walls (two tips each).
+(setq pool:*grecbody* '(0 1 4 5))               ; A B C D
+(setq pool:*grectips* '(2 3 6 7))               ; RB RT LT LB
+(setq pool:*greccuts* '((1 2) (3 4) (5 6) (7 0)))
+(setq pool:*grecwalls* '((2 3) (6 7)))          ; RB-RT and LT-LB
+
 (setq pool:*grec-simple*
       (list '(0 4 "A-C") '(1 5 "B-D")))
 (setq pool:*grec-center*
@@ -1784,7 +1794,7 @@
                        tp bo le ri ltd lbd lew rtd rbd rew
                        evals edgecons crosscons dac dbd fq q
                        a b c d cen0 ml mr lend rend seed
-                       res pts failed notes
+                       res pts failed notes gcs gce gcarcs
                        xmin xmax ymin ymax w hh doff th cen odim
                        e p qq cc nm tgt act rows k fedge fcross
                        rbox mprims mlbls)
@@ -1996,11 +2006,12 @@
   (setq crosscons (reverse crosscons))
   (princ))
 
-  ;; ---- the input phase, with Back working right across it
-  (pool:stages (list 'gr:method 'gr:guide 'gr:perim 'gr:cross))
-  (pool:pvkill)
-
-  ;; -------- seed: fit the body quad, project nominal ends
+  ;; -------- seed: fit the body quad, project nominal ends.
+  ;; Runs at the top of gr:corners rather than after the input phase,
+  ;; because a treatment's setback depends on the corner's real angle
+  ;; -- and a grecian's corners are 135 degrees, not 90.  Pure, so
+  ;; backing into a measurement and forward again simply re-fits.
+  (defun gr:fit ( / )
   (setq evals (list (cons 'ab bo) (cons 'cd tp) (cons 'ad le) (cons 'bc ri)
                     (cons 'rbd rbd) (cons 'rew rew) (cons 'rtd rtd)
                     (cons 'ltd ltd) (cons 'lew lew) (cons 'lbd lbd))
@@ -2049,6 +2060,90 @@
         (setq res (pool:fitpoly seed fedge (reverse fcross) pool:*cross-tol*)
               pts (car res)
               failed (cadr res))))
+  (princ))
+
+  ;; -------- corner treatments.  A grecian's 8 corners come in two
+  ;; families: the BODY corners A/B/C/D, where a long wall runs into a
+  ;; cut face, and the END TIPS LT/LB/RT/RB, where that cut face lands
+  ;; on the end wall.  In square the two families take one answer each
+  ;; (the tips default to the body answer, since a pool that rounds
+  ;; one usually rounds both); out of square every corner is asked on
+  ;; its own, Enter reusing the previous -- the same split the
+  ;; rectangle makes.
+  ;;
+  ;; The shape is FIT at the top of this stage, exactly as the L pool
+  ;; fits at the top of its own corner stage: the setback depends on
+  ;; the real corner angle, and fitting inside the stage (rather than
+  ;; as a stage of its own) keeps Back working -- an always-succeeding
+  ;; stage would swallow the Back out of the corner question.
+  (defun gr:corners ( / v bc tc bcap tcap bsb v2 k caps angs lbls ents)
+    (princ "\nFitting pool body to the measurements ...")
+    (gr:fit)
+    (setq gcs (list (list "Square" 0.0) (list "Square" 0.0) (list "Square" 0.0)
+                    (list "Square" 0.0) (list "Square" 0.0) (list "Square" 0.0)
+                    (list "Square" 0.0) (list "Square" 0.0)))
+    (setq v (cal:askyn "Are the corners modified (rounded / chamfered)"
+                        "No" t))
+    (cond
+      ((eq v 'CAL-BACK) 'CAL-BACK)
+      ((not v) nil)
+      (pool:*insq*
+       ;; one answer for the four body corners, one for the four tips.
+       ;; The body answer covers the SHARPEST of A/B/C/D, since that is
+       ;; the corner whose cut reaches furthest along its walls, and is
+       ;; budgeted half the shortest wall it touches -- which leaves
+       ;; the other half of every cut face for the tip on its far end.
+       (setq bcap (pool:groupcap pts pool:*grecbody*)
+             bc (pool:askcorner "BODY corners (A/B/C/D)" nil nil
+                                (pool:lbl pv '(lA lB lC lD))
+                                (car bcap) (cadr bcap) t))
+       (if (eq bc 'CAL-BACK)
+           'CAL-BACK
+           (progn
+             ;; each tip is then capped by what the body cut actually
+             ;; LEFT on the cut face they share; the two tips on one
+             ;; END wall share that wall with each other, so it halves
+             (setq bsb (* (cadr bc) (pool:cornerk (car bc) (cadr bcap)))
+                   tcap nil)
+             (foreach k pool:*greccuts*
+               (setq v2 (- (distance (nth (car k) pts) (nth (cadr k) pts)) bsb)
+                     tcap (if tcap (min tcap v2) v2)))
+             (foreach k pool:*grecwalls*
+               (setq v2 (* 0.5 (distance (nth (car k) pts) (nth (cadr k) pts)))
+                     tcap (min tcap v2)))
+             (setq tc (pool:askcorner "END TIP corners (LT/LB/RT/RB)"
+                                      (car bc) (cadr bc)
+                                      (pool:lbl pv '(lLT lLB lRT lRB))
+                                      (max 0.0 tcap)
+                                      (cadr (pool:groupcap pts pool:*grectips*)) t))
+             (if (eq tc 'CAL-BACK)
+                 'CAL-BACK
+                 ;; index order is 0=A 1=B 2=RB 3=RT 4=C 5=D 6=LT 7=LB
+                 (progn (setq gcs (list bc bc tc tc bc bc tc tc)) nil)))))
+      (t
+       ;; out of square: all eight, round the perimeter, Enter reusing
+       (princ "\n(per-corner treatment; press Enter to reuse the previous corner)")
+       (setq caps nil angs nil lbls nil ents nil k 0)
+       (while (< k 8)
+         (setq caps (cons (pool:polycap pts k) caps)
+               angs (cons (pool:polywedge pts k) angs)
+               lbls (cons (strcat "Corner " (nth k pool:*grecnames*)) lbls)
+               ents (cons (pool:lbl pv (list (pool:lblkey (nth k pool:*grecnames*))))
+                          ents)
+               k (1+ k)))
+       (setq v (pool:askcorners (reverse lbls) (reverse caps)
+                                (reverse angs) (reverse ents)))
+       (if (eq v 'CAL-BACK)
+           'CAL-BACK
+           (progn (setq gcs v) nil)))))
+
+  ;; ---- the input phase, with Back working right across it
+  (pool:stages (list 'gr:method 'gr:guide 'gr:perim 'gr:cross 'gr:corners))
+  (pool:pvkill)
+
+  ;; pts / failed / notes were fit at the top of gr:corners, so the
+  ;; corner questions could be sized against the real corner angles
+  (setq gce (pool:ringends pts gcs))
 
   ;; -------- extents / scale
   (setq xmin (apply 'min (mapcar 'car pts))
@@ -2063,12 +2158,18 @@
   (foreach p pts (setq cen (cal:v+ cen p)))
   (setq cen (cal:v* cen (/ 1.0 8.0)))
 
-  ;; -------- perimeter (POOL) + internal end chords (dashed, POOL-NOTES)
+  ;; -------- perimeter (POOL) + internal end chords (dashed,
+  ;; POOL-NOTES).  Perimeter walls run between the corner TREATMENT
+  ;; ends and the treatment itself closes each corner (a square corner
+  ;; degenerates to the plain corner-to-corner wall); the two internal
+  ;; chords are not walls, so they stay on the true corners.
   (foreach e pool:*grecedges*
     (setq p (nth (car e) pts) qq (nth (cadr e) pts))
     (if (member (caddr e) '(ad bc))
         (pool:lined p qq)
-        (pool:line p qq "POOL")))
+        (pool:line (cadr (nth (car e) gce))          ; eNext(i)
+                   (car (nth (cadr e) gce)) "POOL"))) ; ePrev(j)
+  (setq gcarcs (pool:ringarcs gce gcs "POOL"))
 
   ;; -------- dimensions (DIMENSION)
   ;; In-square: the field-sheet exterior set only -- S+T share a row
@@ -2132,6 +2233,13 @@
                                        (* (if (= 0 (rem k 2)) 0.12 -0.12) doff)))))
     (setq k (1+ k)))
   (pool:dimxend odim)
+  ;; corner treatments: one Typ. per family in square (body / tips),
+  ;; each treated corner its own dim out of square (collapsing back to
+  ;; Typ. when Enter reused one answer all the way round)
+  (pool:dimringcorners pts gcs gce gcarcs cen doff
+                       (if pool:*insq*
+                           (list '(1 0 4 5) '(2 3 6 7))
+                           (mapcar 'list '(0 1 2 3 4 5 6 7))))
   (setvar "CLAYER" oldclay)
 
   ;; corner letters live on the mini-model beside the report, not in
@@ -2149,6 +2257,14 @@
           act (distance (nth (car cc) pts) (nth (cadr cc) pts))
           rows (cons (list (strcat "X " nm) (caddr cc) act) rows)))
   (setq rows (reverse rows))
+  ;; corner treatments: one row per family in square, per corner out
+  (setq rows (append rows
+    (if pool:*insq*
+        (pool:cornerrows (list "BODY CORNER" "END TIP")
+                         (list (nth 0 gcs) (nth 2 gcs)))
+        (pool:cornerrows (mapcar '(lambda (nm) (strcat "CORNER " nm))
+                                 pool:*grecnames*)
+                         gcs))))
   ;; overall-sheet letters vs the fitted shape
   (if (= imeth "Overall")
       (progn
@@ -2895,6 +3011,24 @@
               (nth (rem (+ i (1- n)) n) pts)
               (nth (rem (+ i 1) n) pts)))
 
+;; The setback budget for a treatment at corner i of a closed polygon:
+;; half the shorter of its two walls, so the treatments at the two
+;; ends of any wall can never overrun each other and fold it.
+(defun pool:polycap (pts i / n)
+  (setq n (length pts))
+  (* 0.5 (min (distance (nth i pts) (nth (rem (+ i (1- n)) n) pts))
+              (distance (nth i pts) (nth (rem (+ i 1) n) pts)))))
+
+;; The tightest budget over a GROUP of corners answered together, and
+;; the sharpest angle in it -- the corner whose cut reaches furthest
+;; along its walls is the one the single answer has to fit.
+;; Returns (cap angle).
+(defun pool:groupcap (pts ks / cap ang k)
+  (foreach k ks
+    (setq cap (if cap (min cap (pool:polycap pts k)) (pool:polycap pts k))
+          ang (if ang (min ang (pool:polywedge pts k)) (pool:polywedge pts k))))
+  (list cap ang))
+
 ;; How far a corner treatment eats along EACH adjacent wall, per unit
 ;; of entered size, at wedge angle ang:
 ;;   Rounded  radius r -> r / tan(ang/2)
@@ -3044,6 +3178,44 @@
                     (pool:wp (cal:v+ p (cal:v* outd (* 1.2 doff))))
                     "" "90%%d Typ." ""))))))
 
+;; Corner-treatment annotations for a ring with more corners than the
+;; rectangle's four.  groups = the index groups that were answered
+;; TOGETHER, each ordered reference-corner first (a grecian's body
+;; family and tip family in square; eight singletons out of square).
+;; Square corners take no annotation here -- a grecian's corners are
+;; never 90, so the rectangle's circled-90 marks would mislead.
+;;   every treated answer identical  -> one Typ. on the first treated
+;;                                      group's reference corner
+;;   else, per group all-same        -> one Typ. on its reference
+;;   else (members differ)           -> each treated corner its own dim
+(defun pool:dimringcorners (pts corners ces arcs cen doff groups
+                            / allsame first g i cc same ref)
+  (setq allsame t first nil)
+  (foreach i (apply 'append groups)
+    (setq cc (nth i corners))
+    (if (/= (car cc) "Square")
+        (if first
+            (if (not (and (equal (car cc) (car first))
+                          (equal (cadr cc) (cadr first) 1.0e-6)))
+                (setq allsame nil))
+            (setq first cc))))
+  (foreach i (apply 'append groups)     ; a mixed square/treated ring
+    (if (and first (= (car (nth i corners)) "Square"))
+        (setq allsame nil)))
+  (foreach g (if allsame (list (apply 'append groups)) groups)
+    (setq same t ref (car g))
+    (foreach i (cdr g)
+      (if (not (and (equal (car (nth i corners)) (car (nth ref corners)))
+                    (equal (cadr (nth i corners)) (cadr (nth ref corners))
+                           1.0e-6)))
+          (setq same nil)))
+    (foreach i (if same (list ref) g)
+      (setq cc (nth i corners))
+      (if (/= (car cc) "Square")
+          (pool:dimcorner1 (nth i ces) (car cc) (nth i arcs)
+                           (pool:unit (cal:v- (nth i pts) cen)) doff
+                           (if (and same (> (length g) 1)) " Typ." ""))))))
+
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
 ;; the visual matches what will be built.  gq = the guide quad,
 ;; corners = per-corner (type size), sizes already clamped for display.
@@ -3092,6 +3264,17 @@
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (label prevty prevsz ents maxsb ang back
                        / ty sz cols sb wed)
+  ;; A corner whose walls leave no room at all cannot carry a
+  ;; treatment: asking would re-ask every answer forever, since none
+  ;; can fit.  Say so once and hold it square.
+  (if (and maxsb (< maxsb 0.125))
+      (progn
+        (princ (strcat "\n" label
+                       ": no room for a treatment on these walls -- held square."))
+        (setq maxsb nil ty "Square" sz 0.0)))
+  (if ty
+      (list ty sz)
+  (progn
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
@@ -3133,7 +3316,81 @@
                                     ": "))))
         (cal:osdown))))
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  (if ty (list ty sz) 'CAL-BACK))
+  (if ty (list ty sz) 'CAL-BACK))))
+
+;; Ask one treatment per corner, in order, Enter reusing the previous
+;; corner's answer -- the out-of-square pattern.  labels / caps / angs
+;; / entl run parallel: the prompt text, the setback budget, the real
+;; wedge angle to size the budget against, and the guide entities to
+;; light up while that corner is being asked.
+;; Back inside the loop steps to the PREVIOUS corner and re-asks it;
+;; Back on the first corner returns CAL-BACK for the stage to hand on.
+;; Returns a list of (type size), or CAL-BACK.
+(defun pool:askcorners (labels caps angs entl / i n out prevty prevsz cc back)
+  (setq i 0 n (length labels) out nil back nil)
+  (while (and (< i n) (not back))
+    (setq cc (pool:askcorner (nth i labels) prevty prevsz (nth i entl)
+                             (nth i caps) (nth i angs) t))
+    (if (eq cc 'CAL-BACK)
+        (if (= i 0)
+            (setq back t)               ; back out of the whole stage
+            (setq i (1- i)
+                  out (cdr out)
+                  ;; the reuse default is the corner BEFORE the one
+                  ;; being re-asked
+                  prevty (if out (car (car out)) nil)
+                  prevsz (if out (cadr (car out)) nil)))
+        (setq prevty (car cc) prevsz (cadr cc)
+              out (cons cc out)
+              i (1+ i))))
+  (if back 'CAL-BACK (reverse out)))
+
+;; Treatment ends for every corner of a closed ring of points, in ring
+;; order -- pool:cornerends applied all the way round.
+(defun pool:ringends (pts corners / n i out)
+  (setq n (length pts) i 0)
+  (while (< i n)
+    (setq out (cons (pool:cornerends (nth i pts)
+                                     (nth (rem (+ i (1- n)) n) pts)
+                                     (nth (rem (+ i 1) n) pts)
+                                     (car (nth i corners)) (cadr (nth i corners))
+                                     (caddr (nth i corners)))
+                    out)
+          i (1+ i)))
+  (reverse out))
+
+;; Draw the corner treatments themselves -- chamfer faces and fillet
+;; arcs -- for a ring whose straight walls the caller has already
+;; drawn between the treatment ends.  Returns the fillet-arc entity
+;; per corner (nil where the corner is square or chamfered), which is
+;; what the radius dims measure.
+(defun pool:ringarcs (ce corners lay / out k cc)
+  (setq k 0 out nil)
+  (foreach cc corners
+    (cond
+      ((= (car cc) "Diag")
+       (pool:line (car (nth k ce)) (cadr (nth k ce)) lay)
+       (setq out (cons nil out)))
+      ((= (car cc) "Rounded")
+       (pool:arc3p (car (nth k ce)) (caddr (nth k ce)) (cadr (nth k ce)) lay)
+       (setq out (cons (entlast) out)))
+      (t (setq out (cons nil out))))
+    (setq k (1+ k)))
+  (reverse out))
+
+;; Report rows for a set of corner treatments: one row per corner that
+;; is not Square, labelled "<label> RAD" or "<label> FACE".  labels
+;; and corners run parallel.
+(defun pool:cornerrows (labels corners / out k cc)
+  (setq k 0 out nil)
+  (foreach cc corners
+    (if (/= (car cc) "Square")
+        (setq out (cons (list (strcat (nth k labels)
+                                      (if (= (car cc) "Rounded") " RAD" " FACE"))
+                              (cadr cc) (cadr cc))
+                        out)))
+    (setq k (1+ k)))
+  (reverse out))
 
 ;; Cross-dim measurement templates for the chosen reference mode.
 ;; Each entry: (diagkey prompt rowlabel iA specA iC specC).  Ends uses
@@ -5278,16 +5535,20 @@
 ;; Build and draw one Roman end (per the reference drawing: straight
 ;; S1 stubs along the end line down to the arc springs, the arc
 ;; bulging S past the end line).  R is implied by S and V:
-;; r = (S^2 + (V/2)^2) / 2S.  Returns (tip springT springB arcEname rImplied).
-(defun pool:romend (pbot ptop m s v lay / u mide tip half st sb)
+;; r = (S^2 + (V/2)^2) / 2S.  pb2/pt2 = where the stubs actually START
+;; -- the body corners themselves normally, the corner-treatment ends
+;; when those corners are rounded or chamfered (the geometry of the
+;; end still springs off the TRUE corners pbot/ptop either way).
+;; Returns (tip springT springB arcEname rImplied).
+(defun pool:romend (pbot ptop pb2 pt2 m s v lay / u mide tip half st sb)
   (setq u (pool:unit (cal:v- ptop pbot))
         mide (cal:mid pbot ptop)
         tip (cal:v+ mide (cal:v* m s))
         half (* 0.5 v)
         st (cal:v+ mide (cal:v* u half))
         sb (cal:v- mide (cal:v* u half)))
-  (if (> (distance ptop st) 1.0e-6) (pool:line ptop st lay))
-  (if (> (distance pbot sb) 1.0e-6) (pool:line pbot sb lay))
+  (if (> (distance pt2 st) 1.0e-6) (pool:line pt2 st lay))
+  (if (> (distance pb2 sb) 1.0e-6) (pool:line pb2 sb lay))
   (pool:arc3p st tip sb lay)
   (list tip st sb (entlast)
         (/ (+ (* s s) (* half half)) (* 2.0 s))))
@@ -5341,6 +5602,7 @@
                           hres sl tv sr lres rres s1l vl s1r vr
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
+                          rcs rce rcarcs
                           allpts xmax ymax ymin rows xcol xa rbox)
   (setq oldclay (getvar "CLAYER"))
   (defun rm:perfect ( / v)
@@ -5412,12 +5674,15 @@
                            dbd (pool:sq ans 'bd))
                      nil)))))
 
-  (pool:stages (list 'rm:perfect 'rm:guide 'rm:letters 'rm:cross))
-  (pool:pvkill)
-
   ;; resolve: per end S1/V vs A (V absorbs); then S + T + S = B with
   ;; T absorbing -- an NA S can come from the chain, or from the end
-  ;; radius (arc sagitta: S = R - sqrt(R^2 - (V/2)^2))
+  ;; radius (arc sagitta: S = R - sqrt(R^2 - (V/2)^2)).
+  ;; Lives at the top of rm:corners so the corner questions can be
+  ;; capped against the resolved side and stub lengths; re-entered
+  ;; after a Back it re-resolves from scratch (the valnotes it emits
+  ;; are reset first so they cannot double up).
+  (defun rm:resolve ()
+  (setq pool:*valnotes* nil rombad nil)
   (setq lres (pool:romres araw s1lraw vlraw)
         s1l (car lres) vl (cadr lres)
         rres (pool:romres araw s1rraw vrraw)
@@ -5462,8 +5727,50 @@
         (setq tv (min 12.0 (* 0.25 braw))
               sl (/ (- braw tv) 2.0) sr sl rombad t)
         (pool:valnote "ROMAN S + T + S DOES NOT FIT B - ADJUSTED")))
+  (princ))
 
-  ;; body fit (sides T, ends A) + roman ends
+  ;; -------- corner treatments: the four TRUE corners A/B/C/D, where
+  ;; a side runs into an end line above/below the arc's corner drop
+  ;; (the arc springs are not corners a builder treats).  One answer
+  ;; for all four in square, each asked on its own out of square --
+  ;; the rectangle's split exactly, and like the rectangle the corner
+  ;; angles are assumed square: the roman body IS a rectangle, within
+  ;; a degree of 90 even out of square.  Sizes are capped at half the
+  ;; side and at the S1 corner drop, so a treatment can never cross
+  ;; the arc spring on the stub below it.
+  (defun rm:corners ( / v cc)
+    (rm:resolve)
+    (setq rcs (list (list "Square" 0.0) (list "Square" 0.0)
+                    (list "Square" 0.0) (list "Square" 0.0)))
+    (setq v (cal:askyn "Are the corners modified (rounded / chamfered)"
+                        "No" t))
+    (cond
+      ((eq v 'CAL-BACK) 'CAL-BACK)
+      ((not v) nil)
+      (pool:*insq*
+       (setq cc (pool:askcorner "All corners (assumed identical)" nil nil nil
+                                (min (* 0.5 tv) s1l s1r) nil t))
+       (if (eq cc 'CAL-BACK)
+           'CAL-BACK
+           (progn (setq rcs (list cc cc cc cc)) nil)))
+      (t
+       (princ "\n(per-corner treatment; press Enter to reuse the previous corner)")
+       (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
+       (setq v (pool:askcorners
+                 (list "Corner A" "Corner B" "Corner C" "Corner D")
+                 (list (min (* 0.5 tv) s1l) (min (* 0.5 tv) s1r)
+                       (min (* 0.5 tv) s1r) (min (* 0.5 tv) s1l))
+                 (list nil nil nil nil)
+                 (list nil nil nil nil)))
+       (if (eq v 'CAL-BACK)
+           'CAL-BACK
+           (progn (setq rcs v) nil)))))
+
+  (pool:stages (list 'rm:perfect 'rm:guide 'rm:letters 'rm:cross 'rm:corners))
+  (pool:pvkill)
+
+  ;; body fit (sides T, ends A) + roman ends; sl/tv/s1l... were
+  ;; resolved at the top of rm:corners
   (princ "\nFitting pool body to the measurements ...")
   (setq fq (pool:fitquad tv tv araw araw dac dbd pool:*side-tol* pool:*cross-tol*)
         quad (car fq) failed (cadr fq)
@@ -5474,18 +5781,25 @@
         doff (max 12.0 (/ (max tv araw) 18.0))
         th (max 3.0 (/ (max tv araw) 70.0))
         pool:*dashlt* (pool:ltload "DASHED"))
-  (pool:line a b "POOL")
-  (pool:line c d "POOL")
+  ;; sides run between the corner-treatment ends (the true corners
+  ;; when the corners are square); the dashed body chords stay on the
+  ;; true corners -- they are construction, not walls
+  (setq rce (pool:ringends quad rcs))
+  (pool:line (cadr (nth 0 rce)) (car (nth 1 rce)) "POOL")
+  (pool:line (cadr (nth 2 rce)) (car (nth 3 rce)) "POOL")
   (pool:lined b c)
   (pool:lined d a)
+  (setq rcarcs (pool:ringarcs rce rcs "POOL"))
   (setq ml (pool:unit (cal:perp (cal:v- d a))))
   (if (< (cal:dot (cal:v- (cal:mid a d) cen) ml) 0.0)
       (setq ml (cal:v* ml -1.0)))
   (setq mr (pool:unit (cal:perp (cal:v- c b))))
   (if (< (cal:dot (cal:v- (cal:mid b c) cen) mr) 0.0)
       (setq mr (cal:v* mr -1.0)))
-  (setq lend (pool:romend a d ml sl vl "POOL")
-        rend (pool:romend b c mr sr vr "POOL")
+  ;; the S1 stubs spring from the treatment ends down the end lines
+  ;; (ePrev at A and C, eNext at B and D -- the stub side of each)
+  (setq lend (pool:romend a d (car (nth 0 rce)) (cadr (nth 3 rce)) ml sl vl "POOL")
+        rend (pool:romend b c (cadr (nth 1 rce)) (car (nth 2 rce)) mr sr vr "POOL")
         tipl (car lend) tipr (car rend))
 
   ;; dims
@@ -5544,6 +5858,13 @@
                                 (cal:v* (pool:unit (cal:perp (cal:v- d b)))
                                          (* -0.2 doff)))))
   (pool:dimxend odim)
+  ;; corner treatments: one Typ. at B in square, each treated corner
+  ;; its own dim out of square (collapsing back to Typ. when Enter
+  ;; reused one answer all the way round)
+  (pool:dimringcorners quad rcs rce rcarcs cen doff
+                       (if pool:*insq*
+                           (list '(1 0 2 3))
+                           (mapcar 'list '(0 1 2 3))))
   (setvar "CLAYER" oldclay)
 
   ;; corner letters live on the mini-model beside the report, not in
@@ -5575,6 +5896,12 @@
       (setq rows (append rows
                          (list (list "CROSS A-C" dac (nth 4 meas))
                                (list "CROSS B-D" dbd (nth 5 meas))))))
+  ;; corner treatments: one row in square, per corner out of square
+  (setq rows (append rows
+    (if pool:*insq*
+        (pool:cornerrows (list "CORNER") (list (nth 0 rcs)))
+        (pool:cornerrows (list "CORNER A" "CORNER B" "CORNER C" "CORNER D")
+                         rcs))))
   ;; interior: the True Oval hopper / sport bottoms
   (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
@@ -5682,7 +6009,7 @@
      (pool:line wt pt2 lay)
      (list (cal:mid pbot ptop) wt wb nil nil))
     ((= style "ROman")
-     (pool:romend pbot ptop m ext v lay))
+     (pool:romend pbot ptop pbot ptop m ext v lay))
     (t                                  ; Oval
      (setq tip (cal:v+ (cal:mid pbot ptop) (cal:v* m ext)))
      (pool:arc3p ptop tip pbot lay)
@@ -6620,7 +6947,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "081926 REV01")
+(setq tutorial:*version* "082126 REV02")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -6743,7 +7070,7 @@
   (setvar "CLAYER" "POOL")
   (tutorial:frame (list -40.0 -40.0) (list 400.0 300.0))
   (princ "\n\n=== 4. CORNER TREATMENTS ===")
-  (princ "\nRectangle, and now L/Lazy L, corners can each be:")
+  (princ "\nRectangle, Grecian/Octagon, Roman and L/Lazy L corners can each be:")
   (tutorial:bullet "Square  -- the plain sharp corner (nothing drawn).")
   (tutorial:bullet "Rounded -- you give the RADIUS; a fillet arc is drawn (bottom-left, above).")
   (tutorial:bullet "Diag    -- you give the CHAMFER FACE length; a straight cut is drawn (bottom-right, above).")
@@ -6754,6 +7081,9 @@
   (tutorial:bullet "Out-of-square: every corner is asked individually -- but if all four answers come back the same type and size, they collapse to that same single \"Typ.\" callout instead of four separate dims.")
   (tutorial:bullet "Sizes are capped so two treatments on the same wall can never overlap and fold it -- too-large answers are re-asked with the max shown.")
   (tutorial:bullet "L/Lazy L: the five OUTER corners take one answer, the INNER corner (E) is asked separately since it's usually different (Enter reuses the outer answer).")
+  (tutorial:bullet "Grecian/Octagon: the four BODY corners (A/B/C/D, where a side runs into a cut face) take one answer and the four END TIPS (LT/LB/RT/RB) another, Enter on the tips reusing the body answer.")
+  (tutorial:bullet "Roman: the four true corners A/B/C/D take one answer; the S1 stubs then spring from the cut, and sizes are capped at the corner drop so a treatment cannot run past the arc spring.")
+  (tutorial:bullet "Every shape asks 'Are the corners modified (rounded / chamfered)?' first, defaulting to No -- square is always the assumption.")
   (tutorial:bullet "The pool bottom's hopper ties connect to the ACTUAL corner cut on the deep-end wall, not the sharp corner behind it -- see topic 5.")
   (princ))
 
