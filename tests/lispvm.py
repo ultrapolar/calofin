@@ -1004,6 +1004,28 @@ def _ssget(vm, a):
     return ['<ss>'] + ents if ents else NIL
 
 
+@bi('ssmemb')
+def _ssmemb(vm, a):
+    """(ssmemb ename ss) -- the entity name when it is in the set."""
+    return a[0] if (a[1] and a[0] in a[1][1:]) else NIL
+
+
+@bi('ssdel')
+def _ssdel(vm, a):
+    """(ssdel ename ss) -- take the entity out of the set, in place as
+    AutoLISP does, and hand the set back (nil if it was not in it)."""
+    if a[1] and a[0] in a[1][1:]:
+        a[1].remove(a[0])
+        return a[1]
+    return NIL
+
+
+BUILTINS[Sym('vlax-ename->vla-object')] = lambda vm, a: a[0]
+"""The VM has no separate ActiveX object layer: an entity name stands in
+for its VLA object, so routines that convert before calling a method
+still line up with the entity the rest of the VM knows."""
+
+
 @bi('trans')
 def _trans(vm, a):
     """(trans pt from to [disp]) -- the VM's world is flat: WCS, UCS and

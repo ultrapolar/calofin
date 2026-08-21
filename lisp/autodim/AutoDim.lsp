@@ -16,13 +16,15 @@
 ;;;                treads (the largest group of parallel lines in the
 ;;;                selection) get their widths dimensioned and the
 ;;;                distances between them chained beside the stair.
-;;;             Step 4. Asks the user to draw two "floor dims" lines.
+;;;             Step 4. Asks whether you would like floor dims, and if
+;;;                you do, has you draw two lines across the plan.
 ;;;                Each one becomes a continued dimension chain
 ;;;                (DIMALIGNED + DIMCONTINUE) that breaks at every
 ;;;                highlighted object standing in its way.  A start or
-;;;                end point picked outside the perimeter is trimmed
-;;;                back to the perimeter so no dims hang outside the
-;;;                plan.
+;;;                end point that is not on an object is pulled back to
+;;;                the last object before it, so every dim runs object
+;;;                to object and none hangs off the end into open
+;;;                drawing.
 ;;;             Step 5. Places the two overall dims, no input needed:
 ;;;                the plan's full width about 2ft above the topmost
 ;;;                dimension and its full height about 2ft to the left
@@ -114,6 +116,8 @@
 ;;;      inches without dragging the rest of the chain with it.
 ;;;    * The two floor dims lines are construction lines only - they
 ;;;      are erased once their dimension chain has been created.
+;;;    * Answering No to the floor dims question skips straight to the
+;;;      overall dims; Back at it re-opens the stairs.
 ;;;    * Break points closer together than 0.0001 drawing units are
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
@@ -154,6 +158,27 @@
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
         (t 12.0)))                      ; inches / unitless
+
+;; ------------------------------------------------------------- asking
+
+;; Keyword question.  kws is the initget string, shown the bracketed
+;; list, dflt the Enter answer (nil = an answer is required).  Returns
+;; the keyword, or AD-BACK for Back/Undo, which is accepted everywhere
+;; Back is as a hidden synonym.  (STANDARDS.md section 4.)
+(defun ad:askkw (msg kws shown dflt back / v)
+  (initget (if dflt 0 (if back 0 1))
+           (if back (strcat kws " Back Undo") kws))
+  (setq v (getkword (strcat "\n" msg " [" shown
+                            (if back "/Back" "") "]"
+                            (if dflt (strcat " <" dflt ">") "") ": ")))
+  (cond ((member v '("Back" "Undo")) 'AD-BACK)
+        ((null v) (if dflt dflt (ad:askkw msg kws shown dflt back)))
+        (t v)))
+
+;; Yes/No that can be backed out of.  Returns T, nil or AD-BACK.
+(defun ad:askyn (msg dflt back / v)
+  (setq v (ad:askkw msg "Yes No" "Yes/No" dflt back))
+  (if (eq v 'AD-BACK) v (= v "Yes")))
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set
@@ -658,20 +683,19 @@
   res)
 
 ;; build one floor dims chain along p1->p2 (WCS): a first aligned dim
-;; followed by DIMCONTINUE through every break point.  A start or end
-;; point picked outside the perimeter of the obstacles is trimmed back
-;; to the first/last crossing so no dims hang outside the plan.
+;; followed by DIMCONTINUE through every break point, breaking wherever
+;; an obstacle stands in the line's way.  An end point the user did not
+;; land on an object is pulled back to the last object before it, so
+;; every dim runs object to object.
 ;; Returns the number of dimensions placed.
-(defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir a ds d x
-                                            starton endon chain prev box
-                                            raylen reps)
+(defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir ds d x
+                                            starton endon chain prev)
   (setq ssx (if obstacles obstacles (ad:geomss)))
   (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
   (setq lin  (entlast)
         lobj (vlax-ename->vla-object lin))
   (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))
   (setq len (distance p1 p2)
-        a   (angle p1 p2)
         dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
         ds  '())
   ;; distance of every crossing object along the line, noting crossings
@@ -690,26 +714,19 @@
       (setq chain (cons (mapcar '(lambda (b v) (+ b (* d v))) p1 dir) chain)
             prev  d)))
   (setq chain (reverse (cons p2 chain)))
-  ;; trim ends picked outside the perimeter: an end point is outside
-  ;; when it is not on any highlighted object and nothing highlighted
-  ;; lies behind it
-  (if (and ssx (> (sslength ssx) 0))
+  ;; an end the user did not land on an object is pulled back to the
+  ;; last object before it, so every dim in the chain runs object to
+  ;; object and none hangs off the end into open drawing
+  (if (not starton)
     (progn
-      (setq box    (ad:ssbox ssx)
-            raylen (if box
-                     (* 2.0 (+ (distance (car box) (cadr box)) len))
-                     (* 4.0 len))
-            reps   (* 1e-6 raylen))
-      (if (and (not starton) (ad:sideclear p1 (+ a pi) raylen reps ssx))
-        (progn
-          (setq chain (cdr chain))
-          (prompt "\n  (start point was outside the perimeter - chain trimmed)")))
-      (if (and (cdr chain)
-               (not endon)
-               (ad:sideclear p2 a raylen reps ssx))
-        (progn
-          (setq chain (reverse (cdr (reverse chain))))
-          (prompt "\n  (end point was outside the perimeter - chain trimmed)")))))
+      (setq chain (cdr chain))
+      (prompt (strcat "\n  (start point was not on an object - the chain"
+                      " starts at the first one the line crosses)"))))
+  (if (and (cdr chain) (not endon))
+    (progn
+      (setq chain (reverse (cdr (reverse chain))))
+      (prompt (strcat "\n  (end point was not on an object - the chain"
+                      " stops at the last one the line crosses)"))))
   (if (cdr chain)
     (ad:dimchain chain loc ad:*style-plan*)
     0))
@@ -769,8 +786,8 @@
                                   (trans loc 1 0) obstacles))
            (if (> n 0)
              (prompt (strcat "\n" tag ": " (itoa n) " dimension(s) placed."))
-             (prompt (strcat "\n" tag ": the drawn line lies outside the"
-                             " plan - no dimensions placed.")))
+             (prompt (strcat "\n" tag ": the line did not cross two"
+                             " objects - no dimensions placed.")))
            (setq out (list n)))))))
   (cond
     ((eq out 'AD-BACK) 'AD-BACK)
@@ -998,38 +1015,50 @@
                   " perimeter - no input needed..."))
   (setq nper (ad:dimperim plan))
   (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
-  ;; steps 3 and 4 walk back through each other: Back at a floor
-  ;; line's START re-opens the previous step, erasing what it drew
+  ;; steps 3 and 4 walk back through each other: Back at the floor dims
+  ;; question re-opens the stairs, erasing what they drew, and Back at
+  ;; the second floor line re-opens the first
   (setq stage 3)
-  (while (< stage 6)
+  (while (< stage 7)
     (cond
       ((= stage 3)
        (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
        (setq mark3  (entlast)
              nstair (ad:dimstairs))
        (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
-       (prompt (strcat "\n=== AUTODIM step 4 of 5: floor dims ==="
-                       "\nDraw two lines across the plan.  Each becomes a"
-                       " dimension chain that breaks at every highlighted"
-                       " object it crosses."))
        (setq stage 4))
       ((= stage 4)
+       (prompt (strcat "\n=== AUTODIM step 4 of 5: floor dims ==="
+                       "\nTwo lines drawn across the plan, each becoming a"
+                       " dimension chain that breaks at every highlighted"
+                       " object it crosses.  A start or end point that is"
+                       " not on an object pulls back to the last object"
+                       " before it, so every dim runs object to object."))
+       (setq v (ad:askyn "Would you like floor dims?" "Yes" T))
+       (cond
+         ((eq v 'AD-BACK)
+          (ad:eraseafter mark3)
+          (prompt "\nStepping back to the stairs.")
+          (setq stage 3))
+         (v (setq stage 5))
+         (T (prompt "\nNo floor dims.")
+            (setq stage 7))))
+      ((= stage 5)
        (setq mark4 (entlast)
              v     (ad:getfloor "Floor dims 1 of 2" plan T))
        (if (eq v 'AD-BACK)
          (progn
-           (ad:eraseafter mark3)
-           (prompt "\nStepping back to the stairs.")
-           (setq stage 3))
-         (setq stage 5)))
+           (prompt "\nStepping back to the floor dims question.")
+           (setq stage 4))
+         (setq stage 6)))
       (T
        (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
        (if (eq v 'AD-BACK)
          (progn
            (ad:eraseafter mark4)
            (prompt "\nStepping back one floor line.")
-           (setq stage 4))
-         (setq stage 6)))))
+           (setq stage 5))
+         (setq stage 7)))))
   (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
                   "\nPlacing the overall width about 2ft above the"
                   " topmost dim and the overall height about 2ft to"

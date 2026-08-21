@@ -29,6 +29,13 @@ LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'autodim', 'AutoDim.lsp')
 STYLES = {'STANDARD', 'SIDE STANDARD', 'STANDARD INCHES'}
 
+_probe = VM()
+_probe.load(LSP)
+#: The file's Back sentinel.  The grouped build calls the library's ask
+#: helpers, which return CAL-BACK, so a stub standing in for a step that
+#: can be backed out of has to hand back whichever one this tier uses.
+BACK = 'CAL-BACK' if _probe.globals.get('cal:askkw') else 'AD-BACK'
+
 
 def fresh(styles=STYLES):
     """A VM with AutoDim loaded, the named dim styles in the drawing and
@@ -335,18 +342,133 @@ TRACE = """
   (defun ad:runsteps (risers) (setq ran (cons "step depths" ran)) (princ))"""
 
 
-def route(segs):
+def route(segs, answers=('Yes',)):
     vm = fresh()
     ents = draw(vm, segs)
     vm.loads(TRACE)
-    vm.run('c:AUTODIM', [ents, None])
+    vm.run('c:AUTODIM', [ents, None] + list(answers))
     return [str(x) for x in reversed(vm.globals['ran'])]
 
 
 assert route(PLAN) == ['perimeter', 'stairs', 'floor', 'floor', 'overall']
 print('   a rectangular plan: all five plan steps, no step depths')
-assert route(FLIGHT) == ['step depths']
+assert route(FLIGHT, answers=()) == ['step depths']
 print('   a flight of steps: the step depths alone, no plan steps')
+
+
+print('== step 4 asks first, and takes No, Enter and Back for an answer ==')
+#: The floor dims step, with every other step of the plan flow replaced
+#: by a note of having been run, and Back available at the floor lines.
+FLOW = """
+  (setq ran '() backon "")
+  (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
+  (defun ad:dimstairs () (setq ran (cons "stairs" ran)) 0)
+  (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
+  (defun ad:eraseafter (mark) (setq ran (cons "rolled back" ran)) (princ))
+  (defun ad:getfloor (tag obstacles back)
+    (setq ran (cons tag ran))
+    (if (= tag backon)
+      (progn (setq backon "") '%s)
+      0))""" % BACK
+
+
+def plan_flow(answers, backon=''):
+    """Run the plan flow with `backon` naming the one floor line the
+    user backs out of."""
+    vm = fresh()
+    vm.loads(FLOW)
+    vm.loads('(setq backon "%s")' % backon)
+    vm.script = list(answers)
+    vm.loads('(ad:runplan nil)')
+    assert not vm.script, 'answers left over: %r' % vm.script
+    return [str(x) for x in reversed(vm.globals['ran'])]
+
+
+assert plan_flow(['Yes']) == ['perimeter', 'stairs', 'Floor dims 1 of 2',
+                              'Floor dims 2 of 2', 'overall']
+print('   Yes: two lines asked for, then the overall dims')
+
+assert plan_flow([None]) == ['perimeter', 'stairs', 'Floor dims 1 of 2',
+                             'Floor dims 2 of 2', 'overall']
+print('   Enter: takes the <Yes> default')
+
+assert plan_flow(['No']) == ['perimeter', 'stairs', 'overall']
+print('   No: straight on to the overall dims, no lines asked for')
+
+# Back at the question re-opens the stairs, erasing what they drew
+assert plan_flow(['Back', 'No']) == ['perimeter', 'stairs', 'rolled back',
+                                     'stairs', 'overall']
+print('   Back: the stairs re-open, and what they drew is rolled back')
+
+# Back at the FIRST floor line goes to the question, not past it - and
+# nothing is rolled back, because that line had not drawn anything yet
+assert plan_flow(['Yes', 'No'], backon='Floor dims 1 of 2') == [
+    'perimeter', 'stairs', 'Floor dims 1 of 2', 'overall']
+print('   Back at the first line: back to the question, nothing rolled back')
+
+# Back at the SECOND floor line re-opens the first, erasing its chain
+assert plan_flow(['Yes'], backon='Floor dims 2 of 2') == [
+    'perimeter', 'stairs', 'Floor dims 1 of 2', 'Floor dims 2 of 2',
+    'rolled back', 'Floor dims 1 of 2', 'Floor dims 2 of 2', 'overall']
+print('   Back at the second line: the first re-opens, its chain rolled back')
+
+
+print('== a floor dims chain runs object to object ==')
+def floorchain(crossings, p1=(0, 0), p2=(60, 0)):
+    """One chain along p1->p2 over a line that crosses objects at the
+    given distances along it.  ad:xpoints is what reaches ActiveX, so
+    the crossings it would find are supplied directly."""
+    vm = fresh()
+    draw(vm, [((0, -50), (0, -49))])          # something to be the obstacles
+    vm.loads('(defun ad:xpoints (lobj ss) (list %s))'
+             % ' '.join('(list %.4f %.4f 0.0)'
+                        % (p1[0] + (p2[0] - p1[0]) * d / 60.0,
+                           p1[1] + (p2[1] - p1[1]) * d / 60.0)
+                        for d in crossings))
+    n = vm.loads('(ad:floorchain (list %.4f %.4f 0.0) (list %.4f %.4f 0.0) '
+                 '(list 30.0 -12.0 0.0) SS)' % (p1[0], p1[1], p2[0], p2[1]))
+    # DIMCONTINUE leaves no entity behind, so the points it was fed are
+    # read back off the command log to see the whole chain
+    cont, run = [], False
+    for c in vm.commands:
+        if c and c[0] == '_.DIMCONTINUE':
+            run = True
+        elif run and len(c) == 2 and c[0] == '_non':
+            cont.append(tuple(c[1][:2]))
+        elif run:
+            run = False
+    return n, [(d[1], d[2]) for d in dims(vm)], cont
+
+
+# both ends landed on an object: every break point is dimensioned
+n, spans, cont = floorchain([0, 20, 40, 60])
+assert n == 3, (n, spans, cont)
+assert spans == [((0.0, 0.0), (20.0, 0.0))], spans
+assert cont == [(40.0, 0.0), (60.0, 0.0)], cont
+print('   both ends on an object: 3 dims, 0 -> 20 -> 40 -> 60')
+
+# neither end on one: the chain pulls back to the objects it crossed
+n, spans, cont = floorchain([20, 40])
+assert n == 1, (n, spans, cont)
+assert spans == [((20.0, 0.0), (40.0, 0.0))] and cont == [], (spans, cont)
+print('   neither end on one: it starts and stops at the objects it crossed')
+
+# the end alone in open drawing: it stops at the previous object
+n, spans, cont = floorchain([0, 20, 40])
+assert n == 2, (n, spans, cont)
+assert spans == [((0.0, 0.0), (20.0, 0.0))] and cont == [(40.0, 0.0)], cont
+print('   the end in open drawing: it stops at the previous object')
+
+# the start alone in open drawing: it begins at the first object
+n, spans, cont = floorchain([20, 40, 60])
+assert n == 2, (n, spans, cont)
+assert spans == [((20.0, 0.0), (40.0, 0.0))] and cont == [(60.0, 0.0)], cont
+print('   the start in open drawing: it begins at the first object')
+
+# a line that crosses nothing, or only one thing, dimensions nothing
+assert floorchain([]) == (0, [], [])
+assert floorchain([30]) == (0, [], [])
+print('   a line crossing nothing, or one object: no dims at all')
 
 
 print('== AUTODIMSIDEPOV keeps stepping its dims out with the stairs ==')

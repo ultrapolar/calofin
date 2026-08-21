@@ -289,7 +289,7 @@ python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
 python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
 python3 tests/test_cdcallout.py       # CDCALLOUT loaded and run in lispvm
-python3 tests/test_autodim.py         # AUTODIM styles, dedupe, overall + step dims
+python3 tests/test_autodim.py         # AUTODIM styles, dedupe, overall/step/floor dims
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
