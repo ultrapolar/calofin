@@ -344,6 +344,12 @@ class VM:
     def sf_function(self, a):
         return a[0]
 
+    def sf_lambda(self, a):
+        """(lambda (args) body ...) evaluates to the function itself, so
+        it can be stored and called later -- how a command installs its
+        own *error* handler without giving it a global name."""
+        return [Sym('lambda')] + list(a)
+
     def sf_setq(self, a):
         if len(a) % 2:
             raise LispError("setq: odd number of arguments", self)
@@ -508,7 +514,7 @@ class VM:
 
 SPECIAL = {Sym(s) for s in
            ['quote', 'function', 'setq', 'if', 'progn', 'cond', 'and', 'or',
-            'while', 'repeat', 'foreach', 'defun']}
+            'while', 'repeat', 'foreach', 'defun', 'lambda']}
 
 
 def split_params(plist):

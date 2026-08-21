@@ -40,10 +40,53 @@ Nothing downstream of the solver knows which shape it is looking at — it
 reads the ring. The four differ only in how many bulges there are, where
 the last one is pinned, and whether the bottom joiner has a radius.
 
+## Simple or complex
+
+Whichever shape it is, the next question is how much of the outline you
+want to say. **Simple** is the shape as described above and is the
+default, so a plain pool is one Enter longer than it used to be and
+nothing else. **Complex** opens two things a real drawing sometimes has
+and the plain flow cannot express:
+
+* **A straight run in place of any joiner.** Answer a joiner question
+  `Line` instead of a radius and the outline runs dead straight between
+  the two bulges' tangent points — their common external tangent. It is
+  not a special case bolted onto the ring: a straight run *is* the
+  reverse arc with an infinite radius, and grows out of it continuously
+  (ten times the radius, a tenth of the gap). The joint stays smooth at
+  both ends, because a tangent line meets each circle square to its own
+  radius. Answer every joiner `Line` and an oasis comes out as three
+  bulges and three straight runs.
+* **A hump off centre.** A Center pool's top bulge sits across the
+  middle of X; complex asks how far off it is, signed, **left
+  negative**. The bulge is still tangent to the Y-max bound — only its
+  X moves — so the shape stays a Center pool with the hump where the
+  drawing has it.
+
+Two answers are refused, because there is no pool on the other side of
+them: an offset that puts the hump's centre off either end of the
+envelope, and one that carries the hump far enough across to swallow
+the left bulge — a nesting no tangent radius can bridge, exactly as the
+centred one is refused. Reaching *past* a bound is not refused: that is
+an ordinary trimmed hump, and the extents report names it.
+
+One thing complex can do that simple never could is touch a bulge at a
+single point: two runs either side of a bulge that shares a tangent line
+with both its neighbours meet it in the same place. The bulge is then a
+point on the outline rather than an arc of it. Nothing is drawn for it —
+an arc whose two angles are equal is a whole circle to AutoCAD, which is
+not what a pinched bulge means — and the report says which bulge it was.
+
+A simple shape's one straight run lies along a bound with both its
+bulges tangent to that bound, so nothing can reach it. A complex one's
+runs slant across the pool, so the self-crossing test checks them like
+anything else: segment against circle and segment against segment,
+exact rather than sampled.
+
 ## What it does
 
-1. Asks **which of the two shapes** it is — everything else follows from
-   that.
+1. Asks **which of the four shapes** it is — everything else follows
+   from that — and then whether it is **simple or complex**.
 2. Asks **where it goes** — the pool is drawn as it is answered.
 3. Asks for the **absolute X and Y bounds** — the envelope the pool
    touches on all four sides and crosses on none.
@@ -54,9 +97,10 @@ the last one is pinned, and whether the bottom joiner has a radius.
 6. Draws the finished pool, its dimensions, and a **check drawing**
    beside it.
 
-So an oasis asks ten questions and the clouds ask seven and six. The
-middle ones are named for the shape, because "top-right" means the
-joiner on one shape and the bulge itself on another:
+So an oasis asks eleven questions and the clouds ask nine and eight — a
+complex Center adds a twelfth for the hump's offset. The middle ones are
+named for the shape, because "top-right" means the joiner on one shape
+and the bulge itself on another:
 
 | Shape | Bulges asked | Joiners asked |
 | --- | --- | --- |
@@ -66,6 +110,10 @@ joiner on one shape and the bulge itself on another:
 | Cloud, rounded | Right | Top, Bottom |
 | Kidney, true | **Top-center** (sides derive) | Bottom-center |
 | Kidney, asymmetric | Left, Right (top derives) | Bottom-center |
+
+On a complex run every joiner in the right-hand column takes `Line` as
+well as a radius, and a complex **Center** gains one more question after
+the top bulge: how far off centre the hump is.
 
 A derived circle is never asked about and never reads `?` — its label
 shows the computed value from the very first question, re-solving as
@@ -226,6 +274,7 @@ computed closed and drawn closed.
 
 ```
 Which shape is it? [Center/TopRight/CLoud/Kidney] <Center>:
+Simple or complex? [Simple/Complex/Back] <Simple>:
 Insertion base point <0,0> [Back]:
 X - overall left-to-right bounds [Back]:
 Y - overall front-to-back bounds [Back]:
@@ -237,11 +286,18 @@ Top-right tangent radius [Back]:
 Bottom-center tangent radius [Back]:
 ```
 
-(A **TopRight** pool asks the same ten, with `Top-right bulge radius` in
-place of `Top bulge radius` and `Right-side tangent radius` in place of
-`Top-right tangent radius`. A **CLoud** asks `Cloud bottom?
+(A **TopRight** pool asks the same eleven, with `Top-right bulge radius`
+in place of `Top bulge radius` and `Right-side tangent radius` in place
+of `Top-right tangent radius`. A **CLoud** asks `Cloud bottom?
 [Straight/Rounded/Back] <Straight>:` second, and then drops the left and
 top bulges and the two extra joiners — see the table above.)
+
+Answer **Complex** and the three tangent questions read `[Line/Back]`
+instead, and a Center pool gains one more straight after the top bulge:
+
+```
+Top bulge off center, left negative [Back] <0>:
+```
 
 `CLoud` takes two capitals because `Center` already has the `C`; the
 routine normalizes it back to `Cloud` at the ask site, so nothing else
@@ -446,7 +502,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 71 of them. The reference case is checked against the drawing OASIS was
+answers — 81 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -494,7 +550,7 @@ because a corner bulge has to fit both ways.
 And seven are the two **cloud** shapes: each reproduces its own reference
 drawing arc for arc; both fill a 30'-0" × 20'-0" envelope exactly; the
 flat run really is the general external tangent landing on the Y-min
-bound rather than a special case bolted on; they ask six and seven
+bound rather than a special case bolted on; they ask eight and nine
 questions with no left-bulge question among them; the flat run is
 dimensioned by its length rather than by a radius it has not got; and
 their preview draws no circle and no `?` behind that run while showing
@@ -508,8 +564,8 @@ Twelve are the two **kidney** shapes: the true kidney reproduces its
 customer drawing arc for arc, with the sides deriving at 95.9167; the
 seams hand over at the exact internal tangency with nothing drawn
 between; it fills its envelope simply; the asymmetric one derives its
-top circle to the same tangencies; each asks its own questions (7 and
-8); a top radius under the named minimum is re-asked; the one degenerate
+top circle to the same tangencies; each asks its own questions (8 and
+9); a top radius under the named minimum is re-asked; the one degenerate
 side pair (both exactly half of Y — a cloud, not a kidney) is caught and
 re-asked; the derived circles label themselves with values, never `?`;
 the check drawing's seam ties read `R − r` where external ties read
@@ -517,10 +573,26 @@ the check drawing's seam ties read `R − r` where external ties read
 question itself; a Y at or over X is re-asked rather than carried into a
 shape that cannot close; and every one of the 1,010 envelopes the
 questions admit draws a ring from its starting provisionals, so the
-first preview is never an empty box. The preview
-ones wrap `getdist` to photograph the drawing at the moment each question
-is put — it is erased before the next one, so there is no other way to
-see it.
+first preview is never an empty box.
+
+Ten cover **complex** runs: Simple is the default and leaves a plain run
+alone, while Complex puts `[Line/…]` on every joiner question and adds
+the hump's offset; `Line` draws the common external tangent, square to
+both bulges and exactly the tangent length long; growing a reverse
+radius by ten closes the gap to that run by ten, which is what "the same
+joiner with an infinite radius" means; the hump moves by exactly the
+offset given, left negative, and still fills the envelope; an offset off
+the envelope or one that swallows the left bulge is re-asked; all four
+families take a run; a bulge pinched to a point by the runs either side
+of it is left out of the drawing and named in the report; a run is
+tested for crossings exactly, segment against circle and segment against
+segment; a run already answered is still the element picked out in red
+when it is re-asked; and `Back` walks the two new questions like any
+other.
+
+The preview ones wrap `getdist` to photograph the drawing at the moment
+each question is put — it is erased before the next one, so there is no
+other way to see it.
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_oasis.py` reruns the whole
 file against the grouped build in `shared/`, as a parity check.
