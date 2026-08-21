@@ -945,7 +945,7 @@ def u_back_corner(base, arm, kind, off):
     far = arm[0] if dist(arm[0], b1) > dist(arm[1], b1) else arm[1]
     ub, ua = unit(vec(b1, b2)), unit(vec(b1, far))
     t1, t2 = add(b1, scl(ub, off)), add(b1, scl(ua, off))
-    if kind == "Rounded":
+    if kind == "Radius":
         return t1, t2, add(t1, scl(ua, off))
     return t1, t2
 
@@ -1025,7 +1025,7 @@ def test_normie_u_back_corner_is_cut_into_the_corner():
     arm = ((-80.0, 150.0), (-80.0, 0.0))
     base = ((-80.0, 0.0), (80.0, 0.0))
     off = 9.0
-    on_base, on_arm = u_back_corner(base, arm, "Diagonal", off)
+    on_base, on_arm = u_back_corner(base, arm, "Cut", off)
     assert on_base == (-80.0 + off, 0.0), on_base       # in along the base
     assert on_arm == (-80.0, off), on_arm               # out along the arm
     assert abs(dist(on_base, on_arm) - off * ROOT2) < 1e-9, "45 degree cut"
@@ -1039,7 +1039,7 @@ def test_normie_u_back_corner_fillet_is_tangent_to_both_legs():
     arm = ((80.0, 150.0), (80.0, 0.0))
     base = ((-80.0, 0.0), (80.0, 0.0))
     rad = 12.0
-    on_base, on_arm, centre = u_back_corner(base, arm, "Rounded", rad)
+    on_base, on_arm, centre = u_back_corner(base, arm, "Radius", rad)
     assert abs(dist(centre, on_base) - rad) < 1e-9
     assert abs(dist(centre, on_arm) - rad) < 1e-9
     assert abs(centre[1] - rad) < 1e-9, "one radius off the base"
@@ -1072,7 +1072,7 @@ def recess_corner(e, wdir, direction, kind, size):
     (on_wall, on_side) - a diagonal joins them, a fillet arc is tangent at
     them, and a square (90 degree) corner has both at E.
     """
-    off = size if kind in ("Diagonal", "Rounded") else 0.0
+    off = size if kind in ("Cut", "Radius") else 0.0
     return add(e, scl(wdir, off)), add(e, scl(direction, off))
 
 
@@ -1089,7 +1089,7 @@ def test_recess_offset_and_cut_convert_both_ways():
 def test_recess_diagonal_is_45_degrees_to_both_lines():
     e, wdir, direction = (50.0, 0.0), (1.0, 0.0), (0.0, 1.0)
     for offset in (6.0, 12.0):
-        on_wall, on_side = recess_corner(e, wdir, direction, "Diagonal", offset)
+        on_wall, on_side = recess_corner(e, wdir, direction, "Cut", offset)
         cut = unit(vec(on_wall, on_side))
         assert abs(dist(on_wall, on_side) - offset * ROOT2) < 1e-12
         # equal angle to the wall and to the side of the recess
@@ -1103,7 +1103,7 @@ def test_recess_rounded_corner_is_tangent_to_both_lines():
     wall = (e, add(e, wdir))
     side = (e, add(e, direction))
     for radius in (4.0, 9.0):
-        t1, t2 = recess_corner(e, wdir, direction, "Rounded", radius)
+        t1, t2 = recess_corner(e, wdir, direction, "Radius", radius)
         centre = add(t1, scl(direction, radius))     # ns-side's centre
         assert abs(ptline(centre, *wall) - radius) < 1e-12, "tangent to wall"
         assert abs(ptline(centre, *side) - radius) < 1e-12, "tangent to side"
@@ -1124,7 +1124,7 @@ def test_recess_flares_the_mouth_by_the_offset():
     width, offset = 120.0, 9.0
     corner, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
     e = add(corner, scl(u, width))       # the outer side meets the wall here
-    on_wall, on_side = recess_corner(e, u, direction, "Diagonal", offset)
+    on_wall, on_side = recess_corner(e, u, direction, "Cut", offset)
     assert abs(dot(vec(corner, on_wall), u) - (width + offset)) < 1e-12, \
         "mouth flares by the offset"
     assert abs(dot(vec(corner, on_side), u) - width) < 1e-12, \
@@ -1135,7 +1135,7 @@ def test_recess_flares_the_mouth_by_the_offset():
 
 def test_recess_square_corner_leaves_the_side_at_the_wall():
     e, wdir, direction = (60.0, 0.0), (1.0, 0.0), (0.0, 1.0)
-    for kind in ("Straight", None):
+    for kind in ("Square", "NotGiven", None):
         on_wall, on_side = recess_corner(e, wdir, direction, kind, 9.0)
         assert on_wall == e and on_side == e, "no flare without a treatment"
 
@@ -1169,7 +1169,7 @@ def outer_offset(kind, size, cum, wid):
     as deep as the whole run, or a pair that would meet across the last
     tread, falls back to square (0).
     """
-    off = size if kind in ("Diagonal", "Rounded") else 0.0
+    off = size if kind in ("Cut", "Radius") else 0.0
     if off <= 0.0:
         return 0.0
     if off >= cum:
@@ -1264,13 +1264,13 @@ def test_outer_half_outline_connects_end_to_end():
 def test_outer_guards_fall_back_to_square():
     """A corner deeper than the run, or two that would meet across the
     last tread, resolves to a square (offset 0) last step."""
-    assert outer_offset("Diagonal", 36.0, 36.0, 120.0) == 0.0  # off >= cum
-    assert outer_offset("Diagonal", 40.0, 36.0, 120.0) == 0.0
-    assert outer_offset("Rounded", 60.0, 200.0, 120.0) == 0.0  # 2*off >= wid
-    assert outer_offset("Rounded", 61.0, 200.0, 120.0) == 0.0
+    assert outer_offset("Cut", 36.0, 36.0, 120.0) == 0.0  # off >= cum
+    assert outer_offset("Cut", 40.0, 36.0, 120.0) == 0.0
+    assert outer_offset("Radius", 60.0, 200.0, 120.0) == 0.0  # 2*off >= wid
+    assert outer_offset("Radius", 61.0, 200.0, 120.0) == 0.0
     assert outer_offset("Square", 9.0, 36.0, 120.0) == 0.0     # no treatment
-    assert outer_offset("Diagonal", 9.0, 36.0, 120.0) == 9.0   # fits
-    assert outer_offset("Rounded", 12.0, 36.0, 120.0) == 12.0
+    assert outer_offset("Cut", 9.0, 36.0, 120.0) == 9.0   # fits
+    assert outer_offset("Radius", 12.0, 36.0, 120.0) == 12.0
 
 
 def linecirc_hits(a, d, c, r):

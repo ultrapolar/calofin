@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_082126_REV25-28-19.lsp
+;;; STEPS_082126_REV25-28-20.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -10,7 +10,7 @@
 ;;;
 ;;;     CORNERSTP.lsp   v2.5 -> REV25   CORNERSTP, TUTORIALCORNERSTP
 ;;;     HEMISTEP.lsp    v2.8 -> REV28   HEMISTEP, TUTORIALHEMISTEP
-;;;     NORMIESTEP.lsp  v1.9 -> REV19   NORMIESTEP, TUTORIALNORMIESTEP
+;;;     NORMIESTEP.lsp  v2.0 -> REV20   NORMIESTEP, TUTORIALNORMIESTEP
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -2405,7 +2405,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v1.9) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v2.0) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -2440,9 +2440,9 @@
 ;;;                      No width is asked for - the arms give it.  The
 ;;;                      U may already have its back corners drawn where
 ;;;                      the arms meet the base: three lines is a plain
-;;;                      square-cornered U, five lines is one with
-;;;                      diagonal (cut) corners, and three lines plus
-;;;                      two arcs is one with rounded corners.
+;;;                      square-cornered U, five lines is one with Cut
+;;;                      (diagonal) corners, and three lines plus two
+;;;                      arcs is one with Radius (rounded) corners.
 ;;;                      Polylines work too, including bulged (rounded)
 ;;;                      corner segments.  Treads trim to whatever part
 ;;;                      of the side they land on - arm, diagonal, or
@@ -2460,11 +2460,16 @@
 ;;;       walls meet the last tread; the other modes ask for their BACK
 ;;;       CORNERS - the two where the sides of the run meet the wall it
 ;;;       comes off.  Either way a corner is
-;;;         Square   - 90 degrees, the plain side lines (the default)
-;;;         Rounded  - a fillet arc, you give the radius
-;;;         Diagonal - a 45 degree cut, given as either its Offset back
-;;;                    along each line or the length of the Cut itself
-;;;                    (each gives the other: cut = offset x root 2)
+;;;         Square   - a true 90 degree corner (the default)
+;;;         Radius   - a fillet arc, you give the radius
+;;;         Cut      - a straight 45 degree diagonal, given as either
+;;;                    its Offset back along each line or the Cut face
+;;;                    length (each gives the other: cut = offset x
+;;;                    root 2)
+;;;         NotGiven - the order sheet never said.  The corner is drawn
+;;;                    square, like Square, but a note on the drawing
+;;;                    says it was never recorded, so nobody reads it
+;;;                    as a measured 90.
 ;;;       In one-line mode the treatment is worked into the last step:
 ;;;       the last tread gives up the offset at each end, the side walls
 ;;;       stop that much short, and the corner piece bridges the two.
@@ -2484,8 +2489,8 @@
 ;;;   6.  The side lines of the run are drawn for the one-line and
 ;;;       corner modes.  One-line mode draws plain side walls, square
 ;;;       off the base wall, running from the wall to the last tread -
-;;;       the treatment sits on the last step's corners, so a Rounded or
-;;;       Diagonal one stops the walls an offset short and the corner
+;;;       the treatment sits on the last step's corners, so a Radius or
+;;;       Cut one stops the walls an offset short and the corner
 ;;;       piece finishes the trip.  In corner mode only the outer side
 ;;;       is drawn - with its back corner flare at the wall - since the
 ;;;       steps run outward from the corner and the picked line closes
@@ -2527,7 +2532,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v1.9") ; printed on load and at command start so a
+(setq *ns-version* "v2.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2739,7 +2744,7 @@
                    (cons 51 (nth 6 pc))))))
 
 ;; The back corner where arm AP meets the base BS of a U, cut OFF back
-;; along each of them - KIND "Diagonal" gives a 45 degree cut, "Rounded"
+;; along each of them - KIND "Cut" gives a 45 degree diagonal, "Radius"
 ;; a fillet arc tangent to both.  Unlike the recess corner of a run that
 ;; comes off an open wall, this one is cut INTO the U, since the arms
 ;; are the sides of the step itself.  The piece comes back in the same
@@ -2760,7 +2765,7 @@
     (progn
       (setq t1 (ns-add b1 (ns-scl ub off))     ; in along the base
             t2 (ns-add b1 (ns-scl ua off)))    ; out along the arm
-      (if (= kind "Rounded")
+      (if (= kind "Radius")
         (progn
           ;; centre sits one radius off each leg, so the arc is tangent
           ;; to both; the record spans counterclockwise t1 -> t2
@@ -2773,6 +2778,36 @@
           (if (< a1 0.0) (setq a1 (+ a1 pi pi) a2 (+ a2 pi pi)))
           (list "A" t1 t2 o off a1 a2))
         (list "S" t1 t2)))))
+
+;;; -------------------------- ask helpers -------------------------------
+
+;; Keyword question of STANDARDS.md section 1.  KWS is the initget list
+;; (hidden aliases included, spelled ALL-CAPS so they must be typed in
+;; full and cannot steal a canonical hotkey); SHOWN is the bracket text,
+;; which carries only the options a click may send.  DFLT nil = an
+;; answer is required.
+(defun ns-askkw (msg kws shown dflt / v)
+  (initget (if dflt 0 1) kws)
+  (setq v (getkword (strcat "\n" msg " [" shown "]"
+                            (if dflt (strcat " <" dflt ">") "") ": ")))
+  (cond ((null v) (if dflt dflt (ns-askkw msg kws shown dflt)))
+        (t v)))
+
+;; The Treatment question of STANDARDS.md section 2: "How should
+;; <subject> be treated?"  SUBJECT reads like prose ("the back
+;; corners").  Returns "Square", "Radius", "Cut" or "NotGiven" - the
+;; old words this tool used to store, and NG, are still accepted typed
+;; in full and are normalized HERE, never downstream.
+(defun ns-asktreat (subject dflt / v)
+  (setq v (ns-askkw (strcat "How should " subject " be treated?")
+                    "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
+                    "Square/Radius/Cut/NotGiven"
+                    dflt))
+  (cond ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
+        ((= v "ROUNDED") "Radius")
+        ((member v '("DIAG" "DIAGONAL")) "Cut")
+        (t v)))
 
 ;;; ------------------------- setting helpers ----------------------------
 
@@ -2826,12 +2861,12 @@
 ;; E - the wall carries on along WDIR, the run heads along DIR for LEN -
 ;; and then the side line down to the last tread.
 ;;   RTYPE nil / "Square"   - a plain 90 degree side line off the wall
-;;   "Rounded"              - a fillet arc of radius RRAD
-;;   "Diagonal"             - a 45 degree cut, ROFF back along each leg
+;;   "Radius"               - a fillet arc of radius RRAD
+;;   "Cut"                  - a 45 degree diagonal, ROFF back each leg
 ;; Either treatment flares the mouth of the recess by that offset.
 (defun ns-side (e wdir dir len rtype roff rrad / off t1 t2 o)
-  (setq off (cond ((and (= rtype "Diagonal") roff) roff)
-                  ((and (= rtype "Rounded") rrad) rrad)
+  (setq off (cond ((and (= rtype "Cut") roff) roff)
+                  ((and (= rtype "Radius") rrad) rrad)
                   (0.0)))
   (if (>= off len)
     (progn
@@ -2842,9 +2877,9 @@
   (setq t1 (ns-add e (ns-scl wdir off))      ; tangent/cut point on the wall
         t2 (ns-add e (ns-scl dir off)))      ; and on the side of the run
   (cond
-    ((and (= rtype "Diagonal") (> off 0.0))
+    ((and (= rtype "Cut") (> off 0.0))
      (ns-mkline t1 t2))
-    ((and (= rtype "Rounded") (> off 0.0))
+    ((and (= rtype "Radius") (> off 0.0))
      ;; centre sits one radius off each leg, so the arc is tangent to both
      (setq o (ns-add t1 (ns-scl dir off)))
      (ns-mkfillet o off t1 t2)))
@@ -2855,9 +2890,9 @@
 ;; base wall, UIN the unit vector along the tread toward the run's
 ;; centre, DIR the way the run heads, LEN the whole run - so the
 ;; theoretical square corner sits at C = E + DIR x LEN.
-;;   "Diagonal" - a 45 degree cut from OFF back along the side wall to
-;;                OFF in along the last tread
-;;   "Rounded"  - a fillet arc of radius OFF tangent to both
+;;   "Cut"     - a 45 degree diagonal from OFF back along the side wall
+;;               to OFF in along the last tread
+;;   "Radius"  - a fillet arc of radius OFF tangent to both
 ;; The side wall and the trimmed tread are drawn by the caller; OFF 0
 ;; (a square corner) draws nothing.
 (defun ns-outer (e uin dir len rtype off / c t1 t2 o)
@@ -2865,12 +2900,20 @@
         t1 (ns-add c (ns-scl dir (- off)))   ; back along the side wall
         t2 (ns-add c (ns-scl uin off)))      ; in along the last tread
   (cond
-    ((and (= rtype "Diagonal") (> off 0.0))
+    ((and (= rtype "Cut") (> off 0.0))
      (ns-mkline t1 t2))
-    ((and (= rtype "Rounded") (> off 0.0))
+    ((and (= rtype "Radius") (> off 0.0))
      ;; centre sits one offset off each leg, so the arc is tangent to both
      (setq o (ns-add t1 (ns-scl uin off)))
      (ns-mkfillet o off t1 t2))))
+
+;; A note on the drawing at PT (WCS), height H.  The geometry cannot
+;; say that a corner treatment was never recorded - this does.
+(defun ns-note (pt h str)
+  (entmake (list '(0 . "TEXT")
+                 (cons 10 (list (car pt) (cadr pt) 0.0))
+                 (cons 40 h)
+                 (cons 1 str))))
 
 ;; T when layer NAME exists and can be drawn on right now
 (defun ns-layerok (name / ld f cl)
@@ -2924,6 +2967,7 @@
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
+                        rsubj ngp ngv
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt spt dx sgn totrun totdrop px0 cx cy
                         lowy tt)
@@ -3177,46 +3221,44 @@
     (princ (strcat "\nBack corners: already drawn on the U - using them"
                    " as they are."))
     (progn
-      ;; bracket options are what a click sends, so they must match the
-      ;; keywords exactly - "90" stays as a hidden typed alias for Square
-      (initget "Square Rounded Diagonal 90")
-      (setq rtype (cond ((getkword (strcat (if (= mode "LINE")
-                                             "\nCorners of the last step"
-                                             "\nBack corners of the steps")
-                                           " [Square/Rounded/Diagonal]"
-                                           " <Square = 90 degrees>: ")))
-                        ("Square")))
-      (if (= rtype "90") (setq rtype "Square"))
+      ;; the subject reads like prose, as STANDARDS.md section 2 has it
+      (setq rsubj (if (= mode "LINE")
+                    "the corners of the last step"
+                    "the back corners")
+            rtype (ns-asktreat rsubj "Square"))
       (cond
-        ((= rtype "Rounded")
+        ((= rtype "Radius")
          (initget 7)
-         (setq rrad (getdist (if (= mode "LINE")
-                               "\nCorner radius: "
-                               "\nBack corner radius: "))
+         (setq rrad (getdist (strcat "\nRadius for " rsubj ": "))
                roff rrad))
-        ((= rtype "Diagonal")
-         ;; offset and cut are the two legs and the hypotenuse of the
-         ;; same 45 degree triangle, so either one gives the other
+        ((= rtype "Cut")
+         ;; the offset and the cut face are the two legs and the
+         ;; hypotenuse of the same 45 degree triangle, so either one
+         ;; gives the other
          (initget "Offset Cut")
          (if (= "Cut" (getkword
-                        (strcat "\nIs the diagonal given as its"
+                        (strcat "\nIs the cut given as its"
                                 " [Offset/Cut] <Offset>: ")))
            (progn
              (initget 7)
-             (setq rcut (getdist "\nLength of the diagonal cut: ")
+             (setq rcut (getdist (strcat "\nCut face length for "
+                                         rsubj ": "))
                    roff (/ rcut (sqrt 2.0))))
            (progn
              (initget 7)
              (setq roff (getdist "\nOffset back along each line: ")
                    rcut (* roff (sqrt 2.0)))))
-         (princ (strcat (if (= mode "LINE")
-                          "\n  45 degree corners on the last step: offset "
-                          "\n  45 degree back corners: offset ")
-                        (rtos roff)
-                        " each way, cut " (rtos rcut) "."))))
+         (princ (strcat "\n  A 45 degree cut on " rsubj ": offset "
+                        (rtos roff) " each way, cut face "
+                        (rtos rcut) ".")))
+        ((= rtype "NotGiven")
+         (princ (strcat "\n  Not Given: " rsubj " are drawn square, and"
+                        " a note on the drawing says the treatment was"
+                        " never recorded."))))
       ;; a U has its arms already, so the corner is built into the sides
-      ;; the treads trim to - and drawn once the run is done
-      (if (and (= mode "U") (/= rtype "Square"))
+      ;; the treads trim to - and drawn once the run is done.  NotGiven
+      ;; is not cut in: its geometry is square, like Square's.
+      (if (and (= mode "U") (member rtype '("Radius" "Cut")))
         (progn
           (setq bc1 (ns-ucorner base arm1 rtype roff)
                 bc2 (ns-ucorner base arm2 rtype roff))
@@ -3362,8 +3404,8 @@
         ;; to it
         ((= mode "LINE")
          ;; resolve the corner offset once for the whole run
-         (setq coff (cond ((and (= rtype "Diagonal") roff) roff)
-                          ((and (= rtype "Rounded") rrad) rrad)
+         (setq coff (cond ((and (= rtype "Cut") roff) roff)
+                          ((and (= rtype "Radius") rrad) rrad)
                           (0.0)))
          (cond
            ((<= coff 0.0))
@@ -3429,6 +3471,25 @@
         ((and (= mode "U") bc1 bc2)
          (ns-drawpc bc1)
          (ns-drawpc bc2)))
+      ;; A corner nobody recorded is drawn square, so the drawing must
+      ;; say so or it reads as a measured 90.  One note carries both
+      ;; corners - they share the one answer - and it sits just outside
+      ;; the corner it speaks for.
+      (if (= rtype "NotGiven")
+        (progn
+          (cond
+            ((= mode "LINE")
+             (setq ngp  (ns-add (ns-add sp (ns-scl u (* 0.5 wid)))
+                                (ns-scl dir cum))
+                   ngv  (ns-unit (ns-add u dir))))
+            ((= mode "CORNER")
+             (setq ngp (ns-add corner (ns-scl u wid))
+                   ngv u))
+            (T
+             (setq ngp (ns-mid2 (car base) (cadr base))
+                   ngv (ns-scl dir -1.0))))
+          (ns-note (ns-add ngp (ns-scl ngv (* 2.0 txth))) txth
+                   "CORNERS NOT GIVEN - DRAWN SQUARE")))
       (if dimflag
         (ns-dim *cs-width-dimstyle* first1 first2
                 (ns-add sp (ns-scl dir (- (+ (* 0.5 (distance first1 first2))
@@ -3594,13 +3655,20 @@
   (princ "\n                    or rounded (arcs / bulged polyline corners)")
   (princ "\nTHE PROMPTS, IN ORDER")
   (princ "\n  1. The step width, ONCE (skipped for a U - its arms set it)")
-  (princ "\n  2. The corner treatment - Square (90), Rounded (radius), or")
-  (princ "\n     Diagonal: a 45 degree cut given as its Offset or the Cut")
-  (princ "\n     length (either one derives the other: cut = offset x")
-  (princ "\n     root 2).  In one-line mode it sits on the corners of the")
-  (princ "\n     LAST step, where the side walls meet the last tread; in")
-  (princ "\n     corner mode on the BACK corners at the wall; a U cuts it")
-  (princ "\n     into its base corners (one already drawn is not asked).")
+  (princ "\n  2. How should the corners be treated? - the one question")
+  (princ "\n     every Calofin tool asks the same way:")
+  (princ "\n       Square   a true 90 degree corner")
+  (princ "\n       Radius   a fillet arc, you give the radius")
+  (princ "\n       Cut      a 45 degree diagonal, given as its Offset or")
+  (princ "\n                its Cut face length (cut = offset x root 2)")
+  (princ "\n       NotGiven never recorded: drawn square, and noted on")
+  (princ "\n                the drawing so it is not read as a real 90")
+  (princ "\n     In one-line mode the treatment sits on the corners of")
+  (princ "\n     the LAST step, where the side walls meet the last tread;")
+  (princ "\n     in corner mode on the BACK corners at the wall; a U cuts")
+  (princ "\n     it into its base corners (one already drawn is not")
+  (princ "\n     asked).  The old words still work typed in full: 90,")
+  (princ "\n     ROUNDED, DIAG and DIAGONAL.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
   (princ "\n  4. Step treads, one per step, each from the previous")
   (princ "\n     tread.  Enter = done, Back = step back one (removes")
@@ -3679,17 +3747,17 @@
   ;; tread - and the diagonal corners on the last step
   (setq e1 (ns-add sp (ns-scl u (* 0.5 wid))))
   (ns-mkline e1 (ns-add e1 (ns-scl dir (- cum off))))
-  (ns-outer e1 (ns-scl u -1.0) dir cum "Diagonal" off)
+  (ns-outer e1 (ns-scl u -1.0) dir cum "Cut" off)
   (setq e2 (ns-add sp (ns-scl u (* -0.5 wid))))
   (ns-mkline e2 (ns-add e2 (ns-scl dir (- cum off))))
-  (ns-outer e2 u dir cum "Diagonal" off)
+  (ns-outer e2 u dir cum "Cut" off)
   (ns-dim *cs-width-dimstyle* first1 first2
           (ns-add sp (ns-scl dir (- (+ (* 0.5 wid) (* 1.5 txth))))))
   (princ "\n[5] The SIDE WALLS close the run - square off the wall, from")
   (princ "\n    the wall to the LAST step, whose corners take the")
-  (princ "\n    treatment: here DIAGONAL, so each cut runs 9 back along")
+  (princ "\n    treatment: here CUT, so each one runs 9 back along")
   (princ "\n    its side wall and 9 in along the last tread (cut length")
-  (princ "\n    9 x root 2, about 12.73).  Rounded would put a fillet arc")
+  (princ "\n    9 x root 2, about 12.73).  Radius would put a fillet arc")
   (princ "\n    there instead; Square keeps the full corner.  The width")
   (princ "\n    is dimensioned once - it is the same for every step.")
   (ns-tut-pause)
