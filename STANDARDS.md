@@ -512,31 +512,38 @@ the commit this file landed on.
 | File | Today | Change |
 | --- | --- | --- |
 | `lisp/spa/SPA.LSP:1778` | `"Radius Diagonal 90 Square"` shown `Radius/Diagonal/90`, stores `"90"`, `Square` hidden | canonical set + `NotGiven`; store `Square`; sheet still prints `90%%d` |
-| `lisp/pool/POOL.LSP:2578` | `"Square Rounded Diag"`, stores `Rounded`/`Diag`; size asks "chamfer face length" | canonical set + `NotGiven`; size asks "Cut face length" |
+| ~~`lisp/pool/POOL.LSP`~~ | **DONE** — was `"Square Rounded Diag"` storing `Rounded`/`Diag` | now `pool:asktreat`: canonical set + `NotGiven`, legacy words hidden, size asks "Radius for" / "Cut face length for" |
 | `lisp/cornerstp/NORMIESTEP.lsp:725` | `"Square Rounded Diagonal 90"`, `<Square = 90 degrees>` prose default | canonical set + `NotGiven`; default `<Square>` |
-| `lisp/spa/TUTORIALSPA.LSP:235`, `lisp/pool/TUTORIALPOOL.LSP:135,151` | hard-code the old stored values / prose | follow their parent tool |
+| `lisp/spa/TUTORIALSPA.LSP:235` | hard-codes the old stored values / prose | follow its parent tool |
+| ~~`lisp/pool/TUTORIALPOOL.LSP`~~ | **DONE** — moved with POOL, and its topic-4 pane now demonstrates all four treatments |
 | `lisp/lincheck/lincheck.lsp:249` | `"Straight Radius"` -- a different axis (step face straight vs curved), not a corner treatment | review in migration; not auto-renamed |
 
 Square-corner depiction (section 2 "How square corners are drawn"):
 `spa:dim90` (`lisp/spa/SPA.LSP:1671`) already draws the circled corner
 + `90%%d` leader and is the donor implementation. To migrate:
 
-* POOL's lone-square-corner `_.DIMANGULAR` branch and its bare
-  `LEADER "90%%d Typ."` branch (`lisp/pool/POOL.LSP:2521-2525`) both
-  become the circle+leader mark.
+* ~~POOL's lone-square-corner `_.DIMANGULAR` branch and its bare
+  `LEADER "90%%d Typ."` branch~~ — **DONE**: both became `pool:dim90`,
+  a port of `spa:dim90`. POOL draws the mark only where the corner
+  really is 90 (within `pool:*sq90-tol*`), so a rectangle's and a
+  Roman's corners are marked and a Grecian's 135° bends are not; the
+  L's reflex inner corner is excluded outright, since `pool:wedge` is
+  unsigned and would report it as 90.
 * SPA's current policy of giving a plain all-square rectangle **no**
   corner notes at all (comment above `spa:dimcorner1`,
   `lisp/spa/SPA.LSP:1683-1697`) changes: all square now gets one
   `90%%d Typ.` mark.
-* All three treatment tools grow the `NotGiven` branch: square
-  geometry, `?` leader, `Not Given` note.
+* SPA and NORMIESTEP still grow the `NotGiven` branch: square
+  geometry, `?` leader, `Not Given` note. (POOL: **done** —
+  `pool:dimng`, plus `pool:cutp` / `pool:anytreat` to keep "is there
+  a cut here" apart from "is there something to record here".)
 
-Downstream of the rename (must move in the same commit as SPA/POOL):
+Downstream of the rename (must move in the same commit as SPA):
 `ui/calofin_net/SpaFormView.vb` + `ui/calofin_net/assets/shapes/fieldmap.json`
 send corner values `90`/`Radius`/`Diagonal` over the wire and gain
 `NotGiven` alongside the rename; `tests/test_spa_form.py` scripts
-them; `lisp/spa/README.md:164` and `lisp/pool/README.md:110` describe
-the old words.
+them; `lisp/spa/README.md:164` describes the old words. The POOL
+palette sends no corner values, so nothing in `ui/` moved with POOL.
 
 ### 7.2 Bracket text that a click cannot send
 

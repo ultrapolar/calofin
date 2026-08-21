@@ -27,7 +27,7 @@
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq pooldemo:*version* "081926 REV01")
+(setq pooldemo:*version* "082126 REV02")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -87,12 +87,12 @@
                             nil nil nil))
   (pooldemo:hopdims gg nil))
 
-;; 2. out-of-square rectangle, rounded corners, WEDGE bottom + profile
+;; 2. out-of-square rectangle, radius corners, WEDGE bottom + profile
 (defun pooldemo:c2 (org / q cs arcs cen gg od)
-  (pooldemo:cap org "2  RECTANGLE out-of-square / rounded corners / WEDGE + section")
+  (pooldemo:cap org "2  RECTANGLE out-of-square / radius corners / WEDGE + section")
   (setq q (list (list 0.0 0.0) (list 482.0 3.0) (list 479.0 243.0) (list 2.0 239.0))
-        cs (list (list "Rounded" 36.0) (list "Rounded" 36.0)
-                 (list "Rounded" 36.0) (list "Rounded" 36.0))
+        cs (list (list "Radius" 36.0) (list "Radius" 36.0)
+                 (list "Radius" 36.0) (list "Radius" 36.0))
         cen (pool:v* (pool:v+ (pool:v+ (nth 0 q) (nth 1 q))
                               (pool:v+ (nth 2 q) (nth 3 q))) 0.25)
         arcs (pool:drawrect q cs))
@@ -219,8 +219,8 @@
 (defun pooldemo:c8 (org / q sq gg)
   (pooldemo:cap org "8  MODIFIED FLAT (left) and SLOPING SHALLOW END (right)")
   (setq q (list (list 0.0 0.0) (list 480.0 0.0) (list 480.0 240.0) (list 0.0 240.0))
-        sq (list (list "Diag" 34.0) (list "Diag" 34.0)
-                 (list "Diag" 34.0) (list "Diag" 34.0)))
+        sq (list (list "Cut" 34.0) (list "Cut" 34.0)
+                 (list "Cut" 34.0) (list "Cut" 34.0)))
   (pool:drawrect q sq)
   (setq gg (pooldemo:bottom q sq "MOdflat" 24.0 432.0 24.0 0.0 24.0 24.0
                             40.0 60.0 40.0))

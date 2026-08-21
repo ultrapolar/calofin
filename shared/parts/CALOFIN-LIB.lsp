@@ -88,12 +88,17 @@
 ;; <subject> be treated?"  Returns "Square", "Radius", "Cut" or
 ;; "NotGiven" -- the legacy words and NG are accepted typed in full and
 ;; normalized HERE, never downstream -- or CAL-BACK.
-(defun cal:asktreat (subject dflt back / v)
+(defun cal:asktreat (subject dflt back / v kws)
+  ;; the bracket is DERIVED from the visible words (section 1 rule 1),
+  ;; so it cannot drift from the initget list; the hidden aliases go on
+  ;; the initget list only
+  (setq kws "Square Radius Cut NotGiven")
   (setq v (cal:askkw (strcat "How should " subject " be treated?")
-                     "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
-                     "Square/Radius/Cut/NotGiven"
+                     (strcat kws " NG 90 ROUNDED DIAG DIAGONAL")
+                     (vl-string-translate " " "/" kws)
                      dflt back))
-  (cond ((= v "NG") "NotGiven")
+  (cond ((eq v 'CAL-BACK) v)
+        ((= v "NG") "NotGiven")
         ((= v "90") "Square")
         ((= v "ROUNDED") "Radius")
         ((member v '("DIAG" "DIAGONAL")) "Cut")
