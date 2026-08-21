@@ -233,8 +233,8 @@ def run(cut, extra=None, pts=None, keep="2"):
 
 print('CABHD -- the file itself')
 src = open(LSP).read()
-check('one command, and it is CABHD',
-      re.findall(r'^\(defun\s+c:(\S+)', src, re.M) == ['CABHD'])
+check('the commands are CABHD and its version banner',
+      re.findall(r'^\(defun\s+c:(\S+)', src, re.M) == ['CABHDVER', 'CABHD'])
 defuns = re.findall(r'^\(defun\s+(\S+)', src, re.M)
 calls = set(re.findall(r'\((cab:[a-z0-9?*!-]+)', src))
 check('no helper is named for the bottom, the hopper or a dimension',
@@ -244,6 +244,8 @@ check('nothing calls a helper this file does not define',
       not (calls - set(defuns)))
 check('the version banner is the one release_lisp.py stamps',
       bool(re.search(r'\*cabhd-version\*\s+"v\d+\.\d+"', src)))
+check('no exit is silent: the error handler always names the step',
+      '" (cancelled)."' in src and 'CABHD done (last step: ' in src)
 check('every helper is under one prefix (cab:)',
       all(n.startswith('cab:') or n.startswith('c:')
           for n in re.findall(r'^\(defun\s+(\S+)', src, re.M)))
@@ -329,6 +331,84 @@ check('no shallow break was asked for', 'shallow' not in asked)
 check('no deep break was asked for', 'deep' not in asked)
 check('no offset was asked for', 'offset' not in asked)
 check('the script ran out exactly at the end of the run', not vm.script)
+
+print('CABHD -- no run ends without saying so')
+# The complaint this section exists for: a run that stops after the
+# cutoff prompt and leaves nothing on screen must SAY that it stopped,
+# and say where.  Every ending is checked, not just the happy one.
+vm = run(18)
+check('a kept fit signs off naming the step it reached',
+      'CABHD done (last step:' in ' '.join(vm.printed))
+check('and it reported the cutoff it applied',
+      any('Up to Pt.18' in s for s in vm.printed))
+
+vm, ents = survey_vm()
+vm.run('c:CABHD', SETTINGS + [ents, 18, "None"])
+check('erasing all three still signs off',
+      'CABHD done (last step:' in ' '.join(vm.printed))
+
+vm, ents = survey_vm()
+vm.run('c:CABHD', SETTINGS + [None])          # nothing selected
+said = ' '.join(vm.printed)
+check('an empty selection is explained and signed off',
+      'Nothing usable selected' in said and 'CABHD done (last step:' in said)
+
+vm, ents = survey_vm(POOL[:2])                # too few to make a shape
+vm.run('c:CABHD', SETTINGS + [ents])
+said = ' '.join(vm.printed)
+check('too few points is explained and signed off',
+      'at least 3' in said and 'CABHD done (last step:' in said)
+check('and nothing was drawn on the POOL layer', kept_polyline(vm) is None)
+
+print('CABHD -- one candidate failing to draw does not kill the other two')
+# The tight fit has to thread every point at *CAB-TIGHT-TOL* with no
+# miss allowance, so on a real survey it is the one that can come out
+# too degenerate for AutoCAD to accept - and AutoCAD answers entmake
+# with nil rather than raising.  Refusing the outline by its preview
+# colour reproduces that exactly: the run must carry on with the two
+# that did draw, instead of giving up on all three.
+_mkx = BUILTINS[Sym('entmakex')]
+
+
+def refusing(colours):
+    """entmakex that hands back nil for an LWPOLYLINE in these colours."""
+    def f(vm, a):
+        d = _alist_dict(a[0])
+        if d.get(0) == 'LWPOLYLINE' and d.get(62) in colours:
+            return NIL
+        return _mkx(vm, a)
+    return f
+
+
+def with_refusal(colours, script):
+    vm, ents = survey_vm()                 # built before anything is refused
+    BUILTINS[Sym('entmakex')] = refusing(colours)
+    try:
+        vm.run('c:CABHD', SETTINGS + script(ents))
+    finally:
+        BUILTINS[Sym('entmakex')] = _mkx
+    return vm
+
+
+vm = with_refusal({1}, lambda e: [e, 18, "2"])     # 1 = the tight fit
+said = ' '.join(vm.printed)
+check('the run carries on and keeps a fit that did draw',
+      kept_polyline(vm) is not None)
+check('the table says which candidate did not draw', 'would not draw' in said)
+check('and it does not claim three are on screen',
+      '2 candidate fit(s) are now drawn' in said)
+
+vm = with_refusal({1}, lambda e: [e, 18, "1"])     # pick the missing one
+said = ' '.join(vm.printed)
+check('picking the missing fit says so instead of reporting on it',
+      'never drew - there is nothing to keep' in said)
+check('and nothing landed on the POOL layer', kept_polyline(vm) is None)
+
+vm = with_refusal({1, 2, 4}, lambda e: [e, 18])    # every one refused
+said = ' '.join(vm.printed)
+check('no candidate drawing at all is explained, not swallowed',
+      'none of the' in said and 'would draw' in said)
+check('and that run signs off too', 'CABHD done (last step:' in said)
 
 print('CABHD -- a survey with no numbers falls back to selection order')
 vm = VM()
