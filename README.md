@@ -39,6 +39,12 @@ python3 tools/check_standards.py       # did anything drift?
 
 Never hand-edit `releases/` or `shared/CALOFIN-ALL.lsp`.
 
+A tool can be in `lisp/` and `shared/parts/` yet deliberately kept out of
+the compiled bundle while it is being reworked (or for good, if it never
+belonged in calofin). `cal:*held-back*` in
+`shared/parts/CALOFIN-LOADER.lsp` is the list, with a reason on each
+entry; the bundle header repeats it.
+
 ### Running the tests
 
 No dependencies - `tests/lispvm.py` is a pure-Python AutoLISP

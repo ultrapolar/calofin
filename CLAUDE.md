@@ -68,6 +68,26 @@ Inside `shared/`:
 The deprecated acady matcher (`lisp/standards_checker/`) is not carried
 into `shared/` and is not expected to be.
 
+### Holding a tool back from the build
+
+A tool can be finished enough to live in `lisp/` and have a clean twin in
+`shared/parts/` while still being **held back** from `CALOFIN-ALL.lsp` —
+because it is mid-rework, or because it never belongs in calofin at all.
+`cal:*held-back*` in `shared/parts/CALOFIN-LOADER.lsp` is the single
+source of truth, and both `tools/build_shared_bundle.py` and
+`tools/check_standards.py` read it:
+
+| Reason | Meaning |
+| --- | --- |
+| `WIP` | still being worked on; moves into the manifest when it settles |
+| `OMITTED` | never part of calofin |
+
+Held files still need their twin and still have to pass every other
+check — they are simply not compiled in. To ship one, move its name out
+of `cal:*held-back*` and into the `foreach` manifest above it, then
+rebuild. `tests/test_shared.py` fails if a held command leaks into the
+bundle, and reads both lists off the loader so it cannot drift.
+
 ## Environment
 
 Nothing to install: the tests run on the Python standard library alone

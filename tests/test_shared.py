@@ -29,26 +29,19 @@ SHARED = os.path.join(REPO, 'shared')
 PARTS = os.path.join(SHARED, 'parts')
 LISP = os.path.join(REPO, 'lisp')
 
-# Must mirror the foreach list in shared/parts/CALOFIN-LOADER.lsp.
-ORDER = [
-    'CALOFIN-LIB.lsp',
-    'POOL.lsp', 'POOLDEMO.lsp', 'TUTORIALPOOL.lsp',
-    'SPA.lsp', 'TUTORIALSPA.lsp',
-    'OASIS.lsp',
-    'abcdef.lsp', 'ABFIND.lsp', 'ALTABCDEF.lsp', 'abhd.lsp',
-    'AUTOBEAD.lsp',
-    'AutoDim.lsp', 'BPCALLOUT.lsp', 'ccprecheck.lsp',
-    'CDCALLOUT.lsp', 'CDCREATE.lsp', 'check_drawing.lsp',
-    'CORNERSTP.lsp', 'HEMISTEP.lsp', 'NORMIESTEP.lsp',
-    'covercheck.lsp', 'dimcheck.lsp', 'dim_continue.lsp',
-    'DroneDistortion.lsp', 'DroneHeightGPS.lsp',
-    'FITABHD.lsp',
-    'lhd.lsp', 'lincheck.lsp', 'linfincheck.lsp', 'LINTXTCHK.lsp',
-    'LISPLAB.lsp',
-    'PADDLE.lsp', 'perp_points.lsp', 'cperp_points.lsp',
-    'tutorial_perp_points.lsp', 'tutorial_cperp_points.lsp',
-    'STOCKCOVER.lsp', 'drone.lsp', 'wcalst.lsp', 'xftconv.lsp',
-]
+# The loader is the single source of truth for both lists, so this test
+# cannot drift from the build it is checking.
+LOADER = os.path.join(PARTS, 'CALOFIN-LOADER.lsp')
+_loader_src = open(LOADER).read()
+
+#: the files compiled into the build, in load order
+ORDER = re.findall(r'"([^"]+)"',
+                   re.search(r"\(foreach m '\((.*?)\)\s*\n\s*\(cal--load m\)",
+                             _loader_src, re.S).group(1))
+
+#: name -> WIP | OMITTED, deliberately left out of the build
+HELD = dict(re.findall(r'\("([^"]+)"\s*\.\s*"(WIP|OMITTED)"\)', _loader_src))
+
 #: Not carried into the shared build: the acady drawing-standards
 #: matcher is a deprecated project and stays in lisp/ only.
 UNMIRRORED_DIRS = {'standards_checker'}
@@ -69,7 +62,9 @@ def fail(msg):
     sys.exit(1)
 
 
-paths = [os.path.join(PARTS, f) for f in ORDER]
+held_paths = [os.path.join(PARTS, f) for f in sorted(HELD)
+              if os.path.exists(os.path.join(PARTS, f))]
+paths = [os.path.join(PARTS, f) for f in ORDER] + held_paths
 missing = [p for p in paths if not os.path.exists(p)]
 if missing:
     fail('missing shared files: %s' % [os.path.relpath(p, REPO) for p in missing])
@@ -132,12 +127,32 @@ try:
 except Exception as e:                      # noqa: BLE001 - report the file
     fail('CALOFIN-ALL.lsp failed to load: %s' % e)
 bundle_cmds = {str(k)[2:] for k in bvm.globals if str(k).startswith('c:')}
-short = sorted(shared_cmds - bundle_cmds)
+
+# what the manifest alone should put in the bundle
+expected = set()
+for f in ORDER:
+    for n in top_level_defuns(os.path.join(PARTS, f)):
+        if n.lower().startswith('c:'):
+            expected.add(n.lower()[2:])
+short = sorted(expected - bundle_cmds)
 if short:
     fail('commands missing from CALOFIN-ALL.lsp: %s (rebuild it with '
          'python3 tools/build_shared_bundle.py)' % short)
-for cmd in ('c:CALVER', 'c:POOLVER', 'c:SPAVER'):
+
+# and a held-back tool must NOT have leaked in
+leaked = []
+for f, why in sorted(HELD.items()):
+    fp = os.path.join(PARTS, f)
+    if not os.path.exists(fp):
+        continue
+    for n in top_level_defuns(fp):
+        if n.lower().startswith('c:') and n.lower()[2:] in bundle_cmds:
+            leaked.append('%s (%s, from %s)' % (n, why, f))
+if leaked:
+    fail('held-back commands leaked into CALOFIN-ALL.lsp: %s' % leaked)
+for cmd in ('c:CALVER', 'c:POOLVER', 'c:ABFINDVER'):
     bvm.run(cmd, [])
-print('  %d commands from one APPLOAD' % len(bundle_cmds))
+print('  %d commands from one APPLOAD, %d file(s) held back'
+      % (len(bundle_cmds), len(HELD)))
 
 print('ALL SHARED-BUILD CHECKS PASSED')

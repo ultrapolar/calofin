@@ -24,6 +24,12 @@ BUNDLE = SHARED / "CALOFIN-ALL.lsp"
 
 RULE = ";;; " + "=" * 70
 COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
+HELD = re.compile(r'\("([^"]+)"\s*\.\s*"(WIP|OMITTED)"\)')
+
+
+def held_back():
+    """(file, reason) pairs the loader deliberately leaves out of the build."""
+    return HELD.findall(LOADER.read_text(encoding="utf-8"))
 
 
 def members():
@@ -66,6 +72,10 @@ def main():
     out += [
         ";;;",
         ";;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.",
+    ] + ([";;;", ";;; Deliberately NOT in this build (see cal:*held-back* in",
+          ";;; CALOFIN-LOADER.lsp):", ";;;"] +
+         [";;;   %-20s %s" % (n, w) for n, w in held_back()]
+         if held_back() else []) + [
         RULE,
         "",
         ";; tells CALOFIN-LIB.lsp it is arriving as part of the whole build",
@@ -89,6 +99,8 @@ def main():
     print("wrote %s (%d files, %d commands, %.0f KB)" %
           (BUNDLE.relative_to(ROOT), len(names), len(commands),
            BUNDLE.stat().st_size / 1024))
+    for name, why in held_back():
+        print("  held back (%s): %s" % (why, name))
 
 
 if __name__ == "__main__":
