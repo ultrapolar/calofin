@@ -10090,10 +10090,41 @@
 ;;;
 ;;; What it draws
 ;;; -------------
-;;; The six arcs on the POOL layer, and, unless the dimension question
-;;; is answered No, the overall X and Y and a radius dimension on each
-;;; of the six arcs, on the DIMENSION layer.  The envelope box itself is
-;;; construction and is NOT drawn.
+;;; Where it goes is picked first, and then the pool is drawn AS IT IS
+;;; ANSWERED.  Before every question the preview is redrawn, with three
+;;; things overlapping on purpose: the outline solid on the POOL layer,
+;;; the circle each arc is cut from dashed on POOL-GUIDE behind it, and a
+;;; label on every circle -- its radius once given, "?" until then.  The
+;;; circle the question is about goes red, arc, circle and label
+;;; together, so there is never a doubt which radius is wanted.  A radius
+;;; not yet answered still needs a value for any of that to be drawable,
+;;; so the preview fills the gaps with provisional ones and marks every
+;;; one it invented with its "?".
+;;;
+;;; When the last answer is in, the preview is erased and the real thing
+;;; goes down:
+;;;
+;;;   * the six arcs on the POOL layer;
+;;;   * the overall X and Y and a radius on each of the six arcs -- eight
+;;;     dimensions, on the DIMENSION layer.  This is not asked about; a
+;;;     pool is always dimensioned;
+;;;   * a CHECK DRAWING clear to the right, dimensioned the way a layout
+;;;     is checked rather than the way it is built: every circle centre
+;;;     tied back to the two envelope corners nearest it, and every pair
+;;;     of neighbouring centres tied to each other.  Eighteen dimensions
+;;;     that between them pin all six centres against the box and against
+;;;     one another, so a transcription slip in any single radius shows
+;;;     up as a dimension that does not agree with the order sheet.  The
+;;;     centre-to-centre ties have a second use: neighbouring circles are
+;;;     externally tangent by construction, so each of those must read
+;;;     exactly the two radii added together.
+;;;
+;;; Every dimension is drawn in the CROSS DIMENSIONS style.  A drawing
+;;; that has not got it is told so once and the dims come out in whatever
+;;; style is current -- an invented style would look right and measure
+;;; wrong.  The envelope box is construction: dashed on the check drawing
+;;; where the corners are being measured to, and not drawn at all on the
+;;; pool itself.
 ;;;
 ;;; Which frame it is drawn in
 ;;; -------------------------
@@ -10134,16 +10165,29 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *oasis-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v2.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
 ;;; -------------------- tunables ----------------------------------------
 
-(setq oasis:*poollayer* "POOL")       ; the six arcs
-(setq oasis:*poolcolor* 4)
-(setq oasis:*dimlayer*  "DIMENSION")  ; the dimensions
-(setq oasis:*dimcolor*  2)
+(setq oasis:*poollayer*  "POOL")       ; the six arcs
+(setq oasis:*poolcolor*  4)
+(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension
+(setq oasis:*dimcolor*   2)
+(setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
+(setq oasis:*guidecolor* 8)
+(setq oasis:*hicolor*    1)            ; red: the part being asked about
+
+;; The dimension style every dimension is drawn in.  A drawing that does
+;; not have it is told so once and the dims come out in whatever style is
+;; current -- an invented style would look right and measure wrong.
+(setq oasis:*dimstyle* "CROSS DIMENSIONS")
+
+;; The check drawing sits this far to the right of the pool, measured
+;; from the pool's own right-hand bound, as a multiple of the dimension
+;; stand-off.  Big enough to clear the radius dims on that side.
+(setq oasis:*checkgap* 4.0)
 
 ;; Where the top bulge sits across the X bound, as a fraction of it.
 ;; 0.5 centres it, which is what every oasis on file wants; the value
@@ -10154,6 +10198,61 @@
 ;; units.  Measurements arrive in inches, so this is far below anything
 ;; a tape can tell apart.
 (setq oasis:*fuzz* 1.0e-6)
+
+;;; -------------------- snaps and the dimension style --------------------
+
+;; Make the cross-dimension style current for the dims about to be drawn.
+;; A missing style is NOT invented: the dims come out in whatever style is
+;; current and the routine says so once, so a drawing started from the
+;; wrong template is obvious instead of quietly producing wrong-looking
+;; dims.  (The CDCREATE rule, CDCREATE.lsp:80.)
+(defun oasis:dimstyle-on ()
+  (cond ((tblsearch "DIMSTYLE" oasis:*dimstyle*)
+         (command "_.-DIMSTYLE" "_Restore" oasis:*dimstyle*)
+         T)
+        (t
+         (princ (strcat "\nOASIS: this drawing has no \"" oasis:*dimstyle*
+                        "\" dimension style -- dims drawn in \""
+                        (getvar "DIMSTYLE")
+                        "\" instead.  Create the style (or start from the"
+                        " standard template) and re-run."))
+         nil)))
+
+;;; -------------------- linetypes ----------------------------------------
+
+;; Build a linetype from an explicit pattern (positive = dash length,
+;; negative = gap), in drawing units.  Done with entmake rather than
+;; loading acad.lin: a failed load falls back to CONTINUOUS silently,
+;; which is how dashes vanish.  (From pool:ltmake, POOL.LSP:251.)
+(defun oasis:ltmake (name descr pat / lst x)
+  (if (not (tblsearch "LTYPE" name))
+      (progn
+        (setq lst (list '(0 . "LTYPE")
+                        '(100 . "AcDbSymbolTableRecord")
+                        '(100 . "AcDbLinetypeTableRecord")
+                        (cons 2 name)
+                        '(70 . 0)
+                        (cons 3 descr)
+                        '(72 . 65)
+                        (cons 73 (length pat))
+                        (cons 40 (apply '+ (mapcar 'abs pat)))))
+        (foreach x pat
+          (setq lst (append lst (list (cons 49 x) '(74 . 0)))))
+        (entmake lst)))
+  (if (tblsearch "LTYPE" name) name "CONTINUOUS"))
+
+;; Per-entity linetype scale that cancels the drawing's LTSCALE, so a
+;; pattern defined in drawing units always plots at that size however the
+;; host drawing is set up.  (From pool:ltsc, POOL.LSP:271.)
+(defun oasis:ltsc ( / s)
+  (setq s (getvar "LTSCALE"))
+  (if (or (null s) (<= s 0.0)) 1.0 (/ 1.0 s)))
+
+;; The dash pattern the guide circles are drawn with, scaled to the pool
+;; so it reads the same on a 10-foot spa and a 40-foot pool.
+(defun oasis:dashlt (w h / d)
+  (setq d (max 2.0 (/ (max w h) 40.0)))
+  (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
 
 ;;; -------------------- geometry ----------------------------------------
 
@@ -10391,6 +10490,7 @@
 ;; they measure the bounds the user was asked for, not a chord of them.
 (defun oasis:dimension (arcs ents base w h rl rr frac lay / doff i e md)
   (setvar "CLAYER" lay)
+  (oasis:dimstyle-on)
   (setq doff (oasis:dimoff w h))
   (command "_.DIMLINEAR"
            (oasis:wp (list 0.0 rl) base)
@@ -10413,6 +10513,233 @@
                  (list e (oasis:wp (car md) base))
                  (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base))))
   (princ))
+
+;;; -------------------- the check drawing --------------------------------
+;;; A second copy of the pool, off to the right, dimensioned the way a
+;;; layout is checked rather than the way it is built: every circle
+;;; centre tied back to the two envelope corners nearest it, and every
+;;; pair of neighbouring centres tied to each other.  Between them those
+;;; two families pin all six centres against the box and against one
+;;; another, so a transcription slip in any single radius shows up as a
+;;; dimension that does not agree with the order sheet.
+;;;
+;;; The centre-to-centre ties have a second use: neighbouring circles are
+;;; externally tangent by construction, so each of those dimensions must
+;;; read exactly the sum of the two radii.  Anything else means the
+;;; outline is not tangent-continuous.
+
+;; The two envelope corners nearest point P, nearest first.
+(defun oasis:near2 (p w h / corners c best rest d bd rd)
+  (setq corners (list (list 0.0 0.0) (list w 0.0)
+                      (list w h) (list 0.0 h))
+        best nil rest nil bd nil rd nil)
+  (foreach c corners
+    (setq d (distance p c))
+    (cond ((or (null bd) (< d bd)) (setq rest best rd bd best c bd d))
+          ((or (null rd) (< d rd)) (setq rest c rd d))))
+  (list best rest))
+
+;; One cross dimension between two drawn points, its dimension line
+;; sitting on the line it measures -- the look POOL and CDCREATE give a
+;; tie measurement.
+(defun oasis:crossdim (p q base)
+  (command "_.DIMALIGNED"
+           (oasis:wp p base) (oasis:wp q base)
+           (oasis:wp (list (* 0.5 (+ (car p) (car q)))
+                           (* 0.5 (+ (cadr p) (cadr q))))
+                     base)))
+
+;; The whole check drawing, placed at CBASE.  Returns nothing; the caller
+;; has already put the layers and the dim style in place.
+(defun oasis:checkdraw (arcs cbase w h lt / mark i a c near)
+  (setvar "CLAYER" oasis:*guidelayer*)
+  (oasis:pv-box w h cbase lt)
+  (setq mark (max 1.0 (/ (max w h) 90.0))
+        i    0)
+  ;; the outline itself, so the centres have something to belong to
+  (oasis:draw arcs cbase oasis:*poollayer*)
+  (setvar "CLAYER" oasis:*guidelayer*)
+  (while (< i 6)
+    (oasis:pv-circle (nth 1 (nth i arcs)) mark cbase "CONTINUOUS" nil)
+    (setq i (1+ i)))
+  (setvar "CLAYER" oasis:*dimlayer*)
+  ;; every centre back to the two corners nearest it
+  (setq i 0)
+  (while (< i 6)
+    (setq a    (nth i arcs)
+          c    (nth 1 a)
+          near (oasis:near2 c w h)
+          i    (1+ i))
+    (oasis:crossdim c (car near) cbase)
+    (oasis:crossdim c (cadr near) cbase))
+  ;; and every centre to the one next round the ring -- each of these
+  ;; must read the two radii added together, because the circles are
+  ;; externally tangent
+  (setq i 0)
+  (while (< i 6)
+    (oasis:crossdim (nth 1 (nth i arcs))
+                    (nth 1 (nth (rem (1+ i) 6) arcs))
+                    cbase)
+    (setq i (1+ i)))
+  (princ))
+
+;; Where the check drawing goes: clear to the right of the pool and of
+;; the radius dimensions on that side.
+(defun oasis:checkbase (base w h)
+  (list (+ (car base) w (* oasis:*checkgap* (oasis:dimoff w h)))
+        (cadr base)
+        (caddr base)))
+
+;;; -------------------- the live preview ---------------------------------
+;;; Every question redraws the pool as it stands, so the answer being
+;;; typed can be seen landing.  Three things overlap on purpose:
+;;;
+;;;   * the OUTLINE, solid, on the pool layer -- what will actually be
+;;;     drawn;
+;;;   * each circle it is cut from, DASHED, on the guide layer -- the
+;;;     construction behind the outline, so the radius being asked for
+;;;     has something to belong to;
+;;;   * a label on every circle: its radius once given, "?" until then.
+;;;
+;;; The circle the question is about -- its dashed circle, its arc and
+;;; its label -- is drawn red, so there is never a doubt about which
+;;; radius is being asked for.
+;;;
+;;; A radius that has not been answered yet still needs a value for any
+;;; of this to be drawable, so the preview fills the gaps in with
+;;; provisional ones (oasis:fillin) and marks every one it invented with
+;;; a "?".  If a provisional set happens not to solve, the outline is
+;;; simply left out and the circles and box still show.
+
+;; The answers so far, with the gaps filled in well enough to draw.  The
+;; provisionals are deliberately timid -- a fifth of the short side for a
+;; bulge, comfortably over the minimum for a tangent -- so they land
+;; inside every check the real answers have to pass.
+(defun oasis:fillin (ans / w h rl rt rr cl ct cr g)
+  (setq w  (nth 0 ans)
+        h  (nth 1 ans)
+        g  (/ (min w h) 5.0)
+        rl (cond ((nth 2 ans)) (g))
+        rt (cond ((nth 3 ans)) ((/ (min w h) 4.0)))
+        rr (cond ((nth 4 ans)) (g))
+        cl (list rl rl)
+        ct (list (* w oasis:*topfrac*) (- h rt))
+        cr (list (- w rr) rr))
+  (list w h rl rt rr
+        (cond ((nth 5 ans)) ((+ (* 2.0 (oasis:filmin ct rt cl rl)) g)))
+        (cond ((nth 6 ans)) ((+ (* 2.0 (oasis:filmin cr rr ct rt)) g)))
+        (cond ((nth 7 ans)) ((+ (* 2.0 (oasis:filmin cl rl cr rr)) g)))))
+
+;; Erase a preview.  Entities the user has since deleted are skipped, so
+;; a stray U in the middle of the questions cannot break the next redraw.
+(defun oasis:pv-clear (ents / e)
+  (foreach e ents (if (and e (entget e)) (entdel e)))
+  nil)
+
+;; One dashed guide entity, red when it is the one being asked about.
+(defun oasis:pv-circle (c r base lt hi / lst)
+  (setq lst (list '(0 . "CIRCLE")
+                  (cons 8 oasis:*guidelayer*)
+                  (cons 10 (trans (oasis:wp c base) 1 0))
+                  (cons 40 r)))
+  (if hi (setq lst (append lst (list (cons 62 oasis:*hicolor*)))))
+  (if (/= lt "CONTINUOUS")
+      (setq lst (append lst (list (cons 6 lt) (cons 48 (oasis:ltsc))))))
+  (entmake lst)
+  (entlast))
+
+(defun oasis:pv-line (p q base lt / lst)
+  (setq lst (list '(0 . "LINE")
+                  (cons 8 oasis:*guidelayer*)
+                  (cons 10 (trans (oasis:wp p base) 1 0))
+                  (cons 11 (trans (oasis:wp q base) 1 0))))
+  (if (/= lt "CONTINUOUS")
+      (setq lst (append lst (list (cons 6 lt) (cons 48 (oasis:ltsc))))))
+  (entmake lst)
+  (entlast))
+
+(defun oasis:pv-text (pt hgt str base hi / lst)
+  (setq lst (list '(0 . "TEXT")
+                  (cons 8 oasis:*guidelayer*)
+                  (cons 10 (trans (oasis:wp pt base) 1 0))
+                  (cons 11 (trans (oasis:wp pt base) 1 0))
+                  (cons 40 hgt)
+                  (cons 72 1)                 ; centred on the point
+                  (cons 1 str)))
+  (if hi (setq lst (append lst (list (cons 62 oasis:*hicolor*)))))
+  (entmake lst)
+  (entlast))
+
+;; Which of the six ring positions each question is about, so the right
+;; circle goes red: 0 left, 1 bottom-center, 2 right, 3 top-right,
+;; 4 top, 5 top-left.  The two bounds questions are about no circle.
+(defun oasis:qring (k)
+  (cond ((= k 2) 0) ((= k 3) 4) ((= k 4) 2)
+        ((= k 5) 5) ((= k 6) 3) ((= k 7) 1)))
+
+;; The envelope box, dashed -- the bounds the pool is being fitted to.
+(defun oasis:pv-box (w h base lt / out)
+  (setq out (list (oasis:pv-line (list 0.0 0.0) (list w 0.0) base lt)
+                  (oasis:pv-line (list w 0.0) (list w h) base lt)
+                  (oasis:pv-line (list w h) (list 0.0 h) base lt)
+                  (oasis:pv-line (list 0.0 h) (list 0.0 0.0) base lt)))
+  out)
+
+;; Redraw the preview for question K and hand back the entities it made,
+;; ready to be passed to the next call so they can be cleared first.
+;; Nothing is drawn until both bounds are known -- before that there is
+;; no envelope to draw anything inside.
+(defun oasis:preview (old ans base k
+                      / w h full arcs lt out hi ring i a md txt hgt slot)
+  (oasis:pv-clear old)
+  (setq w (nth 0 ans) h (nth 1 ans) out nil)
+  (if (and w h)
+      (progn
+        (cal:osdown)
+        (setq lt   (oasis:dashlt w h)
+              hgt  (/ (max w h) 28.0)
+              hi   (oasis:qring k)
+              full (oasis:fillin ans)
+              arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
+                                (nth 3 full) (nth 4 full) (nth 5 full)
+                                (nth 6 full) (nth 7 full) oasis:*topfrac*)
+              out  (oasis:pv-box w h base lt))
+        (if arcs
+            (progn
+              ;; the outline, solid, and behind it the circle each arc is
+              ;; cut from, dashed; the one being asked about goes red
+              (setq ring (oasis:draw arcs base oasis:*poollayer*)
+                    out  (append out ring)
+                    i    0)
+              (if hi (oasis:recolor (nth hi ring) oasis:*hicolor*))
+              (while (< i 6)
+                (setq a    (nth i arcs)
+                      md   (oasis:arcmid a)
+                      slot (oasis:qslot i)
+                      txt  (if (nth slot ans) (rtos (nth slot ans)) "?")
+                      out  (cons (oasis:pv-circle (nth 1 a) (nth 2 a) base lt
+                                                  (and hi (= i hi)))
+                                 out)
+                      out  (cons (oasis:pv-text
+                                   (polar (car md) (cdr md) (* 1.7 hgt))
+                                   hgt txt base (and hi (= i hi)))
+                                 out)
+                      i    (1+ i)))))
+        (cal:osup)))
+  out)
+
+;; Which answer slot holds ring position I's radius -- the inverse of
+;; oasis:qring.
+(defun oasis:qslot (i)
+  (cond ((= i 0) 2) ((= i 1) 7) ((= i 2) 4)
+        ((= i 3) 6) ((= i 4) 3) (t 5)))
+
+;; Force an entity's colour, for the one arc a question is about.
+(defun oasis:recolor (e col / ed)
+  (if (and e (setq ed (entget e)))
+      (entmod (if (assoc 62 ed)
+                  (subst (cons 62 col) (assoc 62 ed) ed)
+                  (append ed (list (cons 62 col)))))))
 
 ;;; -------------------- the questions -----------------------------------
 
@@ -10494,8 +10821,7 @@
     ((= k 4) (oasis:ask-bulge "Right bulge radius" "right" w h))
     ((= k 5) (oasis:ask-tangent "Top-left tangent radius" ct rt cl rl))
     ((= k 6) (oasis:ask-tangent "Top-right tangent radius" cr rr ct rt))
-    ((= k 7) (oasis:ask-tangent "Bottom-center tangent radius" cl rl cr rr))
-    ((= k 8) (cal:askyn "Dimension the pool?" "Yes" T))))
+    ((= k 7) (oasis:ask-tangent "Bottom-center tangent radius" cl rl cr rr))))
 
 ;; The right bulge is the last of the three, so it is the one that has
 ;; to be checked against BOTH of the others before the tangent radii are
@@ -10548,9 +10874,10 @@
 ;;; -------------------- the command -------------------------------------
 
 (defun c:OASIS ( / *error* undo-open guard ans i v w h rl rt rr ftl ftr fbc
-                   dims base arcs ents nests)
+                   base cbase arcs ents nests prev lt)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
+    (cal:dimstyrestore)
     (cal:sysrestore)
     ;; an Esc part-way through a dimension leaves that command pending,
     ;; and the UNDO below would be swallowed as an answer to it
@@ -10558,6 +10885,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
+    ;; the preview is scaffolding, not a result -- it goes whether the run
+    ;; finished or the user pressed Esc part-way through the questions
+    (oasis:pv-clear prev)
     (if undo-open (command "_.UNDO" "_End"))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -10565,6 +10895,7 @@
     (princ))
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  (cal:dimstysave)
 
   (cond
     ;; -- a plan pool has nothing sensible to draw in a UCS that is not
@@ -10579,13 +10910,31 @@
      (cal:sysrestore))
     (t
 
-     ;; -- the eight measurements and the dimension question, with Back
-     ;;    between them.  Every check reads the answers already given, so
-     ;;    backing up to change one re-checks everything that follows it.
-     (setq ans '(nil nil nil nil nil nil nil nil nil)
+     ;; -- where it goes comes first, because the pool is drawn as it is
+     ;;    answered: the base point is picked with the user's own snaps
+     ;;    still live, and the preview then builds on that spot
+     (setq base (getpoint "\nInsertion base point <0,0>: ")
+           base (if base
+                    (list (car base) (cadr base)
+                          (if (caddr base) (caddr base) 0.0))
+                    (list 0.0 0.0 0.0)))
+     (setvar "CMDECHO" 0)
+     (command "_.UNDO" "_Begin")
+     (setq undo-open T)
+     (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
+     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
+     (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
+
+     ;; -- the eight measurements, with Back between them.  Every check
+     ;;    reads the answers already given, so backing up to change one
+     ;;    re-checks everything that follows it -- and the preview is
+     ;;    redrawn before each question, with the circle being asked
+     ;;    about picked out in red.
+     (setq ans '(nil nil nil nil nil nil nil nil)
            i   0)
-     (while (< i 9)
-       (setq v (oasis:askstep i ans))
+     (while (< i 8)
+       (setq prev (oasis:preview prev ans base i)
+             v    (oasis:askstep i ans))
        (if (eq v 'CAL-BACK)
            (if (> i 0)
                (progn (princ "\nStepping back one step.")
@@ -10609,37 +10958,29 @@
                                         " again."))
                          (setq i 4))))))))
 
-     (setq w    (nth 0 ans) h   (nth 1 ans)
+     (setq prev (oasis:pv-clear prev)
+           w    (nth 0 ans) h   (nth 1 ans)
            rl   (nth 2 ans) rt  (nth 3 ans) rr (nth 4 ans)
            ftl  (nth 5 ans) ftr (nth 6 ans) fbc (nth 7 ans)
-           dims (nth 8 ans)
            arcs (oasis:solve w h rl rt rr ftl ftr fbc oasis:*topfrac*))
 
      (if (not arcs)
          (progn
            (princ (strcat "\nOASIS: those radii do not make a closed outline"
                           " -- nothing drawn."))
+           (command "_.UNDO" "_End")
+           (setq undo-open nil)
            (cal:sysrestore))
          (progn
-           ;; the base point is picked with the user's own snaps still
-           ;; live; only afterwards do snaps drop for the drawing work
-           (setq base (getpoint "\nInsertion base point <0,0>: ")
-                 base (if base
-                          (list (car base) (cadr base)
-                                (if (caddr base) (caddr base) 0.0))
-                          (list 0.0 0.0 0.0)))
-           (setvar "CMDECHO" 0)
-           (setvar "OSMODE" 0)
-           (command "_.UNDO" "_Begin")
-           (setq undo-open T)
-
-           (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
+           (cal:osdown)
+           (setq lt    (oasis:dashlt w h)
+                 cbase (oasis:checkbase base w h))
+           (setvar "CLAYER" oasis:*poollayer*)
            (setq ents (oasis:draw arcs base oasis:*poollayer*))
-           (if dims
-               (progn
-                 (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
-                 (oasis:dimension arcs ents base w h rl rr oasis:*topfrac*
-                                  oasis:*dimlayer*)))
+           (oasis:dimension arcs ents base w h rl rr oasis:*topfrac*
+                            oasis:*dimlayer*)
+           (oasis:checkdraw arcs cbase w h lt)
+           (cal:dimstyrestore)
 
            (command "_.UNDO" "_End")
            (setq undo-open nil)
@@ -10653,9 +10994,10 @@
            (princ (strcat "\n  Tangent radii: " (rtos ftl) " top-left, "
                           (rtos ftr) " top-right, " (rtos fbc)
                           " bottom-center."))
-           (if dims
-               (princ (strcat "\n  8 dimensions on layer " oasis:*dimlayer*
-                              " (overall X and Y, and a radius on each arc).")))
+           (princ (strcat "\n  8 dimensions on the pool and 18 on the check"
+                          " drawing beside it, layer " oasis:*dimlayer*
+                          ","))
+           (princ (strcat "\n  all in the " oasis:*dimstyle* " style."))
            (oasis:report-extents arcs w h)
            (oasis:report-crossings arcs)))))
   (princ))
