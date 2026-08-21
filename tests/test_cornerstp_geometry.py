@@ -1112,17 +1112,25 @@ def test_recess_rounded_corner_is_tangent_to_both_lines():
 
 
 def test_recess_flares_the_mouth_by_the_offset():
-    """The pocket opens wider at the wall and closes to the run width."""
+    """Corner mode: the outer side's back corner flares the recess mouth.
+
+    ns-side still serves CORNER mode, where the treatment stays at the
+    wall the run comes off: the outer side line starts one offset OFF
+    the wall and the flare piece bridges back to it, opening the mouth
+    of the recess wider than the run.  (A centered one-line run no
+    longer flares - its treatment sits on the last step's corners; see
+    the outer_corner tests.)
+    """
     width, offset = 120.0, 9.0
-    sp, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
-    e1 = add(sp, scl(u, width / 2))
-    e2 = add(sp, scl(u, -width / 2))
-    w1, s1 = recess_corner(e1, u, direction, "Diagonal", offset)
-    w2, s2 = recess_corner(e2, scl(u, -1.0), direction, "Diagonal", offset)
-    assert abs(dist(w1, w2) - (width + 2 * offset)) < 1e-12, "mouth flares"
-    assert abs(dist(s1, s2) - width) < 1e-12, "closes to the run width"
-    # the side lines start one offset in from the wall
-    assert abs(dot(vec(sp, s1), direction) - offset) < 1e-12
+    corner, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    e = add(corner, scl(u, width))       # the outer side meets the wall here
+    on_wall, on_side = recess_corner(e, u, direction, "Diagonal", offset)
+    assert abs(dot(vec(corner, on_wall), u) - (width + offset)) < 1e-12, \
+        "mouth flares by the offset"
+    assert abs(dot(vec(corner, on_side), u) - width) < 1e-12, \
+        "closes back to the run width"
+    # the outer side line starts one offset off the wall
+    assert abs(dot(vec(corner, on_side), direction) - offset) < 1e-12
 
 
 def test_recess_square_corner_leaves_the_side_at_the_wall():
@@ -1130,6 +1138,139 @@ def test_recess_square_corner_leaves_the_side_at_the_wall():
     for kind in ("Straight", None):
         on_wall, on_side = recess_corner(e, wdir, direction, kind, 9.0)
         assert on_wall == e and on_side == e, "no flare without a treatment"
+
+
+def outer_corner(e, uin, direction, cum, off):
+    """ns-outer: the last-step corner of a centered (one-line) run.
+
+    E is where the side wall leaves the base wall, UIN the unit vector
+    along the last tread toward the run's centre, DIRECTION the way the
+    run heads, CUM the whole run.  With C the theoretical square corner
+    at E + DIRECTION x CUM, returns (t1, t2): T1 one offset back along
+    the side wall, T2 one offset in along the last tread - a diagonal
+    joins them, a fillet arc of radius OFF is tangent at them.
+    """
+    c = add(e, scl(direction, cum))
+    t1 = add(c, scl(direction, -off))
+    t2 = add(c, scl(uin, off))
+    return t1, t2
+
+
+def outer_fillet_centre(t1, uin, off):
+    """ns-outer's fillet centre: one offset in from T1 along the tread."""
+    return add(t1, scl(uin, off))
+
+
+def outer_offset(kind, size, cum, wid):
+    """The resolved last-step corner offset of a centered run.
+
+    Mirrors c:NORMIESTEP's LINE-mode resolution and its guards: Rounded
+    and Diagonal give their size, anything else 0; an offset at least
+    as deep as the whole run, or a pair that would meet across the last
+    tread, falls back to square (0).
+    """
+    off = size if kind in ("Diagonal", "Rounded") else 0.0
+    if off <= 0.0:
+        return 0.0
+    if off >= cum:
+        return 0.0
+    if 2 * off >= wid:
+        return 0.0
+    return off
+
+
+def test_outer_diagonal_is_45_degrees_to_wall_and_tread():
+    """The last-step cut meets the side wall and the tread at 45."""
+    e, uin, direction = (60.0, 0.0), (-1.0, 0.0), (0.0, 1.0)
+    for off in (6.0, 9.0):
+        t1, t2 = outer_corner(e, uin, direction, 36.0, off)
+        cut = unit(vec(t1, t2))
+        assert abs(dist(t1, t2) - off * ROOT2) < 1e-9, "cut = off x root 2"
+        to_wall = math.degrees(math.acos(abs(dot(cut, direction))))
+        to_tread = math.degrees(math.acos(abs(dot(cut, uin))))
+        assert abs(to_wall - 45.0) < 1e-9 and abs(to_tread - 45.0) < 1e-9
+
+
+def test_outer_fillet_centre_is_off_both_lines():
+    """The fillet centre sits one offset off the side wall and the
+    tread, one radius from each tangent point."""
+    e, uin, direction = (60.0, 0.0), (-1.0, 0.0), (0.0, 1.0)
+    cum, off = 36.0, 9.0
+    t1, t2 = outer_corner(e, uin, direction, cum, off)
+    centre = outer_fillet_centre(t1, uin, off)
+    side_wall = (e, add(e, direction))
+    c = add(e, scl(direction, cum))
+    tread = (c, add(c, uin))
+    assert abs(ptline(centre, *side_wall) - off) < 1e-9, "off the side wall"
+    assert abs(ptline(centre, *tread) - off) < 1e-9, "off the tread"
+    assert abs(dist(centre, t1) - off) < 1e-9
+    assert abs(dist(centre, t2) - off) < 1e-9
+
+
+def test_outer_side_wall_runs_from_the_wall_to_cum_minus_off():
+    """The side wall starts ON the base wall and stops one offset short
+    of the last tread."""
+    sp, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    wid, cum, off = 120.0, 36.0, 9.0
+    for sign in (1.0, -1.0):
+        e = add(sp, scl(u, sign * wid / 2))
+        start, end = e, add(e, scl(direction, cum - off))
+        assert abs(dot(vec(sp, start), direction)) < 1e-9, "starts on the wall"
+        assert abs(dot(vec(sp, end), direction) - (cum - off)) < 1e-9
+
+
+def test_outer_trimmed_tread_is_short_by_two_offsets_and_centred():
+    sp, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    wid, cum, off = 120.0, 36.0, 9.0
+    p = add(sp, scl(direction, cum))          # the last tread's axis point
+    te1 = add(p, scl(u, wid / 2 - off))       # trimmed in by OFF each end
+    te2 = add(p, scl(u, off - wid / 2))
+    assert abs(dist(te1, te2) - (wid - 2 * off)) < 1e-9
+    assert dist(mid2(te1, te2), p) < 1e-9, "still centred on the axis"
+
+
+def test_outer_square_side_wall_ends_on_the_tread_endpoint():
+    """Square (or a resolved offset of 0): the side wall's far end IS
+    the last tread's endpoint - no corner piece, no trim."""
+    sp, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    wid, cum = 120.0, 36.0
+    off = outer_offset("Square", 9.0, cum, wid)
+    assert off == 0.0
+    for sign in (1.0, -1.0):
+        e = add(sp, scl(u, sign * wid / 2))
+        wall_end = add(e, scl(direction, cum - off))
+        tread_end = add(add(sp, scl(direction, cum)),
+                        scl(u, sign * (wid / 2 - off)))
+        assert dist(wall_end, tread_end) < 1e-9
+
+
+def test_outer_half_outline_connects_end_to_end():
+    """Wall point -> side wall -> corner piece -> trimmed tread end,
+    every junction coincident, on both sides of the run."""
+    sp, u, direction = (0.0, 0.0), (1.0, 0.0), (0.0, 1.0)
+    wid, cum, off = 120.0, 36.0, 9.0
+    for sign in (1.0, -1.0):
+        uin = scl(u, -sign)
+        e = add(sp, scl(u, sign * wid / 2))          # on the base wall
+        assert abs(dot(vec(sp, e), direction)) < 1e-9, "wall point"
+        wall_end = add(e, scl(direction, cum - off)) # side wall stops here
+        t1, t2 = outer_corner(e, uin, direction, cum, off)
+        tread_end = add(add(sp, scl(direction, cum)),
+                        scl(u, sign * (wid / 2 - off)))
+        assert dist(wall_end, t1) < 1e-9, "side wall meets the corner piece"
+        assert dist(t2, tread_end) < 1e-9, "corner piece meets the tread"
+
+
+def test_outer_guards_fall_back_to_square():
+    """A corner deeper than the run, or two that would meet across the
+    last tread, resolves to a square (offset 0) last step."""
+    assert outer_offset("Diagonal", 36.0, 36.0, 120.0) == 0.0  # off >= cum
+    assert outer_offset("Diagonal", 40.0, 36.0, 120.0) == 0.0
+    assert outer_offset("Rounded", 60.0, 200.0, 120.0) == 0.0  # 2*off >= wid
+    assert outer_offset("Rounded", 61.0, 200.0, 120.0) == 0.0
+    assert outer_offset("Square", 9.0, 36.0, 120.0) == 0.0     # no treatment
+    assert outer_offset("Diagonal", 9.0, 36.0, 120.0) == 9.0   # fits
+    assert outer_offset("Rounded", 12.0, 36.0, 120.0) == 12.0
 
 
 def linecirc_hits(a, d, c, r):
@@ -1397,6 +1538,13 @@ def main():
     test_recess_rounded_corner_is_tangent_to_both_lines()
     test_recess_flares_the_mouth_by_the_offset()
     test_recess_square_corner_leaves_the_side_at_the_wall()
+    test_outer_diagonal_is_45_degrees_to_wall_and_tread()
+    test_outer_fillet_centre_is_off_both_lines()
+    test_outer_side_wall_runs_from_the_wall_to_cum_minus_off()
+    test_outer_trimmed_tread_is_short_by_two_offsets_and_centred()
+    test_outer_square_side_wall_ends_on_the_tread_endpoint()
+    test_outer_half_outline_connects_end_to_end()
+    test_outer_guards_fall_back_to_square()
     test_the_steps_release_as_a_single_bundle()
     test_bundle_revs_match_the_source_banners()
     print("all tests passed")
