@@ -13566,6 +13566,14 @@
 ;;;   listed on the command line nearest miss first within each group.
 ;;;   Type a tag, or Pick and click the marker you want.
 ;;;
+;;;   Each group also gets the line it sits on, dashed and grey: a
+;;;   held tape is a fixed radius off its stake, so everything that
+;;;   holds it lies on one arc centred there - through the point as it
+;;;   is drawn now, and out to the furthest suggestion each way.  Two
+;;;   arcs, then: one through all the A readings and one through all
+;;;   the B readings, crossing at the point itself.  They are
+;;;   scaffolding like the markers and go when the round does.
+;;;
 ;;;   Picking one:
 ;;;     * a new point is made there, numbered "17m" -- the original
 ;;;       number with abf:*moved-suffix* on it, so the drawing says
@@ -13633,7 +13641,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.3")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.4")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -13671,6 +13679,13 @@
                                     ; so a suggestion never reads as one
                                     ; of the drawing's own POINTS
 (setq abf:*sug-hgt*      6.0)       ; height of a suggestion's tag
+(setq abf:*locus-color*  8)         ; colour of the guide line each
+                                    ; group of suggestions sits on:
+                                    ; grey, so it reads as a guide and
+                                    ; not as drawn work
+(setq abf:*locus-ltype*  "DASHED")  ; and its linetype - created at
+                                    ; pool scale when the drawing has
+                                    ; no linetype by that name
 (setq abf:*foot-steps*   10)        ; how many 1-foot steps are offered
                                     ; each way when a tape is swept: 10
                                     ; up and 10 down, per held stake
@@ -14153,6 +14168,52 @@
   (setq out (cons (entlast) out))
   (reverse out))
 
+;; Make sure the guide line's linetype exists, with dashes sized for a
+;; drawing in inches so they read at pool scale.  Pure entmake, no
+;; command calls.  (pf:ensure-dashed, abhd.lsp:1566.)  A drawing that
+;; already has a linetype by that name keeps its own.
+(defun abf:ensure-dashed ()
+  (if (not (tblsearch "LTYPE" abf:*locus-ltype*))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   (cons 2 abf:*locus-ltype*) '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0)))))
+
+;; The guide line one group of suggestions lies on.  Every candidate
+;; that HELD the same tape sits at exactly that tape's reading off its
+;; stake - and so does the point as it is drawn now - so the whole
+;; group is on one circle centred there.  The arc runs from the
+;; furthest candidate one way round to the furthest the other, through
+;; the point itself: a dashed grey line through all of them.  Returns
+;; what it made, in a list, or nil when the group is empty.
+(defun abf:draw-locus (ctr rad pp sugs held / a0 lo hi c d)
+  (setq a0 (angle (cal:2d ctr) (cal:2d pp))
+        lo 0.0
+        hi 0.0)
+  (foreach c sugs
+    (if (= (cadr c) held)
+      (progn
+        (setq d (cal:signed-dang
+                  a0 (angle (cal:2d ctr) (cal:2d (nth 5 c)))))
+        (if (< d lo) (setq lo d))
+        (if (> d hi) (setq hi d)))))
+  (if (> (- hi lo) abf:*fuzz*)
+    (progn
+      (abf:ensure-dashed)
+      (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
+                     (cons 8 abf:*point-layer*)
+                     (cons 62 abf:*locus-color*)
+                     (cons 6 abf:*locus-ltype*)
+                     '(100 . "AcDbCircle")
+                     (list 10 (car ctr) (cadr ctr) 0.0)
+                     (cons 40 rad)
+                     '(100 . "AcDbArc")
+                     (cons 50 (+ a0 lo)) (cons 51 (+ a0 hi))))
+      (list (entlast)))))
+
 ;; Erase a list of entities, skipping any that has gone already.
 (defun abf:drop (lst / e)
   (foreach e lst (if (and e (entget e)) (entdel e))))
@@ -14306,6 +14367,17 @@
                                      (append temps
                                              (abf:draw-sug (nth 5 c)
                                                            (nth 6 c)))))
+                             ;; and the line each group sits on, in the
+                             ;; order the table lists them
+                             (setq temps
+                                   (append
+                                     temps
+                                     (abf:draw-locus
+                                       pb (cal:dist pb pp) pp sugs
+                                       abf:*b-name*)
+                                     (abf:draw-locus
+                                       pa (cal:dist pa pp) pp sugs
+                                       abf:*a-name*)))
                              (setq tried
                                    (+ (length (abf:deltas
                                                 (cal:dist pa pp)))
