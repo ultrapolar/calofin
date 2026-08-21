@@ -89,6 +89,7 @@ changing a routine.
 | `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool, centre-bulge or top-right-bulge - six arcs, no corners - drawn live as its X/Y envelope and six radii are answered, with a centre-to-corner check drawing beside it |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
+| `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points, then a standard-hopper bottom |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
@@ -285,6 +286,7 @@ python3 tests/test_tutorialpool.py    # TUTORIALPOOL, run in lispvm
 python3 tests/test_oasis.py           # OASIS loaded and run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
 python3 tests/test_laser_fit.py       # LHD
+python3 tests/test_fitabhd.py         # FITABHD (engine also run in lispvm)
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
 python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
