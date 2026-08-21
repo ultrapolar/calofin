@@ -109,16 +109,44 @@ shows `N/A` for its target/delta (the as-drawn value is still listed).
 An **oval's side lengths** take `NA` as well — the overall and the
 width give them back (see *Oval ends*).
 
-### Rectangle corners (Square / Rounded / Diag)
+### Corner treatments (Square / Radius / Cut / NotGiven)
 
-Rectangle corners can be **Square**, **Rounded** (a radius) or **Diag**
-(a chamfer, sized by its **face length** — the cut itself). Side and
-end lengths are always measured to the **true (sharp) corner**; the
-treatment cuts inward from there.
+Every corner question in POOL is the same one, in the vocabulary
+`STANDARDS.md` fixes for the whole repo:
 
-The same three treatments are offered on **Grecian/Octagon**, **Roman**
-and **L / Lazy L** pools, each behind an `Are the corners modified
-(rounded / chamfered)?` gate that defaults to **No** — square is
+```
+How should <subject> be treated? [Square/Radius/Cut/NotGiven] <previous>:
+```
+
+| Answer | Meaning | Size question |
+| --- | --- | --- |
+| `Square` | a true sharp corner, nothing cut | none |
+| `Radius` | a filleted corner | `Radius for <subject>` |
+| `Cut` | a straight chamfer | `Cut face length for <subject>` |
+| `NotGiven` | the order sheet never recorded this corner | none — nothing was measured |
+
+The pre-standard words this tool used to ask for — `ROUNDED`, `DIAG`,
+`DIAGONAL`, and SPA's `90` — are still accepted if you type them in
+full, unlisted, and are normalised to the canonical word before
+anything downstream sees them. `NG` is accepted for `NotGiven`.
+
+A remembered size is only offered back as the default when the new
+answer **matches** the previous one: a radius is not a cut face, so
+24" does not carry across from one to the other.
+
+**`NotGiven` is built square but never drawn as a 90.** Its geometry is
+the plain sharp corner, but the sheet marks it with a circled `?` and a
+`Not Given` note, so nobody downstream reads it as a measured right
+angle. It takes no size, and it does not count as a cut — the
+cross-dim reference-mode question below is not asked for it, because
+there are no treatment ends to tape to.
+
+Side and end lengths are always measured to the **true (sharp)
+corner**; the treatment cuts inward from there.
+
+The same four treatments are offered on **Grecian/Octagon**, **Roman**
+and **L / Lazy L** pools, each behind an `Anything to record about the
+corners (radius / cut / not given)?` gate that defaults to **No** — square is
 always the assumption. What differs per shape is only how the corners
 are **grouped**: see [Grecian corner treatments](#grecian-corner-treatments),
 [Roman pools](#roman-pools) and [L / Lazy L pools](#l--lazy-l-pools).
@@ -136,13 +164,13 @@ per family of like corners.
   reuse the previous corner's answer, so four identical corners is
   three quick Enters.
 
-When corners are cut/rounded **and** the pool is out-of-square, you're
-asked where the cross dims were measured from:
+When corners are `Radius` or `Cut` **and** the pool is out-of-square,
+you're asked where the cross dims were measured from:
 
 | Reference | Meaning | Cross prompts |
 | --- | --- | --- |
 | **Corner** | To the true (extended) sharp corner | A-C, B-D |
-| **Middle** | To the middle of each chamfer/arc | A-C, B-D |
+| **Middle** | To the middle of each cut face/arc | A-C, B-D |
 | **Ends** | To the treatment endpoints — **both** ends of each diagonal, **crossing** | A-C (A>B end→C>D end, A>D end→C>B end), B-D likewise |
 
 In **Ends** mode the two ties of a diagonal **cross each other**: each
@@ -154,15 +182,16 @@ out-of-squareness down far less.)
 The measurements are converted to equivalent true-corner diagonals
 (corrected against the fitted corner geometry) so the body still
 best-fits correctly, and each cross measurement is dimensioned between
-its actual reference points and listed in the report. Square corners
-always use the true corner, so no reference question is asked.
+its actual reference points and listed in the report. `Square` and
+`NotGiven` corners always use the true corner, so no reference
+question is asked.
 
 **Perimeter dims** (per the reference drawing): a rectangle gets
 just **two** perimeter dimensions — the **northern** dim (overall
 length) and the **western** dim (overall width) — drawn as rotated
 linear dims whose extension lines hook to **points on the object**:
 the top endpoints of the two side walls and the left endpoints of the
-top/bottom walls (the arc-tangent / chamfer ends when corners are
+top/bottom walls (the arc-tangent / cut-face ends when corners are
 cut). No floating true-corner extension lines. All four sides still
 appear in the report table.
 
@@ -197,18 +226,20 @@ either way.
 
 **Corner dimensions**: an **in-square** pool gets a single "Typ."
 callout at the bottom-right corner (B) — a radius dimension reading
-`R1'-6" Typ.`, a chamfer-face dimension reading `1'-8" Typ.`, or, for
-square corners, a leader pointing at the corner reading `90° Typ.`
+`R1'-6" Typ.`, a cut-face dimension reading `1'-8" Typ.`, or, for
+square corners, the circled corner mark with a `90° Typ.` leader —
+and, for a `NotGiven` corner, a circled `?` with a `Not Given` note.
 An **out-of-square** pool whose four corner answers came back
 **identical** (Enter reusing the previous corner, typically) collapses
 to that same single "Typ." callout — four copies of the same dim are
 noise, per the reference drawings. Only when the corners genuinely
-**differ** is every corner dimmed individually: radius dims on rounded
-corners, face dims on chamfers, and the **actual angular dimension**
-on square corners (showing the true fitted angle, e.g. `89.6°`).
+**differ** is every corner dimmed individually: radius dims on filleted
+corners, face dims on cuts, and the **circled corner mark** on square
+corners (a small circle on the corner point with a `90°` leader) —
+and a circled `?` plus a `Not Given` note on any `NotGiven` corner.
 
 The **guide updates live**: as soon as the corner answers are in, the
-gray guide redraws its corners with the chamfers/fillets (display
+gray guide redraws its corners with the cuts/fillets (display
 sizes capped so oversized inputs can't fold the nominal shape), and
 the dashed cross-dim guide lines are re-drawn between the actual
 reference points for the chosen mode — in Ends mode each of the four
@@ -259,7 +290,7 @@ right** of the hopper's right edge, clear of the hopper linework
 (`pool:*mlkoff*` if you want to retune it). Applies to every shape's
 hopper and to the sport deep flat.
 The hopper's left corners tie to the pool's left corners — when a
-corner is Diag/Rounded, **to both ends of the treatment** (one line
+corner is `Cut`/`Radius`, **to both ends of the treatment** (one line
 per end) — and its right corners tie to the ends of the slope-break
 line. When `E` is 0 there is no separate break line (a modified flat
 or a wedge), so the right side ties to the pool's right corners under
@@ -442,14 +473,14 @@ like the sheet, and the interior is the **True Oval hopper / sport
 bottom** phase, tips and all.
 
 **Corner treatments:** after the letters (and cross dims) are in --
-before the floor -- a Roman asks **`Are the corners modified (rounded
-/ chamfered)?`** (default No). Square is the assumption; answering Yes
+before the floor -- a Roman asks **`Anything to record about the
+corners (radius / cut / not given)?`** (default No). Square is the assumption; answering Yes
 opens the treatments on the four **true corners A/B/C/D**, where a
 side runs into an end line above or below the arc's corner drop. The
 arc springs are not offered: a spring is a shallow line-to-arc kink,
 not a corner anyone radiuses.
 
-* **In-square** asks **once** -- `All corners (assumed identical)`.
+* **In-square** asks **once**, for `all four corners`.
 * **Out-of-square** asks **each corner on its own**, A through D, with
   Enter reusing the previous corner's answer.
 
@@ -570,10 +601,10 @@ in the report table (`X A-C`, `X LB-RT`, …) with target/actual/delta.
 ### Grecian corner treatments
 
 After the perimeter (and cross dims) are in — before the floor — a
-Grecian asks **`Are the corners modified (rounded / chamfered)?`**
+Grecian asks **`Anything to record about the corners (radius / cut / not given)?`**
 (default No). Square is the assumption, but plenty of pools round
-those corners, so answering Yes opens the same `Square` / `Rounded`
-radius / `Diag` chamfer-face treatments the rectangle and the L use.
+those corners, so answering Yes opens the same `Square` / `Radius` /
+`Cut` / `NotGiven` treatments the rectangle and the L use.
 
 The 8 corners come in **two families**, and that is how the answers
 are grouped:
@@ -599,7 +630,7 @@ Because a Grecian's corners are **135°, not 90°**, the shape is fit
 angles — the same reason the L fits first (see below).
 
 Perimeter walls are drawn between the treatment ends with an arc or
-chamfer face closing each corner; the two dashed **internal end
+cut face closing each corner; the two dashed **internal end
 chords** `A-D` and `B-C` stay on the true corners, since they are
 construction lines rather than walls. Edge dims still read to the TRUE
 corners. The drawing gets one `Typ.` callout per family in square
@@ -636,20 +667,20 @@ doesn't reach B1, `E` is prompted and the four-part chain resolves
 against B1 as usual (G absorbing, NA taking the remainder).
 
 **Corner treatments:** after the perimeter (and cross dims) are in —
-before the floor — both L types ask **`Are the corners modified
-(rounded / chamfered)?`** (default No). Answering Yes asks the
-**OUTER corners** once (`Square` / `Rounded` radius / `Diag` chamfer
-face, one answer for all five) and then the **INNER corner (E)**
+before the floor — both L types ask **`Anything to record about the
+corners (radius / cut / not given)?`** (default No). Answering Yes asks the
+**OUTER corners** once (`Square` / `Radius` / `Cut` / `NotGiven`,
+one answer for all five) and then the **INNER corner (E)**
 separately, since it is typically different — Enter reuses the outer
 answer. Sizes are capped so treatments can never overlap and fold a
 wall, the cuts are drawn exactly like the rectangle's (fillet arcs /
-chamfer faces, correct at the 45° bend corners and at the reflex
+cut faces, correct at the 45° bend corners and at the reflex
 inner corner), side dims still read to the TRUE corners, and the
 drawing gets one `Typ.` callout on an outer corner plus the inner
 corner's own radius/face dim. The report lists both sizes.
 
 **Corners that aren't 90°.** How far a treatment eats along its two
-walls depends on the corner's actual angle — a `Rounded` corner sets
+walls depends on the corner's actual angle — a `Radius` corner sets
 back `r / tan(angle/2)`, so a 60° corner reaches **1.73 × its radius**
 while a 135° one reaches only 0.41 ×. On an L that matters in normal
 use, not just in pathological cases: a Lazy L bends 135° at B and E
@@ -812,7 +843,7 @@ written under the report table.
   asked, and the affected report rows are red.
 * **Corner treatments** are capped so two treatments can never
   overlap along a shared wall (setback ≤ half the shorter adjacent
-  wall); an oversized radius/chamfer is re-asked with the maximum
+  wall); an oversized radius/cut face is re-asked with the maximum
   shown.
 * **Depths**: `D` must be deeper than the wall height `C`, and the
   sloping-shallow `C2` must land between `C` and `D` — out-of-order
@@ -853,7 +884,7 @@ sit on the same horizontal or vertical is drawn as a true **linear**
 dimension (`DIMLINEAR`, orientation forced so the placement point
 can't flip it) — overalls, sheet letters on straight rows/columns,
 hopper chains, profile depths. Only a genuinely skewed edge — an
-out-of-square wall, a Grecian corner chord, a chamfer face — is drawn
+out-of-square wall, a Grecian corner chord, a cut face — is drawn
 **aligned** (`DIMALIGNED`).
 
 Three named styles are used when the drawing defines them, and the
@@ -878,14 +909,14 @@ previous style is always restored right afterwards:
   under 24"** — the reference shows a 19" `S1` in `SIDE STANDARD`,
   not in inches.
 * **`STANDARD INCHES`** — **every other dimension measuring under 2'
-  (24")**: corner radii and chamfer faces, short hopper offsets,
+  (24")**: corner radii and cut faces, short hopper offsets,
   profile depths. A dimension of exactly 2' stays in the current
   style (`STANDARD`, or `CROSS DIMENSIONS` inside a cross-dim block) —
   the cutover is *under* 24", not *at or under*. The switch happens
   per dimension, keyed on that dimension's own measurement, so a 96"
-  side and an 18" chamfer on the same pool each get the right style.
-  Angular corner dims measure degrees, not inches, and are left in
-  the current style.
+  side and an 18" cut face on the same pool each get the right style.
+  (POOL draws no angular dimensions: a square corner is marked with a
+  circled `90°` leader, not a measured angle.)
 
 If a style is missing from the drawing the dimension is simply drawn
 in the current style (the routine says so once per run for
