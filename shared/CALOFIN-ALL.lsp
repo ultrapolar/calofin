@@ -37177,6 +37177,9 @@
 ;;;                        offer the standard-hopper pool bottom
 ;;;            FITABHDVER  print the loaded version
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; ABHD traces whatever shape the survey points make.  FITABHD is its
 ;;; typed sibling: you TELL it what kind of typical pool was surveyed -
 ;;; Rectangle, Grecian, Roman, Oval, L, Lazy L or Round (POOL's own
@@ -37239,12 +37242,9 @@
 ;;; Everything is fitted on the 2D plane - Z coordinates are ignored.
 ;;; tests/test_fitabhd.py mirrors the whole engine in Python, and its
 ;;; structural checks hold this file to the conventions above.
-;;;
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.3")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.4")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -37313,6 +37313,11 @@
                                    ; template direction (5 degrees):
                                    ; further than that and the survey
                                    ; is not this type of pool at all
+(setq fit:*arc-max*     6)         ; most arcs one end may be broken
+                                   ; into when a single radius cannot
+                                   ; hold it
+(setq fit:*arc-pts-min* 3)         ; points each arc of such a run
+                                   ; needs before it means anything
 (setq fit:*oos-min*     1.0)       ; the drift from one end of a wall
                                    ; to the other below which the wall
                                    ; reads as true and is held there
@@ -37334,6 +37339,13 @@
 (setq fit:*dim-off*     12.0)      ; the K/L/M string sits this far off
                                    ; the deep break, on the shallow side
 (if (null fit:*tol*) (setq fit:*tol* 1.0))       ; remembered per session
+;; The rest of the answers a session remembers, so a second run is
+;; mostly Enter.  Reading an unset symbol yields nil, so this declares
+;; them beside the others without clobbering what a run put there.
+(setq fit:*ptype*  fit:*ptype*)
+(setq fit:*treat*  fit:*treat*)
+(setq fit:*gtreat* fit:*gtreat*)
+(setq fit:*bowed*  fit:*bowed*)
 (if (null fit:*oos*) (setq fit:*oos* T))  ; as-builts are never true
 (if (null fit:*brk-deep*) (setq fit:*brk-deep* (cons 96.0 T)))
 (if (null fit:*brk-shal*) (setq fit:*brk-shal* (cons 240.0 T)))
@@ -37347,6 +37359,11 @@
 (setq fit:*l-dirs*    (list 0.0 (/ pi 2.0) pi (* pi 1.5) pi (* pi 1.5)))
 (setq fit:*lazy-dirs* (list 0.0 (/ pi 4.0) (* pi 0.75) (* pi 1.25)
                             pi (* pi 1.5)))
+
+;; ---- embedded shared helpers -----------------------------------------
+;; Copies of the CALOFIN-LIB helpers this tool uses, under its own
+;; prefix so the file loads alone with APPLOAD (the shared/ twin calls
+;; cal: instead).  Bodies identical to the library's.
 
 ;; ---- circle / arc geometry -------------------------------------------
 ;; The 2-element circumcenter abhd and lhd also keep locally - the
@@ -37440,6 +37457,16 @@
     (if (> d worst) (setq worst d))
     (setq ssum (+ ssum (* d d))))
   (list worst (sqrt (/ ssum (length ds)))))
+
+;; COUNT elements of LST starting at index K.
+(defun fit:sublist (lst k count / out)
+  (while (> k 0) (setq lst (cdr lst) k (1- k)))
+  (setq out nil)
+  (while (> count 0)
+    (setq out   (cons (car lst) out)
+          lst   (cdr lst)
+          count (1- count)))
+  (reverse out))
 
 ;; LST without ONE element equal to V.
 (defun fit:drop-one (v lst / out done x)
@@ -38442,8 +38469,10 @@
 
 ;; Vertex run for one end cap: SIGN +1 = the +x end (walked bottom to
 ;; top), -1 = the -x end (walked top to bottom).  Stubs appear when the
-;; arc springs meaningfully inside the corners.
-(defun fit:cap-verts (re cx r sign by ty / cy h stub lo hi a1 a2 b out)
+;; arc springs meaningfully inside the corners.  CHAIN, when given,
+;; replaces the single arc with the run of arcs the points asked for.
+(defun fit:cap-verts (re cx r sign by ty chain / cy h stub lo hi a1 a2
+                                               b out)
   (setq cy   (/ (+ by ty) 2.0)
         h    (fit:endcap-h re cx r by ty)
         stub (> (- (/ (- ty by) 2.0) h) 0.25)
@@ -38456,7 +38485,7 @@
             a2 (angle (list cx cy) hi)
             b  (cal:tan (/ (cal:angnorm (- a2 a1)) 4.0)))
       (if stub (setq out (list (list (list re by) 0.0))))
-      (setq out (append out (list (list lo b))))
+      (setq out (append out (if chain chain (list (list lo b)))))
       (if stub
         (setq out (append out (list (list hi 0.0)
                                     (list (list re ty) 0.0))))
@@ -38468,7 +38497,7 @@
             a2 (angle (list cx cy) lo)
             b  (cal:tan (/ (cal:angnorm (- a2 a1)) 4.0)))
       (if stub (setq out (list (list (list re ty) 0.0))))
-      (setq out (append out (list (list hi b))))
+      (setq out (append out (if chain chain (list (list hi b)))))
       (if stub
         (setq out (append out (list (list lo 0.0)
                                     (list (list re by) 0.0))))
@@ -38477,18 +38506,21 @@
 
 ;; Outline vertex list of the fitted end-capped body, frame coords.
 ;; BOWS (nil = none) is (bottom top): the two side walls may bow like
-;; any other straight wall; the cap ends are never touched.
-(defun fit:endcap-verts (prm kind both bows / yb yt verts itop ibot m a b)
+;; any other straight wall.  CHAINS (nil = none) is (right left): an
+;; end a single radius could not hold, rebuilt as a run of arcs.
+(defun fit:endcap-verts (prm kind both bows chains / yb yt verts itop
+                                                    ibot m a b)
   (setq yb    (fit:pget prm 'By)
         yt    (fit:pget prm 'Ty)
         verts (fit:cap-verts (fit:pget prm 'Re) (fit:pget prm 'cx)
-                             (fit:pget prm 'r) 1 yb yt)
+                             (fit:pget prm 'r) 1 yb yt (car chains))
         itop  (1- (length verts)))        ; the TOP wall leaves here
   (if both
     (setq verts (append verts
                         (fit:cap-verts (fit:pget prm 'Re2)
                                        (fit:pget prm 'cx2)
-                                       (fit:pget prm 'r2) -1 yb yt)))
+                                       (fit:pget prm 'r2) -1 yb yt
+                                       (cadr chains))))
     (setq verts (append verts
                         (list (list (list (fit:pget prm 'Lx) yt) 0.0)
                               (list (list (fit:pget prm 'Lx) yb) 0.0)))))
@@ -38714,6 +38746,171 @@
                             0.5)))))))
   prm)
 
+;; ---- arcs that are not one arc ---------------------------------------
+;;
+;; A drawn end is one clean radius.  A built one very often is not: a
+;; gunite shell caves in a little as it cures, and a single arc through
+;; those points either misses them or lies about them.  So an end that
+;; a single arc cannot hold within the distance the user typed is
+;; rebuilt as a POLYLINE OF ARCS - each joint sitting on a survey
+;; point, so the chain is continuous by construction and every joint is
+;; a real measurement.  Extra arcs have to earn their place: the run
+;; keeps the fewest that hold the points.  A symmetric cave-in is still
+;; a circle and one arc handles it; this is for the ends that slumped
+;; to one side.
+
+;; Bulge of the arc P1 -> Q -> P2; 0.0 when degenerate.  ABHD's,
+;; unchanged.
+(defun fit:bulge-3pt (p1 q p2 / c a1 a2 aq dccw dq)
+  (setq p1 (cal:2d p1) q (cal:2d q) p2 (cal:2d p2)
+        c  (fit:circumcenter p1 q p2))
+  (if (null c)
+    0.0
+    (progn
+      (setq a1   (angle c p1)
+            a2   (angle c p2)
+            aq   (angle c q)
+            dccw (cal:angnorm (- a2 a1))
+            dq   (cal:angnorm (- aq a1)))
+      (cond
+        ((< dccw 1.0e-9) 0.0)
+        ((> dccw (- (* 2.0 pi) 1.0e-9)) 0.0)
+        ((<= dq dccw) (cal:tan (/ dccw 4.0)))
+        (T (- (cal:tan (/ (- (* 2.0 pi) dccw) 4.0))))))))
+
+;; Worst distance from any of QS to the arc (A B bulge).
+(defun fit:span-dev (a b bul qs / seg mx d q)
+  (setq seg (list a b bul) mx 0.0)
+  (foreach q qs
+    (setq d (fit:seg-dist q seg))
+    (if (> d mx) (setq mx d)))
+  mx)
+
+;; The one arc from A to B that best fits QS: the exact 3-point arcs
+;; through each point, plus their average, judged on worst deviation.
+(defun fit:best-bulge (a b qs / bls sum q bl best bd d)
+  (if (null qs)
+    0.0
+    (progn
+      (setq bls (mapcar '(lambda (q) (fit:bulge-3pt a q b)) qs)
+            sum 0.0)
+      (foreach bl bls (setq sum (+ sum bl)))
+      (setq bls (append bls (list (/ sum (length bls))))
+            best 0.0 bd nil)
+      (foreach bl bls
+        (setq d (fit:span-dev a b bl qs))
+        (if (or (null bd) (< d bd)) (setq best bl bd d)))
+      best)))
+
+;; The (p1 p2 bulge) segments of a (point bulge) run ending at Z.
+(defun fit:chain-segs (chain z / pts out i n)
+  (setq pts (append (mapcar 'car chain) (list z))
+        n   (length chain)
+        out nil i 0)
+  (while (< i n)
+    (setq out (cons (list (nth i pts) (nth (1+ i) pts)
+                          (cadr (nth i chain)))
+                    out)
+          i   (1+ i)))
+  (reverse out))
+
+;; A run of K arcs from A to Z through the ordered points QS.  The K-1
+;; joints are survey points themselves.
+(defun fit:arc-chain (qs a z k / n bounds s lo hi start end out)
+  (setq n      (length qs)
+        bounds (list 0)
+        s      1)
+  (while (< s k)
+    (setq bounds (append bounds (list (/ (* s n) k))) s (1+ s)))
+  (setq bounds (append bounds (list n))
+        out    nil s 0)
+  (while (< s k)
+    (setq lo    (nth s bounds)
+          hi    (nth (1+ s) bounds)
+          start (if (= s 0) a (nth lo qs))
+          end   (if (= s (1- k)) z (nth hi qs))
+          out   (cons (list start
+                            (fit:best-bulge start end
+                                            (fit:sublist qs lo (- hi lo))))
+                      out)
+          s     (1+ s)))
+  (reverse out))
+
+;; Worst distance from QS to a whole run.
+(defun fit:chain-worst (chain z qs / segs mx q s d dmin)
+  (setq segs (fit:chain-segs chain z) mx 0.0)
+  (foreach q qs
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (fit:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (> dmin mx) (setq mx dmin)))
+  mx)
+
+;; The fewest arcs from A to Z that hold the ordered points QS.  One if
+;; it can; more only while each extra arc clearly earns it.  Returns
+;; the (point bulge) run from A up to but not including Z.
+(defun fit:fit-arc-run (qs a z tol / best worst kmax k trial w done)
+  (setq best (list (list a (fit:best-bulge a z qs))))
+  (if (null qs)
+    best
+    (progn
+      (setq worst (fit:chain-worst best z qs)
+            kmax  (min fit:*arc-max*
+                       (max 1 (/ (length qs) fit:*arc-pts-min*)))
+            k     1
+            done  nil)
+      (while (and (not done) (> worst tol) (< k kmax))
+        (setq k     (1+ k)
+              trial (fit:arc-chain qs a z k)
+              w     (fit:chain-worst trial z qs))
+        (if (> w (* worst fit:*both-edge*))
+          (setq done T)                     ; not a clear enough gain
+          (setq best trial worst w)))
+      best)))
+
+;; The points sorted along the arc SEG, start to end.
+(defun fit:order-along-arc (qs seg / g c a1 ccw keyed q rel)
+  (setq g (fit:arc-geom (car seg) (cadr seg) (caddr seg)))
+  (if (null g)
+    qs
+    (progn
+      (setq c   (car g)
+            a1  (caddr g)
+            ccw (> (caddr seg) 0.0)
+            keyed nil)
+      (foreach q qs
+        (setq rel (if ccw
+                    (cal:angnorm (- (angle c q) a1))
+                    (cal:angnorm (- a1 (angle c q))))
+              keyed (cons (cons rel q) keyed)))
+      (mapcar 'cdr (fit:sort-asc keyed)))))
+
+;; sort (key . val) pairs ascending by key (insertion sort)
+(defun fit:sort-asc (lst / out x)
+  (foreach x lst (setq out (fit:ins-asc x out)))
+  out)
+(defun fit:ins-asc (x lst)
+  (cond ((null lst) (list x))
+        ((< (car x) (car (car lst))) (cons x lst))
+        (T (cons (car lst) (fit:ins-asc x (cdr lst))))))
+
+;; Index of the piece of SEGS that P is nearest to.
+(defun fit:nearest-seg (p segs / best bd i s d)
+  (setq best 0 bd nil i 0)
+  (foreach s segs
+    (setq d (fit:seg-dist p s))
+    (if (or (null bd) (< d bd)) (setq best i bd d))
+    (setq i (1+ i)))
+  best)
+
+;; The points whose nearest piece of the outline is segment I.
+(defun fit:arc-seg-points (pts segs i / out p)
+  (setq out nil)
+  (foreach p pts
+    (if (= i (fit:nearest-seg p segs)) (setq out (cons p out))))
+  (reverse out))
+
 ;; ---- the Round pool --------------------------------------------------
 
 (defun fit:fit-round (pts / cx cy r ssum sx sy p d n)
@@ -38733,12 +38930,16 @@
     (setq cx (/ sx n) cy (/ sy n)))
   (list (cons 'cx cx) (cons 'cy cy) (cons 'r r)))
 
-;; the circle as two bulge-1 semicircles, as ABHD draws a CIRCLE
-(defun fit:round-verts (prm / c r)
-  (setq c (list (fit:pget prm 'cx) (fit:pget prm 'cy))
-        r (fit:pget prm 'r))
-  (list (list (list (+ (car c) r) (cadr c)) 1.0)
-        (list (list (- (car c) r) (cadr c)) 1.0)))
+;; the circle as two bulge-1 semicircles, as ABHD draws a CIRCLE - or
+;; the run of arcs the points asked for, when it caved in
+(defun fit:round-verts (prm chain / c r)
+  (if chain
+    chain
+    (progn
+      (setq c (list (fit:pget prm 'cx) (fit:pget prm 'cy))
+            r (fit:pget prm 'r))
+      (list (list (list (+ (car c) r) (cadr c)) 1.0)
+            (list (list (- (car c) r) (cadr c)) 1.0)))))
 
 ;; ---- one result to rule them all -------------------------------------
 ;; A fit result is an assoc list keyed by symbols: kind (poly / cap /
@@ -38807,7 +39008,8 @@
   (setq prm (fit:fit-endcap fpts ptype both))
   (list (cons 'kind 'cap) (cons 'type ptype) (cons 'prm prm)
         (cons 'both both) (cons 'valid T) (cons 'bows nil)
-        (cons 'verts (fit:endcap-verts prm ptype both nil))))
+        (cons 'chains nil)
+        (cons 'verts (fit:endcap-verts prm ptype both nil nil))))
 
 (defun fit:fit-config (ptype fpts treat both)
   (cond
@@ -38865,7 +39067,8 @@
       (setq prm (fit:fit-round dpts))
       (list (cons 'kind 'round) (cons 'type ptype) (cons 'prm prm)
             (cons 'angle 0.0) (cons 'mirror nil) (cons 'valid T)
-            (cons 'verts (fit:round-verts prm))))
+            (cons 'chain nil)
+            (cons 'verts (fit:round-verts prm nil))))
     (progn
       (setq tour (fit:order-points dpts)
             a0   (fit:frame-angle tour (if (= ptype "LAzyl") 8 4))
@@ -39045,11 +39248,13 @@
      (setq res (fit:rput res 'prm prm))
      (fit:rput res 'verts
                (fit:endcap-verts prm t2 (fit:rget res 'both)
-                                 (fit:rget res 'bows))))
+                                 (fit:rget res 'bows)
+                                 (fit:rget res 'chains))))
     (T
      (setq prm (fit:pput (fit:rget res 'prm) 'r v)
            res (fit:rput res 'prm prm))
-     (fit:rput res 'verts (fit:round-verts prm)))))
+     (fit:rput res 'verts (fit:round-verts prm
+                                            (fit:rget res 'chain))))))
 
 ;; Snap each headline dimension to the first friendly increment the
 ;; points allow; the free value stays when none do.  Whole dimensions
@@ -39153,7 +39358,8 @@
                res (fit:rput res 'bows bows))
          (fit:rput res 'verts
                    (fit:endcap-verts prm (fit:rget res 'type)
-                                     (fit:rget res 'both) bows)))))
+                                     (fit:rget res 'both) bows
+                                     (fit:rget res 'chains))))))
     (T res)))                             ; a round pool has no walls
 
 ;; T when any wall of BOWS came out bowed.
@@ -39161,6 +39367,119 @@
   (foreach b bows
     (if (and b (not (equal b 0.0 1.0e-12))) (setq found T)))
   found)
+
+;; Rebuild any arc a single radius cannot hold as a run of arcs
+;; through the points.  This runs LAST, after the dimensions are
+;; settled: a chain changes no dimension, it just stops the outline
+;; lying about where the shell actually went.
+
+;; The whole outline of a Round pool as one closed run of K arcs, the
+;; joints spaced evenly round the (already rotated) survey.
+(defun fit:round-chain-of (qs n k / trial i lo hi nxt)
+  (setq trial nil i 0)
+  (while (< i k)
+    (setq trial (cons (list (nth (/ (* i n) k) qs) 0.0) trial)
+          i     (1+ i)))
+  (setq trial (reverse trial) i 0)
+  (while (< i k)
+    (setq lo    (/ (* i n) k)
+          hi    (if (= i (1- k)) n (/ (* (1+ i) n) k))
+          nxt   (car (nth (rem (1+ i) k) trial))
+          trial (fit:setnth trial i
+                            (list (car (nth i trial))
+                                  (fit:best-bulge
+                                    (car (nth i trial)) nxt
+                                    (fit:sublist qs lo (- hi lo)))))
+          i     (1+ i)))
+  trial)
+
+(defun fit:round-chain (res fpts segs tol / qs n c keyed q best worst
+                                           kmax k trial w done tw tc off)
+  (setq qs (mapcar 'cal:2d fpts) n (length qs))
+  (if (< n (* 2 fit:*arc-pts-min*))
+    res
+    (progn
+      (setq c     (list (fit:pget (fit:rget res 'prm) 'cx)
+                        (fit:pget (fit:rget res 'prm) 'cy))
+            keyed nil)
+      (foreach q qs (setq keyed (cons (cons (angle c q) q) keyed)))
+      (setq qs    (mapcar 'cdr (fit:sort-asc keyed))
+            worst (fit:outline-worst qs segs)
+            best  nil
+            kmax  (min fit:*arc-max* (/ n fit:*arc-pts-min*))
+            k     2
+            done  nil)
+      (while (and (not done) (> worst tol) (< k kmax))
+        (setq k  (1+ k)
+              tw nil tc nil)
+        ;; a closed ring has no natural first joint, and where the
+        ;; joints land decides how well they bracket the cave-in, so
+        ;; try the aligned run and one shifted half a span
+        (foreach off (list 0 (/ n (* 2 k)))
+          (setq trial (fit:round-chain-of
+                        (append (fit:sublist qs off (- n off))
+                                (fit:sublist qs 0 off))
+                        n k)
+                w     (fit:chain-worst trial (car (car trial)) qs))
+          (if (or (null tw) (< w tw)) (setq tw w tc trial)))
+        (if (> tw (* worst fit:*both-edge*))
+          (setq done T)
+          (setq best tc worst tw)))
+      (if (null best)
+        res
+        (progn
+          (setq res (fit:rput res 'chain best))
+          (fit:rput res 'verts
+                    (fit:round-verts (fit:rget res 'prm) best)))))))
+
+(defun fit:cap-chains (res fpts segs bulged tol / chains side i s qs run)
+  (setq chains (list nil nil) side 0)
+  (foreach i bulged
+    (if (< side 2)
+      (progn
+        (setq s  (nth i segs)
+              qs (fit:order-along-arc (fit:arc-seg-points fpts segs i) s))
+        (if (>= (length qs) (* 2 fit:*arc-pts-min*))
+          (progn
+            (setq run (fit:fit-arc-run qs (car s) (cadr s) tol))
+            (if (> (length run) 1)
+              (setq chains (fit:setnth chains side run)))))
+        (setq side (1+ side)))))
+  (if (or (car chains) (cadr chains))
+    (progn
+      (setq res (fit:rput res 'chains chains))
+      (fit:rput res 'verts
+                (fit:endcap-verts (fit:rget res 'prm)
+                                  (fit:rget res 'type)
+                                  (fit:rget res 'both)
+                                  (fit:rget res 'bows) chains)))
+    res))
+
+(defun fit:apply-arc-chains (res fpts tol / segs bulged i s)
+  (if (not (member (fit:rget res 'kind) '(cap round)))
+    res
+    (progn
+      (setq segs (fit:res-fsegs res) bulged nil i 0)
+      (foreach s segs
+        (if (> (abs (caddr s)) 1.0e-9) (setq bulged (cons i bulged)))
+        (setq i (1+ i)))
+      (setq bulged (reverse bulged))
+      (cond
+        ((null bulged) res)
+        ((eq (fit:rget res 'kind) 'round)
+         (fit:round-chain res fpts segs tol))
+        (T (fit:cap-chains res fpts segs bulged tol))))))
+
+;; worst distance from QS to a whole outline
+(defun fit:outline-worst (qs segs / mx q s d dmin)
+  (setq mx 0.0)
+  (foreach q qs
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (fit:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (> dmin mx) (setq mx dmin)))
+  mx)
 
 ;; The whole engine: configuration search, the bow refinement when the
 ;; walls may be bowed, then nice-dim snapping against the share of the
@@ -39178,6 +39497,7 @@
   (if (or oos bowed)
     (setq res (fit:apply-refinement res fpts oos bowed)))
   (setq res (fit:snap-result res fpts tol allow)
+        res (fit:apply-arc-chains res fpts tol)
         dev (fit:outline-dev fpts (fit:res-fsegs res))
         res (fit:rput res 'worst (car dev))
         res (fit:rput res 'rms (cadr dev))
@@ -39469,6 +39789,64 @@
     ((= ptype "LAzyl") fit:*lazy-dirs*)
     (T fit:*rect-dirs*)))
 
+;; A line for any arc the fit had to rebuild as a run of arcs: how
+;; many, and the radius of each - the shape a shell that caved in
+;; actually took, instead of the one clean radius it was drawn with.
+(defun fit:chain-lines (res / out chains chain z segs s txt r i nm)
+  (setq out nil)
+  (cond
+    ((eq (fit:rget res 'kind) 'cap)
+     (setq chains (fit:rget res 'chains) i 0)
+     (foreach chain chains
+       (if (and chain (> (length chain) 1))
+         (progn
+           (setq z    (fit:chain-close res i)
+                 segs (fit:chain-segs chain z)
+                 txt  "")
+           (foreach s segs
+             (setq r   (fit:bulge-radius (car s) (cadr s) (caddr s))
+                   txt (strcat txt (if (= txt "") "" " / ")
+                               (if r (fit:ftin r) "straight"))))
+           (setq nm  (if (= i 0) "A" "B")
+                 out (cons (cons (strcat "End " nm " is a run of")
+                                 (strcat (itoa (length segs))
+                                         " arcs  R " txt))
+                           out))))
+       (setq i (1+ i))))
+    ((and (eq (fit:rget res 'kind) 'round) (fit:rget res 'chain))
+     (setq chain (fit:rget res 'chain)
+           segs  (fit:chain-segs chain (car (car chain)))
+           txt   "")
+     (foreach s segs
+       (setq r   (fit:bulge-radius (car s) (cadr s) (caddr s))
+             txt (strcat txt (if (= txt "") "" " / ")
+                         (if r (fit:ftin r) "straight"))))
+     (setq out (list (cons "Outline is a run of"
+                           (strcat (itoa (length segs))
+                                   " arcs  R " txt))))))
+  (reverse out))
+
+;; Where a cap's run of arcs lands: the far spring point of that end.
+(defun fit:chain-close (res i / verts chain n j k)
+  (setq verts (fit:rget res 'verts)
+        chain (nth i (fit:rget res 'chains))
+        n     (length verts)
+        j     0 k nil)
+  ;; the vertex after the run's last one closes it
+  (while (< j n)
+    (if (equal (car (nth j verts)) (car (last chain)) 1.0e-9)
+      (setq k (rem (1+ j) n)))
+    (setq j (1+ j)))
+  (if k (car (nth k verts)) (car (car chain))))
+
+;; Radius of the arc (A B bulge); nil when the segment is straight.
+(defun fit:bulge-radius (a b bl / h)
+  (if (< (abs bl) 1.0e-9)
+    nil
+    (progn
+      (setq h (/ (cal:dist a b) 2.0))
+      (/ (* h (1+ (* bl bl))) (* 2.0 (abs bl))))))
+
 ;; One report line per wall the fit found bowed.
 (defun fit:bow-lines (res / bows out i n corners s c span nm)
   (setq bows (fit:rget res 'bows) out nil)
@@ -39534,7 +39912,7 @@
                        2 2)
                  " degrees."))
   (foreach pr (append (fit:dims-lines res) (fit:square-lines res)
-                      (fit:bow-lines res))
+                      (fit:bow-lines res) (fit:chain-lines res))
     (setq line (car pr))
     (while (< (strlen line) 18) (setq line (strcat line " ")))
     (princ (strcat "\n  " line (cdr pr))))
@@ -49597,6 +49975,9 @@
 ;;;            TUTORIALSPACHECK   the checklist, a worked demo, or both
 ;;; ======================================================================
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Highlight the spa drawing TOGETHER WITH its "Spa Cover Details"
 ;;;  block; SPACHECK reads the block for the grade and taper, then holds
 ;;;  the drawing against the rules SPA.LSP builds to.  Every audit is
@@ -53087,6 +53468,9 @@
 ;;;
 ;;;  Command:  XFTCONV   - highlight the import, that is the only answer
 ;;;                        it needs
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;;  What it does, to the objects you highlight:
 ;;;    1. scales the whole selection by 12 (feet -> inches), about the

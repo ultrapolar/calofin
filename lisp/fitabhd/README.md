@@ -84,6 +84,28 @@ Knowing the type does half the work:
   wall's own points by a clear margin. A wall that really is straight
   stays straight. Roman and Oval side walls bow too; their arc ends
   are left alone, and a Round pool is never asked.
+* **An arc that caved in becomes a run of arcs.** A drawn end is one
+  clean radius; a built one very often is not, because a gunite shell
+  slumps a little as it cures. An end (or a Round pool's whole
+  outline) that a single radius cannot hold **within the distance you
+  typed at step 3** is rebuilt as a polyline of arcs, and the report
+  names it -- `End A is a run of 2 arcs  R 7'-2 1/2" / 6'-9 1/4"`.
+  No question is asked: the tolerance you already typed *is* the
+  control, and raising it gives the single clean radius back.
+  * **Every joint sits on a survey point**, so the run is continuous
+    by construction and each joint is a real measurement rather than
+    an invented one.
+  * Extra arcs have to earn their place: the run keeps the **fewest
+    that hold the points**, each one required to beat its predecessor
+    by a clear margin (`fit:*arc-max*` caps it, `fit:*arc-pts-min*`
+    keeps an arc from being fitted to two stray shots). An end that
+    really is one radius stays one arc.
+  * A *symmetric* cave-in is still a circle -- the single arc just
+    takes a smaller radius, and no chain appears. This is for the ends
+    that slumped to **one side**, which no circle can follow.
+  * A chain changes the shape of the end, never the pool's
+    dimensions: it runs after everything else is settled, so the
+    width, body length and hopper are exactly what they were.
 * **Nice dimensions**: each headline dimension -- length, width,
   corner radius, cut face, body length -- is snapped to the first
   friendly increment (whole feet, half feet, inches, half inches) the
@@ -210,7 +232,8 @@ both-ends evidence margin (`fit:*both-edge*`), the standard share of
 points allowed off (`fit:*miss-pct*`), what counts as a bow at all
 (`fit:*bow-min*`, `fit:*bow-max*`, `fit:*bow-max-frac*`,
 `fit:*bow-pts-min*`), how far out of square a wall may go
-(`fit:*oos-max*`, `fit:*oos-min*`) and the K/L/M offset
+(`fit:*oos-max*`, `fit:*oos-min*`), how far an arc may be broken up
+(`fit:*arc-max*`, `fit:*arc-pts-min*`) and the K/L/M offset
 (`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
 
@@ -227,8 +250,11 @@ mirror agree on the ones that shape the fit.
   the type it was declared as.
 * Out of square is not offered for Roman, Oval or Round: swinging an
   arc-ended body's side walls would take its end caps with them. Those
-  types still get the bow refinement, and a genuinely out-of-square one
-  is ABHD's job.
+  types still get the bow refinement and the arc-chain rebuild, and a
+  genuinely out-of-square one is ABHD's job.
+* An arc chain is reported, not snapped: each arc's radius is whatever
+  the shell made it. The nominal single-arc radius is still what the
+  end dimension reports.
 * A Lazy L's bend is nominally 45 degrees -- that is the point of
   declaring the type -- and `Outofsquare` lets it swing up to 5 degrees
   off that. A pool bent much further will show up in the report as
