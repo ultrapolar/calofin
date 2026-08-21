@@ -10037,12 +10037,21 @@
 ;;; ---------
 ;;; An oasis pool is six arcs and nothing else: no straight runs, no
 ;;; corners.  Three of them bulge OUT -- one off the left of the pool,
-;;; one off the top, one off the right -- and between each neighbouring
+;;; one off the right, one off the top -- and between each neighbouring
 ;;; pair a smaller reverse arc curves back IN, so the outline changes
 ;;; direction without ever changing tangent.  That is what "continuous
 ;;; tangent" buys: every joint in the perimeter is smooth, which is why
 ;;; the whole outline can be given as six radii and two overall
 ;;; dimensions.
+;;;
+;;; They come two ways, and the first question is which:
+;;;
+;;;   CENTER BULGE      the third bulge sits across the top, centred.
+;;;   TOP RIGHT BULGE   it is tucked into the top-right corner instead.
+;;;
+;;; That is the ONLY difference.  Same six arcs, same ring, same solver,
+;;; same checks -- only where the third bulge's centre lands, and the
+;;; names the arcs go by because of it.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________
@@ -10062,14 +10071,19 @@
 ;;;
 ;;;   left bulge    touches the X-min and Y-min bounds  -> centre (rL, rL)
 ;;;   right bulge   touches the X-max and Y-min bounds  -> centre (X-rR, rR)
-;;;   top bulge     touches the Y-max bound, centred across X
+;;;   top bulge     CENTER    touches the Y-max bound, centred across X
 ;;;                                                     -> centre (X/2, Y-rT)
+;;;                 TOPRIGHT  touches the Y-max AND the X-max bound
+;;;                                                     -> centre (X-rT, Y-rT)
 ;;;
 ;;; So the box's bottom edge is held by the two side bulges together
-;;; (each dips to it), the left and right edges by their own bulge, and
-;;; the top edge by the top bulge.  Only the top bulge has any freedom
-;;; left, and it is spent centring it: oasis:*topfrac* moves it along X
-;;; if a job ever needs it off-centre.
+;;; (each dips to it), the left edge by the left bulge, the top edge by
+;;; the top bulge -- and the right edge by the right bulge alone on a
+;;; centre-bulge pool, or by the right bulge AND the corner bulge, with
+;;; a reverse curve between them, on a top-right one.  On a centre-bulge
+;;; pool the top bulge has one degree of freedom left and it is spent
+;;; centring it: oasis:*topfrac* moves it along X if a job ever needs it
+;;; off-centre.  The corner bulge has none -- two tangencies pin it.
 ;;;
 ;;; Each tangent radius is then the circle of that radius sitting
 ;;; externally tangent to both of its neighbouring bulges -- two such
@@ -10150,11 +10164,13 @@
 ;;; each is caught at the question that causes it rather than after all
 ;;; eight answers are in:
 ;;;
-;;;   * a side bulge that does not fit the envelope.  It is tangent to
-;;;     the bottom edge AND to its own side, so it is twice its radius
-;;;     both ways: more than half the Y bound and it pushes out through
-;;;     the top, more than half the X bound and it pushes out through
-;;;     the far side;
+;;;   * a bulge that does not fit the envelope.  A side bulge is tangent
+;;;     to the bottom edge AND to its own side, so it is twice its
+;;;     radius both ways: more than half the Y bound and it pushes out
+;;;     through the top, more than half the X bound and it pushes out
+;;;     through the far side.  The TOP RIGHT corner bulge is checked the
+;;;     same way, for the same reason; the CENTER one is not, because it
+;;;     is trimmed away long before it reaches anything;
 ;;;   * one bulge circle wholly inside another: no tangent radius of any
 ;;;     size can bridge them, because raising it grows both reaches
 ;;;     equally;
@@ -10173,7 +10189,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *oasis-version* "v2.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v3.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -10209,6 +10225,54 @@
 ;; already looking at something familiar.
 (setq oasis:*startside* 0.75)
 (setq oasis:*starttop*  0.5)
+
+;;; -------------------- the two shapes -----------------------------------
+;;; An oasis comes two ways, and they differ in exactly ONE thing: where
+;;; the third bulge sits.  Everything else -- the other two bulges, the
+;;; three tangent circles between them, the ring they run in, the whole
+;;; solver -- is the same for both.
+;;;
+;;;   Center    the third bulge is tangent to the Y-max bound and centred
+;;;             across X.  The common one.
+;;;   TopRight  it is tucked into the corner instead, tangent to the Y-max
+;;;             AND the X-max bound, so the right-hand side of the pool
+;;;             touches its bound twice with a reverse curve between.
+;;;
+;;; The names the arcs go by change with it, because "top-right" means the
+;;; tangent arc on one and the bulge itself on the other.
+
+;; Where the third bulge sits -- the one thing the two shapes differ in.
+(defun oasis:topcen (w h rt variant)
+  (if (= variant "TopRight")
+      (list (- w rt) (- h rt))
+      (list (* w oasis:*topfrac*) (- h rt))))
+
+;; What the six arcs are called, in the order they run round the pool.
+(defun oasis:names (variant)
+  (if (= variant "TopRight")
+      '("left" "bottom-center" "right" "right-side" "top-right" "top-left")
+      '("left" "bottom-center" "right" "top-right" "top" "top-left")))
+
+;; What each of the six radius questions is called.  k is 0-5 in the order
+;; they are asked: the three bulges, then the three tangents.
+(defun oasis:rprompt (variant k)
+  (nth k (if (= variant "TopRight")
+             '("Left bulge radius" "Top-right bulge radius"
+               "Right bulge radius" "Top-left tangent radius"
+               "Right-side tangent radius" "Bottom-center tangent radius")
+             '("Left bulge radius" "Top bulge radius"
+               "Right bulge radius" "Top-left tangent radius"
+               "Top-right tangent radius" "Bottom-center tangent radius"))))
+
+;; How the shape is named on the command line and in the report.
+(defun oasis:vlabel (variant)
+  (if (= variant "TopRight") "top-right-bulge" "center-bulge"))
+
+;; T when the third bulge has to fit the envelope the way a side bulge
+;; does.  The corner one is tangent to two bounds, so it is twice its
+;; radius both ways and can break out of either; the centred one is
+;; trimmed away long before it reaches anything.
+(defun oasis:topfits-p (variant) (= variant "TopRight"))
 
 ;; Where the top bulge sits across the X bound, as a fraction of it.
 ;; 0.5 centres it, which is what every oasis on file wants; the value
@@ -10322,22 +10386,23 @@
 ;; an ARC entity's group 50 / 51.  nil when a tangent circle does not
 ;; exist -- c:OASIS checks for that before it ever gets here, so a nil
 ;; return means an input slipped past the checks, not a user mistake.
-(defun oasis:solve (w h rl rt rr ftl ftr fbc frac
-                    / cl ct cr cbc ctr ctl ring n i it c p q s e out)
+(defun oasis:solve (w h rl rt rr ftl ftr fbc variant
+                    / cl ct cr cbc ctr ctl ring nm n i it c p q s e out)
   (setq cl  (list rl rl)
-        ct  (list (* w frac) (- h rt))
+        ct  (oasis:topcen w h rt variant)
         cr  (list (- w rr) rr)
         cbc (oasis:fillet cl rl cr rr fbc)
         ctr (oasis:fillet cr rr ct rt ftr)
         ctl (oasis:fillet ct rt cl rl ftl))
   (if (and cbc ctr ctl)
       (progn
-        (setq ring (list (list "left"          cl  rl  T)
-                         (list "bottom-center" cbc fbc nil)
-                         (list "right"         cr  rr  T)
-                         (list "top-right"     ctr ftr nil)
-                         (list "top"           ct  rt  T)
-                         (list "top-left"      ctl ftl nil))
+        (setq nm   (oasis:names variant)
+              ring (list (list (nth 0 nm) cl  rl  T)
+                         (list (nth 1 nm) cbc fbc nil)
+                         (list (nth 2 nm) cr  rr  T)
+                         (list (nth 3 nm) ctr ftr nil)
+                         (list (nth 4 nm) ct  rt  T)
+                         (list (nth 5 nm) ctl ftl nil))
               n    (length ring)
               i    0
               out  nil)
@@ -10509,7 +10574,7 @@
 ;; envelope -- the left and right bulges' outermost points for X, the
 ;; top bulge's highest point and the left bulge's lowest for Y -- so
 ;; they measure the bounds the user was asked for, not a chord of them.
-(defun oasis:dimension (arcs ents base w h rl rr frac lay / doff i e md)
+(defun oasis:dimension (arcs ents base w h rl rr lay / doff i e md)
   (setvar "CLAYER" lay)
   (oasis:dimstyle-on oasis:*dimstyle*)
   (setq doff (oasis:dimoff w h))
@@ -10518,8 +10583,9 @@
            (oasis:wp (list w rr) base)
            "_H"
            (oasis:wp (list (* 0.5 w) (+ h doff)) base))
+  ;; the top bulge's own highest point, wherever that bulge sits
   (command "_.DIMLINEAR"
-           (oasis:wp (list (* w frac) h) base)
+           (oasis:wp (list (car (nth 1 (nth 4 arcs))) h) base)
            (oasis:wp (list rl 0.0) base)
            "_V"
            (oasis:wp (list (- 0.0 doff) (* 0.5 h)) base))
@@ -10648,21 +10714,30 @@
 ;; A tangent radius has no such rule of thumb -- what looks right depends
 ;; entirely on the three bulges -- so it takes a quarter of the short
 ;; bound, lifted clear of its own minimum when that is larger.
-(defun oasis:fillin (ans / w h rl rt rr cl ct cr side g)
-  (setq w    (nth 0 ans)
-        h    (nth 1 ans)
+(defun oasis:fillin (ans / var w h rl rt rr cl ct cr side top g)
+  (setq var  (nth 0 ans)
+        w    (nth 2 ans)
+        h    (nth 3 ans)
         side (* 0.5 oasis:*startside* (min w h))
-        g    (* 0.25 (min w h))
-        rl   (cond ((nth 2 ans)) (side))
-        rt   (cond ((nth 3 ans)) ((* 0.5 oasis:*starttop* w)))
-        rr   (cond ((nth 4 ans)) (side))
+        ;; the centred bulge is measured across the long bound, the
+        ;; corner one across the short -- it has to fit both ways
+        top  (* 0.5 oasis:*starttop*
+                (if (oasis:topfits-p var) (min w h) w))
+        rl   (cond ((nth 4 ans)) (side))
+        rt   (cond ((nth 5 ans)) (top))
+        rr   (cond ((nth 6 ans)) (side))
+        ;; a tangent circle is read against the bulges either side of it,
+        ;; not against the envelope, so size it off the smallest bulge --
+        ;; that keeps the bulges the bigger circles, which is the whole
+        ;; point of the starting picture
+        g    (* 0.6 (min rl rt rr))
         cl   (list rl rl)
-        ct   (list (* w oasis:*topfrac*) (- h rt))
+        ct   (oasis:topcen w h rt var)
         cr   (list (- w rr) rr))
   (list w h rl rt rr
-        (cond ((nth 5 ans)) ((max g (* 1.25 (oasis:filmin ct rt cl rl)))))
-        (cond ((nth 6 ans)) ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
-        (cond ((nth 7 ans)) ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))))
+        (cond ((nth 7 ans)) ((max g (* 1.25 (oasis:filmin ct rt cl rl)))))
+        (cond ((nth 8 ans)) ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
+        (cond ((nth 9 ans)) ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
 ;; a stray U in the middle of the questions cannot break the next redraw.
@@ -10708,8 +10783,8 @@
 ;; circle goes red: 0 left, 1 bottom-center, 2 right, 3 top-right,
 ;; 4 top, 5 top-left.  The two bounds questions are about no circle.
 (defun oasis:qring (k)
-  (cond ((= k 2) 0) ((= k 3) 4) ((= k 4) 2)
-        ((= k 5) 5) ((= k 6) 3) ((= k 7) 1)))
+  (cond ((= k 4) 0) ((= k 5) 4) ((= k 6) 2)
+        ((= k 7) 5) ((= k 8) 3) ((= k 9) 1)))
 
 ;; The envelope box, dashed -- the bounds the pool is being fitted to.
 (defun oasis:pv-box (w h base lt / out)
@@ -10723,11 +10798,16 @@
 ;; ready to be passed to the next call so they can be cleared first.
 ;; Nothing is drawn until both bounds are known -- before that there is
 ;; no envelope to draw anything inside.
-(defun oasis:preview (old ans base k
-                      / w h full arcs lt out hi ring i a md txt hgt slot)
+(defun oasis:preview (old ans k
+                      / var base w h full arcs lt out hi ring i a md txt
+                        hgt slot)
   (oasis:pv-clear old)
-  (setq w (nth 0 ans) h (nth 1 ans) out nil)
-  (if (and w h)
+  (setq var  (nth 0 ans)
+        base (nth 1 ans)
+        w    (nth 2 ans)
+        h    (nth 3 ans)
+        out  nil)
+  (if (and base w h)
       (progn
         (cal:osdown)
         (setq lt   (oasis:dashlt w h)
@@ -10736,7 +10816,7 @@
               full (oasis:fillin ans)
               arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
                                 (nth 3 full) (nth 4 full) (nth 5 full)
-                                (nth 6 full) (nth 7 full) oasis:*topfrac*)
+                                (nth 6 full) (nth 7 full) var)
               out  (oasis:pv-box w h base lt))
         (if arcs
             (progn
@@ -10765,8 +10845,8 @@
 ;; Which answer slot holds ring position I's radius -- the inverse of
 ;; oasis:qring.
 (defun oasis:qslot (i)
-  (cond ((= i 0) 2) ((= i 1) 7) ((= i 2) 4)
-        ((= i 3) 6) ((= i 4) 3) (t 5)))
+  (cond ((= i 0) 4) ((= i 1) 9) ((= i 2) 6)
+        ((= i 3) 8) ((= i 4) 5) (t 7)))
 
 ;; Force an entity's colour, for the one arc a question is about.
 (defun oasis:recolor (e col / ed)
@@ -10785,6 +10865,19 @@
     (setq out (cons (if (= i k) v e) out)
           i   (1+ i)))
   (reverse out))
+
+;; Where the pool goes.  Picked with the user's own object snaps still
+;; live, and backed out of like any other question -- nothing has been
+;; drawn at that point.  Enter takes the origin.  Returns a 3-D point
+;; (the elevation is carried, so a UCS with one is honoured) or
+;; OASIS-BACK.
+(defun oasis:askbase (back / v)
+  (if back (initget "Back Undo"))
+  (setq v (getpoint (strcat "\nInsertion base point <0,0>"
+                            (if back " [Back]" "") ": ")))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+        ((null v) (list 0.0 0.0 0.0))
+        (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
 
 ;; A side bulge's radius, re-asked until it fits inside the Y bound.
 ;; A bulge is tangent to the bottom edge, so its top sits at twice its
@@ -10809,17 +10902,27 @@
 ;; The top bulge's radius, re-asked while it swallows a side bulge (or
 ;; is swallowed by one).  Nesting cannot be cured with a tangent radius
 ;; later, so it has to be caught here.
-(defun oasis:ask-top (msg w h rl frac / v cl ct)
+(defun oasis:ask-top (msg w h rl variant / v cl ct big)
   (setq cl (list rl rl)
         v  (cal:askdist 'REQ msg nil T))
   (while (and (not (eq v 'CAL-BACK))
-              (progn (setq ct (list (* w frac) (- h v)))
-                     (oasis:nested-p ct v cl rl)))
-    (princ (strcat "\nA " (rtos v) " top bulge and the left bulge lie one"
-                   " inside the other, so no tangent radius can join them"
-                   " -- raising one raises the other's reach by just as"
-                   " much.  Try a top radius nearer the left bulge's "
-                   (rtos rl) "."))
+              (progn
+                (setq ct  (oasis:topcen w h v variant)
+                      big (and (oasis:topfits-p variant)
+                               (> (* 2.0 v) (+ (min w h) oasis:*fuzz*))))
+                (or big (oasis:nested-p ct v cl rl))))
+    (if big
+        ;; only the corner bulge can do this: it is tangent to two
+        ;; bounds, so it is twice its radius both ways
+        (princ (strcat "\nA " (rtos v) " corner bulge is " (rtos (* 2.0 v))
+                       " both ways and breaks out of a " (rtos w) " x "
+                       (rtos h) " envelope.  " (rtos (/ (min w h) 2.0))
+                       " or less."))
+        (princ (strcat "\nA " (rtos v) " top bulge and the left bulge lie one"
+                       " inside the other, so no tangent radius can join them"
+                       " -- raising one raises the other's reach by just as"
+                       " much.  Try a top radius nearer the left bulge's "
+                       (rtos rl) ".")))
     (setq v (cal:askdist 'REQ msg nil T)))
   v)
 
@@ -10837,32 +10940,40 @@
     (setq v (cal:askdist 'REQ msg nil T)))
   v)
 
-;; One question of the run.  k is its number, ans the answers gathered
-;; so far -- the checks that need an earlier answer read it from there,
-;; so backing up and changing one re-checks everything after it.
-;; Returns the answer, or OASIS-BACK.
-(defun oasis:askstep (k ans / w h rl rt rr cl ct cr)
-  (setq w  (nth 0 ans) h  (nth 1 ans)
-        rl (nth 2 ans) rt (nth 3 ans) rr (nth 4 ans)
-        cl (if (and w h rl) (list rl rl))
-        ct (if (and w h rt) (list (* w oasis:*topfrac*) (- h rt)))
-        cr (if (and w h rr) (list (- w rr) rr)))
+;; One question of the run.  k is its number, ans the answers gathered so
+;; far -- the checks that need an earlier answer read it from there, so
+;; backing up and changing one re-checks everything after it.  Returns
+;; the answer, or OASIS-BACK.
+;;
+;;   0 which shape       3 Y bound      6 right bulge    9 bottom-center
+;;   1 base point        4 left bulge   7 top-left tangent
+;;   2 X bound           5 top bulge    8 top-right / right-side tangent
+(defun oasis:askstep (k ans / var w h rl rt rr cl ct cr)
+  (setq var (nth 0 ans)
+        w   (nth 2 ans) h  (nth 3 ans)
+        rl  (nth 4 ans) rt (nth 5 ans) rr (nth 6 ans)
+        cl  (if (and w h rl) (list rl rl))
+        ct  (if (and w h rt) (oasis:topcen w h rt var))
+        cr  (if (and w h rr) (list (- w rr) rr)))
   (cond
-    ((= k 0) (cal:askdist 'REQ "X - overall left-to-right bounds" nil nil))
-    ((= k 1) (cal:askdist 'REQ "Y - overall front-to-back bounds" nil T))
-    ((= k 2) (oasis:ask-bulge "Left bulge radius" "left" w h))
-    ((= k 3) (oasis:ask-top "Top bulge radius" w h rl oasis:*topfrac*))
-    ((= k 4) (oasis:ask-bulge "Right bulge radius" "right" w h))
-    ((= k 5) (oasis:ask-tangent "Top-left tangent radius" ct rt cl rl))
-    ((= k 6) (oasis:ask-tangent "Top-right tangent radius" cr rr ct rt))
-    ((= k 7) (oasis:ask-tangent "Bottom-center tangent radius" cl rl cr rr))))
+    ((= k 0) (cal:askkw "Where is the top bulge?"
+                          "Center TopRight" "Center/TopRight" "Center" nil))
+    ((= k 1) (oasis:askbase T))
+    ((= k 2) (cal:askdist 'REQ "X - overall left-to-right bounds" nil T))
+    ((= k 3) (cal:askdist 'REQ "Y - overall front-to-back bounds" nil T))
+    ((= k 4) (oasis:ask-bulge (oasis:rprompt var 0) "left" w h))
+    ((= k 5) (oasis:ask-top (oasis:rprompt var 1) w h rl var))
+    ((= k 6) (oasis:ask-bulge (oasis:rprompt var 2) "right" w h))
+    ((= k 7) (oasis:ask-tangent (oasis:rprompt var 3) ct rt cl rl))
+    ((= k 8) (oasis:ask-tangent (oasis:rprompt var 4) cr rr ct rt))
+    ((= k 9) (oasis:ask-tangent (oasis:rprompt var 5) cl rl cr rr))))
 
 ;; The right bulge is the last of the three, so it is the one that has
 ;; to be checked against BOTH of the others before the tangent radii are
 ;; asked for.  Returns the name of the bulge it nests with, or nil.
-(defun oasis:right-nests (w h rl rt rr frac / cl ct cr)
+(defun oasis:right-nests (w h rl rt rr variant / cl ct cr)
   (setq cl (list rl rl)
-        ct (list (* w frac) (- h rt))
+        ct (oasis:topcen w h rt variant)
         cr (list (- w rr) rr))
   (cond ((oasis:nested-p cr rr cl rl) "left")
         ((oasis:nested-p cr rr ct rt) "top")))
@@ -10907,8 +11018,8 @@
 
 ;;; -------------------- the command -------------------------------------
 
-(defun c:OASIS ( / *error* undo-open guard ans i v w h rl rt rr ftl ftr fbc
-                   base cbase arcs ents nests prev lt)
+(defun c:OASIS ( / *error* undo-open guard ans i v var base w h rl rt rr
+                   ftl ftr fbc cbase arcs ents nests prev lt)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:dimstyrestore)
@@ -10944,14 +11055,6 @@
      (cal:sysrestore))
     (t
 
-     ;; -- where it goes comes first, because the pool is drawn as it is
-     ;;    answered: the base point is picked with the user's own snaps
-     ;;    still live, and the preview then builds on that spot
-     (setq base (getpoint "\nInsertion base point <0,0>: ")
-           base (if base
-                    (list (car base) (cadr base)
-                          (if (caddr base) (caddr base) 0.0))
-                    (list 0.0 0.0 0.0)))
      (setvar "CMDECHO" 0)
      (command "_.UNDO" "_Begin")
      (setq undo-open T)
@@ -10959,15 +11062,16 @@
      (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
-     ;; -- the eight measurements, with Back between them.  Every check
-     ;;    reads the answers already given, so backing up to change one
-     ;;    re-checks everything that follows it -- and the preview is
-     ;;    redrawn before each question, with the circle being asked
-     ;;    about picked out in red.
-     (setq ans '(nil nil nil nil nil nil nil nil)
+     ;; -- which shape, where it goes, and then the eight measurements,
+     ;;    with Back between them all.  Every check reads the answers
+     ;;    already given, so backing up to change one re-checks
+     ;;    everything that follows it -- and the preview is redrawn
+     ;;    before each question, with the circle being asked about
+     ;;    picked out in red.
+     (setq ans '(nil nil nil nil nil nil nil nil nil nil)
            i   0)
-     (while (< i 8)
-       (setq prev (oasis:preview prev ans base i)
+     (while (< i 10)
+       (setq prev (oasis:preview prev ans i)
              v    (oasis:askstep i ans))
        (if (eq v 'CAL-BACK)
            (if (> i 0)
@@ -10979,24 +11083,25 @@
                    i   (1+ i))
              ;; the right bulge is the last of the three, so it is where a
              ;; nesting with EITHER of the others finally shows up
-             (if (= i 5)
+             (if (= i 7)
                  (progn
-                   (setq nests (oasis:right-nests (nth 0 ans) (nth 1 ans)
-                                                  (nth 2 ans) (nth 3 ans)
-                                                  (nth 4 ans) oasis:*topfrac*))
+                   (setq nests (oasis:right-nests (nth 2 ans) (nth 3 ans)
+                                                  (nth 4 ans) (nth 5 ans)
+                                                  (nth 6 ans) (nth 0 ans)))
                    (if nests
                        (progn
                          (princ (strcat "\nThat right bulge and the " nests
                                         " bulge lie one inside the other, so no"
                                         " tangent radius can join them.  Asking"
                                         " again."))
-                         (setq i 4))))))))
+                         (setq i 6))))))))
 
      (setq prev (oasis:pv-clear prev)
-           w    (nth 0 ans) h   (nth 1 ans)
-           rl   (nth 2 ans) rt  (nth 3 ans) rr (nth 4 ans)
-           ftl  (nth 5 ans) ftr (nth 6 ans) fbc (nth 7 ans)
-           arcs (oasis:solve w h rl rt rr ftl ftr fbc oasis:*topfrac*))
+           var  (nth 0 ans) base (nth 1 ans)
+           w    (nth 2 ans) h    (nth 3 ans)
+           rl   (nth 4 ans) rt   (nth 5 ans) rr (nth 6 ans)
+           ftl  (nth 7 ans) ftr  (nth 8 ans) fbc (nth 9 ans)
+           arcs (oasis:solve w h rl rt rr ftl ftr fbc var))
 
      (if (not arcs)
          (progn
@@ -11011,8 +11116,7 @@
                  cbase (oasis:checkbase base w h))
            (setvar "CLAYER" oasis:*poollayer*)
            (setq ents (oasis:draw arcs base oasis:*poollayer*))
-           (oasis:dimension arcs ents base w h rl rr oasis:*topfrac*
-                            oasis:*dimlayer*)
+           (oasis:dimension arcs ents base w h rl rr oasis:*dimlayer*)
            (oasis:checkdraw arcs cbase w h lt)
            (cal:dimstyrestore)
 
@@ -11021,13 +11125,14 @@
            (cal:sysrestore)
 
            (princ (strcat "\nOASIS " *oasis-version* ": " (rtos w) " x "
-                          (rtos h) " continuous-tangent pool on layer "
-                          oasis:*poollayer* "."))
-           (princ (strcat "\n  Bulges: " (rtos rl) " left, " (rtos rt)
-                          " top, " (rtos rr) " right."))
-           (princ (strcat "\n  Tangent radii: " (rtos ftl) " top-left, "
-                          (rtos ftr) " top-right, " (rtos fbc)
-                          " bottom-center."))
+                          (rtos h) " " (oasis:vlabel var)
+                          " oasis on layer " oasis:*poollayer* "."))
+           (princ (strcat "\n  Bulges: " (rtos rl) " left, " (rtos rt) " "
+                          (nth 4 (oasis:names var)) ", " (rtos rr) " right."))
+           (princ (strcat "\n  Tangent radii: " (rtos ftl) " "
+                          (nth 5 (oasis:names var)) ", " (rtos ftr) " "
+                          (nth 3 (oasis:names var)) ", " (rtos fbc) " "
+                          (nth 1 (oasis:names var)) "."))
            (princ (strcat "\n  8 dimensions on the pool in the "
                           oasis:*dimstyle* " style, and 18 on the check"))
            (princ (strcat "\n  drawing beside it in " oasis:*crossstyle*
