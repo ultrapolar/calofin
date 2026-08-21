@@ -14,8 +14,8 @@ Every lisp here ships **twice, byte-identical, under two names**:
 | | |
 | --- | --- |
 | `SPA.LSP` | the static name — the one in your `APPLOAD` stack |
-| `SPA_081926_REV03.LSP` | the same file, named `MMDDYY_REV##` for its revision |
-| `TUTORIALSPA.LSP` / `TUTORIALSPA_081926_REV03.LSP` | likewise |
+| `SPA_082026_REV04.LSP` | the same file, named `MMDDYY_REV##` for its revision |
+| `TUTORIALSPA.LSP` / `TUTORIALSPA_082026_REV04.LSP` | likewise |
 
 The static name never changes, so an existing autoload keeps working. The
 versioned name tells you at a glance which revision is sitting in someone
@@ -25,8 +25,8 @@ still tell you what it is:
 
 ```
 Command: SPAVER
-SPA 081926 REV03
-Tutorial: 081926 REV03
+SPA 082126 REV05
+Tutorial: 082126 REV05
 ```
 
 Cut a new release with:
@@ -64,9 +64,9 @@ flow in `SPA.LSP` changes, walk `TUTORIALSPA.LSP` through with it.
 
 | Shape | What it asks for |
 | --- | --- |
-| **Rectangle** | overall width (A‑B), overall length (A‑D), then each corner |
+| **Rectangle** | overall width (A‑B), then the length (A‑D) — **the width is offered back**, so Enter makes it square — then each corner |
 | **Octagon** | overalls **B** across and **A** up, then the cut **face S2**, then **T / S / S1 / V** (any of them may be `NA`) |
-| **Round** | **B** across and **A** up — a circle when they agree, an ellipse when they do not |
+| **Round** | **one measurement** — the diameter. Type `O` at it for an out-of-round spa and the two axes are asked instead |
 
 Corner naming, plan view:
 
@@ -179,6 +179,28 @@ Callouts sit outside the corner on its 45° line: a radius dimension on a
 face (`21"`), and a circled corner point with a `90°` leader on a `90`
 corner.
 
+## Going back a step
+
+SPA follows the repo-wide convention: **Back** (`B`), with **Undo**
+(`U`) as an unlisted synonym, is offered at every prompt that has a
+previous question to return to, and is always shown in the prompt's
+brackets. Backing out of a measurement stage re-asks that stage from
+its first question.
+
+Two places worth knowing:
+
+* The **spillaway loop** commits as it goes, so Back at the top of it
+  *removes the spillaway just committed* — its no-go zone and its
+  report row — before re-asking (`Stepping back one spillaway.` /
+  `Already at the first spillaway.`).
+* The **taper** prompt is a `getstring`, which cannot take keywords, so
+  there Back is typed like a value — `B`, `BACK`, `U` or `UNDO`, any
+  case — and the prompt says so.
+
+Back cannot cross a point where geometry was committed: once an outline
+is drawn, the offer to add the other one is a fresh first question. That
+is the same boundary `POOL` has.
+
 ## Orientation
 
 **The long overall always runs west to east**, whichever order the two
@@ -238,6 +260,35 @@ and `90° Typ.` on the square corners.
 The round spa takes one overall; only an out-of-round one gets the
 second. An octagon whose eight sides come out unequal picks up the bottom
 and right flats the same way the rectangle does.
+
+## Bounded outlines
+
+The cover and the water's edge are each drawn as **one closed
+`LWPOLYLINE`**, not a scatter of separate lines and arcs. So either
+outline picks in a single click, encloses a real area, and can be
+offset, hatched, or handed straight to the tools that expect a
+highlighted perimeter (`STOCKCOVER`, `PADDLE`, `AUTOBEAD`).
+
+A radius corner becomes a true arc segment of that polyline, carried as
+a bulge — `tan(θ/4)`, which for a square corner's quarter-turn fillet is
+`0.41421`. Radius dimensions still work: `DIMRADIUS` takes a polyline
+arc segment picked at a point on it exactly as it takes a bare arc. A
+round spa was already a single `CIRCLE` (or `ELLIPSE` when out of
+round), so it was bounded to begin with.
+
+## Millimetres
+
+Any measurement may be typed **in millimetres by putting the unit on the
+number** — `600mm`, `1524 MM`, `76.2mm` — and it is converted to inches
+(÷ 25.4). This works at every distance prompt: the guided measurements,
+the corner sizes, the lap, the spillaway lengths.
+
+Inches and architectural input are unchanged (`84`, `6'10-1/2"`), and
+object snaps stay live, so a distance can still be **picked** off
+existing geometry rather than typed. That combination is what
+`initget`'s bit 128 buys: a value `getdist` understands still comes back
+as a number, and anything else comes back as raw text for the mm parser
+to look at. Text that is neither re-asks rather than slipping through.
 
 ## Standard inches
 

@@ -148,7 +148,14 @@
 ;;;  flat), G H (left flat); the four cuts are B-C, D-E, F-G and H-A.
 ;;;
 ;;;  Distances may be typed in the current drawing units, e.g. 6'10-1/2"
-;;;  as well as plain inches.  "Back" at any prompt after the first
+;;;  as well as plain inches -- or in MILLIMETRES by putting the unit on
+;;;  the number: 600mm, 1524 MM.  Object snaps stay live, so a distance
+;;;  can still be picked off existing geometry instead of typed.
+;;;
+;;;  Each outline is drawn as ONE CLOSED POLYLINE, so the cover and the
+;;;  water's edge are each a single bounded entity: one click selects
+;;;  either, each encloses an area, and either can be offset, hatched or
+;;;  handed to the tools that work on a highlighted perimeter.  "Back" at any prompt after the first
 ;;;  re-asks the previous question.
 ;;;
 ;;;  Written in plain AutoLISP (entmake + classic commands, no
@@ -165,7 +172,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "081926 REV03")
+(setq spa:*version* "082126 REV05")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -486,6 +493,31 @@
 
 (defun spa:perround (cen b a) (spa:body-round cen b a spa:*perlay* (spa:perdxf)))
 
+;; tan(theta/4) -- the DXF bulge of an arc segment sweeping theta.
+(defun spa:bulge (th) (/ (sin (* 0.25 th)) (cos (* 0.25 th))))
+
+;; The perimeter as ONE closed LWPOLYLINE rather than a handful of loose
+;; lines and arcs, so each outline is a single bounded entity: it picks
+;; in one click, encloses an area, and can be offset, hatched or handed
+;; to the tools that expect a highlighted perimeter (STOCKCOVER, PADDLE,
+;; AUTOBEAD).  verts is a list of (point . bulge) walked counter-
+;; clockwise; a bulge of 0 is a straight run to the next vertex.
+;; Returns the polyline's entity name.
+(defun spa:perpoly (verts / lst v p)
+  (setq lst (append (list '(0 . "LWPOLYLINE")
+                          '(100 . "AcDbEntity")
+                          (cons 8 spa:*perlay*)
+                          '(100 . "AcDbPolyline")
+                          (cons 90 (length verts))
+                          '(70 . 1))          ; closed
+                    (spa:perdxf)))
+  (foreach v verts
+    (setq p (spa:wp (car v))
+          lst (append lst (list (cons 10 (list (car p) (cadr p)))
+                                (cons 42 (cdr v))))))
+  (entmake lst)
+  (entlast))
+
 ;; Dotted WHITE guide line -- the measuring ties on the input screen.
 (defun spa:linedot (p1 p2)
   (spa:line p1 p2 "SPA-NOTES"
@@ -587,7 +619,8 @@
 ;; far point and the dimension line dragged further out along the same
 ;; direction, so the leader comes in from outside.
 (defun spa:dimrad (ent tip outd doff sfx)
-  (if (and ent (entget ent) (= "ARC" (cdr (assoc 0 (entget ent)))))
+  (if (and ent (entget ent)
+           (member (cdr (assoc 0 (entget ent))) '("ARC" "LWPOLYLINE")))
       (if (and sfx (/= sfx ""))
           (command "_.DIMRADIUS" (list ent (spa:wp tip))
                    "_T" (strcat "<>" sfx)
@@ -636,7 +669,7 @@
 
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol SPA-BACK.
-(defun spa:asks (kind msg ents dflt back / v cols kw e)
+(defun spa:asks (kind msg ents dflt back / v cols kw e out)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (spa:osup)
@@ -644,24 +677,30 @@
   (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
-  (if kw
-      (initget (if (and (eq kind 'SUG) dflt) 6 7) kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (cond ((eq kind 'REQ) "")
-                          ((eq kind 'SUG)
-                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
-                               " (or NA)"))
-                          (t " (or NA if not measured)"))
-                    (if back " [Back]" "")
-                    ": ")))
+  (while (null out)
+    ;; 128 = arbitrary input, so a value typed in millimetres reaches us
+    ;; as text for spa:mmval rather than being rejected by getdist
+    (if kw
+        (initget (+ (if (and (eq kind 'SUG) dflt) 6 7) 128) kw)
+        (initget (+ 7 128)))
+    (setq v (getdist
+              (strcat "\n" msg
+                      (cond ((eq kind 'REQ) "")
+                            ((eq kind 'SUG)
+                             (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                                 " (or NA)"))
+                            (t " (or NA if not measured)"))
+                      (if back " [Back]" "")
+                      ": ")))
+    (cond
+      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SPA-BACK))
+      ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
+      ((and (null v) (eq kind 'SUG)) (setq out dflt))   ; Enter took it
+      ((setq out (spa:dval v)))
+      (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
   (spa:osdown)
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'SPA-BACK)
-        ((= (type v) 'STR) nil)               ; NA
-        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
-        (t v)))
+  (if (eq out 'SPA-NA) nil out))
 
 ;; Keyword question that can also be backed out of.  kws is the initget
 ;; string, shown the bracketed list, dflt the Enter answer (nil = an
@@ -675,6 +714,67 @@
   (cond ((member v '("Back" "Undo")) 'SPA-BACK)
         ((null v) (if dflt dflt (spa:askkw msg kws shown dflt back)))
         (t v)))
+
+;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
+;; 1524.5mm.  The drawing is in inches, so the value is converted.
+;; Returns the distance in inches, or nil when the text is not that --
+;; which is how the callers tell a mm answer from a typo.
+;;
+;; getdist cannot parse this itself, so the prompts that accept it set
+;; initget's bit 128 (arbitrary input): a value getdist understands
+;; still comes back as a number, and anything else comes back as the
+;; raw string for this to look at.  Point picking and architectural
+;; input are both untouched.
+(defun spa:mmval (s / n body v)
+  (setq s (spa:trim s)
+        n (strlen s))
+  (if (and (> n 2) (= "MM" (strcase (substr s (1- n) 2))))
+      (progn
+        (setq body (spa:trim (substr s 1 (- n 2)))
+              v (if (> (strlen body) 0) (distof body 2) nil))
+        (if (and v (> v 0.0)) (/ v 25.4)))))
+
+;; What a bit-128 getdist gave back: a number passes through, mm text
+;; converts, and anything else is nil so the caller can re-ask.
+(defun spa:dval (v)
+  (cond ((= (type v) 'STR) (spa:mmval v))
+        (t v)))
+
+;; A typed distance prompt that follows the repo's Back convention: a
+;; getdist DOES take keywords, so Back (and its unlisted synonym Undo)
+;; are offered as keywords whenever there is a previous question to
+;; return to, shown in the prompt's brackets like everywhere else.
+;; xkw is any extra keyword to merge in, dflt an Enter answer.
+;; Returns the distance, a matched keyword string, or SPA-BACK.
+(defun spa:askd (msg xkw dflt back / kw v out)
+  (setq kw (cond ((and xkw back) (strcat xkw " Back Undo"))
+                 (back "Back Undo")
+                 (t xkw)))
+  (spa:osup)
+  (while (null out)
+    ;; 128 = arbitrary input, so a mm answer reaches us as text
+    (if kw (initget (+ (if dflt 6 7) 128) kw)
+        (initget (+ (if dflt 6 7) 128)))
+    (setq v (getdist (strcat "\n" msg
+                             (if dflt (strcat " <" (rtos dflt) ">") "")
+                             (cond ((and xkw back) (strcat " [" xkw "/Back]"))
+                                   (xkw (strcat " [" xkw "]"))
+                                   (back " [Back]")
+                                   (t ""))
+                             ": ")))
+    (cond
+      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SPA-BACK))
+      ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
+      ((and (null v) dflt) (setq out dflt))
+      ((setq out (spa:dval v)))
+      (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
+  (spa:osdown)
+  out)
+
+;; Back typed like a value, for the one prompt that cannot take
+;; keywords (getstring).  Any case, per the shared convention.
+(defun spa:backstr (v)
+  (member (strcase v) '("B" "BACK" "U" "UNDO")))
 
 ;; Run a list of input stages with Back between them: a stage that
 ;; returns SPA-BACK sends the user to the previous stage, which is
@@ -897,21 +997,27 @@
 (defun spa:askother2 ( / v)
   (princ (strcat "\nThe " (spa:modeword (spa:othermode))
                  " can be added now -- the cover is always the larger of the two."))
+  ;; the Yes/No is this phase's first question -- the outline is already
+  ;; drawn behind it, so there is nothing to go back to; the method
+  ;; question after it backs up to the Yes/No like any second question
   (if (= "Yes" (spa:askkw (strcat "Draw the " (spa:modeword (spa:othermode))
                                   " as well")
                           "Yes No" "Yes/No" "Yes" nil))
-      (spa:askkw "Take it from" "Offset Dims" "Offset/Dims" "Offset" nil)))
+      (if (eq 'SPA-BACK
+              (setq v (spa:askkw "Take it from" "Offset Dims"
+                                 "Offset/Dims" "Offset" t)))
+          (spa:askother2)
+          v)))
 
 ;; The gap between the two outlines, asked as a positive lap and signed
 ;; for the direction of travel.
 (defun spa:askgap ( / g)
-  (spa:osup)
-  (initget 6)                           ; no zero, no negative
-  (setq g (getdist (strcat "\nHow far does the cover lap the water's edge <"
-                           (rtos spa:*gapdflt*) ">: ")))
-  (spa:osdown)
-  (if (null g) (setq g spa:*gapdflt*))
-  (* g (spa:offsign)))
+  ;; Back here re-asks the question that chose Offset in the first
+  ;; place, which spa:askother2 owns -- so it is returned as SPA-BACK
+  ;; and the caller re-enters the offer.
+  (setq g (spa:askd "How far does the cover lap the water's edge"
+                    nil spa:*gapdflt* t))
+  (if (eq g 'SPA-BACK) g (* g (spa:offsign))))
 
 ;; Offset every corner treatment by g (positive = outward).
 (defun spa:offcorners (corners g / out c sz)
@@ -929,20 +1035,26 @@
 ;; offered with the size the implied lap works out to, so Enter walks
 ;; straight through when the second outline really is a parallel offset,
 ;; and a corner that was measured differently can be typed over.
-(defun spa:askothercorners (corners lbls maxsb / out i cc any)
+(defun spa:askothercorners (corners lbls maxsb / out i cc any v)
   (setq any nil)
   (foreach cc corners (if (/= (car cc) "90") (setq any t)))
   (if any
       (princ (strcat "\n" (spa:modeword (spa:othermode))
                      " corners -- Enter takes the size the overalls imply.")))
+  ;; Back steps to the previous corner, like the main corner loop
   (setq out nil i 0)
-  (foreach cc corners
-    (setq out (cons (if (= (car cc) "90")
-                        cc
-                        (spa:askcorner (strcat "Corner " (nth i lbls))
-                                       (car cc) (cadr cc) nil maxsb nil))
-                    out)
-          i (1+ i)))
+  (while (< i (length corners))
+    (setq cc (nth i corners))
+    (if (= (car cc) "90")
+        (setq out (cons cc out) i (1+ i))
+        (progn
+          (setq v (spa:askcorner (strcat "Corner " (nth i lbls))
+                                 (car cc) (cadr cc) nil maxsb (> i 0)))
+          (if (eq v 'SPA-BACK)
+              (if (> i 0)
+                  (setq i (1- i) out (cdr out))
+                  (princ "\nAlready at the first corner."))
+              (setq out (cons v out) i (1+ i))))))
   (reverse out))
 
 ;; A quad of width w by length l with its bottom-left at org.
@@ -1352,44 +1464,81 @@
 
 ;;; ---------- the guided flow ----------
 
-(defun spa:hask (msg / v)
-  (spa:osup)
-  (initget 7)
-  (setq v (getdist (strcat "\n" msg ": ")))
-  (spa:osdown)
-  v)
+(defun spa:hask (msg back)
+  (spa:askd msg nil nil back))
 
-;; Ask the spillaways.  Returns the forbidden x-intervals; report rows
-;; accumulate through rowsym (a quoted symbol set in the caller).
-(defun spa:askspill (x1 x2 / forb loc cnr d wall len)
-  (while (= "Yes" (spa:askkw "Is there a spillaway" "Yes No" "Yes/No" "No" nil))
-    (setq loc (spa:askkw "Spillaway location" "Corner Wall"
-                         "Corner/Wall(centred)" "Wall" nil))
-    (if (= loc "Corner")
-        (progn
-          (setq cnr (spa:askkw "Which corner"
-                               "BottomLeft BottomRight TopRight TopLeft"
-                               "BottomLeft/BottomRight/TopRight/TopLeft" nil nil)
-                d (spa:hask "Length from the corner to keep clear of hinges"))
-          (if (member cnr '("BottomLeft" "TopLeft"))
-              (setq forb (cons (list x1 (+ x1 d)) forb))
-              (setq forb (cons (list (- x2 d) x2) forb)))
-          (setq spa:*hingerows*
-                (append spa:*hingerows*
-                        (list (list (strcat "SPILLWAY " (strcase cnr)) nil d)))))
-        (progn
-          (setq wall (spa:askkw "On which wall" "Top Bottom Left Right"
-                                "Top/Bottom/Left/Right" nil nil)
-                len (spa:hask "Overall length of the spillaway (centred)"))
-          (if (member wall '("Top" "Bottom"))
-              (setq forb (cons (list (- (* 0.5 (+ x1 x2)) (* 0.5 len))
-                                     (+ (* 0.5 (+ x1 x2)) (* 0.5 len)))
-                               forb))
-              (princ "\n(a left/right wall spillaway cannot meet a north-south hinge; recorded only)"))
-          (setq spa:*hingerows*
-                (append spa:*hingerows*
-                        (list (list (strcat "SPILLWAY " (strcase wall) " WALL")
-                                    nil len)))))))
+;; Ask the spillaways.  Returns the forbidden x-intervals.
+;;
+;; This is one of the repo's commit-as-you-go loops, so Back follows
+;; that convention: it steps back a question within a spillaway, and
+;; from the first question of one it REMOVES the spillaway just
+;; committed -- its zone and its report row -- before re-asking.  The
+;; feedback wording is the shared one.
+(defun spa:askspill (x1 x2 / forb loc cnr d wall len v stage done)
+  (setq forb nil done nil)
+  (while (not done)
+    (setq v (spa:askkw "Is there a spillaway" "Yes No" "Yes/No" "No"
+                       (if forb t nil)))
+    (cond
+      ;; Back from the top question: drop the last spillaway and re-ask
+      ((eq v 'SPA-BACK)
+       (if forb
+           (progn
+             (princ "\nStepping back one spillaway.")
+             (setq forb (cdr forb)
+                   spa:*hingerows* (reverse (cdr (reverse spa:*hingerows*)))))
+           (princ "\nAlready at the first spillaway.")))
+      ((= v "No") (setq done t))
+      (t
+       ;; one spillaway, its own questions Back-able among themselves
+       (setq stage 0)
+       (while (and stage (< stage 3))
+         (cond
+           ((= stage 0)
+            (setq loc (spa:askkw "Spillaway location" "Corner Wall"
+                                 "Corner/Wall(centred)" "Wall" t))
+            (setq stage (if (eq loc 'SPA-BACK) nil 1)))
+           ((= stage 1)
+            (if (= loc "Corner")
+                (setq cnr (spa:askkw "Which corner"
+                                     "BottomLeft BottomRight TopRight TopLeft"
+                                     "BottomLeft/BottomRight/TopRight/TopLeft"
+                                     nil t))
+                (setq wall (spa:askkw "On which wall" "Top Bottom Left Right"
+                                      "Top/Bottom/Left/Right" nil t)))
+            (setq stage (if (eq (if (= loc "Corner") cnr wall) 'SPA-BACK) 0 2)))
+           (t
+            (setq d (spa:hask (if (= loc "Corner")
+                                  "Length from the corner to keep clear of hinges"
+                                  "Overall length of the spillaway (centred)")
+                              t))
+            (if (eq d 'SPA-BACK)
+                (setq stage 1)
+                (progn
+                  ;; commit it
+                  (if (= loc "Corner")
+                      (progn
+                        (if (member cnr '("BottomLeft" "TopLeft"))
+                            (setq forb (cons (list x1 (+ x1 d)) forb))
+                            (setq forb (cons (list (- x2 d) x2) forb)))
+                        (setq spa:*hingerows*
+                              (append spa:*hingerows*
+                                      (list (list (strcat "SPILLWAY "
+                                                          (strcase cnr))
+                                                  nil d)))))
+                      (progn
+                        (if (member wall '("Top" "Bottom"))
+                            (setq forb
+                                  (cons (list (- (* 0.5 (+ x1 x2)) (* 0.5 d))
+                                              (+ (* 0.5 (+ x1 x2)) (* 0.5 d)))
+                                        forb))
+                            (princ "\n(a left/right wall spillaway cannot meet a north-south hinge; recorded only)"))
+                        (setq spa:*hingerows*
+                              (append spa:*hingerows*
+                                      (list (list (strcat "SPILLWAY "
+                                                          (strcase wall) " WALL")
+                                                  nil d))))))
+                  (setq stage 3)))))))))
   forb)
 
 ;; Is this a Thermo-Light cover?  Its water's edge and cover size are
@@ -1430,11 +1579,19 @@
       (spa:readblock))                  ; not offered earlier -- offer now
   (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
   (if (spa:thermop) (setq spa:*taper* "1-3/8"))
+  ;; getstring cannot take keywords, so Back is typed like a value here
+  ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
-    (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8): "))
-    (setq spa:*taper* (spa:tapernorm v))
-    (if (null spa:*taper*) (princ "\nNot a taper on the foam sheet -- again.")))
-  (list spa:*grade* spa:*taper*))
+    (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
+    (if (spa:backstr v)
+        (setq spa:*taper* 'SPA-BACK)
+        (progn
+          (setq spa:*taper* (spa:tapernorm v))
+          (if (null spa:*taper*)
+              (princ "\nNot a taper on the foam sheet -- again.")))))
+  (if (eq spa:*taper* 'SPA-BACK)
+      (progn (setq spa:*taper* nil) 'SPA-BACK)
+      (list spa:*grade* spa:*taper*)))
 
 ;; The whole auto-hinge pass.  desc / x1 / x2 describe the COVER
 ;; outline; coverp nil means only the water's edge was drawn and the
@@ -1450,11 +1607,13 @@
       (progn
         (if (not coverp)
             (spa:valnote "NO COVER OUTLINE - HINGES LAID ON THE WATER'S EDGE"))
-        ;; 1 -- where hinges cannot go
-        (setq forb (spa:askspill x1 x2))
-        ;; 2 -- grade + taper -> foam width / length / piece counts
-        (setq gt (spa:askdetails)
-              grade (car gt) taper (cadr gt)
+        ;; 1 -- where hinges cannot go, then 2 -- grade + taper.  Back
+        ;; at the taper re-opens the spillaways, its previous question.
+        (setq gt 'SPA-BACK)
+        (while (eq gt 'SPA-BACK)
+          (setq forb (spa:askspill x1 x2)
+                gt (spa:askdetails)))
+        (setq grade (car gt) taper (cadr gt)
               ;; Thermo-Light is velcro throughout -- no fold hinge
               allvel (spa:thermop)
               row nil)
@@ -1626,24 +1785,44 @@
         ((eq spec 'next) (cadr ce))
         (t (nth i q))))
 
-;; Draw the rectangle perimeter with its corner treatments.  Returns the
-;; list of fillet-arc entity names per corner (nil where the corner is 90
-;; or diagonal) for the corner callouts.
-(defun spa:drawrect (q corners / ce i tyi arcs)
-  (setq ce (spa:allends q corners))
-  (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
-    (spa:perline (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce))))
-  (setq arcs nil)
-  (foreach i (list 0 1 2 3)             ; corner treatments
+;; Draw the rectangle perimeter with its corner treatments, as ONE
+;; closed polyline.  A radius corner becomes an arc segment (its bulge
+;; is tan of a quarter of the angle the arc sweeps, which for a square
+;; corner is tan 22.5 = 0.4142); a diagonal becomes a straight segment
+;; between its two ends; a 90 corner is a single vertex.
+;;
+;; Returns a per-corner list holding the polyline's entity name at each
+;; RADIUS corner and nil elsewhere, so the corner callouts still have
+;; something to hang a radius dimension on -- DIMRADIUS takes a polyline
+;; arc segment picked at a point on it just as it takes a bare arc.
+(defun spa:drawrect (q corners / ce i j tyi verts pl p pp pn uprev unext
+                                 dp ang arcs)
+  (setq ce (spa:allends q corners) verts nil)
+  (foreach i (list 0 1 2 3)
     (setq tyi (car (nth i corners)))
     (cond
+      ((= tyi "90")
+       ;; a single sharp vertex, straight out to the next corner
+       (setq verts (cons (cons (nth i q) 0.0) verts)))
       ((= tyi "Diagonal")
-       (spa:perline (car (nth i ce)) (cadr (nth i ce)))
-       (setq arcs (cons nil arcs)))
-      ((= tyi "Radius")
-       (spa:perarc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)))
-       (setq arcs (cons (entlast) arcs)))
-      (t (setq arcs (cons nil arcs)))))
+       (setq verts (cons (cons (cadr (nth i ce)) 0.0)
+                         (cons (cons (car (nth i ce)) 0.0) verts))))
+      (t                                ; Radius
+       (setq p  (nth i q)
+             pp (nth (rem (+ i 3) 4) q)
+             pn (nth (rem (+ i 1) 4) q)
+             uprev (spa:unit (spa:v- pp p))
+             unext (spa:unit (spa:v- pn p))
+             dp (spa:dot uprev unext)
+             ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp)
+             ;; the fillet sweeps the corner's exterior angle, and the
+             ;; walk is counter-clockwise, so the bulge is positive
+             verts (cons (cons (cadr (nth i ce)) 0.0)
+                         (cons (cons (car (nth i ce)) (spa:bulge (- pi ang)))
+                               verts))))))
+  (setq pl (spa:perpoly (reverse verts)) arcs nil)
+  (foreach i (list 0 1 2 3)
+    (setq arcs (cons (if (= (car (nth i corners)) "Radius") pl nil) arcs)))
   (reverse arcs))
 
 ;; How far the deepest corner treatment sets back along its walls -- an
@@ -1771,46 +1950,44 @@
 ;; treatment's setback along the walls at half the shorter adjacent
 ;; wall, so two treatments can never overlap and fold the perimeter;
 ;; too-large answers are re-asked.  Returns (type size) or SPA-BACK.
-(defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e)
+(defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e
+                                                            dsz out)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
-  (spa:osup)
-  (setq ty (spa:askkw label "Radius Diagonal 90 Square" "Radius/Diagonal/90"
-                      dflty back))
-  (spa:osdown)
-  (if (eq ty 'SPA-BACK) (setq ty nil))
-  (if (equal ty "Square") (setq ty "90"))   ; sheet legend calls it 90
-  (if (null ty)
-      (progn (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
-             'SPA-BACK)
-      (progn
-        (if (= ty "90")
-            (setq sz 0.0)
-            (progn
-              (spa:osup)
-              ;; the autofill size only stands in when it came from the
-              ;; SAME treatment -- a radius is not a cut face
-              (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
-                  (setq dfltsz nil))
-              (initget (if dfltsz 6 7))
-              (setq sz (getdist (strcat "\n" label (spa:cornersizemsg ty)
-                                        (if dfltsz (strcat " <" (rtos dfltsz) ">") "")
-                                        ": ")))
-              (if (null sz) (setq sz dfltsz))
-              ;; Radius sets back r along each wall; a Diagonal face f
-              ;; sets back f/sqrt(2) on a 90-degree corner
-              (while (and maxsb
-                          (> (setq sb (if (= ty "Radius") sz (* sz 0.70711)))
-                             maxsb))
-                (princ (strcat "\nToo large for this corner's walls -- max "
-                               (rtos (if (= ty "Radius") maxsb (/ maxsb 0.70711)))
-                               ".  Re-enter."))
-                (initget 7)
-                (setq sz (getdist (strcat "\n" label (spa:cornersizemsg ty)
-                                          ": "))))
-              (spa:osdown)))
-        (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
-        (list ty sz))))
+  (while (null out)
+    (spa:osup)
+    (setq ty (spa:askkw label "Radius Diagonal 90 Square" "Radius/Diagonal/90"
+                        dflty back))
+    (spa:osdown)
+    (if (equal ty "Square") (setq ty "90"))   ; sheet legend calls it 90
+    (cond
+      ;; backed out of the type question -- out of the corner entirely
+      ((eq ty 'SPA-BACK) (setq out 'SPA-BACK))
+      ((= ty "90") (setq out (list ty 0.0)))
+      (t
+       ;; the autofill size only stands in when it came from the SAME
+       ;; treatment -- a radius is not a cut face
+       (setq dsz (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
+                     nil dfltsz)
+             sz (spa:askd (strcat label (spa:cornersizemsg ty)) nil dsz t))
+       ;; Back at the size re-asks the type, its previous question
+       (if (not (eq sz 'SPA-BACK))
+           (progn
+             ;; Radius sets back r along each wall; a Diagonal face f
+             ;; sets back f/sqrt(2) on a 90-degree corner
+             (while (and maxsb
+                         (not (eq sz 'SPA-BACK))
+                         (> (setq sb (if (= ty "Radius") sz (* sz 0.70711)))
+                            maxsb))
+               (princ (strcat "\nToo large for this corner's walls -- max "
+                              (rtos (if (= ty "Radius") maxsb
+                                        (/ maxsb 0.70711)))
+                              ".  Re-enter."))
+               (setq sz (spa:askd (strcat label (spa:cornersizemsg ty))
+                                  nil nil t)))
+             (if (not (eq sz 'SPA-BACK)) (setq out (list ty sz))))))))
+  (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
+  out)
 
 ;;; -------------------- rectangle flow ---------------------------------
 
@@ -1840,13 +2017,14 @@
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
                         a b c d cen doff th allsame i j tmp lbls cc back
                         rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
-                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows)
+                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
            (spa:wp (list -110.0 -90.0)) (spa:wp (list 350.0 320.0)))
   (princ "\nA gray guide spa is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
+  (princ "\n(Enter at the length takes the width, i.e. a square spa)")
   (princ "\n(Back re-asks the previous question)")
 
   ;; -------- the two overalls (a moulded shell is a true rectangle)
@@ -1855,11 +2033,16 @@
                 (list (list 'w 'REQ "Overall WIDTH across (A-B)"
                             (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))
                                     (spa:lbl pv '(lA lB))))
-                      (list 'l 'REQ "Overall LENGTH up (A-D)"
+                      ;; the width is offered back as the length, so a
+                      ;; square spa is one measurement and Enter -- type
+                      ;; a different value to decline it
+                      (list 'l 'SUG "Overall LENGTH up (A-D)"
                             (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))
-                                    (spa:lbl pv '(lA lD)))))
+                                    (spa:lbl pv '(lA lD)))
+                            '(w)))
                 nil))
-    (setq w (spa:sq ans 'w) l (spa:sq ans 'l))
+    (setq w (spa:sq ans 'w)
+          l (if (spa:sq ans 'l) (spa:sq ans 'l) w))   ; NA -> square
     nil)
 
   ;; -------- corner treatments; corner A autofills B, C and D
@@ -1932,37 +2115,46 @@
   ;; ------------------------------------------- and, if wanted, the other
   ;; Resolved BEFORE anything is dimensioned, because every dimension
   ;; line stands off the COVER outline -- the outer of the two.
-  (setq meth (spa:askother))
-  (if meth
-      (progn
-        (if (= meth "Offset")
-            (setq g  (spa:askgap)
-                  w2 (+ w (* 2.0 g))
-                  l2 (+ l (* 2.0 g))
-                  c2 (spa:offcorners corners g))
-            (progn
-              (princ (strcat "\nThe two outlines share a centre; give the "
-                             (spa:modeword (spa:othermode)) " as measured."))
-              (setq ans (spa:askseqb
-                          (list (list 'w2 'REQ (strcat (strcase (spa:modeword (spa:othermode)) t)
-                                                       " overall ACROSS") nil)
-                                (list 'l2 'REQ (strcat (strcase (spa:modeword (spa:othermode)) t)
-                                                       " overall UP") nil))
-                          nil)
-                    w2 (spa:sq ans 'w2)
-                    l2 (spa:sq ans 'l2)
+  ;; Asked as one re-enterable unit: a Back anywhere inside either
+  ;; branch re-opens the offer, so the method itself can be changed.
+  (setq meth (spa:askother) done nil)
+  (while (and meth (not done))
+    (if (= meth "Offset")
+        (progn
+          (setq g (spa:askgap))
+          (if (eq g 'SPA-BACK)
+              (setq meth (spa:askother))
+              (setq w2 (+ w (* 2.0 g))
+                    l2 (+ l (* 2.0 g))
+                    c2 (spa:offcorners corners g)
+                    done t)))
+        (progn
+          (princ (strcat "\nThe two outlines share a centre; give the "
+                         (spa:modeword (spa:othermode)) " as measured."))
+          (setq ans (spa:askseqb
+                      (list (list 'w2 'REQ (strcat (strcase (spa:modeword (spa:othermode)) t)
+                                                   " overall ACROSS") nil)
+                            (list 'l2 'SUG (strcat (strcase (spa:modeword (spa:othermode)) t)
+                                                   " overall UP") nil '(w2)))
+                      t))
+          (if (eq ans 'SPA-BACK)
+              (setq meth (spa:askother))
+              (setq w2 (spa:sq ans 'w2)
+                    l2 (if (spa:sq ans 'l2) (spa:sq ans 'l2) w2)
                     ;; the implied lap drives the corner sizes, which the
                     ;; user may then correct one at a time
                     g  (* 0.25 (+ (- w2 w) (- l2 l)))
                     c2 (spa:offcorners corners g)
-                    c2 (spa:askothercorners c2 lbls (* 0.5 (min w2 l2))))))
-        (if (or (<= w2 0.0) (<= l2 0.0))
-            (progn
-              (spa:valnote "THE SECOND OUTLINE CAME OUT AT OR BELOW ZERO - SKIPPED")
-              (setq meth nil))
-            (setq org2 (spa:orgfor cen w2 l2)
-                  q2   (spa:quadat org2 w2 l2)
-                  cen2 cen))))
+                    c2 (spa:askothercorners c2 lbls (* 0.5 (min w2 l2)))
+                    done t)))))
+  (if (and meth done)
+      (if (or (<= w2 0.0) (<= l2 0.0))
+          (progn
+            (spa:valnote "THE SECOND OUTLINE CAME OUT AT OR BELOW ZERO - SKIPPED")
+            (setq meth nil))
+          (setq org2 (spa:orgfor cen w2 l2)
+                q2   (spa:quadat org2 w2 l2)
+                cen2 cen)))
 
   ;; the cover is the larger, so its extents are the ones to stand off
   (setq xhi (if meth (max w (+ (car org2) w2)) w)
@@ -2174,7 +2366,7 @@
                        ovres s tv s1 v pts cen doff th e p q k rows
                        tact vact s2act alleq tmp
                        mode1 meth g kk b2 a2 s2 s12 ovr org2 pts2 cen2
-                       xlo xhi ylo yhi out1 ip1 ip2 hrows)
+                       xlo xhi ylo yhi out1 ip1 ip2 hrows done)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -2244,43 +2436,51 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
-  (foreach e spa:*octedges*
-    (spa:perline (nth (car e) pts) (nth (cadr e) pts)))
+  ;; one closed polyline, not eight loose lines
+  (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts))
 
   ;; ------------------------------------------- and, if wanted, the other
   ;; An octagon offset by g keeps its shape: the overalls each grow by
   ;; 2g and the cut legs by g*(s + s1 - face)/the other leg.
-  (setq meth (spa:askother))
-  (if meth
-      (progn
-        (if (= meth "Offset")
-            (setq g   (spa:askgap)
-                  kk  (- (+ s s1) (distance (nth 1 pts) (nth 2 pts)))
-                  b2  (+ bov (* 2.0 g))
-                  a2  (+ aov (* 2.0 g))
-                  s2  (+ s  (/ (* g kk) s1))
-                  s12 (+ s1 (/ (* g kk) s)))
-            (progn
-              (princ (strcat "\nThe two outlines share a centre; give the "
-                             (spa:modeword (spa:othermode)) " as measured."))
-              (setq ans (spa:askseqb
-                          (list (list 'b2 'REQ "Overall ACROSS" nil)
-                                (list 'a2 'SUG "Overall UP" nil '(b2))
-                                (list 'f2 'NAX "Corner cut FACE" nil))
-                          nil)
-                    b2 (spa:sq ans 'b2)
+  ;; one re-enterable unit: a Back inside either branch re-opens the offer
+  (setq meth (spa:askother) done nil)
+  (while (and meth (not done))
+    (if (= meth "Offset")
+        (progn
+          (setq g (spa:askgap))
+          (if (eq g 'SPA-BACK)
+              (setq meth (spa:askother))
+              (setq kk  (- (+ s s1) (distance (nth 1 pts) (nth 2 pts)))
+                    b2  (+ bov (* 2.0 g))
+                    a2  (+ aov (* 2.0 g))
+                    s2  (+ s  (/ (* g kk) s1))
+                    s12 (+ s1 (/ (* g kk) s))
+                    done t)))
+        (progn
+          (princ (strcat "\nThe two outlines share a centre; give the "
+                         (spa:modeword (spa:othermode)) " as measured."))
+          (setq ans (spa:askseqb
+                      (list (list 'b2 'REQ "Overall ACROSS" nil)
+                            (list 'a2 'SUG "Overall UP" nil '(b2))
+                            (list 'f2 'NAX "Corner cut FACE" nil))
+                      t))
+          (if (eq ans 'SPA-BACK)
+              (setq meth (spa:askother))
+              (setq b2 (spa:sq ans 'b2)
                     a2 (if (spa:sq ans 'a2) (spa:sq ans 'a2) b2)
                     ovr (spa:octov a2 b2 nil nil nil nil (spa:sq ans 'f2))
-                    s2 (car ovr) s12 (caddr ovr))))
-        (if (or (<= b2 0.0) (<= a2 0.0) (<= s2 0.0) (<= s12 0.0)
-                (<= (- b2 (* 2.0 s2)) 0.0) (<= (- a2 (* 2.0 s12)) 0.0))
-            (progn
-              (spa:valnote "THE SECOND OUTLINE WILL NOT CLOSE - SKIPPED")
-              (setq meth nil))
-            (setq org2 (spa:orgfor cen b2 a2)
-                  pts2 (mapcar '(lambda (p) (spa:v+ p org2))
-                               (spa:octpts b2 a2 s2 s12))
-                  cen2 cen))))
+                    s2 (car ovr) s12 (caddr ovr)
+                    done t)))))
+  (if (and meth done)
+      (if (or (<= b2 0.0) (<= a2 0.0) (<= s2 0.0) (<= s12 0.0)
+              (<= (- b2 (* 2.0 s2)) 0.0) (<= (- a2 (* 2.0 s12)) 0.0))
+          (progn
+            (spa:valnote "THE SECOND OUTLINE WILL NOT CLOSE - SKIPPED")
+            (setq meth nil))
+          (setq org2 (spa:orgfor cen b2 a2)
+                pts2 (mapcar '(lambda (p) (spa:v+ p org2))
+                             (spa:octpts b2 a2 s2 s12))
+                cen2 cen)))
 
   ;; the cover is the larger, so its extents are the ones to stand off
   (setq xlo (if meth (min 0.0 (car org2)) 0.0)
@@ -2292,8 +2492,7 @@
   (if meth
       (progn
         (spa:setmode (spa:othermode))
-        (foreach e spa:*octedges*
-          (spa:perline (nth (car e) pts2) (nth (cadr e) pts2)))
+        (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts2))
         (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions
@@ -2404,20 +2603,29 @@
 
 (defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp
                          mode1 meth g b2 a2 cen2 xlo xhi ylo yhi
-                         out1 bl br ab at hrows)
+                         out1 bl br ab at hrows done)
   (setq oldclay (getvar "CLAYER")
         pv (spa:roundpreview))
   (command "_.ZOOM" "_Window"
            (spa:wp (list -130.0 -70.0)) (spa:wp (list 340.0 330.0)))
-  (princ "\nRound spa -- B across and A up, both through the middle.")
-  (princ "\n(Enter at A takes B, i.e. a true circle)")
-
-  (setq ans (spa:askseqb
-              (list (list 'b 'REQ "B - overall size ACROSS" (cdr (assoc "B" pv)))
-                    (list 'a 'SUG "A - overall size UP" (cdr (assoc "A" pv)) '(b)))
-              nil)
-        bov (spa:sq ans 'b)
-        aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov))  ; NA at A -> circle
+  ;; A round spa takes ONE measurement -- the diameter, through the
+  ;; middle.  A spa that measured out of round is the exception, not the
+  ;; rule, so it costs a keyword rather than a second prompt every time:
+  ;; type O and the two axes are asked for instead.
+  (princ "\nRound spa -- the diameter, measured through the middle.")
+  (princ "\n(measured out of round?  type O for the two axes instead)")
+  (setq bov (spa:askd "Overall diameter" "Outofround" nil nil))
+  (if (= (type bov) 'STR)
+      (progn
+        (setq ans (spa:askseqb
+                    (list (list 'b 'REQ "B - overall size ACROSS"
+                                (cdr (assoc "B" pv)))
+                          (list 'a 'SUG "A - overall size UP"
+                                (cdr (assoc "A" pv)) '(b)))
+                    nil)
+              bov (spa:sq ans 'b)
+              aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
+      (setq aov bov))
   (spa:pvkill)
   ;; an out-of-round spa lies with its long overall west to east
   (if (> aov bov)
@@ -2437,27 +2645,35 @@
       (princ "\nA and B agree, so the spa is drawn as a true circle."))
 
   ;; ------------------------------------------- and, if wanted, the other
-  (setq meth (spa:askother))
-  (if meth
-      (progn
-        (if (= meth "Offset")
-            (setq g  (spa:askgap)
-                  b2 (+ bov (* 2.0 g))
-                  a2 (+ aov (* 2.0 g)))
-            (progn
-              (princ (strcat "\nThe two outlines share a centre; give the "
-                             (spa:modeword (spa:othermode)) " as measured."))
-              (setq ans (spa:askseqb
-                          (list (list 'b2 'REQ "Overall ACROSS" nil)
-                                (list 'a2 'SUG "Overall UP" nil '(b2)))
-                          nil)
-                    b2 (spa:sq ans 'b2)
-                    a2 (if (spa:sq ans 'a2) (spa:sq ans 'a2) b2))))
-        (if (or (<= b2 0.0) (<= a2 0.0))
-            (progn
-              (spa:valnote "THE SECOND OUTLINE CAME OUT AT OR BELOW ZERO - SKIPPED")
-              (setq meth nil))
-            (setq cen2 cen))))
+  ;; one re-enterable unit: a Back inside either branch re-opens the offer
+  (setq meth (spa:askother) done nil)
+  (while (and meth (not done))
+    (if (= meth "Offset")
+        (progn
+          (setq g (spa:askgap))
+          (if (eq g 'SPA-BACK)
+              (setq meth (spa:askother))
+              (setq b2 (+ bov (* 2.0 g))
+                    a2 (+ aov (* 2.0 g))
+                    done t)))
+        (progn
+          (princ (strcat "\nThe two outlines share a centre; give the "
+                         (spa:modeword (spa:othermode)) " as measured."))
+          (setq ans (spa:askseqb
+                      (list (list 'b2 'REQ "Overall ACROSS" nil)
+                            (list 'a2 'SUG "Overall UP" nil '(b2)))
+                      t))
+          (if (eq ans 'SPA-BACK)
+              (setq meth (spa:askother))
+              (setq b2 (spa:sq ans 'b2)
+                    a2 (if (spa:sq ans 'a2) (spa:sq ans 'a2) b2)
+                    done t)))))
+  (if (and meth done)
+      (if (or (<= b2 0.0) (<= a2 0.0))
+          (progn
+            (spa:valnote "THE SECOND OUTLINE CAME OUT AT OR BELOW ZERO - SKIPPED")
+            (setq meth nil))
+          (setq cen2 cen)))
 
   (setq xlo (if meth (min 0.0 (- (car cen) (* 0.5 b2))) 0.0)
         xhi (if meth (max bov (+ (car cen) (* 0.5 b2))) bov)

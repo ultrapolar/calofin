@@ -52,8 +52,8 @@ watch each rule fire. At the end it offers to erase the demo again.
 ## Revisions
 
 `PADDLE.lsp` carries the auto-stamped banner `(setq *paddle-version*
-"v1.1")` that `tools/release_lisp.py` reads; run it after any change
-and the dated twin `releases/PADDLE_MMDDYY_REV11.lsp` regenerates
+"v1.2")` that `tools/release_lisp.py` reads; run it after any change
+and the dated twin `releases/PADDLE_MMDDYY_REV12.lsp` regenerates
 itself. Bump the banner with every revision.
 
 PADDLE reports what it found, e.g.:
@@ -78,10 +78,12 @@ Everything inserted in one run is a single undo step.
   stay uncovered. Every pad center sits on the perimeter.
 * **No collisions:** pads from neighbouring features (a corner next
   to a curve, two close corners, a narrow notch) are checked against
-  each other. A pad that would overlap an already-placed pad slides
-  along one axis to sit flush alongside it (exactly 36″ on center);
-  a pad whose spot is already covered by a neighbour is dropped.
-  The command reports how many were merged this way.
+  each other. A pad on a sharp point is the anchor — its center
+  stays exactly on that point, always. The pads along curves do the
+  dodging: one that would overlap an already-placed pad slides along
+  one axis to sit flush alongside it (exactly 36″ on center), and
+  one whose spot is already covered by a neighbour is dropped. The
+  command reports how many were merged this way.
 * Pads are inserted at 0° — parallel to the X/Y axes. (Set
   `*paddle-align*` to `T` at the top of the lisp if you ever want
   them rotated to follow the perimeter edge instead.)

@@ -273,6 +273,11 @@ not a bug in either side.
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 
+`tests/test_pool_runtime.py` and `tests/test_spa_runtime.py` load the
+real `POOL.LSP` / `SPA.LSP` into the AutoLISP VM in `tests/lispvm.py`
+and drive the commands end-to-end with scripted answers, so a change
+that would die at the AutoCAD command line dies there first.
+
 ## Tests (`tests/`)
 
 Runs without AutoCAD or Blender installed - `lispvm.py` is a pure-Python
@@ -296,6 +301,8 @@ python3 tests/test_autodim.py         # AUTODIM dim styles, dedupe, overall dims
 python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
                                       # own sorted(), then the whole tour
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
+python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
+                                      # both real .lsp files in one lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter

@@ -784,6 +784,16 @@ def _substr(vm, a):
     return s[start - 1:start - 1 + ln]
 
 
+@bi('distof')
+def _distof(vm, a):
+    """(distof string [mode]) -- nil when the text is not a distance."""
+    try:
+        m = re.match(r'\s*[-+]?(\d+\.?\d*|\.\d+)', str(a[0]))
+        return float(m.group(0)) if m else NIL
+    except (TypeError, ValueError):
+        return NIL
+
+
 @bi('rtos')
 def _rtos(vm, a):
     v = num(a[0])
@@ -1076,6 +1086,10 @@ def _getdist(vm, a):
     if isinstance(v, str):
         kw = _match_kw(vm, v)
         if kw is None:
+            # initget bit 128 = arbitrary input: unmatched text comes
+            # back as the string itself instead of being rejected
+            if vm.initget_bits & 128:
+                return v
             raise LispError(f"getdist: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
