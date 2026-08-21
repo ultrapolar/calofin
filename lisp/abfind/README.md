@@ -6,9 +6,12 @@ wherever those two distances cross. These two commands work that way
 round.
 
 * **`ABFIND`** — type a point number, get the two ties: an aligned
-  dimension from A to the point and one from B to it.
-* **`ABMOVE`** — the same, and then the question `ABFIND` raises: *if
-  this point is in the wrong place, where should it be?* One tape is
+  dimension from A to the point and one from B to it. Then it asks
+  whether that point wants moving, and if you say Yes it runs
+  everything `ABMOVE` does before coming back for the next number.
+* **`ABMOVE`** — that flow on its own, without the question, for when
+  you already know a point is wrong: *if this point is in the wrong
+  place, where should it be?* One tape is
   held exactly as it is and the other's reading is walked — a foot at a
   time, ten feet each way, plus every number the reading could have
   been misread as. Each candidate is drawn **yellow** on the POINTS
@@ -32,12 +35,22 @@ and `CDCREATE` make cross dims:
 * the dimension line sitting **right on the tie** (nudge
   `abf:*offset*` to push it off).
 
-It keeps asking for the next number until you press **Enter**, and
-prints both readings as it goes:
+It prints both readings as it goes:
 
 ```
   Pt.17:  A 21'-1"   B 18'-6"  dimensioned.
 ```
+
+Then it asks:
+
+```
+  Move Pt.17 to a different reading? [Yes/No/Back] <No>:
+```
+
+**No** (the Enter answer) moves on to the next point number. **Yes**
+runs everything under `ABMOVE` below — the readings, the pick, the
+move — and then `ABFIND` comes back and asks for the next number.
+Either way it keeps going until you press **Enter** at the number.
 
 Nothing is clicked — unless the drawing does not name its stakes (see
 below).
@@ -214,14 +227,19 @@ When a drawing carries a duplicate number, the first match wins.
 The shared Back convention (see the root README) applies:
 
 * in `ABFIND`, `B`, `BACK`, `U` or `UNDO` (any case) typed at the
-  **point number** un-draws the last pair of ties (`Stepping back one
-  point.`, or `Already at the first point.` when there is nothing
-  left);
-* in `ABMOVE`, `Back` at **which suggestion** takes that point's
-  dimensions away and re-asks the number, and `Back` at **the note**
-  re-asks which suggestion with the suggestions still on screen.
-  `ABMOVE`'s first question has nothing to go back to, and once the
-  point is settled the run is over — to undo a move, `U`.
+  **point number** undoes the whole of the last round — its ties, and,
+  if that round moved a point, the moved point, its ring and its note,
+  with the original ties put back (`Stepping back one point.`, or
+  `Already at the first point.` when there is nothing left);
+* `Back` at **`Move Pt.17 to a different reading?`** un-draws that
+  point's ties and re-asks the number;
+* `Back` at **which suggestion** re-asks the move question — in
+  `ABMOVE`, which never asked it, it re-asks the point number instead;
+* `Back` at **the note** re-asks which suggestion, with the
+  suggestions still on screen.
+
+`ABMOVE`'s first question has nothing to go back to, and once its point
+is settled the run is over — to undo that move, `U`.
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -233,7 +251,9 @@ error, or Esc.
 1. Load `ABFIND.lsp` (`APPLOAD`, or drag it into the drawing). Both
    commands come with the one file.
 2. `ABFIND` → `Point number <Enter = done>:` → `17` → the two ties are
-   drawn → next number, or Enter to finish.
+   drawn → `Move Pt.17 to a different reading? [Yes/No/Back] <No>:` →
+   Enter to move on, or `Yes` to go through step 3 → next number, or
+   Enter to finish.
 3. `ABMOVE` → `Point number (Enter to cancel):` → `17` → read the table
    (`F2` opens the text window if it runs off the command line) →
    `Move Pt.17 - type a tag from the table [Pick/None/Back] <None>:`
@@ -309,6 +329,9 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.5** — `ABFIND` asks `Move Pt.## to a different reading?` after
+  each pair of ties and runs `ABMOVE`'s flow on a Yes, then carries on
+  to the next point; Back undoes a moved round whole again.
 * **v1.4** — each group of suggestions gets the dashed grey arc it
   lies on (`abf:*locus-color*` / `abf:*locus-ltype*`), created at pool
   scale when the drawing has no linetype by that name.

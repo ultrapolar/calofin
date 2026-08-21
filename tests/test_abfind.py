@@ -203,7 +203,7 @@ def test_abfind_pair():
     """One number, two dims: A to the point and B to the point."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, '17', None], 'abfind pair')
+    run(vm, 'c:ABFIND', [pts, '17', 'No', None], 'abfind pair')
     ds = dims(vm)
     assert len(ds) == 2, ds
     # first from A, second from B; both end on the point
@@ -231,7 +231,8 @@ def test_abfind_spellings_and_repeat():
     ab_pt(vm, 100.0, 300.0, 18)
     pts = [e for e in vm.entities
            if _alist_dict(vm.entdata[e]).get(0) == 'INSERT']
-    run(vm, 'c:ABFIND', [pts, 'Pt.17', '#018', None], 'spellings')
+    run(vm, 'c:ABFIND', [pts, 'Pt.17', 'No', '#018', 'No', None],
+        'spellings')
     assert len(dims(vm)) == 4, dims(vm)
     print("ok  ABFIND 'Pt.17' / '#018' resolve, and the loop repeats")
 
@@ -243,7 +244,7 @@ def test_abfind_back():
     ab_pt(vm, 100.0, 300.0, 18)
     pts = [e for e in vm.entities
            if _alist_dict(vm.entdata[e]).get(0) == 'INSERT']
-    run(vm, 'c:ABFIND', [pts, '17', '18', 'b', None], 'back')
+    run(vm, 'c:ABFIND', [pts, '17', 'No', '18', 'No', 'b', None], 'back')
     ds = dims(vm)
     assert len(ds) == 2, ds
     assert pt3(ds[0][14]) == pt3(P17), ds[0]     # Pt.18's pair is gone
@@ -254,7 +255,7 @@ def test_abfind_unknown_number():
     """A typo draws nothing and re-asks."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, '99', '17', None], 'typo')
+    run(vm, 'c:ABFIND', [pts, '99', '17', 'No', None], 'typo')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  ABFIND an unknown number draws nothing and re-asks")
 
@@ -263,7 +264,8 @@ def test_abfind_stake_by_click():
     """A drawing that does not name B asks for it, and snaps the click."""
     vm = newvm()
     pts = survey(vm, stakes=('A',))
-    run(vm, 'c:ABFIND', [pts, (B[0] + 3.0, B[1] + 2.0, 0.0), '17', None],
+    run(vm, 'c:ABFIND',
+        [pts, (B[0] + 3.0, B[1] + 2.0, 0.0), '17', 'No', None],
         'stake click')
     ds = dims(vm)
     assert len(ds) == 2, ds
@@ -279,7 +281,7 @@ def test_abfind_stake_snaps_to_point():
     b = ab_pt(vm, B[0], B[1], 'BEE')          # named, but not "B"
     p = ab_pt(vm, P17[0], P17[1], 17)
     run(vm, 'c:ABFIND', [[e, b, p], (B[0] + 3.0, B[1] + 2.0, 0.0), '17',
-                         None], 'stake snap')
+                         'No', None], 'stake snap')
     ds = dims(vm)
     assert pt3(ds[1][13]) == pt3(B), ds[1]
     print("ok  ABFIND a stake click within the snap takes the point")
@@ -289,11 +291,90 @@ def test_abfind_no_style():
     """A drawing without the style still gets its dims, and is told."""
     vm = newvm(styles=())
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, '17', None], 'no style')
+    run(vm, 'c:ABFIND', [pts, '17', 'No', None], 'no style')
     ds = dims(vm)
     assert len(ds) == 2 and ds[0][3] == 'STANDARD', ds
     assert ds[0][8] == 'DIMENSION', ds
     print("ok  ABFIND with no CROSS DIMENSIONS style draws in the current one")
+
+
+def test_abfind_offers_the_move():
+    """ABFIND asks, once the ties are drawn, and defaults to leaving it."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABFIND', [pts, '17', None, None], 'offer')   # Enter = No
+    asked = [q for q, _ in vm.prompts if 'different reading' in q]
+    assert asked == ['\n  Move Pt.17 to a different reading?'
+                     ' [Yes/No/Back] <No>: '], asked
+    assert len(dims(vm)) == 2, dims(vm)          # Enter left it alone
+    assert texts(vm, 'FGStep') == [], texts(vm, 'FGStep')
+    print("ok  ABFIND offers the move after the ties, defaulting to No")
+
+
+def test_abfind_moves_and_carries_on():
+    """Yes runs ABMOVE's flow, then ABFIND asks for the next point."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABFIND',
+        [pts, '17', 'Yes', 'R1B', None,      # moved to Pt.17m
+              '17m', 'No',                   # ... and tied again, same run
+              None],
+        'move and carry on')
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    ins = live(vm, 'INSERT', 'POINTS')
+    assert len(ins) == 4, ins
+    ds = dims(vm)
+    assert len(ds) == 4, ds        # the moved point's pair, then 17m's own
+    newpt = (ins[-1][1][10][0], ins[-1][1][10][1])
+    for d in ds:
+        assert pt3(d[14]) == pt3(newpt), d
+    assert len([q for q, _ in vm.prompts if 'Point number' in q]) == 3
+    print("ok  ABFIND Yes moves the point and then asks for the next one")
+
+
+def test_abfind_back_at_the_move_question():
+    """Back there un-draws that point's ties and re-asks the number."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABFIND', [pts, '17', 'Back', None], 'back at the offer')
+    assert dims(vm) == [], dims(vm)
+    print("ok  ABFIND Back at the move question un-draws the ties")
+
+
+def test_abfind_back_from_the_suggestions():
+    """Back there re-asks the move question, not the point number."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABFIND', [pts, '17', 'Yes', 'Back', 'No', None], 'back to ask')
+    assert len([q for q, _ in vm.prompts if 'different reading' in q]) == 2
+    assert len([q for q, _ in vm.prompts if 'Point number' in q]) == 2
+    assert len(dims(vm)) == 2, dims(vm)          # the ties were never lost
+    assert sug_positions(vm) == []
+    print("ok  ABFIND Back at the suggestions re-asks the move question")
+
+
+def test_abfind_back_undoes_a_move():
+    """Back at the point number puts a whole moved round back."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABFIND', [pts, '17', 'Yes', 'R1B', None, 'b', None],
+        'undo the move')
+    assert texts(vm, 'FGStep') == []
+    assert live(vm, 'CIRCLE', 'FGStep') == []
+    assert len(live(vm, 'INSERT', 'POINTS')) == 3        # 17m is gone
+    ds = dims(vm)
+    assert len(ds) == 2, ds
+    assert pt3(ds[0][14]) == pt3(P17) and pt3(ds[1][14]) == pt3(P17), ds
+    print("ok  ABFIND Back undoes a moved round, ties and all")
+
+
+def test_abmove_does_not_ask():
+    """ABMOVE was typed to move a point, so it goes straight there."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'no question')
+    assert [q for q, _ in vm.prompts if 'different reading' in q] == []
+    print("ok  ABMOVE skips the question and offers the readings at once")
 
 
 # ---- the misreadings --------------------------------------------------
@@ -718,7 +799,7 @@ def test_abfind_a_stake_is_not_a_point():
     """Typing a stake's own name is refused, not dimensioned to itself."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABFIND', [pts, 'A', '17', None], 'stake as point')
+    run(vm, 'c:ABFIND', [pts, 'A', '17', 'No', None], 'stake as point')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  ABFIND naming a stake ties nothing - it is what ties are from")
 
@@ -730,7 +811,8 @@ def test_moved_point_is_a_point_afterwards():
     run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None], 'move')
     moved = live(vm, 'INSERT', 'POINTS')[-1][0]
     # a fresh run re-reads the drawing and finds it by its new number
-    run(vm, 'c:ABFIND', [pts + [moved], '17m', None], 'tie the moved point')
+    run(vm, 'c:ABFIND', [pts + [moved], '17m', 'No', None],
+        'tie the moved point')
     ds = dims(vm)
     assert len(ds) == 4, ds                  # the move's pair, then 17m's
     assert pt3(ds[2][14]) == pt3(ds[0][14]), ds
