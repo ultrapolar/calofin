@@ -20,31 +20,55 @@
 ;;; Workflow
 ;;;   1. Select a LINE (a polyline is also accepted, so work started in
 ;;;      an earlier session can be resumed).
-;;;   2. Click a point to set the direction:
+;;;   2. Say whether the overall width has changed: Grew, Shrank, New
+;;;      or Unchanged.  The width meant is the distance straight across,
+;;;      end to end, not the length of the object; half of any
+;;;      difference is added to (or taken off) each end, and the line in
+;;;      the drawing is resized to match.
+;;;   3. Click a point to set the direction:
 ;;;        - the line end nearest the click becomes START, the far end
 ;;;          FINISH, fixing the order the lengths are entered in;
 ;;;        - the side of the line the click lands on is the side the new
 ;;;          points are offset toward.
-;;;   3. Enter how many values (points) are required  (>= 2).
-;;;   4. Enter a length for each point, in order START -> FINISH.
+;;;   4. Enter how many values (points) are required  (>= 2).
+;;;   5. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
 ;;;      (U, the old keyword, is still accepted).
-;;;   5. Say how the points are joined: Straight (every segment a
+;;;   6. Say how the points are joined: Straight (every segment a
 ;;;      line, which is what the routine has always drawn), Arcs (every
 ;;;      segment an arc), or Mixed, which then asks which segment
 ;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
 ;;;      The question is only asked once there are three points or
 ;;;      more, and the answer becomes the default for the next round.
-;;;   6. Choose whether to repeat on the new polyline.  If so, enter a
-;;;      new point count and repeat from step 4 with the new polyline as
+;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
+;;;      new point count and repeat from step 5 with the new polyline as
 ;;;      the path.
-;;;   7. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
-;;; The offset side is fixed once from the direction click in step 2 and
+;;; The offset side is fixed once from the direction click in step 3 and
 ;;; reused for every round, so all offsets stay on the same side of the
 ;;; original line and every dimension stays perpendicular to it.
+;;;
+;;; The overall width
+;;;   Walls get re-measured, and the number that comes back is the
+;;;   distance straight across, end to end.  That is what step 2 asks
+;;;   for -- never the developed length of the OBJECT, which on anything
+;;;   bowed runs further than the width it spans.  Grew and Shrank take
+;;;   the difference, New takes the width itself, and Unchanged (the
+;;;   default, and Enter) leaves everything exactly as it was.
+;;;
+;;;   A new width is made true by scaling the selected object about the
+;;;   midpoint of its two ends, so exactly half the difference lands at
+;;;   each end and the shape between them is carried along.  The object
+;;;   in the drawing is resized too, not just the numbers behind it: the
+;;;   offsets and their dimensions are measured off it, so leaving it at
+;;;   the old width would put every base point somewhere the drawing
+;;;   says nothing is.  The base points and dimensions then follow the
+;;;   resized object, since they are spaced along it after the resize.
+;;;   The whole thing sits inside the command's undo group, so one U
+;;;   puts the width back.
 ;;;
 ;;; Straight lines, arcs, or both
 ;;;   A measured wall is rarely all one or all the other: a radiused
@@ -90,7 +114,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.3")
+(setq *perp-version* "v0.4")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -426,6 +450,69 @@
             (setq a (1+ a)))))))
   (if bad nil out))
 
+;; --- the overall width -----------------------------------------------
+;; Widths get re-measured, and the number that comes back is the
+;; distance straight across, end to end -- NOT the developed length of
+;; the object on the drawing, which on anything bowed is the longer of
+;; the two.  Making that width true is one scale about the midpoint of
+;; the two ends: exactly half the difference lands at each end, the
+;; direction of travel and the offset side are left alone, and the shape
+;; between the ends is carried along with it.
+
+;; Ask whether the overall width has changed.  Returns the width to work
+;; to, or nil when it has not -- so an unchanged answer skips the resize
+;; altogether and the command behaves exactly as it always did.  d is
+;; the width the drawing carries now.
+(defun perp:ask-width (d / kws ans v w)
+  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+  (setq kws "Grew Shrank New Unchanged")
+  (initget kws)
+  (setq ans (getkword (strcat "\nHas that width changed? ["
+                              (vl-string-translate " " "/" kws)
+                              "] <Unchanged>: ")))
+  (cond
+    ((or (null ans) (= ans "Unchanged")) nil)
+    ((= ans "Grew")
+     (initget 7)                              ; a real, positive amount
+     (+ d (getdist "\nHow much wider? ")))
+    ((= ans "Shrank")
+     (while (null w)
+       (initget 7)
+       (setq v (getdist "\nHow much narrower? "))
+       (if (< v d)
+         (setq w (- d v))
+         (princ "\nThat is the whole width or more - nothing would be left.")))
+     w)
+    (t                                        ; New: the width itself
+     (initget 6)                              ; Enter keeps what is drawn
+     (setq v (getdist (strcat "\nNew overall width <" (rtos d) ">: ")))
+     (if (or (null v) (equal v d 1e-9)) nil v))))
+
+;; Scale en about ctr (a point in the current UCS) by k.  T when the
+;; drawing took it, nil when it would not -- a locked, frozen or
+;; switched-off layer is the usual reason, and the caller has to say so
+;; rather than measure offsets against geometry the drawing does not
+;; actually have.
+(defun perp:rescale (en ctr k / r)
+  (setq r (vl-catch-all-apply
+            'vla-ScaleEntity
+            (list (vlax-ename->vla-object en)
+                  (vlax-3d-point (trans ctr 1 0))
+                  k)))
+  (not (vl-catch-all-error-p r)))
+
+;; p scaled about ctr by k, in plan; z is carried through untouched
+(defun perp:scale-pt (p ctr k)
+  (list (+ (car ctr)  (* k (- (car p)  (car ctr))))
+        (+ (cadr ctr) (* k (- (cadr p) (cadr ctr))))
+        (caddr p)))
+
+;; every point of pts scaled about ctr by k
+(defun perp:scale-pts (pts ctr k / out p)
+  (setq out '())
+  (foreach p pts (setq out (cons (perp:scale-pt p ctr k) out)))
+  (reverse out))
+
 ;; --- command ---------------------------------------------------------
 
 (defun c:PERPPTS (/ *error* perp:kill perp:finish
@@ -438,7 +525,8 @@
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     path pathEnt n lastN basePts newPts guideEnts total
                     len lastLen i base np again ans iter p e seg
-                    join lastJoin kws nseg picks reply tangs)
+                    join lastJoin kws nseg picks reply tangs
+                    wOld wNew mid fac)
 
   ;; erase one temporary entity and forget it
   (defun perp:kill (e)
@@ -520,6 +608,44 @@
   (setq p1 (car verts)                       ; first endpoint (UCS)
         p2 (last verts))                     ; last endpoint  (UCS)
 
+  ;; --- 2. has the overall width changed? -------------------------------
+  ;; The width asked about is the distance straight across, end to end,
+  ;; not the developed length of the object -- a bowed polyline runs
+  ;; further than the width it spans, and it is the width that gets
+  ;; re-measured.  Making a new one true is a scale about the midpoint of
+  ;; the two ends, so exactly half the difference lands at each end.  The
+  ;; drawing is resized too: the offsets and their dimensions are
+  ;; measured off this object, so leaving it at the old width would put
+  ;; every base point somewhere the drawing says nothing is.  It is all
+  ;; inside the command's undo group, so one U puts the width back.
+  (setq dx   (- (car p2)  (car p1))
+        dy   (- (cadr p2) (cadr p1))
+        wOld (sqrt (+ (* dx dx) (* dy dy)))
+        ;; a plan projection with no width at all has nothing to
+        ;; ask about; the direction click below is where that
+        ;; gets reported
+        wNew (if (> wOld 1e-9) (perp:ask-width wOld)))
+  (if wNew
+    (progn
+      (setq mid (list (/ (+ (car p1)  (car p2))  2.0)
+                      (/ (+ (cadr p1) (cadr p2)) 2.0)
+                      (caddr p1))
+            fac (/ wNew wOld))
+      (if (not (perp:rescale ent mid fac))
+        (progn
+          (princ (strcat "\nThe line could not be resized - it is most"
+                         " likely on a locked, frozen or switched-off"
+                         " layer.  Free the layer and run PERPPTS again."))
+          (perp:finish)
+          (exit)))
+      (setq verts (perp:scale-pts verts mid fac)
+            p1    (car verts)
+            p2    (last verts))
+      (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                     (rtos (/ (abs (- wNew wOld)) 2.0))
+                     (if (> wNew wOld) " added at" " taken off")
+                     " each end."))))
+
   ;; --- properties to give the offset polylines -------------------------
   ;; The new polylines are drawn with the same layer, colour, linetype,
   ;; lineweight and linetype scale as the object they are offset from, so
@@ -533,7 +659,7 @@
         srcLw    (cond ((cdr (assoc 370 srcData))) (-1))
         srcLts   (cond ((cdr (assoc 48 srcData))) (1.0)))
 
-  ;; --- 2. click to set direction (START/FINISH) and offset side -------
+  ;; --- 3. click to set direction (START/FINISH) and offset side -------
   ;; Snapping is off so the click cannot be pulled onto the line itself,
   ;; which would make "which side" ambiguous.
   (setvar "OSMODE" 0)
@@ -792,7 +918,7 @@
     (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
     (if (null again) (setq again "No")))
 
-  ;; --- 5. dimension style, then draw every dimension ------------------
+  ;; --- 8. dimension style, then draw every dimension ------------------
   (initget "STandard SIde")
   (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
                               "SIDE STANDARD? [STandard/SIde] <STandard>: ")))

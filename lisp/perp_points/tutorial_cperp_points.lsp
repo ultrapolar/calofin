@@ -24,7 +24,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.2")
+(setq *tutcperp-version* "v0.3")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -189,6 +189,22 @@
                   "    ellipse arcs and plain lines; anything else"
                   "    re-prompts"
                   "  * zero-length and closed curves are rejected"
+                  ""
+                  "Overall width"
+                  "  * right after the selection you are asked whether the"
+                  "    overall width has changed: Grew, Shrank, New, or"
+                  "    Unchanged (the default, and Enter)"
+                  "  * the width meant is the distance straight ACROSS, end"
+                  "    to end - never the length of the CURVE, which on"
+                  "    anything bowed runs further than the width it spans"
+                  "  * half of any difference is added to, or taken off,"
+                  "    EACH end: the CURVE in the drawing is resized to"
+                  "    match, so the base points and their dimensions still"
+                  "    land on it.  One U puts the width back"
+                  "  * shrinking away the whole width is rejected, and a"
+                  "    resize the drawing will not take - a locked, frozen"
+                  "    or switched-off layer - stops the command rather"
+                  "    than measuring off geometry that is not there"
                   ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"

@@ -25,7 +25,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lispvm import (VM, Ent, Dot, Sym, NIL,  # noqa: E402
+from lispvm import (VM, Ent, Dot, Sym, NIL, LispError,  # noqa: E402
                     BUILTINS as VM_BUILTINS)
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -576,6 +576,7 @@ def test_bulge_degenerate_cases():
 # initget list, so a renamed keyword fails here too.
 
 PERP_LSP = os.path.join(LISP_DIR, "perp_points.lsp")
+CPERP_LSP = os.path.join(LISP_DIR, "cperp_points.lsp")
 
 #: a bowed profile with no three consecutive points in a line, so every
 #: segment has a curvature to take, symmetric about x = 50
@@ -609,12 +610,36 @@ def poly_bulges(vm, e):
     return every[:max(0, len(poly_verts(vm, e)) - 1)]
 
 
+#: flip on to rehearse a resize the drawing will not take (a locked,
+#: frozen or switched-off layer), which is what perp:rescale reports
+SCALE_REFUSES = [False]
+
+
 def install_entity_builtins():
-    """The one table call perp_points makes that the shared VM does not
-    carry.  Every layer the routine touches is created rather than
-    repaired, so the lookup guarding the repair branch finds nothing --
-    which is also what a fresh drawing looks like."""
+    """The table call perp_points makes that the shared VM does not
+    carry, plus the ActiveX scale behind the width question.  Every
+    layer the routine touches is created rather than repaired, so the
+    lookup guarding the repair branch finds nothing -- which is also
+    what a fresh drawing looks like.  The VM has no ActiveX layer of its
+    own (an ename stands in for its VLA object), so vla-ScaleEntity
+    moves the entity's own DXF points."""
     VM_BUILTINS[Sym('tblobjname')] = lambda vm, a: NIL
+    VM_BUILTINS[Sym('vlax-3d-point')] = lambda vm, a: (
+        list(a[0]) if len(a) == 1 else [float(v) for v in a])
+
+    def scale_entity(vm, a):
+        if SCALE_REFUSES[0]:
+            raise LispError("Automation error: entity is on a locked layer",
+                            vm)
+        e, ctr, k = a[0], a[1], float(a[2])
+        vm.entdata[e] = [
+            ([g[0], ctr[0] + k * (g[1] - ctr[0]),
+              ctr[1] + k * (g[2] - ctr[1])] + list(g[3:]))
+            if isinstance(g, list) and g and g[0] in (10, 11) else g
+            for g in vm.entdata[e]]
+        return NIL
+
+    VM_BUILTINS[Sym('vla-scaleentity')] = scale_entity
 
 
 def install_command(vm):
@@ -717,24 +742,49 @@ def install_curve_builtins():
     VM_BUILTINS[Sym('vlax-curve-getpointatdist')] = point_at_dist
 
 
-def run_perppts(script):
-    """One scripted PERPPTS run on a 100-unit line, left to right.
-    Returns the VM and the polylines the run left behind, in order."""
+def run_perppts(script, width=None, source=None):
+    """One scripted PERPPTS run, by default on a 100-unit line running
+    left to right.  width answers the overall-width question that comes
+    straight after the selection -- the default is Enter, i.e.
+    Unchanged.  source is a vertex list for a polyline to select
+    instead of the line.  The selected object is left on vm.source.
+    Returns the VM and the polylines the run drew, in order."""
     install_entity_builtins()
     install_curve_builtins()
     vm = VM()
     install_command(vm)
     vm.load(PERP_LSP)
-    line = Ent()
-    vm.entities.append(line)
-    vm.entdata[line] = [Dot(0, 'LINE'), Dot(8, 'WALLS'), Dot(62, 3),
-                        [10, 0.0, 0.0, 0.0], [11, 100.0, 0.0, 0.0]]
+    src = Ent()
+    vm.entities.append(src)
+    if source is None:
+        vm.entdata[src] = [Dot(0, 'LINE'), Dot(8, 'WALLS'), Dot(62, 3),
+                           [10, 0.0, 0.0, 0.0], [11, 100.0, 0.0, 0.0]]
+    else:
+        vm.entdata[src] = [Dot(0, 'LWPOLYLINE'), Dot(100, 'AcDbPolyline'),
+                           Dot(8, 'WALLS'), Dot(62, 3),
+                           Dot(90, len(source)), Dot(70, 0), Dot(38, 0.0)] + \
+            [g for p in source for g in ([10, p[0], p[1]], Dot(42, 0.0))]
+    vm.source = src
     vm.tables['LAYER'].add('WALLS')
     vm.tables['DIMSTYLE'].add('STANDARD INCHES')
-    vm.run('c:PERPPTS', [line] + list(script))
+    vm.run('c:PERPPTS', [src] + list(width or [None]) + list(script))
     return vm, [e for e in vm.entities
                 if e not in vm.deleted
                 and dxf(vm.entdata[e], 0) == 'LWPOLYLINE']
+
+
+def source_ends(vm):
+    """The two ends of the object PERPPTS was pointed at, as it stands
+    in the drawing after the run."""
+    data = vm.entdata[vm.source]
+    if dxf(data, 0) == 'LINE':
+        return (tuple(dxf(data, 10)[:2]), tuple(dxf(data, 11)[:2]))
+    vs = poly_verts(vm, vm.source)
+    return (vs[0], vs[-1])
+
+
+def close(a, b, tol=1e-9):
+    return all(abs(x - y) < tol for x, y in zip(a, b))
 
 
 def test_perppts_asks_how_to_join_the_points():
@@ -819,6 +869,152 @@ def test_perppts_rounds_follow_the_curve_they_offset_from():
     print("PERPPTS: a round after arcs measures along the curve itself")
 
 
+def test_perppts_asks_whether_the_overall_width_changed():
+    # Enter takes Unchanged: the line stays exactly where it was drawn
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                          "STandard"])
+    assert source_ends(vm) == ((0.0, 0.0), (100.0, 0.0)), source_ends(vm)
+    assert poly_verts(vm, pl[0]) == [(0.0, 10.0), (50.0, 10.0),
+                                     (100.0, 10.0)], poly_verts(vm, pl[0])
+    print("PERPPTS width: Unchanged leaves the line and the offsets alone")
+
+    # Grew by 20: half at each end, and the drawing is resized with it
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                          "STandard"], width=["Grew", 20.0])
+    assert close(source_ends(vm)[0], (-10.0, 0.0)), source_ends(vm)
+    assert close(source_ends(vm)[1], (110.0, 0.0)), source_ends(vm)
+    assert [round(x, 9) for x, _ in poly_verts(vm, pl[0])] == \
+        [-10.0, 50.0, 110.0], poly_verts(vm, pl[0])
+    print("PERPPTS width: Grew adds half the difference at each end")
+
+    # Shrank by 20: half comes off each end
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                          "STandard"], width=["Shrank", 20.0])
+    assert close(source_ends(vm)[0], (10.0, 0.0)), source_ends(vm)
+    assert close(source_ends(vm)[1], (90.0, 0.0)), source_ends(vm)
+    print("PERPPTS width: Shrank takes half the difference off each end")
+
+    # New gives the width itself, not a difference
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                          "STandard"], width=["New", 50.0])
+    assert close(source_ends(vm)[0], (25.0, 0.0)), source_ends(vm)
+    assert close(source_ends(vm)[1], (75.0, 0.0)), source_ends(vm)
+    print("PERPPTS width: New is the overall width, not the change")
+
+    # shrinking by the whole width would leave nothing, so it re-asks
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                          "STandard"], width=["Shrank", 100.0, 20.0])
+    assert close(source_ends(vm)[0], (10.0, 0.0)), source_ends(vm)
+    print("PERPPTS width: shrinking away the whole width re-asks")
+
+
+def test_perppts_width_is_measured_across_not_along():
+    # A tent: 100 across, but 116.6 of polyline to walk.  Doubling the
+    # WIDTH must put the ends 200 apart -- not make the path 200 long.
+    tent = [(0.0, 0.0), (50.0, 30.0), (100.0, 0.0)]
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                          "STandard"], width=["New", 200.0], source=tent)
+    ends = source_ends(vm)
+    assert close(ends[0], (-50.0, 0.0)) and close(ends[1], (150.0, 0.0)), ends
+    assert abs(math.dist(ends[0], ends[1]) - 200.0) < 1e-9, ends
+    assert close(poly_verts(vm, vm.source)[1], (50.0, 60.0)), \
+        "the shape between the ends is carried along by the same scale"
+    print("PERPPTS width: the number is the span end to end, not the path")
+
+
+def test_perppts_dimensions_follow_the_resized_line():
+    vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 10.0, "Straight", "No",
+                          "STandard"], width=["Grew", 20.0])
+    # every dimension runs from a base point on the resized line to the
+    # offset point above it, and the three base points span the new width
+    bases = [tuple(d[0][:2]) for d in vm.dims]
+    heads = [tuple(d[1][:2]) for d in vm.dims]
+    assert [round(x, 9) for x, _ in bases] == [-10.0, 50.0, 110.0], bases
+    assert all(abs(y) < 1e-9 for _, y in bases), bases
+    for (bx, by), (hx, hy), length in zip(bases, heads, (10.0, 12.0, 10.0)):
+        assert abs(bx - hx) < 1e-9 and abs(hy - by - length) < 1e-9, \
+            "each dimension still runs the offset length, straight up"
+    print("PERPPTS width: the dimensions move with the resized line")
+
+
+def test_perppts_says_so_when_the_drawing_refuses_the_resize():
+    SCALE_REFUSES[0] = True
+    try:
+        raised = None
+        try:
+            run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
+                         "STandard"], width=["Grew", 20.0])
+        except LispError as err:
+            raised = err
+        assert raised is not None, \
+            "a resize the drawing will not take must stop the command"
+    finally:
+        SCALE_REFUSES[0] = False
+    print("PERPPTS width: a refused resize stops rather than mismeasures")
+
+
+# The width question and the resize behind it are the same code in both
+# routines, so both are driven here rather than only through the PERPPTS
+# runs above.
+
+def ask_width(path, prefix, drawn, answers):
+    """<prefix>:ask-width against one scripted set of answers.  Returns
+    the width to work to, or None for "unchanged"."""
+    vm = VM()
+    vm.load(path)
+    vm.script, vm.prompts = list(answers), []
+    got = vm.loads("(%s:ask-width %r)" % (prefix, drawn))
+    assert not vm.script, "answers left over: %r" % vm.script
+    return None if got is None else float(got)
+
+
+def test_the_width_question_reads_the_same_in_both_routines():
+    for path, prefix in ((PERP_LSP, "perp"), (CPERP_LSP, "cperp")):
+        name, ask = os.path.basename(path), \
+            lambda answers: ask_width(path, prefix, 100.0, answers)
+        assert ask([None]) is None, "%s: Enter must mean Unchanged" % name
+        assert ask(["Unchanged"]) is None, name
+        assert ask(["Grew", 20.0]) == 120.0, name
+        assert ask(["G", 20.0]) == 120.0, "%s: the hotkey must work" % name
+        assert ask(["Shrank", 20.0]) == 80.0, name
+        assert ask(["New", 50.0]) == 50.0, \
+            "%s: New is the width itself, not a difference" % name
+        # Enter at New, or typing the width already drawn, is no change
+        assert ask(["New", None]) is None, name
+        assert ask(["New", 100.0]) is None, name
+        # shrinking by the whole width or more re-asks instead of
+        # turning the line inside out
+        assert ask(["Shrank", 120.0, 100.0, 20.0]) == 80.0, name
+        print("%s: width question reads Grew/Shrank/New/Unchanged" % name)
+
+
+def test_rescale_says_whether_the_drawing_took_it():
+    for path, prefix in ((PERP_LSP, "perp"), (CPERP_LSP, "cperp")):
+        install_entity_builtins()
+        vm = VM()
+        vm.load(path)
+        vm.script = []
+        line = Ent()
+        vm.entities.append(line)
+        vm.entdata[line] = [Dot(0, 'LINE'), Dot(8, '0'),
+                            [10, 0.0, 0.0, 0.0], [11, 100.0, 0.0, 0.0]]
+        call = "(%s:rescale (entlast) (list 50.0 0.0 0.0) 1.2)" % prefix
+        assert vm.loads(call) is not None, "a scale that works reports T"
+        assert close(dxf(vm.entdata[line], 10)[:2], (-10.0, 0.0)), \
+            "half the difference at the near end"
+        assert close(dxf(vm.entdata[line], 11)[:2], (110.0, 0.0)), \
+            "half the difference at the far end"
+        SCALE_REFUSES[0] = True
+        try:
+            refused = vm.loads(call)
+        finally:
+            SCALE_REFUSES[0] = False
+        assert refused is None, \
+            "a resize the drawing refuses must report nil, not raise"
+        print("%s: rescale reports whether the drawing took the resize"
+              % os.path.basename(path))
+
+
 def main():
     test_structure_of_all_routines()
     test_releases_match_their_source()
@@ -836,6 +1032,12 @@ def main():
     test_perppts_asks_how_to_join_the_points()
     test_perppts_mixed_takes_a_segment_list()
     test_perppts_rounds_follow_the_curve_they_offset_from()
+    test_perppts_asks_whether_the_overall_width_changed()
+    test_perppts_width_is_measured_across_not_along()
+    test_perppts_dimensions_follow_the_resized_line()
+    test_perppts_says_so_when_the_drawing_refuses_the_resize()
+    test_the_width_question_reads_the_same_in_both_routines()
+    test_rescale_says_whether_the_drawing_took_it()
     print("\nall tests passed")
 
 
