@@ -296,6 +296,8 @@ python3 tests/test_autodim.py         # AUTODIM dim styles, dedupe, overall dims
 python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
                                       # own sorted(), then the whole tour
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
+python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
+                                      # both real .lsp files in one lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter

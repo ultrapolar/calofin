@@ -24702,10 +24702,18 @@
 ;;;       cover drawn on the cover layer - PADDLE pads are NOT
 ;;;       suggested.
 ;;;     - PADS. The pool outline is run through PADDLE's concave-
-;;;       feature hunt at 36" pads; every spot with no pad already
-;;;       nearby (existing pads = *cchk-pad-blocks* inserts, or any
-;;;       insert on *cchk-pads-layer*) is circled on the construction
-;;;       layer and SUGGESTED in the report.
+;;;       feature hunt at 36" pads (PADDLE v1.2 rules): an inside
+;;;       corner gets a pad centered dead on the corner, a concave
+;;;       radius of 4'-6" or less gets a row of pads starting on the
+;;;       middle of the radius and marching flush (36" on center)
+;;;       toward both ends, and geometry that bends 10 degrees or
+;;;       less - a semi-straight kink, a gently sweeping arc - is
+;;;       passed over. Suggested pads never overlap each other: a
+;;;       pad on a sharp point holds its spot, the ones along curves
+;;;       slide flush alongside or drop out. Every spot with no pad
+;;;       already nearby (existing pads = *cchk-pad-blocks* inserts,
+;;;       or any insert on *cchk-pads-layer*) is circled on the
+;;;       construction layer and SUGGESTED in the report.
 ;;;
 ;;;  6. A COVERCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer COVERCHECK-REPORT listing every dimension —
@@ -24749,7 +24757,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.2")
+(setq *cchk-version* "v0.3")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -24794,7 +24802,7 @@
 (setq *cchk-pad-near*    18.0)     ; a pad center within this (Chebyshev) covers a spot
 (setq *cchk-pad-maxrad*  54.0)     ; 4'-6": largest concave radius needing pads (PADDLE)
 (setq *cchk-chain-fuzz*  0.05)     ; max gap when chaining an exploded outline
-(setq *cchk-pad-angtol*  (/ pi 180.0)) ; 1 deg: corners flatter than this are straight-through
+(setq *cchk-pad-angtol*  (/ (* 10.0 pi) 180.0)) ; 10 deg: a corner - or a whole arc - bending this little is semi-straight (PADDLE)
 (setq *cchk-repl-block*  "Replacement Disclaimer") ; block demanded on replacement drawings
 (setq *cchk-dashed-pat*  "*DASH*,*HIDDEN*") ; linetype names that count as dashed
 (setq *cchk-tut-layer*   "TUTORIAL-COVERCHECK-DEMO") ; layer for TUTORIALCOVERCHECK's non-pool demo geometry
@@ -25900,7 +25908,8 @@
          (list label "left as drawn" 'left))))))
 
 
-;; --- pad geometry (ported from PADDLE.lsp) --------------------------
+;; --- pad geometry (ported from PADDLE.lsp v1.2) ---------------------
+;; Keep in step with PADDLE whenever its pad rules change.
 ;; Bulge-aware outline handling and the concave-feature hunt, used to
 ;; measure the pool outline and suggest 36" pads along it. Accepts a
 ;; closed LWPOLYLINE / 2D POLYLINE or the same shape exploded into
@@ -26139,7 +26148,9 @@
                 theta (car seg)
                 r     (cadr seg)
                 cen   (caddr seg))
-          (if (<= r (+ *cchk-pad-maxrad* 1e-6))
+          (if (and (<= r (+ *cchk-pad-maxrad* 1e-6))
+                   (> (abs theta) *cchk-pad-angtol*)) ; total bend over the
+                                     ; tolerance, else it's a semi-straight line
               (progn
                 (setq sa    (angle cen (cal:2d a))
                       sgn   (if (> theta 0.0) 1.0 -1.0)
@@ -26148,6 +26159,60 @@
                   (setq pads (cons (list ctr 0.0 "arc") pads)))))))
     (setq i (1+ i)))
   (reverse pads))
+
+;; Keep suggested pads from colliding where features crowd together,
+;; without ever pulling a pad off a sharp point (PADDLE v1.2). Corner
+;; pads commit first, dead-center on their vertex -- they NEVER slide;
+;; one that would overlap an earlier corner pad is dropped (in a notch
+;; that tight, the neighbour carries the area). Arc pads then dodge
+;; around everything committed: one that would overlap slides along
+;; one axis to sit flush alongside instead (pads are PADSIZE x
+;; PADSIZE, so flush = exactly PADSIZE on center). An arc pad whose
+;; center is already inside a committed pad -- or that cannot find a
+;; clear flush spot within half a pad of where it wanted to be -- is
+;; dropped: its area is covered by the neighbours it kept hitting.
+(defun cchk:pv-dodge (pads padsize / out ctr orig tries done hit d ax sgn)
+  (foreach pad pads ; sharp points first: exact centers, never slid
+    (if (= (caddr pad) "corner")
+        (progn
+          (setq hit nil)
+          (foreach q out
+            (if (and (not hit)
+                     (< (cchk:pv-cheb (cal:v- (car pad) (car q)))
+                        (- padsize 1e-6)))
+                (setq hit T)))
+          (if (not hit) (setq out (cons pad out))))))
+  (foreach pad pads ; arc pads dodge around what's committed
+    (if (/= (caddr pad) "corner")
+        (progn
+          (setq ctr   (car pad)
+                orig  ctr
+                tries 0
+                done  nil)
+          (while (not done)
+            (setq hit nil)
+            (foreach q out
+              (if (and (not hit)
+                       (< (cchk:pv-cheb (cal:v- ctr (car q)))
+                          (- padsize 1e-6)))
+                  (setq hit (car q))))
+            (cond
+              ((not hit) ; clear: commit it here
+               (setq out  (cons (list ctr (cadr pad) (caddr pad)) out)
+                     done T))
+              ((or (< (cchk:pv-cheb (cal:v- ctr hit)) (/ padsize 2.0))
+                   (> tries 6)
+                   (> (cchk:pv-cheb (cal:v- ctr orig)) (/ padsize 2.0)))
+               (setq done T)) ; already covered there, or stuck: drop it
+              (T ; slide along the more-separated axis until flush
+               (setq d   (cal:v- ctr hit)
+                     ax  (if (>= (abs (car d)) (abs (cadr d))) 0 1)
+                     sgn (if (< (nth ax d) 0.0) -1.0 1.0))
+               (setq ctr (if (= ax 0)
+                             (list (+ (car hit) (* sgn padsize)) (cadr ctr))
+                             (list (car ctr) (+ (cadr hit) (* sgn padsize)))))
+               (setq tries (1+ tries))))))))
+  (reverse out))
 
 ;; --- cover rules ----------------------------------------------------
 
@@ -26637,7 +26702,8 @@
   (if (and vts (not padskip))
     (progn
       (setq feats   (if (> (length vts) 1)
-                      (cchk:pv-features vts *cchk-pad-size*))
+                      (cchk:pv-dodge (cchk:pv-features vts *cchk-pad-size*)
+                                     *cchk-pad-size*))
             padctrs (cchk:pad-centers)
             miss    nil)
       (foreach f feats
