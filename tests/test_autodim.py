@@ -43,8 +43,7 @@ def fresh(styles=STYLES):
     vm = VM()
     vm.load(LSP)                            # CALOFIN_LISP_ROOT picks the tier
     vm.tables['DIMSTYLE'] = set(styles)
-    vm.script = [None]                      # ad:begin's ssget: no dims yet
-    vm.loads('(ad:begin)')
+    vm.loads('(ad:begin)')       # ad:begin sweeps with "_X": nothing to script
     return vm
 
 
@@ -66,8 +65,7 @@ def dims(vm):
 
 def rescan(vm):
     """Re-read the drawing the way a second command run would."""
-    vm.script = [list(vm.entities) or None]
-    vm.loads('(ad:dimscan)')
+    vm.loads('(ad:dimscan)')     # likewise a "_X" sweep of the drawing
 
 
 #: A 10ft x 6ft plan whose dims already reach a foot clear of it on the
@@ -201,7 +199,6 @@ print('   a taken span in the middle leaves the pieces either side')
 print('== a missing style falls back, it does not strand the next dim ==')
 vm = fresh(styles={'STANDARD', 'STANDARD INCHES'})   # no "SIDE STANDARD"
 vm.sysvars['DIMSTYLE'] = 'STANDARD'
-vm.script = [None]
 vm.loads('(ad:begin)')
 assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1     # wants SIDE STANDARD
 assert aligned(vm, (0, 40), (8, 40), (4, 52)) == 1      # wants STANDARD INCHES
@@ -298,7 +295,7 @@ vm.sysvars['DIMTXT'] = 0.125
 vm.sysvars['DIMSCALE'] = 48                      # 2 x 0.125 x 48 = 12" < 2ft
 ents = draw(vm, FLIGHT)
 # the plan pick, then ad:begin's read of the drawing's dims
-vm.run('c:AUTODIM', [ents, None])
+vm.run('c:AUTODIM', [ents])
 placed = dims(vm)
 assert len(placed) == 4, placed
 assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
@@ -325,7 +322,7 @@ assert not [c for c in vm.commands if c[0] == '_.DIMALIGNED']
 print('   the plan steps were skipped, as they are about a plan')
 
 # and it is idempotent, like everything else the tool places
-vm.run('c:AUTODIM', [ents, list(vm.entities)])
+vm.run('c:AUTODIM', [ents])
 assert len(dims(vm)) == 4
 print('   a second run over the same flight adds nothing')
 
@@ -346,7 +343,7 @@ def route(segs, answers=('Yes',)):
     vm = fresh()
     ents = draw(vm, segs)
     vm.loads(TRACE)
-    vm.run('c:AUTODIM', [ents, None] + list(answers))
+    vm.run('c:AUTODIM', [ents] + list(answers))
     return [str(x) for x in reversed(vm.globals['ran'])]
 
 
@@ -476,7 +473,7 @@ vm = fresh()
 vm.sysvars['DIMTXT'] = 0.125
 vm.sysvars['DIMSCALE'] = 48
 ents = draw(vm, FLIGHT)
-vm.run('c:AUTODIMSIDEPOV', [ents, None])
+vm.run('c:AUTODIMSIDEPOV', [ents])
 placed = dims(vm)
 assert len(placed) == 4, placed
 assert all(d[0] == 'STANDARD INCHES' for d in placed), placed

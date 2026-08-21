@@ -27,7 +27,10 @@ for i,ch in enumerate(clean):
         depth-=1
         if depth==0: forms.append((start,clean[start:i+1]))
 
-globals_declared=set(re.findall(r'\(setq\s+(spa:\*[\w*-]+)', clean))
+# Namespace prefixes are taken FROM THE FILE, not hardcoded, so every
+# tool gets these checks and not just the one this script grew up on.
+prefixes=sorted(set(re.findall(r'\(defun\s+([a-zA-Z][\w-]*):', clean)))
+globals_declared=set(re.findall(r'\(setq\s+([a-zA-Z][\w-]*:\*[\w*-]+)', clean))
 
 problems=[]
 for pos,f in forms:
@@ -54,10 +57,12 @@ for pos,f in forms:
         for a,b in toks2:
             v=a or b
             if not v: continue
-            if v.startswith('spa:*'):
+            if re.match(r'^[a-zA-Z][\w-]*:\*', v):
                 if v not in globals_declared: problems.append((line,name,'setq-global',v))
                 continue
-            if v not in declared and not v.startswith('spa:') and v not in ('nil','t'):
+            if (v not in declared
+                    and not any(v.startswith(pre + ':') for pre in prefixes)
+                    and v not in ('nil', 't')):
                 problems.append((line,name,'setq',v))
 for p in sorted(set(problems)):
     print(f"line {p[0]:5d}  {p[1]:22s} {p[2]:12s} {p[3]}")
