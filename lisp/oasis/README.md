@@ -1,40 +1,27 @@
 # OASIS — Continuous-tangent pool from an X/Y envelope
 
-An AutoLISP routine for full AutoCAD that draws an **oasis** pool: six
-arcs and nothing else — no straight runs, no corners. Three bulge
-outward, one off the left of the pool, one off the right and one off the
-top; between each neighbouring pair a smaller **reverse** arc curves
-back in, so the perimeter changes direction without ever changing
-tangent.
+An AutoLISP routine for full AutoCAD that draws an **oasis** pool: arcs
+and nothing else, no corners and at most one straight run. It is a ring
+of **bulges** — circles pinned to the envelope — with a **joiner**
+between each consecutive pair, and a joiner is either a smaller
+**reverse** arc curving back in, or, when both bulges are tangent to the
+same bound, the **straight run** of that bound between them. Every joint
+is smooth: the outline changes direction without ever changing tangent,
+which is why the whole thing can be given as a handful of radii and two
+overall dimensions.
 
-They come two ways, and the first question is which:
+Four shapes come out of that, and the first question is which:
 
-| | The third bulge | Touches |
-| --- | --- | --- |
-| **centre bulge** | across the top, centred | the top bound |
-| **top right bulge** | tucked into the top-right corner | the top **and** the right bound |
+| | Bulges | The top | The bottom |
+| --- | --- | --- | --- |
+| **Center** | left, right, top — centred | reverse arcs either side | reverse arc |
+| **TopRight** | left, right, top — in the corner | reverse arcs either side | reverse arc |
+| **StraightBottom** | left, right | one reverse arc | the flat run of the bound |
+| **RoundedBottom** | left, right | one reverse arc | reverse arc |
 
-That is the **only** difference. Same six arcs, same ring, same solver,
-same checks — only where the third bulge's centre lands, and the names
-the arcs go by because of it. On a top-right pool the right-hand bound
-is touched twice, once by each of the two right-hand bulges, with a
-reverse curve dipping in between them.
-
-```
-                   top bulge
-                 ___________
-     top-left  ,'           `.  top-right
-     tangent  /               \  tangent
-             |                 |
- left bulge  |                 |  right bulge
-              \      ___      /
-               `.__,'   `.__,'
-                bottom-center tangent
-```
-
-That is what *continuous tangent* buys: every joint in the outline is
-smooth, so the whole shape can be given as two overall dimensions and
-six radii — which is exactly what OASIS asks for.
+Nothing downstream of the solver knows which shape it is looking at — it
+reads the ring. The four differ only in how many bulges there are, where
+the last one is pinned, and whether the bottom joiner has a radius.
 
 ## What it does
 
@@ -43,16 +30,23 @@ six radii — which is exactly what OASIS asks for.
 2. Asks **where it goes** — the pool is drawn as it is answered.
 3. Asks for the **absolute X and Y bounds** — the envelope the pool
    touches on all four sides and crosses on none.
-4. Asks the three **bulge radii**, left, top, then right.
-5. Asks the three **tangent radii** that join them, top-left, then the
-   one on the right, then bottom-center.
+4. Asks the **bulge radii** it needs — three on an oasis, one on a
+   cloud.
+5. Asks the **joiner radii** that connect them — three on an oasis, two
+   on a rounded cloud, one on a straight-bottom cloud.
 6. Draws the finished pool, its dimensions, and a **check drawing**
    beside it.
 
-The middle four questions are named for the shape: a centre-bulge pool
-asks for a *Top bulge* and a *Top-right tangent*, a top-right one for a
-*Top-right bulge* and a *Right-side tangent* — because "top-right" means
-the tangent arc on one and the bulge itself on the other.
+So an oasis asks ten questions and the clouds ask seven and six. The
+middle ones are named for the shape, because "top-right" means the
+joiner on one shape and the bulge itself on another:
+
+| Shape | Bulges asked | Joiners asked |
+| --- | --- | --- |
+| Center | Left, Top, Right | Top-left, Top-right, Bottom-center |
+| TopRight | Left, **Top-right**, Right | Top-left, **Right-side**, Bottom-center |
+| StraightBottom | Right | Top |
+| RoundedBottom | Right | Top, Bottom |
 
 ### Answering it, with the pool on screen
 
@@ -129,10 +123,16 @@ The X and Y are absolute, and that alone pins all three bulges:
 
 | Bulge | Touches | Centre |
 | --- | --- | --- |
-| left | the X-min and Y-min bounds | `(rL, rL)` |
+| left, **Center / TopRight** | the X-min and Y-min bounds | `(rL, rL)` |
+| left, **the two clouds** | the X-min, Y-min **and** Y-max bounds | `(Y/2, Y/2)` |
 | right | the X-max and Y-min bounds | `(X - rR, rR)` |
-| top, **centre bulge** | the Y-max bound, centred across X | `(X/2, Y - rT)` |
-| top, **top right bulge** | the Y-max **and** the X-max bounds | `(X - rT, Y - rT)` |
+| top, **Center** | the Y-max bound, centred across X | `(X/2, Y - rT)` |
+| top, **TopRight** | the Y-max **and** the X-max bounds | `(X - rT, Y - rT)` |
+
+A cloud's left bulge is tangent to **three** bounds at once, and three
+tangencies leave nothing free: its radius *is* half the Y bound. So it
+is never asked for — it appears in the preview with its value already on
+it while everything else still reads `?`.
 
 So the bottom edge of the envelope is held by the two side bulges
 together — each dips down to it — the left edge by the left bulge, the
@@ -176,7 +176,7 @@ computed closed and drawn closed.
 ### The questions
 
 ```
-Where is the top bulge? [Center/TopRight] <Center>:
+Which shape is it? [Center/TopRight/StraightBottom/RoundedBottom] <Center>:
 Insertion base point <0,0> [Back]:
 X - overall left-to-right bounds [Back]:
 Y - overall front-to-back bounds [Back]:
@@ -188,9 +188,10 @@ Top-right tangent radius [Back]:
 Bottom-center tangent radius [Back]:
 ```
 
-(A **top right bulge** pool asks the same ten, with `Top-right bulge
-radius` in place of `Top bulge radius` and `Right-side tangent radius`
-in place of `Top-right tangent radius`.)
+(A **TopRight** pool asks the same ten, with `Top-right bulge radius` in
+place of `Top bulge radius` and `Right-side tangent radius` in place of
+`Top-right tangent radius`. The clouds drop the left and top bulges and
+the two extra joiners — see the table above.)
 
 Every measurement is required — Enter, zero and a negative are all
 refused — and every question after the first offers `Back` (`Undo` is
@@ -207,7 +208,7 @@ The worked example the routine was written from is a 40'-0" × 20'-0"
 pool with 8'/11'/9' bulges and 6'/3'/5' tangent radii:
 
 ```
-Where is the top bulge? [Center/TopRight] <Center>: Center
+Which shape is it? [...] <Center>: Center
 Insertion base point <0,0> [Back]: (pick)
 X - overall left-to-right bounds [Back]: 40'
 Y - overall front-to-back bounds [Back]: 20'
@@ -223,7 +224,7 @@ and the top-right one it was extended for is a 36'-11" × 28'-8" with
 9'/8'/9' bulges and 8'/8'/10' tangents:
 
 ```
-Where is the top bulge? [Center/TopRight] <Center>: T
+Which shape is it? [...] <Center>: T
 Insertion base point <0,0> [Back]: (pick)
 X - overall left-to-right bounds [Back]: 36'11
 Y - overall front-to-back bounds [Back]: 28'8
@@ -233,6 +234,19 @@ Right bulge radius [Back]: 9'
 Top-left tangent radius [Back]: 8'
 Right-side tangent radius [Back]: 8'
 Bottom-center tangent radius [Back]: 10'
+```
+
+and a straight-bottom cloud is a 30'-0" × 20'-0" with a 7' right bulge
+and a 6' top — four numbers, because three bounds already pin the left
+bulge at 10'-0":
+
+```
+Which shape is it? [...] <Center>: S
+Insertion base point <0,0> [Back]: (pick)
+X - overall left-to-right bounds [Back]: 30'
+Y - overall front-to-back bounds [Back]: 20'
+Right bulge radius [Back]: 7'
+Top tangent radius [Back]: 6'
 ```
 
 ## Tunables
@@ -254,7 +268,7 @@ needs different names:
 | `oasis:*startside*` | `0.75` | How far across the short bound a side bulge reaches before its radius is given |
 | `oasis:*starttop*` | `0.5` | How far across the long bound the top bulge reaches before its radius is given |
 | `oasis:*checkgap*` | `4.0` | How far right the check drawing sits, as a multiple of the dimension stand-off |
-| `oasis:*topfrac*` | `0.5` | Where the top bulge sits across the X bound, as a fraction of it. `0.5` centres it, which is what every oasis on file wants |
+| `oasis:*topfrac*` | `0.5` | Where a **Center** pool's top bulge sits across the X bound, as a fraction of it |
 | `oasis:*fuzz*` | `1.0e-6` | Slack for "same point / same length" tests, drawing units |
 
 The dimension stand-off is not a tunable: it is `max(12, longer side /
@@ -364,7 +378,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 51 of them. The reference case is checked against the drawing OASIS was
+answers — 58 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -398,7 +412,7 @@ proportions: the side bulges span three quarters of `Y`, the top bulge
 half of `X`, the bulges really are the bigger circles, and all six read
 `?`.
 
-Eight more are the **top right bulge** variant: the shape is the first
+Eight more are the **TopRight** shape: the shape is the first
 question and offers no `Back` while the base-point pick after it does;
 the corner variant reproduces its own reference drawing arc for arc; it
 fills a 36'-11" × 28'-8" envelope and touches the right bound twice; its
@@ -407,7 +421,16 @@ name their six arcs apart; it asks for a top-right bulge and a
 right-side tangent rather than a top bulge and a top-right tangent; a
 corner bulge too big for the envelope is re-asked while a centred one of
 the same size is not; and its preview starts from the short bound
-because a corner bulge has to fit both ways. The preview
+because a corner bulge has to fit both ways.
+
+And seven are the two **cloud** shapes: each reproduces its own reference
+drawing arc for arc; both fill a 30'-0" × 20'-0" envelope exactly; the
+flat run really is the general external tangent landing on the Y-min
+bound rather than a special case bolted on; they ask six and seven
+questions with no left-bulge question among them; the flat run is
+dimensioned by its length rather than by a radius it has not got; and
+their preview draws no circle and no `?` behind that run while showing
+the pinned left bulge's value from the very first question. The preview
 ones wrap `getdist` to photograph the drawing at the moment each question
 is put — it is erased before the next one, so there is no other way to
 see it.
