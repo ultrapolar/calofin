@@ -116,6 +116,16 @@ Rectangle corners can be **Square**, **Rounded** (a radius) or **Diag**
 end lengths are always measured to the **true (sharp) corner**; the
 treatment cuts inward from there.
 
+The same three treatments are offered on **Grecian/Octagon**, **Roman**
+and **L / Lazy L** pools, each behind an `Are the corners modified
+(rounded / chamfered)?` gate that defaults to **No** — square is
+always the assumption. What differs per shape is only how the corners
+are **grouped**: see [Grecian corner treatments](#grecian-corner-treatments),
+[Roman pools](#roman-pools) and [L / Lazy L pools](#l--lazy-l-pools).
+Everywhere, an **out-of-square** pool asks each corner independently
+(Enter reusing the previous one) while an **in-square** pool asks once
+per family of like corners.
+
 * **In-square:** one corner question, applied to all four corners.
   In-square pools also ask each **pair of opposing sides once** —
   side length (top & bottom together), end length (left & right
@@ -431,6 +441,27 @@ radius dimensions, the overalls B (tip to tip) and A are dimensioned
 like the sheet, and the interior is the **True Oval hopper / sport
 bottom** phase, tips and all.
 
+**Corner treatments:** after the letters (and cross dims) are in --
+before the floor -- a Roman asks **`Are the corners modified (rounded
+/ chamfered)?`** (default No). Square is the assumption; answering Yes
+opens the treatments on the four **true corners A/B/C/D**, where a
+side runs into an end line above or below the arc's corner drop. The
+arc springs are not offered: a spring is a shallow line-to-arc kink,
+not a corner anyone radiuses.
+
+* **In-square** asks **once** -- `All corners (assumed identical)`.
+* **Out-of-square** asks **each corner on its own**, A through D, with
+  Enter reusing the previous corner's answer.
+
+The `S1` stubs then spring from the **treatment ends** rather than the
+sharp corners behind them, so a rounded corner shortens its stub
+instead of hanging off it. Sizes are capped at half the side **and at
+the `S1` corner drop**, so a treatment can never run past the arc
+spring below it. Side dims still read to the TRUE corners; the drawing
+gets one `Typ.` callout in square (and out of square too, when Enter
+reused one answer all the way round), otherwise a radius or face dim
+per treated corner. The report lists the sizes.
+
 ### Mutt pools (mixed ends)
 
 Field pools don't always match one sheet — a Roman deep end shows up
@@ -535,6 +566,51 @@ can't be met the edges are held true and **`CROSS DIMS FAILED`** is
 reported — same policy as the rectangle. Every cross dim is
 dimensioned (in the `CROSS DIMENSIONS` style when present) and listed
 in the report table (`X A-C`, `X LB-RT`, …) with target/actual/delta.
+
+### Grecian corner treatments
+
+After the perimeter (and cross dims) are in — before the floor — a
+Grecian asks **`Are the corners modified (rounded / chamfered)?`**
+(default No). Square is the assumption, but plenty of pools round
+those corners, so answering Yes opens the same `Square` / `Rounded`
+radius / `Diag` chamfer-face treatments the rectangle and the L use.
+
+The 8 corners come in **two families**, and that is how the answers
+are grouped:
+
+* **BODY corners A/B/C/D** — where a long wall runs into a cut face.
+* **END TIPS LT/LB/RT/RB** — where that cut face lands on the end wall.
+
+**In square** each family takes **one answer**: the body corners
+first, then the tips, with Enter on the tip question reusing the body
+answer (a pool that rounds one usually rounds both). **Out of square**
+every corner is asked **on its own**, round the perimeter A → B → RB →
+RT → C → D → LT → LB, Enter reusing the previous corner — the same
+split the rectangle makes between its in-square and out-of-square
+corner questions.
+
+Sizes are capped so treatments can never overlap and fold a wall: the
+body answer is budgeted half the shortest wall it touches (which
+leaves the other half of every cut face free), and each tip is then
+capped by what the body cut actually **left** on the cut face they
+share, halving the end wall the two tips on it share with each other.
+Because a Grecian's corners are **135°, not 90°**, the shape is fit
+*before* the corner questions so those budgets use the real fitted
+angles — the same reason the L fits first (see below).
+
+Perimeter walls are drawn between the treatment ends with an arc or
+chamfer face closing each corner; the two dashed **internal end
+chords** `A-D` and `B-C` stay on the true corners, since they are
+construction lines rather than walls. Edge dims still read to the TRUE
+corners. The drawing gets one `Typ.` callout per family in square
+(and one for the whole ring when every answer came back the same),
+otherwise a radius or face dim per treated corner; the report lists
+`BODY CORNER` / `END TIP` sizes in square and per-corner sizes out.
+
+Note the ordering: unlike the rectangle, a Grecian asks its corners
+**after** its cross dims (the fit has to come first), so there is no
+"cross dims measured from Corner/Middle/Ends" question — its cross
+dims always read the true corners. The L pool works the same way.
 
 ### L / Lazy L pools
 
