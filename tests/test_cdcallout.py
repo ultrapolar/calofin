@@ -3,12 +3,14 @@ drive c:CDCALLOUT with scripted typing.  AutoLISP cannot run outside
 AutoCAD, so this is where a wrong arity, an unbound function or a nil
 reaching (distance ...) has to die.
 
-Script values answer the interactive calls in order: the "_X" point
-sweep (ssget), then per round a FROM number and a TO number (both
-getstring) -- the dimension line is placed automatically, right
-inbetween, so nothing is ever picked; None at the FROM prompt is the
-Enter that ends the loop.  Typed 'b'/'undo' answers exercise the
-shared Back convention.  Run: python3 tests/test_cdcallout.py
+Script values answer the interactive calls in order: per round a FROM
+number and a TO number (both getstring) -- the dimension line is placed
+automatically, right inbetween, so nothing is ever picked; None at the
+FROM prompt is the Enter that ends the loop.  Typed 'b'/'undo' answers
+exercise the shared Back convention.  The "_X" point sweep takes no
+scripted answer: ssget "_X" reads the drawing and never prompts, so the
+points the scenario builds with ab_pt are what it finds.
+Run: python3 tests/test_cdcallout.py
 """
 
 import os
@@ -91,7 +93,7 @@ def dim_ents(vm):
 def test_one_dim():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 35), ab_pt(vm, 120, 0, 40)]
-    run(vm, [pts, '35', '40', None], 'one dim')
+    run(vm, ['35', '40', None], 'one dim')
     ds = dims(vm)
     assert len(ds) == 1, ds
     d = ds[0]
@@ -114,7 +116,7 @@ def test_rinse_repeat():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
            ab_pt(vm, 100, 100, 3)]
-    run(vm, [pts,
+    run(vm, [
              '1', '2',
              '2', '3',
              '3', '1',
@@ -130,7 +132,7 @@ def test_number_spellings():
     """'Pt.35', 'PT35', '#035' and '35.0' all name plain '35'."""
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 35), ab_pt(vm, 100, 0, 40)]
-    run(vm, [pts,
+    run(vm, [
              'Pt.35', 'PT40',
              '#035', '40.0',
              None], 'spellings')
@@ -143,7 +145,7 @@ def test_decimal_point_name():
     genuinely named 40.5 read as 405 and could never be asked for."""
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, '40.5'), ab_pt(vm, 100, 0, 41)]
-    run(vm, [pts, 'Pt.40.5', '41', None], 'decimal name')
+    run(vm, ['Pt.40.5', '41', None], 'decimal name')
     assert len(dims(vm)) == 1, dims(vm)
     print("ok  Pt.40.5      -> a decimal point name keeps its decimal")
 
@@ -153,7 +155,7 @@ def test_unknown_number():
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
     # '99' names nothing: the round dies at the FROM prompt and nothing
     # is asked for or drawn; the next round still works
-    run(vm, [pts, '99', '1', '2', None], 'unknown')
+    run(vm, ['99', '1', '2', None], 'unknown')
     assert len(dims(vm)) == 1, dims(vm)
     print("ok  unknown number -> reported, nothing drawn, loop goes on")
 
@@ -161,7 +163,7 @@ def test_unknown_number():
 def test_cancelled_rounds():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
-    run(vm, [pts,
+    run(vm, [
              '1', None,               # Enter at TO: round skipped
              '1', '1',                # same point both ends: TO re-asked
              None,                    # Enter at the re-asked TO: skipped
@@ -176,7 +178,7 @@ def test_offset_pushes_dim_line():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 120, 0, 2)]
     vm.loads('(setq cdo:*offset* 6.0)')
-    run(vm, [pts, '1', '2', None], 'offset')
+    run(vm, ['1', '2', None], 'offset')
     assert dims(vm)[0][10] == [60.0, 6.0, 0.0], dims(vm)
     print("ok  offset 6     -> dim line pushed 6 off the tie")
 
@@ -184,7 +186,7 @@ def test_offset_pushes_dim_line():
 def test_missing_style():
     vm = newvm(styles=())
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
-    run(vm, [pts, '1', '2', None], 'missing style')
+    run(vm, ['1', '2', None], 'missing style')
     ds = dims(vm)
     assert len(ds) == 1, ds
     # the style is NOT invented: the dim stays in the current style,
@@ -200,7 +202,7 @@ def test_back_undraws_last_dim():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
            ab_pt(vm, 100, 100, 3)]
-    run(vm, [pts,
+    run(vm, [
              '1', '2',
              '2', '3',
              'b',                      # un-draw the 2-3 dim
@@ -221,7 +223,7 @@ def test_back_reasks_previous_prompt():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
            ab_pt(vm, 100, 100, 3)]
-    run(vm, [pts,
+    run(vm, [
              '1', 'back',              # B at TO: back to FROM
              '2', '1',                 # ...and the round runs 2 -> 1
              None], 'back mid-round')
@@ -236,7 +238,7 @@ def test_back_reasks_previous_prompt():
 
 def test_no_points():
     vm = newvm()
-    run(vm, [None], 'no points')
+    run(vm, [], 'no points')
     assert dims(vm) == []
     print("ok  no named points -> nothing asked, nothing drawn")
 

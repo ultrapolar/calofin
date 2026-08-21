@@ -67,6 +67,21 @@
            (princ (strcat "\n[calofin] MISSING: " name))
            nil)))
 
+;;; -------------------- held back from this build -----------------------
+;;; These exist in shared/parts/ and in lisp/, but are deliberately NOT
+;;; compiled into CALOFIN-ALL.lsp and not loaded here.  Two reasons,
+;;; kept apart on purpose:
+;;;   WIP      still being worked on - goes in when it settles
+;;;   OMITTED  never part of calofin
+;;; This list is the single source of truth: tools/build_shared_bundle.py
+;;; and tools/check_standards.py both read it.  Move a name out of here
+;;; and into the manifest above, then rebuild:
+;;;     python3 tools/build_shared_bundle.py
+
+(setq cal:*held-back*
+  '(("CABHD.lsp" . "WIP")              ; not written yet
+    ("LISPLAB.lsp" . "OMITTED")))     ; teaching tool - never part of calofin
+
 ;;; -------------------- the build ---------------------------------------
 
 (if (not cal:*dir*)
@@ -80,27 +95,31 @@
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
     ;; The library first -- every tool below calls into it.  POOL and SPA
     ;; precede their demo/tutorial satellites.
-    (foreach m '("CALOFIN-LIB.lsp"
-                 "POOL.lsp" "POOLDEMO.lsp" "TUTORIALPOOL.lsp"
-                 "SPA.lsp" "TUTORIALSPA.lsp"
-                 "OASIS.lsp"
-                 "abcdef.lsp" "ALTABCDEF.lsp" "abhd.lsp" "AUTOBEAD.lsp"
+    (foreach m '(
+                 "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
+                 "TUTORIALPOOL.lsp" "SPA.lsp" "TUTORIALSPA.lsp"
+                 "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
+                 "ALTABCDEF.lsp" "abhd.lsp" "AUTOBEAD.lsp"
                  "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
                  "covercheck.lsp" "dimcheck.lsp" "dim_continue.lsp"
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
-                 "FITABHD.lsp"
-                 "lhd.lsp" "lincheck.lsp" "linfincheck.lsp" "LINTXTCHK.lsp"
-                 "LISPLAB.lsp"
-                 "PADDLE.lsp" "perp_points.lsp" "cperp_points.lsp"
+                 "FITABHD.lsp" "lhd.lsp" "lincheck.lsp"
+                 "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
+                 "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
-                 "STOCKCOVER.lsp" "drone.lsp" "wcalst.lsp" "xftconv.lsp")
+                 "SPACHECK.lsp"
+                 "STOCKCOVER.lsp" "drone.lsp" "wcalst.lsp"
+                 "xftconv.lsp")
       (cal--load m))
     (if (> cal:*missing* 0)
       (princ (strcat "\n[calofin] " (itoa cal:*missing*)
                      " file(s) missing - the build folder is incomplete."))
       (princ "\n[calofin] shared build loaded - every command in one session."))
+    (if cal:*held-back*
+      (princ (strcat "\n[calofin] " (itoa (length cal:*held-back*))
+                     " file(s) held back - see cal:*held-back*.")))
     (princ "\n[calofin] Type CALVER for the library version.")))
 
 (princ)

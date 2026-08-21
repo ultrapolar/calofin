@@ -3,7 +3,11 @@
 ;;;
 ;;;  AUTODIM  - Step 1. Asks the user to highlight the stuff to
 ;;;                auto-dim (the plan geometry).  Everything else in
-;;;                the drawing is ignored from then on.
+;;;                the drawing is ignored from then on.  Highlight a
+;;;                flight of steps drawn in side view instead and it
+;;;                is recognised as one - see "Steps in side view"
+;;;                below - and steps 2 to 5 are skipped, being all
+;;;                about a plan.
 ;;;             Step 2. Dimensions the straight lines about the
 ;;;                perimeter of the highlighted geometry (LINE entities
 ;;;                and straight LWPOLYLINE segments) with aligned
@@ -12,13 +16,15 @@
 ;;;                treads (the largest group of parallel lines in the
 ;;;                selection) get their widths dimensioned and the
 ;;;                distances between them chained beside the stair.
-;;;             Step 4. Asks the user to draw two "floor dims" lines.
+;;;             Step 4. Asks whether you would like floor dims, and if
+;;;                you do, has you draw two lines across the plan.
 ;;;                Each one becomes a continued dimension chain
 ;;;                (DIMALIGNED + DIMCONTINUE) that breaks at every
 ;;;                highlighted object standing in its way.  A start or
-;;;                end point picked outside the perimeter is trimmed
-;;;                back to the perimeter so no dims hang outside the
-;;;                plan.
+;;;                end point that is not on an object is pulled back to
+;;;                the last object before it, so every dim runs object
+;;;                to object and none hangs off the end into open
+;;;                drawing.
 ;;;             Step 5. Places the two overall dims, no input needed:
 ;;;                the plan's full width about 2ft above the topmost
 ;;;                dimension and its full height about 2ft to the left
@@ -42,6 +48,32 @@
 ;;;    1. APPLOAD this file (or drag it into the drawing window).
 ;;;    2. Type AUTODIM and follow the prompts.
 ;;;
+;;;  Steps in side view:
+;;;    AUTODIM works out for itself whether step 1's selection is a
+;;;    plan or a flight of steps drawn in side view, and it only takes
+;;;    the second route when the drawing really looks like steps:
+;;;      * nothing curved in the selection - no arc, circle, ellipse,
+;;;        spline, polyline bulge or block;
+;;;      * three quarters or more of the straight segments running
+;;;        square, so a sloping pool floor at the foot of the flight is
+;;;        still allowed;
+;;;      * two or more risers, and at least one tread per gap between
+;;;        them;
+;;;      * the risers forming a connected staircase across the drawing,
+;;;        each starting where the one before it finished, a tread's
+;;;        run further along.
+;;;    A vertical as tall as the whole profile is read as the back wall
+;;;    rather than a step and left out of that - which is also what
+;;;    stops a rectangular plan reading as a two-step flight.  Anything
+;;;    that fails the test is dimensioned as a plan, so a false alarm
+;;;    is not something a plan can trip into.
+;;;    What it then places: the depth of every step as a vertical dim,
+;;;    all on one line clear of the right-hand side of the flight, and
+;;;    the overall depth further right again.  Both in "STANDARD
+;;;    INCHES".  AUTODIMSIDEPOV is still there for a flight the test
+;;;    does not recognise, or to put the dims on the high side of the
+;;;    steps instead of the right.
+;;;
 ;;;  How the perimeter is found:
 ;;;    From the midpoint of every straight segment a test ray is cast
 ;;;    perpendicular to each side, out past the extents of the
@@ -58,7 +90,9 @@
 ;;;    * Every plan dim          -> "SIDE STANDARD"
 ;;;    * ...measuring under 12"  -> "STANDARD INCHES" instead
 ;;;    * The two overall dims    -> "STANDARD"
-;;;    * AUTODIMSIDEPOV          -> "STANDARD INCHES", as before
+;;;    * Steps in side view      -> "STANDARD INCHES", depths and the
+;;;                                 overall alike, in AUTODIM and in
+;;;                                 AUTODIMSIDEPOV
 ;;;
 ;;;  One dimension per place:
 ;;;    Before placing anything the tool reads every linear and aligned
@@ -82,6 +116,8 @@
 ;;;      inches without dragging the rest of the chain with it.
 ;;;    * The two floor dims lines are construction lines only - they
 ;;;      are erased once their dimension chain has been created.
+;;;    * Answering No to the floor dims question skips straight to the
+;;;      overall dims; Back at it re-opens the stairs.
 ;;;    * Break points closer together than 0.0001 drawing units are
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
@@ -396,6 +432,41 @@
        (setq n (1+ n)))
      (reverse segs))))
 
+;; every straight segment of every entity in ss, as (p1 p2) pairs
+(defun ad:allsegs (ss / i en s out)
+  (setq out '()
+        i   0)
+  (if ss
+    (repeat (sslength ss)
+      (setq en (ssname ss i)
+            i  (1+ i))
+      (foreach s (ad:segs en)
+        (if (> (distance (car s) (cadr s)) 1e-8)
+          (setq out (cons s out))))))
+  out)
+
+;; how many curved pieces the selection holds: arc, circle, ellipse and
+;; spline entities, the bulged segments of a polyline, and blocks,
+;; whose contents cannot be read from the DXF list.  A flight of steps
+;; drawn in side view has none of them.
+(defun ad:curves (ss / i en el ty g n)
+  (setq n 0
+        i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq en (ssname ss i)
+            i  (1+ i)
+            el (entget en)
+            ty (cdr (assoc 0 el)))
+      (cond
+        ((wcmatch ty "ARC,CIRCLE,ELLIPSE,SPLINE,INSERT,POLYLINE")
+         (setq n (1+ n)))
+        ((= "LWPOLYLINE" ty)
+         (foreach g el
+           (if (and (= 42 (car g)) (> (abs (cdr g)) 1e-8))
+             (setq n (1+ n))))))))
+  n)
+
 ;; dxf filter for geometry that can be dimensioned / block a ray /
 ;; break a dim chain
 (defun ad:geomfilter ()
@@ -469,7 +540,7 @@
 ;; stair.  Both go in the plan style, or in inches when they measure
 ;; under a foot, which the gap between two treads usually does.
 ;; Returns the number of dimensions placed.
-(defun ad:dimstairs (/ ss segs i en s a hit g out groups best u v off
+(defun ad:dimstairs (/ ss segs s a hit g out groups best u v off
                        tds td w lastw mid loc smax ts prev pts cnt)
   (prompt (strcat "\nHighlight the stairs (window or pick the tread"
                   " lines), then press Enter."
@@ -477,19 +548,11 @@
                   " get dimensioned - anything under 12\" in"
                   " \"STANDARD INCHES\"."
                   "  Press Enter without selecting to skip."))
-  (setq ss   (ssget '((0 . "LINE,LWPOLYLINE")))
-        segs '()
-        cnt  0
-        i    0)
+  (setq ss  (ssget '((0 . "LINE,LWPOLYLINE")))
+        cnt 0)
   (if ss
     (progn
-      ;; every straight segment in the selection
-      (repeat (sslength ss)
-        (setq en (ssname ss i)
-              i  (1+ i))
-        (foreach s (ad:segs en)
-          (if (> (distance (car s) (cadr s)) 1e-8)
-            (setq segs (cons s segs)))))
+      (setq segs (ad:allsegs ss))
       ;; group the segments by direction - the biggest group of
       ;; parallel lines is taken as the treads
       (setq groups '())
@@ -579,20 +642,19 @@
   res)
 
 ;; build one floor dims chain along p1->p2 (WCS): a first aligned dim
-;; followed by DIMCONTINUE through every break point.  A start or end
-;; point picked outside the perimeter of the obstacles is trimmed back
-;; to the first/last crossing so no dims hang outside the plan.
+;; followed by DIMCONTINUE through every break point, breaking wherever
+;; an obstacle stands in the line's way.  An end point the user did not
+;; land on an object is pulled back to the last object before it, so
+;; every dim runs object to object.
 ;; Returns the number of dimensions placed.
-(defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir a ds d
-                                            starton endon chain prev box
-                                            raylen reps)
+(defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir ds d x
+                                            starton endon chain prev)
   (setq ssx (if obstacles obstacles (ad:geomss)))
   (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
   (setq lin  (entlast)
         lobj (vlax-ename->vla-object lin))
   (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))
   (setq len (distance p1 p2)
-        a   (angle p1 p2)
         dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
         ds  '())
   ;; distance of every crossing object along the line, noting crossings
@@ -611,26 +673,19 @@
       (setq chain (cons (mapcar '(lambda (b v) (+ b (* d v))) p1 dir) chain)
             prev  d)))
   (setq chain (reverse (cons p2 chain)))
-  ;; trim ends picked outside the perimeter: an end point is outside
-  ;; when it is not on any highlighted object and nothing highlighted
-  ;; lies behind it
-  (if (and ssx (> (sslength ssx) 0))
+  ;; an end the user did not land on an object is pulled back to the
+  ;; last object before it, so every dim in the chain runs object to
+  ;; object and none hangs off the end into open drawing
+  (if (not starton)
     (progn
-      (setq box    (cal:bbox-ss ssx)
-            raylen (if box
-                     (* 2.0 (+ (distance (car box) (cadr box)) len))
-                     (* 4.0 len))
-            reps   (* 1e-6 raylen))
-      (if (and (not starton) (ad:sideclear p1 (+ a pi) raylen reps ssx))
-        (progn
-          (setq chain (cdr chain))
-          (prompt "\n  (start point was outside the perimeter - chain trimmed)")))
-      (if (and (cdr chain)
-               (not endon)
-               (ad:sideclear p2 a raylen reps ssx))
-        (progn
-          (setq chain (reverse (cdr (reverse chain))))
-          (prompt "\n  (end point was outside the perimeter - chain trimmed)")))))
+      (setq chain (cdr chain))
+      (prompt (strcat "\n  (start point was not on an object - the chain"
+                      " starts at the first one the line crosses)"))))
+  (if (and (cdr chain) (not endon))
+    (progn
+      (setq chain (reverse (cdr (reverse chain))))
+      (prompt (strcat "\n  (end point was not on an object - the chain"
+                      " stops at the last one the line crosses)"))))
   (if (cdr chain)
     (ad:dimchain chain loc ad:*style-plan*)
     0))
@@ -651,7 +706,7 @@
 ;; breaking at the given obstacles (nil = all model space geometry).
 ;; The three picks step back through each other with Back (Undo is
 ;; accepted too); with BACK non-nil, Back at the START pick returns
-;; the symbol AD-BACK so the caller can re-open its previous step.
+;; the symbol CAL-BACK so the caller can re-open its previous step.
 ;; Returns the dimension count, or nil when the line was skipped.
 (defun ad:getfloor (tag obstacles back / p1 p2 loc n stage out)
   (setq stage 1 out nil)
@@ -665,7 +720,7 @@
                                   (if back ", or Back" "") "): ")))
        (cond
          ((null p1) (prompt "\nNothing drawn - skipped.") (setq out 'skip))
-         ((= (type p1) 'STR) (setq out 'AD-BACK))
+         ((= (type p1) 'STR) (setq out 'CAL-BACK))
          (T (setq stage 2))))
       ((= stage 2)
        (initget "Back Undo")
@@ -690,11 +745,11 @@
                                   (trans loc 1 0) obstacles))
            (if (> n 0)
              (prompt (strcat "\n" tag ": " (itoa n) " dimension(s) placed."))
-             (prompt (strcat "\n" tag ": the drawn line lies outside the"
-                             " plan - no dimensions placed.")))
+             (prompt (strcat "\n" tag ": the line did not cross two"
+                             " objects - no dimensions placed.")))
            (setq out (list n)))))))
   (cond
-    ((eq out 'AD-BACK) 'AD-BACK)
+    ((eq out 'CAL-BACK) 'CAL-BACK)
     ((eq out 'skip) nil)
     (T (car out))))
 
@@ -764,10 +819,223 @@
                          "_V" ad:*style-over*)))))
   cnt)
 
+;; ------------------------------------- part 5: steps drawn in side view
+
+;; every vertical segment in ss as (top bottom), from the top step down
+;; - the risers of a flight drawn in side view
+(defun ad:risers (ss / s out)
+  (setq out '())
+  (foreach s (ad:allsegs ss)
+    (if (and (< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
+             (> (abs (- (cadr (car s)) (cadr (cadr s)))) 1e-4))
+      (setq out (cons (if (> (cadr (car s)) (cadr (cadr s)))
+                        s
+                        (list (cadr s) (car s)))
+                      out))))
+  (ad:topdown out))
+
+;; risers ordered from the top step down
+(defun ad:topdown (risers)
+  (vl-sort risers '(lambda (a b) (> (cadr (car a)) (cadr (car b))))))
+
+;; the nosing corners of a flight, top down: the top of the top riser,
+;; then the bottom corner of every riser going down the flight
+(defun ad:stepchain (risers)
+  (cons (car (car risers)) (mapcar 'cadr risers)))
+
+;; T when the risers, taken in the order given, are a connected
+;; staircase: each one starts where the one before it finished, a
+;; tread's run further along
+(defun ad:stairlike-p (risers tol / r prev ok)
+  (setq ok   t
+        prev (car risers))
+  (foreach r (cdr risers)
+    (if (or (> (abs (- (cadr (car r)) (cadr (cadr prev)))) tol)
+            (<= (abs (- (car (car r)) (car (car prev)))) tol))
+      (setq ok nil))
+    (setq prev r))
+  ok)
+
+;; Does the highlighted geometry look like a flight of steps drawn in
+;; side view rather than a plan?  It does when
+;;   * nothing in it is curved - no arc, circle, ellipse, spline,
+;;     polyline bulge or block;
+;;   * three quarters or more of its straight segments run square, so a
+;;     sloping pool floor at the foot of the flight is still allowed;
+;;   * it has two or more risers and at least one tread per gap
+;;     between them;
+;;   * and the risers form a connected staircase across the drawing,
+;;     each starting where the one before it finished.
+;; A vertical as tall as the whole profile is the back wall, not a
+;; step, and is left out of that reckoning - which is also what stops a
+;; rectangular plan reading as a two-step flight.
+;; Returns the risers, top down, or nil.
+(defun ad:stepprofile-p (ss / segs s pp vert horz nsq ymin ymax hgt
+                              tol risers r)
+  (setq segs (ad:allsegs ss)
+        vert '()
+        horz '()
+        ymin nil
+        ymax nil)
+  (foreach s segs
+    (cond ((< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
+           (setq vert (cons s vert)))
+          ((< (ad:angdiff (ad:segang s) 0.0) 1e-3)
+           (setq horz (cons s horz))))
+    (foreach pp s
+      (setq ymin (if ymin (min ymin (cadr pp)) (cadr pp))
+            ymax (if ymax (max ymax (cadr pp)) (cadr pp)))))
+  (setq nsq (+ (length vert) (length horz))
+        hgt (if ymin (- ymax ymin) 0.0))
+  (if (and (> hgt 1e-8)
+           (zerop (ad:curves ss))
+           (>= (length vert) 2)
+           (>= (length horz) 1)
+           (>= (* 4 nsq) (* 3 (length segs))))
+    (progn
+      ;; the risers, a full-height back wall left out
+      (setq tol    (max (ad:dupetol) (* 0.01 hgt))
+            risers '())
+      (foreach s vert
+        (setq r (if (> (cadr (car s)) (cadr (cadr s)))
+                  s
+                  (list (cadr s) (car s))))
+        (if (< (- (cadr (car r)) (cadr (cadr r))) (* 0.9 hgt))
+          (setq risers (cons r risers))))
+      (setq risers (vl-sort risers
+                            '(lambda (a b) (< (car (car a)) (car (car b))))))
+      (if (and (cdr risers)
+               (>= (length horz) (1- (length risers)))
+               (or (ad:stairlike-p risers tol)
+                   (ad:stairlike-p (reverse risers) tol)))
+        (ad:topdown risers)))))
+
+;; Dimension a flight of steps drawn in side view: one vertical dim for
+;; the depth of every step, then the overall depth one step further
+;; out.  side is 1.0 to put them to the right of the profile, -1.0 to
+;; put them to the left.  With stack non-nil they all sit on one line
+;; clear of the whole flight; with it nil each sits just outside its
+;; own step, walking down with the stairs.
+;; Returns the number of dimensions placed.
+(defun ad:dimsteps (chain side stack base / clear xs xdim edge loc
+                                            cnt nris prev pb)
+  (setq clear (max (ad:dimoff) (* 2.0 (ad:onefoot)))
+        cnt   0
+        nris  0
+        edge  nil
+        prev  (car chain))
+  (if stack
+    (setq xs   (mapcar 'car chain)
+          xdim (+ (* side clear)
+                  (if (> side 0.0) (apply 'max xs) (apply 'min xs)))
+          edge xdim))
+  (foreach pb (cdr chain)
+    (if (> (abs (- (cadr prev) (cadr pb))) 1e-4)
+      (progn
+        (if (not stack)
+          (setq xdim (+ (* side clear)
+                        (if (> side 0.0)
+                          (max (car prev) (car pb))
+                          (min (car prev) (car pb))))
+                edge (cond ((null edge) xdim)
+                           ((> side 0.0) (max edge xdim))
+                           (t (min edge xdim)))))
+        (setq loc  (list xdim (* 0.5 (+ (cadr prev) (cadr pb))) 0.0)
+              cnt  (+ cnt (ad:putlinear prev pb loc "_V" base))
+              nris (1+ nris))))
+    (setq prev pb))
+  ;; the overall depth, one step further out again - counted off the
+  ;; risers found, not the dims placed, so a flight that is dimensioned
+  ;; already still gets its overall
+  (if (> nris 1)
+    (setq cnt (+ cnt (ad:putlinear
+                       (last chain) (car chain)
+                       (list (+ edge (* side clear))
+                             (* 0.5 (+ (cadr (car chain))
+                                       (cadr (last chain))))
+                             0.0)
+                       "_V" base))))
+  cnt)
+
 ;; --------------------------------------------------------------- commands
 
-(defun c:AUTODIM (/ *error* oldcmd olddim plan nper nstair nover
-                    stage mark3 mark4 v)
+;; AUTODIM's plan flow, steps 2 to 5: the perimeter, then the stairs,
+;; then the two floor dims lines, then the two overall dims.
+(defun ad:runplan (plan / nper nstair nover stage mark3 mark4 v)
+  (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
+                  "\nDimensioning the straight lines about the"
+                  " perimeter - no input needed..."))
+  (setq nper (ad:dimperim plan))
+  (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
+  ;; steps 3 and 4 walk back through each other: Back at the floor dims
+  ;; question re-opens the stairs, erasing what they drew, and Back at
+  ;; the second floor line re-opens the first
+  (setq stage 3)
+  (while (< stage 7)
+    (cond
+      ((= stage 3)
+       (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
+       (setq mark3  (entlast)
+             nstair (ad:dimstairs))
+       (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
+       (setq stage 4))
+      ((= stage 4)
+       (prompt (strcat "\n=== AUTODIM step 4 of 5: floor dims ==="
+                       "\nTwo lines drawn across the plan, each becoming a"
+                       " dimension chain that breaks at every highlighted"
+                       " object it crosses.  A start or end point that is"
+                       " not on an object pulls back to the last object"
+                       " before it, so every dim runs object to object."))
+       (setq v (cal:askyn "Would you like floor dims?" "Yes" T))
+       (cond
+         ((eq v 'CAL-BACK)
+          (ad:eraseafter mark3)
+          (prompt "\nStepping back to the stairs.")
+          (setq stage 3))
+         (v (setq stage 5))
+         (T (prompt "\nNo floor dims.")
+            (setq stage 7))))
+      ((= stage 5)
+       (setq mark4 (entlast)
+             v     (ad:getfloor "Floor dims 1 of 2" plan T))
+       (if (eq v 'CAL-BACK)
+         (progn
+           (prompt "\nStepping back to the floor dims question.")
+           (setq stage 4))
+         (setq stage 6)))
+      (T
+       (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
+       (if (eq v 'CAL-BACK)
+         (progn
+           (ad:eraseafter mark4)
+           (prompt "\nStepping back one floor line.")
+           (setq stage 5))
+         (setq stage 7)))))
+  (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
+                  "\nPlacing the overall width about 2ft above the"
+                  " topmost dim and the overall height about 2ft to"
+                  " the left of the left-most one - no input"
+                  " needed..."))
+  (setq nover (ad:overall plan))
+  (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
+  (princ))
+
+;; AUTODIM's side-view flow, for when step 1's selection turned out to
+;; be a flight of steps drawn in side view: the depth of every step
+;; down the right-hand side, then the overall depth further right
+;; again.  Nothing else is asked for - the perimeter, stairs and floor
+;; dims steps are all about a plan.
+(defun ad:runsteps (risers / n)
+  (prompt (strcat "\n=== AUTODIM: that is a side view of steps ==="
+                  "\nDimensioning the depth of every step, to the right"
+                  " of the flight in \"" ad:*style-short* "\", and the"
+                  " overall depth further right again - no input"
+                  " needed..."))
+  (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-short*))
+  (prompt (strcat "\n" (itoa n) " step dimension(s) placed."))
+  (princ))
+
+(defun c:AUTODIM (/ *error* oldcmd olddim plan risers)
   (defun *error* (msg)
     (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
     (if olddim
@@ -776,10 +1044,13 @@
     (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (prompt (strcat "\n=== AUTODIM step 1 of 5: highlight the plan ==="
+  (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
                   "\nHighlight everything that makes up the plan (walls"
                   " etc.), then press Enter.  Only what you highlight is"
-                  " dimensioned and used to find the perimeter."))
+                  " dimensioned and used to find the perimeter."
+                  "\nHighlight a flight of steps drawn in side view"
+                  " instead and it is recognised as one: the depth of"
+                  " every step gets dimensioned rather than a plan."))
   (setq plan (ssget (ad:geomfilter)))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
@@ -789,50 +1060,9 @@
       (setvar "CMDECHO" 0)
       (ad:begin)
       (command "_.UNDO" "_Begin")
-      (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
-                      "\nDimensioning the straight lines about the"
-                      " perimeter - no input needed..."))
-      (setq nper (ad:dimperim plan))
-      (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
-      ;; steps 3 and 4 walk back through each other: Back at a floor
-      ;; line's START re-opens the previous step, erasing what it drew
-      (setq stage 3)
-      (while (< stage 6)
-        (cond
-          ((= stage 3)
-           (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
-           (setq mark3  (entlast)
-                 nstair (ad:dimstairs))
-           (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
-           (prompt (strcat "\n=== AUTODIM step 4 of 5: floor dims ==="
-                           "\nDraw two lines across the plan.  Each becomes a"
-                           " dimension chain that breaks at every highlighted"
-                           " object it crosses."))
-           (setq stage 4))
-          ((= stage 4)
-           (setq mark4 (entlast)
-                 v     (ad:getfloor "Floor dims 1 of 2" plan T))
-           (if (eq v 'AD-BACK)
-             (progn
-               (ad:eraseafter mark3)
-               (prompt "\nStepping back to the stairs.")
-               (setq stage 3))
-             (setq stage 5)))
-          (T
-           (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
-           (if (eq v 'AD-BACK)
-             (progn
-               (ad:eraseafter mark4)
-               (prompt "\nStepping back one floor line.")
-               (setq stage 4))
-             (setq stage 6)))))
-      (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
-                      "\nPlacing the overall width about 2ft above the"
-                      " topmost dim and the overall height about 2ft to"
-                      " the left of the left-most one - no input"
-                      " needed..."))
-      (setq nover (ad:overall plan))
-      (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
+      (if (setq risers (ad:stepprofile-p plan))
+        (ad:runsteps risers)
+        (ad:runplan plan))
       (ad:skipreport)
       (ad:usestyle olddim)
       (command "_.UNDO" "_End")
@@ -891,8 +1121,8 @@
 ;; match the reference drawing - a riser is under a foot anyway, so
 ;; that is the style the length rule asks for too.  A riser that is
 ;; dimensioned already is left alone, as everywhere else.
-(defun c:AUTODIMSIDEPOV (/ *error* oldcmd olddim oldlay ss i en s risers
-                            chain sx clear xdim edge loc cnt nris prev pb)
+(defun c:AUTODIMSIDEPOV (/ *error* oldcmd olddim oldlay ss risers chain
+                            sx cnt)
   (defun *error* (msg)
     (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
     (if olddim
@@ -918,69 +1148,17 @@
       (ad:begin)
       (command "_.UNDO" "_Begin")
       (ad:setlayer "DIMENSION")
-      ;; the vertical segments in the selection are the risers
-      (setq risers '()
-            i      0)
-      (repeat (sslength ss)
-        (setq en (ssname ss i)
-              i  (1+ i))
-        (foreach s (ad:segs en)
-          (if (and (> (distance (car s) (cadr s)) 1e-8)
-                   (< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
-                   (> (abs (- (cadr (car s)) (cadr (cadr s)))) 1e-4))
-            (setq risers (cons s risers)))))
+      ;; told these are steps, so every vertical is taken as a riser -
+      ;; no staircase test here, unlike AUTODIM's own side-view branch
+      (setq risers (ad:risers ss))
       (if (null risers)
         (prompt (strcat "\nNo vertical riser lines found in the selection"
                         " - nothing dimensioned."))
         (progn
-          ;; each riser as (top bottom), sorted from the top step down
-          (setq risers
-                 (vl-sort
-                   (mapcar '(lambda (s)
-                              (if (> (cadr (car s)) (cadr (cadr s)))
-                                s
-                                (list (cadr s) (car s))))
-                           risers)
-                   '(lambda (a b) (> (cadr (car a)) (cadr (car b))))))
-          ;; chain of nosing corners: the top of the top riser, then
-          ;; the bottom corner of every riser going down the flight
-          (setq chain (cons (car (car risers)) (mapcar 'cadr risers))
+          (setq chain (ad:stepchain risers)
                 ;; dims go on the high side of the steps
                 sx    (if (>= (car (car chain)) (car (last chain))) 1.0 -1.0)
-                clear (max (ad:dimoff) (* 2.0 (ad:onefoot)))
-                edge  nil
-                cnt   0
-                nris  0
-                prev  (car chain))
-          ;; one vertical dimension per riser, beside its step
-          (foreach pb (cdr chain)
-            (if (> (abs (- (cadr prev) (cadr pb))) 1e-4)
-              (progn
-                (setq xdim (+ (* sx clear)
-                              (if (> sx 0.0)
-                                (max (car prev) (car pb))
-                                (min (car prev) (car pb))))
-                      edge (cond ((null edge) xdim)
-                                 ((> sx 0.0) (max edge xdim))
-                                 (t (min edge xdim)))
-                      loc  (list xdim
-                                 (* 0.5 (+ (cadr prev) (cadr pb)))
-                                 0.0))
-                (setq cnt  (+ cnt (ad:putlinear prev pb loc "_V"
-                                                ad:*style-short*))
-                      nris (1+ nris))))
-            (setq prev pb))
-          ;; the overall height, one step further out - counted off the
-          ;; risers found, not the dims placed, so a flight that is
-          ;; dimensioned already still gets its overall height
-          (if (> nris 1)
-            (progn
-              (setq loc (list (+ edge (* sx clear))
-                              (* 0.5 (+ (cadr (car chain))
-                                        (cadr (last chain))))
-                              0.0))
-              (setq cnt (+ cnt (ad:putlinear (last chain) (car chain) loc
-                                             "_V" ad:*style-short*)))))
+                cnt   (ad:dimsteps chain sx nil ad:*style-short*))
           (prompt (strcat "\n" (itoa cnt) " step dimension(s) placed."))
           (ad:skipreport)))
       (ad:usestyle olddim)
@@ -989,5 +1167,5 @@
       (setvar "CMDECHO" oldcmd)))
   (princ))
 
-(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")
+(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")
 (princ)

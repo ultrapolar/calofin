@@ -54,6 +54,8 @@ echo "  - mirror a lisp/ change into shared/parts/<FILE>.lsp in the SAME commit,
 echo "    python3 tools/release_lisp.py && python3 tools/build_shared_bundle.py"
 echo "  - never hand-edit releases/ or shared/CALOFIN-ALL.lsp - both are generated"
 echo "  - only shared/parts/CALOFIN-LIB.lsp defines cal: symbols"
+echo "  - some tools are HELD BACK from CALOFIN-ALL.lsp on purpose - the list"
+echo "    and the reasons are cal:*held-back* in parts/CALOFIN-LOADER.lsp"
 echo "  - corner treatments are Square/Radius/Cut/NotGiven, nothing else"
 if [ "$BRANCH" != "$TRUNK" ]; then
   echo "  - branch is '$BRANCH'; CLAUDE.md pins work to $TRUNK"

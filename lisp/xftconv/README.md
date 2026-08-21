@@ -14,10 +14,11 @@ Given what the export drops in the drawing:
 | **scaled** | the same thing ×12 — a `0.16404167` high name becomes `1.9685` |
 | **after** | an `ab_pt` block on layer `POINTS`, attribute `number` = `22` |
 
-`XFTCONV` does all three: it scales what you selected, then for each marker it
-inserts the block at the exact centre of the X, fills in the number with the
-letter prefix stripped (`P22` → `22`), and erases the old X and its name text.
-Everything else in the selection is just scaled and left alone.
+`XFTCONV` does all three: it scales what you selected ×12 about the middle of
+the selection, then for each marker it inserts the block at the exact centre of
+the X, fills in the number with the letter prefix stripped (`P22` → `22`), and
+erases the old X and its name text. Any text still left in the selection after
+that is erased too. Non-text geometry is scaled and otherwise left alone.
 
 ## Install
 
@@ -29,19 +30,19 @@ Or just drag the file into the drawing window to load it for the session.
 
 ## Use
 
+Highlighting the import is the only answer it needs:
+
 ```
 Command: XFTCONV
-Select objects:                      ← highlight the import (Enter = everything in this space)
-Scale factor <12.0000>:              ← Enter
-Base point for the scale <0,0>:      ← Enter
+Select objects:            ← highlight the import (Enter = everything in this space)
 ```
 
 It reports what it did:
 
 ```
-Scaling 431 objects by 12.0000 ...
+Scaling 431 objects by 12.0000 about the middle of the selection ...
 118 point(s) replaced with "ab_pt".
-2 name text(s) had no marker - left in the drawing so you can look at them.
+26 leftover text object(s) erased.
 ```
 
 The whole run is a single `U` step, so one undo puts the drawing back if the
@@ -49,10 +50,12 @@ import turns out to be worse than usual.
 
 Notes:
 
-- **Already scaled?** Enter `1` at the scale prompt and it will only swap the
-  points.
-- **Names it could not match** are left in place rather than deleted, so
-  anything odd stays visible instead of disappearing quietly.
+- **Always ×12**, always about the centre of the bounding box around everything
+  you highlighted. Neither is asked for.
+- **All remaining text goes.** Once the point numbers are safely in block
+  attributes, every other `TEXT` and `MTEXT` in the selection is erased —
+  including point names it could not match to a marker. Highlight only the
+  import, or set `*xft-purge-text*` to `nil` if you need the text kept.
 - **A marker with no name nearby** still gets a block, with a blank number.
 - Points nested inside a block reference are not touched — explode first.
 - `LEICA_POINT`, `LEICA_POINT_NAME` and `POINTS` must be unlocked; the command
@@ -67,7 +70,7 @@ The constants at the top of `xftconv.lsp` are the whole configuration:
 
 | variable | default | meaning |
 | --- | --- | --- |
-| `*xft-scale*` | `12.0` | default scale factor (feet → inches) |
+| `*xft-scale*` | `12.0` | scale factor (feet → inches) |
 | `*xft-marker-layer*` | `"LEICA_POINT"` | layer of the X marker (wildcards ok) |
 | `*xft-name-layer*` | `"LEICA_POINT_NAME"` | layer of the point name text |
 | `*xft-block*` | `"ab_pt"` | block that replaces the marker |
@@ -78,6 +81,7 @@ The constants at the top of `xftconv.lsp` are the whole configuration:
 | `*xft-att-offset*` | `(0.8697246 -3.5316825)` | attribute offset from the point, as on the sample |
 | `*xft-name-reach*` | `6.0` | how far to look for a name, in text heights |
 | `*xft-fuzz*` | `1e-4` | tolerance for "these two lines share a centre" |
+| `*xft-purge-text*` | `t` | erase every text object left in the selection |
 
 `XFTCONV-SETUP` is a separate command that only creates the layer and the block,
 if you want them in a drawing without running a conversion.

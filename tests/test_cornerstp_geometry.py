@@ -1273,6 +1273,109 @@ def test_outer_guards_fall_back_to_square():
     assert outer_offset("Radius", 12.0, 36.0, 120.0) == 12.0
 
 
+# ------------------------------------------------- AUTOBEAD hand-off
+# The step routines hand their geometry to AUTOBEAD rather than making
+# the user re-select it: every tread is beaded, and the steps whose side
+# walls carry the bead are named by number instead of clicked.  These
+# mirror the ...-numlist / ...-treadents / ...-sideents helpers.
+
+
+def numlist(text):
+    """ns-numlist: the step numbers in a typed answer, in order.
+
+    Runs of digits are numbers; everything else separates, so "1 3 4",
+    "1,3,4" and "1, 3 and 4" all read the same.
+    """
+    out, tok = [], ""
+    for ch in text + " ":
+        if ch.isdigit():
+            tok += ch
+        else:
+            if tok:
+                out.append(int(tok))
+            tok = ""
+    return out
+
+
+def treadents(log):
+    """ns-treadents: (step number, tread) per committed step.
+
+    A log record is (entities, ..., n) with the entities newest first,
+    and a step draws its tread BEFORE any side line or dimension - so
+    the last LINE seen walking the record is the tread.  Consing through
+    a newest-first log leaves the pairs in step order.
+    """
+    out = []
+    for rec in log:
+        tread = None
+        for kind, ent in rec[0]:
+            if kind == "LINE":
+                tread = ent
+        if tread is not None:
+            out.insert(0, (rec[-1], tread))   # cons, like the lisp does
+    return out
+
+
+def sideents(log):
+    """cs-sideents: every LINE in the log that is not its step's tread."""
+    out = []
+    for rec in log:
+        lines = [e for kind, e in rec[0] if kind == "LINE"]
+        tread = lines[-1] if lines else None
+        for e in reversed(lines):
+            if e != tread:
+                out.append(e)
+    return out
+
+
+def test_numlist_reads_every_separator_the_same():
+    assert numlist("1 3 4") == [1, 3, 4]
+    assert numlist("1,3,4") == [1, 3, 4]
+    assert numlist("1, 3 and 4") == [1, 3, 4]
+    assert numlist("  2  ") == [2]
+    assert numlist("10 2") == [10, 2], "multi-digit numbers stay whole"
+    assert numlist("") == [] and numlist("none") == [], "nothing to read"
+
+
+def test_treadents_picks_the_tread_not_a_riser_or_a_dim():
+    """CORNERSTP draws tread, then risers, then dims - and the log lists
+    them newest first, so the tread is the LAST line in the record."""
+    step1 = ([("DIMENSION", "d1"), ("LINE", "r1b"), ("LINE", "r1a"),
+              ("LINE", "tread1")], 0.0, None, None, None, None, 1)
+    step2 = ([("LINE", "tread2")], 0.0, None, None, None, None, 2)
+    log = [step2, step1]                      # newest first
+    assert treadents(log) == [(1, "tread1"), (2, "tread2")]
+
+
+def test_treadents_comes_back_in_step_order():
+    log = [([("LINE", "t3")], 3), ([("LINE", "t2")], 2), ([("LINE", "t1")], 1)]
+    assert [n for n, _ in treadents(log)] == [1, 2, 3]
+
+
+def test_treadents_skips_a_record_that_drew_no_line():
+    log = [([("LINE", "t2")], 2), ([("DIMENSION", "d")], 1)]
+    assert treadents(log) == [(2, "t2")]
+
+
+def test_sideents_returns_the_risers_only():
+    step1 = ([("DIMENSION", "d1"), ("LINE", "r1b"), ("LINE", "r1a"),
+              ("LINE", "tread1")], 1)
+    step2 = ([("LINE", "tread2")], 2)
+    assert sorted(sideents([step2, step1])) == ["r1a", "r1b"]
+
+
+def test_named_steps_map_to_their_own_treads():
+    """The numbers typed at the prompt pick out those steps' treads -
+    what the routine hands AUTOBEAD as its clicked steps."""
+    log = [([("LINE", "t%d" % k)], k) for k in (4, 3, 2, 1)]
+    pairs = dict(treadents(log))
+    named = [k for k in numlist("1, 3") if k in pairs]
+    assert named == [1, 3]
+    assert [pairs[k] for k in named] == ["t1", "t3"]
+    unknown = [k for k in numlist("9") if k in pairs]
+    assert unknown == [], "an unknown number is dropped, not beaded"
+
+
 def linecirc_hits(a, d, c, r):
     """ns-linecirc: crossings of line (a, unit d) with circle (c, r)."""
     f = vec(c, a)
@@ -1545,6 +1648,12 @@ def main():
     test_outer_square_side_wall_ends_on_the_tread_endpoint()
     test_outer_half_outline_connects_end_to_end()
     test_outer_guards_fall_back_to_square()
+    test_numlist_reads_every_separator_the_same()
+    test_treadents_picks_the_tread_not_a_riser_or_a_dim()
+    test_treadents_comes_back_in_step_order()
+    test_treadents_skips_a_record_that_drew_no_line()
+    test_sideents_returns_the_risers_only()
+    test_named_steps_map_to_their_own_treads()
     test_the_steps_release_as_a_single_bundle()
     test_bundle_revs_match_the_source_banners()
     print("all tests passed")

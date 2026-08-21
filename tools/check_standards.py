@@ -64,6 +64,19 @@ VERSION2 = re.compile(r'\*version\*\s+"(\d{6}) REV(\d{2})"')
 DEFUN = re.compile(r"^\(defun\s+([^\s()]+)", re.MULTILINE)
 COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
 CAL_SYM = re.compile(r"^\((?:defun|setq)\s+(cal:[^\s()]+)", re.MULTILINE)
+HELD = re.compile(r'\("([^"]+)"\s*\.\s*"(WIP|OMITTED)"\)')
+
+
+def held_back():
+    """Files the loader deliberately keeps out of the build, name -> reason.
+
+    A held file still has to exist and still has to be a clean twin -- it
+    is simply not compiled in yet, so the bundle and loader checks skip
+    it instead of reporting it as drift."""
+    loader = PARTS_DIR / "CALOFIN-LOADER.lsp"
+    if not loader.is_file():
+        return {}
+    return dict(HELD.findall(read(loader)))
 
 
 def lsp_files(d):
@@ -111,6 +124,25 @@ def check_twins(problems):
     for name in ("CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"):
         if name not in have:
             problems.append("shared/parts/%s is missing" % name)
+    check_twins_current(problems)
+
+
+def check_twins_current(problems):
+    """...and mirrors the version it was mirrored FROM.  Presence alone
+    says nothing: a twin left behind while lisp/ moved on still loads,
+    still passes every one-file check, and quietly gives the grouped
+    build different behaviour from the standalone one."""
+    byname = {p.name: p for p in shared_members()}
+    for p in lsp_files(LISP_DIR):
+        twin = byname.get(p.stem + ".lsp")
+        if twin is None:
+            continue
+        a, b = rev_of(read(p)), rev_of(read(twin))
+        if a and b and a != b:
+            problems.append(
+                "shared/parts/%s is at %s but %s is at %s - mirror the "
+                "change into the twin, per CLAUDE.md"
+                % (twin.name, b, p.relative_to(ROOT), a))
 
 
 def check_library_owns_cal(problems):
@@ -146,6 +178,7 @@ def check_command_parity(problems):
     grouped = set()
     for p in shared_members():
         grouped.update(c.upper() for c in COMMAND.findall(read(p)))
+    # a held tool still has its twin, so its commands are counted here
     for p in lisp_files_with_commands():
         for cmd in COMMAND.findall(read(p)):
             if cmd.upper() not in grouped:
@@ -164,8 +197,9 @@ def check_loader_lists_everything(problems):
     if not loader.is_file():
         return
     listed = read(loader)
+    held = held_back()
     for p in shared_members():
-        if p.name == "CALOFIN-LOADER.lsp":
+        if p.name == "CALOFIN-LOADER.lsp" or p.name in held:
             continue
         if ('"%s"' % p.name) not in listed:
             problems.append(
@@ -202,9 +236,10 @@ def check_bundle_current(problems):
             "python3 tools/build_shared_bundle.py")
         return
     text = read(bundle)
+    held = held_back()
     for p in shared_members():
-        if p.name == "CALOFIN-LOADER.lsp":
-            continue                       # the bundle needs no loader
+        if p.name == "CALOFIN-LOADER.lsp" or p.name in held:
+            continue                # no loader, and held files are not in
         if (";;; >>> %s" % p.name) not in text:
             problems.append(
                 "shared/parts/%s is not in CALOFIN-ALL.lsp - rebuild it with "
@@ -236,6 +271,14 @@ def main():
     if WIP_DIR.is_dir():
         tiers.insert(0, "wip/ %d" % len(lsp_files(WIP_DIR)))
     print("standards: " + ", ".join(tiers) + " files")
+    held = held_back()
+    if held:
+        wip = sorted(n for n, w in held.items() if w == "WIP")
+        omit = sorted(n for n, w in held.items() if w == "OMITTED")
+        if wip:
+            print("standards: held back (WIP): " + ", ".join(wip))
+        if omit:
+            print("standards: held back (OMITTED): " + ", ".join(omit))
 
     if problems:
         print("\n%d problem(s):" % len(problems))

@@ -58,7 +58,7 @@ happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 39 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 41 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
@@ -82,6 +82,18 @@ add that folder to *Options > Files > Support File Search Path*, or run
 
 before APPLOADing it. If none of that appeals, use `CALOFIN-ALL.lsp` --
 it cannot hit any of these problems.
+
+## Held back from the build
+
+Some tools live in `parts/` but are deliberately not compiled into
+`CALOFIN-ALL.lsp`. `cal:*held-back*` in `parts/CALOFIN-LOADER.lsp` says
+which, and why — `WIP` for something mid-rework that goes in once it
+settles, `OMITTED` for something that is never part of calofin. The
+bundle header lists them too, so the file itself tells you what it does
+not contain.
+
+To ship one, move its name out of `cal:*held-back*` into the `foreach`
+manifest just above it and rebuild.
 
 ## What the library owns
 

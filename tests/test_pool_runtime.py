@@ -224,6 +224,7 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           474.5, 474.5,                           # LT-RT / LB-RB: near-true
           "NA", "NA", "NA", "NA",                 # the end-cut X, both ends
           "NA", "NA", "NA", "NA",                 # tips to far corners
+          None,                                    # corners modified? Enter = No
           "No"],
          "R5")
 assert len(drawn(vm, 'LINE', 'POOL')) >= 8
@@ -253,6 +254,7 @@ vm = run(["Insquare", "Grecian"] + BASE +
           480.0,                    # B - overall length
           200.0,                    # A - overall width  (NOT assumed = B)
           "NA", "NA", "NA", "NA", "NA",   # T S S1 V S2
+          None,                     # corners modified? Enter = No
           "No"],
          "R5b")
 _ov = [p for p, a in vm.prompts if "overall" in p.lower()]
@@ -282,6 +284,7 @@ vm = run(["Insquare", "OC"] + BASE +
          [None,                    # method Enter -> Overall default
           400.0,                   # A & B once (in-square)
           "NA", "NA", "NA", "NA", "NA",   # T S S1 V S2 all NA
+          None,                     # corners modified? Enter = No
           "Yes", "Normal", "Square",   # bottom type, then hopper style
           80.0, 120.0, 110.0, 90.0,       # H G F E
           None, 160.0, None],      # M sugg, L, K sugg
@@ -304,6 +307,7 @@ print("== R6b. the drawn octagon itself is regular (no bottom, so every "
 vm = run(["Insquare", "OC"] + BASE +
          [None, 400.0,
           "NA", "NA", "NA", "NA", "NA",
+          None,                     # corners modified? Enter = No
           "No"],
          "R6b")
 _per = [_m.dist(tuple(d[10][:2]), tuple(d[11][:2]))
@@ -323,6 +327,7 @@ print("== R7. roman, in-square perfect, no bottom ==")
 vm = run(["Insquare", "RO"] + BASE +
          [400.0, 260.0, "NA",      # B A T
           45.0, 50.0, 160.0, "NA",  # S S1 V R(check NA)
+          None,                     # corners modified? Enter = No
           "No"],
          "R7")
 assert drawn(vm, 'ARC', 'POOL')
@@ -700,6 +705,7 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           441.50, 216.00,                 # B, A overalls
           324.00, 61.00, 60.00, 96.00, 84.00,   # T, S, S1, V, S2
           "Simple", 389.00, 388.50,       # cross dims A-C, B-D
+          None,                           # corners modified? Enter = No
           "No"],                          # no bottom: every POOL line
          "R16")                           # is a perimeter edge
 _seg = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
@@ -734,6 +740,7 @@ print("== R17. SIX-sided grecian hopper, sheet-letter input (W X L L1 G M K) =="
 def hexrun(mode_answers, label):
     vm = run(["Insquare", "Grecian"] + BASE +
              ["Overall", 480.0, 240.0, "NA", 60.0, 72.0, "NA", "NA",
+              None,                     # corners modified? Enter = No
               "Yes", "Normal", "SIX"] + mode_answers, label)
     s = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
     ox = min(p[0] for seg in s for p in seg)
@@ -994,9 +1001,11 @@ assert abs(_p1[1] - 210.0) < 0.01, _p1
 # the hopper sits in the main section, left of the break line, and the
 # flip cannot move it sideways: its x range is unchanged by mirroring
 _hop = {}
-for _m in ("No", "Yes"):
+# NB: not `_m` -- that is `math`, and rebinding it here would break
+# every scenario after this one
+for _mans in ("No", "Yes"):
     v = run(["Insquare", "L"] + BASE + _LSIDES +
-            ["No", "Yes", 60.0, 90.0, 150.0, None, 100.0, None, _m], "R23")
+            ["No", "Yes", 60.0, 90.0, 150.0, None, 100.0, None, _mans], "R23")
     _pts = set()
     for d in drawn(v, 'LINE', 'POOL'):
         _pts.add(tuple(d[10][:2]))
@@ -1004,7 +1013,7 @@ for _m in ("No", "Yes"):
     _xs = [p[0] for p in _pts]
     _lo, _hi = min(_xs), max(_xs)
     _in = [p[0] for p in _pts if _lo + 1 < p[0] < _hi - 1]
-    _hop[_m] = (min(_in), max(_in), _lo, _hi)
+    _hop[_mans] = (min(_in), max(_in), _lo, _hi)
 assert _hop["No"][:2] == _hop["Yes"][:2], _hop
 _a, _b, _lo, _hi = _hop["Yes"]
 assert (_a + _b) / 2.0 < (_lo + _hi) / 2.0, f"hopper drifted right: {_hop}"
@@ -1037,6 +1046,7 @@ print("== R24. secondary sheet letters read in SIDE STANDARD ==")
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
+          None,                     # corners modified? Enter = No
           "No"],
          "R24", dimstyles=("SIDE STANDARD",))
 # in-square grecian draws 7 dims: S T B S1 V A S2 -> exactly 4 of them
@@ -1070,6 +1080,7 @@ assert vm.dimstyle_log == ['SIDE STANDARD', 'STANDARD',
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
+          None,                     # corners modified? Enter = No
           "No"],
          "R24-missing")
 assert 'SIDE STANDARD' not in vm.dimstyle_log
@@ -1103,7 +1114,9 @@ vm.sysvars['LUNITS'] = 4
 vm.run('c:POOL', ["Outofsquare", "Grecian"] + BASE +
        ["Overall", 441.50, 216.00,
         324.00, 61.00, 60.00, 96.00, 84.00,
-        "Simple", 389.00, 388.50, "No"])
+        "Simple", 389.00, 388.50,
+        None,                     # corners modified? Enter = No
+        "No"])
 _tx = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
 assert any(isinstance(t, str) and (t.startswith('+') or t.startswith('-'))
            and '"' not in t and "'" not in t and '.' in t for t in _tx), \
@@ -1131,7 +1144,9 @@ assert len(_mlines) >= 4, _mlines
 # the grecian mini-model carries all 8 corner letters
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
-          "NA", "NA", "NA", "NA", "NA", "No"], "R26-grec")
+          "NA", "NA", "NA", "NA", "NA",
+          None,                     # corners modified? Enter = No
+          "No"], "R26-grec")
 _g = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')
       if d.get(1) in ("A", "B", "C", "D", "RB", "RT", "LT", "LB")]
 assert sorted(_g) == sorted(["A", "B", "C", "D", "RB", "RT", "LT", "LB"]), _g
@@ -1183,9 +1198,125 @@ check_linear(vm, "R27-oos")
 # grecian: corner-cut chords are skewed (aligned), overalls linear
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
-          "NA", "NA", "NA", "NA", "NA", "No"], "R27-grec")
+          "NA", "NA", "NA", "NA", "NA",
+          None,                     # corners modified? Enter = No
+          "No"], "R27-grec")
 assert dimcalls(vm, '_.DIMLINEAR'), "grecian overalls must be linear"
 check_linear(vm, "R27-grec")
 print("   _H spans equal-y, _V equal-x, aligned only on real skew")
+
+
+def hasrow(vm, label):
+    """Row-existence check that does not assert (reportrow raises)."""
+    return any(d.get(1) == label for d in drawn(vm, 'TEXT', 'POOL-NOTES'))
+
+
+print("== R28. grecian corner treatments: body family / tip family ==")
+# in-square: one answer for the BODY corners (A/B/C/D), one for the
+# END TIPS (LT/LB/RT/RB), Enter on the tip question reusing the body
+# answer -- all 8 corners filleted here
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0,
+          "NA", "NA", "NA", "NA", "NA",
+          "Yes",                    # corners modified
+          "Rounded", 12.0,          # BODY corners
+          None, None,               # END TIPS: Enter reuses type and size
+          "No"],
+         "R28")
+_arcs = drawn(vm, 'ARC', 'POOL')
+assert len(_arcs) == 8, len(_arcs)
+# both families identical -> ONE Typ. radius callout, not eight dims
+assert len(dimcalls(vm, '_.DIMRADIUS')) == 1, dimcalls(vm, '_.DIMRADIUS')
+# the walls shortened by the treatment: no full-length top side left,
+# but its dim still reads the TRUE corners (T = 360 among the dims)
+assert not any(abs(_m.dist(*(tuple(d[10][:2]), tuple(d[11][:2]))) - 360.0) < 0.01
+               for d in drawn(vm, 'LINE', 'POOL'))
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 360.0) < 0.5 for c in dimcalls(vm))
+# report rows: one per family
+assert reportrow(vm, "BODY CORNER RAD"), "body corner row missing"
+assert reportrow(vm, "END TIP RAD"), "end tip row missing"
+
+# tips answered differently: Square tips leave only the 4 body fillets
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0,
+          "NA", "NA", "NA", "NA", "NA",
+          "Yes",
+          "Rounded", 12.0,          # BODY corners
+          "Square",                 # END TIPS stay sharp
+          "No"],
+         "R28b")
+assert len(drawn(vm, 'ARC', 'POOL')) == 4
+assert hasrow(vm, "BODY CORNER RAD")
+assert not hasrow(vm, "END TIP RAD")
+
+# out-of-square: all 8 asked independently, Enter reusing the previous
+# -- and identical answers all round still collapse to one Typ.
+vm = run(["Outofsquare", "Grecian"] + BASE +
+         ["Measured",
+          360.0, 360.0, 180.0, 180.0,
+          70.0, 70.0, 100.0,
+          70.0, 70.0, 100.0,
+          "Simple", "NA", "NA",
+          "Yes",
+          "Rounded", 10.0,          # corner A
+          None, None, None, None, None, None, None,   # B..RB: Enter reuses
+          None, None, None, None, None, None, None,   # ... type AND size each
+          "No"],
+         "R28c")
+_cp = [p for p, a in vm.prompts
+       if p.startswith("\nCorner ") and "[Square/" in p]
+assert len(_cp) == 8, _cp
+assert len(drawn(vm, 'ARC', 'POOL')) == 8
+assert len(dimcalls(vm, '_.DIMRADIUS')) == 1
+assert reportrow(vm, "CORNER A RAD") and reportrow(vm, "CORNER LB RAD")
+
+print("   grecian: body/tip families in square, all 8 independent out")
+
+print("== R29. roman corner treatments ==")
+# in-square: one answer for all four true corners; the S1 stubs then
+# spring from the treatment ends, so the pool shows 2 end arcs + 4
+# corner fillets
+vm = run(["Insquare", "RO"] + BASE +
+         [400.0, 260.0, "NA",
+          45.0, 50.0, 160.0, "NA",
+          "Yes",                    # corners modified
+          "Rounded", 12.0,          # all corners (assumed identical)
+          "No"],
+         "R29")
+_arcs = drawn(vm, 'ARC', 'POOL')
+assert len(_arcs) == 6, len(_arcs)
+assert len(dimcalls(vm, '_.DIMRADIUS')) == 3     # R1, R2, one corner Typ.
+assert reportrow(vm, "CORNER RAD"), "corner row missing"
+# stubs shortened: the full 50" S1 stub is gone, its 38" remainder is
+# there (the fillet eats 12 down the end line at a square corner)
+_lens = sorted(round(_m.dist(tuple(d[10][:2]), tuple(d[11][:2])), 2)
+               for d in drawn(vm, 'LINE', 'POOL'))
+assert 50.0 not in _lens, _lens
+assert _lens.count(38.0) == 4, _lens
+# side dims still read the TRUE corners: T = 310 among the dims
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 310.0) < 0.5 for c in dimcalls(vm))
+
+# out-of-square: each corner its own question, mixed answers
+vm = run(["Outofsquare", "RO"] + BASE +
+         ["No",                    # ends not perfect
+          400.0, 260.0, "NA",
+          45.0, 45.0, 50.0, 50.0, 160.0, 160.0, "NA", "NA",
+          "NA", "NA",              # cross dims
+          "Yes",                   # corners modified
+          "Rounded", 12.0,         # corner A
+          None, None,              # corner B reuses type and size
+          "Diag", 18.0,            # corner C chamfered
+          "Square",                # corner D stays sharp
+          "No"],
+         "R29b")
+_arcs = drawn(vm, 'ARC', 'POOL')
+assert len(_arcs) == 4, len(_arcs)               # 2 ends + fillets at A, B
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert any(abs(_m.dist(*s) - 18.0) < 0.05 for s in segs), "chamfer face at C"
+assert len(dimcalls(vm, '_.DIMRADIUS')) == 4     # R1, R2, corners A and B
+assert hasrow(vm, "CORNER A RAD") and hasrow(vm, "CORNER B RAD")
+assert hasrow(vm, "CORNER C FACE")
+assert not hasrow(vm, "CORNER D RAD") and not hasrow(vm, "CORNER D FACE")
+print("   roman: one answer in square, per-corner out; stubs off the cuts")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

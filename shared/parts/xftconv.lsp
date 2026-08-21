@@ -1,11 +1,13 @@
 ;;; ===================================================================
 ;;;  XFTCONV.lsp   -  Leica XFT / DXF survey import cleanup
-;;;  AutoCAD 2018 (vanilla AutoLISP - no ActiveX, no extra libraries)
+;;;  AutoCAD 2018
 ;;;
-;;;  Command:  XFTCONV
+;;;  Command:  XFTCONV   - highlight the import, that is the only answer
+;;;                        it needs
 ;;;
 ;;;  What it does, to the objects you highlight:
-;;;    1. scales the whole selection by 12 (feet -> inches)
+;;;    1. scales the whole selection by 12 (feet -> inches), about the
+;;;       middle of everything highlighted
 ;;;    2. finds every Leica point marker in the selection
 ;;;         - the X made of 2 crossing LINEs on layer LEICA_POINT
 ;;;           (a POINT on that layer works too)
@@ -14,19 +16,19 @@
 ;;;       attribute "number" set to the point number with the letter
 ;;;       prefix stripped ("P22" -> "22")
 ;;;    4. erases the old marker lines and the old name text
+;;;    5. erases every other TEXT / MTEXT left in the selection - the
+;;;       numbers live in the block attributes now, so the rest is noise
 ;;;
-;;;  Everything else in the selection is just scaled and left alone.
-;;;  The whole run is one UNDO step.
+;;;  Non-text geometry is scaled and otherwise left alone.  The whole
+;;;  run is one UNDO step.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 
 ;;; -------------------------------------------------------------------
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.1") ; printed on load and at command start so a
+(setq *xft-version* "v1.2") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -41,7 +43,11 @@
   *xft-att-offset*   '(0.8697246 -3.5316825) ; attribute offset from the point
   *xft-name-reach*   6.0                  ; name search radius = this x text height
   *xft-fuzz*         1e-4                 ; tolerance for "same point"
+  *xft-purge-text*   t                    ; erase every TEXT/MTEXT left in the
+                                          ; selection once the points are done
 )
+
+(vl-load-com)   ; getboundingbox, for the middle of the selection
 
 
 ;;; -------------------------------------------------------------------
@@ -110,6 +116,41 @@
                (/= 0 (cdr (assoc 73 (append ed '((73 . 0))))))))
     (cdr (assoc 11 ed))
     (cdr (assoc 10 ed))
+  )
+)
+
+;; centre of the box around everything that was highlighted.  ActiveX
+;; getboundingbox is the only thing that knows the real extents of an arc,
+;; a spline or a block, so it does the work; if it will not answer for an
+;; object, that object's own definition points are used instead.
+(defun xft:centre (ss / i en mn mx lo hi ed pair)
+  (setq i 0 lo nil hi nil)
+  (while (< i (sslength ss))
+    (setq en (ssname ss i))
+    (if (not (vl-catch-all-error-p
+               (vl-catch-all-apply
+                 '(lambda ()
+                    (vla-getboundingbox (vlax-ename->vla-object en) 'mn 'mx)))))
+      (setq lo (if lo (mapcar 'min lo (vlax-safearray->list mn)) (vlax-safearray->list mn))
+            hi (if hi (mapcar 'max hi (vlax-safearray->list mx)) (vlax-safearray->list mx)))
+      ;; fallback - whatever points the entity carries itself
+      (progn
+        (setq ed (entget en))
+        (foreach pair ed
+          (if (and (member (car pair) '(10 11))
+                   (listp (cdr pair))
+                   (= 3 (length (cdr pair))))
+            (setq lo (if lo (mapcar 'min lo (cdr pair)) (cdr pair))
+                  hi (if hi (mapcar 'max hi (cdr pair)) (cdr pair)))
+          )
+        )
+      )
+    )
+    (setq i (1+ i))
+  )
+  (if (and lo hi)
+    (mapcar '(lambda (a b) (/ (+ a b) 2.0)) lo hi)
+    (list 0.0 0.0 0.0)
   )
 )
 
@@ -220,10 +261,10 @@
 ;;; -------------------------------------------------------------------
 
 (defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone
-                     ss base sf i en ed typ
+                     ss base i en ed typ
                      markers names g nm e
                      ctr best bestd bestr rank txth d reach num
-                     nmade nblank nleft stage done)
+                     nmade nblank nleft)
 
   (defun xft:restore ()
     (if oscm   (setvar "CMDECHO" oscm))
@@ -248,38 +289,18 @@
   (princ (strcat "\nXFTCONV " *xft-version*
                  " - scale the survey and swap the Leica points for blocks."))
 
-  ;; ---- selection, scale and base point - staged: Back (or Undo)
-  ;; ---- at a later prompt re-opens the previous one ---------------
-  (setq stage 1 done nil)
-  (while (not done)
-    (cond
-      ((= stage 1)
-       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-       (setq ss (ssget))
-       (if (not ss)
-         (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
-       (if (not ss)
-         (setq done 'quit)
-         (setq stage 2)))
-      ((= stage 2)
-       (initget 6 "Back Undo")
-       (setq sf (getreal (strcat "\nScale factor <" (rtos *xft-scale* 2 4)
-                                 "> [Back]: ")))
-       (cond
-         ((= (type sf) 'STR) (setq stage 1))
-         (T
-          (if (not sf) (setq sf *xft-scale*))
-          (setq stage 3))))
-      (T
-       (initget "Back Undo")
-       (setq base (getpoint "\nBase point for the scale <0,0> [Back]: "))
-       (if (= (type base) 'STR)
-         (setq stage 2)
-         (progn
-           (if (not base) (setq base (list 0.0 0.0 0.0)))
-           (setq done T))))))
+  ;; ---- selection -------------------------------------------------
+  ;; the only prompt there is.  the scale factor and the base point used
+  ;; to be asked for, and the staged Back that moved between them went
+  ;; with them - it is always x12 about the middle of the selection now,
+  ;; so there is nothing left to step back to.
+  (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
+  (setq ss (ssget))
+  (if (not ss)
+    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+  )
 
-  (if (eq done 'quit)
+  (if (not ss)
     (progn (princ "\nNothing to work on.") (xft:restore) (princ))
     (progn
 
@@ -303,11 +324,14 @@
           (cal:ensure-layer *xft-block-layer* 6)
           (xft:ensure-block)
 
-          ;; ---- 1. scale ------------------------------------------
-          (if (/= sf 1.0)
+          ;; ---- 1. scale x12 about the middle of what was picked ---
+          ;; getboundingbox works in WCS, SCALE wants the current UCS
+          (setq base (trans (xft:centre ss) 0 1))
+          (if (/= *xft-scale* 1.0)
             (progn
-              (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by " (rtos sf 2 4) " ..."))
-              (command "_.SCALE" ss "" base sf)
+              (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by "
+                             (rtos *xft-scale* 2 4) " about the middle of the selection ..."))
+              (command "_.SCALE" ss "" base *xft-scale*)
             )
           )
 
@@ -380,9 +404,25 @@
             (setq nmade (1+ nmade))
           )
 
-          ;; names with no marker of their own stay put
+          ;; ---- 5. every other bit of text in the selection goes ---
+          ;; the numbers now live in the block attributes, so anything
+          ;; still written as text is leftover import noise.  entget
+          ;; comes back nil on what step 4 already erased, which keeps
+          ;; entdel from toggling those back into the drawing.
           (setq nleft 0)
-          (foreach nm names (if (not (nth 4 nm)) (setq nleft (1+ nleft))))
+          (if *xft-purge-text*
+            (progn
+              (setq i 0)
+              (while (< i (sslength ss))
+                (setq en (ssname ss i)
+                      ed (entget en))
+                (if (and ed (member (cdr (assoc 0 ed)) '("TEXT" "MTEXT")))
+                  (progn (entdel en) (setq nleft (1+ nleft)))
+                )
+                (setq i (1+ i))
+              )
+            )
+          )
 
           (command "_.UNDO" "_End")
           (setq undone nil)
@@ -395,8 +435,7 @@
             (princ (strcat "\n" (itoa nblank)
                            " had no name text nearby - inserted with a blank number.")))
           (if (> nleft 0)
-            (princ (strcat "\n" (itoa nleft)
-                           " name text(s) had no marker - left in the drawing so you can look at them.")))
+            (princ (strcat "\n" (itoa nleft) " leftover text object(s) erased.")))
           (princ)
         )
       )

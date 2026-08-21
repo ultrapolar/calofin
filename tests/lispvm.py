@@ -19,6 +19,7 @@ None is Enter.  Running out of script, or ending with script left
 over, is a test failure -- the prompt log tells you where.
 """
 
+import functools
 import math
 import os
 import re
@@ -26,10 +27,26 @@ import re
 
 class LispError(Exception):
     def __init__(self, msg, vm=None):
+        if vm is not None and getattr(vm, 'calls', None):
+            msg += "\n  in: " + " > ".join(vm.calls[-8:])
         if vm is not None and vm.prompts:
             msg += "\n  last prompts:\n    " + "\n    ".join(
                 f"{p!r} -> {a!r}" for p, a in vm.prompts[-8:])
         super().__init__(msg)
+
+
+class CaughtError:
+    """What vl-catch-all-apply hands back instead of throwing.  It is
+    truthy, so (if (vl-catch-all-apply ...) ...) takes the then-branch
+    on a failure -- which is why callers must test it with
+    vl-catch-all-error-p and not for nil."""
+    __slots__ = ('msg',)
+
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __repr__(self):
+        return f"<caught {self.msg!r}>"
 
 
 class Sym(str):
@@ -61,6 +78,13 @@ class Ent:
     def __init__(self):
         Ent._n += 1
         self.id = Ent._n
+
+    @property
+    def handle(self):
+        """AutoCAD hands every entity a hex handle and entget always
+        carries it as group 5, so routines that label a finding by
+        handle have something to print."""
+        return format(self.id, 'X')
 
     def __repr__(self):
         return f"<Entity {self.id}>"
@@ -169,6 +193,10 @@ class VM:
     def __init__(self):
         self.globals = {}
         self.stack = []          # list of dicts (dynamic scope frames)
+        self.calls = []          # defun names currently on the stack
+        self._entmakex = False   # entmake returning an ename, not a list
+        self._blockdef = None    # name of the block being defined, if any
+        self.blocks = {}         # block name -> its definition entities
         self.script = []
         self.prompts = []        # (prompt, answer) log
         self.commands = []       # every (command ...) call
@@ -183,6 +211,11 @@ class VM:
             'LTSCALE': 1.0, 'UNDOCTL': 5, 'MIRRTEXT': 1,
             'DIMSTYLE': 'STANDARD', 'INSUNITS': 1, 'ATTREQ': 1,
             'ATTDIA': 0, 'CMDACTIVE': 0,
+            # CDATE is YYYYMMDD.HHMMSS.  A fixed one, not the wall
+            # clock: a routine that stamps the date into its output
+            # must produce the same output on every run, or the test
+            # asserting on it would pass today and fail tomorrow.
+            'CDATE': 20260821.143000, 'DATE': 2461274.5,
         }
         self.tables = {'LAYER': set(), 'LTYPE': {'CONTINUOUS'},
                        'DIMSTYLE': {'STANDARD'}}
@@ -275,6 +308,7 @@ class VM:
         for l in locals_:
             frame[l] = NIL
         self.stack.append(frame)
+        self.calls.append(name)
         try:
             r = NIL
             for form in body:
@@ -282,6 +316,7 @@ class VM:
             return r
         finally:
             self.stack.pop()
+            self.calls.pop()
 
     def call_lambda(self, lam, args):
         params, locals_ = split_params(lam[1])
@@ -760,7 +795,16 @@ BUILTINS[Sym('polar')] = lambda vm, a: [pt(a[0])[0] + a[2] * math.cos(a[1]),
                                         pt(a[0])[1] + a[2] * math.sin(a[1])]
 
 # strings
-BUILTINS[Sym('strcat')] = lambda vm, a: ''.join(a)
+@bi('strcat')
+def _strcat(vm, a):
+    """AutoCAD's strcat takes strings and nothing else -- a nil that
+    reached it is a bug in the routine, so it dies here rather than
+    quietly stringifying itself."""
+    for i, x in enumerate(a):
+        if not isinstance(x, str):
+            raise LispError(
+                f"strcat: bad argument type: stringp {x!r} (arg {i + 1})", vm)
+    return ''.join(a)
 BUILTINS[Sym('strlen')] = lambda vm, a: len(a[0]) if a else 0
 BUILTINS[Sym('itoa')] = lambda vm, a: str(int(num(a[0])))
 BUILTINS[Sym('atoi')] = lambda vm, a: int(a[0]) if re.match(r'^[+-]?\d+',
@@ -868,6 +912,21 @@ def _entmake(vm, a):
     if etype == 'LTYPE':
         vm.tables['LTYPE'].add(d[2])
         return alist
+    # A BLOCK ... ENDBLK run defines a block: everything between the two
+    # belongs to the definition in the block table, NOT to the drawing.
+    # Model it, or a routine that defines a block would leave its ATTDEFs
+    # lying in model space for the next (ssget "_X") to trip over.
+    if etype == 'BLOCK':
+        vm._blockdef = d.get(2, '')
+        vm.tables.setdefault('BLOCK', set()).add(vm._blockdef)
+        vm.blocks.setdefault(vm._blockdef, [])
+        return alist
+    if etype == 'ENDBLK':
+        vm._blockdef = None
+        return alist
+    if vm._blockdef is not None:
+        vm.blocks[vm._blockdef].append(list(alist))
+        return alist
     if etype in ('LINE', 'ARC', 'TEXT', 'CIRCLE', 'ELLIPSE'):
         lay = d.get(8, '0')
         if lay != '0' and lay not in vm.tables['LAYER']:
@@ -875,7 +934,20 @@ def _entmake(vm, a):
     e = Ent()
     vm.entities.append(e)
     vm.entdata[e] = list(alist)
-    return vm.entdata[e]
+    return e if vm._entmakex else vm.entdata[e]
+
+
+@bi('entmakex')
+def _entmakex(vm, a):
+    """Same as entmake but hands back the new entity's name instead of
+    its data, which is the whole reason routines reach for it."""
+    vm._entmakex = True
+    try:
+        r = _entmake(vm, a)
+    finally:
+        vm._entmakex = False
+    # a table entry (LAYER, LTYPE) has no ename to give back
+    return r if isinstance(r, Ent) else T
 
 
 @bi('entlast')
@@ -894,8 +966,13 @@ def _entget(vm, a):
     if e in vm.deleted:
         return NIL
     # (-1 . <ename>) leads the list in AutoLISP, and it is what entmod
-    # follows back to the entity after subst/append have rebuilt it
-    return [Dot(-1, e)] + vm.entdata[e]
+    # follows back to the entity after subst/append have rebuilt it.
+    # (5 . handle) rides along the same way AutoCAD's does, unless the
+    # entity carries one of its own already.
+    head = [Dot(-1, e)]
+    if not any(isinstance(g, Dot) and g.a == 5 for g in vm.entdata[e]):
+        head.append(Dot(5, e.handle))
+    return head + vm.entdata[e]
 
 
 @bi('entmod')
@@ -973,6 +1050,37 @@ def _dxf(vm, e, code):
     return NIL
 
 
+def _filt_pairs(a):
+    """The DXF filter list out of an ssget argument list, as (code, value)."""
+    for x in a:
+        if isinstance(x, list) and x and isinstance(x[0], (Dot, list)):
+            pairs = []
+            for g in x:
+                if isinstance(g, Dot):
+                    pairs.append((g.a, g.b))
+                elif isinstance(g, list) and len(g) >= 2:
+                    pairs.append((g[0], g[1]))
+            return pairs
+    return None
+
+
+def _filt_hit(vm, e, pairs):
+    """Does one entity pass a DXF filter list?  String values match the
+    way AutoCAD's do -- case-insensitively and through wcmatch, so a
+    layer filter of "border" finds an entity on "BORDER" and "COVER*"
+    finds them all.  Everything else compares straight."""
+    for code, want in pairs:
+        got = _dxf(vm, e, code)
+        if isinstance(want, str):
+            if not isinstance(got, str):
+                return False
+            if _wcmatch(vm, [got.upper(), want.upper()]) is NIL:
+                return False
+        elif got != want:
+            return False
+    return True
+
+
 @bi('ssget')
 def _ssget(vm, a):
     """(ssget [mode] [pt] [filter]) -- scripted, like every other bit of
@@ -980,29 +1088,52 @@ def _ssget(vm, a):
     highlighted, or None for "nothing" (Enter, or no pickfirst set when
     the routine asks for "_I").  A DXF filter list is honoured, so a
     routine that lets AutoCAD keep only the LINEs gets only LINEs here.
-    Returns nil for an empty result, exactly as AutoLISP does."""
+    Returns nil for an empty result, exactly as AutoLISP does.
+
+    "_X" and "_A" are the exception: in AutoCAD they sweep the database
+    and never prompt, so they are answered from the drawing itself
+    rather than from the script.  A routine that falls back to
+    (ssget "_X") when the user picked nothing must not stall here."""
     mode = ' '.join(x for x in a if isinstance(x, str))
-    filt = None
-    for x in a:
-        if isinstance(x, list) and x and isinstance(x[0], (Dot, list)):
-            filt = x
-            break
-    v = vm.pop_script(('ssget ' + mode).strip(), 'ssget')
-    if v is None:
-        return NIL
-    if isinstance(v, Ent):
-        v = [v]
-    ents = [e for e in v if e not in vm.deleted]
-    if filt:
-        pairs = []
-        for g in filt:
-            if isinstance(g, Dot):
-                pairs.append((g.a, g.b))
-            elif isinstance(g, list) and len(g) >= 2:
-                pairs.append((g[0], g[1]))
-        ents = [e for e in ents
-                if all(_dxf(vm, e, c) == val for c, val in pairs)]
+    pairs = _filt_pairs(a)
+    if mode.upper().lstrip('_') in ('X', 'A'):
+        ents = [e for e in vm.entities if e not in vm.deleted]
+    else:
+        v = vm.pop_script(('ssget ' + mode).strip(), 'ssget')
+        if v is None:
+            return NIL
+        if isinstance(v, Ent):
+            v = [v]
+        if not isinstance(v, list) or any(not isinstance(e, Ent) for e in v):
+            raise LispError(
+                f"ssget: scripted answer {v!r} is not an entity or a list "
+                f"of them -- the script is out of step with the prompts", vm)
+        ents = [e for e in v if e not in vm.deleted]
+    if pairs:
+        ents = [e for e in ents if _filt_hit(vm, e, pairs)]
     return ['<ss>'] + ents if ents else NIL
+
+
+@bi('ssmemb')
+def _ssmemb(vm, a):
+    """(ssmemb ename ss) -- the entity name when it is in the set."""
+    return a[0] if (a[1] and a[0] in a[1][1:]) else NIL
+
+
+@bi('ssdel')
+def _ssdel(vm, a):
+    """(ssdel ename ss) -- take the entity out of the set, in place as
+    AutoLISP does, and hand the set back (nil if it was not in it)."""
+    if a[1] and a[0] in a[1][1:]:
+        a[1].remove(a[0])
+        return a[1]
+    return NIL
+
+
+BUILTINS[Sym('vlax-ename->vla-object')] = lambda vm, a: a[0]
+"""The VM has no separate ActiveX object layer: an entity name stands in
+for its VLA object, so routines that convert before calling a method
+still line up with the entity the rest of the VM knows."""
 
 
 @bi('trans')
@@ -1021,7 +1152,13 @@ def _command(vm, a):
     # -DIMSTYLE Restore really does change the current dim style, and
     # code that saves/restores it round-trips through getvar, so the
     # VM has to model it or a wrong-style restore would go unnoticed
-    if a and a[0] == '_.-DIMSTYLE' and len(a) >= 3 and a[1] == '_Restore':
+    if a and a[0] == '_.-DIMSTYLE' and len(a) >= 3 \
+            and a[1] in ('_Restore', '_Save'):
+        # Save writes the current settings out under a name AND leaves
+        # that name current, so a routine that builds a style it needs
+        # and dimensions straight afterwards gets the style it built.
+        if a[1] == '_Save':
+            vm.tables['DIMSTYLE'].add(a[2])
         vm.sysvars['DIMSTYLE'] = a[2]
         vm.dimstyle_log.append(a[2])
     # a dimension command leaves a DIMENSION entity behind, on the
@@ -1037,9 +1174,41 @@ def _command(vm, a):
             lay = vm.sysvars.get('CLAYER', '0')
         e = Ent()
         vm.entities.append(e)
-        vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay),
+        # 410 is the space the dim lives in -- these are made in model
+        # space, and routines that re-read the drawing filter on it.
+        # DXF 70's low bits are its kind: 0 rotated/linear, 1 aligned.
+        # A routine that asks "is this one of the kinds I place?" reads
+        # them, so they have to be here too.
+        kind = 1 if a[0] == '_.DIMALIGNED' else 0
+        vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay), Dot(410, 'Model'),
+                         Dot(70, kind),
                          Dot(3, vm.sysvars.get('DIMSTYLE', 'STANDARD'))] + \
             [[code] + [float(v) for v in p] for code, p in zip((13, 14, 10), pts)]
+        # 42 is the measurement AutoCAD computed.  Aligned dims measure
+        # the distance between the two origins; a linear one measures
+        # its projection onto the dimension line's axis.
+        if len(pts) >= 2:
+            p1, p2 = pt(pts[0]), pt(pts[1])
+            if kind == 1:
+                meas = math.dist(p1[:2], p2[:2])
+            elif len(pts) >= 3:
+                loc = pt(pts[2])
+                # the dim line stands off along whichever axis separates
+                # it from the points; it measures across the other one
+                dx, dy = abs(p2[0] - p1[0]), abs(p2[1] - p1[1])
+                off_y = abs(loc[1] - (p1[1] + p2[1]) / 2.0)
+                off_x = abs(loc[0] - (p1[0] + p2[0]) / 2.0)
+                meas = dx if off_y >= off_x else dy
+            else:
+                meas = math.dist(p1[:2], p2[:2])
+            vm.entdata[e].append(Dot(42, meas))
+        # "_T <text>" is a text override, and AutoCAD keeps it verbatim
+        # in group 1 with "<>" standing in for the measurement
+        for i, x in enumerate(a[:-1]):
+            if isinstance(x, str) and x.upper() in ('_T', 'T', '_TEXT') \
+                    and isinstance(a[i + 1], str):
+                vm.entdata[e].append(Dot(1, a[i + 1]))
+                break
     return NIL
 
 
@@ -1178,14 +1347,16 @@ def _wcmatch(vm, a):
     return NIL
 
 
-BUILTINS[Sym('logior')] = lambda vm, a: _logop(a, lambda x, y: x | y, 0)
-BUILTINS[Sym('logand')] = lambda vm, a: _logop(a, lambda x, y: x & y, -1)
+BUILTINS[Sym('logior')] = lambda vm, a: _logop(vm, a, lambda x, y: x | y, 0)
+BUILTINS[Sym('logand')] = lambda vm, a: _logop(vm, a, lambda x, y: x & y, -1)
 
 
-def _logop(args, op, unit):
+def _logop(vm, args, op, unit):
     out = unit
     for v in args:
-        out = op(out, int(num(v, 'logop')))
+        if not isinstance(v, (int, float)):
+            raise LispError(f"logop: bad argument type: numberp {v!r}", vm)
+        out = op(out, int(v))
     return out
 
 
@@ -1195,7 +1366,250 @@ BUILTINS[Sym('getint')] = lambda vm, a: vm.pop_script(
 BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(
     LispError("exit called", vm))
 BUILTINS[Sym('atoms-family')] = lambda vm, a: []
+# (regapp name) -- registers an xdata application, returns the name.
+# Re-registering an app already there is not an error in AutoCAD, so it
+# is not one here either.
+BUILTINS[Sym('regapp')] = lambda vm, a: (
+    vm.tables.setdefault('APPID', set()).add(a[0]) or a[0])
 BUILTINS[Sym('vl-load-com')] = lambda vm, a: NIL
+
+
+@bi('vl-sort')
+def _vl_sort(vm, a):
+    """(vl-sort lst less) -- sort by the given comparison function.
+
+    AutoLISP DROPS any element the function reports as equal to one
+    already in the result (neither before it nor after it), and routines
+    here lean on that to dedupe as they sort - so the VM has to drop
+    them too or a deduping sort would look like it kept everything.
+    An insertion sort: the comparison is a LISP call and the lists are
+    short."""
+    fn = a[1]
+
+    def less(x, y):
+        return vm.call_value(fn, [x, y]) is not NIL
+
+    out = []
+    for item in (a[0] or []):
+        i = 0
+        while i < len(out) and less(out[i], item):
+            i += 1
+        if i < len(out) and not less(item, out[i]):
+            continue                            # equal to one already in
+        out.insert(i, item)
+    return out or NIL
 # (vl-string-translate source-chars dest-chars str)
 BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
     str.maketrans(str(a[0]), str(a[1])))
+
+
+# vl- list functions.  All of them return nil for an empty result, which
+# is the whole reason a routine can write (if (vl-remove-if ...) ...).
+@bi('vl-remove')
+def _vl_remove(vm, a):
+    return [x for x in (a[1] or []) if not truthy(_equal(vm, [x, a[0]]))] or NIL
+
+
+@bi('vl-remove-if')
+def _vl_remove_if(vm, a):
+    return [x for x in (a[1] or [])
+            if not truthy(vm.call_value(a[0], [x]))] or NIL
+
+
+@bi('vl-remove-if-not')
+def _vl_remove_if_not(vm, a):
+    return [x for x in (a[1] or [])
+            if truthy(vm.call_value(a[0], [x]))] or NIL
+
+
+@bi('vl-member-if')
+def _vl_member_if(vm, a):
+    lst = list(a[1] or [])
+    for i, x in enumerate(lst):
+        if truthy(vm.call_value(a[0], [x])):
+            return lst[i:]
+    return NIL
+
+
+@bi('vl-position')
+def _vl_position(vm, a):
+    for i, x in enumerate(a[1] or []):
+        if truthy(_equal(vm, [x, a[0]])):
+            return i
+    return NIL
+
+
+@bi('vl-some')
+def _vl_some(vm, a):
+    for x in (a[1] or []):
+        v = vm.call_value(a[0], [x])
+        if truthy(v):
+            return v
+    return NIL
+
+
+@bi('vl-every')
+def _vl_every(vm, a):
+    for x in (a[1] or []):
+        if not truthy(vm.call_value(a[0], [x])):
+            return NIL
+    return T
+
+
+@bi('vl-catch-all-apply')
+def _vl_catch_all_apply(vm, a):
+    try:
+        return vm.call_value(a[0], list(a[1] or []))
+    except LispError as e:
+        return CaughtError(str(e))
+
+
+BUILTINS[Sym('vl-catch-all-error-p')] = lambda vm, a: (
+    T if isinstance(a[0], CaughtError) else NIL)
+BUILTINS[Sym('vl-catch-all-error-message')] = lambda vm, a: (
+    a[0].msg if isinstance(a[0], CaughtError) else "")
+
+
+# ---------------------------------------------------------------- ActiveX
+#
+# Just enough of the vla-/vlax- surface for the one thing the drafting
+# routines actually use it for: an entity's bounding box.  A vla-object
+# here is the ename itself, so the round trip is free and the box is
+# computed from the entity's own DXF geometry.
+
+BUILTINS[Sym('vlax-ename->vla-object')] = lambda vm, a: a[0]
+BUILTINS[Sym('vlax-vla-object->ename')] = lambda vm, a: a[0]
+BUILTINS[Sym('vlax-safearray->list')] = lambda vm, a: a[0]
+BUILTINS[Sym('vlax-curve-isclosed')] = lambda vm, a: (
+    T if _closed_p(vm, a[0]) else NIL)
+
+
+def _closed_p(vm, e):
+    t = _dxf(vm, e, 0)
+    if t in ('CIRCLE', 'ELLIPSE'):
+        return True
+    if t == 'LWPOLYLINE':
+        f = _dxf(vm, e, 70)
+        return isinstance(f, (int, float)) and int(f) & 1
+    return False
+
+
+def _all_dxf(vm, e, code):
+    """Every value at one group code, in order -- LWPOLYLINE vertices
+    and bulges repeat, and reading only the first would collapse a
+    polygon to a point."""
+    out = []
+    for g in vm.entdata.get(e, []):
+        if isinstance(g, Dot) and g.a == code:
+            out.append(g.b)
+        elif isinstance(g, list) and g and g[0] == code:
+            out.append(g[1] if len(g) == 2 else g[1:])
+    return out
+
+
+def _arc_pts(cx, cy, r, a0, a1):
+    """The extreme points of a CCW arc: its two ends, plus whichever of
+    the four cardinal directions the sweep actually crosses.  Without
+    the cardinals a filleted corner's box would stop at the vertices
+    and miss the part of the arc that swings past them."""
+    out = [(cx + r * math.cos(a0), cy + r * math.sin(a0)),
+           (cx + r * math.cos(a1), cy + r * math.sin(a1))]
+    sweep = (a1 - a0) % (2 * math.pi)
+    for k in range(4):
+        ang = k * math.pi / 2
+        if ((ang - a0) % (2 * math.pi)) <= sweep:
+            out.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
+    return out
+
+
+def _bulge_arc_pts(p1, p2, bulge):
+    """The extreme points of one bulged polyline segment.  bulge is
+    tan(theta/4) of the included angle, positive counter-clockwise."""
+    inc = 4 * math.atan(bulge)
+    c = math.dist(p1[:2], p2[:2])
+    if c == 0 or abs(math.sin(inc / 2)) < 1e-12:
+        return [p1[:2], p2[:2]]
+    r = c / (2 * math.sin(inc / 2))
+    mid = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
+    th = math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+    d = (c / 2.0) / math.tan(inc / 2)
+    cx = mid[0] + d * math.cos(th + math.pi / 2)
+    cy = mid[1] + d * math.sin(th + math.pi / 2)
+    a0 = math.atan2(p1[1] - cy, p1[0] - cx)
+    a1 = math.atan2(p2[1] - cy, p2[0] - cx)
+    return _arc_pts(cx, cy, abs(r), a0, a1)
+
+
+def _ent_pts(vm, e):
+    """Points whose extents are the entity's bounding box.  Text is
+    reduced to its insertion point -- the VM has no font metrics, so a
+    box around an MTEXT would be a guess dressed as a measurement."""
+    t = _dxf(vm, e, 0)
+    if t == 'LWPOLYLINE':
+        vs = [pt(v) for v in _all_dxf(vm, e, 10)]
+        bs = [num(b) for b in _all_dxf(vm, e, 42)]
+        if not vs:
+            return []
+        out = [v[:2] for v in vs]
+        n = len(vs)
+        last = n if _closed_p(vm, e) else n - 1
+        for i in range(last):
+            b = bs[i] if i < len(bs) else 0.0
+            if b:
+                out += _bulge_arc_pts(vs[i], vs[(i + 1) % n], b)
+        return out
+    if t == 'CIRCLE':
+        c, r = pt(_dxf(vm, e, 10)), num(_dxf(vm, e, 40))
+        return [(c[0] - r, c[1] - r), (c[0] + r, c[1] + r)]
+    if t == 'ARC':
+        c, r = pt(_dxf(vm, e, 10)), num(_dxf(vm, e, 40))
+        a0 = math.radians(num(_dxf(vm, e, 50) or 0.0))
+        a1 = math.radians(num(_dxf(vm, e, 51) or 0.0))
+        return _arc_pts(c[0], c[1], r, a0, a1)
+    if t == 'ELLIPSE':
+        c = pt(_dxf(vm, e, 10))
+        mj = pt(_dxf(vm, e, 11))            # major axis, relative to centre
+        ratio = num(_dxf(vm, e, 40) or 1.0)
+        aa = math.hypot(mj[0], mj[1])
+        bb = aa * ratio
+        th = math.atan2(mj[1], mj[0])
+        dx = math.hypot(aa * math.cos(th), bb * math.sin(th))
+        dy = math.hypot(aa * math.sin(th), bb * math.cos(th))
+        return [(c[0] - dx, c[1] - dy), (c[0] + dx, c[1] + dy)]
+    out = []
+    for code in (10, 11, 13, 14):
+        v = _dxf(vm, e, code)
+        if isinstance(v, list) and len(v) >= 2:
+            out.append(pt(v)[:2])
+    return out
+
+
+@bi('vla-getboundingbox')
+def _vla_getboundingbox(vm, a):
+    """(vla-getboundingbox obj 'll 'ur) -- sets the two symbols to the
+    corners and returns nothing, exactly as the real one does.  An
+    entity with no usable geometry raises, so the vl-catch-all-apply
+    wrapper every caller puts around it does what it is there for."""
+    e = a[0]
+    pts = _ent_pts(vm, e) if isinstance(e, Ent) and e not in vm.deleted else []
+    if not pts:
+        raise LispError(f"vla-getboundingbox: no geometry on {e!r}", vm)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    vm.set(a[1], [min(xs), min(ys), 0.0])
+    vm.set(a[2], [max(xs), max(ys), 0.0])
+    return NIL
+
+
+@bi('vl-sort')
+def _vl_sort(vm, a):
+    """(vl-sort lst pred) -- pred is "comes before".  AutoCAD's own
+    vl-sort drops duplicates; this one keeps them, because every caller
+    here sorts entity records that are never equal and a silent drop
+    would be the harder bug to find."""
+    lst = list(a[0] or [])
+    fn = a[1]
+    key = functools.cmp_to_key(
+        lambda x, y: -1 if truthy(vm.call_value(fn, [x, y]))
+        else (1 if truthy(vm.call_value(fn, [y, x])) else 0))
+    return sorted(lst, key=key) or NIL

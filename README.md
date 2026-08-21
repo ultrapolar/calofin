@@ -26,18 +26,25 @@ in step:
 | draft | `wip/` | being drafted, no version banner yet. Optional - absent until a first draft lands. | yes |
 | standalone | `lisp/<tool>/` | one self-contained file, loads alone with APPLOAD. **All tool logic starts here.** | yes |
 | released | `releases/` | dated `REV`-stamped twin, so a loaded routine never changes underfoot | no - generated |
-| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | mirrored by hand, bundle generated |
+| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | generated for the tools in `tools/mirror_shared.py`, by hand otherwise; bundle generated |
 
 Change a tool in `lisp/`, mirror it into `shared/parts/<FILE>.lsp` in the same
 commit, then regenerate both artifacts:
 
 ```
+python3 tools/mirror_shared.py <TOOL>  # the shared/parts/ twin, where generated
 python3 tools/release_lisp.py          # releases/ dated twins
 python3 tools/build_shared_bundle.py   # shared/CALOFIN-ALL.lsp
 python3 tools/check_standards.py       # did anything drift?
 ```
 
 Never hand-edit `releases/` or `shared/CALOFIN-ALL.lsp`.
+
+A tool can be in `lisp/` and `shared/parts/` yet deliberately kept out of
+the compiled bundle while it is being reworked (or for good, if it never
+belonged in calofin). `cal:*held-back*` in
+`shared/parts/CALOFIN-LOADER.lsp` is the list, with a reason on each
+entry; the bundle header repeats it.
 
 ### Running the tests
 
@@ -86,18 +93,20 @@ changing a routine.
 | --- | --- | --- |
 | `POOL`, `POOLDEMO`, `POOLVER`, `TUTORIALPOOL` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements |
 | `SPA`, `SPAVER`, `TUTORIALSPA` | `lisp/spa/` | Spa/hot-tub template - Rectangle, Octagon, Round |
-| `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool - centre bulge, top-right bulge or cloud (straight or rounded bottom) - drawn live as its X/Y envelope and radii are answered, with a centre-to-corner check drawing beside it |
+| `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool - centre bulge, top-right bulge, cloud (straight or rounded bottom) or kidney (true or asymmetric) - drawn live as its X/Y envelope and radii are answered, with a centre-to-corner check drawing beside it |
 | `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
 | `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- out-of-square walls, corner sizes and bows all measured from the survey, Redo to refit -- then a standard-hopper bottom |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
+| `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each. `ABMOVE` also offers every place the point lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow and tagged by the tape they move (`1A`, `-3B`) - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
 | `ABCDEF` | `lisp/abcdef/` | Plots Excel-measured points into rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom) |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
 | `DIMCHECK`, `DIMSCAN`, `DIMCHECKVER`, ... | `lisp/dimcheck/` | Guided, one-at-a-time review of dimension placement, arc-end attachment and overlapping lines, grouped by dimension style |
 | `LINFINCHECK`, `LINFINSCAN`, ... | `lisp/linfincheck/` | `DIMCHECK`'s checks plus steps & side views, wall height, the liner pattern and the title block border - the full liner-finish drawing QA |
 | `COVERCHECK`, `COVERSCAN`, ... | `lisp/covercheck/` | Same guided review, rules swapped for pool-cover QA |
+| `SPACHECK`, `SPACHECKSCAN`, `SPACHECKRESCUE`, `SPACHECKVER`, `TUTORIALSPACHECK` | `lisp/spacheck/` | The same guided review for spa sheets: audits a drawing against what `SPA` draws - bounded outlines, the dimension roster and its notes, hinges against the block's grade/taper and the Hinge Arrangement Chart, and a title block at exactly 0.6x the liner block |
 | `CCPRECHECK` | `lisp/ccprecheck/` | Walks the "Tech Flow Chart" product-type decision tree and prints a summary. Renamed from `CHECK` to resolve a name collision with `lisp/check/` |
 | `LINCHECK` | `lisp/lincheck/` | Companion checklist routine, shipped alongside the flowchart walker |
 | `STOCKCOVER`, `STOCKLIST`, `STOCKCOVER-CFG` | `lisp/stockcover/` | Replaces a highlighted perimeter with a stock cover drawing pulled straight out of the stock DWG folder, lined up on what was highlighted |
@@ -105,10 +114,10 @@ changing a routine.
 | `LINTXTCHK` | `lisp/lintxtchk/` | Places the vinyl-liner QA checklist into the drawing as text |
 | `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners - three files here, one `STEPS` release (see below) |
 | `PADDLE`, `TUTORIALPADDLE` | `lisp/paddle/` | Finds concave perimeter features and inserts pad blocks |
-| `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, with a repeat-on-the-new-polyline step |
+| `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, joined with straight segments, arcs or a mix of both, with a repeat-on-the-new-polyline step |
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
 | `DCE`, `DIMCONTEND` | `lisp/dim_continue/` | Chains `DIMCONTINUE` from a seed dimension out to every remaining feature point |
-| `AUTODIM`, `FLOORDIM`, `STAIRDIM`, `AUTODIMSIDEPOV` | `lisp/autodim/` | Auto-dimensions a highlighted plan, then its stairs, then the two overall dims - `SIDE STANDARD`, or `STANDARD INCHES` under 12", the overall pair `STANDARD`; a place that is dimensioned already is left alone |
+| `AUTODIM`, `FLOORDIM`, `STAIRDIM`, `AUTODIMSIDEPOV` | `lisp/autodim/` | Auto-dimensions a highlighted plan, then its stairs, then the two overall dims - `SIDE STANDARD`, or `STANDARD INCHES` under 12", the overall pair `STANDARD`; a place that is dimensioned already is left alone. Highlight a flight of steps drawn in side view instead and `AUTODIM` recognises it and dimensions the depth of every step down the right in `STANDARD INCHES` |
 | `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, source line erased |
 | `DRONE` | `lisp/drone/` | Drawing cleanup: text style/height, pool/spa points onto `POINTS`, spa perimeter onto `POOL`, and more in one pass |
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
@@ -133,7 +142,8 @@ never offers Back.
 
 In loops that draw as they go - `PERPPTS`/`CPERPPTS` offset points,
 `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` treads, `ABHD`/`ADAB` slope
-waypoints, `CDCALLOUT` dimensions - Back also removes the
+waypoints, `CDCALLOUT` dimensions, `ABFIND`/`ABMOVE` ties - Back
+also removes the
 just-committed point or step (its lines and its dimensions) before
 re-asking. `BPCALLOUT` works by
 reselection instead: clicking a ringed point again un-rings it.
@@ -269,8 +279,9 @@ not a bug in either side.
 | --- | --- |
 | `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
 | `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/CALOFIN-ALL.lsp` |
-| `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
-| `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns |
+| `mirror_shared.py` | Regenerates a `shared/parts/` twin from its `lisp/` original - drops the helpers the library provides and rewrites the call sites onto `cal:`. Table-driven, one entry per tool |
+| `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin **and that twin carries the same version banner**, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
+| `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 
 `tests/test_pool_runtime.py` and `tests/test_spa_runtime.py` load the
@@ -297,12 +308,15 @@ python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
 python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
 python3 tests/test_cdcallout.py       # CDCALLOUT loaded and run in lispvm
-python3 tests/test_autodim.py         # AUTODIM dim styles, dedupe, overall dims
+python3 tests/test_abfind.py          # ABFIND / ABMOVE, run in lispvm
+python3 tests/test_autodim.py         # AUTODIM styles, dedupe, overall/step/floor dims
 python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
                                       # own sorted(), then the whole tour
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
+python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
+                                      # just made, in the same lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter

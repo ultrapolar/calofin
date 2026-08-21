@@ -29,6 +29,13 @@ LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'autodim', 'AutoDim.lsp')
 STYLES = {'STANDARD', 'SIDE STANDARD', 'STANDARD INCHES'}
 
+_probe = VM()
+_probe.load(LSP)
+#: The file's Back sentinel.  The grouped build calls the library's ask
+#: helpers, which return CAL-BACK, so a stub standing in for a step that
+#: can be backed out of has to hand back whichever one this tier uses.
+BACK = 'CAL-BACK' if _probe.globals.get('cal:askkw') else 'AD-BACK'
+
 
 def fresh(styles=STYLES):
     """A VM with AutoDim loaded, the named dim styles in the drawing and
@@ -36,8 +43,7 @@ def fresh(styles=STYLES):
     vm = VM()
     vm.load(LSP)                            # CALOFIN_LISP_ROOT picks the tier
     vm.tables['DIMSTYLE'] = set(styles)
-    vm.script = [None]                      # ad:begin's ssget: no dims yet
-    vm.loads('(ad:begin)')
+    vm.loads('(ad:begin)')       # ad:begin sweeps with "_X": nothing to script
     return vm
 
 
@@ -58,19 +64,8 @@ def dims(vm):
 
 
 def rescan(vm):
-    """Re-read the drawing the way a second command run would.  The VM's
-    dim stub does not stamp group 410, so the test supplies the
-    model-space mark AutoCAD would report before ad:dimss filters on it."""
-    ents = []
-    for e in vm.entities:
-        data = vm.entdata.get(e, [])
-        if any(isinstance(g, Dot) and g.a == 0 and g.b == 'DIMENSION'
-               for g in data):
-            if not any(isinstance(g, Dot) and g.a == 410 for g in data):
-                data.append(Dot(410, 'Model'))
-            ents.append(e)
-    vm.script = [ents or None]
-    vm.loads('(ad:dimscan)')
+    """Re-read the drawing the way a second command run would."""
+    vm.loads('(ad:dimscan)')     # likewise a "_X" sweep of the drawing
 
 
 #: A 10ft x 6ft plan whose dims already reach a foot clear of it on the
@@ -204,7 +199,6 @@ print('   a taken span in the middle leaves the pieces either side')
 print('== a missing style falls back, it does not strand the next dim ==')
 vm = fresh(styles={'STANDARD', 'STANDARD INCHES'})   # no "SIDE STANDARD"
 vm.sysvars['DIMSTYLE'] = 'STANDARD'
-vm.script = [None]
 vm.loads('(ad:begin)')
 assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1     # wants SIDE STANDARD
 assert aligned(vm, (0, 40), (8, 40), (4, 52)) == 1      # wants STANDARD INCHES
@@ -212,6 +206,282 @@ assert aligned(vm, (0, 60), (60, 60), (30, 72)) == 1    # wants SIDE STANDARD
 got = [d[0] for d in dims(vm)]
 assert got == ['STANDARD', 'STANDARD INCHES', 'STANDARD'], got
 print('   the long dims keep the style the run started in, both times')
+
+
+def draw(vm, segs):
+    """Draw the segments as LINEs and hand them back as a selection set."""
+    for (x1, y1), (x2, y2) in segs:
+        vm.loads('(entmake (list (cons 0 "LINE") '
+                 '(cons 10 (list %.4f %.4f 0.0)) '
+                 '(cons 11 (list %.4f %.4f 0.0))))' % (x1, y1, x2, y2))
+    ents = list(vm.entities)                    # whatever else was drawn too
+    vm.script = [ents]
+    vm.loads('(setq SS (ssget))')
+    return ents
+
+
+#: Three 10"-deep steps on a 12" run, descending to the right, drawn
+#: top down from the waterline: riser, tread, riser, tread, ...
+FLIGHT = [((0, 0), (0, -10)), ((0, -10), (12, -10)),
+          ((12, -10), (12, -20)), ((12, -20), (24, -20)),
+          ((24, -20), (24, -30)), ((24, -30), (36, -30))]
+
+#: The same flight the other way round - the top step on the right.
+MIRRORED = [((36, 0), (36, -10)), ((36, -10), (24, -10)),
+            ((24, -10), (24, -20)), ((24, -20), (12, -20)),
+            ((12, -20), (12, -30)), ((12, -30), (0, -30))]
+
+#: A plain rectangular pool in plan: 10ft x 5ft, drawn square.
+PLAN = [((0, 0), (0, 60)), ((0, 60), (120, 60)),
+        ((120, 60), (120, 0)), ((120, 0), (0, 0))]
+
+
+def looks_like_steps(segs, extra=''):
+    vm = fresh()
+    if extra:
+        vm.loads(extra)                         # drawn first, so it is selected
+    draw(vm, segs)
+    return vm, vm.loads('(ad:stepprofile-p SS)')
+
+
+print('== it only takes the side-view route when it looks like steps ==')
+_, risers = looks_like_steps(FLIGHT)
+assert risers and len(risers) == 3, risers
+print('   a flight of three steps: recognised')
+
+_, risers = looks_like_steps(MIRRORED)
+assert risers and len(risers) == 3, risers
+print('   the same flight facing the other way: recognised')
+
+# a sloping pool floor at the foot of the flight is still a flight
+_, risers = looks_like_steps(FLIGHT + [((36, -30), (60, -40))])
+assert risers and len(risers) == 3, risers
+print('   with a sloping floor at its foot: still recognised')
+
+# closed against a back wall: the full-height vertical is the wall
+_, risers = looks_like_steps(FLIGHT + [((36, -30), (36, 0)), ((36, 0), (0, 0))])
+assert risers and len(risers) == 3, risers
+print('   closed against a back wall: the wall is not counted as a step')
+
+assert looks_like_steps(PLAN)[1] is None
+print('   a rectangular plan: not steps')
+
+# two verticals at the same level are not a staircase
+assert looks_like_steps([((0, 0), (0, 10)), ((20, 0), (20, 10)),
+                         ((0, 30), (20, 30))])[1] is None
+print('   two verticals side by side at the same level: not steps')
+
+# one riser is not a flight
+assert looks_like_steps([((0, 0), (0, -10)), ((0, -10), (12, -10))])[1] is None
+print('   a single riser: not steps')
+
+# anything curved and it is not read as a square-drawn profile
+assert looks_like_steps(
+    FLIGHT,
+    '(entmake (list (cons 0 "ARC") (cons 10 (list 40.0 -30.0 0.0)) '
+    '(cons 40 5.0) (cons 50 0.0) (cons 51 3.14)))')[1] is None
+print('   one arc anywhere in the selection: not steps')
+
+# a staircase with the risers left disconnected is not one either
+assert looks_like_steps([((0, 0), (0, -10)), ((0, -10), (12, -10)),
+                         ((12, -14), (12, -24)), ((12, -24), (24, -24)),
+                         ((0, -40), (24, -40))])[1] is None
+print('   risers that do not join up: not steps')
+
+
+print('== AUTODIM dimensions the step depths on the right ==')
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48                      # 2 x 0.125 x 48 = 12" < 2ft
+ents = draw(vm, FLIGHT)
+# the plan pick, then ad:begin's read of the drawing's dims
+vm.run('c:AUTODIM', [ents])
+placed = dims(vm)
+assert len(placed) == 4, placed
+assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
+print('   3 step depths + 1 overall, all in STANDARD INCHES')
+
+# every depth dim sits on one line two feet right of the flight (max x
+# 24 + 24), the overall two feet right of that again
+assert [d[3][0] for d in placed[:3]] == [48.0, 48.0, 48.0], placed
+assert placed[3][3][0] == 72.0, placed[3]
+print('   the depths on one line to the right, the overall further right')
+
+# each one measures a step, the last one the whole flight
+assert [(d[1], d[2]) for d in placed] == [
+    ((0.0, 0.0), (0.0, -10.0)),
+    ((0.0, -10.0), (12.0, -20.0)),
+    ((12.0, -20.0), (24.0, -30.0)),
+    ((24.0, -30.0), (0.0, 0.0))], placed
+assert all('_V' in c for c in vm.commands if c[0] == '_.DIMLINEAR')
+print('   three 10" depths and a 30" overall, all vertical')
+
+# no perimeter, stairs or floor dims were asked for - the script would
+# have been exhausted at the first prompt if they had been
+assert not [c for c in vm.commands if c[0] == '_.DIMALIGNED']
+print('   the plan steps were skipped, as they are about a plan')
+
+# and it is idempotent, like everything else the tool places
+vm.run('c:AUTODIM', [ents])
+assert len(dims(vm)) == 4
+print('   a second run over the same flight adds nothing')
+
+
+print('== the branch: a plan goes the plan route, a flight does not ==')
+#: The plan route needs ActiveX for its bounding boxes, which the VM has
+#: no stub for, so each step is replaced by a note of having been run.
+TRACE = """
+  (setq ran '())
+  (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
+  (defun ad:dimstairs ()  (setq ran (cons "stairs" ran)) 0)
+  (defun ad:getfloor (tag obstacles back) (setq ran (cons "floor" ran)) 0)
+  (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
+  (defun ad:runsteps (risers) (setq ran (cons "step depths" ran)) (princ))"""
+
+
+def route(segs, answers=('Yes',)):
+    vm = fresh()
+    ents = draw(vm, segs)
+    vm.loads(TRACE)
+    vm.run('c:AUTODIM', [ents] + list(answers))
+    return [str(x) for x in reversed(vm.globals['ran'])]
+
+
+assert route(PLAN) == ['perimeter', 'stairs', 'floor', 'floor', 'overall']
+print('   a rectangular plan: all five plan steps, no step depths')
+assert route(FLIGHT, answers=()) == ['step depths']
+print('   a flight of steps: the step depths alone, no plan steps')
+
+
+print('== step 4 asks first, and takes No, Enter and Back for an answer ==')
+#: The floor dims step, with every other step of the plan flow replaced
+#: by a note of having been run, and Back available at the floor lines.
+FLOW = """
+  (setq ran '() backon "")
+  (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
+  (defun ad:dimstairs () (setq ran (cons "stairs" ran)) 0)
+  (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
+  (defun ad:eraseafter (mark) (setq ran (cons "rolled back" ran)) (princ))
+  (defun ad:getfloor (tag obstacles back)
+    (setq ran (cons tag ran))
+    (if (= tag backon)
+      (progn (setq backon "") '%s)
+      0))""" % BACK
+
+
+def plan_flow(answers, backon=''):
+    """Run the plan flow with `backon` naming the one floor line the
+    user backs out of."""
+    vm = fresh()
+    vm.loads(FLOW)
+    vm.loads('(setq backon "%s")' % backon)
+    vm.script = list(answers)
+    vm.loads('(ad:runplan nil)')
+    assert not vm.script, 'answers left over: %r' % vm.script
+    return [str(x) for x in reversed(vm.globals['ran'])]
+
+
+assert plan_flow(['Yes']) == ['perimeter', 'stairs', 'Floor dims 1 of 2',
+                              'Floor dims 2 of 2', 'overall']
+print('   Yes: two lines asked for, then the overall dims')
+
+assert plan_flow([None]) == ['perimeter', 'stairs', 'Floor dims 1 of 2',
+                             'Floor dims 2 of 2', 'overall']
+print('   Enter: takes the <Yes> default')
+
+assert plan_flow(['No']) == ['perimeter', 'stairs', 'overall']
+print('   No: straight on to the overall dims, no lines asked for')
+
+# Back at the question re-opens the stairs, erasing what they drew
+assert plan_flow(['Back', 'No']) == ['perimeter', 'stairs', 'rolled back',
+                                     'stairs', 'overall']
+print('   Back: the stairs re-open, and what they drew is rolled back')
+
+# Back at the FIRST floor line goes to the question, not past it - and
+# nothing is rolled back, because that line had not drawn anything yet
+assert plan_flow(['Yes', 'No'], backon='Floor dims 1 of 2') == [
+    'perimeter', 'stairs', 'Floor dims 1 of 2', 'overall']
+print('   Back at the first line: back to the question, nothing rolled back')
+
+# Back at the SECOND floor line re-opens the first, erasing its chain
+assert plan_flow(['Yes'], backon='Floor dims 2 of 2') == [
+    'perimeter', 'stairs', 'Floor dims 1 of 2', 'Floor dims 2 of 2',
+    'rolled back', 'Floor dims 1 of 2', 'Floor dims 2 of 2', 'overall']
+print('   Back at the second line: the first re-opens, its chain rolled back')
+
+
+print('== a floor dims chain runs object to object ==')
+def floorchain(crossings, p1=(0, 0), p2=(60, 0)):
+    """One chain along p1->p2 over a line that crosses objects at the
+    given distances along it.  ad:xpoints is what reaches ActiveX, so
+    the crossings it would find are supplied directly."""
+    vm = fresh()
+    draw(vm, [((0, -50), (0, -49))])          # something to be the obstacles
+    vm.loads('(defun ad:xpoints (lobj ss) (list %s))'
+             % ' '.join('(list %.4f %.4f 0.0)'
+                        % (p1[0] + (p2[0] - p1[0]) * d / 60.0,
+                           p1[1] + (p2[1] - p1[1]) * d / 60.0)
+                        for d in crossings))
+    n = vm.loads('(ad:floorchain (list %.4f %.4f 0.0) (list %.4f %.4f 0.0) '
+                 '(list 30.0 -12.0 0.0) SS)' % (p1[0], p1[1], p2[0], p2[1]))
+    # DIMCONTINUE leaves no entity behind, so the points it was fed are
+    # read back off the command log to see the whole chain
+    cont, run = [], False
+    for c in vm.commands:
+        if c and c[0] == '_.DIMCONTINUE':
+            run = True
+        elif run and len(c) == 2 and c[0] == '_non':
+            cont.append(tuple(c[1][:2]))
+        elif run:
+            run = False
+    return n, [(d[1], d[2]) for d in dims(vm)], cont
+
+
+# both ends landed on an object: every break point is dimensioned
+n, spans, cont = floorchain([0, 20, 40, 60])
+assert n == 3, (n, spans, cont)
+assert spans == [((0.0, 0.0), (20.0, 0.0))], spans
+assert cont == [(40.0, 0.0), (60.0, 0.0)], cont
+print('   both ends on an object: 3 dims, 0 -> 20 -> 40 -> 60')
+
+# neither end on one: the chain pulls back to the objects it crossed
+n, spans, cont = floorchain([20, 40])
+assert n == 1, (n, spans, cont)
+assert spans == [((20.0, 0.0), (40.0, 0.0))] and cont == [], (spans, cont)
+print('   neither end on one: it starts and stops at the objects it crossed')
+
+# the end alone in open drawing: it stops at the previous object
+n, spans, cont = floorchain([0, 20, 40])
+assert n == 2, (n, spans, cont)
+assert spans == [((0.0, 0.0), (20.0, 0.0))] and cont == [(40.0, 0.0)], cont
+print('   the end in open drawing: it stops at the previous object')
+
+# the start alone in open drawing: it begins at the first object
+n, spans, cont = floorchain([20, 40, 60])
+assert n == 2, (n, spans, cont)
+assert spans == [((20.0, 0.0), (40.0, 0.0))] and cont == [(60.0, 0.0)], cont
+print('   the start in open drawing: it begins at the first object')
+
+# a line that crosses nothing, or only one thing, dimensions nothing
+assert floorchain([]) == (0, [], [])
+assert floorchain([30]) == (0, [], [])
+print('   a line crossing nothing, or one object: no dims at all')
+
+
+print('== AUTODIMSIDEPOV keeps stepping its dims out with the stairs ==')
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIMSIDEPOV', [ents])
+placed = dims(vm)
+assert len(placed) == 4, placed
+assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
+# the flight descends to the right, so its high side is the left: each
+# dim sits 2ft left of its own step and they walk down with the stairs
+assert [d[3][0] for d in placed] == [-24.0, -24.0, -12.0, -48.0], placed
+assert vm.layer_of(vm.entities[-1]) == 'DIMENSION'
+print('   dims on the high side, one per step, overall furthest out')
 
 
 print('ALL AUTODIM CHECKS PASSED')
