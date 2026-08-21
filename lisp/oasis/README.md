@@ -25,17 +25,72 @@ six radii — which is exactly what OASIS asks for.
 
 ## What it does
 
-1. Asks for the **absolute X and Y bounds** — the envelope the pool
+1. Asks **where it goes**, first — because the pool is drawn as it is
+   answered.
+2. Asks for the **absolute X and Y bounds** — the envelope the pool
    touches on all four sides and crosses on none.
-2. Asks the three **bulge radii**, left, top, then right.
-3. Asks the three **tangent radii** that join them, top-left,
+3. Asks the three **bulge radii**, left, top, then right.
+4. Asks the three **tangent radii** that join them, top-left,
    top-right, then bottom-center.
-4. Asks whether to dimension the result, and where to put it.
-5. Draws the six arcs on the **`POOL`** layer and, unless dimensioning
-   was declined, the overall X and Y plus a radius dimension on each of
-   the six arcs on the **`DIMENSION`** layer.
+5. Draws the finished pool, its dimensions, and a **check drawing**
+   beside it.
 
-The envelope box itself is construction geometry and is **not** drawn.
+### Answering it, with the pool on screen
+
+Before every question the preview is redrawn, with three things
+overlapping on purpose:
+
+* the **outline, solid**, on the `POOL` layer — what will actually be
+  drawn;
+* behind it the **circle each arc is cut from, dashed**, on
+  `POOL-GUIDE` — the construction the radius being asked for belongs
+  to;
+* a **label on every circle**: its radius once given, **`?`** until
+  then.
+
+The circle the question is about — its arc, its dashed circle and its
+label — is drawn **red**, so there is never a doubt about which radius
+is wanted. A radius that has not been answered yet still needs a value
+for any of this to be drawable, so the preview fills the gaps with
+provisional ones and marks every one it invented with that `?`.
+
+The preview is scaffolding: it is erased when the last answer is in,
+and again if the run is cancelled with Esc.
+
+### What is left on the drawing
+
+* the **six arcs** on the `POOL` layer;
+* the **overall X and Y and a radius on each of the six arcs** — eight
+  dimensions on the `DIMENSION` layer. This is not asked about; a pool
+  is always dimensioned;
+* a **check drawing** clear to the right, dimensioned the way a layout
+  is *checked* rather than the way it is built — see below.
+
+Every dimension is drawn in the **`CROSS DIMENSIONS`** style.
+
+The envelope box itself is construction: dashed on the check drawing,
+where the corners are being measured to, and not drawn at all on the
+pool.
+
+### The check drawing
+
+A second copy of the pool, off to the right, with the envelope box
+dashed and a small circle on each of the six centres. Two families of
+cross dimensions:
+
+| Dims | What they tie |
+| --- | --- |
+| 12 | each circle centre to the **two envelope corners nearest it** |
+| 6 | each circle centre to **the next one round the ring** |
+
+Between them those pin all six centres against the box and against one
+another, so a transcription slip in any single radius shows up as a
+dimension that does not agree with the order sheet. The
+centre-to-centre ties have a second use: neighbouring circles are
+externally tangent by construction, so **each of those must read
+exactly the two radii added together** — 8'-0" + 5'-0" = 13'-0" where
+the left bulge meets the bottom-center tangent, and so on round the
+six. Anything else means the outline is not tangent-continuous.
 
 ### Where the circles come from
 
@@ -87,6 +142,7 @@ computed closed and drawn closed.
 ### The questions
 
 ```
+Insertion base point <0,0>:
 X - overall left-to-right bounds:
 Y - overall front-to-back bounds [Back]:
 Left bulge radius [Back]:
@@ -95,16 +151,14 @@ Right bulge radius [Back]:
 Top-left tangent radius [Back]:
 Top-right tangent radius [Back]:
 Bottom-center tangent radius [Back]:
-Dimension the pool? [Yes/No/Back] <Yes>:
-Insertion base point <0,0>:
 ```
 
 Every measurement is required — Enter, zero and a negative are all
-refused — and every question after the first offers `Back` (`Undo` is
-accepted too, unlisted) to step up one and re-answer, right through the
-dimension question. Backing up re-checks everything after the answer you
-changed. The base point pick at the end is the one prompt with no
-`Back`: nothing has been drawn yet, so Esc there costs nothing.
+refused — and every one of them offers `Back` (`Undo` is accepted too,
+unlisted) to step up one and re-answer. Backing up re-checks everything
+after the answer you changed, and redraws the preview from it. The base
+point pick is the one prompt with no `Back`: it is the first question,
+and nothing has been drawn yet.
 
 Measurements are read with `getdist`, so they are typed in the
 drawing's own units (`8'` in an architectural drawing, or picked as two
@@ -114,6 +168,7 @@ The worked example the routine was written from is a 40'-0" × 20'-0"
 pool with 8'/11'/9' bulges and 6'/3'/5' tangent radii:
 
 ```
+Insertion base point <0,0>: (pick)
 X - overall left-to-right bounds: 40'
 Y - overall front-to-back bounds [Back]: 20'
 Left bulge radius [Back]: 8'
@@ -133,8 +188,13 @@ needs different names:
 | --- | --- | --- |
 | `oasis:*poollayer*` | `"POOL"` | Layer the six arcs are drawn on |
 | `oasis:*poolcolor*` | `4` | Colour it is created with |
-| `oasis:*dimlayer*` | `"DIMENSION"` | Layer the dimensions go on |
+| `oasis:*dimlayer*` | `"DIMENSION"` | Layer every dimension goes on |
 | `oasis:*dimcolor*` | `2` | Colour it is created with |
+| `oasis:*guidelayer*` | `"POOL-GUIDE"` | Layer the dashed circles, the box and the `?` labels go on |
+| `oasis:*guidecolor*` | `8` | Colour it is created with |
+| `oasis:*hicolor*` | `1` (red) | Colour the circle being asked about is drawn in |
+| `oasis:*dimstyle*` | `"CROSS DIMENSIONS"` | Dimension style every dim is drawn in |
+| `oasis:*checkgap*` | `4.0` | How far right the check drawing sits, as a multiple of the dimension stand-off |
 | `oasis:*topfrac*` | `0.5` | Where the top bulge sits across the X bound, as a fraction of it. `0.5` centres it, which is what every oasis on file wants |
 | `oasis:*fuzz*` | `1.0e-6` | Slack for "same point / same length" tests, drawing units |
 
@@ -201,6 +261,21 @@ away.
   coordinates and its angles are measured from the world X axis — so
   both are carried across on the way out. The base point keeps its own
   elevation. A tilted UCS is refused (above).
+* **A missing `CROSS DIMENSIONS` style is not invented.** The dims are
+  drawn in whatever style is current and the routine says so once, so a
+  drawing started from the wrong template is obvious instead of quietly
+  producing wrong-looking dims. Create the style — or start from the
+  standard template — and run it again. The style in force before the
+  command is restored afterwards.
+* **The preview is one undo group with everything else**, so a single
+  `U` after the run takes the pool, the check drawing and all their
+  dimensions away together. Esc part-way through the questions erases
+  the preview too — no half-answered pool is left behind.
+* The dashed guide linetype is **built by the routine** (`OASISDASH`,
+  scaled to the pool) rather than loaded from `acad.lin`, because a
+  failed load falls back to continuous silently, which is how dashes
+  vanish. Its per-entity scale cancels the drawing's `LTSCALE`, so it
+  reads the same whatever the host drawing is set to.
 * The six arcs are **plain `ARC` entities**, not a polyline. Join them
   with `PEDIT` if a closed polyline is wanted — the endpoints coincide
   exactly, so the join is clean.
@@ -227,7 +302,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers. The reference case is checked against the drawing OASIS was
+answers — 41 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -245,6 +320,20 @@ centres and angles into world while the dimension points stay in the
 UCS, and a tilted UCS is refused before a single question is asked.
 (The VM's own `trans` is the identity, so those last two swap in a real
 one for the length of the test.)
+
+Nine more cover what this file added last: the preview appears only once
+both bounds are known and then carries six arcs, six dashed circles and
+the box at every radius question; the questioned circle's arc, circle and
+label are all red and all the right one; unanswered radii read `?` while
+answered ones read their value; every preview entity is erased when the
+run finishes; the check drawing lands clear to the right as a true copy;
+its twelve corner ties really do go to the two nearest corners of each
+centre; its six centre ties each read the two radii added together; every
+dimension comes out in `CROSS DIMENSIONS` with the previous style put
+back; and a drawing without that style still gets its pool. The preview
+ones wrap `getdist` to photograph the drawing at the moment each question
+is put — it is erased before the next one, so there is no other way to
+see it.
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_oasis.py` reruns the whole
 file against the grouped build in `shared/`, as a parity check.

@@ -91,15 +91,24 @@ REF_ARCS = [
      265.8916555993, 310.3069641965),
 ]
 
-#: the answers that draw the reference pool, in the order OASIS asks
-REF_SCRIPT = [REF_X, REF_Y] + list(REF_BULGES) + list(REF_TANGENTS)
+#: the eight measurements that draw the reference pool, in the order
+#: OASIS asks them.  The base point pick comes first, so a whole run is
+#: [base] + REF_MEASURE.
+REF_MEASURE = [REF_X, REF_Y] + list(REF_BULGES) + list(REF_TANGENTS)
+
+
+def script(base=(0.0, 0.0), measure=None):
+    """A whole run: where it goes, then the eight measurements."""
+    return [base] + list(REF_MEASURE if measure is None else measure)
 
 
 # ---- scaffolding ------------------------------------------------------
 
-def newvm():
+def newvm(style=True):
     vm = VM()
     vm.layer_records = {}
+    if style:
+        vm.tables['DIMSTYLE'].add('CROSS DIMENSIONS')
     vm.load(LSP)
     return vm
 
@@ -129,14 +138,27 @@ def cmds(vm, name):
 
 
 def arcs_of(vm):
-    """The drawn arcs as (centre, radius, start, end), creation order,
-    angles in degrees so they read against the reference table."""
+    """The POOL's six arcs as (centre, radius, start, end), in creation
+    order, angles in degrees so they read against the reference table.
+
+    Only the surviving arcs count -- every preview is erased -- and the
+    pool is drawn before the check drawing beside it, so the first six
+    are the pool's."""
     out = []
     for d in made(vm, 'ARC'):
         c = d[10]
         out.append(((c[0], c[1]), d[40],
                     math.degrees(d[50]) % 360.0, math.degrees(d[51]) % 360.0))
-    return out
+    return out[:6]
+
+
+def check_arcs_of(vm):
+    """The check drawing's six, which follow the pool's."""
+    out = []
+    for d in made(vm, 'ARC'):
+        c = d[10]
+        out.append(((c[0], c[1]), d[40]))
+    return out[6:]
 
 
 def pt_on(c, r, deg):
@@ -205,12 +227,42 @@ class fake_trans(object):
         return False
 
 
+class at_each_prompt(object):
+    """Snapshot the drawing as it stands at every measurement prompt.
+
+    The preview is redrawn before each question and erased before the
+    next, so this is the only way to see it: wrap getdist, and record
+    what is on screen at the moment the question is put."""
+
+    def __enter__(self):
+        self.shots = []
+        self.saved = BUILTINS[Sym('getdist')]
+
+        def _g(vm, a):
+            self.shots.append(
+                [(e, dict(_alist_dict(vm.entdata[e])))
+                 for e in vm.entities if e not in vm.deleted])
+            return self.saved(vm, a)
+
+        BUILTINS[Sym('getdist')] = _g
+        return self
+
+    def __exit__(self, *exc):
+        BUILTINS[Sym('getdist')] = self.saved
+        return False
+
+    def shot(self, k, etype=None):
+        """Everything alive at question k, optionally of one type."""
+        return [d for _, d in self.shots[k]
+                if etype is None or d.get(0) == etype]
+
+
 # ---- tests ------------------------------------------------------------
 
 def test_reference_drawing():
     """The six arcs land on the reference drawing's six arcs."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'reference')
+    run(vm, script(), 'reference')
     got = arcs_of(vm)
     assert len(got) == 6, got
     for (name, c, r, a0, a1), (gc, gr, ga0, ga1) in zip(REF_ARCS, got):
@@ -228,7 +280,7 @@ def test_outline_closes():
     """Consecutive arcs share an endpoint: the perimeter is one closed
     curve, not six arcs that nearly meet."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'closure')
+    run(vm, script(), 'closure')
     got = arcs_of(vm)
     # an arc is drawn counter-clockwise from start to end whichever way
     # the walk runs, so a bulge hands over at its END and a reverse arc
@@ -249,7 +301,7 @@ def test_tangent_continuity():
     """Every joint is smooth: the two arcs share a tangent there, which
     is the whole point of a continuous-tangent pool."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'tangency')
+    run(vm, script(), 'tangency')
     got = arcs_of(vm)
     bulge = [n in ('left', 'right', 'top') for n, _, _, _, _ in REF_ARCS]
     worst = 0.0
@@ -271,7 +323,7 @@ def test_fills_the_envelope():
     """The outline touches all four bounds the user gave and crosses
     none of them -- they are absolute."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'envelope')
+    run(vm, script(), 'envelope')
     xs, ys = [], []
     for c, r, a0, a1 in arcs_of(vm):
         sweep = (a1 - a0) % 360.0
@@ -291,23 +343,24 @@ def test_fills_the_envelope():
 
 def test_layers_and_dimensions():
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'layers')
+    run(vm, script(), 'layers')
     assert all(d[8] == 'POOL' for d in made(vm, 'ARC')), made(vm, 'ARC')
     dims = made(vm, 'DIMENSION')
-    assert len(dims) == 2, dims                       # overall X and Y
     assert all(d[8] == 'DIMENSION' for d in dims), dims
-    assert len(cmds(vm, '_.DIMLINEAR')) == 2, vm.commands
-    assert len(cmds(vm, '_.DIMRADIUS')) == 6, vm.commands
-    assert 'POOL' in vm.tables['LAYER'] and 'DIMENSION' in vm.tables['LAYER']
-    print("ok  layers      -> arcs on POOL, 2 linear + 6 radius dims on"
-          " DIMENSION")
+    assert len(cmds(vm, '_.DIMLINEAR')) == 2, vm.commands     # overall X, Y
+    assert len(cmds(vm, '_.DIMRADIUS')) == 6, vm.commands     # one per arc
+    assert len(cmds(vm, '_.DIMALIGNED')) == 18, vm.commands   # check drawing
+    for lay in ('POOL', 'DIMENSION', 'POOL-GUIDE'):
+        assert lay in vm.tables['LAYER'], vm.tables['LAYER']
+    print("ok  layers      -> arcs on POOL, 2 linear + 6 radius + 18 check"
+          " dims")
 
 
 def test_dimension_values():
     """The two overall dims are hooked to the points that really touch
     the envelope, so they read the X and Y that were asked for."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'dim values')
+    run(vm, script(), 'dim values')
     lin = cmds(vm, '_.DIMLINEAR')
     horiz = [c for c in lin if '_H' in c][0]
     vert = [c for c in lin if '_V' in c][0]
@@ -321,9 +374,10 @@ def test_radius_dims_hook_the_arcs():
     """Each radius dim picks the arc it belongs to, at a point on that
     arc, and is dragged clear of the water."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'radius dims')
+    run(vm, script(), 'radius dims')
     arcs = [e for e in vm.entities
-            if _alist_dict(vm.entdata[e]).get(0) == 'ARC']
+            if e not in vm.deleted
+            and _alist_dict(vm.entdata[e]).get(0) == 'ARC'][:6]
     picked = []
     for c in cmds(vm, '_.DIMRADIUS'):
         ent, tip = c[1][0], c[1][1]
@@ -334,19 +388,9 @@ def test_radius_dims_hook_the_arcs():
     print("ok  radius dims -> one per arc, picked on the arc")
 
 
-def test_no_dimensions():
-    vm = newvm()
-    run(vm, REF_SCRIPT + ['No', (0.0, 0.0)], 'no dims')
-    assert len(made(vm, 'ARC')) == 6
-    assert made(vm, 'DIMENSION') == []
-    assert cmds(vm, '_.DIMLINEAR') == [] and cmds(vm, '_.DIMRADIUS') == []
-    assert 'DIMENSION' not in vm.tables['LAYER']
-    print("ok  no dims     -> six arcs and nothing else")
-
-
 def test_base_point_moves_everything():
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (1000.0, -250.0)], 'base point')
+    run(vm, script((1000.0, -250.0)), 'base point')
     for (name, c, r, a0, a1), (gc, gr, _, _) in zip(REF_ARCS, arcs_of(vm)):
         assert close(gc[0], c[0] + 1000.0), (name, gc)
         assert close(gc[1], c[1] - 250.0), (name, gc)
@@ -355,7 +399,7 @@ def test_base_point_moves_everything():
 
 def test_enter_takes_the_origin():
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', None], 'enter base')
+    run(vm, script(None), 'enter base')
     assert close(arcs_of(vm)[0][0][0], 96.0)
     print("ok  base <0,0>  -> Enter draws at the origin")
 
@@ -364,8 +408,8 @@ def test_back_reasks():
     """Back steps one question up and the re-answer is the one used."""
     vm = newvm()
     # answer Y as 300, back out of the left bulge, give Y as 240 instead
-    run(vm, [REF_X, 300.0, 'Back', REF_Y] + REF_SCRIPT[2:]
-        + ['Yes', (0.0, 0.0)], 'back')
+    run(vm, [(0.0, 0.0), REF_X, 300.0, 'Back', REF_Y]
+        + REF_MEASURE[2:], 'back')
     top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
     assert close(top[0][1], REF_Y - 132.0), top
     print("ok  back        -> Back re-asks and the new answer wins")
@@ -375,7 +419,7 @@ def test_back_at_the_first_question_stays_put():
     """Back is not offered at the first question; typing it anyway must
     not fall through it."""
     vm = newvm()
-    vm.script = list(REF_SCRIPT + ['Yes', (0.0, 0.0)])
+    vm.script = list(script())
     vm.run('c:OASIS', vm.script)
     first = vm.prompts[0][0]
     assert '[Back]' not in first, first
@@ -387,8 +431,8 @@ def test_oversize_bulge_is_reasked():
     the top, so the question comes back."""
     vm = newvm()
     # 150 on a 240 envelope stands 300 tall -- rejected, then 96 taken
-    run(vm, [REF_X, REF_Y, 150.0, 96.0] + REF_SCRIPT[3:]
-        + ['Yes', (0.0, 0.0)], 'oversize bulge')
+    run(vm, [(0.0, 0.0), REF_X, REF_Y, 150.0, 96.0]
+        + REF_MEASURE[3:], 'oversize bulge')
     assert close(arcs_of(vm)[0][1], 96.0), arcs_of(vm)[0]
     print("ok  big bulge   -> a bulge taller than Y is re-asked")
 
@@ -397,7 +441,7 @@ def test_short_tangent_is_reasked():
     """A tangent radius too short to span its two bulges is re-asked."""
     vm = newvm()
     # the bottom-center minimum here is 36.13"; 20 cannot reach
-    run(vm, REF_SCRIPT[:7] + [20.0, 60.0, 'Yes', (0.0, 0.0)], 'short tangent')
+    run(vm, script(measure=REF_MEASURE[:7] + [20.0, 60.0]), 'short tangent')
     bc = [a for a in arcs_of(vm) if close(a[1], 60.0)][0]
     assert close(bc[0][0], 230.6428859721), bc
     print("ok  short tan.  -> a tangent radius under the minimum is re-asked")
@@ -409,8 +453,8 @@ def test_nested_bulges_are_reasked():
     vm = newvm()
     # a 480 top bulge on a 480 x 240 envelope is centred at (240, -240)
     # and swallows the 96 left bulge whole; 132 is taken instead
-    run(vm, [REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
-        + list(REF_TANGENTS) + ['Yes', (0.0, 0.0)], 'nested top')
+    run(vm, [(0.0, 0.0), REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
+        + list(REF_TANGENTS), 'nested top')
     assert close([a for a in arcs_of(vm) if close(a[1], 132.0)][0][0][1],
                  REF_Y - 132.0)
     print("ok  nesting     -> a bulge inside another is re-asked")
@@ -423,8 +467,8 @@ def test_right_bulge_nesting_is_caught():
     # on a 480 x 800 envelope a 384 right bulge is centred at (96, 384)
     # -- directly above the 96 left bulge and swallowing it -- so it is
     # re-asked, and 108 is taken instead
-    run(vm, [REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
-             200.0, 200.0, 60.0, 'Yes', (0.0, 0.0)], 'nested right')
+    run(vm, [(0.0, 0.0), REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
+             200.0, 200.0, 60.0], 'nested right')
     assert close([a for a in arcs_of(vm) if close(a[1], 108.0)][0][0][0],
                  REF_X - 108.0)
     print("ok  right nest  -> a right bulge swallowing the left one is"
@@ -437,7 +481,7 @@ def test_zero_and_negative_are_rejected():
     for bad, why in ((0.0, 'zero'), (-10.0, 'negative'), (None, 'Enter')):
         vm = newvm()
         try:
-            vm.run('c:OASIS', [bad] + REF_SCRIPT[1:] + ['Yes', (0.0, 0.0)])
+            vm.run('c:OASIS', script(measure=[bad] + REF_MEASURE[1:]))
         except LispError:
             continue
         raise AssertionError("%s was accepted as the X bound" % why)
@@ -446,7 +490,7 @@ def test_zero_and_negative_are_rejected():
 
 def test_undo_group_wraps_the_drawing():
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'undo')
+    run(vm, script(), 'undo')
     undo = [c for c in vm.commands if c and c[0] == '_.UNDO']
     assert [c[1] for c in undo] == ['_Begin', '_End'], undo
     print("ok  undo group  -> one U puts the whole pool back")
@@ -458,7 +502,7 @@ def test_settings_come_back():
     vm.sysvars['CMDECHO'] = 1
     vm.tables['LAYER'].add('SOMETHING')
     vm.sysvars['CLAYER'] = 'SOMETHING'
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'sysvars')
+    run(vm, script(), 'sysvars')
     assert vm.sysvars['OSMODE'] == 4133, vm.sysvars
     assert vm.sysvars['CMDECHO'] == 1, vm.sysvars
     assert vm.sysvars['CLAYER'] == 'SOMETHING', vm.sysvars
@@ -474,11 +518,11 @@ def test_frozen_layer_is_restored():
     vm.entdata[rec] = [Dot(0, 'LAYER'), Dot(2, 'POOL'), Dot(70, 5),
                        Dot(62, -4)]
     vm.layer_records['POOL'] = rec
-    run(vm, REF_SCRIPT + ['No', (0.0, 0.0)], 'frozen layer')
+    run(vm, script(), 'frozen layer')
     d = _alist_dict(vm.entdata[rec])
     assert d[70] == 0, d          # thawed and unlocked
     assert d[62] == 4, d          # switched back on
-    assert len(made(vm, 'ARC')) == 6
+    assert len(made(vm, 'ARC')) == 12      # the pool and the check drawing
     print("ok  cold layer  -> a frozen, locked, off POOL layer is revived")
 
 
@@ -530,8 +574,8 @@ def test_wide_bulge_is_reasked():
     vm = newvm()
     # 200 wide envelope, 400 deep: a 150 left bulge is 300 across -- it
     # fits the depth easily and still cannot fit the width
-    run(vm, [200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
-             120.0, 120.0, 120.0, 'No', (0.0, 0.0)], 'wide bulge')
+    run(vm, [(0.0, 0.0), 200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
+             120.0, 120.0, 120.0], 'wide bulge')
     assert close(arcs_of(vm)[0][1], 60.0), arcs_of(vm)[0]
     print("ok  wide bulge  -> a bulge wider than X is re-asked")
 
@@ -560,7 +604,7 @@ def test_arcs_follow_a_rotated_ucs():
     have to be carried across, or the pool detaches from its own dims."""
     with fake_trans(rot=math.radians(30.0), org=(1000.0, -400.0, 12.0)):
         vm = newvm()
-        run(vm, REF_SCRIPT + ['Yes', (50.0, 20.0, 5.0)], 'rotated ucs')
+        run(vm, script((50.0, 20.0, 5.0)), 'rotated ucs')
         c, s = math.cos(math.radians(30.0)), math.sin(math.radians(30.0))
         for (name, lc, r, a0, a1), (gc, gr, ga0, ga1) in zip(REF_ARCS,
                                                              arcs_of(vm)):
@@ -598,7 +642,7 @@ def test_radius_dim_text_lands_outside_the_water():
     it on a reverse arc -- whose own centre is outside the pool -- so
     both put the text clear of the water rather than across it."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'radius drag')
+    run(vm, script(), 'radius drag')
     doff = max(12.0, max(REF_X, REF_Y) / 18.0)
     bulge = dict((n, n in ('left', 'right', 'top'))
                  for n, _, _, _, _ in REF_ARCS)
@@ -624,7 +668,7 @@ def test_overall_dims_hook_the_touch_points_at_the_right_standoff():
     envelope, and the dimension line sits at POOL's own stand-off, so an
     oasis reads the same as a rectangle drawn beside it."""
     vm = newvm()
-    run(vm, REF_SCRIPT + ['Yes', (0.0, 0.0)], 'standoff')
+    run(vm, script(), 'standoff')
     doff = max(12.0, max(REF_X, REF_Y) / 18.0)
     horiz = [c for c in cmds(vm, '_.DIMLINEAR') if '_H' in c][0]
     vert = [c for c in cmds(vm, '_.DIMLINEAR') if '_V' in c][0]
@@ -646,15 +690,164 @@ def test_every_measurement_rejects_zero_and_negative():
     for k in range(8):
         for bad in (0.0, -12.0):
             vm = newvm()
-            script = list(REF_SCRIPT)
-            script[k] = bad
+            m = list(REF_MEASURE)
+            m[k] = bad
             try:
-                vm.run('c:OASIS', script + ['Yes', (0.0, 0.0)])
+                vm.run('c:OASIS', script(measure=m))
             except LispError:
                 continue
             raise AssertionError("question %d accepted %r" % (k, bad))
     print("ok  all REQ     -> zero and negative refused at all eight"
           " measurements")
+
+
+
+def test_preview_shows_the_pool_being_answered():
+    """Each question redraws the pool as it stands: the outline solid on
+    POOL, the circle behind each arc dashed on POOL-GUIDE, and the
+    envelope box.  Nothing before both bounds are known -- there is no
+    envelope to draw anything inside yet."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(), 'preview')
+    assert p.shot(0, 'ARC') == [], 'nothing may be drawn before X'
+    assert p.shot(1, 'ARC') == [], 'nothing may be drawn before Y'
+    for k in range(2, 8):                     # the six radius questions
+        assert len(p.shot(k, 'ARC')) == 6, (k, len(p.shot(k, 'ARC')))
+        assert len(p.shot(k, 'CIRCLE')) == 6, (k, len(p.shot(k, 'CIRCLE')))
+        assert len(p.shot(k, 'LINE')) == 4, (k, len(p.shot(k, 'LINE')))
+        assert all(d[8] == 'POOL' for d in p.shot(k, 'ARC'))
+        assert all(d[8] == 'POOL-GUIDE' for d in p.shot(k, 'CIRCLE'))
+        # each dashed circle really is the one its arc is cut from
+        for arc, circ in zip(p.shot(k, 'ARC'), p.shot(k, 'CIRCLE')):
+            assert close(arc[40], circ[40]), (k, arc[40], circ[40])
+    print("ok  preview     -> outline + dashed circles + box at every"
+          " radius question")
+
+
+def test_preview_marks_the_circle_being_asked_about():
+    """The circle the question is about goes red -- its dashed circle,
+    its arc and its label -- so there is no doubt which radius is
+    wanted."""
+    order = {2: 0, 3: 4, 4: 2, 5: 5, 6: 3, 7: 1}   # question -> ring slot
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(), 'highlight')
+    for k, slot in order.items():
+        red = [d for d in p.shot(k) if d.get(62) == 1]
+        assert len(red) == 3, (k, len(red))       # arc, circle, label
+        assert {d[0] for d in red} == {'ARC', 'CIRCLE', 'TEXT'}, red
+        arc = [d for d in red if d[0] == 'ARC'][0]
+        assert arc is p.shot(k, 'ARC')[slot], (k, slot)
+        circ = [d for d in red if d[0] == 'CIRCLE'][0]
+        assert close(arc[40], circ[40]), (k, arc[40], circ[40])
+    print("ok  highlight   -> the questioned circle, arc and label are red")
+
+
+def test_preview_labels_unanswered_radii_with_a_question_mark():
+    """A radius that has not been given yet is labelled ?; one that has
+    shows what was typed."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, script(), 'labels')
+    # at the very first radius question nothing has been answered
+    assert [d[1] for d in p.shot(2, 'TEXT')].count('?') == 6, p.shot(2, 'TEXT')
+    # by the last, only the bottom-center tangent is still unknown
+    last = [d[1] for d in p.shot(7, 'TEXT')]
+    assert last.count('?') == 1, last
+    for r in REF_BULGES + REF_TANGENTS[:2]:
+        assert any(close(float(t), r) for t in last if t != '?'), (r, last)
+    print("ok  ? labels    -> unanswered radii read ?, answered ones read"
+          " their value")
+
+
+def test_preview_is_gone_when_the_run_finishes():
+    """The preview is scaffolding.  What is left is the pool, the check
+    drawing and their dimensions -- nothing provisional."""
+    vm = newvm()
+    run(vm, script(), 'preview cleared')
+    assert len(made(vm, 'ARC')) == 12, made(vm, 'ARC')   # pool + check
+    assert len(made(vm, 'CIRCLE')) == 6                  # centre marks
+    assert len(made(vm, 'LINE')) == 4                    # the check box
+    assert made(vm, 'TEXT') == [], made(vm, 'TEXT')      # no ? survives
+    assert len(vm.deleted) > 100, len(vm.deleted)
+    print("ok  cleared     -> every preview entity erased, %d of them"
+          % len(vm.deleted))
+
+
+def test_check_drawing_sits_clear_to_the_right():
+    vm = newvm()
+    run(vm, script(), 'check placement')
+    pool = arcs_of(vm)
+    chk = check_arcs_of(vm)
+    assert len(chk) == 6, chk
+    gap = chk[0][0][0] - pool[0][0][0]
+    assert gap > REF_X, gap            # clear of the pool and its dims
+    for (pc, pr), (cc, cr) in zip([(c, r) for c, r, _, _ in pool], chk):
+        assert close(cr, pr), (pr, cr)
+        assert close(cc[0] - pc[0], gap) and close(cc[1], pc[1]), (pc, cc)
+    print("ok  check right -> a second copy %g\" to the right" % gap)
+
+
+def test_check_drawing_ties_every_centre_to_its_two_nearest_corners():
+    vm = newvm()
+    run(vm, script(), 'corner ties')
+    chk = check_arcs_of(vm)
+    ox = chk[0][0][0] - REF_BULGES[0]        # the check envelope's origin
+    oy = chk[0][0][1] - REF_BULGES[0]
+    corners = [(ox, oy), (ox + REF_X, oy),
+               (ox + REF_X, oy + REF_Y), (ox, oy + REF_Y)]
+    ties = cmds(vm, '_.DIMALIGNED')[:12]
+    assert len(ties) == 12, len(ties)
+    for i, (c, _) in enumerate(chk):
+        near = sorted(corners, key=lambda k: math.dist(c, k))[:2]
+        got = [t for t in ties if close(math.dist(t[1][:2], c), 0.0, 1e-9)]
+        assert len(got) == 2, (i, len(got))
+        assert sorted(round(math.dist(t[2][:2], c), 6) for t in got) == \
+            sorted(round(math.dist(n, c), 6) for n in near), (i, got)
+    print("ok  corner ties -> 12 dims, each centre to its two nearest"
+          " corners")
+
+
+def test_check_drawing_ties_neighbouring_centres():
+    """The last six tie each centre to the next one round the ring -- and
+    because neighbouring circles are externally tangent, each of those
+    dimensions must read exactly the two radii added together."""
+    vm = newvm()
+    run(vm, script(), 'centre ties')
+    chk = check_arcs_of(vm)
+    ties = cmds(vm, '_.DIMALIGNED')[12:]
+    assert len(ties) == 6, len(ties)
+    for i, t in enumerate(ties):
+        a, b = chk[i], chk[(i + 1) % 6]
+        assert close(math.dist(t[1][:2], a[0]), 0.0, 1e-9), (i, t[1], a[0])
+        assert close(math.dist(t[2][:2], b[0]), 0.0, 1e-9), (i, t[2], b[0])
+        assert close(math.dist(a[0], b[0]), a[1] + b[1]), (i, a, b)
+    print("ok  centre ties -> 6 dims, each reading the two radii added"
+          " together")
+
+
+def test_every_dimension_is_drawn_in_the_cross_style():
+    vm = newvm()
+    run(vm, script(), 'cross style')
+    assert vm.dimstyle_log[0] == 'CROSS DIMENSIONS', vm.dimstyle_log
+    assert all(d[3] == 'CROSS DIMENSIONS' for d in made(vm, 'DIMENSION')), \
+        made(vm, 'DIMENSION')[:2]
+    assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.sysvars['DIMSTYLE']
+    print("ok  cross style -> every dim in CROSS DIMENSIONS, the old style"
+          " back after")
+
+
+def test_a_drawing_without_the_style_still_gets_its_pool():
+    """A missing CROSS DIMENSIONS style is not invented -- the dims come
+    out in whatever is current and the routine says so."""
+    vm = newvm(style=False)
+    run(vm, script(), 'no style')
+    assert len(made(vm, 'ARC')) == 12
+    assert len(made(vm, 'DIMENSION')) == 20
+    assert all(d[3] == 'STANDARD' for d in made(vm, 'DIMENSION'))
+    print("ok  no style    -> drawn in the current style rather than"
+          " refused")
 
 
 def test_version_command():
@@ -736,7 +929,6 @@ if __name__ == '__main__':
     test_layers_and_dimensions()
     test_dimension_values()
     test_radius_dims_hook_the_arcs()
-    test_no_dimensions()
     test_base_point_moves_everything()
     test_enter_takes_the_origin()
     test_back_reasks()
@@ -759,6 +951,15 @@ if __name__ == '__main__':
     test_radius_dim_text_lands_outside_the_water()
     test_overall_dims_hook_the_touch_points_at_the_right_standoff()
     test_every_measurement_rejects_zero_and_negative()
+    test_preview_shows_the_pool_being_answered()
+    test_preview_marks_the_circle_being_asked_about()
+    test_preview_labels_unanswered_radii_with_a_question_mark()
+    test_preview_is_gone_when_the_run_finishes()
+    test_check_drawing_sits_clear_to_the_right()
+    test_check_drawing_ties_every_centre_to_its_two_nearest_corners()
+    test_check_drawing_ties_neighbouring_centres()
+    test_every_dimension_is_drawn_in_the_cross_style()
+    test_a_drawing_without_the_style_still_gets_its_pool()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
