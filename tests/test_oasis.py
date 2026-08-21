@@ -97,14 +97,15 @@ REF_ARCS = [
 REF_MEASURE = [REF_X, REF_Y] + list(REF_BULGES) + list(REF_TANGENTS)
 
 
-def script(base=(0.0, 0.0), measure=None, variant='Center'):
-    """A whole run: which shape -- and, for a cloud, which bottom --
-    then where it goes and the measurements."""
+def script(base=(0.0, 0.0), measure=None, variant='Center', detail='Simple'):
+    """A whole run: which shape -- and, for a cloud, which bottom -- then
+    simple or complex, then where it goes and the measurements."""
     head = {'StraightBottom': ['CLoud', 'Straight'],
             'RoundedBottom': ['CLoud', 'Rounded'],
             'TrueKidney': ['Kidney', 'True'],
             'AsymKidney': ['Kidney', 'Asymmetric']}.get(variant, [variant])
-    return head + [base] + list(REF_MEASURE if measure is None else measure)
+    return (head + [detail, base]
+            + list(REF_MEASURE if measure is None else measure))
 
 
 #: the drawing the TOP RIGHT BULGE variant was read off: 36'-11" x 28'-8",
@@ -223,24 +224,28 @@ def close(a, b, tol=TOL):
     return abs(a - b) <= tol
 
 
-def solved(vm, w, h, rl, rt, rr, ftl, ftr, fbc):
+def solved(vm, w, h, rl, rt, rr, ftl, ftr, fbc, off=0.0):
     """Call oasis:solve inside the VM and hand back what it built."""
     return vm.loads('(oasis:solve %s "Center")'
                     % " ".join("%.10f" % v
-                               for v in (w, h, rl, rt, rr, ftl, ftr, fbc)))
+                               for v in (w, h, rl, rt, rr, ftl, ftr, fbc,
+                                         off)))
 
 
-def crossing_pairs(vm, *dims):
+def crossing_pairs(vm, *dims, **kw):
     """The pairs of arcs oasis:crossings says run through each other."""
     r = vm.loads('(oasis:crossings (oasis:solve %s "Center"))'
-                 % " ".join("%.10f" % v for v in dims))
+                 % " ".join("%.10f" % v
+                            for v in tuple(dims) + (kw.get('off', 0.0),)))
     return set() if r is None else {tuple(sorted(p)) for p in r}
 
 
-def overruns(vm, w, h, *radii):
+def overruns(vm, w, h, *radii, **kw):
     """What oasis:overruns says reaches past the envelope."""
     r = vm.loads('(oasis:overruns (oasis:solve %s "Center") %.6f %.6f)'
-                 % (" ".join("%.6f" % v for v in (w, h) + radii), w, h))
+                 % (" ".join("%.6f" % v
+                             for v in (w, h) + radii + (kw.get('off', 0.0),)),
+                    w, h))
     return [] if r is None else [(x[0], x[2], x[1]) for x in r]
 
 
@@ -461,7 +466,7 @@ def test_back_reasks():
     """Back steps one question up and the re-answer is the one used."""
     vm = newvm()
     # answer Y as 300, back out of the left bulge, give Y as 240 instead
-    run(vm, ['Center', (0.0, 0.0), REF_X, 300.0, 'Back', REF_Y]
+    run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, 300.0, 'Back', REF_Y]
         + REF_MEASURE[2:], 'back')
     top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
     assert close(top[0][1], REF_Y - 132.0), top
@@ -484,7 +489,7 @@ def test_oversize_bulge_is_reasked():
     the top, so the question comes back."""
     vm = newvm()
     # 150 on a 240 envelope stands 300 tall -- rejected, then 96 taken
-    run(vm, ['Center', (0.0, 0.0), REF_X, REF_Y, 150.0, 96.0]
+    run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, REF_Y, 150.0, 96.0]
         + REF_MEASURE[3:], 'oversize bulge')
     assert close(arcs_of(vm)[0][1], 96.0), arcs_of(vm)[0]
     print("ok  big bulge   -> a bulge taller than Y is re-asked")
@@ -506,7 +511,7 @@ def test_nested_bulges_are_reasked():
     vm = newvm()
     # a 480 top bulge on a 480 x 240 envelope is centred at (240, -240)
     # and swallows the 96 left bulge whole; 132 is taken instead
-    run(vm, ['Center', (0.0, 0.0), REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
+    run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
         + list(REF_TANGENTS), 'nested top')
     assert close([a for a in arcs_of(vm) if close(a[1], 132.0)][0][0][1],
                  REF_Y - 132.0)
@@ -520,7 +525,7 @@ def test_right_bulge_nesting_is_caught():
     # on a 480 x 800 envelope a 384 right bulge is centred at (96, 384)
     # -- directly above the 96 left bulge and swallowing it -- so it is
     # re-asked, and 108 is taken instead
-    run(vm, ['Center', (0.0, 0.0), REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
+    run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
              200.0, 200.0, 60.0], 'nested right')
     assert close([a for a in arcs_of(vm) if close(a[1], 108.0)][0][0][0],
                  REF_X - 108.0)
@@ -627,7 +632,7 @@ def test_wide_bulge_is_reasked():
     vm = newvm()
     # 200 wide envelope, 400 deep: a 150 left bulge is 300 across -- it
     # fits the depth easily and still cannot fit the width
-    run(vm, ['Center', (0.0, 0.0), 200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
+    run(vm, ['Center', 'Simple', (0.0, 0.0), 200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
              120.0, 120.0, 120.0], 'wide bulge')
     assert close(arcs_of(vm)[0][1], 60.0), arcs_of(vm)[0]
     print("ok  wide bulge  -> a bulge wider than X is re-asked")
@@ -972,7 +977,9 @@ def test_the_shape_is_the_first_question():
     first = vm.prompts[0][0]
     assert first == ('\nWhich shape is it? [Center/TopRight/CLoud/Kidney] '
                      '<Center>: '), repr(first)
-    assert '[Back]' in vm.prompts[1][0], vm.prompts[1][0]   # the base point
+    assert vm.prompts[1][0] == ('\nSimple or complex? [Simple/Complex/Back]'
+                                ' <Simple>: '), repr(vm.prompts[1][0])
+    assert '[Back]' in vm.prompts[2][0], vm.prompts[2][0]   # the base point
     print("ok  shape first -> %r" % first.strip())
 
 
@@ -1034,7 +1041,7 @@ def test_top_right_outline_is_still_tangent_continuous_and_simple():
         v2 = (nc[0] - joint[0], nc[1] - joint[1])
         worst = max(worst, abs(v1[0] * v2[1] - v1[1] * v2[0]) / (r * nr))
     assert worst <= 1.0e-9, worst
-    r = vm.loads('(oasis:crossings (oasis:solve %s "TopRight"))'
+    r = vm.loads('(oasis:crossings (oasis:solve %s 0.0 "TopRight"))'
                  % " ".join("%.10f" % v for v in TR_MEASURE))
     assert r is None, r
     print("ok  tr tangency -> closed, tangent-continuous and simple")
@@ -1072,14 +1079,14 @@ def test_a_corner_bulge_too_big_for_the_envelope_is_reasked():
     anything."""
     vm = newvm()
     # 200 short bound: a 150 corner bulge is 300 both ways
-    run(vm, ['TopRight', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 80.0, 60.0,
+    run(vm, ['TopRight', 'Simple', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 80.0, 60.0,
              90.0, 90.0, 90.0], 'big corner')
     top = arcs_of(vm)[4]
     assert close(top[1], 80.0), top
     # and the centred bulge of the same size is accepted, because there
     # it is trimmed rather than breaking out
     vm = newvm()
-    run(vm, ['Center', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 60.0,
+    run(vm, ['Center', 'Simple', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 60.0,
              90.0, 90.0, 90.0], 'big centre')
     assert close(arcs_of(vm)[4][1], 150.0), arcs_of(vm)[4]
     print("ok  big corner  -> a corner bulge over the envelope is re-asked,"
@@ -1152,7 +1159,7 @@ def test_both_clouds_fill_their_envelope():
         vm = newvm()
         run(vm, script(measure=measure, variant=variant), variant)
         over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f %.4f 0.0 %.4f'
-                        ' %.4f 0.0 %.4f "%s") %.4f %.4f)'
+                        ' %.4f 0.0 %.4f 0.0 "%s") %.4f %.4f)'
                         % (CL_X, CL_Y, CL_RLEFT, measure[2], measure[3],
                            measure[4] if len(measure) > 4 else 0.0, variant,
                            CL_X, CL_Y))
@@ -1169,7 +1176,7 @@ def test_the_flat_bottom_is_the_bound_itself():
     m = vm.loads('(oasis:extnorm (list 120.0 120.0) 120.0'
                  ' (list 276.0 84.0) 84.0)')
     assert close(m[0], 0.0, 1.0e-12) and close(m[1], -1.0, 1.0e-12), m
-    ring = vm.loads('(oasis:solve %.1f %.1f %.1f 0.0 84.0 72.0 0.0 0.0'
+    ring = vm.loads('(oasis:solve %.1f %.1f %.1f 0.0 84.0 72.0 0.0 0.0 0.0'
                     ' "StraightBottom")' % (CL_X, CL_Y, CL_RLEFT))
     flat = ring[1]
     assert flat[0] == 'bottom' and flat[5] == 'LINE', flat
@@ -1184,12 +1191,14 @@ def test_the_clouds_ask_four_or_five_measurements():
     at all, so the two of them ask fewer questions than an oasis."""
     for variant, measure, want in (
             ('StraightBottom', CL_FLAT,
-             ['Which shape is it?', 'Cloud bottom?', 'Insertion base point',
+             ['Which shape is it?', 'Cloud bottom?', 'Simple or complex?',
+              'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Right bulge radius', 'Top tangent radius']),
             ('RoundedBottom', CL_ROUND,
-             ['Which shape is it?', 'Cloud bottom?', 'Insertion base point',
+             ['Which shape is it?', 'Cloud bottom?', 'Simple or complex?',
+              'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Right bulge radius', 'Top tangent radius', 'Bottom radius'])):
@@ -1199,7 +1208,7 @@ def test_the_clouds_ask_four_or_five_measurements():
                  for p, _ in vm.prompts]
         assert asked == want, (variant, asked)
         assert not any('Left bulge' in a for a in asked), asked
-    print("ok  cloud asks  -> 7 questions flat, 8 rounded, no left bulge")
+    print("ok  cloud asks  -> 8 questions flat, 9 rounded, no left bulge")
 
 
 def test_the_flat_run_is_dimensioned_by_length_not_radius():
@@ -1248,10 +1257,10 @@ def test_a_cloud_is_one_shape_with_two_bottoms():
     run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat ask')
     assert vm.prompts[1][0] == '\nCloud bottom? [Straight/Rounded/Back]' \
         ' <Straight>: ', repr(vm.prompts[1][0])
-    assert len(vm.prompts) == 7, len(vm.prompts)
+    assert len(vm.prompts) == 8, len(vm.prompts)
     vm = newvm()
     run(vm, script(measure=CL_ROUND, variant='RoundedBottom'), 'round ask')
-    assert len(vm.prompts) == 8, len(vm.prompts)      # plus the bottom radius
+    assert len(vm.prompts) == 9, len(vm.prompts)      # plus the bottom radius
     # the two answers together name the ring
     for a, b, want in (('Center', None, 'Center'),
                        ('Cloud', 'Straight', 'StraightBottom'),
@@ -1262,11 +1271,13 @@ def test_a_cloud_is_one_shape_with_two_bottoms():
         assert got == want, (a, b, got, want)
     # an oasis never reaches the bottom question, a cloud always does
     assert vm.loads('(oasis:steps (list "Center" nil nil nil nil nil nil nil'
-                    ' nil nil nil))') == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                    ' nil nil nil nil nil))') == [0, 11, 1, 2, 3, 4, 5, 6, 7,
+                                                 8, 9]
     assert vm.loads('(oasis:steps (list "Cloud" nil nil nil nil nil nil nil'
-                    ' nil nil nil))') == [0, 10, 1, 2, 3, 6, 7]
+                    ' nil nil nil nil nil))') == [0, 10, 11, 1, 2, 3, 6, 7]
     assert vm.loads('(oasis:steps (list "Cloud" nil nil nil nil nil nil nil'
-                    ' nil nil "Rounded"))') == [0, 10, 1, 2, 3, 6, 7, 9]
+                    ' nil nil "Rounded" nil nil))') == [0, 10, 11, 1, 2, 3,
+                                                        6, 7, 9]
     print("ok  cloud bottom-> asked after the shape, and it decides the rest")
 
 
@@ -1275,7 +1286,7 @@ def test_backing_out_of_the_bottom_reaches_the_shape():
     shape -- and answering that differently rebuilds every question after
     it."""
     vm = newvm()
-    run(vm, ['CLoud', 'Back', 'Center', (0.0, 0.0)] + REF_MEASURE, 'back out')
+    run(vm, ['CLoud', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE, 'back out')
     assert len(arcs_of(vm)) == 6, arcs_of(vm)       # an oasis, not a cloud
     assert close(arcs_of(vm)[4][1], REF_BULGES[1]), arcs_of(vm)[4]
     asked = [p.lstrip('\n').split(' [')[0] for p, _ in vm.prompts]
@@ -1328,11 +1339,11 @@ def test_true_kidney_fills_its_envelope():
     vm = newvm()
     run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'kidney bounds')
     over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f nil %.4f nil nil'
-                    ' nil %.4f "TrueKidney") %.4f %.4f)'
+                    ' nil %.4f 0.0 "TrueKidney") %.4f %.4f)'
                     % (KD_X, KD_Y, KD_TOP, KD_BOT, KD_X, KD_Y))
     assert over is None, over
     cross = vm.loads('(oasis:crossings (oasis:solve %.4f %.4f nil %.4f nil'
-                     ' nil nil %.4f "TrueKidney"))'
+                     ' nil nil %.4f 0.0 "TrueKidney"))'
                      % (KD_X, KD_Y, KD_TOP, KD_BOT))
     assert cross is None, cross
     print("ok  kd envelope -> fills 0,0 - %g,%g, simple, no crossings"
@@ -1357,7 +1368,7 @@ def test_asym_kidney_derives_its_top_circle():
         assert close(math.dist(side[0], top[0]), top[1] - side[1], 1e-6), side
     # and the whole thing still fills the envelope exactly
     over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f 96.0 nil 72.0'
-                    ' nil nil %.4f "AsymKidney") %.4f %.4f)'
+                    ' nil nil %.4f 0.0 "AsymKidney") %.4f %.4f)'
                     % (KD_X, KD_Y, KD_BOT, KD_X, KD_Y))
     assert over is None, over
     print("ok  asym kidney -> top circle derived at cx=%.3f R=%.3f,"
@@ -1367,12 +1378,14 @@ def test_asym_kidney_derives_its_top_circle():
 def test_kidney_asks_its_own_questions():
     for variant, measure, want in (
             ('TrueKidney', KD_TRUE,
-             ['Which shape is it?', 'Kidney type?', 'Insertion base point',
+             ['Which shape is it?', 'Kidney type?', 'Simple or complex?',
+              'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Top-center radius', 'Bottom-center tangent radius']),
             ('AsymKidney', KD_ASYM,
-             ['Which shape is it?', 'Kidney type?', 'Insertion base point',
+             ['Which shape is it?', 'Kidney type?', 'Simple or complex?',
+              'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Left bulge radius', 'Right bulge radius',
@@ -1382,7 +1395,7 @@ def test_kidney_asks_its_own_questions():
         asked = [p.lstrip('\n').split(' [')[0].split(' <')[0].rstrip(': ')
                  for p, _ in vm.prompts]
         assert asked == want, (variant, asked)
-    print("ok  kd asks     -> true 7 questions, asymmetric 8")
+    print("ok  kd asks     -> true 8 questions, asymmetric 9")
 
 
 def test_true_kidney_top_radius_is_validated():
@@ -1392,7 +1405,7 @@ def test_true_kidney_top_radius_is_validated():
     named."""
     vm = newvm()
     # min for 388 x 214 is 194.9346; 150 cannot work, 324 can
-    run(vm, ['Kidney', 'True', (0.0, 0.0), KD_X, KD_Y, 150.0, KD_TOP,
+    run(vm, ['Kidney', 'True', 'Simple', (0.0, 0.0), KD_X, KD_Y, 150.0, KD_TOP,
              KD_BOT], 'small top')
     assert close(arcs_of(vm, 4)[3][1], KD_TOP), arcs_of(vm, 4)[3]
     mn = vm.loads('(oasis:ktrue-min %.4f %.4f)' % (KD_X, KD_Y))
@@ -1408,7 +1421,7 @@ def test_asym_kidney_unreachable_sides_are_reasked():
     vm = newvm()
     assert vm.loads('(oasis:kidney-top %.4f %.4f %.4f %.4f)'
                     % (KD_X, KD_Y, KD_Y/2.0, KD_Y/2.0)) is None
-    run(vm, ['Kidney', 'Asymmetric', (0.0, 0.0), KD_X, KD_Y,
+    run(vm, ['Kidney', 'Asymmetric', 'Simple', (0.0, 0.0), KD_X, KD_Y,
              KD_Y/2.0, KD_Y/2.0, 72.0, KD_BOT], 'degenerate pair')
     arcs = arcs_of(vm, 4)
     assert len(arcs) == 4, arcs
@@ -1463,22 +1476,22 @@ def test_backing_up_through_a_kidney():
     out of the type question on the shape -- where a different answer
     rebuilds every question after it."""
     vm = newvm()
-    run(vm, ['Kidney', 'True', (0.0, 0.0), KD_X, 200.0, 'Back', KD_Y,
+    run(vm, ['Kidney', 'True', 'Simple', (0.0, 0.0), KD_X, 200.0, 'Back', KD_Y,
              KD_TOP, KD_BOT], 'kd back Y')
     assert close(arcs_of(vm, 4)[3][1], KD_TOP), arcs_of(vm, 4)[3]
     # the re-answered Y is the one the envelope is built on
     assert close(arcs_of(vm, 4)[3][0][1], KD_Y - KD_TOP), arcs_of(vm, 4)[3]
 
     vm = newvm()
-    run(vm, ['Kidney', 'Asymmetric', (0.0, 0.0), KD_X, KD_Y, 84.0, 'Back',
+    run(vm, ['Kidney', 'Asymmetric', 'Simple', (0.0, 0.0), KD_X, KD_Y, 84.0, 'Back',
              96.0, 72.0, KD_BOT], 'kd back left')
     asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
-    assert asked[5:9] == ['Left bulge radius', 'Right bulge radius',
-                          'Left bulge radius', 'Right bulge radius'], asked
+    assert asked[6:10] == ['Left bulge radius', 'Right bulge radius',
+                           'Left bulge radius', 'Right bulge radius'], asked
     assert close(arcs_of(vm, 4)[0][1], 96.0), arcs_of(vm, 4)[0]
 
     vm = newvm()
-    run(vm, ['Kidney', 'Back', 'Center', (0.0, 0.0)] + REF_MEASURE,
+    run(vm, ['Kidney', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE,
         'kd back shape')
     assert len(arcs_of(vm)) == 6, arcs_of(vm)      # an oasis, not a kidney
     print("ok  kd back     -> Back walks the kidney's own steps, up to the"
@@ -1503,7 +1516,7 @@ def test_the_first_kidney_preview_is_never_blank():
             '             $f (oasis:fillin $a))'
             ' (oasis:solve (nth 0 $f) (nth 1 $f) (nth 2 $f) (nth 3 $f)'
             '              (nth 4 $f) (nth 5 $f) (nth 6 $f) (nth 7 $f)'
-            '              (oasis:variant $a)))' % (w, h, tail))
+            '              (nth 8 $f) (oasis:variant $a)))' % (w, h, tail))
 
     blank, n = [], 0
     for wf in range(8, 68, 2):
@@ -1528,7 +1541,7 @@ def test_a_true_kidney_needs_a_y_smaller_than_its_x():
     envelope, so the Y question is where it has to be caught."""
     vm = newvm()
     # 240 x 240 is refused, 240 x 216 accepted in its place
-    run(vm, ['Kidney', 'True', (0.0, 0.0), 240.0, 240.0, 216.0,
+    run(vm, ['Kidney', 'True', 'Simple', (0.0, 0.0), 240.0, 240.0, 216.0,
              264.0, 60.0], 'square Y')
     arcs = arcs_of(vm, 4)
     assert len(arcs) == 4, arcs
@@ -1540,6 +1553,289 @@ def test_a_true_kidney_needs_a_y_smaller_than_its_x():
         assert close(g, 120.0, 1e-9), (rt, g)
     print("ok  kd Y < X    -> a Y at or over X is re-asked, not carried"
           " into a shape that cannot close")
+
+
+#: the complex reference: the same 40' x 20' envelope and the same three
+#: bulges, but every joiner answered Line.  A run between two bulges is
+#: their common external tangent, so its length is the tangent length
+#: sqrt(d^2 - (r1-r2)^2) between the two centres.
+CX_RUNS = ['Line', 'Line', 'Line']
+
+
+def tangent_len(c1, r1, c2, r2):
+    return math.sqrt(math.dist(c1, c2) ** 2 - (r1 - r2) ** 2)
+
+
+def elements(vm, n):
+    """The pool's ring as drawn: ('ARC', centre, radius) or
+    ('LINE', p1, p2), in creation order."""
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = _alist_dict(vm.entdata[e])
+        if d.get(0) == 'ARC':
+            out.append(('ARC', (d[10][0], d[10][1]), d[40]))
+        elif d.get(0) == 'LINE' and d.get(8) == 'POOL':
+            out.append(('LINE', (d[10][0], d[10][1]), (d[11][0], d[11][1])))
+    return out[:n]
+
+
+def test_complex_is_asked_after_the_shape():
+    """Simple is the shape as it has always been, and it is the default,
+    so a plain run is one Enter longer and nothing else.  Complex is
+    where the straight runs and the off-centre hump live."""
+    vm = newvm()
+    run(vm, script(), 'simple')
+    assert vm.prompts[1][0] == ('\nSimple or complex? [Simple/Complex/Back]'
+                                ' <Simple>: '), repr(vm.prompts[1][0])
+    # a simple joiner question takes a radius and nothing else
+    joiner = [q for q, _ in vm.prompts if 'Top-left tangent' in q][0]
+    assert joiner == '\nTop-left tangent radius [Back]: ', repr(joiner)
+    assert len(arcs_of(vm)) == 6, arcs_of(vm)
+    # a complex one offers Line at the same question, and asks the hump's
+    # offset that a simple run never sees
+    vm = newvm()
+    run(vm, script(detail='Complex',
+                   measure=[REF_X, REF_Y, 96.0, 132.0, 0.0, 108.0,
+                            72.0, 36.0, 60.0]), 'complex')
+    joiner = [q for q, _ in vm.prompts if 'Top-left tangent' in q][0]
+    assert joiner == '\nTop-left tangent radius [Line/Back]: ', repr(joiner)
+    asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
+    assert 'Top bulge off center, left negative' in asked, asked
+    assert vm.loads('(oasis:steps (list "Center" nil nil nil nil nil nil nil'
+                    ' nil nil nil "Complex" nil))') == [0, 11, 1, 2, 3, 4, 5,
+                                                        12, 6, 7, 8, 9]
+    print("ok  complex ask -> Simple by default; Complex adds Line and the"
+          " hump's offset")
+
+
+def test_a_straight_run_can_stand_in_for_any_joiner():
+    """Line answers a joiner question the way a radius does, and what it
+    draws is the common external tangent between the two bulges: from the
+    tangent point on one to the tangent point on the other."""
+    vm = newvm()
+    run(vm, script(detail='Complex',
+                   measure=[REF_X, REF_Y, 96.0, 132.0, 0.0, 108.0] + CX_RUNS),
+        'all runs')
+    ring = elements(vm, 6)
+    kinds = [e[0] for e in ring]
+    assert kinds == ['ARC', 'LINE', 'ARC', 'LINE', 'ARC', 'LINE'], kinds
+    # the three bulges are untouched -- a run changes what joins them,
+    # not where they sit
+    assert [round(e[2], 6) for e in ring if e[0] == 'ARC'] == [96.0, 108.0,
+                                                               132.0], ring
+    cen = {r: c for _, c, r in ring if _ == 'ARC'}
+    for (a, b), i in (((96.0, 108.0), 1), ((108.0, 132.0), 3),
+                      ((132.0, 96.0), 5)):
+        _, p, q = ring[i]
+        want = tangent_len(cen[a], a, cen[b], b)
+        assert close(math.dist(p, q), want), (i, math.dist(p, q), want)
+        # and it really is tangent: the run is square to both radii
+        for c, r in ((cen[a], a), (cen[b], b)):
+            foot = min((p, q), key=lambda t: abs(math.dist(t, c) - r))
+            assert close(math.dist(foot, c), r), (c, r, foot)
+            v1 = (foot[0] - c[0], foot[1] - c[1])
+            v2 = (q[0] - p[0], q[1] - p[1])
+            assert abs(v1[0]*v2[0] + v1[1]*v2[1]) / (r * math.dist(p, q)) \
+                <= 1.0e-12, (c, r, foot)
+    print("ok  runs        -> Line draws the common tangent, square to both"
+          " bulges")
+
+
+def test_a_run_is_the_joiner_with_no_radius_left_to_give():
+    """A straight run is not a special case bolted onto the ring: it is
+    the reverse arc with an infinite radius.  Grow the radius by ten and
+    the arc's ends close on the run's ten times faster."""
+    vm = newvm()
+    run(vm, script(detail='Complex',
+                   measure=[REF_X, REF_Y, 96.0, 132.0, 0.0, 108.0,
+                            72.0, 36.0, 'Line']), 'one run')
+    _, p, q = elements(vm, 6)[1]
+    ends = sorted((p, q))
+    errs = []
+    for rf in (1.0e4, 1.0e5, 1.0e6):
+        a = solved(vm, REF_X, REF_Y, 96.0, 132.0, 108.0, 72.0, 36.0, rf)[1]
+        got = sorted(pt_on((a[1][0], a[1][1]), a[2], math.degrees(t))
+                     for t in (a[3], a[4]))
+        errs.append(max(math.dist(g, e) for g, e in zip(got, ends)))
+    for i in range(len(errs) - 1):
+        assert 8.0 <= errs[i] / errs[i + 1] <= 12.0, errs
+    assert errs[-1] <= 0.02, errs
+    print("ok  run = R-inf -> ten times the radius, a tenth of the gap"
+          " (%.1e\" at R=1e6)" % errs[-1])
+
+
+def test_the_hump_moves_off_centre():
+    """The offset is signed and moves the top bulge along X by exactly
+    that much, left negative -- and the pool still fills its envelope."""
+    vm = newvm()
+    for off in (-72.0, 0.0, 72.0):
+        vm = newvm()
+        run(vm, script(detail='Complex',
+                       measure=[REF_X, REF_Y, 96.0, 132.0, off, 108.0,
+                                72.0, 36.0, 60.0]), 'off %g' % off)
+        got = arcs_of(vm)
+        top = [a for a in got if close(a[1], 132.0)][0]
+        assert close(top[0][0], REF_X / 2.0 + off), (off, top)
+        assert close(top[0][1], REF_Y - 132.0), (off, top)
+        # the envelope is still absolute
+        assert vm.loads('(oasis:overruns (oasis:solve %.1f %.1f 96.0 132.0'
+                        ' 108.0 72.0 36.0 60.0 %.1f "Center") %.1f %.1f)'
+                        % (REF_X, REF_Y, off, REF_X, REF_Y)) is None, off
+    print("ok  hump offset -> the top bulge moves by exactly the offset,"
+          " left negative")
+
+
+def test_an_impossible_offset_is_reasked():
+    """Two ways it can be: past either end of the envelope, where the
+    hump is no longer over the water, or so far across that it swallows
+    the left bulge."""
+    vm = newvm()
+    run(vm, script(detail='Complex',
+                   measure=[REF_X, REF_Y, 96.0, 132.0, -300.0, 60.0, 108.0,
+                            72.0, 36.0, 60.0]), 'off the box')
+    top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
+    assert close(top[0][0], REF_X / 2.0 + 60.0), top    # the re-answer won
+    vm = newvm()
+    run(vm, script(detail='Complex',
+                   measure=[REF_X, REF_Y, 96.0, 132.0, -120.0, 48.0, 108.0,
+                            72.0, 36.0, 60.0]), 'nesting')
+    top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
+    assert close(top[0][0], REF_X / 2.0 + 48.0), top
+    assert vm.loads('(oasis:nested-p (oasis:topcen %.1f %.1f 132.0 "Center"'
+                    ' -120.0) 132.0 (list 96.0 96.0) 96.0)'
+                    % (REF_X, REF_Y)) is not None
+    print("ok  bad offset  -> off the envelope or nesting the left bulge is"
+          " re-asked")
+
+
+def test_every_shape_takes_a_straight_run():
+    """The ring does not care which shape it came from, so Line answers a
+    joiner on all of them -- including the kidney, whose bottom is its
+    only joiner."""
+    for variant, measure, want in (
+            ('TopRight', [443.0, 344.0, 108.0, 96.0, 108.0,
+                          'Line', 'Line', 120.0],
+             ['ARC', 'ARC', 'ARC', 'LINE', 'ARC', 'LINE']),
+            ('RoundedBottom', [360.0, 240.0, 84.0, 'Line', 'Line'],
+             ['ARC', 'LINE', 'ARC', 'LINE']),
+            ('TrueKidney', [388.0, 214.0, 324.0, 'Line'],
+             ['ARC', 'LINE', 'ARC', 'ARC']),
+            ('AsymKidney', [388.0, 214.0, 96.0, 72.0, 'Line'],
+             ['ARC', 'LINE', 'ARC', 'ARC'])):
+        vm = newvm()
+        run(vm, script(detail='Complex', measure=measure, variant=variant),
+            variant)
+        got = [e[0] for e in elements(vm, len(want))]
+        assert got == want, (variant, got, want)
+        # every run is dimensioned by length, never by radius
+        nline = want.count('LINE')
+        assert len(cmds(vm, '_.DIMALIGNED')) >= nline, variant
+    print("ok  runs, shapes-> Line answers a joiner on all four families")
+
+
+def test_a_pinched_bulge_is_left_out_of_the_drawing():
+    """Two runs either side of a bulge can touch it at the same point --
+    side bulges half the Y bound share the top bound's tangent with the
+    hump.  The bulge is then a point on the outline, not an arc of it: it
+    is not drawn, and the report says so rather than leaving an ARC whose
+    two angles are equal, which AutoCAD would draw as a whole circle."""
+    vm = newvm()
+    run(vm, script(detail='Complex',
+                   measure=[REF_X, REF_Y, 120.0, 200.0, 72.0, 120.0]
+                           + CX_RUNS), 'pinched')
+    ring = elements(vm, 5)
+    assert [e[0] for e in ring] == ['ARC', 'LINE', 'ARC', 'LINE',
+                                    'LINE'], ring
+    # the two top runs are collinear: the hump's tangent point is the one
+    # place both of them touch, and both lie along the Y-max bound
+    assert all(close(p[1], REF_Y) for e in ring[3:] for p in e[1:]), ring
+    assert vm.loads('(oasis:pinched (oasis:solve %.1f %.1f 120.0 200.0 120.0'
+                    ' "LINE" "LINE" "LINE" 72.0 "Center") "Center")'
+                    % (REF_X, REF_Y)) == ['top']
+    print("ok  pinched     -> a bulge touched at one point is left out, and"
+          " named")
+
+
+def test_a_straight_run_is_crossed_like_any_arc():
+    """A simple shape's one run lies along a bound with both its bulges
+    tangent to it, so nothing can reach it; a complex one's runs slant
+    across the pool and can be run through like anything else.  The test
+    is exact -- segment against circle, segment against segment -- so it
+    is checked here on elements built for it."""
+    vm = newvm()
+
+    def meet(a, b):
+        return vm.loads('(oasis:meet-p %s %s)' % (a, b)) is not None
+
+    RUN = '(list "run" (list 0.0 0.0) (list 100.0 0.0) 0.0 nil "LINE" nil)'
+    OTHER = '(list "b" (list 40.0 20.0) (list 40.0 -20.0) 0.0 nil "LINE" nil)'
+    APART = '(list "b" (list 40.0 20.0) (list 40.0 5.0) 0.0 nil "LINE" nil)'
+    def arc(cx, cy, r, a0=0.0, a1=6.2831852):
+        return ('(list "a" (list %.4f %.4f) %.4f %.6f %.6f T nil)'
+                % (cx, cy, r, a0, a1))
+    assert meet(RUN, arc(50.0, 0.0, 20.0))        # straight through it
+    assert not meet(RUN, arc(50.0, 40.0, 20.0))   # clear above it
+    assert not meet(RUN, arc(150.0, 0.0, 20.0))   # past the segment's end
+    # on the circle but outside the drawn sweep
+    assert not meet(RUN, arc(50.0, 0.0, 20.0, 1.0, 2.0))
+    assert meet(RUN, OTHER)                       # two runs crossing
+    assert not meet(RUN, APART)                   # and two that do not
+    # and oasis:crossings really does put its runs through that test:
+    # element 0 against element 2 is the one pair of a four-element ring
+    # that is not two neighbours sharing an end
+    far = '(list "%s" (list 0.0 %.1f) 5.0 0.0 1.0 T nil)'
+    ring = ('(list %s %s %s %s)'
+            % (RUN, far % ('b', 500.0), arc(50.0, 0.0, 20.0),
+               far % ('d', -500.0)))
+    assert vm.loads('(oasis:crossings %s)' % ring) == [['run', 'a']], \
+        vm.loads('(oasis:crossings %s)' % ring)
+    # and the reference pool, complex or not, is still simple
+    assert vm.loads('(oasis:crossings (oasis:solve %.1f %.1f 96.0 132.0 108.0'
+                    ' "LINE" "LINE" "LINE" 0.0 "Center"))'
+                    % (REF_X, REF_Y)) is None
+    print("ok  run crossed -> segment-against-circle and segment-against-"
+          "segment, exact")
+
+
+def test_a_run_already_answered_still_goes_red_when_re_asked():
+    """A joiner answered Line keeps the answer slot it was given, so
+    backing up to it picks it out in red like any other arc -- and the
+    outline it belongs to is a straight run by then, with no circle and
+    no radius behind it."""
+    with at_each_prompt() as p:
+        vm = newvm()
+        run(vm, ['Center', 'Complex', (0.0, 0.0), REF_X, REF_Y, 96.0, 132.0,
+                 0.0, 108.0, 'Line', 'Back', 'Line', 36.0, 60.0], 'red run')
+    # shot 8 is the top-left question the second time round, with Line
+    # already standing as its answer
+    red = [d for d in p.shot(8, 'LINE')
+           if d.get(8) == 'POOL' and d.get(62) == 1]
+    assert len(red) == 1, [d for d in p.shot(8, 'LINE') if d.get(8) == 'POOL']
+    # nothing else on the pool layer is picked out
+    assert not [d for d in p.shot(8, 'ARC') if d.get(62) == 1], p.shot(8)
+    print("ok  red run     -> a run already answered is still the one picked"
+          " out when re-asked")
+
+
+def test_backing_up_through_the_complex_questions():
+    """Back walks the new steps like any other: out of the offset it
+    lands on the top bulge, and out of simple-or-complex on the shape."""
+    vm = newvm()
+    run(vm, ['Center', 'Complex', (0.0, 0.0), REF_X, REF_Y, 96.0, 200.0,
+             'Back', 132.0, 48.0, 108.0, 72.0, 36.0, 60.0], 'back offset')
+    top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
+    assert close(top[0][0], REF_X / 2.0 + 48.0), top
+    vm = newvm()
+    run(vm, ['Center', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE,
+        'back detail')
+    asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
+    assert asked[:4] == ['Which shape is it?', 'Simple or complex?',
+                         'Which shape is it?', 'Simple or complex?'], asked
+    assert len(arcs_of(vm)) == 6, arcs_of(vm)
+    print("ok  complex back-> Back walks the offset and the detail question"
+          " too")
 
 
 def test_version_command():
@@ -1683,6 +1979,16 @@ if __name__ == '__main__':
     test_backing_up_through_a_kidney()
     test_the_first_kidney_preview_is_never_blank()
     test_a_true_kidney_needs_a_y_smaller_than_its_x()
+    test_complex_is_asked_after_the_shape()
+    test_a_straight_run_can_stand_in_for_any_joiner()
+    test_a_run_is_the_joiner_with_no_radius_left_to_give()
+    test_the_hump_moves_off_centre()
+    test_an_impossible_offset_is_reasked()
+    test_every_shape_takes_a_straight_run()
+    test_a_pinched_bulge_is_left_out_of_the_drawing()
+    test_a_straight_run_is_crossed_like_any_arc()
+    test_a_run_already_answered_still_goes_red_when_re_asked()
+    test_backing_up_through_the_complex_questions()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")

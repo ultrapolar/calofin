@@ -189,7 +189,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v5.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v6.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -267,6 +267,26 @@
 (defun oasis:kidney-p (variant)
   (member variant '("TrueKidney" "AsymKidney")))
 
+;; T when the run is a COMPLEX one.  Complex is not a shape: it is a
+;; second question asked straight after the shape, and what it changes is
+;; how much of the outline the user is allowed to say.  A simple run is
+;; the shape as it has always been -- bulges pinned to the envelope,
+;; reverse arcs between them.  A complex one adds two things a real
+;; drawing sometimes has and the simple flow cannot express:
+;;
+;;   * any joiner may be answered LINE instead of a radius, and comes out
+;;     as the straight run between the two bulges' tangent points --
+;;     exactly the reverse arc with an infinite radius, so the outline
+;;     stays tangent-continuous through it;
+;;   * a Center pool's top bulge may be moved off centre by a signed
+;;     offset, left negative.
+;;
+;; Neither changes the ring downstream: a straight joiner is the "LINE"
+;; element the cloud's flat bottom already uses, and an offset hump is
+;; the same bulge at a different X.
+(defun oasis:complex-p (ans)
+  (= (nth 11 ans) "Complex"))
+
 ;; The shape, resolved.  The first question offers four families --
 ;; Center, TopRight, Cloud and Kidney -- and the two families that come
 ;; two ways get a second question of their own, asked straight after: a
@@ -286,11 +306,14 @@
 (defun oasis:leftrad (variant h rl)
   (if (oasis:cloud-p variant) (if h (* 0.5 h)) rl))
 
-;; Where the third bulge sits, on the shapes that have one.
-(defun oasis:topcen (w h rt variant)
+;; Where the third bulge sits, on the shapes that have one.  off is the
+;; complex run's signed shift of a Center pool's hump along X -- negative
+;; to the left, nil or zero for the centred one every simple run draws.
+;; A corner bulge has no such freedom: two bounds already hold it.
+(defun oasis:topcen (w h rt variant off)
   (if (= variant "TopRight")
       (list (- w rt) (- h rt))
-      (list (* w oasis:*topfrac*) (- h rt))))
+      (list (+ (* w oasis:*topfrac*) (cond (off) (0.0))) (- h rt))))
 
 ;; What the ring's elements are called, in the order they run round the
 ;; pool: bulges at the even positions, joiners at the odd ones.  A seam
@@ -332,20 +355,30 @@
             ((= slot 8) (if (= variant "TopRight")
                             "Right-side tangent radius"
                             "Top-right tangent radius"))
-            ((= slot 9) "Bottom-center tangent radius")))))
+            ((= slot 9) "Bottom-center tangent radius")
+            ((= slot 12) "Top bulge off center, left negative")))))
 
 ;; Which answer slots this shape asks for, in the order it asks them.
 ;; The rest are either pinned by the envelope (a cloud's left bulge) or
 ;; are no part of the shape at all.
-(defun oasis:steps (ans / fam)
-  (setq fam (nth 0 ans))
-  (cond ((= fam "Cloud")
-         (if (= (nth 10 ans) "Rounded") '(0 10 1 2 3 6 7 9)
-             '(0 10 1 2 3 6 7)))
-        ((= fam "Kidney")
-         (if (= (nth 10 ans) "Asymmetric") '(0 10 1 2 3 4 6 9)
-             '(0 10 1 2 3 5 9)))
-        (t '(0 1 2 3 4 5 6 7 8 9))))
+;;
+;; The head is the same for every run: the shape, the sub-type on the two
+;; families that have one, then simple-or-complex.  Complex adds one
+;; question and only to the Center shape -- how far its hump is off
+;; centre; the straight runs it also allows are not questions of their
+;; own but answers to the joiner questions already being asked.
+(defun oasis:steps (ans / fam out)
+  (setq fam (nth 0 ans)
+        out (cond ((= fam "Cloud")
+                   (if (= (nth 10 ans) "Rounded") '(1 2 3 6 7 9)
+                       '(1 2 3 6 7)))
+                  ((= fam "Kidney")
+                   (if (= (nth 10 ans) "Asymmetric") '(1 2 3 4 6 9)
+                       '(1 2 3 5 9)))
+                  ((and (= fam "Center") (oasis:complex-p ans))
+                   '(1 2 3 4 5 12 6 7 8 9))
+                  (t '(1 2 3 4 5 6 7 8 9))))
+  (append (if (member fam '("Cloud" "Kidney")) '(0 10 11) '(0 11)) out))
 
 ;; How the shape is named on the command line and in the report.
 (defun oasis:vlabel (variant)
@@ -584,6 +617,14 @@
 ;; for a straight run, data the outward normal along it.  angle-out is
 ;; where the first bulge hands over, angle-in where the second picks up.
 ;; nil when the two cannot be joined at all.
+;;
+;; rf says which: a number is the reverse arc's radius, "SEAM" the
+;; internal tangency a kidney hands over at, and a straight run is either
+;; asked for by name -- "LINE", what a complex run answers a joiner
+;; question with -- or implied by the shape, which is how a cloud's flat
+;; bottom arrives with nothing given at all.  Both reach the same place:
+;; the straight run IS the reverse arc with an infinite radius, so
+;; nothing downstream has to tell the two apart.
 (defun oasis:joiner (c1 r1 c2 r2 rf / cf m a)
   (cond
     ;; a SEAM: one circle inside the other, touching -- the internal
@@ -594,13 +635,13 @@
     ((and (= (type rf) 'STR) (= rf "SEAM"))
      (setq a (if (> r1 r2) (angle c1 c2) (angle c2 c1)))
      (list "SEAM" nil a a))
-    (rf
-     (setq cf (oasis:fillet c1 r1 c2 r2 rf))
-     (if cf (list nil cf (angle c1 cf) (angle c2 cf))))
-    (t
+    ((or (null rf) (and (= (type rf) 'STR) (= rf "LINE")))
      (setq m (oasis:extnorm c1 r1 c2 r2))
      (if m (progn (setq a (atan (cadr m) (car m)))
-                  (list "LINE" m a a))))))
+                  (list "LINE" m a a))))
+    (t
+     (setq cf (oasis:fillet c1 r1 c2 r2 rf))
+     (if cf (list nil cf (angle c1 cf) (angle c2 cf))))))
 
 ;; T when a joiner is a seam.
 (defun oasis:seam-p (j)
@@ -723,8 +764,8 @@
 ;; the two-bulge clouds.  nil when a joiner does not exist -- c:OASIS
 ;; checks for that before it ever gets here, so a nil return means an
 ;; input slipped past the checks, not a user mistake.
-(defun oasis:solve (w h rl rt rr ftl ftr fbc variant
-                    / nm bc br bs jr js kt n i j js2 jj ok jp jn out)
+(defun oasis:solve (w h rl rt rr ftl ftr fbc off variant
+                    / nm bc br bs jr js kt n i j js2 jj ok jp jn jl jm out)
   (setq nm (oasis:names variant) ok T)
   (cond
     ((oasis:cloud-p variant)
@@ -755,7 +796,7 @@
          (setq ok nil br '())))
     (t
      (setq bc (list (list rl rl) (list (- w rr) rr)
-                    (oasis:topcen w h rt variant))
+                    (oasis:topcen w h rt variant off))
            br (list rl rr rt)
            bs (list 4 6 5)
            jr (list fbc ftr ftl)
@@ -776,10 +817,20 @@
                 jp (nth (rem (+ i n -1) n) js2)   ; the joiner before it
                 jn (nth i js2)                    ; and the one after
                 ;; the bulge: from where the joiner before it hands over
-                ;; to where the joiner after it picks up
-                out (cons (list (nth (* 2 i) nm) (nth i bc) (nth i br)
-                                (nth 3 jp) (nth 2 jn) T (nth i bs))
-                          out)
+                ;; to where the joiner after it picks up.  Those two can
+                ;; be the SAME point -- two straight runs either side of
+                ;; a bulge that shares a tangent line with both its
+                ;; neighbours touch it in one place -- and then the bulge
+                ;; is a point on the outline, not an arc of it.  Nothing
+                ;; is drawn for it: an ARC whose two angles are equal is
+                ;; a full circle to AutoCAD, which is not what a pinched
+                ;; bulge means.
+                out (if (> (oasis:angnorm (- (nth 2 jn) (nth 3 jp)))
+                           oasis:*fuzz*)
+                        (cons (list (nth (* 2 i) nm) (nth i bc) (nth i br)
+                                    (nth 3 jp) (nth 2 jn) T (nth i bs))
+                              out)
+                        out)
                 ;; then that joiner.  A seam draws nothing -- the two
                 ;; arcs hand straight over at the touch point.  A reverse
                 ;; arc curves the other way round its own circle, so its
@@ -788,20 +839,34 @@
                       ((oasis:seam-p jn) out)
                       ((and (= (type (nth 0 jn)) 'STR)
                             (= (nth 0 jn) "LINE"))
-                       (cons (list (nth (1+ (* 2 i)) nm)
-                                   (oasis:v+ (nth i bc)
-                                             (oasis:v* (nth 1 jn) (nth i br)))
-                                   (oasis:v+ (nth j bc)
-                                             (oasis:v* (nth 1 jn) (nth j br)))
-                                   (nth 2 jn) nil "LINE" nil)
-                             out))
-                      (t
+                       (setq jl (oasis:v+ (nth i bc)
+                                          (oasis:v* (nth 1 jn) (nth i br)))
+                             jm (oasis:v+ (nth j bc)
+                                          (oasis:v* (nth 1 jn) (nth j br))))
+                       ;; two bulges already tangent to each other leave
+                       ;; no run between them, only the point they touch
+                       (if (> (distance jl jm) oasis:*fuzz*)
+                           (cons (list (nth (1+ (* 2 i)) nm) jl jm
+                                       ;; a run the user asked for keeps
+                                       ;; its answer slot, so backing up
+                                       ;; to it still picks it out in red;
+                                       ;; the one a cloud's flat bottom
+                                       ;; implies was never asked and has
+                                       ;; none
+                                       (nth 2 jn) nil "LINE"
+                                       (if (nth i jr) (nth i js)))
+                                 out)
+                           out))
+                      ((> (oasis:angnorm (- (angle (nth 1 jn) (nth i bc))
+                                            (angle (nth 1 jn) (nth j bc))))
+                          oasis:*fuzz*)
                        (cons (list (nth (1+ (* 2 i)) nm) (nth 1 jn)
                                    (nth i jr)
                                    (angle (nth 1 jn) (nth j bc))
                                    (angle (nth 1 jn) (nth i bc))
                                    nil (nth i js))
-                             out)))
+                             out))
+                      (t out))
                 i   (1+ i)))
         (reverse out))))
 
@@ -855,36 +920,96 @@
   (<= (oasis:angnorm (- ang (nth 3 a)))
       (oasis:angnorm (- (nth 4 a) (nth 3 a)))))
 
-;; The pairs of arcs that run through each other.  Neighbours are
-;; externally tangent by construction and touch only at the end they
-;; share, so they are skipped; anything else that meets is the outline
-;; crossing itself.  Exact rather than sampled: two circles meet in at
-;; most two points, and a crossing is one of those points lying inside
-;; BOTH sweeps -- nine pairs, eighteen points, and no curve to walk on
-;; the six-element shapes.  A straight run is skipped: it lies along a
-;; bound with both its bulges tangent to that bound, so nothing can reach
-;; it without leaving the envelope first, which the extents report
-;; already names.
-(defun oasis:crossings (arcs / n i j a b p side pair out)
+;; Where a straight run meets a circle: the up-to-two points of (c r)
+;; that lie ON the segment p->q, as a list.  The segment is walked as
+;; p + t(q - p) and only 0 <= t <= 1 counts, so a circle the run points
+;; at but never reaches gives back nothing.
+(defun oasis:seg-circ (p q c r / dx dy fx fy qa qb qc d sd out t1)
+  (setq dx (- (car q) (car p))   dy (- (cadr q) (cadr p))
+        fx (- (car p) (car c))   fy (- (cadr p) (cadr c))
+        qa (+ (* dx dx) (* dy dy))
+        qb (* 2.0 (+ (* fx dx) (* fy dy)))
+        qc (- (+ (* fx fx) (* fy fy)) (* r r))
+        out nil)
+  (if (> qa oasis:*fuzz*)
+      (progn
+        (setq d (- (* qb qb) (* 4.0 qa qc)))
+        (if (> d 0.0)
+            (progn
+              (setq sd (sqrt d))
+              (foreach t1 (list (/ (+ (- qb) sd) (* 2.0 qa))
+                                (/ (- (- qb) sd) (* 2.0 qa)))
+                (if (and (>= t1 0.0) (<= t1 1.0))
+                    (setq out (cons (list (+ (car p) (* t1 dx))
+                                          (+ (cadr p) (* t1 dy)))
+                                    out))))))))
+  out)
+
+;; Where two straight runs meet, or nil.  Parallel runs never do, and a
+;; meeting past either segment's ends is not one.
+(defun oasis:seg-seg (p q r s / ax ay bx by den t1 u)
+  (setq ax  (- (car q) (car p))  ay (- (cadr q) (cadr p))
+        bx  (- (car s) (car r))  by (- (cadr s) (cadr r))
+        den (- (* ax by) (* ay bx)))
+  (if (> (abs den) oasis:*fuzz*)
+      (progn
+        (setq t1 (/ (- (* (- (car r) (car p)) by)
+                       (* (- (cadr r) (cadr p)) bx))
+                    den)
+              u  (/ (- (* (- (car r) (car p)) ay)
+                       (* (- (cadr r) (cadr p)) ax))
+                    den))
+        (if (and (>= t1 0.0) (<= t1 1.0) (>= u 0.0) (<= u 1.0))
+            (list (+ (car p) (* t1 ax)) (+ (cadr p) (* t1 ay)))))))
+
+;; T when two ring elements meet somewhere other than the end they share.
+;; Exact rather than sampled, whichever pair of kinds it is: two circles
+;; meet in at most two points and a crossing is one of them inside BOTH
+;; sweeps; a run meets a circle in at most two, and only the ones on the
+;; segment and inside the arc's sweep count; two runs meet at most once.
+;; A simple shape's only straight run lies along a bound with both its
+;; bulges tangent to it, so nothing can reach it -- but a complex one's
+;; runs slant across the pool, and those can be crossed like any arc.
+(defun oasis:meet-p (a b / hit p)
+  (setq hit nil)
+  (cond
+    ((and (oasis:line-p a) (oasis:line-p b))
+     (setq hit (and (oasis:seg-seg (nth 1 a) (nth 2 a)
+                                   (nth 1 b) (nth 2 b))
+                    T)))
+    ((oasis:line-p a)
+     (foreach p (oasis:seg-circ (nth 1 a) (nth 2 a) (nth 1 b) (nth 2 b))
+       (if (oasis:on-arc-p b (angle (nth 1 b) p)) (setq hit T))))
+    ((oasis:line-p b)
+     (foreach p (oasis:seg-circ (nth 1 b) (nth 2 b) (nth 1 a) (nth 2 a))
+       (if (oasis:on-arc-p a (angle (nth 1 a) p)) (setq hit T))))
+    (t
+     (foreach p (list (oasis:circint (nth 1 a) (nth 2 a)
+                                     (nth 1 b) (nth 2 b) 1.0)
+                      (oasis:circint (nth 1 a) (nth 2 a)
+                                     (nth 1 b) (nth 2 b) -1.0))
+       (if (and p
+                (oasis:on-arc-p a (angle (nth 1 a) p))
+                (oasis:on-arc-p b (angle (nth 1 b) p)))
+           (setq hit T)))))
+  hit)
+
+;; The pairs of ring elements that run through each other.  Neighbours
+;; are tangent by construction and touch only at the end they share, so
+;; they are skipped; anything else that meets is the outline crossing
+;; itself.
+(defun oasis:crossings (arcs / n i j a b pair out)
   (setq n (length arcs) i 0 out nil)
   (while (< i n)
     (setq j (1+ i))
     (while (< j n)
-      (if (not (or (= j (1+ i)) (and (= i 0) (= j (1- n)))
-                   (oasis:line-p (nth i arcs))
-                   (oasis:line-p (nth j arcs))))
+      (if (not (or (= j (1+ i)) (and (= i 0) (= j (1- n)))))
         (progn
           (setq a    (nth i arcs)
                 b    (nth j arcs)
                 pair (list (nth 0 a) (nth 0 b)))
-          (foreach side '(1.0 -1.0)
-            (setq p (oasis:circint (nth 1 a) (nth 2 a)
-                                   (nth 1 b) (nth 2 b) side))
-            (if (and p
-                     (not (member pair out))
-                     (oasis:on-arc-p a (angle (nth 1 a) p))
-                     (oasis:on-arc-p b (angle (nth 1 b) p)))
-              (setq out (cons pair out))))))
+          (if (and (not (member pair out)) (oasis:meet-p a b))
+              (setq out (cons pair out)))))
       (setq j (1+ j)))
     (setq i (1+ i)))
   (reverse out))
@@ -976,23 +1101,28 @@
 ;; envelope -- the left and right bulges' outermost points for X, the
 ;; top bulge's highest point and the left bulge's lowest for Y -- so
 ;; they measure the bounds the user was asked for, not a chord of them.
-(defun oasis:dimension (arcs ents base w h lay / doff i a e md yl yr top)
+(defun oasis:dimension (arcs ents base w h lay / doff i a e md bul yl yr top)
   (setvar "CLAYER" lay)
   (oasis:dimstyle-on oasis:*dimstyle*)
   (setq doff (oasis:dimoff w h)
-        ;; the ring starts at the left bulge and the right bulge is two
-        ;; along, on every shape; each touches its own bound level with
-        ;; its centre, so those are the points the overall X hooks
-        yl   (cadr (nth 1 (nth 0 arcs)))
-        yr   (cadr (nth 1 (nth 2 arcs)))
+        ;; the left bulge is the first bulge round the ring and the right
+        ;; one the second, on every shape; each touches its own bound
+        ;; level with its centre, so those are the points the overall X
+        ;; hooks.  Read as BULGES rather than as ring positions 0 and 2,
+        ;; because a bulge pinched to a point by the runs either side of
+        ;; it is not in the ring at all
+        bul  nil)
+  (foreach a arcs
+    (if (and (not (oasis:line-p a)) (nth 5 a)) (setq bul (cons a bul))))
+  (setq bul (reverse bul)
+        yl  (cadr (nth 1 (nth 0 bul)))
+        yr  (cadr (nth 1 (nth 1 bul)))
         ;; and the overall Y hooks the bulge that actually reaches the
         ;; top bound -- the one whose centre plus radius lands on it
-        top  (nth 0 arcs))
-  (foreach a arcs
-    (if (and (not (oasis:line-p a))
-             (nth 5 a)
-             (> (+ (cadr (nth 1 a)) (nth 2 a))
-                (+ (cadr (nth 1 top)) (nth 2 top))))
+        top (nth 0 bul))
+  (foreach a bul
+    (if (> (+ (cadr (nth 1 a)) (nth 2 a))
+           (+ (cadr (nth 1 top)) (nth 2 top)))
         (setq top a)))
   (command "_.DIMLINEAR"
            (oasis:wp (list 0.0 yl) base)
@@ -1165,10 +1295,19 @@
 ;; A tangent radius has no such rule of thumb -- what looks right depends
 ;; entirely on the three bulges -- so it takes a quarter of the short
 ;; bound, lifted clear of its own minimum when that is larger.
-(defun oasis:fillin (ans / var w h rl rt rr cl ct cr gl gr side g big)
+;;
+;; A joiner ANSWERED as a straight run needs no provisional at all: the
+;; string "LINE" is an answer like any other and goes straight through.
+;; The hump's offset starts at nothing, which is the shape every simple
+;; run draws, so a complex run's first preview looks like the familiar
+;; one until the offset is typed.
+;;
+;; Hands back (w h rl rt rr ftl ftr fbc off), ready for oasis:solve.
+(defun oasis:fillin (ans / var w h rl rt rr cl ct cr gl gr side off g big)
   (setq var  (oasis:variant ans)
         w    (nth 2 ans)
-        h    (nth 3 ans))
+        h    (nth 3 ans)
+        off  (cond ((nth 12 ans)) (0.0)))
   (if (oasis:kidney-p var)
       ;; the kidney: what was not asked for is derived by the solver, so
       ;; only the asked slots need filling -- the true one's top circle
@@ -1199,7 +1338,8 @@
               ;; last question was answered
               (cond ((nth 9 ans))
                     ((max (* 0.6 g)
-                          (* 1.25 (oasis:filmin cl gl cr gr)))))))
+                          (* 1.25 (oasis:filmin cl gl cr gr)))))
+              off))
       (progn
   (setq side (* 0.5 oasis:*startside* (min w h))
         rl   (cond ((oasis:leftrad var h (nth 4 ans))) (side))
@@ -1220,7 +1360,7 @@
         g    (* 0.6 (min rl rr (cond (rt) (rl))))
         big  (* 1.2 (max rl rr (cond (rt) (rl))))
         cl   (list rl rl)
-        ct   (if rt (oasis:topcen w h rt var))
+        ct   (if rt (oasis:topcen w h rt var off))
         cr   (list (- w rr) rr))
   (list w h rl rt rr
         (cond ((nth 7 ans))
@@ -1231,7 +1371,8 @@
               ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
         (cond ((nth 9 ans))
               ((oasis:cloud-p var) (max big (* 1.25 (oasis:filmin cl rl cr rr))))
-              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))))))
+              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))
+        off))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
 ;; a stray U in the middle of the questions cannot break the next redraw.
@@ -1303,7 +1444,7 @@
               full (oasis:fillin ans)
               arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
                                 (nth 3 full) (nth 4 full) (nth 5 full)
-                                (nth 6 full) (nth 7 full) var)
+                                (nth 6 full) (nth 7 full) (nth 8 full) var)
               out  (oasis:pv-box w h base lt))
         (if arcs
             (progn
@@ -1390,12 +1531,12 @@
 ;; The top bulge's radius, re-asked while it swallows a side bulge (or
 ;; is swallowed by one).  Nesting cannot be cured with a tangent radius
 ;; later, so it has to be caught here.
-(defun oasis:ask-top (msg w h rl variant / v cl ct big)
+(defun oasis:ask-top (msg w h rl variant off / v cl ct big)
   (setq cl (list rl rl)
         v  (oasis:askdist 'REQ msg nil T))
   (while (and (not (eq v 'OASIS-BACK))
               (progn
-                (setq ct  (oasis:topcen w h v variant)
+                (setq ct  (oasis:topcen w h v variant off)
                       big (and (oasis:topfits-p variant)
                                (> (* 2.0 v) (+ (min w h) oasis:*fuzz*))))
                 (or big (oasis:nested-p ct v cl rl))))
@@ -1456,18 +1597,76 @@
     (setq v (oasis:askdist 'REQ msg nil T)))
   v)
 
+;; A joiner answer on a COMPLEX run: a radius as usual, or the keyword
+;; Line for the straight run between the two bulges' tangent points.
+;; Returns the number, the string "LINE", or OASIS-BACK.  Its own
+;; getdist rather than oasis:askdist because that one folds every
+;; keyword but Back into nil, which is the answer a cloud's implied flat
+;; bottom already means.
+(defun oasis:askrun (msg / v)
+  (initget 7 "Line Back Undo")
+  (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
+        ((= (type v) 'STR) "LINE")
+        (t v)))
+
+;; A signed distance, defaulting to none: zero and negative are both
+;; ordinary answers here, where every other measurement in the file
+;; refuses them.  Returns the number or OASIS-BACK.
+(defun oasis:askoff (msg / v)
+  (initget 0 "Back Undo")
+  (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
+        ((null v) 0.0)
+        (t v)))
+
 ;; A tangent radius, re-asked until it is big enough to span its two
 ;; bulges.  Below the minimum the two circles it would have to touch
-;; never meet, and there is no such arc at any position.
-(defun oasis:ask-tangent (msg c1 r1 c2 r2 / v mn)
+;; never meet, and there is no such arc at any position.  runs is T on a
+;; complex pool, where Line is an answer too -- and the only thing that
+;; can rule THAT out is one bulge lying inside the other, since a
+;; straight run has no radius to be too small.
+(defun oasis:ask-tangent (msg c1 r1 c2 r2 runs / v mn bad)
   (setq mn (oasis:filmin c1 r1 c2 r2)
-        v  (oasis:askdist 'REQ msg nil T))
+        v  (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T)))
   (while (and (not (eq v 'OASIS-BACK))
-              (<= v (+ mn oasis:*fuzz*)))
-    (princ (strcat "\n" (rtos v) " is too short to reach from one bulge"
-                   " to the other -- it has to be more than "
-                   (rtos mn) "."))
-    (setq v (oasis:askdist 'REQ msg nil T)))
+              (setq bad
+                    (if (= (type v) 'STR)
+                        (if (null (oasis:extnorm c1 r1 c2 r2)) "nested")
+                        (if (<= v (+ mn oasis:*fuzz*)) "short"))))
+    (if (= bad "short")
+        (princ (strcat "\n" (rtos v) " is too short to reach from one bulge"
+                       " to the other -- it has to be more than "
+                       (rtos mn) "."))
+        (princ (strcat "\nOne of those two bulges lies inside the other,"
+                       " so there is no straight run between them.")))
+    (setq v (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T))))
+  v)
+
+;; How far a complex Center pool's hump is off centre, re-asked while it
+;; would put the hump somewhere there is no pool.  Two ways it can: past
+;; either end of the envelope, where the "top" bulge is no longer over
+;; the water at all, or so far across that it swallows the left bulge --
+;; a nesting no tangent radius can bridge, exactly as oasis:ask-top
+;; refuses on the centred one.  Reaching past a bound is NOT refused:
+;; that is an ordinary trimmed hump, and oasis:report-extents names it.
+(defun oasis:ask-offset (msg w h rl rt / v ct bad)
+  (setq v (oasis:askoff msg))
+  (while (and (not (eq v 'OASIS-BACK))
+              (progn
+                (setq ct  (oasis:topcen w h rt "Center" v)
+                      bad (cond ((or (< (car ct) 0.0) (> (car ct) w)) "out")
+                                ((oasis:nested-p ct rt (list rl rl) rl)
+                                 "nested")))
+                bad))
+    (if (= bad "out")
+        (princ (strcat "\nThat puts the hump's centre at "
+                       (rtos (car ct)) ", off the " (rtos w)
+                       " envelope altogether -- it has to stay on it."))
+        (princ (strcat "\nAt " (rtos v) " off centre the hump and the left"
+                       " bulge lie one inside the other, so no tangent"
+                       " radius can join them.")))
+    (setq v (oasis:askoff msg)))
   v)
 
 ;; One question of the run.  k is the answer slot it fills, ans the
@@ -1480,11 +1679,14 @@
 ;;   2 X bound          5 top bulge                      10 a cloud's bottom
 ;;
 ;; A shape asks only the slots oasis:steps lists for it.
-(defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr)
-  (setq var (oasis:variant ans)
-        w   (nth 2 ans) h  (nth 3 ans)
-        rl  (oasis:leftrad var h (nth 4 ans))
-        rt  (nth 5 ans) rr (nth 6 ans))
+(defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr off runs)
+  (setq var  (oasis:variant ans)
+        w    (nth 2 ans) h  (nth 3 ans)
+        rl   (oasis:leftrad var h (nth 4 ans))
+        rt   (nth 5 ans) rr (nth 6 ans)
+        off  (nth 12 ans)
+        ;; on a complex run every joiner question takes Line as well
+        runs (oasis:complex-p ans))
   ;; a true kidney's sides are derived from its top circle, so by the
   ;; time the bottom joiner is asked for they are known without ever
   ;; having been asked about
@@ -1493,7 +1695,7 @@
             rr rl))
   (setq cl  (if (and w h rl) (list rl rl))
         ct  (if (and w h rt (not (oasis:kidney-p var)))
-                (oasis:topcen w h rt var))
+                (oasis:topcen w h rt var off))
         cr  (if (and w h rr) (list (- w rr) rr)))
   (cond
     ;; CLoud takes two capitals because Center already has the C.  The
@@ -1510,32 +1712,39 @@
                       "True/Asymmetric" "True" T)
          (oasis:askkw "Cloud bottom?" "Straight Rounded"
                       "Straight/Rounded" "Straight" T)))
+    ;; simple is the shape as it has always been; complex opens the two
+    ;; things a drawing sometimes has and the plain flow cannot say --
+    ;; a straight run in place of any joiner, and a hump off centre
+    ((= k 11)
+     (oasis:askkw "Simple or complex?" "Simple Complex"
+                  "Simple/Complex" "Simple" T))
     ((= k 1) (oasis:askbase T))
     ((= k 2) (oasis:askdist 'REQ "X - overall left-to-right bounds" nil T))
     ((= k 3) (oasis:ask-ybound "Y - overall front-to-back bounds" w var))
     ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4) "left" w h))
     ((= k 5) (if (oasis:kidney-p var)
                  (oasis:ask-ktop (oasis:sprompt var 5) w h)
-                 (oasis:ask-top (oasis:sprompt var 5) w h rl var)))
+                 (oasis:ask-top (oasis:sprompt var 5) w h rl var off)))
     ((= k 6) (oasis:ask-bulge (oasis:sprompt var 6) "right" w h))
     ;; on a cloud the top joiner runs straight from the right bulge back
     ;; to the left one; on an oasis it stops at the third bulge first
     ((= k 7) (if (oasis:cloud-p var)
-                 (oasis:ask-tangent (oasis:sprompt var 7) cr rr cl rl)
-                 (oasis:ask-tangent (oasis:sprompt var 7) ct rt cl rl)))
-    ((= k 8) (oasis:ask-tangent (oasis:sprompt var 8) cr rr ct rt))
-    ((= k 9) (oasis:ask-tangent (oasis:sprompt var 9) cl rl cr rr))))
+                 (oasis:ask-tangent (oasis:sprompt var 7) cr rr cl rl runs)
+                 (oasis:ask-tangent (oasis:sprompt var 7) ct rt cl rl runs)))
+    ((= k 8) (oasis:ask-tangent (oasis:sprompt var 8) cr rr ct rt runs))
+    ((= k 9) (oasis:ask-tangent (oasis:sprompt var 9) cl rl cr rr runs))
+    ((= k 12) (oasis:ask-offset (oasis:sprompt var 12) w h rl rt))))
 
 ;; The right bulge is the last of the three, so it is the one that has
 ;; to be checked against BOTH of the others before the tangent radii are
 ;; asked for.  Returns the name of the bulge it nests with, or nil.
-(defun oasis:right-nests (w h rl rt rr variant / cl ct cr)
+(defun oasis:right-nests (w h rl rt rr off variant / cl ct cr)
   (setq rl (oasis:leftrad variant h rl)
         cl (list rl rl)
         cr (list (- w rr) rr))
   (cond ((oasis:nested-p cr rr cl rl) "left")
         ((oasis:cloud-p variant) nil)
-        ((progn (setq ct (oasis:topcen w h rt variant))
+        ((progn (setq ct (oasis:topcen w h rt variant off))
                 (oasis:nested-p cr rr ct rt))
          "top")))
 
@@ -1545,6 +1754,22 @@
 (defun oasis:pad (s w)
   (while (< (strlen s) w) (setq s (strcat s " ")))
   s)
+
+;; The bulges the ring left out.  A bulge whose two joiners hand over at
+;; the same point is a point on the outline rather than an arc of it, and
+;; oasis:solve drops it -- so the radius the user gave for it is not in
+;; the drawing anywhere, which is worth saying out loud.  Bulges sit at
+;; the even positions of the name list.
+(defun oasis:pinched (arcs variant / have nm out i)
+  (setq have (mapcar 'car arcs)
+        nm   (oasis:names variant)
+        out  nil
+        i    0)
+  (while (< i (length nm))
+    (if (and (= 0 (rem i 2)) (not (member (nth i nm) have)))
+        (setq out (cons (nth i nm) out)))
+    (setq i (+ i 1)))
+  (reverse out))
 
 
 ;; Say when the outline runs through itself.  Nothing that gets this far
@@ -1603,7 +1828,8 @@
 (setq oasis:*odstyle* nil)
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
-                   rl rt rr ftl ftr fbc cbase arcs ents nests prev lt a nchk)
+                   rl rt rr ftl ftr fbc off cbase arcs ents nests prev lt a
+                   nchk)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (oasis:dimstyrestore)
@@ -1656,7 +1882,7 @@
      ;;    business -- so the step list is re-read every time round,
      ;;    and changing the shape at the first question changes every
      ;;    question after it.
-     (setq ans '(nil nil nil nil nil nil nil nil nil nil nil)
+     (setq ans '(nil nil nil nil nil nil nil nil nil nil nil nil nil)
            pos 0)
      (while (progn (setq steps (oasis:steps ans))
                    (< pos (length steps)))
@@ -1691,7 +1917,7 @@
                    ((not (oasis:kidney-p (oasis:variant ans)))
                     (setq nests (oasis:right-nests (nth 2 ans) (nth 3 ans)
                                                    (nth 4 ans) (nth 5 ans)
-                                                   (nth 6 ans)
+                                                   (nth 6 ans) (nth 12 ans)
                                                    (oasis:variant ans)))
                     (if nests
                         (progn
@@ -1707,7 +1933,8 @@
            rl   (oasis:leftrad var (nth 3 ans) (nth 4 ans))
            rt   (nth 5 ans) rr (nth 6 ans)
            ftl  (nth 7 ans) ftr  (nth 8 ans) fbc (nth 9 ans)
-           arcs (oasis:solve w h rl rt rr ftl ftr fbc var))
+           off  (nth 12 ans)
+           arcs (oasis:solve w h rl rt rr ftl ftr fbc off var))
 
      (if (not arcs)
          (progn
@@ -1732,11 +1959,15 @@
 
            (princ (strcat "\nOASIS " *oasis-version* ": " (rtos w) " x "
                           (rtos h) " " (oasis:vlabel var)
+                          (if (oasis:complex-p ans) " complex" "")
                           " oasis on layer " oasis:*poollayer* "."))
+           (if (and off (/= off 0.0))
+               (princ (strcat "\n  hump " (rtos (abs off)) " off centre to the "
+                              (if (< off 0.0) "left" "right") ".")))
            (foreach a arcs
              (princ (strcat "\n  " (oasis:pad (nth 0 a) 14)
                             (if (oasis:line-p a)
-                                (strcat "flat run, "
+                                (strcat "straight run, "
                                         (rtos (distance (nth 1 a) (nth 2 a))))
                                 (strcat (if (nth 5 a) "bulge  R" "reverse R")
                                         (rtos (nth 2 a))))
@@ -1749,6 +1980,12 @@
                           " style, and " (itoa nchk) " on the"))
            (princ (strcat "\n  check drawing beside it in " oasis:*crossstyle*
                           " -- all on layer " oasis:*dimlayer* "."))
+           (foreach a (oasis:pinched arcs var)
+             (princ (strcat "\nOASIS: the " a " bulge is pinched out -- the"
+                            " two joiners either side of it"))
+             (princ (strcat "\n       touch it at the same point, so it is a"
+                            " point on the outline and"))
+             (princ "\n       nothing is drawn for it."))
            (oasis:report-extents arcs w h)
            (oasis:report-crossings arcs)))))
   (princ))
