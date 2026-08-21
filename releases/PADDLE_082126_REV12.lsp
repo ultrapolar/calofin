@@ -15,9 +15,10 @@
 ;;;     arc whose total bend is 10 degrees or less is not a feature.
 ;;;   * Convex features and concave arcs larger than 4'-6" radius do
 ;;;     NOT require pads.
-;;;   * Pads never overlap: where features crowd together, a pad slides
-;;;     over to sit flush alongside its neighbour, or is dropped when
-;;;     the neighbour already covers its spot.
+;;;   * Pads never overlap: where features crowd together, a pad on a
+;;;     sharp point stays dead-center on that point, and the pads
+;;;     along curves do the dodging -- sliding over to sit flush
+;;;     alongside, or dropping out when a neighbour covers their spot.
 ;;;
 ;;; Accepted perimeter input (generous):
 ;;;   * a closed LWPOLYLINE or 2D POLYLINE, or
@@ -54,7 +55,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.1") ; printed on load and at command start
+(setq *paddle-version* "v1.2") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -328,43 +329,59 @@
     (setq i (1+ i)))
   (reverse pads))
 
-;; Keep pads from colliding where features crowd together. Pads are
-;; committed in order; one that would overlap an already-committed pad
-;; slides along one axis to sit flush alongside it instead (pads are
-;; PADSIZE x PADSIZE, so flush = exactly PADSIZE on center). A pad
-;; whose center is already inside a committed pad -- or that cannot
-;; find a clear flush spot within half a pad of where it wanted to be
-;; -- is dropped: its area is covered by the neighbours it kept
-;; hitting. Returns the committed pads, in order.
+;; Keep pads from colliding where features crowd together, without
+;; ever pulling a pad off a sharp point. Corner pads commit first,
+;; dead-center on their vertex -- they NEVER slide; one that would
+;; overlap an earlier corner pad is dropped (in a notch that tight,
+;; the neighbour carries the area). Arc pads then dodge around
+;; everything committed: one that would overlap a committed pad slides
+;; along one axis to sit flush alongside it instead (pads are PADSIZE
+;; x PADSIZE, so flush = exactly PADSIZE on center). An arc pad whose
+;; center is already inside a committed pad -- or that cannot find a
+;; clear flush spot within half a pad of where it wanted to be -- is
+;; dropped: its area is covered by the neighbours it kept hitting.
+;; Returns the committed pads, corner pads first.
 (defun paddle--dodge (pads padsize / out ctr orig tries done hit d ax sgn)
-  (foreach pad pads
-    (setq ctr   (car pad)
-          orig  ctr
-          tries 0
-          done  nil)
-    (while (not done)
-      (setq hit nil)
-      (foreach q out ; find a committed pad it overlaps
-        (if (and (not hit)
-                 (< (paddle--cheb (paddle--sub ctr (car q)))
-                    (- padsize 1e-6)))
-            (setq hit (car q))))
-      (cond
-        ((not hit) ; clear: commit it here
-         (setq out  (cons (list ctr (cadr pad) (caddr pad)) out)
-               done T))
-        ((or (< (paddle--cheb (paddle--sub ctr hit)) (/ padsize 2.0))
-             (> tries 6)
-             (> (paddle--cheb (paddle--sub ctr orig)) (/ padsize 2.0)))
-         (setq done T)) ; already covered there, or stuck: drop it
-        (T ; slide along the more-separated axis until flush
-         (setq d   (paddle--sub ctr hit)
-               ax  (if (>= (abs (car d)) (abs (cadr d))) 0 1)
-               sgn (if (< (nth ax d) 0.0) -1.0 1.0))
-         (setq ctr (if (= ax 0)
-                       (list (+ (car hit) (* sgn padsize)) (cadr ctr))
-                       (list (car ctr) (+ (cadr hit) (* sgn padsize)))))
-         (setq tries (1+ tries))))))
+  (foreach pad pads ; sharp points first: exact centers, never slid
+    (if (= (caddr pad) "corner")
+        (progn
+          (setq hit nil)
+          (foreach q out
+            (if (and (not hit)
+                     (< (paddle--cheb (paddle--sub (car pad) (car q)))
+                        (- padsize 1e-6)))
+                (setq hit T)))
+          (if (not hit) (setq out (cons pad out))))))
+  (foreach pad pads ; arc pads dodge around what's committed
+    (if (/= (caddr pad) "corner")
+        (progn
+          (setq ctr   (car pad)
+                orig  ctr
+                tries 0
+                done  nil)
+          (while (not done)
+            (setq hit nil)
+            (foreach q out
+              (if (and (not hit)
+                       (< (paddle--cheb (paddle--sub ctr (car q)))
+                          (- padsize 1e-6)))
+                  (setq hit (car q))))
+            (cond
+              ((not hit) ; clear: commit it here
+               (setq out  (cons (list ctr (cadr pad) (caddr pad)) out)
+                     done T))
+              ((or (< (paddle--cheb (paddle--sub ctr hit)) (/ padsize 2.0))
+                   (> tries 6)
+                   (> (paddle--cheb (paddle--sub ctr orig)) (/ padsize 2.0)))
+               (setq done T)) ; already covered there, or stuck: drop it
+              (T ; slide along the more-separated axis until flush
+               (setq d   (paddle--sub ctr hit)
+                     ax  (if (>= (abs (car d)) (abs (cadr d))) 0 1)
+                     sgn (if (< (nth ax d) 0.0) -1.0 1.0))
+               (setq ctr (if (= ax 0)
+                             (list (+ (car hit) (* sgn padsize)) (cadr ctr))
+                             (list (car ctr) (+ (cadr hit) (* sgn padsize)))))
+               (setq tries (1+ tries))))))))
   (reverse out))
 
 ;; ------------------------- block handling --------------------------
@@ -583,9 +600,10 @@
   (princ "\n    version of the curve. The extreme ends of the radius may stay")
   (princ "\n    uncovered; that is by design. Bigger concave radii, and curves")
   (princ "\n    bending 10 degrees or less, need no pads at all.")
-  (princ "\n 4. NO COLLISIONS. Where features crowd together, a pad that would")
-  (princ "\n    overlap a neighbour slides over to sit flush alongside it - or is")
-  (princ "\n    dropped when the neighbour already covers its spot.")
+  (princ "\n 4. NO COLLISIONS. Where features crowd together, a pad on a sharp")
+  (princ "\n    point stays dead-center on that point - it never moves. The pads")
+  (princ "\n    along curves do the dodging: they slide over to sit flush")
+  (princ "\n    alongside, or drop out when a neighbour already covers their spot.")
   (princ (strcat "\n 5. RESULT. 36\" x 36\" pads (block " *paddle-blkname*
                  ", imported from"))
   (princ (strcat "\n    " *paddle-blkfile* " if needed), always square to the"
