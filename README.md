@@ -114,6 +114,7 @@ changing a routine.
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
+| `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
 
 ### Going back a step
 
@@ -292,6 +293,8 @@ python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
 python3 tests/test_cdcallout.py       # CDCALLOUT loaded and run in lispvm
 python3 tests/test_autodim.py         # AUTODIM dim styles, dedupe, overall dims
+python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
+                                      # own sorted(), then the whole tour
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
