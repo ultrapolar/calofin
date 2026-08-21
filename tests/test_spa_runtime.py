@@ -44,6 +44,47 @@ def drawn(vm, etype, layer=None):
     return out
 
 
+def outline(vm, layer):
+    """The single closed polyline that bounds an outline."""
+    pls = drawn(vm, 'LWPOLYLINE', layer)
+    return pls[0] if len(pls) == 1 else None
+
+
+def extents(pl):
+    """(width height) of a polyline's vertices."""
+    xs = [p[0] for p in pl[10]] if isinstance(pl[10][0], list) else None
+    return xs
+
+
+def plverts(vm, layer):
+    """Vertices and bulges of an outline polyline, in order."""
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = [p for p in vm.entdata[e]]
+        got = {}
+        vs, bs = [], []
+        for p in d:
+            if isinstance(p, Dot):
+                if p.a == 0:
+                    got['t'] = p.b
+                elif p.a == 8:
+                    got['l'] = p.b
+                elif p.a == 42:
+                    bs.append(p.b)
+            elif isinstance(p, list) and p and p[0] == 10:
+                vs.append(p[1] if len(p) == 2 else p[1:])
+            elif isinstance(p, list) and p and p[0] == 42:
+                bs.append(p[1])
+            elif isinstance(p, list) and p and p[0] == 0:
+                got['t'] = p[1]
+            elif isinstance(p, list) and p and p[0] == 8:
+                got['l'] = p[1]
+        if got.get('t') == 'LWPOLYLINE' and got.get('l') == layer:
+            return vs, bs
+    return None, None
+
+
 def hinge_labels(vm):
     """The Hinge / Velcro Hinge MTEXTs, west to east."""
     lab = [d for d in drawn(vm, 'MTEXT', 'TEXT')
@@ -94,9 +135,9 @@ def test_rectangle_length_suggests_width():
               '90', None, None, None,   # corner A, then Enter x3
               'No', 'No'],
              'rect/suggest')
-    lines = drawn(vm, 'LINE', 'COVER')
-    xs = [p[0] for d in lines for p in (d[10], d[11])]
-    ys = [p[1] for d in lines for p in (d[10], d[11])]
+    vs, _ = plverts(vm, 'COVER')
+    xs = [v[0] for v in vs]
+    ys = [v[1] for v in vs]
     assert abs((max(xs) - min(xs)) - 84.0) < 1e-9
     assert abs((max(ys) - min(ys)) - 84.0) < 1e-9, (max(ys) - min(ys))
 
@@ -107,8 +148,8 @@ def test_rectangle_can_decline_the_suggestion():
               '90', None, None, None,
               'No', 'No'],
              'rect/decline')
-    lines = drawn(vm, 'LINE', 'COVER')
-    ys = [p[1] for d in lines for p in (d[10], d[11])]
+    vs, _ = plverts(vm, 'COVER')
+    ys = [v[1] for v in vs]
     assert abs((max(ys) - min(ys)) - 60.0) < 1e-9
 
 
@@ -152,7 +193,7 @@ def test_back_out_of_the_offset_reopens_the_offer():
               78.0, None,          # water's edge overalls
               'No'],               # no auto-hinge
              'rect/back-out-of-offset')
-    assert drawn(vm, 'LINE', 'POOL'), "the second outline was never drawn"
+    assert outline(vm, 'POOL'), "the second outline was never drawn"
 
 
 def test_back_undo_synonym():
@@ -166,6 +207,113 @@ def test_back_undo_synonym():
          '90', None, None, None,
          'No', 'No'],
         'rect/undo-synonym')
+
+
+# ------------------------------------------------- bounded outlines
+
+def test_each_outline_is_one_closed_entity():
+    """Cover and water's edge are each a single closed polyline, not a
+    scatter of loose lines."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              '90', None, None, None,
+              'Yes', 'Offset', 3.0,
+              'No'],
+             'bounded/two-outlines')
+    for layer in ('COVER', 'POOL'):
+        pls = drawn(vm, 'LWPOLYLINE', layer)
+        assert len(pls) == 1, f"{layer}: {len(pls)} polylines"
+        assert pls[0].get(70) == 1, f"{layer} polyline is not closed"
+    # and nothing is left drawn as loose perimeter lines
+    assert not drawn(vm, 'LINE', 'COVER')
+    assert not drawn(vm, 'LINE', 'POOL')
+
+
+def test_radius_corner_becomes_an_arc_segment():
+    """A radius corner is an arc segment of the polyline, with the
+    bulge of a quarter-turn fillet: tan(22.5) = 0.41421."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              # corner A: type then size; B/C/D each Enter twice to
+              # take the autofilled type AND its size
+              'Radius', 12.0, None, None, None, None, None, None,
+              'No', 'No'],
+             'bounded/radius-bulge')
+    vs, bs = plverts(vm, 'COVER')
+    assert len(vs) == 8, vs          # 4 corners x 2 tangent points
+    arcs = [b for b in bs if abs(b) > 1e-9]
+    assert len(arcs) == 4, bs
+    for b in arcs:
+        assert abs(b - 0.41421356) < 1e-6, b
+
+
+def test_diagonal_corner_stays_straight():
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              'Diagonal', 21.0,      # corner A: a 21" cut face
+              '90', '90', '90',      # B, C, D square
+              'No', 'No'],
+             'bounded/diagonal')
+    vs, bs = plverts(vm, 'COVER')
+    assert len(vs) == 5, vs          # one cut corner adds a vertex
+    assert all(abs(b) < 1e-12 for b in bs), bs
+
+
+# ------------------------------------------------------ millimetres
+
+def test_mm_measurement():
+    """A measurement typed as ##mm converts to inches."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              '2134mm',        # 2134 mm = 84.0157 in
+              '1524mm',        # 1524 mm = 60 in exactly
+              '90', None, None, None,
+              'No', 'No'],
+             'mm/rectangle')
+    vs, _ = plverts(vm, 'COVER')
+    ys = [v[1] for v in vs]
+    assert abs((max(ys) - min(ys)) - 60.0) < 1e-9, max(ys) - min(ys)
+    xs = [v[0] for v in vs]
+    assert abs((max(xs) - min(xs)) - 2134.0 / 25.4) < 1e-9
+
+
+def test_mm_is_case_and_space_insensitive():
+    vm = run([None, 'Coversize', 'ROund', None,
+              '1524 MM',
+              'No', 'No'],
+             'mm/round-spaced')
+    circles = drawn(vm, 'CIRCLE', 'COVER')
+    assert abs(circles[0][40] - 30.0) < 1e-9, circles[0][40]
+
+
+def test_mm_at_a_typed_prompt():
+    """The lap, a spa:askd prompt, takes mm too."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              '90', None, None, None,
+              'Yes', 'Offset', '76.2mm',   # 76.2 mm = 3 in
+              'No'],
+             'mm/lap')
+    vs, _ = plverts(vm, 'POOL')
+    xs = [v[0] for v in vs]
+    assert abs((max(xs) - min(xs)) - 78.0) < 1e-9, max(xs) - min(xs)
+
+
+def test_junk_is_re_asked_not_accepted():
+    """Arbitrary input that is not a measurement re-asks rather than
+    slipping through as a number."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              'banana',        # rejected...
+              84.0,            # ...then a real answer
+              None,
+              '90', None, None, None,
+              'No', 'No'],
+             'mm/junk')
+    # the width prompt came round twice: junk did not slip through
+    widths = [p for p, _ in vm.prompts if 'WIDTH' in p]
+    assert len(widths) == 2, [p for p, _ in vm.prompts]
+    vs, _ = plverts(vm, 'COVER')
+    xs = [v[0] for v in vs]
+    assert abs((max(xs) - min(xs)) - 84.0) < 1e-9
 
 
 # -------------------------------------------------------------- hinges
@@ -217,7 +365,9 @@ def test_octagon_runs():
               'NA', 'NA', 'NA', 'NA', 'NA',   # S2/T/S/S1/V
               'No', 'No'],
              'octagon/basic')
-    assert drawn(vm, 'LINE', 'COVER')
+    vs, bs = plverts(vm, 'COVER')
+    assert len(vs) == 8, vs
+    assert all(abs(b) < 1e-12 for b in bs), bs
 
 
 def test_thermolight_style_all_velcro():

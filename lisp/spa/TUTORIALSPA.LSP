@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082126 REV04")
+(setq tut:*version* "082126 REV05")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -93,6 +93,8 @@
     "    A ROUND spa takes ONE measurement -- the diameter; type O at"
     "    it only if the spa measured out of round.  A RECTANGLE offers"
     "    the width back as the length, so Enter makes it square."
+    "    Any measurement may be typed in MILLIMETRES with the unit on"
+    "    the number -- 600mm, 1524 MM -- and is converted to inches."
     "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
     "    Corner A's answer autofills B, C and D -- Enter accepts."
     "7.  Draw the other outline as well?  By Offset (give the lap) or by"
@@ -177,8 +179,9 @@
 
 (setq tut:*draws*
   (list
-    "COVER        the cover outline, solid"
-    "POOL         the water's edge outline, dashed"
+    "COVER        the cover outline, solid -- ONE closed polyline, so"
+    "             it picks in a click and encloses an area"
+    "POOL         the water's edge outline, dashed -- likewise"
     "DIMENSION    every dimension, in standard inches (fractional to"
     "             1/8\" with the inch mark), always outside the shape"
     "TEXT         the Hinge / Velcro Hinge labels"

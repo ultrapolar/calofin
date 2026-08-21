@@ -148,7 +148,14 @@
 ;;;  flat), G H (left flat); the four cuts are B-C, D-E, F-G and H-A.
 ;;;
 ;;;  Distances may be typed in the current drawing units, e.g. 6'10-1/2"
-;;;  as well as plain inches.  "Back" at any prompt after the first
+;;;  as well as plain inches -- or in MILLIMETRES by putting the unit on
+;;;  the number: 600mm, 1524 MM.  Object snaps stay live, so a distance
+;;;  can still be picked off existing geometry instead of typed.
+;;;
+;;;  Each outline is drawn as ONE CLOSED POLYLINE, so the cover and the
+;;;  water's edge are each a single bounded entity: one click selects
+;;;  either, each encloses an area, and either can be offset, hatched or
+;;;  handed to the tools that work on a highlighted perimeter.  "Back" at any prompt after the first
 ;;;  re-asks the previous question.
 ;;;
 ;;;  Written in plain AutoLISP (entmake + classic commands, no
@@ -165,7 +172,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082126 REV04")
+(setq spa:*version* "082126 REV05")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -486,6 +493,31 @@
 
 (defun spa:perround (cen b a) (spa:body-round cen b a spa:*perlay* (spa:perdxf)))
 
+;; tan(theta/4) -- the DXF bulge of an arc segment sweeping theta.
+(defun spa:bulge (th) (/ (sin (* 0.25 th)) (cos (* 0.25 th))))
+
+;; The perimeter as ONE closed LWPOLYLINE rather than a handful of loose
+;; lines and arcs, so each outline is a single bounded entity: it picks
+;; in one click, encloses an area, and can be offset, hatched or handed
+;; to the tools that expect a highlighted perimeter (STOCKCOVER, PADDLE,
+;; AUTOBEAD).  verts is a list of (point . bulge) walked counter-
+;; clockwise; a bulge of 0 is a straight run to the next vertex.
+;; Returns the polyline's entity name.
+(defun spa:perpoly (verts / lst v p)
+  (setq lst (append (list '(0 . "LWPOLYLINE")
+                          '(100 . "AcDbEntity")
+                          (cons 8 spa:*perlay*)
+                          '(100 . "AcDbPolyline")
+                          (cons 90 (length verts))
+                          '(70 . 1))          ; closed
+                    (spa:perdxf)))
+  (foreach v verts
+    (setq p (spa:wp (car v))
+          lst (append lst (list (cons 10 (list (car p) (cadr p)))
+                                (cons 42 (cdr v))))))
+  (entmake lst)
+  (entlast))
+
 ;; Dotted WHITE guide line -- the measuring ties on the input screen.
 (defun spa:linedot (p1 p2)
   (spa:line p1 p2 "SPA-NOTES"
@@ -587,7 +619,8 @@
 ;; far point and the dimension line dragged further out along the same
 ;; direction, so the leader comes in from outside.
 (defun spa:dimrad (ent tip outd doff sfx)
-  (if (and ent (entget ent) (= "ARC" (cdr (assoc 0 (entget ent)))))
+  (if (and ent (entget ent)
+           (member (cdr (assoc 0 (entget ent))) '("ARC" "LWPOLYLINE")))
       (if (and sfx (/= sfx ""))
           (command "_.DIMRADIUS" (list ent (spa:wp tip))
                    "_T" (strcat "<>" sfx)
@@ -636,7 +669,7 @@
 
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol SPA-BACK.
-(defun spa:asks (kind msg ents dflt back / v cols kw e)
+(defun spa:asks (kind msg ents dflt back / v cols kw e out)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (spa:osup)
@@ -644,24 +677,30 @@
   (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
-  (if kw
-      (initget (if (and (eq kind 'SUG) dflt) 6 7) kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (cond ((eq kind 'REQ) "")
-                          ((eq kind 'SUG)
-                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
-                               " (or NA)"))
-                          (t " (or NA if not measured)"))
-                    (if back " [Back]" "")
-                    ": ")))
+  (while (null out)
+    ;; 128 = arbitrary input, so a value typed in millimetres reaches us
+    ;; as text for spa:mmval rather than being rejected by getdist
+    (if kw
+        (initget (+ (if (and (eq kind 'SUG) dflt) 6 7) 128) kw)
+        (initget (+ 7 128)))
+    (setq v (getdist
+              (strcat "\n" msg
+                      (cond ((eq kind 'REQ) "")
+                            ((eq kind 'SUG)
+                             (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                                 " (or NA)"))
+                            (t " (or NA if not measured)"))
+                      (if back " [Back]" "")
+                      ": ")))
+    (cond
+      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SPA-BACK))
+      ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
+      ((and (null v) (eq kind 'SUG)) (setq out dflt))   ; Enter took it
+      ((setq out (spa:dval v)))
+      (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
   (spa:osdown)
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'SPA-BACK)
-        ((= (type v) 'STR) nil)               ; NA
-        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
-        (t v)))
+  (if (eq out 'SPA-NA) nil out))
 
 ;; Keyword question that can also be backed out of.  kws is the initget
 ;; string, shown the bracketed list, dflt the Enter answer (nil = an
@@ -676,29 +715,61 @@
         ((null v) (if dflt dflt (spa:askkw msg kws shown dflt back)))
         (t v)))
 
+;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
+;; 1524.5mm.  The drawing is in inches, so the value is converted.
+;; Returns the distance in inches, or nil when the text is not that --
+;; which is how the callers tell a mm answer from a typo.
+;;
+;; getdist cannot parse this itself, so the prompts that accept it set
+;; initget's bit 128 (arbitrary input): a value getdist understands
+;; still comes back as a number, and anything else comes back as the
+;; raw string for this to look at.  Point picking and architectural
+;; input are both untouched.
+(defun spa:mmval (s / n body v)
+  (setq s (spa:trim s)
+        n (strlen s))
+  (if (and (> n 2) (= "MM" (strcase (substr s (1- n) 2))))
+      (progn
+        (setq body (spa:trim (substr s 1 (- n 2)))
+              v (if (> (strlen body) 0) (distof body 2) nil))
+        (if (and v (> v 0.0)) (/ v 25.4)))))
+
+;; What a bit-128 getdist gave back: a number passes through, mm text
+;; converts, and anything else is nil so the caller can re-ask.
+(defun spa:dval (v)
+  (cond ((= (type v) 'STR) (spa:mmval v))
+        (t v)))
+
 ;; A typed distance prompt that follows the repo's Back convention: a
 ;; getdist DOES take keywords, so Back (and its unlisted synonym Undo)
 ;; are offered as keywords whenever there is a previous question to
 ;; return to, shown in the prompt's brackets like everywhere else.
 ;; xkw is any extra keyword to merge in, dflt an Enter answer.
 ;; Returns the distance, a matched keyword string, or SPA-BACK.
-(defun spa:askd (msg xkw dflt back / kw v)
+(defun spa:askd (msg xkw dflt back / kw v out)
   (setq kw (cond ((and xkw back) (strcat xkw " Back Undo"))
                  (back "Back Undo")
                  (t xkw)))
   (spa:osup)
-  (if kw (initget (if dflt 6 7) kw) (initget (if dflt 6 7)))
-  (setq v (getdist (strcat "\n" msg
-                           (if dflt (strcat " <" (rtos dflt) ">") "")
-                           (cond ((and xkw back) (strcat " [" xkw "/Back]"))
-                                 (xkw (strcat " [" xkw "]"))
-                                 (back " [Back]")
-                                 (t ""))
-                           ": ")))
+  (while (null out)
+    ;; 128 = arbitrary input, so a mm answer reaches us as text
+    (if kw (initget (+ (if dflt 6 7) 128) kw)
+        (initget (+ (if dflt 6 7) 128)))
+    (setq v (getdist (strcat "\n" msg
+                             (if dflt (strcat " <" (rtos dflt) ">") "")
+                             (cond ((and xkw back) (strcat " [" xkw "/Back]"))
+                                   (xkw (strcat " [" xkw "]"))
+                                   (back " [Back]")
+                                   (t ""))
+                             ": ")))
+    (cond
+      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SPA-BACK))
+      ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
+      ((and (null v) dflt) (setq out dflt))
+      ((setq out (spa:dval v)))
+      (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
   (spa:osdown)
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'SPA-BACK)
-        ((and (null v) dflt) dflt)
-        (t v)))
+  out)
 
 ;; Back typed like a value, for the one prompt that cannot take
 ;; keywords (getstring).  Any case, per the shared convention.
@@ -1714,24 +1785,44 @@
         ((eq spec 'next) (cadr ce))
         (t (nth i q))))
 
-;; Draw the rectangle perimeter with its corner treatments.  Returns the
-;; list of fillet-arc entity names per corner (nil where the corner is 90
-;; or diagonal) for the corner callouts.
-(defun spa:drawrect (q corners / ce i tyi arcs)
-  (setq ce (spa:allends q corners))
-  (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
-    (spa:perline (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce))))
-  (setq arcs nil)
-  (foreach i (list 0 1 2 3)             ; corner treatments
+;; Draw the rectangle perimeter with its corner treatments, as ONE
+;; closed polyline.  A radius corner becomes an arc segment (its bulge
+;; is tan of a quarter of the angle the arc sweeps, which for a square
+;; corner is tan 22.5 = 0.4142); a diagonal becomes a straight segment
+;; between its two ends; a 90 corner is a single vertex.
+;;
+;; Returns a per-corner list holding the polyline's entity name at each
+;; RADIUS corner and nil elsewhere, so the corner callouts still have
+;; something to hang a radius dimension on -- DIMRADIUS takes a polyline
+;; arc segment picked at a point on it just as it takes a bare arc.
+(defun spa:drawrect (q corners / ce i j tyi verts pl p pp pn uprev unext
+                                 dp ang arcs)
+  (setq ce (spa:allends q corners) verts nil)
+  (foreach i (list 0 1 2 3)
     (setq tyi (car (nth i corners)))
     (cond
+      ((= tyi "90")
+       ;; a single sharp vertex, straight out to the next corner
+       (setq verts (cons (cons (nth i q) 0.0) verts)))
       ((= tyi "Diagonal")
-       (spa:perline (car (nth i ce)) (cadr (nth i ce)))
-       (setq arcs (cons nil arcs)))
-      ((= tyi "Radius")
-       (spa:perarc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)))
-       (setq arcs (cons (entlast) arcs)))
-      (t (setq arcs (cons nil arcs)))))
+       (setq verts (cons (cons (cadr (nth i ce)) 0.0)
+                         (cons (cons (car (nth i ce)) 0.0) verts))))
+      (t                                ; Radius
+       (setq p  (nth i q)
+             pp (nth (rem (+ i 3) 4) q)
+             pn (nth (rem (+ i 1) 4) q)
+             uprev (spa:unit (spa:v- pp p))
+             unext (spa:unit (spa:v- pn p))
+             dp (spa:dot uprev unext)
+             ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp)
+             ;; the fillet sweeps the corner's exterior angle, and the
+             ;; walk is counter-clockwise, so the bulge is positive
+             verts (cons (cons (cadr (nth i ce)) 0.0)
+                         (cons (cons (car (nth i ce)) (spa:bulge (- pi ang)))
+                               verts))))))
+  (setq pl (spa:perpoly (reverse verts)) arcs nil)
+  (foreach i (list 0 1 2 3)
+    (setq arcs (cons (if (= (car (nth i corners)) "Radius") pl nil) arcs)))
   (reverse arcs))
 
 ;; How far the deepest corner treatment sets back along its walls -- an
@@ -2345,8 +2436,8 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
-  (foreach e spa:*octedges*
-    (spa:perline (nth (car e) pts) (nth (cadr e) pts)))
+  ;; one closed polyline, not eight loose lines
+  (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts))
 
   ;; ------------------------------------------- and, if wanted, the other
   ;; An octagon offset by g keeps its shape: the overalls each grow by
@@ -2401,8 +2492,7 @@
   (if meth
       (progn
         (spa:setmode (spa:othermode))
-        (foreach e spa:*octedges*
-          (spa:perline (nth (car e) pts2) (nth (cadr e) pts2)))
+        (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts2))
         (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions

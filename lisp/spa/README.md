@@ -25,8 +25,8 @@ still tell you what it is:
 
 ```
 Command: SPAVER
-SPA 082126 REV04
-Tutorial: 082126 REV04
+SPA 082126 REV05
+Tutorial: 082126 REV05
 ```
 
 Cut a new release with:
@@ -260,6 +260,35 @@ and `90° Typ.` on the square corners.
 The round spa takes one overall; only an out-of-round one gets the
 second. An octagon whose eight sides come out unequal picks up the bottom
 and right flats the same way the rectangle does.
+
+## Bounded outlines
+
+The cover and the water's edge are each drawn as **one closed
+`LWPOLYLINE`**, not a scatter of separate lines and arcs. So either
+outline picks in a single click, encloses a real area, and can be
+offset, hatched, or handed straight to the tools that expect a
+highlighted perimeter (`STOCKCOVER`, `PADDLE`, `AUTOBEAD`).
+
+A radius corner becomes a true arc segment of that polyline, carried as
+a bulge — `tan(θ/4)`, which for a square corner's quarter-turn fillet is
+`0.41421`. Radius dimensions still work: `DIMRADIUS` takes a polyline
+arc segment picked at a point on it exactly as it takes a bare arc. A
+round spa was already a single `CIRCLE` (or `ELLIPSE` when out of
+round), so it was bounded to begin with.
+
+## Millimetres
+
+Any measurement may be typed **in millimetres by putting the unit on the
+number** — `600mm`, `1524 MM`, `76.2mm` — and it is converted to inches
+(÷ 25.4). This works at every distance prompt: the guided measurements,
+the corner sizes, the lap, the spillaway lengths.
+
+Inches and architectural input are unchanged (`84`, `6'10-1/2"`), and
+object snaps stay live, so a distance can still be **picked** off
+existing geometry rather than typed. That combination is what
+`initget`'s bit 128 buys: a value `getdist` understands still comes back
+as a number, and anything else comes back as raw text for the mm parser
+to look at. Text that is neither re-asks rather than slipping through.
 
 ## Standard inches
 
