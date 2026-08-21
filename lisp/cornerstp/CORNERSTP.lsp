@@ -93,6 +93,15 @@
 ;;;       on the drops are chained vertically behind the wall and the
 ;;;       step treads horizontally below the profile, in the depth dim
 ;;;       style.
+;;;     9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
+;;;       assumption - so the only thing asked is which steps carry the
+;;;       bead along their side walls: All of them, or Some, given by
+;;;       step number.  AUTOBEAD does the work on its own rules (2"
+;;;       toward the side you click, onto its Bead Track layer), so
+;;;       AUTOBEAD.lsp has to be loaded; when it is not, the run says
+;;;       so and finishes without beading.  The beads are their own
+;;;       undo group - AutoCAD does not nest them - so one U undoes
+;;;       the beads and the next undoes the steps.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      step width tolerance in drawing units.  When
@@ -112,7 +121,8 @@
 ;;;   - DIMSCALE (or the annotation scale for annotative styles) sets
 ;;;     the dimension size; grab a dimension line to slide it if it
 ;;;     lands awkwardly.
-;;;   - One U / UNDO reverses the whole command.
+;;;   - One U / UNDO reverses the whole command; a bead run added at
+;;;     the end is its own group, so it takes a U of its own.
 ;;; ======================================================================
 
 ;; Settings - only defined if not already set, so the two routines that
@@ -124,7 +134,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.5") ; printed on load and at command start so a
+(setq *cs-version* "v2.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -270,6 +280,70 @@
     (if (or (null best) (< d bd)) (setq best s bd d)))
   best)
 
+
+;;; --------------------------- bead helpers -----------------------------
+
+;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
+;; all read the same.  Anything that is not a digit separates.
+(defun cs-numlist (str / out tok i c)
+  (setq out '() tok "" i 0)
+  (while (<= i (strlen str))
+    (setq c (if (< i (strlen str)) (substr str (1+ i) 1) " "))
+    (if (and (>= (ascii c) 48) (<= (ascii c) 57))
+      (setq tok (strcat tok c))
+      (progn
+        (if (/= tok "") (setq out (cons (atoi tok) out)))
+        (setq tok "")))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; The tread line of every step that was committed, as
+;; (step-number . ename).  A step's log record carries its entities
+;; first and its step number at index 6, and the only LINE among
+;; those entities is its tread - any dimension beside it is a DIMENSION.
+(defun cs-treadents (log / out rec e ln)
+  (setq out '())
+  (foreach rec log
+    (setq ln nil)
+    ;; ...-since lists newest first, and a step draws its tread before
+    ;; any side line or dimension, so the LAST line seen is the tread
+    (foreach e (car rec)
+      (if (and e (entget e)
+               (= "LINE" (cdr (assoc 0 (entget e)))))
+        (setq ln e)))
+    (if ln (setq out (cons (cons (nth 6 rec) ln) out))))
+  ;; the log runs newest first, so consing through it already leaves
+  ;; the pairs in step order - lowest first, the way they were drawn
+  out)
+
+;; The side (riser) lines the run drew: every LINE in the log that is
+;; not its step's tread.  CORNERSTP closes a step edge with one only
+;; when the walls do not already close it, so most runs have none.
+(defun cs-sideents (log / out rec e ln lines)
+  (setq out '())
+  (foreach rec log
+    (setq lines '() ln nil)
+    (foreach e (car rec)
+      (if (and e (entget e)
+               (= "LINE" (cdr (assoc 0 (entget e)))))
+        (setq lines (cons e lines) ln e)))    ; ln ends on the tread
+    (foreach e lines
+      (if (not (eq e ln)) (setq out (cons e out)))))
+  out)
+
+;; The step numbers on offer, as "1, 2, 3" - so the numbers prompt can
+;; be answered without scrolling back through the run.
+(defun cs-numsay (pairs / out pr)
+  (setq out "")
+  (foreach pr pairs
+    (setq out (strcat out (if (= out "") "" ", ") (itoa (car pr)))))
+  out)
+
+;; Midpoint (WCS) of a LINE entity.
+(defun cs-entmid (e / ed)
+  (setq ed (entget e))
+  (cs-mid2 (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
+
 ;;; ------------------------- setting helpers ----------------------------
 
 ;; 1/8" expressed in the drawing's units (INSUNITS); inches if unitless
@@ -406,6 +480,7 @@
                        prevL prevR dimflag w offd oldce oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
+                       bsides btreads bnums bside bdir bss pr be
                        tlist tvals tds drops pd ix ppt pw p2 dx sgn
                        px py totr totd)
 
@@ -998,6 +1073,73 @@
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
+
+  ;; ---- 11. bead the steps -----------------------------------------------
+  ;; AUTOBEAD does the beading, on its own rules and in its own undo
+  ;; group - which is why this sits outside ours: AutoCAD does not nest
+  ;; undo groups, so one U undoes the beads and the next undoes the
+  ;; steps.  Every tread is beaded; the only question left is which
+  ;; steps carry the bead along their side walls, and that is answered
+  ;; by step number here instead of by clicking each one.
+  (if (> drawn 0)
+    (if (not (boundp 'autobead-build))
+      (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
+                     " if you want these steps beaded."))
+      (progn
+        (initget "Yes No")
+        (if (/= "No" (getkword "\nBead the steps? [Yes/No] <Yes>: "))
+          (progn
+            (setq btreads (cs-treadents slog)
+                  bsides  (cs-sideents slog)
+                  bnums   nil)
+            (if (null btreads)
+              (princ "\nNo tread lines to bead.")
+              (progn
+                ;; every tread is beaded - the side walls are the question
+                (initget "All Some")
+                (setq bside (cond ((getkword (strcat "\nWhich steps have"
+                                                     " beaded side walls?"
+                                                     " [All/Some] <All>: ")))
+                                  ("All")))
+                (if (= bside "Some")
+                  (progn
+                    (princ (strcat "\n  Steps drawn: "
+                                   (cs-numsay btreads)))
+                    (setq bnums (cs-numlist
+                                  (getstring T (strcat "\nStep numbers with"
+                                                       " beaded sides: "))))
+                    (setq bnums (vl-remove-if-not
+                                  '(lambda (k) (assoc k btreads)) bnums))
+                    (if (null bnums)
+                      (progn
+                        (princ (strcat "\n  No step numbers recognized -"
+                                       " beading every side wall full"
+                                       " length."))
+                        (setq bside "All")))))
+                (setq bdir (getpoint "\nClick the side to bead toward: "))
+                (if (null bdir)
+                  (princ "\nNo direction picked - nothing beaded.")
+                  (progn
+                    ;; the treads, anything the run drew for its walls,
+                    ;; and the lines it came off: the pool lines of this
+                    ;; pocket, which is what AUTOBEAD beads
+                    (setq bss (ssadd))
+                    (foreach pr btreads (ssadd (cdr pr) bss))
+                    (foreach be bsides
+                      (if (and be (entget be)) (ssadd be bss)))
+                    (setq i 0)
+                    (while (< i (sslength ss))
+                      (ssadd (ssname ss i) bss)
+                      (setq i (1+ i)))
+                    (autobead-ensure-layer *autobead-layer*)
+                    (autobead-build
+                      bss bdir
+                      (= bside "Some")
+                      (if (= bside "Some")
+                        (mapcar '(lambda (k)
+                                   (cs-entmid (cdr (assoc k btreads))))
+                                bnums)
+                        nil)))))))))))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -1051,6 +1193,11 @@
   (princ "\n  4. Add a side profile? [Yes/No] - give each step's drop")
   (princ "\n     (its step depth), top step first, then pick the wall top")
   (princ "\n     and which side the steps descend.")
+  (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
+  (princ "\n     only question is which steps have beaded SIDE WALLS:")
+  (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
+  (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
+  (princ "\n     rest on its own rules - it has to be loaded for this.")
   (princ "\n  At any step tread prompt: Enter = done, Back = step back one")
   (princ "\n  step (removes it), Same = repeat the previous step tread.")
   (cs-tut-pause)
