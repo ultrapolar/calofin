@@ -50,9 +50,18 @@ overlapping on purpose:
 
 The circle the question is about — its arc, its dashed circle and its
 label — is drawn **red**, so there is never a doubt about which radius
-is wanted. A radius that has not been answered yet still needs a value
-for any of this to be drawable, so the preview fills the gaps with
-provisional ones and marks every one it invented with that `?`.
+is wanted.
+
+A radius that has not been answered yet still needs a value for any of
+this to be drawable, so the preview fills the gaps with **the
+proportions an oasis usually comes in**: a side bulge reaching three
+quarters of the way across the short bound, the top bulge half way
+across the long one. On a 40'×20' that starts you at 7'-6" side bulges
+and a 10'-0" top, against the 8'/9' and 11' of the drawing this tool was
+written from — near enough that the first question is already looking at
+a familiar shape rather than something to look past. Every one of those
+invented values carries a `?`, and the shape re-solves the instant a
+real number replaces one.
 
 The preview is scaffolding: it is erased when the last answer is in,
 and again if the run is cancelled with Esc.
@@ -61,12 +70,15 @@ and again if the run is cancelled with Esc.
 
 * the **six arcs** on the `POOL` layer;
 * the **overall X and Y and a radius on each of the six arcs** — eight
-  dimensions on the `DIMENSION` layer. This is not asked about; a pool
-  is always dimensioned;
+  dimensions on the `DIMENSION` layer, in the drawing's ordinary
+  **`Standard`** style. This is not asked about; a pool is always
+  dimensioned;
 * a **check drawing** clear to the right, dimensioned the way a layout
-  is *checked* rather than the way it is built — see below.
+  is *checked* rather than the way it is built — see below. Its
+  eighteen are the ones in the **`CROSS DIMENSIONS`** style, since that
+  is what they are.
 
-Every dimension is drawn in the **`CROSS DIMENSIONS`** style.
+Both layers are the same (`DIMENSION`); only the styles differ.
 
 The envelope box itself is construction: dashed on the check drawing,
 where the corners are being measured to, and not drawn at all on the
@@ -193,7 +205,10 @@ needs different names:
 | `oasis:*guidelayer*` | `"POOL-GUIDE"` | Layer the dashed circles, the box and the `?` labels go on |
 | `oasis:*guidecolor*` | `8` | Colour it is created with |
 | `oasis:*hicolor*` | `1` (red) | Colour the circle being asked about is drawn in |
-| `oasis:*dimstyle*` | `"CROSS DIMENSIONS"` | Dimension style every dim is drawn in |
+| `oasis:*dimstyle*` | `"Standard"` | Style the pool's own eight dims are drawn in |
+| `oasis:*crossstyle*` | `"CROSS DIMENSIONS"` | Style the check drawing's eighteen are drawn in |
+| `oasis:*startside*` | `0.75` | How far across the short bound a side bulge reaches before its radius is given |
+| `oasis:*starttop*` | `0.5` | How far across the long bound the top bulge reaches before its radius is given |
 | `oasis:*checkgap*` | `4.0` | How far right the check drawing sits, as a multiple of the dimension stand-off |
 | `oasis:*topfrac*` | `0.5` | Where the top bulge sits across the X bound, as a fraction of it. `0.5` centres it, which is what every oasis on file wants |
 | `oasis:*fuzz*` | `1.0e-6` | Slack for "same point / same length" tests, drawing units |
@@ -261,7 +276,7 @@ away.
   coordinates and its angles are measured from the world X axis — so
   both are carried across on the way out. The base point keeps its own
   elevation. A tilted UCS is refused (above).
-* **A missing `CROSS DIMENSIONS` style is not invented.** The dims are
+* **A missing dimension style is not invented.** Those dims are
   drawn in whatever style is current and the routine says so once, so a
   drawing started from the wrong template is obvious instead of quietly
   producing wrong-looking dims. Create the style — or start from the
@@ -302,7 +317,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 41 of them. The reference case is checked against the drawing OASIS was
+answers — 43 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -328,9 +343,13 @@ label are all red and all the right one; unanswered radii read `?` while
 answered ones read their value; every preview entity is erased when the
 run finishes; the check drawing lands clear to the right as a true copy;
 its twelve corner ties really do go to the two nearest corners of each
-centre; its six centre ties each read the two radii added together; every
-dimension comes out in `CROSS DIMENSIONS` with the previous style put
-back; and a drawing without that style still gets its pool. The preview
+centre; its six centre ties each read the two radii added together; the
+pool's dims come out in `Standard` and the check drawing's in
+`CROSS DIMENSIONS` with the previous style put back; and a drawing
+without a style still gets its pool. A tenth pins the starting
+proportions: the side bulges span three quarters of `Y`, the top bulge
+half of `X`, the bulges really are the bigger circles, and all six read
+`?`. The preview
 ones wrap `getdist` to photograph the drawing at the moment each question
 is put — it is erased before the next one, so there is no other way to
 see it.

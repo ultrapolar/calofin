@@ -72,16 +72,22 @@
 ;;; circle the question is about goes red, arc, circle and label
 ;;; together, so there is never a doubt which radius is wanted.  A radius
 ;;; not yet answered still needs a value for any of that to be drawable,
-;;; so the preview fills the gaps with provisional ones and marks every
-;;; one it invented with its "?".
+;;; so the preview fills the gaps with the proportions an oasis usually
+;;; comes in -- a side bulge three quarters of the way across the short
+;;; bound, the top bulge half way across the long one -- and marks every
+;;; one it invented with its "?".  On a 40 x 20 that starts the run at
+;;; 7'-6" side bulges and a 10'-0" top, against the 8'/9' and 11' of the
+;;; drawing this tool was written from: near enough that the first
+;;; question is already looking at a familiar shape.
 ;;;
 ;;; When the last answer is in, the preview is erased and the real thing
 ;;; goes down:
 ;;;
 ;;;   * the six arcs on the POOL layer;
 ;;;   * the overall X and Y and a radius on each of the six arcs -- eight
-;;;     dimensions, on the DIMENSION layer.  This is not asked about; a
-;;;     pool is always dimensioned;
+;;;     dimensions, on the DIMENSION layer, in the drawing's ordinary
+;;;     dimension style.  This is not asked about; a pool is always
+;;;     dimensioned;
 ;;;   * a CHECK DRAWING clear to the right, dimensioned the way a layout
 ;;;     is checked rather than the way it is built: every circle centre
 ;;;     tied back to the two envelope corners nearest it, and every pair
@@ -93,12 +99,14 @@
 ;;;     externally tangent by construction, so each of those must read
 ;;;     exactly the two radii added together.
 ;;;
-;;; Every dimension is drawn in the CROSS DIMENSIONS style.  A drawing
-;;; that has not got it is told so once and the dims come out in whatever
-;;; style is current -- an invented style would look right and measure
-;;; wrong.  The envelope box is construction: dashed on the check drawing
-;;; where the corners are being measured to, and not drawn at all on the
-;;; pool itself.
+;;; The check drawing's eighteen are drawn in the CROSS DIMENSIONS
+;;; style, since that is what they are; the pool's own eight are left in
+;;; the drawing's ordinary style, because the pool is a plan and reads
+;;; like one.  A drawing that has not got one of those styles is told so
+;;; once and those dims come out in whatever style is current -- an
+;;; invented style would look right and measure wrong.  The envelope box
+;;; is construction: dashed on the check drawing where the corners are
+;;; being measured to, and not drawn at all on the pool itself.
 ;;;
 ;;; Which frame it is drawn in
 ;;; -------------------------
@@ -137,7 +145,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v2.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -151,15 +159,28 @@
 (setq oasis:*guidecolor* 8)
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
-;; The dimension style every dimension is drawn in.  A drawing that does
-;; not have it is told so once and the dims come out in whatever style is
-;; current -- an invented style would look right and measure wrong.
-(setq oasis:*dimstyle* "CROSS DIMENSIONS")
+;; Two styles, because the two drawings are read differently: the pool
+;; itself is a plan and is dimensioned in the drawing's ordinary style,
+;; while the check drawing beside it is nothing but tie measurements and
+;; goes in the cross-dimension style, same as every other cross dim in
+;; the repo.  A drawing that has not got one of them is told so once and
+;; those dims come out in whatever style is current -- an invented style
+;; would look right and measure wrong.
+(setq oasis:*dimstyle*   "Standard")           ; the pool's own dims
+(setq oasis:*crossstyle* "CROSS DIMENSIONS")   ; the check drawing's
 
 ;; The check drawing sits this far to the right of the pool, measured
 ;; from the pool's own right-hand bound, as a multiple of the dimension
 ;; stand-off.  Big enough to clear the radius dims on that side.
 (setq oasis:*checkgap* 4.0)
+
+;; The shape the preview starts from, before any radius has been given:
+;; how far across the envelope a side bulge and the top bulge usually
+;; reach, as fractions.  Three quarters of the short bound and half the
+;; long one is what an oasis normally comes in, so the first question is
+;; already looking at something familiar.
+(setq oasis:*startside* 0.75)
+(setq oasis:*starttop*  0.5)
 
 ;; Where the top bulge sits across the X bound, as a fraction of it.
 ;; 0.5 centres it, which is what every oasis on file wants; the value
@@ -234,13 +255,13 @@
 ;; current and the routine says so once, so a drawing started from the
 ;; wrong template is obvious instead of quietly producing wrong-looking
 ;; dims.  (The CDCREATE rule, CDCREATE.lsp:80.)
-(defun oasis:dimstyle-on ()
-  (cond ((tblsearch "DIMSTYLE" oasis:*dimstyle*)
-         (command "_.-DIMSTYLE" "_Restore" oasis:*dimstyle*)
+(defun oasis:dimstyle-on (name)
+  (cond ((tblsearch "DIMSTYLE" name)
+         (command "_.-DIMSTYLE" "_Restore" name)
          T)
         (t
-         (princ (strcat "\nOASIS: this drawing has no \"" oasis:*dimstyle*
-                        "\" dimension style -- dims drawn in \""
+         (princ (strcat "\nOASIS: this drawing has no \"" name
+                        "\" dimension style -- those dims drawn in \""
                         (getvar "DIMSTYLE")
                         "\" instead.  Create the style (or start from the"
                         " standard template) and re-run."))
@@ -556,7 +577,7 @@
 ;; they measure the bounds the user was asked for, not a chord of them.
 (defun oasis:dimension (arcs ents base w h rl rr frac lay / doff i e md)
   (setvar "CLAYER" lay)
-  (oasis:dimstyle-on)
+  (oasis:dimstyle-on oasis:*dimstyle*)
   (setq doff (oasis:dimoff w h))
   (command "_.DIMLINEAR"
            (oasis:wp (list 0.0 rl) base)
@@ -618,6 +639,7 @@
 ;; The whole check drawing, placed at CBASE.  Returns nothing; the caller
 ;; has already put the layers and the dim style in place.
 (defun oasis:checkdraw (arcs cbase w h lt / mark i a c near)
+  (oasis:dimstyle-on oasis:*crossstyle*)
   (setvar "CLAYER" oasis:*guidelayer*)
   (oasis:pv-box w h cbase lt)
   (setq mark (max 1.0 (/ (max w h) 90.0))
@@ -677,24 +699,36 @@
 ;;; a "?".  If a provisional set happens not to solve, the outline is
 ;;; simply left out and the circles and box still show.
 
-;; The answers so far, with the gaps filled in well enough to draw.  The
-;; provisionals are deliberately timid -- a fifth of the short side for a
-;; bulge, comfortably over the minimum for a tangent -- so they land
-;; inside every check the real answers have to pass.
-(defun oasis:fillin (ans / w h rl rt rr cl ct cr g)
-  (setq w  (nth 0 ans)
-        h  (nth 1 ans)
-        g  (/ (min w h) 5.0)
-        rl (cond ((nth 2 ans)) (g))
-        rt (cond ((nth 3 ans)) ((/ (min w h) 4.0)))
-        rr (cond ((nth 4 ans)) (g))
-        cl (list rl rl)
-        ct (list (* w oasis:*topfrac*) (- h rt))
-        cr (list (- w rr) rr))
+;; The answers so far, with the gaps filled in well enough to draw.
+;;
+;; The provisionals are not arbitrary: they are the proportions an oasis
+;; usually comes in, so the shape on screen at the first question is
+;; already close to the one being measured rather than something the
+;; draftsman has to look past.  A side bulge spans about three quarters
+;; of the short bound and the top bulge about half the long one --
+;; oasis:*startside* and oasis:*starttop* are those two fractions, and
+;; they are HALVED here because a bulge is twice its radius across.  On a
+;; 40 x 20 that is 7'-6" side bulges and a 10'-0" top, against the 8'/9'
+;; and 11' of the drawing this tool was written from.
+;;
+;; A tangent radius has no such rule of thumb -- what looks right depends
+;; entirely on the three bulges -- so it takes a quarter of the short
+;; bound, lifted clear of its own minimum when that is larger.
+(defun oasis:fillin (ans / w h rl rt rr cl ct cr side g)
+  (setq w    (nth 0 ans)
+        h    (nth 1 ans)
+        side (* 0.5 oasis:*startside* (min w h))
+        g    (* 0.25 (min w h))
+        rl   (cond ((nth 2 ans)) (side))
+        rt   (cond ((nth 3 ans)) ((* 0.5 oasis:*starttop* w)))
+        rr   (cond ((nth 4 ans)) (side))
+        cl   (list rl rl)
+        ct   (list (* w oasis:*topfrac*) (- h rt))
+        cr   (list (- w rr) rr))
   (list w h rl rt rr
-        (cond ((nth 5 ans)) ((+ (* 2.0 (oasis:filmin ct rt cl rl)) g)))
-        (cond ((nth 6 ans)) ((+ (* 2.0 (oasis:filmin cr rr ct rt)) g)))
-        (cond ((nth 7 ans)) ((+ (* 2.0 (oasis:filmin cl rl cr rr)) g)))))
+        (cond ((nth 5 ans)) ((max g (* 1.25 (oasis:filmin ct rt cl rl)))))
+        (cond ((nth 6 ans)) ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
+        (cond ((nth 7 ans)) ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
 ;; a stray U in the middle of the questions cannot break the next redraw.
@@ -1077,10 +1111,10 @@
            (princ (strcat "\n  Tangent radii: " (rtos ftl) " top-left, "
                           (rtos ftr) " top-right, " (rtos fbc)
                           " bottom-center."))
-           (princ (strcat "\n  8 dimensions on the pool and 18 on the check"
-                          " drawing beside it, layer " oasis:*dimlayer*
-                          ","))
-           (princ (strcat "\n  all in the " oasis:*dimstyle* " style."))
+           (princ (strcat "\n  8 dimensions on the pool in the "
+                          oasis:*dimstyle* " style, and 18 on the check"))
+           (princ (strcat "\n  drawing beside it in " oasis:*crossstyle*
+                          " -- all on layer " oasis:*dimlayer* "."))
            (oasis:report-extents arcs w h)
            (oasis:report-crossings arcs)))))
   (princ))
