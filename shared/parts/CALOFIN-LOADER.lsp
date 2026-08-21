@@ -113,6 +113,7 @@
                  "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
+                 "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "wcalst.lsp"
                  "xftconv.lsp")
       (cal--load m))
