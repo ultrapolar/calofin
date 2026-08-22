@@ -13,7 +13,7 @@ Deliberately AutoLISP-strict where it matters:
   * dynamic scoping: a function's body sees its caller's locals;
   * integer / is integer division; floats propagate.
 
-Interaction is scripted: getdist / getkword / getpoint / getreal pop
+Interaction is scripted: getdist / getint / getkword / getpoint / getreal pop
 answers from a queue.  Numbers are distances, strings are keywords,
 None is Enter.  Running out of script, or ending with script left
 over, is a test failure -- the prompt log tells you where.
@@ -1294,6 +1294,30 @@ def _getdist(vm, a):
         raise LispError(f"getdist: zero not allowed at {prompt!r}", vm)
     if v < 0 and vm.initget_bits & 4:
         raise LispError(f"getdist: negative not allowed at {prompt!r}", vm)
+    return v
+
+
+@bi('getint')
+def _getint(vm, a):
+    # (getint [prompt]) -- a whole number, honouring the same initget
+    # bits and keywords getdist does
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = vm.pop_script(prompt, 'getint')
+    if v is None:
+        if vm.initget_bits & 1:
+            raise LispError(f"getint: Enter not allowed at {prompt!r}", vm)
+        return NIL
+    if isinstance(v, str):
+        kw = _match_kw(vm, v)
+        if kw is None:
+            raise LispError(f"getint: keyword {v!r} not among "
+                            f"{vm.initget_kws!r} at {prompt!r}", vm)
+        return kw
+    v = int(v)
+    if v == 0 and vm.initget_bits & 2:
+        raise LispError(f"getint: zero not allowed at {prompt!r}", vm)
+    if v < 0 and vm.initget_bits & 4:
+        raise LispError(f"getint: negative not allowed at {prompt!r}", vm)
     return v
 
 
