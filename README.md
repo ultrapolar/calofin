@@ -126,6 +126,7 @@ changing a routine.
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 | `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
+| `LAZFORM`, `LAZFORMVER` | `lisp/lazform/` | Fill a dimension chart in and draw the pool from it. The chart is the one off the paper - outline, hopper, dimension chain with its letters - and typing a number against a letter REPLACES the letter with what you typed. Clicking the picture moves the caret to the nearest dimension's box. Fill in what you know, leave the rest blank, press Insert: `POOL` runs and asks only for the gaps. `NA` in a box means not measured and is passed through as such; a blank box just means ask. Drawn with `vector_image` from a table of lines, so there is no artwork file to ship - see `lisp/lazform/README.md` |
 | `LAZPANEL`, `LAZBUTTON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 47 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange-L placeholder icon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Buttons are grouped Layout / Points / Dimensions / Checking (the same four group names as the VB palette); a command not loaded in this session is greyed out. A click closes the panel and runs the command exactly as if typed. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
 
 ### Going back a step
@@ -340,6 +341,8 @@ python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
 python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
                                       # just made, in the same lispvm
+python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
+                                      # and the pool it draws vs the prompts
 python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
                                       # DCL well-formed, run with stubs,
                                       # toolbar + generated icon bytes

@@ -176,6 +176,14 @@ TOOLS = {
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
     },
+    # The chart form is like the panel: it draws its own picture and
+    # asks nothing through the library, so its twin is the file plus the
+    # shared banner.  Listed so it can never drift.
+    'LAZFORM': {
+        'src': 'lisp/lazform/LAZFORM.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
     # The launcher panel uses no library helpers at all -- it draws
     # nothing and asks nothing -- so its twin is the file plus the
     # shared banner.  Listed anyway so the twin can never drift.

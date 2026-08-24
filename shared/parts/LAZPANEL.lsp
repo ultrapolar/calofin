@@ -64,7 +64,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.2")
+(setq *lazpanel-version* "v1.3")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -82,6 +82,7 @@
 
 (setq lzp:*groups*
   '(("Layout"
+     ("LAZFORM"        "Pool from a filled-in chart")
      ("SPA"            "Spa template")
      ("POOL"           "Pool layout")
      ("POOLDEMO"       "Worked pool example")
