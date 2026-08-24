@@ -62,7 +62,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.6")
+(setq *lazpanel-version* "v1.7")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -138,6 +138,8 @@
 (setq lzp:*pos* nil)              ; where the panel was last standing
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
+(setq lzp:*icondir* nil)          ; the folder the icons landed in
+(setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -442,27 +444,72 @@
 ;; path rather than the image, and AutoCAD re-reads it whenever the
 ;; button is redrawn.  A toolbar that survives into another session
 ;; would otherwise be pointing at a swept temp file for ever.
+(defun lzp:icon-file (dir name / d)
+  (setq d dir)
+  ;; a folder is not guaranteed to end in a separator -- glue the name
+  ;; straight on and a folder called Temp becomes a file called
+  ;; Templazpanel-16.bmp, which fails silently later
+  (if (not (member (substr d (strlen d) 1) '("\\" "/")))
+      (setq d (strcat d "\\")))
+  (strcat d "lazpanel-" name ".bmp"))
+
 (defun lzp:icon-path (name / d)
   (setq d (getvar "TEMPPREFIX"))
-  (cond
-    ((and d (= (type d) 'STR) (/= d ""))
-     ;; TEMPPREFIX usually ends in a backslash and is not guaranteed to
-     ;; -- glue the name straight on and a folder called Temp becomes a
-     ;; file called Templazpanel-16.bmp, which fails silently later
-     (if (not (member (substr d (strlen d) 1) '("\\" "/")))
-         (setq d (strcat d "\\")))
-     (strcat d "lazpanel-" name ".bmp"))
-    (t (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp"))))
+  (if (and d (= (type d) 'STR) (/= d ""))
+      (lzp:icon-file d name)
+      (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp")))
 
-;; Both icon files; (small large) paths, or nil when they cannot be
-;; written.
-(defun lzp:write-bmps ( / small large)
-  (setq small (lzp:icon-path "16")
-        large (lzp:icon-path "32"))
-  (if (and small large
-           (lzp:bmp-write small 16 lzp:*icon16*)
-           (lzp:bmp-write large 32 lzp:*icon32*))
-    (list small large)))
+;;  WHERE THE FILES GO, AND WHAT SETBITMAPS IS TOLD.  The CUI resolves a
+;;  toolbar bitmap by NAME along the support file search path -- hand it
+;;  a full path into the temp folder, which is not on that path, and on
+;;  many builds the button draws the "?" missing-image placeholder even
+;;  though the file is right where the path says.  So the icons go into
+;;  the FIRST folder of the support path (the user's own Support folder,
+;;  writable by design) and SetBitmaps is handed the bare names, which
+;;  resolve exactly the way the CUI wants to resolve them.  Only when
+;;  that folder cannot be written does this fall back to the temp folder
+;;  and full paths -- better a chance of an icon than none.
+
+(defun lzp:support-read ()
+  (vla-get-supportpath
+    (vla-get-files (vla-get-preferences (vlax-get-acad-object)))))
+
+;; The first entry of the support path, or nil.
+(defun lzp:support-dir ( / p out i n c)
+  (setq p (vl-catch-all-apply 'lzp:support-read nil))
+  (if (and (not (vl-catch-all-error-p p)) (= (type p) 'STR) (/= p ""))
+      (progn
+        (setq i 1 n (strlen p) out "")
+        (while (and (<= i n) (/= (setq c (substr p i 1)) ";"))
+          (setq out (strcat out c)
+                i (1+ i)))
+        (if (/= out "") out))))
+
+;; Write both sizes into DIR; the paths, or nil when either write fails
+;; (lzp:bmp-write records why in lzp:*iconerr*).
+(defun lzp:try-icons (dir / s l)
+  (if (and dir (= (type dir) 'STR) (/= dir ""))
+      (progn
+        (setq s (lzp:icon-file dir "16")
+              l (lzp:icon-file dir "32"))
+        (if (and (lzp:bmp-write s 16 lzp:*icon16*)
+                 (lzp:bmp-write l 32 lzp:*icon32*))
+            (progn (setq lzp:*icondir* dir)
+                   (list s l))))))
+
+;; What to hand SetBitmaps: bare names when the files sit on the support
+;; path, full temp paths as the fallback.
+(defun lzp:write-bmps ( / d)
+  (setq lzp:*icondir* nil
+        lzp:*iconref* nil)
+  (cond
+    ((and (setq d (lzp:support-dir)) (lzp:try-icons d))
+     (setq lzp:*iconref* "name")
+     (list "lazpanel-16.bmp" "lazpanel-32.bmp"))
+    ((lzp:try-icons (getvar "TEMPPREFIX"))
+     (setq lzp:*iconref* "path")
+     (list (lzp:icon-file (getvar "TEMPPREFIX") "16")
+           (lzp:icon-file (getvar "TEMPPREFIX") "32")))))
 
 ;; The LazPanel toolbar, wherever it lives -- one this file made in an
 ;; earlier session may sit in any loaded menu group.
@@ -643,19 +690,29 @@
   ;; right default and a poor answer to "why is my button blank", so
   ;; this walks the same steps out loud.
   (princ "\nLAZICON: where the button's picture comes from.")
+  (princ (strcat "\n  support    : "
+                 (cond ((lzp:support-dir))
+                       (t "(could not read the support path)"))))
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
-  (princ (strcat "\n  small      : " (lzp:icon-path "16")))
-  (princ (strcat "\n  large      : " (lzp:icon-path "32")))
   (setq paths (lzp:write-bmps))
   (cond
     (paths
-     (princ (strcat "\n  written    : yes, as a "
-                    (if lzp:*icontype* lzp:*icontype* "?")
-                    " array"))
-     (princ (strcat "\n  on disk    : "
-                    (if (findfile (car paths)) "found" "NOT FOUND")))
+     (princ (strcat "\n  written to : "
+                    (if lzp:*icondir* lzp:*icondir* "?")
+                    "  (as a " (if lzp:*icontype* lzp:*icontype* "?")
+                    " array)"))
+     (princ (strcat "\n  handed on  : " (car paths)
+                    (if (= lzp:*iconref* "name")
+                        "  (a name the support path resolves)"
+                        "  (a full path - the fallback)")))
+     ;; the CUI's own test, run here: a bitmap is resolved by findfile
+     ;; along the support path, and a name findfile cannot resolve is
+     ;; exactly the "?" placeholder on the button
+     (princ (strcat "\n  findfile   : "
+                    (cond ((findfile (car paths)))
+                          (t "CANNOT RESOLVE - this is the ? placeholder"))))
      (cond
        ((not (setq tb (vl-catch-all-apply 'lzp:toolbar-find nil)))
         (princ "\n  toolbar    : not on screen - type LAZBUTTON first."))

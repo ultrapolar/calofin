@@ -113,7 +113,7 @@ re-summon the button.
   `C:<NAME>`; unbound symbols are nil), so commands loaded after the
   panel's file was loaded are still picked up, each time it opens.
 
-## When the button comes up blank
+## When the button comes up blank -- or shows the "?" cloud
 
 The picture is best effort and fails quietly on purpose -- a missing
 icon must never stop the panel working. `LAZICON` is the way to find
@@ -129,6 +129,19 @@ LAZICON: where the button's picture comes from.
   on disk    : found
   SetBitmaps : accepted - the button should show it now
 ```
+
+The **"?" placeholder** is its own story, and the giveaway is that it
+means `SetBitmaps` *worked*: the button carries bitmap names, AutoCAD
+just cannot load them. The CUI resolves a toolbar bitmap by **name
+along the support file search path**, and the temp folder is not on
+that path -- so a full temp path can come back as the "?" even though
+the file is exactly where the path says. The icons therefore go into
+the **first folder of the support path** (the user's own Support
+folder) and `SetBitmaps` is handed the bare names, which resolve the
+way the CUI wants to resolve them; the temp folder and full paths are
+only the fallback when that folder cannot be written. `LAZICON` runs
+the CUI's own test -- `findfile` on the name it handed over -- and says
+`CANNOT RESOLVE - this is the ? placeholder` when that is the problem.
 
 The two steps most likely to fail, and what they mean:
 

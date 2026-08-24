@@ -268,7 +268,8 @@ STUB = '''
       stub:*ran* nil stub:*dlgname* nil stub:*done* nil
       stub:*tbs* nil stub:*btns* nil stub:*addargs* nil
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
-      stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil)
+      stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
+      stub:*nosupport* nil)
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
@@ -304,6 +305,10 @@ STUB = '''
 (defun vlax-get-acad-object () "ACAD")
 (defun vla-get-menugroups (app) "MGS")
 (defun vla-get-toolbars (mg) "TBS")
+(defun vla-get-preferences (app) "PREFS")
+(defun vla-get-files (prefs) "FILES")
+(defun vla-get-supportpath (files)
+  (if stub:*nosupport* (exit) "/stub/support;/stub/other"))
 (defun vla-get-count (obj) (if (= obj "MGS") 1 (length stub:*tbs*)))
 (defun vla-get-name (tb) tb)
 (defun vla-item (obj i)
@@ -409,6 +414,7 @@ def _invoke(vm, a):
         raise lispvm.LispError('Automation Error', vm)
     if m == 'savetofile':
         COM['saved'] = (str(a[2]), a[3])
+        COM.setdefault('saves', []).append(str(a[2]))
     return None
 
 
@@ -519,9 +525,17 @@ assert int(COM['props']['type']) == 1, COM['props']      # adTypeBinary
 assert COM['calls'].count('open') == 2 and COM['calls'].count('write') == 2
 assert COM['saved'][1] == 2, COM['saved']                # overwrite if present
 assert COM['released'] == 2, "the stream object must be released"
+# The FILES go into the first support-path folder; SetBitmaps is handed
+# the bare NAMES.  The CUI resolves a toolbar bitmap by name along the
+# support search path, and a full path into the temp folder -- which is
+# not on that path -- is exactly the "?" placeholder the button showed.
+# the stub folder carries no trailing separator, so the code adds the
+# Windows one -- which is the point of the guard
+assert COM.get('saves') == ['/stub/support\\lazpanel-16.bmp',
+                            '/stub/support\\lazpanel-32.bmp'], COM.get('saves')
 bitmaps = [str(x) for x in vm.globals.get('stub:*bitmaps*') or []]
-assert len(bitmaps) == 2 and bitmaps[0].endswith('16.bmp') \
-    and bitmaps[1].endswith('32.bmp'), bitmaps
+assert bitmaps == ['lazpanel-16.bmp', 'lazpanel-32.bmp'], (
+    "SetBitmaps must get support-resolvable NAMES, not paths: %r" % bitmaps)
 
 grid = [str(r) for r in vm.globals.get('lzp:*icon16*')]
 assert len(grid) == 16 and all(len(r) == 16 for r in grid), grid
@@ -574,6 +588,18 @@ assert nuls > 0
 print("   and every pixel of the 16x16 -- %d of its bytes are NUL, which is"
       % nuls)
 print("   exactly why write-char could never have written this file")
+
+
+print("== no support folder: full temp paths, the best that is left ==")
+vmf = stubbed(preload=True)
+vmf.loads('(setq stub:*nosupport* t)'
+          '(setvar "TEMPPREFIX" "/tmp/acad/")'
+          '(setq t:*b* (lzp:write-bmps))')
+fb = [str(x) for x in (vmf.globals.get('t:*b*') or [])]
+assert fb == ['/tmp/acad/lazpanel-16.bmp', '/tmp/acad/lazpanel-32.bmp'], fb
+assert str(vmf.globals.get('lzp:*iconref*')) == 'path', \
+    vmf.globals.get('lzp:*iconref*')
+print("   support path unreadable -> temp folder and full paths")
 
 
 print("== a stable icon path, so a surviving toolbar keeps its picture ==")
