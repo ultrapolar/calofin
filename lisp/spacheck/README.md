@@ -62,6 +62,7 @@ all-clear in green at 75%.
 | --- | --- |
 | `SPACHECK` | The audits, then a walk of everything they flagged — one item at a time, zoomed to each, colouring the ones you confirm are wrong. |
 | `SPACHECKSCAN` | The identical audits, **read-only** — writes the report and nothing else. Good as a pre-flight. |
+| `LITESPACHECKSCAN` | The scan minus the per-dimension audit (layer, style, span agreement) — for a drawing `DIMCHECK` already went over, when only the spa rules are wanted. |
 | `SPACHECKRESCUE` | Puts back every colour SPACHECK stashed and removes the report — the way out after a crash, or once you're done with the marks. |
 | `SPACHECKVER` | Prints the loaded version and the title-block size it is checking for. |
 | `TUTORIALSPACHECK` | Teaches the tool — see below. |

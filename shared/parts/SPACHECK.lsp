@@ -5,6 +5,7 @@
 ;;;
 ;;; Commands:  SPACHECK        guided review of everything it flags
 ;;;            SPACHECKSCAN    the same audits, read-only
+;;;            LITESPACHECKSCAN  the scan minus the dimension audit
 ;;;            SPACHECKVER     print the loaded version
 ;;;            SPACHECKRESCUE  put back every colour, remove the markers
 ;;;            TUTORIALSPACHECK   the checklist, a worked demo, or both
@@ -71,8 +72,13 @@
 ;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
-;;;      every finding under underlined section headings.  Problems in
-;;;      RED at full size, advice in CYAN, all-clear in green at 75%.
+;;;      the SPA-specific findings under underlined section headings.
+;;;      The mechanical per-dimension audit (each dimension's layer,
+;;;      style and span agreement) is set apart in a DIMENSION AUDIT
+;;;      column to the RIGHT of the main sheet, since DIMCHECK covers
+;;;      the same ground; LITESPACHECKSCAN skips that audit entirely,
+;;;      for drawings DIMCHECK already went over.  Problems in RED at
+;;;      full size, advice in CYAN, all-clear in green at 75%.
 ;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
@@ -85,7 +91,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.1")
+(setq *spacheck-version* "v1.2")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -976,10 +982,13 @@
 ;;; ======================================================================
 
 ;; Everything, in report order, each section under its heading row.
-;; Returns (rows . flagged-entities).
-(defun spachk:audit (ss / rows ents blk att g tp cov wat covo wato
-                          dims covn r)
-  (setq rows nil ents nil)
+;; The mechanical per-dimension audit (layer, style, span agreement)
+;; is DIMCHECK's ground, so its rows come back separately for the
+;; report's second column - and a lite run skips it altogether.
+;; Returns (main-rows dim-rows flagged-entities).
+(defun spachk:audit (ss lite / rows drows ents blk att g tp cov wat covo
+                             wato dims covn r)
+  (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
   (setq rows (append rows (list (spachk:row "THE DETAILS BLOCK" 3))))
@@ -1014,12 +1023,15 @@
   (setq r (spachk:audit-nesting cov wat)
         rows (append rows (spachk:res-rows r)))
 
-  ;; 4 -- the dimensions
-  (setq rows (append rows (list (spachk:row "THE DIMENSIONS" 3))))
-  (setq dims (spachk:dims ss)
-        r    (spachk:audit-dims dims cov wat)
-        rows (append rows (spachk:res-rows r))
-        ents (append ents (spachk:res-ents r)))
+  ;; 4 -- the dimensions.  The per-dimension audit fills the second
+  ;; column; the roster and standoffs are SPA's own rules and stay on
+  ;; the main sheet.
+  (setq rows (append rows (list (spachk:row "THE OVERALLS" 3))))
+  (setq dims (spachk:dims ss))
+  (if (not lite)
+    (setq r     (spachk:audit-dims dims cov wat)
+          drows (spachk:res-rows r)
+          ents  (append ents (spachk:res-ents r))))
   (setq r (spachk:audit-roster dims cov wat)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
@@ -1044,24 +1056,32 @@
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
 
-  (cons rows ents))
+  (list rows drows ents))
 
 ;;; -------------------- the report --------------------------------------
 
-(defun spachk:write-report (rows bb readonly / nlin ref h ins txt r nbad nadv)
+;; The whole report: the SPA-specific findings on the MAIN sheet and,
+;; unless lite, the per-dimension audit in a DIMENSION AUDIT column to
+;; its right - the DIMCHECK-style pass, set apart so the spa verdicts
+;; lead.  Returns (problem-count advisory-count), over both columns.
+(defun spachk:write-report (rows drows bb readonly lite
+                            / nlin ndim ref h ins ins2 txt r nbad nadv)
   (cal:ensure-layer spachk:*report-layer* spachk:*report-color*)
   (setq nbad 0 nadv 0)
-  (foreach r rows
+  (foreach r (append rows drows)
     (cond ((spachk:lvl-p r 1) (setq nbad (1+ nbad)))
           ((spachk:lvl-p r 2) (setq nadv (1+ nadv)))))
   ;; height: scale the sheet to the drawing, as the siblings do.  The
   ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
-  ;; row is one line plus the 0.4 gap above it.
+  ;; row is one line plus the 0.4 gap above it.  The dimension column
+  ;; is counted the same way, and the taller column drives the height.
   (setq nlin 4.5)
   (foreach r rows
     (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
                              ((spachk:row-lvl r) 1.0)
                              (t spachk:*green-scale*)))))
+  (setq ndim (+ 2.5 (if drows (length drows) 1)))
+  (if (and (not lite) (> ndim nlin)) (setq nlin ndim))
   (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
     (progn
       (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
@@ -1078,9 +1098,10 @@
   ;; plain ALL CLEAR otherwise -- then the colour legend.  The verdict
   ;; is wrapped in its height code first so it never renders as (or
   ;; counts among) the finding rows, which start with a colour code.
-  (setq txt (strcat (spachk:big (if readonly
-                                    "SPACHECKSCAN REPORT"
-                                    "SPACHECK REPORT"))
+  (setq txt (strcat (spachk:big (cond ((and readonly lite)
+                                       "LITESPACHECKSCAN REPORT")
+                                      (readonly "SPACHECKSCAN REPORT")
+                                      (t "SPACHECK REPORT")))
                     "\\P"
                     (spachk:small (strcat (cal:datestr)
                                           "  -  SPACHECK "
@@ -1107,12 +1128,33 @@
                       (strcat (if readonly
                                   "Read-only scan - nothing in the drawing was changed.  "
                                   "")
+                              (if lite
+                                  "Lite: the dimension audit was skipped - run SPACHECKSCAN or DIMCHECK for it.  "
+                                  "")
                               "Problems in " (spachk:red "red")
                               ", advice in " (spachk:cyan "cyan")
                               "; lines that checked out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (spachk:render r))))
   (cal:mtext ins h (* spachk:*report-chars* h) txt spachk:*report-layer*)
+  ;; the DIMENSION AUDIT column, to the right of the main sheet
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ spachk:*report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (spachk:small
+                           (strcat "Each dimension against its layer, its"
+                                   " style and its own span - DIMCHECK's"
+                                   " ground, kept off the main sheet."))))
+      (if drows
+        (foreach r drows
+          (setq txt (strcat txt "\\P" (spachk:render r))))
+        (setq txt (strcat txt "\\P"
+                          (spachk:small "  Every dimension checks out."))))
+      (cal:mtext ins2 h (* spachk:*report-chars* h) txt
+                    spachk:*report-layer*)))
   (list nbad nadv))
 
 ;;; -------------------- marking (SPACHECK only) -------------------------
@@ -1186,18 +1228,25 @@
                  (rtos (* spachk:*title-frac* spachk:*liner-h*))))
   (princ))
 
-;;; --- SPACHECKSCAN: the audits, read-only -------------------------------
+;;; --- SPACHECKSCAN / LITESPACHECKSCAN: the audits, read-only ------------
+;;;  The lite scan is the same audits minus the per-dimension pass,
+;;;  for a drawing DIMCHECK already went over.
 
-(defun c:SPACHECKSCAN ( / *error* oldecho ss res rows bb ents n)
+(defun c:SPACHECKSCAN () (spachk:scan nil))
+
+(defun c:LITESPACHECKSCAN () (spachk:scan T))
+
+(defun spachk:scan (lite / *error* oldecho name ss res rows drows bb ents n)
+  (setq name (if lite "LITESPACHECKSCAN" "SPACHECKSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nSPACHECKSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
   (prompt (strcat "\nHighlight the spa drawing and its "
                   spachk:*details-block*
-                  " block to SPACHECKSCAN (Enter = whole drawing): "))
+                  " block to " name " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
@@ -1205,24 +1254,28 @@
     (progn
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (setq res  (spachk:audit ss)
-            rows (car res)
-            ents (cdr res)
-            bb   (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*))
-            n    (spachk:write-report rows bb t))
+      (setq res   (spachk:audit ss lite)
+            rows  (car res)
+            drows (cadr res)
+            ents  (caddr res)
+            bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*))
+            n     (spachk:write-report rows drows bb t lite))
       (setvar "CMDECHO" oldecho)
-      (princ (strcat "\n--- SPACHECKSCAN complete (read-only) ---"
+      (princ (strcat "\n--- " name " complete (read-only) ---"
                      "\n" (itoa (car n)) " problem"
                      (if (= 1 (car n)) "" "s") ", "
                      (itoa (cadr n)) " advisor"
                      (if (= 1 (cadr n)) "y" "ies")
+                     (if lite
+                         "\nLite: the dimension audit was skipped."
+                         "")
                      "\nReport written on layer " spachk:*report-layer*
                      "; nothing else was changed."))))
   (princ))
 
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
 
-(defun c:SPACHECK ( / *error* oldecho undo-open ss res rows ents bb n
+(defun c:SPACHECK ( / *error* oldecho undo-open ss res rows drows ents bb n
                       e k tot ans marked)
   (defun *error* (msg)
     (cal:sysrestore)
@@ -1244,10 +1297,11 @@
       (setvar "CMDECHO" 0)
       (command "_.UNDO" "_Begin")
       (setq undo-open T)
-      (setq res  (spachk:audit ss)
-            rows (car res)
-            ents (cdr res)
-            bb   (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
+      (setq res   (spachk:audit ss nil)
+            rows  (car res)
+            drows (cadr res)
+            ents  (caddr res)
+            bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
       ;; walk what was flagged, one at a time
       (setq tot (length ents) k 0 marked 0)
       (if (> tot 0)
@@ -1269,7 +1323,7 @@
                    (spachk:stash-color e spachk:*flag-color*)
                    (setq marked (1+ marked)))
                   ((= ans "Skip") (setq k tot))))))))
-      (setq n (spachk:write-report rows bb nil))
+      (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
       (command "_.UNDO" "_End")
       (setq undo-open nil)
