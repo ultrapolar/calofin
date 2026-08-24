@@ -123,7 +123,7 @@
 ;;;  view -- so it gets a box in the list and nothing on the picture.
 
 (setq lzf:*charts* '(
-  ("rectangle" "Rectangle" "Rectangle"
+  ("Rectangle" "Rectangle" "Rectangle"
    ;; pool outline, hopper flat, the four slopes, deep-end wall
    ((100 300 900 300 900 860 100 860 100 300)
     (275 475 400 475 400 700 275 700 275 475)
@@ -146,6 +146,21 @@
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")))
 ))
+
+;;; -------------------- asking which chart ------------------------------
+;;;  The canonical keyword prompt of STANDARDS.md section 4, carried
+;;;  locally: the grouped build swaps this for cal:askkw, so nothing
+;;;  here may call another tool's copy of it.
+
+(defun lzf:askkw (msg kws shown dflt back / v)
+  (initget (if dflt 0 (if back 0 1))
+           (if back (strcat kws " Back Undo") kws))
+  (setq v (getkword (strcat "\n" msg " [" shown
+                            (if back "/Back" "") "]"
+                            (if dflt (strcat " <" dflt ">") "") ": ")))
+  (cond ((member v '("Back" "Undo")) 'LZF-BACK)
+        ((null v) (if dflt dflt (lzf:askkw msg kws shown dflt back)))
+        (t v)))
 
 ;;; -------------------- chart access ------------------------------------
 
@@ -199,6 +214,40 @@
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
 (defun lzf:py (v) (fix (/ (* v lzf:*dy*) 1000.0)))
+
+;;  An outline element is either a POLYLINE -- a flat list of per-mille
+;;  numbers, x y x y ... -- or an ARC, written
+;;
+;;      ("A" cx cy rx ry from to)
+;;
+;;  with the centre and both radii in per-mille and the angles in
+;;  degrees, 0 due east and counting anticlockwise ON SCREEN.  Since
+;;  image-tile y runs DOWN, that is a minus on the y term and nowhere
+;;  else.  Two radii rather than one because these charts want half of
+;;  an ellipse as often as half of a circle.
+;;
+;;  DCL draws line segments and nothing else, so an arc has to become a
+;;  polyline sooner or later; doing it here means the chart data can say
+;;  what it means and say it once.
+
+(defun lzf:arcpts (a / cx cy rx ry f to n i ang out)
+  (setq cx (nth 1 a) cy (nth 2 a) rx (nth 3 a) ry (nth 4 a)
+        f (nth 5 a) to (nth 6 a))
+  (setq n (fix (/ (abs (- to f)) 6.0)))
+  (if (< n 4) (setq n 4))
+  (setq i 0)
+  (while (<= i n)
+    ;; NB: the angle local is not called t -- a local of that name would
+    ;; shadow TRUE for the length of the call
+    (setq ang (/ (* pi (+ f (/ (* (- to f) i) (float n)))) 180.0)
+          out (cons (fix (- cy (* ry (sin ang))))
+                    (cons (fix (+ cx (* rx (cos ang)))) out))
+          i (1+ i)))
+  (reverse out))
+
+;; An outline element as a flat per-mille polyline, whichever it was.
+(defun lzf:flatten (e)
+  (if (= (type (car e)) 'STR) (lzf:arcpts e) e))
 
 ;; A polyline given as a flat per-mille list, in pixels.
 (defun lzf:pline (flat col / a b)
@@ -327,7 +376,8 @@
         lzf:*dy* (dimy_tile "chart"))
   (start_image "chart")
   (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
-  (foreach poly (lzf:outline c) (lzf:pline poly lzf:*col-line*))
+  (foreach poly (lzf:outline c)
+    (lzf:pline (lzf:flatten poly) lzf:*col-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (lzf:px (nth 2 d)) (lzf:py (nth 3 d))
                (lzf:px (nth 4 d)) (lzf:py (nth 5 d)) lzf:*col-dim*))
@@ -357,6 +407,20 @@
         (mode_tile key 2)               ; move the caret to its box
         (lzf:redraw)))
   (princ))
+
+;;; -------------------- which chart -------------------------------------
+
+;; The keyword list, straight off the chart table: a chart added below
+;; is offered here without touching this code.
+(defun lzf:keywords ( / c out)
+  (foreach c lzf:*charts*
+    (setq out (if out (strcat out " " (car c)) (car c))))
+  out)
+
+(defun lzf:pickchart ( / kws)
+  (setq kws (lzf:keywords))
+  (lzf:askkw "Which chart" kws (vl-string-translate " " "/" kws)
+             (car (car lzf:*charts*)) nil))
 
 ;;; -------------------- the dialog --------------------------------------
 ;;  Two columns: the chart on the left as an image_button, the boxes on
@@ -534,7 +598,7 @@
     ((not pool:run-with-answers)
      (princ "\nLAZFORM: POOL is not loaded in this session -- APPLOAD")
      (princ "\n         lisp/pool/POOL.LSP, or LAZPASS.lsp which has both."))
-    ((setq form (lzf:show "rectangle"))
+    ((setq form (lzf:show (lzf:pickchart)))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
      (pool:run-with-answers form))

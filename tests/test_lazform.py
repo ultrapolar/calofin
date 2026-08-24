@@ -150,7 +150,7 @@ askseq_keys = set(re.findall(r"\(list '([a-z][a-z0-9]*)\s+'(?:REQ|NAX|ZER|SUG)",
                              pool_src))
 derived = {'c', 'd', 'c2'}          # the depth asks, keyed off their prompts
 wired = {'shape', 'insq', 'btype', 'base'}
-vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "rectangle")))')
+vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "Rectangle")))')
 for k in [str(x) for x in vm.globals['t:*keys*']]:
     assert k in askseq_keys or k in derived, (
         "chart key %r is not asked for anywhere in POOL.LSP -- it would be "
@@ -160,7 +160,7 @@ print("   every chart key is a POOL answer key (%d of them)"
 
 
 print("== the generated DCL is well formed ==")
-vm.loads('(setq lzf:*chart* (lzf:chart "rectangle"))'
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
          '(setq t:*dcl* (lzf:dcl-lines))')
 dcl = [str(x) for x in vm.globals['t:*dcl*']]
 assert dcl[0] == 'lazform : dialog {', dcl[0]
@@ -239,7 +239,7 @@ print("   %d value strokes appear; outline strokes fall %d -> %d"
 
 
 print("== clicking the picture picks the nearest dimension ==")
-vm.loads('(setq lzf:*chart* (lzf:chart "rectangle"))')
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
 for frac_x, frac_y, want in (
         (0.50, 0.175, 'tp'),        # on the B chain across the top
         (0.19, 0.58, 'h'),          # on H
@@ -343,7 +343,8 @@ vm.loads('(setq stub:*insq* "0")')             # out-of-square
 vm.loads('(setq stub:*btype* "2")')            # Wedge, third in the list
 try:
     vm.run('c:LAZFORM',
-           [(0.0, 0.0, 0.0)] + CORNERS + CROSS + ["Yes"] + REST)
+           ["Rectangle"] + [(0.0, 0.0, 0.0)] + CORNERS + CROSS +
+           ["Yes"] + REST)
 except LispError as e:
     raise AssertionError("form run: %s" % e) from None
 a = snapshot(vm)
