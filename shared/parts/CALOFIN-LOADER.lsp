@@ -109,8 +109,8 @@
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
                  "SPACHECK.lsp"
-                 "STOCKCOVER.lsp" "drone.lsp" "wcalst.lsp"
-                 "xftconv.lsp")
+                 "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
+                 "xftconv.lsp" "XYPLOT.lsp")
       (cal--load m))
     (if (> cal:*missing* 0)
       (princ (strcat "\n[calofin] " (itoa cal:*missing*)

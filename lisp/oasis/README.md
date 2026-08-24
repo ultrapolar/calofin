@@ -83,6 +83,105 @@ runs slant across the pool, so the self-crossing test checks them like
 anything else: segment against circle and segment against segment,
 exact rather than sampled.
 
+## The pool bottom
+
+Once the perimeter is drawn and reported, OASIS offers the floor:
+
+```
+Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:
+```
+
+`Enter` finishes as usual. Answer `Yes` and it draws what
+[ABHD](../abhd/README.md) draws at the end of its own fit — a **shallow
+break** across the pool where the flat shallow floor starts to fall, a
+**deep break** where it levels out, the **hopper** beyond it (the flat
+deep floor, the perimeter offset inward) and a **slope line** up each
+side from the hopper's corner to the shallow break. The deep break goes
+down as three collinear pieces, dashed stubs from each wall in to the
+hopper's corners with a solid run between them, and carries the classic
+**K/L/M** string of chained dimensions a stand-off clear of it on the
+shallow side, so the string reads from the shallow end rather than from
+over the deep end it measures.
+
+### Saying where a break is
+
+ABHD is a survey: points are picked on the pool edge and everything is
+measured from the nearest one. Here the perimeter is not surveyed but
+**known**, exactly — so a point on it is said one of three ways, and each
+break question offers all three:
+
+```
+Shallow break, located how? [Offset/Tangency/Nearest/Back] <Offset>:
+```
+
+| | What it asks | What it gives |
+| --- | --- | --- |
+| **Offset** | which bound, and how far in from it | **both** ends at once: the break is where that line crosses the pool |
+| **Tangency** | a number, twice | the change of tangency with that number — every one is drawn and numbered on screen while the question is up |
+| **Nearest** | a pick, twice | the pick dropped onto the outline at the nearest point of it, exactly |
+
+`Offset` is how a deep end is normally called out — *the hopper starts
+twelve feet in* — and one answer names the whole break. The bounds are
+`Left`, `Right`, `BOttom` and `Top` (two capitals on the bottom, because
+`Back` already has the B). A line that crosses a dipping edge more than
+twice takes the break right across, from the first crossing to the last,
+and says so.
+
+`Tangency` is the one the shape itself suggests: the joints between the
+arcs are where a continuous-tangent pool naturally breaks. While the
+question is up, every joint carries a numbered mark on `POOL-GUIDE`;
+they come down with the rest of the scaffolding.
+
+### The hopper
+
+```
+Hopper offset in from the wall [Back] <18.0000>:
+```
+
+One number, not ABHD's three. That is the one thing here that is not
+ABHD's logic, and it is what an exact perimeter buys: offsetting a
+tangent-continuous ring inward by a **constant** gives another
+tangent-continuous ring — same centres, same angles, every bulge shrunk
+and every reverse arc grown by the offset — so the hopper comes out as
+**arcs and runs**, exactly the offset in from the wall, rather than a
+polyline of facets fitted back to curves. ABHD asks three and blends
+them along the wall because a surveyed shape is irregular and the tape
+says different things in different places; an oasis is a designed shape
+and does not need that.
+
+The hopper is that offset ring cut off at the deep break, so its two
+corners are exactly where it meets the break line. **K** and **M** then
+read what the offset really produced at the break rather than the number
+that was typed — they are the same only where the break meets the wall
+square. The offset itself is dimensioned at the back of the hopper,
+where it is squarest to the wall.
+
+An offset with no room is re-asked. What rules one out is never the
+number on its own but the number against this pool, so the check is the
+build itself: past a bulge's own radius there is no wall left inside it,
+and the re-ask names the bulge.
+
+### The slope lines
+
+```
+Slope line on the left side [Straight/Guided/Back] <Straight>:
+```
+
+Each is asked separately and named by the arc its end of the deep break
+landed on, so there is never a doubt which of the two is being asked
+about. **Straight** is a clean run from the hopper's corner to the
+shallow break point on that side. **Guided** follows the pool's own wall
+instead, its inward offset easing from the hopper's at the deep break to
+nothing at the shallow one, so it lands on the shallow break having
+followed the curve in. Either way it departs from the hopper's corner on
+the deep break line itself.
+
+`Back` steps through the bottom's own questions the way it does the
+pool's; `Back` out of the first of them adds nothing at all, and the
+perimeter stays exactly as it was. Everything lands on `POOL` with the
+perimeter and its dimensions on `DIMENSION`, inside the same undo group,
+so one `U` takes the pool and its floor together.
+
 ## What it does
 
 1. Asks **which of the four shapes** it is — everything else follows
@@ -96,6 +195,8 @@ exact rather than sampled.
    on a rounded cloud, one on a straight-bottom cloud.
 6. Draws the finished pool, its dimensions, and a **check drawing**
    beside it.
+7. Offers the **pool bottom** — the two breaks, the hopper and the slope
+   lines — laid out on the outline it has just built.
 
 So an oasis asks eleven questions and the clouds ask nine and eight — a
 complex Center adds a twelfth for the hump's offset. The middle ones are
@@ -297,6 +398,17 @@ instead, and a Center pool gains one more straight after the top bulge:
 
 ```
 Top bulge off center, left negative [Back] <0>:
+```
+
+Then, once the pool is drawn and reported:
+
+```
+Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: Yes
+Shallow break, located how? [Offset/Tangency/Nearest/Back] <Offset>:
+Deep break, located how? [Offset/Tangency/Nearest/Back] <Offset>:
+Hopper offset in from the wall [Back] <18.0000>:
+Slope line on the left side [Straight/Guided/Back] <Straight>:
+Slope line on the right side [Straight/Guided/Back] <Straight>:
 ```
 
 `CLoud` takes two capitals because `Center` already has the `C`; the
@@ -502,7 +614,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 81 of them. The reference case is checked against the drawing OASIS was
+answers — 95 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -590,9 +702,29 @@ segment; a run already answered is still the element picked out in red
 when it is re-asked; and `Back` walks the two new questions like any
 other.
 
+Thirteen cover the **pool bottom**: it is offered last and defaults to
+No, which leaves the perimeter untouched; a break can be said all three
+ways and each lands on the outline (the nearest-point one is checked
+against a dense walk, so "nearest" means nearest); the changes of
+tangency are numbered on screen while the question is up and gone after
+it; the hopper is the wall offset inward to 1e-8, in the water all
+along, tangent-continuous, and with both corners exactly on the deep
+break line; every part of it lies beyond that break; a straight run in
+the wall is offset across it rather than out through it; the deep break
+goes down as a dashed stub, a solid run and a dashed stub, collinear,
+with K, L and M measuring the three of them and standing off on the
+shallow side; the two slope lines are paired away from the hopper and do
+not cross; a guided one starts on the wall, eases out to the hopper's
+offset and ends on its corner, staying in the water throughout; a line
+that cuts a dipping edge four times takes the break across the outermost
+pair; a shallow break past the deep one is refused as swapped; an offset
+wider than a bulge is re-asked; `Back` out of the first step adds nothing
+at all; and the whole flow sits inside the perimeter's own undo group.
+
 The preview ones wrap `getdist` to photograph the drawing at the moment
 each question is put — it is erased before the next one, so there is no
-other way to see it.
+other way to see it; the tangency marks are caught the same way, through
+`getint`.
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_oasis.py` reruns the whole
 file against the grouped build in `shared/`, as a parity check.

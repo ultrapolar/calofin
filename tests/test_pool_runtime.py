@@ -95,10 +95,10 @@ assert len(drawn(vm, 'LINE', 'POOL')) >= 9    # perimeter + hopper + ties
 assert drawn(vm, 'TEXT', 'POOL-NOTES')        # labels + report
 print("   perimeter, hopper and report all drawn")
 
-print("== R2. rectangle, out-of-square, Diag corners, Ends mode, wedge ==")
+print("== R2. rectangle, out-of-square, Cut corners, Ends mode, wedge ==")
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,        # TOP BOTTOM LEFT RIGHT
-          "Diag", 24.0,                       # corner A
+          "Cut", 24.0,                       # corner A
           None, None, None, None, None, None,  # B, C, D reuse (type+size)
           "Ends",
           260.0, 260.0, 260.0, 260.0,         # 4 crossing cross dims
@@ -116,10 +116,10 @@ print("== R3. Back stress: across questions, blocks and stages ==")
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, "Back", 240.0,                   # typo -> Back into TOP
           240.0, 120.0, 120.0,                    # BOTTOM LEFT RIGHT
-          "Diag", 24.0,                           # corner A
+          "Cut", 24.0,                           # corner A
           None, None,                             # corner B reuses
-          "Rounded", 30.0,                        # corner C changes
-          "Back", "Diag", 24.0,                   # Back into C, re-answer
+          "Radius", 30.0,                        # corner C changes
+          "Back", "Cut", 24.0,                   # Back into C, re-answer
           None, None,                             # corner D reuses C
           "Ends",
           "Back",                                 # out of cross -> cmode
@@ -224,7 +224,7 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           474.5, 474.5,                           # LT-RT / LB-RB: near-true
           "NA", "NA", "NA", "NA",                 # the end-cut X, both ends
           "NA", "NA", "NA", "NA",                 # tips to far corners
-          None,                                    # corners modified? Enter = No
+          None,                                    # anything to record? Enter = No
           "No"],
          "R5")
 assert len(drawn(vm, 'LINE', 'POOL')) >= 8
@@ -254,7 +254,7 @@ vm = run(["Insquare", "Grecian"] + BASE +
           480.0,                    # B - overall length
           200.0,                    # A - overall width  (NOT assumed = B)
           "NA", "NA", "NA", "NA", "NA",   # T S S1 V S2
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"],
          "R5b")
 _ov = [p for p, a in vm.prompts if "overall" in p.lower()]
@@ -284,7 +284,7 @@ vm = run(["Insquare", "OC"] + BASE +
          [None,                    # method Enter -> Overall default
           400.0,                   # A & B once (in-square)
           "NA", "NA", "NA", "NA", "NA",   # T S S1 V S2 all NA
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "Yes", "Normal", "Square",   # bottom type, then hopper style
           80.0, 120.0, 110.0, 90.0,       # H G F E
           None, 160.0, None],      # M sugg, L, K sugg
@@ -307,7 +307,7 @@ print("== R6b. the drawn octagon itself is regular (no bottom, so every "
 vm = run(["Insquare", "OC"] + BASE +
          [None, 400.0,
           "NA", "NA", "NA", "NA", "NA",
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"],
          "R6b")
 _per = [_m.dist(tuple(d[10][:2]), tuple(d[11][:2]))
@@ -327,7 +327,7 @@ print("== R7. roman, in-square perfect, no bottom ==")
 vm = run(["Insquare", "RO"] + BASE +
          [400.0, 260.0, "NA",      # B A T
           45.0, 50.0, 160.0, "NA",  # S S1 V R(check NA)
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"],
          "R7")
 assert drawn(vm, 'ARC', 'POOL')
@@ -351,7 +351,7 @@ print("== R8. true L, out-of-square, diagonals NA, hopper E-skip, mirror No ==")
 vm = run(["Outofsquare", "L"] + BASE +
          [480.0, 420.0, 180.0, 180.0, 300.0, 240.0,   # six sides
           "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA",  # 9 diags
-          None,                   # corners modified? Enter = No
+          None,                   # anything to record? Enter = No
           "Yes",
           60.0, 90.0, 150.0,      # H G F sum to B1=300 -> E skipped
           None, 100.0, None,      # M sugg, L, K sugg
@@ -481,12 +481,12 @@ assert hasseg((0.0, 0.0), (360.0, 0.0)), "body is B minus the half-round ext"
 assert any("Cross dim body A-C" in p for p, a in vm.prompts)
 print("   half-round deep end, square shallow end, crosses asked")
 
-print("== R14. lazy L with ROUNDED outer corners + DIAG inner corner ==")
+print("== R14. lazy L with RADIUS outer corners + CUT inner corner ==")
 vm = run(["Insquare", "LA"] + BASE +
          [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
           "Yes",                  # corners modified
-          "Rounded", 24.0,        # OUTER corners
-          "Diag", 18.0,           # INNER corner (E) differs
+          "Radius", 24.0,        # OUTER corners
+          "Cut", 18.0,           # INNER corner (E) differs
           "No", "No"],            # no bottom, no mirror
          "R14")
 # five outer fillet arcs on the pool perimeter
@@ -506,9 +506,9 @@ assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 296.0) < 0.5 for c in dimcalls(vm))
 # the Typ. radius callout ran for the outer corners
 assert any(c[0] == '_.DIMRADIUS' and any('Typ.' in str(x) for x in c)
            for c in vm.commands), "outer corner Typ. callout"
-print("   5 rounded outer corners, chamfered inner corner, Typ. callout")
+print("   5 radius outer corners, cut inner corner, Typ. callout")
 
-print("== R14b. true L hopper ties connect to the ROUNDED deep-end wall ==")
+print("== R14b. true L hopper ties connect to the RADIUS deep-end wall ==")
 # true L, sides 480/420/180/180/300/240 -> A=(0,0) B=(480,0) C=(480,420)
 # D=(300,420) E=(300,240) F=(0,240).  The deep-end wall is A-F (both
 # plain 90-degree corners), so with a 24" outer radius the hopper's
@@ -517,7 +517,7 @@ print("== R14b. true L hopper ties connect to the ROUNDED deep-end wall ==")
 # behind them like the old (hardcoded-Square) main-section frame drew.
 vm = run(["Insquare", "L"] + BASE +
          [480.0, 420.0, 180.0, 180.0, 300.0, 240.0,
-          "Yes", "Rounded", 24.0, "Square",   # outer 24" round, inner square
+          "Yes", "Radius", 24.0, "Square",   # outer 24" radius, inner square
           "Yes",
           60.0, 90.0, 150.0,      # H G F sum to B1=300 -> E skipped
           None, 100.0, None,      # M sugg, L, K sugg
@@ -573,7 +573,7 @@ print("== R14c. lazy L: the same fix applies (shared hopper code path) ==")
 # collapsing onto the sharp corner.
 vm = run(["Insquare", "LA"] + BASE +
          [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
-          "Yes", "Diag", 20.0, "Square",
+          "Yes", "Cut", 20.0, "Square",
           "Yes",
           48.0, 72.0, 106.0,
           40.0, 80.0, 40.0,
@@ -602,7 +602,7 @@ print("== R15. dims under 24\" use the STANDARD INCHES dim style ==")
 # that HAS the style: the corner treatments are small, the sides big
 vm = run(["Insquare", "LA"] + BASE +
          [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
-          "Yes", "Rounded", 20.0, "Diag", 18.0,
+          "Yes", "Radius", 20.0, "Cut", 18.0,
           "No", "No"],
          "R15", dimstyles=("STANDARD INCHES",))
 
@@ -638,7 +638,7 @@ print(f"   {len(small)} small dims in STANDARD INCHES, "
 print("== R15b. no STANDARD INCHES in the drawing -> current style, warned once ==")
 vm = run(["Insquare", "LA"] + BASE +
          [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
-          "Yes", "Rounded", 20.0, "Diag", 18.0,
+          "Yes", "Radius", 20.0, "Cut", 18.0,
           "No", "No"],
          "R15b")
 assert not vm.dimstyle_log, vm.dimstyle_log      # never switched
@@ -652,7 +652,7 @@ print("== R15c. out-of-square corner dims + nesting inside CROSS DIMENSIONS ==")
 # chamfer dim in the inches style, not four
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,
-          "Diag", 18.0,
+          "Cut", 18.0,
           None, None, None, None, None, None,
           "Corner", 268.0, 268.0,
           "No"],
@@ -665,9 +665,9 @@ assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.dimstyle_log
 # ... but corners that genuinely DIFFER still dim individually
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,
-          "Diag", 18.0,
+          "Cut", 18.0,
           None, None,                    # B reuses A
-          "Rounded", 20.0,               # C differs
+          "Radius", 20.0,               # C differs
           None, None,                    # D reuses C
           "Corner", 268.0, 268.0,
           "No"],
@@ -705,7 +705,7 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           441.50, 216.00,                 # B, A overalls
           324.00, 61.00, 60.00, 96.00, 84.00,   # T, S, S1, V, S2
           "Simple", 389.00, 388.50,       # cross dims A-C, B-D
-          None,                           # corners modified? Enter = No
+          None,                           # anything to record? Enter = No
           "No"],                          # no bottom: every POOL line
          "R16")                           # is a perimeter edge
 _seg = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
@@ -740,7 +740,7 @@ print("== R17. SIX-sided grecian hopper, sheet-letter input (W X L L1 G M K) =="
 def hexrun(mode_answers, label):
     vm = run(["Insquare", "Grecian"] + BASE +
              ["Overall", 480.0, 240.0, "NA", 60.0, 72.0, "NA", "NA",
-              None,                     # corners modified? Enter = No
+              None,                     # anything to record? Enter = No
               "Yes", "Normal", "SIX"] + mode_answers, label)
     s = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
     ox = min(p[0] for seg in s for p in seg)
@@ -843,7 +843,7 @@ print("   under 24\" switches to STANDARD INCHES; exactly 24\" keeps the current
 print("== R20. out-of-square L: corner cuts use the REAL angle, not 90 ==")
 # The nominal L sheared 0.15 in x, so no corner is square: A and C come
 # out 81.47 deg, B/D/E/F 98.53.  A treatment's setback along its walls
-# is r/tan(a/2) (Rounded) -- 27.87 at 81.47 deg for r=24, not the 24.00
+# is r/tan(a/2) (Radius) -- 27.87 at 81.47 deg for r=24, not the 24.00
 # a fixed-90 assumption gives.  The perimeter must be cut by the real
 # figure, and no wall may end up drawn backwards.
 #
@@ -888,7 +888,7 @@ def wall_spans(segs, P, walls):
 
 
 vm = run(["Outofsquare", "L"] + BASE + _S + _D +
-         ["Yes", "Rounded", 24.0, "Square", "No", "No"], "R20")
+         ["Yes", "Radius", 24.0, "Square", "No", "No"], "R20")
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
 spans = wall_spans(segs, _P, _WALLS)
 for nm, ts in spans.items():
@@ -911,8 +911,8 @@ print("== R21. out-of-square L: the size cap knows the angle too ==")
 # -- overrunning it and drawing that wall backwards.  It must now be
 # rejected and re-asked instead.
 vm = run(["Outofsquare", "L"] + BASE + _S + _D +
-         ["Yes", "Rounded", 90.0, 40.0, "Square", "No", "No"], "R21")
-_rad = [p for p, a in vm.prompts if 'corner radius' in str(p)]
+         ["Yes", "Radius", 90.0, 40.0, "Square", "No", "No"], "R21")
+_rad = [p for p, a in vm.prompts if 'Radius for' in str(p)]
 assert len(_rad) == 2, f"oversize radius was not re-asked: {_rad}"
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
 for nm, ts in wall_spans(segs, _P, _WALLS).items():
@@ -924,10 +924,10 @@ def inner_asked(osz, isz):
     v.load(LSP)
     try:
         v.run('c:POOL', ["Outofsquare", "L"] + BASE + _S + _D +
-              ["Yes", "Diag", osz, "Rounded", isz, 10.0, "No", "No"])
+              ["Yes", "Cut", osz, "Radius", isz, 10.0, "No", "No"])
     except LispError:
         pass          # accepted first time: the spare value hit the next prompt
-    return len([p for p, a in v.prompts if 'INNER' in str(p) and 'radius' in str(p)])
+    return len([p for p, a in v.prompts if 'inner corner' in str(p) and 'Radius for' in str(p)])
 
 
 assert inner_asked(40.0, 140.0) == 1, "r=140 fits when the outer cut is small"
@@ -955,7 +955,7 @@ _ls = [round(_m.dist(_LZ[i], _LZ[j]), 2)
 _ld = [round(_m.dist(_LZ[i], _LZ[j]), 2)
        for i, j in [(0,2),(1,3),(2,4),(3,5),(0,4),(1,5),(0,3),(2,5)]]  # no B-E
 vm = run(["Outofsquare", "LA"] + BASE + _ls + _ld +
-         ["Yes", "Rounded", 24.0, "Square",
+         ["Yes", "Radius", 24.0, "Square",
           "Yes", 40.0, 60.0, 90.0, "NA", None, 60.0, None, "No"], "R22")
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
 # A (index 0) and F (index 5) are the deep-end wall's corners: each of
@@ -1046,7 +1046,7 @@ print("== R24. secondary sheet letters read in SIDE STANDARD ==")
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"],
          "R24", dimstyles=("SIDE STANDARD",))
 # in-square grecian draws 7 dims: S T B S1 V A S2 -> exactly 4 of them
@@ -1080,7 +1080,7 @@ assert vm.dimstyle_log == ['SIDE STANDARD', 'STANDARD',
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"],
          "R24-missing")
 assert 'SIDE STANDARD' not in vm.dimstyle_log
@@ -1115,7 +1115,7 @@ vm.run('c:POOL', ["Outofsquare", "Grecian"] + BASE +
        ["Overall", 441.50, 216.00,
         324.00, 61.00, 60.00, 96.00, 84.00,
         "Simple", 389.00, 388.50,
-        None,                     # corners modified? Enter = No
+        None,                     # anything to record? Enter = No
         "No"])
 _tx = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
 assert any(isinstance(t, str) and (t.startswith('+') or t.startswith('-'))
@@ -1145,7 +1145,7 @@ assert len(_mlines) >= 4, _mlines
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"], "R26-grec")
 _g = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')
       if d.get(1) in ("A", "B", "C", "D", "RB", "RT", "LT", "LB")]
@@ -1199,7 +1199,7 @@ check_linear(vm, "R27-oos")
 vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
-          None,                     # corners modified? Enter = No
+          None,                     # anything to record? Enter = No
           "No"], "R27-grec")
 assert dimcalls(vm, '_.DIMLINEAR'), "grecian overalls must be linear"
 check_linear(vm, "R27-grec")
@@ -1219,7 +1219,7 @@ vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
           "Yes",                    # corners modified
-          "Rounded", 12.0,          # BODY corners
+          "Radius", 12.0,          # BODY corners
           None, None,               # END TIPS: Enter reuses type and size
           "No"],
          "R28")
@@ -1241,7 +1241,7 @@ vm = run(["Insquare", "Grecian"] + BASE +
          ["Overall", 480.0, 200.0,
           "NA", "NA", "NA", "NA", "NA",
           "Yes",
-          "Rounded", 12.0,          # BODY corners
+          "Radius", 12.0,          # BODY corners
           "Square",                 # END TIPS stay sharp
           "No"],
          "R28b")
@@ -1258,13 +1258,13 @@ vm = run(["Outofsquare", "Grecian"] + BASE +
           70.0, 70.0, 100.0,
           "Simple", "NA", "NA",
           "Yes",
-          "Rounded", 10.0,          # corner A
+          "Radius", 10.0,          # corner A
           None, None, None, None, None, None, None,   # B..RB: Enter reuses
           None, None, None, None, None, None, None,   # ... type AND size each
           "No"],
          "R28c")
 _cp = [p for p, a in vm.prompts
-       if p.startswith("\nCorner ") and "[Square/" in p]
+       if "How should Corner " in p and "[Square/Radius/Cut/NotGiven" in p]
 assert len(_cp) == 8, _cp
 assert len(drawn(vm, 'ARC', 'POOL')) == 8
 assert len(dimcalls(vm, '_.DIMRADIUS')) == 1
@@ -1280,7 +1280,7 @@ vm = run(["Insquare", "RO"] + BASE +
          [400.0, 260.0, "NA",
           45.0, 50.0, 160.0, "NA",
           "Yes",                    # corners modified
-          "Rounded", 12.0,          # all corners (assumed identical)
+          "Radius", 12.0,          # all corners (assumed identical)
           "No"],
          "R29")
 _arcs = drawn(vm, 'ARC', 'POOL')
@@ -1303,9 +1303,9 @@ vm = run(["Outofsquare", "RO"] + BASE +
           45.0, 45.0, 50.0, 50.0, 160.0, 160.0, "NA", "NA",
           "NA", "NA",              # cross dims
           "Yes",                   # corners modified
-          "Rounded", 12.0,         # corner A
+          "Radius", 12.0,         # corner A
           None, None,              # corner B reuses type and size
-          "Diag", 18.0,            # corner C chamfered
+          "Cut", 18.0,            # corner C cut
           "Square",                # corner D stays sharp
           "No"],
          "R29b")
@@ -1318,5 +1318,181 @@ assert hasrow(vm, "CORNER A RAD") and hasrow(vm, "CORNER B RAD")
 assert hasrow(vm, "CORNER C FACE")
 assert not hasrow(vm, "CORNER D RAD") and not hasrow(vm, "CORNER D FACE")
 print("   roman: one answer in square, per-corner out; stubs off the cuts")
+
+
+print("== R30. the Treatment question: canonical set, aliases, no size ==")
+# STANDARDS section 2: one wording, four answers, NotGiven last, the
+# pre-standard words accepted but never shown
+vm = run(["Insquare", "Rectangle"] + BASE + [480.0, 240.0, "NotGiven", "No"], "R30")
+_q = [p for p, a in vm.prompts if "be treated?" in p]
+assert len(_q) == 1, _q
+assert _q[0] == "\nHow should all four corners be treated? " \
+                "[Square/Radius/Cut/NotGiven/Back]: ", repr(_q[0])
+# NotGiven takes NO size follow-up -- nothing was measured
+assert not any("Radius for" in p or "Cut face length for" in p
+               for p, a in vm.prompts), vm.prompts[-4:]
+# ... and the sheet flags it rather than claiming a 90
+assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
+assert any(d.get(1) == "Not Given" for d in drawn(vm, 'TEXT', 'DIMENSION')), \
+    "a NotGiven corner needs its Not Given note"
+assert hasrow(vm, "CORNERS NotGiven")
+# the row carries no numbers: N/A target AND N/A actual, no delta
+_row = reportrow(vm, "CORNERS NotGiven")
+assert _row.count("N/A") == 2 and "-" in _row, _row
+
+# a plain square corner gets the circled 90 mark (was a bare leader)
+vm = run(["Insquare", "Rectangle"] + BASE + [480.0, 240.0, "Square", "No"], "R30b")
+assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['90%%d Typ.']
+assert len(drawn(vm, 'CIRCLE', 'DIMENSION')) == 1
+
+# the legacy words still work, typed in full, and normalise on the way in
+for _old, _new, _sizeprompt in [("ROUNDED", "Radius", "Radius for"),
+                                ("DIAG", "Cut", "Cut face length for"),
+                                ("DIAGONAL", "Cut", "Cut face length for"),
+                                ("90", "Square", None),
+                                ("NG", "NotGiven", None)]:
+    _script = [480.0, 240.0, _old] + ([24.0] if _sizeprompt else []) + ["No"]
+    vm = run(["Insquare", "Rectangle"] + BASE + _script, f"R30-{_old}")
+    if _sizeprompt:
+        assert any(_sizeprompt in p for p, a in vm.prompts), (_old, vm.prompts)
+        assert hasrow(vm, f"CORNERS {_new}"), _old
+    else:
+        assert not any("Radius for" in p or "Cut face length for" in p
+                       for p, a in vm.prompts), _old
+        # and they really did normalise, not just skip the size question:
+        # 90 -> Square draws the circled 90, NG -> NotGiven the "?" + note
+        _ld = [c[-2] for c in vm.commands if c and c[0] == '_.LEADER']
+        if _new == "Square":
+            assert _ld == ['90%%d Typ.'], (_old, _ld)
+            assert not hasrow(vm, "CORNERS NotGiven"), _old
+        else:
+            assert _ld == ['? Typ.'], (_old, _ld)
+            assert hasrow(vm, "CORNERS NotGiven"), _old
+# but the bracket never advertises them
+assert all("ROUNDED" not in p and "DIAG" not in p
+           for p, a in vm.prompts if "be treated?" in p)
+print("   one wording, four answers, legacy words hidden but accepted")
+
+print("== R31. a remembered size does not cross treatments ==")
+# STANDARDS section 2: the previous size is only a default when the new
+# answer matches the one it was measured for -- a radius is not a cut face
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 236.0, 120.0, 118.0,
+          "Radius", 20.0,          # corner A
+          None, None,              # corner B reuses BOTH type and size
+          "Cut", 18.0,             # corner C is a different treatment...
+          "Square",                # corner D
+          "Corner", 266.0, 264.0,
+          "No"], "R31")
+_sz = [p for p, a in vm.prompts if "Radius for" in p or "Cut face length for" in p]
+# A offered no default (first), B offered 20 back (same treatment),
+# C offered none (Radius -> Cut must not carry 20" across)
+assert "<" not in _sz[0], _sz[0]
+assert "<20" in _sz[1], _sz[1]
+assert "Cut face length for Corner C" in _sz[2] and "<" not in _sz[2], _sz[2]
+print("   size default only survives when the treatment is unchanged")
+
+print("== R32. NotGiven is not a cut: geometry, gates and marks ==")
+# out-of-square with a NotGiven among real cuts: the cross-dim
+# reference-mode question is still asked (there ARE cuts), the NotGiven
+# corner is built square, and the marks follow the standard's table
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 236.0, 120.0, 118.0,
+          "Radius", 20.0, "NotGiven", "Square", "Cut", 18.0,
+          "Corner", 266.0, 264.0, "No"], "R32")
+_lead = sorted(c[-2] for c in vm.commands if c and c[0] == '_.LEADER')
+assert _lead == ['90%%d', '?'], _lead        # mixed -> no Typ. on either
+assert len(drawn(vm, 'CIRCLE', 'DIMENSION')) == 2
+assert hasrow(vm, "COR B NotGiven") and hasrow(vm, "COR A Radius")
+assert not hasrow(vm, "COR C Square"), "a plain square corner needs no row"
+
+# every corner NotGiven: no cuts at all, so the reference-mode question
+# must NOT be asked -- there are no treatment ends to tape between
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 236.0, 120.0, 118.0,
+          "NotGiven", None, None, None,
+          266.0, 264.0, "No"], "R32b")
+assert not any("cross dims measured from" in p for p, a in vm.prompts), \
+    "NotGiven is built square -- there is no cut to measure from"
+assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
+print("   built square, gates say no cut, but the sheet still records it")
+
+
+print("== R33. the 90 mark is drawn where -- and only where -- 90 is true ==")
+def _marks(vm):
+    return ([c[-2] for c in vm.commands if c and c[0] == '_.LEADER'],
+            [tuple(round(x, 1) for x in d[10][:2])
+             for d in drawn(vm, 'CIRCLE', 'DIMENSION')])
+
+# an ordinarily out-of-square rectangle really does drift a few degrees
+# (240x120 with cross dims 12" apart fits at 86.8/93.2) -- it is still a
+# rectangle and still gets its mark
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 240.0, 120.0, 120.0,
+          "Square", None, None, None, 274.0, 262.0, "No"], "R33")
+assert _marks(vm)[0] == ['90%%d Typ.'], _marks(vm)
+
+# a GRECIAN's corners are ~135 by construction: marking them 90 would be
+# a lie, so an all-square grecian carries no corner mark at all
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall", 480.0, 200.0, "NA", "NA", "NA", "NA", "NA",
+          "Yes", "Square", "Square", "No"], "R33b")
+assert _marks(vm)[0] == [], _marks(vm)
+
+# a ROMAN body IS a rectangle, so its square corners are marked -- and on
+# the same corner (B) whether the pool is in square or out
+_ins = _marks(run(["Insquare", "RO"] + BASE +
+                  [400.0, 260.0, "NA", 45.0, 50.0, 160.0, "NA",
+                   "Yes", "Square", "No"], "R33c"))
+_oos = _marks(run(["Outofsquare", "RO"] + BASE +
+                  ["Yes", 400.0, 260.0, "NA", 45.0, 50.0, 160.0, "NA",
+                   "NA", "NA", "Yes", "Square", None, None, None, "No"], "R33d"))
+assert _ins[0] == _oos[0] == ['90%%d Typ.'], (_ins, _oos)
+assert _ins[1] == _oos[1], f"the Typ. mark must land on the same corner: {_ins[1]} vs {_oos[1]}"
+
+# an L's single outer Typ. mark is conventionally corner B -- but a LAZY
+# L bends B 135 degrees, so the mark has to fall through to an outer
+# corner that really is square rather than vanish or lie
+for _shape, _lbl in (("L", "true L"), ("LA", "lazy L")):
+    vm = run(["Insquare", _shape] + BASE +
+             [296.0, 167.6, 167.6, 99.0, 226.0, 168.0,
+              "Yes", "Square", "Square", "No", "No"], f"R33-{_shape}")
+    assert _marks(vm)[0] == ['90%%d Typ.'], (_lbl, _marks(vm))
+print("   marked on rectangles, romans and true 90s; never on a 135 bend")
+
+print("== R34. no room for a cut still leaves NotGiven sayable ==")
+# a Roman with a 0.1" corner drop cannot fit any radius or chamfer, but
+# "the sheet never said" is still a truthful answer -- the two SIZED
+# options are withheld, the question is still asked
+vm = run(["Insquare", "RO"] + BASE +
+         [400.0, 260.0, "NA", 45.0, 0.1, 259.8, "NA",
+          "Yes", "NotGiven", "No"], "R34")
+_q = [p for p, a in vm.prompts if "be treated?" in p]
+assert len(_q) == 1 and "[Square/NotGiven/Back]" in _q[0], _q
+assert "Radius" not in _q[0] and "Cut" not in _q[0], _q[0]
+assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
+assert hasrow(vm, "CORNER NotGiven")
+# and it can still be answered Square, as before
+vm = run(["Insquare", "RO"] + BASE +
+         [400.0, 260.0, "NA", 45.0, 0.1, 259.8, "NA",
+          "Yes", "Square", "No"], "R34b")
+assert not hasrow(vm, "CORNER NotGiven")
+print("   the geometry limits the answer set, not what the sheet records")
+
+print("== R35. the Not Given note reads outward, never back over the pool ==")
+# TEXT runs left-to-right from its insertion point, so a note on a
+# LEFT-hand corner has to be pulled back by its own width
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [480.0, 480.0, 240.0, 240.0,
+          "NotGiven", "Square", "Square", "Square", 536.7, 536.7, "No"], "R35")
+_note = [d for d in drawn(vm, 'TEXT', 'DIMENSION') if d.get(1) == "Not Given"]
+assert len(_note) == 1, _note
+_x = _note[0][10][0]
+_pool_x = [p[0] for d in drawn(vm, 'LINE', 'POOL')
+           for p in (d[10], d[11])]
+# corner A sits at the pool's left extreme; the note must start left of
+# it by more than its own rendered width, so it reads away from the pool
+assert _x < min(_pool_x) - 20.0, (_x, min(_pool_x))
+print("   left-hand corners pull the note back by its width")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

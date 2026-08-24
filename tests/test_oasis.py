@@ -27,6 +27,9 @@ LSP = os.path.join(os.path.dirname(__file__), '..', 'lisp', 'oasis',
 
 TOL = 1.0e-6
 
+#: every run ends with the same question, whose default is No
+BOTQ = 'Add the bottom of the pool (breaks and hopper)?' 
+
 
 # ---- builtins the shared VM does not carry yet ------------------------
 # entmakex: entmake that returns the new entity name; tblobjname: the
@@ -97,15 +100,20 @@ REF_ARCS = [
 REF_MEASURE = [REF_X, REF_Y] + list(REF_BULGES) + list(REF_TANGENTS)
 
 
-def script(base=(0.0, 0.0), measure=None, variant='Center', detail='Simple'):
+def script(base=(0.0, 0.0), measure=None, variant='Center', detail='Simple',
+           bottom=None):
     """A whole run: which shape -- and, for a cloud, which bottom -- then
-    simple or complex, then where it goes and the measurements."""
+    simple or complex, then where it goes and the measurements.  bottom
+    is the answers to the pool-bottom flow; without it the run takes the
+    default No and stops at the perimeter."""
     head = {'StraightBottom': ['CLoud', 'Straight'],
             'RoundedBottom': ['CLoud', 'Rounded'],
             'TrueKidney': ['Kidney', 'True'],
             'AsymKidney': ['Kidney', 'Asymmetric']}.get(variant, [variant])
     return (head + [detail, base]
-            + list(REF_MEASURE if measure is None else measure))
+            + list(REF_MEASURE if measure is None else measure)
+            # Enter at "Add the bottom of the pool?", whose default is No
+            + ([None] if bottom is None else ['Yes'] + list(bottom)))
 
 
 #: the drawing the TOP RIGHT BULGE variant was read off: 36'-11" x 28'-8",
@@ -467,7 +475,7 @@ def test_back_reasks():
     vm = newvm()
     # answer Y as 300, back out of the left bulge, give Y as 240 instead
     run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, 300.0, 'Back', REF_Y]
-        + REF_MEASURE[2:], 'back')
+        + REF_MEASURE[2:] + [None], 'back')
     top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
     assert close(top[0][1], REF_Y - 132.0), top
     print("ok  back        -> Back re-asks and the new answer wins")
@@ -490,7 +498,7 @@ def test_oversize_bulge_is_reasked():
     vm = newvm()
     # 150 on a 240 envelope stands 300 tall -- rejected, then 96 taken
     run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, REF_Y, 150.0, 96.0]
-        + REF_MEASURE[3:], 'oversize bulge')
+        + REF_MEASURE[3:] + [None], 'oversize bulge')
     assert close(arcs_of(vm)[0][1], 96.0), arcs_of(vm)[0]
     print("ok  big bulge   -> a bulge taller than Y is re-asked")
 
@@ -512,7 +520,7 @@ def test_nested_bulges_are_reasked():
     # a 480 top bulge on a 480 x 240 envelope is centred at (240, -240)
     # and swallows the 96 left bulge whole; 132 is taken instead
     run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, REF_Y, 96.0, 480.0, 132.0, 108.0]
-        + list(REF_TANGENTS), 'nested top')
+        + list(REF_TANGENTS) + [None], 'nested top')
     assert close([a for a in arcs_of(vm) if close(a[1], 132.0)][0][0][1],
                  REF_Y - 132.0)
     print("ok  nesting     -> a bulge inside another is re-asked")
@@ -526,7 +534,7 @@ def test_right_bulge_nesting_is_caught():
     # -- directly above the 96 left bulge and swallowing it -- so it is
     # re-asked, and 108 is taken instead
     run(vm, ['Center', 'Simple', (0.0, 0.0), REF_X, 800.0, 96.0, 132.0, 384.0, 108.0,
-             200.0, 200.0, 60.0], 'nested right')
+             200.0, 200.0, 60.0] + [None], 'nested right')
     assert close([a for a in arcs_of(vm) if close(a[1], 108.0)][0][0][0],
                  REF_X - 108.0)
     print("ok  right nest  -> a right bulge swallowing the left one is"
@@ -633,7 +641,7 @@ def test_wide_bulge_is_reasked():
     # 200 wide envelope, 400 deep: a 150 left bulge is 300 across -- it
     # fits the depth easily and still cannot fit the width
     run(vm, ['Center', 'Simple', (0.0, 0.0), 200.0, 400.0, 150.0, 60.0, 60.0, 60.0,
-             120.0, 120.0, 120.0], 'wide bulge')
+             120.0, 120.0, 120.0] + [None], 'wide bulge')
     assert close(arcs_of(vm)[0][1], 60.0), arcs_of(vm)[0]
     print("ok  wide bulge  -> a bulge wider than X is re-asked")
 
@@ -1080,14 +1088,14 @@ def test_a_corner_bulge_too_big_for_the_envelope_is_reasked():
     vm = newvm()
     # 200 short bound: a 150 corner bulge is 300 both ways
     run(vm, ['TopRight', 'Simple', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 80.0, 60.0,
-             90.0, 90.0, 90.0], 'big corner')
+             90.0, 90.0, 90.0] + [None], 'big corner')
     top = arcs_of(vm)[4]
     assert close(top[1], 80.0), top
     # and the centred bulge of the same size is accepted, because there
     # it is trimmed rather than breaking out
     vm = newvm()
     run(vm, ['Center', 'Simple', (0.0, 0.0), 400.0, 200.0, 60.0, 150.0, 60.0,
-             90.0, 90.0, 90.0], 'big centre')
+             90.0, 90.0, 90.0] + [None], 'big centre')
     assert close(arcs_of(vm)[4][1], 150.0), arcs_of(vm)[4]
     print("ok  big corner  -> a corner bulge over the envelope is re-asked,"
           " a centred one is not")
@@ -1195,20 +1203,22 @@ def test_the_clouds_ask_four_or_five_measurements():
               'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
-              'Right bulge radius', 'Top tangent radius']),
+              'Right bulge radius', 'Top tangent radius', BOTQ]),
             ('RoundedBottom', CL_ROUND,
              ['Which shape is it?', 'Cloud bottom?', 'Simple or complex?',
               'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
-              'Right bulge radius', 'Top tangent radius', 'Bottom radius'])):
+              'Right bulge radius', 'Top tangent radius', 'Bottom radius',
+              BOTQ])):
         vm = newvm()
         run(vm, script(measure=measure, variant=variant), variant)
         asked = [p.lstrip('\n').split(' [')[0].split(' <')[0].rstrip(': ')
                  for p, _ in vm.prompts]
         assert asked == want, (variant, asked)
         assert not any('Left bulge' in a for a in asked), asked
-    print("ok  cloud asks  -> 8 questions flat, 9 rounded, no left bulge")
+    print("ok  cloud asks  -> 8 measurements flat, 9 rounded, no left"
+          " bulge")
 
 
 def test_the_flat_run_is_dimensioned_by_length_not_radius():
@@ -1257,10 +1267,10 @@ def test_a_cloud_is_one_shape_with_two_bottoms():
     run(vm, script(measure=CL_FLAT, variant='StraightBottom'), 'flat ask')
     assert vm.prompts[1][0] == '\nCloud bottom? [Straight/Rounded/Back]' \
         ' <Straight>: ', repr(vm.prompts[1][0])
-    assert len(vm.prompts) == 8, len(vm.prompts)
+    assert len(vm.prompts) == 9, len(vm.prompts)
     vm = newvm()
     run(vm, script(measure=CL_ROUND, variant='RoundedBottom'), 'round ask')
-    assert len(vm.prompts) == 9, len(vm.prompts)      # plus the bottom radius
+    assert len(vm.prompts) == 10, len(vm.prompts)     # plus the bottom radius
     # the two answers together name the ring
     for a, b, want in (('Center', None, 'Center'),
                        ('Cloud', 'Straight', 'StraightBottom'),
@@ -1286,7 +1296,7 @@ def test_backing_out_of_the_bottom_reaches_the_shape():
     shape -- and answering that differently rebuilds every question after
     it."""
     vm = newvm()
-    run(vm, ['CLoud', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE, 'back out')
+    run(vm, ['CLoud', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE + [None], 'back out')
     assert len(arcs_of(vm)) == 6, arcs_of(vm)       # an oasis, not a cloud
     assert close(arcs_of(vm)[4][1], REF_BULGES[1]), arcs_of(vm)[4]
     asked = [p.lstrip('\n').split(' [')[0] for p, _ in vm.prompts]
@@ -1382,20 +1392,20 @@ def test_kidney_asks_its_own_questions():
               'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
-              'Top-center radius', 'Bottom-center tangent radius']),
+              'Top-center radius', 'Bottom-center tangent radius', BOTQ]),
             ('AsymKidney', KD_ASYM,
              ['Which shape is it?', 'Kidney type?', 'Simple or complex?',
               'Insertion base point',
               'X - overall left-to-right bounds',
               'Y - overall front-to-back bounds',
               'Left bulge radius', 'Right bulge radius',
-              'Bottom-center tangent radius'])):
+              'Bottom-center tangent radius', BOTQ])):
         vm = newvm()
         run(vm, script(measure=measure, variant=variant), variant)
         asked = [p.lstrip('\n').split(' [')[0].split(' <')[0].rstrip(': ')
                  for p, _ in vm.prompts]
         assert asked == want, (variant, asked)
-    print("ok  kd asks     -> true 8 questions, asymmetric 9")
+    print("ok  kd asks     -> true 8 measurements, asymmetric 9")
 
 
 def test_true_kidney_top_radius_is_validated():
@@ -1406,7 +1416,7 @@ def test_true_kidney_top_radius_is_validated():
     vm = newvm()
     # min for 388 x 214 is 194.9346; 150 cannot work, 324 can
     run(vm, ['Kidney', 'True', 'Simple', (0.0, 0.0), KD_X, KD_Y, 150.0, KD_TOP,
-             KD_BOT], 'small top')
+             KD_BOT] + [None], 'small top')
     assert close(arcs_of(vm, 4)[3][1], KD_TOP), arcs_of(vm, 4)[3]
     mn = vm.loads('(oasis:ktrue-min %.4f %.4f)' % (KD_X, KD_Y))
     assert close(mn, KD_Y/2.0 + KD_X*KD_X/(8.0*KD_Y), 1e-9), mn
@@ -1422,7 +1432,7 @@ def test_asym_kidney_unreachable_sides_are_reasked():
     assert vm.loads('(oasis:kidney-top %.4f %.4f %.4f %.4f)'
                     % (KD_X, KD_Y, KD_Y/2.0, KD_Y/2.0)) is None
     run(vm, ['Kidney', 'Asymmetric', 'Simple', (0.0, 0.0), KD_X, KD_Y,
-             KD_Y/2.0, KD_Y/2.0, 72.0, KD_BOT], 'degenerate pair')
+             KD_Y/2.0, KD_Y/2.0, 72.0, KD_BOT] + [None], 'degenerate pair')
     arcs = arcs_of(vm, 4)
     assert len(arcs) == 4, arcs
     assert close(arcs[2][1], 72.0), arcs[2]      # the re-answered right
@@ -1477,21 +1487,21 @@ def test_backing_up_through_a_kidney():
     rebuilds every question after it."""
     vm = newvm()
     run(vm, ['Kidney', 'True', 'Simple', (0.0, 0.0), KD_X, 200.0, 'Back', KD_Y,
-             KD_TOP, KD_BOT], 'kd back Y')
+             KD_TOP, KD_BOT] + [None], 'kd back Y')
     assert close(arcs_of(vm, 4)[3][1], KD_TOP), arcs_of(vm, 4)[3]
     # the re-answered Y is the one the envelope is built on
     assert close(arcs_of(vm, 4)[3][0][1], KD_Y - KD_TOP), arcs_of(vm, 4)[3]
 
     vm = newvm()
     run(vm, ['Kidney', 'Asymmetric', 'Simple', (0.0, 0.0), KD_X, KD_Y, 84.0, 'Back',
-             96.0, 72.0, KD_BOT], 'kd back left')
+             96.0, 72.0, KD_BOT] + [None], 'kd back left')
     asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
     assert asked[6:10] == ['Left bulge radius', 'Right bulge radius',
                            'Left bulge radius', 'Right bulge radius'], asked
     assert close(arcs_of(vm, 4)[0][1], 96.0), arcs_of(vm, 4)[0]
 
     vm = newvm()
-    run(vm, ['Kidney', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE,
+    run(vm, ['Kidney', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE + [None],
         'kd back shape')
     assert len(arcs_of(vm)) == 6, arcs_of(vm)      # an oasis, not a kidney
     print("ok  kd back     -> Back walks the kidney's own steps, up to the"
@@ -1542,7 +1552,7 @@ def test_a_true_kidney_needs_a_y_smaller_than_its_x():
     vm = newvm()
     # 240 x 240 is refused, 240 x 216 accepted in its place
     run(vm, ['Kidney', 'True', 'Simple', (0.0, 0.0), 240.0, 240.0, 216.0,
-             264.0, 60.0], 'square Y')
+             264.0, 60.0] + [None], 'square Y')
     arcs = arcs_of(vm, 4)
     assert len(arcs) == 4, arcs
     assert close(arcs[3][1], 264.0), arcs[3]        # the re-answered top
@@ -1807,7 +1817,7 @@ def test_a_run_already_answered_still_goes_red_when_re_asked():
     with at_each_prompt() as p:
         vm = newvm()
         run(vm, ['Center', 'Complex', (0.0, 0.0), REF_X, REF_Y, 96.0, 132.0,
-                 0.0, 108.0, 'Line', 'Back', 'Line', 36.0, 60.0], 'red run')
+                 0.0, 108.0, 'Line', 'Back', 'Line', 36.0, 60.0] + [None], 'red run')
     # shot 8 is the top-left question the second time round, with Line
     # already standing as its answer
     red = [d for d in p.shot(8, 'LINE')
@@ -1824,11 +1834,11 @@ def test_backing_up_through_the_complex_questions():
     lands on the top bulge, and out of simple-or-complex on the shape."""
     vm = newvm()
     run(vm, ['Center', 'Complex', (0.0, 0.0), REF_X, REF_Y, 96.0, 200.0,
-             'Back', 132.0, 48.0, 108.0, 72.0, 36.0, 60.0], 'back offset')
+             'Back', 132.0, 48.0, 108.0, 72.0, 36.0, 60.0] + [None], 'back offset')
     top = [a for a in arcs_of(vm) if close(a[1], 132.0)][0]
     assert close(top[0][0], REF_X / 2.0 + 48.0), top
     vm = newvm()
-    run(vm, ['Center', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE,
+    run(vm, ['Center', 'Back', 'Center', 'Simple', (0.0, 0.0)] + REF_MEASURE + [None],
         'back detail')
     asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
     assert asked[:4] == ['Which shape is it?', 'Simple or complex?',
@@ -1836,6 +1846,503 @@ def test_backing_up_through_the_complex_questions():
     assert len(arcs_of(vm)) == 6, arcs_of(vm)
     print("ok  complex back-> Back walks the offset and the detail question"
           " too")
+
+
+#: the pool bottom, on the reference pool: shallow and deep breaks both
+#: given as an offset in from the left bound, the standard 18" hopper
+#: and two straight slope lines.
+BOT_OFFSET = [None, 'Left', 120.0, None, 'Left', 300.0, None, None, None]
+
+
+def pool_ring(vm, *dims, **kw):
+    """oasis:solve on the reference pool, as the bottom code sees it."""
+    return ('(oasis:solve %s %.4f "%s")'
+            % (" ".join("%.6f" % v for v in (dims or (REF_X, REF_Y)
+                                             + REF_BULGES + REF_TANGENTS)),
+               kw.get('off', 0.0), kw.get('variant', 'Center')))
+
+
+def bottom_of(vm, sh1, sh2, sd1, sd2, off, call=None):
+    """oasis:bottom for one set of breaks, as a Python list."""
+    return vm.loads('(oasis:bottom %s %.8f %.8f %.8f %.8f %.4f)'
+                    % (call or pool_ring(vm), sh1, sh2, sd1, sd2, off))
+
+
+def cut_at(vm, x, call=None):
+    """Where the outline crosses the vertical line at X -- the two ends
+    of a break located the Offset way."""
+    return vm.loads('(oasis:ringcut %s (list %.6f 0.0) (list 1.0 0.0))'
+                    % (call or pool_ring(vm), x))
+
+
+def on_pool(vm, etype):
+    return [d for d in made(vm, etype) if d.get(8) == 'POOL']
+
+
+def el_at(e, u):
+    """The point at fraction U of one ring element's own walk -- the rule
+    oasis:eat follows, in Python, so a chain can be swept cheaply."""
+    if e[5] == 'LINE':
+        p, q = e[1], e[2]
+        return (p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u)
+    c, r, a0, a1 = e[1], e[2], e[3], e[4]
+    sw = (a1 - a0) % (2 * math.pi)
+    th = a0 + u * sw if e[5] is not None else a1 - u * sw
+    return (c[0] + r * math.cos(th), c[1] + r * math.sin(th))
+
+
+def el_tan(e, u):
+    """The direction the walk is heading at that fraction."""
+    if e[5] == 'LINE':
+        return math.atan2(e[2][1] - e[1][1], e[2][0] - e[1][0])
+    a0, a1 = e[3], e[4]
+    sw = (a1 - a0) % (2 * math.pi)
+    if e[5] is not None:
+        return a0 + u * sw + math.pi / 2.0
+    return a1 - u * sw - math.pi / 2.0
+
+
+def ring_inside(vm, call, p):
+    """Is P inside the outline?  Cast a ray along +X from it and count the
+    crossings -- odd means in the water."""
+    hits = vm.loads('(oasis:ringcut %s (list %.8f %.8f) (list 0.0 1.0))'
+                    % (call, p[0], p[1])) or []
+    n = 0
+    for t in hits:
+        q = vm.loads('(oasis:ringat %s %.10f)' % (call, t))[0]
+        if q[0] > p[0]:
+            n += 1
+    return n % 2 == 1
+
+
+def plines(vm, lay='POOL'):
+    """Every surviving open polyline's vertices, in creation order.  A
+    polyline carries one group 10 per vertex, so the flattened dict of
+    _alist_dict only ever shows the first -- they have to be read off the
+    entity's own list."""
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        raw = vm.entdata[e]
+        d = _alist_dict(raw)
+        if d.get(0) != 'LWPOLYLINE' or d.get(8) != lay:
+            continue
+        pts = []
+        for pr in raw:
+            if isinstance(pr, Dot) and pr.a == 10:
+                pts.append(pr.b)
+            elif isinstance(pr, list) and pr and pr[0] == 10:
+                pts.append(pr[1:])
+        out.append(pts)
+    return out
+
+
+class at_each_int(object):
+    """Snapshot the drawing at every whole-number prompt -- which is only
+    the tangency question, so this photographs the marks it puts up."""
+
+    def __enter__(self):
+        self.shots = []
+        self.saved = BUILTINS[Sym('getint')]
+
+        def _g(vm, a):
+            self.shots.append([dict(_alist_dict(vm.entdata[e]))
+                               for e in vm.entities if e not in vm.deleted])
+            return self.saved(vm, a)
+
+        BUILTINS[Sym('getint')] = _g
+        return self
+
+    def __exit__(self, *exc):
+        BUILTINS[Sym('getint')] = self.saved
+        return False
+
+
+def test_the_bottom_is_offered_once_the_pool_is_drawn():
+    """The perimeter finishes first and reports itself; only then is the
+    floor offered, and the default is No, so a run that only wants the
+    outline is one Enter longer."""
+    vm = newvm()
+    run(vm, script(), 'no bottom')
+    last = vm.prompts[-1][0]
+    assert last == ('\nAdd the bottom of the pool (breaks and hopper)?'
+                    ' [Yes/No] <No>: '), repr(last)
+    assert len(arcs_of(vm, 99)) == 12, len(arcs_of(vm, 99))   # pool + check
+    assert not on_pool(vm, 'LINE'), on_pool(vm, 'LINE')
+    print("ok  bottom ask  -> offered last, default No, and No leaves the"
+          " pool alone")
+
+
+def test_a_break_is_located_three_ways():
+    """Offset says how far in from a bound and takes both ends of the
+    break from where that line crosses the pool; Tangency names a change
+    of tangency by its number; Nearest drops a pick onto the outline at
+    the nearest point of it.  All three land on the perimeter."""
+    vm = newvm()
+    call = pool_ring(vm)
+    joints = vm.loads('(oasis:joints %s)' % call)
+
+    # -- Offset: 10'-0" in from the left bound is x = 120, both ends
+    cuts = vm.loads('(oasis:ringcut %s (list 120.0 0.0) (list 1.0 0.0))'
+                    % call)
+    assert len(cuts) == 2, cuts
+    for c in cuts:
+        p = vm.loads('(oasis:ringat %s %.10f)' % (call, c))[0]
+        assert close(p[0], 120.0), p
+
+    # -- Tangency: the numbers are the joints, in ring order
+    for i, s in enumerate(joints):
+        p = vm.loads('(oasis:ringat %s %.10f)' % (call, s))[0]
+        q = vm.loads('(car (oasis:eat (nth %d %s) 0.0))' % (i, call))
+        assert close(math.dist(p, q), 0.0, 1e-9), (i, p, q)
+
+    # -- Nearest: a pick well off the outline comes back on it
+    for pick in ((240.0, -200.0), (0.0, 0.0), (700.0, 500.0),
+                 (240.0, 120.0)):
+        s = vm.loads('(oasis:ringnear %s (list %.4f %.4f))'
+                     % ((call,) + pick))
+        p = vm.loads('(oasis:ringat %s %.10f)' % (call, s))[0]
+        # it really is the nearest: nothing on the ring is closer
+        best = min(math.dist(pick, vm.loads('(oasis:ringat %s %.8f)'
+                                            % (call, k * 1265.0 / 180.0))[0])
+                   for k in range(180))
+        assert math.dist(pick, p) <= best + 1e-6, (pick, p, best)
+    print("ok  break where -> offset / tangency / nearest all land on the"
+          " outline")
+
+
+def test_the_tangency_changes_are_numbered_on_screen():
+    """They cannot be named if they cannot be seen, so the marks go up
+    while the question is -- one per change, numbered from 1 -- and come
+    down with the rest of the scaffolding."""
+    with at_each_int() as p:
+        vm = newvm()
+        run(vm, script(bottom=['Tangency', 1, 2, 'Tangency', 3, 4,
+                               None, None, None]), 'marks')
+    shot = p.shots[0]
+    labels = sorted(d[1] for d in shot if d.get(0) == 'TEXT')
+    assert labels == ['1', '2', '3', '4', '5', '6'], labels
+    marks = [d for d in shot
+             if d.get(0) == 'CIRCLE' and d.get(8) == 'POOL-GUIDE']
+    assert len(marks) >= 6, len(marks)
+    # and every one of them sits on a change of tangency
+    call = pool_ring(vm)
+    joints = vm.loads('(oasis:joints %s)' % call)
+    js = [tuple(vm.loads('(oasis:ringat %s %.10f)' % (call, s))[0])
+          for s in joints]
+    for d in marks[-6:]:
+        assert any(close(math.dist(d[10][:2], j), 0.0, 1e-6) for j in js), d
+    # gone by the time the run ends
+    assert not [d for d in made(vm, 'TEXT')], made(vm, 'TEXT')
+    print("ok  tang marks  -> six numbered marks while the question is up,"
+          " none after")
+
+
+def test_the_hopper_is_the_wall_offset_inward():
+    """Offsetting a tangent-continuous ring inward by a constant gives
+    another one -- same centres, same angles, every bulge shrunk and
+    every reverse arc grown -- so the hopper is arcs and runs, exactly
+    the offset in from the wall, and INSIDE it."""
+    vm = newvm()
+    call = pool_ring(vm)
+    # 6' and 20' in from the left: those breaks cut the ring mid-arc at
+    # both ends, one of them on a REVERSE arc, so the trimming is real
+    sh, sd = cut_at(vm, 72.0, call), cut_at(vm, 240.0, call)
+    bot = bottom_of(vm, sh[0], sh[1], sd[0], sd[1], 18.0)
+    assert not isinstance(bot, str), bot
+    hop, cs, ce, pda, pdb = bot[0], bot[1], bot[2], bot[3], bot[4]
+    assert len(hop) >= 2, hop
+    assert any(e[5] is None for e in (hop[0], hop[-1])), \
+        [e[5] for e in hop]                # a trimmed reverse arc
+    worst = 0.0
+    for e in hop:
+        for u in (0.0, 0.25, 0.5, 0.75, 1.0):
+            q = el_at(e, u)
+            t = vm.loads('(oasis:ringnear %s (list %.10f %.10f))'
+                         % (call, q[0], q[1]))
+            w = vm.loads('(oasis:ringat %s %.10f)' % (call, t))[0]
+            worst = max(worst, abs(math.dist(q, w) - 18.0))
+            # 18" from the wall is two places; the hopper is the one in
+            # the water
+            assert ring_inside(vm, call, q), q
+    assert worst <= 1.0e-8, worst
+    # the chain is one curve: consecutive elements meet, and meet smoothly
+    for i in range(len(hop) - 1):
+        assert close(math.dist(el_at(hop[i], 1.0), el_at(hop[i+1], 0.0)),
+                     0.0, 1e-8), i
+        d = abs((el_tan(hop[i], 1.0) - el_tan(hop[i+1], 0.0) + math.pi)
+                % (2 * math.pi) - math.pi)
+        assert d <= 1.0e-9, (i, d)
+    # it starts and ends ON the two corners, which are ON the deep break
+    assert close(math.dist(el_at(hop[0], 0.0), cs), 0.0, 1e-8) or \
+        close(math.dist(el_at(hop[0], 0.0), ce), 0.0, 1e-8), hop[0]
+    bx, by = pdb[0] - pda[0], pdb[1] - pda[1]
+    bl = math.hypot(bx, by)
+    for c, ends in ((cs, (el_at(hop[0], 0.0), el_at(hop[-1], 1.0))),
+                    (ce, (el_at(hop[0], 0.0), el_at(hop[-1], 1.0)))):
+        assert min(math.dist(c, e) for e in ends) <= 1e-8, c
+        assert abs((c[0]-pda[0]) * (-by/bl) + (c[1]-pda[1]) * (bx/bl)) \
+            <= 1e-8, c
+    # each corner belongs to the wall end it is nearest
+    assert math.dist(cs, pda) < math.dist(cs, pdb), (cs, pda, pdb)
+    assert math.dist(ce, pdb) < math.dist(ce, pda), (ce, pda, pdb)
+    print("ok  hopper      -> the wall offset 18\" inward, exactly (%.1e\"),"
+          " inside, corners on the break" % worst)
+
+
+def test_the_hopper_lies_beyond_the_deep_break():
+    """It is the DEEP end: every part of it is on the far side of the
+    deep break from the shallow one, and its deepest point is the pool's
+    own."""
+    vm = newvm()
+    call = pool_ring(vm)
+    sh, sd = cut_at(vm, 120.0, call), cut_at(vm, 300.0, call)
+    bot = bottom_of(vm, sh[0], sh[1], sd[0], sd[1], 18.0)
+    assert not isinstance(bot, str), bot
+    hop, pda, pdb, qsa, qsb = bot[0], bot[3], bot[4], bot[5], bot[6]
+    qm = ((qsa[0] + qsb[0]) / 2.0, (qsa[1] + qsb[1]) / 2.0)
+    u = vm.loads('(oasis:deepdir (list %.8f %.8f) (list %.8f %.8f)'
+                 ' (list %.8f %.8f))'
+                 % (pda[0], pda[1], pdb[0], pdb[1], qm[0], qm[1]))
+    mid = ((pda[0] + pdb[0]) / 2.0, (pda[1] + pdb[1]) / 2.0)
+    depths = []
+    for e in hop:
+        for uu in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
+            q = el_at(e, uu)
+            depths.append((q[0]-mid[0]) * u[0] + (q[1]-mid[1]) * u[1])
+    assert min(depths) >= -1.0e-8, min(depths)
+    assert max(depths) > 1.0, max(depths)
+    # and the shallow break really is on the other side of it
+    for q in (qsa, qsb):
+        assert (q[0]-mid[0]) * u[0] + (q[1]-mid[1]) * u[1] < 0.0, q
+    print("ok  hopper side -> all of it beyond the deep break, %.1f\" at the"
+          " deepest" % max(depths))
+
+
+def test_the_deep_break_goes_down_in_three_pieces():
+    """A dashed stub from each wall in to its hopper corner and a solid
+    run across the hopper between them -- collinear, and carrying the
+    K/L/M string of chained dimensions."""
+    vm = newvm()
+    run(vm, script(bottom=BOT_OFFSET), 'three pieces')
+    lines = on_pool(vm, 'LINE')
+    # the shallow break, then the deep break's three, then two straight
+    # slope lines
+    assert len(lines) == 6, len(lines)
+    stub1, solid, stub2 = lines[1], lines[2], lines[3]
+    assert 6 in stub1 and 6 in stub2, (stub1, stub2)   # dashed
+    assert 6 not in solid, solid                        # ByLayer
+    # collinear, and joined end to end
+    assert close(math.dist(stub1[11][:2], solid[10][:2]), 0.0, 1e-8)
+    assert close(math.dist(solid[11][:2], stub2[10][:2]), 0.0, 1e-8)
+    v1 = (solid[11][0]-stub1[10][0], solid[11][1]-stub1[10][1])
+    for p in (stub1[11], solid[11]):
+        v2 = (p[0]-stub1[10][0], p[1]-stub1[10][1])
+        assert abs(v1[0]*v2[1] - v1[1]*v2[0]) <= 1e-6, (v1, v2)
+    # three chained dims on it, plus the offset at the back
+    dims = [d for d in made(vm, 'DIMENSION') if d[3] == 'Standard']
+    assert len(dims) == 2 + 4, len(dims)   # the pool's two, then K/L/M + back
+    klm = dims[2:5]
+    # K, L and M measure the three pieces in order
+    for d, piece in zip(klm, (stub1, solid, stub2)):
+        assert close(math.dist(d[13][:2], piece[10][:2]), 0.0, 1e-8), d
+        assert close(math.dist(d[14][:2], piece[11][:2]), 0.0, 1e-8), d
+    # their dimension lines are collinear and stand off on the SHALLOW
+    # side -- the string reads from the shallow end, not from over the
+    # deep end it measures
+    pda, pdb = stub1[10][:2], stub2[11][:2]
+    mid = ((pda[0] + pdb[0]) / 2.0, (pda[1] + pdb[1]) / 2.0)
+    bx, by = pdb[0] - pda[0], pdb[1] - pda[1]
+    bl = math.hypot(bx, by)
+    nx, ny = -by / bl, bx / bl
+    shal = [d for d in on_pool(vm, 'LINE')][0]            # the shallow break
+    smid = ((shal[10][0] + shal[11][0]) / 2.0,
+            (shal[10][1] + shal[11][1]) / 2.0)
+    towards = (smid[0] - mid[0]) * nx + (smid[1] - mid[1]) * ny
+    offs = [(d[10][0] - mid[0]) * nx + (d[10][1] - mid[1]) * ny for d in klm]
+    assert all(o * towards > 0.0 for o in offs), offs
+    assert max(offs) - min(offs) <= 1e-8, offs
+    print("ok  deep break  -> dashed stub / solid run / dashed stub,"
+          " collinear, K/L/M dimensioned")
+
+
+def test_a_guided_slope_follows_the_wall_in():
+    """Straight is a clean run from the hopper's corner to the shallow
+    break; guided follows the pool's own wall instead, its offset easing
+    from the hopper's at the deep break to nothing at the shallow one."""
+    vm = newvm()
+    run(vm, script(bottom=[None, 'Left', 120.0, None, 'Left', 300.0, None,
+                           'Guided', None]), 'guided')
+    pls = plines(vm)
+    assert len(pls) == 1, len(pls)
+    pts = pls[0]
+    assert len(on_pool(vm, 'LINE')) == 5, len(on_pool(vm, 'LINE'))
+    # the run eases: its first vertex is on the wall, its last is the
+    # hopper corner, and in between it stays inside the pool
+    call = pool_ring(vm)
+    first, last = pts[0], pts[-1]
+    s = vm.loads('(oasis:ringnear %s (list %.8f %.8f))'
+                 % (call, first[0], first[1]))
+    w = vm.loads('(oasis:ringat %s %.10f)' % (call, s))[0]
+    assert close(math.dist(first[:2], w), 0.0, 1e-6), (first, w)
+    rl = vm.loads('(oasis:ringlen %s)' % call)
+    offs = []
+    for v in pts:
+        s = vm.loads('(oasis:ringnear %s (list %.8f %.8f))' % (call, v[0], v[1]))
+        w = vm.loads('(oasis:ringat %s %.10f)' % (call, s))[0]
+        offs.append(math.dist(v[:2], w))
+    assert offs[0] <= 1e-6, offs[0]
+    assert max(offs) <= 18.0 + 1e-6, max(offs)
+    assert offs[len(offs)//2] > 1.0, offs
+    # every vertex is in the water -- an offset measured the wrong way
+    # would put them outside the wall it is easing off
+    for v in pts[1:]:
+        assert ring_inside(vm, call, v[:2]), v
+    # and the last one IS the hopper's corner, on the deep break line
+    sh, sd = cut_at(vm, 120.0, call), cut_at(vm, 300.0, call)
+    bot = bottom_of(vm, sh[0], sh[1], sd[0], sd[1], 18.0)
+    assert min(math.dist(pts[-1][:2], c) for c in (bot[1], bot[2])) \
+        <= 1.0e-8, (pts[-1], bot[1], bot[2])
+    print("ok  guided slope-> starts on the wall, eases out to the hopper's"
+          " 18\" at the deep break")
+
+
+def test_the_two_slope_lines_never_cross():
+    """Each runs from a hopper corner to the shallow break point on its
+    OWN side, so the sides have to be paired by walking away from the
+    hopper.  Pair them the other way and the two lines cross the pool."""
+    vm = newvm()
+    run(vm, script(bottom=BOT_OFFSET), 'slopes')
+    lines = on_pool(vm, 'LINE')
+    a, b = lines[4], lines[5]                 # the two straight slopes
+    p1, p2 = a[10][:2], a[11][:2]
+    q1, q2 = b[10][:2], b[11][:2]
+
+    def side(u, v, w):
+        return ((v[0]-u[0]) * (w[1]-u[1]) - (v[1]-u[1]) * (w[0]-u[0]))
+
+    assert side(p1, p2, q1) * side(p1, p2, q2) > 0.0 or \
+        side(q1, q2, p1) * side(q1, q2, p2) > 0.0, (a, b)
+    # each ends on a shallow break point, and they are different ones
+    shal = lines[0]
+    ends = [shal[10][:2], shal[11][:2]]
+    got = [min(range(2), key=lambda i: math.dist(x, ends[i]))
+           for x in (p2, q2)]
+    assert sorted(got) == [0, 1], (p2, q2, ends)
+    print("ok  slopes      -> one per side, paired away from the hopper, and"
+          " they do not cross")
+
+
+def test_a_bound_line_that_cuts_four_times_takes_the_break_right_across():
+    """A pool whose edge dips is crossed more than twice by one line.
+    The break is the full width of it, so the two OUTERMOST crossings are
+    the ones taken and the rest are the dip it runs over."""
+    vm = newvm()
+    call = pool_ring(vm)
+    cuts = vm.loads('(oasis:ringcut %s (list 0.0 36.0) (list 0.0 1.0))'
+                    % call)
+    assert len(cuts) == 4, cuts
+    xs = [vm.loads('(oasis:ringat %s %.10f)' % (call, c))[0][0] for c in cuts]
+    # the outermost pair spans the pool; the inner two are the dip
+    assert min(xs) in (xs[0], xs[-1]) and max(xs) in (xs[0], xs[-1]), xs
+    run(vm, script(bottom=[None, 'BOttom', 36.0, None, 'BOttom', 120.0,
+                           None, None, None]), 'four cuts')
+    shal = on_pool(vm, 'LINE')[0]
+    got = sorted((shal[10][0], shal[11][0]))
+    assert close(got[0], min(xs)) and close(got[1], max(xs)), (got, xs)
+    print("ok  four cuts   -> the break spans the outermost pair, not the"
+          " first two")
+
+
+def test_the_bottom_of_a_pool_with_straight_runs():
+    """The hopper and the slopes read the ring, so a straight run in the
+    wall is offset and followed like any arc -- across, not out."""
+    vm = newvm()
+    call = pool_ring(vm, REF_X, REF_Y, 96.0, 132.0, 108.0)
+    call = ('(oasis:solve %.1f %.1f 96.0 132.0 108.0 "LINE" "LINE" "LINE"'
+            ' 0.0 "Center")' % (REF_X, REF_Y))
+    sh, sd = cut_at(vm, 120.0, call), cut_at(vm, 300.0, call)
+    bot = bottom_of(vm, sh[0], sh[1], sd[0], sd[1], 18.0, call=call)
+    assert not isinstance(bot, str), bot
+    hop = bot[0]
+    assert any(e[5] == 'LINE' for e in hop), [e[5] for e in hop]
+    for e in hop:
+        for u in (0.0, 0.5, 1.0):
+            q = el_at(e, u)
+            t = vm.loads('(oasis:ringnear %s (list %.10f %.10f))'
+                         % (call, q[0], q[1]))
+            w = vm.loads('(oasis:ringat %s %.10f)' % (call, t))[0]
+            assert close(math.dist(q, w), 18.0, 1e-8), (e[0], u, q, w)
+            assert ring_inside(vm, call, q), (e[0], u, q)
+    # and a guided slope over a run stays in the water too
+    pts = vm.loads('(oasis:chordrun %s %.8f %.8f 0.0 18.0 12)'
+                   % (call, sh[0], sd[0]))
+    for v in pts[1:]:
+        assert ring_inside(vm, call, v), v
+    print("ok  bottom, runs-> a straight run in the wall is offset across"
+          " it, not out through it")
+
+
+def test_breaks_the_wrong_way_round_are_refused():
+    """The shallow break has to be on the shallow side of the deep one.
+    Put it past the deep break and the slope lines would have to run
+    through the hopper to reach it, so the offset question comes round
+    again rather than drawing that."""
+    vm = newvm()
+    call = pool_ring(vm)
+    js = vm.loads('(oasis:joints %s)' % call)
+    # 1/2 and 3/4 are the two ends of the pool; 1/3 against 2/4 interleaves
+    good = bottom_of(vm, js[0], js[1], js[2], js[3], 18.0)
+    assert not isinstance(good, str), good
+    swapped = bottom_of(vm, js[0], js[2], js[1], js[3], 18.0)
+    assert isinstance(swapped, str) and 'swapped' in swapped, swapped
+    print("ok  breaks order-> a shallow break past the deep one is refused")
+
+
+def test_a_hopper_offset_with_no_room_is_reasked():
+    """The offset is only wrong against this pool, so the check is the
+    build: past a bulge's own radius there is no wall left inside it to
+    draw, and the question comes round again."""
+    vm = newvm()
+    call = pool_ring(vm)
+    assert vm.loads('(oasis:offbad %s 200.0)' % call) == 'left', \
+        vm.loads('(oasis:offbad %s 200.0)' % call)
+    assert vm.loads('(oasis:offring %s 200.0)' % call) is None
+    run(vm, script(bottom=[None, 'Left', 120.0, None, 'Left', 300.0,
+                           200.0, 18.0, None, None]), 'too deep')
+    # the re-answered 18 is the one that got built
+    assert len(on_pool(vm, 'LINE')) == 6, len(on_pool(vm, 'LINE'))
+    print("ok  bad hopper  -> an offset wider than a bulge is re-asked")
+
+
+def test_backing_out_of_the_bottom_leaves_the_pool_alone():
+    """Back walks the bottom's own steps, and Back out of the first of
+    them adds nothing at all -- the perimeter is already drawn and stays
+    exactly as it was."""
+    vm = newvm()
+    run(vm, script(bottom=['Back']), 'backed out')
+    assert not on_pool(vm, 'LINE'), on_pool(vm, 'LINE')
+    assert len(arcs_of(vm, 99)) == 12, len(arcs_of(vm, 99))
+    vm = newvm()
+    run(vm, script(bottom=[None, 'Left', 120.0, None, 'Left', 300.0,
+                           'Back', None, 'Left', 300.0, None, None, None]),
+        'back one step')
+    assert len(on_pool(vm, 'LINE')) == 6, len(on_pool(vm, 'LINE'))
+    print("ok  bottom back -> Back out of the first step adds nothing; one"
+          " step back re-asks the deep break")
+
+
+def test_the_bottom_shares_the_pools_undo_group():
+    """One U has to take the pool and its floor together, so the flow
+    runs inside the group the perimeter opened."""
+    vm = newvm()
+    run(vm, script(bottom=BOT_OFFSET), 'undo')
+    us = [c for c in vm.commands if c and c[0] == '_.UNDO']
+    assert [c[1] for c in us] == ['_Begin', '_End'], us
+    # the last thing drawn is inside it: no _End before the bottom's lines
+    assert on_pool(vm, 'LINE'), 'nothing was drawn'
+    print("ok  bottom undo -> one group round the pool and its bottom")
 
 
 def test_version_command():
@@ -1989,6 +2496,20 @@ if __name__ == '__main__':
     test_a_straight_run_is_crossed_like_any_arc()
     test_a_run_already_answered_still_goes_red_when_re_asked()
     test_backing_up_through_the_complex_questions()
+    test_the_bottom_is_offered_once_the_pool_is_drawn()
+    test_a_break_is_located_three_ways()
+    test_the_tangency_changes_are_numbered_on_screen()
+    test_the_hopper_is_the_wall_offset_inward()
+    test_the_hopper_lies_beyond_the_deep_break()
+    test_the_deep_break_goes_down_in_three_pieces()
+    test_a_guided_slope_follows_the_wall_in()
+    test_the_two_slope_lines_never_cross()
+    test_a_bound_line_that_cuts_four_times_takes_the_break_right_across()
+    test_the_bottom_of_a_pool_with_straight_runs()
+    test_breaks_the_wrong_way_round_are_refused()
+    test_a_hopper_offset_with_no_room_is_reasked()
+    test_backing_out_of_the_bottom_leaves_the_pool_alone()
+    test_the_bottom_shares_the_pools_undo_group()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")

@@ -36,7 +36,7 @@ BASE = [(0.0, 0.0, 0.0)]
 # scenario below, so the interesting part is what follows it
 LEAD = (["Outofsquare", "Rectangle"] + BASE +
         [240.0, 240.0, 120.0, 120.0,             # TOP BOTTOM LEFT RIGHT
-         "Diag", 24.0,                            # corner A
+         "Cut", 24.0,                            # corner A
          None, None, None, None, None, None,      # B C D reuse
          "Ends",
          260.0, 260.0, 260.0, 260.0,              # crossing cross dims

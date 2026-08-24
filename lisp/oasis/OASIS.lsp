@@ -189,7 +189,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v6.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v7.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -207,6 +207,13 @@
 ;; of it.  0.5 centres it, which is what every one on file wants; the
 ;; value is here so an off-centre one does not need the file edited.
 (setq oasis:*topfrac* 0.5)
+
+;; The pool bottom.  The offset the hopper question offers first, the
+;; number of chords a guided slope line is drawn with, and how finely the
+;; deepest point of the offset ring is looked for.
+(setq oasis:*hopoff*   18.0)
+(setq oasis:*hopchord* 24)
+(setq oasis:*hopscan*  720)
 
 ;; Slack for "is this the same point / the same length" tests, drawing
 ;; units.  Measurements arrive in inches, so this is far below anything
@@ -1748,6 +1755,751 @@
                 (oasis:nested-p cr rr ct rt))
          "top")))
 
+;;; -------------------- walking the outline ------------------------------
+;;; The bottom of the pool is laid out ON the perimeter, so everything
+;;; below needs to be able to say where a point is along it.  The ring is
+;;; a closed curve, so one number does it: the arc length S from the
+;;; start of element 0, running the way the outline runs.
+;;;
+;;; That direction is not the same as an arc's own: a BULGE is walked
+;;; counter-clockwise from its start angle to its end, a REVERSE arc the
+;;; other way (its centre is outside the pool, so the outline goes round
+;;; it clockwise), and a straight run from its first end to its second.
+;;; Every element also knows which way is INTO the water, which is what
+;;; an offset is measured along -- towards the centre on a bulge, away
+;;; from it on a reverse arc, and across a run.
+
+;; The angle one element sweeps, 0 for a straight run.
+(defun oasis:esweep (a)
+  (if (oasis:line-p a) 0.0 (oasis:angnorm (- (nth 4 a) (nth 3 a)))))
+
+;; How long one element is along the walk.
+(defun oasis:elen (a)
+  (if (oasis:line-p a)
+      (distance (nth 1 a) (nth 2 a))
+      (* (nth 2 a) (oasis:esweep a))))
+
+;; The whole way round.
+(defun oasis:ringlen (arcs / s a)
+  (setq s 0.0)
+  (foreach a arcs (setq s (+ s (oasis:elen a))))
+  s)
+
+;; Where element A is at fraction U of its own walk, as
+;; (point . inward-angle) -- inward being the way an offset is measured.
+(defun oasis:eat (a u / th)
+  (if (oasis:line-p a)
+      (cons (oasis:v+ (nth 1 a)
+                      (oasis:v* (mapcar '- (nth 2 a) (nth 1 a)) u))
+            (oasis:angnorm (+ (nth 3 a) pi)))
+      (progn
+        ;; a bulge runs with the angle, a reverse arc against it
+        (setq th (if (nth 5 a)
+                     (+ (nth 3 a) (* u (oasis:esweep a)))
+                     (- (nth 4 a) (* u (oasis:esweep a)))))
+        (cons (polar (nth 1 a) th (nth 2 a))
+              ;; the centre is inside the pool on a bulge and outside it
+              ;; on a reverse arc, so the two point opposite ways
+              (oasis:angnorm (if (nth 5 a) (+ th pi) th))))))
+
+;; The point at arc length S round the ring, as
+;; (point inward-angle element-index fraction).  S wraps.
+(defun oasis:ringat (arcs s / tot i n a l u pu out)
+  (setq tot (oasis:ringlen arcs)
+        n   (length arcs)
+        i   0)
+  (while (< s 0.0) (setq s (+ s tot)))
+  (while (>= s tot) (setq s (- s tot)))
+  (while (and (< i n) (null out))
+    (setq a (nth i arcs)
+          l (oasis:elen a))
+    (if (or (<= s l) (= i (1- n)))
+        (setq u   (if (> l oasis:*fuzz*) (/ s l) 0.0)
+              pu  (oasis:eat a u)
+              out (list (car pu) (cdr pu) i u))
+        (setq s (- s l)))
+    (setq i (1+ i)))
+  out)
+
+;; A list of numbers in ascending order, without duplicates closer
+;; together than the fuzz -- a crossing that lands exactly on a joint is
+;; found by both elements that meet there, and it is one crossing.
+(defun oasis:sortasc (lst / out v p taken)
+  (setq out nil taken nil)
+  (while
+    (progn
+      (setq p nil)
+      (foreach v lst
+        (if (and (or (null taken) (> v (+ taken oasis:*fuzz*)))
+                 (or (null p) (< v p)))
+            (setq p v)))
+      p)
+    (setq out   (cons p out)
+          taken p))
+  (reverse out))
+
+;; The arc length at which each element STARTS -- and so, one per
+;; element, the arc length of every change of tangency round the ring.
+(defun oasis:joints (arcs / s out a)
+  (setq s 0.0 out nil)
+  (foreach a arcs
+    (setq out (cons s out)
+          s   (+ s (oasis:elen a))))
+  (reverse out))
+
+;; The arc length of the point on the ring nearest P.
+(defun oasis:ringnear (arcs p / s best bd i n a l u q d dx dy dd)
+  (setq s 0.0 best 0.0 bd nil i 0 n (length arcs))
+  (while (< i n)
+    (setq a (nth i arcs)
+          l (oasis:elen a))
+    (if (oasis:line-p a)
+        (setq dx (- (car (nth 2 a)) (car (nth 1 a)))
+              dy (- (cadr (nth 2 a)) (cadr (nth 1 a)))
+              dd (+ (* dx dx) (* dy dy))
+              u  (if (> dd oasis:*fuzz*)
+                     (/ (+ (* (- (car p) (car (nth 1 a))) dx)
+                           (* (- (cadr p) (cadr (nth 1 a))) dy))
+                        dd)
+                     0.0))
+        (setq u (if (> (oasis:esweep a) oasis:*fuzz*)
+                    (/ (oasis:angnorm
+                         (if (nth 5 a)
+                             (- (angle (nth 1 a) p) (nth 3 a))
+                             (- (nth 4 a) (angle (nth 1 a) p))))
+                       (oasis:esweep a))
+                    0.0)))
+    (setq u (max 0.0 (min 1.0 u))
+          q (car (oasis:eat a u))
+          d (distance p q))
+    (if (or (null bd) (< d bd)) (setq bd d best (+ s (* u l))))
+    (setq s (+ s l)
+          i (1+ i)))
+  best)
+
+;; Every arc length at which the ring crosses the straight line through Q
+;; with unit normal NRM, in ascending order.  Exact: a run is linear in
+;; its own parameter, and an arc meets a line where its angle is one of
+;; two the normal names -- no walking and no sampling.
+(defun oasis:ringcut (arcs q nrm / s out i n a l d0 dx dy den u ph c th)
+  (setq s 0.0 out nil i 0 n (length arcs))
+  (while (< i n)
+    (setq a  (nth i arcs)
+          l  (oasis:elen a)
+          d0 (+ (* (- (car (nth 1 a)) (car q)) (car nrm))
+                (* (- (cadr (nth 1 a)) (cadr q)) (cadr nrm))))
+    (if (oasis:line-p a)
+        (progn
+          (setq dx  (- (car (nth 2 a)) (car (nth 1 a)))
+                dy  (- (cadr (nth 2 a)) (cadr (nth 1 a)))
+                den (+ (* dx (car nrm)) (* dy (cadr nrm))))
+          (if (> (abs den) oasis:*fuzz*)
+              (progn
+                (setq u (/ (- d0) den))
+                (if (and (>= u 0.0) (<= u 1.0))
+                    (setq out (cons (+ s (* u l)) out))))))
+        (progn
+          (setq c (/ (- d0) (nth 2 a)))
+          (if (<= (abs c) 1.0)
+              (progn
+                (setq ph (atan (cadr nrm) (car nrm)))
+                (foreach th (list (+ ph (atan (sqrt (max 0.0 (- 1.0 (* c c))))
+                                              c))
+                                  (- ph (atan (sqrt (max 0.0 (- 1.0 (* c c))))
+                                              c)))
+                  (setq u (if (> (oasis:esweep a) oasis:*fuzz*)
+                              (/ (oasis:angnorm
+                                   (if (nth 5 a)
+                                       (- th (nth 3 a))
+                                       (- (nth 4 a) th)))
+                                 (oasis:esweep a))))
+                  (if (and u (<= u 1.0))
+                      (setq out (cons (+ s (* u l)) out))))))))
+    (setq s (+ s l)
+          i (1+ i)))
+  (oasis:sortasc out))
+
+;;; -------------------- the pool bottom ----------------------------------
+;;; The floor, laid out on the perimeter the questions have just built --
+;;; ABHD's bottom flow, with ABHD's one input replaced.  There it is a
+;;; survey: points are picked on the pool edge and everything is measured
+;;; from the nearest one.  Here the perimeter is not surveyed but KNOWN,
+;;; exactly, so a point on it can be said three ways:
+;;;
+;;;   Tangency  every change of tangency round the outline is numbered
+;;;             and drawn on screen while the question is up -- the
+;;;             joints between the arcs, which are the places a pool
+;;;             is naturally broken at.  Name a number.
+;;;   Nearest   pick anywhere; the pick is dropped onto the outline at
+;;;             the nearest point of it, exactly.
+;;;   Offset    say how far in from one of the four bounds, and the
+;;;             break is where that line crosses the pool -- one answer
+;;;             for both ends of the break, which is how a deep end is
+;;;             usually called out ("the hopper starts 12 feet in").
+;;;
+;;; What is drawn is ABHD's: a SHALLOW BREAK across the pool where the
+;;; flat shallow floor starts to fall, a DEEP BREAK where it levels out,
+;;; the HOPPER beyond it -- the flat deep floor, the perimeter offset
+;;; inward -- and a SLOPE LINE up each side from the hopper's corner to
+;;; the shallow break.  The deep break goes down as three collinear
+;;; pieces, dashed stubs from each wall in to the hopper's corners with a
+;;; solid run between them, and carries the classic K/L/M string of
+;;; chained dimensions a stand-off clear of it on the shallow side.
+;;;
+;;; One thing is not ABHD's.  ABHD asks three offsets -- one at each end
+;;; of the deep break and one at the back -- and blends them along the
+;;; wall, because a surveyed shape is irregular and the tape says
+;;; different things in different places.  An oasis is a designed shape,
+;;; so its hopper is ONE offset, and that buys exactness: offsetting a
+;;; tangent-continuous ring inward by a constant is again a
+;;; tangent-continuous ring, with the same centres, the same angles, and
+;;; every bulge shrunk and every reverse arc grown by the offset.  The
+;;; hopper is that ring cut off at the deep break, so it is arcs and
+;;; runs, not a polyline of facets, and its corners are exactly where it
+;;; meets the break.  The K/L/M string then reads what the offset really
+;;; produced at the break rather than the number that was typed.
+
+;; One ring element pushed inward by OFF.  A bulge curves away from the
+;; water, so it shrinks; a reverse arc curves into it, so it grows; a
+;; straight run simply moves across.  The result meets its neighbours at
+;; the same normals it did, which is why the offset ring is still
+;; tangent-continuous.
+(defun oasis:offel (a off)
+  (if (oasis:line-p a)
+      (list (nth 0 a)
+            (polar (nth 1 a) (+ (nth 3 a) pi) off)
+            (polar (nth 2 a) (+ (nth 3 a) pi) off)
+            (nth 3 a) nil "LINE" nil)
+      (list (nth 0 a) (nth 1 a)
+            (if (nth 5 a) (- (nth 2 a) off) (+ (nth 2 a) off))
+            (nth 3 a) (nth 4 a) (nth 5 a) nil)))
+
+;; The first bulge an offset of OFF would swallow, or nil.  Past its own
+;; radius a bulge has no offset left to give and the hopper cannot be
+;; built at all -- there is no arc on the other side of it.
+(defun oasis:offbad (arcs off / bad a)
+  (setq bad nil)
+  (foreach a arcs
+    (if (and (null bad) (not (oasis:line-p a)) (nth 5 a)
+             (<= (- (nth 2 a) off) oasis:*fuzz*))
+        (setq bad (nth 0 a))))
+  bad)
+
+;; The whole ring pushed inward by OFF, or nil when a bulge would go.
+(defun oasis:offring (arcs off / out a)
+  (if (oasis:offbad arcs off)
+      nil
+      (progn
+        (setq out nil)
+        (foreach a arcs (setq out (cons (oasis:offel a off) out)))
+        (reverse out))))
+
+;; One ring element cut down to the stretch between fractions U0 and U1
+;; of its own walk.  An arc keeps its centre and its radius; only the two
+;; angles move, and which end each fraction lands on depends on which way
+;; the walk runs -- with the angle on a bulge, against it on a reverse.
+(defun oasis:trimel (a u0 u1 / sw)
+  (if (oasis:line-p a)
+      (list (nth 0 a) (car (oasis:eat a u0)) (car (oasis:eat a u1))
+            (nth 3 a) nil "LINE" nil)
+      (progn
+        (setq sw (oasis:esweep a))
+        (if (nth 5 a)
+            (list (nth 0 a) (nth 1 a) (nth 2 a)
+                  (oasis:angnorm (+ (nth 3 a) (* u0 sw)))
+                  (oasis:angnorm (+ (nth 3 a) (* u1 sw)))
+                  (nth 5 a) nil)
+            (list (nth 0 a) (nth 1 a) (nth 2 a)
+                  (oasis:angnorm (- (nth 4 a) (* u1 sw)))
+                  (oasis:angnorm (- (nth 4 a) (* u0 sw)))
+                  (nth 5 a) nil)))))
+
+;; How far it is round the ring from SA forward to SB.
+(defun oasis:spanlen (arcs sa sb / tot d)
+  (setq tot (oasis:ringlen arcs)
+        d   (- sb sa))
+  (while (< d 0.0) (setq d (+ d tot)))
+  (while (>= d tot) (setq d (- d tot)))
+  d)
+
+;; The stretch of the ring from SA forward to SB, as ring elements with
+;; the first and last trimmed -- an OPEN chain, drawable by oasis:draw
+;; like any other.
+(defun oasis:subring (arcs sa sb / n at k u0 want l avail u1 out guard)
+  (setq n     (length arcs)
+        at    (oasis:ringat arcs sa)
+        k     (nth 2 at)
+        u0    (nth 3 at)
+        want  (oasis:spanlen arcs sa sb)
+        out   nil
+        guard 0)
+  (while (and (> want oasis:*fuzz*) (< guard (* 4 n)))
+    (setq l     (oasis:elen (nth k arcs))
+          avail (* l (- 1.0 u0)))
+    (if (<= want (+ avail oasis:*fuzz*))
+        (setq u1   (if (> l oasis:*fuzz*) (min 1.0 (+ u0 (/ want l))) 1.0)
+              out  (cons (oasis:trimel (nth k arcs) u0 u1) out)
+              want 0.0)
+        (setq out  (if (> avail oasis:*fuzz*)
+                       (cons (oasis:trimel (nth k arcs) u0 1.0) out)
+                       out)
+              want (- want avail)
+              k    (if (= k (1- n)) 0 (1+ k))
+              u0   0.0))
+    (setq guard (1+ guard)))
+  (reverse out))
+
+;; The stretch from SA to SB as a run of N+1 points, each pushed in by an
+;; offset easing from O0 to O1 over the walk.  Where the offset varies
+;; there is no exact curve to draw -- a slope line running out to nothing
+;; at the shallow break is the case -- so it goes down as a polyline.
+(defun oasis:chordrun (arcs sa sb o0 o1 n / len i out at f)
+  (setq len (oasis:spanlen arcs sa sb)
+        i   0
+        out nil)
+  (while (<= i n)
+    (setq f   (/ (float i) (float n))
+          at  (oasis:ringat arcs (+ sa (* len f)))
+          out (cons (polar (car at) (cadr at) (+ o0 (* (- o1 o0) f))) out)
+          i   (1+ i)))
+  (reverse out))
+
+;; How far the ring reaches beyond the break line through MID along U,
+;; over the LEN of walk starting at SA, and where.  Returns
+;; (arc-length . reach).
+(defun oasis:reach (arcs sa len mid u n / i s at d best bd)
+  (setq i  0
+        bd nil)
+  (while (<= i n)
+    (setq s  (+ sa (* len (/ (float i) (float n))))
+          at (oasis:ringat arcs s)
+          d  (+ (* (- (car (car at)) (car mid)) (car u))
+                (* (- (cadr (car at)) (cadr mid)) (cadr u))))
+    (if (or (null bd) (> d bd)) (setq bd d best s))
+    (setq i (1+ i)))
+  (cons best bd))
+
+;; The unit vector square to the deep break, pointing AWAY from the
+;; shallow break -- the direction the hopper lies in.
+(defun oasis:deepdir (p1 p2 q / u)
+  (setq u (list (- (cadr p2) (cadr p1)) (- (car p1) (car p2))))
+  (setq u (oasis:v* u (/ 1.0 (max oasis:*fuzz* (distance '(0.0 0.0) u)))))
+  (if (> (+ (* (- (car q) (car p1)) (car u))
+            (* (- (cadr q) (cadr p1)) (cadr u)))
+         0.0)
+      (oasis:v* u -1.0)
+      u))
+
+;; Where the hopper starts and stops on the OFFSET ring: the two places
+;; it crosses the deep break line either side of its deepest point.
+;; Returns (from to deepest), or nil when the offset ring never reaches
+;; the break -- an offset so big the deep end has closed up.
+(defun oasis:hopcut (offall q nrm mid u / cuts tot far ca cb c)
+  (setq cuts (oasis:ringcut offall q nrm)
+        tot  (oasis:ringlen offall))
+  (if (< (length cuts) 2)
+      nil
+      (progn
+        (setq far (car (oasis:reach offall 0.0 tot mid u oasis:*hopscan*))
+              ca  nil
+              cb  nil)
+        (foreach c cuts
+          (if (and (<= c far) (or (null ca) (> c ca))) (setq ca c))
+          (if (and (>= c far) (or (null cb) (< c cb))) (setq cb c)))
+        ;; the deepest point can sit past the last crossing, in which
+        ;; case the hopper wraps the start of the ring
+        (if (null ca) (setq ca (last cuts)))
+        (if (null cb) (setq cb (car cuts)))
+        (if (< (oasis:spanlen offall ca cb) oasis:*fuzz*)
+            nil
+            (list ca cb far)))))
+
+;;; -------------------- the bottom, asked ---------------------------------
+
+;; Every change of tangency, numbered on screen, so one can be named.
+;; Scaffolding: the marks go when the flow does, like the preview.
+(defun oasis:tangmarks (arcs w h base lt / out js i n at hgt mk)
+  (setq js  (oasis:joints arcs)
+        n   (length js)
+        i   0
+        hgt (/ (max w h) 34.0)
+        mk  (/ (max w h) 150.0)
+        out nil)
+  (while (< i n)
+    (setq at  (oasis:ringat arcs (nth i js))
+          out (cons (oasis:pv-circle (car at) mk base "CONTINUOUS" T) out)
+          ;; the number sits OUTSIDE the water, clear of the outline
+          out (cons (oasis:pv-text (polar (car at)
+                                          (+ (cadr at) pi)
+                                          (* 1.6 hgt))
+                                   hgt (itoa (1+ i)) base T)
+                    out)
+          i   (1+ i)))
+  out)
+
+;; A tangency change, by number.  Returns its arc length, or OASIS-BACK.
+(defun oasis:asktang (msg arcs / js n v)
+  (setq js (oasis:joints arcs)
+        n  (length js)
+        v  nil)
+  (while (null v)
+    (initget 7 "Back Undo")
+    (setq v (getint (strcat "\n" msg " -- tangency change 1-" (itoa n)
+                            " [Back]: ")))
+    (cond ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+           (setq v 'OASIS-BACK))
+          ((and (= (type v) 'INT) (<= v n)))
+          (t (princ (strcat "\nThere are " (itoa n) " changes of tangency"
+                            " round this pool; that is not one of them."))
+             (setq v nil))))
+  (if (eq v 'OASIS-BACK) v (nth (1- v) js)))
+
+;; A point picked anywhere, dropped onto the outline at the nearest point
+;; of it.  Returns its arc length, or OASIS-BACK.
+(defun oasis:asknear (msg arcs base / v)
+  (initget 1 "Back Undo")
+  (setq v (getpoint (strcat "\n" msg " [Back]: ")))
+  (if (and (= (type v) 'STR) (member v '("Back" "Undo")))
+      'OASIS-BACK
+      (oasis:ringnear arcs (list (- (car v) (car base))
+                                 (- (cadr v) (cadr base))))))
+
+;; A line parallel to one bound of the envelope, a given distance in from
+;; it.  Returns (point normal), or OASIS-BACK.
+(defun oasis:askbound (msg w h / side d)
+  ;; BOttom takes two capitals because Back already has the B
+  (setq side (oasis:askkw (strcat msg " -- in from which bound?")
+                          "Left Right BOttom Top"
+                          "Left/Right/BOttom/Top" "BOttom" T))
+  (if (eq side 'OASIS-BACK)
+      side
+      (progn
+        (setq d (oasis:askdist 'REQ (strcat "How far in from the "
+                                            (strcase side T) " bound")
+                               nil T))
+        (if (eq d 'OASIS-BACK)
+            d
+            (cond ((= side "Left")    (list (list d 0.0) '(1.0 0.0)))
+                  ((= side "Right")   (list (list (- w d) 0.0) '(1.0 0.0)))
+                  ((= side "BOttom")  (list (list 0.0 d) '(0.0 1.0)))
+                  (t                  (list (list 0.0 (- h d))
+                                            '(0.0 1.0))))))))
+
+;; One break, both ends, said whichever of the three ways suits.  Returns
+;; (s1 s2) as arc lengths round the outline, or OASIS-BACK.
+(defun oasis:askbreak (what arcs w h base / how ln cuts a b)
+  (setq a nil)
+  (while (null a)
+    (setq how (oasis:askkw (strcat what " break, located how?")
+                           "Offset Tangency Nearest"
+                           "Offset/Tangency/Nearest" "Offset" T))
+    (cond
+      ((eq how 'OASIS-BACK) (setq a how))
+      ;; one answer gives both ends: the break is the chord that line cuts
+      ((= how "Offset")
+       (setq ln (oasis:askbound (strcat "The " (strcase what T) " break")
+                                w h))
+       (cond
+         ((eq ln 'OASIS-BACK) (setq a ln))
+         (t (setq cuts (oasis:ringcut arcs (car ln) (cadr ln)))
+            ;; a pool whose edge dips can be crossed more than twice by
+            ;; one line -- the break is the full width of it, so the two
+            ;; outermost crossings are the ones wanted, and the rest are
+            ;; the dip the break runs over
+            (cond
+              ((< (length cuts) 2)
+               (princ (strcat "\nThat line does not cross the pool at all,"
+                              " so it does not name a break.")))
+              (t (if (> (length cuts) 2)
+                     (princ (strcat "\n(that line crosses the outline "
+                                    (itoa (length cuts)) " times -- the"
+                                    " break is taken right across, from the"
+                                    " first to the last)")))
+                 (setq a (list (car cuts) (last cuts))))))))
+      ((= how "Tangency")
+       (setq a (oasis:asktang (strcat "The " (strcase what T)
+                                      " break, first end") arcs))
+       (if (not (eq a 'OASIS-BACK))
+           (progn
+             (setq b (oasis:asktang (strcat "The " (strcase what T)
+                                            " break, second end") arcs))
+             (if (eq b 'OASIS-BACK)
+                 (setq a nil)
+                 (setq a (list a b))))))
+      (t
+       (setq a (oasis:asknear (strcat "The " (strcase what T)
+                                      " break, first end") arcs base))
+       (if (not (eq a 'OASIS-BACK))
+           (progn
+             (setq b (oasis:asknear (strcat "The " (strcase what T)
+                                            " break, second end")
+                                    arcs base))
+             (if (eq b 'OASIS-BACK)
+                 (setq a nil)
+                 (setq a (list a b)))))))
+    ;; two ends in the same place are not a break
+    (if (and a (listp a)
+             (< (distance (car (oasis:ringat arcs (car a)))
+                          (car (oasis:ringat arcs (cadr a))))
+                oasis:*fuzz*))
+        (progn
+          (princ "\nBoth ends of that break land on the same point.")
+          (setq a nil))))
+  a)
+
+;;; -------------------- the bottom, built and drawn -----------------------
+
+;; Everything the bottom is made of, worked out from the two breaks and
+;; the one offset.  Returns
+;;
+;;   (hopper cs ce pda pdb qsa qsb ssa sda ssb sdb backw backh)
+;;
+;; where the hopper is a chain of ring elements, cs and ce its two
+;; corners on the deep break line, pda / pdb the deep break's own two
+;; ends -- pda first in the hopper's own walk -- qsa / qsb the shallow
+;; break ends paired with them, ssa / sda / ssb / sdb their arc lengths,
+;; and backw / backh the wall and hopper points at the back, which is
+;; where the offset is worth dimensioning.  A string instead of a list is
+;; the reason it cannot be built.
+(defun oasis:bottom (arcs sh1 sh2 sd1 sd2 off
+                     / p1 p2 q1 q2 pmid qmid u bad offall cut hop
+                       ca cb cs ce da db pda pdb ssa ssb qsa qsb bp backh
+                       backw r12 r21)
+  (setq p1   (car (oasis:ringat arcs sd1))
+        p2   (car (oasis:ringat arcs sd2))
+        q1   (car (oasis:ringat arcs sh1))
+        q2   (car (oasis:ringat arcs sh2))
+        pmid (list (* 0.5 (+ (car p1) (car p2)))
+                   (* 0.5 (+ (cadr p1) (cadr p2))))
+        qmid (list (* 0.5 (+ (car q1) (car q2)))
+                   (* 0.5 (+ (cadr q1) (cadr q2))))
+        ;; u is square to the deep break and points away from the
+        ;; shallow one, so it is also that break line's own normal --
+        ;; which is what a cut of the ring is asked for by
+        u    (oasis:deepdir p1 p2 qmid))
+  ;; which way round the ring is the deep end?  the stretch that reaches
+  ;; furthest away from the shallow break
+  (setq r12 (cdr (oasis:reach arcs sd1 (oasis:spanlen arcs sd1 sd2)
+                              pmid u oasis:*hopscan*))
+        r21 (cdr (oasis:reach arcs sd2 (oasis:spanlen arcs sd2 sd1)
+                              pmid u oasis:*hopscan*)))
+  (if (>= r12 r21)
+      (setq da sd1 db sd2 pda p1 pdb p2)
+      (setq da sd2 db sd1 pda p2 pdb p1))
+  ;; the shallow end on each side is the one nearest that deep end
+  ;; walking AWAY from the hopper -- backwards, since the hopper runs
+  ;; forwards from da
+  (if (<= (oasis:spanlen arcs sh1 da) (oasis:spanlen arcs sh2 da))
+      (setq ssa sh1 qsa q1 ssb sh2 qsb q2)
+      (setq ssa sh2 qsa q2 ssb sh1 qsb q1))
+  (cond
+    ;; a shallow break on the far side of the deep one is the two of them
+    ;; the wrong way round: the slope lines would have to run through the
+    ;; hopper to reach it
+    ((or (> (+ (* (- (car q1) (car pmid)) (car u))
+               (* (- (cadr q1) (cadr pmid)) (cadr u)))
+            (- oasis:*fuzz*))
+         (> (+ (* (- (car q2) (car pmid)) (car u))
+               (* (- (cadr q2) (cadr pmid)) (cadr u)))
+            (- oasis:*fuzz*)))
+     "the shallow break reaches past the deep one -- the two look swapped")
+    ((setq bad (oasis:offbad arcs off))
+     (strcat "the " bad " bulge is not " (rtos off) " wide, so there is"
+             " no hopper wall to draw inside it"))
+    ((null (setq offall (oasis:offring arcs off)))
+     "that offset leaves no pool inside it")
+    ((oasis:crossings offall)
+     "at that offset the hopper wall runs through itself")
+    ((null (setq cut (oasis:hopcut offall pda u pmid u)))
+     "the offset closes the deep end before it reaches the break")
+    (t
+     (setq ca  (car cut)
+           cb  (cadr cut)
+           hop (oasis:subring offall ca cb)
+           cs  (car (oasis:ringat offall ca))
+           ce  (car (oasis:ringat offall cb)))
+     ;; the corner at the start of the hopper's walk belongs to the wall
+     ;; end that walk starts from: the offset ring runs the same way
+     ;; round as the wall and stays the offset inside it, so the crossing
+     ;; before the deepest point is the one off pda and the crossing
+     ;; after it the one off pdb
+     ;; the back: the deepest point of the hopper, and the wall it is
+     ;; measured off
+     (setq bp    (car (oasis:reach offall ca (oasis:spanlen offall ca cb)
+                                   pmid u oasis:*hopscan*))
+           backh (car (oasis:ringat offall bp))
+           backw (car (oasis:ringat arcs (oasis:ringnear arcs backh))))
+     (list hop cs ce pda pdb qsa qsb ssa da ssb db backw backh))))
+
+;; A LINE on one layer, optionally with a linetype of its own.
+(defun oasis:mkline (p q base lay lt / lst)
+  (setq lst (list '(0 . "LINE")
+                  (cons 8 lay)
+                  (cons 10 (trans (oasis:wp p base) 1 0))
+                  (cons 11 (trans (oasis:wp q base) 1 0))))
+  (if (and lt (/= lt "CONTINUOUS"))
+      (setq lst (append lst (list (cons 6 lt) (cons 48 (oasis:ltsc))))))
+  (entmake lst)
+  (entlast))
+
+;; An open polyline through PTS.
+(defun oasis:mkpl (pts base lay / lst p)
+  (setq lst (list '(0 . "LWPOLYLINE")
+                  '(100 . "AcDbEntity")
+                  (cons 8 lay)
+                  '(100 . "AcDbPolyline")
+                  (cons 90 (length pts))
+                  '(70 . 0)))
+  (foreach p pts
+    (setq lst (append lst (list (cons 10 (trans (oasis:wp p base) 1 0))))))
+  (entmake lst)
+  (entlast))
+
+;; One slope line, from a hopper corner up to the shallow break point on
+;; its own side.  Straight is a clean run; guided follows the pool's own
+;; wall with its offset easing from the hopper's at the deep break to
+;; nothing at the shallow one, so it lands on the shallow break having
+;; followed the curve in.  Either way it departs from the corner itself.
+(defun oasis:slope (arcs ss sd off corner shal guided base lay / pts)
+  (if (not guided)
+      (oasis:mkline corner shal base lay nil)
+      (progn
+        (setq pts (oasis:chordrun arcs ss sd 0.0 off oasis:*hopchord*))
+        ;; the walk ends at the deep break; the line has to end on the
+        ;; corner, which sits on the break line itself
+        (setq pts (reverse (cons corner (cdr (reverse pts))))
+              pts (cons shal (cdr pts)))
+        (oasis:mkpl pts base lay))))
+
+;; Draw the whole bottom and dimension it.  Returns the entities made.
+(defun oasis:drawbottom (bot arcs base w h lt ga gb off
+                         / hop cs ce pda pdb qsa qsb ssa da ssb db backw
+                           backh out doff sh p)
+  (setq hop  (nth 0 bot)  cs   (nth 1 bot)  ce   (nth 2 bot)
+        pda  (nth 3 bot)  pdb  (nth 4 bot)  qsa  (nth 5 bot)
+        qsb  (nth 6 bot)  ssa  (nth 7 bot)  da   (nth 8 bot)
+        ssb  (nth 9 bot)  db   (nth 10 bot) backw (nth 11 bot)
+        backh (nth 12 bot)
+        doff (oasis:dimoff w h)
+        out  nil)
+  (setvar "CLAYER" oasis:*poollayer*)
+  ;; the shallow break, straight across
+  (setq out (cons (oasis:mkline qsa qsb base oasis:*poollayer* nil) out))
+  ;; the deep break in three collinear pieces: a dashed stub from each
+  ;; wall in to its hopper corner, a solid run across the hopper between
+  (setq out (cons (oasis:mkline pda cs base oasis:*poollayer* lt) out)
+        out (cons (oasis:mkline cs ce base oasis:*poollayer* nil) out)
+        out (cons (oasis:mkline ce pdb base oasis:*poollayer* lt) out))
+  ;; the hopper itself -- arcs and runs, not facets
+  (setq out (append (oasis:draw hop base oasis:*poollayer*) out))
+  ;; a slope line up each side
+  (setq out (cons (oasis:slope arcs ssa da off cs qsa ga base
+                               oasis:*poollayer*)
+                  out)
+        out (cons (oasis:slope arcs ssb db off ce qsb gb base
+                               oasis:*poollayer*)
+                  out))
+  ;; the K/L/M string: wall to hopper, hopper across, hopper to wall,
+  ;; all chained on one line a stand-off clear of the deep break on the
+  ;; SHALLOW side, so it reads from the shallow end rather than from
+  ;; over the deep end it measures
+  (setvar "CLAYER" oasis:*dimlayer*)
+  (oasis:dimstyle-on oasis:*dimstyle*)
+  (setq sh (oasis:v* (oasis:deepdir pda pdb
+                                    (list (* 0.5 (+ (car qsa) (car qsb)))
+                                          (* 0.5 (+ (cadr qsa) (cadr qsb)))))
+                     -1.0))
+  (foreach p (list (list pda cs) (list cs ce) (list ce pdb))
+    (command "_.DIMALIGNED"
+             (oasis:wp (car p) base) (oasis:wp (cadr p) base)
+             (oasis:wp (polar (list (* 0.5 (+ (car (car p)) (car (cadr p))))
+                                    (* 0.5 (+ (cadr (car p))
+                                              (cadr (cadr p)))))
+                              (atan (cadr sh) (car sh))
+                              doff)
+                       base)))
+  ;; and the offset itself, where it is squarest to the wall
+  (oasis:crossdim backw backh base)
+  out)
+
+;; The hopper offset, re-asked until a hopper can be built on it.  What
+;; rules one out is never the number on its own -- it is the number
+;; against this pool -- so the check is the build itself.  Returns
+;; (offset bottom), or OASIS-BACK.
+(defun oasis:askhopoff (arcs sh sd / off bot try)
+  (setq bot nil)
+  (while (null bot)
+    (initget 6 "Back Undo")
+    (setq off (getdist (strcat "\nHopper offset in from the wall [Back] <"
+                               (rtos oasis:*hopoff*) ">: ")))
+    (cond
+      ((and (= (type off) 'STR) (member off '("Back" "Undo")))
+       (setq bot 'OASIS-BACK))
+      (t
+       (if (null off) (setq off oasis:*hopoff*))
+       (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
+                               off))
+       (if (= (type try) 'STR)
+           (princ (strcat "\nAt " (rtos off) " " try "."))
+           (setq oasis:*hopoff* off
+                 bot            (list off try))))))
+  bot)
+
+;; How one slope line runs.  The side is named by the arc its end of the
+;; deep break lands on, so there is never a doubt which of the two is
+;; being asked about.  Returns T for guided, nil for straight, or
+;; OASIS-BACK.
+(defun oasis:askslope (arcs bot which / da nm v)
+  (setq da (if (= which 0) (nth 8 bot) (nth 10 bot))
+        nm (nth 0 (nth (nth 2 (oasis:ringat arcs da)) arcs))
+        v  (oasis:askkw (strcat "Slope line on the " nm " side")
+                        "Straight Guided" "Straight/Guided" "Straight" T))
+  (if (eq v 'OASIS-BACK) v (= v "Guided")))
+
+;; The whole bottom flow, with Back between its steps the way the pool's
+;; own questions have it.  Back out of the first step and nothing is
+;; added at all.  Returns the lines to report, so they land after the
+;; pool's own, or nil when nothing was added.
+(defun oasis:askbottom (arcs w h base lt / marks ans pos k v off bot done)
+  (setq marks (oasis:tangmarks arcs w h base lt)
+        ans   (list nil nil nil nil nil)
+        pos   0)
+  (while (and pos (< pos 5))
+    (setq k pos
+          v (cond ((= k 0) (oasis:askbreak "Shallow" arcs w h base))
+                  ((= k 1) (oasis:askbreak "Deep" arcs w h base))
+                  ((= k 2) (oasis:askhopoff arcs (nth 0 ans) (nth 1 ans)))
+                  (t       (oasis:askslope arcs (cadr (nth 2 ans))
+                                           (- k 3)))))
+    (if (eq v 'OASIS-BACK)
+        (if (> pos 0)
+            (progn (princ "\nStepping back one step.")
+                   (setq pos (1- pos)))
+            (progn (princ "\nNo bottom added.")
+                   (setq pos nil)))
+        (setq ans (oasis:put ans k v)
+              pos (1+ pos))))
+  (setq marks (oasis:pv-clear marks))
+  (if (null pos)
+      nil
+      (progn
+        (setq off  (car (nth 2 ans))
+              bot  (cadr (nth 2 ans))
+              done (oasis:drawbottom bot arcs base w h lt
+                                     (nth 3 ans) (nth 4 ans) off))
+        (list
+          (strcat "\nBottom on layer " oasis:*poollayer*
+                  ": the shallow break, the three-piece deep break"
+                  " (dashed stubs,")
+          (strcat "\n  solid middle), the hopper " (rtos off)
+                  " in from the wall, and the slope lines ("
+                  (if (nth 3 ans) "guided" "straight") " / "
+                  (if (nth 4 ans) "guided" "straight") ").")
+          (strcat "\n  K/L/M at the deep break: "
+                  (rtos (distance (nth 3 bot) (nth 1 bot))) " / "
+                  (rtos (distance (nth 1 bot) (nth 2 bot))) " / "
+                  (rtos (distance (nth 2 bot) (nth 4 bot))) ".")))))
+
 ;;; -------------------- reporting ---------------------------------------
 
 ;; s padded out to w characters, so the report's rows line up.
@@ -1829,7 +2581,7 @@
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc off cbase arcs ents nests prev lt a
-                   nchk)
+                   nchk gotbot)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (oasis:dimstyrestore)
@@ -1951,11 +2703,6 @@
            (setq ents (oasis:draw arcs base oasis:*poollayer*))
            (oasis:dimension arcs ents base w h oasis:*dimlayer*)
            (setq nchk (oasis:checkdraw arcs cbase w h lt))
-           (oasis:dimstyrestore)
-
-           (command "_.UNDO" "_End")
-           (setq undo-open nil)
-           (oasis:sysrestore)
 
            (princ (strcat "\nOASIS " *oasis-version* ": " (rtos w) " x "
                           (rtos h) " " (oasis:vlabel var)
@@ -1987,7 +2734,24 @@
                             " point on the outline and"))
              (princ "\n       nothing is drawn for it."))
            (oasis:report-extents arcs w h)
-           (oasis:report-crossings arcs)))))
+           (oasis:report-crossings arcs)
+
+           ;; and then, if it is wanted, the floor -- laid out on the
+           ;; outline that has just been built, so every point of it can
+           ;; be said exactly instead of picked at.  Still inside the
+           ;; undo group: one U takes the pool and its bottom together.
+           (oasis:osup)
+           (if (= "Yes" (oasis:askkw
+                          "Add the bottom of the pool (breaks and hopper)?"
+                          "Yes No" "Yes/No" "No" nil))
+               (setq gotbot (oasis:askbottom arcs w h base lt)))
+           (oasis:osdown)
+           (oasis:dimstyrestore)
+
+           (command "_.UNDO" "_End")
+           (setq undo-open nil)
+           (oasis:sysrestore)
+           (foreach a gotbot (princ a))))))
   (princ))
 
 (defun c:OASISVER ()

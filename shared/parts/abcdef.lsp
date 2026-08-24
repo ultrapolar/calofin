@@ -1,7 +1,15 @@
 ;;; ==========================================================================
-;;;  ABCDEF.lsp  -  Plot measured points into AutoCAD from an Excel sheet
+;;; abcdef.lsp  --  Locate measured points inside a rectangle and plot them
 ;;; --------------------------------------------------------------------------
-;;;  Points A B C D sit on the corners of a rectangle:
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  ABCDEF      read the sheet, place every point, report the fit
+;;;            ABCDEFVER   print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; Points A B C D sit on the corners of a rectangle:
 ;;;
 ;;;        A --------- B         A = top-left      B = top-right
 ;;;        |           |         C = bottom-left   D = bottom-right
@@ -10,39 +18,90 @@
 ;;;                               below B - the same "Z" reading order as
 ;;;                               the field sheet, NOT clockwise A-B-C-D)
 ;;;
-;;;  Every labelled point in the sheet is located by its distance from each
-;;;  of A, B, C and D.  The command asks for the two rectangle dimensions
-;;;  A-B (width) and A-C (height), reads a spreadsheet with the columns
+;;; The command asks for the two rectangle dimensions A-B (width) and A-C
+;;; (height), reads a spreadsheet with the columns
 ;;;
-;;;      POINT NAME | DIST FROM A | DIST FROM B | DIST FROM C | DIST FROM D
+;;;     POINT NAME | DIST FROM A | DIST FROM B | DIST FROM C | DIST FROM D
 ;;;
-;;;  and multilaterates each point.  Because the supplied distances are
-;;;  rounded to the nearest 1/4", no single distance can be trusted exactly;
-;;;  a least-squares fit is used so the residual error is shared equally
-;;;  among all the distances provided for a point (rather than forcing two
-;;;  of them to be exact and dumping all the slop on the rest).
+;;; and works out where each named point has to be.  The corners are built
+;;; square to the world axes and every one of the four angles is measured
+;;; back off the drawn coordinates before anything is plotted, so the frame
+;;; the points land in is a true 90-degree rectangle or the run stops.
 ;;;
-;;;  Should a sheet label its bottom corners the other way round (C =
-;;;  bottom-right, D = bottom-left), the import notices - the distances only
-;;;  fit the rectangle one way - swaps C and D to match, and says so.
+;;; HOW MANY TAPES IT TAKES.  Two distances fix a point up to a mirror,
+;;; three fix it outright, and the fourth is the cross-check.  A sheet
+;;; rarely gives four clean ones, so the leniency is built in:
 ;;;
-;;;  Distances are entered / stored as architectural feet-inches, e.g.
-;;;      12'-3 1/2"      3 1/2"      0'-6"      5'-0 3/4"
+;;;   * a row with only TWO distances still plots - the two circles are
+;;;     crossed exactly and the root that falls inside the rectangle is
+;;;     taken (the mirror root is on the far side of a rectangle side)
+;;;   * a row with THREE is least-squares fitted, sharing the leftover
+;;;     error across all three
+;;;   * a row with FOUR is fitted on all four; if that fit is poor and
+;;;     leaving ONE tape out settles the other three, that tape is dropped
+;;;     and the report names it
 ;;;
-;;;  Command:  ABCDEF
+;;; What it will NOT do is drop a tape it cannot prove is the bad one.
+;;; Three tapes that disagree give no evidence about which of them is
+;;; wrong - every pair of them fits perfectly - so a poor 3-tape row keeps
+;;; all three and is flagged instead of being quietly made to look exact.
 ;;;
-;;;  All geometry is created in inches (1 drawing unit = 1 inch).
+;;; PLACEMENT METHOD, asked per run:
+;;;   Auto      the rules above - all tapes, minus a provably bad one
+;;;   Furthest  only the two supplied corners furthest apart (widest base)
+;;;   Mean      every 2- and 3-tape subset solved, and the answers averaged
+;;;   Least     least-squares over every supplied tape, nothing dropped
+;;;
+;;; CONFIDENCE.  Every point is reported with the number of tapes that
+;;; actually placed it, which corners they were, any tape dropped, and a
+;;; 0-99 confidence built from four measured things: redundancy, the
+;;; leftover fit error, how far the answer moves when any one tape is taken
+;;; away, and the angle the tapes cross at.  Nothing in it is a guess.
+;;;
+;;; INSIDE THE FRAME.  A surveyed pool point belongs inside the rectangle it
+;;; was measured from.  A solution that lands outside is pulled back onto
+;;; the frame, and the distance it had to be pulled is reported - a small
+;;; snap is rounding, a large one means a tape or a dimension is wrong.
+;;;
+;;; WHAT IT DRAWS.  Each point is an "ab_pt" block on layer POINTS carrying
+;;; its sheet label in the number attribute - the same thing a Leica import
+;;; produces - so ABHD, CABHD, ABFIND, BPCALLOUT and LHD read this import
+;;; with no conversion.  The run ends by offering ABHD the whole set, which
+;;; is how a sheet of tape measurements becomes a pool perimeter.
+;;;
+;;; Distances are entered / stored as architectural feet-inches, e.g.
+;;;     12'-3 1/2"      3 1/2"      0'-6"      5'-0 3/4"
+;;;
+;;; Should a sheet label its bottom corners the other way round (C =
+;;; bottom-right, D = bottom-left), the import notices - the distances only
+;;; fit the rectangle one way - swaps C and D to match, and says so.
+;;;
+;;; All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
-;; Revision stamp, shown on load and in every run's output.  When plotted
-;; points look wrong, FIRST check the drawing/command line shows the rev you
-;; think you loaded - two separate field failures turned out to be a stale or
-;; hand-edited copy of this file still loaded in AutoCAD.
-(setq abcdef:*version* "4")
+;; Version banner, shown on load and in every run's output.  When plotted
+;; points look wrong, FIRST check the drawing/command line shows the version
+;; you think you loaded - two separate field failures turned out to be a
+;; stale or hand-edited copy of this file still loaded in AutoCAD.
+(setq *abcdef-version* "v5.0")
+
+;;; --------------------------------------------------------------------------
+;;;  Tunables
+;;; --------------------------------------------------------------------------
+
+;; Quarter-inch field data that was read and typed correctly fits a
+;; rectangle well under a tenth of an inch.  These two numbers are where
+;; "fits" stops and "check this" starts, in inches of RMS leftover error.
+(setq abcdef:*fit-ok*  0.20)   ; at or under this, the tapes agree
+(setq abcdef:*fit-bad* 0.50)   ; over this, the point is flagged CHECK
+
+;; How far outside the rectangle a solved point may land and still be
+;; treated as rounding to be snapped back, rather than a bad reading.
+(setq abcdef:*edge-tol* 1.0)
+
+(setq abcdef:*fuzz* 1e-9)      ; below this, two lengths are the same length
 
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
@@ -370,6 +429,385 @@
   (cons x (cons y (cons rms (reverse res)))))
 
 ;;; --------------------------------------------------------------------------
+;;;  Where a point really is
+;;;
+;;;  Four tapes to four corners is one measurement more than the geometry
+;;;  needs, and in field data that spare one is the whole point: it is what
+;;;  turns "here is an answer" into "here is an answer, and here is how much
+;;;  the readings argued about it".
+;;;
+;;;  A row therefore arrives as a small pile of possible answers - every
+;;;  pair of tapes, every triple, and the all-four fit.  What follows builds
+;;;  that pile, picks from it under the method the user chose, and scores
+;;;  the pick.  A tape is only ever discarded on evidence (see abcdef:auto).
+;;; --------------------------------------------------------------------------
+
+;; Plain 2-D distance between two (x y ...) points.
+(defun abcdef:d2p (p q)
+  (sqrt (+ (expt (- (car q) (car p)) 2) (expt (- (cadr q) (cadr p)) 2))))
+
+;; The points at distance RA from CA and RB from CB, as a list of one or
+;; two (x y).
+;;
+;; Quarter-inch tapes routinely describe circles that miss each other, or
+;; one that swallows the other, by a fraction of an inch.  Giving up on
+;; those rows would throw away most of a real sheet, so instead the
+;; shortfall is shared equally between the two radii until the circles just
+;; touch, and the single touching point comes back.  Neither tape is called
+;; the liar, which is the same principle the least-squares fit works on.
+(defun abcdef:cc-int (ca ra cb rb / d ux uy m h2 h bx by gap)
+  (setq d (abcdef:d2p ca cb))
+  (if (< d abcdef:*fuzz*)
+    nil                                  ; the same corner twice: no crossing
+    (progn
+      (setq ux (/ (- (car cb) (car ca)) d)
+            uy (/ (- (cadr cb) (cadr ca)) d))
+      (cond
+        ((< (+ ra rb) d)                 ; circles fall short of each other
+         (setq gap (- d (+ ra rb))
+               ra  (+ ra (* 0.5 gap))
+               rb  (+ rb (* 0.5 gap))))
+        ((< d (abs (- ra rb)))           ; one circle inside the other
+         (setq gap (- (abs (- ra rb)) d))
+         (if (> ra rb)
+           (setq ra (- ra (* 0.5 gap)) rb (+ rb (* 0.5 gap)))
+           (setq ra (+ ra (* 0.5 gap)) rb (- rb (* 0.5 gap))))))
+      (setq m  (/ (+ (* d d) (* ra ra) (- (* rb rb))) (* 2.0 d))
+            h2 (- (* ra ra) (* m m)))
+      (if (< h2 0.0) (setq h2 0.0))      ; only rounding can get here now
+      (setq h  (sqrt h2)
+            bx (+ (car ca) (* m ux))
+            by (+ (cadr ca) (* m uy)))
+      (if (< h abcdef:*fuzz*)
+        (list (list bx by))
+        (list (list (- bx (* h uy)) (+ by (* h ux)))
+              (list (+ bx (* h uy)) (- by (* h ux))))))))
+
+;; T when (X Y) is inside RECT - (xmin ymin xmax ymax) - allowing TOL of
+;; slop on every side.
+(defun abcdef:inside-p (x y rect tol)
+  (and (>= x (- (nth 0 rect) tol)) (<= x (+ (nth 2 rect) tol))
+       (>= y (- (nth 1 rect) tol)) (<= y (+ (nth 3 rect) tol))))
+
+;; (X Y SNAP) with X Y pulled back onto RECT and SNAP the distance moved.
+;; A point measured from four corners of a rectangle belongs inside it; a
+;; solution that lands outside is at best rounding and at worst a bad tape,
+;; and either way the snap distance is the size of the problem.
+(defun abcdef:clamp-in (x y rect / cx cy)
+  (setq cx (max (nth 0 rect) (min (nth 2 rect) x))
+        cy (max (nth 1 rect) (min (nth 3 rect) y)))
+  (list cx cy (abcdef:d2p (list x y) (list cx cy))))
+
+;; The angle in degrees, measured at (X Y), between the lines out to corners
+;; CA and CB.  This is the "cut" of the two arcs: near 90 degrees they cross
+;; cleanly and a quarter inch of tape error stays a quarter inch on the
+;; ground, while near 0 or 180 they cross at a glance and that same quarter
+;; inch walks the answer several inches along the crossing.  It is the
+;; geometry, not the reading, that makes such a point weak - which is why
+;; the confidence score has to see it.
+(defun abcdef:cut-ang (x y ca cb / ux uy vx vy la lb dot)
+  (setq ux (- (car ca) x) uy (- (cadr ca) y)
+        vx (- (car cb) x) vy (- (cadr cb) y)
+        la (sqrt (+ (* ux ux) (* uy uy)))
+        lb (sqrt (+ (* vx vx) (* vy vy))))
+  (if (or (< la abcdef:*fuzz*) (< lb abcdef:*fuzz*))
+    0.0
+    (progn
+      (setq dot (/ (+ (* ux vx) (* uy vy)) (* la lb)))
+      (if (> dot  1.0) (setq dot  1.0))
+      (if (< dot -1.0) (setq dot -1.0))
+      (* 180.0 (/ (atan (sqrt (- 1.0 (* dot dot))) dot) pi)))))
+
+;; The widest cut angle any pair of the used tapes makes at (X Y) - the best
+;; crossing the point actually had going for it.
+(defun abcdef:best-cut (x y sub / best a i j n)
+  (setq best 0.0 n (length sub) i 0)
+  (while (< i n)
+    (setq j (1+ i))
+    (while (< j n)
+      (setq a (abcdef:cut-ang x y (cadr (nth i sub)) (cadr (nth j sub))))
+      (if (> a 90.0) (setq a (- 180.0 a)))   ; 170 deg cuts as badly as 10
+      (if (> a best) (setq best a))
+      (setq j (1+ j)))
+    (setq i (1+ i)))
+  best)
+
+;;; --------------------------------------------------------------------------
+;;;  Subsets of the tapes a row supplied
+;;; --------------------------------------------------------------------------
+
+;; One row's measured tapes as (INDEX CORNER DIST) triples - index 0-3 for
+;; A B C D - with the blank cells left out.  Everything downstream works on
+;; these triples, so a row that gave two tapes and a row that gave four take
+;; exactly the same path.
+(defun abcdef:avail (din pts / out i)
+  (setq out '() i 0)
+  (repeat 4
+    (if (nth i din)
+      (setq out (cons (list i (nth i pts) (nth i din)) out)))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; Every K-element subset of LST, order preserved.  K is 2 or 3 and LST
+;; never holds more than four tapes, so the plain recursion is cheap.
+(defun abcdef:subsets (lst k)
+  (cond ((= k 0) (list '()))
+        ((null lst) '())
+        (T (append
+             (mapcar '(lambda (s) (cons (car lst) s))
+                     (abcdef:subsets (cdr lst) (1- k)))
+             (abcdef:subsets (cdr lst) k)))))
+
+;; The triples of AV that SUB left out.
+(defun abcdef:missing (av sub / out e)
+  (setq out nil)
+  (foreach e av (if (not (member e sub)) (setq out (cons e out))))
+  (if out (reverse out)))
+
+;; "ABD" - the corner letters of a list of triples, in sheet order.
+(defun abcdef:letters (sub / s e)
+  (setq s "")
+  (foreach e (list 0 1 2 3)
+    (if (assoc e sub) (setq s (strcat s (nth e '("A" "B" "C" "D"))))))
+  (if (= s "") "-" s))
+
+;; Fit one subset of tapes: (X Y RMS RESIDUALS...) in the subset's order.
+;;
+;; Three or more tapes go to the least-squares fit, which shares the
+;; leftover error over all of them.  Exactly two are crossed as circles and
+;; the root inside the frame is taken - the mirror root of a pair measured
+;; from two rectangle corners sits on the far side of a rectangle side, so
+;; there is normally exactly one candidate inside, and the seed only breaks
+;; a tie.  Two tapes cross-check nothing, so their RMS is reported as the
+;; zero it genuinely is rather than as a fit anyone should be reassured by.
+(defun abcdef:fit (sub rect seed / corners dists cands best bd p sc)
+  (setq corners (mapcar 'cadr sub) dists (mapcar 'caddr sub))
+  (cond
+    ((>= (length sub) 3)
+     (abcdef:solve corners dists (car seed) (cadr seed)))
+    ((= (length sub) 2)
+     (setq cands (abcdef:cc-int (nth 0 corners) (nth 0 dists)
+                                (nth 1 corners) (nth 1 dists)))
+     (if (null cands)
+       nil
+       (progn
+         (setq best nil bd nil)
+         (foreach p cands
+           (setq sc (+ (if (abcdef:inside-p (car p) (cadr p) rect
+                                            abcdef:*edge-tol*)
+                         0.0 1.0e6)
+                       (abcdef:d2p p seed)))
+           (if (or (null bd) (< sc bd)) (setq bd sc best p)))
+         (list (car best) (cadr best) 0.0 0.0 0.0))))
+    (T nil)))
+
+;; RMS of an already-chosen position against EVERY tape the row supplied.
+;; Furthest and Mean place a point from part of the data; this scores that
+;; point against all of it, so the four methods stay comparable and a tape
+;; the method ignored still gets to object.
+(defun abcdef:rms-at (av x y / s n e f)
+  (setq s 0.0 n 0)
+  (foreach e av
+    (setq f (- (abcdef:d2p (list x y) (cadr e)) (caddr e))
+          s (+ s (* f f))
+          n (1+ n)))
+  (if (> n 0) (sqrt (/ s n)) 0.0))
+
+;; Signed leftover error against each tape of AV, in sheet order, for the
+;; position (X Y).
+(defun abcdef:resids (av x y / out e)
+  (setq out '())
+  (foreach e av
+    (setq out (cons (cons (car e)
+                          (- (abcdef:d2p (list x y) (cadr e)) (caddr e)))
+                    out)))
+  (reverse out))
+
+;; How far the answer moves when any ONE tape of SUB is taken away.
+;;
+;; This is the disagreement between the tapes said where it matters - in
+;; inches on the ground, rather than as a residual that has already been
+;; averaged down.  nil for two tapes, because dropping one of those leaves
+;; nothing to solve.
+(defun abcdef:spread (sub rect seed pt / worst s f d)
+  (if (< (length sub) 3)
+    nil
+    (progn
+      (setq worst 0.0)
+      (foreach s (abcdef:subsets sub (1- (length sub)))
+        (setq f (abcdef:fit s rect seed))
+        (if f
+          (progn
+            (setq d (abcdef:d2p pt (list (car f) (cadr f))))
+            (if (> d worst) (setq worst d)))))
+      worst)))
+
+;;; --------------------------------------------------------------------------
+;;;  The four placement methods
+;;;
+;;;  Each returns (FIT USED DROPPED), where FIT is what abcdef:fit returns,
+;;;  USED the triples that placed the point and DROPPED the supplied ones
+;;;  that did not - or nil when the row cannot be placed at all.
+;;; --------------------------------------------------------------------------
+
+;; Auto - every tape has a say, minus one that can be PROVEN wrong.
+;;
+;; With four tapes and a poor fit, leaving each one out in turn is a real
+;; experiment: three tapes are still one more than the geometry needs, so if
+;; removing a particular tape settles the other three, that tape was the bad
+;; one and the evidence is the settling.  With three tapes there is no such
+;; evidence - every pair of three fits perfectly, whichever pair you pick -
+;; so a poor three-tape row keeps all three and is flagged.  Making it look
+;; exact by dropping to a pair would be inventing confidence, which is the
+;; one thing a report like this must never do.
+;;
+;; The experiment has to be DECISIVE as well as successful, and that is not
+;; a formality.  A point sitting near a diagonal of the rectangle is barely
+;; constrained along that diagonal: the two corners it lies between cross at
+;; a glancing angle, so a wrong third tape can drag the answer six inches
+;; along the diagonal and still leave a fit of a few hundredths.  Dropping
+;; the tape with the lowest leftover error would then throw out a GOOD tape
+;; and quietly move the point.  Seen from the numbers, the giveaway is that
+;; the best and second-best triples fit equally well - the data cannot tell
+;; which tape is wrong.  So a drop needs the runner-up to be clearly worse;
+;; when it is not, every tape is kept and the point is graded down instead,
+;; which is the same rule the three-tape case already follows.
+(defun abcdef:auto (av rect seed / n f rms bs br nr best s trial)
+  (setq n (length av) f (abcdef:fit av rect seed))
+  (cond
+    ((null f) nil)
+    ((or (< n 4) (<= (caddr f) abcdef:*fit-ok*))
+     (list f av nil))
+    (T
+     (setq rms (caddr f) bs nil br nil nr nil best nil)
+     (foreach s (abcdef:subsets av 3)
+       (setq trial (abcdef:fit s rect seed))
+       (if trial
+         (cond ((or (null br) (< (caddr trial) br))
+                (setq nr br br (caddr trial) bs s best trial))
+               ((or (null nr) (< (caddr trial) nr))
+                (setq nr (caddr trial))))))
+     (if (and bs
+              (<= br abcdef:*fit-ok*)
+              (< br (* 0.5 rms))
+              nr
+              (> nr (max (* 3.0 br) (+ br 0.25))))   ; the runner-up must lose
+       (list best bs (abcdef:missing av bs))
+       (list f av nil)))))
+
+;; Furthest - only the two supplied corners furthest apart from each other.
+;; On a rectangle that is a diagonal pair whenever both ends were measured,
+;; which is the widest base the sheet can offer.
+(defun abcdef:furthest (av rect seed / best bd p d f)
+  (if (< (length av) 2)
+    nil
+    (progn
+      (setq best nil bd nil)
+      (foreach p (abcdef:subsets av 2)
+        (setq d (abcdef:d2p (cadr (car p)) (cadr (cadr p))))
+        (if (or (null bd) (> d bd)) (setq bd d best p)))
+      (setq f (abcdef:fit best rect seed))
+      (if f (list f best (abcdef:missing av best))))))
+
+;; Mean - solve every 2- and 3-tape subset on its own and average the
+;; answers.  No subset is trusted over any other, so a single bad tape is
+;; diluted rather than removed; the report's spread column is what tells
+;; you whether the answers being averaged agreed in the first place.
+(defun abcdef:mean (av rect seed / subs s f sx sy n x y)
+  (if (< (length av) 2)
+    nil
+    (progn
+      (setq subs (abcdef:subsets av 2))
+      (if (>= (length av) 3)
+        (setq subs (append subs (abcdef:subsets av 3))))
+      (setq sx 0.0 sy 0.0 n 0)
+      (foreach s subs
+        (setq f (abcdef:fit s rect seed))
+        (if f (setq sx (+ sx (car f)) sy (+ sy (cadr f)) n (1+ n))))
+      (if (= n 0)
+        nil
+        (progn
+          (setq x (/ sx n) y (/ sy n))
+          (list (list x y (abcdef:rms-at av x y)) av '()))))))
+
+;; Least - least-squares over every tape supplied, nothing dropped.  This is
+;; what every earlier revision of ABCDEF did, kept so an old plot can be
+;; reproduced exactly.
+(defun abcdef:least (av rect seed / f)
+  (setq f (abcdef:fit av rect seed))
+  (if f (list f av nil)))
+
+;; Run one row under the chosen method.  Returns
+;;   (X Y RMS USED DROPPED SPREAD CUT SNAP URMS)
+;; or nil when the row has too little to place.
+;;
+;; RMS is scored against every tape the sheet gave, URMS against only the
+;; tapes that placed the point, and the two are deliberately different
+;; numbers.  A row whose bad tape was found and dropped should read as what
+;; it is - a well-located point from a sheet with one bad reading in it - so
+;; the report shows RMS, which still carries the dropped tape's objection,
+;; while the confidence is built on URMS.  Scoring confidence on RMS instead
+;; would punish a correctly repaired row exactly as hard as an unrepaired
+;; one, leaving no way to tell the two apart in the column that exists to
+;; tell them apart.
+(defun abcdef:locate (av method rect seed / r f used dropped x y c sp cut)
+  (setq r (cond ((= method "Furthest") (abcdef:furthest av rect seed))
+                ((= method "Mean")     (abcdef:mean     av rect seed))
+                ((= method "Least")    (abcdef:least    av rect seed))
+                (T                     (abcdef:auto     av rect seed))))
+  (if (null r)
+    nil
+    (progn
+      (setq f (car r) used (cadr r) dropped (caddr r)
+            x (car f) y (cadr f))
+      ;; the frame has the last word on where a surveyed point can be
+      (setq c (abcdef:clamp-in x y rect) x (car c) y (cadr c))
+      (setq sp  (abcdef:spread used rect seed (list x y))
+            cut (abcdef:best-cut x y used))
+      (list x y (abcdef:rms-at av x y) used dropped sp cut (caddr c)
+            (abcdef:rms-at used x y)))))
+
+;;; --------------------------------------------------------------------------
+;;;  Confidence
+;;;
+;;;  One number, 1-99, built only from things the sheet actually shows:
+;;;
+;;;    redundancy  how many tapes had a say.  Four cross-check three, three
+;;;                cross-check two, a bare pair cross-checks nothing at all
+;;;                and can be exactly wrong without ever looking it.
+;;;    fit         the leftover error the tapes could not agree away (RMS).
+;;;    spread      how far the answer moves when any one tape is dropped.
+;;;    cut         the angle the best pair of tapes crosses at, at the
+;;;                point - shallow crossings turn small tape errors into
+;;;                large position errors.
+;;;
+;;;  A dropped tape costs a few points too: the row needed repairing, and a
+;;;  repair is a judgement even when the evidence for it was good.
+;;; --------------------------------------------------------------------------
+
+(defun abcdef:confidence (used rms spread cut dropped / p)
+  (setq p 100.0)
+  (cond ((>= used 4) (setq p (- p  0.0)))
+        ((= used 3)  (setq p (- p  8.0)))
+        (T           (setq p (- p 26.0))))
+  (setq p (- p (min 55.0 (* 110.0 rms))))
+  (if spread (setq p (- p (min 20.0 (* 12.0 spread)))))
+  (cond ((< cut 20.0) (setq p (- p 22.0)))
+        ((< cut 35.0) (setq p (- p 10.0)))
+        ((< cut 50.0) (setq p (- p  3.0))))
+  (if dropped (setq p (- p 6.0)))
+  (max 1.0 (min 99.0 p)))
+
+;; The word that goes with a confidence number.
+(defun abcdef:grade (pct)
+  (cond ((>= pct 90.0) "HIGH")
+        ((>= pct 75.0) "GOOD")
+        ((>= pct 60.0) "FAIR")
+        ((>= pct 40.0) "WEAK")
+        (T             "POOR")))
+
+
+;;; --------------------------------------------------------------------------
 ;;;  Drawing helpers
 ;;; --------------------------------------------------------------------------
 
@@ -379,14 +817,6 @@
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord") (cons 2 name)
                    '(70 . 0) (cons 62 color) '(6 . "Continuous")))))
-
-(defun abcdef:point (pt layer)
-  (entmake (list '(0 . "POINT") (cons 8 layer)
-                 (cons 10 (list (car pt) (cadr pt) 0.0)))))
-
-(defun abcdef:circle (pt rad layer)
-  (entmake (list '(0 . "CIRCLE") (cons 8 layer)
-                 (cons 10 (list (car pt) (cadr pt) 0.0)) (cons 40 rad))))
 
 (defun abcdef:text (pt hgt str layer)
   (entmake (list '(0 . "TEXT") (cons 8 layer)
@@ -401,6 +831,82 @@
   (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 layer)
                  '(100 . "AcDbPolyline") '(90 . 4) '(70 . 1)
                  (cons 10 p1) (cons 10 p2) (cons 10 p3) (cons 10 p4))))
+
+;;; --------------------------------------------------------------------------
+;;;  Survey points the rest of the toolkit already understands
+;;;
+;;;  ABHD, CABHD, ADAB, ABFIND, BPCALLOUT and LHD all read a survey the same
+;;;  way: an "ab_pt" block INSERT carrying its point number in an attribute,
+;;;  or a plain POINT on layer POINTS.  Plotting into that block instead of
+;;;  into private ABCDEF-POINTS markers is the whole reason this import can
+;;;  become a pool perimeter without a conversion step in between - and it
+;;;  is why nothing else drawn here goes on the POINTS layer.
+;;; --------------------------------------------------------------------------
+
+(setq abcdef:*point-layer* "POINTS")   ; where the survey points land
+(setq abcdef:*point-block* "ab_pt")    ; the block every fitter reads
+(setq abcdef:*point-tag*   "number")   ; its point-number attribute
+
+;; Make sure ab_pt exists, building it the way the office template has it
+;; when the drawing has never seen one.  (Same definition XFTCONV creates
+;; for a Leica import, so a drawing can hold both without a clash.)
+(defun abcdef:ensure-block (/ sty)
+  (if (not (tblsearch "BLOCK" abcdef:*point-block*))
+    (progn
+      (setq sty (if (tblsearch "STYLE" "STANDARD")
+                  "STANDARD"
+                  (getvar "TEXTSTYLE")))
+      (entmake (list '(0 . "BLOCK") '(100 . "AcDbEntity") '(8 . "0")
+                     '(100 . "AcDbBlockBegin")
+                     (cons 2 abcdef:*point-block*) '(70 . 2)
+                     '(10 0.0 0.0 0.0)
+                     (cons 3 abcdef:*point-block*) '(1 . "")))
+      (entmake '((0 . "POINT") (100 . "AcDbEntity") (8 . "0")
+                 (100 . "AcDbPoint") (10 0.0 0.0 0.0)))
+      (entmake (list '(0 . "ATTDEF") '(100 . "AcDbEntity") '(8 . "0")
+                     '(100 . "AcDbText") '(10 1.0 -2.0 0.0) '(40 . 1.0)
+                     '(1 . "0") (cons 7 sty)
+                     '(100 . "AcDbAttributeDefinition")
+                     '(3 . "Type_Point_Number")
+                     (cons 2 abcdef:*point-tag*) '(70 . 4)))
+      (entmake '((0 . "ENDBLK") (100 . "AcDbEntity") (8 . "0")
+                 (100 . "AcDbBlockEnd")))
+      (princ (strcat "\n  block \"" abcdef:*point-block*
+                     "\" was not in this drawing - created it."))))
+  (tblsearch "BLOCK" abcdef:*point-block*))
+
+;; One survey point: ab_pt at PT, its number attribute set to NAME, scaled
+;; so the number reads at height TH.
+(defun abcdef:insert-pt (pt name th)
+  (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
+                 (cons 8 abcdef:*point-layer*)
+                 '(100 . "AcDbBlockReference") '(66 . 1)
+                 (cons 2 abcdef:*point-block*)
+                 (list 10 (car pt) (cadr pt) 0.0)
+                 (cons 41 th) (cons 42 th) (cons 43 th)))
+  (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity")
+                 (cons 8 abcdef:*point-layer*) '(100 . "AcDbText")
+                 (list 10 (+ (car pt) th) (- (cadr pt) (* 2.0 th)) 0.0)
+                 (cons 40 th) (cons 1 name) '(100 . "AcDbAttribute")
+                 (cons 2 abcdef:*point-tag*) '(70 . 0)))
+  (entmake (list '(0 . "SEQEND") '(100 . "AcDbEntity")
+                 (cons 8 abcdef:*point-layer*))))
+
+;; Every ab_pt INSERT made since MARK (the entlast taken before plotting
+;; began, or nil for an empty drawing), as a selection set.
+;;
+;; Walking forward from a mark is what keeps a second import in the same
+;; drawing honest: an "_X" filter on the block name would sweep up the
+;; previous survey too and hand ABHD two pools at once.
+(defun abcdef:new-points (mark / ss e ed)
+  (setq ss (ssadd) e (if mark (entnext mark) (entnext)))
+  (while e
+    (setq ed (entget e))
+    (if (and (= (cdr (assoc 0 ed)) "INSERT")
+             (= (strcase (cdr (assoc 2 ed))) (strcase abcdef:*point-block*)))
+      (ssadd e ss))
+    (setq e (entnext e)))
+  ss)
 
 ;;; --------------------------------------------------------------------------
 ;;;  Excel reading (via COM automation)
@@ -634,6 +1140,23 @@
 
 ;; With BACK non-nil, typing B (Back; Undo works too) returns the
 ;; symbol AB-BACK so the caller can re-open its previous question.
+;;; --------------------------------------------------------------------------
+;;;  Asking
+;;; --------------------------------------------------------------------------
+
+;; Keyword question in the house format (STANDARDS.md section 1): the
+;; bracket text is built from the keyword list so the two cannot drift, and
+;; Back / Undo come back as the symbol AB-BACK.
+(defun abcdef:askkw (msg kws shown dflt back / v)
+  (initget (if dflt 0 (if back 0 1))
+           (if back (strcat kws " Back Undo") kws))
+  (setq v (getkword (strcat "\n" msg " [" shown
+                            (if back "/Back" "") "]"
+                            (if dflt (strcat " <" dflt ">") "") ": ")))
+  (cond ((member v '("Back" "Undo")) 'AB-BACK)
+        ((null v) (if dflt dflt (abcdef:askkw msg kws shown dflt back)))
+        (T v)))
+
 (defun abcdef:getdim (prompt back / s v)
   (setq v nil)
   (while (null v)
@@ -703,19 +1226,85 @@
     (* 180.0 (/ (atan (abs cross) dot) pi))))
 
 ;;; --------------------------------------------------------------------------
+;;;  The report file
+;;;
+;;;  The command line report scrolls away, and the numbers behind a plot are
+;;;  exactly what gets argued about a week later.  So the same report is
+;;;  written to a text file beside the spreadsheet it came from.
+;;; --------------------------------------------------------------------------
+
+;; Push one report line onto the accumulating list (newest first).
+(defun abcdef:say (rep line)
+  (cons line rep))
+
+;; SHEET with its extension replaced by SUFFIX.
+(defun abcdef:sibling (sheet suffix / n i cut)
+  (setq n (strlen sheet) i n cut nil)
+  (while (and (> i 0) (null cut))
+    (cond ((= (substr sheet i 1) ".") (setq cut i))
+          ((member (substr sheet i 1) '("\\" "/")) (setq i 1)))
+    (setq i (1- i)))
+  (strcat (if cut (substr sheet 1 (1- cut)) sheet) suffix))
+
+;; Write LINES (newest first, as they were accumulated) to a text file
+;; beside SHEET.  Returns the path written, or nil - a report that cannot
+;; be saved is worth a note, never worth losing the plot over.
+(defun abcdef:write-report (sheet lines / path fp ln)
+  (setq path (abcdef:sibling sheet "_ABCDEF_report.txt"))
+  (setq fp (vl-catch-all-apply 'open (list path "w")))
+  (if (or (vl-catch-all-error-p fp) (null fp))
+    nil
+    (progn
+      (foreach ln (reverse lines) (write-line ln fp))
+      (close fp)
+      path)))
+
+;;; --------------------------------------------------------------------------
+;;;  Handing the survey on to the perimeter fitter
+;;; --------------------------------------------------------------------------
+
+;; Pre-select the points just plotted and start ABHD on them.  ABHD reads
+;; ab_pt blocks, which is what was drawn, so nothing is converted here - the
+;; selection is simply put in front of it and it asks its own questions.
+;;
+;; ABHD lives in its own file.  Loaded as part of the calofin build it is
+;; already here; APPLOADed on its own, abcdef.lsp has no business pretending
+;; otherwise, so the absence is reported rather than discovered at the
+;; command line.
+(defun abcdef:to-abhd (ss / n)
+  (setq n (if ss (sslength ss) 0))
+  (cond
+    ((= n 0)
+     (princ "\n  Nothing was plotted, so there is no survey to fit."))
+    ((null (boundp 'c:ABHD))
+     (princ (strcat "\n  ABHD is not loaded in this drawing, so the points"
+                    "\n  were left ready for it instead: they are ab_pt"
+                    "\n  blocks on layer " abcdef:*point-layer*
+                    ".  APPLOAD abhd.lsp (or the"
+                    "\n  whole CALOFIN-ALL.lsp build), then run ABHD and"
+                    "\n  window the points.")))
+    (T
+     (princ (strcat "\n  Starting ABHD on the " (itoa n)
+                    " point(s) just plotted ..."))
+     (sssetfirst nil ss)
+     (vl-cmdf "_.ABHD"))))
+
+;;; --------------------------------------------------------------------------
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ABCDEF (/ file rows base bpx bpy W H
-                    Ax Ay Bx By Cx Cy Dx Dy th mrad
-                    good bad r k rr nm din g corners dists
-                    sol x y rms tags tg tx ty placed p flag
-                    totn tots n3 swapcd tmp angs chk rlist rstr stage done)
+(defun c:ABCDEF (/ file rows base bpx bpy W H method
+                    Ax Ay Bx By Cx Cy Dx Dy th
+                    good bad r nm din d k rr av loc x y rms used dropped
+                    sp cut snap urms pct gr rect seed tags tg tx ty placed p
+                    flag totn tots n3 swapcd tmp angs chk rstr rl
+                    stage done mark ss rep line nby4 nby3 nby2 ndrop
+                    nlow path)
   (vl-load-com)
-  (princ (strcat "\nABCDEF rev " abcdef:*version*))
+  (princ (strcat "\nABCDEF " *abcdef-version*))
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
-  (setq stage 1 done nil)
+  (setq stage 1 done nil method "Auto")
   (while (not done)
     (cond
       ;; ---- get the spreadsheet ------------------------------------------
@@ -725,7 +1314,6 @@
        (if (null file)
          (setq done 'quit)
          (progn
-           ;; ---- rectangle dimensions ------------------------------------
            (princ "\n--- Rectangle A(top-left) B(top-right) C(bottom-left) D(bottom-right) ---")
            (setq stage 2))))
       ((= stage 2)
@@ -734,13 +1322,19 @@
       ((= stage 3)
        (setq H (abcdef:getdim "Dimension A-C (height down the side)" T))
        (if (eq H 'AB-BACK) (setq stage 2) (setq stage 4)))
+      ;; ---- how much of each row gets a say -------------------------------
+      ((= stage 4)
+       (setq method (abcdef:askkw "How should each point be placed?"
+                                  "Auto Furthest Mean Least"
+                                  "Auto/Furthest/Mean/Least" "Auto" T))
+       (if (eq method 'AB-BACK) (setq stage 3) (setq stage 5)))
       ;; ---- where does corner A land? -------------------------------------
       ;; take the pick in WCS so the rectangle is built square to the world
       ;; axes even when the current UCS is rotated (entmake writes WCS).
       (T
        (initget "Back Undo")
        (setq base (getpoint "\nInsertion point for corner A <0,0> [Back]: "))
-       (if (= (type base) 'STR) (setq stage 3) (setq done T)))))
+       (if (= (type base) 'STR) (setq stage 4) (setq done T)))))
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))
     (progn
@@ -762,10 +1356,10 @@
       (setq chk (abcdef:frame-check Ax Ay Bx By Cx Cy Dx Dy W H))
       (if chk
         (progn
-          (alert (strcat "ABCDEF rev " abcdef:*version*
+          (alert (strcat "ABCDEF " *abcdef-version*
                          " - corner layout self-check FAILED:\n\n" chk
                          "\n\nThe loaded copy of abcdef.lsp appears stale or"
-                         "\nhand-edited.  Re-download abcdef_lisp/abcdef.lsp"
+                         "\nhand-edited.  Re-download lisp/abcdef/abcdef.lsp"
                          "\nand APPLOAD it again.  Nothing was drawn."))
           (princ (strcat "\n** ABORT - corner self-check failed: " chk))
           (princ))
@@ -821,23 +1415,22 @@
                 "\n\n  ** WARNING: the distances fit the rectangle poorly (avg fit "
                 (rtos (/ (if swapcd tots totn) n3) 2 3)
                 "\").  Check the A-B / A-C dimensions and the sheet values;"
-                "\n     the **CHECK flags below mark the worst points."))
+                "\n     the confidence column below marks the worst points."))
               (alert (strcat
-                "ABCDEF rev " abcdef:*version*
+                "ABCDEF " *abcdef-version*
                 ": the distances fit the rectangle POORLY\n(average fit error "
                 (rtos (/ (if swapcd tots totn) n3) 2 2)
                 "\" - quarter-inch data should fit under 0.10\").\n"
                 "\nCheck the A-B / A-C dimensions you entered and the"
-                "\nsheet's values.  Points ARE plotted, but every doubtful"
-                "\none is flagged CHECK in red in the drawing."))))
+                "\nsheet's values.  Points ARE plotted, but the report"
+                "\ngrades every one of them and flags the doubtful."))))
           ;; ---- layers & sizing --------------------------------------------
           (abcdef:layer "ABCDEF-FRAME"  1)     ; red
-          (abcdef:layer "ABCDEF-POINTS" 2)     ; yellow
-          (abcdef:layer "ABCDEF-LABELS" 3)     ; green
-          (abcdef:layer "ABCDEF-WARN"   1)     ; red - labels of doubtful fits
+          (abcdef:layer "ABCDEF-WARN"   1)     ; red - notes on doubtful fits
+          (abcdef:layer abcdef:*point-layer* 2) ; yellow - the survey itself
+          (abcdef:ensure-block)
           (setq th (/ (max W H) 120.0))        ; text height
           (if (< th 0.5) (setq th 0.5))
-          (setq mrad (* th 0.4))               ; marker radius
           ;; ---- draw the rectangle + corner tags ---------------------------
           ;; perimeter order TL -> TR -> BR -> BL, by position (so the frame
           ;; stays a rectangle no matter which naming the sheet used).
@@ -856,42 +1449,71 @@
             (abcdef:text (list (+ (cadr tg) tx) (+ (caddr tg) ty))
                          (* th 1.4) (car tg) "ABCDEF-FRAME"))
           ;; ---- plot each measured point -----------------------------------
-          (setq good 0 bad 0 placed '())
+          ;; RECT is the frame every solution is held inside; SEED is its
+          ;; middle, which is where an ambiguous two-tape crossing starts
+          ;; looking from.  MARK is the drawing's last entity before any
+          ;; point exists, so the ABHD handoff can pick out exactly the
+          ;; points this run made.
+          (setq rect (list bpx (- bpy H) (+ bpx W) bpy)
+                seed (list (+ bpx (/ W 2.0)) (- bpy (/ H 2.0)))
+                mark (entlast))
+          (setq good 0 bad 0 placed '()
+                nby4 0 nby3 0 nby2 0 ndrop 0 nlow 0)
           (foreach r rows
             (setq nm (car r) din (cdr r))
-            (setq g (abcdef:row-geom din (list Ax Ay) (list Bx By)
-                                     (list Cx Cy) (list Dx Dy)))
-            (setq corners (car g) dists (cadr g))
-            (if (>= (length corners) 2)
+            (setq av (abcdef:avail din (list (list Ax Ay) (list Bx By)
+                                             (list Cx Cy) (list Dx Dy))))
+            (setq loc (if (>= (length av) 2)
+                        (abcdef:locate av method rect seed)))
+            (if loc
               (progn
-                (setq sol (abcdef:solve corners dists
-                                        (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
-                (setq x (car sol) y (cadr sol) rms (caddr sol))
-                ;; signed leftover error against each supplied distance, in
-                ;; sheet order A B C D ("--" = not measured) - shows how the
-                ;; quarter-inch rounding slop was shared out over the tapes
-                (setq rlist (cdddr sol) rstr "")
-                (foreach d din
-                  (if d
-                    (setq rstr (strcat rstr
-                                 (cal:pad (abcdef:signres (car rlist)) 7))
-                          rlist (cdr rlist))
-                    (setq rstr (strcat rstr (cal:pad "  --" 7)))))
-                (abcdef:point  (list x y) "ABCDEF-POINTS")
-                (abcdef:circle (list x y) mrad "ABCDEF-POINTS")
+                (setq x    (nth 0 loc) y       (nth 1 loc)
+                      rms  (nth 2 loc) used    (nth 3 loc)
+                      dropped (nth 4 loc)
+                      sp   (nth 5 loc) cut     (nth 6 loc)
+                      snap (nth 7 loc) urms    (nth 8 loc))
+                (setq pct (abcdef:confidence (length used) urms sp cut dropped)
+                      gr  (abcdef:grade pct))
+                ;; signed leftover error against each supplied tape, in sheet
+                ;; order A B C D ("--" = not measured) - what each tape still
+                ;; disagrees with after the point was placed
+                (setq rl (abcdef:resids av x y) rstr "")
+                (foreach k '(0 1 2 3)
+                  (setq rstr (strcat rstr
+                    (cal:pad (if (assoc k rl)
+                                  (abcdef:signres (cdr (assoc k rl)))
+                                  "  --")
+                                7))))
+                (abcdef:insert-pt (list x y) nm th)
+                ;; a doubtful point says so in the drawing too, not only in
+                ;; the report that scrolls away
                 (setq flag "")
-                (if (> rms 0.25) (setq flag "  **CHECK"))
-                (if (or (< x (- bpx 0.1)) (> x (+ bpx W 0.1))
-                        (> y (+ bpy 0.1)) (< y (- bpy H 0.1)))
-                  (setq flag (strcat flag "  (outside frame)")))
-                ;; a doubtful fit gets its label in red so the problem is
-                ;; visible in the drawing, not only in this report
-                (if (> rms 0.25)
-                  (abcdef:text (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
-                               th (strcat nm " CHECK") "ABCDEF-WARN")
-                  (abcdef:text (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
-                               th nm "ABCDEF-LABELS"))
-                (setq placed (cons (list nm x y rms (length corners) flag rstr)
+                (if (> rms abcdef:*fit-bad*) (setq flag "  **CHECK"))
+                (if (> snap 0.001)
+                  (setq flag (strcat flag "  (snapped "
+                                     (rtos snap 2 2) "\" into frame)")))
+                (if dropped
+                  (setq flag (strcat flag "  (dropped "
+                                     (abcdef:letters dropped) ")")))
+                ;; four tapes that argue, with no one of them provably the
+                ;; liar, is a different problem from a bad reading and gets
+                ;; said out loud rather than hidden behind the grade
+                (if (and (null dropped) (= (length used) 4)
+                         (> rms abcdef:*fit-ok*))
+                  (setq flag (strcat flag "  (tapes disagree, none provably wrong)")))
+                (if (or (> rms abcdef:*fit-bad*) (< pct 60.0)
+                        (> snap abcdef:*edge-tol*))
+                  (progn
+                    (setq nlow (1+ nlow))
+                    (abcdef:text (list (+ x (* th 0.6)) (+ y (* th 0.6)))
+                                 th (strcat nm " " gr) "ABCDEF-WARN")))
+                (cond ((>= (length used) 4) (setq nby4 (1+ nby4)))
+                      ((= (length used) 3)  (setq nby3 (1+ nby3)))
+                      (T                    (setq nby2 (1+ nby2))))
+                (if dropped (setq ndrop (1+ ndrop)))
+                (setq placed (cons (list nm x y (length used) (length av)
+                                         (abcdef:letters used) rms sp cut
+                                         pct gr flag rstr)
                                    placed))
                 (setq good (1+ good)))
               (progn
@@ -899,27 +1521,78 @@
                                " : fewer than 2 distances given - skipped."))
                 (setq bad (1+ bad)))))
           ;; ---- report ------------------------------------------------------
-          (princ (strcat "\n\n===== ABCDEF rev " abcdef:*version*
-                         " results (all values in inches) ====="))
-          (princ (strcat "\n  POINT            X          Y      #dims"
-                         "   fit err (RMS)   err vs A      B      C      D"))
+          ;; built as a list of lines so the same text goes to the command
+          ;; line and to the file beside the sheet
+          (setq rep '())
+          (setq rep (abcdef:say rep (strcat "===== ABCDEF " *abcdef-version*
+                                            " results (inches) =====")))
+          (setq rep (abcdef:say rep (strcat "  sheet  : " file)))
+          (setq rep (abcdef:say rep (strcat "  method : " method)))
+          (setq rep (abcdef:say rep (strcat "  frame  : " (rtos W 2 2)
+                                            "\" (A-B) x " (rtos H 2 2)
+                                            "\" (A-C)"
+                                            (if swapcd
+                                              ", C/D read swapped" ""))))
+          (setq rep (abcdef:say rep ""))
+          (setq rep (abcdef:say rep
+            (strcat "  POINT            X          Y     TAPES  USED"
+                    "   FIT     SPREAD  CUT    CONF"
+                    "      err vs A      B      C      D")))
           (foreach p (reverse placed)
-            (princ (strcat "\n  " (cal:pad (nth 0 p) 14)
-                           (abcdef:padnum (nth 1 p) 10)
-                           (abcdef:padnum (nth 2 p) 11)
-                           "    " (itoa (nth 4 p))
-                           "      " (rtos (nth 3 p) 2 4) "\""
-                           "     " (nth 6 p) (nth 5 p))))
-          (princ (strcat "\n-------------------------------------------------"
-                         "\n  " (itoa good) " point(s) plotted"
-                         (if (> bad 0) (strcat ", " (itoa bad) " skipped") "")
-                         "."))
-          (princ (strcat "\n  No single tape is trusted: each point is placed so"
-                         "\n  the leftover error is SHARED across all its given"
-                         "\n  distances (the signed err columns above).  Rounded"
-                         "\n  quarter-inch data typically fits < 0.10\" RMS;"
-                         "\n  anything worse than 0.25\" is flagged **CHECK -"
-                         "\n  the err columns point at the tape to re-check."))
+            (setq rep (abcdef:say rep (strcat
+              "  " (cal:pad (nth 0 p) 14)
+              (abcdef:padnum (nth 1 p) 10)
+              (abcdef:padnum (nth 2 p) 11)
+              "   " (itoa (nth 3 p)) " of " (itoa (nth 4 p))
+              "  " (cal:pad (nth 5 p) 6)
+              (cal:pad (strcat (rtos (nth 6 p) 2 3) "\"") 8)
+              (cal:pad (if (nth 7 p)
+                            (strcat (rtos (nth 7 p) 2 2) "\"") "   --") 8)
+              (cal:pad (strcat (rtos (nth 8 p) 2 0) "d") 7)
+              (cal:pad (strcat (rtos (nth 9 p) 2 0) "% " (nth 10 p)) 10)
+              (nth 12 p) (nth 11 p)))))
+          (setq rep (abcdef:say rep
+            "-------------------------------------------------------------"))
+          (setq rep (abcdef:say rep (strcat
+            "  " (itoa good) " point(s) plotted"
+            (if (> bad 0) (strcat ", " (itoa bad) " skipped (under 2 tapes)")
+              "") ".")))
+          (setq rep (abcdef:say rep (strcat
+            "  placed by 4 tapes: " (itoa nby4)
+            "   by 3: " (itoa nby3)
+            "   by 2: " (itoa nby2)
+            (if (> ndrop 0)
+              (strcat "   (" (itoa ndrop) " with one tape dropped)") ""))))
+          (setq rep (abcdef:say rep (strcat
+            "  " (itoa nlow) " point(s) want checking"
+            " (FIT over " (rtos abcdef:*fit-bad* 2 2)
+            "\", confidence under 60%, or snapped over "
+            (rtos abcdef:*edge-tol* 2 2) "\").")))
+          (setq rep (abcdef:say rep ""))
+          (setq rep (abcdef:say rep
+            "  TAPES  how many of the four distances the sheet gave."))
+          (setq rep (abcdef:say rep
+            "  USED   which corners actually placed the point.  Under Auto a"))
+          (setq rep (abcdef:say rep
+            "         tape is only left out when four were given and leaving"))
+          (setq rep (abcdef:say rep
+            "         that one out settles the other three: three tapes that"))
+          (setq rep (abcdef:say rep
+            "         disagree never say which of them is the wrong one, so"))
+          (setq rep (abcdef:say rep
+            "         they are all kept and the point is graded down instead."))
+          (setq rep (abcdef:say rep
+            "  FIT    RMS leftover error against every tape the sheet gave."))
+          (setq rep (abcdef:say rep
+            "  SPREAD how far the point moves if any one tape is dropped."))
+          (setq rep (abcdef:say rep
+            "  CUT    angle the best pair of tapes crosses at, at the point."))
+          (setq rep (abcdef:say rep
+            "  CONF   all four of those together, 1-99%.  Two tapes cross-"))
+          (setq rep (abcdef:say rep
+            "         check nothing, so a 2-tape point is capped well short"))
+          (setq rep (abcdef:say rep
+            "         of certainty however neatly the circles crossed."))
           ;; ---- confirm the frame really is a rectangle --------------------
           ;; measure the corner angles from the coordinates that were drawn,
           ;; rather than asserting them - so a future corner-math regression
@@ -929,18 +1602,47 @@
             (abcdef:corner-ang (+ bpx W) bpy bpx bpy (+ bpx W) (- bpy H))
             (abcdef:corner-ang (+ bpx W) (- bpy H) (+ bpx W) bpy bpx (- bpy H))
             (abcdef:corner-ang bpx (- bpy H) bpx bpy (+ bpx W) (- bpy H))))
-          (princ (strcat "\n\n  Frame: " (rtos W 2 2) "\" (A-B) x "
-                         (rtos H 2 2) "\" (A-C); measured corner angles "
-                         (rtos (nth 0 angs) 2 2) " / " (rtos (nth 1 angs) 2 2)
-                         " / " (rtos (nth 2 angs) 2 2) " / "
-                         (rtos (nth 3 angs) 2 2) " deg."))
+          (setq rep (abcdef:say rep ""))
+          (setq rep (abcdef:say rep (strcat
+            "  Frame corner angles, measured off the drawn coordinates: "
+            (rtos (nth 0 angs) 2 2) " / " (rtos (nth 1 angs) 2 2) " / "
+            (rtos (nth 2 angs) 2 2) " / " (rtos (nth 3 angs) 2 2) " deg."
+            "  Every point above is inside it.")))
+          (foreach line (reverse rep) (princ (strcat "\n" line)))
+          ;; ---- the same thing, on disk ------------------------------------
+          (setq path (abcdef:write-report file rep))
+          (princ (if path
+                   (strcat "\n\n  Report saved: " path)
+                   "\n\n  ** the report file could not be written (read-only folder?)"))
+          ;; vl-catch-all-apply takes the argument list as its second argument;
+          ;; called with only the lambda it raises "too few arguments" and
+          ;; takes the end of the run down with it, which is exactly what
+          ;; the catch was there to prevent.
           (vl-catch-all-apply
             '(lambda ()
                (vl-cmdf "_.plan" "_World")
-               (vl-cmdf "_.zoom" "_Extents")))
+               (vl-cmdf "_.zoom" "_Extents"))
+            '())
           (princ "\n  View reset to plan (top).")
+          ;; ---- on to the pool perimeter -----------------------------------
+          (setq ss (abcdef:new-points mark))
+          (princ (strcat "\n\n  The " (itoa good)
+                         " point(s) are ab_pt blocks on layer "
+                         abcdef:*point-layer* ", numbered from the sheet."))
+          (if (and (> good 0)
+                   (= "Yes" (abcdef:askkw
+                              "Fit a pool perimeter through these points now?"
+                              "Yes No" "Yes/No" "Yes" nil)))
+            (abcdef:to-abhd ss)
+            (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
           (princ)))))))
   (princ))
+
+;; Print the loaded version.
+(defun c:ABCDEFVER ()
+  (princ (strcat "\nABCDEF " *abcdef-version* " (abcdef.lsp)"))
+  (princ))
+
 
 ;; format a signed inches value like "+0.08" (sign always shown, 2 decimals)
 (defun abcdef:signres (v)
@@ -952,6 +1654,6 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ (strcat "\nABCDEF.lsp rev " abcdef:*version*
+(princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
                " loaded.  Type ABCDEF to plot points from a spreadsheet."))
 (princ)
