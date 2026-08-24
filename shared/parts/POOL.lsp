@@ -4,6 +4,9 @@
 ;;;  Commands:  POOL     - lay out a pool from field measurements
 ;;;             POOLVER  - report which revision is loaded
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Draws a pool plan (Rectangle, Oval, Grecian, L or Lazy L) from
 ;;;  field measurements.
 ;;;
@@ -98,8 +101,6 @@
 ;;;  ActiveX/VLA), so it loads in AutoCAD 2018 as well as older
 ;;;  releases.
 ;;; ====================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; -------------------- version ---------------------------------------
 ;;;
@@ -546,6 +547,34 @@
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
         (t v)))
 
+;; Does this treatment cut real geometry off the corner?  NotGiven
+;; does NOT: its corner is built square, so everything that asks
+;; "is there a cut here" -- the setback caps, the cross-dim reference
+;; modes, the hopper ties -- must answer no.  Only the report and the
+;; corner marks care that it is not a plain Square.
+;; The same question with the two SIZED answers withheld, for a corner
+;; whose walls leave no room for a cut at all.  Square and NotGiven are
+;; the only truthful answers there, and both take no size.
+(defun pool:asktreatng (subject dflt back / v kws)
+  (setq kws "Square NotGiven")
+  (setq v (cal:askkw (strcat "How should " subject " be treated?")
+                      (strcat kws " NG 90")
+                      (vl-string-translate " " "/" kws)
+                      dflt back))
+  (cond ((eq v 'CAL-BACK) v)
+        ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
+        (t v)))
+
+(defun pool:cutp (ty) (member ty '("Radius" "Cut")))
+
+;; Does any corner carry something the SHEET must record -- a cut, or
+;; a NotGiven?  The wider question pool:cutp deliberately does not
+;; answer, for the report rows and the corner marks.
+(defun pool:anytreat (corners / out c)
+  (foreach c corners (if (/= (car c) "Square") (setq out t)))
+  out)
+
 ;; Run a list of input stages with Back between them: a stage that
 ;; returns CAL-BACK sends the user to the previous stage, which is
 ;; re-asked from scratch.  Each stage is a function of no arguments
@@ -597,31 +626,6 @@
                 (pool:pvnote (car it) v))))))
   (if out 'CAL-BACK ans))
 
-;; Does this treatment cut real geometry off the corner?  NotGiven
-;; does NOT: its corner is built square, so everything that asks
-;; "is there a cut here" -- the setback caps, the cross-dim reference
-;; modes, the hopper ties -- must answer no.  Only the report and the
-;; corner marks care that it is not a plain Square.
-;; The same question with the two SIZED answers withheld, for a corner
-;; whose walls leave no room for a cut at all.  Square and NotGiven are
-;; the only truthful answers there, and both take no size.
-(defun pool:asktreatng (subject dflt back / v kws)
-  (setq kws "Square NotGiven")
-  (setq v (cal:askkw (strcat "How should " subject " be treated?")
-                      (strcat kws " NG 90")
-                      (vl-string-translate " " "/" kws)
-                      dflt back))
-  (cond ((eq v 'CAL-BACK) v)
-        ((= v "NG") "NotGiven")
-        ((= v "90") "Square")
-        (t v)))
-(defun pool:cutp (ty) (member ty '("Radius" "Cut")))
-;; Does any corner carry something the SHEET must record -- a cut, or
-;; a NotGiven?  The wider question pool:cutp deliberately does not
-;; answer, for the report rows and the corner marks.
-(defun pool:anytreat (corners / out c)
-  (foreach c corners (if (/= (car c) "Square") (setq out t)))
-  out)
 ;;; -------------------- guide preview ----------------------------------
 ;;; A gray pool of the chosen shape is drawn as soon as the shape is
 ;;; picked.  While each measurement is prompted for, the matching
@@ -2011,6 +2015,9 @@
   ;; corner treatments: one Typ. per family in square (body / tips),
   ;; each treated corner its own dim out of square (collapsing back to
   ;; Typ. when Enter reused one answer all the way round)
+  ;; out of square the eight are their own groups -- but B leads the
+  ;; list, as it does in square, so an all-same answer puts its one
+  ;; Typ. mark on the same corner either way
   (pool:dimringcorners pts gcs gce gcarcs cen doff
                        (if pool:*insq*
                            (list '(1 0 4 5) '(2 3 6 7))
@@ -2548,7 +2555,7 @@
   (pool:dimtreat1 (nth 4 hce) icty (nth 4 hcarcs) (nth 4 pts)
                   (pool:unit
                     (cal:v+ (pool:unit (cal:v- (nth 3 pts) (nth 4 pts)))
-                            (pool:unit (cal:v- (nth 5 pts) (nth 4 pts)))))
+                             (pool:unit (cal:v- (nth 5 pts) (nth 4 pts)))))
                   doff "" nil)
   ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
@@ -2943,6 +2950,7 @@
   (command "_.LEADER" (pool:wp (cal:v+ p (cal:v* outd r)))
            (pool:wp (cal:v+ p (cal:v* outd (* 1.2 doff))))
            "" txt ""))
+
 ;; A NotGiven corner: the same circled mark, but the leader asks a
 ;; question instead of asserting an angle, and a note under it spells
 ;; the reason out.  The sheet has to SAY the treatment was never
@@ -2958,6 +2966,7 @@
   (if (< (car outd) 0.0)
       (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
   (pool:text tp h "Not Given" "DIMENSION"))
+
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides
 ;; whether a plain Square corner may be marked at all:
@@ -2978,6 +2987,7 @@
     ((= ty "NotGiven") (pool:dimng p outd doff sfx))
     ((and ang (< (abs (- ang (/ pi 2.0))) pool:*sq90-tol*))
      (pool:dim90 p outd doff (strcat "90%%d" sfx)))))
+
 (defun pool:dimcorner1 (ce ty arc outd doff sfx / am fm od)
   (cond
     ((= ty "Radius")
@@ -3003,12 +3013,6 @@
                   (pool:wp (cal:v+ fm (cal:v* outd (* 0.5 doff))))))
      (pool:dimsend od))))
 
-;; Corner annotations for the rectangle.  In-square pools get a single
-;; "Typ." note at the bottom-right corner (B): the radius or cut-face
-;; measurement with a Typ. suffix, or the circled 90 mark for square
-;; corners.  Out-of-square pools dim every corner individually --
-;; radius dim, cut-face dim, or its own circled mark.  Assumes CLAYER
-;; is already DIMENSION.
 ;; Corner annotations for the rectangle.  In-square pools get a single
 ;; "Typ." note at the bottom-right corner (B): the radius or cut-face
 ;; measurement with a Typ. suffix, or the circled 90 mark for square
@@ -3143,7 +3147,7 @@
   (cal:osup)
   (setq ty (if nofit
                ;; a remembered Radius/Cut is not among the offered
-               ;; words, and cal:askkw hands a default straight back
+               ;; words, and pool:askkw hands a default straight back
                ;; on Enter without checking it -- so drop it
                (pool:asktreatng subject
                                 (if (member prevty '("Square" "NotGiven"))
@@ -5942,6 +5946,8 @@
   ;; corner treatments: one Typ. at B in square, each treated corner
   ;; its own dim out of square (collapsing back to Typ. when Enter
   ;; reused one answer all the way round)
+  ;; B leads out of square too, so the all-same Typ. mark lands on the
+  ;; same corner as it does in square
   (pool:dimringcorners quad rcs rce rcarcs cen doff
                        (if pool:*insq*
                            (list '(1 0 2 3))
@@ -6552,6 +6558,16 @@
 (defun pool:undoend ()
   (if pool:*undogrp* (command "_.UNDO" "_End"))
   (setq pool:*undogrp* nil))
+
+;;; -------------------- sysvar save / restore --------------------------
+;;; The snapshot of the user's settings lives in a GLOBAL and is taken
+;;; only when no snapshot is already pending: if a previous run died
+;;; before restoring (hard crash, failure inside the error handler),
+;;; the stale snapshot still holds the user's TRUE settings.  Saving
+;;; again at that point would capture the zeroed OSMODE and every
+;;; later run would faithfully "restore" 0 -- the user's object snaps
+;;; would look permanently wiped by the command.  Restoring clears the
+;;; snapshot so the next run saves fresh.
 
 ;;; -------------------- main command -----------------------------------
 

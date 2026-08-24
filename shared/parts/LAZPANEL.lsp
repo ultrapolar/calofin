@@ -192,7 +192,6 @@
   (if (and f (setq fh (open f "w")))
     (progn
       (setq err (vl-catch-all-apply 'lzp:write-lines (list fh)))
-      (close fh)
       (cond
         ((vl-catch-all-error-p err)
          (vl-file-delete f)

@@ -146,6 +146,36 @@ TOOLS = {
         # bracket itself, so its call sites need translating
         'askkw_hidden': True,
     },
+    # POOL is the largest file in the tree and its twin was hand-mirrored
+    # until the form-answer work made that a second pass -- exactly the
+    # trigger CLAUDE.md names for moving a tool in here.
+    'POOL': {
+        'src': 'lisp/pool/POOL.LSP',
+        'swap': {
+            'pool:v+': 'cal:v+', 'pool:v-': 'cal:v-', 'pool:v*': 'cal:v*',
+            'pool:dot': 'cal:dot', 'pool:perp': 'cal:perp',
+            'pool:mid': 'cal:mid', 'pool:npos': 'cal:angnorm',
+            'pool:osup': 'cal:osup', 'pool:osdown': 'cal:osdown',
+            'pool:syssave': 'cal:syssave',
+            'pool:sysrestore': 'cal:sysrestore',
+            'pool:askkw': 'cal:askkw', 'pool:askyn': 'cal:askyn',
+            'pool:asktreat': 'cal:asktreat',
+        },
+        'drop_globals': ['pool:*sysold*'],
+        # pool:askkw already takes the SHOWN bracket third, like the
+        # library's, so no bracket translation is needed
+        'askkw_hidden': False,
+        # the Back sentinel travels with the ask helpers, and every
+        # caller tests for it by name
+        # the Back sentinel travels with the ask helpers, and the sysvar
+        # snapshot global travels with syssave/sysrestore: drop_globals
+        # removes its declaration, so every remaining READ of it has to
+        # point at the library's own.  Miss this and pool:*ftin* reads an
+        # unset global, so the grouped build quietly stops recognising
+        # feet-inch drawings.
+        'symbols': {'POOL-BACK': 'CAL-BACK',
+                    'pool:*sysold*': 'cal:*sysold*'},
+    },
     # The launcher panel uses no library helpers at all -- it draws
     # nothing and asks nothing -- so its twin is the file plus the
     # shared banner.  Listed anyway so the twin can never drift.
@@ -169,6 +199,12 @@ EXPAND = {
     },
     'SPACHECK': {
         '(cal:syssave)': ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+    },
+    # POOL also saves LUNITS -- it switches the drawing to architectural
+    # units for the run and must put the user's back.
+    'POOL': {
+        '(cal:syssave)':
+            ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
     },
 }
 
@@ -319,7 +355,14 @@ def mirror(tool, spec):
     src = expand_calls(src, EXPAND.get(tool, {}))
 
     for old, new in spec.get('symbols', {}).items():
-        src = re.sub(r'\b' + re.escape(old) + r'\b', new, src)
+        # \b only means anything next to a word character.  A global
+        # written with earmuffs ends in '*', so a trailing \b would sit
+        # between '*' and ')' -- two non-word characters, never a
+        # boundary -- and the rename would silently do nothing.
+        pat = (r'\b' if old[:1].isalnum() or old[:1] == '_' else '')
+        pat += re.escape(old)
+        pat += (r'\b' if old[-1:].isalnum() or old[-1:] == '_' else '')
+        src = re.sub(pat, new, src)
 
     nkw = 0
     if spec.get('askkw_hidden'):
