@@ -146,6 +146,14 @@ TOOLS = {
         # bracket itself, so its call sites need translating
         'askkw_hidden': True,
     },
+    # The launcher panel uses no library helpers at all -- it draws
+    # nothing and asks nothing -- so its twin is the file plus the
+    # shared banner.  Listed anyway so the twin can never drift.
+    'CALPANEL': {
+        'src': 'lisp/calpanel/CALPANEL.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
 }
 
 # Some call sites need more than a rename.  cal:syssave takes the

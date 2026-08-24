@@ -93,7 +93,8 @@
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
     ;; The library first -- every tool below calls into it.  POOL and SPA
-    ;; precede their demo/tutorial satellites.
+    ;; precede their demo/tutorial satellites; the CALPANEL launcher
+    ;; loads last, after everything its buttons name.
     (foreach m '(
                  "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
                  "TUTORIALPOOL.lsp" "SPA.lsp" "TUTORIALSPA.lsp"
@@ -110,7 +111,7 @@
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
                  "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
-                 "xftconv.lsp" "XYPLOT.lsp")
+                 "xftconv.lsp" "XYPLOT.lsp" "CALPANEL.lsp")
       (cal--load m))
     (if (> cal:*missing* 0)
       (princ (strcat "\n[calofin] " (itoa cal:*missing*)
