@@ -104,14 +104,15 @@ def add_layer(vm, name, color=7):
     return rec
 
 
-def newvm(styles=("CROSS DIMENSIONS",), block=True):
+def newvm(styles=("CROSS DIMENSIONS",), block=True, points=True):
     vm = VM()
     vm.layer_records = getattr(vm, 'layer_records', {})
     vm.load(LSP)
     for s in styles:
         vm.tables['DIMSTYLE'].add(s)
     vm.tables['BLOCK'] = {'ab_pt'} if block else set()
-    add_layer(vm, 'POINTS', 2)
+    if points:
+        add_layer(vm, 'POINTS', 2)
     vm.sysvars['CLAYER'] = '0'
     vm.sysvars['DIMSTYLE'] = 'STANDARD'
     return vm
@@ -458,9 +459,12 @@ def test_circint():
 
 # ---- ABMOVE -----------------------------------------------------------
 
+SUGL = 'ABMOVE-POINTS'           # the scratch layer the suggestions use
+
+
 def sug_positions(vm):
     """Where the suggestion markers are, in list order (their circles)."""
-    return [pt3(d[10]) for _, d in live(vm, 'CIRCLE', 'POINTS')]
+    return [pt3(d[10]) for _, d in live(vm, 'CIRCLE', SUGL)]
 
 
 def test_abmove_suggestions_drawn():
@@ -473,7 +477,7 @@ def test_abmove_suggestions_drawn():
     assert len(got) == 45, len(got)          # 23 B-held + 22 A-held
     # ... and none of them left in the drawing once the round is over
     assert sug_positions(vm) == [], sug_positions(vm)
-    assert texts(vm, 'POINTS') == [], texts(vm, 'POINTS')
+    assert texts(vm, SUGL) == [], texts(vm, SUGL)
     assert len([e for e, _ in live(vm, 'POINT')]) == 0
     # None keeps the two dims: ABMOVE has then done exactly ABFIND's job
     assert len(dims(vm)) == 2, dims(vm)
@@ -557,13 +561,13 @@ def test_abmove_markers_are_yellow():
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'yellow')
-    marks = (ever(vm, 'POINT', 'POINTS') + ever(vm, 'CIRCLE', 'POINTS')
-             + ever(vm, 'TEXT', 'POINTS'))
+    marks = (ever(vm, 'POINT', SUGL) + ever(vm, 'CIRCLE', SUGL)
+             + ever(vm, 'TEXT', SUGL))
     assert len(marks) == 45 * 3, len(marks)      # a point, a ring, a tag
     assert all(m.get(62) == 2 for m in marks), \
         [m for m in marks if m.get(62) != 2][:2]
-    assert sorted(m[1] for m in ever(vm, 'TEXT', 'POINTS'))[:3] == \
-        ['-10A', '-10B', '-1A'], ever(vm, 'TEXT', 'POINTS')[:3]
+    assert sorted(m[1] for m in ever(vm, 'TEXT', SUGL))[:3] == \
+        ['-10A', '-10B', '-1A'], ever(vm, 'TEXT', SUGL)[:3]
     print("ok  ABMOVE draws its suggestions yellow, tag and all")
 
 
@@ -572,7 +576,7 @@ def test_abmove_locus_lines():
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'locus')
-    arcs = ever(vm, 'ARC', 'POINTS')
+    arcs = ever(vm, 'ARC', SUGL)
     assert len(arcs) == 2, arcs
     # the readings that move A hold B, so their line is B's own reading
     # swung round B; the ones that move B are A's swung round A
@@ -580,7 +584,7 @@ def test_abmove_locus_lines():
     assert pt3(movea[10]) == pt3(B) and near(movea[40], PB), movea
     assert pt3(moveb[10]) == pt3(A) and near(moveb[40], PA), moveb
     for d in arcs:
-        assert d.get(8) == 'POINTS', d
+        assert d.get(8) == SUGL, d
         assert d.get(62) == 8, d                   # grey
         assert d.get(6) == 'DASHED', d             # dashed
     assert 'DASHED' in {x.upper() for x in vm.tables['LTYPE']}
@@ -596,7 +600,7 @@ def test_abmove_locus_covers_its_group():
     got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
                    f"'({P17[0]} {P17[1]} 0.0))")
     run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'locus span')
-    arcs = ever(vm, 'ARC', 'POINTS')
+    arcs = ever(vm, 'ARC', SUGL)
     for arc, held, ctr, rad in ((arcs[0], 'B', B, PB), (arcs[1], 'A', A, PA)):
         start = arc[50]
         span = (arc[51] - start) % (2 * math.pi)
@@ -621,10 +625,50 @@ def test_abmove_locus_linetype_is_tunable():
     vm.loads('(setq abf:*locus-ltype* "PHANTOM2")')
     vm.loads('(setq abf:*locus-color* 9)')
     run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'ltype')
-    for d in ever(vm, 'ARC', 'POINTS'):
+    for d in ever(vm, 'ARC', SUGL):
         assert d.get(6) == 'PHANTOM2' and d.get(62) == 9, d
     assert 'PHANTOM2' in {x.upper() for x in vm.tables['LTYPE']}
     print("ok  the guide line's linetype and colour are tunable")
+
+
+def test_abmove_suggestions_keep_off_the_points_layer():
+    """Nothing throwaway lands on POINTS. It is the drawing's own layer
+    - it carries a colour, and every other tool in the toolset reads
+    survey points off it."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'own layer')
+    for etype in ('POINT', 'CIRCLE', 'TEXT', 'ARC'):
+        assert ever(vm, etype, 'POINTS') == [], \
+            (etype, ever(vm, etype, 'POINTS'))
+    assert len(ever(vm, 'POINT', SUGL)) == 45
+    assert len(ever(vm, 'ARC', SUGL)) == 2
+    assert SUGL in {x.upper() for x in vm.tables['LAYER']}
+    print("ok  ABMOVE keeps its suggestions off POINTS, on its own layer")
+
+
+def test_the_chosen_one_lands_on_points():
+    """The one that is picked IS a survey point, so that one does."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None], 'chosen')
+    assert len(live(vm, 'INSERT', 'POINTS')) == 4, live(vm, 'INSERT', 'POINTS')
+    nums = [d.get(1) for _, d in live(vm, 'ATTRIB')]
+    assert nums[-1] == '17m', nums
+    # ... and the scratch layer is left empty
+    for etype in ('POINT', 'CIRCLE', 'TEXT', 'ARC'):
+        assert live(vm, etype, SUGL) == [], (etype, live(vm, etype, SUGL))
+    print("ok  the chosen suggestion is what goes on POINTS")
+
+
+def test_points_layer_is_made_when_the_drawing_lacks_it():
+    """A drawing with no POINTS layer still gets its moved point."""
+    vm = newvm(block=False, points=False)
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None], 'no points layer')
+    assert 'POINTS' in {x.upper() for x in vm.tables['LAYER']}
+    assert texts(vm, 'POINTS') == ['17m'], texts(vm, 'POINTS')
+    print("ok  the points layer is created when the drawing lacks it")
 
 
 def test_abmove_the_marks_it_keeps_are_bylayer():

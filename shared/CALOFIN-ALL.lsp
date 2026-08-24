@@ -12503,10 +12503,14 @@
 ;;;   of feet it moved -- 1A, 2A, -1A, -2A for the sweep on A, 1B, -1B
 ;;;   for the sweep on B -- or R1A, R2A for a look-alike reading of A
 ;;;   that is not a whole foot out, in the same nearest-first order.
-;;;   The candidates are drawn on the POINTS layer in abf:*sug-color*
-;;;   (yellow), so they never read as the drawing's own points, and
-;;;   listed on the command line nearest miss first within each group.
-;;;   Type a tag, or Pick and click the marker you want.
+;;;   The candidates are drawn on abf:*sug-layer* ("ABMOVE-POINTS") in
+;;;   abf:*sug-color* (yellow) -- a layer of their OWN, never the
+;;;   points layer.  They are throwaway, they would inherit the points
+;;;   layer's colour, and while they existed every other tool in the
+;;;   toolset would count them as real survey points.  They are listed
+;;;   on the command line nearest miss first within each group: type a
+;;;   tag, or Pick and click the marker you want.  The ONE that is
+;;;   chosen is a survey point, and that is what goes on POINTS.
 ;;;
 ;;;   Each group also gets the line it sits on, dashed and grey: a
 ;;;   held tape is a fixed radius off its stake, so everything that
@@ -12517,7 +12521,8 @@
 ;;;   scaffolding like the markers and go when the round does.
 ;;;
 ;;;   Picking one:
-;;;     * a new point is made there, numbered "17m" -- the original
+;;;     * a new point is made there ON THE POINTS LAYER, numbered
+;;;       "17m" -- the original
 ;;;       number with abf:*moved-suffix* on it, so the drawing says
 ;;;       plainly that this one was moved (an "ab_pt" block carrying
 ;;;       the new number when the drawing has that block, a POINT with
@@ -12588,7 +12593,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.5")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.6")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -12601,8 +12606,12 @@
 (setq abf:*point-block*  "ab_pt")   ; block name whose INSERTs mark
                                     ; points wherever they sit
 (setq abf:*point-layer*  "POINTS")  ; layer whose INSERTs are always
-                                    ; points, and the layer the moved
-                                    ; point and the suggestions go on
+                                    ; points, and where the moved point
+                                    ; lands once one is chosen
+(setq abf:*point-color*  6)         ; colour to give that layer if the
+                                    ; drawing somehow lacks it - the
+                                    ; magenta the standard uses.  An
+                                    ; existing POINTS keeps its own
 (setq abf:*pt-tag*       "number")  ; attribute tag on the point block
                                     ; naming the point, as in "Pt.17"
 (setq abf:*a-name*       "A")       ; what the two stakes are numbered
@@ -12621,10 +12630,21 @@
                                     ; circle - smaller than the ring so
                                     ; the two never read as the same
                                     ; mark
-(setq abf:*sug-color*    2)         ; colour the suggestions are drawn
-                                    ; in, as an entity override: yellow,
-                                    ; so a suggestion never reads as one
-                                    ; of the drawing's own POINTS
+(setq abf:*sug-layer*    "ABMOVE-POINTS") ; the suggestions get a layer
+                                    ; of their OWN, never the points
+                                    ; layer: they are throwaway, they
+                                    ; would inherit the points layer's
+                                    ; colour, and while they existed
+                                    ; every other tool in the toolset
+                                    ; would count them as real survey
+                                    ; points.  Created when missing,
+                                    ; and swept clear at the end of
+                                    ; every round
+(setq abf:*sug-color*    2)         ; colour of that layer, and an
+                                    ; entity override to match: yellow,
+                                    ; so a suggestion reads as a
+                                    ; suggestion whatever the layer was
+                                    ; set to by hand
 (setq abf:*sug-hgt*      6.0)       ; height of a suggestion's tag
 (setq abf:*locus-color*  8)         ; colour of the guide line each
                                     ; group of suggestions sits on:
@@ -13089,25 +13109,26 @@
   (reverse out))
 
 ;; One suggestion on screen: a point where it would sit, a small circle
-;; so it can be seen and clicked, and its tag beside it.  On the points
-;; layer, but in abf:*sug-color* rather than ByLayer - a suggestion is
-;; not one of the drawing's own points and must not read as one - and
-;; all of it swept again as soon as the round ends.
+;; so it can be seen and clicked, and its tag beside it.  On
+;; abf:*sug-layer*, never the points layer - a suggestion is not one of
+;; the drawing's own points and must not read as one, to the eye or to
+;; the next tool - in abf:*sug-color*, and all of it swept again as
+;; soon as the round ends.
 (defun abf:draw-sug (p tag / out)
   (setq out nil)
   (entmake (list '(0 . "POINT") '(100 . "AcDbEntity")
-                 (cons 8 abf:*point-layer*)
+                 (cons 8 abf:*sug-layer*)
                  (cons 62 abf:*sug-color*) '(100 . "AcDbPoint")
                  (list 10 (car p) (cadr p) 0.0)))
   (setq out (cons (entlast) out))
   (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                 (cons 8 abf:*point-layer*)
+                 (cons 8 abf:*sug-layer*)
                  (cons 62 abf:*sug-color*) '(100 . "AcDbCircle")
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*sug-radius*)))
   (setq out (cons (entlast) out))
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                 (cons 8 abf:*point-layer*)
+                 (cons 8 abf:*sug-layer*)
                  (cons 62 abf:*sug-color*) '(100 . "AcDbText")
                  (list 10 (+ (car  p) abf:*sug-radius*)
                           (+ (cadr p) abf:*sug-radius*) 0.0)
@@ -13151,7 +13172,7 @@
     (progn
       (abf:ensure-dashed)
       (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
-                     (cons 8 abf:*point-layer*)
+                     (cons 8 abf:*sug-layer*)
                      (cons 62 abf:*locus-color*)
                      (cons 6 abf:*locus-ltype*)
                      '(100 . "AcDbCircle")
@@ -13359,7 +13380,7 @@
                     (setq hist  (cons (list "DIM" pair) hist)
                           stage 1)))
                 (progn
-                  (cal:ensure-layer abf:*point-layer* 2)
+                  (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
                   (foreach c sugs
                     (setq temps (append temps
                                         (abf:draw-sug (nth 5 c)
@@ -13500,7 +13521,11 @@
                   (abf:drop temps)
                   (setq temps nil
                         newpt (nth 5 sug)
-                        ments (abf:make-point
+                        ments nil)
+                  ;; the chosen one is a survey point, so THIS is what
+                  ;; lands on the points layer
+                  (cal:ensure-layer abf:*point-layer* abf:*point-color*)
+                  (setq ments (abf:make-point
                                 newpt (strcat nm abf:*moved-suffix*)))
                   (cal:ensure-layer abf:*ring-layer* 1)
                   (setq ring (abf:ring pp)
