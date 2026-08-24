@@ -36821,6 +36821,17 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
+;;; WHAT THE TYPE IS FOR.  The type is not a promise about the shape,
+;;; it is what lets the survey be READ: it says which walls belong
+;;; together, which corner is a corner, which end is an end.  The
+;;; POINTS decide where all of that actually goes.  An AB pool is
+;;; built, not drawn, so the points are imperfect - and the shape that
+;;; comes out of them is meant to be imperfect too.  Every deviation
+;;; the tool can draw is fitted FROM the points and kept only where
+;;; they prove it: out of square, bowed walls, eased corners, an end
+;;; that caved in.  Hold the template rigid and the error does not go
+;;; away, it just moves into the points, where nobody can see it.
+;;;
 ;;; ABHD traces whatever shape the survey points make.  FITABHD is its
 ;;; typed sibling: you TELL it what kind of typical pool was surveyed -
 ;;; Rectangle, Grecian, Roman, Oval, L, Lazy L or Round (POOL's own
@@ -36885,7 +36896,7 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.4")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.5")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -36986,8 +36997,8 @@
 (setq fit:*ptype*  fit:*ptype*)
 (setq fit:*treat*  fit:*treat*)
 (setq fit:*gtreat* fit:*gtreat*)
-(setq fit:*bowed*  fit:*bowed*)
 (if (null fit:*oos*) (setq fit:*oos* T))  ; as-builts are never true
+(if (null fit:*bowed*) (setq fit:*bowed* T))  ; nor are their walls
 (if (null fit:*brk-deep*) (setq fit:*brk-deep* (cons 96.0 T)))
 (if (null fit:*brk-shal*) (setq fit:*brk-shal* (cons 240.0 T)))
 (if (null fit:*hop-side*) (setq fit:*hop-side* (cons 18.0 nil)))
@@ -38093,6 +38104,26 @@
 
 ;; ---- the arc-ended types (Roman / Oval) ------------------------------
 
+;; A cap body's side wall at X.  The template holds the two walls
+;; parallel; once the pool is allowed out of square each carries its
+;; own slope, and By/Ty are its height at the body's middle.
+(defun fit:wall-y (prm side x / off slope)
+  (if (= side "b")
+    (setq off   (fit:pget prm 'By)
+          slope (cond ((fit:pget prm 'sb)) (0.0)))
+    (setq off   (fit:pget prm 'Ty)
+          slope (cond ((fit:pget prm 'st)) (0.0))))
+  (+ off (* slope (- x (cond ((fit:pget prm 'xm)) (0.0))))))
+
+;; The body's centreline at X - level on a true pool, tilted on one
+;; built wider at one end.
+(defun fit:cap-cy (prm x)
+  (/ (+ (fit:wall-y prm "b" x) (fit:wall-y prm "t" x)) 2.0))
+
+;; Half the body's width at X.
+(defun fit:cap-half (prm x)
+  (/ (- (fit:wall-y prm "t" x) (fit:wall-y prm "b" x)) 2.0))
+
 ;; Half-height of the spring points where the end arc leaves the end
 ;; line, clamped inside the side walls.
 (defun fit:endcap-h (re cx r by ty / d)
@@ -38112,9 +38143,13 @@
 ;; top), -1 = the -x end (walked top to bottom).  Stubs appear when the
 ;; arc springs meaningfully inside the corners.  CHAIN, when given,
 ;; replaces the single arc with the run of arcs the points asked for.
-(defun fit:cap-verts (re cx r sign by ty chain / cy h stub lo hi a1 a2
-                                               b out)
-  (setq cy   (/ (+ by ty) 2.0)
+;; The end line runs between the side walls AT THIS END, so a pool
+;; built wider at one end still closes on both.
+(defun fit:cap-verts (re cx r sign prm chain / by ty cy h stub lo hi a1
+                                              a2 b out)
+  (setq by   (fit:wall-y prm "b" re)
+        ty   (fit:wall-y prm "t" re)
+        cy   (/ (+ by ty) 2.0)
         h    (fit:endcap-h re cx r by ty)
         stub (> (- (/ (- ty by) 2.0) h) 0.25)
         out  nil)
@@ -38149,22 +38184,26 @@
 ;; BOWS (nil = none) is (bottom top): the two side walls may bow like
 ;; any other straight wall.  CHAINS (nil = none) is (right left): an
 ;; end a single radius could not hold, rebuilt as a run of arcs.
-(defun fit:endcap-verts (prm kind both bows chains / yb yt verts itop
-                                                    ibot m a b)
-  (setq yb    (fit:pget prm 'By)
-        yt    (fit:pget prm 'Ty)
-        verts (fit:cap-verts (fit:pget prm 'Re) (fit:pget prm 'cx)
-                             (fit:pget prm 'r) 1 yb yt (car chains))
+(defun fit:endcap-verts (prm kind both bows chains / verts itop ibot
+                                                    m a b)
+  (setq verts (fit:cap-verts (fit:pget prm 'Re) (fit:pget prm 'cx)
+                             (fit:pget prm 'r) 1 prm (car chains))
         itop  (1- (length verts)))        ; the TOP wall leaves here
   (if both
     (setq verts (append verts
                         (fit:cap-verts (fit:pget prm 'Re2)
                                        (fit:pget prm 'cx2)
-                                       (fit:pget prm 'r2) -1 yb yt
+                                       (fit:pget prm 'r2) -1 prm
                                        (cadr chains))))
     (setq verts (append verts
-                        (list (list (list (fit:pget prm 'Lx) yt) 0.0)
-                              (list (list (fit:pget prm 'Lx) yb) 0.0)))))
+                        (list (list (list (fit:pget prm 'Lx)
+                                          (fit:wall-y prm "t"
+                                                      (fit:pget prm 'Lx)))
+                                    0.0)
+                              (list (list (fit:pget prm 'Lx)
+                                          (fit:wall-y prm "b"
+                                                      (fit:pget prm 'Lx)))
+                                    0.0)))))
   (setq ibot (1- (length verts)))         ; the BOTTOM wall leaves here
   (if bows
     (progn
@@ -38227,7 +38266,10 @@
 ;; ICP for a rectangle body with a Roman or radius (Oval) end cap on
 ;; the +x end - and on the -x end too when BOTH.  Returns the fitted
 ;; parameter assoc list.
-(defun fit:fit-endcap (pts kind both / bb x0 y0 x1 y1 w prm r0 yb yt cy
+(defun fit:fit-endcap (pts kind both oos / bb x0 y0 x1 y1 w prm r0 yb yt
+                                          cy cy1 cy2 byr tyr byl tyl
+                                          inband wpts key skey mid num den
+                                          slope base
                                        xr xl bpts tpts lpts a1pts a2pts e1pts
                                        e2pts p darc1 darc2 dbot dtop dlft
                                        dend1 dend2 h1 h2 best bd cand cc
@@ -38237,6 +38279,8 @@
         w  (- y1 y0)
         r0 (if (= kind "Oval") (/ w 2.0) (* 0.6 w))
         prm (list (cons 'By y0) (cons 'Ty y1) (cons 'Lx x0)
+                  (cons 'sb 0.0) (cons 'st 0.0)
+                  (cons 'xm (/ (+ x0 x1) 2.0))
                   (cons 'r r0) (cons 'cx (- x1 r0))))
   (setq prm (fit:pput prm 'Re
               (if (= kind "Oval")
@@ -38253,39 +38297,47 @@
                     (- (fit:pget prm 'cx2)
                        (sqrt (max 0.0 (- (* r0 r0) (* 0.16 w w))))))))))
   (repeat fit:*icp-iters*
-    (setq yb (fit:pget prm 'By)
-          yt (fit:pget prm 'Ty)
-          cy (/ (+ yb yt) 2.0)
-          xr (fit:pget prm 'Re)
-          xl (if both (fit:pget prm 'Re2) (fit:pget prm 'Lx))
-          h1 (fit:endcap-h (fit:pget prm 'Re) (fit:pget prm 'cx)
-                           (fit:pget prm 'r) yb yt)
-          h2 (if both
-               (fit:endcap-h (fit:pget prm 'Re2) (fit:pget prm 'cx2)
-                             (fit:pget prm 'r2) yb yt))
+    (setq yb  (fit:pget prm 'By)
+          yt  (fit:pget prm 'Ty)
+          cy  (/ (+ yb yt) 2.0)
+          xr  (fit:pget prm 'Re)
+          xl  (if both (fit:pget prm 'Re2) (fit:pget prm 'Lx))
+          prm (fit:pput prm 'xm (/ (+ xl xr) 2.0))
+          cy1 (fit:cap-cy prm (fit:pget prm 'cx))
+          cy2 (if both (fit:cap-cy prm (fit:pget prm 'cx2)) cy)
+          byr (fit:wall-y prm "b" xr)
+          tyr (fit:wall-y prm "t" xr)
+          byl (fit:wall-y prm "b" xl)
+          tyl (fit:wall-y prm "t" xl)
+          h1  (fit:endcap-h (fit:pget prm 'Re) (fit:pget prm 'cx)
+                            (fit:pget prm 'r) byr tyr)
+          h2  (if both
+                (fit:endcap-h (fit:pget prm 'Re2) (fit:pget prm 'cx2)
+                              (fit:pget prm 'r2) byl tyl))
           bpts nil tpts nil lpts nil a1pts nil a2pts nil e1pts nil e2pts nil)
     (foreach p pts
       ;; distance to each feature; a point left of an arc's centre
       ;; falls back to its spring corners so side points never claim it
-      (setq darc1 (if (< (car p) (fit:pget prm 'cx))
-                    (min (cal:dist p (list (fit:pget prm 'Re) yb))
-                         (cal:dist p (list (fit:pget prm 'Re) yt)))
-                    (abs (- (cal:dist p (list (fit:pget prm 'cx) cy))
+      (setq inband (and (<= xl (car p)) (<= (car p) xr))
+            darc1 (if (< (car p) (fit:pget prm 'cx))
+                    (min (cal:dist p (list (fit:pget prm 'Re) byr))
+                         (cal:dist p (list (fit:pget prm 'Re) tyr)))
+                    (abs (- (cal:dist p (list (fit:pget prm 'cx) cy1))
                             (fit:pget prm 'r))))
             darc2 (if both
                     (if (> (car p) (fit:pget prm 'cx2))
-                      (min (cal:dist p (list (fit:pget prm 'Re2) yb))
-                           (cal:dist p (list (fit:pget prm 'Re2) yt)))
-                      (abs (- (cal:dist p (list (fit:pget prm 'cx2) cy))
+                      (min (cal:dist p (list (fit:pget prm 'Re2) byl))
+                           (cal:dist p (list (fit:pget prm 'Re2) tyl)))
+                      (abs (- (cal:dist p (list (fit:pget prm 'cx2) cy2))
                               (fit:pget prm 'r2)))))
-            dbot  (if (and (<= xl (car p)) (<= (car p) xr))
-                    (abs (- (cadr p) yb)) 1.0e9)
-            dtop  (if (and (<= xl (car p)) (<= (car p) xr))
-                    (abs (- (cadr p) yt)) 1.0e9)
+            dbot  (if inband
+                    (abs (- (cadr p) (fit:wall-y prm "b" (car p)))) 1.0e9)
+            dtop  (if inband
+                    (abs (- (cadr p) (fit:wall-y prm "t" (car p)))) 1.0e9)
             dlft  (if both 1.0e9 (abs (- (car p) (fit:pget prm 'Lx))))
-            dend1 (if (> (abs (- (cadr p) cy)) h1)
+            dend1 (if (> (abs (- (cadr p) cy1)) h1)
                     (abs (- (car p) (fit:pget prm 'Re))) 1.0e9)
-            dend2 (if (and both (> (abs (- (cadr p) cy)) h2))
+            dend2 (if (and both (> (abs (- (cadr p) cy2)) h2))
                     (abs (- (car p) (fit:pget prm 'Re2))) 1.0e9))
       (setq cand (list (list dbot 'K-BOT) (list dtop 'K-TOP)
                        (list darc1 'K-ARC1)))
@@ -38308,44 +38360,60 @@
         ((eq best 'K-ARC2) (setq a2pts (cons p a2pts)))
         ((eq best 'K-END1) (setq e1pts (cons p e1pts)))
         ((eq best 'K-END2) (setq e2pts (cons p e2pts)))))
-    ;; wall updates
-    (if bpts
-      (progn
-        (setq ssum 0.0)
-        (foreach p bpts (setq ssum (+ ssum (cadr p))))
-        (setq prm (fit:pput prm 'By (/ ssum (length bpts))))))
-    (if tpts
-      (progn
-        (setq ssum 0.0)
-        (foreach p tpts (setq ssum (+ ssum (cadr p))))
-        (setq prm (fit:pput prm 'Ty (/ ssum (length tpts))))))
+    ;; wall updates: a plain mean while the walls are held parallel,
+    ;; a fitted line once the pool may be out of square - the swing has
+    ;; to be in here, with the caps refitting against it each round,
+    ;; not bolted on after the caps have settled
+    (foreach q (list (list bpts 'By 'sb) (list tpts 'Ty 'st))
+      (setq wpts (car q) key (cadr q) skey (caddr q))
+      (if wpts
+        (if (not oos)
+          (progn
+            (setq ssum 0.0)
+            (foreach p wpts (setq ssum (+ ssum (cadr p))))
+            (setq prm (fit:pput prm key (/ ssum (length wpts)))))
+          (progn
+            (setq ssum 0.0)
+            (foreach p wpts (setq ssum (+ ssum (car p))))
+            (setq mid (/ ssum (length wpts)) num 0.0 den 0.0 base 0.0)
+            (foreach p wpts
+              (setq num  (+ num (* (- (car p) mid) (cadr p)))
+                    den  (+ den (* (- (car p) mid) (- (car p) mid)))
+                    base (+ base (cadr p))))
+            (setq slope (if (> den 1.0e-9) (/ num den) 0.0)
+                  base  (/ base (length wpts)))
+            (if (> (abs (atan slope)) fit:*oos-max*) (setq slope 0.0))
+            (setq prm (fit:pput prm skey slope)
+                  prm (fit:pput prm key
+                                (+ base (* slope
+                                           (- (fit:pget prm 'xm)
+                                              mid)))))))))
     (if (and lpts (not both))
       (progn
         (setq ssum 0.0)
         (foreach p lpts (setq ssum (+ ssum (car p))))
         (setq prm (fit:pput prm 'Lx (/ ssum (length lpts))))))
-    (setq yb (fit:pget prm 'By)
-          yt (fit:pget prm 'Ty)
-          cy (/ (+ yb yt) 2.0)
-          w  (- yt yb))
+    (setq cy1 (fit:cap-cy prm (fit:pget prm 'cx))
+          cy2 (if both (fit:cap-cy prm (fit:pget prm 'cx2)) cy1))
     ;; the +x cap
     (if a1pts
       (progn
-        (if (/= kind "Oval")
+        (if (= kind "Oval")
+          (setq prm (fit:pput prm 'r (fit:cap-half prm (fit:pget prm 'cx))))
           (progn
-            (setq ssum 0.0 cc (list (fit:pget prm 'cx) cy))
+            (setq ssum 0.0 cc (list (fit:pget prm 'cx) cy1))
             (foreach p a1pts (setq ssum (+ ssum (cal:dist p cc))))
             (setq prm (fit:pput prm 'r (/ ssum (length a1pts))))))
         (setq ssum 0.0 n 0)
         (foreach p a1pts
           (setq d (- (* (fit:pget prm 'r) (fit:pget prm 'r))
-                     (* (- (cadr p) cy) (- (cadr p) cy))))
+                     (* (- (cadr p) cy1) (- (cadr p) cy1))))
           (if (> d 0.0)
             (setq ssum (+ ssum (- (car p) (sqrt d)))
                   n    (1+ n))))
         (if (> n 0) (setq prm (fit:pput prm 'cx (/ ssum n))))))
     (if (= kind "Oval")
-      (setq prm (fit:pput prm 'r (/ w 2.0))
+      (setq prm (fit:pput prm 'r (fit:cap-half prm (fit:pget prm 'cx)))
             prm (fit:pput prm 'Re (fit:pget prm 'cx)))
       (if e1pts
         (progn
@@ -38360,21 +38428,24 @@
       (progn
         (if a2pts
           (progn
-            (if (/= kind "Oval")
+            (if (= kind "Oval")
+              (setq prm (fit:pput prm 'r2
+                                  (fit:cap-half prm (fit:pget prm 'cx2))))
               (progn
-                (setq ssum 0.0 cc (list (fit:pget prm 'cx2) cy))
+                (setq ssum 0.0 cc (list (fit:pget prm 'cx2) cy2))
                 (foreach p a2pts (setq ssum (+ ssum (cal:dist p cc))))
                 (setq prm (fit:pput prm 'r2 (/ ssum (length a2pts))))))
             (setq ssum 0.0 n 0)
             (foreach p a2pts
               (setq d (- (* (fit:pget prm 'r2) (fit:pget prm 'r2))
-                         (* (- (cadr p) cy) (- (cadr p) cy))))
+                         (* (- (cadr p) cy2) (- (cadr p) cy2))))
               (if (> d 0.0)
                 (setq ssum (+ ssum (+ (car p) (sqrt d)))
                       n    (1+ n))))
             (if (> n 0) (setq prm (fit:pput prm 'cx2 (/ ssum n))))))
         (if (= kind "Oval")
-          (setq prm (fit:pput prm 'r2 (/ w 2.0))
+          (setq prm (fit:pput prm 'r2
+                              (fit:cap-half prm (fit:pget prm 'cx2)))
                 prm (fit:pput prm 'Re2 (fit:pget prm 'cx2)))
           (if e2pts
             (progn
@@ -38645,14 +38716,14 @@
             (cons 'which which) (cons 'verts verts) (cons 'bows nil)
             (cons 'valid (fit:poly-valid dirs offs))))))
 
-(defun fit:cap-result (ptype fpts both / prm)
-  (setq prm (fit:fit-endcap fpts ptype both))
+(defun fit:cap-result (ptype fpts both oos / prm)
+  (setq prm (fit:fit-endcap fpts ptype both oos))
   (list (cons 'kind 'cap) (cons 'type ptype) (cons 'prm prm)
         (cons 'both both) (cons 'valid T) (cons 'bows nil)
         (cons 'chains nil)
         (cons 'verts (fit:endcap-verts prm ptype both nil nil))))
 
-(defun fit:fit-config (ptype fpts treat both)
+(defun fit:fit-config (ptype fpts treat both oos)
   (cond
     ((= ptype "Rectangle")
      (if (= treat "Cut")
@@ -38669,7 +38740,7 @@
     ((= ptype "LAzyl")
      (fit:poly-result ptype fpts fit:*lazy-dirs* (fit:l-init fpts T)
                       treat))
-    (T (fit:cap-result ptype fpts both))))
+    (T (fit:cap-result ptype fpts both oos))))
 
 ;; (extra-rotation mirror both-ends) candidates per type
 (defun fit:configs-for (ptype / q e out k m)
@@ -38700,7 +38771,7 @@
 ;; Order, frame, and try every placement the type allows; the
 ;; lowest-RMS one wins.  Returns the winning result with its frame
 ;; recorded; the outline stays in frame coordinates.
-(defun fit:fit-type (pts ptype treat / dpts prm tour a0 best cfg a fpts
+(defun fit:fit-type (pts ptype treat oos / dpts prm tour a0 best cfg a fpts
                                        res dev worst rms edge)
   (setq dpts (cal:dedupe pts fit:*exact-eps*))
   (if (= ptype "ROUnd")
@@ -38717,7 +38788,7 @@
       (foreach cfg (fit:configs-for ptype)
         (setq a    (+ a0 (car cfg))
               fpts (fit:to-frame dpts a (cadr cfg))
-              res  (fit:fit-config ptype fpts treat (caddr cfg)))
+              res  (fit:fit-config ptype fpts treat (caddr cfg) oos))
         (if (fit:rget res 'valid)
           (progn
             (setq dev   (fit:outline-dev fpts (fit:res-fsegs res))
@@ -38745,7 +38816,7 @@
         (progn
           (setq a    (+ (fit:rget best 'angle) (/ pi 2.0))
                 fpts (fit:to-frame dpts a nil)
-                res  (fit:fit-config ptype fpts treat nil)
+                res  (fit:fit-config ptype fpts treat nil oos)
                 dev  (fit:outline-dev fpts (fit:res-fsegs res))
                 res  (fit:rput res 'angle a)
                 res  (fit:rput res 'mirror nil)
@@ -38986,8 +39057,8 @@
                                         (fit:rget res 'size))
                                       (fit:rget res 'which) bows)))))
     ((and (eq (fit:rget res 'kind) 'cap) bowed)
-     ;; an arc-ended body's SIDE walls can bow; swinging them would
-     ;; take the end caps with them, so out-of-square stops here
+     ;; the SWING of these walls is fitted inside fit:fit-endcap, with
+     ;; the caps answering to it each round; only the bow is left to do
      (setq got  (fit:fit-cap-bows fpts (fit:rget res 'prm)
                                   (fit:rget res 'both))
            prm  (car got)
@@ -39130,7 +39201,7 @@
                                                             res fpts dev)
   (setq dpts  (cal:dedupe pts fit:*exact-eps*)
         allow (cal:ceil (* pct (length dpts)))
-        res   (fit:fit-type dpts ptype treat))
+        res   (fit:fit-type dpts ptype treat oos))
   (if (eq (fit:rget res 'kind) 'round)
     (setq fpts dpts)
     (setq fpts (fit:to-frame dpts (fit:rget res 'angle)
@@ -39383,7 +39454,29 @@
 ;; off square the worst wall came out.  A pool held square needs none
 ;; of this - its sides are its two dimensions.
 (defun fit:square-lines (res / dirs offs corners n i j out worst sw base
-                               names)
+                               names prm xl xr)
+  (if (eq (fit:rget res 'kind) 'cap)
+    (progn
+      (setq prm (fit:rget res 'prm)
+            xr  (fit:pget prm 'Re)
+            xl  (if (fit:rget res 'both)
+                  (fit:pget prm 'Re2)
+                  (fit:pget prm 'Lx)))
+      (if (< (abs (- (fit:cap-half prm xr) (fit:cap-half prm xl))) 0.25)
+        nil
+        (list (cons "Width at one end"
+                    (fit:ftin (* 2.0 (fit:cap-half prm xr))))
+              (cons "Width at the other"
+                    (fit:ftin (* 2.0 (fit:cap-half prm xl))))
+              (cons "Out of square by"
+                    (strcat (fit:ftin (abs (* 2.0
+                                              (- (fit:cap-half prm xr)
+                                                 (fit:cap-half prm xl)))))
+                            " wider at one end")))))
+    (fit:square-lines-poly res)))
+
+(defun fit:square-lines-poly (res / dirs offs corners n i j out worst sw
+                                   base names)
   (setq dirs (fit:rget res 'dirs)
         offs (fit:rget res 'offs)
         out  nil)
@@ -39660,7 +39753,7 @@
 ;; wall at its middle, u pointing INTO the pool, v across, the side
 ;; walls at v-coordinates s1 < s2 relative to the origin.
 (defun fit:legs (res / t2 a m dirs offs corners ends e n c1 c2 o u v s1
-                       s2 out prm yb yt cy half)
+                       s2 out prm)
   (setq t2 (fit:rget res 'type)
         a  (fit:rget res 'angle)
         m  (fit:rget res 'mirror)
@@ -39688,28 +39781,36 @@
                               (fit:ffd u a m) (fit:ffd v a m) s1 s2)
                         out))))
     (progn                                ; cap types: end lines
-      (setq prm  (fit:rget res 'prm)
-            yb   (fit:pget prm 'By)
-            yt   (fit:pget prm 'Ty)
-            cy   (/ (+ yb yt) 2.0)
-            half (/ (- yt yb) 2.0))
+      ;; each leg takes its cross extent from the walls AT ITS OWN END,
+      ;; so a pool built wider at one end gets a hopper square to the
+      ;; wall that is really there
+      (setq prm (fit:rget res 'prm))
       (setq out (list (list (fit:from-frame
-                              (list (fit:pget prm 'Re) cy) a m)
+                              (list (fit:pget prm 'Re)
+                                    (fit:cap-cy prm (fit:pget prm 'Re)))
+                              a m)
                             (fit:ffd '(-1.0 0.0) a m)
                             (fit:ffd '(0.0 1.0) a m)
-                            (- half) half)))
+                            (- (fit:cap-half prm (fit:pget prm 'Re)))
+                            (fit:cap-half prm (fit:pget prm 'Re)))))
       (if (fit:rget res 'both)
         (setq out (cons (list (fit:from-frame
-                                (list (fit:pget prm 'Re2) cy) a m)
+                                (list (fit:pget prm 'Re2)
+                                      (fit:cap-cy prm (fit:pget prm 'Re2)))
+                                a m)
                               (fit:ffd '(1.0 0.0) a m)
                               (fit:ffd '(0.0 1.0) a m)
-                              (- half) half)
+                              (- (fit:cap-half prm (fit:pget prm 'Re2)))
+                              (fit:cap-half prm (fit:pget prm 'Re2)))
                         out))
         (setq out (cons (list (fit:from-frame
-                                (list (fit:pget prm 'Lx) cy) a m)
+                                (list (fit:pget prm 'Lx)
+                                      (fit:cap-cy prm (fit:pget prm 'Lx)))
+                                a m)
                               (fit:ffd '(1.0 0.0) a m)
                               (fit:ffd '(0.0 1.0) a m)
-                              (- half) half)
+                              (- (fit:cap-half prm (fit:pget prm 'Lx)))
+                              (fit:cap-half prm (fit:pget prm 'Lx)))
                         out)))))
   out)
 
@@ -39942,14 +40043,15 @@
        ;; little to answer its own points - and a pool that really is
        ;; square still comes out square, because a swing is kept only
        ;; where the points prove it.
-       (if (member ptype '("ROman" "Oval" "ROUnd"))
-         (setq v nil)                      ; no free straight walls
+       (if (= ptype "ROUnd")
+         (setq v nil)                      ; a circle has no walls
          (progn
            (princ (strcat "\n\n  Step 5 of " n
                           " - is the pool in-square, or out of square?"))
            (princ "\n  Outofsquare lets each wall swing a little to honour the")
            (princ "\n  points; Insquare holds the template true and shows you")
-           (princ "\n  the error instead.")
+           (princ "\n  the error instead.  On a Roman or Oval that swing is")
+           (princ "\n  the pool coming out wider at one end than the other.")
            (setq v (cal:askkw "Is the pool in-square or out-of-square?"
                               "Insquare Outofsquare"
                               "Insquare/Outofsquare"
@@ -39969,7 +40071,8 @@
            (princ "\n  radius on site.  Yes measures a bow on every wall from")
            (princ "\n  the points and keeps it only where they prove one - a")
            (princ "\n  wall that really is straight stays straight, and no bow")
-           (princ "\n  ever moves a corner.")
+           (princ "\n  ever moves a corner.  No is the answer for a drawing that")
+           (princ "\n  has to show clean straight walls whatever the site did.")
            (setq v (cal:askyn "Any bowed walls?"
                               (if bowed "Yes" "No") T))))
        (if (eq v 'CAL-BACK)
