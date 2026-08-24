@@ -6,9 +6,8 @@
 outline, the hopper, and the dimension chain with its letters -- next to
 a box for every letter. Type a number against a letter and **the letter
 is replaced by what you typed**, which is what the letter was standing
-in for all along. Click anywhere on the picture and the box for the
-nearest dimension takes the caret, so you can work off the drawing
-rather than down the list.
+in for all along. Every box is labelled with its own letter, so the list
+and the picture read as one thing.
 
 Fill in what you know, leave the rest blank, press **Insert**: `POOL`
 runs and asks only for the gaps.
@@ -63,10 +62,23 @@ vectors or an AutoCAD slide, nothing else. Those two facts together
 rule out "the artwork with text boxes on the letters", which is what
 the VB.NET palette in `ui/` does and needs a DLL on every machine to do.
 
-So the chart is **drawn** rather than loaded, from a table of lines; the
-numbers appear on it as they are typed; and clicking it moves the caret.
-Between them those recover most of what a box sitting on the artwork
-would have given, with nothing to install.
+So the chart is **drawn** rather than loaded, from a table of lines, and
+the numbers appear on it as they are typed -- which recovers most of
+what a box sitting on the artwork would have given, with nothing to
+install.
+
+An earlier version also let you click the picture to jump to a box, via
+an `image_button`. That had to go, and the reason is worth writing down
+because it will catch anyone who tries it again: **a DCL image tile is
+not retained by AutoCAD.** Any repaint clears it to the tile's own
+`color` attribute and everything the application drew into it is gone,
+and there is no expose callback to redraw from. An `image_button` is
+repainted on mouse-enter and mouse-leave, so the chart vanished the
+first time the cursor crossed it. A plain `image` tile is passive: no
+highlight, no repaint, nothing to vanish. The same rule is why the
+chart is redrawn after the bottom-type list and the in-square toggle as
+well as after every edit box -- a list unrolling over it does the same
+damage, and nothing else would repair it.
 
 There is no text primitive in DCL either, so the letters and numbers are
 stroked out of line segments from a small vector font in this file.
@@ -107,6 +119,7 @@ out of step with the drawing.
   press Insert and POOL takes over at the command line.
 - An edit box reports its value when the caret **leaves** it, so the
   picture updates on Tab or on a click elsewhere, not per keystroke.
+- The picture is read, not clicked -- see above.
 - Lazy L is not here yet. Its sheet carries eight perimeter letters
   (`B B1 V V1 T T1 A A1`) where POOL asks for six side lengths, and
   four `Y` letters where POOL asks for eight named diagonals, so the

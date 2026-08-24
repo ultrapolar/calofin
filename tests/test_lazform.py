@@ -213,7 +213,7 @@ print("   %d keys across %d charts" % (total, len(charts)))
 
 print("== the generated DCL is well formed, for every chart ==")
 TILES = {'row', 'column', 'boxed_column', 'button', 'text', 'edit_box',
-         'image_button', 'toggle', 'popup_list'}
+         'image', 'image_button', 'toggle', 'popup_list'}
 
 
 def check_dcl(name):
@@ -312,20 +312,37 @@ print("   %d value strokes appear; outline strokes fall %d -> %d"
       % (len(vals), line_blank, line_now))
 
 
-print("== clicking the picture picks the nearest dimension ==")
-vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
-for frac_x, frac_y, want in (
-        (0.50, 0.175, 'tp'),        # on the B chain across the top
-        (0.19, 0.58, 'h'),          # on H
-        (0.34, 0.58, 'g'),          # on G
-        (0.80, 0.58, 'e'),          # on E
-        (0.437, 0.36, 'm')):        # on the M stack
-    vm.loads('(setq t:*n* (lzf:nearest %d %d))'
-             % (int(frac_x * DX), int(frac_y * DY)))
-    got = str(vm.globals['t:*n*'])
-    assert got == want, "a click at (%.2f,%.2f) picked %r, expected %r" % (
-        frac_x, frac_y, got, want)
-print("   five clicks across the chart each land on the right dimension")
+print("== the chart tile is passive, so it cannot be wiped ==")
+# A DCL image tile is not retained by AutoCAD: any repaint clears it to
+# the tile's own colour and everything drawn into it is lost, and there
+# is no expose callback to redraw from.  An image_button is repainted on
+# mouse-enter and mouse-leave, so the chart vanished the moment the
+# cursor crossed it.  This pins the fix: the tile is a plain image, and
+# nothing wires an action to it.
+for c in charts:
+    name = str(c[0])
+    d, _tk = check_dcl(name)
+    body = '\n'.join(d)
+    assert ': image_button' not in body, (
+        "%s: the chart is an image_button again -- it will be wiped the "
+        "first time the mouse crosses it" % name)
+    assert re.search(r': image \{ key = "chart"', body), \
+        "%s: no passive chart image tile" % name
+print("   every chart draws into a plain image tile, never an image_button")
+
+# and the tiles that can open OVER the chart repaint it afterwards
+vm2 = stubbed()
+vm2.loads('(setq stub:*type* nil)')
+vm2.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
+vm2.loads('(setq stub:*act* nil) (setq t:*f* (lzf:show "Rectangle"))')
+wired = {str(a[0]) for a in (vm2.globals.get('stub:*act*') or [])}
+assert 'chart' not in wired, \
+    "an action is wired to the chart tile: %r" % sorted(wired)
+for k in ('btype', 'insq'):
+    assert k in wired, (
+        "%r has no callback -- it can unroll over the chart and nothing "
+        "would repaint it" % k)
+print("   no action on the chart; btype and insq both repaint it")
 
 
 print("== the three-state answer contract ==")
@@ -361,7 +378,8 @@ print("   spelling parses rather than being dropped")
 
 
 print("== the alist handed to POOL ==")
-vm.loads('(setq lzf:*vals* nil)'
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+         '(setq lzf:*vals* nil)'
          '(lzf:put "tp" "240") (lzf:put "le" "120")'
          '(lzf:put "g" "NA") (lzf:put "h" "")'
          '(setq t:*f* (lzf:form "Rectangle" T "Wedge"))')

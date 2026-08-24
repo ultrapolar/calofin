@@ -12,11 +12,10 @@
 ;;; The chart on screen is the one off the paper: the pool outline, the
 ;;; hopper, and the dimension chain with its letters.  Type a number
 ;;; against a letter and the letter is REPLACED by what you typed --
-;;; which is what the letter was standing in for all along.  Click
-;;; anywhere on the picture and the box for the nearest dimension takes
-;;; the caret, so you can work off the drawing rather than off the list.
-;;; Fill in what you know, leave the rest blank, press Insert: POOL runs
-;;; and asks only for the gaps.
+;;; which is what the letter was standing in for all along.  Every box
+;;; is labelled with its own letter, so the list and the picture read
+;;; as one thing.  Fill in what you know, leave the rest blank, press
+;;; Insert: POOL runs and asks only for the gaps.
 ;;;
 ;;; NA in a box means "not measured" and is passed through as such --
 ;;; different from leaving it blank, which just means POOL should ask.
@@ -33,6 +32,8 @@
 ;;; numbers appear ON it as they are typed, and clicking it moves the
 ;;; caret: between them those two recover most of what a text box
 ;;; sitting on the artwork would have given, without a DLL to install.
+;;; (An earlier version also let you click the picture to jump to a
+;;; box; DCL took that back -- see "why the picture is not clickable".)
 ;;;
 ;;; ADDING A SHAPE is adding data, not code -- one entry in
 ;;; lzf:*charts* with an outline, a dimension list and its POOL keys.
@@ -46,7 +47,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.1")
+(setq *lazform-version* "v1.2")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -554,28 +555,26 @@
   (end_image)
   (princ))
 
-;;; -------------------- clicking the picture ----------------------------
-;;  An image_button reports where it was picked, so the nearest
-;;  dimension to the click takes the caret.  This is what stands in for
-;;  a text box sitting on the artwork: you work off the drawing, and the
-;;  typing happens in the box the click just moved you to.
-
-(defun lzf:nearest (x y / c d best bd mx my dd)
-  (setq c lzf:*chart*)
-  (foreach d (lzf:dims c)
-    (setq mx (/ (+ (lzf:px (nth 2 d)) (lzf:px (nth 4 d))) 2)
-          my (/ (+ (lzf:py (nth 3 d)) (lzf:py (nth 5 d))) 2)
-          dd (+ (* (- x mx) (- x mx)) (* (- y my) (- y my))))
-    (if (or (not best) (< dd bd)) (setq best (cadr d) bd dd)))
-  best)
-
-(defun lzf:pick (x y / key)
-  (if (setq key (lzf:nearest x y))
-      (progn
-        (setq lzf:*focus* key)
-        (mode_tile key 2)               ; move the caret to its box
-        (lzf:redraw)))
-  (princ))
+;;; -------------------- why the picture is not clickable ----------------
+;;;
+;;;  It was, once: an image_button reports the point it was picked at,
+;;;  so a click near a dimension could move the caret to that box.  It
+;;;  had to go.  An image_button is repainted when the mouse enters it
+;;;  and again when it leaves, and a DCL image tile is NOT retained by
+;;;  AutoCAD -- a repaint clears the tile to its own colour attribute
+;;;  and everything the application drew into it is gone.  There is no
+;;;  expose callback to redraw from, so the chart vanished the first
+;;;  time the cursor crossed it.
+;;;
+;;;  A plain image tile is passive: no highlight, no repaint, nothing
+;;;  to vanish.  The cost is that the picture is read rather than
+;;;  clicked, and the letter at the front of each box's label is what
+;;;  ties the two together instead.
+;;;
+;;;  The same retention rule is why lzf:redraw runs after the
+;;;  bottom-type list and the in-square toggle as well as after every
+;;;  edit box: a list unrolling over the chart damages it the same way,
+;;;  and nothing else would repair it.
 
 ;;; -------------------- which chart -------------------------------------
 
@@ -592,7 +591,7 @@
              (car (car lzf:*charts*)) nil))
 
 ;;; -------------------- the dialog --------------------------------------
-;;  Two columns: the chart on the left as an image_button, the boxes on
+;;  Two columns: the chart on the left as a passive image, the boxes on
 ;;  the right in the chart's own order, each labelled with its letter so
 ;;  the list and the picture read as one thing.
 
@@ -603,7 +602,9 @@
   (setq out (list "  : row {"
                   (strcat "  label = \"LazForm - " (caddr c) "\";")
                   "lazform : dialog {"))
-  (setq out (cons (strcat "    : image_button { key = \"chart\"; "
+  ;; A PASSIVE image tile, deliberately -- see "why the picture is not
+  ;; clickable" above.
+  (setq out (cons (strcat "    : image { key = \"chart\"; "
                           "width = 52; aspect_ratio = 0.72; "
                           "fixed_width = true; fixed_height = true; "
                           "color = -15; }")
@@ -746,7 +747,10 @@
        (action_tile d
          (strcat "(lzf:put \"" d "\" $value) (setq lzf:*focus* \"" d "\")"
                  " (lzf:redraw)")))
-     (action_tile "chart" "(lzf:pick $x $y)")
+     ;; the chart takes no action -- it is a passive image tile now --
+     ;; but the two tiles that can open OVER it repaint it afterwards
+     (action_tile "btype" "(lzf:redraw)")
+     (action_tile "insq" "(lzf:redraw)")
      (action_tile "accept" "(done_dialog 1)")
      (action_tile "cancel" "(done_dialog 0)")
      (lzf:redraw)
