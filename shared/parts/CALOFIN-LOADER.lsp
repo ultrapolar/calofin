@@ -69,7 +69,7 @@
 
 ;;; -------------------- held back from this build -----------------------
 ;;; These exist in shared/parts/ and in lisp/, but are deliberately NOT
-;;; compiled into CALOFIN-ALL.lsp and not loaded here.  Two reasons,
+;;; compiled into LAZPASS.lsp and not loaded here.  Two reasons,
 ;;; kept apart on purpose:
 ;;;   WIP      still being worked on - goes in when it settles
 ;;;   OMITTED  never part of calofin

@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; CALOFIN-ALL.lsp  --  the whole shared build in one file
+;;; LAZPASS.lsp  --  the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -68,7 +68,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.1")
+(setq cal:*version* "v1.2")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -551,14 +551,14 @@
 (princ (strcat "\nCALOFIN-LIB " cal:*version*
                " loaded.  Shared helpers under the cal: prefix."))
 ;; On its own this file defines helpers and exactly one command
-;; (CALVER) -- no tools at all.  CALOFIN-ALL.lsp and CALOFIN-LOADER.lsp
+;; (CALVER) -- no tools at all.  LAZPASS.lsp and CALOFIN-LOADER.lsp
 ;; both set the flag below before loading it, so this only ever fires
 ;; when someone APPLOADs the library by itself and would otherwise be
 ;; left wondering why not one command exists.
 (if (not cal:*build-loading*)
   (progn
     (princ "\n[calofin] That is the helper library ONLY - it defines no tools.")
-    (princ "\n[calofin] APPLOAD CALOFIN-ALL.lsp for the whole build instead.")))
+    (princ "\n[calofin] APPLOAD LAZPASS.lsp for the whole build instead.")))
 (princ)
 
 
@@ -14097,7 +14097,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.0")
+(setq *abcdef-version* "v5.1")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -15293,7 +15293,7 @@
                     "\n  were left ready for it instead: they are ab_pt"
                     "\n  blocks on layer " abcdef:*point-layer*
                     ".  APPLOAD abhd.lsp (or the"
-                    "\n  whole CALOFIN-ALL.lsp build), then run ABHD and"
+                    "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window the points.")))
     (T
      (princ (strcat "\n  Starting ABHD on the " (itoa n)
@@ -56842,7 +56842,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.0")
+(setq *xyplot-version* "v1.1")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -57527,7 +57527,7 @@
                     "\n  were left ready for it instead: they are ab_pt"
                     "\n  blocks on layer " xyp:*point-layer*
                     ".  APPLOAD abhd.lsp (or the"
-                    "\n  whole CALOFIN-ALL.lsp build), then run ABHD and"
+                    "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window graph 1's points.")))
     (T
      (princ (strcat "\n  Starting ABHD on the " (itoa n)
@@ -57757,5 +57757,5 @@
 
 
 ;;; ======================================================================
-(princ (strcat "\nCALOFIN: shared build loaded - 96 commands in one session."))
+(princ (strcat "\nLAZPASS: calofin shared build loaded - 96 commands in one session."))
 (princ)

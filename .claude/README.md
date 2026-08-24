@@ -106,7 +106,7 @@ see, because they read one file at a time:
   load into one session,
 - no command is lost between the tiers,
 - `CALOFIN-LOADER.lsp` lists every file beside it,
-- the one-file bundle `shared/CALOFIN-ALL.lsp` exists and is not behind
+- the one-file bundle `shared/LAZPASS.lsp` exists and is not behind
   its members (rebuild: `python3 tools/build_shared_bundle.py`),
 - a versioned file's dated twin in `releases/` is not stale,
 - `wip/`, once it exists, holds drafts and no dated releases.

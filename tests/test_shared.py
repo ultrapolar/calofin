@@ -118,14 +118,14 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:SPAVER'):
 print('  CALVER / POOLVER / SPAVER ok')
 
 print('shared -- the one-file bundle carries the whole build')
-BUNDLE = os.path.join(SHARED, 'CALOFIN-ALL.lsp')
+BUNDLE = os.path.join(SHARED, 'LAZPASS.lsp')
 if not os.path.exists(BUNDLE):
-    fail('CALOFIN-ALL.lsp missing - run python3 tools/build_shared_bundle.py')
+    fail('LAZPASS.lsp missing - run python3 tools/build_shared_bundle.py')
 bvm = VM()
 try:
     bvm.load(BUNDLE)                        # ONE file, nothing beside it
 except Exception as e:                      # noqa: BLE001 - report the file
-    fail('CALOFIN-ALL.lsp failed to load: %s' % e)
+    fail('LAZPASS.lsp failed to load: %s' % e)
 bundle_cmds = {str(k)[2:] for k in bvm.globals if str(k).startswith('c:')}
 
 # what the manifest alone should put in the bundle
@@ -136,7 +136,7 @@ for f in ORDER:
             expected.add(n.lower()[2:])
 short = sorted(expected - bundle_cmds)
 if short:
-    fail('commands missing from CALOFIN-ALL.lsp: %s (rebuild it with '
+    fail('commands missing from LAZPASS.lsp: %s (rebuild it with '
          'python3 tools/build_shared_bundle.py)' % short)
 
 # and a held-back tool must NOT have leaked in
@@ -149,7 +149,7 @@ for f, why in sorted(HELD.items()):
         if n.lower().startswith('c:') and n.lower()[2:] in bundle_cmds:
             leaked.append('%s (%s, from %s)' % (n, why, f))
 if leaked:
-    fail('held-back commands leaked into CALOFIN-ALL.lsp: %s' % leaked)
+    fail('held-back commands leaked into LAZPASS.lsp: %s' % leaked)
 for cmd in ('c:CALVER', 'c:POOLVER', 'c:ABFINDVER'):
     bvm.run(cmd, [])
 print('  %d commands from one APPLOAD, %d file(s) held back'

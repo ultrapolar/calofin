@@ -26,7 +26,7 @@ in step:
 | draft | `wip/` | being drafted, no version banner yet. Optional - absent until a first draft lands. | yes |
 | standalone | `lisp/<tool>/` | one self-contained file, loads alone with APPLOAD. **All tool logic starts here.** | yes |
 | released | `releases/` | dated `REV`-stamped twin, so a loaded routine never changes underfoot | no - generated |
-| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | generated for the tools in `tools/mirror_shared.py`, by hand otherwise; bundle generated |
+| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/LAZPASS.lsp` is the generated one-file build | generated for the tools in `tools/mirror_shared.py`, by hand otherwise; bundle generated |
 
 Change a tool in `lisp/`, mirror it into `shared/parts/<FILE>.lsp` in the same
 commit, then regenerate both artifacts:
@@ -34,11 +34,11 @@ commit, then regenerate both artifacts:
 ```
 python3 tools/mirror_shared.py <TOOL>  # the shared/parts/ twin, where generated
 python3 tools/release_lisp.py          # releases/ dated twins
-python3 tools/build_shared_bundle.py   # shared/CALOFIN-ALL.lsp
+python3 tools/build_shared_bundle.py   # shared/LAZPASS.lsp
 python3 tools/check_standards.py       # did anything drift?
 ```
 
-Never hand-edit `releases/` or `shared/CALOFIN-ALL.lsp`.
+Never hand-edit `releases/` or `shared/LAZPASS.lsp`.
 
 A tool can be in `lisp/` and `shared/parts/` yet deliberately kept out of
 the compiled bundle while it is being reworked (or for good, if it never
@@ -205,7 +205,7 @@ placed, and the whole run is one `U`.
 ## Shared build (`shared/`)
 
 The same tools built against one common helper library instead of each
-embedding its own copies. APPLOAD `shared/CALOFIN-ALL.lsp` - the whole
+embedding its own copies. APPLOAD `shared/LAZPASS.lsp` - the whole
 build concatenated into one file, so there is nothing for it to find on
 disk - and every command loads in one go. (`CALOFIN-LOADER.lsp` is the
 multi-file alternative for when you are editing the files; it has to
@@ -287,7 +287,7 @@ routines.
 | Script | What it does |
 | --- | --- |
 | `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
-| `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/CALOFIN-ALL.lsp` |
+| `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/LAZPASS.lsp` |
 | `mirror_shared.py` | Regenerates a `shared/parts/` twin from its `lisp/` original - drops the helpers the library provides and rewrites the call sites onto `cal:`. Table-driven, one entry per tool |
 | `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin **and that twin carries the same version banner**, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |

@@ -6,7 +6,7 @@ AutoCAD only lets it look along the support file search path -- which
 is not where APPLOAD's file dialog just sent you.  A single file has
 nothing to find, so this is the build to hand someone:
 
-    python3 tools/build_shared_bundle.py   ->  shared/CALOFIN-ALL.lsp
+    python3 tools/build_shared_bundle.py   ->  shared/LAZPASS.lsp
 
 Same idea as the STEPS bundle in release_lisp.py: members are included
 verbatim, in the loader's own order, library first.
@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
 PARTS = SHARED / "parts"
 LOADER = PARTS / "CALOFIN-LOADER.lsp"
-BUNDLE = SHARED / "CALOFIN-ALL.lsp"
+BUNDLE = SHARED / "LAZPASS.lsp"
 
 RULE = ";;; " + "=" * 70
 COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
@@ -55,7 +55,7 @@ def main():
 
     out = [
         RULE,
-        ";;; CALOFIN-ALL.lsp  --  the whole shared build in one file",
+        ";;; LAZPASS.lsp  --  the whole shared build in one file",
         ";;; " + "-" * 70,
         ";;; GENERATED - do not edit.  Rebuild it with:",
         ";;;     python3 tools/build_shared_bundle.py",
@@ -90,7 +90,7 @@ def main():
     out += [
         "",
         RULE,
-        '(princ (strcat "\\nCALOFIN: shared build loaded - %d commands '
+        '(princ (strcat "\\nLAZPASS: calofin shared build loaded - %d commands '
         'in one session."))' % len(commands),
         "(princ)",
         "",
