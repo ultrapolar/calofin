@@ -218,6 +218,9 @@ class VM:
             # asserting on it would pass today and fail tomorrow.
             'CDATE': 20260821.143000, 'DATE': 2461274.5,
         }
+        self.tablerecs = {}      # table -> {NAME: Ent} for tblobjname
+        self.recdata = {}        # Ent -> alist for those records; kept
+                                 # out of entdata, which is the DRAWING
         self.tables = {'LAYER': set(), 'LTYPE': {'CONTINUOUS'},
                        'DIMSTYLE': {'STANDARD'}}
 
@@ -912,6 +915,24 @@ def _tblsearch(vm, a):
     return NIL
 
 
+@bi('tblobjname')
+def _tblobjname(vm, a):
+    """The symbol table RECORD, which entget/entmod can then work on --
+    how a routine thaws, unlocks or switches a layer back on.  A layer a
+    test declared by name alone gets a record made for it here, on
+    demand, with the defaults AutoCAD would have given it."""
+    table, name = a[0].upper(), a[1].upper()
+    if name not in {x.upper() for x in vm.tables.get(table, set())}:
+        return NIL
+    recs = vm.tablerecs.setdefault(table, {})
+    if name not in recs:
+        e = Ent()
+        vm.recdata[e] = [Dot(0, table), Dot(2, a[1]), Dot(70, 0),
+                         Dot(62, 7), Dot(6, 'Continuous')]
+        recs[name] = e
+    return recs[name]
+
+
 # entities
 @bi('entmake')
 def _entmake(vm, a):
@@ -925,6 +946,14 @@ def _entmake(vm, a):
     etype = d.get(0)
     if etype == 'LAYER':
         vm.tables['LAYER'].add(d[2])
+        # the record itself, so tblobjname can hand it to a routine that
+        # thaws or unlocks the layer.  It is NOT an entity in the
+        # drawing: symbol table records never appear to entnext/entlast
+        # or to a selection set, and a test that walks the drawing must
+        # not trip over them
+        e = Ent()
+        vm.recdata[e] = list(alist)
+        vm.tablerecs.setdefault('LAYER', {})[d[2].upper()] = e
         return alist
     if etype == 'LTYPE':
         vm.tables['LTYPE'].add(d[2])
@@ -996,10 +1025,16 @@ def _entget(vm, a):
     # follows back to the entity after subst/append have rebuilt it.
     # (5 . handle) rides along the same way AutoCAD's does, unless the
     # entity carries one of its own already.
+    # a symbol table record -- a layer, say -- is not in the drawing, but
+    # entget reads and entmod writes it just the same: that is how a
+    # routine thaws the layer it is about to draw on
+    data = vm.entdata.get(e, vm.recdata.get(e))
+    if data is None:
+        raise LispError(f"entget: no such entity: {e!r}", vm)
     head = [Dot(-1, e)]
-    if not any(isinstance(g, Dot) and g.a == 5 for g in vm.entdata[e]):
+    if not any(isinstance(g, Dot) and g.a == 5 for g in data):
         head.append(Dot(5, e.handle))
-    return head + vm.entdata[e]
+    return head + data
 
 
 @bi('entmod')
@@ -1009,8 +1044,9 @@ def _entmod(vm, a):
         if isinstance(g, Dot) and g.a == -1 and isinstance(g.b, Ent):
             if g.b in vm.deleted:
                 return NIL
-            vm.entdata[g.b] = [x for x in alist
-                               if not (isinstance(x, Dot) and x.a == -1)]
+            store = vm.recdata if g.b in vm.recdata else vm.entdata
+            store[g.b] = [x for x in alist
+                          if not (isinstance(x, Dot) and x.a == -1)]
             return alist
     # a list built from scratch, with no (-1 . ename) to follow: nothing
     # to write it back to
@@ -1229,6 +1265,10 @@ def _command(vm, a):
             else:
                 meas = math.dist(p1[:2], p2[:2])
             vm.entdata[e].append(Dot(42, meas))
+            # 11 is the middle of the text, which starts out in the
+            # middle of the measured span -- where AutoCAD centres it
+            vm.entdata[e].append(
+                [11] + [0.5 * (x + y) for x, y in zip(p1, p2)])
         # "_T <text>" is a text override, and AutoCAD keeps it verbatim
         # in group 1 with "<>" standing in for the measurement
         for i, x in enumerate(a[:-1]):
@@ -1236,7 +1276,21 @@ def _command(vm, a):
                     and isinstance(a[i + 1], str):
                 vm.entdata[e].append(Dot(1, a[i + 1]))
                 break
+    # DIMTEDIT re-homes the text: group 11 moves, and group 70 gains bit
+    # 128, "text position defined by the user" -- the flag that stops the
+    # text springing back to the middle
+    if a and a[0] == '_.DIMTEDIT' and isinstance(a[1], Ent):
+        loc = [x for x in a[2:] if isinstance(x, list) and len(x) >= 2]
+        if loc:
+            data = [g for g in vm.entdata[a[1]]
+                    if not (isinstance(g, list) and g and g[0] == 11)]
+            data = [Dot(g.a, g.b | 128) if isinstance(g, Dot) and g.a == 70
+                    else g for g in data]
+            vm.entdata[a[1]] = data + [[11] + [float(v) for v in loc[0]]]
     return NIL
+
+
+BUILTINS[Sym('command-s')] = BUILTINS[Sym('command')]
 
 
 @bi('initget')

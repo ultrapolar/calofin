@@ -14,11 +14,16 @@ end, in the **`CROSS DIMENSIONS`** dimension style, on the
    from endpoint to endpoint, with the dimension line sitting **on the
    line itself** — the usual look for a cross-dim tie drawn across a
    pool.
-3. Each new dimension is put in the `CROSS DIMENSIONS` dimension style
+3. The text is slid along that dimension line to about **80% of the way
+   toward the right-hand end** instead of sitting centred — the
+   **bottom** end on a line standing near vertical, where "right-hand"
+   would be a coin toss. Whichever way round the line happens to have
+   been drawn, the text lands on the same end.
+4. Each new dimension is put in the `CROSS DIMENSIONS` dimension style
    and on the `DIMENSION` layer, **ByLayer**: any per-entity colour,
    linetype or lineweight override the command left behind is stripped,
    so the dims look exactly like the cross dims `POOL` draws.
-4. **The line each dimension was made from is erased** — the tie
+5. **The line each dimension was made from is erased** — the tie
    measurement is left as a dimension and nothing else. Only lines that
    really did get a dimension go; the report says how many, and off
    which layers (normally `POOL` or `POINTS`). Set `cdc:*erase*` to
@@ -52,6 +57,8 @@ different names:
 | `cdc:*layer*` | `"DIMENSION"` | Layer the new dims are created on |
 | `cdc:*offset*` | `0.0` | How far the dimension line is pushed perpendicular to the line it measures, in drawing units. `0.0` puts it on the line |
 | `cdc:*erase*` | `T` | Erase each line once its dimension is drawn. `nil` keeps the lines |
+| `cdc:*textpos*` | `0.8` | Where the text sits along the dimension: `0.0` the far end, `0.5` centred (no text move at all), `1.0` the right/bottom end |
+| `cdc:*vertang*` | `15.0` | How near vertical, in degrees, a line has to stand before its text goes to the bottom end rather than the right-hand one |
 
 ## Notes & limitations
 
@@ -59,6 +66,10 @@ different names:
   selection — polylines, arcs, text, blocks — is counted and reported,
   not dimensioned. Explode a polyline first if its segments need cross
   dims.
+* The text is moved with `DIMTEDIT`, along the dimension line, so the
+  dimension line itself does not shift whatever `DIMTMOVE` is set to.
+  The dimension is flagged as having a user-defined text position, which
+  is what stops the text springing back to the middle.
 * Erasing the line cannot disturb its dimension: the extension-line
   points are picked as plain coordinates (`_non`, with osnaps off), so
   the dimension is not associated with the line and keeps its
@@ -66,7 +77,10 @@ different names:
 * Zero-length lines are skipped; there is nothing to measure — and a
   skipped line is never erased, only a line that got its dimension is.
 * The `DIMENSION` layer is **created** when the drawing lacks it
-  (colour 7, continuous).
+  (colour 7, continuous) — and when it is already there but frozen,
+  locked or switched off, it is thawed, unlocked and switched back on,
+  with a line saying so. A run onto a frozen layer would otherwise look
+  like the command did nothing.
 * A missing `CROSS DIMENSIONS` style is **not** invented. The dims are
   drawn in whatever style is current and the routine says so, so a
   drawing started from the wrong template is obvious instead of quietly
@@ -84,5 +98,8 @@ different names:
 repo's AutoLISP VM (`tests/lispvm.py`) and drives `c:CDCREATE` with
 scripted selections — pickfirst and prompted, mixed selections, an empty
 drawing, a drawing with no `CROSS DIMENSIONS` style, a hostile
-`DIMLAYER`, a non-zero offset, ties drawn on `POOL` and `POINTS`, and
-`cdc:*erase*` switched off.
+`DIMLAYER`, a non-zero offset, ties drawn on `POOL` and `POINTS`,
+`cdc:*erase*` switched off, a frozen/locked/off `DIMENSION` layer, and
+the text-end rule on flat, steep, near-vertical and either-way-round
+lines. `CALOFIN_LISP_ROOT=shared python3 tests/test_cdcreate.py` runs
+the same suite against the grouped build.

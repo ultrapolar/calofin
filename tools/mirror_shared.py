@@ -59,6 +59,20 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
+    # CDCREATE keeps its own dim-style pair -- it restores a style only
+    # when the style really moved, which cal:dimstyrestore does not
+    # model -- but the sysvar snapshot and ensure-layer are the library
+    # helpers verbatim, so those swap out.  Listed here because the twin
+    # was being hand-copied, and a hand-copied twin is a twin that drifts.
+    'CDCREATE': {
+        'src': 'lisp/cdcreate/CDCREATE.lsp',
+        'swap': {
+            'cdc:syssave': 'cal:syssave',
+            'cdc:sysrestore': 'cal:sysrestore',
+            'cdc:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': ['cdc:*sysold*'],
+    },
     # ABCDEF and XYPLOT carry the same feet-inch parser, so the same two
     # generic helpers come out of both.  Mirrored rather than hand-copied
     # because the twins were drifting: the shared abcdef.lsp still had
