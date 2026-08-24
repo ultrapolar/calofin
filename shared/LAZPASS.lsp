@@ -59744,5 +59744,42 @@
 
 
 ;;; ======================================================================
-(princ (strcat "\nLAZPASS: calofin shared build loaded - 102 commands in one session."))
+;;; -------------------- what actually arrived ---------------------------
+(setq lazpass:*want* '(
+  "CALVER" "POOL" "POOLVER" "POOLDEMO" "TUTORIALPOOL" "SPA"
+  "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF" "ABCDEFVER"
+  "ABFIND" "ABMOVE" "ABFINDVER" "ALTABCDEF" "ABHD" "ADAB"
+  "TUTORIALABHD" "TUTORIALADAB" "CABHDVER" "CABHD" "AUTOBEAD" "AUTOBEADVER"
+  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "BPCALLOUT"
+  "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
+  "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP"
+  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVERSION"
+  "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN"
+  "DIMCONTEND" "DCE" "DDFIX" "DDSET" "DDCAL" "DDINFO"
+  "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER" "FITABHD"
+  "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN"
+  "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS"
+  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SPACHECKVER" "SPACHECKSCAN" "SPACHECK"
+  "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE"
+  "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER"
+  "LAZFORM" "LAZFORMVER" "LAZPANEL" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+))
+
+(setq lazpass:*missing* nil)
+(foreach n lazpass:*want*
+  (if (not (eval (read (strcat "C:" n))))
+    (setq lazpass:*missing* (cons n lazpass:*missing*))))
+
+(if lazpass:*missing*
+  (progn
+    (princ (strcat "\nLAZPASS: only " (itoa (- (length lazpass:*want*)
+                                             (length lazpass:*missing*)))
+                   " of " (itoa (length lazpass:*want*))
+                   " commands loaded -- this build is incomplete."))
+    (princ "\nLAZPASS: missing:")
+    (foreach n (reverse lazpass:*missing*)
+      (princ (strcat " " n))))
+  (princ (strcat "\nLAZPASS: calofin shared build loaded - "
+                 (itoa (length lazpass:*want*))
+                 " commands in one session.")))
 (princ)

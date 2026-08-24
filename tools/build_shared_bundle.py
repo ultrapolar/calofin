@@ -90,8 +90,35 @@ def main():
     out += [
         "",
         RULE,
-        '(princ (strcat "\\nLAZPASS: calofin shared build loaded - %d commands '
-        'in one session."))' % len(commands),
+        # The count used to be baked in here, so a build that half
+        # loaded still announced every command it was BUILT with.  A
+        # command that never arrived is exactly what a greyed button on
+        # the panel means, so the footer checks its own claim: an
+        # unbound C: name evaluates to nil, and anything missing is
+        # named rather than counted over.
+        ";;; -------------------- what actually arrived ---------------------------",
+        "(setq lazpass:*want* '(",
+    ] + ["  " + " ".join('"%s"' % c for c in commands[i:i + 6])
+         for i in range(0, len(commands), 6)] + [
+        "))",
+        "",
+        "(setq lazpass:*missing* nil)",
+        "(foreach n lazpass:*want*",
+        "  (if (not (eval (read (strcat \"C:\" n))))",
+        "    (setq lazpass:*missing* (cons n lazpass:*missing*))))",
+        "",
+        "(if lazpass:*missing*",
+        "  (progn",
+        '    (princ (strcat "\\nLAZPASS: only " (itoa (- (length lazpass:*want*)',
+        "                                             (length lazpass:*missing*)))",
+        '                   " of " (itoa (length lazpass:*want*))',
+        '                   " commands loaded -- this build is incomplete."))',
+        '    (princ "\\nLAZPASS: missing:")',
+        "    (foreach n (reverse lazpass:*missing*)",
+        '      (princ (strcat " " n))))',
+        '  (princ (strcat "\\nLAZPASS: calofin shared build loaded - "',
+        '                 (itoa (length lazpass:*want*))',
+        '                 " commands in one session.")))',
         "(princ)",
         "",
     ]
