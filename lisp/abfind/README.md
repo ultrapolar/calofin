@@ -14,8 +14,9 @@ round.
   place, where should it be?* One tape is
   held exactly as it is and the other's reading is walked — a foot at a
   time, ten feet each way, plus every number the reading could have
-  been misread as. Each candidate is drawn **yellow** on the POINTS
-  layer and tagged by the tape it moves and how far: `1A`, `-3B`.
+  been misread as. Each candidate is drawn **yellow**, on a scratch
+  layer of its own, tagged by the tape it moves and how far: `1A`,
+  `-3B`.
   Type the tag you believe and the point moves there, renamed, ringed
   and noted — **one point per run**: moving a point is a decision, not
   a sweep, so the command ends as soon as that point is settled.
@@ -101,10 +102,17 @@ So `-3B` reads "B was three feet less than it says", and `R1A` reads
 "A's nearest look-alike". A tag names exactly one place, and it is
 what the prompt accepts.
 
-The candidates are drawn on the **POINTS** layer in
-`abf:*sug-color*` — **yellow**, as an entity override, so a suggestion
-never reads as one of the drawing's own points — each with its tag
-beside it, and listed nearest miss first within each group:
+The candidates are drawn on `abf:*sug-layer*` — **`ABMOVE-POINTS`**,
+a layer of their own, created when the drawing lacks it — in
+`abf:*sug-color*` (**yellow**, both as the layer's colour and as an
+entity override). They deliberately do **not** go on `POINTS`: they
+are throwaway, they would take that layer's colour, and while they
+existed every other tool in the toolset (`BPCALLOUT`, `LHD`, `ABHD`,
+`FITABHD` …) would count them as real survey points. The one you
+choose is a survey point, and *that* is what lands on `POINTS`.
+
+Each carries its tag beside it, and they are listed nearest miss first
+within each group:
 
 ```
   Where Pt.17 lands if one tape was read wrong - the ones that move A
@@ -272,7 +280,8 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*offset*       0.0)           ; push the dim line off the tie
 (setq abf:*point-block*  "ab_pt")       ; the survey point block
 (setq abf:*point-layer*  "POINTS")      ; layer whose INSERTs count,
-                                        ; and where new points go
+                                        ; and where the moved point goes
+(setq abf:*point-color*  6)             ; colour for it if it is missing
 (setq abf:*pt-tag*       "number")      ; attribute naming the point
 (setq abf:*a-name*       "A")           ; what the two stakes are
 (setq abf:*b-name*       "B")           ; numbered in the drawing
@@ -282,6 +291,7 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*note-hgt*     6.0)           ; note text height
 (setq abf:*moved-suffix* "m")           ; Pt.17 -> Pt.17m
 (setq abf:*sug-radius*   3.0)           ; suggestion marker radius
+(setq abf:*sug-layer*    "ABMOVE-POINTS") ; scratch layer, NOT POINTS
 (setq abf:*sug-color*    2)             ; suggestion colour: yellow
 (setq abf:*sug-hgt*      6.0)           ; suggestion tag height
 (setq abf:*locus-color*  8)             ; guide-line colour: grey
@@ -321,6 +331,8 @@ one of the two answers.
 * A missing `CROSS DIMENSIONS` style is **not** invented: the dims are
   drawn in whatever style is current and the routine says so, so a
   drawing started from the wrong template is obvious.
+* `ABMOVE-POINTS` is emptied at the end of every round but the layer
+  itself stays in the drawing — `PURGE` clears it when you are done.
 * Requires the Visual LISP engine (full AutoCAD; LT cannot run this).
 
 ## Versioning
@@ -329,6 +341,10 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.6** — the suggestions and their guide lines get their own
+  layer (`abf:*sug-layer*`, `ABMOVE-POINTS`) instead of `POINTS`; only
+  the chosen point lands on `POINTS`, which is created in
+  `abf:*point-color*` when a drawing lacks it.
 * **v1.5** — `ABFIND` asks `Move Pt.## to a different reading?` after
   each pair of ties and runs `ABMOVE`'s flow on a Yes, then carries on
   to the next point; Back undoes a moved round whole again.
