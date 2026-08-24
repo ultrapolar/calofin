@@ -106,6 +106,35 @@ re-summon the button.
   `C:<NAME>`; unbound symbols are nil), so commands loaded after the
   panel's file was loaded are still picked up, each time it opens.
 
+## When the button comes up blank
+
+The picture is best effort and fails quietly on purpose -- a missing
+icon must never stop the panel working. `LAZICON` is the way to find
+out why: it walks the same steps out loud and prints where each one
+got to.
+
+```
+LAZICON: where the button's picture comes from.
+  TEMPPREFIX : C:\Users\you\AppData\Local\Temp\
+  small      : C:\Users\you\AppData\Local\Temp\lazpanel-16.bmp
+  large      : C:\Users\you\AppData\Local\Temp\lazpanel-32.bmp
+  written    : yes, as a VT_UI1 array
+  on disk    : found
+  SetBitmaps : accepted - the button should show it now
+```
+
+The two steps most likely to fail, and what they mean:
+
+- **`written : NO`** -- the bytes never reached the disk. The reason is
+  printed after it. The usual cause is the byte array: writing binary
+  from AutoLISP needs a `VT_UI1` safearray, and `vlax-make-safearray`'s
+  documented type constants stop at `vlax-vbVariant`, so whether type
+  17 is accepted is a property of the release rather than of this code.
+  A second spelling is tried before giving up, and the line says which
+  one worked.
+- **`SetBitmaps : <error>`** -- the files were written but AutoCAD would
+  not take them for the button.
+
 ## Tests
 
 ```

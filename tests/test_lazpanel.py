@@ -129,8 +129,10 @@ for c in ALL:
         satellites.add(c)
 # DCE is DIMCONTEND's short alias; STOCKLIST is STOCKCOVER's listing
 # companion -- both reachable, neither needs its own button.  LAZPANEL
-# is the panel itself and LAZBUTTON its toolbar summoner.
-satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON'}
+# is the panel itself, LAZBUTTON its toolbar summoner and LAZICON the
+# diagnostic that reports where the button's picture came from: none of
+# the three is a drafting tool, so none belongs on the panel.
+satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON'}
 
 headline = ALL - satellites - HELD
 assert headline == set(PANEL), (
@@ -504,9 +506,18 @@ print("   exactly why write-char could never have written this file")
 
 print("== a stable icon path, so a surviving toolbar keeps its picture ==")
 vm2 = stubbed(preload=True)
-vm2.loads('(setvar "TEMPPREFIX" "/tmp/acad/") (setq t:*p* (lzp:icon-path "16"))')
-assert str(vm2.globals['t:*p*']) == '/tmp/acad/lazpanel-16.bmp', \
-    vm2.globals['t:*p*']
+for prefix, want in (
+        # the usual shape: AutoCAD hands back a folder with a separator
+        ('C:\\Temp\\', 'C:\\Temp\\lazpanel-16.bmp'),
+        ('/tmp/acad/', '/tmp/acad/lazpanel-16.bmp'),
+        # and the shape the guard exists for: no separator at all, which
+        # silently turns a folder called Temp into a file called
+        # Templazpanel-16.bmp that SetBitmaps then cannot read
+        ('C:\\Temp', 'C:\\Temp\\lazpanel-16.bmp')):
+    vm2.loads('(setvar "TEMPPREFIX" "%s") (setq t:*p* (lzp:icon-path "16"))'
+              % prefix.replace('\\', '\\\\'))
+    got = str(vm2.globals['t:*p*'])
+    assert got == want, "TEMPPREFIX %r gave %r, expected %r" % (prefix, got, want)
 print("   icons live at a fixed name under TEMPPREFIX, rewritten each load")
 
 

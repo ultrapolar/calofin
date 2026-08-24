@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 46 files, 101 commands:
+;;; 46 files, 102 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABMOVE
 ;;;   ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV
@@ -18,15 +18,15 @@
 ;;;   DDELEV  DDFIX  DDGPS  DDINFO  DDSET  DDTEST
 ;;;   DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN
 ;;;   DRONE  FITABHD  FITABHDVER  FLOORDIM  HEMISTEP  LAZBUTTON
-;;;   LAZFORM  LAZFORMVER  LAZPANEL  LAZPANELVER  LHD  LINCHECK
-;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  NORMIESTEP
-;;;   OASIS  OASISVER  PADDLE  PERPPTS  POOL  POOLDEMO
-;;;   POOLVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
-;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD
-;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
-;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
-;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
-;;;   WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   LAZFORM  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LHD
+;;;   LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK
+;;;   NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS  POOL
+;;;   POOLDEMO  POOLVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
+;;;   SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST
+;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
+;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
+;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
+;;;   TYDRN  WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -59042,6 +59042,7 @@
 ;;;
 ;;; Commands:  LAZPANEL       open the panel
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
+;;;            LAZICON        report where the button picture came from
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -59101,7 +59102,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.4")
+(setq *lazpanel-version* "v1.5")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -59173,6 +59174,8 @@
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
+(setq lzp:*iconerr* nil)          ; why the last icon write failed
+(setq lzp:*icontype* nil)         ; which byte-array spelling worked
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -59388,26 +59391,61 @@
 ;;  is unavailable the write fails, the caller skips SetBitmaps, and
 ;;  the button keeps its default face.
 
+;; A byte array is the one piece of this that AutoLISP may refuse:
+;; vlax-make-safearray's documented type constants stop at
+;; vlax-vbVariant, and VT_UI1 (17) is not among them, so whether it is
+;; accepted is a property of the release rather than of the code.  Both
+;; spellings are tried before giving up, and which one worked is
+;; recorded for LAZICON to report.
+(defun lzp:bytearray (bytes / sa)
+  (setq sa (vl-catch-all-apply
+             'vlax-make-safearray
+             (list 17 (cons 0 (1- (length bytes))))))
+  (if (vl-catch-all-error-p sa)
+      (setq sa (vl-catch-all-apply
+                 'vlax-make-safearray
+                 (list vlax-vbInteger (cons 0 (1- (length bytes))))))
+      (setq lzp:*icontype* "VT_UI1"))
+  (cond
+    ((vl-catch-all-error-p sa) nil)
+    (t (if (not lzp:*icontype*) (setq lzp:*icontype* "vbInteger"))
+       (vlax-safearray-fill sa bytes)
+       sa)))
+
 (defun lzp:bmp-stream (st path bytes / sa)
+  (setq lzp:*icontype* nil)
+  (if (not (setq sa (lzp:bytearray bytes)))
+      (exit))                                 ; caught by the caller
   (vlax-put st 'Type 1)                       ; adTypeBinary
   (vlax-invoke st 'Open)
-  (setq sa (vlax-make-safearray 17            ; VT_UI1, a byte array
-                                (cons 0 (1- (length bytes)))))
-  (vlax-safearray-fill sa bytes)
   (vlax-invoke st 'Write sa)
   (vlax-invoke st 'SaveToFile path 2)         ; overwrite if present
   (vlax-invoke st 'Close)
   t)
 
 (defun lzp:bmp-write (path size grid / st ok)
+  (setq lzp:*iconerr* nil)
   (setq st (vl-catch-all-apply 'vlax-create-object (list "ADODB.Stream")))
   (cond
-    ((or (vl-catch-all-error-p st) (null st)) nil)
+    ((vl-catch-all-error-p st)
+     (setq lzp:*iconerr*
+           (strcat "ADODB.Stream would not start: "
+                   (vl-catch-all-error-message st)))
+     nil)
+    ((null st)
+     (setq lzp:*iconerr* "ADODB.Stream came back nil.")
+     nil)
     (t
      (setq ok (vl-catch-all-apply
                 'lzp:bmp-stream (list st path (lzp:bmp-bytes size grid))))
      (vl-catch-all-apply 'vlax-release-object (list st))
-     (if (vl-catch-all-error-p ok) nil path))))
+     (cond
+       ((vl-catch-all-error-p ok)
+        (setq lzp:*iconerr*
+              (strcat "writing " path " failed: "
+                      (vl-catch-all-error-message ok)))
+        nil)
+       (t path)))))
 
 ;; A STABLE path, not a fresh temp name each time: SetBitmaps stores the
 ;; path rather than the image, and AutoCAD re-reads it whenever the
@@ -59415,9 +59453,15 @@
 ;; would otherwise be pointing at a swept temp file for ever.
 (defun lzp:icon-path (name / d)
   (setq d (getvar "TEMPPREFIX"))
-  (if (and d (= (type d) 'STR) (/= d ""))
-      (strcat d "lazpanel-" name ".bmp")
-      (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp")))
+  (cond
+    ((and d (= (type d) 'STR) (/= d ""))
+     ;; TEMPPREFIX usually ends in a backslash and is not guaranteed to
+     ;; -- glue the name straight on and a folder called Temp becomes a
+     ;; file called Templazpanel-16.bmp, which fails silently later
+     (if (not (member (substr d (strlen d) 1) '("\\" "/")))
+         (setq d (strcat d "\\")))
+     (strcat d "lazpanel-" name ".bmp"))
+    (t (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp"))))
 
 ;; Both icon files; (small large) paths, or nil when they cannot be
 ;; written.
@@ -59492,7 +59536,10 @@
     (progn
       (if (and btn (setq paths (lzp:write-bmps)))
         (vl-catch-all-apply 'vla-setbitmaps
-                            (list btn (car paths) (cadr paths))))
+                            (list btn (car paths) (cadr paths)))
+        ;; one line, not a stack trace: the panel still works without a
+        ;; picture, but a blank button should not be a mystery
+        (princ "\n[lazpanel] button picture not applied - LAZICON says why."))
       (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
       (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
   tb)
@@ -59572,6 +59619,49 @@
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
+(defun c:LAZICON ( / paths tb btn r)
+  ;; The icon path is best effort and fails silently on purpose: a
+  ;; missing picture must never stop the panel working.  Silence is the
+  ;; right default and a poor answer to "why is my button blank", so
+  ;; this walks the same steps out loud.
+  (princ "\nLAZICON: where the button's picture comes from.")
+  (princ (strcat "\n  TEMPPREFIX : "
+                 (if (= (type (getvar "TEMPPREFIX")) 'STR)
+                     (getvar "TEMPPREFIX") "(not a string)")))
+  (princ (strcat "\n  small      : " (lzp:icon-path "16")))
+  (princ (strcat "\n  large      : " (lzp:icon-path "32")))
+  (setq paths (lzp:write-bmps))
+  (cond
+    (paths
+     (princ (strcat "\n  written    : yes, as a "
+                    (if lzp:*icontype* lzp:*icontype* "?")
+                    " array"))
+     (princ (strcat "\n  on disk    : "
+                    (if (findfile (car paths)) "found" "NOT FOUND")))
+     (cond
+       ((not (setq tb (vl-catch-all-apply 'lzp:toolbar-find nil)))
+        (princ "\n  toolbar    : not on screen - type LAZBUTTON first."))
+       ((vl-catch-all-error-p tb)
+        (princ (strcat "\n  toolbar    : " (vl-catch-all-error-message tb))))
+       (t
+        (setq btn (vl-catch-all-apply 'vla-item (list tb 0)))
+        (cond
+          ((vl-catch-all-error-p btn)
+           (princ (strcat "\n  button     : "
+                          (vl-catch-all-error-message btn))))
+          (t
+           (setq r (vl-catch-all-apply
+                     'vla-setbitmaps
+                     (list btn (car paths) (cadr paths))))
+           (princ (strcat "\n  SetBitmaps : "
+                          (if (vl-catch-all-error-p r)
+                              (vl-catch-all-error-message r)
+                              "accepted - the button should show it now"))))))))
+    (t
+     (princ (strcat "\n  written    : NO - "
+                    (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:commands))) " tools on the panel."))
@@ -59589,5 +59679,5 @@
 
 
 ;;; ======================================================================
-(princ (strcat "\nLAZPASS: calofin shared build loaded - 101 commands in one session."))
+(princ (strcat "\nLAZPASS: calofin shared build loaded - 102 commands in one session."))
 (princ)
