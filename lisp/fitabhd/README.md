@@ -86,15 +86,34 @@ Knowing the type does half the work:
   `Insquare` holds the template exactly and shows you the error
   instead. On a Grecian the four cut corners are not free walls: each
   **bisects its own corner** and all four keep one shared face,
-  however far the axis walls have swung. **On a Roman or Oval the
-  swing is the pool coming out wider at one end than the other** --
-  each side wall answers its own points and the end caps are fitted to
-  the body they actually sit on, rather than to a parallel one that
-  was never built. It is fitted inside the cap fit, not bolted on
-  after it, so the arcs never go stale against the walls: a 9" taper
-  goes from 2.3" of error down to 0.3", while a body that really is
-  parallel keeps its arcs where they were. A Round pool is not asked
-  -- a circle has no walls.
+  however far the axis walls have swung. A Round pool is not asked --
+  a circle has no walls.
+* **A Roman or Oval's side walls are never held parallel.** A gunite
+  shell slumps as it cures, so one wall very often slants away from
+  the other and the pool comes out wider at one end than the other.
+  Out of square, each side wall is fitted **on its own** -- neither is
+  tied to the other's direction -- and the two may lean up to
+  `fit:*cap-oos-max*` (10 degrees) apart, which is about as far as a
+  built pool goes before it stops being that shape. Past that the lean
+  is **clamped, never thrown away**: the points still know which way
+  the wall leans, only how far is in doubt, and the ones that no longer
+  reach say so in the report. Three things follow from it:
+  * each **end cap is fitted across the body at its own end**, so the
+    arc springs off the walls it really meets rather than a parallel
+    pair that was never built;
+  * it is fitted **inside** the cap fit, not bolted on after it, so
+    the arcs never go stale against walls that moved. A 9" taper goes
+    from 2.3" of error down to 0.3"; a wall leaning 8 degrees away
+    from its partner, from 17.9" down to 1.0";
+  * the **frame angle is fitted too**. The pool's rotation is found by
+    a vote of the survey edges, and when the two walls disagree every
+    edge pulls that vote towards its own direction -- so the axis
+    lands between them and the flat end of a Roman is drawn crooked.
+    The angle is swept a degree at a time and then bracketed, and the
+    fitted one is kept only when it beats the vote.
+
+  A body whose walls really are parallel still comes out parallel, and
+  the report says how far off parallel they came out.
 * **Straight walls may be bowed.** "Straight" is a drafting
   convention, not a site measurement: a gunite wall shot dead straight
   on the order sheet is very often a very long radius on the ground.
@@ -219,6 +238,17 @@ out.
   Diagonal B-D      36'-1 1/2"
   Out of square by  2.13 deg at the worst wall
 ```
+
+An arc-ended pool reports what an as-built of *that* type needs
+instead -- what it measures at each end, and how far its walls came
+out from parallel:
+
+```
+  Width at one end         14'-0 1/4"
+  Width at the other       12'-7 3/4"
+  Out of square by         1'-4 1/2" wider at one end
+  Side walls off parallel  8.01 deg
+```
  Keep it
 and it moves to the `POOL` layer in ByLayer colour, like ABHD's.
 Only FITABHD's own stamped objects are ever erased from `FGStep` or
@@ -263,7 +293,9 @@ both-ends evidence margin (`fit:*both-edge*`), the standard share of
 points allowed off (`fit:*miss-pct*`), what counts as a bow at all
 (`fit:*bow-min*`, `fit:*bow-max*`, `fit:*bow-max-frac*`,
 `fit:*bow-pts-min*`), how far out of square a wall may go
-(`fit:*oos-max*`, `fit:*oos-min*`), how far an arc may be broken up
+(`fit:*oos-max*`, `fit:*oos-min*`), how far a Roman or Oval's side
+walls may lean and diverge (`fit:*cap-oos-max*`), how far an arc may
+be broken up
 (`fit:*arc-max*`, `fit:*arc-pts-min*`) and the K/L/M offset
 (`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
@@ -279,11 +311,13 @@ mirror agree on the ones that shape the fit.
   neighbours. A wall that is genuinely curved is what the bow question
   is for; a pool whose walls need more than 5 degrees of swing is not
   the type it was declared as.
-* Out of square on a Roman or Oval is a **taper**, not a bend: the two
-  side walls may converge or spread, and each end cap is fitted across
-  the body width at its own end. A Round pool is not asked -- what
-  would be out of square on a circle is a cave-in, which the arc chain
-  already covers.
+* Out of square on a Roman or Oval is a **lean**, not a bend: each
+  side wall stays a straight line (or a bowed one, if bows are on) and
+  simply no longer runs parallel to its partner. The 10-degree limit
+  is on both the lean of one wall and the divergence of the pair; a
+  pool past it is not this shape and will show up as points beyond
+  tolerance. A Round pool is not asked -- what would be out of square
+  on a circle is a cave-in, which the arc chain already covers.
 * An arc chain is reported, not snapped: each arc's radius is whatever
   the shell made it. The nominal single-arc radius is still what the
   end dimension reports.
