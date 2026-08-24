@@ -1,13 +1,13 @@
 """Form-driven POOL: prove the palette path draws what the command line
 draws, including the side-view depths.
 
-KNOWN FAILING as of the branch consolidation: this file was written
-against calofin_net's forked copy of POOL.LSP. lisp/pool/POOL.LSP is
-now the canonical, actively-developed version instead (see the repo
-README), and its prompt sequence has since diverged from what the
-palette's LispBridge expects. Expect this to fail until the palette is
-reconciled with the canonical POOL.LSP - that's tracked work, not a
-regression from the restructure.
+This file was written against the contract before the contract was
+built: pool:*form*, pool:run-with-answers and pool:fkeyof existed in
+ui/PLAN.md, in STANDARDS.md and here, and in no .lsp anywhere. It was
+the specification, and it failed for as long as the receiving end was
+missing. That end is now in lisp/pool/POOL.LSP and this passes at both
+tiers, so a form and the command line have to keep drawing the same
+pool from here on.
 
 POOL is a harder case than SPA. Its plan chain (H G F E, or E2 F2 G F1
 E1 on a Sport) comes through pool:askseqb and is keyed like SPA's, but

@@ -177,9 +177,11 @@ python3 tests/test_shared.py    # the whole grouped build in one session,
                                 # and the one-file bundle
 ```
 
-`tests/test_pool_form.py` and `tests/test_spa_form.py` fail on a clean
-checkout. That is a known open gap: the palette's `PoolFormView`/`SpaFormView`
-were built against an earlier fork of POOL/SPA with a different prompt
-sequence, and `lisp/pool/POOL.LSP` / `lisp/spa/SPA.LSP` are the canonical
-versions. Don't treat those two failures as something your change caused, and
-don't "fix" them by editing the canonical routines to match the palette.
+`tests/test_spa_form.py` fails on a clean checkout. That is a known open
+gap: a form can answer SPA's questions only once SPA has the answer store
+POOL now has (`spa:*form*`, the hooks in its ask helpers). Don't treat that
+failure as something your change caused, and don't "fix" it by editing the
+canonical routine to match the palette.
+
+`tests/test_pool_form.py` used to be listed here too and now passes at both
+tiers - if it starts failing, that IS your change.

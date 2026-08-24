@@ -155,4 +155,33 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:ABFINDVER'):
 print('  %d commands from one APPLOAD, %d file(s) held back'
       % (len(bundle_cmds), len(HELD)))
 
+# The bundle checks its own claim.  The count used to be baked in at
+# build time, so a build that half loaded still announced every command
+# it was BUILT with -- and a command that never arrived is exactly what
+# a greyed button on the panel means.
+want = bvm.globals.get('lazpass:*want*')
+if not want:
+    fail('the bundle does not declare lazpass:*want*, so its load message '
+         'is an unchecked claim')
+want = set(str(x).lower() for x in want)
+if want != bundle_cmds:
+    fail('the bundle announces a different command set than it defines: %s'
+         % sorted(want ^ bundle_cmds))
+if bvm.globals.get('lazpass:*missing*'):
+    fail('the bundle reported commands missing on a clean load: %s'
+         % bvm.globals.get('lazpass:*missing*'))
+# and it must NAME what is missing rather than just counting
+mvm = VM()
+mvm.load(BUNDLE)
+mvm.loads('(setq c:OASIS nil)'
+          '(setq lazpass:*missing* nil)'
+          '(foreach n lazpass:*want*'
+          '  (if (not (eval (read (strcat "C:" n))))'
+          '    (setq lazpass:*missing* (cons n lazpass:*missing*))))')
+gone = [str(x) for x in (mvm.globals.get('lazpass:*missing*') or [])]
+if gone != ['OASIS']:
+    fail('the bundle self-check did not notice a missing command: %r' % gone)
+print('  and it checks its own claim: %d names declared, missing ones named'
+      % len(want))
+
 print('ALL SHARED-BUILD CHECKS PASSED')
