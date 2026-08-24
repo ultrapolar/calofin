@@ -50,6 +50,14 @@
 ;;;     to that gentler turn - and kept only when it beats the sharp
 ;;;     outline on the corner points by a clear margin, so noise never
 ;;;     invents a radius on a genuinely sharp pool.
+;;;   * A ROMAN OR OVAL'S SIDE WALLS ARE NOT HELD PARALLEL.  A gunite
+;;;     shell slumps as it cures, so one wall very often slants away
+;;;     from the other; out of square, each answers its own points and
+;;;     the two may lean up to fit:*cap-oos-max* (10 degrees) apart.
+;;;     Each end cap is then fitted across the body AT ITS OWN END, and
+;;;     the frame angle is fitted too - the edge vote cannot find the
+;;;     body's axis when the walls disagree, and a crooked axis draws a
+;;;     crooked flat end.
 ;;;   * Roman and Oval ends are found, not declared: square-end and
 ;;;     arc-end placements (one end and both ends) all compete, and a
 ;;;     both-ends fit must beat a single-ended one by a clear margin -
@@ -86,7 +94,7 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.5")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.6")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -155,6 +163,16 @@
                                    ; template direction (5 degrees):
                                    ; further than that and the survey
                                    ; is not this type of pool at all
+(setq fit:*cap-oos-max* (/ pi 18.0)); how far a Roman or Oval side
+                                   ; wall may lean, and how far the two
+                                   ; may diverge from each other (10
+                                   ; degrees).  An arc-ended shell
+                                   ; slumps as it cures and the walls
+                                   ; slant away, so they are NEVER held
+                                   ; parallel the way a rectangle's
+                                   ; template holds its own: they are
+                                   ; two independent walls that happen
+                                   ; to start out parallel
 (setq fit:*arc-max*     6)         ; most arcs one end may be broken
                                    ; into when a single radius cannot
                                    ; hold it
@@ -1314,6 +1332,47 @@
 (defun fit:cap-half (prm x)
   (/ (- (fit:wall-y prm "t" x) (fit:wall-y prm "b" x)) 2.0))
 
+;; A side wall's own least-squares line through the points that chose
+;; it, as (base mid slope): its height at MID, and how that height
+;; rises with x.
+(defun fit:cap-wall (wpts / n sx sy num den mid base p)
+  (setq n   (length wpts)
+        sx  0.0
+        sy  0.0
+        num 0.0
+        den 0.0)
+  (foreach p wpts (setq sx (+ sx (car p)) sy (+ sy (cadr p))))
+  (setq mid (/ sx n) base (/ sy n))
+  (foreach p wpts
+    (setq num (+ num (* (- (car p) mid) (cadr p)))
+          den (+ den (* (- (car p) mid) (- (car p) mid)))))
+  (list base mid (if (> den 1.0e-9) (/ num den) 0.0)))
+
+;; The angles the two side walls of an arc-ended body may really take.
+;; They are not held parallel: a gunite shell slumps as it cures, so
+;; one wall very often slants away from the other, and forcing them
+;; parallel would push that lean straight back into the points.  Two
+;; limits, both fit:*cap-oos-max* (10 degrees): how far one wall may
+;; lean, and how far the two may diverge from each other.  Past either
+;; the offender is CLAMPED, never zeroed - the points still know which
+;; way the wall leans, only how far is in doubt.
+(defun fit:cap-slopes (sb st / m ab at dv mid)
+  (setq m  fit:*cap-oos-max*
+        ab (max (- m) (min m (atan sb)))
+        at (max (- m) (min m (atan st)))
+        dv (- at ab))
+  (if (> (abs dv) m)
+    (setq mid (/ (+ ab at) 2.0)
+          dv  (if (> dv 0.0) m (- m))
+          ab  (- mid (/ dv 2.0))
+          at  (+ mid (/ dv 2.0))))
+  (list (cal:tan ab) (cal:tan at)))
+
+;; How far off parallel the two side walls came out, in radians.
+(defun fit:cap-divergence (prm)
+  (- (atan (cond ((fit:pget prm 'st)) (0.0)))
+     (atan (cond ((fit:pget prm 'sb)) (0.0)))))
+
 ;; Half-height of the spring points where the end arc leaves the end
 ;; line, clamped inside the side walls.
 (defun fit:endcap-h (re cx r by ty / d)
@@ -1458,8 +1517,7 @@
 ;; parameter assoc list.
 (defun fit:fit-endcap (pts kind both oos / bb x0 y0 x1 y1 w prm r0 yb yt
                                           cy cy1 cy2 byr tyr byl tyl
-                                          inband wpts key skey mid num den
-                                          slope base
+                                          inband lb lt sl
                                        xr xl bpts tpts lpts a1pts a2pts e1pts
                                        e2pts p darc1 darc2 dbot dtop dlft
                                        dend1 dend2 h1 h2 best bd cand cc
@@ -1551,33 +1609,43 @@
         ((eq best 'K-END1) (setq e1pts (cons p e1pts)))
         ((eq best 'K-END2) (setq e2pts (cons p e2pts)))))
     ;; wall updates: a plain mean while the walls are held parallel,
-    ;; a fitted line once the pool may be out of square - the swing has
-    ;; to be in here, with the caps refitting against it each round,
-    ;; not bolted on after the caps have settled
-    (foreach q (list (list bpts 'By 'sb) (list tpts 'Ty 'st))
-      (setq wpts (car q) key (cadr q) skey (caddr q))
-      (if wpts
-        (if (not oos)
+    ;; two INDEPENDENT lines once the pool may be out of square - the
+    ;; swing has to be in here, with the caps refitting against it each
+    ;; round, not bolted on after the caps have settled.  Each wall
+    ;; answers its own points and neither is tied to the other's
+    ;; direction; fit:cap-slopes only says how far either may go.
+    (if (not oos)
+      (progn
+        (if bpts
           (progn
             (setq ssum 0.0)
-            (foreach p wpts (setq ssum (+ ssum (cadr p))))
-            (setq prm (fit:pput prm key (/ ssum (length wpts)))))
+            (foreach p bpts (setq ssum (+ ssum (cadr p))))
+            (setq prm (fit:pput prm 'By (/ ssum (length bpts))))))
+        (if tpts
           (progn
             (setq ssum 0.0)
-            (foreach p wpts (setq ssum (+ ssum (car p))))
-            (setq mid (/ ssum (length wpts)) num 0.0 den 0.0 base 0.0)
-            (foreach p wpts
-              (setq num  (+ num (* (- (car p) mid) (cadr p)))
-                    den  (+ den (* (- (car p) mid) (- (car p) mid)))
-                    base (+ base (cadr p))))
-            (setq slope (if (> den 1.0e-9) (/ num den) 0.0)
-                  base  (/ base (length wpts)))
-            (if (> (abs (atan slope)) fit:*oos-max*) (setq slope 0.0))
-            (setq prm (fit:pput prm skey slope)
-                  prm (fit:pput prm key
-                                (+ base (* slope
-                                           (- (fit:pget prm 'xm)
-                                              mid)))))))))
+            (foreach p tpts (setq ssum (+ ssum (cadr p))))
+            (setq prm (fit:pput prm 'Ty (/ ssum (length tpts)))))))
+      (progn
+        (setq lb (if bpts (fit:cap-wall bpts))
+              lt (if tpts (fit:cap-wall tpts))
+              sl (fit:cap-slopes
+                   (if lb (caddr lb) (cond ((fit:pget prm 'sb)) (0.0)))
+                   (if lt (caddr lt) (cond ((fit:pget prm 'st)) (0.0))))
+              prm (fit:pput prm 'sb (car sl))
+              prm (fit:pput prm 'st (cadr sl)))
+        ;; the offset is the fitted line read at the body's middle, so
+        ;; it has to follow the slope the clamp actually allowed
+        (if lb
+          (setq prm (fit:pput prm 'By
+                              (+ (car lb)
+                                 (* (car sl) (- (fit:pget prm 'xm)
+                                                (cadr lb)))))))
+        (if lt
+          (setq prm (fit:pput prm 'Ty
+                              (+ (car lt)
+                                 (* (cadr sl) (- (fit:pget prm 'xm)
+                                                 (cadr lt)))))))))
     (if (and lpts (not both))
       (progn
         (setq ssum 0.0)
@@ -1961,6 +2029,70 @@
 ;; Order, frame, and try every placement the type allows; the
 ;; lowest-RMS one wins.  Returns the winning result with its frame
 ;; recorded; the outline stays in frame coordinates.
+;; ---- fitting the frame angle of an arc-ended body --------------------
+;; The frame is the body's own axis, and the edge vote cannot find it
+;; once the two side walls lean by different amounts: every edge pulls
+;; the vote towards its own direction, so the axis lands between the
+;; walls and the flat end is drawn crooked.  The walls do not care -
+;; each carries its own slope - but the end does, so the angle is
+;; fitted too, and kept only if it beats the voted one.
+
+;; One trial: the fit at angle A, as (rms res worst).
+(defun fit:cap-at (dpts ptype treat both mirror a / fpts res dev)
+  (setq fpts (fit:to-frame dpts a mirror)
+        res  (fit:fit-config ptype fpts treat both T)
+        dev  (fit:outline-dev fpts (fit:res-fsegs res)))
+  (list (cadr dev) res (car dev)))
+
+;; A one-degree sweep to find the basin, then golden section inside it.
+(defun fit:refine-cap-angle (dpts ptype treat best / both mirror step n k
+                                   a ba got bgot gr lo hi x1 x2 f1 f2 i)
+  (setq both   (fit:rget best 'both)
+        mirror (fit:rget best 'mirror)
+        step   (/ pi 180.0)
+        n      (fix (+ 0.5 (/ fit:*cap-oos-max* step)))
+        ba     (fit:rget best 'angle)
+        bgot   (fit:cap-at dpts ptype treat both mirror ba)
+        k      (- n))
+  (while (<= k n)
+    (if (/= k 0)
+      (progn
+        (setq a   (+ (fit:rget best 'angle) (* k step))
+              got (fit:cap-at dpts ptype treat both mirror a))
+        (if (< (car got) (car bgot)) (setq ba a bgot got))))
+    (setq k (1+ k)))
+  (setq gr 0.6180339887
+        lo (- ba step)
+        hi (+ ba step)
+        x1 (- hi (* gr (- hi lo)))
+        x2 (+ lo (* gr (- hi lo)))
+        f1 (fit:cap-at dpts ptype treat both mirror x1)
+        f2 (fit:cap-at dpts ptype treat both mirror x2)
+        i  0)
+  (while (< i 16)
+    (if (<= (car f1) (car f2))
+      (setq hi x2                      ; shrink from the top
+            x2 x1
+            f2 f1
+            x1 (- hi (* gr (- hi lo)))
+            f1 (fit:cap-at dpts ptype treat both mirror x1))
+      (setq lo x1 x1 x2 f1 f2
+            x2 (+ lo (* gr (- hi lo)))
+            f2 (fit:cap-at dpts ptype treat both mirror x2)))
+    (setq i (1+ i)))
+  (setq a   (/ (+ lo hi) 2.0)
+        got (fit:cap-at dpts ptype treat both mirror a))
+  (if (>= (car got) (car bgot)) (setq a ba got bgot))
+  (if (>= (car got) (fit:rget best 'rms))
+    best
+    (progn
+      (setq best (cadr got)
+            best (fit:rput best 'angle a)
+            best (fit:rput best 'mirror mirror)
+            best (fit:rput best 'worst (caddr got))
+            best (fit:rput best 'rms (car got)))
+      best)))
+
 (defun fit:fit-type (pts ptype treat oos / dpts prm tour a0 best cfg a fpts
                                        res dev worst rms edge)
   (setq dpts (cal:dedupe pts fit:*exact-eps*))
@@ -2013,6 +2145,10 @@
                 res  (fit:rput res 'worst (car dev))
                 res  (fit:rput res 'rms (cadr dev))
                 best res)))
+      ;; an arc-ended body whose walls lean unequally needs its frame
+      ;; angle fitted as well, or the flat end comes out crooked
+      (if (and oos best (eq (fit:rget best 'kind) 'cap))
+        (setq best (fit:refine-cap-angle dpts ptype treat best)))
       best)))
 
 ;; ---- nice dimensions -------------------------------------------------
@@ -2662,7 +2798,13 @@
                     (strcat (fit:ftin (abs (* 2.0
                                               (- (fit:cap-half prm xr)
                                                  (fit:cap-half prm xl)))))
-                            " wider at one end")))))
+                            " wider at one end"))
+              (cons "Side walls off parallel"
+                    (strcat (rtos (abs (/ (* 180.0
+                                             (fit:cap-divergence prm))
+                                          pi))
+                                  2 2)
+                            " deg")))))
     (fit:square-lines-poly res)))
 
 (defun fit:square-lines-poly (res / dirs offs corners n i j out worst sw
@@ -3240,8 +3382,9 @@
                           " - is the pool in-square, or out of square?"))
            (princ "\n  Outofsquare lets each wall swing a little to honour the")
            (princ "\n  points; Insquare holds the template true and shows you")
-           (princ "\n  the error instead.  On a Roman or Oval that swing is")
-           (princ "\n  the pool coming out wider at one end than the other.")
+           (princ "\n  the error instead.  A Roman or Oval's two side walls")
+           (princ "\n  are not held parallel at all: a shell slumps as it")
+           (princ "\n  cures, so one very often slants away from the other.")
            (setq v (cal:askkw "Is the pool in-square or out-of-square?"
                               "Insquare Outofsquare"
                               "Insquare/Outofsquare"

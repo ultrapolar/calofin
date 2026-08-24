@@ -58,6 +58,13 @@ BOW_PTS_MIN = 4                    # fit:*bow-pts-min*
 OOS_MAX = math.pi / 36.0           # fit:*oos-max*  (5 degrees: a wall
                                    # swung further than this is not the
                                    # template's wall any more)
+CAP_OOS_MAX = math.pi / 18.0       # fit:*cap-oos-max*  (10 degrees: how
+                                   # far a Roman or Oval side wall may
+                                   # lean, and how far the two may
+                                   # diverge - an arc-ended shell slumps
+                                   # as it cures and the walls slant
+                                   # away, so they are never held
+                                   # parallel)
 ARC_MAX = 6                        # fit:*arc-max*  (most arcs one end
                                    # may be broken into)
 ARC_PTS_MIN = 3                    # fit:*arc-pts-min*  (points each arc
@@ -835,6 +842,41 @@ def cap_half(prm, x):
     return (wall_y(prm, "t", x) - wall_y(prm, "b", x)) / 2.0
 
 
+def cap_wall(wpts):
+    """A side wall's own least-squares line through the points that
+    chose it, as (base, mid, slope)."""
+    n = len(wpts)
+    mid = sum(p[0] for p in wpts) / n
+    base = sum(p[1] for p in wpts) / n
+    num = sum((p[0] - mid) * p[1] for p in wpts)
+    den = sum((p[0] - mid) ** 2 for p in wpts)
+    return base, mid, (num / den if den > 1.0e-9 else 0.0)
+
+
+def cap_slopes(sb, st):
+    """The angles the two side walls of an arc-ended body may really
+    take.  They are not held parallel: a gunite shell slumps as it
+    cures, so one wall very often slants away from the other, and
+    forcing them parallel would push that lean back into the points.
+    Two limits, both CAP_OOS_MAX: how far one wall may lean, and how
+    far the two may diverge from each other.  Past either the offender
+    is CLAMPED, never zeroed."""
+    m = CAP_OOS_MAX
+    ab = max(-m, min(m, math.atan(sb)))
+    at = max(-m, min(m, math.atan(st)))
+    dv = at - ab
+    if abs(dv) > m:
+        mid = (ab + at) / 2.0
+        dv = m if dv > 0.0 else -m
+        ab, at = mid - dv / 2.0, mid + dv / 2.0
+    return math.tan(ab), math.tan(at)
+
+
+def cap_divergence(prm):
+    """How far off parallel the two side walls came out, in radians."""
+    return math.atan(prm.get("st", 0.0)) - math.atan(prm.get("sb", 0.0))
+
+
 def endcap_h(re, cx, cy, r, by, ty):
     """Half-height of the spring points where the end arc leaves the
     end line, clamped inside the side walls."""
@@ -1019,21 +1061,26 @@ def fit_endcap(pts, kind, both, oos=False):
                     cand.append((d_end2, end2))
             cand.sort(key=lambda cv: cv[0])
             cand[0][1].append(p)
-        for wpts, key, skey in ((bot, "By", "sb"), (top, "Ty", "st")):
-            if not wpts:
-                continue
-            if not oos:
-                prm[key] = sum(p[1] for p in wpts) / len(wpts)
-                continue
-            mid = sum(p[0] for p in wpts) / len(wpts)
-            num = sum((p[0] - mid) * p[1] for p in wpts)
-            den = sum((p[0] - mid) ** 2 for p in wpts)
-            slope = num / den if den > 1.0e-9 else 0.0
-            if abs(math.atan(slope)) > OOS_MAX:
-                slope = 0.0
-            base = sum(p[1] for p in wpts) / len(wpts)
-            prm[skey] = slope
-            prm[key] = base + slope * (prm["xm"] - mid)
+        # two INDEPENDENT wall lines once the pool may be out of
+        # square: each answers its own points and neither is tied to
+        # the other's direction; cap_slopes only says how far either
+        # may go
+        if not oos:
+            for wpts, key in ((bot, "By"), (top, "Ty")):
+                if wpts:
+                    prm[key] = sum(p[1] for p in wpts) / len(wpts)
+        else:
+            lb = cap_wall(bot) if bot else None
+            lt = cap_wall(top) if top else None
+            sb, st = cap_slopes(lb[2] if lb else prm.get("sb", 0.0),
+                                lt[2] if lt else prm.get("st", 0.0))
+            prm["sb"], prm["st"] = sb, st
+            # the offset is the fitted line read at the body's middle,
+            # so it has to follow the slope the clamp actually allowed
+            if lb:
+                prm["By"] = lb[0] + sb * (prm["xm"] - lb[1])
+            if lt:
+                prm["Ty"] = lt[0] + st * (prm["xm"] - lt[1])
         if lft and not both:
             prm["Lx"] = sum(p[0] for p in lft) / len(lft)
         cy1 = cap_cy(prm, prm["cx"])
@@ -1328,6 +1375,58 @@ def configs_for(ptype):
     return [(0.0, False, False)]
 
 
+def refine_cap_angle(dpts, ptype, treat, best):
+    """Fit the FRAME ANGLE of an arc-ended body, not just its walls.
+
+    The frame is the body's own axis, and the edge vote cannot find it
+    once the two side walls lean by different amounts: every edge pulls
+    the vote towards its own direction, so the axis lands between the
+    walls and the flat end is drawn crooked.  The walls do not care -
+    each has its own slope - but the end does, so the angle is fitted
+    too: a one-degree sweep to find the basin, then golden section
+    inside it.  Kept only if it beats the voted angle."""
+    both, mirror = best.get("both"), best["mirror"]
+
+    def at(a):
+        fpts = to_frame(dpts, a, mirror)
+        res = fit_config(ptype, fpts, treat, both, True)
+        worst, rms = outline_dev(fpts, res["segs"])
+        return rms, res, worst
+
+    step = math.pi / 180.0
+    n = int(round(CAP_OOS_MAX / step))
+    ba, (brms, bres, bworst) = best["angle"], at(best["angle"])
+    for k in range(-n, n + 1):
+        if k == 0:
+            continue
+        a = best["angle"] + k * step
+        rms, res, worst = at(a)
+        if rms < brms:
+            ba, brms, bres, bworst = a, rms, res, worst
+    gr = 0.6180339887
+    lo, hi = ba - step, ba + step
+    x1 = hi - gr * (hi - lo)
+    x2 = lo + gr * (hi - lo)
+    f1, f2 = at(x1), at(x2)
+    for _ in range(16):
+        if f1[0] <= f2[0]:
+            hi, x2, f2 = x2, x1, f1
+            x1 = hi - gr * (hi - lo)
+            f1 = at(x1)
+        else:
+            lo, x1, f1 = x1, x2, f2
+            x2 = lo + gr * (hi - lo)
+            f2 = at(x2)
+    a = (lo + hi) / 2.0
+    rms, res, worst = at(a)
+    if rms >= brms:
+        a, rms, res, worst = ba, brms, bres, bworst
+    if rms >= best["rms"]:
+        return best
+    res.update({"angle": a, "mirror": mirror, "worst": worst, "rms": rms})
+    return res
+
+
 def fit_type(pts, ptype, treat, oos=False):
     """Order, frame, and try every placement the type allows; the
     lowest-RMS one wins.  Returns the winning result dict with its
@@ -1369,6 +1468,10 @@ def fit_type(pts, ptype, treat, oos=False):
         res.update({"angle": a, "mirror": False,
                     "worst": worst, "rms": rms})
         best = res
+    # an arc-ended body whose walls lean unequally needs its frame
+    # angle fitted as well, or the flat end comes out crooked
+    if oos and best is not None and best["kind"] == "cap":
+        best = refine_cap_angle(dpts, ptype, treat, best)
     return best
 
 
@@ -2100,6 +2203,33 @@ def tapered_cap(taper, kind):
     return endcap_segs(prm, "ROman", False), False
 
 
+def leaning_cap(kind, deg_b, deg_t):
+    """A cap body whose two side walls lean by their OWN angles - a
+    shell that slumped to one side, which is what an as-built arc-ended
+    pool does as it cures.  Each end is again the arc that fits between
+    the walls at that end, so the fixture is a shape that can exist."""
+    sb, st = math.tan(math.radians(deg_b)), math.tan(math.radians(deg_t))
+    if kind == "Oval":
+        prm = {"By": 0.0, "Ty": 168.0, "Lx": 0.0, "xm": 192.0,
+               "cx": 300.0, "cx2": 84.0, "sb": sb, "st": st}
+        prm["r"] = cap_half(prm, prm["cx"])
+        prm["Re"] = prm["cx"]
+        prm["r2"] = cap_half(prm, prm["cx2"])
+        prm["Re2"] = prm["cx2"]
+        return endcap_segs(prm, "Oval", True)
+    prm = {"By": -96.0, "Ty": 96.0, "Lx": 0.0, "cx": 300.0, "r": 120.0,
+           "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
+    prm["xm"] = (prm["Lx"] + prm["Re"]) / 2.0
+    prm["sb"], prm["st"] = sb, st
+    return endcap_segs(prm, "ROman", False)
+
+
+def cap_divergence_of(res):
+    """How far off parallel the fitted side walls came out, in
+    degrees."""
+    return math.degrees(cap_divergence(res["prm"]))
+
+
 def cap_taper_of(res):
     """How much wider one end came out than the other."""
     p = res["prm"]
@@ -2137,6 +2267,45 @@ def test_a_true_cap_body_stays_parallel():
         assert abs(cap_taper_of(res)) < 0.5, (kind, cap_taper_of(res))
         assert res["worst"] < 0.8, (kind, res["worst"])
     print("  a cap body whose walls really are parallel stays parallel")
+
+
+def test_side_walls_need_not_be_parallel():
+    # a shell that slumped to one side: one wall leans 8 degrees away
+    # from the other, well past anything a rectangle's template would
+    # allow, and still inside what an arc-ended pool really does
+    for kind, place_at in (("Oval", (40.0, -200.0, 100.0)),
+                           ("ROman", (197.0, 500.0, 300.0))):
+        segs = leaning_cap(kind, 0.0, 8.0)
+        sp = 14.0 if kind == "Oval" else 22.0
+        pts = survey(place(segs, *place_at), sp, 0.25, seed=907)
+        held = fit_and_snap(pts, kind, "Square", 1.0, 0.15, False, False)
+        swung = fit_and_snap(pts, kind, "Square", 1.0, 0.15, True, False)
+        assert held["worst"] > 5.0, (kind, held["worst"])
+        assert swung["worst"] < 1.0, (kind, swung["worst"])
+        assert close(cap_divergence_of(swung), 8.0, 0.6), \
+            (kind, cap_divergence_of(swung))
+        print("  %-5s one wall leaning 8 deg: %.2f\" -> %.2f\" "
+              "(fitted %.1f deg apart)"
+              % (kind, held["worst"], swung["worst"],
+                 cap_divergence_of(swung)))
+
+
+def test_walls_further_apart_than_the_limit_are_clamped():
+    # 16 degrees apart is not a pool that slumped, it is a shape this
+    # template cannot hold: the lean is clamped at the limit rather
+    # than thrown away, and the points that no longer fit say so
+    for kind, place_at in (("Oval", (40.0, -200.0, 100.0)),
+                           ("ROman", (197.0, 500.0, 300.0))):
+        segs = leaning_cap(kind, -8.0, 8.0)
+        sp = 14.0 if kind == "Oval" else 22.0
+        pts = survey(place(segs, *place_at), sp, 0.25, seed=907)
+        res = fit_and_snap(pts, kind, "Square", 1.0, 0.15, True, False)
+        dv = abs(cap_divergence_of(res))
+        assert dv <= math.degrees(CAP_OOS_MAX) + 1.0e-6, (kind, dv)
+        assert dv > math.degrees(CAP_OOS_MAX) - 1.5, (kind, dv)
+        assert res["worst"] > 2.0, (kind, res["worst"])
+        print("  %-5s 16 deg apart: clamped to %.1f deg, worst point "
+              "%.2f\" off" % (kind, dv, res["worst"]))
 
 
 def test_true_l():
@@ -2636,6 +2805,25 @@ def test_lisp_engine_matches_mirror():
     assert "Diagonal A-C" in labels and "Diagonal B-D" in labels
     assert labels[-1] == "Out of square by", labels
 
+    # a Roman whose walls lean apart: the independent wall fit, the
+    # clamp and the frame-angle search, all through the .lsp
+    pts = survey(place(leaning_cap("ROman", 0.0, 8.0), 197.0, 500.0,
+                       300.0), 22.0, 0.25, seed=907)
+    py = fit_and_snap(pts, "ROman", "Square", 1.0, MISS_PCT, True, False)
+    vm = vmfit(pts, "ROman", "Square", MISS_PCT, True, False)
+    lw = vm.loads("(fit:rget fit-test-res 'worst)")
+    assert abs(lw - py["worst"]) < 1.0e-6, (lw, py["worst"])
+    la = vm.loads("(fit:rget fit-test-res 'angle)")
+    assert abs(la - py["angle"]) < 1.0e-9, (la, py["angle"])
+    for k in ("sb", "st"):
+        lv = vm.loads("(fit:pget (fit:rget fit-test-res 'prm) '%s)" % k)
+        assert abs(lv - py["prm"][k]) < 1.0e-9, (k, lv, py["prm"][k])
+    ld = vm.loads("(fit:cap-divergence (fit:rget fit-test-res 'prm))")
+    assert abs(ld - cap_divergence(py["prm"])) < 1.0e-9, ld
+    assert abs(math.degrees(ld) - 8.0) < 0.6, math.degrees(ld)
+    labels = [str(x.a) for x in vm.loads("(fit:square-lines fit-test-res)")]
+    assert labels[-1] == "Side walls off parallel", labels
+
     # a caved end, and a caved round pool: the arc-chain pass end to end
     pts = caved_oval(6.0)
     py = fit_and_snap(pts, "Oval", "Square", 1.0, MISS_PCT, False, False)
@@ -2810,6 +2998,8 @@ def test_lisp_file_is_well_formed():
                "fit:bow-bulge", "fit:fit-cap-bows",
                "fit:apply-refinement", "fit:square-lines-poly",
                "fit:wall-y", "fit:cap-cy", "fit:cap-half",
+               "fit:cap-wall", "fit:cap-slopes", "fit:cap-divergence",
+               "fit:cap-at", "fit:refine-cap-angle",
                "fit:held-worst", "fit:snap-ok", "fit:on-eps",
                "fit:ask-settings", "fit:omit-choose", "fit:omit-loop",
                "fit:active", "fit:bow-lines",
@@ -2875,6 +3065,9 @@ def test_constants_match_lisp():
     assert int(setq_value("arc-pts-min")) == ARC_PTS_MIN
     m = re.search(r"\(setq\s+fit:\*oos-max\*\s+\(/\s+pi\s+([0-9.]+)\)", src)
     assert m and abs(math.pi / float(m.group(1)) - OOS_MAX) < 1e-12
+    m = re.search(r"\(setq\s+fit:\*cap-oos-max\*\s+\(/\s+pi\s+([0-9.]+)\)",
+                  src)
+    assert m and abs(math.pi / float(m.group(1)) - CAP_OOS_MAX) < 1e-12
     assert '"Insquare Outofsquare"' in src, \
         "the squareness question no longer uses POOL's vocabulary"
     assert int(setq_value("icp-iters")) == ICP_ITERS
@@ -2917,6 +3110,8 @@ def main():
     test_out_of_square_l_and_grecian()
     test_a_tapered_cap_body_is_honoured()
     test_a_true_cap_body_stays_parallel()
+    test_side_walls_need_not_be_parallel()
+    test_walls_further_apart_than_the_limit_are_clamped()
     test_percent_buys_nice_dimensions()
     test_snap_never_pushes_past_the_tolerance()
     test_bowed_walls_are_found()
