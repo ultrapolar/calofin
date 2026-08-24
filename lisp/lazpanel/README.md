@@ -24,14 +24,28 @@ prints the loaded version.
 **The screen button.** Loading the file also puts a one-button toolbar
 named "LazPanel" on screen -- drag it anywhere or dock it like any
 toolbar; clicking it opens the panel. It is created through the
-ActiveX menu API (no CUI file to install) the first time no toolbar of
-that name exists, and its icon -- an orange L, a placeholder until
-there is a real logo -- is generated as 16x16 and 32x32 `.bmp` files
-in the temp folder. If the toolbar gets closed or lost, `LAZBUTTON`
-brings it back. AutoLISP can only write text-mode files, so the
-bitmaps are built so that no byte equals 10 (or 13): a newline byte
-would be translated in transit and shear the image. The test suite
-pins that invariant.
+ActiveX menu API (no CUI file to install) when no toolbar of that name
+exists yet, and its icon -- an orange L, a placeholder until there is
+a real logo -- is generated as 16x16 and 32x32 `.bmp` files. If the
+toolbar gets closed or lost, `LAZBUTTON` brings it back; a toolbar
+that is merely hidden is re-shown rather than duplicated, and one that
+you have docked or moved is left where you put it.
+
+Two details worth knowing, because both were wrong first time round:
+
+- **The icon is written through an `ADODB.Stream` in binary mode, not
+  with `write-char`.** AutoLISP writes text-mode files and has no NUL
+  in its character model at all -- `(chr 0)` is the empty string --
+  while a 24-bit BMP header carries 43 NULs before the first pixel.
+  There is no arrangement of this format the language's own file
+  output could produce. COM is not a new dependency: the toolbar the
+  icon goes on is built through the same ActiveX API, so a session
+  that cannot reach COM has no button to decorate.
+- **The icon files live at a fixed name under `TEMPPREFIX` and are
+  rewritten on every load**, because `SetBitmaps` stores the *path*,
+  not the picture, and AutoCAD re-reads it whenever the button
+  redraws. A toolbar that survives into a later session would
+  otherwise be pointing at a swept temp file.
 
 The point of the design is **zero install**: the dialog is plain DCL,
 and LAZPANEL.lsp writes its own `.dcl` into the system temp folder each
@@ -49,10 +63,11 @@ re-summon the button.
 
 ## Assumptions
 
-- The system temp folder is writable (`vl-filename-mktemp` decides
-  where it is). If it is not, the panel reports that it could not write
-  the dialog file and leaves the session untouched; the button skips
-  its icon.
+- The system temp folder is writable -- `vl-filename-mktemp` decides
+  where the dialog goes, `TEMPPREFIX` where the icons go. If it is not
+  writable, the panel reports that it could not write the dialog file
+  and leaves the session untouched; the button simply keeps its
+  default face.
 - The screen button needs the ActiveX menu API (COM). Where it is
   unavailable or the CUI is locked, the button is quietly skipped --
   the panel itself never depends on it.
@@ -74,9 +89,14 @@ re-summon the button.
   for that reopen.
 - A toolbar created through the ActiveX API may or may not survive an
   AutoCAD restart, depending on how the main CUI is saved. That is why
-  the file re-creates it (only when missing) on every load: sessions
-  that load LAZPANEL.lsp or LAZPASS.lsp always end up with the button,
-  and one that somehow lost it can type `LAZBUTTON`.
+  every load re-creates it when it is missing, and re-ices and re-shows
+  it when it is not: sessions that load LAZPANEL.lsp or LAZPASS.lsp
+  always end up with a visible button carrying a current icon, and one
+  that somehow lost it can type `LAZBUTTON`.
+- If the button cannot be added to a freshly created toolbar, that
+  toolbar is deleted again rather than left behind. An empty "LazPanel"
+  would be found by name for ever afterwards, and `LAZBUTTON` would
+  report success while putting nothing on screen.
 - The panel changes no system variables and draws nothing, so it takes
   no undo group; whatever it launches manages its own.
 - The availability probe is the same one the VB palette uses (evaluate
@@ -96,5 +116,10 @@ tool without a button (or a button whose command does not exist) fails
 the suite. It validates the generated DCL with a grammar pass, drives
 `c:LAZPANEL` end-to-end in the VM with the dialog surface stubbed
 (executing the real button-wiring expression), and checks the toolbar
-creation path and both generated bitmaps byte by byte -- including the
-no-newline-byte invariant that keeps them writable from AutoLISP.
+creation path and both generated bitmaps pixel by pixel -- position,
+not just colour count, since a BMP stores its rows bottom-up and an L
+is not symmetric.
+
+The stubs go in *before* the file loads, so the load-time toolbar call
+is itself under test: delete it and the suite fails rather than
+quietly passing.

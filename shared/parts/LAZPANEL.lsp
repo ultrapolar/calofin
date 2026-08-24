@@ -28,11 +28,20 @@
 ;;; clickable button you drag anywhere or dock, like any toolbar.  It
 ;;; is created through the ActiveX menu API when no toolbar of that
 ;;; name exists yet -- no CUI file to install -- and its icon (an
-;;; orange L, a placeholder logo) is generated as two .bmp files in
-;;; the temp folder.  Clicking it runs LAZPANEL.  If the toolbar gets
-;;; closed or lost, LAZBUTTON brings it back.  When any of this is
-;;; unavailable (no COM, locked CUI, unwritable temp folder) the
-;;; button is quietly skipped and the panel itself is untouched.
+;;; orange L, a placeholder logo) is generated as two .bmp files under
+;;; TEMPPREFIX and re-applied on every load, because SetBitmaps stores
+;;; the path rather than the picture.  Clicking it runs LAZPANEL.  If
+;;; the toolbar gets closed or lost, LAZBUTTON brings it back.  When
+;;; any of this is unavailable (no COM, locked CUI, unwritable temp
+;;; folder) the button is quietly skipped and the panel is untouched.
+;;;
+;;; The icon goes out through an ADODB.Stream in binary mode, not
+;;; through write-char: AutoLISP writes text-mode files and has no NUL
+;;; in its character model at all -- (chr 0) is the empty string --
+;;; while a 24-bit BMP header is full of NULs before a single pixel is
+;;; reached.  No arrangement of this format could be written with the
+;;; language's own file output.  COM is no new dependency here: the
+;;; toolbar the icon goes on is made through the same ActiveX API.
 ;;;
 ;;; A button whose command is not loaded in this session is greyed out
 ;;; rather than left to fail -- the same availability probe the VB
@@ -55,7 +64,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.1")
+(setq *lazpanel-version* "v1.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -192,6 +201,7 @@
   (if (and f (setq fh (open f "w")))
     (progn
       (setq err (vl-catch-all-apply 'lzp:write-lines (list fh)))
+      (close fh)
       (cond
         ((vl-catch-all-error-p err)
          (vl-file-delete f)
@@ -216,17 +226,12 @@
 ;;  A one-button toolbar so the panel can sit on screen like any other
 ;;  toolbar button -- drag it anywhere, dock it, click it to open the
 ;;  panel.  Created through the ActiveX menu API, so there is no CUI
-;;  file to install; the icon is an orange L (a placeholder logo)
-;;  written as 16x16 and 32x32 .bmp files in the temp folder.
+;;  file to install; the icon is an orange L (a placeholder logo).
 ;;
-;;  AutoLISP writes files in text mode only, so a bitmap byte equal to
-;;  10 would be silently translated into 13 10 and corrupt the image.
-;;  Every constant below -- sizes, offsets, the two colours -- is
-;;  chosen so that no byte of either file is 10 (or 13, for symmetry),
-;;  and the row widths (48 and 96 bytes) are multiples of 4 so there
-;;  is no padding to get wrong.  Best effort by design: if COM, the
-;;  CUI or the temp folder says no, the button is skipped and the
-;;  panel is unaffected.
+;;  Everything here is best effort by design.  A session without COM,
+;;  with a locked CUI or an unwritable temp folder loses the button and
+;;  keeps the panel -- which is why the load-time call sits inside
+;;  vl-catch-all-apply and why nothing below reports its own failure.
 
 ;; The L, drawn in 16x16; the 32x32 icon is this grid doubled.
 (setq lzp:*icon16*
@@ -264,8 +269,12 @@
     (setq out (cons s (cons s out))))
   (reverse out))
 
-;; The complete .bmp as a byte list: 24bpp, bottom-up rows.
-;; "X" pixels are orange (B G R = 0 165 255), the rest panel grey.
+;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
+;; height means the FIRST row in the file is the BOTTOM row of the
+;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
+;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
+;; width that is a multiple of 4 (48 and 96), so there is no row
+;; padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
         bg '(54 54 54)
@@ -284,44 +293,78 @@
               (lzp:le4 (* rowbytes size))
               (lzp:le4 0) (lzp:le4 0)
               (lzp:le4 0) (lzp:le4 0)))
+  ;; built by consing and reversed once: appending inside the loop
+  ;; would copy the whole list per pixel, which for the 32x32 is
+  ;; millions of cons cells and a visible pause on every load
+  (setq out (reverse out))
   (foreach row (reverse grid)
     (setq i 1)
     (while (<= i size)
       (setq s (substr row i 1))
-      (setq out (append out (if (= s "X") fg bg)))
+      (setq out (cons (caddr (if (= s "X") fg bg))
+                      (cons (cadr (if (= s "X") fg bg))
+                            (cons (car (if (= s "X") fg bg)) out))))
       (setq i (1+ i))))
-  out)
+  (reverse out))
 
-;; The byte loop, alone for the same reason as lzp:write-lines: the
-;; handle must close even when a write dies half way.
-(defun lzp:bmp-loop (fh bytes / b)
-  (foreach b bytes
-    (write-char b fh)))
+;;  WRITING IT.  Not with write-char: AutoLISP opens files in text mode
+;;  and has no NUL in its character model at all -- (chr 0) is the
+;;  empty string -- while a 24-bit BMP header is full of them.  The
+;;  pixel-data offset (54 0 0 0), the header size (40 0 0 0) and the
+;;  five zeroed DIB fields are 43 NULs before a single pixel, and the
+;;  orange itself has a zero blue channel.  There is no arrangement of
+;;  this format that write-char could emit, so the bytes go out through
+;;  an ADODB.Stream in binary mode instead.
+;;
+;;  That is no new dependency: the toolbar this icon goes on is made
+;;  through the ActiveX menu API a few lines below, so a session that
+;;  cannot reach COM has no button to put an icon on.  If the stream
+;;  is unavailable the write fails, the caller skips SetBitmaps, and
+;;  the button keeps its default face.
 
-(defun lzp:bmp-write (path size grid / fh err)
-  (if (setq fh (open path "w"))
-    (progn
-      (setq err (vl-catch-all-apply
-                  'lzp:bmp-loop (list fh (lzp:bmp-bytes size grid))))
-      (close fh)
-      (cond
-        ((vl-catch-all-error-p err)
-         (vl-file-delete path)
-         nil)
-        (t path)))))
+(defun lzp:bmp-stream (st path bytes / sa)
+  (vlax-put st 'Type 1)                       ; adTypeBinary
+  (vlax-invoke st 'Open)
+  (setq sa (vlax-make-safearray 17            ; VT_UI1, a byte array
+                                (cons 0 (1- (length bytes)))))
+  (vlax-safearray-fill sa bytes)
+  (vlax-invoke st 'Write sa)
+  (vlax-invoke st 'SaveToFile path 2)         ; overwrite if present
+  (vlax-invoke st 'Close)
+  t)
+
+(defun lzp:bmp-write (path size grid / st ok)
+  (setq st (vl-catch-all-apply 'vlax-create-object (list "ADODB.Stream")))
+  (cond
+    ((or (vl-catch-all-error-p st) (null st)) nil)
+    (t
+     (setq ok (vl-catch-all-apply
+                'lzp:bmp-stream (list st path (lzp:bmp-bytes size grid))))
+     (vl-catch-all-apply 'vlax-release-object (list st))
+     (if (vl-catch-all-error-p ok) nil path))))
+
+;; A STABLE path, not a fresh temp name each time: SetBitmaps stores the
+;; path rather than the image, and AutoCAD re-reads it whenever the
+;; button is redrawn.  A toolbar that survives into another session
+;; would otherwise be pointing at a swept temp file for ever.
+(defun lzp:icon-path (name / d)
+  (setq d (getvar "TEMPPREFIX"))
+  (if (and d (= (type d) 'STR) (/= d ""))
+      (strcat d "lazpanel-" name ".bmp")
+      (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp")))
 
 ;; Both icon files; (small large) paths, or nil when they cannot be
 ;; written.
 (defun lzp:write-bmps ( / small large)
-  (setq small (vl-filename-mktemp "lazpanel16" nil ".bmp")
-        large (vl-filename-mktemp "lazpanel32" nil ".bmp"))
+  (setq small (lzp:icon-path "16")
+        large (lzp:icon-path "32"))
   (if (and small large
            (lzp:bmp-write small 16 lzp:*icon16*)
            (lzp:bmp-write large 32 (lzp:grid2x lzp:*icon16*)))
     (list small large)))
 
-;; The LazPanel toolbar, wherever it lives -- a toolbar this file made
-;; in an earlier session may sit in any loaded menu group.
+;; The LazPanel toolbar, wherever it lives -- one this file made in an
+;; earlier session may sit in any loaded menu group.
 (defun lzp:toolbar-find ( / mgs n i tbs m j tb found)
   (setq mgs (vla-get-menugroups (vlax-get-acad-object)))
   (setq n (vla-get-count mgs)
@@ -340,33 +383,53 @@
 
 ;; Make the toolbar with its one button.  The macro is what a menu
 ;; button really sends: two Cancels (ASCII 3 -- the COM API takes the
-;; raw characters, not the "^C^C" menu-file spelling) and the command.
+;; raw characters, not the "^C^C" spelling a menu FILE would use) and
+;; the command.
+;;
+;; The button goes in at index 0.  The toolbar was created empty a line
+;; earlier, so 1 is past its end -- and if that throws, an empty
+;; toolbar called LazPanel is left behind, which lzp:toolbar-find would
+;; then hand back for ever while LAZBUTTON reported success and put
+;; nothing on screen.  So a toolbar that fails to get its button does
+;; not survive the attempt.
 (defun lzp:toolbar-make ( / tbs tb btn)
   (setq tbs (vla-get-toolbars
               (vla-item (vla-get-menugroups (vlax-get-acad-object)) 0)))
   (setq tb (vla-add tbs lzp:*tbname*))
-  (setq btn (vla-addtoolbarbutton
-              tb 1 lzp:*tbname*
-              "Open the LazPanel tool panel"
-              (strcat (chr 3) (chr 3) "_LAZPANEL ")))
-  (list tb btn))
-
-;; Put the button on screen: reuse the toolbar when one exists (its
-;; position and docking are the user's), otherwise create it, give it
-;; the orange L, and float it in view.  Returns the toolbar, or nil.
-(defun lzp:button-init ( / tb pair btn paths)
+  (setq btn (vl-catch-all-apply
+              'vla-addtoolbarbutton
+              (list tb 0 lzp:*tbname*
+                    "Open the LazPanel tool panel"
+                    (strcat (chr 3) (chr 3) "_LAZPANEL "))))
   (cond
-    ((setq tb (lzp:toolbar-find)) tb)
+    ((vl-catch-all-error-p btn)
+     (vl-catch-all-apply 'vla-delete (list tb))
+     nil)
+    (t (list tb btn))))
+
+;; Put the button on screen: reuse the toolbar when one exists -- its
+;; position and docking are the user's -- otherwise create it and float
+;; it in view.  Either way the icons are rewritten and re-applied, and
+;; the toolbar is made visible: a toolbar the user closed is still
+;; found by name, and without this it would never come back.
+;; Returns the toolbar, or nil when there is none to be had.
+(defun lzp:button-init ( / tb btn pair paths made)
+  (cond
+    ((setq tb (lzp:toolbar-find))
+     (setq btn (vl-catch-all-apply 'vla-item (list tb 0)))
+     (if (vl-catch-all-error-p btn) (setq btn nil)))
     ((setq pair (lzp:toolbar-make))
      (setq tb (car pair)
-           btn (cadr pair))
-     (setq paths (lzp:write-bmps))
-     (if (and btn paths)
-       (vl-catch-all-apply 'vla-setbitmaps
-                           (list btn (car paths) (cadr paths))))
-     (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
-     (vl-catch-all-apply 'vla-float (list tb 200 300 1))
-     tb)))
+           btn (cadr pair)
+           made t)))
+  (if tb
+    (progn
+      (if (and btn (setq paths (lzp:write-bmps)))
+        (vl-catch-all-apply 'vla-setbitmaps
+                            (list btn (car paths) (cadr paths))))
+      (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
+      (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
+  tb)
 
 ;;; -------------------- the dialog run ----------------------------------
 ;;  No sysvar save, no undo group: the panel changes no settings and

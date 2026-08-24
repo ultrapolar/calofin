@@ -573,6 +573,9 @@
 ;;;  Commands:  POOL     - lay out a pool from field measurements
 ;;;             POOLVER  - report which revision is loaded
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Draws a pool plan (Rectangle, Oval, Grecian, L or Lazy L) from
 ;;;  field measurements.
 ;;;
@@ -667,8 +670,6 @@
 ;;;  ActiveX/VLA), so it loads in AutoCAD 2018 as well as older
 ;;;  releases.
 ;;; ====================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; -------------------- version ---------------------------------------
 ;;;
@@ -682,7 +683,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV06")
+(setq pool:*version* "082426 REV07")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1081,6 +1082,91 @@
     (if (and (not out) (pool:sq ans k)) (setq out (pool:sq ans k))))
   out)
 
+;;; -------------------- form answers -----------------------------------
+;;;
+;;;  A form -- the LAZFORM dialog, or the VB palette -- can answer some
+;;;  or all of POOL's questions before the run starts.  It leaves them
+;;;  in pool:*form* as (key . value) and the ask helpers below look
+;;;  there first, so a filled-in sheet drives the whole run and a
+;;;  half-filled one simply shortens it.
+;;;
+;;;  Three states, and the difference between the last two IS the
+;;;  feature:
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . nil)     the form answered NA         -> nil, no prompt
+;;;    (key . 84.0)    the form answered it         -> 84.0, no prompt
+;;;
+;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
+;;;  Get it backwards and a half-filled form is either impossible or
+;;;  silent, and the half-filled form is the whole point.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Otherwise Back deadlocks: step back onto a form-answered question,
+;;;  it answers itself instantly and walks forward again, and there is
+;;;  no key the user can press to get out.  Consuming also gives the
+;;;  range checks their way out: pool:askdeep re-asks through pool:askh
+;;;  when a depth fails its check, and the second pass finds the store
+;;;  empty and lets the user type the correction -- rather than being
+;;;  re-fed the same bad number for ever.
+
+(setq pool:*form* nil)
+
+;; Did the form answer KEY at all?  This is the absent/nil distinction
+;; that (cdr (assoc ...)) throws away.
+(defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
+
+;; The form's answer for KEY, removed from the store as it is read.
+(defun pool:ftake (key / p)
+  (setq p (assoc key pool:*form*))
+  (setq pool:*form* (vl-remove p pool:*form*))
+  (cdr p))
+
+(defun pool:fclear () (setq pool:*form* nil))
+
+;; The letter a prompt leads with, as a form key.  The depth questions
+;; are asked through pool:askh, which carries no key of its own, but
+;; their prompts all read "<letter> - <what it is>": "C - wall height
+;; (shallow depth)" is 'c, "C2 - depth where the shallow floor meets
+;; the break" is 'c2, and both spellings of D are 'd.  ONLY that exact
+;; shape counts -- "Total pool length (arc tip to arc tip)" leads with
+;; no letter and must come back nil so it prompts, rather than eating
+;; whatever answer happens to be under that name in the store.
+(defun pool:fkeyof (msg / n s out)
+  (setq n 1)
+  (while (and (not out) (<= n 2))
+    (if (= (substr msg (1+ n) 3) " - ")
+        (progn
+          (setq s (strcase (substr msg 1 n) t))
+          (if (wcmatch s "@,@#") (setq out (read s)))))
+    (setq n (1+ n)))
+  out)
+
+;; The shape, from the form when it named one the dispatch knows, else
+;; asked.  Checked against the same list the prompt offers: an unknown
+;; shape would fall through the cond at the foot of c:POOL into the
+;; rectangle branch and draw the wrong pool without saying so.
+(defun pool:fshape ( / v)
+  (if (pool:fhas 'shape) (setq v (pool:ftake 'shape)))
+  (if (and v (= (type v) 'STR)
+           (member v '("Rectangle" "Grecian" "ROman" "L" "LAzyl"
+                       "Oval" "OCtagon" "ROUnd" "MUtt")))
+      v
+      (progn
+        (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
+        (getkword
+          (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
+                  "OCtagon/ROUnd/MUtt]: ")))))
+
+;; Run POOL with a form's answers already in hand.  Nothing happens
+;; here that the direct path misses: a caller may equally set
+;; pool:*form* itself and call c:POOL, which is what the tests do.
+(defun pool:run-with-answers (answers)
+  (setq pool:*form* answers)
+  (c:POOL)
+  (pool:fclear)
+  (princ))
+
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol CAL-BACK.
 (defun pool:asks (kind msg ents dflt back / v cols kw)
@@ -1114,6 +1200,72 @@
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
         (t v)))
+
+;; The keyword question a form can answer.  Deliberately a WRAPPER and
+;; not a sixth argument on pool:askkw: the grouped build swaps that
+;; helper out for cal:askkw, which takes five, so widening it here
+;; would have the twin call the library with an argument it does not
+;; accept -- a build that loads cleanly and dies at the first keyword
+;; question.  The mirror leaves this defun alone, while the pool:askkw
+;; call inside it is rewritten like any other call site.
+(defun pool:askkwf (key msg kws shown dflt back / v)
+  (if (and (pool:fhas key)
+           (setq v (pool:ftake key))
+           (= (type v) 'STR)
+           (setq v (pool:fkword v kws)))
+      v
+      (cal:askkw msg kws shown dflt back)))
+
+;; V as the question would spell it, or nil when the question does not
+;; accept it at all.  Two jobs in one walk of the keyword list:
+;;
+;;   - an answer the question does not offer falls through to the
+;;     prompt instead of being handed on to fail later.  The shape
+;;     charts show bottoms POOL cannot draw, and a form built from a
+;;     chart will offer them;
+;;   - the canonical SPELLING comes back, not the caller's.  Every test
+;;     downstream is (= btype "Wedge"), so a form that said "wedge"
+;;     would sail through a case-insensitive check and then match
+;;     nothing at all.
+(defun pool:fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
+
+;; Does this treatment cut real geometry off the corner?  NotGiven
+;; does NOT: its corner is built square, so everything that asks
+;; "is there a cut here" -- the setback caps, the cross-dim reference
+;; modes, the hopper ties -- must answer no.  Only the report and the
+;; corner marks care that it is not a plain Square.
+;; The same question with the two SIZED answers withheld, for a corner
+;; whose walls leave no room for a cut at all.  Square and NotGiven are
+;; the only truthful answers there, and both take no size.
+(defun pool:asktreatng (subject dflt back / v kws)
+  (setq kws "Square NotGiven")
+  (setq v (cal:askkw (strcat "How should " subject " be treated?")
+                      (strcat kws " NG 90")
+                      (vl-string-translate " " "/" kws)
+                      dflt back))
+  (cond ((eq v 'CAL-BACK) v)
+        ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
+        (t v)))
+
+(defun pool:cutp (ty) (member ty '("Radius" "Cut")))
+
+;; Does any corner carry something the SHEET must record -- a cut, or
+;; a NotGiven?  The wider question pool:cutp deliberately does not
+;; answer, for the report rows and the corner marks.
+(defun pool:anytreat (corners / out c)
+  (foreach c corners (if (/= (car c) "Square") (setq out t)))
+  out)
 
 ;; Run a list of input stages with Back between them: a stage that
 ;; returns CAL-BACK sends the user to the previous stage, which is
@@ -1151,8 +1303,12 @@
           (setq dflt (nth 4 it))
           (if (and dflt (listp dflt))
               (setq dflt (pool:sqfirst ans dflt)))
-          (setq v (pool:asks (cadr it) (caddr it) (cadddr it) dflt
-                             (if (or asked bk) t nil)))
+          ;; the form answers first, and its answer is consumed --
+          ;; see "form answers" above for why removing beats marking
+          (setq v (if (pool:fhas (car it))
+                      (pool:ftake (car it))
+                      (pool:asks (cadr it) (caddr it) (cadddr it) dflt
+                                 (if (or asked bk) t nil))))
           (if (eq v 'CAL-BACK)
               (if asked
                   (setq i (car asked) asked (cdr asked))
@@ -1166,31 +1322,6 @@
                 (pool:pvnote (car it) v))))))
   (if out 'CAL-BACK ans))
 
-;; Does this treatment cut real geometry off the corner?  NotGiven
-;; does NOT: its corner is built square, so everything that asks
-;; "is there a cut here" -- the setback caps, the cross-dim reference
-;; modes, the hopper ties -- must answer no.  Only the report and the
-;; corner marks care that it is not a plain Square.
-;; The same question with the two SIZED answers withheld, for a corner
-;; whose walls leave no room for a cut at all.  Square and NotGiven are
-;; the only truthful answers there, and both take no size.
-(defun pool:asktreatng (subject dflt back / v kws)
-  (setq kws "Square NotGiven")
-  (setq v (cal:askkw (strcat "How should " subject " be treated?")
-                      (strcat kws " NG 90")
-                      (vl-string-translate " " "/" kws)
-                      dflt back))
-  (cond ((eq v 'CAL-BACK) v)
-        ((= v "NG") "NotGiven")
-        ((= v "90") "Square")
-        (t v)))
-(defun pool:cutp (ty) (member ty '("Radius" "Cut")))
-;; Does any corner carry something the SHEET must record -- a cut, or
-;; a NotGiven?  The wider question pool:cutp deliberately does not
-;; answer, for the report rows and the corner marks.
-(defun pool:anytreat (corners / out c)
-  (foreach c corners (if (/= (car c) "Square") (setq out t)))
-  out)
 ;;; -------------------- guide preview ----------------------------------
 ;;; A gray pool of the chosen shape is drawn as soon as the shape is
 ;;; picked.  While each measurement is prompted for, the matching
@@ -1244,12 +1375,22 @@
 
 ;; Ask for a distance while the matching guide elements glow red, then
 ;; restore each element to the color it had (outline vs cross-dim gray).
-(defun pool:askh (msg ents / v cols)
-  (setq cols (mapcar 'pool:getcol ents))
-  (foreach e ents (pool:setcol e pool:*hi-col*))
-  (setq v (pool:ask msg))
-  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  v)
+(defun pool:askh (msg ents / v cols k)
+  ;; A form answer for this letter skips the prompt and the highlight
+  ;; with it -- there is nothing to look at while nothing is being
+  ;; asked.  Only a real measurement is taken: every caller here range
+  ;; checks what it gets and none of them can do anything with nil, so
+  ;; an NA in the store falls through to the keyboard (having been
+  ;; consumed, so it cannot come back round again).
+  (setq k (pool:fkeyof msg))
+  (if (and k (pool:fhas k) (numberp (setq v (pool:ftake k))))
+      v
+      (progn
+        (setq cols (mapcar 'pool:getcol ents))
+        (foreach e ents (pool:setcol e pool:*hi-col*))
+        (setq v (pool:ask msg))
+        (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
+        v)))
 
 ;; Delete all guide entities (tracked globally so the *error* handler
 ;; can clean up after a cancel mid-prompt).  The live-reshape engine is
@@ -2580,6 +2721,9 @@
   ;; corner treatments: one Typ. per family in square (body / tips),
   ;; each treated corner its own dim out of square (collapsing back to
   ;; Typ. when Enter reused one answer all the way round)
+  ;; out of square the eight are their own groups -- but B leads the
+  ;; list, as it does in square, so an all-same answer puts its one
+  ;; Typ. mark on the same corner either way
   (pool:dimringcorners pts gcs gce gcarcs cen doff
                        (if pool:*insq*
                            (list '(1 0 4 5) '(2 3 6 7))
@@ -3117,7 +3261,7 @@
   (pool:dimtreat1 (nth 4 hce) icty (nth 4 hcarcs) (nth 4 pts)
                   (pool:unit
                     (cal:v+ (pool:unit (cal:v- (nth 3 pts) (nth 4 pts)))
-                            (pool:unit (cal:v- (nth 5 pts) (nth 4 pts)))))
+                             (pool:unit (cal:v- (nth 5 pts) (nth 4 pts)))))
                   doff "" nil)
   ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
@@ -3512,6 +3656,7 @@
   (command "_.LEADER" (pool:wp (cal:v+ p (cal:v* outd r)))
            (pool:wp (cal:v+ p (cal:v* outd (* 1.2 doff))))
            "" txt ""))
+
 ;; A NotGiven corner: the same circled mark, but the leader asks a
 ;; question instead of asserting an angle, and a note under it spells
 ;; the reason out.  The sheet has to SAY the treatment was never
@@ -3527,6 +3672,7 @@
   (if (< (car outd) 0.0)
       (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
   (pool:text tp h "Not Given" "DIMENSION"))
+
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides
 ;; whether a plain Square corner may be marked at all:
@@ -3547,6 +3693,7 @@
     ((= ty "NotGiven") (pool:dimng p outd doff sfx))
     ((and ang (< (abs (- ang (/ pi 2.0))) pool:*sq90-tol*))
      (pool:dim90 p outd doff (strcat "90%%d" sfx)))))
+
 (defun pool:dimcorner1 (ce ty arc outd doff sfx / am fm od)
   (cond
     ((= ty "Radius")
@@ -3572,12 +3719,6 @@
                   (pool:wp (cal:v+ fm (cal:v* outd (* 0.5 doff))))))
      (pool:dimsend od))))
 
-;; Corner annotations for the rectangle.  In-square pools get a single
-;; "Typ." note at the bottom-right corner (B): the radius or cut-face
-;; measurement with a Typ. suffix, or the circled 90 mark for square
-;; corners.  Out-of-square pools dim every corner individually --
-;; radius dim, cut-face dim, or its own circled mark.  Assumes CLAYER
-;; is already DIMENSION.
 ;; Corner annotations for the rectangle.  In-square pools get a single
 ;; "Typ." note at the bottom-right corner (B): the radius or cut-face
 ;; measurement with a Typ. suffix, or the circled 90 mark for square
@@ -3712,7 +3853,7 @@
   (cal:osup)
   (setq ty (if nofit
                ;; a remembered Radius/Cut is not among the offered
-               ;; words, and cal:askkw hands a default straight back
+               ;; words, and pool:askkw hands a default straight back
                ;; on Enter without checking it -- so drop it
                (pool:asktreatng subject
                                 (if (member prevty '("Square" "NotGiven"))
@@ -4638,8 +4779,9 @@
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- xmin doff) (- ymin doff)))
                  (pool:wp (list (+ xmax doff) (+ ymax doff))))
-        (setq btype (cal:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (if (/= btype "Sport")
             (pool:hopnormal quad corners doff th nil btype
                             xmin (- ymin (* 2.2 doff)) t)
@@ -5259,8 +5401,9 @@
   (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (cal:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (setq u (pool:unit (cal:v- tipr tipl))
               v (cal:perp u)
               lline (list tipl v)
@@ -5297,8 +5440,9 @@
   (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (cal:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (setq cen (list 0.0 0.0))
         (foreach p pts (setq cen (cal:v+ cen p)))
         (setq cen (cal:v* cen 0.125)
@@ -6511,6 +6655,8 @@
   ;; corner treatments: one Typ. at B in square, each treated corner
   ;; its own dim out of square (collapsing back to Typ. when Enter
   ;; reused one answer all the way round)
+  ;; B leads out of square too, so the all-same Typ. mark lands on the
+  ;; same corner as it does in square
   (pool:dimringcorners quad rcs rce rcarcs cen doff
                        (if pool:*insq*
                            (list '(1 0 2 3))
@@ -7083,8 +7229,9 @@
   (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (cal:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (setq u (pool:unit (cal:v- tipr tipl))
               v (cal:perp u))
         (if (/= btype "Sport")
@@ -7122,6 +7269,16 @@
   (if pool:*undogrp* (command "_.UNDO" "_End"))
   (setq pool:*undogrp* nil))
 
+;;; -------------------- sysvar save / restore --------------------------
+;;; The snapshot of the user's settings lives in a GLOBAL and is taken
+;;; only when no snapshot is already pending: if a previous run died
+;;; before restoring (hard crash, failure inside the error handler),
+;;; the stale snapshot still holds the user's TRUE settings.  Saving
+;;; again at that point would capture the zeroed OSMODE and every
+;;; later run would faithfully "restore" 0 -- the user's object snaps
+;;; would look permanently wiped by the command.  Restoring clears the
+;;; snapshot so the next run saves fresh.
+
 ;;; -------------------- main command -----------------------------------
 
 (defun c:POOL ( / *error* ptype base)
@@ -7139,6 +7296,10 @@
     (setq pool:*sideon* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
+    ;; a form must never outlive the run it was given to: left behind,
+    ;; the next POOL typed at the command line would answer itself with
+    ;; last time's numbers and draw a wrong pool with no error at all
+    (pool:fclear)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -7168,23 +7329,24 @@
   ;; no diagonals; out-of-square pools take the usual cross-dim route.
   (setq pool:*insq*
         (= "Insquare"
-           (cal:askkw "Is the pool in-square or out-of-square"
-                       "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
+           (pool:askkwf 'insq "Is the pool in-square or out-of-square"
+                        "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
   (if pool:*insq*
       (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
   ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
   ;; the six common shapes first, then the rarely-used ones; type RO
   ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
-  (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
-  (setq ptype (getkword
-                (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
-                        "OCtagon/ROUnd/MUtt]: ")))
+  (setq ptype (pool:fshape))
 
   ;; the base point is picked with the user's own snaps still live;
   ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (getpoint "\nInsertion base point <0,0>: ")
-        pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  (setq base (if (pool:fhas 'base)
+                 (pool:ftake 'base)
+                 (getpoint "\nInsertion base point <0,0>: "))
+        pool:*base* (if (and base (listp base))
+                        (list (car base) (cadr base))
+                        (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -7212,6 +7374,7 @@
   (command "_.ZOOM" "_Extents")
   (pool:undoend)
   (cal:sysrestore)
+  (pool:fclear)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
@@ -58031,11 +58194,20 @@
 ;;; clickable button you drag anywhere or dock, like any toolbar.  It
 ;;; is created through the ActiveX menu API when no toolbar of that
 ;;; name exists yet -- no CUI file to install -- and its icon (an
-;;; orange L, a placeholder logo) is generated as two .bmp files in
-;;; the temp folder.  Clicking it runs LAZPANEL.  If the toolbar gets
-;;; closed or lost, LAZBUTTON brings it back.  When any of this is
-;;; unavailable (no COM, locked CUI, unwritable temp folder) the
-;;; button is quietly skipped and the panel itself is untouched.
+;;; orange L, a placeholder logo) is generated as two .bmp files under
+;;; TEMPPREFIX and re-applied on every load, because SetBitmaps stores
+;;; the path rather than the picture.  Clicking it runs LAZPANEL.  If
+;;; the toolbar gets closed or lost, LAZBUTTON brings it back.  When
+;;; any of this is unavailable (no COM, locked CUI, unwritable temp
+;;; folder) the button is quietly skipped and the panel is untouched.
+;;;
+;;; The icon goes out through an ADODB.Stream in binary mode, not
+;;; through write-char: AutoLISP writes text-mode files and has no NUL
+;;; in its character model at all -- (chr 0) is the empty string --
+;;; while a 24-bit BMP header is full of NULs before a single pixel is
+;;; reached.  No arrangement of this format could be written with the
+;;; language's own file output.  COM is no new dependency here: the
+;;; toolbar the icon goes on is made through the same ActiveX API.
 ;;;
 ;;; A button whose command is not loaded in this session is greyed out
 ;;; rather than left to fail -- the same availability probe the VB
@@ -58058,7 +58230,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.1")
+(setq *lazpanel-version* "v1.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -58220,17 +58392,12 @@
 ;;  A one-button toolbar so the panel can sit on screen like any other
 ;;  toolbar button -- drag it anywhere, dock it, click it to open the
 ;;  panel.  Created through the ActiveX menu API, so there is no CUI
-;;  file to install; the icon is an orange L (a placeholder logo)
-;;  written as 16x16 and 32x32 .bmp files in the temp folder.
+;;  file to install; the icon is an orange L (a placeholder logo).
 ;;
-;;  AutoLISP writes files in text mode only, so a bitmap byte equal to
-;;  10 would be silently translated into 13 10 and corrupt the image.
-;;  Every constant below -- sizes, offsets, the two colours -- is
-;;  chosen so that no byte of either file is 10 (or 13, for symmetry),
-;;  and the row widths (48 and 96 bytes) are multiples of 4 so there
-;;  is no padding to get wrong.  Best effort by design: if COM, the
-;;  CUI or the temp folder says no, the button is skipped and the
-;;  panel is unaffected.
+;;  Everything here is best effort by design.  A session without COM,
+;;  with a locked CUI or an unwritable temp folder loses the button and
+;;  keeps the panel -- which is why the load-time call sits inside
+;;  vl-catch-all-apply and why nothing below reports its own failure.
 
 ;; The L, drawn in 16x16; the 32x32 icon is this grid doubled.
 (setq lzp:*icon16*
@@ -58268,8 +58435,12 @@
     (setq out (cons s (cons s out))))
   (reverse out))
 
-;; The complete .bmp as a byte list: 24bpp, bottom-up rows.
-;; "X" pixels are orange (B G R = 0 165 255), the rest panel grey.
+;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
+;; height means the FIRST row in the file is the BOTTOM row of the
+;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
+;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
+;; width that is a multiple of 4 (48 and 96), so there is no row
+;; padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
         bg '(54 54 54)
@@ -58288,44 +58459,78 @@
               (lzp:le4 (* rowbytes size))
               (lzp:le4 0) (lzp:le4 0)
               (lzp:le4 0) (lzp:le4 0)))
+  ;; built by consing and reversed once: appending inside the loop
+  ;; would copy the whole list per pixel, which for the 32x32 is
+  ;; millions of cons cells and a visible pause on every load
+  (setq out (reverse out))
   (foreach row (reverse grid)
     (setq i 1)
     (while (<= i size)
       (setq s (substr row i 1))
-      (setq out (append out (if (= s "X") fg bg)))
+      (setq out (cons (caddr (if (= s "X") fg bg))
+                      (cons (cadr (if (= s "X") fg bg))
+                            (cons (car (if (= s "X") fg bg)) out))))
       (setq i (1+ i))))
-  out)
+  (reverse out))
 
-;; The byte loop, alone for the same reason as lzp:write-lines: the
-;; handle must close even when a write dies half way.
-(defun lzp:bmp-loop (fh bytes / b)
-  (foreach b bytes
-    (write-char b fh)))
+;;  WRITING IT.  Not with write-char: AutoLISP opens files in text mode
+;;  and has no NUL in its character model at all -- (chr 0) is the
+;;  empty string -- while a 24-bit BMP header is full of them.  The
+;;  pixel-data offset (54 0 0 0), the header size (40 0 0 0) and the
+;;  five zeroed DIB fields are 43 NULs before a single pixel, and the
+;;  orange itself has a zero blue channel.  There is no arrangement of
+;;  this format that write-char could emit, so the bytes go out through
+;;  an ADODB.Stream in binary mode instead.
+;;
+;;  That is no new dependency: the toolbar this icon goes on is made
+;;  through the ActiveX menu API a few lines below, so a session that
+;;  cannot reach COM has no button to put an icon on.  If the stream
+;;  is unavailable the write fails, the caller skips SetBitmaps, and
+;;  the button keeps its default face.
 
-(defun lzp:bmp-write (path size grid / fh err)
-  (if (setq fh (open path "w"))
-    (progn
-      (setq err (vl-catch-all-apply
-                  'lzp:bmp-loop (list fh (lzp:bmp-bytes size grid))))
-      (close fh)
-      (cond
-        ((vl-catch-all-error-p err)
-         (vl-file-delete path)
-         nil)
-        (t path)))))
+(defun lzp:bmp-stream (st path bytes / sa)
+  (vlax-put st 'Type 1)                       ; adTypeBinary
+  (vlax-invoke st 'Open)
+  (setq sa (vlax-make-safearray 17            ; VT_UI1, a byte array
+                                (cons 0 (1- (length bytes)))))
+  (vlax-safearray-fill sa bytes)
+  (vlax-invoke st 'Write sa)
+  (vlax-invoke st 'SaveToFile path 2)         ; overwrite if present
+  (vlax-invoke st 'Close)
+  t)
+
+(defun lzp:bmp-write (path size grid / st ok)
+  (setq st (vl-catch-all-apply 'vlax-create-object (list "ADODB.Stream")))
+  (cond
+    ((or (vl-catch-all-error-p st) (null st)) nil)
+    (t
+     (setq ok (vl-catch-all-apply
+                'lzp:bmp-stream (list st path (lzp:bmp-bytes size grid))))
+     (vl-catch-all-apply 'vlax-release-object (list st))
+     (if (vl-catch-all-error-p ok) nil path))))
+
+;; A STABLE path, not a fresh temp name each time: SetBitmaps stores the
+;; path rather than the image, and AutoCAD re-reads it whenever the
+;; button is redrawn.  A toolbar that survives into another session
+;; would otherwise be pointing at a swept temp file for ever.
+(defun lzp:icon-path (name / d)
+  (setq d (getvar "TEMPPREFIX"))
+  (if (and d (= (type d) 'STR) (/= d ""))
+      (strcat d "lazpanel-" name ".bmp")
+      (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp")))
 
 ;; Both icon files; (small large) paths, or nil when they cannot be
 ;; written.
 (defun lzp:write-bmps ( / small large)
-  (setq small (vl-filename-mktemp "lazpanel16" nil ".bmp")
-        large (vl-filename-mktemp "lazpanel32" nil ".bmp"))
+  (setq small (lzp:icon-path "16")
+        large (lzp:icon-path "32"))
   (if (and small large
            (lzp:bmp-write small 16 lzp:*icon16*)
            (lzp:bmp-write large 32 (lzp:grid2x lzp:*icon16*)))
     (list small large)))
 
-;; The LazPanel toolbar, wherever it lives -- a toolbar this file made
-;; in an earlier session may sit in any loaded menu group.
+;; The LazPanel toolbar, wherever it lives -- one this file made in an
+;; earlier session may sit in any loaded menu group.
 (defun lzp:toolbar-find ( / mgs n i tbs m j tb found)
   (setq mgs (vla-get-menugroups (vlax-get-acad-object)))
   (setq n (vla-get-count mgs)
@@ -58344,33 +58549,53 @@
 
 ;; Make the toolbar with its one button.  The macro is what a menu
 ;; button really sends: two Cancels (ASCII 3 -- the COM API takes the
-;; raw characters, not the "^C^C" menu-file spelling) and the command.
+;; raw characters, not the "^C^C" spelling a menu FILE would use) and
+;; the command.
+;;
+;; The button goes in at index 0.  The toolbar was created empty a line
+;; earlier, so 1 is past its end -- and if that throws, an empty
+;; toolbar called LazPanel is left behind, which lzp:toolbar-find would
+;; then hand back for ever while LAZBUTTON reported success and put
+;; nothing on screen.  So a toolbar that fails to get its button does
+;; not survive the attempt.
 (defun lzp:toolbar-make ( / tbs tb btn)
   (setq tbs (vla-get-toolbars
               (vla-item (vla-get-menugroups (vlax-get-acad-object)) 0)))
   (setq tb (vla-add tbs lzp:*tbname*))
-  (setq btn (vla-addtoolbarbutton
-              tb 1 lzp:*tbname*
-              "Open the LazPanel tool panel"
-              (strcat (chr 3) (chr 3) "_LAZPANEL ")))
-  (list tb btn))
-
-;; Put the button on screen: reuse the toolbar when one exists (its
-;; position and docking are the user's), otherwise create it, give it
-;; the orange L, and float it in view.  Returns the toolbar, or nil.
-(defun lzp:button-init ( / tb pair btn paths)
+  (setq btn (vl-catch-all-apply
+              'vla-addtoolbarbutton
+              (list tb 0 lzp:*tbname*
+                    "Open the LazPanel tool panel"
+                    (strcat (chr 3) (chr 3) "_LAZPANEL "))))
   (cond
-    ((setq tb (lzp:toolbar-find)) tb)
+    ((vl-catch-all-error-p btn)
+     (vl-catch-all-apply 'vla-delete (list tb))
+     nil)
+    (t (list tb btn))))
+
+;; Put the button on screen: reuse the toolbar when one exists -- its
+;; position and docking are the user's -- otherwise create it and float
+;; it in view.  Either way the icons are rewritten and re-applied, and
+;; the toolbar is made visible: a toolbar the user closed is still
+;; found by name, and without this it would never come back.
+;; Returns the toolbar, or nil when there is none to be had.
+(defun lzp:button-init ( / tb btn pair paths made)
+  (cond
+    ((setq tb (lzp:toolbar-find))
+     (setq btn (vl-catch-all-apply 'vla-item (list tb 0)))
+     (if (vl-catch-all-error-p btn) (setq btn nil)))
     ((setq pair (lzp:toolbar-make))
      (setq tb (car pair)
-           btn (cadr pair))
-     (setq paths (lzp:write-bmps))
-     (if (and btn paths)
-       (vl-catch-all-apply 'vla-setbitmaps
-                           (list btn (car paths) (cadr paths))))
-     (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
-     (vl-catch-all-apply 'vla-float (list tb 200 300 1))
-     tb)))
+           btn (cadr pair)
+           made t)))
+  (if tb
+    (progn
+      (if (and btn (setq paths (lzp:write-bmps)))
+        (vl-catch-all-apply 'vla-setbitmaps
+                            (list btn (car paths) (cadr paths))))
+      (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
+      (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
+  tb)
 
 ;;; -------------------- the dialog run ----------------------------------
 ;;  No sysvar save, no undo group: the panel changes no settings and

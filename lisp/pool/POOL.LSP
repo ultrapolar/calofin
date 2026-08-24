@@ -111,7 +111,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV06")
+(setq pool:*version* "082426 REV07")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -537,6 +537,91 @@
     (if (and (not out) (pool:sq ans k)) (setq out (pool:sq ans k))))
   out)
 
+;;; -------------------- form answers -----------------------------------
+;;;
+;;;  A form -- the LAZFORM dialog, or the VB palette -- can answer some
+;;;  or all of POOL's questions before the run starts.  It leaves them
+;;;  in pool:*form* as (key . value) and the ask helpers below look
+;;;  there first, so a filled-in sheet drives the whole run and a
+;;;  half-filled one simply shortens it.
+;;;
+;;;  Three states, and the difference between the last two IS the
+;;;  feature:
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . nil)     the form answered NA         -> nil, no prompt
+;;;    (key . 84.0)    the form answered it         -> 84.0, no prompt
+;;;
+;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
+;;;  Get it backwards and a half-filled form is either impossible or
+;;;  silent, and the half-filled form is the whole point.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Otherwise Back deadlocks: step back onto a form-answered question,
+;;;  it answers itself instantly and walks forward again, and there is
+;;;  no key the user can press to get out.  Consuming also gives the
+;;;  range checks their way out: pool:askdeep re-asks through pool:askh
+;;;  when a depth fails its check, and the second pass finds the store
+;;;  empty and lets the user type the correction -- rather than being
+;;;  re-fed the same bad number for ever.
+
+(setq pool:*form* nil)
+
+;; Did the form answer KEY at all?  This is the absent/nil distinction
+;; that (cdr (assoc ...)) throws away.
+(defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
+
+;; The form's answer for KEY, removed from the store as it is read.
+(defun pool:ftake (key / p)
+  (setq p (assoc key pool:*form*))
+  (setq pool:*form* (vl-remove p pool:*form*))
+  (cdr p))
+
+(defun pool:fclear () (setq pool:*form* nil))
+
+;; The letter a prompt leads with, as a form key.  The depth questions
+;; are asked through pool:askh, which carries no key of its own, but
+;; their prompts all read "<letter> - <what it is>": "C - wall height
+;; (shallow depth)" is 'c, "C2 - depth where the shallow floor meets
+;; the break" is 'c2, and both spellings of D are 'd.  ONLY that exact
+;; shape counts -- "Total pool length (arc tip to arc tip)" leads with
+;; no letter and must come back nil so it prompts, rather than eating
+;; whatever answer happens to be under that name in the store.
+(defun pool:fkeyof (msg / n s out)
+  (setq n 1)
+  (while (and (not out) (<= n 2))
+    (if (= (substr msg (1+ n) 3) " - ")
+        (progn
+          (setq s (strcase (substr msg 1 n) t))
+          (if (wcmatch s "@,@#") (setq out (read s)))))
+    (setq n (1+ n)))
+  out)
+
+;; The shape, from the form when it named one the dispatch knows, else
+;; asked.  Checked against the same list the prompt offers: an unknown
+;; shape would fall through the cond at the foot of c:POOL into the
+;; rectangle branch and draw the wrong pool without saying so.
+(defun pool:fshape ( / v)
+  (if (pool:fhas 'shape) (setq v (pool:ftake 'shape)))
+  (if (and v (= (type v) 'STR)
+           (member v '("Rectangle" "Grecian" "ROman" "L" "LAzyl"
+                       "Oval" "OCtagon" "ROUnd" "MUtt")))
+      v
+      (progn
+        (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
+        (getkword
+          (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
+                  "OCtagon/ROUnd/MUtt]: ")))))
+
+;; Run POOL with a form's answers already in hand.  Nothing happens
+;; here that the direct path misses: a caller may equally set
+;; pool:*form* itself and call c:POOL, which is what the tests do.
+(defun pool:run-with-answers (answers)
+  (setq pool:*form* answers)
+  (c:POOL)
+  (pool:fclear)
+  (princ))
+
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol POOL-BACK.
 (defun pool:asks (kind msg ents dflt back / v cols kw)
@@ -583,6 +668,44 @@
   (cond ((member v '("Back" "Undo")) 'POOL-BACK)
         ((null v) (if dflt dflt (pool:askkw msg kws shown dflt back)))
         (t v)))
+
+;; The keyword question a form can answer.  Deliberately a WRAPPER and
+;; not a sixth argument on pool:askkw: the grouped build swaps that
+;; helper out for cal:askkw, which takes five, so widening it here
+;; would have the twin call the library with an argument it does not
+;; accept -- a build that loads cleanly and dies at the first keyword
+;; question.  The mirror leaves this defun alone, while the pool:askkw
+;; call inside it is rewritten like any other call site.
+(defun pool:askkwf (key msg kws shown dflt back / v)
+  (if (and (pool:fhas key)
+           (setq v (pool:ftake key))
+           (= (type v) 'STR)
+           (setq v (pool:fkword v kws)))
+      v
+      (pool:askkw msg kws shown dflt back)))
+
+;; V as the question would spell it, or nil when the question does not
+;; accept it at all.  Two jobs in one walk of the keyword list:
+;;
+;;   - an answer the question does not offer falls through to the
+;;     prompt instead of being handed on to fail later.  The shape
+;;     charts show bottoms POOL cannot draw, and a form built from a
+;;     chart will offer them;
+;;   - the canonical SPELLING comes back, not the caller's.  Every test
+;;     downstream is (= btype "Wedge"), so a form that said "wedge"
+;;     would sail through a case-insensitive check and then match
+;;     nothing at all.
+(defun pool:fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
 
 ;; Yes/No that can be backed out of.  Returns T, nil or POOL-BACK.
 (defun pool:askyn (msg dflt back / v)
@@ -690,8 +813,12 @@
           (setq dflt (nth 4 it))
           (if (and dflt (listp dflt))
               (setq dflt (pool:sqfirst ans dflt)))
-          (setq v (pool:asks (cadr it) (caddr it) (cadddr it) dflt
-                             (if (or asked bk) t nil)))
+          ;; the form answers first, and its answer is consumed --
+          ;; see "form answers" above for why removing beats marking
+          (setq v (if (pool:fhas (car it))
+                      (pool:ftake (car it))
+                      (pool:asks (cadr it) (caddr it) (cadddr it) dflt
+                                 (if (or asked bk) t nil))))
           (if (eq v 'POOL-BACK)
               (if asked
                   (setq i (car asked) asked (cdr asked))
@@ -758,12 +885,22 @@
 
 ;; Ask for a distance while the matching guide elements glow red, then
 ;; restore each element to the color it had (outline vs cross-dim gray).
-(defun pool:askh (msg ents / v cols)
-  (setq cols (mapcar 'pool:getcol ents))
-  (foreach e ents (pool:setcol e pool:*hi-col*))
-  (setq v (pool:ask msg))
-  (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
-  v)
+(defun pool:askh (msg ents / v cols k)
+  ;; A form answer for this letter skips the prompt and the highlight
+  ;; with it -- there is nothing to look at while nothing is being
+  ;; asked.  Only a real measurement is taken: every caller here range
+  ;; checks what it gets and none of them can do anything with nil, so
+  ;; an NA in the store falls through to the keyboard (having been
+  ;; consumed, so it cannot come back round again).
+  (setq k (pool:fkeyof msg))
+  (if (and k (pool:fhas k) (numberp (setq v (pool:ftake k))))
+      v
+      (progn
+        (setq cols (mapcar 'pool:getcol ents))
+        (foreach e ents (pool:setcol e pool:*hi-col*))
+        (setq v (pool:ask msg))
+        (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
+        v)))
 
 ;; Delete all guide entities (tracked globally so the *error* handler
 ;; can clean up after a cancel mid-prompt).  The live-reshape engine is
@@ -4152,8 +4289,9 @@
         (command "_.ZOOM" "_Window"
                  (pool:wp (list (- xmin doff) (- ymin doff)))
                  (pool:wp (list (+ xmax doff) (+ ymax doff))))
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (if (/= btype "Sport")
             (pool:hopnormal quad corners doff th nil btype
                             xmin (- ymin (* 2.2 doff)) t)
@@ -4773,8 +4911,9 @@
   (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (setq u (pool:unit (pool:v- tipr tipl))
               v (pool:perp u)
               lline (list tipl v)
@@ -4811,8 +4950,9 @@
   (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (setq cen (list 0.0 0.0))
         (foreach p pts (setq cen (pool:v+ cen p)))
         (setq cen (pool:v* cen 0.125)
@@ -6599,8 +6739,9 @@
   (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
       nil
       (progn
-        (setq btype (pool:askkw "Bottom type" pool:*btypes* pool:*btshown*
-                                "Normal" nil))
+        (setq btype (pool:askkwf 'btype "Bottom type"
+                                 pool:*btypes* pool:*btshown*
+                                 "Normal" nil))
         (setq u (pool:unit (pool:v- tipr tipl))
               v (pool:perp u))
         (if (/= btype "Sport")
@@ -6679,6 +6820,10 @@
     (setq pool:*sideon* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
+    ;; a form must never outlive the run it was given to: left behind,
+    ;; the next POOL typed at the command line would answer itself with
+    ;; last time's numbers and draw a wrong pool with no error at all
+    (pool:fclear)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -6708,23 +6853,24 @@
   ;; no diagonals; out-of-square pools take the usual cross-dim route.
   (setq pool:*insq*
         (= "Insquare"
-           (pool:askkw "Is the pool in-square or out-of-square"
-                       "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
+           (pool:askkwf 'insq "Is the pool in-square or out-of-square"
+                        "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
   (if pool:*insq*
       (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
 
   ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
   ;; the six common shapes first, then the rarely-used ones; type RO
   ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
-  (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
-  (setq ptype (getkword
-                (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
-                        "OCtagon/ROUnd/MUtt]: ")))
+  (setq ptype (pool:fshape))
 
   ;; the base point is picked with the user's own snaps still live;
   ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (getpoint "\nInsertion base point <0,0>: ")
-        pool:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  (setq base (if (pool:fhas 'base)
+                 (pool:ftake 'base)
+                 (getpoint "\nInsertion base point <0,0>: "))
+        pool:*base* (if (and base (listp base))
+                        (list (car base) (cadr base))
+                        (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -6752,6 +6898,7 @@
   (command "_.ZOOM" "_Extents")
   (pool:undoend)
   (pool:sysrestore)
+  (pool:fclear)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
