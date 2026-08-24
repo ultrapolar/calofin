@@ -75,6 +75,19 @@ def dimcalls(vm):
     return [c for c in vm.commands if c and c[0] == '_.DIMALIGNED']
 
 
+def textmoves(vm):
+    """Where each dimension's text was slid to, in order."""
+    return [c[3] for c in vm.commands if c and c[0] == '_.DIMTEDIT']
+
+
+def textpos(vm, one_line):
+    """Run CDCREATE on a single line and give back its text position."""
+    v = newvm()
+    e = line(v, *one_line)
+    run(v, [None, [e]], f"text {one_line}")
+    return textmoves(v)[0]
+
+
 def alive(vm, etype):
     """Entities of ETYPE still in the drawing (not erased)."""
     out = []
@@ -117,6 +130,15 @@ assert all(62 not in d and 6 not in d and 370 not in d for d in made), \
 assert "DIMENSION" in vm.tables['LAYER'], "DIMENSION layer created"
 assert alive(vm, 'LINE') == [], "every dimensioned line is erased"
 assert all(e in vm.deleted for e in ls)
+# text slid 80% of the way toward the right-hand end of each line
+assert near(textmoves(vm)[0], [8.0, 0.0, 0.0]), textmoves(vm)[0]
+assert near(textmoves(vm)[1], [8.0, 8.0, 0.0]), textmoves(vm)[1]
+assert near(textmoves(vm)[2], [8.0, 2.0, 0.0]), \
+    "drawn right-to-left, the text still goes to the right-hand end"
+assert all(d[11] == m for d, m in zip(made, textmoves(vm))), \
+    "the entity's text midpoint follows"
+assert all(d[70] & 128 for d in made), "text position marked user-defined"
+
 undo = [c for c in vm.commands if c and c[0] == '_.UNDO']
 assert [c[1] for c in undo] == ["_Begin", "_End"], undo
 assert vm.commands.index(['_.UNDO', '_Begin']) < \
@@ -207,7 +229,10 @@ ls = [line(vm, (0, 0, 0), (10, 0, 0))]
 run(vm, [None, ls], "C7")
 loc = dimcalls(vm)[0][6]
 assert near(loc, [5.0, 2.0, 0.0]), loc
-print("   offset 2.0 puts the horizontal dim line 2.0 above the line")
+assert near(textmoves(vm)[0], [8.0, 2.0, 0.0]), \
+    "the text rides the dimension line, not the measured line"
+print("   offset 2.0 puts the horizontal dim line 2.0 above the line,")
+print("   text still 80% along it")
 
 
 print("== C8. cdc:*erase* nil keeps the lines ==")
@@ -231,7 +256,59 @@ assert alive(vm, 'LINE') == []
 print("   both ties dimensioned onto DIMENSION, both source lines erased")
 
 
-print("== C10. CDCREATEVER prints the version ==")
+print("== C11. which end the text goes to ==")
+# lying over: the right-hand end, whichever way the line was drawn
+assert near(textpos(vm, [(0, 0, 0), (10, 0, 0)]), [8.0, 0.0, 0.0])
+assert near(textpos(vm, [(10, 0, 0), (0, 0, 0)]), [8.0, 0.0, 0.0])
+assert near(textpos(vm, [(0, 0, 0), (10, 6, 0)]), [8.0, 4.8, 0.0])
+# standing up: the bottom end, whichever way the line was drawn
+assert near(textpos(vm, [(0, 0, 0), (0, 10, 0)]), [0.0, 2.0, 0.0])
+assert near(textpos(vm, [(0, 10, 0), (0, 0, 0)]), [0.0, 2.0, 0.0])
+# within 15 degrees of vertical counts as standing up ...
+assert near(textpos(vm, [(0, 0, 0), (1, 10, 0)]), [0.2, 2.0, 0.0])
+# ... and a hair past 45 degrees does not: right-hand end again
+assert near(textpos(vm, [(0, 0, 0), (10, 10.4, 0)]), [8.0, 8.32, 0.0])
+print("   right-hand end when lying over, bottom end when standing up")
+
+
+print("== C12. cdc:*textpos* 0.5 leaves the text centred ==")
+vm = newvm()
+vm.globals[Sym('cdc:*textpos*')] = 0.5
+run(vm, [None, [line(vm, (0, 0, 0), (10, 0, 0))]], "C12")
+assert len(dims(vm)) == 1
+assert textmoves(vm) == [], "no text move at all when it belongs in the middle"
+assert dims(vm)[0][70] & 128 == 0, "and no user-defined-position flag"
+print("   centred text needs no DIMTEDIT")
+
+
+print("== C13. a DIMENSION layer that is frozen, locked or off ==")
+vm = newvm()
+vm.loads('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
+         '                \'(100 . "AcDbLayerTableRecord") \'(2 . "DIMENSION")'
+         '                \'(70 . 5) \'(62 . -7) \'(6 . "Continuous")))')
+ls = [line(vm, (0, 0, 0), (10, 0, 0))]
+run(vm, [None, ls], "C13")
+rec = vm.recdata[vm.tablerecs['LAYER']['DIMENSION']]
+flags = next(g.b for g in rec if isinstance(g, Dot) and g.a == 70)
+color = next(g.b for g in rec if isinstance(g, Dot) and g.a == 62)
+assert flags == 0, f"thawed and unlocked, got {flags}"
+assert color == 7, f"switched back on, got {color}"
+assert len(dims(vm)) == 1 and dims(vm)[0][8] == "DIMENSION"
+print("   layer thawed, unlocked and switched on before anything is drawn")
+
+
+print("== C14. a quiet run does not hoard the user's settings ==")
+vm = newvm()
+run(vm, [None, None], "C14-noop")           # nothing highlighted
+vm.sysvars['OSMODE'] = 512                  # the user changes a setting
+run(vm, [None, [line(vm, (0, 0, 0), (5, 0, 0))]], "C14-real")
+assert vm.sysvars['OSMODE'] == 512, \
+    "the second run restores what was current when IT started"
+assert vm.sysvars['CLAYER'] == "POOL"
+print("   the snapshot from a no-op run is dropped, not carried forward")
+
+
+print("== C15. CDCREATEVER prints the version ==")
 vm = newvm()
 vm.run('c:CDCREATEVER', [])
 print("   ok")

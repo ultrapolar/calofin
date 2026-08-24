@@ -1,7 +1,14 @@
-;;; ==================================================================
-;;;  CDCREATE.lsp
+;;; ===================================================================
+;;; CDCREATE.lsp  --  cross dimensions from every highlighted line
+;;; -------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP; needs the Visual LISP
+;;; engine that ships with full AutoCAD -- LT cannot run this).
 ;;;
-;;;  CDCREATE  ("Cross Dimension - Create")
+;;; Commands:  CDCREATE       dimension every highlighted line
+;;;            CDCREATEVER    print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;;  Turns highlighted lines into cross dimensions in one pass:
 ;;;
@@ -9,7 +16,9 @@
 ;;;       command -- a pickfirst selection is used as-is).
 ;;;    2. Every LINE in the selection gets an aligned dimension along
 ;;;       it, measuring end to end, with the dimension line sitting on
-;;;       the line itself.
+;;;       the line itself and the text slid along it, about 80% of the
+;;;       way toward the right-hand end -- the bottom end on a line
+;;;       standing near vertical -- rather than sitting centred.
 ;;;    3. Each new dimension is put in the "CROSS DIMENSIONS" dimension
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
@@ -35,6 +44,11 @@
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
 ;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
+;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
+;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
+;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
+;;;                  before the text goes to its bottom end instead of
+;;;                  its right-hand one
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -42,7 +56,10 @@
 ;;;      reported, not dimensioned -- explode a polyline first if its
 ;;;      segments need cross dims.
 ;;;    * Zero-length lines are skipped; they have nothing to measure.
-;;;    * The "DIMENSION" layer is created when the drawing lacks it.
+;;;    * The "DIMENSION" layer is created when the drawing lacks it,
+;;;      and thawed / unlocked / switched back on when it is there but
+;;;      not usable -- a run onto a frozen layer would otherwise look
+;;;      like the command did nothing.
 ;;;      A missing "CROSS DIMENSIONS" style is NOT invented: the dims
 ;;;      are drawn in whatever style is current and the routine says so,
 ;;;      so a drawing started from the wrong template is obvious
@@ -50,33 +67,20 @@
 ;;;    * The dimension style, current layer, CMDECHO and OSMODE in
 ;;;      force before the command are restored afterwards, on a clean
 ;;;      finish, an error, or Esc.
-;;;    * Requires the Visual LISP engine, which ships with full
-;;;      AutoCAD.  AutoCAD LT has no LISP engine and cannot run this.
-;;; ==================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;; ===================================================================
 
-(setq *cdcreate-version* "v1.0")   ; announced on load; release_lisp.py
-                                   ; turns v1.0 into the REV10 suffix
+(setq *cdcreate-version* "v1.1")   ; announced on load; release_lisp.py
+                                   ; reads this banner and stamps the
+                                   ; dated twin in releases/ from it
 
 (setq cdc:*style*  "CROSS DIMENSIONS")
 (setq cdc:*layer*  "DIMENSION")
 (setq cdc:*offset* 0.0)
 (setq cdc:*erase*  t)
+(setq cdc:*textpos* 0.8)
+(setq cdc:*vertang* 15.0)
 
 ;;; -------------------- helpers ------------------------------------
-
-;; make a layer current, creating it first when the drawing lacks it
-(defun cdc:setlayer (name)
-  (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   '(70 . 0)
-                   '(62 . 7)
-                   '(6 . "Continuous"))))
-  (setvar "CLAYER" name))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -84,12 +88,16 @@
   (if (and name (tblsearch "DIMSTYLE" name))
     (progn (command "_.-DIMSTYLE" "_Restore" name) t)))
 
-;; put a saved dimension style back, but only when the style really did
-;; move -- a run that never found "CROSS DIMENSIONS" should not leave a
-;; pointless -DIMSTYLE Restore in the drawing's command history
+;; DIMSTYLE is read-only to setvar, so it goes back through a command --
+;; and only when the style really did move: a run that never found
+;; "CROSS DIMENSIONS" should not leave a pointless -DIMSTYLE Restore in
+;; the drawing's command history.  command-s, so the same call is legal
+;; from inside the error handler.
 (defun cdc:restyle (odim)
-  (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
-    (cdc:setstyle odim)))
+  (if (and odim (tblsearch "DIMSTYLE" odim)
+           (not (equal odim (getvar "DIMSTYLE"))))
+    (vl-catch-all-apply 'command-s
+                        (list "_.-DIMSTYLE" "_Restore" odim))))
 
 ;; the two endpoints of a LINE, in WCS (the entity's own OCS may be
 ;; tilted, so go through the entity coordinate system)
@@ -98,23 +106,45 @@
   (list (trans (cdr (assoc 10 ed)) en 0)
         (trans (cdr (assoc 11 ed)) en 0)))
 
-;; midpoint of p1->p2, pushed perpendicular to the line by dist
-;; (dist 0.0 puts the dimension line straight on the line)
-(defun cdc:loc (p1 p2 dist / dx dy d m)
-  (setq m (list (* 0.5 (+ (car  p1) (car  p2)))
-                (* 0.5 (+ (cadr p1) (cadr p2)))
-                (* 0.5 (+ (caddr p1) (caddr p2)))))
+;; the point f of the way from p1 to p2 (f 0.5 = midpoint), pushed
+;; perpendicular to the line by dist -- dist 0.0 leaves it on the line.
+;; Everything CDCREATE places sits on this one line, so the dimension
+;; line and its text can never drift onto opposite sides of it.
+(defun cdc:loc (p1 p2 f dist / dx dy d b)
+  (setq dx (- (car  p2) (car  p1))
+        dy (- (cadr p2) (cadr p1))
+        b  (list (+ (car   p1) (* f dx))
+                 (+ (cadr  p1) (* f dy))
+                 (+ (caddr p1) (* f (- (caddr p2) (caddr p1))))))
   (if (equal dist 0.0 1e-12)
-    m
+    b
     (progn
-      (setq dx (- (car  p2) (car  p1))
-            dy (- (cadr p2) (cadr p1))
-            d  (sqrt (+ (* dx dx) (* dy dy))))
+      (setq d (sqrt (+ (* dx dx) (* dy dy))))
       (if (> d 1e-9)
-        (list (+ (car  m) (* dist (/ (- dy) d)))
-              (+ (cadr m) (* dist (/ dx d)))
-              (caddr m))
-        m))))
+        (list (+ (car  b) (* dist (/ (- dy) d)))
+              (+ (cadr b) (* dist (/ dx d)))
+              (caddr b))
+        b))))
+
+(defun cdc:d2r (a) (* pi (/ a 180.0)))
+
+;; T when the text belongs at the p2 end rather than the p1 end: the
+;; right-hand end, or -- for a line standing within cdc:*vertang* of
+;; vertical, where "right-hand" is a coin toss a hair of drafting noise
+;; could flip -- the bottom end
+(defun cdc:top2 (p1 p2 / dx dy a)
+  (setq dx (abs (- (car  p2) (car  p1)))
+        dy (abs (- (cadr p2) (cadr p1)))
+        a  (cdc:d2r cdc:*vertang*))
+  (if (<= (* dx (cos a)) (* dy (sin a)))
+    (< (cadr p2) (cadr p1))               ; standing up: the lower end
+    (> (car  p2) (car  p1))))             ; lying over: the right end
+
+;; cdc:*textpos* measured from the far end toward the end the text
+;; belongs at, expressed as a fraction of p1->p2 so it can go straight
+;; into cdc:loc whichever way round the line was drawn
+(defun cdc:textfrac (p1 p2)
+  (if (cdc:top2 p1 p2) cdc:*textpos* (- 1.0 cdc:*textpos*)))
 
 ;; a copy of an entget list with every entry for group CODE dropped
 (defun cdc:strip (code lst / out)
@@ -148,31 +178,30 @@
 
 ;;; -------------------- the command --------------------------------
 
-(defun c:CDCREATE ( / *error* olderr oce ocl oos odim
+(defun c:CDCREATE ( / *error* olderr odim
                       ss i en ed typ ends pairs skipped plines
-                      havestyle grouped pre new made gone lays p1 p2 )
+                      havestyle undo-open pre new made gone lays p1 p2 )
 
-  ;; -- restore drawing state on error / Esc.  A dimension command may
-  ;;    still be open, so talk to AutoCAD through command-s -- and close
-  ;;    the undo group, or the next U would swallow the user's own work
+  ;; -- restore drawing state on error / Esc.  The user's settings come
+  ;;    back FIRST so nothing below can skip them; a dimension command
+  ;;    may still be open, so AutoCAD is talked to through command-s --
+  ;;    and the undo group is closed, or the next U would swallow the
+  ;;    user's own work
   (setq olderr *error*)
   (defun *error* (m)
-    (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
-      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
-    (if ocl (setvar "CLAYER"  ocl))
-    (if oos (setvar "OSMODE"  oos))
-    (if oce (setvar "CMDECHO" oce))
-    (if grouped (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (cal:sysrestore)
+    (cdc:restyle odim)
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
-      (princ (strcat "\n** Error: " m)))
+    (if (and m (not (wcmatch (strcase m)
+                             "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCDCREATE error: " m)))
     (princ))
 
   (vl-load-com)
-  (setq oce (getvar "CMDECHO")
-        ocl (getvar "CLAYER")
-        oos (getvar "OSMODE")
-        odim (getvar "DIMSTYLE"))
+  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  (setq odim (getvar "DIMSTYLE"))
 
   ;; -- 1. the highlighted lines: a pickfirst selection if there is
   ;;       one, otherwise ask for it
@@ -213,8 +242,8 @@
           (setvar "CMDECHO" 0)
           (setvar "OSMODE"  0)
           (command "_.UNDO" "_Begin")
-          (setq grouped t)
-          (cdc:setlayer cdc:*layer*)
+          (setq undo-open t)
+          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* 7))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
             (princ (strcat "\n** This drawing has no \"" cdc:*style*
@@ -234,10 +263,20 @@
             (command "_.DIMALIGNED"
                      "_non" (trans p1 0 1)
                      "_non" (trans p2 0 1)
-                     "_non" (trans (cdc:loc p1 p2 cdc:*offset*) 0 1))
+                     "_non" (trans (cdc:loc p1 p2 0.5 cdc:*offset*) 0 1))
             (setq new (entlast))
             (if (and new (not (eq new pre)))
               (progn
+                ;; slide the text down the dimension line, out of the
+                ;; middle -- DIMTEDIT moves the text alone, and the move
+                ;; is along the dimension line, so the line itself does
+                ;; not shift whatever DIMTMOVE says
+                (if (not (equal cdc:*textpos* 0.5 1e-6))
+                  (command "_.DIMTEDIT" new
+                           "_non" (trans (cdc:loc p1 p2
+                                                  (cdc:textfrac p1 p2)
+                                                  cdc:*offset*)
+                                         0 1)))
                 (cdc:fixdim new havestyle)
                 (setq made (1+ made))
                 ;; only a line that really did get its dimension is
@@ -251,11 +290,8 @@
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
-          (setvar "CLAYER"  ocl)
-          (setvar "OSMODE"  oos)
-          (setvar "CMDECHO" oce)
           (command "_.UNDO" "_End")
-          (setq grouped nil)
+          (setq undo-open nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"
                          (if (= made 1) "" "s") " created on layer "
@@ -276,6 +312,11 @@
                              " Explode a polyline to cross-dim its segments."
                              ""))))))))
 
+  ;; every path out of the command drops the snapshot, the quiet ones
+  ;; included: a run that found nothing to do and kept its snapshot
+  ;; would hand it to the NEXT run, which would then put the user's
+  ;; settings back to what they were two commands ago
+  (cal:sysrestore)
   (setq *error* olderr)
   (princ))
 
