@@ -66,8 +66,10 @@
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
 ;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;      drawing, sized to scale with it.  Problems in RED at full
-;;;      size, advice in CYAN, all-clear in green at 75%.
+;;;      drawing, sized to scale with it: a large title, the date and
+;;;      version under it, an ALL CLEAR / problem-count verdict, then
+;;;      every finding under underlined section headings.  Problems in
+;;;      RED at full size, advice in CYAN, all-clear in green at 75%.
 ;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
@@ -80,7 +82,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.0")
+(setq *spacheck-version* "v1.1")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -209,11 +211,12 @@
 
 ;;; -------------------- report text -------------------------------------
 ;;;  A report row is (text . level): level nil = all clear, 1 = a
-;;;  problem, 2 = advice.  The three render differently in the MTEXT.
+;;;  problem, 2 = advice, 3 = a section heading.  The four render
+;;;  differently in the MTEXT.
 
 ;; A report row is (text . level): nil = all clear, 1 = a problem,
-;; 2 = advice.  spachk:lvl-p compares nil-safely -- (= nil 1) is not
-;; something to rely on.
+;; 2 = advice, 3 = a section heading.  spachk:lvl-p compares
+;; nil-safely -- (= nil 1) is not something to rely on.
 (defun spachk:row (s lvl) (cons s lvl))
 (defun spachk:row-txt (r) (car r))
 (defun spachk:row-lvl (r) (cdr r))
@@ -228,10 +231,25 @@
 (defun spachk:small (s)
   (strcat "{\\H" (rtos spachk:*green-scale* 2 2) "x;" s "}"))
 
+;; The report's title line: half again the base height.
+(defun spachk:big (s)
+  (strcat "{\\H1.5x;" s "}"))
+
+;; A section heading: underlined, with a thin blank line above it so
+;; the sections read as blocks.  The braces scope both codes, and the
+;; \P inside the first group is a paragraph break at 0.4x height --
+;; a narrow gap, not a full empty line.
+(defun spachk:hdg (s)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+;; Findings are indented two spaces under their heading; the indent
+;; sits INSIDE the colour/height wrap so a problem row still starts
+;; with its colour code.
 (defun spachk:render (r)
-  (cond ((spachk:lvl-p r 1) (spachk:red (spachk:row-txt r)))
-        ((spachk:lvl-p r 2) (spachk:cyan (spachk:row-txt r)))
-        (t (spachk:small (spachk:row-txt r)))))
+  (cond ((spachk:lvl-p r 3) (spachk:hdg (spachk:row-txt r)))
+        ((spachk:lvl-p r 1) (spachk:red (strcat "  " (spachk:row-txt r))))
+        ((spachk:lvl-p r 2) (spachk:cyan (strcat "  " (spachk:row-txt r))))
+        (t (spachk:small (strcat "  " (spachk:row-txt r))))))
 
 ;; MTEXT carries at most 250 characters in group 1; anything longer goes
 ;; out as leading group 3 chunks with the tail in group 1.  A report is
@@ -1018,12 +1036,14 @@
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
 
-;; Everything, in report order.  Returns (rows . flagged-entities).
+;; Everything, in report order, each section under its heading row.
+;; Returns (rows . flagged-entities).
 (defun spachk:audit (ss / rows ents blk att g tp cov wat covo wato
                           dims covn r)
   (setq rows nil ents nil)
 
   ;; 1 -- the block
+  (setq rows (append rows (list (spachk:row "THE DETAILS BLOCK" 3))))
   (setq r (spachk:audit-block ss)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
@@ -1038,6 +1058,7 @@
   (if (and (= g "THERMOLIGHT") (null tp)) (setq tp "1-3/8"))
 
   ;; 2 -- the cover outline
+  (setq rows (append rows (list (spachk:row "THE OUTLINES" 3))))
   (setq r (spachk:audit-outline ss spachk:*lay-cover* "Cover outline" t)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r))
@@ -1055,6 +1076,7 @@
         rows (append rows (spachk:res-rows r)))
 
   ;; 4 -- the dimensions
+  (setq rows (append rows (list (spachk:row "THE DIMENSIONS" 3))))
   (setq dims (spachk:dims ss)
         r    (spachk:audit-dims dims cov wat)
         rows (append rows (spachk:res-rows r))
@@ -1067,6 +1089,7 @@
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
+  (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
       (setq r (spachk:audit-hinges ss cov g tp)
@@ -1078,6 +1101,7 @@
                         1)))))
 
   ;; 6 -- the title block
+  (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
 
@@ -1091,10 +1115,14 @@
   (foreach r rows
     (cond ((spachk:lvl-p r 1) (setq nbad (1+ nbad)))
           ((spachk:lvl-p r 2) (setq nadv (1+ nadv)))))
-  ;; height: scale the sheet to the drawing, as the siblings do
-  (setq nlin 4.0)
+  ;; height: scale the sheet to the drawing, as the siblings do.  The
+  ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
+  ;; row is one line plus the 0.4 gap above it.
+  (setq nlin 4.5)
   (foreach r rows
-    (setq nlin (+ nlin (if (spachk:row-lvl r) 1.0 spachk:*green-scale*))))
+    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
+                             ((spachk:row-lvl r) 1.0)
+                             (t spachk:*green-scale*)))))
   (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
     (progn
       (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
@@ -1106,24 +1134,43 @@
                 (list (+ (caadr bb) (* 0.05 (max (spachk:bw bb) 1.0)))
                       (cadadr bb) 0.0)
                 (list 0.0 0.0 0.0)))
-  (setq txt (strcat (if readonly "SPACHECKSCAN REPORT - " "SPACHECK REPORT - ")
-                    (spachk:datestr)
-                    "  [SPACHECK " *spacheck-version* "]"
+  ;; the head: a large title, the date and version small under it, a
+  ;; verdict line -- red with the problem count, cyan when only advice,
+  ;; plain ALL CLEAR otherwise -- then the colour legend.  The verdict
+  ;; is wrapped in its height code first so it never renders as (or
+  ;; counts among) the finding rows, which start with a colour code.
+  (setq txt (strcat (spachk:big (if readonly
+                                    "SPACHECKSCAN REPORT"
+                                    "SPACHECK REPORT"))
+                    "\\P"
+                    (spachk:small (strcat (spachk:datestr)
+                                          "  -  SPACHECK "
+                                          *spacheck-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (cond
+                      ((> nbad 0)
+                       (spachk:red
+                         (strcat (itoa nbad) " PROBLEM"
+                                 (if (= 1 nbad) "" "S")
+                                 (if (> nadv 0)
+                                     (strcat ", " (itoa nadv) " ADVISOR"
+                                             (if (= 1 nadv) "Y" "IES"))
+                                     ""))))
+                      ((> nadv 0)
+                       (spachk:cyan
+                         (strcat "ALL CLEAR - " (itoa nadv) " advisor"
+                                 (if (= 1 nadv) "y" "ies"))))
+                      (t "ALL CLEAR - every check passed"))
+                    "}"
                     "\\P"
                     (spachk:small
                       (strcat (if readonly
                                   "Read-only scan - nothing in the drawing was changed.  "
                                   "")
                               "Problems in " (spachk:red "red")
-                              ", advice in " (spachk:cyan "cyan") "."))
-                    "\\P"
-                    (spachk:small
-                      (strcat (itoa nbad) " problem"
-                              (if (= 1 nbad) "" "s") ", "
-                              (itoa nadv) " advisor"
-                              (if (= 1 nadv) "y" "ies")))
-                    "\\P"
-                    (spachk:small "----------------------------------------")))
+                              ", advice in " (spachk:cyan "cyan")
+                              "; lines that checked out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (spachk:render r))))
   (spachk:mtext ins h (* spachk:*report-chars* h) txt spachk:*report-layer*)

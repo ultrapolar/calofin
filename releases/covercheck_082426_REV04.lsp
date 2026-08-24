@@ -144,15 +144,20 @@
 ;;;     drawing on layer COVERCHECK-REPORT listing every dimension —
 ;;;     with its measured distance (in the drawing's units; angular
 ;;;     dims show their angle) — every arc and every overlapping line
-;;;     pair (with its overlap length), plus
-;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it. Any line describing something
-;;;     questionable or that needs looking over (a flagged/wrong
-;;;     item, a missing block, a "NOT" find, an "add ..." note, a
-;;;     skipped check) is coloured RED in the report; everything
-;;;     that checked out stays the report's normal colour and is
-;;;     drawn at *cchk-green-scale* (3/4) of the red text's height,
-;;;     so the problems are the big lines on the sheet.
+;;;     pair (with its overlap length), plus totals. The report text
+;;;     is sized from the drawing's extents so it sits to scale next
+;;;     to it, and reads top to bottom as: a large title, the date
+;;;     and version, a verdict line (ALL CLEAR, or the count of red
+;;;     lines), the colour legend, then a SUMMARY dashboard and the
+;;;     findings grouped under underlined section headings
+;;;     (DIMENSIONS, ARCS, OVERLAPPING LINES, COVER CHECKS). Any
+;;;     line describing something questionable or that needs looking
+;;;     over (a flagged/wrong item, a missing block, a "NOT" find,
+;;;     an "add ..." note, a skipped check) is coloured RED in the
+;;;     report; everything that checked out stays the report's
+;;;     normal colour and is drawn at *cchk-green-scale* (3/4) of
+;;;     the red text's height, so the problems are the big lines on
+;;;     the sheet.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -180,7 +185,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.3")
+(setq *cchk-version* "v0.4")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -577,6 +582,24 @@
   ;; all-clear text renders at *cchk-green-scale* of the height the
   ;; red attention text gets, so problems stand out on the sheet
   (strcat "{\\H" (rtos *cchk-green-scale* 2 4) "x;" s "}"))
+
+(defun cchk:big (s)
+  ;; the report's title line: half again the base height
+  (strcat "{\\H1.5x;" s "}"))
+
+(defun cchk:hdg (s)
+  ;; a section heading: underlined, with a thin blank line above it
+  ;; so the sections read as blocks (the \P inside the first group is
+  ;; a paragraph break at 0.4x height - a narrow gap, not a full line)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+(defun cchk:linegrp (s)
+  ;; which underlined section a report line files under, keyed on the
+  ;; fixed prefixes the review gives its lines
+  (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
+        ((wcmatch s "Arc *")              "ARCS")
+        ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        (t                                "COVER CHECKS")))
 
 ;; --- geometry ------------------------------------------------------
 
@@ -2297,7 +2320,8 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb h m ins txt nlin ref)
+                      minx miny maxx maxy bb h m ins txt nlin ref
+                      nred grp grps)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2544,8 +2568,15 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing
-        (setq nlin 3.0)                          ; title, legend, separator
+        ;; all-clear lines are shorter, so weight them when sizing;
+        ;; the head (title, date, verdict, legend) is ~4.5 lines and
+        ;; each underlined section heading is a line plus its 0.4 gap
+        (setq nlin 4.5)
+        (setq grps nil)
+        (foreach l lines
+          (if (not (member (cchk:linegrp l) grps))
+            (setq grps (cons (cchk:linegrp l) grps))))
+        (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
         (foreach l lines
           (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
         (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))   ; the header dashboard
@@ -2585,22 +2616,52 @@
         (setq hdr (append hdr
                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
                                   (car cres))))
-        (setq txt (strcat "COVERCHECK REPORT - " (cchk:datestr)
-                          " (" *cchk-version* ")"
+        ;; how many lines will render red - the verdict states it
+        (setq nred 0)
+        (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+        (foreach l lines (if (cchk:attn-p l) (setq nred (1+ nred))))
+        ;; the head: a large title, the date and version small under
+        ;; it, the verdict, then the colour legend.  The verdict is
+        ;; wrapped in its height code first so it reads as a banner,
+        ;; not as one of the finding lines.
+        (setq txt (strcat (cchk:big "COVERCHECK REPORT")
+                          "\\P"
+                          (cchk:small (strcat (cchk:datestr)
+                                              "  -  COVERCHECK "
+                                              *cchk-version*))
+                          "\\P"
+                          "{\\H1.2x;"
+                          (if (> nred 0)
+                            (cchk:red (strcat (itoa nred) " LINE"
+                                              (if (= 1 nred) "" "S")
+                                              " NEED"
+                                              (if (= 1 nred) "S" "")
+                                              " ATTENTION"))
+                            "ALL CLEAR - every check passed")
+                          "}"
                           "\\P"
                           (cchk:small
-                            (strcat "Items needing attention are shown in "
-                                    (cchk:red "red") ", larger than the rest."))))
+                            (strcat "Lines needing attention are in "
+                                    (cchk:red "red")
+                                    " at full size; lines that checked"
+                                    " out are smaller."))))
+        ;; the dashboard, under its own heading
+        (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
         (foreach pr hdr
           (setq txt (strcat txt "\\P"
                             (if (cdr pr)
-                              (cchk:red (car pr))
-                              (cchk:small (car pr))))))
-        (setq txt (strcat txt "\\P"
-                          (cchk:small "----------------------------------------")))
+                              (cchk:red (strcat "  " (car pr)))
+                              (cchk:small (strcat "  " (car pr)))))))
+        ;; the findings, grouped under underlined section headings
+        (setq grp nil)
         (foreach l (reverse lines)
+          (if (/= grp (cchk:linegrp l))
+            (setq grp (cchk:linegrp l)
+                  txt (strcat txt "\\P" (cchk:hdg grp))))
           (setq txt (strcat txt "\\P"
-                            (if (cchk:attn-p l) (cchk:red l) (cchk:small l)))))
+                            (if (cchk:attn-p l)
+                              (cchk:red (strcat "  " l))
+                              (cchk:small (strcat "  " l))))))
         (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
 
         ;; --- show the drawing plus the report -----------------------
@@ -2651,7 +2712,8 @@
 (defun c:COVERSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
                      blks lines olaps pr bb bad
                      nd ndbad na nabad h ins txt nlin ref hdr l cres
-                     minx miny maxx maxy p13 p14 near s)
+                     minx miny maxx maxy p13 p14 near s
+                     nred grp grps)
 
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -2768,7 +2830,12 @@
      (setq hdr (append hdr
                        (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
                                (car cres))))
-     (setq nlin 3.0)
+     (setq nlin 4.5)                     ; title, date, verdict, legend
+     (setq grps nil)
+     (foreach l lines
+       (if (not (member (cchk:linegrp l) grps))
+         (setq grps (cons (cchk:linegrp l) grps))))
+     (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
      (foreach l lines
        (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
      (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))
@@ -2782,18 +2849,45 @@
      (setq ins (if minx
                  (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                  (list 0.0 0.0 0.0)))
-     (setq txt (strcat "COVERSCAN REPORT - " (cchk:datestr)
-                       " (" *cchk-version* ")"
+     ;; how many lines will render red - the verdict states it
+     (setq nred 0)
+     (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+     (foreach l lines (if (cchk:attn-p l) (setq nred (1+ nred))))
+     (setq txt (strcat (cchk:big "COVERSCAN REPORT")
                        "\\P"
-                       (cchk:small (strcat "Read-only scan - nothing in the drawing was changed. "
-                                           "Items needing attention are shown in "
-                                           (cchk:red "red") "."))))
+                       (cchk:small (strcat (cchk:datestr)
+                                           "  -  COVERCHECK "
+                                           *cchk-version*))
+                       "\\P"
+                       "{\\H1.2x;"
+                       (if (> nred 0)
+                         (cchk:red (strcat (itoa nred) " LINE"
+                                           (if (= 1 nred) "" "S")
+                                           " NEED"
+                                           (if (= 1 nred) "S" "")
+                                           " ATTENTION"))
+                         "ALL CLEAR - every check passed")
+                       "}"
+                       "\\P"
+                       (cchk:small
+                         (strcat "Read-only scan - nothing in the drawing"
+                                 " was changed.  Lines needing attention"
+                                 " are in " (cchk:red "red")
+                                 " at full size; lines that checked out"
+                                 " are smaller."))))
+     (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
      (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr) (cchk:red (car pr))
-                                     (cchk:small (car pr))))))
-     (setq txt (strcat txt "\\P" (cchk:small "----------------------------------------")))
+       (setq txt (strcat txt "\\P" (if (cdr pr)
+                                     (cchk:red (strcat "  " (car pr)))
+                                     (cchk:small (strcat "  " (car pr)))))))
+     (setq grp nil)
      (foreach l (reverse lines)
-       (setq txt (strcat txt "\\P" (if (cchk:attn-p l) (cchk:red l) (cchk:small l)))))
+       (if (/= grp (cchk:linegrp l))
+         (setq grp (cchk:linegrp l)
+               txt (strcat txt "\\P" (cchk:hdg grp))))
+       (setq txt (strcat txt "\\P" (if (cchk:attn-p l)
+                                     (cchk:red (strcat "  " l))
+                                     (cchk:small (strcat "  " l))))))
      (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
      (setvar "CMDECHO" oldecho)
      (princ (strcat "\n--- COVERSCAN complete (read-only) ---"

@@ -33022,15 +33022,20 @@
 ;;;     drawing on layer COVERCHECK-REPORT listing every dimension —
 ;;;     with its measured distance (in the drawing's units; angular
 ;;;     dims show their angle) — every arc and every overlapping line
-;;;     pair (with its overlap length), plus
-;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it. Any line describing something
-;;;     questionable or that needs looking over (a flagged/wrong
-;;;     item, a missing block, a "NOT" find, an "add ..." note, a
-;;;     skipped check) is coloured RED in the report; everything
-;;;     that checked out stays the report's normal colour and is
-;;;     drawn at *cchk-green-scale* (3/4) of the red text's height,
-;;;     so the problems are the big lines on the sheet.
+;;;     pair (with its overlap length), plus totals. The report text
+;;;     is sized from the drawing's extents so it sits to scale next
+;;;     to it, and reads top to bottom as: a large title, the date
+;;;     and version, a verdict line (ALL CLEAR, or the count of red
+;;;     lines), the colour legend, then a SUMMARY dashboard and the
+;;;     findings grouped under underlined section headings
+;;;     (DIMENSIONS, ARCS, OVERLAPPING LINES, COVER CHECKS). Any
+;;;     line describing something questionable or that needs looking
+;;;     over (a flagged/wrong item, a missing block, a "NOT" find,
+;;;     an "add ..." note, a skipped check) is coloured RED in the
+;;;     report; everything that checked out stays the report's
+;;;     normal colour and is drawn at *cchk-green-scale* (3/4) of
+;;;     the red text's height, so the problems are the big lines on
+;;;     the sheet.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -33060,7 +33065,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.3")
+(setq *cchk-version* "v0.4")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -33390,6 +33395,24 @@
   ;; all-clear text renders at *cchk-green-scale* of the height the
   ;; red attention text gets, so problems stand out on the sheet
   (strcat "{\\H" (rtos *cchk-green-scale* 2 4) "x;" s "}"))
+
+(defun cchk:big (s)
+  ;; the report's title line: half again the base height
+  (strcat "{\\H1.5x;" s "}"))
+
+(defun cchk:hdg (s)
+  ;; a section heading: underlined, with a thin blank line above it
+  ;; so the sections read as blocks (the \P inside the first group is
+  ;; a paragraph break at 0.4x height - a narrow gap, not a full line)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+(defun cchk:linegrp (s)
+  ;; which underlined section a report line files under, keyed on the
+  ;; fixed prefixes the review gives its lines
+  (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
+        ((wcmatch s "Arc *")              "ARCS")
+        ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        (t                                "COVER CHECKS")))
 
 ;; --- geometry ------------------------------------------------------
 
@@ -35055,7 +35078,8 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb h m ins txt nlin ref)
+                      minx miny maxx maxy bb h m ins txt nlin ref
+                      nred grp grps)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -35303,8 +35327,15 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing
-        (setq nlin 3.0)                          ; title, legend, separator
+        ;; all-clear lines are shorter, so weight them when sizing;
+        ;; the head (title, date, verdict, legend) is ~4.5 lines and
+        ;; each underlined section heading is a line plus its 0.4 gap
+        (setq nlin 4.5)
+        (setq grps nil)
+        (foreach l lines
+          (if (not (member (cchk:linegrp l) grps))
+            (setq grps (cons (cchk:linegrp l) grps))))
+        (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
         (foreach l lines
           (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
         (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))   ; the header dashboard
@@ -35344,22 +35375,52 @@
         (setq hdr (append hdr
                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
                                   (car cres))))
-        (setq txt (strcat "COVERCHECK REPORT - " (cal:datestr)
-                          " (" *cchk-version* ")"
+        ;; how many lines will render red - the verdict states it
+        (setq nred 0)
+        (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+        (foreach l lines (if (cchk:attn-p l) (setq nred (1+ nred))))
+        ;; the head: a large title, the date and version small under
+        ;; it, the verdict, then the colour legend.  The verdict is
+        ;; wrapped in its height code first so it reads as a banner,
+        ;; not as one of the finding lines.
+        (setq txt (strcat (cchk:big "COVERCHECK REPORT")
+                          "\\P"
+                          (cchk:small (strcat (cal:datestr)
+                                              "  -  COVERCHECK "
+                                              *cchk-version*))
+                          "\\P"
+                          "{\\H1.2x;"
+                          (if (> nred 0)
+                            (cchk:red (strcat (itoa nred) " LINE"
+                                              (if (= 1 nred) "" "S")
+                                              " NEED"
+                                              (if (= 1 nred) "S" "")
+                                              " ATTENTION"))
+                            "ALL CLEAR - every check passed")
+                          "}"
                           "\\P"
                           (cchk:small
-                            (strcat "Items needing attention are shown in "
-                                    (cchk:red "red") ", larger than the rest."))))
+                            (strcat "Lines needing attention are in "
+                                    (cchk:red "red")
+                                    " at full size; lines that checked"
+                                    " out are smaller."))))
+        ;; the dashboard, under its own heading
+        (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
         (foreach pr hdr
           (setq txt (strcat txt "\\P"
                             (if (cdr pr)
-                              (cchk:red (car pr))
-                              (cchk:small (car pr))))))
-        (setq txt (strcat txt "\\P"
-                          (cchk:small "----------------------------------------")))
+                              (cchk:red (strcat "  " (car pr)))
+                              (cchk:small (strcat "  " (car pr)))))))
+        ;; the findings, grouped under underlined section headings
+        (setq grp nil)
         (foreach l (reverse lines)
+          (if (/= grp (cchk:linegrp l))
+            (setq grp (cchk:linegrp l)
+                  txt (strcat txt "\\P" (cchk:hdg grp))))
           (setq txt (strcat txt "\\P"
-                            (if (cchk:attn-p l) (cchk:red l) (cchk:small l)))))
+                            (if (cchk:attn-p l)
+                              (cchk:red (strcat "  " l))
+                              (cchk:small (strcat "  " l))))))
         (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
 
         ;; --- show the drawing plus the report -----------------------
@@ -35410,7 +35471,8 @@
 (defun c:COVERSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
                      blks lines olaps pr bb bad
                      nd ndbad na nabad h ins txt nlin ref hdr l cres
-                     minx miny maxx maxy p13 p14 near s)
+                     minx miny maxx maxy p13 p14 near s
+                     nred grp grps)
 
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -35527,7 +35589,12 @@
      (setq hdr (append hdr
                        (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
                                (car cres))))
-     (setq nlin 3.0)
+     (setq nlin 4.5)                     ; title, date, verdict, legend
+     (setq grps nil)
+     (foreach l lines
+       (if (not (member (cchk:linegrp l) grps))
+         (setq grps (cons (cchk:linegrp l) grps))))
+     (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
      (foreach l lines
        (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
      (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))
@@ -35541,18 +35608,45 @@
      (setq ins (if minx
                  (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                  (list 0.0 0.0 0.0)))
-     (setq txt (strcat "COVERSCAN REPORT - " (cal:datestr)
-                       " (" *cchk-version* ")"
+     ;; how many lines will render red - the verdict states it
+     (setq nred 0)
+     (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+     (foreach l lines (if (cchk:attn-p l) (setq nred (1+ nred))))
+     (setq txt (strcat (cchk:big "COVERSCAN REPORT")
                        "\\P"
-                       (cchk:small (strcat "Read-only scan - nothing in the drawing was changed. "
-                                           "Items needing attention are shown in "
-                                           (cchk:red "red") "."))))
+                       (cchk:small (strcat (cal:datestr)
+                                           "  -  COVERCHECK "
+                                           *cchk-version*))
+                       "\\P"
+                       "{\\H1.2x;"
+                       (if (> nred 0)
+                         (cchk:red (strcat (itoa nred) " LINE"
+                                           (if (= 1 nred) "" "S")
+                                           " NEED"
+                                           (if (= 1 nred) "S" "")
+                                           " ATTENTION"))
+                         "ALL CLEAR - every check passed")
+                       "}"
+                       "\\P"
+                       (cchk:small
+                         (strcat "Read-only scan - nothing in the drawing"
+                                 " was changed.  Lines needing attention"
+                                 " are in " (cchk:red "red")
+                                 " at full size; lines that checked out"
+                                 " are smaller."))))
+     (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
      (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr) (cchk:red (car pr))
-                                     (cchk:small (car pr))))))
-     (setq txt (strcat txt "\\P" (cchk:small "----------------------------------------")))
+       (setq txt (strcat txt "\\P" (if (cdr pr)
+                                     (cchk:red (strcat "  " (car pr)))
+                                     (cchk:small (strcat "  " (car pr)))))))
+     (setq grp nil)
      (foreach l (reverse lines)
-       (setq txt (strcat txt "\\P" (if (cchk:attn-p l) (cchk:red l) (cchk:small l)))))
+       (if (/= grp (cchk:linegrp l))
+         (setq grp (cchk:linegrp l)
+               txt (strcat txt "\\P" (cchk:hdg grp))))
+       (setq txt (strcat txt "\\P" (if (cchk:attn-p l)
+                                     (cchk:red (strcat "  " l))
+                                     (cchk:small (strcat "  " l))))))
      (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
      (setvar "CMDECHO" oldecho)
      (princ (strcat "\n--- COVERSCAN complete (read-only) ---"
@@ -46147,7 +46241,12 @@
 ;;;     pair (with its overlap length), every step pattern, the Step
 ;;;     Attachment verdict and the Liner Material verdict, plus
 ;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it. Any line describing something
+;;;     so it sits to scale next to it, and reads top to bottom as: a
+;;;     large title, the date and version, a verdict line (ALL CLEAR,
+;;;     or the count of red lines), the colour legend, then a SUMMARY
+;;;     dashboard and the findings grouped under underlined section
+;;;     headings (DIMENSIONS, ARCS, OVERLAPPING LINES, STEPS & SIDE
+;;;     VIEWS, WALL HEIGHT, THE LINER). Any line describing something
 ;;;     questionable or that needs looking over (a flagged/wrong
 ;;;     item, a missing block, a "NOT" find, an "add ..." note, a
 ;;;     skipped check) is coloured RED in the report; everything
@@ -46184,7 +46283,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.1")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.2")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -46584,6 +46683,29 @@
   ;; all-clear text renders at *lfc-green-scale* of the height the
   ;; red attention text gets, so problems stand out on the sheet
   (strcat "{\\H" (rtos *lfc-green-scale* 2 4) "x;" s "}"))
+
+(defun lfc:big (s)
+  ;; the report's title line: half again the base height
+  (strcat "{\\H1.5x;" s "}"))
+
+(defun lfc:hdg (s)
+  ;; a section heading: underlined, with a thin blank line above it
+  ;; so the sections read as blocks (the \P inside the first group is
+  ;; a paragraph break at 0.4x height - a narrow gap, not a full line)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+(defun lfc:linegrp (s)
+  ;; which underlined section a report line files under, keyed on the
+  ;; fixed prefixes the review gives its lines
+  (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
+        ((wcmatch s "Arc *")              "ARCS")
+        ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Steps:*,Step Attachment*,Bead Track:*")
+         "STEPS & SIDE VIEWS")
+        ((wcmatch s "Height dim *,*CHECK THE WALL HEIGHT*")
+         "WALL HEIGHT")
+        ((wcmatch s "Liner Material*")    "THE LINER")
+        (t                                "OTHER CHECKS")))
 
 ;; --- geometry ------------------------------------------------------
 
@@ -47834,7 +47956,8 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb h m ins txt nlin ref)
+                      minx miny maxx maxy bb h m ins txt nlin ref
+                      nred grp grps)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -48610,8 +48733,15 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing
-        (setq nlin 3.0)                          ; title, legend, separator
+        ;; all-clear lines are shorter, so weight them when sizing;
+        ;; the head (title, date, verdict, legend) is ~4.5 lines and
+        ;; each underlined section heading is a line plus its 0.4 gap
+        (setq nlin 4.5)
+        (setq grps nil)
+        (foreach l lines
+          (if (not (member (lfc:linegrp l) grps))
+            (setq grps (cons (lfc:linegrp l) grps))))
+        (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
         (foreach l lines
           (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
         (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))   ; the header dashboard
@@ -48657,22 +48787,52 @@
         (if datesum
           (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                             (lfc:attn-p datesum))))))
-        (setq txt (strcat "LINFINCHECK REPORT - " (cal:datestr)
-                          "  [LINFINCHECK " *lfc-version* "]"
+        ;; how many lines will render red - the verdict states it
+        (setq nred 0)
+        (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+        (foreach l lines (if (lfc:attn-p l) (setq nred (1+ nred))))
+        ;; the head: a large title, the date and version small under
+        ;; it, the verdict, then the colour legend.  The verdict is
+        ;; wrapped in its height code first so it reads as a banner,
+        ;; not as one of the finding lines.
+        (setq txt (strcat (lfc:big "LINFINCHECK REPORT")
+                          "\\P"
+                          (lfc:small (strcat (cal:datestr)
+                                             "  -  LINFINCHECK "
+                                             *lfc-version*))
+                          "\\P"
+                          "{\\H1.2x;"
+                          (if (> nred 0)
+                            (lfc:red (strcat (itoa nred) " LINE"
+                                             (if (= 1 nred) "" "S")
+                                             " NEED"
+                                             (if (= 1 nred) "S" "")
+                                             " ATTENTION"))
+                            "ALL CLEAR - every check passed")
+                          "}"
                           "\\P"
                           (lfc:small
-                            (strcat "Items needing attention are shown in "
-                                    (lfc:red "red") ", larger than the rest."))))
+                            (strcat "Lines needing attention are in "
+                                    (lfc:red "red")
+                                    " at full size; lines that checked"
+                                    " out are smaller."))))
+        ;; the dashboard, under its own heading
+        (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
         (foreach pr hdr
           (setq txt (strcat txt "\\P"
                             (if (cdr pr)
-                              (lfc:red (car pr))
-                              (lfc:small (car pr))))))
-        (setq txt (strcat txt "\\P"
-                          (lfc:small "----------------------------------------")))
+                              (lfc:red (strcat "  " (car pr)))
+                              (lfc:small (strcat "  " (car pr)))))))
+        ;; the findings, grouped under underlined section headings
+        (setq grp nil)
         (foreach l (reverse lines)
+          (if (/= grp (lfc:linegrp l))
+            (setq grp (lfc:linegrp l)
+                  txt (strcat txt "\\P" (lfc:hdg grp))))
           (setq txt (strcat txt "\\P"
-                            (if (lfc:attn-p l) (lfc:red l) (lfc:small l)))))
+                            (if (lfc:attn-p l)
+                              (lfc:red (strcat "  " l))
+                              (lfc:small (strcat "  " l))))))
         (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
 
         ;; --- show the drawing plus the report -----------------------
@@ -48734,7 +48894,8 @@
                      datesum dateraw datebad
                      nd ndbad na nabad h m ins txt nlin ref hdr l badtags
                      bordbb bordsum attundec
-                     minx miny maxx maxy p13 p14 near s b w)
+                     minx miny maxx maxy p13 p14 near s b w
+                     nred grp grps)
 
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -49060,7 +49221,12 @@
      (if datesum
        (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                          (lfc:attn-p datesum))))))
-     (setq nlin 3.0)
+     (setq nlin 4.5)                     ; title, date, verdict, legend
+     (setq grps nil)
+     (foreach l lines
+       (if (not (member (lfc:linegrp l) grps))
+         (setq grps (cons (lfc:linegrp l) grps))))
+     (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
      (foreach l lines
        (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
      (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))
@@ -49074,18 +49240,45 @@
      (setq ins (if minx
                  (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                  (list 0.0 0.0 0.0)))
-     (setq txt (strcat "LINFINSCAN REPORT - " (cal:datestr)
-                       "  [LINFINCHECK " *lfc-version* "]"
+     ;; how many lines will render red - the verdict states it
+     (setq nred 0)
+     (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+     (foreach l lines (if (lfc:attn-p l) (setq nred (1+ nred))))
+     (setq txt (strcat (lfc:big "LINFINSCAN REPORT")
                        "\\P"
-                       (lfc:small (strcat "Read-only scan - nothing in the drawing was changed. "
-                                           "Items needing attention are shown in "
-                                           (lfc:red "red") "."))))
+                       (lfc:small (strcat (cal:datestr)
+                                          "  -  LINFINCHECK "
+                                          *lfc-version*))
+                       "\\P"
+                       "{\\H1.2x;"
+                       (if (> nred 0)
+                         (lfc:red (strcat (itoa nred) " LINE"
+                                          (if (= 1 nred) "" "S")
+                                          " NEED"
+                                          (if (= 1 nred) "S" "")
+                                          " ATTENTION"))
+                         "ALL CLEAR - every check passed")
+                       "}"
+                       "\\P"
+                       (lfc:small
+                         (strcat "Read-only scan - nothing in the drawing"
+                                 " was changed.  Lines needing attention"
+                                 " are in " (lfc:red "red")
+                                 " at full size; lines that checked out"
+                                 " are smaller."))))
+     (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
      (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr) (lfc:red (car pr))
-                                     (lfc:small (car pr))))))
-     (setq txt (strcat txt "\\P" (lfc:small "----------------------------------------")))
+       (setq txt (strcat txt "\\P" (if (cdr pr)
+                                     (lfc:red (strcat "  " (car pr)))
+                                     (lfc:small (strcat "  " (car pr)))))))
+     (setq grp nil)
      (foreach l (reverse lines)
-       (setq txt (strcat txt "\\P" (if (lfc:attn-p l) (lfc:red l) (lfc:small l)))))
+       (if (/= grp (lfc:linegrp l))
+         (setq grp (lfc:linegrp l)
+               txt (strcat txt "\\P" (lfc:hdg grp))))
+       (setq txt (strcat txt "\\P" (if (lfc:attn-p l)
+                                     (lfc:red (strcat "  " l))
+                                     (lfc:small (strcat "  " l))))))
      (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
      (setvar "CMDECHO" oldecho)
      (princ (strcat "\n--- LINFINSCAN complete (read-only) ---"
@@ -52623,8 +52816,10 @@
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
 ;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;      drawing, sized to scale with it.  Problems in RED at full
-;;;      size, advice in CYAN, all-clear in green at 75%.
+;;;      drawing, sized to scale with it: a large title, the date and
+;;;      version under it, an ALL CLEAR / problem-count verdict, then
+;;;      every finding under underlined section headings.  Problems in
+;;;      RED at full size, advice in CYAN, all-clear in green at 75%.
 ;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
@@ -52637,7 +52832,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.0")
+(setq *spacheck-version* "v1.1")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -52752,11 +52947,12 @@
 
 ;;; -------------------- report text -------------------------------------
 ;;;  A report row is (text . level): level nil = all clear, 1 = a
-;;;  problem, 2 = advice.  The three render differently in the MTEXT.
+;;;  problem, 2 = advice, 3 = a section heading.  The four render
+;;;  differently in the MTEXT.
 
 ;; A report row is (text . level): nil = all clear, 1 = a problem,
-;; 2 = advice.  spachk:lvl-p compares nil-safely -- (= nil 1) is not
-;; something to rely on.
+;; 2 = advice, 3 = a section heading.  spachk:lvl-p compares
+;; nil-safely -- (= nil 1) is not something to rely on.
 (defun spachk:row (s lvl) (cons s lvl))
 (defun spachk:row-txt (r) (car r))
 (defun spachk:row-lvl (r) (cdr r))
@@ -52771,10 +52967,25 @@
 (defun spachk:small (s)
   (strcat "{\\H" (rtos spachk:*green-scale* 2 2) "x;" s "}"))
 
+;; The report's title line: half again the base height.
+(defun spachk:big (s)
+  (strcat "{\\H1.5x;" s "}"))
+
+;; A section heading: underlined, with a thin blank line above it so
+;; the sections read as blocks.  The braces scope both codes, and the
+;; \P inside the first group is a paragraph break at 0.4x height --
+;; a narrow gap, not a full empty line.
+(defun spachk:hdg (s)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+;; Findings are indented two spaces under their heading; the indent
+;; sits INSIDE the colour/height wrap so a problem row still starts
+;; with its colour code.
 (defun spachk:render (r)
-  (cond ((spachk:lvl-p r 1) (spachk:red (spachk:row-txt r)))
-        ((spachk:lvl-p r 2) (spachk:cyan (spachk:row-txt r)))
-        (t (spachk:small (spachk:row-txt r)))))
+  (cond ((spachk:lvl-p r 3) (spachk:hdg (spachk:row-txt r)))
+        ((spachk:lvl-p r 1) (spachk:red (strcat "  " (spachk:row-txt r))))
+        ((spachk:lvl-p r 2) (spachk:cyan (strcat "  " (spachk:row-txt r))))
+        (t (spachk:small (strcat "  " (spachk:row-txt r))))))
 
 ;;; -------------------- layers ------------------------------------------
 ;;;  The canonical ensure-layer: create, or when it already exists make
@@ -53511,12 +53722,14 @@
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
 
-;; Everything, in report order.  Returns (rows . flagged-entities).
+;; Everything, in report order, each section under its heading row.
+;; Returns (rows . flagged-entities).
 (defun spachk:audit (ss / rows ents blk att g tp cov wat covo wato
                           dims covn r)
   (setq rows nil ents nil)
 
   ;; 1 -- the block
+  (setq rows (append rows (list (spachk:row "THE DETAILS BLOCK" 3))))
   (setq r (spachk:audit-block ss)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
@@ -53531,6 +53744,7 @@
   (if (and (= g "THERMOLIGHT") (null tp)) (setq tp "1-3/8"))
 
   ;; 2 -- the cover outline
+  (setq rows (append rows (list (spachk:row "THE OUTLINES" 3))))
   (setq r (spachk:audit-outline ss spachk:*lay-cover* "Cover outline" t)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r))
@@ -53548,6 +53762,7 @@
         rows (append rows (spachk:res-rows r)))
 
   ;; 4 -- the dimensions
+  (setq rows (append rows (list (spachk:row "THE DIMENSIONS" 3))))
   (setq dims (spachk:dims ss)
         r    (spachk:audit-dims dims cov wat)
         rows (append rows (spachk:res-rows r))
@@ -53560,6 +53775,7 @@
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
+  (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
       (setq r (spachk:audit-hinges ss cov g tp)
@@ -53571,6 +53787,7 @@
                         1)))))
 
   ;; 6 -- the title block
+  (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
 
@@ -53584,10 +53801,14 @@
   (foreach r rows
     (cond ((spachk:lvl-p r 1) (setq nbad (1+ nbad)))
           ((spachk:lvl-p r 2) (setq nadv (1+ nadv)))))
-  ;; height: scale the sheet to the drawing, as the siblings do
-  (setq nlin 4.0)
+  ;; height: scale the sheet to the drawing, as the siblings do.  The
+  ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
+  ;; row is one line plus the 0.4 gap above it.
+  (setq nlin 4.5)
   (foreach r rows
-    (setq nlin (+ nlin (if (spachk:row-lvl r) 1.0 spachk:*green-scale*))))
+    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
+                             ((spachk:row-lvl r) 1.0)
+                             (t spachk:*green-scale*)))))
   (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
     (progn
       (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
@@ -53599,24 +53820,43 @@
                 (list (+ (caadr bb) (* 0.05 (max (spachk:bw bb) 1.0)))
                       (cadadr bb) 0.0)
                 (list 0.0 0.0 0.0)))
-  (setq txt (strcat (if readonly "SPACHECKSCAN REPORT - " "SPACHECK REPORT - ")
-                    (cal:datestr)
-                    "  [SPACHECK " *spacheck-version* "]"
+  ;; the head: a large title, the date and version small under it, a
+  ;; verdict line -- red with the problem count, cyan when only advice,
+  ;; plain ALL CLEAR otherwise -- then the colour legend.  The verdict
+  ;; is wrapped in its height code first so it never renders as (or
+  ;; counts among) the finding rows, which start with a colour code.
+  (setq txt (strcat (spachk:big (if readonly
+                                    "SPACHECKSCAN REPORT"
+                                    "SPACHECK REPORT"))
+                    "\\P"
+                    (spachk:small (strcat (cal:datestr)
+                                          "  -  SPACHECK "
+                                          *spacheck-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (cond
+                      ((> nbad 0)
+                       (spachk:red
+                         (strcat (itoa nbad) " PROBLEM"
+                                 (if (= 1 nbad) "" "S")
+                                 (if (> nadv 0)
+                                     (strcat ", " (itoa nadv) " ADVISOR"
+                                             (if (= 1 nadv) "Y" "IES"))
+                                     ""))))
+                      ((> nadv 0)
+                       (spachk:cyan
+                         (strcat "ALL CLEAR - " (itoa nadv) " advisor"
+                                 (if (= 1 nadv) "y" "ies"))))
+                      (t "ALL CLEAR - every check passed"))
+                    "}"
                     "\\P"
                     (spachk:small
                       (strcat (if readonly
                                   "Read-only scan - nothing in the drawing was changed.  "
                                   "")
                               "Problems in " (spachk:red "red")
-                              ", advice in " (spachk:cyan "cyan") "."))
-                    "\\P"
-                    (spachk:small
-                      (strcat (itoa nbad) " problem"
-                              (if (= 1 nbad) "" "s") ", "
-                              (itoa nadv) " advisor"
-                              (if (= 1 nadv) "y" "ies")))
-                    "\\P"
-                    (spachk:small "----------------------------------------")))
+                              ", advice in " (spachk:cyan "cyan")
+                              "; lines that checked out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (spachk:render r))))
   (cal:mtext ins h (* spachk:*report-chars* h) txt spachk:*report-layer*)

@@ -188,7 +188,12 @@
 ;;;     pair (with its overlap length), every step pattern, the Step
 ;;;     Attachment verdict and the Liner Material verdict, plus
 ;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it. Any line describing something
+;;;     so it sits to scale next to it, and reads top to bottom as: a
+;;;     large title, the date and version, a verdict line (ALL CLEAR,
+;;;     or the count of red lines), the colour legend, then a SUMMARY
+;;;     dashboard and the findings grouped under underlined section
+;;;     headings (DIMENSIONS, ARCS, OVERLAPPING LINES, STEPS & SIDE
+;;;     VIEWS, WALL HEIGHT, THE LINER). Any line describing something
 ;;;     questionable or that needs looking over (a flagged/wrong
 ;;;     item, a missing block, a "NOT" find, an "add ..." note, a
 ;;;     skipped check) is coloured RED in the report; everything
@@ -223,7 +228,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.1")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.2")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -684,6 +689,29 @@
   ;; all-clear text renders at *lfc-green-scale* of the height the
   ;; red attention text gets, so problems stand out on the sheet
   (strcat "{\\H" (rtos *lfc-green-scale* 2 4) "x;" s "}"))
+
+(defun lfc:big (s)
+  ;; the report's title line: half again the base height
+  (strcat "{\\H1.5x;" s "}"))
+
+(defun lfc:hdg (s)
+  ;; a section heading: underlined, with a thin blank line above it
+  ;; so the sections read as blocks (the \P inside the first group is
+  ;; a paragraph break at 0.4x height - a narrow gap, not a full line)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+(defun lfc:linegrp (s)
+  ;; which underlined section a report line files under, keyed on the
+  ;; fixed prefixes the review gives its lines
+  (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
+        ((wcmatch s "Arc *")              "ARCS")
+        ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Steps:*,Step Attachment*,Bead Track:*")
+         "STEPS & SIDE VIEWS")
+        ((wcmatch s "Height dim *,*CHECK THE WALL HEIGHT*")
+         "WALL HEIGHT")
+        ((wcmatch s "Liner Material*")    "THE LINER")
+        (t                                "OTHER CHECKS")))
 
 ;; --- geometry ------------------------------------------------------
 
@@ -1981,7 +2009,8 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb h m ins txt nlin ref)
+                      minx miny maxx maxy bb h m ins txt nlin ref
+                      nred grp grps)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2755,8 +2784,15 @@
         ;; report roughly matches the drawing's height (MTEXT line
         ;; spacing is ~1.66 x text height), clamped so a short report
         ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing
-        (setq nlin 3.0)                          ; title, legend, separator
+        ;; all-clear lines are shorter, so weight them when sizing;
+        ;; the head (title, date, verdict, legend) is ~4.5 lines and
+        ;; each underlined section heading is a line plus its 0.4 gap
+        (setq nlin 4.5)
+        (setq grps nil)
+        (foreach l lines
+          (if (not (member (lfc:linegrp l) grps))
+            (setq grps (cons (lfc:linegrp l) grps))))
+        (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
         (foreach l lines
           (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
         (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))   ; the header dashboard
@@ -2802,22 +2838,52 @@
         (if datesum
           (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                             (lfc:attn-p datesum))))))
-        (setq txt (strcat "LINFINCHECK REPORT - " (lfc:datestr)
-                          "  [LINFINCHECK " *lfc-version* "]"
+        ;; how many lines will render red - the verdict states it
+        (setq nred 0)
+        (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+        (foreach l lines (if (lfc:attn-p l) (setq nred (1+ nred))))
+        ;; the head: a large title, the date and version small under
+        ;; it, the verdict, then the colour legend.  The verdict is
+        ;; wrapped in its height code first so it reads as a banner,
+        ;; not as one of the finding lines.
+        (setq txt (strcat (lfc:big "LINFINCHECK REPORT")
+                          "\\P"
+                          (lfc:small (strcat (lfc:datestr)
+                                             "  -  LINFINCHECK "
+                                             *lfc-version*))
+                          "\\P"
+                          "{\\H1.2x;"
+                          (if (> nred 0)
+                            (lfc:red (strcat (itoa nred) " LINE"
+                                             (if (= 1 nred) "" "S")
+                                             " NEED"
+                                             (if (= 1 nred) "S" "")
+                                             " ATTENTION"))
+                            "ALL CLEAR - every check passed")
+                          "}"
                           "\\P"
                           (lfc:small
-                            (strcat "Items needing attention are shown in "
-                                    (lfc:red "red") ", larger than the rest."))))
+                            (strcat "Lines needing attention are in "
+                                    (lfc:red "red")
+                                    " at full size; lines that checked"
+                                    " out are smaller."))))
+        ;; the dashboard, under its own heading
+        (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
         (foreach pr hdr
           (setq txt (strcat txt "\\P"
                             (if (cdr pr)
-                              (lfc:red (car pr))
-                              (lfc:small (car pr))))))
-        (setq txt (strcat txt "\\P"
-                          (lfc:small "----------------------------------------")))
+                              (lfc:red (strcat "  " (car pr)))
+                              (lfc:small (strcat "  " (car pr)))))))
+        ;; the findings, grouped under underlined section headings
+        (setq grp nil)
         (foreach l (reverse lines)
+          (if (/= grp (lfc:linegrp l))
+            (setq grp (lfc:linegrp l)
+                  txt (strcat txt "\\P" (lfc:hdg grp))))
           (setq txt (strcat txt "\\P"
-                            (if (lfc:attn-p l) (lfc:red l) (lfc:small l)))))
+                            (if (lfc:attn-p l)
+                              (lfc:red (strcat "  " l))
+                              (lfc:small (strcat "  " l))))))
         (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
 
         ;; --- show the drawing plus the report -----------------------
@@ -2879,7 +2945,8 @@
                      datesum dateraw datebad
                      nd ndbad na nabad h m ins txt nlin ref hdr l badtags
                      bordbb bordsum attundec
-                     minx miny maxx maxy p13 p14 near s b w)
+                     minx miny maxx maxy p13 p14 near s b w
+                     nred grp grps)
 
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -3205,7 +3272,12 @@
      (if datesum
        (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                          (lfc:attn-p datesum))))))
-     (setq nlin 3.0)
+     (setq nlin 4.5)                     ; title, date, verdict, legend
+     (setq grps nil)
+     (foreach l lines
+       (if (not (member (lfc:linegrp l) grps))
+         (setq grps (cons (lfc:linegrp l) grps))))
+     (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
      (foreach l lines
        (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
      (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))
@@ -3219,18 +3291,45 @@
      (setq ins (if minx
                  (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
                  (list 0.0 0.0 0.0)))
-     (setq txt (strcat "LINFINSCAN REPORT - " (lfc:datestr)
-                       "  [LINFINCHECK " *lfc-version* "]"
+     ;; how many lines will render red - the verdict states it
+     (setq nred 0)
+     (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
+     (foreach l lines (if (lfc:attn-p l) (setq nred (1+ nred))))
+     (setq txt (strcat (lfc:big "LINFINSCAN REPORT")
                        "\\P"
-                       (lfc:small (strcat "Read-only scan - nothing in the drawing was changed. "
-                                           "Items needing attention are shown in "
-                                           (lfc:red "red") "."))))
+                       (lfc:small (strcat (lfc:datestr)
+                                          "  -  LINFINCHECK "
+                                          *lfc-version*))
+                       "\\P"
+                       "{\\H1.2x;"
+                       (if (> nred 0)
+                         (lfc:red (strcat (itoa nred) " LINE"
+                                          (if (= 1 nred) "" "S")
+                                          " NEED"
+                                          (if (= 1 nred) "S" "")
+                                          " ATTENTION"))
+                         "ALL CLEAR - every check passed")
+                       "}"
+                       "\\P"
+                       (lfc:small
+                         (strcat "Read-only scan - nothing in the drawing"
+                                 " was changed.  Lines needing attention"
+                                 " are in " (lfc:red "red")
+                                 " at full size; lines that checked out"
+                                 " are smaller."))))
+     (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
      (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr) (lfc:red (car pr))
-                                     (lfc:small (car pr))))))
-     (setq txt (strcat txt "\\P" (lfc:small "----------------------------------------")))
+       (setq txt (strcat txt "\\P" (if (cdr pr)
+                                     (lfc:red (strcat "  " (car pr)))
+                                     (lfc:small (strcat "  " (car pr)))))))
+     (setq grp nil)
      (foreach l (reverse lines)
-       (setq txt (strcat txt "\\P" (if (lfc:attn-p l) (lfc:red l) (lfc:small l)))))
+       (if (/= grp (lfc:linegrp l))
+         (setq grp (lfc:linegrp l)
+               txt (strcat txt "\\P" (lfc:hdg grp))))
+       (setq txt (strcat txt "\\P" (if (lfc:attn-p l)
+                                     (lfc:red (strcat "  " l))
+                                     (lfc:small (strcat "  " l))))))
      (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
      (setvar "CMDECHO" oldecho)
      (princ (strcat "\n--- LINFINSCAN complete (read-only) ---"
