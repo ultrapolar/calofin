@@ -25,8 +25,11 @@ prints the loaded version.
 named "LazPanel" on screen -- drag it anywhere or dock it like any
 toolbar; clicking it opens the panel. It is created through the
 ActiveX menu API (no CUI file to install) when no toolbar of that name
-exists yet, and its icon -- an orange L, a placeholder until there is
-a real logo -- is generated as 16x16 and 32x32 `.bmp` files. If the
+exists yet, and its icon -- an orange hexagon with a corner facing
+north -- is generated as 16x16 and 32x32 `.bmp` files, each drawn at
+its own resolution rather than the small one doubled, because a
+hexagon doubled from 16 pixels keeps the 16-pixel staircase on its
+diagonals and those diagonals are the whole shape. If the
 toolbar gets closed or lost, `LAZBUTTON` brings it back; a toolbar
 that is merely hidden is re-shown rather than duplicated, and one that
 you have docked or moved is left where you put it.

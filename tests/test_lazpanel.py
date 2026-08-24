@@ -486,8 +486,9 @@ def check_bmp(bb, size, grid):
                 % (gx, gy, size, size, got, want))
 
 
-check_bmp(COM['bytes'], 32,
-          [''.join(c * 2 for c in r) for r in grid for _ in (0, 1)])
+grid32 = [str(r) for r in vm.globals.get('lzp:*icon32*')]
+assert len(grid32) == 32 and all(len(r) == 32 for r in grid32), grid32
+check_bmp(COM['bytes'], 32, grid32)
 print("   ADODB.Stream in binary mode, released; every pixel of the 32x32")
 print("   in its right place (bottom-up rows, B G R order)")
 

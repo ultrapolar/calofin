@@ -58996,7 +58996,7 @@
 ;;; clickable button you drag anywhere or dock, like any toolbar.  It
 ;;; is created through the ActiveX menu API when no toolbar of that
 ;;; name exists yet -- no CUI file to install -- and its icon (an
-;;; orange L, a placeholder logo) is generated as two .bmp files under
+;;; orange hexagon, point to the north) is generated as two .bmp files under
 ;;; TEMPPREFIX and re-applied on every load, because SetBitmaps stores
 ;;; the path rather than the picture.  Clicking it runs LAZPANEL.  If
 ;;; the toolbar gets closed or lost, LAZBUTTON brings it back.  When
@@ -59032,7 +59032,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.3")
+(setq *lazpanel-version* "v1.4")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -59195,48 +59195,76 @@
 ;;  A one-button toolbar so the panel can sit on screen like any other
 ;;  toolbar button -- drag it anywhere, dock it, click it to open the
 ;;  panel.  Created through the ActiveX menu API, so there is no CUI
-;;  file to install; the icon is an orange L (a placeholder logo).
+;;  file to install; the icon is an orange hexagon, point north.
 ;;
 ;;  Everything here is best effort by design.  A session without COM,
 ;;  with a locked CUI or an unwritable temp folder loses the button and
 ;;  keeps the panel -- which is why the load-time call sits inside
 ;;  vl-catch-all-apply and why nothing below reports its own failure.
 
-;; The L, drawn in 16x16; the 32x32 icon is this grid doubled.
+;; The mark: a hexagon with a corner facing north.  Each size is
+;; drawn at its own resolution rather than the small one doubled --
+;; a hexagon doubled from 16 pixels keeps the 16-pixel staircase on
+;; its diagonals, and those diagonals are the whole shape.
 (setq lzp:*icon16*
-  '("................"
+  '(
     "................"
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
-    "...XXX.........."
+    "......XXXX......"
+    ".....XXXXXX....."
     "...XXXXXXXXXX..."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
+    "..XXXXXXXXXXXX.."
     "...XXXXXXXXXX..."
-    "...XXXXXXXXXX..."
-    "................"
+    ".....XXXXXX....."
+    "......XXXX......"
     "................"))
+
+(setq lzp:*icon32*
+  '(
+    "................................"
+    "..............XXXX.............."
+    ".............XXXXXX............."
+    "...........XXXXXXXXXX..........."
+    ".........XXXXXXXXXXXXXX........."
+    ".......XXXXXXXXXXXXXXXXXX......."
+    "......XXXXXXXXXXXXXXXXXXXX......"
+    "....XXXXXXXXXXXXXXXXXXXXXXXX...."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
+    "....XXXXXXXXXXXXXXXXXXXXXXXX...."
+    "......XXXXXXXXXXXXXXXXXXXX......"
+    ".......XXXXXXXXXXXXXXXXXX......."
+    ".........XXXXXXXXXXXXXX........."
+    "...........XXXXXXXXXX..........."
+    ".............XXXXXX............."
+    "..............XXXX.............."
+    "................................"))
 
 (defun lzp:le2 (n)
   (list (rem n 256) (rem (/ n 256) 256)))
 
 (defun lzp:le4 (n)
   (append (lzp:le2 (rem n 65536)) (lzp:le2 (/ n 65536))))
-
-;; Double a pixel grid: each row's characters twice, each row twice.
-(defun lzp:grid2x (grid / out row s i c)
-  (foreach row grid
-    (setq s "" i 1)
-    (while (<= i (strlen row))
-      (setq c (substr row i 1)
-            s (strcat s c c)
-            i (1+ i)))
-    (setq out (cons s (cons s out))))
-  (reverse out))
 
 ;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
 ;; height means the FIRST row in the file is the BOTTOM row of the
@@ -59329,7 +59357,7 @@
         large (lzp:icon-path "32"))
   (if (and small large
            (lzp:bmp-write small 16 lzp:*icon16*)
-           (lzp:bmp-write large 32 (lzp:grid2x lzp:*icon16*)))
+           (lzp:bmp-write large 32 lzp:*icon32*))
     (list small large)))
 
 ;; The LazPanel toolbar, wherever it lives -- one this file made in an
