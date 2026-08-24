@@ -126,6 +126,16 @@ for c in charts:
     keys = [str(d[1]) for d in dims] + [str(e[0]) for e in extra]
     assert len(keys) == len(set(keys)), "duplicate keys in %s: %r" % (key, keys)
     for poly in outline:
+        if str(poly[0]) == 'A':          # ("A" cx cy rx ry from to)
+            assert len(poly) == 7, "malformed arc in %s: %r" % (key, poly)
+            cx, cy, rx, ry = (int(poly[1]), int(poly[2]),
+                              int(poly[3]), int(poly[4]))
+            assert rx > 0 and ry > 0, "arc with no radius in %s: %r" % (key, poly)
+            assert 0 <= cx - rx and cx + rx <= 1000, \
+                "arc of %s leaves the picture sideways: %r" % (key, poly)
+            assert 0 <= cy - ry and cy + ry <= 1000, \
+                "arc of %s leaves the picture vertically: %r" % (key, poly)
+            continue
         pts = [int(v) for v in poly]
         assert len(pts) % 2 == 0 and len(pts) >= 4, poly
         assert all(0 <= v <= 1000 for v in pts), \
@@ -142,79 +152,143 @@ print("   %s, %d chart(s), every dimension keyed, labelled and in bounds"
       % (ver, len(charts)))
 
 
+print("== the dimension chains close ==")
+# POOL resolves H+G+F+E against the pool's overall length and M+L+K
+# against its width -- if the drawn chain does not add up to the drawn
+# overall, the picture is lying about the measurement it names, and the
+# operator reading it off would be misled before POOL ever saw a number.
+for c in charts:
+    name = str(c[0])
+    dims = {str(d[1]): (int(d[2]), int(d[3]), int(d[4]), int(d[5]))
+            for d in c[4]}
+    letters = {str(d[0]): str(d[1]) for d in c[4]}
+
+    def span(key, horiz):
+        if key not in dims:
+            return None
+        x1, y1, x2, y2 = dims[key]
+        return abs(x2 - x1) if horiz else abs(y2 - y1)
+
+    for parts, letter, horiz, what in ((('h', 'g', 'f', 'e'), 'B', True, 'length'),
+                                       (('m', 'l', 'k'), 'A', False, 'width')):
+        got = [span(k, horiz) for k in parts]
+        if not all(v is not None for v in got):
+            continue
+        overall = span(letters.get(letter, ''), horiz)
+        if overall is None:
+            continue
+        assert abs(sum(got) - overall) <= 2, (
+            "%s: %s = %d but %s (the overall %s) is %d -- the chain does "
+            "not close" % (name, '+'.join(p.upper() for p in parts),
+                           sum(got), letter, what, overall))
+    print("   %-10s chains close against the overalls" % name)
+
+
 print("== the chart's keys are keys POOL actually asks for ==")
 # the whole point of the form is that POOL reads these back; a key POOL
 # never asks for would be typed into and silently dropped
 pool_src = open(POOL).read()
+# POOL builds its ask items two ways: most flows write
+# (list 'key 'KIND "prompt" ...), while the L shapes write
+# (list 'key "prompt" 'guide ...) and map the kind on afterwards.  Both
+# shapes have to be recognised, or a perfectly good key looks invented.
 askseq_keys = set(re.findall(r"\(list '([a-z][a-z0-9]*)\s+'(?:REQ|NAX|ZER|SUG)",
                              pool_src))
+askseq_keys |= set(re.findall(r"\(list '([a-z][a-z0-9]*)\s+\"", pool_src))
 derived = {'c', 'd', 'c2'}          # the depth asks, keyed off their prompts
 wired = {'shape', 'insq', 'btype', 'base'}
-vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "Rectangle")))')
-for k in [str(x) for x in vm.globals['t:*keys*']]:
-    assert k in askseq_keys or k in derived, (
-        "chart key %r is not asked for anywhere in POOL.LSP -- it would be "
-        "typed into and dropped on the floor" % k)
-print("   every chart key is a POOL answer key (%d of them)"
-      % len(vm.globals['t:*keys*']))
+total = 0
+for c in charts:
+    name = str(c[0])
+    vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "%s")))' % name)
+    ks = [str(x) for x in vm.globals['t:*keys*']]
+    for k in ks:
+        assert k in askseq_keys or k in derived, (
+            "%s: chart key %r is not asked for anywhere in POOL.LSP -- it "
+            "would be typed into and dropped on the floor" % (name, k))
+    total += len(ks)
+    print("   %-10s %2d keys, all of them POOL answer keys" % (name, len(ks)))
+print("   %d keys across %d charts" % (total, len(charts)))
 
 
-print("== the generated DCL is well formed ==")
-vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
-         '(setq t:*dcl* (lzf:dcl-lines))')
-dcl = [str(x) for x in vm.globals['t:*dcl*']]
-assert dcl[0] == 'lazform : dialog {', dcl[0]
-assert dcl[-1] == '}', dcl[-1]
-depth = 0
-for line in dcl:
-    assert line.count('"') % 2 == 0, "odd quotes: %r" % line
-    depth += line.count('{') - line.count('}')
-    assert depth >= 0, line
-assert depth == 0, "unbalanced braces"
-text = '\n'.join(dcl)
-tilekeys = re.findall(r'key = "([^"]+)"', text)
-assert len(tilekeys) == len(set(tilekeys)), "duplicate tile keys"
-answer_keys = [str(x) for x in vm.globals['t:*keys*']]
-assert set(answer_keys) <= set(tilekeys), \
-    set(answer_keys) - set(tilekeys)
-for extra in ('chart', 'insq', 'btype', 'accept', 'cancel'):
-    assert extra in tilekeys, extra
-assert text.count('is_cancel = true') == 1
-assert text.count('is_default = true') == 1
-# every clause ends in a semicolon and every tile is a real DCL tile
+print("== the generated DCL is well formed, for every chart ==")
 TILES = {'row', 'column', 'boxed_column', 'button', 'text', 'edit_box',
          'image_button', 'toggle', 'popup_list'}
-for line in dcl[1:]:
-    s = line.strip()
-    if s in ('}', 'spacer;'):
-        continue
-    m = re.match(r': ([a-z_]+) \{', s)
-    if m:
-        assert m.group(1) in TILES, "unknown tile %r" % m.group(1)
-    for clause in re.findall(r'[a-z_]+ = (?:"[^"]*"|[a-z0-9.]+)(;?)', s):
-        assert clause == ';', "a DCL clause without its semicolon: %r" % line
-print("   %d lines, %d tile keys, one Insert and one Cancel"
-      % (len(dcl), len(tilekeys)))
+
+
+def check_dcl(name):
+    vm.loads('(setq lzf:*chart* (lzf:chart "%s"))'
+             '(setq t:*dcl* (lzf:dcl-lines))'
+             '(setq t:*keys* (lzf:keys lzf:*chart*))' % name)
+    dcl = [str(x) for x in vm.globals['t:*dcl*']]
+    assert dcl[0] == 'lazform : dialog {', dcl[0]
+    assert dcl[-1] == '}', dcl[-1]
+    depth = 0
+    for line in dcl:
+        assert line.count('"') % 2 == 0, "odd quotes: %r" % line
+        depth += line.count('{') - line.count('}')
+        assert depth >= 0, line
+    assert depth == 0, "%s: unbalanced braces" % name
+    text = '\n'.join(dcl)
+    tilekeys = re.findall(r'key = "([^"]+)"', text)
+    assert len(tilekeys) == len(set(tilekeys)), "%s: duplicate tile keys" % name
+    answer_keys = [str(x) for x in vm.globals['t:*keys*']]
+    assert set(answer_keys) <= set(tilekeys), (
+        "%s: answers with no box: %r"
+        % (name, sorted(set(answer_keys) - set(tilekeys))))
+    for extra in ('chart', 'insq', 'btype', 'accept', 'cancel'):
+        assert extra in tilekeys, "%s: no %r tile" % (name, extra)
+    assert text.count('is_cancel = true') == 1
+    assert text.count('is_default = true') == 1
+    for line in dcl[1:]:
+        t = line.strip()
+        if t in ('}', 'spacer;'):
+            continue
+        m = re.match(r': ([a-z_]+) \{', t)
+        if m:
+            assert m.group(1) in TILES, "%s: unknown tile %r" % (name, m.group(1))
+        for clause in re.findall(r'[a-z_]+ = (?:"[^"]*"|[a-z0-9.]+)(;?)', t):
+            assert clause == ';', "%s: a DCL clause without its semicolon: %r" % (name, line)
+    return dcl, tilekeys
+
+
+for c in charts:
+    d, tk = check_dcl(str(c[0]))
+    print("   %-10s %2d lines, %2d tile keys" % (str(c[0]), len(d), len(tk)))
+
+# the rectangle's DCL is the one the end-to-end section compares against
+dcl, _ = check_dcl("Rectangle")
+vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "Rectangle")))')
 
 
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
 for name in ('line', 'back', 'dim', 'val', 'hi'):
     COLS[name] = int(vm.globals['lzf:*col-%s*' % name])
-vm.loads('(lzf:redraw)')
-assert DRAW['vec'], "nothing was drawn"
-for v in DRAW['vec']:
-    x1, y1, x2, y2, c = v
-    assert 0 <= x1 <= DX and 0 <= x2 <= DX, "vector off the tile: %r" % v
-    assert 0 <= y1 <= DY and 0 <= y2 <= DY, "vector off the tile: %r" % v
-    assert c in COLS.values(), "undeclared colour %r in %r" % (c, v)
-for f in DRAW['fill']:
-    x, y, w, h, c = f
-    assert x >= 0 and y >= 0 and x + w <= DX and y + h <= DY, \
-        "fill off the tile: %r" % f
+for c in charts:
+    name = str(c[0])
+    _reset()
+    vm.loads('(setq lzf:*chart* (lzf:chart "%s")) (setq lzf:*vals* nil)'
+             '(setq lzf:*focus* nil) (lzf:redraw)' % name)
+    assert DRAW['vec'], "%s drew nothing" % name
+    for v in DRAW['vec']:
+        x1, y1, x2, y2, col = v
+        assert 0 <= x1 <= DX and 0 <= x2 <= DX, \
+            "%s: vector off the tile: %r" % (name, v)
+        assert 0 <= y1 <= DY and 0 <= y2 <= DY, \
+            "%s: vector off the tile: %r" % (name, v)
+        assert col in COLS.values(), \
+            "%s: undeclared colour %r in %r" % (name, col, v)
+    for f in DRAW['fill']:
+        x, y, w, h, col = f
+        assert x >= 0 and y >= 0 and x + w <= DX and y + h <= DY, \
+            "%s: fill off the tile: %r" % (name, f)
+    print("   %-10s %3d vectors, %2d fills, all inside %dx%d and in colour"
+          % (name, len(DRAW['vec']), len(DRAW['fill']), DX, DY))
+_reset()
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle")) (setq lzf:*vals* nil)'
+         '(setq lzf:*focus* nil) (lzf:redraw)')
 blank = len(DRAW['vec'])
-print("   %d vectors, %d fills, all inside %dx%d and all in colour"
-      % (blank, len(DRAW['fill']), DX, DY))
 
 
 print("== a typed value replaces its letter on the chart ==")

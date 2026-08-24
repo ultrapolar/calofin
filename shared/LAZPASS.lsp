@@ -683,7 +683,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV07")
+(setq pool:*version* "082426 REV08")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -2147,9 +2147,12 @@
   (setq nm2 (if oct "Octagon" "Grecian")
         npts (if oct pool:*octnpts* pool:*grecnpts*))
   (defun gr:method ()
-    (setq imeth (cal:askkw (strcat nm2 " perimeter input")
-                            "Measured Overall" "Measured/Overall"
-                            (if oct "Overall" nil) nil))
+    ;; a form built from a sheet answers the LETTERS, which only the
+    ;; Overall path asks for -- so this has to be form-answerable too,
+    ;; or every letter it filled in would go unread
+    (setq imeth (pool:askkwf 'imeth (strcat nm2 " perimeter input")
+                             "Measured Overall" "Measured/Overall"
+                             (if oct "Overall" nil) nil))
     nil)
   ;; The live guide geometry (see "live guide reshaping").  Both input
   ;; methods produce the same eight-corner ring in the index order the
@@ -5177,16 +5180,17 @@
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
-        (setq htype (cal:askkw "Hopper type" "Square SIX" "Square/SIX-sided"
-                                "Square" nil)
+        (setq htype (pool:askkwf 'htype "Hopper type"
+                                 "Square SIX" "Square/SIX-sided"
+                                 "Square" nil)
               six (= htype "SIX"))
         ;; a six-sided deep end can be taped two ways: offsets shot
         ;; from every wall (cut faces parallel to the pool cuts), or
         ;; the sheet letters W / X / L / L1 / G / M / K
         (if six
-            (setq mode (cal:askkw "SIX-sided corners measured by"
-                                   "Offsets Letters" "Offsets/Letters"
-                                   "Offsets" nil)))
+            (setq mode (pool:askkwf 'hmode "SIX-sided corners measured by"
+                                    "Offsets Letters" "Offsets/Letters"
+                                    "Offsets" nil)))
         (setq xmin (- (apply 'min (mapcar 'car pts)) doff)
               xmax (+ (apply 'max (mapcar 'car pts)) doff)
               ymin (- (apply 'min (mapcar 'cadr pts)) doff)
@@ -58202,11 +58206,17 @@
 ;;;
 ;;; ADDING A SHAPE is adding data, not code -- one entry in
 ;;; lzf:*charts* with an outline, a dimension list and its POOL keys.
+;;; Six charts so far: Rectangle, True Oval, Roman, both Grecians and
+;;; True L Left.  Watch the keys rather than the letters when you add
+;;; one: the same letter means different things on different sheets --
+;;; a rectangle's B is the side length, an oval's B is the tip-to-tip
+;;; total and its SIDE is T -- so the mapping is per chart and is
+;;; checked against POOL's own question lists by tests/test_lazform.py.
 ;;; ======================================================================
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.0")
+(setq *lazform-version* "v1.1")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -58292,7 +58302,7 @@
 ;;;  view -- so it gets a box in the list and nothing on the picture.
 
 (setq lzf:*charts* '(
-  ("rectangle" "Rectangle" "Rectangle"
+  ("Rectangle" "Rectangle" "Rectangle"
    ;; pool outline, hopper flat, the four slopes, deep-end wall
    ((100 300 900 300 900 860 100 860 100 300)
     (275 475 400 475 400 700 275 700 275 475)
@@ -58314,7 +58324,169 @@
     ("ri" "overall up, right end (out-of-square only)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")))
+
+  ;; ---------------- True Oval ----------------
+  ;;  Careful: B is NOT the key it is on the rectangle.  A rectangle's B
+  ;;  is the side length (tp); an oval's B is the tip-to-tip total
+  ;;  (tot), and it is the SIDE that becomes T.  The two charts share a
+  ;;  letter and not a meaning, which is exactly the sort of thing this
+  ;;  table exists to write down.
+  ("Oval" "Oval" "True Oval"
+   (("A" 310 500 250 250 90 270)
+     (310 250 690 250)
+     ("A" 690 500 250 250 90 -90)
+     (310 750 690 750)
+     ("A" 310 500 120 120 90 270)
+     (310 380 400 380) (400 380 400 620) (310 620 400 620)
+     (400 380 690 250) (400 620 690 750)
+     (690 250 690 750))
+   (("B"  "tot" 60 130 940 130 "h" "total length, arc tip to arc tip")
+    ("T"  "tp" 310 205 690 205 "h" "straight side length, top and bottom")
+    ("A"  "le"  35 250  35 750 "v" "end length, left and right")
+    ("H"  "h"   60 580 190 580 "h" "H - pool left tip to hopper tip")
+    ("G"  "g"  190 580 400 580 "h" "G - hopper length, tip to right edge")
+    ("F"  "f"  400 580 690 580 "h" "F - hopper to slope break")
+    ("E"  "e"  690 580 940 580 "h" "E - slope break to pool right tip")
+    ("W"  "w"  310 345 400 345 "h" "W - hopper flat top")
+    ("M"  "m"  437 250 437 380 "v" "M - top side to hopper")
+    ("L"  "l"  437 380 437 620 "v" "L - hopper width")
+    ("K"  "k"  437 620 437 750 "v" "K - hopper to bottom side"))
+   (("lr" "R1 - LEFT oval end radius")
+    ("rr" "R2 - RIGHT oval end radius")
+    ("r3" "R3 - hopper end radius")
+    ("bo" "side length BOTTOM (out-of-square only)")
+    ("ri" "end length RIGHT (out-of-square only)")))
+
+  ;; ---------------- Roman ----------------
+  ;;  S / S1 / V / R are asked once per end when both ends are "perfect"
+  ;;  and twice when they are not, so the right-hand halves sit in the
+  ;;  column below: fill them in and answer No to the perfect question.
+  ("ROman" "ROman" "Roman"
+   ((160 250 840 250)
+     ("A" 840 500 100 250 90 -90)
+     (840 750 160 750)
+     (160 750 100 621)
+     ("A" 140 500 80 140 120 240)
+     (160 250 100 379)
+     ("A" 330 500 110 120 90 270)
+     (330 380 420 380) (420 380 420 620) (330 620 420 620)
+     (420 380 700 250) (420 620 700 750)
+     (700 250 700 750)
+     (160 250 300 385) (160 750 300 615))
+   (("B"  "b"   60 130 940 130 "h" "B - overall length")
+    ("T"  "tt" 160 205 840 205 "h" "T - side length, top and bottom")
+    ("A"  "a"   35 250  35 750 "v" "A - overall width")
+    ("S"  "sl"  60 205 160 205 "h" "S - end setback")
+    ("S1" "s1l" 90 250  90 379 "v" "S1 - corner drop")
+    ("V"  "vl" 125 379 125 621 "v" "V - end width")
+    ("H"  "h"   60 580 220 580 "h" "H - left end to hopper")
+    ("G"  "g"  220 580 420 580 "h" "G - hopper length")
+    ("F"  "f"  420 580 700 580 "h" "F - hopper to slope break")
+    ("E"  "e"  700 580 940 580 "h" "E - slope break to right end")
+    ("W"  "w"  330 345 420 345 "h" "W - hopper flat top")
+    ("M"  "m"  455 250 455 380 "v" "M - top side to hopper")
+    ("L"  "l"  455 380 455 620 "v" "L - hopper width")
+    ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side"))
+   (("r1" "R1 - LEFT end radius (check)")
+    ("r2" "R2 - RIGHT end radius (check)")
+    ("r3" "R3 - hopper end radius")
+    ("sr"  "S - RIGHT end setback (ends not perfect)")
+    ("s1r" "S1 - RIGHT corner drop (ends not perfect)")
+    ("vr"  "V - RIGHT end width (ends not perfect)")))
+
+  ;; ---------------- Grecian, six-sided hopper ----------------
+  ;;  These letters exist only on the Overall input path with a SIX
+  ;;  hopper taped by Letters, so the form answers those three gates
+  ;;  itself rather than filling in boxes nothing would ever read.
+  ("Grecian" "Grecian" "Grecian (6-Sided Hopper)"
+   ((190 250 780 250) (780 250 900 380) (900 380 900 620)
+     (900 620 780 750) (780 750 190 750) (190 750 100 620)
+     (100 620 100 380) (100 380 190 250)
+     (250 440 330 380) (330 380 420 380) (420 380 420 620)
+     (330 620 420 620) (250 560 330 620) (250 440 250 560)
+     (420 380 690 250) (420 620 690 750) (690 250 690 750)
+     (190 250 250 440) (190 750 250 560))
+   (("B"  "b"  100 120 900 120 "h" "B - overall length")
+    ("S"  "ss" 100 195 190 195 "h" "S - corner cut along the side")
+    ("T"  "tt" 190 205 780 205 "h" "T - top side length")
+    ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
+    ("A"  "a"   20 250  20 750 "v" "A - overall width")
+    ("V"  "vv"  55 380  55 620 "v" "V - end width")
+    ("H"  "h"  100 580 250 580 "h" "H - left end to hopper")
+    ("G"  "g"  250 580 420 580 "h" "G - hopper length")
+    ("W"  "w"  270 330 350 330 "h" "W - top flat, cut corner to hopper end")
+    ("L1" "l1" 225 440 225 560 "v" "L1 - hopper left edge length")
+    ("M"  "m"  455 250 455 380 "v" "M - top side to hopper")
+    ("L"  "l"  455 380 455 620 "v" "L - hopper width")
+    ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
+    ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
+    ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
+   (("x"  "X - hopper cut face length (check)")
+    ("s2" "S2 - corner cut face (check)"))
+   (("imeth" . "Overall") ("htype" . "SIX") ("hmode" . "Letters")))
+
+  ;; ---------------- Grecian, square hopper ----------------
+  ("GRSquare" "Grecian" "Grecian (Square Hopper)"
+   ((190 250 780 250) (780 250 900 380) (900 380 900 620)
+     (900 620 780 750) (780 750 190 750) (190 750 100 620)
+     (100 620 100 380) (100 380 190 250)
+     (250 380 420 380) (420 380 420 620) (250 620 420 620)
+     (250 380 250 620)
+     (420 380 690 250) (420 620 690 750) (690 250 690 750)
+     (190 250 250 380) (190 750 250 620))
+   (("B"  "b"  100 120 900 120 "h" "B - overall length")
+    ("S"  "ss" 100 195 190 195 "h" "S - corner cut along the side")
+    ("T"  "tt" 190 205 780 205 "h" "T - top side length")
+    ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
+    ("A"  "a"   20 250  20 750 "v" "A - overall width")
+    ("V"  "vv"  55 380  55 620 "v" "V - end width")
+    ("H"  "h"  100 580 250 580 "h" "H - left end to hopper")
+    ("G"  "g"  250 580 420 580 "h" "G - hopper length")
+    ("M"  "m"  455 250 455 380 "v" "M - top side to hopper")
+    ("L"  "l"  455 380 455 620 "v" "L - hopper width")
+    ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
+    ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
+    ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
+   (("s2" "S2 - corner cut face (check)"))
+   (("imeth" . "Overall") ("htype" . "Square")))
+
+  ;; ---------------- True L Left ----------------
+  ;;  The six sides are POOL's ab..fa, and the chart letters walk the
+  ;;  same ring: B is the bottom (A-B), A1 the right end (B-C), B2 the
+  ;;  wing top (C-D), A2 the step down to the reverse corner (D-E), B1
+  ;;  the main-section top (E-F), A the left end (F-A).  The "Reverse
+  ;;  Corner" the sheet names is POOL's inner corner E, asked as a
+  ;;  treatment and not answerable from here -- it is a corner, not a
+  ;;  measurement, so it gets no box.
+  ("L" "L" "True L Left"
+   ((100 400 640 400) (640 400 640 150) (640 150 900 150)
+     (900 150 900 850) (900 850 100 850) (100 850 100 400)
+     (250 520 400 520) (400 520 400 730) (250 730 400 730)
+     (250 520 250 730)
+     (100 400 250 520) (100 850 250 730)
+     (400 520 640 400) (400 730 640 850)
+     (640 400 640 850))
+   (("B"  "ab" 100 920 900 920 "h" "side A-B, bottom, full length")
+    ("A1" "bc" 960 150 960 850 "v" "end B-C, right end, full height")
+    ("B2" "cd" 640  90 900  90 "h" "side C-D, top of the wing")
+    ("A2" "de" 600 150 600 400 "v" "step D-E, down to the reverse corner")
+    ("B1" "ef" 100 340 640 340 "h" "side E-F, top of the main section")
+    ("A"  "fa"  45 400  45 850 "v" "end F-A, left end")
+    ("H"  "h"  100 625 250 625 "h" "H - left end to deep end")
+    ("G"  "g"  250 625 400 625 "h" "G - hopper length")
+    ("F"  "f"  400 625 640 625 "h" "F - hopper to slope break")
+    ("E"  "e"  640 625 900 625 "h" "E - slope break to right end")
+    ("M"  "m"  430 400 430 520 "v" "M - top side to hopper")
+    ("L"  "l"  430 520 430 730 "v" "L - hopper width")
+    ("K"  "k"  430 730 430 850 "v" "K - hopper to bottom side"))
+   (("c" "C - wall height (shallow depth)")
+    ("d" "D - deep end depth")))
 ))
+
+;;; -------------------- asking which chart ------------------------------
+;;;  The canonical keyword prompt of STANDARDS.md section 4, carried
+;;;  locally: the grouped build swaps this for cal:askkw, so nothing
+;;;  here may call another tool's copy of it.
 
 ;;; -------------------- chart access ------------------------------------
 
@@ -58326,6 +58498,13 @@
 (defun lzf:outline (c) (nth 3 c))
 (defun lzf:dims (c) (nth 4 c))
 (defun lzf:extra (c) (nth 5 c))
+
+;; Answers a chart implies rather than asks for.  The Grecian letters
+;; exist only on the Overall input path with the hopper type the chart
+;; draws -- pick "Measured" instead and every letter typed here goes
+;; unread -- so the chart answers those gates itself.  A chart with
+;; nothing to imply simply has none.
+(defun lzf:gates (c) (nth 6 c))
 
 ;; Every POOL key the chart can answer, drawn ones first, in order.
 (defun lzf:keys (c / d out)
@@ -58368,6 +58547,40 @@
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
 (defun lzf:py (v) (fix (/ (* v lzf:*dy*) 1000.0)))
+
+;;  An outline element is either a POLYLINE -- a flat list of per-mille
+;;  numbers, x y x y ... -- or an ARC, written
+;;
+;;      ("A" cx cy rx ry from to)
+;;
+;;  with the centre and both radii in per-mille and the angles in
+;;  degrees, 0 due east and counting anticlockwise ON SCREEN.  Since
+;;  image-tile y runs DOWN, that is a minus on the y term and nowhere
+;;  else.  Two radii rather than one because these charts want half of
+;;  an ellipse as often as half of a circle.
+;;
+;;  DCL draws line segments and nothing else, so an arc has to become a
+;;  polyline sooner or later; doing it here means the chart data can say
+;;  what it means and say it once.
+
+(defun lzf:arcpts (a / cx cy rx ry f to n i ang out)
+  (setq cx (nth 1 a) cy (nth 2 a) rx (nth 3 a) ry (nth 4 a)
+        f (nth 5 a) to (nth 6 a))
+  (setq n (fix (/ (abs (- to f)) 6.0)))
+  (if (< n 4) (setq n 4))
+  (setq i 0)
+  (while (<= i n)
+    ;; NB: the angle local is not called t -- a local of that name would
+    ;; shadow TRUE for the length of the call
+    (setq ang (/ (* pi (+ f (/ (* (- to f) i) (float n)))) 180.0)
+          out (cons (fix (- cy (* ry (sin ang))))
+                    (cons (fix (+ cx (* rx (cos ang)))) out))
+          i (1+ i)))
+  (reverse out))
+
+;; An outline element as a flat per-mille polyline, whichever it was.
+(defun lzf:flatten (e)
+  (if (= (type (car e)) 'STR) (lzf:arcpts e) e))
 
 ;; A polyline given as a flat per-mille list, in pixels.
 (defun lzf:pline (flat col / a b)
@@ -58470,8 +58683,14 @@
   (if (= side "h")
       (setq lx (- mx (/ w 2)) ly (- y1 h 4))
       ;; a vertical dimension labels at the TOP of its span: the middle
-      ;; row already carries the H/G/F/E chain across the pool
-      (setq lx (- mx (/ w 2)) ly (+ (min y1 y2) 5)))
+      ;; row already carries the H/G/F/E chain across the pool.  It is
+      ;; centred on its own line, EXCEPT when that would run off the
+      ;; left edge -- an overall like A sits hard against the boundary
+      ;; with no room on its outside, so its label goes on the inside
+      ;; rather than being clipped down to a stub
+      (progn
+        (setq ly (+ (min y1 y2) 5))
+        (setq lx (if (< (- mx (/ w 2)) 2) (+ mx 4) (- mx (/ w 2))))))
   ;; and nothing is allowed off the edge of the picture
   (if (< lx 2) (setq lx 2))
   (if (> (+ lx w) (- lzf:*dx* 2)) (setq lx (- lzf:*dx* w 2)))
@@ -58496,7 +58715,8 @@
         lzf:*dy* (dimy_tile "chart"))
   (start_image "chart")
   (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
-  (foreach poly (lzf:outline c) (lzf:pline poly lzf:*col-line*))
+  (foreach poly (lzf:outline c)
+    (lzf:pline (lzf:flatten poly) lzf:*col-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (lzf:px (nth 2 d)) (lzf:py (nth 3 d))
                (lzf:px (nth 4 d)) (lzf:py (nth 5 d)) lzf:*col-dim*))
@@ -58526,6 +58746,20 @@
         (mode_tile key 2)               ; move the caret to its box
         (lzf:redraw)))
   (princ))
+
+;;; -------------------- which chart -------------------------------------
+
+;; The keyword list, straight off the chart table: a chart added below
+;; is offered here without touching this code.
+(defun lzf:keywords ( / c out)
+  (foreach c lzf:*charts*
+    (setq out (if out (strcat out " " (car c)) (car c))))
+  out)
+
+(defun lzf:pickchart ( / kws)
+  (setq kws (lzf:keywords))
+  (cal:askkw "Which chart" kws (vl-string-translate " " "/" kws)
+             (car (car lzf:*charts*)) nil))
 
 ;;; -------------------- the dialog --------------------------------------
 ;;  Two columns: the chart on the left as an image_button, the boxes on
@@ -58637,6 +58871,10 @@
           a (lzf:answer v))
     (if (not (eq a 'SKIP))
         (setq out (cons (cons (read k) a) out))))
+  ;; the gates last, so a chart cannot be talked out of the path its
+  ;; own letters live on
+  (foreach k (lzf:gates lzf:*chart*)
+    (setq out (cons (cons (read (car k)) (cdr k)) out)))
   (reverse out))
 
 ;;; -------------------- the run -----------------------------------------
@@ -58703,7 +58941,7 @@
     ((not pool:run-with-answers)
      (princ "\nLAZFORM: POOL is not loaded in this session -- APPLOAD")
      (princ "\n         lisp/pool/POOL.LSP, or LAZPASS.lsp which has both."))
-    ((setq form (lzf:show "rectangle"))
+    ((setq form (lzf:show (lzf:pickchart)))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
      (pool:run-with-answers form))

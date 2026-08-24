@@ -111,7 +111,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV07")
+(setq pool:*version* "082426 REV08")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1657,9 +1657,12 @@
   (setq nm2 (if oct "Octagon" "Grecian")
         npts (if oct pool:*octnpts* pool:*grecnpts*))
   (defun gr:method ()
-    (setq imeth (pool:askkw (strcat nm2 " perimeter input")
-                            "Measured Overall" "Measured/Overall"
-                            (if oct "Overall" nil) nil))
+    ;; a form built from a sheet answers the LETTERS, which only the
+    ;; Overall path asks for -- so this has to be form-answerable too,
+    ;; or every letter it filled in would go unread
+    (setq imeth (pool:askkwf 'imeth (strcat nm2 " perimeter input")
+                             "Measured Overall" "Measured/Overall"
+                             (if oct "Overall" nil) nil))
     nil)
   ;; The live guide geometry (see "live guide reshaping").  Both input
   ;; methods produce the same eight-corner ring in the index order the
@@ -4687,16 +4690,17 @@
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
-        (setq htype (pool:askkw "Hopper type" "Square SIX" "Square/SIX-sided"
-                                "Square" nil)
+        (setq htype (pool:askkwf 'htype "Hopper type"
+                                 "Square SIX" "Square/SIX-sided"
+                                 "Square" nil)
               six (= htype "SIX"))
         ;; a six-sided deep end can be taped two ways: offsets shot
         ;; from every wall (cut faces parallel to the pool cuts), or
         ;; the sheet letters W / X / L / L1 / G / M / K
         (if six
-            (setq mode (pool:askkw "SIX-sided corners measured by"
-                                   "Offsets Letters" "Offsets/Letters"
-                                   "Offsets" nil)))
+            (setq mode (pool:askkwf 'hmode "SIX-sided corners measured by"
+                                    "Offsets Letters" "Offsets/Letters"
+                                    "Offsets" nil)))
         (setq xmin (- (apply 'min (mapcar 'car pts)) doff)
               xmax (+ (apply 'max (mapcar 'car pts)) doff)
               ymin (- (apply 'min (mapcar 'cadr pts)) doff)

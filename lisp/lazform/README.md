@@ -23,10 +23,29 @@ A typo counts as an empty box on purpose: something that is neither `NA`
 nor a distance AutoCAD can read leaves POOL asking, rather than quietly
 feeding it a nil that means something else entirely.
 
-The Rectangle chart carries `B A H G F E M L K`, plus boxes for the two
-out-of-square overalls and for `C` and `D` -- the depths are read off a
-section, not off this view, so they get a box and no place on the
-picture. Below the boxes: an in-square toggle and the bottom type.
+`LAZFORM` asks which chart first. Six are drawn:
+
+| Chart | POOL shape | Letters on the picture |
+| --- | --- | --- |
+| `Rectangle` | Rectangle | B A H G F E M L K |
+| `Oval` | Oval | B T A H G F E W M L K |
+| `ROman` | ROman | B T A S S1 V H G F E W M L K |
+| `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E |
+| `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
+| `L` | L | B B1 B2 A A1 A2 H G F E M L K |
+
+Anything a sheet carries that has no place on the plan view gets a box
+and no letter: the depths `C` and `D` (read off a section), the radii
+`R1 R2 R3`, the check dimensions `S2` and `X`, the out-of-square second
+overalls, and Roman's right-hand `S`/`S1`/`V` for when the two ends are
+not identical. Below the boxes: an in-square toggle and the bottom type.
+
+**The same letter is not the same measurement on every sheet.** A
+rectangle's `B` is the side length (`tp`); an oval's `B` is the
+tip-to-tip total (`tot`) and it is the *side* that becomes `T`. The
+mapping is per chart, and `tests/test_lazform.py` checks every key
+against POOL's own question lists, so a letter pointed at the wrong key
+fails the suite rather than silently swallowing what you type.
 
 ## Install & run
 
@@ -88,8 +107,21 @@ out of step with the drawing.
   press Insert and POOL takes over at the command line.
 - An edit box reports its value when the caret **leaves** it, so the
   picture updates on Tab or on a click elsewhere, not per keystroke.
-- Only the Rectangle chart exists so far. The other POOL shapes are
-  data waiting to be written.
+- Lazy L is not here yet. Its sheet carries eight perimeter letters
+  (`B B1 V V1 T T1 A A1`) where POOL asks for six side lengths, and
+  four `Y` letters where POOL asks for eight named diagonals, so the
+  mapping cannot be settled from the code alone -- see the note in
+  `lzf:*charts*`.
+- The `Grecian` charts answer three questions on your behalf, because
+  their letters only exist on one path through POOL: the perimeter
+  input method (`Overall`), the hopper type, and -- on the six-sided
+  chart -- that its corners were taped by `Letters`. Those are the
+  chart's `gates`.
+- A chart's letters assume the bottom type it was drawn for. `W`, `R3`
+  and `L1` exist only on a Normal bottom; pick another and POOL asks a
+  different set, so those boxes go unread.
+- The "Reverse Corner" the True L sheet names is a corner treatment,
+  not a measurement, so it has no box -- POOL asks for it directly.
 - The insertion base point is still picked at the command line.
 
 ## Tests
