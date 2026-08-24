@@ -1,6 +1,6 @@
-"""CALPANEL: the DCL launcher panel, in the AutoLISP VM.
+"""LAZPANEL: the DCL launcher panel and its screen button, in the VM.
 
-Three jobs:
+Four jobs:
 
 1. Pin the roster to the tree.  Every headline command defined under
    lisp/ must have a button, so a new tool without one fails here
@@ -11,12 +11,21 @@ Three jobs:
    matcher must NOT have buttons.
 
 2. Check the generated DCL is well formed: balanced braces, even
-   quotes, one key per button matching the roster, one cancel tile.
+   quotes, one key per button matching the roster, one cancel tile,
+   and a grammar pass (trailing semicolons, known tile and attribute
+   names) for the errors AutoCAD's DCL parser rejects outright.
 
-3. Drive c:CALPANEL end-to-end with the DCL surface stubbed (the VM has
-   no dialog or file i/o builtins): Close launches nothing, a click
-   launches the picked command, greyed buttons are exactly the missing
-   commands, and the temp .dcl is written and deleted either way.
+3. Drive c:LAZPANEL end-to-end with the DCL surface stubbed (the VM
+   has no dialog or file i/o builtins): Close launches nothing, a
+   click evaluates the REAL action_tile expression, greyed buttons are
+   exactly the missing commands, and the temp .dcl is written and
+   deleted -- in order -- either way.
+
+4. Check the screen button: lzp:button-init creates the one-button
+   toolbar exactly once, wires the ^C^C_LAZPANEL macro as raw ASCII 3s,
+   and generates .bmp icons that are structurally valid -- and contain
+   no byte equal to 10 or 13, because AutoLISP writes text-mode files
+   and a newline byte would be translated in transit.
 
 Runs against either tier: standalone by default, the grouped build with
 CALOFIN_LISP_ROOT=shared.
@@ -31,7 +40,7 @@ from lispvm import VM, LispError  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
-LSP = os.path.join(REPO, 'lisp', 'calpanel', 'CALPANEL.lsp')
+LSP = os.path.join(REPO, 'lisp', 'lazpanel', 'LAZPANEL.lsp')
 LOADER = os.path.join(REPO, 'shared', 'parts', 'CALOFIN-LOADER.lsp')
 PARTS = os.path.join(REPO, 'shared', 'parts')
 
@@ -46,7 +55,7 @@ def fresh():
 
 
 def roster(vm):
-    groups = vm.globals.get('cpl:*groups*') or []
+    groups = vm.globals.get('lzp:*groups*') or []
     out = []
     for g in groups:
         for cmd, _caption in g[1:]:
@@ -82,9 +91,9 @@ def held_commands():
 
 print("== the file loads and announces itself ==")
 vm = fresh()
-ver = vm.globals.get('*calpanel-version*')
+ver = vm.globals.get('*lazpanel-version*')
 assert ver and re.fullmatch(r'v\d+\.\d+', str(ver)), ver
-assert any('CALPANEL' in str(p) for p in vm.printed), vm.printed
+assert any('LAZPANEL' in str(p) for p in vm.printed), vm.printed
 PANEL = roster(vm)
 assert len(PANEL) == len(set(PANEL)), "duplicate buttons: %r" % PANEL
 print("   %s, %d buttons, no duplicates" % (ver, len(PANEL)))
@@ -113,9 +122,9 @@ for c in ALL:
     if base and base in ALL:
         satellites.add(c)
 # DCE is DIMCONTEND's short alias; STOCKLIST is STOCKCOVER's listing
-# companion -- both reachable, neither needs its own button.  CALPANEL
-# is the panel itself.
-satellites |= {'DCE', 'STOCKLIST', 'CALPANEL'}
+# companion -- both reachable, neither needs its own button.  LAZPANEL
+# is the panel itself and LAZBUTTON its toolbar summoner.
+satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON'}
 
 headline = ALL - satellites - HELD
 assert headline == set(PANEL), (
@@ -128,9 +137,9 @@ print("   %d headline commands, all on the panel; %d held back, none on it"
 
 
 print("== the generated DCL is well formed ==")
-vm.loads('(setq test:*dcl* (cpl:dcl-lines))')
+vm.loads('(setq test:*dcl* (lzp:dcl-lines))')
 dcl = [str(l) for l in vm.globals.get('test:*dcl*')]
-assert dcl[0] == 'calpanel : dialog {', dcl[0]
+assert dcl[0] == 'lazpanel : dialog {', dcl[0]
 assert dcl[-1] == '}', dcl[-1]
 depth = 0
 for line in dcl:
@@ -196,16 +205,23 @@ print("== end-to-end with the DCL surface stubbed ==")
 # not just each call's happening.  A click is simulated faithfully:
 # start_dialog looks up the clicked key's REAL action_tile expression,
 # binds $key / $value / $reason the way AutoCAD does, and evaluates it,
-# so the wiring string in CALPANEL.lsp is executed here, not assumed.
+# so the wiring string in LAZPANEL.lsp is executed here, not assumed.
+# The vla-* stubs model the menu API: menu group "MG0" whose toolbar
+# names live in stub:*tbs*; write-char logs (path byte) pairs so the
+# generated bitmaps can be checked byte by byte.
 STUB = '''
 (setq stub:*written* nil stub:*disabled* nil stub:*action* nil
       stub:*events* nil stub:*click* nil stub:*status* nil
-      stub:*ran* nil stub:*dlgname* nil stub:*done* nil)
+      stub:*ran* nil stub:*dlgname* nil stub:*done* nil
+      stub:*tbs* nil stub:*macro* nil stub:*bitmaps* nil
+      stub:*bytes* nil)
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
-(defun vl-filename-mktemp (pat dir ext) "/stub/calpanel.dcl")
-(defun open (f mode) 'FH)
+(defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
+(defun open (f mode) f)
 (defun write-line (s fh)
   (setq stub:*written* (cons s stub:*written*)) s)
+(defun write-char (b fh)
+  (setq stub:*bytes* (cons (list fh b) stub:*bytes*)) b)
 (defun close (fh) (stub:ev "close"))
 (defun load_dialog (f) (stub:ev "load") 7)
 (defun new_dialog (name id)
@@ -228,6 +244,20 @@ STUB = '''
   (if stub:*done* stub:*done* 0))
 (defun unload_dialog (id) (stub:ev "unload"))
 (defun vl-file-delete (f) (stub:ev (strcat "delete " f)) t)
+(defun vlax-get-acad-object () "ACAD")
+(defun vla-get-menugroups (app) "MGS")
+(defun vla-get-toolbars (mg) "TBS")
+(defun vla-get-count (obj) (if (= obj "MGS") 1 (length stub:*tbs*)))
+(defun vla-item (obj i) (if (= obj "MGS") "MG0" (nth i stub:*tbs*)))
+(defun vla-get-name (tb) tb)
+(defun vla-add (tbs name)
+  (setq stub:*tbs* (append stub:*tbs* (list name))) name)
+(defun vla-addtoolbarbutton (tb idx name help macro)
+  (setq stub:*macro* macro) "BTN")
+(defun vla-setbitmaps (btn small large)
+  (setq stub:*bitmaps* (list small large)) t)
+(defun vla-put-visible (tb v) (stub:ev "visible") t)
+(defun vla-float (tb top left rows) (stub:ev "float") t)
 (defun c:SPA ()
   (setq stub:*ran* (cons "SPA" stub:*ran*)) (stub:ev "run SPA") (princ))
 '''
@@ -239,9 +269,9 @@ def stubbed():
     return vm
 
 
-def run(vm, label):
+def run(vm, name, label):
     try:
-        vm.run('c:CALPANEL', [])
+        vm.run(name, [])
     except LispError as e:
         raise AssertionError("[%s] %s" % (label, e)) from None
 
@@ -251,12 +281,12 @@ def events(vm):
 
 
 vm = stubbed()
-run(vm, 'close')
+run(vm, 'c:LAZPANEL', 'close')
 assert not vm.globals.get('stub:*ran*'), "Close launched something"
 written = [str(l) for l in reversed(vm.globals.get('stub:*written*'))]
-assert written == dcl, "written DCL differs from cpl:dcl-lines"
+assert written == dcl, "written DCL differs from lzp:dcl-lines"
 assert events(vm) == ['close', 'load', 'new', 'start', 'unload',
-                      'delete /stub/calpanel.dcl'], events(vm)
+                      'delete /stub/lazpanel.dcl'], events(vm)
 assert str(vm.globals.get('stub:*dlgname*')) == \
     dcl[0].split(' : ')[0], "new_dialog name does not match the DCL id"
 acts = vm.globals.get('stub:*action*')
@@ -264,33 +294,95 @@ assert set(str(a[0]) for a in acts) == set(PANEL)
 assert '1 of %d' % len(PANEL) in str(vm.globals.get('stub:*status*'))
 disabled = set(map(str, vm.globals.get('stub:*disabled*')))
 assert disabled == set(PANEL) - {'SPA'}, disabled ^ (set(PANEL) - {'SPA'})
-assert vm.globals.get('cpl:*pick*') is None, "pick survived the run"
+assert vm.globals.get('lzp:*pick*') is None, "pick survived the run"
 print("   Close: nothing ran, close->load->new->start->unload->delete,")
 print("   dialog id matches, only SPA enabled")
 
 vm = stubbed()
 vm.loads('(setq stub:*click* "SPA")')
-run(vm, 'click-spa')
+run(vm, 'c:LAZPANEL', 'click-spa')
 assert [str(x) for x in vm.globals.get('stub:*ran*')] == ['SPA']
-assert vm.globals.get('cpl:*pick*') is None, "pick not cleared after launch"
+assert vm.globals.get('lzp:*pick*') is None, "pick not cleared after launch"
 assert events(vm) == ['close', 'load', 'new', 'start', 'unload',
-                      'delete /stub/calpanel.dcl', 'run SPA'], events(vm)
+                      'delete /stub/lazpanel.dcl', 'run SPA'], events(vm)
 print("   click SPA: the real action expression fires, SPA runs once,")
 print("   and only after the dialog is unloaded and the temp file gone")
 
 vm = stubbed()
 vm.loads('(setq stub:*click* "POOL")')
-run(vm, 'click-missing')
+run(vm, 'c:LAZPANEL', 'click-missing')
 assert not vm.globals.get('stub:*ran*')
 assert any('POOL is not loaded' in str(p) for p in vm.printed), vm.printed
 print("   click on a missing command reports it instead of erroring")
 
 
-print("== CALPANELVER ==")
+print("== the screen button: toolbar, macro, and bitmap bytes ==")
+vm = stubbed()
+vm.loads('(setq test:*tb* (lzp:button-init))')
+tbs = [str(x) for x in vm.globals.get('stub:*tbs*') or []]
+assert tbs == ['LazPanel'], tbs
+macro = str(vm.globals.get('stub:*macro*'))
+assert macro == '\x03\x03_LAZPANEL ', (
+    "macro must be raw ASCII-3 cancels + the command: %r" % macro)
+ev = events(vm)
+assert 'visible' in ev and 'float' in ev, ev
+bitmaps = [str(x) for x in vm.globals.get('stub:*bitmaps*') or []]
+assert bitmaps == ['/stub/lazpanel16.bmp', '/stub/lazpanel32.bmp'], bitmaps
+
+by_file = {}
+for fh, b in reversed(vm.globals.get('stub:*bytes*') or []):
+    by_file.setdefault(str(fh), []).append(int(b))
+grid = [str(r) for r in vm.globals.get('lzp:*icon16*')]
+assert len(grid) == 16 and all(len(r) == 16 for r in grid), grid
+want_orange = sum(r.count('X') for r in grid)
+assert want_orange > 0
+
+
+def le(bb):
+    n = 0
+    for i, b in enumerate(bb):
+        n += b << (8 * i)
+    return n
+
+
+for path, size, scale in ((bitmaps[0], 16, 1), (bitmaps[1], 32, 4)):
+    bb = by_file[path]
+    assert len(bb) == 54 + size * size * 3, (path, len(bb))
+    assert bb[0] == 66 and bb[1] == 77, "no BM signature in %s" % path
+    assert le(bb[2:6]) == len(bb), "file size field wrong in %s" % path
+    assert le(bb[10:14]) == 54 and le(bb[14:18]) == 40
+    assert le(bb[18:22]) == size and le(bb[22:26]) == size
+    assert le(bb[26:28]) == 1 and le(bb[28:30]) == 24
+    assert le(bb[34:38]) == size * size * 3
+    # THE invariant: AutoLISP writes text-mode, so a 10 would become
+    # 13 10 in the file and shear every following pixel
+    assert 10 not in bb, "byte 10 (newline) in %s" % path
+    assert 13 not in bb, "byte 13 (CR) in %s" % path
+    px = bb[54:]
+    orange = sum(1 for i in range(0, len(px), 3)
+                 if px[i:i + 3] == [0, 165, 255])
+    assert orange == want_orange * scale, (path, orange, want_orange * scale)
+print("   toolbar created, macro wired, both BMPs valid, no newline bytes,")
+print("   %d orange pixels small / %d large" % (want_orange, want_orange * 4))
+
+vm.loads('(lzp:button-init)')
+tbs = [str(x) for x in vm.globals.get('stub:*tbs*') or []]
+assert tbs == ['LazPanel'], "second init duplicated the toolbar: %r" % tbs
+print("   second init reuses the toolbar instead of duplicating it")
+
+vm = stubbed()
+run(vm, 'c:LAZBUTTON', 'lazbutton')
+assert any('on screen' in str(p) for p in vm.printed), vm.printed
+tbs = [str(x) for x in vm.globals.get('stub:*tbs*') or []]
+assert tbs == ['LazPanel'], tbs
+print("   LAZBUTTON creates it on demand and says where it went")
+
+
+print("== LAZPANELVER ==")
 vm = fresh()
-vm.run('c:CALPANELVER', [])
+vm.run('c:LAZPANELVER', [])
 out = ''.join(str(p) for p in vm.printed)
 assert str(ver) in out and str(len(PANEL)) in out, out
 print("   reports %s and the %d-tool roster" % (ver, len(PANEL)))
 
-print("ALL CALPANEL TESTS PASSED")
+print("ALL LAZPANEL TESTS PASSED")

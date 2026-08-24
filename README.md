@@ -126,7 +126,7 @@ changing a routine.
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 | `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
-| `CALPANEL`, `CALPANELVER` | `lisp/calpanel/` | A clickable button panel with the 47 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Buttons are grouped Layout / Points / Dimensions / Checking (the same four group names as the VB palette); a command not loaded in this session is greyed out. A click closes the panel and runs the command exactly as if typed. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/calpanel/README.md` |
+| `LAZPANEL`, `LAZBUTTON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 47 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange-L placeholder icon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Buttons are grouped Layout / Points / Dimensions / Checking (the same four group names as the VB palette); a command not loaded in this session is greyed out. A click closes the panel and runs the command exactly as if typed. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
 
 ### Going back a step
 
@@ -272,10 +272,11 @@ everything else releases one file per source.
 | Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest |
 
 The palette needs its DLL `NETLOAD`ed on every machine. For a
-button panel with nothing to install, see `lisp/calpanel/` above:
-`CALPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, and covers
-the 47 headline drafting commands; the VB palette remains the richer
-surface (dockable, stays open, POOL/SPA forms).
+button panel with nothing to install, see `lisp/lazpanel/` above:
+`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 47
+headline drafting commands, and puts its own one-button toolbar on
+screen to open it; the VB palette remains the richer surface (docks,
+stays open while a tool runs, POOL/SPA forms).
 
 **Status:** `lisp/pool/POOL.LSP` and `lisp/spa/SPA.LSP` are the
 canonical, actively-developed versions of those tools. The palette's
@@ -336,8 +337,9 @@ python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
 python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
                                       # just made, in the same lispvm
-python3 tests/test_calpanel.py        # CALPANEL - roster pinned to lisp/,
-                                      # DCL well-formed, run with stubs
+python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
+                                      # DCL well-formed, run with stubs,
+                                      # toolbar + generated icon bytes
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
