@@ -26,7 +26,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "082126 REV03")
+(setq tutorial:*version* "082426 REV04")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -96,6 +96,7 @@
   (princ "\nAs soon as you pick the shape, a gray guide (like the three")
   (princ "\nsides above) is drawn at the base point and the view zooms to it.")
   (tutorial:bullet "The element being asked about right now turns RED (the D-A side, here) -- there is never any doubt which measurement you are answering.")
+  (tutorial:bullet "The guide is LIVE: every answer reshapes it on the spot -- type the bottom side and the box stretches to it, type a cross dim and the pool leans out of square -- so you watch the real pool take shape instead of a fixed cartoon.")
   (tutorial:bullet "When a prompt names corners (a side, a cross dim, a corner treatment) the corner LETTERS turn red too.")
   (tutorial:bullet "Object snaps stay LIVE the whole time you are answering, including the very first base-point pick, so you can snap to the real site.")
   (tutorial:bullet "Back (type B -- or U for Undo, its unlisted synonym) re-asks the previous question, from ANYWHERE in the process, right back to the very first one.")

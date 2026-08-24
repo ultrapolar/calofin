@@ -239,11 +239,13 @@ corners (a small circle on the corner point with a `90°` leader) —
 and a circled `?` plus a `Not Given` note on any `NotGiven` corner.
 
 The **guide updates live**: as soon as the corner answers are in, the
-gray guide redraws its corners with the cuts/fillets (display
-sizes capped so oversized inputs can't fold the nominal shape), and
-the dashed cross-dim guide lines are re-drawn between the actual
-reference points for the chosen mode — in Ends mode each of the four
-ties is its own line, highlighted individually as it's prompted.
+gray guide redraws its corners with the cuts/fillets at their real
+sizes (the guide sits on the live measured quad, so nothing needs
+display-capping any more), and the dashed cross-dim guide lines are
+drawn between the actual reference points for the chosen mode — in
+Ends mode each of the four ties is its own line, highlighted
+individually as it's prompted. Each cross dim answered then reshapes
+the quad under all of them, corners and ties walking along with it.
 
 ### Pool bottom / hopper (every shape)
 
@@ -756,9 +758,9 @@ target/actual deltas instead of a subtly bent pool.
 
 ### Guided input
 
-As soon as the shape is chosen, a gray nominal "guide" pool of that
-shape (with corner labels) is drawn at the base point and the view
-zooms to it. The pool outline is drawn solid in **gray**, while all
+As soon as the shape is chosen, a gray "guide" pool of that shape
+(with corner labels) is drawn at the base point and the view zooms to
+it. The pool outline is drawn solid in **gray**, while all
 **cross dims (and other measuring lines) are WHITE and DOTTED**, so
 the diagonals read clearly over the shape even on the L pools where
 nine diagonals cross the body. The dot pattern is defined in inches
@@ -766,6 +768,19 @@ by the routine itself and scaled to cancel the drawing's `LTSCALE`,
 so it looks the same in any drawing (no dependency on `acad.lin`
 being found, which used to make the pattern silently fall back to
 continuous).
+
+**The guide is live** (the way an OASIS preview redraws before every
+question): it starts at a familiar nominal size, and every accepted
+answer reshapes it on the spot — type the bottom side and the box
+stretches to it, give an oval end radius and that end's bulge follows,
+answer a cross dim on a rectangle and the guide leans out of square
+exactly the way the final fit will hold it. Values not yet given are
+filled with the same derivations the drawing pass will use (an
+unanswered side borrows its partner, a Grecian letter falls back to
+the overall sheet's split, an oval end without a radius is a
+semicircle), and the view follows the reshaped guide so a pool bigger
+than the nominal never grows out of sight. `Back` and re-answer, and
+the guide snaps to the corrected number.
 
 When a prompt names corners — a side "A-B", a cross dim "A-C", or a
 rectangle corner treatment — **the corner letters turn red too**,
