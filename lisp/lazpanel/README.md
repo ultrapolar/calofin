@@ -14,6 +14,13 @@ different group here than there):
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
 | Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, COVERCHECK, COVERSCAN, SPACHECK, SPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
+A **tab strip** across the top switches groups, so the eye lands on a
+dozen buttons rather than all forty-eight. The pages ARE `lzp:*groups*`
+-- re-ordering the tools or re-grouping them is an edit to that one
+table and nothing else. The status line still counts the whole roster,
+not just the page you are looking at, and the panel reopens where you
+left it rather than jumping back to the middle of the screen.
+
 Clicking a button closes the panel and runs that command exactly as if
 its name had been typed -- the panel adds nothing in front of a tool and
 nothing behind it. A command that is not loaded in this session shows as

@@ -58217,7 +58217,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.4")
+(setq *lazform-version* "v1.5")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -58758,9 +58758,12 @@
   ;; to hide or restyle one, so "which page am I on" is carried by that
   ;; greyed button and by the dialog's own title bar.
   (setq out (list "  : row {"))
+  ;; the KEY, not the title: six full chart titles make a row 117
+  ;; characters wide, twice the chart it sits above, and a dialog wider
+  ;; than the screen has nowhere to go -- DCL does not scroll
   (foreach c lzf:*charts*
     (setq out (cons (strcat "    : button { key = \"tab_" (car c)
-                            "\"; label = \"" (caddr c) "\"; }")
+                            "\"; label = \"" (car c) "\"; }")
                     out)))
   (reverse (cons "  }" out)))
 
@@ -58768,8 +58771,12 @@
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
 (defun lzf:dcl-one (c / out d)
-  (setq out (list (strcat (lzf:dlgname (car c)) " : dialog {")
-                  (strcat "  label = \"LazForm - " (caddr c) "\";")))
+  ;; out is consed newest-first and reversed once at the end, so this
+  ;; seed list reads BACKWARDS: the label second here puts it second in
+  ;; the file, after the line that opens the dialog.  The other way
+  ;; round emits an attribute before its own dialog, which is not DCL.
+  (setq out (list (strcat "  label = \"LazForm - " (caddr c) "\";")
+                  (strcat (lzf:dlgname (car c)) " : dialog {")))
   (setq out (append (reverse (lzf:tabstrip (car c))) out))
   (setq out (cons "  : row {" out))
   ;; A PASSIVE image tile, deliberately -- see "why the picture is not
@@ -59102,7 +59109,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.5")
+(setq *lazpanel-version* "v1.6")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -59175,11 +59182,19 @@
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
+(setq lzp:*pos* nil)              ; where the panel was last standing
+(setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 
 ;;; -------------------- roster access -----------------------------------
 
 ;; Every command on the panel, flat, in display order.
+(defun lzp:group-commands (name / g c out)
+  (foreach g lzp:*groups*
+    (if (= (car g) name)
+        (foreach c (cdr g) (setq out (cons (car c) out)))))
+  (reverse out))
+
 (defun lzp:commands ( / g c out)
   (foreach g lzp:*groups*
     (foreach c (cdr g)
@@ -59205,21 +59220,38 @@
 ;;  .lsp.  Keys are the command names themselves; boxed columns carry
 ;;  the group labels.
 
-(defun lzp:dcl-lines ( / g c out)
-  ;; built newest-first (cons) and reversed once at the end, so the
-  ;; seed list below is the header in REVERSE order
-  (setq out (list "  : row {"
-                  "  : text { key = \"status\"; width = 70; alignment = centered; }"
-                  (strcat "  label = \"LazPanel  " *lazpanel-version* "\";")
-                  "lazpanel : dialog {"))
+(defun lzp:dlgname (group) (strcat "lazpanel_" (strcase group t)))
+
+;; The tab strip: one button per group.  DCL has no tab tile, so a tab
+;; is a button that closes this page and reopens the next -- and since
+;; done_dialog reports where the dialog was standing, it reopens there
+;; rather than jumping back to the middle of the screen.
+(defun lzp:tabstrip ( / out g)
+  (setq out (list "  : row {"))
   (foreach g lzp:*groups*
-    (setq out (cons (strcat "      label = \"" (car g) "\";")
-                    (cons "    : boxed_column {" out)))
-    (foreach c (cdr g)
-      (setq out (cons (strcat "      : button { label = \"" (car c) "  -  "
-                              (cadr c) "\"; key = \"" (car c) "\"; }")
-                      out)))
-    (setq out (cons "    }" (cons "      spacer;" out))))
+    (setq out (cons (strcat "    : button { key = \"tab_" (car g)
+                            "\"; label = \"" (car g) "\"; }")
+                    out)))
+  (reverse (cons "  }" out)))
+
+;; One page per group.  The whole roster is still one list -- the pages
+;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
+;; an edit to that table and nothing else.
+(defun lzp:dcl-one (g / out c)
+  ;; consed newest-first and reversed at the end, so this seed list
+  ;; reads BACKWARDS: the dialog line last here comes out first
+  (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
+                          "alignment = centered; }")
+                  (strcat "  label = \"LazPanel " *lazpanel-version*
+                          "  -  " (car g) "\";")
+                  (strcat (lzp:dlgname (car g)) " : dialog {")))
+  (setq out (append (reverse (lzp:tabstrip)) out))
+  (setq out (cons "  : boxed_column {" out))
+  (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+  (foreach c (cdr g)
+    (setq out (cons (strcat "    : button { label = \"" (car c) "  -  "
+                            (cadr c) "\"; key = \"" (car c) "\"; }")
+                    out)))
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
@@ -59227,6 +59259,12 @@
                           "fixed_width = true; alignment = centered; }")
                   out))
   (reverse (cons "}" out)))
+
+;; Every page, one after another, in one generated file.
+(defun lzp:dcl-lines ( / out g)
+  (foreach g lzp:*groups*
+    (setq out (append out (lzp:dcl-one g) (list ""))))
+  out)
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -59554,7 +59592,7 @@
 ;;  the user clicked gets whatever error handling it sets up itself,
 ;;  and a tool that fails reports as itself, not as "LAZPANEL error".
 
-(defun lzp:show ( / *error* f dcl rc pick have n)
+(defun lzp:show ( / *error* f dcl rc pick have n g done out)
   (defun *error* (msg)
     ;; the dialog itself first: unload_dialog alone does not dismiss a
     ;; dialog that is still up, term_dialog does (and is a no-op when
@@ -59568,36 +59606,63 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
     (princ))
-  (setq lzp:*pick* nil)
+  (setq lzp:*pick* nil
+        lzp:*pos* nil
+        g (car (car lzp:*groups*)))
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
      (princ "\nLAZPANEL error: could not load the dialog file."))
-    ((not (new_dialog "lazpanel" dcl))
-     (princ "\nLAZPANEL error: could not open the panel."))
     (t
-     (setq have (lzp:loaded))
-     (set_tile "status"
-               (strcat (itoa (length have)) " of "
-                       (itoa (length (lzp:commands)))
-                       " tools loaded - greyed buttons are not in this session"))
-     (foreach n (lzp:commands)
-       (action_tile n "(setq lzp:*pick* $key) (done_dialog 1)")
-       (if (not (member n have))
-         (mode_tile n 1)))
-     (setq rc (start_dialog))))
+     ;; The page loop.  One page per group, so the eye lands on a dozen
+     ;; buttons rather than all of them; the tab strip is the whole
+     ;; roster and never changes width as you move along it.
+     (while (not done)
+       (cond
+         ((not (lzp:newdlg (lzp:dlgname g) dcl))
+          (princ "\nLAZPANEL error: could not open the panel.")
+          (setq done t))
+         (t
+          (setq have (lzp:loaded))
+          (set_tile "status"
+                    (strcat (itoa (length have)) " of "
+                            (itoa (length (lzp:commands)))
+                            " tools loaded - greyed are not in this session"))
+          (foreach n (lzp:group-commands g)
+            (action_tile n
+              "(setq lzp:*pick* $key lzp:*pos* (done_dialog 1))")
+            (if (not (member n have))
+              (mode_tile n 1)))
+          (foreach n lzp:*groups*
+            (action_tile (strcat "tab_" (car n))
+              (strcat "(setq lzp:*go* \"" (car n)
+                      "\" lzp:*pos* (done_dialog 4))")))
+          (action_tile "cancel" "(setq lzp:*pos* (done_dialog 0))")
+          (setq rc (start_dialog))
+          (cond
+            ((= rc 4) (setq g lzp:*go*))      ; a tab: go round again
+            (t (setq done t
+                     out (if (= rc 1) lzp:*pick*)))))))))
   ;; the dialog and its temp file go away BEFORE anything is launched,
   ;; so an interactive command never starts under an open modal dialog
   ;; and the temp file never outlives the panel
   (if (and dcl (>= dcl 0)) (unload_dialog dcl))
   (setq dcl nil)
   (if f (vl-file-delete f))
-  (setq f nil)
-  (setq pick lzp:*pick*
-        lzp:*pick* nil)
-  (if (and rc (= rc 1) pick)
-    pick))
+  (setq f nil lzp:*pick* nil)
+  out)
+
+;; Open a page where the user last had the panel.  done_dialog reports
+;; the position it closed at and new_dialog takes one back, but only in
+;; its four-argument form -- and a build answering done_dialog with
+;; something other than a point would poison every reopen, so the shape
+;; is checked before it is trusted.
+(defun lzp:newdlg (name dcl)
+  (if (and lzp:*pos* (listp lzp:*pos*) (= (length lzp:*pos*) 2)
+           (numberp (car lzp:*pos*)) (numberp (cadr lzp:*pos*)))
+      (new_dialog name dcl "" lzp:*pos*)
+      (new_dialog name dcl)))
 
 ;;; -------------------- commands ----------------------------------------
 

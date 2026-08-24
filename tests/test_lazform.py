@@ -100,13 +100,19 @@ STUB = '''
 (defun start_dialog ( / p k)
   (if stub:*rcs*
     (setq stub:*rc* (car stub:*rcs*) stub:*rcs* (cdr stub:*rcs*)))
+  (setq stub:*done* nil)          ; each page starts un-closed
   ;; type into every box the scenario named, the way a user tabbing
   ;; through them would -- through the REAL action expression
   (foreach p stub:*type*
-    (if (setq k (assoc (car p) stub:*act*))
+    (if (and (not stub:*done*) (setq k (assoc (car p) stub:*act*)))
       (progn (setq $value (cadr p) $key (car p))
-             (eval (read (strcat "(progn " (cadr k) ")"))))))
-  stub:*rc*)
+             (eval (read (strcat "(progn " (cadr k) ")")))
+             ;; an entry that closed the dialog is spent: left in the
+             ;; list a tab would re-fire on the page it just opened and
+             ;; reopen itself for ever
+             (if stub:*done*
+               (setq stub:*type* (vl-remove p stub:*type*))))))
+  (if stub:*done* stub:*done* stub:*rc*))
 (setq stub:*act* nil stub:*type* nil stub:*rcs* nil)
 '''
 
@@ -267,6 +273,15 @@ def page(name):
 
 def check_page(name):
     d = page(name)
+    # the dialog's own line opens it, and its label belongs INSIDE.  Get
+    # these the wrong way round -- easy, since the lines are consed
+    # newest-first and reversed once at the end -- and the file carries
+    # an attribute before the dialog it belongs to, which is not DCL and
+    # which balanced braces do not notice.
+    assert d[0].endswith(' : dialog {'), \
+        "%s: page does not open with its dialog line: %r" % (name, d[0])
+    assert d[1].strip().startswith('label = '), \
+        "%s: the dialog's label is not the first thing inside it: %r" % (name, d[1])
     vm.loads('(setq lzf:*chart* (lzf:chart "%s"))'
              '(setq t:*keys* (lzf:keys lzf:*chart*))'
              '(setq t:*dims* (lzf:dims lzf:*chart*))' % name)
@@ -309,10 +324,22 @@ def check_page(name):
     return d, tilekeys
 
 
+# DCL does not scroll and a dialog wider than the screen has nowhere to
+# go, so the tab strip gets a width budget.  Six full chart TITLES came
+# to 117 characters -- more than twice the chart sitting under them.
+TAB_BUDGET = 90
 for c in charts:
     d, tk = check_page(str(c[0]))
-    print("   %-10s %2d lines, %2d tile keys, tabs + letter buttons"
-          % (str(c[0]), len(d), len(tk)))
+    body = '\n'.join(d)
+    tabs = re.findall(r'key = "tab_[^"]+"; label = "([^"]+)"', body)
+    assert len(tabs) == len(charts), "%s: %d tabs" % (str(c[0]), len(tabs))
+    wide = sum(len(t) + 6 for t in tabs)
+    assert wide <= TAB_BUDGET, (
+        "%s: the tab strip is about %d characters wide, over the %d budget "
+        "-- a dialog wider than the screen cannot be shown and DCL will not "
+        "scroll it: %r" % (str(c[0]), wide, TAB_BUDGET, tabs))
+    print("   %-10s %2d lines, %2d tile keys, tab strip ~%d chars"
+          % (str(c[0]), len(d), len(tk), wide))
 
 dcl = ALL
 vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
@@ -371,7 +398,14 @@ print("   %d value strokes appear; outline strokes fall %d -> %d"
 
 print("== the page loop: tabs, letter buttons, nothing on the chart ==")
 vm2 = stubbed()
+DRAW['vec'] = []
 vm2.loads('(setq t:*f* (lzf:show "Rectangle"))')
+# the chart must actually be DRAWN while the dialog is up.  An image tile
+# is blank until something strokes into it, and DCL gives no second
+# chance -- so a page that opens without a redraw shows an empty box,
+# which is exactly what a user reports as "the drawing disappeared".
+assert DRAW['vec'], "lzf:show opened a page and drew nothing into the chart"
+drew_open = len(DRAW['vec'])
 wired = {str(a[0]) for a in (vm2.globals.get('stub:*act*') or [])}
 assert 'chart' not in wired, \
     "an action is wired to the chart tile: it would be repainted on hover"
@@ -383,7 +417,8 @@ for dim in vm2.globals['t:*dims*']:
         "dimension %s has no letter-button callback" % str(dim[0])
 for c in charts:
     assert 'tab_%s' % str(c[0]) in wired, "no tab callback for %s" % str(c[0])
-print("   %d callbacks bound, none of them on the chart" % len(wired))
+print("   %d callbacks bound, none on the chart, %d vectors drawn"
+      % (len(wired), drew_open))
 
 # clicking a letter must put the caret in that box AND select what is
 # there, so the first keystroke replaces rather than appends
@@ -399,6 +434,7 @@ print("   clicking a letter focuses its box, selects it, and rings the chart")
 
 # a tab click reopens on the other chart, and what was typed survives it
 vm4 = stubbed()
+DRAW['vec'] = []
 vm4.loads('(setq stub:*rcs* \'(4 1))'
           '(setq stub:*type* \'(("tp" "240") ("tab_Oval" "")))'
           '(setq t:*f* (lzf:show "Rectangle"))')
@@ -415,6 +451,7 @@ assert str(vm4.globals['t:*v*']) == '240', (
 # -- and if that ever regresses, the dialog jumps back to the middle of
 # the screen on every tab click.
 assert [n for n, _ in OPENED] == ['lazform_rectangle', 'lazform_oval'], OPENED
+assert DRAW['vec'], "the second page opened and drew nothing into its chart"
 assert [n for _, n in OPENED] == [2, 4], (
     "the reopened page did not carry the position back: %r" % OPENED)
 print("   a tab reopens on the other chart, keeps what was typed,")

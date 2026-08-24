@@ -144,35 +144,21 @@ print("   %d headline commands, all on the panel; %d held back, none on it"
       % (len(headline), len(HELD)))
 
 
-print("== the generated DCL is well formed ==")
+print("== the generated DCL is well formed, one page per group ==")
 vm.loads('(setq test:*dcl* (lzp:dcl-lines))')
 dcl = [str(l) for l in vm.globals.get('test:*dcl*')]
-assert dcl[0] == 'lazpanel : dialog {', dcl[0]
-assert dcl[-1] == '}', dcl[-1]
+GROUPS = [str(g[0]) for g in vm.globals['lzp:*groups*']]
+
+opens = [l for l in dcl if l.endswith(' : dialog {')]
+assert len(opens) == len(GROUPS), (
+    "%d dialogs for %d groups" % (len(opens), len(GROUPS)))
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
-    for ch in line:
-        if ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            assert depth >= 0, "brace closes below zero at %r" % line
-assert depth == 0, "unbalanced braces: %d left open" % depth
-text = '\n'.join(dcl)
-keys = re.findall(r'key = "([^"]+)"', text)
-assert len(keys) == len(set(keys)), "duplicate keys"
-assert set(keys) == set(PANEL) | {'status', 'cancel'}, (
-    set(keys) ^ (set(PANEL) | {'status', 'cancel'}))
-assert text.count('is_cancel = true') == 1
-for c in PANEL:
-    assert re.search(r'label = "%s  -  [^"]+"' % re.escape(c), text), c
+    depth += line.count('{') - line.count('}')
+    assert depth >= 0, line
+assert depth == 0, "unbalanced braces across the file"
 
-# A grammar pass, because AutoCAD's DCL parser rejects what the shape
-# checks above cannot see: an attribute clause without its trailing
-# semicolon, or a misspelled tile name, kills load_dialog/new_dialog
-# outright.  Every line must be one of the five shapes below, every
-# tile and attribute name drawn from the known sets.
 TILES = {'row', 'boxed_column', 'button', 'text'}
 ATTRS = {'label', 'key', 'width', 'alignment',
          'is_default', 'is_cancel', 'fixed_width'}
@@ -187,25 +173,79 @@ def check_clauses(chunk, line):
         assert name in ATTRS, "unknown attribute %r in %r" % (name, line)
 
 
-for line in dcl[1:]:
-    s = line.strip()
-    if s in ('}', 'spacer;'):
-        continue
-    m = OPEN_RE.fullmatch(s)
-    if m:
-        assert m.group(1) in TILES, "unknown tile %r in %r" % (m.group(1), line)
-        continue
-    m = INLINE_RE.fullmatch(s)
-    if m:
-        assert m.group(1) in TILES, "unknown tile %r in %r" % (m.group(1), line)
-        check_clauses(m.group(2), line)
-        continue
-    assert PLAIN_RE.fullmatch(s), "not a valid DCL line: %r" % line
-    check_clauses(s, line)
-print("   %d lines, %d keys, braces/quotes/clauses/tile names all valid"
-      % (len(dcl), len(keys)))
+def page(group):
+    vm.loads('(setq test:*n* (lzp:dlgname "%s"))' % group)
+    name = str(vm.globals['test:*n*'])
+    i = dcl.index(name + ' : dialog {')
+    d = 0
+    for j in range(i, len(dcl)):
+        d += dcl[j].count('{') - dcl[j].count('}')
+        if d == 0:
+            return dcl[i:j + 1]
+    raise AssertionError("%s never closes" % name)
 
 
+# DCL does not scroll, so a dialog wider than the screen has nowhere to
+# go.  The tab strip is on every page and never changes, so it gets a
+# budget: full group titles are short, but the check is what stops a
+# future rename making the panel unopenable.
+TAB_BUDGET = 90
+seen_keys = set()
+for gname in GROUPS:
+    d = page(gname)
+    assert d[0].endswith(' : dialog {'), \
+        "%s: page does not open with its dialog line: %r" % (gname, d[0])
+    assert d[1].strip().startswith('label = '), \
+        "%s: the label is not the first thing inside the dialog: %r" % (gname, d[1])
+    text = '\n'.join(d)
+    keys = re.findall(r'key = "([^"]+)"', text)
+    assert len(keys) == len(set(keys)), "%s: duplicate tile keys" % gname
+    # a tab for every group, on every page
+    tabs = re.findall(r'key = "tab_([^"]+)"; label = "([^"]+)"', text)
+    assert [t[0] for t in tabs] == GROUPS, \
+        "%s: tab strip is %r, expected %r" % (gname, [t[0] for t in tabs], GROUPS)
+    wide = sum(len(t[1]) + 6 for t in tabs)
+    assert wide <= TAB_BUDGET, (
+        "%s: the tab strip is about %d characters wide, over the %d budget "
+        "-- DCL will not scroll a dialog wider than the screen" % (gname, wide, TAB_BUDGET))
+    # this page carries exactly its own group's commands
+    vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % gname)
+    mine = [str(x) for x in vm.globals['test:*g*']]
+    assert set(mine) <= set(keys), \
+        "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
+    for other in GROUPS:
+        if other == gname:
+            continue
+        vm.loads('(setq test:*o* (lzp:group-commands "%s"))' % other)
+        strays = set(str(x) for x in vm.globals['test:*o*']) & set(keys)
+        assert not strays, \
+            "%s: carries %s's commands too: %r" % (gname, other, sorted(strays))
+    seen_keys |= set(mine)
+    assert 'status' in keys and 'cancel' in keys, gname
+    assert text.count('is_cancel = true') == 1
+    for line in d[1:]:
+        s2 = line.strip()
+        if s2 in ('}', 'spacer;'):
+            continue
+        m = OPEN_RE.fullmatch(s2)
+        if m:
+            assert m.group(1) in TILES, "unknown tile %r in %r" % (m.group(1), line)
+            continue
+        m = INLINE_RE.fullmatch(s2)
+        if m:
+            assert m.group(1) in TILES, "unknown tile %r in %r" % (m.group(1), line)
+            check_clauses(m.group(2), line)
+            continue
+        assert PLAIN_RE.fullmatch(s2), "not a valid DCL line: %r" % line
+        check_clauses(s2, line)
+    print("   %-11s %2d lines, %2d commands, tab strip ~%d chars"
+          % (gname, len(d), len(mine), wide))
+
+# every command on the roster lives on exactly one page
+assert seen_keys == set(PANEL), (
+    "pages and roster disagree: %r" % sorted(seen_keys ^ set(PANEL)))
+print("   %d dialogs, %d commands across them, none on two pages"
+      % (len(opens), len(seen_keys)))
 
 print("== end-to-end with the DCL surface stubbed ==")
 # The stubs keep one ORDERED event log (stub:*events*) so the cleanup
@@ -228,7 +268,7 @@ STUB = '''
       stub:*ran* nil stub:*dlgname* nil stub:*done* nil
       stub:*tbs* nil stub:*btns* nil stub:*addargs* nil
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
-      stub:*deleted-tb* nil stub:*addfail* nil)
+      stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil)
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
@@ -236,8 +276,6 @@ STUB = '''
   (setq stub:*written* (cons s stub:*written*)) s)
 (defun close (fh) (stub:ev "close"))
 (defun load_dialog (f) (stub:ev "load") 7)
-(defun new_dialog (name id)
-  (setq stub:*dlgname* name) (stub:ev "new") t)
 (defun term_dialog () nil)
 (defun set_tile (k v)
   (if (= k "status") (setq stub:*status* v)) v)
@@ -245,15 +283,22 @@ STUB = '''
   (setq stub:*action* (cons (list k expr) stub:*action*)) t)
 (defun mode_tile (k m)
   (if (= m 1) (setq stub:*disabled* (cons k stub:*disabled*))) t)
-(defun done_dialog (status) (setq stub:*done* status) t)
+;; DCL hands back where the dialog was standing, so the next page can
+;; open in the same place instead of wandering
+(defun done_dialog (status) (setq stub:*done* status) (list 120 340))
 (defun start_dialog ( / pair)
+  (if stub:*rcs*
+    (setq stub:*rc* (car stub:*rcs*) stub:*rcs* (cdr stub:*rcs*)))
   (stub:ev "start")
   (setq stub:*done* nil)
   (if (setq pair (assoc stub:*click* stub:*action*))
     (progn
       (setq $key (car pair) $value nil $reason 1)
-      (eval (read (strcat "(progn " (cadr pair) ")")))))
-  (if stub:*done* stub:*done* 0))
+      (eval (read (strcat "(progn " (cadr pair) ")")))
+      ;; a click happens ONCE -- left armed it re-fires on the page it
+      ;; just opened, and a tab would reopen itself for ever
+      (setq stub:*click* nil)))
+  (if stub:*done* stub:*done* stub:*rc*))
 (defun unload_dialog (id) (stub:ev "unload"))
 (defun vl-file-delete (f) (stub:ev (strcat "delete " f)) t)
 (defun vlax-get-acad-object () "ACAD")
@@ -297,6 +342,7 @@ COM = {}
 
 
 def _reset_com():
+    OPENED.clear()
     COM.clear()
     COM.update(created=[], props={}, calls=[], bytes=None, saved=None,
                released=0, fail_at=None)
@@ -307,6 +353,21 @@ def _b(name):
         lispvm.BUILTINS[lispvm.Sym(name)] = fn
         return fn
     return deco
+
+
+OPENED = []
+
+
+@_b('new_dialog')
+def _newdlg(vm, a):
+    # 2 args on the first open, 4 once a position is known, so the
+    # position threading is provable and a fixed-arity stub cannot
+    # express it
+    OPENED.append((str(a[0]), len(a)))
+    vm.globals[lispvm.Sym('stub:*dlgname*')] = str(a[0])
+    vm.globals[lispvm.Sym('stub:*action*')] = None
+    vm.loads('(stub:ev "new")')
+    return True
 
 
 @_b('vlax-create-object')
@@ -388,16 +449,27 @@ assert not vm.globals.get('stub:*ran*'), "Close launched something"
 written = [str(l) for l in reversed(vm.globals.get('stub:*written*'))]
 assert written == dcl, "written DCL differs from lzp:dcl-lines"
 assert events(vm) == DIALOG, events(vm)
-assert str(vm.globals.get('stub:*dlgname*')) == dcl[0].split(' : ')[0], \
-    "new_dialog name does not match the DCL id"
-acts = vm.globals.get('stub:*action*')
-assert set(str(a[0]) for a in acts) == set(PANEL)
+vm.loads('(setq test:*n* (lzp:dlgname "%s"))' % GROUPS[0])
+assert str(vm.globals.get('stub:*dlgname*')) == str(vm.globals['test:*n*']), \
+    "new_dialog opened %r, not the first page" % vm.globals.get('stub:*dlgname*')
+# only THIS page's commands are bound now -- that is the point of the
+# pages -- plus a tab for every group
+vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % GROUPS[0])
+first = [str(x) for x in vm.globals['test:*g*']]
+acts = {str(a[0]) for a in vm.globals.get('stub:*action*')}
+assert set(first) <= acts, sorted(set(first) - acts)
+for g in GROUPS:
+    assert 'tab_%s' % g in acts, "no tab callback for %s" % g
+strays = acts & (set(PANEL) - set(first))
+assert not strays, "another page's commands were bound too: %r" % sorted(strays)
+# the status line still counts the WHOLE roster, not just this page
 assert '1 of %d' % len(PANEL) in str(vm.globals.get('stub:*status*'))
 disabled = set(map(str, vm.globals.get('stub:*disabled*')))
-assert disabled == set(PANEL) - {'SPA'}, disabled ^ (set(PANEL) - {'SPA'})
+assert disabled == set(first) - {'SPA'}, disabled ^ (set(first) - {'SPA'})
 assert vm.globals.get('lzp:*pick*') is None, "pick survived the run"
 print("   Close: nothing ran, close->load->new->start->unload->delete,")
-print("   dialog id matches, only SPA enabled")
+print("   only the first page's %d commands bound, only SPA enabled"
+      % len(first))
 
 vm = stubbed()
 vm.loads('(setq stub:*click* "SPA")')
@@ -566,6 +638,22 @@ run(vm6, 'c:LAZBUTTON', 'lazbutton-unavailable')
 assert any('menu API is unavailable' in str(p) for p in vm6.printed), \
     "the unavailable branch is unreachable: %r" % vm6.printed
 print("   and says so plainly when the menu API will not have it")
+
+
+print("== a tab opens the next page ==")
+vm7 = stubbed()
+vm7.loads('(setq stub:*rcs* \'(4 0))'
+          '(setq stub:*click* "tab_%s")'
+          '(setq t:*p* (lzp:show))' % GROUPS[1])
+vm7.loads('(setq t:*n* (lzp:dlgname "%s"))' % GROUPS[1])
+assert str(vm7.globals.get('stub:*dlgname*')) == str(vm7.globals['t:*n*']), (
+    "the tab did not reopen on the %s page: %r"
+    % (GROUPS[1], vm7.globals.get('stub:*dlgname*')))
+assert vm7.globals.get('t:*p*') is None, "a tab click launched something"
+ev = events(vm7)
+assert ev.count('new') == 2, "the page did not reopen: %r" % ev
+print("   a tab closes this page and opens %s, launching nothing"
+      % GROUPS[1])
 
 
 print("== LAZPANELVER ==")

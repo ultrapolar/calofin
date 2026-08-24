@@ -44,7 +44,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.4")
+(setq *lazform-version* "v1.5")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -585,9 +585,12 @@
   ;; to hide or restyle one, so "which page am I on" is carried by that
   ;; greyed button and by the dialog's own title bar.
   (setq out (list "  : row {"))
+  ;; the KEY, not the title: six full chart titles make a row 117
+  ;; characters wide, twice the chart it sits above, and a dialog wider
+  ;; than the screen has nowhere to go -- DCL does not scroll
   (foreach c lzf:*charts*
     (setq out (cons (strcat "    : button { key = \"tab_" (car c)
-                            "\"; label = \"" (caddr c) "\"; }")
+                            "\"; label = \"" (car c) "\"; }")
                     out)))
   (reverse (cons "  }" out)))
 
@@ -595,8 +598,12 @@
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
 (defun lzf:dcl-one (c / out d)
-  (setq out (list (strcat (lzf:dlgname (car c)) " : dialog {")
-                  (strcat "  label = \"LazForm - " (caddr c) "\";")))
+  ;; out is consed newest-first and reversed once at the end, so this
+  ;; seed list reads BACKWARDS: the label second here puts it second in
+  ;; the file, after the line that opens the dialog.  The other way
+  ;; round emits an attribute before its own dialog, which is not DCL.
+  (setq out (list (strcat "  label = \"LazForm - " (caddr c) "\";")
+                  (strcat (lzf:dlgname (car c)) " : dialog {")))
   (setq out (append (reverse (lzf:tabstrip (car c))) out))
   (setq out (cons "  : row {" out))
   ;; A PASSIVE image tile, deliberately -- see "why the picture is not
