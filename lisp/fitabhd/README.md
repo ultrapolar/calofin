@@ -12,6 +12,26 @@ Command:  FITABHD      (FITABHDVER prints the loaded version)
 Load:     APPLOAD -> FITABHD.lsp
 ```
 
+## What the type is for
+
+The type is **not a promise about the shape**. It is what lets the
+survey be *read*: it says which walls belong together, which corner is
+a corner, which end is an end. The **points decide where all of that
+actually goes**.
+
+An AB pool is *built*, not drawn, so the points are imperfect -- and
+the shape that comes out of them is meant to be imperfect too. Every
+deviation the tool can draw is fitted **from the points** and kept only
+where they prove it: out of square, bowed walls, eased corners, a
+tapered body, an end that caved in. A pool that really is true still
+comes out true, because none of those deviations survive without
+evidence.
+
+Hold the template rigid and the error does not go away -- it just moves
+into the points, where nobody can see it. The pool definition
+illustrates what the shape *should* look like; the survey says what it
+*is*.
+
 ## What it does
 
 Knowing the type does half the work:
@@ -66,14 +86,24 @@ Knowing the type does half the work:
   `Insquare` holds the template exactly and shows you the error
   instead. On a Grecian the four cut corners are not free walls: each
   **bisects its own corner** and all four keep one shared face,
-  however far the axis walls have swung. The arc-ended types are not
-  asked (swinging their side walls would take the end caps with them).
+  however far the axis walls have swung. **On a Roman or Oval the
+  swing is the pool coming out wider at one end than the other** --
+  each side wall answers its own points and the end caps are fitted to
+  the body they actually sit on, rather than to a parallel one that
+  was never built. It is fitted inside the cap fit, not bolted on
+  after it, so the arcs never go stale against the walls: a 9" taper
+  goes from 2.3" of error down to 0.3", while a body that really is
+  parallel keeps its arcs where they were. A Round pool is not asked
+  -- a circle has no walls.
 * **Straight walls may be bowed.** "Straight" is a drafting
   convention, not a site measurement: a gunite wall shot dead straight
   on the order sheet is very often a very long radius on the ground.
-  Answer `Yes` at step 5 and every wall is refitted as a constant
-  offset plus a shallow bow, and the report gives each bowed wall its
-  depth and the radius it implies (`Wall A-B bowed 3" out (R 205'-4")`).
+  Every wall is refitted as a constant offset plus a shallow bow, and
+  the report gives each bowed wall its depth and the radius it implies
+  (`Wall A-B bowed 3" out (R 205'-4")`). It is **on by default**, for
+  the same reason out of square is; answer `No` at step 6 for a
+  drawing that has to show clean straight walls whatever the site
+  did.
   **A bow never moves a corner** -- it vanishes at both ends of its
   wall by construction, so every dimension taken between corners, and
   the whole hopper flow, are untouched. A bow is kept only where the
@@ -123,7 +153,7 @@ Knowing the type does half the work:
     deviation by a tenth of an inch. An 8" as-built corner is reported
     as 8".
 
-The six questions:
+The six questions, then the selection:
 
 1. the **pool type**;
 2. the **corner treatment** (for Rectangle / L / Lazy L, and for the
@@ -134,10 +164,11 @@ The six questions:
 4. the **percent of points allowed beyond** that distance (standard
    15%) -- the slack that buys whole-foot dimensions;
 5. whether the pool is **in-square or out of square** (default
-   `Outofsquare`; not asked for the arc-ended or round types);
-6. whether the **straight walls may be bowed** (skipped for a Round
-   pool, which has none);
-7. the **selection**.
+   `Outofsquare`; not asked for a Round pool, which has no walls);
+6. whether the **straight walls may be bowed** (default `Yes`; not
+   asked for a Round pool either);
+
+and then the **selection**.
 
 Survey points are read exactly as ABHD reads them: `ab_pt` block
 inserts on any layer, or `POINT` entities (and other blocks) on the
@@ -248,10 +279,11 @@ mirror agree on the ones that shape the fit.
   neighbours. A wall that is genuinely curved is what the bow question
   is for; a pool whose walls need more than 5 degrees of swing is not
   the type it was declared as.
-* Out of square is not offered for Roman, Oval or Round: swinging an
-  arc-ended body's side walls would take its end caps with them. Those
-  types still get the bow refinement and the arc-chain rebuild, and a
-  genuinely out-of-square one is ABHD's job.
+* Out of square on a Roman or Oval is a **taper**, not a bend: the two
+  side walls may converge or spread, and each end cap is fitted across
+  the body width at its own end. A Round pool is not asked -- what
+  would be out of square on a circle is a cave-in, which the arc chain
+  already covers.
 * An arc chain is reported, not snapped: each arc's radius is whatever
   the shell made it. The nominal single-arc radius is still what the
   end dimension reports.

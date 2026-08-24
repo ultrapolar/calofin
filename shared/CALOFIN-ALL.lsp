@@ -28079,10 +28079,17 @@
 ;;; >>> CDCREATE.lsp
 ;;; ======================================================================
 
-;;; ==================================================================
-;;;  CDCREATE.lsp
+;;; ===================================================================
+;;; CDCREATE.lsp  --  cross dimensions from every highlighted line
+;;; -------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP; needs the Visual LISP
+;;; engine that ships with full AutoCAD -- LT cannot run this).
 ;;;
-;;;  CDCREATE  ("Cross Dimension - Create")
+;;; Commands:  CDCREATE       dimension every highlighted line
+;;;            CDCREATEVER    print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;;  Turns highlighted lines into cross dimensions in one pass:
 ;;;
@@ -28090,7 +28097,9 @@
 ;;;       command -- a pickfirst selection is used as-is).
 ;;;    2. Every LINE in the selection gets an aligned dimension along
 ;;;       it, measuring end to end, with the dimension line sitting on
-;;;       the line itself.
+;;;       the line itself and the text slid along it, about 80% of the
+;;;       way toward the right-hand end -- the bottom end on a line
+;;;       standing near vertical -- rather than sitting centred.
 ;;;    3. Each new dimension is put in the "CROSS DIMENSIONS" dimension
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
@@ -28116,6 +28125,11 @@
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
 ;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
+;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
+;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
+;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
+;;;                  before the text goes to its bottom end instead of
+;;;                  its right-hand one
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -28123,7 +28137,10 @@
 ;;;      reported, not dimensioned -- explode a polyline first if its
 ;;;      segments need cross dims.
 ;;;    * Zero-length lines are skipped; they have nothing to measure.
-;;;    * The "DIMENSION" layer is created when the drawing lacks it.
+;;;    * The "DIMENSION" layer is created when the drawing lacks it,
+;;;      and thawed / unlocked / switched back on when it is there but
+;;;      not usable -- a run onto a frozen layer would otherwise look
+;;;      like the command did nothing.
 ;;;      A missing "CROSS DIMENSIONS" style is NOT invented: the dims
 ;;;      are drawn in whatever style is current and the routine says so,
 ;;;      so a drawing started from the wrong template is obvious
@@ -28131,33 +28148,20 @@
 ;;;    * The dimension style, current layer, CMDECHO and OSMODE in
 ;;;      force before the command are restored afterwards, on a clean
 ;;;      finish, an error, or Esc.
-;;;    * Requires the Visual LISP engine, which ships with full
-;;;      AutoCAD.  AutoCAD LT has no LISP engine and cannot run this.
-;;; ==================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;; ===================================================================
 
-(setq *cdcreate-version* "v1.0")   ; announced on load; release_lisp.py
-                                   ; turns v1.0 into the REV10 suffix
+(setq *cdcreate-version* "v1.1")   ; announced on load; release_lisp.py
+                                   ; reads this banner and stamps the
+                                   ; dated twin in releases/ from it
 
 (setq cdc:*style*  "CROSS DIMENSIONS")
 (setq cdc:*layer*  "DIMENSION")
 (setq cdc:*offset* 0.0)
 (setq cdc:*erase*  t)
+(setq cdc:*textpos* 0.8)
+(setq cdc:*vertang* 15.0)
 
 ;;; -------------------- helpers ------------------------------------
-
-;; make a layer current, creating it first when the drawing lacks it
-(defun cdc:setlayer (name)
-  (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   '(70 . 0)
-                   '(62 . 7)
-                   '(6 . "Continuous"))))
-  (setvar "CLAYER" name))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -28165,12 +28169,16 @@
   (if (and name (tblsearch "DIMSTYLE" name))
     (progn (command "_.-DIMSTYLE" "_Restore" name) t)))
 
-;; put a saved dimension style back, but only when the style really did
-;; move -- a run that never found "CROSS DIMENSIONS" should not leave a
-;; pointless -DIMSTYLE Restore in the drawing's command history
+;; DIMSTYLE is read-only to setvar, so it goes back through a command --
+;; and only when the style really did move: a run that never found
+;; "CROSS DIMENSIONS" should not leave a pointless -DIMSTYLE Restore in
+;; the drawing's command history.  command-s, so the same call is legal
+;; from inside the error handler.
 (defun cdc:restyle (odim)
-  (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
-    (cdc:setstyle odim)))
+  (if (and odim (tblsearch "DIMSTYLE" odim)
+           (not (equal odim (getvar "DIMSTYLE"))))
+    (vl-catch-all-apply 'command-s
+                        (list "_.-DIMSTYLE" "_Restore" odim))))
 
 ;; the two endpoints of a LINE, in WCS (the entity's own OCS may be
 ;; tilted, so go through the entity coordinate system)
@@ -28179,23 +28187,45 @@
   (list (trans (cdr (assoc 10 ed)) en 0)
         (trans (cdr (assoc 11 ed)) en 0)))
 
-;; midpoint of p1->p2, pushed perpendicular to the line by dist
-;; (dist 0.0 puts the dimension line straight on the line)
-(defun cdc:loc (p1 p2 dist / dx dy d m)
-  (setq m (list (* 0.5 (+ (car  p1) (car  p2)))
-                (* 0.5 (+ (cadr p1) (cadr p2)))
-                (* 0.5 (+ (caddr p1) (caddr p2)))))
+;; the point f of the way from p1 to p2 (f 0.5 = midpoint), pushed
+;; perpendicular to the line by dist -- dist 0.0 leaves it on the line.
+;; Everything CDCREATE places sits on this one line, so the dimension
+;; line and its text can never drift onto opposite sides of it.
+(defun cdc:loc (p1 p2 f dist / dx dy d b)
+  (setq dx (- (car  p2) (car  p1))
+        dy (- (cadr p2) (cadr p1))
+        b  (list (+ (car   p1) (* f dx))
+                 (+ (cadr  p1) (* f dy))
+                 (+ (caddr p1) (* f (- (caddr p2) (caddr p1))))))
   (if (equal dist 0.0 1e-12)
-    m
+    b
     (progn
-      (setq dx (- (car  p2) (car  p1))
-            dy (- (cadr p2) (cadr p1))
-            d  (sqrt (+ (* dx dx) (* dy dy))))
+      (setq d (sqrt (+ (* dx dx) (* dy dy))))
       (if (> d 1e-9)
-        (list (+ (car  m) (* dist (/ (- dy) d)))
-              (+ (cadr m) (* dist (/ dx d)))
-              (caddr m))
-        m))))
+        (list (+ (car  b) (* dist (/ (- dy) d)))
+              (+ (cadr b) (* dist (/ dx d)))
+              (caddr b))
+        b))))
+
+(defun cdc:d2r (a) (* pi (/ a 180.0)))
+
+;; T when the text belongs at the p2 end rather than the p1 end: the
+;; right-hand end, or -- for a line standing within cdc:*vertang* of
+;; vertical, where "right-hand" is a coin toss a hair of drafting noise
+;; could flip -- the bottom end
+(defun cdc:top2 (p1 p2 / dx dy a)
+  (setq dx (abs (- (car  p2) (car  p1)))
+        dy (abs (- (cadr p2) (cadr p1)))
+        a  (cdc:d2r cdc:*vertang*))
+  (if (<= (* dx (cos a)) (* dy (sin a)))
+    (< (cadr p2) (cadr p1))               ; standing up: the lower end
+    (> (car  p2) (car  p1))))             ; lying over: the right end
+
+;; cdc:*textpos* measured from the far end toward the end the text
+;; belongs at, expressed as a fraction of p1->p2 so it can go straight
+;; into cdc:loc whichever way round the line was drawn
+(defun cdc:textfrac (p1 p2)
+  (if (cdc:top2 p1 p2) cdc:*textpos* (- 1.0 cdc:*textpos*)))
 
 ;; a copy of an entget list with every entry for group CODE dropped
 (defun cdc:strip (code lst / out)
@@ -28229,31 +28259,30 @@
 
 ;;; -------------------- the command --------------------------------
 
-(defun c:CDCREATE ( / *error* olderr oce ocl oos odim
+(defun c:CDCREATE ( / *error* olderr odim
                       ss i en ed typ ends pairs skipped plines
-                      havestyle grouped pre new made gone lays p1 p2 )
+                      havestyle undo-open pre new made gone lays p1 p2 )
 
-  ;; -- restore drawing state on error / Esc.  A dimension command may
-  ;;    still be open, so talk to AutoCAD through command-s -- and close
-  ;;    the undo group, or the next U would swallow the user's own work
+  ;; -- restore drawing state on error / Esc.  The user's settings come
+  ;;    back FIRST so nothing below can skip them; a dimension command
+  ;;    may still be open, so AutoCAD is talked to through command-s --
+  ;;    and the undo group is closed, or the next U would swallow the
+  ;;    user's own work
   (setq olderr *error*)
   (defun *error* (m)
-    (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
-      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
-    (if ocl (setvar "CLAYER"  ocl))
-    (if oos (setvar "OSMODE"  oos))
-    (if oce (setvar "CMDECHO" oce))
-    (if grouped (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (cal:sysrestore)
+    (cdc:restyle odim)
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
-      (princ (strcat "\n** Error: " m)))
+    (if (and m (not (wcmatch (strcase m)
+                             "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCDCREATE error: " m)))
     (princ))
 
   (vl-load-com)
-  (setq oce (getvar "CMDECHO")
-        ocl (getvar "CLAYER")
-        oos (getvar "OSMODE")
-        odim (getvar "DIMSTYLE"))
+  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  (setq odim (getvar "DIMSTYLE"))
 
   ;; -- 1. the highlighted lines: a pickfirst selection if there is
   ;;       one, otherwise ask for it
@@ -28294,8 +28323,8 @@
           (setvar "CMDECHO" 0)
           (setvar "OSMODE"  0)
           (command "_.UNDO" "_Begin")
-          (setq grouped t)
-          (cdc:setlayer cdc:*layer*)
+          (setq undo-open t)
+          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* 7))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
             (princ (strcat "\n** This drawing has no \"" cdc:*style*
@@ -28315,10 +28344,20 @@
             (command "_.DIMALIGNED"
                      "_non" (trans p1 0 1)
                      "_non" (trans p2 0 1)
-                     "_non" (trans (cdc:loc p1 p2 cdc:*offset*) 0 1))
+                     "_non" (trans (cdc:loc p1 p2 0.5 cdc:*offset*) 0 1))
             (setq new (entlast))
             (if (and new (not (eq new pre)))
               (progn
+                ;; slide the text down the dimension line, out of the
+                ;; middle -- DIMTEDIT moves the text alone, and the move
+                ;; is along the dimension line, so the line itself does
+                ;; not shift whatever DIMTMOVE says
+                (if (not (equal cdc:*textpos* 0.5 1e-6))
+                  (command "_.DIMTEDIT" new
+                           "_non" (trans (cdc:loc p1 p2
+                                                  (cdc:textfrac p1 p2)
+                                                  cdc:*offset*)
+                                         0 1)))
                 (cdc:fixdim new havestyle)
                 (setq made (1+ made))
                 ;; only a line that really did get its dimension is
@@ -28332,11 +28371,8 @@
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
-          (setvar "CLAYER"  ocl)
-          (setvar "OSMODE"  oos)
-          (setvar "CMDECHO" oce)
           (command "_.UNDO" "_End")
-          (setq grouped nil)
+          (setq undo-open nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"
                          (if (= made 1) "" "s") " created on layer "
@@ -28357,6 +28393,11 @@
                              " Explode a polyline to cross-dim its segments."
                              ""))))))))
 
+  ;; every path out of the command drops the snapshot, the quiet ones
+  ;; included: a run that found nothing to do and kept its snapshot
+  ;; would hand it to the NEXT run, which would then put the user's
+  ;; settings back to what they were two commands ago
+  (cal:sysrestore)
   (setq *error* olderr)
   (princ))
 
@@ -39457,6 +39498,17 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
+;;; WHAT THE TYPE IS FOR.  The type is not a promise about the shape,
+;;; it is what lets the survey be READ: it says which walls belong
+;;; together, which corner is a corner, which end is an end.  The
+;;; POINTS decide where all of that actually goes.  An AB pool is
+;;; built, not drawn, so the points are imperfect - and the shape that
+;;; comes out of them is meant to be imperfect too.  Every deviation
+;;; the tool can draw is fitted FROM the points and kept only where
+;;; they prove it: out of square, bowed walls, eased corners, an end
+;;; that caved in.  Hold the template rigid and the error does not go
+;;; away, it just moves into the points, where nobody can see it.
+;;;
 ;;; ABHD traces whatever shape the survey points make.  FITABHD is its
 ;;; typed sibling: you TELL it what kind of typical pool was surveyed -
 ;;; Rectangle, Grecian, Roman, Oval, L, Lazy L or Round (POOL's own
@@ -39521,7 +39573,7 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.4")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.5")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -39622,8 +39674,8 @@
 (setq fit:*ptype*  fit:*ptype*)
 (setq fit:*treat*  fit:*treat*)
 (setq fit:*gtreat* fit:*gtreat*)
-(setq fit:*bowed*  fit:*bowed*)
 (if (null fit:*oos*) (setq fit:*oos* T))  ; as-builts are never true
+(if (null fit:*bowed*) (setq fit:*bowed* T))  ; nor are their walls
 (if (null fit:*brk-deep*) (setq fit:*brk-deep* (cons 96.0 T)))
 (if (null fit:*brk-shal*) (setq fit:*brk-shal* (cons 240.0 T)))
 (if (null fit:*hop-side*) (setq fit:*hop-side* (cons 18.0 nil)))
@@ -40729,6 +40781,26 @@
 
 ;; ---- the arc-ended types (Roman / Oval) ------------------------------
 
+;; A cap body's side wall at X.  The template holds the two walls
+;; parallel; once the pool is allowed out of square each carries its
+;; own slope, and By/Ty are its height at the body's middle.
+(defun fit:wall-y (prm side x / off slope)
+  (if (= side "b")
+    (setq off   (fit:pget prm 'By)
+          slope (cond ((fit:pget prm 'sb)) (0.0)))
+    (setq off   (fit:pget prm 'Ty)
+          slope (cond ((fit:pget prm 'st)) (0.0))))
+  (+ off (* slope (- x (cond ((fit:pget prm 'xm)) (0.0))))))
+
+;; The body's centreline at X - level on a true pool, tilted on one
+;; built wider at one end.
+(defun fit:cap-cy (prm x)
+  (/ (+ (fit:wall-y prm "b" x) (fit:wall-y prm "t" x)) 2.0))
+
+;; Half the body's width at X.
+(defun fit:cap-half (prm x)
+  (/ (- (fit:wall-y prm "t" x) (fit:wall-y prm "b" x)) 2.0))
+
 ;; Half-height of the spring points where the end arc leaves the end
 ;; line, clamped inside the side walls.
 (defun fit:endcap-h (re cx r by ty / d)
@@ -40748,9 +40820,13 @@
 ;; top), -1 = the -x end (walked top to bottom).  Stubs appear when the
 ;; arc springs meaningfully inside the corners.  CHAIN, when given,
 ;; replaces the single arc with the run of arcs the points asked for.
-(defun fit:cap-verts (re cx r sign by ty chain / cy h stub lo hi a1 a2
-                                               b out)
-  (setq cy   (/ (+ by ty) 2.0)
+;; The end line runs between the side walls AT THIS END, so a pool
+;; built wider at one end still closes on both.
+(defun fit:cap-verts (re cx r sign prm chain / by ty cy h stub lo hi a1
+                                              a2 b out)
+  (setq by   (fit:wall-y prm "b" re)
+        ty   (fit:wall-y prm "t" re)
+        cy   (/ (+ by ty) 2.0)
         h    (fit:endcap-h re cx r by ty)
         stub (> (- (/ (- ty by) 2.0) h) 0.25)
         out  nil)
@@ -40785,22 +40861,26 @@
 ;; BOWS (nil = none) is (bottom top): the two side walls may bow like
 ;; any other straight wall.  CHAINS (nil = none) is (right left): an
 ;; end a single radius could not hold, rebuilt as a run of arcs.
-(defun fit:endcap-verts (prm kind both bows chains / yb yt verts itop
-                                                    ibot m a b)
-  (setq yb    (fit:pget prm 'By)
-        yt    (fit:pget prm 'Ty)
-        verts (fit:cap-verts (fit:pget prm 'Re) (fit:pget prm 'cx)
-                             (fit:pget prm 'r) 1 yb yt (car chains))
+(defun fit:endcap-verts (prm kind both bows chains / verts itop ibot
+                                                    m a b)
+  (setq verts (fit:cap-verts (fit:pget prm 'Re) (fit:pget prm 'cx)
+                             (fit:pget prm 'r) 1 prm (car chains))
         itop  (1- (length verts)))        ; the TOP wall leaves here
   (if both
     (setq verts (append verts
                         (fit:cap-verts (fit:pget prm 'Re2)
                                        (fit:pget prm 'cx2)
-                                       (fit:pget prm 'r2) -1 yb yt
+                                       (fit:pget prm 'r2) -1 prm
                                        (cadr chains))))
     (setq verts (append verts
-                        (list (list (list (fit:pget prm 'Lx) yt) 0.0)
-                              (list (list (fit:pget prm 'Lx) yb) 0.0)))))
+                        (list (list (list (fit:pget prm 'Lx)
+                                          (fit:wall-y prm "t"
+                                                      (fit:pget prm 'Lx)))
+                                    0.0)
+                              (list (list (fit:pget prm 'Lx)
+                                          (fit:wall-y prm "b"
+                                                      (fit:pget prm 'Lx)))
+                                    0.0)))))
   (setq ibot (1- (length verts)))         ; the BOTTOM wall leaves here
   (if bows
     (progn
@@ -40863,7 +40943,10 @@
 ;; ICP for a rectangle body with a Roman or radius (Oval) end cap on
 ;; the +x end - and on the -x end too when BOTH.  Returns the fitted
 ;; parameter assoc list.
-(defun fit:fit-endcap (pts kind both / bb x0 y0 x1 y1 w prm r0 yb yt cy
+(defun fit:fit-endcap (pts kind both oos / bb x0 y0 x1 y1 w prm r0 yb yt
+                                          cy cy1 cy2 byr tyr byl tyl
+                                          inband wpts key skey mid num den
+                                          slope base
                                        xr xl bpts tpts lpts a1pts a2pts e1pts
                                        e2pts p darc1 darc2 dbot dtop dlft
                                        dend1 dend2 h1 h2 best bd cand cc
@@ -40873,6 +40956,8 @@
         w  (- y1 y0)
         r0 (if (= kind "Oval") (/ w 2.0) (* 0.6 w))
         prm (list (cons 'By y0) (cons 'Ty y1) (cons 'Lx x0)
+                  (cons 'sb 0.0) (cons 'st 0.0)
+                  (cons 'xm (/ (+ x0 x1) 2.0))
                   (cons 'r r0) (cons 'cx (- x1 r0))))
   (setq prm (fit:pput prm 'Re
               (if (= kind "Oval")
@@ -40889,39 +40974,47 @@
                     (- (fit:pget prm 'cx2)
                        (sqrt (max 0.0 (- (* r0 r0) (* 0.16 w w))))))))))
   (repeat fit:*icp-iters*
-    (setq yb (fit:pget prm 'By)
-          yt (fit:pget prm 'Ty)
-          cy (/ (+ yb yt) 2.0)
-          xr (fit:pget prm 'Re)
-          xl (if both (fit:pget prm 'Re2) (fit:pget prm 'Lx))
-          h1 (fit:endcap-h (fit:pget prm 'Re) (fit:pget prm 'cx)
-                           (fit:pget prm 'r) yb yt)
-          h2 (if both
-               (fit:endcap-h (fit:pget prm 'Re2) (fit:pget prm 'cx2)
-                             (fit:pget prm 'r2) yb yt))
+    (setq yb  (fit:pget prm 'By)
+          yt  (fit:pget prm 'Ty)
+          cy  (/ (+ yb yt) 2.0)
+          xr  (fit:pget prm 'Re)
+          xl  (if both (fit:pget prm 'Re2) (fit:pget prm 'Lx))
+          prm (fit:pput prm 'xm (/ (+ xl xr) 2.0))
+          cy1 (fit:cap-cy prm (fit:pget prm 'cx))
+          cy2 (if both (fit:cap-cy prm (fit:pget prm 'cx2)) cy)
+          byr (fit:wall-y prm "b" xr)
+          tyr (fit:wall-y prm "t" xr)
+          byl (fit:wall-y prm "b" xl)
+          tyl (fit:wall-y prm "t" xl)
+          h1  (fit:endcap-h (fit:pget prm 'Re) (fit:pget prm 'cx)
+                            (fit:pget prm 'r) byr tyr)
+          h2  (if both
+                (fit:endcap-h (fit:pget prm 'Re2) (fit:pget prm 'cx2)
+                              (fit:pget prm 'r2) byl tyl))
           bpts nil tpts nil lpts nil a1pts nil a2pts nil e1pts nil e2pts nil)
     (foreach p pts
       ;; distance to each feature; a point left of an arc's centre
       ;; falls back to its spring corners so side points never claim it
-      (setq darc1 (if (< (car p) (fit:pget prm 'cx))
-                    (min (cal:dist p (list (fit:pget prm 'Re) yb))
-                         (cal:dist p (list (fit:pget prm 'Re) yt)))
-                    (abs (- (cal:dist p (list (fit:pget prm 'cx) cy))
+      (setq inband (and (<= xl (car p)) (<= (car p) xr))
+            darc1 (if (< (car p) (fit:pget prm 'cx))
+                    (min (cal:dist p (list (fit:pget prm 'Re) byr))
+                         (cal:dist p (list (fit:pget prm 'Re) tyr)))
+                    (abs (- (cal:dist p (list (fit:pget prm 'cx) cy1))
                             (fit:pget prm 'r))))
             darc2 (if both
                     (if (> (car p) (fit:pget prm 'cx2))
-                      (min (cal:dist p (list (fit:pget prm 'Re2) yb))
-                           (cal:dist p (list (fit:pget prm 'Re2) yt)))
-                      (abs (- (cal:dist p (list (fit:pget prm 'cx2) cy))
+                      (min (cal:dist p (list (fit:pget prm 'Re2) byl))
+                           (cal:dist p (list (fit:pget prm 'Re2) tyl)))
+                      (abs (- (cal:dist p (list (fit:pget prm 'cx2) cy2))
                               (fit:pget prm 'r2)))))
-            dbot  (if (and (<= xl (car p)) (<= (car p) xr))
-                    (abs (- (cadr p) yb)) 1.0e9)
-            dtop  (if (and (<= xl (car p)) (<= (car p) xr))
-                    (abs (- (cadr p) yt)) 1.0e9)
+            dbot  (if inband
+                    (abs (- (cadr p) (fit:wall-y prm "b" (car p)))) 1.0e9)
+            dtop  (if inband
+                    (abs (- (cadr p) (fit:wall-y prm "t" (car p)))) 1.0e9)
             dlft  (if both 1.0e9 (abs (- (car p) (fit:pget prm 'Lx))))
-            dend1 (if (> (abs (- (cadr p) cy)) h1)
+            dend1 (if (> (abs (- (cadr p) cy1)) h1)
                     (abs (- (car p) (fit:pget prm 'Re))) 1.0e9)
-            dend2 (if (and both (> (abs (- (cadr p) cy)) h2))
+            dend2 (if (and both (> (abs (- (cadr p) cy2)) h2))
                     (abs (- (car p) (fit:pget prm 'Re2))) 1.0e9))
       (setq cand (list (list dbot 'K-BOT) (list dtop 'K-TOP)
                        (list darc1 'K-ARC1)))
@@ -40944,44 +41037,60 @@
         ((eq best 'K-ARC2) (setq a2pts (cons p a2pts)))
         ((eq best 'K-END1) (setq e1pts (cons p e1pts)))
         ((eq best 'K-END2) (setq e2pts (cons p e2pts)))))
-    ;; wall updates
-    (if bpts
-      (progn
-        (setq ssum 0.0)
-        (foreach p bpts (setq ssum (+ ssum (cadr p))))
-        (setq prm (fit:pput prm 'By (/ ssum (length bpts))))))
-    (if tpts
-      (progn
-        (setq ssum 0.0)
-        (foreach p tpts (setq ssum (+ ssum (cadr p))))
-        (setq prm (fit:pput prm 'Ty (/ ssum (length tpts))))))
+    ;; wall updates: a plain mean while the walls are held parallel,
+    ;; a fitted line once the pool may be out of square - the swing has
+    ;; to be in here, with the caps refitting against it each round,
+    ;; not bolted on after the caps have settled
+    (foreach q (list (list bpts 'By 'sb) (list tpts 'Ty 'st))
+      (setq wpts (car q) key (cadr q) skey (caddr q))
+      (if wpts
+        (if (not oos)
+          (progn
+            (setq ssum 0.0)
+            (foreach p wpts (setq ssum (+ ssum (cadr p))))
+            (setq prm (fit:pput prm key (/ ssum (length wpts)))))
+          (progn
+            (setq ssum 0.0)
+            (foreach p wpts (setq ssum (+ ssum (car p))))
+            (setq mid (/ ssum (length wpts)) num 0.0 den 0.0 base 0.0)
+            (foreach p wpts
+              (setq num  (+ num (* (- (car p) mid) (cadr p)))
+                    den  (+ den (* (- (car p) mid) (- (car p) mid)))
+                    base (+ base (cadr p))))
+            (setq slope (if (> den 1.0e-9) (/ num den) 0.0)
+                  base  (/ base (length wpts)))
+            (if (> (abs (atan slope)) fit:*oos-max*) (setq slope 0.0))
+            (setq prm (fit:pput prm skey slope)
+                  prm (fit:pput prm key
+                                (+ base (* slope
+                                           (- (fit:pget prm 'xm)
+                                              mid)))))))))
     (if (and lpts (not both))
       (progn
         (setq ssum 0.0)
         (foreach p lpts (setq ssum (+ ssum (car p))))
         (setq prm (fit:pput prm 'Lx (/ ssum (length lpts))))))
-    (setq yb (fit:pget prm 'By)
-          yt (fit:pget prm 'Ty)
-          cy (/ (+ yb yt) 2.0)
-          w  (- yt yb))
+    (setq cy1 (fit:cap-cy prm (fit:pget prm 'cx))
+          cy2 (if both (fit:cap-cy prm (fit:pget prm 'cx2)) cy1))
     ;; the +x cap
     (if a1pts
       (progn
-        (if (/= kind "Oval")
+        (if (= kind "Oval")
+          (setq prm (fit:pput prm 'r (fit:cap-half prm (fit:pget prm 'cx))))
           (progn
-            (setq ssum 0.0 cc (list (fit:pget prm 'cx) cy))
+            (setq ssum 0.0 cc (list (fit:pget prm 'cx) cy1))
             (foreach p a1pts (setq ssum (+ ssum (cal:dist p cc))))
             (setq prm (fit:pput prm 'r (/ ssum (length a1pts))))))
         (setq ssum 0.0 n 0)
         (foreach p a1pts
           (setq d (- (* (fit:pget prm 'r) (fit:pget prm 'r))
-                     (* (- (cadr p) cy) (- (cadr p) cy))))
+                     (* (- (cadr p) cy1) (- (cadr p) cy1))))
           (if (> d 0.0)
             (setq ssum (+ ssum (- (car p) (sqrt d)))
                   n    (1+ n))))
         (if (> n 0) (setq prm (fit:pput prm 'cx (/ ssum n))))))
     (if (= kind "Oval")
-      (setq prm (fit:pput prm 'r (/ w 2.0))
+      (setq prm (fit:pput prm 'r (fit:cap-half prm (fit:pget prm 'cx)))
             prm (fit:pput prm 'Re (fit:pget prm 'cx)))
       (if e1pts
         (progn
@@ -40996,21 +41105,24 @@
       (progn
         (if a2pts
           (progn
-            (if (/= kind "Oval")
+            (if (= kind "Oval")
+              (setq prm (fit:pput prm 'r2
+                                  (fit:cap-half prm (fit:pget prm 'cx2))))
               (progn
-                (setq ssum 0.0 cc (list (fit:pget prm 'cx2) cy))
+                (setq ssum 0.0 cc (list (fit:pget prm 'cx2) cy2))
                 (foreach p a2pts (setq ssum (+ ssum (cal:dist p cc))))
                 (setq prm (fit:pput prm 'r2 (/ ssum (length a2pts))))))
             (setq ssum 0.0 n 0)
             (foreach p a2pts
               (setq d (- (* (fit:pget prm 'r2) (fit:pget prm 'r2))
-                         (* (- (cadr p) cy) (- (cadr p) cy))))
+                         (* (- (cadr p) cy2) (- (cadr p) cy2))))
               (if (> d 0.0)
                 (setq ssum (+ ssum (+ (car p) (sqrt d)))
                       n    (1+ n))))
             (if (> n 0) (setq prm (fit:pput prm 'cx2 (/ ssum n))))))
         (if (= kind "Oval")
-          (setq prm (fit:pput prm 'r2 (/ w 2.0))
+          (setq prm (fit:pput prm 'r2
+                              (fit:cap-half prm (fit:pget prm 'cx2)))
                 prm (fit:pput prm 'Re2 (fit:pget prm 'cx2)))
           (if e2pts
             (progn
@@ -41281,14 +41393,14 @@
             (cons 'which which) (cons 'verts verts) (cons 'bows nil)
             (cons 'valid (fit:poly-valid dirs offs))))))
 
-(defun fit:cap-result (ptype fpts both / prm)
-  (setq prm (fit:fit-endcap fpts ptype both))
+(defun fit:cap-result (ptype fpts both oos / prm)
+  (setq prm (fit:fit-endcap fpts ptype both oos))
   (list (cons 'kind 'cap) (cons 'type ptype) (cons 'prm prm)
         (cons 'both both) (cons 'valid T) (cons 'bows nil)
         (cons 'chains nil)
         (cons 'verts (fit:endcap-verts prm ptype both nil nil))))
 
-(defun fit:fit-config (ptype fpts treat both)
+(defun fit:fit-config (ptype fpts treat both oos)
   (cond
     ((= ptype "Rectangle")
      (if (= treat "Cut")
@@ -41305,7 +41417,7 @@
     ((= ptype "LAzyl")
      (fit:poly-result ptype fpts fit:*lazy-dirs* (fit:l-init fpts T)
                       treat))
-    (T (fit:cap-result ptype fpts both))))
+    (T (fit:cap-result ptype fpts both oos))))
 
 ;; (extra-rotation mirror both-ends) candidates per type
 (defun fit:configs-for (ptype / q e out k m)
@@ -41336,7 +41448,7 @@
 ;; Order, frame, and try every placement the type allows; the
 ;; lowest-RMS one wins.  Returns the winning result with its frame
 ;; recorded; the outline stays in frame coordinates.
-(defun fit:fit-type (pts ptype treat / dpts prm tour a0 best cfg a fpts
+(defun fit:fit-type (pts ptype treat oos / dpts prm tour a0 best cfg a fpts
                                        res dev worst rms edge)
   (setq dpts (cal:dedupe pts fit:*exact-eps*))
   (if (= ptype "ROUnd")
@@ -41353,7 +41465,7 @@
       (foreach cfg (fit:configs-for ptype)
         (setq a    (+ a0 (car cfg))
               fpts (fit:to-frame dpts a (cadr cfg))
-              res  (fit:fit-config ptype fpts treat (caddr cfg)))
+              res  (fit:fit-config ptype fpts treat (caddr cfg) oos))
         (if (fit:rget res 'valid)
           (progn
             (setq dev   (fit:outline-dev fpts (fit:res-fsegs res))
@@ -41381,7 +41493,7 @@
         (progn
           (setq a    (+ (fit:rget best 'angle) (/ pi 2.0))
                 fpts (fit:to-frame dpts a nil)
-                res  (fit:fit-config ptype fpts treat nil)
+                res  (fit:fit-config ptype fpts treat nil oos)
                 dev  (fit:outline-dev fpts (fit:res-fsegs res))
                 res  (fit:rput res 'angle a)
                 res  (fit:rput res 'mirror nil)
@@ -41622,8 +41734,8 @@
                                         (fit:rget res 'size))
                                       (fit:rget res 'which) bows)))))
     ((and (eq (fit:rget res 'kind) 'cap) bowed)
-     ;; an arc-ended body's SIDE walls can bow; swinging them would
-     ;; take the end caps with them, so out-of-square stops here
+     ;; the SWING of these walls is fitted inside fit:fit-endcap, with
+     ;; the caps answering to it each round; only the bow is left to do
      (setq got  (fit:fit-cap-bows fpts (fit:rget res 'prm)
                                   (fit:rget res 'both))
            prm  (car got)
@@ -41766,7 +41878,7 @@
                                                             res fpts dev)
   (setq dpts  (cal:dedupe pts fit:*exact-eps*)
         allow (cal:ceil (* pct (length dpts)))
-        res   (fit:fit-type dpts ptype treat))
+        res   (fit:fit-type dpts ptype treat oos))
   (if (eq (fit:rget res 'kind) 'round)
     (setq fpts dpts)
     (setq fpts (fit:to-frame dpts (fit:rget res 'angle)
@@ -42019,7 +42131,29 @@
 ;; off square the worst wall came out.  A pool held square needs none
 ;; of this - its sides are its two dimensions.
 (defun fit:square-lines (res / dirs offs corners n i j out worst sw base
-                               names)
+                               names prm xl xr)
+  (if (eq (fit:rget res 'kind) 'cap)
+    (progn
+      (setq prm (fit:rget res 'prm)
+            xr  (fit:pget prm 'Re)
+            xl  (if (fit:rget res 'both)
+                  (fit:pget prm 'Re2)
+                  (fit:pget prm 'Lx)))
+      (if (< (abs (- (fit:cap-half prm xr) (fit:cap-half prm xl))) 0.25)
+        nil
+        (list (cons "Width at one end"
+                    (fit:ftin (* 2.0 (fit:cap-half prm xr))))
+              (cons "Width at the other"
+                    (fit:ftin (* 2.0 (fit:cap-half prm xl))))
+              (cons "Out of square by"
+                    (strcat (fit:ftin (abs (* 2.0
+                                              (- (fit:cap-half prm xr)
+                                                 (fit:cap-half prm xl)))))
+                            " wider at one end")))))
+    (fit:square-lines-poly res)))
+
+(defun fit:square-lines-poly (res / dirs offs corners n i j out worst sw
+                                   base names)
   (setq dirs (fit:rget res 'dirs)
         offs (fit:rget res 'offs)
         out  nil)
@@ -42296,7 +42430,7 @@
 ;; wall at its middle, u pointing INTO the pool, v across, the side
 ;; walls at v-coordinates s1 < s2 relative to the origin.
 (defun fit:legs (res / t2 a m dirs offs corners ends e n c1 c2 o u v s1
-                       s2 out prm yb yt cy half)
+                       s2 out prm)
   (setq t2 (fit:rget res 'type)
         a  (fit:rget res 'angle)
         m  (fit:rget res 'mirror)
@@ -42324,28 +42458,36 @@
                               (fit:ffd u a m) (fit:ffd v a m) s1 s2)
                         out))))
     (progn                                ; cap types: end lines
-      (setq prm  (fit:rget res 'prm)
-            yb   (fit:pget prm 'By)
-            yt   (fit:pget prm 'Ty)
-            cy   (/ (+ yb yt) 2.0)
-            half (/ (- yt yb) 2.0))
+      ;; each leg takes its cross extent from the walls AT ITS OWN END,
+      ;; so a pool built wider at one end gets a hopper square to the
+      ;; wall that is really there
+      (setq prm (fit:rget res 'prm))
       (setq out (list (list (fit:from-frame
-                              (list (fit:pget prm 'Re) cy) a m)
+                              (list (fit:pget prm 'Re)
+                                    (fit:cap-cy prm (fit:pget prm 'Re)))
+                              a m)
                             (fit:ffd '(-1.0 0.0) a m)
                             (fit:ffd '(0.0 1.0) a m)
-                            (- half) half)))
+                            (- (fit:cap-half prm (fit:pget prm 'Re)))
+                            (fit:cap-half prm (fit:pget prm 'Re)))))
       (if (fit:rget res 'both)
         (setq out (cons (list (fit:from-frame
-                                (list (fit:pget prm 'Re2) cy) a m)
+                                (list (fit:pget prm 'Re2)
+                                      (fit:cap-cy prm (fit:pget prm 'Re2)))
+                                a m)
                               (fit:ffd '(1.0 0.0) a m)
                               (fit:ffd '(0.0 1.0) a m)
-                              (- half) half)
+                              (- (fit:cap-half prm (fit:pget prm 'Re2)))
+                              (fit:cap-half prm (fit:pget prm 'Re2)))
                         out))
         (setq out (cons (list (fit:from-frame
-                                (list (fit:pget prm 'Lx) cy) a m)
+                                (list (fit:pget prm 'Lx)
+                                      (fit:cap-cy prm (fit:pget prm 'Lx)))
+                                a m)
                               (fit:ffd '(1.0 0.0) a m)
                               (fit:ffd '(0.0 1.0) a m)
-                              (- half) half)
+                              (- (fit:cap-half prm (fit:pget prm 'Lx)))
+                              (fit:cap-half prm (fit:pget prm 'Lx)))
                         out)))))
   out)
 
@@ -42578,14 +42720,15 @@
        ;; little to answer its own points - and a pool that really is
        ;; square still comes out square, because a swing is kept only
        ;; where the points prove it.
-       (if (member ptype '("ROman" "Oval" "ROUnd"))
-         (setq v nil)                      ; no free straight walls
+       (if (= ptype "ROUnd")
+         (setq v nil)                      ; a circle has no walls
          (progn
            (princ (strcat "\n\n  Step 5 of " n
                           " - is the pool in-square, or out of square?"))
            (princ "\n  Outofsquare lets each wall swing a little to honour the")
            (princ "\n  points; Insquare holds the template true and shows you")
-           (princ "\n  the error instead.")
+           (princ "\n  the error instead.  On a Roman or Oval that swing is")
+           (princ "\n  the pool coming out wider at one end than the other.")
            (setq v (cal:askkw "Is the pool in-square or out-of-square?"
                               "Insquare Outofsquare"
                               "Insquare/Outofsquare"
@@ -42605,7 +42748,8 @@
            (princ "\n  radius on site.  Yes measures a bow on every wall from")
            (princ "\n  the points and keeps it only where they prove one - a")
            (princ "\n  wall that really is straight stays straight, and no bow")
-           (princ "\n  ever moves a corner.")
+           (princ "\n  ever moves a corner.  No is the answer for a drawing that")
+           (princ "\n  has to show clean straight walls whatever the site did.")
            (setq v (cal:askyn "Any bowed walls?"
                               (if bowed "Yes" "No") T))))
        (if (eq v 'CAL-BACK)

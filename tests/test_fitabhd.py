@@ -815,6 +815,26 @@ def fit_polytype(pts, dirs, offs0, treat):
 # ---- the arc-ended types (Roman / Oval) ------------------------------
 
 
+def wall_y(prm, side, x):
+    """A cap body's side wall at X.  The template holds the two walls
+    parallel; once the pool is allowed out of square each carries its
+    own slope, and By/Ty are its height at the body's middle."""
+    if side == "b":
+        return prm["By"] + prm.get("sb", 0.0) * (x - prm.get("xm", 0.0))
+    return prm["Ty"] + prm.get("st", 0.0) * (x - prm.get("xm", 0.0))
+
+
+def cap_cy(prm, x):
+    """The body's centreline at X - level on a true pool, tilted on one
+    built wider at one end."""
+    return (wall_y(prm, "b", x) + wall_y(prm, "t", x)) / 2.0
+
+
+def cap_half(prm, x):
+    """Half the body's width at X."""
+    return (wall_y(prm, "t", x) - wall_y(prm, "b", x)) / 2.0
+
+
 def endcap_h(re, cx, cy, r, by, ty):
     """Half-height of the spring points where the end arc leaves the
     end line, clamped inside the side walls."""
@@ -864,13 +884,16 @@ def endcap_segs(prm, kind, both, bows=None, chains=None):
     prm = dict with By Ty Lx Re cx r (and Re2 cx2 r2 when BOTH).
     CHAINS, when given, is (right left): each end's single arc replaced
     by a run of arcs that follows the points."""
-    by, ty = prm["By"], prm["Ty"]
-    cy = (by + ty) / 2.0
     verts = []
 
     def cap(re, cx, r, sign, chain=None):
         """Vertex run for one end cap; SIGN +1 = the +x end (walked
-        bottom to top), -1 = the -x end (walked top to bottom)."""
+        bottom to top), -1 = the -x end (walked top to bottom).  The
+        end line runs between the side walls AT THIS END, so a pool
+        wider at one end still closes on both."""
+        by = wall_y(prm, "b", re)
+        ty = wall_y(prm, "t", re)
+        cy = (by + ty) / 2.0
         h = endcap_h(re, cx, cy, r, by, ty)
         stub = (ty - by) / 2.0 - h > 0.25
         out = []
@@ -907,8 +930,8 @@ def endcap_segs(prm, kind, both, bows=None, chains=None):
         verts.extend(cap(prm["Re2"], prm["cx2"], prm["r2"], -1,
                          chains[1] if chains else None))
     else:
-        verts.append(((prm["Lx"], ty), 0.0))
-        verts.append(((prm["Lx"], by), 0.0))
+        verts.append(((prm["Lx"], wall_y(prm, "t", prm["Lx"])), 0.0))
+        verts.append(((prm["Lx"], wall_y(prm, "b", prm["Lx"])), 0.0))
     ibot = len(verts) - 1                  # the BOTTOM wall leaves here
     if bows:
         m = len(verts)
@@ -920,12 +943,17 @@ def endcap_segs(prm, kind, both, bows=None, chains=None):
     return verts_to_segs(verts)
 
 
-def fit_endcap(pts, kind, both):
+def fit_endcap(pts, kind, both, oos=False):
     """ICP for a rectangle body with a Roman or radius (Oval) end cap
-    on the +x end - and on the -x end too when BOTH."""
+    on the +x end - and on the -x end too when BOTH.  With OOS the two
+    side walls may also swing, so a pool built wider at one end than
+    the other comes out that way; the caps are fitted against the walls
+    as they go, which is why the swing belongs here and not in a pass
+    bolted on afterwards."""
     x0, y0, x1, y1 = bbox(pts)
     w = y1 - y0
-    prm = {"By": y0, "Ty": y1, "Lx": x0}
+    prm = {"By": y0, "Ty": y1, "Lx": x0, "sb": 0.0, "st": 0.0,
+           "xm": (x0 + x1) / 2.0}
     r0 = w / 2.0 if kind == "Oval" else 0.6 * w
     prm["r"] = r0
     prm["cx"] = x1 - r0
@@ -944,32 +972,41 @@ def fit_endcap(pts, kind, both):
         # feature spans along x for the straight walls
         xr = prm["Re"]
         xl = prm["Re2"] if both else prm["Lx"]
+        prm["xm"] = (xl + xr) / 2.0
+        cy1 = cap_cy(prm, prm["cx"])
+        cy2 = cap_cy(prm, prm["cx2"]) if both else cy
+        byr, tyr = wall_y(prm, "b", xr), wall_y(prm, "t", xr)
+        byl, tyl = wall_y(prm, "b", xl), wall_y(prm, "t", xl)
         bot, top, lft, arc1, arc2, end1, end2 = [], [], [], [], [], [], []
         for p in pts:
             # nearest feature by construction, not by segment list:
             # classify by x band first, then by side
-            d_arc1 = abs(dist(p, (prm["cx"], cy)) - prm["r"])
+            d_arc1 = abs(dist(p, (prm["cx"], cy1)) - prm["r"])
             if p[0] < prm["cx"]:
-                d_arc1 = min(dist(p, (prm["Re"], by)),
-                             dist(p, (prm["Re"], ty)))
+                d_arc1 = min(dist(p, (prm["Re"], byr)),
+                             dist(p, (prm["Re"], tyr)))
             d_arc2 = None
             if both:
-                d_arc2 = abs(dist(p, (prm["cx2"], cy)) - prm["r2"])
+                d_arc2 = abs(dist(p, (prm["cx2"], cy2)) - prm["r2"])
                 if p[0] > prm["cx2"]:
-                    d_arc2 = min(dist(p, (prm["Re2"], by)),
-                                 dist(p, (prm["Re2"], ty)))
-            d_bot = abs(p[1] - by) if xl <= p[0] <= xr else 1.0e9
-            d_top = abs(p[1] - ty) if xl <= p[0] <= xr else 1.0e9
+                    d_arc2 = min(dist(p, (prm["Re2"], byl)),
+                                 dist(p, (prm["Re2"], tyl)))
+            inband = xl <= p[0] <= xr
+            d_bot = (abs(p[1] - wall_y(prm, "b", p[0])) if inband
+                     else 1.0e9)
+            d_top = (abs(p[1] - wall_y(prm, "t", p[0])) if inband
+                     else 1.0e9)
             d_lft = 1.0e9 if both else abs(p[0] - prm["Lx"])
-            d_end1 = abs(p[0] - prm["Re"]) if abs(p[1] - cy) > \
-                endcap_h(prm["Re"], prm["cx"], cy, prm["r"], by, ty) \
+            d_end1 = abs(p[0] - prm["Re"]) if abs(p[1] - cy1) > \
+                endcap_h(prm["Re"], prm["cx"], cy1, prm["r"], byr, tyr) \
                 else 1.0e9
             d_end2 = 1.0e9
             if both:
                 d_end2 = (abs(p[0] - prm["Re2"])
-                          if abs(p[1] - cy) > endcap_h(prm["Re2"],
-                                                       prm["cx2"], cy,
-                                                       prm["r2"], by, ty)
+                          if abs(p[1] - cy2) > endcap_h(prm["Re2"],
+                                                        prm["cx2"], cy2,
+                                                        prm["r2"], byl,
+                                                        tyl)
                           else 1.0e9)
             cand = [(d_bot, bot), (d_top, top), (d_arc1, arc1)]
             if both:
@@ -982,53 +1019,64 @@ def fit_endcap(pts, kind, both):
                     cand.append((d_end2, end2))
             cand.sort(key=lambda cv: cv[0])
             cand[0][1].append(p)
-        if bot:
-            prm["By"] = sum(p[1] for p in bot) / len(bot)
-        if top:
-            prm["Ty"] = sum(p[1] for p in top) / len(top)
+        for wpts, key, skey in ((bot, "By", "sb"), (top, "Ty", "st")):
+            if not wpts:
+                continue
+            if not oos:
+                prm[key] = sum(p[1] for p in wpts) / len(wpts)
+                continue
+            mid = sum(p[0] for p in wpts) / len(wpts)
+            num = sum((p[0] - mid) * p[1] for p in wpts)
+            den = sum((p[0] - mid) ** 2 for p in wpts)
+            slope = num / den if den > 1.0e-9 else 0.0
+            if abs(math.atan(slope)) > OOS_MAX:
+                slope = 0.0
+            base = sum(p[1] for p in wpts) / len(wpts)
+            prm[skey] = slope
+            prm[key] = base + slope * (prm["xm"] - mid)
         if lft and not both:
             prm["Lx"] = sum(p[0] for p in lft) / len(lft)
-        cy = (prm["By"] + prm["Ty"]) / 2.0
-        w = prm["Ty"] - prm["By"]
+        cy1 = cap_cy(prm, prm["cx"])
         # right cap
         if arc1:
             if kind == "Oval":
-                prm["r"] = w / 2.0
+                prm["r"] = cap_half(prm, prm["cx"])
             else:
-                cc = (prm["cx"], cy)
+                cc = (prm["cx"], cy1)
                 prm["r"] = sum(dist(p, cc) for p in arc1) / len(arc1)
             ssum = n = 0
             for p in arc1:
-                d = prm["r"] ** 2 - (p[1] - cy) ** 2
+                d = prm["r"] ** 2 - (p[1] - cy1) ** 2
                 if d > 0.0:
                     ssum += p[0] - math.sqrt(d)
                     n += 1
             if n:
                 prm["cx"] = ssum / n
         if kind == "Oval":
-            prm["r"] = w / 2.0
+            prm["r"] = cap_half(prm, prm["cx"])
             prm["Re"] = prm["cx"]
         elif end1:
             prm["Re"] = sum(p[0] for p in end1) / len(end1)
         prm["Re"] = min(prm["Re"], prm["cx"] + prm["r"] - 0.5)
         # left cap
         if both:
+            cy2 = cap_cy(prm, prm["cx2"])
             if arc2:
                 if kind == "Oval":
-                    prm["r2"] = w / 2.0
+                    prm["r2"] = cap_half(prm, prm["cx2"])
                 else:
-                    cc = (prm["cx2"], cy)
+                    cc = (prm["cx2"], cy2)
                     prm["r2"] = sum(dist(p, cc) for p in arc2) / len(arc2)
                 ssum = n = 0
                 for p in arc2:
-                    d = prm["r2"] ** 2 - (p[1] - cy) ** 2
+                    d = prm["r2"] ** 2 - (p[1] - cy2) ** 2
                     if d > 0.0:
                         ssum += p[0] + math.sqrt(d)
                         n += 1
                 if n:
                     prm["cx2"] = ssum / n
             if kind == "Oval":
-                prm["r2"] = w / 2.0
+                prm["r2"] = cap_half(prm, prm["cx2"])
                 prm["Re2"] = prm["cx2"]
             elif end2:
                 prm["Re2"] = sum(p[0] for p in end2) / len(end2)
@@ -1234,14 +1282,14 @@ def poly_result(ptype, fpts, dirs, offs0, treat):
             "segs": verts_to_segs(verts)}
 
 
-def endcap_result(ptype, fpts, both):
-    prm = fit_endcap(fpts, ptype, both)
+def endcap_result(ptype, fpts, both, oos=False):
+    prm = fit_endcap(fpts, ptype, both, oos)
     segs = endcap_segs(prm, ptype, both)
     return {"kind": "cap", "type": ptype, "prm": prm, "both": both,
             "bows": None, "segs": segs}
 
 
-def fit_config(ptype, fpts, treat, both):
+def fit_config(ptype, fpts, treat, both, oos=False):
     if ptype == "Rectangle":
         if treat == "Cut":
             return poly_result(ptype, fpts, GREC_DIRS, grec_init(fpts),
@@ -1257,7 +1305,7 @@ def fit_config(ptype, fpts, treat, both):
         return poly_result(ptype, fpts, LAZY_DIRS, l_init(fpts, True),
                            treat)
     if ptype in ("ROman", "Oval"):
-        return endcap_result(ptype, fpts, both)
+        return endcap_result(ptype, fpts, both, oos)
     raise ValueError(ptype)
 
 
@@ -1280,7 +1328,7 @@ def configs_for(ptype):
     return [(0.0, False, False)]
 
 
-def fit_type(pts, ptype, treat):
+def fit_type(pts, ptype, treat, oos=False):
     """Order, frame, and try every placement the type allows; the
     lowest-RMS one wins.  Returns the winning result dict with its
     frame (angle, mirror) and its outline in WORLD coordinates."""
@@ -1298,7 +1346,7 @@ def fit_type(pts, ptype, treat):
     for extra, mirror, both in configs_for(ptype):
         a = a0 + extra
         fpts = to_frame(dpts, a, mirror)
-        res = fit_config(ptype, fpts, treat, both)
+        res = fit_config(ptype, fpts, treat, both, oos)
         if res.get("valid") is False:
             continue
         worst, rms = outline_dev(fpts, res["segs"])
@@ -1316,7 +1364,7 @@ def fit_type(pts, ptype, treat):
     if ptype in ("Rectangle", "Grecian")             and get_dim(best, "WID") > get_dim(best, "LEN"):
         a = best["angle"] + math.pi / 2.0
         fpts = to_frame(dpts, a, False)
-        res = fit_config(ptype, fpts, treat, False)
+        res = fit_config(ptype, fpts, treat, False, oos)
         worst, rms = outline_dev(fpts, res["segs"])
         res.update({"angle": a, "mirror": False,
                     "worst": worst, "rms": rms})
@@ -1779,7 +1827,7 @@ def fit_and_snap(pts, ptype, treat, tol, pct, oos, bowed):
     the points the user allows beyond the distance."""
     dpts = dedupe(pts)
     allow = fit_ceil(pct * len(dpts))
-    res = fit_type(dpts, ptype, treat)
+    res = fit_type(dpts, ptype, treat, oos)
     fpts = (dpts if res["kind"] == "round"
             else to_frame(dpts, res["angle"], res["mirror"]))
     if oos or bowed:
@@ -2028,6 +2076,67 @@ def test_oval_both_ends():
     assert close(get_dim(res, "BLEN"), 216.0, 1e-6), get_dim(res, "BLEN")
     print("  oval: both 84\" radius ends, straight run %.0f\""
           % get_dim(res, "BLEN"))
+
+
+def tapered_cap(taper, kind):
+    """A cap body built wider at one end than the other - the side
+    walls not quite parallel, which is what an out-of-square arc-ended
+    pool actually is.  Each end is the arc that fits between the walls
+    AT THAT END, so the fixture is a shape that can really exist."""
+    if kind == "Oval":
+        prm = {"By": 0.0, "Ty": 168.0, "Lx": 0.0, "xm": 192.0,
+               "cx": 300.0, "cx2": 84.0,
+               "sb": -taper / 2 / 216.0, "st": taper / 2 / 216.0}
+        prm["r"] = cap_half(prm, prm["cx"])
+        prm["Re"] = prm["cx"]
+        prm["r2"] = cap_half(prm, prm["cx2"])
+        prm["Re2"] = prm["cx2"]
+        return endcap_segs(prm, "Oval", True), True
+    prm = {"By": -96.0, "Ty": 96.0, "Lx": 0.0, "cx": 300.0, "r": 120.0,
+           "Re": 300.0 + math.sqrt(120.0 ** 2 - 72.0 ** 2)}
+    prm["xm"] = (prm["Lx"] + prm["Re"]) / 2.0
+    span = prm["Re"] - prm["Lx"]
+    prm["sb"], prm["st"] = -taper / 2 / span, taper / 2 / span
+    return endcap_segs(prm, "ROman", False), False
+
+
+def cap_taper_of(res):
+    """How much wider one end came out than the other."""
+    p = res["prm"]
+    xl = p["Re2"] if res["both"] else p["Lx"]
+    return (cap_half(p, p["Re"]) - cap_half(p, xl)) * 2.0
+
+
+def test_a_tapered_cap_body_is_honoured():
+    # an arc-ended pool built wider at one end: held parallel the
+    # template pushes the error into the points, allowed out of square
+    # the walls answer them - and the ends spring where the walls are
+    for kind, place_at in (("Oval", (40.0, -200.0, 100.0)),
+                           ("ROman", (197.0, 500.0, 300.0))):
+        segs, _both = tapered_cap(9.0, kind)
+        sp = 14.0 if kind == "Oval" else 22.0
+        pts = survey(place(segs, *place_at), sp, 0.25, seed=131)
+        held = fit_and_snap(pts, kind, "Square", 1.0, 0.15, False, False)
+        swung = fit_and_snap(pts, kind, "Square", 1.0, 0.15, True, False)
+        assert held["worst"] > 1.5, (kind, held["worst"])
+        assert swung["worst"] < 0.8, (kind, swung["worst"])
+        assert close(cap_taper_of(held), 0.0, 1e-9), kind
+        assert close(cap_taper_of(swung), 9.0, 1.0), \
+            (kind, cap_taper_of(swung))
+        print("  %-5s built 9\" wider at one end: %.2f\" -> %.2f\""
+              % (kind, held["worst"], swung["worst"]))
+
+
+def test_a_true_cap_body_stays_parallel():
+    for kind, place_at in (("Oval", (40.0, -200.0, 100.0)),
+                           ("ROman", (197.0, 500.0, 300.0))):
+        segs, _both = tapered_cap(0.0, kind)
+        sp = 14.0 if kind == "Oval" else 22.0
+        pts = survey(place(segs, *place_at), sp, 0.25, seed=131)
+        res = fit_and_snap(pts, kind, "Square", 1.0, 0.15, True, False)
+        assert abs(cap_taper_of(res)) < 0.5, (kind, cap_taper_of(res))
+        assert res["worst"] < 0.8, (kind, res["worst"])
+    print("  a cap body whose walls really are parallel stays parallel")
 
 
 def test_true_l():
@@ -2698,7 +2807,9 @@ def test_lisp_file_is_well_formed():
                "fit:cap-chains", "fit:apply-arc-chains",
                "fit:best-bulge", "fit:bulge-3pt", "fit:chain-lines",
                "fit:order-along-arc",
-               "fit:bow-bulge", "fit:fit-cap-bows", "fit:apply-refinement",
+               "fit:bow-bulge", "fit:fit-cap-bows",
+               "fit:apply-refinement", "fit:square-lines-poly",
+               "fit:wall-y", "fit:cap-cy", "fit:cap-half",
                "fit:held-worst", "fit:snap-ok", "fit:on-eps",
                "fit:ask-settings", "fit:omit-choose", "fit:omit-loop",
                "fit:active", "fit:bow-lines",
@@ -2804,6 +2915,8 @@ def main():
     test_a_square_pool_stays_square()
     test_a_swing_too_far_is_refused()
     test_out_of_square_l_and_grecian()
+    test_a_tapered_cap_body_is_honoured()
+    test_a_true_cap_body_stays_parallel()
     test_percent_buys_nice_dimensions()
     test_snap_never_pushes_past_the_tolerance()
     test_bowed_walls_are_found()

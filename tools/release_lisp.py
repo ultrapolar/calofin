@@ -87,6 +87,25 @@ def rev(version):
     return "%s%s" % version
 
 
+def unchanged_twin(stem, revs, text, build=None):
+    """An existing dated twin of this exact revision whose contents
+    already match.  Its date is the day that snapshot was really made,
+    so re-stamping it with today's would rename a file that did not
+    change - and churn every release in the tree on any day the tool
+    is run.  None when there is no such twin."""
+    dated = re.compile(re.escape(stem) + r"_[0-9]{6}_REV"
+                       + re.escape(revs) + r"\.lsp$", re.IGNORECASE)
+    for old in RELEASES_DIR.iterdir():
+        if dated.fullmatch(old.name):
+            try:
+                want = build(old.name) if build else text
+                if old.read_text(encoding="utf-8") == want:
+                    return old
+            except (OSError, UnicodeDecodeError):
+                pass
+    return None
+
+
 def prune(stem, keep):
     """Drop earlier dated copies of ``stem``, keeping ``keep``."""
     dated = re.compile(re.escape(stem) + r"_[0-9]+_REV[\d-]+\.lsp$",
@@ -147,18 +166,34 @@ def release_bundle(bundle, date):
     name = "%s_%s_REV%s.lsp" % (bundle["name"], date, revs)
     dst = RELEASES_DIR / name
 
-    text = bundle_header(bundle, parts, name)
-    for src, version in parts:
-        text += "\n".join([
-            RULE,
-            ";;; >>> %s (v%s.%s) - verbatim from lisp/%s/%s"
-            % (src.name, version[0], version[1], bundle["dir"], src.name),
-            RULE,
-            "",
-        ])
-        text += src.read_text()
-        text += "\n"
+    def build(as_name):
+        """The bundle's text as it would read under AS_NAME.  The
+        header names the file it sits in, so an unchanged bundle only
+        compares equal against its own name - not today's."""
+        text = bundle_header(bundle, parts, as_name)
+        for src, version in parts:
+            text += "\n".join([
+                RULE,
+                ";;; >>> %s (v%s.%s) - verbatim from lisp/%s/%s"
+                % (src.name, version[0], version[1], bundle["dir"],
+                   src.name),
+                RULE,
+                "",
+            ])
+            text += src.read_text()
+            text += "\n"
+        return text
 
+    text = build(name)
+    keep = unchanged_twin(bundle["name"], revs, None, build)
+    if keep:
+        prune(bundle["name"], keep)
+        for src, _ in parts:
+            prune(src.stem, keep)
+        print("%s -> %s (unchanged)"
+              % (", ".join("lisp/%s/%s" % (bundle["dir"], s.name)
+                           for s, _ in parts), keep.relative_to(ROOT)))
+        return
     prune(bundle["name"], dst)
     for src, _ in parts:                # any leftover single-file copies
         prune(src.stem, dst)
@@ -197,6 +232,14 @@ def main():
                                   % (src.stem, m2.group(1), m2.group(2),
                                      src.suffix))
             ver = "%s REV%s" % (m2.group(1), m2.group(2))
+        keep = unchanged_twin(src.stem, dst.name.rsplit("_REV", 1)[1]
+                              [:-len(".lsp")],
+                              src.read_text(encoding="utf-8"))
+        if keep:
+            prune(src.stem, keep)
+            print("%s (%s) -> %s (unchanged)"
+                  % (src.relative_to(ROOT), ver, keep.relative_to(ROOT)))
+            continue
         prune(src.stem, dst)
         shutil.copyfile(src, dst)
         print("%s (%s) -> %s" % (src.relative_to(ROOT), ver,
