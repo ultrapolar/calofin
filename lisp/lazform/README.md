@@ -22,7 +22,7 @@ A typo counts as an empty box on purpose: something that is neither `NA`
 nor a distance AutoCAD can read leaves POOL asking, rather than quietly
 feeding it a nil that means something else entirely.
 
-`LAZFORM` asks which chart first. Six are drawn:
+A **tab strip** across the top switches charts. Six are drawn:
 
 | Chart | POOL shape | Letters on the picture |
 | --- | --- | --- |
@@ -45,6 +45,17 @@ tip-to-tip total (`tot`) and it is the *side* that becomes `T`. The
 mapping is per chart, and `tests/test_lazform.py` checks every key
 against POOL's own question lists, so a letter pointed at the wrong key
 fails the suite rather than silently swallowing what you type.
+
+Clicking a dimension's **letter button** puts the caret in that box,
+selects what is already there so your first keystroke replaces it, and
+rings that dimension on the drawing. It sits against the box it fills,
+which is as close to clicking the drawing itself as DCL allows -- see
+below for why the drawing cannot take the click.
+
+Switching tabs keeps everything you have typed (the answers are keyed,
+so they survive and are still there if you tab back) and reopens the
+dialog where you dragged it rather than back in the middle of the
+screen.
 
 ## Install & run
 
@@ -120,6 +131,11 @@ out of step with the drawing.
 - An edit box reports its value when the caret **leaves** it, so the
   picture updates on Tab or on a click elsewhere, not per keystroke.
 - The picture is read, not clicked -- see above.
+- DCL has no tab tile. A tab is a button that closes the page and
+  reopens the next, so the dialog blinks as it switches. `done_dialog`
+  reports where the dialog was standing and `new_dialog` takes a
+  position back, so it reopens in the same spot -- the blink is
+  unavoidable, the wandering is not.
 - Lazy L is not here yet. Its sheet carries eight perimeter letters
   (`B B1 V V1 T T1 A A1`) where POOL asks for six side lengths, and
   four `Y` letters where POOL asks for eight named diagonals, so the

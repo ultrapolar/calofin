@@ -181,12 +181,10 @@ TOOLS = {
     # shared banner.  Listed so it can never drift.
     'LAZFORM': {
         'src': 'lisp/lazform/LAZFORM.lsp',
-        'swap': {'lzf:askkw': 'cal:askkw'},
+        # the form asks nothing at the command line -- the tab strip
+        # replaced its keyword picker -- so it uses no library helper
+        'swap': {},
         'drop_globals': [],
-        # lzf:askkw already takes the SHOWN bracket third, like the
-        # library's
-        'askkw_hidden': False,
-        'symbols': {'LZF-BACK': 'CAL-BACK'},
     },
     # The launcher panel uses no library helpers at all -- it draws
     # nothing and asks nothing -- so its twin is the file plus the

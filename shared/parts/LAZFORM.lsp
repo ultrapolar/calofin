@@ -47,7 +47,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.3")
+(setq *lazform-version* "v1.4")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -314,11 +314,6 @@
     ("d" "D - deep end depth")))
 ))
 
-;;; -------------------- asking which chart ------------------------------
-;;;  The canonical keyword prompt of STANDARDS.md section 4, carried
-;;;  locally: the grouped build swaps this for cal:askkw, so nothing
-;;;  here may call another tool's copy of it.
-
 ;;; -------------------- chart access ------------------------------------
 
 (defun lzf:chart (key / c out)
@@ -353,6 +348,8 @@
 (setq lzf:*chart* nil)          ; the chart being filled in
 (setq lzf:*insq* nil)           ; the in-square toggle, as it is set
 (setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
+(setq lzf:*pos* nil)            ; where the dialog was last standing
+(setq lzf:*go* nil)             ; the chart a tab click asked for
 
 (defun lzf:get (key / p)
   (if (setq p (assoc key lzf:*vals*)) (cdr p) ""))
@@ -578,20 +575,6 @@
 ;;;  edit box: a list unrolling over the chart damages it the same way,
 ;;;  and nothing else would repair it.
 
-;;; -------------------- which chart -------------------------------------
-
-;; The keyword list, straight off the chart table: a chart added below
-;; is offered here without touching this code.
-(defun lzf:keywords ( / c out)
-  (foreach c lzf:*charts*
-    (setq out (if out (strcat out " " (car c)) (car c))))
-  out)
-
-(defun lzf:pickchart ( / kws)
-  (setq kws (lzf:keywords))
-  (cal:askkw "Which chart" kws (vl-string-translate " " "/" kws)
-             (car (car lzf:*charts*)) nil))
-
 ;;; -------------------- the dialog --------------------------------------
 ;;  Two columns: the chart on the left as a passive image, the boxes on
 ;;  the right in the chart's own order, each labelled with its letter so
@@ -599,11 +582,26 @@
 
 (setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
 
-(defun lzf:dcl-lines ( / c out d)
-  (setq c lzf:*chart*)
-  (setq out (list "  : row {"
-                  (strcat "  label = \"LazForm - " (caddr c) "\";")
-                  "lazform : dialog {"))
+(defun lzf:tabstrip (cur / out c)
+  ;; The tab strip: one button per chart, the current one disabled so
+  ;; it reads as the page you are on.  DCL has no tab tile and no way
+  ;; to hide or restyle one, so "which page am I on" is carried by that
+  ;; greyed button and by the dialog's own title bar.
+  (setq out (list "  : row {"))
+  (foreach c lzf:*charts*
+    (setq out (cons (strcat "    : button { key = \"tab_" (car c)
+                            "\"; label = \"" (caddr c) "\"; }")
+                    out)))
+  (reverse (cons "  }" out)))
+
+;; One dialog per chart.  They all live in one generated file so the
+;; page loop can load_dialog once and switch pages without touching
+;; the disk again.
+(defun lzf:dcl-one (c / out d)
+  (setq out (list (strcat (lzf:dlgname (car c)) " : dialog {")
+                  (strcat "  label = \"LazForm - " (caddr c) "\";")))
+  (setq out (append (reverse (lzf:tabstrip (car c))) out))
+  (setq out (cons "  : row {" out))
   ;; A PASSIVE image tile, deliberately -- see "why the picture is not
   ;; clickable" above.
   (setq out (cons (strcat "    : image { key = \"chart\"; "
@@ -614,20 +612,33 @@
   (setq out (cons "    : column {" out))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"Dimensions\";" out))
+  ;; Each dimension is a row: its LETTER as a button, then the box.
+  ;; Clicking the letter puts the caret in that box and rings the
+  ;; dimension on the chart -- which is as close to clicking the
+  ;; drawing itself as DCL allows, and the button sits against the box
+  ;; it fills rather than off in a separate list.
   (foreach d (lzf:dims c)
-    (setq out (cons (strcat "        : edit_box { key = \"" (cadr d)
-                            "\"; edit_width = 10; label = \"" (car d)
-                            "  " (nth 7 d) "\"; }")
-                    out)))
-  (setq out (cons "      }" out))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"Not on this view\";" out))
-  (foreach d (lzf:extra c)
-    (setq out (cons (strcat "        : edit_box { key = \"" (car d)
-                            "\"; edit_width = 10; label = \"" (cadr d)
+    (setq out (cons "        : row {" out))
+    (setq out (cons (strcat "          : button { key = \"pick_" (cadr d)
+                            "\"; label = \"" (car d)
+                            "\"; fixed_width = true; }")
+                    out))
+    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                            "\"; edit_width = 9; label = \"" (nth 7 d)
                             "\"; }")
-                    out)))
+                    out))
+    (setq out (cons "        }" out)))
   (setq out (cons "      }" out))
+  (if (lzf:extra c)
+    (progn
+      (setq out (cons "      : boxed_column {" out))
+      (setq out (cons "        label = \"Not on this view\";" out))
+      (foreach d (lzf:extra c)
+        (setq out (cons (strcat "        : edit_box { key = \"" (car d)
+                                "\"; edit_width = 9; label = \"" (cadr d)
+                                "\"; }")
+                        out)))
+      (setq out (cons "      }" out))))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"The rest of the run\";" out))
   (setq out (cons (strcat "        : toggle { key = \"insq\"; "
@@ -641,8 +652,9 @@
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
-                          "label = \"Type NA where nothing was measured; "
-                          "leave a box empty and POOL will ask.\"; }")
+                          "label = \"Click a letter to jump to its box.  "
+                          "Type NA where nothing was measured; leave a box "
+                          "empty and POOL will ask.\"; }")
                   out))
   (setq out (cons "  : row {" out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
@@ -653,6 +665,15 @@
                   out))
   (setq out (cons "  }" out))
   (reverse (cons "}" out)))
+
+;; The DCL name of a chart's page.
+(defun lzf:dlgname (key) (strcat "lazform_" (strcase key t)))
+
+;; Every page, one after another, in one file.
+(defun lzf:dcl-lines ( / out c)
+  (foreach c lzf:*charts*
+    (setq out (append out (lzf:dcl-one c) (list ""))))
+  out)
 
 (defun lzf:write-lines (fh / l)
   (foreach l (lzf:dcl-lines) (write-line l fh)))
@@ -715,7 +736,7 @@
 ;;  out of scope by the time POOL is started: POOL installs its own, and
 ;;  a POOL that fails must report as POOL.
 
-(defun lzf:show (chartkey / *error* f dcl rc c d)
+(defun lzf:show (chartkey / *error* f dcl rc c d go done out)
   (defun *error* (msg)
     (term_dialog)
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
@@ -726,52 +747,92 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZFORM error: " msg)))
     (princ))
-  (setq lzf:*chart* (lzf:chart chartkey)
-        lzf:*vals* nil
-        lzf:*focus* nil
+  (setq lzf:*vals* nil
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
-        c lzf:*chart*)
+        lzf:*pos* nil                   ; where the user last had it
+        go chartkey)
   (cond
-    ((not c) (princ (strcat "\nLAZFORM: no chart called " chartkey ".")))
+    ((not (lzf:chart go))
+     (princ (strcat "\nLAZFORM: no chart called " go ".")))
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZFORM error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
      (princ "\nLAZFORM error: could not load the dialog file."))
-    ((not (new_dialog "lazform" dcl))
-     (princ "\nLAZFORM error: could not open the form."))
     (t
-     (start_list "btype")
-     (foreach d lzf:*btypes* (add_list d))
-     (end_list)
-     (set_tile "btype" "0")
-     ;; every box redraws the chart when it is left, which is when DCL
-     ;; reports an edit box changed
-     (foreach d (lzf:keys c)
-       (action_tile d
-         (strcat "(lzf:put \"" d "\" $value) (setq lzf:*focus* \"" d "\")"
-                 " (lzf:redraw)")))
-     ;; The chart takes no action -- it is a passive image tile now.
-     ;; These two CAPTURE THEIR VALUE as it changes rather than being
-     ;; read back at the end: get_tile answers about a live dialog, and
-     ;; by the time the answers are assembled this one has been closed
-     ;; and unloaded.  Reading them late looked fine and would have
-     ;; quietly made every pool out-of-square.  They redraw the chart
-     ;; too, since a list unrolling across it damages what it covers.
-     (action_tile "btype" "(setq lzf:*btype* (atoi $value)) (lzf:redraw)")
-     (action_tile "insq" "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)")
-     (action_tile "accept" "(done_dialog 1)")
-     (action_tile "cancel" "(done_dialog 0)")
-     (lzf:redraw)
-     (setq rc (start_dialog))))
+     ;; The page loop.  DCL has no tab tile, so a tab is a button that
+     ;; closes this page and reopens the next -- and because
+     ;; done_dialog hands back where the dialog was standing, it
+     ;; reopens exactly there instead of wandering off to the middle of
+     ;; the screen.  Everything typed lives in lzf:*vals*, keyed, so it
+     ;; survives the switch and is still there if you tab back.
+     (while (not done)
+       (setq lzf:*chart* (lzf:chart go)
+             c lzf:*chart*
+             lzf:*focus* nil)
+       (cond
+         ((not (lzf:newdlg (lzf:dlgname go) dcl))
+          (princ "\nLAZFORM error: could not open the form.")
+          (setq done t))
+         (t
+          (start_list "btype")
+          (foreach d lzf:*btypes* (add_list d))
+          (end_list)
+          (set_tile "btype" (itoa lzf:*btype*))
+          (if lzf:*insq* (set_tile "insq" "1"))
+          ;; put back what was typed before this page was opened
+          (foreach d (lzf:keys c) (set_tile d (lzf:get d)))
+          (foreach d (lzf:keys c)
+            (action_tile d
+              (strcat "(lzf:put \"" d "\" $value) (setq lzf:*focus* \"" d "\")"
+                      " (lzf:redraw)")))
+          ;; clicking a dimension's letter: caret into its box, with
+          ;; the box's contents selected so the first keystroke
+          ;; replaces rather than appends, and the dimension ringed on
+          ;; the chart
+          (foreach d (lzf:dims c)
+            (action_tile (strcat "pick_" (cadr d))
+              (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
+                      " (mode_tile \"" (cadr d) "\" 2)"
+                      " (mode_tile \"" (cadr d) "\" 3)")))
+          ;; the tabs -- each closes this page and names the next
+          (foreach d lzf:*charts*
+            (action_tile (strcat "tab_" (car d))
+              (strcat "(setq lzf:*go* \"" (car d)
+                      "\" lzf:*pos* (done_dialog 4))")))
+          ;; the chart takes no action -- it is a passive image tile.
+          ;; These two capture their value as it changes: get_tile
+          ;; answers about a LIVE dialog, and by the time the answers
+          ;; are assembled this one is closed and unloaded.
+          (action_tile "btype" "(setq lzf:*btype* (atoi $value)) (lzf:redraw)")
+          (action_tile "insq" "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)")
+          (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
+          (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
+          (lzf:redraw)
+          (setq rc (start_dialog))
+          (cond
+            ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again
+            (t (setq done t
+                     out (if (= rc 1)
+                             (lzf:form (cadr c) lzf:*insq*
+                                       (nth lzf:*btype* lzf:*btypes*)))))))))))
   (if (and dcl (>= dcl 0)) (unload_dialog dcl))
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil)
-  (if (and rc (= rc 1))
-      (lzf:form (cadr c)
-                lzf:*insq*
-                (nth lzf:*btype* lzf:*btypes*))))
+  out)
+
+;; Open a page where the user last had the dialog.  done_dialog reports
+;; the position it was closed at and new_dialog takes one back, but only
+;; as a 4-argument call -- and a build that answered done_dialog with
+;; something other than a point would poison every reopen, so the shape
+;; is checked before it is trusted and the plain 2-argument call is the
+;; fallback.
+(defun lzf:newdlg (name dcl)
+  (if (and lzf:*pos* (listp lzf:*pos*) (= (length lzf:*pos*) 2)
+           (numberp (car lzf:*pos*)) (numberp (cadr lzf:*pos*)))
+      (new_dialog name dcl "" lzf:*pos*)
+      (new_dialog name dcl)))
 
 ;;; -------------------- commands ----------------------------------------
 
@@ -783,7 +844,7 @@
     ((not pool:run-with-answers)
      (princ "\nLAZFORM: POOL is not loaded in this session -- APPLOAD")
      (princ "\n         lisp/pool/POOL.LSP, or LAZPASS.lsp which has both."))
-    ((setq form (lzf:show (lzf:pickchart)))
+    ((setq form (lzf:show (car (car lzf:*charts*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
      (pool:run-with-answers form))

@@ -37,6 +37,7 @@ DRAW = {'vec': [], 'fill': [], 'tiles': {}, 'list': [], 'focus': []}
 
 
 def _reset():
+    OPENED.clear()
     DRAW['vec'] = []
     DRAW['fill'] = []
     DRAW['tiles'] = {}
@@ -65,21 +66,40 @@ _b('end_list')(lambda vm, a: None)
 _b('mode_tile')(lambda vm, a: DRAW['focus'].append(str(a[0])))
 
 
+OPENED = []
+
+
+@_b('new_dialog')
+def _newdlg(vm, a):
+    # 2 args on the first open, 4 once a position is known -- record
+    # which, so the position threading is provable
+    OPENED.append((str(a[0]), len(a)))
+    vm.globals[lispvm.Sym('stub:*opened*')] = str(a[0])
+    vm.globals[lispvm.Sym('stub:*act*')] = None
+    return True
+
+
 STUB = '''
-(setq stub:*rc* 1 stub:*written* nil)
+(setq stub:*rc* 1 stub:*written* nil stub:*rcs* nil
+      stub:*opened* nil stub:*mode* nil)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
 (defun write-line (s fh) (setq stub:*written* (cons s stub:*written*)) s)
 (defun close (fh) t)
 (defun load_dialog (f) 7)
-(defun new_dialog (name id) t)
+(defun mode_tile (k m) (setq stub:*mode* (cons (list k m) stub:*mode*)) t)
 (defun term_dialog () nil)
+;; DCL hands back where the dialog was standing when it closed, so the
+;; next page can open in the same place instead of wandering
+(defun done_dialog (status) (setq stub:*done* status) (list 120 340))
 (defun unload_dialog (id) t)
 (defun vl-file-delete (f) t)
 (defun set_tile (k v) v)
 (defun action_tile (k expr)
   (setq stub:*act* (cons (list k expr) stub:*act*)) t)
 (defun start_dialog ( / p k)
+  (if stub:*rcs*
+    (setq stub:*rc* (car stub:*rcs*) stub:*rcs* (cdr stub:*rcs*)))
   ;; type into every box the scenario named, the way a user tabbing
   ;; through them would -- through the REAL action expression
   (foreach p stub:*type*
@@ -87,7 +107,7 @@ STUB = '''
       (progn (setq $value (cadr p) $key (car p))
              (eval (read (strcat "(progn " (cadr k) ")"))))))
   stub:*rc*)
-(setq stub:*act* nil stub:*type* nil)
+(setq stub:*act* nil stub:*type* nil stub:*rcs* nil)
 '''
 
 
@@ -212,32 +232,71 @@ print("== the generated DCL is well formed, for every chart ==")
 TILES = {'row', 'column', 'boxed_column', 'button', 'text', 'edit_box',
          'image', 'image_button', 'toggle', 'popup_list'}
 
+vm.loads('(setq t:*all* (lzf:dcl-lines))')
+ALL = [str(x) for x in vm.globals['t:*all*']]
 
-def check_dcl(name):
+# every chart is its own dialog, all of them in one generated file, so
+# the page loop can load_dialog once and switch pages without going back
+# to disk
+opens = [l for l in ALL if l.endswith(' : dialog {')]
+names = [l.split(' : ')[0] for l in opens]
+assert len(opens) == len(charts), (
+    "%d dialogs for %d charts" % (len(opens), len(charts)))
+assert len(names) == len(set(names)), "duplicate dialog names: %r" % names
+depth = 0
+for line in ALL:
+    assert line.count('"') % 2 == 0, "odd quotes: %r" % line
+    depth += line.count('{') - line.count('}')
+    assert depth >= 0, line
+assert depth == 0, "unbalanced braces across the file"
+print("   %d lines, %d dialogs: %s" % (len(ALL), len(opens), ', '.join(names)))
+
+
+def page(name):
+    """One chart's dialog, sliced out of the whole file."""
+    vm.loads('(setq t:*n* (lzf:dlgname "%s"))' % name)
+    dlg = str(vm.globals['t:*n*'])
+    i = ALL.index(dlg + ' : dialog {')
+    d = 0
+    for j in range(i, len(ALL)):
+        d += ALL[j].count('{') - ALL[j].count('}')
+        if d == 0:
+            return ALL[i:j + 1]
+    raise AssertionError("%s never closes" % dlg)
+
+
+def check_page(name):
+    d = page(name)
     vm.loads('(setq lzf:*chart* (lzf:chart "%s"))'
-             '(setq t:*dcl* (lzf:dcl-lines))'
-             '(setq t:*keys* (lzf:keys lzf:*chart*))' % name)
-    dcl = [str(x) for x in vm.globals['t:*dcl*']]
-    assert dcl[0] == 'lazform : dialog {', dcl[0]
-    assert dcl[-1] == '}', dcl[-1]
-    depth = 0
-    for line in dcl:
-        assert line.count('"') % 2 == 0, "odd quotes: %r" % line
-        depth += line.count('{') - line.count('}')
-        assert depth >= 0, line
-    assert depth == 0, "%s: unbalanced braces" % name
-    text = '\n'.join(dcl)
+             '(setq t:*keys* (lzf:keys lzf:*chart*))'
+             '(setq t:*dims* (lzf:dims lzf:*chart*))' % name)
+    text = '\n'.join(d)
     tilekeys = re.findall(r'key = "([^"]+)"', text)
-    assert len(tilekeys) == len(set(tilekeys)), "%s: duplicate tile keys" % name
+    assert len(tilekeys) == len(set(tilekeys)), \
+        "%s: duplicate tile keys" % name
     answer_keys = [str(x) for x in vm.globals['t:*keys*']]
     assert set(answer_keys) <= set(tilekeys), (
         "%s: answers with no box: %r"
         % (name, sorted(set(answer_keys) - set(tilekeys))))
     for extra in ('chart', 'insq', 'btype', 'accept', 'cancel'):
         assert extra in tilekeys, "%s: no %r tile" % (name, extra)
+    # a tab for every chart, on every page -- including this one, so the
+    # strip does not change width as you move along it
+    for c2 in charts:
+        assert 'tab_%s' % str(c2[0]) in tilekeys, \
+            "%s: no tab for %s" % (name, str(c2[0]))
+    # and a letter button for every dimension, keyed off its answer
+    for dim in vm.globals['t:*dims*']:
+        assert 'pick_%s' % str(dim[1]) in tilekeys, \
+            "%s: dimension %s has no letter button" % (name, str(dim[0]))
     assert text.count('is_cancel = true') == 1
     assert text.count('is_default = true') == 1
-    for line in dcl[1:]:
+    assert ': image_button' not in text, (
+        "%s: the chart is an image_button again -- it will be wiped the "
+        "first time the mouse crosses it" % name)
+    assert re.search(r': image \{ key = "chart"', text), \
+        "%s: no passive chart image tile" % name
+    for line in d[1:]:
         t = line.strip()
         if t in ('}', 'spacer;'):
             continue
@@ -245,17 +304,18 @@ def check_dcl(name):
         if m:
             assert m.group(1) in TILES, "%s: unknown tile %r" % (name, m.group(1))
         for clause in re.findall(r'[a-z_]+ = (?:"[^"]*"|[a-z0-9.]+)(;?)', t):
-            assert clause == ';', "%s: a DCL clause without its semicolon: %r" % (name, line)
-    return dcl, tilekeys
+            assert clause == ';', \
+                "%s: a DCL clause without its semicolon: %r" % (name, line)
+    return d, tilekeys
 
 
 for c in charts:
-    d, tk = check_dcl(str(c[0]))
-    print("   %-10s %2d lines, %2d tile keys" % (str(c[0]), len(d), len(tk)))
+    d, tk = check_page(str(c[0]))
+    print("   %-10s %2d lines, %2d tile keys, tabs + letter buttons"
+          % (str(c[0]), len(d), len(tk)))
 
-# the rectangle's DCL is the one the end-to-end section compares against
-dcl, _ = check_dcl("Rectangle")
-vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "Rectangle")))')
+dcl = ALL
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
 
 
 print("== the drawing lands inside the tile, in declared colours ==")
@@ -309,37 +369,56 @@ print("   %d value strokes appear; outline strokes fall %d -> %d"
       % (len(vals), line_blank, line_now))
 
 
-print("== the chart tile is passive, so it cannot be wiped ==")
-# A DCL image tile is not retained by AutoCAD: any repaint clears it to
-# the tile's own colour and everything drawn into it is lost, and there
-# is no expose callback to redraw from.  An image_button is repainted on
-# mouse-enter and mouse-leave, so the chart vanished the moment the
-# cursor crossed it.  This pins the fix: the tile is a plain image, and
-# nothing wires an action to it.
-for c in charts:
-    name = str(c[0])
-    d, _tk = check_dcl(name)
-    body = '\n'.join(d)
-    assert ': image_button' not in body, (
-        "%s: the chart is an image_button again -- it will be wiped the "
-        "first time the mouse crosses it" % name)
-    assert re.search(r': image \{ key = "chart"', body), \
-        "%s: no passive chart image tile" % name
-print("   every chart draws into a plain image tile, never an image_button")
-
-# and the tiles that can open OVER the chart repaint it afterwards
+print("== the page loop: tabs, letter buttons, nothing on the chart ==")
 vm2 = stubbed()
-vm2.loads('(setq stub:*type* nil)')
-vm2.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
-vm2.loads('(setq stub:*act* nil) (setq t:*f* (lzf:show "Rectangle"))')
+vm2.loads('(setq t:*f* (lzf:show "Rectangle"))')
 wired = {str(a[0]) for a in (vm2.globals.get('stub:*act*') or [])}
 assert 'chart' not in wired, \
-    "an action is wired to the chart tile: %r" % sorted(wired)
-for k in ('btype', 'insq'):
-    assert k in wired, (
-        "%r has no callback -- it can unroll over the chart and nothing "
-        "would repaint it" % k)
-print("   no action on the chart; btype and insq both repaint it")
+    "an action is wired to the chart tile: it would be repainted on hover"
+for k in ('btype', 'insq', 'accept', 'cancel'):
+    assert k in wired, "%r has no callback" % k
+vm2.loads('(setq t:*dims* (lzf:dims (lzf:chart "Rectangle")))')
+for dim in vm2.globals['t:*dims*']:
+    assert 'pick_%s' % str(dim[1]) in wired, \
+        "dimension %s has no letter-button callback" % str(dim[0])
+for c in charts:
+    assert 'tab_%s' % str(c[0]) in wired, "no tab callback for %s" % str(c[0])
+print("   %d callbacks bound, none of them on the chart" % len(wired))
+
+# clicking a letter must put the caret in that box AND select what is
+# there, so the first keystroke replaces rather than appends
+vm3 = stubbed()
+vm3.loads('(setq stub:*type* \'(("pick_g" "")))'
+          '(setq t:*f* (lzf:show "Rectangle"))')
+modes = [(str(a[0]), int(a[1])) for a in (vm3.globals.get('stub:*mode*') or [])]
+assert ('g', 2) in modes, "clicking G did not move the caret to its box: %r" % modes
+assert ('g', 3) in modes, "clicking G did not select the box contents: %r" % modes
+assert str(vm3.globals.get('lzf:*focus*')) == 'g', \
+    "clicking G did not ring G on the chart"
+print("   clicking a letter focuses its box, selects it, and rings the chart")
+
+# a tab click reopens on the other chart, and what was typed survives it
+vm4 = stubbed()
+vm4.loads('(setq stub:*rcs* \'(4 1))'
+          '(setq stub:*type* \'(("tp" "240") ("tab_Oval" "")))'
+          '(setq t:*f* (lzf:show "Rectangle"))')
+assert str(vm4.globals.get('stub:*opened*')) == 'lazform_oval', (
+    "the tab did not reopen on the Oval page: %r"
+    % vm4.globals.get('stub:*opened*'))
+vm4.loads('(setq t:*v* (lzf:get "tp"))')
+assert str(vm4.globals['t:*v*']) == '240', (
+    "what was typed did not survive the page switch: %r" % vm4.globals['t:*v*'])
+# DCL has no way to ask an open dialog where it is; done_dialog reporting
+# its position as it closes is the only chance to find out, and
+# new_dialog only accepts one back in its FOUR-argument form.  So the
+# first page opens with two arguments and every page after it with four
+# -- and if that ever regresses, the dialog jumps back to the middle of
+# the screen on every tab click.
+assert [n for n, _ in OPENED] == ['lazform_rectangle', 'lazform_oval'], OPENED
+assert [n for _, n in OPENED] == [2, 4], (
+    "the reopened page did not carry the position back: %r" % OPENED)
+print("   a tab reopens on the other chart, keeps what was typed,")
+print("   and puts the dialog back where the user had dragged it")
 
 
 print("== the three-state answer contract ==")
@@ -433,9 +512,9 @@ vm.loads('(setq stub:*type* \'(%s))'
 # way a user sets them, through the tiles' own action expressions, so a
 # value read back after the dialog closes would not survive this test
 try:
+    # no chart prompt any more -- the tab strip picks the chart
     vm.run('c:LAZFORM',
-           ["Rectangle"] + [(0.0, 0.0, 0.0)] + CORNERS + CROSS +
-           ["Yes"] + REST)
+           [(0.0, 0.0, 0.0)] + CORNERS + CROSS + ["Yes"] + REST)
 except LispError as e:
     raise AssertionError("form run: %s" % e) from None
 a = snapshot(vm)
