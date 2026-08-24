@@ -77,9 +77,6 @@ STUB = '''
 (defun unload_dialog (id) t)
 (defun vl-file-delete (f) t)
 (defun set_tile (k v) v)
-(defun get_tile (k) (cond ((= k "insq") stub:*insq*)
-                          ((= k "btype") stub:*btype*)
-                          (t "")))
 (defun action_tile (k expr)
   (setq stub:*act* (cons (list k expr) stub:*act*)) t)
 (defun start_dialog ( / p k)
@@ -90,7 +87,7 @@ STUB = '''
       (progn (setq $value (cadr p) $key (car p))
              (eval (read (strcat "(progn " (cadr k) ")"))))))
   stub:*rc*)
-(setq stub:*act* nil stub:*type* nil stub:*insq* "0" stub:*btype* "0")
+(setq stub:*act* nil stub:*type* nil)
 '''
 
 
@@ -430,9 +427,11 @@ REST = [None, 60.0, None]                      # M takes its suggestion, L, K
 
 vm = stubbed(with_pool=True)
 vm.loads('(setq stub:*type* \'(%s))'
-         % ' '.join('("%s" "%s")' % (k, v) for k, v in TYPED))
-vm.loads('(setq stub:*insq* "0")')             # out-of-square
-vm.loads('(setq stub:*btype* "2")')            # Wedge, third in the list
+         % ' '.join('("%s" "%s")' % (k, v)
+                    for k, v in TYPED + [('insq', '0'), ('btype', '2')]))
+# out-of-square, and Wedge (third in the bottom-type list) -- set the
+# way a user sets them, through the tiles' own action expressions, so a
+# value read back after the dialog closes would not survive this test
 try:
     vm.run('c:LAZFORM',
            ["Rectangle"] + [(0.0, 0.0, 0.0)] + CORNERS + CROSS +

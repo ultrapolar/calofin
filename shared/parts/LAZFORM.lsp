@@ -47,7 +47,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.2")
+(setq *lazform-version* "v1.3")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -351,6 +351,8 @@
 (setq lzf:*vals* nil)           ; ((key . "typed") ...)
 (setq lzf:*focus* nil)          ; the key whose box has the caret
 (setq lzf:*chart* nil)          ; the chart being filled in
+(setq lzf:*insq* nil)           ; the in-square toggle, as it is set
+(setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
 
 (defun lzf:get (key / p)
   (if (setq p (assoc key lzf:*vals*)) (cdr p) ""))
@@ -713,7 +715,7 @@
 ;;  out of scope by the time POOL is started: POOL installs its own, and
 ;;  a POOL that fails must report as POOL.
 
-(defun lzf:show (chartkey / *error* f dcl rc c d bi)
+(defun lzf:show (chartkey / *error* f dcl rc c d)
   (defun *error* (msg)
     (term_dialog)
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
@@ -727,6 +729,8 @@
   (setq lzf:*chart* (lzf:chart chartkey)
         lzf:*vals* nil
         lzf:*focus* nil
+        lzf:*insq* nil                  ; the toggle's own starting state
+        lzf:*btype* 0                   ; Normal, first in the list
         c lzf:*chart*)
   (cond
     ((not c) (princ (strcat "\nLAZFORM: no chart called " chartkey ".")))
@@ -747,23 +751,27 @@
        (action_tile d
          (strcat "(lzf:put \"" d "\" $value) (setq lzf:*focus* \"" d "\")"
                  " (lzf:redraw)")))
-     ;; the chart takes no action -- it is a passive image tile now --
-     ;; but the two tiles that can open OVER it repaint it afterwards
-     (action_tile "btype" "(lzf:redraw)")
-     (action_tile "insq" "(lzf:redraw)")
+     ;; The chart takes no action -- it is a passive image tile now.
+     ;; These two CAPTURE THEIR VALUE as it changes rather than being
+     ;; read back at the end: get_tile answers about a live dialog, and
+     ;; by the time the answers are assembled this one has been closed
+     ;; and unloaded.  Reading them late looked fine and would have
+     ;; quietly made every pool out-of-square.  They redraw the chart
+     ;; too, since a list unrolling across it damages what it covers.
+     (action_tile "btype" "(setq lzf:*btype* (atoi $value)) (lzf:redraw)")
+     (action_tile "insq" "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)")
      (action_tile "accept" "(done_dialog 1)")
      (action_tile "cancel" "(done_dialog 0)")
      (lzf:redraw)
-     (setq rc (start_dialog))
-     (setq bi (atoi (get_tile "btype")))))
+     (setq rc (start_dialog))))
   (if (and dcl (>= dcl 0)) (unload_dialog dcl))
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil)
   (if (and rc (= rc 1))
       (lzf:form (cadr c)
-                (= (get_tile "insq") "1")
-                (nth (if bi bi 0) lzf:*btypes*))))
+                lzf:*insq*
+                (nth lzf:*btype* lzf:*btypes*))))
 
 ;;; -------------------- commands ----------------------------------------
 
