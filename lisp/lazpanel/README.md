@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 52 of them across 121 buttons, because the pages come in two kinds
+-- 56 of them across 125 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both.
 
 **The job pages** are what you are actually doing this hour, and each
@@ -13,7 +13,7 @@ build the steps, then dimension and check.
 | Job | Buttons |
 | --- | --- |
 | Pool | POOL, LAZFORM, OASIS, ABHD, ADAB, FITABHD, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / CORNERSTP, HEMISTEP, NORMIESTEP, AUTOBEAD, PERPPTS, CPERPPTS / AUTODIM, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, DIMCHECK, DIMSCAN |
-| Cover | POOL, LAZFORM, OASIS, ABHD, FITABHD, STOCKCOVER, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / PADDLE, AUTODIM, COVERCHECK, COVERSCAN, LITECOVERSCAN, DIMCHECK, DIMSCAN |
+| Cover | POOLCOVER, LAZFORMCOVER, OASIS, ABHDCOVER, FITABHDCOVER, STOCKCOVER, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / PADDLE, AUTODIM, COVERCHECK, COVERSCAN, LITECOVERSCAN, DIMCHECK, DIMSCAN |
 | Spa | SPA, AUTODIM, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, DIMCHECK, DIMSCAN |
 | Rest | POOLDEMO, CABHD, LHD, SMARTFILLET, WCALST, ABCDEF, ALTABCDEF, XYPLOT, DRONE, TYDRN, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CHECK, DIMARCCHECK, LINCHECK, LINTXTCHK, CCPRECHECK |
 
@@ -24,13 +24,26 @@ them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, SPA, POOL, POOLDEMO, OASIS, FITABHD, ABHD, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
+| Layout | LAZFORM, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
 | Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
 | Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
 `AUTODIM` and `DIMCHECK`/`DIMSCAN` are on all three jobs, because every
-job ends the same way; 14 commands are shared between jobs in total.
+job ends the same way; 10 commands are shared between jobs in total.
+
+**The Cover page runs cover twins, not the plain tools.** A cover sheet
+records the perimeter and nothing below it, so `POOLCOVER`,
+`LAZFORMCOVER`, `ABHDCOVER` and `FITABHDCOVER` answer their tool's
+pool-bottom question No before it is asked -- and with it goes the
+whole depth interrogation behind it (POOL's C, C2 and D, the hopper
+type and its corner method; ABHD's breaks, hopper offsets and slope
+lines). They are commands of their own rather than a mode the panel
+switches on, so a button still runs exactly the command named on it and
+typing `POOLCOVER` does what clicking it does. Each sets a flag its
+tool clears on both exits, so a cancelled cover run cannot leave the
+next pool silently bottomless. `OASIS` is on the Cover page unchanged
+-- it has no such gate.
 
 **Rest is not a hand-kept list.** It is every command Pool, Cover and
 Spa do not name, and the test recomputes that complement from the tree
@@ -48,7 +61,7 @@ re-ordering the tools, re-grouping them or moving a tab to the other
 row is an edit to those two tables and nothing else, and the test
 asserts they name exactly the same groups so neither can drift. The
 status line counts tools rather than buttons (`lzp:commands` folds the
-repeats), so it still reports the whole 52 and not 121. The panel
+repeats), so it still reports the whole 56 and not 125. The panel
 reopens where you left it rather than jumping back to the middle of the
 screen.
 
