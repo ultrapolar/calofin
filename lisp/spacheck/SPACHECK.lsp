@@ -62,7 +62,14 @@
 ;;;      Hardware called for by the longest hinge -- velcro hinges,
 ;;;      double C channel, hold down kit -- is reported as advice.
 ;;;
-;;;   6. THE TITLE BLOCK.  Everything on the border layer is measured
+;;;   6. FEET AND INCHES.  Every text box in the selection -- TEXT,
+;;;      MTEXT and the ATTRIB values on blocks -- must state its
+;;;      inches wherever it states feet: 5' is flagged, 5'-0", 3'-2"
+;;;      and a plain 40" are fine.  A feet mark is an apostrophe
+;;;      straight after a digit, so "Water's Edge" is prose and never
+;;;      flagged.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   7. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
 ;;;      four lines both measure the same.  A spa sheet's title block is
 ;;;      exactly 0.6x the liner block: the liner nominal is 704 x
@@ -70,7 +77,7 @@
 ;;;      is reported with the factor it actually came out at, and a
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
-;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;   8. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
 ;;;      the SPA-specific findings under underlined section headings.
@@ -92,7 +99,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.3")
+(setq *spacheck-version* "v1.4")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1088,6 +1095,114 @@
                       (if (spachk:has s "OK") nil 1)))
     nil))
 
+;;; --- feet-and-inch text -------------------------------------------------
+;;;  A distance written in feet must state its inches too: 5' is wrong,
+;;;  5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun spachk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+(defun spachk:clip (s n)
+  (if (> (strlen s) n) (strcat (substr s 1 n) "...") s))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun spachk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun spachk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+(defun spachk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (spachk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (spachk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, then one row per offender.  The
+;; report itself is skipped: SPACHECK writes it onto its own layer, but
+;; a rerun reads the drawing before clearing the old one.
+(defun spachk:audit-units (ss / items it s n bad rows)
+  (setq items (spachk:text-items ss) n 0 bad 0 rows nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (spachk:feet-open-p s)
+          (setq bad  (1+ bad)
+                rows (append rows
+                       (list (spachk:row
+                               (strcat "Text " (car it) ": \""
+                                       (spachk:mtsafe (spachk:clip s 40))
+                                       "\" gives feet with NO INCHES"
+                                       " - write it 5'-0\" not 5'")
+                               1))))))))
+  (spachk:res
+    (cons (spachk:row
+            (cond
+              ((= n 0) "Feet & inches: no text in the selection")
+              ((= bad 0) (strcat "Feet & inches: all " (itoa n) " text item"
+                                 (if (= 1 n) "" "s") " OK"))
+              (t (strcat "Feet & inches: " (itoa bad) " of " (itoa n)
+                         " text item" (if (= 1 n) "" "s")
+                         " give feet with NO INCHES"
+                         " - write 5'-0\" not 5'")))
+            (if (> bad 0) 1 nil))
+          rows)
+    nil))
+
 ;;; ======================================================================
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
@@ -1165,7 +1280,12 @@
                         "Hinges: not checked - no taper to check against"
                         1)))))
 
-  ;; 6 -- the title block
+  ;; 6 -- the text boxes: feet must carry inches (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "TEXT & UNITS" 3))))
+  (setq r (spachk:audit-units ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 7 -- the title block
   (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))

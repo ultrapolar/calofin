@@ -554,6 +554,67 @@ def test_the_lite_scan_keeps_the_dimension_layer_check():
     assert 'DIMENSION AUDIT' not in txt, txt
 
 
+def _add_text(vm, s, handle):
+    """Drop a TEXT entity carrying s into the drawing."""
+    esc = s.replace('\\', '\\\\').replace('"', '\\"')
+    vm.loads('(entmakex (list (cons 0 "TEXT") (cons 8 "TEXT") (cons 5 "%s")'
+             ' (list 10 0.0 -50.0) (cons 40 2.0) (cons 1 "%s")))'
+             % (handle, esc))
+
+
+def test_feet_without_inches_is_flagged_and_good_notation_is_not():
+    """A text box reading 5' is caught; 5'-0", 3'-2" and 40" pass, and
+    so does an apostrophe that is a possessive rather than a feet mark."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_text(vm, "Depth 5'", 'BAD1')
+    _add_text(vm, 'Wall 3\'-2"', 'OK1')
+    _add_text(vm, 'Skimmer 40"', 'OK2')
+    _add_text(vm, "Owner's Manual", 'OK3')
+    txt = report_of(vm)
+    bad = problems(txt)
+    assert any('Text BAD1' in p and 'NO INCHES' in p for p in bad), bad
+    for h in ('OK1', 'OK2', 'OK3'):
+        assert not any(h in p for p in bad), (h, bad)
+    assert any('Feet & inches: 1 of ' in p for p in bad), bad
+
+
+def test_the_feet_mark_predicate_itself():
+    """The rule, case by case: an apostrophe straight after a digit is a
+    feet mark and needs an inch mark; anything else is prose."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    vm.load(CHK)
+    for src, want in [("5'", True), ("5'-0\"", False), ("3'-2\"", False),
+                      ('40"', False), ("5'-0''", False), ("12''", False),
+                      ("Water's Edge", False), ("don't", False),
+                      ("3' 4 1/2\"", False), ("5' and 7'-0\"", True),
+                      ("A 5'x10' pad", True)]:
+        esc = src.replace('\\', '\\\\').replace('"', '\\"')
+        got = bool(vm.loads('(spachk:feet-open-p "%s")' % esc))
+        assert got == want, (src, got, want)
+
+
+def test_spas_own_text_states_its_inches():
+    """Everything SPA writes passes -- the check must not cry wolf on
+    the tool's own output."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    txt = report_of(vm)
+    assert 'Feet & inches: all ' in txt, txt
+    assert not any('NO INCHES' in p for p in problems(txt)), problems(txt)
+
+
+def test_the_lite_scan_keeps_the_units_check():
+    """LITESPACHECKSCAN drops the per-dimension audit but keeps the
+    feet-and-inches check -- it is about drawing text, not dimensions."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_text(vm, "Depth 5'", 'BAD1')
+    bad = problems(report_of(vm, cmd='c:LITESPACHECKSCAN'))
+    assert any('Text BAD1' in p and 'NO INCHES' in p for p in bad), bad
+
+
 def test_the_ratio_itself():
     """0.6 x the liner block is 422.4 x 326.175 -- the numbers the check
     is built on."""

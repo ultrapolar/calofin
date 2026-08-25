@@ -44,7 +44,12 @@ on-drawing MTEXT report — with the spa rules in place of the liner ones.
    Arrangement Chart** for that piece count, and a label on `TEXT`
    against every hinge. Hardware called for by the longest hinge —
    velcro hinges, double C channel, hold down kit — comes out as advice.
-7. **The title block.** Everything on the `border` layer is measured
+7. **Feet and inches.** Every text box — TEXT, MTEXT and the `ATTRIB`
+   values on blocks — must state its inches wherever it states feet.
+   `5'` is flagged; `5'-0"`, `3'-2"` and a plain `40"` are fine. A feet
+   mark is an apostrophe **straight after a digit**, so `Water's Edge`
+   is prose and never flagged. `LITESPACHECKSCAN` keeps this one.
+8. **The title block.** Everything on the `border` layer is measured
    together, so a frame drawn as one polyline and one drawn as four
    lines both measure the same. **A spa title block is exactly 0.6× the
    liner block**: the liner nominal is 704 × 543.625, so the spa nominal
@@ -66,7 +71,7 @@ all-clear in green at 75%.
 | --- | --- |
 | `SPACHECK` | The audits, then a walk of everything they flagged — one item at a time, zoomed to each, colouring the ones you confirm are wrong. |
 | `SPACHECKSCAN` | The identical audits, **read-only** — writes the report and nothing else. Good as a pre-flight. |
-| `LITESPACHECKSCAN` | The scan minus the per-dimension audit (layer, style, span agreement) — for a drawing `DIMCHECK` already went over, when only the spa rules are wanted. It keeps the roster-wide dimension-layer verdict, which is cheap and tells you to run `CDIM`. |
+| `LITESPACHECKSCAN` | The scan minus the per-dimension audit (layer, style, span agreement) — for a drawing `DIMCHECK` already went over, when only the spa rules are wanted. It keeps the dimension-layer verdict (which tells you to run `CDIM`) and the feet-and-inches check. |
 | `SPACHECKRESCUE` | Puts back every colour SPACHECK stashed and removes the report — the way out after a crash, or once you're done with the marks. |
 | `SPACHECKVER` | Prints the loaded version and the title-block size it is checking for. |
 | `TUTORIALSPACHECK` | Teaches the tool — see below. |
