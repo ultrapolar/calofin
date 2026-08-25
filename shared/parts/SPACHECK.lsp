@@ -36,7 +36,11 @@
 ;;;      entity, on layer POOL, drawn dashed, and it must lie INSIDE the
 ;;;      cover: the cover is always the larger of the two.
 ;;;
-;;;   4. THE DIMENSIONS.  Every one is checked for
+;;;   4. THE DIMENSIONS.  First the roster-wide verdict: every
+;;;      dimension must sit on the DIMENSION layer, and any that do
+;;;      not are counted, their layers named, and CDIM suggested to
+;;;      move them -- the one dimension check LITESPACHECKSCAN keeps.
+;;;      Then every dimension is checked for
 ;;;        - the right layer (DIMENSION),
 ;;;        - the right style: STANDARD INCHES for the cover's, and
 ;;;          STANDARD INCHES 0.5 for the water's edge's,
@@ -91,7 +95,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.2")
+(setq *spacheck-version* "v1.3")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -105,6 +109,10 @@
 (setq spachk:*lay-dim*    "DIMENSION")  ; every dimension
 (setq spachk:*lay-text*   "TEXT")       ; the hinge labels
 (setq spachk:*lay-notes*  "SPA-NOTES")  ; corner letters, mode note, report
+
+;; CDIM is the command that moves stray dimensions onto *lay-dim*, and
+;; is what the report tells you to run when it finds any.
+(setq spachk:*dimfix-cmd* "CDIM")
 
 ;; Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*).
 (setq spachk:*ds-cover*   "STANDARD INCHES")
@@ -674,6 +682,48 @@
                     ents (cons e ents))))))))
   (spachk:res rows (reverse ents)))
 
+;; Every dimension belongs on spachk:*lay-dim*.  The per-dimension
+;; audit says so one dimension at a time, in the report's DIMENSION
+;; AUDIT column; this is the roster-wide verdict, and it carries the
+;; suggestion to run CDIM over the strays.  It is the one dimension
+;; check LITESPACHECKSCAN keeps -- it costs a layer read apiece, and a
+;; sheet whose dimensions sit on the wrong layer plots wrong however
+;; sound the dimensions themselves are.  The offending layers are
+;; named, since that is what you need to go fix them.
+(defun spachk:audit-dimlayer (dims / n off lays lay e s)
+  (setq n 0 off 0 lays nil)
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq n   (1+ n)
+              lay (spachk:layer e))
+        (if (/= (strcase lay) (strcase spachk:*lay-dim*))
+          (progn
+            (setq off (1+ off))
+            (if (not (member (strcase lay) lays))
+              (setq lays (cons (strcase lay) lays))))))))
+  (cond
+    ((= n 0)
+     (spachk:res (list (spachk:row (strcat "Dimension layer: no dimensions"
+                                           " in the selection")
+                                   1))
+                 nil))
+    ((= off 0)
+     (spachk:res (list (spachk:row (strcat "Dimension layer: all " (itoa n)
+                                           " on " spachk:*lay-dim*)
+                                   nil))
+                 nil))
+    (t
+     (spachk:res (list (spachk:row
+                         (strcat "Dimension layer: " (itoa off) " of "
+                                 (itoa n) " NOT on layer "
+                                 spachk:*lay-dim* " ("
+                                 (spachk:join (reverse lays) ", ")
+                                 ") - run " spachk:*dimfix-cmd*
+                                 " to move them")
+                         1))
+                 nil))))
+
 ;; The roster: are the dimensions a finished spa sheet needs present,
 ;; and do the overalls read the outline's true size?
 (defun spachk:audit-roster (dims cov wat / rows ents covn watn lapn bb
@@ -1028,6 +1078,9 @@
   ;; the main sheet.
   (setq rows (append rows (list (spachk:row "THE OVERALLS" 3))))
   (setq dims (spachk:dims ss))
+  ;; the dimension-layer verdict runs in every mode, lite included
+  (setq r (spachk:audit-dimlayer dims)
+        rows (append rows (spachk:res-rows r)))
   (if (not lite)
     (setq r     (spachk:audit-dims dims cov wat)
           drows (spachk:res-rows r)

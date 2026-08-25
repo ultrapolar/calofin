@@ -505,6 +505,55 @@ def test_the_report_is_split_the_way_mtext_needs():
     raise AssertionError("no report found")
 
 
+def _move_one_dim(vm, layer):
+    """Shove the first dimension in the drawing onto another layer."""
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = {p.a: p.b for p in vm.entdata[e] if isinstance(p, Dot)}
+        if d.get(0) == 'DIMENSION':
+            vm.entdata[e] = [Dot(8, layer) if (isinstance(p, Dot) and p.a == 8)
+                             else p for p in vm.entdata[e]]
+            return True
+    return False
+
+
+def test_dimension_layer_verdict_is_clean_on_spas_own_output():
+    """Every dimension SPA draws is on DIMENSION, so the roster-wide
+    verdict passes and nothing suggests running CDIM."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    txt = report_of(vm)
+    assert 'Dimension layer: all ' in txt, txt
+    assert 'CDIM' not in txt, txt
+
+
+def test_a_dim_on_the_wrong_layer_is_caught_and_names_cdim():
+    """A dimension dragged onto another layer is counted, the layer it
+    landed on is named, and the report says to run CDIM."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    assert _move_one_dim(vm, 'JUNK'), "found no dimension to move"
+    bad = problems(report_of(vm))
+    assert any('NOT on layer DIMENSION' in p and 'JUNK' in p
+               and 'run CDIM' in p for p in bad), bad
+
+
+def test_the_lite_scan_keeps_the_dimension_layer_check():
+    """LITESPACHECKSCAN drops the per-dimension audit but NOT the
+    layer verdict -- a sheet whose dims sit on the wrong layer plots
+    wrong however sound the dimensions are."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    assert _move_one_dim(vm, 'JUNK')
+    txt = report_of(vm, cmd='c:LITESPACHECKSCAN')
+    assert 'LITESPACHECKSCAN REPORT' in txt, txt[:120]
+    bad = problems(txt)
+    assert any('run CDIM' in p for p in bad), bad
+    # ...and the per-dimension audit really is gone
+    assert 'DIMENSION AUDIT' not in txt, txt
+
+
 def test_the_ratio_itself():
     """0.6 x the liner block is 422.4 x 326.175 -- the numbers the check
     is built on."""

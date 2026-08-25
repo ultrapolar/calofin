@@ -26,21 +26,25 @@ on-drawing MTEXT report — with the spa rules in place of the liner ones.
 3. **The water's edge outline.** Optional; a sheet may show one outline
    only. When present it must also be one closed entity, on `POOL`, and
    it must lie **inside** the cover — the cover is always the larger.
-4. **The dimensions.** Each one for its layer (`DIMENSION`), its style
+4. **The dimension layer.** Every dimension must sit on `DIMENSION`.
+   Any that do not are counted, the layers they landed on are named,
+   and the report tells you to run **`CDIM`** to move them. This is
+   the one dimension check `LITESPACHECKSCAN` keeps.
+5. **The dimensions.** Each one for its layer (`DIMENSION`), its style
    (`STANDARD INCHES` for the cover's, `STANDARD INCHES 0.5` for the
    water's edge's) and agreement with its own definition points. Then
    the roster: both overalls present, carrying their `Cover Size` /
    `Water's Edge` note, and **reading the outline's true size**; an
    `Overlap` dimension whenever both outlines are drawn, reading the
    true lap; and the overall standoffs at SPA's 2 ft above / 3 ft left.
-5. **The hinges** — the LINEs on `COVER` (the outline is a polyline, so
+6. **The hinges** — the LINEs on `COVER` (the outline is a polyline, so
    the two never confuse) — against the block's grade and taper: a piece
    count the taper allows, no piece wider than the foam sheet, no hinge
    longer than it, the fold/velcro arrangement matching the **Hinge
    Arrangement Chart** for that piece count, and a label on `TEXT`
    against every hinge. Hardware called for by the longest hinge —
    velcro hinges, double C channel, hold down kit — comes out as advice.
-6. **The title block.** Everything on the `border` layer is measured
+7. **The title block.** Everything on the `border` layer is measured
    together, so a frame drawn as one polyline and one drawn as four
    lines both measure the same. **A spa title block is exactly 0.6× the
    liner block**: the liner nominal is 704 × 543.625, so the spa nominal
@@ -62,7 +66,7 @@ all-clear in green at 75%.
 | --- | --- |
 | `SPACHECK` | The audits, then a walk of everything they flagged — one item at a time, zoomed to each, colouring the ones you confirm are wrong. |
 | `SPACHECKSCAN` | The identical audits, **read-only** — writes the report and nothing else. Good as a pre-flight. |
-| `LITESPACHECKSCAN` | The scan minus the per-dimension audit (layer, style, span agreement) — for a drawing `DIMCHECK` already went over, when only the spa rules are wanted. |
+| `LITESPACHECKSCAN` | The scan minus the per-dimension audit (layer, style, span agreement) — for a drawing `DIMCHECK` already went over, when only the spa rules are wanted. It keeps the roster-wide dimension-layer verdict, which is cheap and tells you to run `CDIM`. |
 | `SPACHECKRESCUE` | Puts back every colour SPACHECK stashed and removes the report — the way out after a crash, or once you're done with the marks. |
 | `SPACHECKVER` | Prints the loaded version and the title-block size it is checking for. |
 | `TUTORIALSPACHECK` | Teaches the tool — see below. |
@@ -100,6 +104,7 @@ they are named after the SPA globals they shadow.
 | --- | --- | --- |
 | `spachk:*lay-cover*` / `*lay-water*` | `COVER` / `POOL` | where each outline lives |
 | `spachk:*lay-dim*` / `*lay-text*` | `DIMENSION` / `TEXT` | dimensions, hinge labels |
+| `spachk:*dimfix-cmd*` | `CDIM` | the command the report tells you to run when dimensions are off `*lay-dim*` |
 | `spachk:*ds-cover*` / `*ds-water*` | `STANDARD INCHES` / `... 0.5` | the two dimension styles |
 | `spachk:*sfx-cover*` / `*sfx-water*` / `*sfx-lap*` | `Cover Size` / `Water's Edge` / `Overlap` | the notes stacked under a measurement |
 | `spachk:*topoff*` / `*dimoff*` / `*off-tol*` | 24 / 36 / 2 | SPA's standoffs, and the slack allowed on them |
