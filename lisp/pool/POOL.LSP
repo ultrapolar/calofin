@@ -120,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV12")
+(setq pool:*version* "082526 REV13")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -4218,6 +4218,9 @@
         (progn
           (setq wh2 (cond ((pool:pvdim 'wh)) ((* 0.25 totv)))
                 dp2 (cond ((pool:pvdim 'dp)) ((* 0.55 totv)))
+                ;; a deep C with D still open must not float the floor
+                ;; above the wall bottoms while D is being asked
+                dp2 (max dp2 (* 1.15 wh2))
                 c22 (cond ((pool:pvdim 'c2)) ((* 0.5 (+ wh2 dp2))))
                 fb (max 0.0 (- toth hv gv ev)))
           (pool:profdraw x0 y0 toth wh2
@@ -4497,6 +4500,9 @@
           mv (car res) kv (caddr res)
           wh2 (cond ((pool:pvdim 'wh)) (whn))
           dp2 (cond ((pool:pvdim 'dp)) (hdn))
+          ;; a deep C with D still open must not float the floor above
+          ;; the wall bottoms while D is being asked
+          dp2 (max dp2 (* 1.15 wh2))
           gg (pool:hopsportc lline rline bline tline cen
                              e2v f2v gv f1v e1v mv kv))
     (pool:pvcopen)
@@ -4803,11 +4809,17 @@
                       (list (* 0.25 wid) (* 0.5 wid) (* 0.25 wid))
                       wid)
                 mv (car res) lv (cadr res) kv (caddr res)
+                ;; the same precedence the resolver applies below: a
+                ;; given R3 wins, else the tangent semicircle of the
+                ;; hopper width, and only a collapsed width lets W
+                ;; spend the hopper length -- so the end the user
+                ;; watches is the end the final draw keeps
                 r3v (cond ((pool:pvdim 'r3))
+                          ((> lv 1.0e-6) (* 0.5 lv))
                           ((and (pool:pvdim 'w)
                                 (> (- gv (pool:pvdim 'w)) 1.0))
                            (- gv (pool:pvdim 'w)))
-                          ((min (* 0.20 wid) (* 0.5 lv))))
+                          (t (* 0.20 wid)))
                 r3v (max (min r3v (* 0.9 gv)) (* 0.02 len))
                 gg (pool:hopovalc quad tipl tipr hv gv ev mv kv r3v))
           (pool:pvcopen)
@@ -5112,8 +5124,13 @@
                      ((= mode "Offsets")
                       (list "Offsets" (cond ((pool:pvdim 'co)) (hv))))
                      (t (list "Letters"
-                              (cond ((pool:pvdim 'w)) ((* 0.12 len)))
-                              (cond ((pool:pvdim 'l1)) ((* 0.26 wid)))
+                              ;; clamped the way the resolver will
+                              ;; clamp them, so a W or L1 typo cannot
+                              ;; draw a preview that crosses itself
+                              (min (cond ((pool:pvdim 'w)) ((* 0.12 len)))
+                                   gv)
+                              (min (cond ((pool:pvdim 'l1)) ((* 0.26 wid)))
+                                   lv)
                               lv)))
                 gg (pool:hopgrecc pts hv gv ev mv kv hx))
           (pool:pvcopen)
