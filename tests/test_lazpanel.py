@@ -60,12 +60,20 @@ def fresh():
     return vm
 
 
+def columns(vm, page):
+    """One page's columns as (heading, [command, ...])."""
+    for g in vm.globals.get('lzp:*groups*') or []:
+        if str(g[0]) == page:
+            return [(str(c[0]), [str(x) for x in c[1:]]) for c in g[1:]]
+    raise AssertionError("no such page: %r" % page)
+
+
 def roster(vm):
-    groups = vm.globals.get('lzp:*groups*') or []
+    """Every button on the panel, repeats and all, in display order."""
     out = []
-    for g in groups:
-        for cmd, _caption in g[1:]:
-            out.append(str(cmd))
+    for g in vm.globals.get('lzp:*groups*') or []:
+        for col in g[1:]:
+            out.extend(str(x) for x in col[1:])
     return out
 
 
@@ -107,23 +115,28 @@ PANEL = sorted(set(BUTTONS))               # every command, once
 # duplicate DCL key.  (The per-page key check below catches that too;
 # this one names the offender in roster terms.)
 for _g in vm.globals.get('lzp:*groups*') or []:
-    _names = [str(c[0]) for c in _g[1:]]
+    _names = [str(x) for _c in _g[1:] for x in _c[1:]]
     assert len(_names) == len(set(_names)), \
         "%s lists a command twice: %r" % (_g[0], _names)
+
+# Captions live in one table now, so a command cannot carry two of
+# them; what CAN go wrong is a button with no caption at all, or a
+# caption left behind for a command that no longer has a button.
+CAPTIONS = {str(c[0]): str(c[1])
+            for c in vm.globals.get('lzp:*captions*') or []}
+missing_caption = [c for c in set(BUTTONS) if c not in CAPTIONS]
+assert not missing_caption, "buttons with no caption: %r" % missing_caption
+orphan_caption = [c for c in CAPTIONS if c not in set(BUTTONS)]
+assert not orphan_caption, "captions with no button: %r" % orphan_caption
+assert all(CAPTIONS.values()), \
+    "blank caption: %r" % [c for c, v in CAPTIONS.items() if not v]
+# and the lookup agrees with the table
+for _c in sorted(CAPTIONS)[:5]:
+    vm.loads('(setq test:*cap* (lzp:caption "%s"))' % _c)
+    assert str(vm.globals['test:*cap*']) == CAPTIONS[_c], _c
+
 # lzp:commands folds the repeats -- the status line counts tools, not
 # buttons, and would otherwise report more tools than exist.
-# A command that appears on several pages must read the same on each --
-# two captions for one button is the drift this arrangement invites.
-_caption = {}
-for _g in vm.globals.get('lzp:*groups*') or []:
-    for _c in _g[1:]:
-        _name, _cap = str(_c[0]), str(_c[1])
-        if _name in _caption:
-            assert _caption[_name][1] == _cap, (
-                "%s reads %r on %s but %r on %s"
-                % (_name, _caption[_name][1], _caption[_name][0], _cap, _g[0]))
-        else:
-            _caption[_name] = (str(_g[0]), _cap)
 vm.loads('(setq test:*all* (lzp:commands))')
 FOLDED = [str(x) for x in vm.globals['test:*all*']]
 assert len(FOLDED) == len(set(FOLDED)), "lzp:commands repeats: %r" % FOLDED
@@ -194,7 +207,7 @@ for line in dcl:
     assert depth >= 0, line
 assert depth == 0, "unbalanced braces across the file"
 
-TILES = {'row', 'boxed_column', 'button', 'text'}
+TILES = {'row', 'boxed_row', 'boxed_column', 'column', 'button', 'text'}
 ATTRS = {'label', 'key', 'width', 'alignment',
          'is_default', 'is_cancel', 'fixed_width'}
 CLAUSE = r'[a-z_]+ = (?:"[^"]*"|[a-z0-9]+);'
@@ -312,6 +325,55 @@ print("   %d dialogs, %d commands across them (%d buttons)"
 print("   jobs cover %d, Rest holds the other %d, %d shared across jobs"
       % (len(named), len(rest),
          sum(1 for c in PANEL if sum(c in page_cmds(j) for j in JOBS) > 1)))
+
+
+# --------------------------------------------------------------------
+# Columns: the shape of a page, and the width that shape has to fit.
+# --------------------------------------------------------------------
+# The job pages break their tools into the columns the work falls into.
+# A page laid out in columns shows the command name alone on each
+# button, because four captioned buttons abreast would be about 147
+# character cells and DCL will not scroll a dialog wider than the
+# screen -- it just fails to open, which is how this budget came to
+# exist for the tab strip in the first place.
+print("== columns: the page layout, and what it has to fit ==")
+BODY_BUDGET = 90
+EXPECT_COLUMNS = {'Pool': 4, 'Cover': 3, 'Spa': 1, 'Rest': 1,
+                  'Layout': 1, 'Points': 1, 'Dimensions': 1, 'Checking': 1}
+
+for gname in GROUPS:
+    cols = columns(vm, gname)
+    assert len(cols) == EXPECT_COLUMNS[gname], \
+        "%s has %d column(s), expected %d" % (gname, len(cols),
+                                              EXPECT_COLUMNS[gname])
+    text = '\n'.join(page(gname))
+    # key -> the label the page actually renders for it
+    rendered = dict((k, lb) for lb, k in
+                    re.findall(r': button \{ label = "([^"]*)"; key = "([^"]+)"',
+                               text))
+    if len(cols) == 1:
+        heading, cmds = cols[0]
+        assert heading == '', \
+            "%s is a single column but carries a heading %r" % (gname, heading)
+        for c in cmds:
+            assert rendered[c] == '%s  -  %s' % (c, CAPTIONS[c]), \
+                "%s: %s lost its caption: %r" % (gname, c, rendered[c])
+        wide = max(len(c) + 5 + len(CAPTIONS[c]) for c in cmds) + 6
+    else:
+        for heading, cmds in cols:
+            assert heading, "%s has a column with no heading" % gname
+            for c in cmds:
+                assert rendered[c] == c, (
+                    "%s: %s is captioned on a multi-column page (%r) -- that "
+                    "is what blows the width budget" % (gname, c, rendered[c]))
+        wide = sum(max([len(h)] + [len(c) for c in cs]) + 6 for h, cs in cols)
+    assert wide <= BODY_BUDGET, (
+        "%s is about %d cells wide, over the %d budget -- DCL will not "
+        "scroll it and the dialog will not open" % (gname, wide, BODY_BUDGET))
+    print("   %-11s %d column(s), about %2d cells wide%s"
+          % (gname, len(cols), wide,
+             '  [' + ' | '.join(h for h, _ in cols) + ']'
+             if len(cols) > 1 else ''))
 
 print("== end-to-end with the DCL surface stubbed ==")
 # The stub session "has" exactly one command, LIVE, and deliberately
