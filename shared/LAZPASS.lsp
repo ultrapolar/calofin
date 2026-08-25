@@ -684,7 +684,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV08")
+(setq pool:*version* "082526 REV09")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1142,6 +1142,19 @@
           (if (wcmatch s "@,@#") (setq out (read s)))))
     (setq n (1+ n)))
   out)
+
+;; The form-key stem for a corner question, from the subject string
+;; every flow already passes pool:askcorner -- "Corner A" is cornera,
+;; and the collective questions get names of their own.  A subject no
+;; form addresses comes back nil and the corner is asked as always.
+(defun pool:fckey (subject / s)
+  (setq s (strcase subject t))
+  (cond
+    ((= s "all four corners") "corners")
+    ((= s "the outer corners") "outercorners")
+    ((= s "the inner corner e") "innercorner")
+    ((and (> (strlen s) 7) (= (substr s 1 7) "corner "))
+     (strcat "corner" (substr s 8)))))
 
 ;; The shape, from the form when it named one the dispatch knows, else
 ;; asked.  Checked against the same list the prompt offers: an unknown
@@ -3839,7 +3852,25 @@
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (subject prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed dflt szmsg nofit)
+                       / ty sz cols sb wed dflt szmsg nofit fk fty fsz)
+  ;; A form can answer this corner: <stem>-ty carries the treatment,
+  ;; <stem>-sz the radius or cut face.  Both are consumed NOW, valid or
+  ;; not -- consume-once is what keeps Back from deadlocking, and what
+  ;; lets a rejected size be retyped at the keyboard instead of re-fed.
+  ;; An answer the question would not accept falls through to the
+  ;; prompt exactly as if the box had been left empty.
+  (if (setq fk (pool:fckey subject))
+      (progn
+        (if (pool:fhas (read (strcat fk "-ty")))
+            (progn
+              (setq fty (pool:ftake (read (strcat fk "-ty"))))
+              (if (not (member fty '("Square" "Radius" "Cut" "NotGiven")))
+                  (setq fty nil))))
+        (if (pool:fhas (read (strcat fk "-sz")))
+            (progn
+              (setq fsz (pool:ftake (read (strcat fk "-sz"))))
+              (if (not (and (numberp fsz) (> fsz 0.0)))
+                  (setq fsz nil))))))
   ;; A corner whose walls leave no room for a cut cannot be given one:
   ;; every size would be rejected and re-asked forever.  That is a fact
   ;; about the GEOMETRY, though, and it must not answer the question
@@ -3850,20 +3881,25 @@
       (progn
         (princ (strcat "\nNo room for a cut on " subject
                        " -- Radius and Cut are not offered."))
-        (setq maxsb nil nofit t)))
+        (setq maxsb nil nofit t)
+        ;; the geometry outranks the form: a sized treatment cannot fit
+        ;; here whoever supplied it, so the question is put after all
+        (if (pool:cutp fty) (setq fty nil))))
   (progn
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
-  (setq ty (if nofit
-               ;; a remembered Radius/Cut is not among the offered
-               ;; words, and pool:askkw hands a default straight back
-               ;; on Enter without checking it -- so drop it
-               (pool:asktreatng subject
-                                (if (member prevty '("Square" "NotGiven"))
-                                    prevty nil)
-                                back)
-               (cal:asktreat subject prevty back)))
+  (setq ty (cond
+             (fty fty)
+             (nofit
+              ;; a remembered Radius/Cut is not among the offered
+              ;; words, and pool:askkw hands a default straight back
+              ;; on Enter without checking it -- so drop it
+              (pool:asktreatng subject
+                               (if (member prevty '("Square" "NotGiven"))
+                                   prevty nil)
+                               back))
+             (t (cal:asktreat subject prevty back))))
   (cal:osdown)
   (if (eq ty 'CAL-BACK)
       (progn (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
@@ -3887,11 +3923,18 @@
                                      "Cut face length for ")
                             subject))
         (cal:osup)
-        (initget (if dflt 6 7))
-        (setq sz (getdist (strcat szmsg
-                                  (if dflt (strcat " <" (rtos dflt) ">") "")
-                                  ": ")))
-        (if (null sz) (setq sz dflt))
+        (if fsz
+            ;; the form's size skips the prompt but NOT the cap check
+            ;; below: one that will not fit is rejected there and
+            ;; retyped at the keyboard, the store already being empty
+            (setq sz fsz)
+            (progn
+              (initget (if dflt 6 7))
+              (setq sz (getdist (strcat szmsg
+                                        (if dflt (strcat " <" (rtos dflt) ">")
+                                            "")
+                                        ": ")))
+              (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
         ;; skewed out-of-square corner, not just on a square one
@@ -58793,7 +58836,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.6")
+(setq *lazform-version* "v1.7")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -59102,6 +59145,57 @@
                    ("L" 90 340 625 920)))
 
 (defun lzf:cuts (c) (cdr (assoc (car c) lzf:*cuts*)))
+
+;;; -------------------- corners -----------------------------------------
+;;;  A corner is a treatment plus, when the treatment is Radius or Cut,
+;;;  a size -- so each gets a dropdown and a size box that is greyed
+;;;  until a sized treatment is picked.  The dropdown's first entry is
+;;;  "(ask)": the form's version of leaving a box empty, and the only
+;;;  honest default, since POOL offers no default on a first corner
+;;;  either.  Only the charts whose POOL flow asks in these terms carry
+;;;  corner rows; Roman and the Grecians spell their corners as letter
+;;;  dimensions that are already on the chart.
+;;;
+;;;  In-square is the one wrinkle: an in-square rectangle asks ONE
+;;;  question for all four corners, under its own key -- so when the
+;;;  toggle is on, corner A's row speaks for all four and the other
+;;;  three are ignored (lzf:form does the mapping).
+
+(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+
+(setq lzf:*corners*
+  '(("Rectangle"
+     ("cornera" "Corner A (bottom left)")
+     ("cornerb" "Corner B (bottom right)")
+     ("cornerc" "Corner C (top right)")
+     ("cornerd" "Corner D (top left)"))
+    ("L"
+     ("outercorners" "Outer corners (all five)")
+     ("innercorner" "Reverse corner E"))))
+
+(defun lzf:corners (c) (cdr (assoc (car c) lzf:*corners*)))
+
+;; the dropdown selections, by stem: ((\"cornera\" . 3) ...)
+(setq lzf:*cvals* nil)
+
+(defun lzf:cget (stem / p)
+  (if (setq p (assoc stem lzf:*cvals*)) (cdr p) 0))
+
+(defun lzf:cput (stem i / out p)
+  (foreach p lzf:*cvals* (if (/= (car p) stem) (setq out (cons p out))))
+  (setq lzf:*cvals* (reverse (cons (cons stem i) out))))
+
+;; is selection I a sized treatment?  2 = Radius, 3 = Cut
+(defun lzf:csized (i) (member i '(2 3)))
+
+;; the dropdown changed: remember it, grey or un-grey the size box,
+;; and repaint the chart the list may have unrolled across
+(defun lzf:cornerpick (stem v / i)
+  (setq i (atoi v))
+  (lzf:cput stem i)
+  (mode_tile (strcat stem "-sz") (if (lzf:csized i) 0 1))
+  (lzf:redraw)
+  (princ))
 
 ;; The horizontal dims whose line IS this cut.
 (defun lzf:cutdims (c y / d out)
@@ -59563,6 +59657,22 @@
                                 "\"; }")
                         out)))
       (setq out (cons "      }" out))))
+  (if (lzf:corners c)
+    (progn
+      (setq out (cons "      : boxed_column {" out))
+      (setq out (cons "        label = \"Corners\";" out))
+      (foreach d (lzf:corners c)
+        (setq out (cons "        : row {" out))
+        (setq out (cons (strcat "          : popup_list { key = \"" (car d)
+                                "\"; label = \"" (cadr d)
+                                "\"; edit_width = 9; }")
+                        out))
+        (setq out (cons (strcat "          : edit_box { key = \"" (car d)
+                                "-sz\"; label = \"size\"; "
+                                "edit_width = 6; fixed_width = true; }")
+                        out))
+        (setq out (cons "        }" out)))
+      (setq out (cons "      }" out))))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"The rest of the run\";" out))
   (setq out (cons (strcat "        : toggle { key = \"insq\"; "
@@ -59649,10 +59759,35 @@
           a (lzf:answer v))
     (if (not (eq a 'SKIP))
         (setq out (cons (cons (read k) a) out))))
+  ;; the corners: a dropdown left on (ask) sends nothing, a sized
+  ;; treatment carries its size when one parses.  In-square asks ONE
+  ;; question for all four rectangle corners, under its own key, so
+  ;; corner A's row speaks for all four there and B-D are ignored.
+  (foreach k (lzf:cornerpairs insq)
+    (setq out (cons k out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
     (setq out (cons (cons (read (car k)) (cdr k)) out)))
+  (reverse out))
+
+;; The (key . value) pairs the corner rows contribute.
+(defun lzf:cornerpairs (insq / out d stem use i ty a)
+  (foreach d (lzf:corners lzf:*chart*)
+    (setq stem (car d)
+          use stem)
+    (if (and insq (= (car lzf:*chart*) "Rectangle"))
+        (setq use (if (= stem "cornera") "corners" nil)))
+    (if (and use (> (setq i (lzf:cget stem)) 0))
+        (progn
+          (setq ty (nth i lzf:*ctreat*))
+          (setq out (cons (cons (read (strcat use "-ty")) ty) out))
+          (if (lzf:csized i)
+              (progn
+                (setq a (lzf:answer (lzf:get (strcat stem "-sz"))))
+                (if (numberp a)
+                    (setq out (cons (cons (read (strcat use "-sz")) a)
+                                    out))))))))
   (reverse out))
 
 ;;; -------------------- the run -----------------------------------------
@@ -59660,7 +59795,7 @@
 ;;  out of scope by the time POOL is started: POOL installs its own, and
 ;;  a POOL that fails must report as POOL.
 
-(defun lzf:show (chartkey / *error* f dcl rc c d go done out)
+(defun lzf:show (chartkey / *error* f dcl rc c d n go done out)
   (defun *error* (msg)
     (term_dialog)
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
@@ -59672,6 +59807,7 @@
       (princ (strcat "\nLAZFORM error: " msg)))
     (princ))
   (setq lzf:*vals* nil
+        lzf:*cvals* nil                 ; corner dropdowns back to (ask)
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
         lzf:*pos* nil                   ; where the user last had it
@@ -59703,6 +59839,22 @@
           (foreach d lzf:*btypes* (add_list d))
           (end_list)
           (set_tile "btype" (itoa lzf:*btype*))
+          ;; the corner dropdowns: filled, put back to their remembered
+          ;; pick, size boxes greyed unless that pick takes a size --
+          ;; and each harvests into its own store the moment it changes
+          (foreach d (lzf:corners c)
+            (start_list (car d))
+            (foreach n lzf:*ctreat* (add_list n))
+            (end_list)
+            (set_tile (car d) (itoa (lzf:cget (car d))))
+            (set_tile (strcat (car d) "-sz")
+                      (lzf:get (strcat (car d) "-sz")))
+            (mode_tile (strcat (car d) "-sz")
+                       (if (lzf:csized (lzf:cget (car d))) 0 1))
+            (action_tile (car d)
+              (strcat "(lzf:cornerpick \"" (car d) "\" $value)"))
+            (action_tile (strcat (car d) "-sz")
+              (strcat "(lzf:put \"" (car d) "-sz\" $value)")))
           (if lzf:*insq* (set_tile "insq" "1"))
           ;; put back what was typed before this page was opened
           (foreach d (lzf:keys c) (set_tile d (lzf:get d)))

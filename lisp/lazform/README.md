@@ -36,6 +36,22 @@ A **tab strip** across the top switches charts. Six are drawn:
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K |
 
+**Corners** get their own section on the Rectangle and True L charts:
+a dropdown per corner -- `(ask)`, `Square`, `Radius`, `Cut`,
+`NotGiven` -- with a size box that stays greyed until a sized
+treatment is picked. `(ask)` is the dropdown's version of an empty
+box: POOL asks that corner at the command line as always. A sized
+treatment with the size left empty sends the treatment alone and POOL
+asks for just the number; a size its walls cannot fit is rejected by
+POOL's own cap check and retyped at the keyboard. In-square is the one
+wrinkle: an in-square rectangle asks ONE question for all four
+corners, so when that toggle is on, corner A's row speaks for all four
+and the other three are ignored. The True L's rows are its two real
+questions -- the outer corners as a set, and the reverse corner E,
+which until now could not be answered from a form at all. Roman and
+the Grecians spell their corners as letter dimensions (S, S1, S2, X)
+that are already on the chart.
+
 Anything a sheet carries that has no place on the plan view gets a box
 and no letter: the depths `C` and `D` (read off a section), the radii
 `R1 R2 R3`, the check dimensions `S2` and `X`, the out-of-square second

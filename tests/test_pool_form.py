@@ -182,9 +182,51 @@ print("   bad D reported and retyped once; no infinite loop")
 
 
 # --------------------------------------------------------------------
-# 6.  Answers must not survive the command.
+# 6.  Corners from the form: the treatment dropdown and its size.
 # --------------------------------------------------------------------
-print("== 6. answers do not leak into the next run ==")
+print("== 6. corners answered by the form ==")
+
+# all four corners Cut 24 -- what scenario 1's PROMPTS typed as
+# "Cut", 24.0 and six Enter-defaults -- supplied as form keys instead
+CORNER_LEAD = (["Outofsquare", "Rectangle"] + BASE +
+               [240.0, 240.0, 120.0, 120.0])
+CORNER_FORM = """'((btype . "Wedge") (h . 30.0) (f . 180.0)
+                  (c . 40.0) (d . 60.0)
+                  (cornera-ty . "Cut") (cornera-sz . 24.0)
+                  (cornerb-ty . "Cut") (cornerb-sz . 24.0)
+                  (cornerc-ty . "Cut") (cornerc-sz . 24.0)
+                  (cornerd-ty . "Cut") (cornerd-sz . 24.0))"""
+
+f = by_form(CORNER_FORM,
+            CORNER_LEAD + ["Ends", 260.0, 260.0, 260.0, 260.0,
+                           "Yes", None, 60.0, None])
+same(a, f, "form corners")
+assert not any(p.startswith('\nCorner') or 'corners be treated' in p
+               for p, _ in f.prompts), \
+    "a corner was asked despite the form answering all four"
+print("   all four corners from the form; no corner prompt appeared")
+
+# treatment without a size: POOL asks for JUST the number
+g2 = by_form("""'((btype . "Wedge") (h . 30.0) (f . 180.0)
+                 (c . 40.0) (d . 60.0)
+                 (cornera-ty . "Cut"))""",
+             CORNER_LEAD + [24.0,                  # A's size, prompted
+                            None, None, None, None, None, None,
+                            "Ends", 260.0, 260.0, 260.0, 260.0,
+                            "Yes", None, 60.0, None])
+same(a, g2, "ty without sz")
+assert any(p.startswith('\nCut face length for Corner A')
+           for p, _ in g2.prompts), \
+    "A's size should have been prompted"
+assert not any('Corner A' in p and 'treated' in p for p, _ in g2.prompts), \
+    "A's treatment was asked despite the form supplying it"
+print("   treatment from the form, size typed; B-D default as always")
+
+
+# --------------------------------------------------------------------
+# 7.  Answers must not survive the command.
+# --------------------------------------------------------------------
+print("== 7. answers do not leak into the next run ==")
 
 g = VM()
 g.load(LSP)
