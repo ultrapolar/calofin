@@ -618,6 +618,12 @@
 
 (setq pool:*form* nil)
 
+;; Cover mode: no pool bottom, so the gate in pool:askbottom answers No
+;; and the whole depth interrogation behind it never runs.  Set by
+;; POOLCOVER (and by LAZFORM's cover twin), cleared on both exits from
+;; c:POOL.  nil for a typed POOL, always.
+(setq pool:*nobottom* nil)
+
 ;; Did the form answer KEY at all?  This is the absent/nil distinction
 ;; that (cdr (assoc ...)) throws away.
 (defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
@@ -775,6 +781,30 @@
 (defun pool:askyn (msg dflt back / v)
   (setq v (pool:askkw msg "Yes No" "Yes/No" dflt back))
   (if (eq v 'POOL-BACK) v (= v "Yes")))
+
+;; THE POOL-BOTTOM GATE.  The same question in five places, one per
+;; shape family, and everything behind it -- the wall height C, the
+;; break depth C2, the deep end D, the hopper type and its corner
+;; method -- is asked only if the answer is Yes.
+;;
+;; A cover sheet records no floor work at all, so there is nothing on
+;; the other side of this question worth asking for: POOLCOVER sets
+;; pool:*nobottom* and the gate answers No without appearing.  That is
+;; the whole of "cover mode" -- one gate, closed.
+;;
+;; It is a run flag rather than an entry in pool:*form* on purpose.
+;; The store is consume-once (an answer is removed as it is read, so a
+;; range check can escape to the keyboard and Back cannot deadlock),
+;; which is right for a measurement asked once and wrong for a gate
+;; that five different shape paths may reach.  A flag answers wherever
+;; the run happens to land.
+;;
+;; Like the store, it is cleared on the way out of c:POOL -- both exits
+;; -- so a cover run can never leave the next POOL silently bottomless.
+(defun pool:askbottom ()
+  (if pool:*nobottom*
+      nil
+      (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil)))
 
 ;; The Treatment question (STANDARDS.md section 2), the one vocabulary
 ;; every corner in this file is answered in:
@@ -2992,7 +3022,7 @@
   ;; this virtual frame (dv has no corner at all; E's real treatment
   ;; is sized for the true reflex angle against D, not against dv), so
   ;; they stay plain "Square" the way they always have.
-  (if (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil)
+  (if (pool:askbottom)
       (progn
         ;; per the reference: the break line drops from the inner
         ;; corner E to the bottom side, and the hopper lives in the
@@ -4494,7 +4524,7 @@
 ;; Returns the report rows (nil if skipped).
 (defun pool:hopper (quad corners doff th / btype xmin xmax ymin ymax
                                            a b c d cen sres ln xi)
-  (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq xmin (apply 'min (mapcar 'car quad))
@@ -5140,7 +5170,7 @@
 
 (defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi
                                                  lline rline bline tline)
-  (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -5179,7 +5209,7 @@
 
 (defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln
                                       lline rline bline tline)
-  (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -6968,7 +6998,7 @@
 ;; tip, like every home sheet), square hopper corners, no corner
 ;; ties -- the ends are too varied to tie the hopper back to.
 (defun pool:hopmuttdsp (quad tipl tipr doff th / btype u v)
-  (if (not (pool:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -7054,8 +7084,11 @@
     (pool:pvkill)
     ;; a form must never outlive the run it was given to: left behind,
     ;; the next POOL typed at the command line would answer itself with
-    ;; last time's numbers and draw a wrong pool with no error at all
+    ;; last time's numbers and draw a wrong pool with no error at all.
+    ;; Cover mode is the same hazard, quieter: a leaked flag draws the
+    ;; next pool with no bottom and never asks why
     (pool:fclear)
+    (setq pool:*nobottom* nil)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -7131,9 +7164,27 @@
   (pool:undoend)
   (pool:sysrestore)
   (pool:fclear)
+  (setq pool:*nobottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
+
+;; POOL for a cover sheet: the same command, with the pool-bottom gate
+;; already answered No.  A cover records the perimeter and nothing
+;; below it, so the depth chain -- C, C2, D, the hopper type and its
+;; corner method -- is work the sheet has no answers for and no room
+;; to show.
+;;
+;; It is a command of its own rather than a mode the panel switches on,
+;; so that clicking a button still runs exactly the command named on it
+;; and typing POOLCOVER does the same thing as clicking it.  The flag
+;; is cleared by c:POOL on both its exits, so this cannot leak into the
+;; next pool even if this run is cancelled half way.
+(defun c:POOLCOVER ()
+  (setq pool:*nobottom* t)
+  (princ "\nPOOLCOVER: cover sheet - no pool bottom will be asked for.")
+  (c:POOL)
+  (princ))
 
 (defun c:POOLVER ()
   (princ (strcat "\nPOOL " pool:*version*))

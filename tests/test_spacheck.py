@@ -615,6 +615,78 @@ def test_the_lite_scan_keeps_the_units_check():
     assert any('Text BAD1' in p and 'NO INCHES' in p for p in bad), bad
 
 
+def _add_title(vm, date, name='Tech Title'):
+    """Put a Tech Title block carrying a Date attribute in the drawing."""
+    vm.loads("""(progn
+      (setq b (entmakex (list '(0 . "INSERT") '(8 . "0") (cons 2 "%s")
+                              '(10 0.0 400.0) '(66 . 1))))
+      (entmake (list '(0 . "ATTRIB") '(8 . "0") '(2 . "Date") (cons 1 "%s")))
+      (entmake (list '(0 . "SEQEND") '(8 . "0"))))""" % (name, date))
+
+
+def _today():
+    """The date the VM's clock reports, as MM/DD/YYYY."""
+    vm = VM()
+    vm.load(CHK)
+    return vm.loads('(spachk:mdy-str (spachk:today-mdy))')
+
+
+def test_todays_date_in_the_tech_title_passes():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, _today())
+    txt = report_of(vm)
+    assert "Tech Title: Date = '" in txt and "' - OK" in txt, txt
+    assert not any('Tech Title' in p for p in problems(txt)), problems(txt)
+
+
+def test_a_stale_date_is_reported():
+    """The mistake this is for: the drawing was reworked and the title
+    block never caught up."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, '01/02/2020')
+    bad = problems(report_of(vm))
+    assert any("NOT TODAY'S DATE" in p and _today() in p for p in bad), bad
+
+
+def test_a_malformed_or_impossible_date_is_reported():
+    for value, want in [('8/1/26', 'not in MM/DD/YYYY format'),
+                        ('', 'is blank'),
+                        ('02/30/2026', 'not a valid day for that month'),
+                        ('13/01/2026', 'is not a month')]:
+        vm = build([None, 'Coversize', 'Rectangle', None,
+                    84.0, None, '90', None, None, None, 'No', 'No'])
+        _add_title(vm, value)
+        bad = problems(report_of(vm))
+        assert any(want in p for p in bad), (value, want, bad)
+
+
+def test_the_block_name_may_be_spelled_without_spaces():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, _today(), name='TECHTITLE')
+    assert not any('Tech Title' in p for p in problems(report_of(vm)))
+
+
+def test_no_tech_title_says_so_without_crying_wolf():
+    """A spa sheet checked on its own has no Tech Title in reach; that
+    is stated, not flagged."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    txt = report_of(vm)
+    assert 'date NOT CHECKED' in txt, txt
+    assert not any('NOT CHECKED' in p for p in problems(txt)), problems(txt)
+
+
+def test_the_lite_scan_keeps_the_date_check():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, '01/02/2020')
+    bad = problems(report_of(vm, cmd='c:LITESPACHECKSCAN'))
+    assert any("NOT TODAY'S DATE" in p for p in bad), bad
+
+
 def test_the_ratio_itself():
     """0.6 x the liner block is 422.4 x 326.175 -- the numbers the check
     is built on."""

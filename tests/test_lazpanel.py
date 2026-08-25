@@ -60,12 +60,20 @@ def fresh():
     return vm
 
 
+def columns(vm, page):
+    """One page's columns as (heading, [command, ...])."""
+    for g in vm.globals.get('lzp:*groups*') or []:
+        if str(g[0]) == page:
+            return [(str(c[0]), [str(x) for x in c[1:]]) for c in g[1:]]
+    raise AssertionError("no such page: %r" % page)
+
+
 def roster(vm):
-    groups = vm.globals.get('lzp:*groups*') or []
+    """Every button on the panel, repeats and all, in display order."""
     out = []
-    for g in groups:
-        for cmd, _caption in g[1:]:
-            out.append(str(cmd))
+    for g in vm.globals.get('lzp:*groups*') or []:
+        for col in g[1:]:
+            out.extend(str(x) for x in col[1:])
     return out
 
 
@@ -107,23 +115,28 @@ PANEL = sorted(set(BUTTONS))               # every command, once
 # duplicate DCL key.  (The per-page key check below catches that too;
 # this one names the offender in roster terms.)
 for _g in vm.globals.get('lzp:*groups*') or []:
-    _names = [str(c[0]) for c in _g[1:]]
+    _names = [str(x) for _c in _g[1:] for x in _c[1:]]
     assert len(_names) == len(set(_names)), \
         "%s lists a command twice: %r" % (_g[0], _names)
+
+# Captions live in one table now, so a command cannot carry two of
+# them; what CAN go wrong is a button with no caption at all, or a
+# caption left behind for a command that no longer has a button.
+CAPTIONS = {str(c[0]): str(c[1])
+            for c in vm.globals.get('lzp:*captions*') or []}
+missing_caption = [c for c in set(BUTTONS) if c not in CAPTIONS]
+assert not missing_caption, "buttons with no caption: %r" % missing_caption
+orphan_caption = [c for c in CAPTIONS if c not in set(BUTTONS)]
+assert not orphan_caption, "captions with no button: %r" % orphan_caption
+assert all(CAPTIONS.values()), \
+    "blank caption: %r" % [c for c, v in CAPTIONS.items() if not v]
+# and the lookup agrees with the table
+for _c in sorted(CAPTIONS)[:5]:
+    vm.loads('(setq test:*cap* (lzp:caption "%s"))' % _c)
+    assert str(vm.globals['test:*cap*']) == CAPTIONS[_c], _c
+
 # lzp:commands folds the repeats -- the status line counts tools, not
 # buttons, and would otherwise report more tools than exist.
-# A command that appears on several pages must read the same on each --
-# two captions for one button is the drift this arrangement invites.
-_caption = {}
-for _g in vm.globals.get('lzp:*groups*') or []:
-    for _c in _g[1:]:
-        _name, _cap = str(_c[0]), str(_c[1])
-        if _name in _caption:
-            assert _caption[_name][1] == _cap, (
-                "%s reads %r on %s but %r on %s"
-                % (_name, _caption[_name][1], _caption[_name][0], _cap, _g[0]))
-        else:
-            _caption[_name] = (str(_g[0]), _cap)
 vm.loads('(setq test:*all* (lzp:commands))')
 FOLDED = [str(x) for x in vm.globals['test:*all*']]
 assert len(FOLDED) == len(set(FOLDED)), "lzp:commands repeats: %r" % FOLDED
@@ -156,10 +169,12 @@ for c in ALL:
         satellites.add(c)
 # DCE is DIMCONTEND's short alias; STOCKLIST is STOCKCOVER's listing
 # companion -- both reachable, neither needs its own button.  LAZPANEL
-# is the panel itself, LAZBUTTON its toolbar summoner and LAZICON the
-# diagnostic that reports where the button's picture came from: none of
-# the three is a drafting tool, so none belongs on the panel.
-satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON'}
+# is the panel itself, LAZBUTTON its toolbar summoner, LAZICON the
+# diagnostic that reports where the button's picture came from, and
+# LAZPIN the pin editor the Pin... button already opens: none of the
+# four is a drafting tool, so none belongs on the panel.
+satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON',
+               'LAZPIN'}
 
 headline = ALL - satellites - HELD
 assert headline == set(PANEL), (
@@ -175,7 +190,11 @@ print("== the generated DCL is well formed, one page per group ==")
 vm.loads('(setq test:*dcl* (lzp:dcl-lines))')
 dcl = [str(l) for l in vm.globals.get('test:*dcl*')]
 GROUPS = [str(g[0]) for g in vm.globals['lzp:*groups*']]
-ROWS = [[str(g) for g in r] for r in vm.globals['lzp:*rows*']]
+# Each row is (label page page ...) -- the label names the row on
+# screen ("Job", "Or by category"), the rest are the pages it links to.
+ROW_LABELS = [str(r[0]) for r in vm.globals['lzp:*rows*']]
+ROWS = [[str(g) for g in r[1:]] for r in vm.globals['lzp:*rows*']]
+assert all(ROW_LABELS), "a navigation row has no label"
 
 # The strip layout and the pages are two tables; neither may drift from
 # the other, or a group would be unreachable (no tab) or a tab would
@@ -185,8 +204,11 @@ assert flat_rows == GROUPS, \
     "lzp:*rows* names %r, lzp:*groups* names %r" % (flat_rows, GROUPS)
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-assert len(opens) == len(GROUPS), (
-    "%d dialogs for %d groups" % (len(opens), len(GROUPS)))
+# one dialog per page, plus the pin editor
+assert len(opens) == len(GROUPS) + 1, (
+    "%d dialogs for %d groups + the pin editor" % (len(opens), len(GROUPS)))
+assert 'lazpanel_pins : dialog {' in opens, \
+    "the pin editor dialog is not in the generated file"
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
@@ -194,7 +216,8 @@ for line in dcl:
     assert depth >= 0, line
 assert depth == 0, "unbalanced braces across the file"
 
-TILES = {'row', 'boxed_column', 'button', 'text'}
+TILES = {'row', 'boxed_row', 'boxed_column', 'column', 'button',
+         'text', 'toggle'}
 ATTRS = {'label', 'key', 'width', 'alignment',
          'is_default', 'is_cancel', 'fixed_width'}
 CLAUSE = r'[a-z_]+ = (?:"[^"]*"|[a-z0-9]+);'
@@ -245,8 +268,12 @@ for gname in GROUPS:
     assert wide <= TAB_BUDGET, (
         "%s: the widest tab row is about %d characters, over the %d budget "
         "-- DCL will not scroll a dialog wider than the screen" % (gname, wide, TAB_BUDGET))
-    assert text.count(': row {') >= len(ROWS), \
-        "%s: %d tab rows emitted, expected %d" % (gname, text.count(': row {'), len(ROWS))
+    # the navigation rows are labelled boxed rows now, one per lzp:*rows*
+    for lbl in ROW_LABELS:
+        assert 'label = "%s";' % lbl in text, \
+            "%s: no navigation row labelled %r" % (gname, lbl)
+    assert 'key = "pin_edit"' in text, \
+        "%s: no Pin... button -- the pinned row is missing" % gname
     # this page carries exactly its own group's commands -- no more and
     # no fewer.  It may well share commands with another page (AUTODIM
     # is on Pool, Cover and Spa), so the test is against this group's
@@ -255,8 +282,11 @@ for gname in GROUPS:
     mine = [str(x) for x in vm.globals['test:*g*']]
     assert set(mine) <= set(keys), \
         "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
-    extra = set(keys) - set(mine) - {'status', 'cancel'} \
-            - {'tab_' + g for g in GROUPS}
+    # pinned buttons carry a pin_ prefix and repeat a tool already on
+    # some page; pin_edit opens the editor.  Neither is a page command.
+    extra = set(keys) - set(mine) - {'status', 'cancel', 'pin_edit'} \
+            - {'tab_' + g for g in GROUPS} \
+            - {k for k in keys if k.startswith('pin_')}
     assert not extra, \
         "%s: buttons for commands not in its group: %r" % (gname, sorted(extra))
     seen_keys |= set(mine)
@@ -312,6 +342,145 @@ print("   %d dialogs, %d commands across them (%d buttons)"
 print("   jobs cover %d, Rest holds the other %d, %d shared across jobs"
       % (len(named), len(rest),
          sum(1 for c in PANEL if sum(c in page_cmds(j) for j in JOBS) > 1)))
+
+
+# --------------------------------------------------------------------
+# Columns: the shape of a page, and the width that shape has to fit.
+# --------------------------------------------------------------------
+# The job pages break their tools into the columns the work falls into.
+# A page laid out in columns shows the command name alone on each
+# button, because four captioned buttons abreast would be about 147
+# character cells and DCL will not scroll a dialog wider than the
+# screen -- it just fails to open, which is how this budget came to
+# exist for the tab strip in the first place.
+print("== columns: the page layout, and what it has to fit ==")
+BODY_BUDGET = 90
+EXPECT_COLUMNS = {'Pool': 4, 'Cover': 3, 'Spa': 1, 'Rest': 1,
+                  'Layout': 1, 'Points': 1, 'Dimensions': 1, 'Checking': 1}
+
+for gname in GROUPS:
+    cols = columns(vm, gname)
+    assert len(cols) == EXPECT_COLUMNS[gname], \
+        "%s has %d column(s), expected %d" % (gname, len(cols),
+                                              EXPECT_COLUMNS[gname])
+    text = '\n'.join(page(gname))
+    # key -> the label the page actually renders for it
+    rendered = dict((k, lb) for lb, k in
+                    re.findall(r': button \{ label = "([^"]*)"; key = "([^"]+)"',
+                               text))
+    if len(cols) == 1:
+        heading, cmds = cols[0]
+        assert heading == '', \
+            "%s is a single column but carries a heading %r" % (gname, heading)
+        for c in cmds:
+            assert rendered[c] == '%s  -  %s' % (c, CAPTIONS[c]), \
+                "%s: %s lost its caption: %r" % (gname, c, rendered[c])
+        wide = max(len(c) + 5 + len(CAPTIONS[c]) for c in cmds) + 6
+    else:
+        for heading, cmds in cols:
+            assert heading, "%s has a column with no heading" % gname
+            for c in cmds:
+                assert rendered[c] == c, (
+                    "%s: %s is captioned on a multi-column page (%r) -- that "
+                    "is what blows the width budget" % (gname, c, rendered[c]))
+        wide = sum(max([len(h)] + [len(c) for c in cs]) + 6 for h, cs in cols)
+    assert wide <= BODY_BUDGET, (
+        "%s is about %d cells wide, over the %d budget -- DCL will not "
+        "scroll it and the dialog will not open" % (gname, wide, BODY_BUDGET))
+    print("   %-11s %d column(s), about %2d cells wide%s"
+          % (gname, len(cols), wide,
+             '  [' + ' | '.join(h for h, _ in cols) + ']'
+             if len(cols) > 1 else ''))
+
+# --------------------------------------------------------------------
+# Pins: the row that follows you across every page.
+# --------------------------------------------------------------------
+# Pins sit on EVERY page, so they are the one part of the panel a user
+# can make arbitrarily wide -- and a DCL dialog that is too wide does
+# not clip, it fails to open.  The row therefore packs greedily onto as
+# many rows as it needs.  These are the cases that break it.
+print("== pins: pinned row, packing, order and persistence ==")
+pv = fresh()
+
+
+def pinrow_lines(vm_):
+    vm_.loads('(setq test:*pr* (lzp:pinrow))')
+    return [str(l) for l in vm_.globals['test:*pr*']]
+
+
+def widest_row(lines):
+    worst = cur = 0
+    for l in lines:
+        if l.strip() == '}':
+            worst, cur = max(worst, cur), 0
+        else:
+            m = re.search(r'label = "([^"]*)"', l)
+            if m and ('button {' in l or 'text {' in l):
+                cur += len(m.group(1)) + 6
+    return max(worst, cur)
+
+
+# nothing pinned: the row still exists, says so, and offers the editor
+pv.loads("(setq lzp:*pins* nil)")
+empty = pinrow_lines(pv)
+assert any('nothing pinned yet' in l for l in empty), empty
+assert any('pin_edit' in l for l in empty), empty
+
+# the worst case a user can actually reach: the longest names there are
+LONG = ["LITESPACHECKSCAN", "LITELINFINSCAN", "AUTODIMSIDEPOV",
+        "LITECOVERSCAN", "FITABHDCOVER", "LAZFORMCOVER", "SPACHECKSCAN",
+        "DIMARCCHECK"]
+pv.loads("(setq lzp:*pins* '(%s))" % ' '.join('"%s"' % n for n in LONG))
+wide = pinrow_lines(pv)
+budget = int(str(pv.globals['lzp:*pinbudget*']))
+w = widest_row(wide)
+assert w <= budget, (
+    "eight long pins made a %d-cell row against a %d budget -- one row "
+    "that wide is a dialog that will not open" % (w, budget))
+assert wide.count('  : boxed_row {') > 1, \
+    "the long pins did not wrap; they were all put on one row"
+# only the first of the wrapped rows is labelled
+assert [l for l in wide if 'label = "Pinned";' in l], wide
+assert len([l for l in wide if l.strip().startswith('label =')]) == \
+    wide.count('  : boxed_row {'), "every wrapped row needs a label clause"
+# every pin is still there, none dropped by the packing
+for n in LONG:
+    assert any('key = "pin_%s"' % n in l for l in wide), "%s lost" % n
+print("   %d long pins wrap onto %d rows, widest %d cells (budget %d)"
+      % (len(LONG), wide.count('  : boxed_row {'), w, budget))
+
+# pin order is click order: a newly ticked tool goes on the END
+pv.loads("(setq lzp:*pins* '(\"POOL\" \"SPA\"))")
+pv.loads('(lzp:pin-toggle "AUTODIM" "1")')
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'SPA', 'AUTODIM']
+pv.loads('(lzp:pin-toggle "SPA" "0")')
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'AUTODIM']
+pv.loads('(lzp:pin-toggle "POOL" "1")')      # already pinned: no duplicate
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'AUTODIM']
+print("   ticking appends, unticking removes, re-ticking does not double")
+
+# a pin left over from an older build must not put a dead button on
+# screen: pins-read keeps only what is on the roster today
+pv.loads('(defun vl-registry-read (k v) "POOL;NOSUCHTOOL;AUTODIM")')
+pv.loads('(lzp:pins-read)')
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'AUTODIM'], \
+    "a stale pin survived: %r" % pv.globals['lzp:*pins*']
+# and a session with no registry at all simply has no pins
+pv2 = fresh()
+pv2.loads('(setq lzp:*pins* nil)')
+pv2.loads('(lzp:pins-read)')
+assert not pv2.globals.get('lzp:*pins*'), "no registry should mean no pins"
+print("   stale pins dropped against the roster; no registry = no pins")
+
+# every page carries the pinned row, not just the first
+pv.loads("(setq lzp:*pins* '(\"POOL\"))")
+pv.loads('(setq test:*d* (lzp:dcl-lines))')
+alld = '\n'.join(str(l) for l in pv.globals['test:*d*'])
+assert alld.count('key = "pin_POOL"') == len(GROUPS), (
+    "the pinned tool appears on %d pages, expected %d"
+    % (alld.count('key = "pin_POOL"'), len(GROUPS)))
+print("   a pinned tool gets a button on all %d pages" % len(GROUPS))
+
 
 print("== end-to-end with the DCL surface stubbed ==")
 # The stub session "has" exactly one command, LIVE, and deliberately
@@ -565,10 +734,19 @@ vm.loads('(setq stub:*click* "%s")' % LIVE)
 run(vm, 'c:LAZPANEL', 'click-live')
 assert [str(x) for x in vm.globals.get('stub:*ran*') or []] == [LIVE]
 assert vm.globals.get('lzp:*pick*') is None, "pick not cleared after launch"
-assert events(vm) == DIALOG + ['run %s' % LIVE], events(vm)
+# THE REOPEN, which is the point of the loop: the panel closes, the tool
+# runs, and the panel comes straight back rather than leaving the user to
+# type LAZPANEL again.  The stub clicks once and then closes, so the
+# sequence is exactly one full dialog cycle, the run, and a second cycle.
+assert events(vm) == DIALOG + ['run %s' % LIVE] + DIALOG, events(vm)
+assert events(vm).count('new') == 2, \
+    "the panel did not reopen after the tool finished: %r" % events(vm)
+assert events(vm).index('run %s' % LIVE) < events(vm).index('new', 3), \
+    "the panel reopened before the tool ran"
 print("   click %s: the real action expression fires, it runs once,"
       % LIVE)
 print("   and only after the dialog is unloaded and the temp file gone")
+print("   then the panel REOPENS itself -- close is the way out")
 
 vm = stubbed()
 vm.loads('(setq stub:*click* "%s")' % MISSING)

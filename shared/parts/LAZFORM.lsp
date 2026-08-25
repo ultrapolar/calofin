@@ -47,7 +47,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.7")
+(setq *lazform-version* "v1.8")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -1126,7 +1126,13 @@
 
 ;;; -------------------- commands ----------------------------------------
 
-(defun c:LAZFORM ( / form)
+;; The form, then POOL with what it collected.  COVER closes POOL's
+;; pool-bottom gate first: a cover sheet has no floor work on it, so
+;; the depth chain behind that gate is neither asked for nor drawn.
+;; The flag goes on at the last moment -- after the form comes back --
+;; so a cancelled form leaves the session exactly as it found it, and
+;; c:POOL clears it again on the way out either way.
+(defun lzf:run (cover / form)
   (cond
     ;; the chart fills POOL's answers in, so POOL has to be here to
     ;; receive them -- say so plainly rather than opening a form whose
@@ -1137,9 +1143,17 @@
     ((setq form (lzf:show (car (car lzf:*charts*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
+     (if cover
+       (progn
+         (setq pool:*nobottom* t)
+         (princ "\n         Cover sheet - no pool bottom will be asked for.")))
      (pool:run-with-answers form))
     (t (princ "\nLAZFORM: cancelled, nothing drawn.")))
   (princ))
+
+(defun c:LAZFORM () (lzf:run nil))
+
+(defun c:LAZFORMCOVER () (lzf:run t))
 
 (defun c:LAZFORMVER ()
   (princ (strcat "\nLAZFORM " *lazform-version* " (LAZFORM.lsp) - "

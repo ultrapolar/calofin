@@ -8,26 +8,27 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 47 files, 107 commands:
+;;; 47 files, 112 commands:
 ;;;
-;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABMOVE
-;;;   ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV
-;;;   BPCALLOUT  CABHD  CABHDVER  CALVER  CCPRECHECK  CDCALLOUT
-;;;   CDCREATE  CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE
-;;;   COVERCHECKVERSION  COVERSCAN  CPERPPTS  DCE  DDALT  DDCAL
-;;;   DDELEV  DDFIX  DDGPS  DDINFO  DDSET  DDTEST
-;;;   DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN
-;;;   DRONE  FITABHD  FITABHDVER  FLOORDIM  HEMISTEP  LAZBUTTON
-;;;   LAZFORM  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LHD
-;;;   LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK
-;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER
-;;;   PADDLE  PERPPTS  POOL  POOLDEMO  POOLVER  SMARTFILLET
-;;;   SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
-;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD
-;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
-;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
-;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
-;;;   WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABHDCOVER
+;;;   ABMOVE  ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM
+;;;   AUTODIMSIDEPOV  BPCALLOUT  CABHD  CABHDVER  CALVER  CCPRECHECK
+;;;   CDCALLOUT  CDCREATE  CDCREATEVER  CHECK  CORNERSTP  COVERCHECK
+;;;   COVERCHECKRESCUE  COVERCHECKVERSION  COVERSCAN  CPERPPTS  DCE  DDALT
+;;;   DDCAL  DDELEV  DDFIX  DDGPS  DDINFO  DDSET
+;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
+;;;   DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
+;;;   HEMISTEP  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON
+;;;   LAZPANEL  LAZPANELVER  LAZPIN  LHD  LINCHECK  LINFINCHECK
+;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN
+;;;   LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS
+;;;   POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER
+;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
+;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST
+;;;   XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -1164,6 +1165,12 @@
 
 (setq pool:*form* nil)
 
+;; Cover mode: no pool bottom, so the gate in pool:askbottom answers No
+;; and the whole depth interrogation behind it never runs.  Set by
+;; POOLCOVER (and by LAZFORM's cover twin), cleared on both exits from
+;; c:POOL.  nil for a typed POOL, always.
+(setq pool:*nobottom* nil)
+
 ;; Did the form answer KEY at all?  This is the absent/nil distinction
 ;; that (cdr (assoc ...)) throws away.
 (defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
@@ -1303,6 +1310,30 @@
         (setq w (strcat w c)))
     (setq i (1+ i)))
   out)
+
+;; THE POOL-BOTTOM GATE.  The same question in five places, one per
+;; shape family, and everything behind it -- the wall height C, the
+;; break depth C2, the deep end D, the hopper type and its corner
+;; method -- is asked only if the answer is Yes.
+;;
+;; A cover sheet records no floor work at all, so there is nothing on
+;; the other side of this question worth asking for: POOLCOVER sets
+;; pool:*nobottom* and the gate answers No without appearing.  That is
+;; the whole of "cover mode" -- one gate, closed.
+;;
+;; It is a run flag rather than an entry in pool:*form* on purpose.
+;; The store is consume-once (an answer is removed as it is read, so a
+;; range check can escape to the keyboard and Back cannot deadlock),
+;; which is right for a measurement asked once and wrong for a gate
+;; that five different shape paths may reach.  A flag answers wherever
+;; the run happens to land.
+;;
+;; Like the store, it is cleared on the way out of c:POOL -- both exits
+;; -- so a cover run can never leave the next POOL silently bottomless.
+(defun pool:askbottom ()
+  (if pool:*nobottom*
+      nil
+      (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil)))
 
 ;; Does this treatment cut real geometry off the corner?  NotGiven
 ;; does NOT: its corner is built square, so everything that asks
@@ -3483,7 +3514,7 @@
   ;; this virtual frame (dv has no corner at all; E's real treatment
   ;; is sized for the true reflex angle against D, not against dv), so
   ;; they stay plain "Square" the way they always have.
-  (if (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil)
+  (if (pool:askbottom)
       (progn
         ;; per the reference: the break line drops from the inner
         ;; corner E to the bottom side, and the hopper lives in the
@@ -4985,7 +5016,7 @@
 ;; Returns the report rows (nil if skipped).
 (defun pool:hopper (quad corners doff th / btype xmin xmax ymin ymax
                                            a b c d cen sres ln xi)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq xmin (apply 'min (mapcar 'car quad))
@@ -5631,7 +5662,7 @@
 
 (defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi
                                                  lline rline bline tline)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -5670,7 +5701,7 @@
 
 (defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln
                                       lline rline bline tline)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -7459,7 +7490,7 @@
 ;; tip, like every home sheet), square hopper corners, no corner
 ;; ties -- the ends are too varied to tie the hopper back to.
 (defun pool:hopmuttdsp (quad tipl tipr doff th / btype u v)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -7531,8 +7562,11 @@
     (pool:pvkill)
     ;; a form must never outlive the run it was given to: left behind,
     ;; the next POOL typed at the command line would answer itself with
-    ;; last time's numbers and draw a wrong pool with no error at all
+    ;; last time's numbers and draw a wrong pool with no error at all.
+    ;; Cover mode is the same hazard, quieter: a leaked flag draws the
+    ;; next pool with no bottom and never asks why
     (pool:fclear)
+    (setq pool:*nobottom* nil)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -7608,9 +7642,27 @@
   (pool:undoend)
   (cal:sysrestore)
   (pool:fclear)
+  (setq pool:*nobottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
+
+;; POOL for a cover sheet: the same command, with the pool-bottom gate
+;; already answered No.  A cover records the perimeter and nothing
+;; below it, so the depth chain -- C, C2, D, the hopper type and its
+;; corner method -- is work the sheet has no answers for and no room
+;; to show.
+;;
+;; It is a command of its own rather than a mode the panel switches on,
+;; so that clicking a button still runs exactly the command named on it
+;; and typing POOLCOVER does the same thing as clicking it.  The flag
+;; is cleared by c:POOL on both its exits, so this cannot leak into the
+;; next pool even if this run is cancelled half way.
+(defun c:POOLCOVER ()
+  (setq pool:*nobottom* t)
+  (princ "\nPOOLCOVER: cover sheet - no pool bottom will be asked for.")
+  (c:POOL)
+  (princ))
 
 (defun c:POOLVER ()
   (princ (strcat "\nPOOL " pool:*version*))
@@ -18182,7 +18234,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081926 REV05") ; announced on load.  The
+(setq *PF-VERSION*      "082526 REV06") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -18191,6 +18243,12 @@
                                     ; re-copy the file so the twins
                                     ; stay identical (the tests check
                                     ; the name, the match, and this)
+;; Cover mode: the pool-bottom question in pf:bottom answers No without
+;; being asked, so a cover sheet is fitted to its perimeter and stops
+;; there.  Set by ABHDCOVER, cleared on both exits from c:ABHD; nil for
+;; a typed ABHD, always.
+(setq abhd:*nobottom* nil)
+
 (setq *PF-POOL-LAYER*   "POOL")     ; layer holding the drawn perimeter
 (setq *PF-POINT-LAYER*  "POINTS")   ; layer holding the survey points
 (setq *PF-POINT-BLOCK*  "ab_pt")    ; block name whose INSERTs mark survey
@@ -20864,10 +20922,18 @@
       ;; -- offer the bottom (the ABHD ending; ADAB starts at 1)
       ((= stage 0)
        (setq pf-phase "asking about the pool bottom")
-       (initget "Yes No")
-       (setq ans (getkword
-                   "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
-       (if (= ans "Yes") (setq stage 1) (setq go nil)))
+       (cond
+         ;; cover mode: a cover sheet records the perimeter and nothing
+         ;; below it, so this is answered No without being asked --
+         ;; ABHDCOVER sets the flag and c:ABHD clears it again
+         (abhd:*nobottom*
+          (princ "\n\n  Cover sheet - skipping the bottom of the pool.")
+          (setq go nil))
+         (t
+          (initget "Yes No")
+          (setq ans (getkword
+                      "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+          (if (= ans "Yes") (setq stage 1) (setq go nil)))))
 
       ;; -- the shallow break, one end per stage
       ((= stage 1)
@@ -21253,6 +21319,9 @@
                              " -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            ;; cover mode must not outlive the run that asked for it,
+            ;; or the next ABHD would skip its bottom without a word
+            (setq abhd:*nobottom* nil)
             (princ)))
 
   ;; sweep leftovers from a run that was interrupted before it could
@@ -21680,6 +21749,21 @@
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
   (setq *error* pf-old-err)   ; restore the previous error handler
+  (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (princ))
+
+;; ABHD for a cover sheet: the same fit, with the pool-bottom question
+;; answered No before it is asked.  A cover records the perimeter and
+;; nothing below it, so the breaks, the hopper offsets and the slope
+;; lines are work the sheet has no room for.
+;;
+;; A command of its own rather than a mode, so that a button runs
+;; exactly the command named on it; the flag is cleared by c:ABHD on
+;; both its exits, so it cannot leak into the next run.
+(defun c:ABHDCOVER ()
+  (setq abhd:*nobottom* t)
+  (princ "\nABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:ABHD)
   (princ))
 
 ;; ---- ADAB: the pool bottom on its own --------------------------------
@@ -33751,6 +33835,13 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
+;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
+;;;       TODAY, written MM/DD/YYYY - a sheet going out under an old
+;;;       date is the mistake this catches. The block is looked for in
+;;;       the selection and then across the drawing; with none in
+;;;       reach the report says the date was not checked rather than
+;;;       flagging it. LITECOVERSCAN keeps this one.
 ;;;     - FEET AND INCHES. Every text box in the selection - TEXT,
 ;;;       MTEXT and the ATTRIB values on blocks - must state its
 ;;;       inches wherever it states feet: 5' is flagged, 5'-0",
@@ -33873,7 +33964,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.7")
+(setq *cchk-version* "v0.8")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -33890,6 +33981,9 @@
 ;; every dimension belongs on this layer; CDIM is the command that
 ;; moves the strays there, and is what the report tells you to run
 (setq *cchk-dim-layer*   "DIMENSION")
+(setq *cchk-dimfix-cmd*  "CDIM")
+(setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
+(setq *cchk-date-tag*    "Date")
 (setq *cchk-dimfix-cmd*  "CDIM")
 (setq *cchk-constr-layer* "COVERCHECK-CONSTRUCTION")
 (setq *cchk-constr-color* 2)       ; yellow
@@ -34196,7 +34290,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -34363,6 +34457,120 @@
                  " - write 5'-0\" not 5'")))
     (> bad 0)
     (reverse lines)))
+
+;; --- the Tech Title date ---------------------------------------------
+;; The sheet's Tech Title block carries a Date attribute, and it must
+;; read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
+;; is the mistake this catches: the drawing was reworked and the title
+;; block never caught up.
+
+(defun cchk:datenorm (s)
+  ;; a value may arrive labelled ("Date = 05/01/2024"); the date is
+  ;; whatever follows the last "="
+  (cchk:after-eq (if s s "")))
+
+(defun cchk:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun cchk:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29)
+    (t 28)))
+
+(defun cchk:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun cchk:mdy-str (mdy)
+  (strcat (cal:zeropad2 (car mdy)) "/" (cal:zeropad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+;; nil when raw is today's date written MM/DD/YYYY; otherwise a short
+;; string saying what is wrong with it.
+(defun cchk:date-verdict (raw / s mo dd yr now)
+  (setq s (vl-string-trim " \t" (cchk:datenorm raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (cchk:all-digits-p (substr s 1 2)))
+         (not (cchk:all-digits-p (substr s 4 2)))
+         (not (cchk:all-digits-p (substr s 7 4))))
+     (strcat "'" s "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" s "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (cchk:days-in-month mo yr)))
+        (strcat "'" s "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       ((progn (setq now (cchk:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now)
+                ") - update it"))
+       (t nil)))))
+
+;; The Tech Title block: the first INSERT whose name carries it, looked
+;; for in the selection and then across the drawing, since the title
+;; block sits outside the area someone highlights as often as not.
+(defun cchk:find-title (ss / pat i e ed out ss2)
+  (setq pat (strcat "*" (cchk:squash *cchk-title-block*) "*") i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e))
+      (if (and (null out) ed (= "INSERT" (cdr (assoc 0 ed)))
+               (wcmatch (cchk:squash (cchk:block-name e)) pat))
+        (setq out e))))
+  (if (null out)
+    (progn
+      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
+      (if ss2
+        (repeat (sslength ss2)
+          (setq e (ssname ss2 i) i (1+ i))
+          (if (and (null out)
+                   (wcmatch (cchk:squash (cchk:block-name e)) pat))
+            (setq out e))))))
+  out)
+
+;; The verdict: (sentence . needs-attention).  With no Tech Title in
+;; reach there is nothing to read, and that is said plainly rather than
+;; flagged -- a cover or spa sheet may well be checked on its own.
+(defun cchk:audit-date (ss / blk ed raw bad)
+  (setq blk (cchk:find-title ss))
+  (if (null blk)
+    (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
+          nil)
+    (progn
+      (setq ed  (entget blk)
+            raw (if (and (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+                  (cchk:ins-attrib blk *cchk-date-tag*))
+            bad (if raw
+                  (cchk:date-verdict raw)
+                  (strcat "is missing from the block"
+                          " - expected MM/DD/YYYY")))
+      (if bad
+        (cons (strcat *cchk-date-tag* " " bad) T)
+        (cons (strcat *cchk-date-tag* " = '"
+                      (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+              nil)))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -36162,7 +36370,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay units)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -36428,7 +36636,8 @@
                             " - none found"))
                   (> noflag 0))))
         (setq dimlay (cchk:dimlayer-verdict dims)
-              units  (cchk:audit-units ss))
+              units  (cchk:audit-units ss)
+              datev  (cchk:audit-date ss))
         (foreach l (caddr units)
           (princ (strcat "\n  " l))
           (setq lines (cons l lines)))
@@ -36436,8 +36645,12 @@
                               (cdr dimlay))
                         (cons (cons (strcat "Feet & inches: " (car units))
                                     (cadr units))
-                              (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                      (car cres)))))
+                              (cons (cons (strcat "Tech Title date: "
+                                                  (car datev))
+                                          (cdr datev))
+                                    (mapcar '(lambda (s)
+                                               (cons s (cchk:attn-p s)))
+                                            (car cres))))))
         (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
                                        (reverse lines) nil
                                        minx miny maxx maxy))
@@ -36494,7 +36707,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres dimlay units
+                       nd ndbad na nabad hdr dhdr l cres dimlay units datev
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -36620,7 +36833,8 @@
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
      (setq dimlay (cchk:dimlayer-verdict dims)
-           units  (cchk:audit-units ss))
+           units  (cchk:audit-units ss)
+           datev  (cchk:audit-date ss))
      (foreach l (caddr units)
        (princ (strcat "\n  " l))
        (setq lines (cons l lines)))
@@ -36628,8 +36842,12 @@
                            (cdr dimlay))
                      (cons (cons (strcat "Feet & inches: " (car units))
                                  (cadr units))
-                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                   (car cres)))))
+                           (cons (cons (strcat "Tech Title date: "
+                                               (car datev))
+                                       (cdr datev))
+                                 (mapcar '(lambda (s)
+                                            (cons s (cchk:attn-p s)))
+                                         (car cres))))))
      (cchk:write-report (strcat name " REPORT")
                         (strcat "Read-only scan - nothing in the drawing"
                                 " was changed.  "
@@ -40698,7 +40916,12 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.6")    ; announced on load; release_lisp.py
+;; Cover mode: the pool-bottom question answers No without being asked,
+;; so a cover sheet is fitted to its perimeter and stops there.  Set by
+;; FITABHDCOVER, cleared on both exits from c:FITABHD.
+(setq fit:*nobottom* nil)
+
+(setq *fitabhd-version* "v1.7")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -44114,6 +44337,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nFITABHD error: " msg)))
+    ;; cover mode lasts one run: leaked, it would quietly cost the next
+    ;; FITABHD its bottom
+    (setq fit:*nobottom* nil)
     (princ))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
@@ -44187,13 +44413,18 @@
           (fit:set-bylayer en)
           (princ (strcat "\nKept - the outline moved to layer "
                          fit:*pool-layer* " in ByLayer colour."))
-          (if (cal:askyn (if (= ptype "ROUnd")
-                           "Add the bottom of the pool (hopper ring)?"
-                           "Add the bottom of the pool (standard hopper)?")
-                         "No" nil)
+          ;; cover mode answers this No without asking: a cover sheet
+          ;; is the perimeter and nothing below it
+          (if (and (not fit:*nobottom*)
+                   (cal:askyn (if (= ptype "ROUnd")
+                                "Add the bottom of the pool (hopper ring)?"
+                                "Add the bottom of the pool (standard hopper)?")
+                              "No" nil))
             (if (= ptype "ROUnd")
               (fit:round-bottom res)
-              (fit:bottom res))))
+              (fit:bottom res))
+            (if fit:*nobottom*
+              (princ "\nCover sheet - the pool bottom was skipped."))))
          (T
           (fit:omit-clear)
           (if (and en (entget en)) (entdel en))
@@ -44202,6 +44433,17 @@
   (command "_.UNDO" "_End")
   (setq undo-open nil)
   (cal:sysrestore)
+  (setq fit:*nobottom* nil)
+  (princ))
+
+;; FITABHD for a cover sheet: the same template fit, with the
+;; pool-bottom question answered No before it is asked.  A command of
+;; its own rather than a mode, so a button runs exactly what it names;
+;; c:FITABHD clears the flag on both exits so it cannot leak.
+(defun c:FITABHDCOVER ()
+  (setq fit:*nobottom* t)
+  (princ "\nFITABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:FITABHD)
   (princ))
 
 ;; ----------------------------------------------------------------------
@@ -47193,7 +47435,12 @@
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
-;;;     "02/30" is reported in red with what is wrong; a clean date
+;;;     "02/30" is reported in red with what is wrong. A well-formed
+;;;     calendar date that is NOT TODAY is reported too - a sheet going
+;;;     out under an old date is the mistake that catches. Only
+;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
+;;;     Title in reach the report says the date was not checked.
+"02/30" is reported in red with what is wrong; a clean date
 ;;;     ("05/01/2024") is a quiet OK.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
@@ -47299,7 +47546,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.5")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -47692,7 +47939,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -48758,7 +49005,18 @@
     ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29) ; leap Feb
     (t 28)))
 
-(defun lfc:date-verdict (raw / s mo dd yr)
+(defun lfc:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun lfc:mdy-str (mdy)
+  (strcat (cal:zeropad2 (car mdy)) "/" (cal:zeropad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+(defun lfc:date-verdict (raw / s mo dd yr now)
   ;; nil when raw is a clean MM/DD/YYYY calendar date; otherwise a
   ;; short string saying what is wrong with it
   (setq s (vl-string-trim " \t" (lfc:after-eq raw)))
@@ -48782,6 +49040,14 @@
        ((or (< dd 1) (> dd (lfc:days-in-month mo yr)))
         (strcat "'" raw "' - " (substr s 4 2)
                 " is not a valid day for that month - expected MM/DD/YYYY"))
+       ;; a real date, but is it TODAY?  A sheet going out under an old
+       ;; date is the mistake this catches -- the drawing was reworked
+       ;; and the title block never caught up.
+       ((progn (setq now (lfc:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now)
+                ") - update it"))
        (t nil)))))
 
 ;; --- dimension review ----------------------------------------------
@@ -49860,7 +50126,9 @@
               (if datebad
                 (strcat *lfc-date-tag* " " datebad)
                 (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
-            (princ (strcat "\n  Date: " datesum))))
+            (princ (strcat "\n  Date: " datesum)))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
         ;; --- Liner Material check -----------------------------------
         (setq liners      (vl-remove-if-not
@@ -50392,7 +50660,9 @@
          (setq datesum
            (if datebad
              (strcat *lfc-date-tag* " " datebad)
-             (strcat *lfc-date-tag* " = '" dateraw "' - OK")))))
+             (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
      ;; --- liner
      (setq liners (vl-remove-if-not
@@ -54670,7 +54940,14 @@
 ;;;      straight after a digit, so "Water's Edge" is prose and never
 ;;;      flagged.  LITESPACHECKSCAN keeps this one.
 ;;;
-;;;   7. THE TITLE BLOCK.  Everything on the border layer is measured
+;;;   7. THE TECH TITLE DATE.  The Date attribute of the "Tech Title"
+;;;      block must read TODAY, written MM/DD/YYYY -- a sheet going
+;;;      out under an old date is the mistake this catches.  The block
+;;;      is looked for in the selection and then across the drawing;
+;;;      with none in reach the report says the date was not checked
+;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   8. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
 ;;;      four lines both measure the same.  A spa sheet's title block is
 ;;;      exactly 0.6x the liner block: the liner nominal is 704 x
@@ -54678,7 +54955,7 @@
 ;;;      is reported with the factor it actually came out at, and a
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
-;;;   8. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;   9. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
 ;;;      the SPA-specific findings under underlined section headings.
@@ -54700,7 +54977,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.4")
+(setq *spacheck-version* "v1.5")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -54718,6 +54995,11 @@
 ;; CDIM is the command that moves stray dimensions onto *lay-dim*, and
 ;; is what the report tells you to run when it finds any.
 (setq spachk:*dimfix-cmd* "CDIM")
+
+;; The sheet's title block, and the attribute in it carrying the date.
+;; This is the Tech Title BLOCK, not the drawn border section 7 checks.
+(setq spachk:*techtitle-block* "Tech Title")  ; spaces optional in the name
+(setq spachk:*date-tag*        "Date")
 
 ;; Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*).
 (setq spachk:*ds-cover*   "STANDARD INCHES")
@@ -55740,6 +56022,151 @@
           rows)
     nil))
 
+;;; --- the Tech Title date ------------------------------------------------
+;;;  The sheet's Tech Title block carries a Date attribute, and it must
+;;;  read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
+;;;  is the mistake this catches: the drawing was reworked and the title
+;;;  block never caught up.
+
+(defun spachk:pad2 (n)
+  (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
+
+;; uppercase with every non-alphanumeric dropped, so "Tech Title"
+;; matches a block actually named "TECHTITLE" or "Tech-Title"
+(defun spachk:squash (s)
+  (vl-list->string
+    (vl-remove nil
+      (mapcar '(lambda (c)
+                 (cond ((and (>= c 48) (<= c 57)) c)
+                       ((and (>= c 65) (<= c 90)) c)
+                       ((and (>= c 97) (<= c 122)) (- c 32))))
+              (vl-string->list (if s s ""))))))
+
+;; the block's effective name, so a dynamic block answers by the name
+;; it was drawn from rather than its anonymous one
+(defun spachk:block-name (ent / res)
+  (setq res (vl-catch-all-apply
+              'vla-get-EffectiveName
+              (list (vlax-ename->vla-object ent))))
+  (if (vl-catch-all-error-p res) (spachk:dxf 2 ent) res))
+
+(defun spachk:ins-attrib (ent tag)
+  (cdr (assoc (strcase tag) (spachk:attribs ent))))
+
+;; a value may arrive labelled ("Date: 05/01/2024" or "Date = ..."),
+;; so the date is whatever follows the last "=" and then the last ":"
+(defun spachk:after-eq (s / p)
+  (while (setq p (vl-string-search "=" s))
+    (setq s (substr s (+ p 2))))
+  s)
+
+(defun spachk:datenorm (s)
+  (spachk:aftercolon (spachk:after-eq (if s s ""))))
+
+(defun spachk:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun spachk:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29)
+    (t 28)))
+
+(defun spachk:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun spachk:mdy-str (mdy)
+  (strcat (spachk:pad2 (car mdy)) "/" (spachk:pad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+;; nil when raw is today's date written MM/DD/YYYY; otherwise a short
+;; string saying what is wrong with it.
+(defun spachk:date-verdict (raw / s mo dd yr now)
+  (setq s (cal:trim (spachk:datenorm raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (spachk:all-digits-p (substr s 1 2)))
+         (not (spachk:all-digits-p (substr s 4 2)))
+         (not (spachk:all-digits-p (substr s 7 4))))
+     (strcat "'" s "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" s "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (spachk:days-in-month mo yr)))
+        (strcat "'" s "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       ((progn (setq now (spachk:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now)
+                ") - update it"))
+       (t nil)))))
+
+;; The Tech Title block: the first INSERT whose name carries it, looked
+;; for in the selection and then across the drawing, since the title
+;; block sits outside the area someone highlights as often as not.
+(defun spachk:find-title (ss / pat i e out ss2)
+  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*") i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e (ssname ss i) i (1+ i))
+      (if (and (null out) (entget e) (= "INSERT" (spachk:etype e))
+               (wcmatch (spachk:squash (spachk:block-name e)) pat))
+        (setq out e))))
+  (if (null out)
+    (progn
+      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
+      (if ss2
+        (repeat (sslength ss2)
+          (setq e (ssname ss2 i) i (1+ i))
+          (if (and (null out)
+                   (wcmatch (spachk:squash (spachk:block-name e)) pat))
+            (setq out e))))))
+  out)
+
+;; With no Tech Title in reach there is nothing to read, and that is
+;; said plainly rather than flagged -- a spa sheet may well be checked
+;; on its own, away from the sheet it will sit on.
+(defun spachk:audit-date (ss / blk raw bad)
+  (setq blk (spachk:find-title ss))
+  (if (null blk)
+    (spachk:res
+      (list (spachk:row (strcat "Tech Title: no '" spachk:*techtitle-block*
+                                "' block in reach - date NOT CHECKED")
+                        nil))
+      nil)
+    (progn
+      (setq raw (spachk:ins-attrib blk spachk:*date-tag*)
+            bad (if raw
+                  (spachk:date-verdict raw)
+                  "is missing from the block - expected MM/DD/YYYY"))
+      (spachk:res
+        (list (spachk:row
+                (if bad
+                  (strcat "Tech Title: " spachk:*date-tag* " " bad)
+                  (strcat "Tech Title: " spachk:*date-tag* " = '"
+                          (cal:trim (spachk:datenorm raw)) "' - OK"))
+                (if bad 1 nil)))
+        nil))))
+
 ;;; ======================================================================
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
@@ -55822,7 +56249,12 @@
   (setq r (spachk:audit-units ss)
         rows (append rows (spachk:res-rows r)))
 
-  ;; 7 -- the title block
+  ;; 7 -- the Tech Title date (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "THE TECH TITLE" 3))))
+  (setq r (spachk:audit-date ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 8 -- the title block
   (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
@@ -60127,7 +60559,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.7")
+(setq *lazform-version* "v1.8")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -61206,7 +61638,13 @@
 
 ;;; -------------------- commands ----------------------------------------
 
-(defun c:LAZFORM ( / form)
+;; The form, then POOL with what it collected.  COVER closes POOL's
+;; pool-bottom gate first: a cover sheet has no floor work on it, so
+;; the depth chain behind that gate is neither asked for nor drawn.
+;; The flag goes on at the last moment -- after the form comes back --
+;; so a cancelled form leaves the session exactly as it found it, and
+;; c:POOL clears it again on the way out either way.
+(defun lzf:run (cover / form)
   (cond
     ;; the chart fills POOL's answers in, so POOL has to be here to
     ;; receive them -- say so plainly rather than opening a form whose
@@ -61217,9 +61655,17 @@
     ((setq form (lzf:show (car (car lzf:*charts*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
+     (if cover
+       (progn
+         (setq pool:*nobottom* t)
+         (princ "\n         Cover sheet - no pool bottom will be asked for.")))
      (pool:run-with-answers form))
     (t (princ "\nLAZFORM: cancelled, nothing drawn.")))
   (princ))
+
+(defun c:LAZFORM () (lzf:run nil))
+
+(defun c:LAZFORMCOVER () (lzf:run t))
 
 (defun c:LAZFORMVER ()
   (princ (strcat "\nLAZFORM " *lazform-version* " (LAZFORM.lsp) - "
@@ -61243,17 +61689,25 @@
 ;;; Commands:  LAZPANEL       open the panel
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
+;;;            LAZPIN         choose the pinned tools
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
-;;; Every headline calofin routine as a button, grouped the way the
-;;; drafter thinks about them (the same four group names as the VB.NET
-;;; palette in ui/calofin_net: Layout, Points, Dimensions, Checking).
+;;; Every headline calofin routine as a button, on tabbed pages of two
+;;; kinds.  Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
+;;; reach for while doing that job, in columns that follow the work:
+;;; lay the shape out, tie the points, build the steps, dimension and
+;;; check.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
+;;; the same four names the VB.NET palette in ui/calofin_net uses --
+;;; hold the whole roster filed by what each tool IS.  A tool that
+;;; serves two jobs is on both, so there are more buttons than commands.
 ;;; Clicking a button closes the panel and runs the command exactly as
 ;;; if its name had been typed -- the panel adds nothing in front of a
-;;; tool and nothing behind it.
+;;; tool and nothing behind it.  (The Cover page names the cover twins,
+;;; POOLCOVER and friends, which is not the panel meddling: they are
+;;; commands of their own and do the same thing typed.)
 ;;;
 ;;; ZERO INSTALL.  The dialog is plain DCL, and this file writes its own
 ;;; .dcl into the system temp folder each time the panel opens, so there
@@ -61288,8 +61742,12 @@
 ;;; session has.
 ;;;
 ;;; DCL dialogs are modal, so the panel cannot stay open while a tool
-;;; runs the way a docked palette can: click, the panel closes, the tool
-;;; runs, LAZPANEL reopens it.  The *SCAN companions are on the panel;
+;;; runs the way a docked palette can -- but it no longer has to be
+;;; reopened by hand: click, the panel closes, the tool runs to its own
+;;; end, and the panel COMES BACK on the page and at the screen position
+;;; it was at.  Close is the way out, and is the default button.  A
+;;; PINNED row on every page carries the handful of tools you actually
+;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.  The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
 ;;; walkthroughs, *VER reporters, *RESCUE undo companions, -CFG /
 ;;; -SETUP partners) stay off on purpose, and so does the DD*
@@ -61302,11 +61760,12 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.9")
+(setq *lazpanel-version* "v2.1")
 
 ;;; -------------------- the roster --------------------------------------
-;;  One entry per button: (label (command caption) ...) per group.  The
-;;  rules for what belongs here:
+;;  Two tables: lzp:*captions* names every command once, and
+;;  lzp:*groups* lays the pages out in columns of those names.  The
+;;  rules for what belongs on the panel at all:
 ;;    - every headline drafting command under lisp/ gets a button;
 ;;    - satellites do not: TUTORIAL* walkthroughs, *VER reporters,
 ;;      *RESCUE undo companions, -CFG / -SETUP partners, DCE (alias of
@@ -61336,141 +61795,269 @@
 ;;  but lzp:commands has to fold the repeats or the status line would
 ;;  count the roster twice over.
 ;;
+;;  The job pages are laid out in COLUMNS, which is the other half of
+;;  the same idea: a job is not a flat list of two dozen tools, it is
+;;  four short lists in the order you reach for them.
+;;
 ;;  "Rest" is not a hand-kept list: it is every command the Pool, Cover
 ;;  and Spa pages do not name, and the test recomputes that complement
 ;;  from the tree, so a tool added to the panel lands there by default
 ;;  instead of falling off the job pages unnoticed.
 
+;;  ONE CAPTION PER COMMAND, here and nowhere else.  A command appears
+;;  on several pages, so a caption kept beside each button would be the
+;;  same words written two or three times -- and would drift the first
+;;  time one copy was edited.  This is the only place they live.
+(setq lzp:*captions*
+  '(
+    ("ABCDEF"           "Rectangle plot")
+    ("ABFIND"           "A/B stake ties")
+    ("ABHD"             "Survey perimeter + bottom")
+    ("ABHDCOVER"        "Survey perimeter, no bottom")
+    ("ABMOVE"           "Move mis-taped point")
+    ("ADAB"             "Organic shape points")
+    ("ALTABCDEF"        "Clockwise rectangle plot")
+    ("AUTOBEAD"         "Bead offsets")
+    ("AUTODIM"          "Auto dimension")
+    ("AUTODIMSIDEPOV"   "Side-view dims")
+    ("BPCALLOUT"        "Bad point callout")
+    ("CABHD"            "Perimeter-only fit")
+    ("CCPRECHECK"       "Tech flow chart")
+    ("CDCALLOUT"        "Point-to-point cross dims")
+    ("CDCREATE"         "Lines to cross dims")
+    ("CHECK"            "Drawing check")
+    ("CORNERSTP"        "Corner step")
+    ("COVERCHECK"       "Cover review")
+    ("COVERSCAN"        "Cover scan")
+    ("CPERPPTS"         "Curved perp points")
+    ("DIMARCCHECK"      "Arc endpoint check")
+    ("DIMCHECK"         "Dimension review")
+    ("DIMCONTEND"       "Continue dim chains")
+    ("DIMSCAN"          "Dimension scan")
+    ("DRONE"            "Drone cleanup")
+    ("FITABHD"          "Typed template fit")
+    ("FITABHDCOVER"     "Typed template fit, no bottom")
+    ("FLOORDIM"         "Floor dims")
+    ("HEMISTEP"         "Hemi step")
+    ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZFORMCOVER"     "Chart to pool, no bottom")
+    ("LHD"              "Laser outline fit")
+    ("LINCHECK"         "Line checklist")
+    ("LINFINCHECK"      "Liner finish review")
+    ("LINFINSCAN"       "Liner finish scan")
+    ("LINTXTCHK"        "Liner checklist text")
+    ("LITECOVERSCAN"    "Cover scan, no dims")
+    ("LITELINFINSCAN"   "Liner scan, no dims")
+    ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("NORMIESTEP"       "Normie step")
+    ("OASIS"            "Freeform pool")
+    ("PADDLE"           "Paddle pads")
+    ("PERPPTS"          "Perpendicular points")
+    ("POOL"             "Pool layout")
+    ("POOLCOVER"        "Pool layout, no bottom")
+    ("POOLDEMO"         "Worked pool example")
+    ("SMARTFILLET"      "Corner radius, previewed")
+    ("SPA"              "Spa template")
+    ("SPACHECK"         "Spa sheet review")
+    ("SPACHECKSCAN"     "Spa sheet scan")
+    ("STAIRDIM"         "Stair dims")
+    ("STOCKCOVER"       "Stock cover placement")
+    ("TYDRN"            "Text + point tidy-up")
+    ("WCALST"           "Unroll curved band")
+    ("XFTCONV"          "Leica import cleanup")
+    ("XYPLOT"           "X/Y offset plot")
+   ))
+
+(defun lzp:caption (name / p)
+  (if (setq p (assoc name lzp:*captions*)) (cadr p) ""))
+
+;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
+;;  one entry per COLUMN, laid out side by side across the page.  The
+;;  job pages break their tools into the columns the work falls into:
+;;  lay the shape out, tie the points, build the steps, dimension and
+;;  check.  That is the grouping the drafter already carries; the
+;;  columns just stop it being a single list of twenty-four.
+;;
+;;  A column heading of "" means the page is one plain column -- what
+;;  the four category pages are.
+;;
+;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
+;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
+;;  four of those side by side is 147, and DCL will not scroll a dialog
+;;  wider than the screen -- the dialog simply fails to open.  So the
+;;  columns carry the meaning in their headings and the buttons carry
+;;  the command name, which puts the widest page at about 64 cells.
+;;  Single-column pages have the room, and keep the caption on the
+;;  button: the category pages stay the place to go to find out what a
+;;  tool is, and the job pages are the place to go when you know.
 (setq lzp:*groups*
   '(("Pool"
-     ("POOL"           "Pool layout")
-     ("LAZFORM"        "Pool from a filled-in chart")
-     ("OASIS"          "Freeform pool")
-     ("ABHD"           "Survey perimeter + bottom")
-     ("ADAB"           "Organic shape points")
-     ("FITABHD"        "Typed template fit")
-     ("XFTCONV"        "Leica import cleanup")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout")
-     ("CORNERSTP"      "Corner step")
-     ("HEMISTEP"       "Hemi step")
-     ("NORMIESTEP"     "Normie step")
-     ("AUTOBEAD"       "Bead offsets")
-     ("PERPPTS"        "Perpendicular points")
-     ("CPERPPTS"       "Curved perp points")
-     ("AUTODIM"        "Auto dimension")
-     ("LINFINCHECK"    "Liner finish review")
-     ("LINFINSCAN"     "Liner finish scan")
-     ("LITELINFINSCAN" "Liner scan, no dims")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan"))
-    ("Cover"
-     ("POOL"           "Pool layout")
-     ("LAZFORM"        "Pool from a filled-in chart")
-     ("OASIS"          "Freeform pool")
-     ("ABHD"           "Survey perimeter + bottom")
-     ("FITABHD"        "Typed template fit")
-     ("STOCKCOVER"     "Stock cover placement")
-     ("XFTCONV"        "Leica import cleanup")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout")
-     ("PADDLE"         "Paddle pads")
-     ("AUTODIM"        "Auto dimension")
-     ("COVERCHECK"     "Cover review")
-     ("COVERSCAN"      "Cover scan")
-     ("LITECOVERSCAN"  "Cover scan, no dims")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan"))
-    ("Spa"
-     ("SPA"            "Spa template")
-     ("AUTODIM"        "Auto dimension")
-     ("SPACHECK"       "Spa sheet review")
-     ("SPACHECKSCAN"   "Spa sheet scan")
-     ("LITESPACHECKSCAN" "Spa scan, no dims")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan"))
-    ("Rest"
-     ("POOLDEMO"       "Worked pool example")
-     ("CABHD"          "Perimeter-only fit")
-     ("LHD"            "Laser outline fit")
-     ("SMARTFILLET"    "Corner radius, previewed")
-     ("WCALST"         "Unroll curved band")
-     ("ABCDEF"         "Rectangle plot")
-     ("ALTABCDEF"      "Clockwise rectangle plot")
-     ("XYPLOT"         "X/Y offset plot")
-     ("DRONE"          "Drone cleanup")
-     ("TYDRN"          "Text + point tidy-up")
-     ("AUTODIMSIDEPOV" "Side-view dims")
-     ("STAIRDIM"       "Stair dims")
-     ("FLOORDIM"       "Floor dims")
-     ("DIMCONTEND"     "Continue dim chains")
-     ("CHECK"          "Drawing check")
-     ("DIMARCCHECK"    "Arc endpoint check")
-     ("LINCHECK"       "Line checklist")
-     ("LINTXTCHK"      "Liner checklist text")
-     ("CCPRECHECK"     "Tech flow chart"))
-    ("Layout"
-     ("LAZFORM"        "Pool from a filled-in chart")
-     ("SPA"            "Spa template")
-     ("POOL"           "Pool layout")
-     ("POOLDEMO"       "Worked pool example")
-     ("OASIS"          "Freeform pool")
-     ("FITABHD"        "Typed template fit")
-     ("ABHD"           "Survey perimeter + bottom")
-     ("ADAB"           "Organic shape points")
-     ("CABHD"          "Perimeter-only fit")
-     ("LHD"            "Laser outline fit")
-     ("PADDLE"         "Paddle pads")
-     ("AUTOBEAD"       "Bead offsets")
-     ("CORNERSTP"      "Corner step")
-     ("HEMISTEP"       "Hemi step")
-     ("NORMIESTEP"     "Normie step")
-     ("SMARTFILLET"    "Corner radius, previewed")
-     ("STOCKCOVER"     "Stock cover placement")
-     ("WCALST"         "Unroll curved band"))
-    ("Points"
-     ("ABCDEF"         "Rectangle plot")
-     ("ALTABCDEF"      "Clockwise rectangle plot")
-     ("XYPLOT"         "X/Y offset plot")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("PERPPTS"        "Perpendicular points")
-     ("CPERPPTS"       "Curved perp points")
-     ("XFTCONV"        "Leica import cleanup")
-     ("DRONE"          "Drone cleanup")
-     ("TYDRN"          "Text + point tidy-up"))
-    ("Dimensions"
-     ("AUTODIM"        "Auto dimension")
-     ("AUTODIMSIDEPOV" "Side-view dims")
-     ("STAIRDIM"       "Stair dims")
-     ("FLOORDIM"       "Floor dims")
-     ("DIMCONTEND"     "Continue dim chains")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout"))
-    ("Checking"
-     ("CHECK"          "Drawing check")
-     ("DIMARCCHECK"    "Arc endpoint check")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan")
-     ("LINCHECK"       "Line checklist")
-     ("LINFINCHECK"    "Liner finish review")
-     ("LINFINSCAN"     "Liner finish scan")
-     ("LITELINFINSCAN" "Liner scan, no dims")
-     ("COVERCHECK"     "Cover review")
-     ("COVERSCAN"      "Cover scan")
-     ("LITECOVERSCAN"  "Cover scan, no dims")
-     ("SPACHECK"       "Spa sheet review")
-     ("SPACHECKSCAN"   "Spa sheet scan")
-     ("LITESPACHECKSCAN" "Spa scan, no dims")
-     ("LINTXTCHK"      "Liner checklist text")
-     ("CCPRECHECK"     "Tech flow chart"))))
+     ("Shape"
+      "POOL"
+      "LAZFORM"
+      "OASIS"
+      "ABHD"
+      "ADAB"
+      "FITABHD"
+      "XFTCONV"
+      )
+     ("Points"
+      "ABFIND"
+      "ABMOVE"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+     ("Steps"
+      "CORNERSTP"
+      "HEMISTEP"
+      "NORMIESTEP"
+      "AUTOBEAD"
+      "PERPPTS"
+      "CPERPPTS"
+      )
+     ("Dims & check"
+      "AUTODIM"
+      "LINFINCHECK"
+      "LINFINSCAN"
+      "LITELINFINSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Cover"
+     ("Shape"
+      "POOLCOVER"
+      "LAZFORMCOVER"
+      "OASIS"
+      "ABHDCOVER"
+      "FITABHDCOVER"
+      "STOCKCOVER"
+      "XFTCONV"
+      )
+     ("Points"
+      "ABFIND"
+      "ABMOVE"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+     ("Pads, dims & check"
+      "PADDLE"
+      "AUTODIM"
+      "COVERCHECK"
+      "COVERSCAN"
+      "LITECOVERSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Spa"
+     (""
+      "SPA"
+      "AUTODIM"
+      "SPACHECK"
+      "SPACHECKSCAN"
+      "LITESPACHECKSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Rest"
+     (""
+      "POOLDEMO"
+      "CABHD"
+      "LHD"
+      "SMARTFILLET"
+      "WCALST"
+      "ABCDEF"
+      "ALTABCDEF"
+      "XYPLOT"
+      "DRONE"
+      "TYDRN"
+      "AUTODIMSIDEPOV"
+      "STAIRDIM"
+      "FLOORDIM"
+      "DIMCONTEND"
+      "CHECK"
+      "DIMARCCHECK"
+      "LINCHECK"
+      "LINTXTCHK"
+      "CCPRECHECK"
+      )
+    )
+     ("Layout"
+     (""
+      "LAZFORM"
+      "LAZFORMCOVER"
+      "SPA"
+      "POOL"
+      "POOLCOVER"
+      "POOLDEMO"
+      "OASIS"
+      "FITABHD"
+      "FITABHDCOVER"
+      "ABHD"
+      "ABHDCOVER"
+      "ADAB"
+      "CABHD"
+      "LHD"
+      "PADDLE"
+      "AUTOBEAD"
+      "CORNERSTP"
+      "HEMISTEP"
+      "NORMIESTEP"
+      "SMARTFILLET"
+      "STOCKCOVER"
+      "WCALST"
+      )
+    )
+     ("Points"
+     (""
+      "ABCDEF"
+      "ALTABCDEF"
+      "XYPLOT"
+      "ABFIND"
+      "ABMOVE"
+      "PERPPTS"
+      "CPERPPTS"
+      "XFTCONV"
+      "DRONE"
+      "TYDRN"
+      )
+    )
+     ("Dimensions"
+     (""
+      "AUTODIM"
+      "AUTODIMSIDEPOV"
+      "STAIRDIM"
+      "FLOORDIM"
+      "DIMCONTEND"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+    )
+     ("Checking"
+     (""
+      "CHECK"
+      "DIMARCCHECK"
+      "DIMCHECK"
+      "DIMSCAN"
+      "LINCHECK"
+      "LINFINCHECK"
+      "LINFINSCAN"
+      "LITELINFINSCAN"
+      "COVERCHECK"
+      "COVERSCAN"
+      "LITECOVERSCAN"
+      "SPACHECK"
+      "SPACHECKSCAN"
+      "LITESPACHECKSCAN"
+      "LINTXTCHK"
+      "CCPRECHECK"
+      )
+    )))
 
 ;; How the tab strip is laid out: one DCL row per entry, in this order.
 ;; The jobs sit on one line and the categories on the next, which is
@@ -61480,8 +62067,8 @@
 ;; pages themselves are still lzp:*groups*.  The test asserts the two
 ;; tables name exactly the same groups, so neither can drift.
 (setq lzp:*rows*
-  '(("Pool" "Cover" "Spa" "Rest")
-    ("Layout" "Points" "Dimensions" "Checking")))
+  '(("Job"            "Pool" "Cover" "Spa" "Rest")
+    ("Or by category" "Layout" "Points" "Dimensions" "Checking")))
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
@@ -61491,24 +62078,36 @@
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
+(setq lzp:*page* nil)             ; the page the panel reopens on
+(setq lzp:*pins* nil)             ; the pinned tools, in pin order
+(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
 
 ;;; -------------------- roster access -----------------------------------
 
-;; Every command on the panel, flat, in display order.
-(defun lzp:group-commands (name / g c out)
+;; One page's commands, flattened out of its columns, in display order:
+;; down the first column, then down the second.
+(defun lzp:group-commands (name / g col c out)
   (foreach g lzp:*groups*
     (if (= (car g) name)
-        (foreach c (cdr g) (setq out (cons (car c) out)))))
+        (foreach col (cdr g)
+          (foreach c (cdr col) (setq out (cons c out))))))
   (reverse out))
+
+;; A page's columns: (heading cmd ...) each.
+(defun lzp:group-columns (name / g out)
+  (foreach g lzp:*groups*
+    (if (= (car g) name) (setq out (cdr g))))
+  out)
 
 ;; Folded, because a command that serves two jobs is listed on both
 ;; pages and the status line counts tools, not buttons.  First
 ;; appearance wins, so the order still reads as the panel is laid out.
-(defun lzp:commands ( / g c out)
+(defun lzp:commands ( / g col c out)
   (foreach g lzp:*groups*
-    (foreach c (cdr g)
-      (if (not (member (car c) out))
-        (setq out (cons (car c) out)))))
+    (foreach col (cdr g)
+      (foreach c (cdr col)
+        (if (not (member c out))
+          (setq out (cons c out))))))
   (reverse out))
 
 ;; Is C:<name> defined in this session?  An unbound symbol evaluates to
@@ -61540,18 +62139,75 @@
 ;; of the screen.
 (defun lzp:tabstrip ( / out r g)
   (foreach r lzp:*rows*
-    (setq out (cons "  : row {" out))
-    (foreach g r
+    (setq out (cons "  : boxed_row {" out))
+    (setq out (cons (strcat "    label = \"" (car r) "\";") out))
+    (foreach g (cdr r)
       (setq out (cons (strcat "    : button { key = \"tab_" g
                               "\"; label = \"" g "\"; }")
                       out)))
     (setq out (cons "  }" out)))
   (reverse out))
 
+;;; -------------------- the pinned row ----------------------------------
+;;  Pins are the answer to "I run four of these fifty-six all day": the
+;;  tools you tick sit on EVERY page, in the order you pinned them, so
+;;  the ones you actually use stop being three tabs apart.
+;;
+;;  A pinned button carries a "pin_" key so it cannot collide with the
+;;  same tool's own button further down the page, and it is greyed by
+;;  the same availability probe.
+;;
+;;  WIDTH.  The pinned row is generated DCL like everything else, and a
+;;  handful of long names abreast -- LITESPACHECKSCAN is sixteen
+;;  characters -- would push the dialog past the width DCL refuses to
+;;  scroll, which does not clip the page, it stops it opening at all.
+;;  So pins are packed greedily into as many rows as they need, with
+;;  the Pin... button packed last like any other item.  Pin thirty
+;;  tools and you get a tall panel, never a broken one.
+(setq lzp:*pinbudget* 84)
+
+(defun lzp:pin-label (n) (strcat "    : button { label = \"" n
+                                 "\"; key = \"pin_" n "\"; }"))
+
+;; (name width) for every pinned tool, then the editor button last.
+(defun lzp:pin-items ( / out n)
+  (foreach n lzp:*pins* (setq out (cons n out)))
+  (reverse (cons "*edit*" out)))
+
+(defun lzp:pinrows ( / out row w n cw items)
+  (setq items (lzp:pin-items) row nil w 0)
+  (foreach n items
+    (setq cw (+ (strlen (if (= n "*edit*") "Pin..." n)) 6))
+    (if (and row (> (+ w cw) lzp:*pinbudget*))
+      (setq out (cons (reverse row) out) row nil w 0))
+    (setq row (cons n row) w (+ w cw)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
+
+(defun lzp:pinrow ( / out rows r n first)
+  (setq rows (lzp:pinrows) first t)
+  (foreach r rows
+    (setq out (cons "  : boxed_row {" out))
+    ;; only the first row is labelled: two boxes both saying "Pinned"
+    ;; would read as two different things
+    (setq out (cons (strcat "    label = \""
+                            (if first "Pinned" "") "\";") out))
+    (foreach n r
+      (setq out
+        (cons (if (= n "*edit*")
+                "    : button { label = \"Pin...\"; key = \"pin_edit\"; }"
+                (lzp:pin-label n))
+              out)))
+    (if (and first (not lzp:*pins*))
+      (setq out (cons "    : text { label = \"nothing pinned yet\"; }" out)))
+    (setq out (cons "  }" out))
+    (setq first nil))
+  (reverse out))
+
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
-(defun lzp:dcl-one (g / out c)
+(defun lzp:dcl-one (g / out c col)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -61560,13 +62216,34 @@
                           "  -  " (car g) "\";")
                   (strcat (lzp:dlgname (car g)) " : dialog {")))
   (setq out (append (reverse (lzp:tabstrip)) out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons (strcat "    label = \"" (car g) "\";") out))
-  (foreach c (cdr g)
-    (setq out (cons (strcat "    : button { label = \"" (car c) "  -  "
-                            (cadr c) "\"; key = \"" (car c) "\"; }")
-                    out)))
-  (setq out (cons "  }" out))
+  (setq out (append (reverse (lzp:pinrow)) out))
+  (cond
+    ;; ONE COLUMN: the page has the width to spare, so every button
+    ;; carries its caption -- this is what the category pages are for.
+    ((= (length (cdr g)) 1)
+     (setq out (cons "  : boxed_column {" out))
+     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+     (foreach c (cdr (car (cdr g)))
+       (setq out (cons (strcat "    : button { label = \"" c "  -  "
+                               (lzp:caption c) "\"; key = \"" c "\"; }")
+                       out)))
+     (setq out (cons "  }" out)))
+    ;; SEVERAL COLUMNS, side by side: the heading says what the column
+    ;; is for and the buttons carry the command name alone.  Four
+    ;; captioned buttons abreast would be about 147 cells wide and the
+    ;; dialog would not open at all.
+    (t
+     (setq out (cons "  : boxed_row {" out))
+     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+     (foreach col (cdr g)
+       (setq out (cons "    : boxed_column {" out))
+       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       (foreach c (cdr col)
+         (setq out (cons (strcat "      : button { label = \"" c
+                                 "\"; key = \"" c "\"; }")
+                         out)))
+       (setq out (cons "    }" out)))
+     (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
                           "is_default = true; is_cancel = true; "
@@ -61574,11 +62251,42 @@
                   out))
   (reverse (cons "}" out)))
 
-;; Every page, one after another, in one generated file.
+;; The pin editor: every tool on the panel as a toggle, in three
+;; columns so fifty-six of them fit on a screen rather than a scroll
+;; DCL would not give.
+(defun lzp:dcl-pins ( / out cmds n per i j c)
+  (setq cmds (lzp:commands)
+        n    (length cmds)
+        per  (1+ (/ (1- n) 3))
+        i    0)
+  (setq out (list "lazpanel_pins : dialog {"
+                  "  label = \"LazPanel  -  pinned tools\";"
+                  (strcat "  : text { label = \"Ticked tools sit in the "
+                          "Pinned row on every page.\"; }")
+                  "  : row {"))
+  (while (< i n)
+    (setq out (append out (list "    : column {")) j 0)
+    (while (and (< j per) (< i n))
+      (setq c (nth i cmds))
+      (setq out (append out
+        (list (strcat "      : toggle { label = \"" c
+                      "\"; key = \"tg_" c "\"; }"))))
+      (setq i (1+ i) j (1+ j)))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }" "  spacer;"
+          (strcat "  : row { alignment = centered; "
+                  ": button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; } "
+                  ": button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; } }")
+          "}")))
+
+;; Every page, then the pin editor, in one generated file.
 (defun lzp:dcl-lines ( / out g)
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
-  out)
+  (append out (lzp:dcl-pins) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -61604,6 +62312,61 @@
 ;; Run a roster command by name, exactly as if it had been typed.  The
 ;; probe guards the greyed-button race: a command that vanished between
 ;; opening the panel and clicking reports itself instead of erroring.
+(defun lzp:split (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (if (/= cur "") (setq out (cons cur out))) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (if (/= cur "") (setq out (cons cur out)))
+  (reverse out))
+
+;; Read the pins back, dropping any name no longer on the roster: a pin
+;; left over from an older build must not put a dead button on screen,
+;; and the roster is the only thing that says what is real.
+(defun lzp:pins-read ( / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Pins")))
+  (setq lzp:*pins*
+    (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+      (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
+                        (lzp:split s ";"))))
+  lzp:*pins*)
+
+(defun lzp:pins-write ( / s n)
+  (setq s "")
+  (foreach n lzp:*pins*
+    (setq s (strcat s (if (= s "") "" ";") n)))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Pins" s))
+  lzp:*pins*)
+
+;; Pin order is click order: a newly ticked tool goes on the END rather
+;; than jumping into the middle of a row the hand has already learned.
+(defun lzp:pin-toggle (name val)
+  (if (= val "1")
+    (if (not (member name lzp:*pins*))
+      (setq lzp:*pins* (append lzp:*pins* (list name))))
+    (setq lzp:*pins* (vl-remove name lzp:*pins*)))
+  (princ))
+
+;; The toggle dialog.  Cancel re-reads the registry rather than trying
+;; to undo the ticks one by one -- the stored list is the truth, so
+;; going back to it is exact where unwinding would be approximate.
+(defun lzp:pin-edit (dcl / n rc)
+  (cond
+    ((not (new_dialog "lazpanel_pins" dcl)) nil)
+    (t
+     (foreach n (lzp:commands)
+       (set_tile (strcat "tg_" n) (if (member n lzp:*pins*) "1" "0"))
+       (action_tile (strcat "tg_" n)
+                    (strcat "(lzp:pin-toggle \"" n "\" $value)")))
+     (action_tile "accept" "(done_dialog 1)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:pins-write) (lzp:pins-read))
+     t)))
+
 (defun lzp:launch (name / fn)
   (setq fn (read (strcat "C:" name)))
   (cond
@@ -61965,9 +62728,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
     (princ))
-  (setq lzp:*pick* nil
-        lzp:*pos* nil
-        g (car (car lzp:*groups*)))
+  ;; NOT reset here: the panel reopens after every tool it launches, and
+  ;; coming back to page one in the middle of the screen each time would
+  ;; undo the whole point of reopening.  lzp:*page* and lzp:*pos* are
+  ;; where the user last had it.
+  (setq lzp:*pick* nil)
+  (if (not (and lzp:*page* (assoc lzp:*page* lzp:*groups*)))
+    (setq lzp:*page* (car (car lzp:*groups*))))
+  (setq g lzp:*page*)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
@@ -61983,7 +62751,8 @@
           (princ "\nLAZPANEL error: could not open the panel.")
           (setq done t))
          (t
-          (setq have (lzp:loaded))
+          (setq lzp:*page* g
+                have (lzp:loaded))
           (set_tile "status"
                     (strcat (itoa (length have)) " of "
                             (itoa (length (lzp:commands)))
@@ -61993,6 +62762,15 @@
               "(setq lzp:*pick* $key lzp:*pos* (done_dialog 1))")
             (if (not (member n have))
               (mode_tile n 1)))
+          ;; the pinned row: same launch, its own keys, greyed the same
+          ;; way -- $key would read "pin_POOL", so the name is baked in
+          (foreach n lzp:*pins*
+            (action_tile (strcat "pin_" n)
+              (strcat "(setq lzp:*pick* \"" n
+                      "\" lzp:*pos* (done_dialog 1))"))
+            (if (not (member n have))
+              (mode_tile (strcat "pin_" n) 1)))
+          (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
           (foreach n lzp:*groups*
             (action_tile (strcat "tab_" (car n))
               (strcat "(setq lzp:*go* \"" (car n)
@@ -62000,7 +62778,13 @@
           (action_tile "cancel" "(setq lzp:*pos* (done_dialog 0))")
           (setq rc (start_dialog))
           (cond
-            ((= rc 4) (setq g lzp:*go*))      ; a tab: go round again
+            ((= rc 4) (setq g lzp:*go* lzp:*page* lzp:*go*))  ; a tab
+            ;; the pin editor runs on the same loaded handle, then the
+            ;; caller reopens: the Pinned row is generated DCL, so it
+            ;; only changes when the file is written again
+            ((= rc 5)
+             (lzp:pin-edit dcl)
+             (setq done t out "*pins*"))
             (t (setq done t
                      out (if (= rc 1) lzp:*pick*)))))))))
   ;; the dialog and its temp file go away BEFORE anything is launched,
@@ -62025,9 +62809,42 @@
 
 ;;; -------------------- commands ----------------------------------------
 
+;;  THE REOPEN.  A DCL dialog is modal, so the panel still has to close
+;;  for a tool to run -- but it no longer has to be reopened by hand.
+;;  The loop is the feature: click, the panel closes, the tool runs to
+;;  its own end, the panel comes straight back on the page and at the
+;;  screen position it was at, with the session re-probed so a tool
+;;  loaded meanwhile is no longer greyed.  Close is the way out, and it
+;;  is the default button.
+;;
+;;  A tool cancelled with Escape comes back here exactly as a finished
+;;  one does: lzp:launch has already returned by then, so the reopen is
+;;  not conditional on the tool having succeeded.  A tool that dies with
+;;  a hard error DOES end the loop -- its own *error* runs, the panel
+;;  simply does not come back, and LAZPANEL reopens it.  That is the
+;;  right way round: the alternative is a panel that keeps bouncing back
+;;  in front of someone trying to read the error it just printed.
 (defun c:LAZPANEL ( / pick)
-  (if (setq pick (lzp:show))
-    (lzp:launch pick))
+  (lzp:pins-read)
+  (while (setq pick (lzp:show))
+    (if (/= pick "*pins*")
+      (lzp:launch pick)))
+  (princ))
+
+;; Open the pin editor on its own, without going through the panel.
+(defun c:LAZPIN ( / f dcl)
+  (lzp:pins-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZPIN error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZPIN error: could not load the dialog file."))
+    (t
+     (lzp:pin-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
 (defun c:LAZBUTTON ( / tb)
@@ -62098,41 +62915,46 @@
 
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
-                 (itoa (length (lzp:commands))) " tools on the panel."))
+                 (itoa (length (lzp:commands))) " tools on the panel across "
+                 (itoa (length lzp:*groups*)) " pages, "
+                 (itoa (length lzp:*pins*)) " pinned."))
   (princ))
 
 ;; Put the button up as the file loads, quietly: in a session where
 ;; the COM menu API is missing the panel still loads and LAZPANEL
 ;; still runs -- the button is a convenience, never a gate.
 (vl-catch-all-apply 'lzp:button-init nil)
+(vl-catch-all-apply 'lzp:pins-read nil)
 
 (princ (strcat "\nLAZPANEL " *lazpanel-version*
                " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen."))
+               " LAZBUTTON puts its button on screen;"
+               " LAZPIN edits the pinned row."))
 (princ)
 
 
 ;;; ======================================================================
 ;;; -------------------- what actually arrived ---------------------------
 (setq lazpass:*want* '(
-  "CALVER" "POOL" "POOLVER" "POOLDEMO" "TUTORIALPOOL" "SPA"
-  "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF" "ABCDEFVER"
-  "ABFIND" "ABMOVE" "ABFINDVER" "ALTABCDEF" "ABHD" "ADAB"
-  "TUTORIALABHD" "TUTORIALADAB" "CABHDVER" "CABHD" "AUTOBEAD" "AUTOBEADVER"
-  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "BPCALLOUT"
-  "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
-  "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP"
-  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
-  "COVERCHECKVERSION" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK"
-  "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DDFIX" "DDSET" "DDCAL"
-  "DDINFO" "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER"
-  "FITABHD" "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
-  "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE"
-  "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET"
-  "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
-  "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN"
-  "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZFORM"
-  "LAZFORMVER" "LAZPANEL" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "CALVER" "POOL" "POOLCOVER" "POOLVER" "POOLDEMO" "TUTORIALPOOL"
+  "SPA" "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF"
+  "ABCDEFVER" "ABFIND" "ABMOVE" "ABFINDVER" "ALTABCDEF" "ABHD"
+  "ABHDCOVER" "ADAB" "TUTORIALABHD" "TUTORIALADAB" "CABHDVER" "CABHD"
+  "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM"
+  "AUTODIMSIDEPOV" "BPCALLOUT" "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER"
+  "CHECK" "DIMARCCHECK" "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP"
+  "NORMIESTEP" "TUTORIALNORMIESTEP" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN"
+  "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVERSION" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK"
+  "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DDFIX"
+  "DDSET" "DDCAL" "DDINFO" "DDALT" "DDGPS" "DDELEV"
+  "DDTEST" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD" "LINCHECK"
+  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
+  "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS" "CPERPPTS"
+  "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
+  "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG"
+  "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP"
+  "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
+  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
