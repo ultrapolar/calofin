@@ -82,6 +82,24 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
+;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
+;;;       TODAY, written MM/DD/YYYY - a sheet going out under an old
+;;;       date is the mistake this catches. The block is looked for in
+;;;       the selection and then across the drawing; with none in
+;;;       reach the report says the date was not checked rather than
+;;;       flagging it. LITECOVERSCAN keeps this one.
+;;;     - FEET AND INCHES. Every text box in the selection - TEXT,
+;;;       MTEXT and the ATTRIB values on blocks - must state its
+;;;       inches wherever it states feet: 5' is flagged, 5'-0",
+;;;       3'-2" and a plain 40" are fine. A feet mark is an
+;;;       apostrophe straight after a digit, so "Water's Edge" is
+;;;       prose and never flagged. LITECOVERSCAN keeps this one.
+;;;     - DIMENSION LAYER. Every dimension must sit on the
+;;;       "DIMENSION" layer (tune *cchk-dim-layer*). Any that do not
+;;;       are counted, the layers they landed on are named, and the
+;;;       report tells you to run CDIM (tune *cchk-dimfix-cmd*) to
+;;;       move them. This one runs in LITECOVERSCAN too.
 ;;;     - POOL OUTLINE & AREA. Everything in the selection on layer
 ;;;       "POOL" (tune *cchk-pool-layer*) whose properties are all
 ;;;       ByLayer is the pool outline: a closed (lw)polyline, a
@@ -141,18 +159,29 @@
 ;;;       construction layer and SUGGESTED in the report.
 ;;;
 ;;;  6. A COVERCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer COVERCHECK-REPORT listing every dimension —
-;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc and every overlapping line
-;;;     pair (with its overlap length), plus
-;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it. Any line describing something
-;;;     questionable or that needs looking over (a flagged/wrong
-;;;     item, a missing block, a "NOT" find, an "add ..." note, a
-;;;     skipped check) is coloured RED in the report; everything
-;;;     that checked out stays the report's normal colour and is
-;;;     drawn at *cchk-green-scale* (3/4) of the red text's height,
-;;;     so the problems are the big lines on the sheet.
+;;;     drawing on layer COVERCHECK-REPORT, sized from the drawing's
+;;;     extents so it sits to scale next to it.  The MAIN sheet leads
+;;;     with what matters to the cover itself: a large title, the
+;;;     date and version, a verdict line (ALL CLEAR, or the count of
+;;;     red lines), the colour legend, a SUMMARY dashboard, then the
+;;;     COVER CHECKS findings under underlined section headings.
+;;;     The DIMCHECK-style findings — every dimension with its
+;;;     measured distance, every arc, every overlapping line pair
+;;;     with its overlap length — go in a separate DIMENSION AUDIT
+;;;     column to the RIGHT of the main sheet, so the cover verdicts
+;;;     lead and the mechanical audit reads alongside.  Any line
+;;;     describing something questionable or that needs looking over
+;;;     (a flagged/wrong item, a missing block, a "NOT" find, an
+;;;     "add ..." note, a skipped check) is coloured RED in the
+;;;     report; everything that checked out stays the report's
+;;;     normal colour and is drawn at *cchk-green-scale* (3/4) of
+;;;     the red text's height, so the problems are the big lines on
+;;;     the sheet.
+;;;
+;;;  LITECOVERSCAN is COVERSCAN minus the DIMCHECK-style pass: no
+;;;     dimension, arc or overlap audit and no DIMENSION AUDIT
+;;;     column - just the cover rules, for a drawing DIMCHECK
+;;;     already went over.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -182,7 +211,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.3")
+(setq *cchk-version* "v0.8")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -196,6 +225,13 @@
 ;; come afterwards ("whatever else is left"), still left-to-right
 (setq *cchk-style-order*
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+;; every dimension belongs on this layer; CDIM is the command that
+;; moves the strays there, and is what the report tells you to run
+(setq *cchk-dim-layer*   "DIMENSION")
+(setq *cchk-dimfix-cmd*  "CDIM")
+(setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
+(setq *cchk-date-tag*    "Date")
+(setq *cchk-dimfix-cmd*  "CDIM")
 (setq *cchk-constr-layer* "COVERCHECK-CONSTRUCTION")
 (setq *cchk-constr-color* 2)       ; yellow
 (setq *cchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
@@ -501,7 +537,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -512,6 +548,410 @@
   ;; all-clear text renders at *cchk-green-scale* of the height the
   ;; red attention text gets, so problems stand out on the sheet
   (strcat "{\\H" (rtos *cchk-green-scale* 2 4) "x;" s "}"))
+
+(defun cchk:big (s)
+  ;; the report's title line: half again the base height
+  (strcat "{\\H1.5x;" s "}"))
+
+(defun cchk:hdg (s)
+  ;; a section heading: underlined, with a thin blank line above it
+  ;; so the sections read as blocks (the \P inside the first group is
+  ;; a paragraph break at 0.4x height - a narrow gap, not a full line)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+(defun cchk:linegrp (s)
+  ;; which underlined section a report line files under, keyed on the
+  ;; fixed prefixes the review gives its lines
+  (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
+        ((wcmatch s "Arc *")              "ARCS")
+        ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
+        (t                                "COVER CHECKS")))
+
+(defun cchk:dimline-p (s)
+  ;; T for a line that belongs to the DIMENSION AUDIT column - the
+  ;; DIMCHECK-style findings, as opposed to the cover's own checks
+  (member (cchk:linegrp s) '("DIMENSIONS" "ARCS" "OVERLAPPING LINES")))
+
+;; Every dimension belongs on the dimension layer.  This is the one
+;; dimension check the lite scan keeps: it costs a layer read apiece,
+;; and a sheet whose dimensions sit on the wrong layer plots wrong
+;; however sound the dimensions themselves are - so the verdict, and
+;; the suggestion to run CDIM over them, belong on the main sheet
+;; rather than in the DIMENSION AUDIT column.  The offending layers
+;; are named, since that is what you need to go fix them.
+;; Returns (sentence . needs-attention).
+(defun cchk:dimlayer-verdict (dims / n off lays lay e)
+  (setq n 0 off 0 lays nil)
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq n   (1+ n)
+              lay (cdr (assoc 8 (entget e))))
+        (if (/= (strcase lay) (strcase *cchk-dim-layer*))
+          (progn
+            (setq off (1+ off))
+            (if (not (member (strcase lay) lays))
+              (setq lays (cons (strcase lay) lays))))))))
+  (cond
+    ((= n 0)
+     (cons "no dimensions in the selection" nil))
+    ((= off 0)
+     (cons (strcat "all " (itoa n) " on " *cchk-dim-layer*) nil))
+    (t
+     (cons (strcat (itoa off) " of " (itoa n) " NOT on layer "
+                   *cchk-dim-layer* " ("
+                   (cchk:join (reverse lays) ", ")
+                   ") - run " *cchk-dimfix-cmd* " to move them")
+           T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun cchk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun cchk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun cchk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun cchk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (cchk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (cchk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun cchk:audit-units (ss / items it s n bad lines)
+  (setq items (cchk:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (cchk:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (cchk:mtsafe (cchk:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
+
+;; --- the Tech Title date ---------------------------------------------
+;; The sheet's Tech Title block carries a Date attribute, and it must
+;; read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
+;; is the mistake this catches: the drawing was reworked and the title
+;; block never caught up.
+
+(defun cchk:datenorm (s)
+  ;; a value may arrive labelled ("Date = 05/01/2024"); the date is
+  ;; whatever follows the last "="
+  (cchk:after-eq (if s s "")))
+
+(defun cchk:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun cchk:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29)
+    (t 28)))
+
+(defun cchk:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun cchk:mdy-str (mdy)
+  (strcat (cal:zeropad2 (car mdy)) "/" (cal:zeropad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+;; nil when raw is today's date written MM/DD/YYYY; otherwise a short
+;; string saying what is wrong with it.
+(defun cchk:date-verdict (raw / s mo dd yr now)
+  (setq s (vl-string-trim " \t" (cchk:datenorm raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (cchk:all-digits-p (substr s 1 2)))
+         (not (cchk:all-digits-p (substr s 4 2)))
+         (not (cchk:all-digits-p (substr s 7 4))))
+     (strcat "'" s "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" s "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (cchk:days-in-month mo yr)))
+        (strcat "'" s "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       ((progn (setq now (cchk:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now)
+                ") - update it"))
+       (t nil)))))
+
+;; The Tech Title block: the first INSERT whose name carries it, looked
+;; for in the selection and then across the drawing, since the title
+;; block sits outside the area someone highlights as often as not.
+(defun cchk:find-title (ss / pat i e ed out ss2)
+  (setq pat (strcat "*" (cchk:squash *cchk-title-block*) "*") i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e))
+      (if (and (null out) ed (= "INSERT" (cdr (assoc 0 ed)))
+               (wcmatch (cchk:squash (cchk:block-name e)) pat))
+        (setq out e))))
+  (if (null out)
+    (progn
+      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
+      (if ss2
+        (repeat (sslength ss2)
+          (setq e (ssname ss2 i) i (1+ i))
+          (if (and (null out)
+                   (wcmatch (cchk:squash (cchk:block-name e)) pat))
+            (setq out e))))))
+  out)
+
+;; The verdict: (sentence . needs-attention).  With no Tech Title in
+;; reach there is nothing to read, and that is said plainly rather than
+;; flagged -- a cover or spa sheet may well be checked on its own.
+(defun cchk:audit-date (ss / blk ed raw bad)
+  (setq blk (cchk:find-title ss))
+  (if (null blk)
+    (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
+          nil)
+    (progn
+      (setq ed  (entget blk)
+            raw (if (and (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+                  (cchk:ins-attrib blk *cchk-date-tag*))
+            bad (if raw
+                  (cchk:date-verdict raw)
+                  (strcat "is missing from the block"
+                          " - expected MM/DD/YYYY")))
+      (if bad
+        (cons (strcat *cchk-date-tag* " " bad) T)
+        (cons (strcat *cchk-date-tag* " = '"
+                      (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+              nil)))))
+
+;; The whole report: the cover checks on the MAIN sheet - a large
+;; title, the date and version, a verdict line, the colour legend, a
+;; SUMMARY dashboard, then the findings under underlined headings -
+;; and the DIMCHECK-style findings (dimensions, arcs, overlapping
+;; lines) in a DIMENSION AUDIT column to its right.  A lite run
+;; writes the main sheet alone.
+;;   title   the report's big first line ("COVERCHECK REPORT", ...)
+;;   note    extra legend sentence(s) up front, or nil
+;;   hdr     (text . attn) pairs for the SUMMARY dashboard
+;;   dhdr    (text . attn) pairs for the dimension column's dashboard
+;;   lines   every finding line, report order
+;;   lite    T = skip the dimension column
+;; Returns the x of the report's right edge, for the caller's zoom.
+(defun cchk:write-report (title note hdr dhdr lines lite
+                          minx miny maxx maxy
+                          / mainl diml l pr nred nmain ndim nlin grps grp
+                            ref h ins ins2 txt right)
+  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+  (foreach l lines
+    (if (cchk:dimline-p l)
+      (setq diml (cons l diml))
+      (setq mainl (cons l mainl))))
+  (setq mainl (reverse mainl)
+        diml  (reverse diml))
+  ;; the verdict counts every line that will render red, either column
+  (setq nred 0)
+  (foreach pr (append hdr dhdr)
+    (if (cdr pr) (setq nred (1+ nred))))
+  (foreach l lines
+    (if (cchk:attn-p l) (setq nred (1+ nred))))
+  ;; sizing: weighted line count per column - the head is ~4.5 lines,
+  ;; a heading is a line plus its 0.4 gap - and the taller column
+  ;; drives the text height, clamped as before
+  (setq nmain 4.5 grps nil)
+  (foreach l mainl
+    (if (not (member (cchk:linegrp l) grps))
+      (setq grps (cons (cchk:linegrp l) grps))))
+  (setq nmain (+ nmain (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
+  (setq nmain (+ nmain (* (length hdr) *cchk-green-scale*)))
+  (foreach l mainl
+    (setq nmain (+ nmain (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
+  (setq ndim 0.0)
+  (if (not lite)
+    (progn
+      (setq ndim 2.5 grps nil)                        ; column title + legend
+      (foreach l diml
+        (if (not (member (cchk:linegrp l) grps))
+          (setq grps (cons (cchk:linegrp l) grps))))
+      (setq ndim (+ ndim (* 1.4 (length grps))))
+      (setq ndim (+ ndim (* (length dhdr) *cchk-green-scale*)))
+      (foreach l diml
+        (setq ndim (+ ndim (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))))
+  (setq nlin (max nmain ndim))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+    (progn
+      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
+            h   (/ ref (* 1.66 nlin)))
+      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
+      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+    (progn
+      (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
+      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+  (setq ins (if minx
+              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list 0.0 0.0 0.0)))
+  ;; --- the main sheet
+  (setq txt (strcat (cchk:big title)
+                    "\\P"
+                    (cchk:small (strcat (cal:datestr)
+                                        "  -  COVERCHECK "
+                                        *cchk-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (if (> nred 0)
+                      (cchk:red (strcat (itoa nred) " LINE"
+                                        (if (= 1 nred) "" "S")
+                                        " NEED"
+                                        (if (= 1 nred) "S" "")
+                                        " ATTENTION"))
+                      "ALL CLEAR - every check passed")
+                    "}"
+                    "\\P"
+                    (cchk:small
+                      (strcat (if note note "")
+                              "Lines needing attention are in "
+                              (cchk:red "red")
+                              " at full size; lines that checked out"
+                              " are smaller."))))
+  (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
+  (foreach pr hdr
+    (setq txt (strcat txt "\\P"
+                      (if (cdr pr)
+                        (cchk:red (strcat "  " (car pr)))
+                        (cchk:small (strcat "  " (car pr)))))))
+  (setq grp nil)
+  (foreach l mainl
+    (if (/= grp (cchk:linegrp l))
+      (setq grp (cchk:linegrp l)
+            txt (strcat txt "\\P" (cchk:hdg grp))))
+    (setq txt (strcat txt "\\P"
+                      (if (cchk:attn-p l)
+                        (cchk:red (strcat "  " l))
+                        (cchk:small (strcat "  " l))))))
+  (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+  (setq right (+ (car ins) (* *cchk-report-chars* h)))
+  ;; --- the DIMENSION AUDIT column
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ *cchk-report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (cchk:small
+                           (strcat "Dimensions, arcs and overlapping"
+                                   " lines - DIMCHECK's ground, kept"
+                                   " off the main sheet."))))
+      (foreach pr dhdr
+        (setq txt (strcat txt "\\P"
+                          (if (cdr pr)
+                            (cchk:red (strcat "  " (car pr)))
+                            (cchk:small (strcat "  " (car pr)))))))
+      (setq grp nil)
+      (foreach l diml
+        (if (/= grp (cchk:linegrp l))
+          (setq grp (cchk:linegrp l)
+                txt (strcat txt "\\P" (cchk:hdg grp))))
+        (setq txt (strcat txt "\\P"
+                          (if (cchk:attn-p l)
+                            (cchk:red (strcat "  " l))
+                            (cchk:small (strcat "  " l))))))
+      (cchk:mtext ins2 h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+      (setq right (+ (car ins2) (* *cchk-report-chars* h)))))
+  right)
 
 ;; --- geometry ------------------------------------------------------
 
@@ -2177,7 +2617,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb h m ins txt nlin ref)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2421,30 +2861,9 @@
           (setq lines (cons l lines)))
 
         ;; --- report on the right side, to scale with the drawing ----
-        ;; text height picked from the drawing's extents so the whole
-        ;; report roughly matches the drawing's height (MTEXT line
-        ;; spacing is ~1.66 x text height), clamped so a short report
-        ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing
-        (setq nlin 3.0)                          ; title, legend, separator
-        (foreach l lines
-          (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-        (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))   ; the header dashboard
-        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-          (progn
-            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-                  h   (/ ref (* 1.66 nlin)))
-            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-          (progn
-            (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
-        (setq ins (if minx
-                    (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                    (list 0.0 0.0 0.0)))
-        ;; header dashboard: each line carries a "needs attention" flag
-        ;; so a category with anything to look over turns red
-        (setq hdr
+        ;; the cover checks lead on the main sheet; the DIMCHECK-style
+        ;; findings go in the DIMENSION AUDIT column beside it
+        (setq dhdr
           (list
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
@@ -2463,26 +2882,25 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq hdr (append hdr
-                          (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                  (car cres))))
-        (setq txt (strcat "COVERCHECK REPORT - " (cal:datestr)
-                          " (" *cchk-version* ")"
-                          "\\P"
-                          (cchk:small
-                            (strcat "Items needing attention are shown in "
-                                    (cchk:red "red") ", larger than the rest."))))
-        (foreach pr hdr
-          (setq txt (strcat txt "\\P"
-                            (if (cdr pr)
-                              (cchk:red (car pr))
-                              (cchk:small (car pr))))))
-        (setq txt (strcat txt "\\P"
-                          (cchk:small "----------------------------------------")))
-        (foreach l (reverse lines)
-          (setq txt (strcat txt "\\P"
-                            (if (cchk:attn-p l) (cchk:red l) (cchk:small l)))))
-        (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+        (setq dimlay (cchk:dimlayer-verdict dims)
+              units  (cchk:audit-units ss)
+              datev  (cchk:audit-date ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
+        (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
+                              (cdr dimlay))
+                        (cons (cons (strcat "Feet & inches: " (car units))
+                                    (cadr units))
+                              (cons (cons (strcat "Tech Title date: "
+                                                  (car datev))
+                                          (cdr datev))
+                                    (mapcar '(lambda (s)
+                                               (cons s (cchk:attn-p s)))
+                                            (car cres))))))
+        (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
+                                       (reverse lines) nil
+                                       minx miny maxx maxy))
 
         ;; --- show the drawing plus the report -----------------------
         (if minx
@@ -2490,9 +2908,7 @@
             (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
-                     (trans (list (+ (car ins) (* *cchk-report-chars* h) m)
-                                  (+ maxy m) 0.0)
-                            0 1)))
+                     (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
         (command "_.UNDO" "_End")
@@ -2524,23 +2940,32 @@
                        "\nOne UNDO reverts everything COVERCHECK changed (including the report)."))))))
   (princ))
 
-;; --- COVERSCAN: the read-only twin -----------------------------------
-;;  Runs every audit, asks nothing, and changes nothing in the drawing
-;;  except writing the report. Use it as a quick pre-flight, or when
+;; --- COVERSCAN / LITECOVERSCAN: the read-only twins -------------------
+;;  Run every audit, ask nothing, and change nothing in the drawing
+;;  except writing the report. Use them as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
+;;  LITECOVERSCAN skips the DIMCHECK-style pass entirely - no
+;;  dimension, arc or overlap audit and no DIMENSION AUDIT column -
+;;  for a drawing DIMCHECK already went over.
 
-(defun c:COVERSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
-                     blks lines olaps pr bb bad
-                     nd ndbad na nabad h ins txt nlin ref hdr l cres
-                     minx miny maxx maxy p13 p14 near s)
+(defun c:COVERSCAN () (cchk:scan nil))
 
+(defun c:LITECOVERSCAN () (cchk:scan T))
+
+(defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
+                       plns segs blks lines olaps pr bb bad
+                       nd ndbad na nabad hdr dhdr l cres dimlay units datev
+                       minx miny maxx maxy p13 p14 near s)
+
+  (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nCOVERSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to COVERSCAN (Enter = whole drawing): ")
+  (prompt (strcat "\nHighlight the drawing to " name
+                  " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
@@ -2571,10 +2996,14 @@
                maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
      (setq dims (reverse dims) arcs (reverse arcs)
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
-           segs (cchk:collect-segs plns))
+           segs (if lite nil (cchk:collect-segs plns)))
 
      ;; --- dimensions: report stray definition points, move nothing
-     (foreach e (cchk:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+     ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
+     (foreach e (if lite
+                  nil
+                  (cchk:sort-dims dims (if (and miny maxy)
+                                         (* 0.05 (- maxy miny)) 1.0)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -2602,7 +3031,7 @@
                          lines)))
 
      ;; --- arcs: report unattached endpoints, move nothing
-     (foreach e arcs
+     (foreach e (if lite nil arcs)
        (setq na  (1+ na)
              bad nil)
        (if (cchk:planar-arc-p (entget e))
@@ -2618,7 +3047,7 @@
                          lines)))
 
      ;; --- overlaps
-     (setq olaps (cchk:find-overlaps segs))
+     (setq olaps (if lite nil (cchk:find-overlaps segs)))
      (foreach pr olaps
        (setq lines (cons (strcat "Lines "
                                  (cdr (assoc 5 (entget (cchk:seg-ent (car pr)))))
@@ -2636,51 +3065,57 @@
        (princ (strcat "\n  " l))
        (setq lines (cons l lines)))
 
-     ;; --- report (the only thing COVERSCAN writes) ------------------
-     (setq hdr (list
-                 (cons (strcat "Dimensions scanned: " (itoa nd) " ("
-                               (itoa ndbad) " with a stray definition point)")
-                       (> ndbad 0))
-                 (cons (strcat "Arcs scanned: " (itoa na) " ("
-                               (itoa nabad) " with an unattached end)")
-                       (> nabad 0))
-                 (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
-                       (> (length olaps) 0))))
-     (setq hdr (append hdr
-                       (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                               (car cres))))
-     (setq nlin 3.0)
-     (foreach l lines
-       (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-     (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))
-     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-       (progn
-         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-               h   (/ ref (* 1.66 nlin)))
-         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-       (setq h 2.5))
-     (setq ins (if minx
-                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                 (list 0.0 0.0 0.0)))
-     (setq txt (strcat "COVERSCAN REPORT - " (cal:datestr)
-                       " (" *cchk-version* ")"
-                       "\\P"
-                       (cchk:small (strcat "Read-only scan - nothing in the drawing was changed. "
-                                           "Items needing attention are shown in "
-                                           (cchk:red "red") "."))))
-     (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr) (cchk:red (car pr))
-                                     (cchk:small (car pr))))))
-     (setq txt (strcat txt "\\P" (cchk:small "----------------------------------------")))
-     (foreach l (reverse lines)
-       (setq txt (strcat txt "\\P" (if (cchk:attn-p l) (cchk:red l) (cchk:small l)))))
-     (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+     ;; --- report (the only thing the scan writes) -------------------
+     (setq dhdr (if lite
+                  nil
+                  (list
+                    (cons (strcat "Dimensions scanned: " (itoa nd) " ("
+                                  (itoa ndbad)
+                                  " with a stray definition point)")
+                          (> ndbad 0))
+                    (cons (strcat "Arcs scanned: " (itoa na) " ("
+                                  (itoa nabad) " with an unattached end)")
+                          (> nabad 0))
+                    (cons (strcat "Overlapping line pairs: "
+                                  (itoa (length olaps)))
+                          (> (length olaps) 0)))))
+     (setq dimlay (cchk:dimlayer-verdict dims)
+           units  (cchk:audit-units ss)
+           datev  (cchk:audit-date ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
+     (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
+                           (cdr dimlay))
+                     (cons (cons (strcat "Feet & inches: " (car units))
+                                 (cadr units))
+                           (cons (cons (strcat "Tech Title date: "
+                                               (car datev))
+                                       (cdr datev))
+                                 (mapcar '(lambda (s)
+                                            (cons s (cchk:attn-p s)))
+                                         (car cres))))))
+     (cchk:write-report (strcat name " REPORT")
+                        (strcat "Read-only scan - nothing in the drawing"
+                                " was changed.  "
+                                (if lite
+                                  (strcat "Lite: dimensions, arcs and"
+                                          " overlaps were not audited -"
+                                          " run DIMCHECK or COVERSCAN"
+                                          " for those.  ")
+                                  ""))
+                        hdr dhdr (reverse lines) lite
+                        minx miny maxx maxy)
      (setvar "CMDECHO" oldecho)
-     (princ (strcat "\n--- COVERSCAN complete (read-only) ---"
-                    "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
-                    "\nArcs: " (itoa na) " scanned, " (itoa nabad) " with an unattached end"
-                    "\nOverlapping line pairs: " (itoa (length olaps))))
+     (princ (strcat "\n--- " name " complete (read-only) ---"
+                    (if lite
+                      "\nLite: dimensions, arcs and overlaps were not audited."
+                      (strcat "\nDimensions: " (itoa nd) " scanned, "
+                              (itoa ndbad) " with a stray point"
+                              "\nArcs: " (itoa na) " scanned, "
+                              (itoa nabad) " with an unattached end"
+                              "\nOverlapping line pairs: "
+                              (itoa (length olaps))))))
      (foreach l (car cres) (princ (strcat "\n" l)))
      (princ (strcat "\nReport written on layer " *cchk-report-layer*
                     "; nothing else was changed."))))

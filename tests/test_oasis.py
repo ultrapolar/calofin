@@ -924,11 +924,13 @@ def test_the_two_drawings_take_their_own_dim_styles():
     vm = newvm()
     run(vm, script(), 'dim styles')
     dims = made(vm, 'DIMENSION')
-    assert len(dims) == 23, len(dims)
-    # the pool's two linear dims come first (DIMRADIUS makes no entity
-    # in the VM), then the check drawing's eighteen
-    assert all(d[3] == 'Standard' for d in dims[:2]), dims[:2]
-    assert all(d[3] == 'CROSS DIMENSIONS' for d in dims[2:]), dims[2]
+    assert len(dims) == 29, len(dims)
+    # the pool's own dims come first -- two linear and six radius -- and
+    # then the check drawing's twenty-one
+    assert all(d[3] == 'Standard' for d in dims[:8]), dims[:8]
+    assert [d[70] for d in dims[:8]] == [0, 0, 4, 4, 4, 4, 4, 4], \
+        [d[70] for d in dims[:8]]
+    assert all(d[3] == 'CROSS DIMENSIONS' for d in dims[8:]), dims[8]
     assert vm.dimstyle_log == ['Standard', 'CROSS DIMENSIONS', 'STANDARD'], \
         vm.dimstyle_log
     assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.sysvars['DIMSTYLE']
@@ -943,7 +945,7 @@ def test_a_drawing_without_the_cross_style_still_gets_its_pool():
     run(vm, script(), 'no style')
     assert len(made(vm, 'ARC')) == 12
     dims = made(vm, 'DIMENSION')
-    assert len(dims) == 23, len(dims)
+    assert len(dims) == 29, len(dims)
     assert all(d[3] == 'Standard' for d in dims), dims[2]
     print("ok  no style    -> drawn in the current style rather than"
           " refused")
@@ -1467,9 +1469,9 @@ def test_kidney_check_drawing_counts():
     aligned = cmds(vm, '_.DIMALIGNED')
     assert len(aligned) == 13, len(aligned)
     dims = made(vm, 'DIMENSION')
-    assert len(dims) == 15, len(dims)              # 2 pool + 13 check
-    assert all(d[3] == 'Standard' for d in dims[:2]), dims[:2]
-    assert all(d[3] == 'CROSS DIMENSIONS' for d in dims[2:]), dims[2]
+    assert len(dims) == 19, len(dims)     # 2 linear + 4 radius + 13 check
+    assert all(d[3] == 'Standard' for d in dims[:6]), dims[:6]
+    assert all(d[3] == 'CROSS DIMENSIONS' for d in dims[6:]), dims[6]
     # the seam ring ties read the DIFFERENCE of the radii -- internal
     # tangency -- where every external pair reads the sum
     chk = check_arcs_of(vm, 4)
@@ -2141,7 +2143,11 @@ def test_the_deep_break_goes_down_in_three_pieces():
         v2 = (p[0]-stub1[10][0], p[1]-stub1[10][1])
         assert abs(v1[0]*v2[1] - v1[1]*v2[0]) <= 1e-6, (v1, v2)
     # three chained dims on it, plus the offset at the back
-    dims = [d for d in made(vm, 'DIMENSION') if d[3] == 'Standard']
+    # linear and aligned only: the pool's radius dims are in the same
+    # style and would otherwise sit between the two overalls and the
+    # chain being counted here
+    dims = [d for d in made(vm, 'DIMENSION')
+            if d[3] == 'Standard' and d[70] in (0, 1)]
     assert len(dims) == 2 + 4, len(dims)   # the pool's two, then K/L/M + back
     klm = dims[2:5]
     # K, L and M measure the three pieces in order

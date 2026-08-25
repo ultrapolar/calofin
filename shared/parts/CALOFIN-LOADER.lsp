@@ -69,7 +69,7 @@
 
 ;;; -------------------- held back from this build -----------------------
 ;;; These exist in shared/parts/ and in lisp/, but are deliberately NOT
-;;; compiled into CALOFIN-ALL.lsp and not loaded here.  Two reasons,
+;;; compiled into LAZPASS.lsp and not loaded here.  Two reasons,
 ;;; kept apart on purpose:
 ;;;   WIP      still being worked on - goes in when it settles
 ;;;   OMITTED  never part of calofin
@@ -93,7 +93,9 @@
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
     ;; The library first -- every tool below calls into it.  POOL and SPA
-    ;; precede their demo/tutorial satellites.
+    ;; precede their demo/tutorial satellites; LAZFORM comes after POOL,
+    ;; whose answers it fills in, and the LAZPANEL launcher loads last of
+    ;; all, after everything its buttons name.
     (foreach m '(
                  "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
                  "TUTORIALPOOL.lsp" "SPA.lsp" "TUTORIALSPA.lsp"
@@ -108,9 +110,10 @@
                  "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
-                 "SPACHECK.lsp"
+                 "SMARTFILLET.lsp" "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
-                 "xftconv.lsp" "XYPLOT.lsp")
+                 "xftconv.lsp" "XYPLOT.lsp"
+                 "LAZFORM.lsp" "LAZPANEL.lsp")
       (cal--load m))
     (if (> cal:*missing* 0)
       (princ (strcat "\n[calofin] " (itoa cal:*missing*)

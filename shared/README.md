@@ -3,7 +3,7 @@
 Every AutoLISP tool in this repo, built against one common helper
 library instead of each embedding its own copies. The assumption in
 this folder is that **everything loads together in one AutoCAD
-session**: APPLOAD `CALOFIN-ALL.lsp` and every command from the whole
+session**: APPLOAD `LAZPASS.lsp` and every command from the whole
 toolset is available at once.
 
 The standalone builds live in `lisp/` -- one self-contained file per
@@ -14,7 +14,7 @@ without `CALOFIN-LIB.lsp` loaded is broken by design.
 ## Layout
 
 ```
-CALOFIN-ALL.lsp        APPLOAD THIS - the whole build in one file. The only
+LAZPASS.lsp            APPLOAD THIS - the whole build in one file. The only
                        .lsp at this level, so there is nothing else to pick.
 parts/                 what it is built FROM - do not APPLOAD these:
   CALOFIN-LIB.lsp        the shared helpers, namespace cal:
@@ -24,7 +24,7 @@ parts/                 what it is built FROM - do not APPLOAD these:
 ```
 
 `parts/` exists so the folder you point AutoCAD at contains exactly one
-loadable file. The members still have to be there: `CALOFIN-ALL.lsp` is
+loadable file. The members still have to be there: `LAZPASS.lsp` is
 *generated from them*, they are where a `lisp/` change gets mirrored, and
 they are what gives git a per-tool diff instead of one 1.8 MB blob.
 
@@ -34,12 +34,12 @@ on its own, from `lisp/standards_checker/src/acady-loader.lsp`.
 
 ## Loading it
 
-**APPLOAD `CALOFIN-ALL.lsp`.** That is the whole build in a single
+**APPLOAD `LAZPASS.lsp`.** That is the whole build in a single
 file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-CALOFIN: shared build loaded - 80 commands in one session.
+LAZPASS: calofin shared build loaded - 107 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -58,7 +58,7 @@ happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 41 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 47 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
@@ -80,13 +80,13 @@ add that folder to *Options > Files > Support File Search Path*, or run
 (setq cal:*dir* "C:\\path\\to\\shared\\parts")
 ```
 
-before APPLOADing it. If none of that appeals, use `CALOFIN-ALL.lsp` --
+before APPLOADing it. If none of that appeals, use `LAZPASS.lsp` --
 it cannot hit any of these problems.
 
 ## Held back from the build
 
 Some tools live in `parts/` but are deliberately not compiled into
-`CALOFIN-ALL.lsp`. `cal:*held-back*` in `parts/CALOFIN-LOADER.lsp` says
+`LAZPASS.lsp`. `cal:*held-back*` in `parts/CALOFIN-LOADER.lsp` says
 which, and why — `WIP` for something mid-rework that goes in once it
 settles, `OMITTED` for something that is never part of calofin. The
 bundle header lists them too, so the file itself tells you what it does

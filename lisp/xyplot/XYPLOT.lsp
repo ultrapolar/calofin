@@ -55,7 +55,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.0")
+(setq *xyplot-version* "v1.1")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -769,7 +769,7 @@
                     "\n  were left ready for it instead: they are ab_pt"
                     "\n  blocks on layer " xyp:*point-layer*
                     ".  APPLOAD abhd.lsp (or the"
-                    "\n  whole CALOFIN-ALL.lsp build), then run ABHD and"
+                    "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window graph 1's points.")))
     (T
      (princ (strcat "\n  Starting ABHD on the " (itoa n)

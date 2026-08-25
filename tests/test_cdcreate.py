@@ -39,6 +39,19 @@ def line(vm, p1, p2, layer='0'):
     return e
 
 
+def olddim(vm, p1, p2, layer='DIMENSION'):
+    """A dimension already in the drawing across p1-p2."""
+    if layer not in vm.tables['LAYER']:
+        vm.tables['LAYER'].add(layer)
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, layer), Dot(410, 'Model'),
+                     Dot(70, 1), Dot(3, 'STANDARD'),
+                     [13] + [float(v) for v in p1],
+                     [14] + [float(v) for v in p2]]
+    return e
+
+
 def other(vm, etype, layer='0'):
     e = Ent()
     vm.entities.append(e)
@@ -308,7 +321,101 @@ assert vm.sysvars['CLAYER'] == "POOL"
 print("   the snapshot from a no-op run is dropped, not carried forward")
 
 
-print("== C15. CDCREATEVER prints the version ==")
+print("== C15. a tie that is dimensioned already is left alone ==")
+vm = newvm()
+olddim(vm, (0, 0, 0), (10, 6, 0))
+ln = line(vm, (0, 0, 0), (10, 6, 0), layer="POOL")
+run(vm, [None, [ln]], "C15")
+assert dimcalls(vm) == [], "no second dimension across the same two points"
+assert ln not in vm.deleted, "and the line stays, so the skip is visible"
+assert not any(c and c[0] == '_.UNDO' for c in vm.commands), \
+    "nothing to draw means the layer and style are never touched"
+print("   no duplicate dim, line left in place")
+
+
+print("== C16. the same tie, dimensioned the other way round ==")
+vm = newvm()
+olddim(vm, (10, 6, 0), (0, 0, 0))            # dim drawn p2 -> p1
+run(vm, [None, [line(vm, (0, 0, 0), (10, 6, 0))]], "C16")
+assert dimcalls(vm) == [], "either way round is the same tie"
+
+# ... and a line drawn the other way round from the dim
+vm = newvm()
+olddim(vm, (0, 0, 0), (10, 6, 0))
+run(vm, [None, [line(vm, (10, 6, 0), (0, 0, 0))]], "C16-rev")
+assert dimcalls(vm) == []
+print("   direction does not make it a different tie")
+
+
+print("== C17. a dim across other points does not block ==")
+vm = newvm()
+olddim(vm, (0, 0, 0), (10, 0, 0))            # a different tie
+olddim(vm, (0, 0, 0), (0, 0, 0))             # degenerate, must not match
+ln = line(vm, (0, 0, 0), (10, 6, 0))
+run(vm, [None, [ln]], "C17")
+assert len(dimcalls(vm)) == 1, "this tie is not dimensioned yet"
+assert ln in vm.deleted
+print("   only the same two points count")
+
+
+print("== C18. how close counts as the same point ==")
+# the default tolerance is a sixteenth of an inch in drawing units
+vm = newvm()
+olddim(vm, (0, 0, 0), (10, 6, 0))
+run(vm, [None, [line(vm, (0.03125, 0, 0), (10, 6.03125, 0))]], "C18-near")
+assert dimcalls(vm) == [], "a thirty-second of an inch out is the same point"
+
+vm = newvm()
+olddim(vm, (0, 0, 0), (10, 6, 0))
+run(vm, [None, [line(vm, (1.0, 0, 0), (10, 6, 0))]], "C18-far")
+assert len(dimcalls(vm)) == 1, "an inch out is a different point"
+print("   1/32in out is the same tie, 1in out is not")
+
+
+print("== C19. two coincident lines in one selection ==")
+vm = newvm()
+ls = [line(vm, (0, 0, 0), (10, 6, 0)),
+      line(vm, (10, 6, 0), (0, 0, 0)),       # the same tie, drawn again
+      line(vm, (0, 0, 0), (10, 0, 0))]
+run(vm, [None, ls], "C19")
+assert len(dimcalls(vm)) == 2, "the tie is dimensioned once, not twice"
+assert ls[0] in vm.deleted and ls[2] in vm.deleted
+assert ls[1] not in vm.deleted, "the duplicate line is left to be looked at"
+print("   the second copy of a tie is recognised inside one run too")
+
+
+print("== C20. cdc:*skipdimmed* nil dimensions it anyway ==")
+vm = newvm()
+vm.globals[Sym('cdc:*skipdimmed*')] = None
+olddim(vm, (0, 0, 0), (10, 6, 0))
+run(vm, [None, [line(vm, (0, 0, 0), (10, 6, 0))]], "C20")
+assert len(dimcalls(vm)) == 1
+print("   the check can be switched off")
+
+
+print("== C21. a dim with no extension line origins blocks nothing ==")
+vm = newvm()
+e = Ent()                                     # a radial dim: 10 and 15,
+vm.entities.append(e)                         # no 13/14 pair to compare
+vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, 'DIMENSION'), Dot(410, 'Model'),
+                 Dot(70, 4), [10, 0.0, 0.0, 0.0], [15, 10.0, 6.0, 0.0]]
+run(vm, [None, [line(vm, (0, 0, 0), (10, 6, 0))]], "C21")
+assert len(dimcalls(vm)) == 1
+print("   radial / angular dims are passed over, not misread")
+
+
+print("== C22. running it twice over the same tie ==")
+vm = newvm()
+run(vm, [None, [line(vm, (0, 0, 0), (10, 6, 0), layer="POINTS")]], "C22-first")
+assert len(dimcalls(vm)) == 1
+ln = line(vm, (0, 0, 0), (10, 6, 0), layer="POINTS")   # drawn again later
+run(vm, [None, [ln]], "C22-again")
+assert len(dimcalls(vm)) == 1, "the dim from the first run is recognised"
+assert ln not in vm.deleted
+print("   the second run finds its own earlier dimension and stands down")
+
+
+print("== C23. CDCREATEVER prints the version ==")
 vm = newvm()
 vm.run('c:CDCREATEVER', [])
 print("   ok")

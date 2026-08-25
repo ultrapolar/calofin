@@ -82,7 +82,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.0")
+(setq *abcdef-version* "v5.1")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -1290,7 +1290,7 @@
                     "\n  were left ready for it instead: they are ab_pt"
                     "\n  blocks on layer " abcdef:*point-layer*
                     ".  APPLOAD abhd.lsp (or the"
-                    "\n  whole CALOFIN-ALL.lsp build), then run ABHD and"
+                    "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window the points.")))
     (T
      (princ (strcat "\n  Starting ABHD on the " (itoa n)

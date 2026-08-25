@@ -157,7 +157,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081926 REV05") ; announced on load.  The
+(setq *PF-VERSION*      "082526 REV06") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -166,6 +166,12 @@
                                     ; re-copy the file so the twins
                                     ; stay identical (the tests check
                                     ; the name, the match, and this)
+;; Cover mode: the pool-bottom question in pf:bottom answers No without
+;; being asked, so a cover sheet is fitted to its perimeter and stops
+;; there.  Set by ABHDCOVER, cleared on both exits from c:ABHD; nil for
+;; a typed ABHD, always.
+(setq abhd:*nobottom* nil)
+
 (setq *PF-POOL-LAYER*   "POOL")     ; layer holding the drawn perimeter
 (setq *PF-POINT-LAYER*  "POINTS")   ; layer holding the survey points
 (setq *PF-POINT-BLOCK*  "ab_pt")    ; block name whose INSERTs mark survey
@@ -2839,10 +2845,18 @@
       ;; -- offer the bottom (the ABHD ending; ADAB starts at 1)
       ((= stage 0)
        (setq pf-phase "asking about the pool bottom")
-       (initget "Yes No")
-       (setq ans (getkword
-                   "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
-       (if (= ans "Yes") (setq stage 1) (setq go nil)))
+       (cond
+         ;; cover mode: a cover sheet records the perimeter and nothing
+         ;; below it, so this is answered No without being asked --
+         ;; ABHDCOVER sets the flag and c:ABHD clears it again
+         (abhd:*nobottom*
+          (princ "\n\n  Cover sheet - skipping the bottom of the pool.")
+          (setq go nil))
+         (t
+          (initget "Yes No")
+          (setq ans (getkword
+                      "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+          (if (= ans "Yes") (setq stage 1) (setq go nil)))))
 
       ;; -- the shallow break, one end per stage
       ((= stage 1)
@@ -3228,6 +3242,9 @@
                              " -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            ;; cover mode must not outlive the run that asked for it,
+            ;; or the next ABHD would skip its bottom without a word
+            (setq abhd:*nobottom* nil)
             (princ)))
 
   ;; sweep leftovers from a run that was interrupted before it could
@@ -3655,6 +3672,21 @@
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
   (setq *error* pf-old-err)   ; restore the previous error handler
+  (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (princ))
+
+;; ABHD for a cover sheet: the same fit, with the pool-bottom question
+;; answered No before it is asked.  A cover records the perimeter and
+;; nothing below it, so the breaks, the hopper offsets and the slope
+;; lines are work the sheet has no room for.
+;;
+;; A command of its own rather than a mode, so that a button runs
+;; exactly the command named on it; the flag is cleared by c:ABHD on
+;; both its exits, so it cannot leak into the next run.
+(defun c:ABHDCOVER ()
+  (setq abhd:*nobottom* t)
+  (princ "\nABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:ABHD)
   (princ))
 
 ;; ---- ADAB: the pool bottom on its own --------------------------------

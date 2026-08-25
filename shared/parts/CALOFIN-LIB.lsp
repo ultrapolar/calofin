@@ -23,7 +23,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.1")
+(setq cal:*version* "v1.2")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -506,12 +506,12 @@
 (princ (strcat "\nCALOFIN-LIB " cal:*version*
                " loaded.  Shared helpers under the cal: prefix."))
 ;; On its own this file defines helpers and exactly one command
-;; (CALVER) -- no tools at all.  CALOFIN-ALL.lsp and CALOFIN-LOADER.lsp
+;; (CALVER) -- no tools at all.  LAZPASS.lsp and CALOFIN-LOADER.lsp
 ;; both set the flag below before loading it, so this only ever fires
 ;; when someone APPLOADs the library by itself and would otherwise be
 ;; left wondering why not one command exists.
 (if (not cal:*build-loading*)
   (progn
     (princ "\n[calofin] That is the helper library ONLY - it defines no tools.")
-    (princ "\n[calofin] APPLOAD CALOFIN-ALL.lsp for the whole build instead.")))
+    (princ "\n[calofin] APPLOAD LAZPASS.lsp for the whole build instead.")))
 (princ)

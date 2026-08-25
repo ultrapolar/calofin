@@ -311,6 +311,29 @@ offset, so once one is entered the next offers it as a default —
 press Enter to accept, type a number to override, `NA` as always.
 (Sport bottoms do the same between `M` and `K`.)
 
+**The last letter of a chain is worked out for you.** Each loop closes
+against a total the pool already knows — H+G+F+E against the length,
+M+L+K against the width — so once every other member is in, the last
+one can only be one number, and that number is the default:
+
+* `H`, `G` and `F` given → **`E`** is offered as what the length has
+  left (on an L pool where they already span the main section, `E`
+  isn't even asked — the break lands on the inner corner);
+* `M` and `L` given → **`K`** is offered as what the width has left,
+  in place of the plain "same as M" default;
+* the sport bottom does the same for **`E1`** (after E2/F2/G/F1) and
+  for **`K`**.
+
+**`M` answered the same as `H` fixes `L`.** The same offset off the
+end wall and the side is the crew saying the deep end sits **square in
+the pool**, which leaves the hopper width as `A - 2M` (i.e. `2M + L =
+A`) — so that is what `L` offers. Measure `M` different from `H` and
+`L` is asked cold, as before.
+
+Every one of these is a *suggestion*: Enter takes it, a typed number
+overrides it, `NA` still hands the letter to the chain resolver. A
+squarely-set hopper is now `H`, `G`, `F` and four Enters.
+
 **Oval (True Oval sheet):** same phase, prompting the interior letters
 only (A, B, R1, R2 come from the perimeter). The hopper is a box with
 a radius **R3** left end set out along the pool axis (arc tip to arc
@@ -751,16 +774,39 @@ pinned down — with none at all you simply get the perfect right-angle
 (or 45°-jointed) shape. The two-triangle check is a rectangle-only
 computation and is not made for L pools.
 
-**In-square lazy L — parallel pairs held exactly.** Field side
+**In-square lazy L — deep end held, the wing gives.** Field side
 lengths never quite close, and letting a best-fit absorb that error
 would bend the corners, breaking the pairs that must read parallel
 (**A-B ∥ E-F** and **B-C ∥ D-E**). So the in-square lazy L is not
-relaxed at all: the chain A→B→C→D→E is walked at the **exact
-headings** (0°, 45°, 135°, 225°) with the taped lengths, and F drops
-straight down from E onto the left wall. Parallelism is perfect by
-construction; whatever closure error the tapes carried lands in the
-**lengths of E-F and F-A**, where the report shows it as small
-target/actual deltas instead of a subtly bent pool.
+relaxed at all, it is **built**:
+
+* the main section — **A-B, E-F and F-A** — is held **exactly** and
+  comes out a true rectangle (A-B and E-F dead horizontal, F-A dead
+  vertical, square corners at A and F). That is the deep end, and it
+  is the frame the **hopper** is measured off, so it is the part that
+  has to be right;
+* the bends **B-C** and **D-E** stay on the 45° heading, so they stay
+  parallel to each other whatever happens;
+* the only freedom left is how far C and D slide along those bend
+  lines, and it is spent spreading the closure error over the three
+  **wing** sides in the least-squares sense — B-C and D-E give up
+  half of it each (one grows exactly as much as the other shrinks)
+  and C-D takes the rest.
+
+Parallelism is perfect by construction, and the error lands where a
+lazy L can carry it. Earlier revisions walked the whole chain
+A→B→C→D→E at exact headings and dropped F onto the left wall, which
+piled every inch of closure error into **E-F and F-A** — the deep-end
+sides, the two that must not move.
+
+**And a tape that misses by feet is an error, not a fit.** Whatever
+the fit could not hold to within the 1" side tolerance is called out
+rather than absorbed quietly: those sides are **dimensioned in red**,
+their report rows are red, and **`SIDES DO NOT CLOSE - <sides> OFF THE
+TAPE, RE-MEASURE`** is written under the table (with the same warning
+at the command line). Six sides that miss each other by a foot are not
+a pool that got drawn slightly small — they are a measurement to go
+back and take again.
 
 ### Guided input
 
