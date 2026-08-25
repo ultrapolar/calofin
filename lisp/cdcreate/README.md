@@ -23,7 +23,13 @@ end, in the **`CROSS DIMENSIONS`** dimension style, on the
    and on the `DIMENSION` layer, **ByLayer**: any per-entity colour,
    linetype or lineweight override the command left behind is stripped,
    so the dims look exactly like the cross dims `POOL` draws.
-5. **The line each dimension was made from is erased** — the tie
+5. **A tie that is dimensioned already is left alone** — if some
+   dimension in model space already runs between those same two points,
+   no second one is drawn on top of it, and the line is left in place so
+   you can see what was skipped. Two coincident lines in one selection
+   count as the same tie, and so does a tie you dimensioned on an
+   earlier run.
+6. **The line each dimension was made from is erased** — the tie
    measurement is left as a dimension and nothing else. Only lines that
    really did get a dimension go; the report says how many, and off
    which layers (normally `POOL` or `POINTS`). Set `cdc:*erase*` to
@@ -57,6 +63,8 @@ different names:
 | `cdc:*layer*` | `"DIMENSION"` | Layer the new dims are created on |
 | `cdc:*offset*` | `0.0` | How far the dimension line is pushed perpendicular to the line it measures, in drawing units. `0.0` puts it on the line |
 | `cdc:*erase*` | `T` | Erase each line once its dimension is drawn. `nil` keeps the lines |
+| `cdc:*skipdimmed*` | `T` | Leave a tie whose two points already carry a dimension. `nil` dimensions it again anyway |
+| `cdc:*dupetol*` | `nil` | How close two extension-line origins have to be to count as the same point. `nil` means a sixteenth of an inch in the drawing's own units (`INSUNITS`) |
 | `cdc:*textpos*` | `0.8` | Where the text sits along the dimension: `0.0` the far end, `0.5` centred (no text move at all), `1.0` the right/bottom end |
 | `cdc:*vertang*` | `15.0` | How near vertical, in degrees, a line has to stand before its text goes to the bottom end rather than the right-hand one |
 
@@ -76,6 +84,16 @@ different names:
   measurement once the line is gone.
 * Zero-length lines are skipped; there is nothing to measure — and a
   skipped line is never erased, only a line that got its dimension is.
+  The same goes for a tie that was already dimensioned: it keeps its
+  line, so nothing disappears without leaving a dimension behind.
+* **"Dimensioned already"** means some dimension in model space carries
+  those same two extension-line origins, either way round — whatever its
+  style, its layer, or where its dimension line sits. A dim of the same
+  tie pushed out to one side still counts. Radial, angular and ordinate
+  dims have no such pair of origins and are passed over. (`AUTODIM` also
+  weighs *where* the existing dimension line sits, because it places
+  several dims across the same span; a cross dim is one per tie, so
+  CDCREATE does not.)
 * The `DIMENSION` layer is **created** when the drawing lacks it
   (colour 7, continuous) — and when it is already there but frozen,
   locked or switched off, it is thawed, unlocked and switched back on,
@@ -99,7 +117,8 @@ repo's AutoLISP VM (`tests/lispvm.py`) and drives `c:CDCREATE` with
 scripted selections — pickfirst and prompted, mixed selections, an empty
 drawing, a drawing with no `CROSS DIMENSIONS` style, a hostile
 `DIMLAYER`, a non-zero offset, ties drawn on `POOL` and `POINTS`,
-`cdc:*erase*` switched off, a frozen/locked/off `DIMENSION` layer, and
-the text-end rule on flat, steep, near-vertical and either-way-round
+`cdc:*erase*` switched off, a frozen/locked/off `DIMENSION` layer,
+already-dimensioned ties (either way round, inside one run, across two
+runs, and at the edge of the tolerance), and the text-end rule on flat, steep, near-vertical and either-way-round
 lines. `CALOFIN_LISP_ROOT=shared python3 tests/test_cdcreate.py` runs
 the same suite against the grouped build.
