@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""POOLPERIM: the outermost loop, the keep rules, and the handover.
+"""LINGUTTER: the outermost loop, the keep rules, and the handover.
 
-POOLPERIM erases nearly everything in a drawing, so the two decisions it
+LINGUTTER erases nearly everything in a drawing, so the two decisions it
 makes have to be exactly right: which loop is the perimeter, and which
-dimension survives.  Both are worked out by pp:analyze without touching
+dimension survives.  Both are worked out by lg:analyze without touching
 the drawing, which is what makes them testable here -- the real
-POOLPERIM.lsp is loaded into the AutoLISP VM and run against a drawing
+LINGUTTER.lsp is loaded into the AutoLISP VM and run against a drawing
 built entity by entity.
 
-It also carries a PORT.  POOLPERIM is a standalone file and cannot call
-into PADDLE.lsp, so pp:arcdata / pp:area / pp:ent-segs / pp:chain are
+It also carries a PORT.  LINGUTTER is a standalone file and cannot call
+into PADDLE.lsp, so lg:arcdata / lg:area / lg:ent-segs / lg:chain are
 copies of paddle--arcdata / --area / --ent-segs / --chain.  A port
 drifts silently -- COVERCHECK sat on PADDLE's old corner tolerance for
 several revisions -- so both files are loaded into one session and the
 two implementations are run on the same geometry.  When PADDLE's
-chaining changes, port the change into POOLPERIM.lsp and this goes
+chaining changes, port the change into LINGUTTER.lsp and this goes
 green again.
 
-Usage:  python3 tests/test_poolperim.py
-        CALOFIN_LISP_ROOT=shared python3 tests/test_poolperim.py
+Usage:  python3 tests/test_lingutter.py
+        CALOFIN_LISP_ROOT=shared python3 tests/test_lingutter.py
 """
 
 import math
@@ -31,13 +31,13 @@ REPO_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, TESTS_DIR)
 
 LISP_ROOT = os.path.join(REPO_DIR, os.environ.get("CALOFIN_LISP_ROOT", "lisp"))
-POOLPERIM = os.path.join(LISP_ROOT, "poolperim", "POOLPERIM.lsp")
+LINGUTTER = os.path.join(LISP_ROOT, "lingutter", "LINGUTTER.lsp")
 PADDLE = os.path.join(LISP_ROOT, "paddle", "PADDLE.lsp")
 # the shared tier keeps every file flat in parts/, on the cal: library
 if os.path.basename(LISP_ROOT) == "shared":
     PARTS = os.path.join(LISP_ROOT, "parts")
     LIB = os.path.join(PARTS, "CALOFIN-LIB.lsp")
-    POOLPERIM = os.path.join(PARTS, "POOLPERIM.lsp")
+    LINGUTTER = os.path.join(PARTS, "LINGUTTER.lsp")
     PADDLE = os.path.join(PARTS, "PADDLE.lsp")
 else:
     LIB = None
@@ -60,7 +60,7 @@ def newvm(layers=("POOL", "DIMENSION", "POINTS", "NOTES", "PADS")):
     vm = VM()
     if LIB:
         vm.load(LIB)
-    vm.load(POOLPERIM)
+    vm.load(LINGUTTER)
     for lay in layers:
         vm.tables['LAYER'].add(lay)
     for sty in ("STANDARD", "SIDE STANDARD", "STANDARD INCHES",
@@ -145,9 +145,11 @@ def alive_of(vm, etype):
     return [e for e in alive(vm) if dxf(vm, e).get(0) == etype]
 
 
-def analyze(vm):
-    """pp:analyze over the whole tab, unpacked into a dict."""
-    r = vm.loads("(pp:analyze nil)")
+def analyze(vm, ss='(ssget "_X")'):
+    """lg:analyze over a highlighted set, unpacked into a dict.  The
+    default hands it everything, which is what most of these checks
+    want; the scoping checks pass a set of their own."""
+    r = vm.loads("(lg:analyze %s)" % ss)
     return {
         'vts': r[0] if r[0] is not NIL else None,
         'gap': r[1] if r[1] is not NIL else None,
@@ -158,6 +160,13 @@ def analyze(vm):
         'nother': int(r[6]),
         'nspared': int(r[7]),
     }
+
+
+def analyze_sel(vm, ents):
+    """lg:analyze over exactly ENTS, handed over the way AutoCAD hands a
+    pickfirst set to a command."""
+    vm.pickfirst = ['<ss>'] + list(ents)
+    return analyze(vm, '(ssget "_I")')
 
 
 def loop_xy(vts):
@@ -175,11 +184,11 @@ PARITY = """
     (setq out (append out (apply fn (list (ssname ss i))))
           i   (1+ i)))
   out)
-(defun tst-pp ( / ) (tst-segs 'pp:ent-segs))
+(defun tst-pp ( / ) (tst-segs 'lg:ent-segs))
 (defun tst-pd ( / ) (tst-segs 'paddle--ent-segs))
-(defun tst-pploops ( / ) (car (pp:chain (tst-pp))))
+(defun tst-pploops ( / ) (car (lg:chain (tst-pp))))
 (defun tst-pdloops ( / ) (car (paddle--chain (tst-pd))))
-(defun tst-ppopen ( / ) (length (cdr (pp:chain (tst-pp)))))
+(defun tst-ppopen ( / ) (length (cdr (lg:chain (tst-pp)))))
 (defun tst-pdopen ( / ) (cdr (paddle--chain (tst-pd))))
 """
 
@@ -232,7 +241,7 @@ for label, build in [
 vm = parity_vm()
 rectangle(vm, 0, 0, 300, 200)
 vm.loads("(setq tst-l (car (tst-pploops)))")
-a, b = vm.loads("(pp:area tst-l)"), vm.loads("(paddle--area tst-l)")
+a, b = vm.loads("(lg:area tst-l)"), vm.loads("(paddle--area tst-l)")
 check("P1 area agrees", round(float(a), 9) == round(float(b), 9), f"{a} {b}")
 
 
@@ -297,7 +306,7 @@ check("P3 the gap is reported", res['gap'] is not None
       and abs(float(res['gap']) - 3.0) < 1e-9, res['gap'])
 
 vm = newvm()
-rectangle(vm, 0, 0, 300, 200, gap=24.0)  # wider than pp:*gap*
+rectangle(vm, 0, 0, 300, 200, gap=24.0)  # wider than lg:*gap*
 res = analyze(vm)
 check("P3 a 24-unit gap is left alone", res['vts'] is None)
 
@@ -367,27 +376,25 @@ check("P4 the dropped dims are counted by reason",
                          "STANDARD INCHES - style not kept": 1},
       res['dropped'])
 
-# a viewport is never ours to erase, and another tab is not ours to read
+# a viewport is never ours to erase
 vm, d = keepvm()
 vp = other(vm, 'VIEWPORT', '0')
-away = other(vm, 'TEXT', 'NOTES', tab='Layout1')
 res = analyze(vm)
 check("P4 a VIEWPORT is never erased", vp not in set(res['kill']))
-check("P4 another layout is not touched", away not in set(res['kill']))
 
-# pp:*keeplayers* spares a layer outright
+# lg:*keeplayers* spares a layer outright
 vm, d = keepvm()
-vm.loads('(setq pp:*keeplayers* (list "NOTES"))')
+vm.loads('(setq lg:*keeplayers* (list "NOTES"))')
 res = analyze(vm)
-check("P4 pp:*keeplayers* spares the text", d['text'] not in set(res['kill']))
+check("P4 lg:*keeplayers* spares the text", d['text'] not in set(res['kill']))
 check("P4 ...and counts what it spared", res['nspared'] == 1, res['nspared'])
 
 # the styles are tunable, not baked in
 vm, d = keepvm()
-vm.loads('(setq pp:*perimstyles* (list "STANDARD" "SIDE STANDARD"'
+vm.loads('(setq lg:*perimstyles* (list "STANDARD" "SIDE STANDARD"'
          ' "STANDARD INCHES"))')
 res = analyze(vm)
-check("P4 adding STANDARD INCHES to pp:*perimstyles* keeps it",
+check("P4 adding STANDARD INCHES to lg:*perimstyles* keeps it",
       d['inches_perim'] not in set(res['kill']))
 
 # the tolerance is what decides "on the perimeter"
@@ -409,13 +416,13 @@ print("== P5. the command: strip, redraw, hand over ==")
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 try:
-    vm.run('c:POOLPERIM', [None, "Yes"])
+    vm.run('c:LINGUTTER', [alive(vm), "Yes"])
     ran = True
 except LispError as e:
     ran = False
-    check("P5 c:POOLPERIM runs", False, str(e))
+    check("P5 c:LINGUTTER runs", False, str(e))
 if ran:
-    check("P5 c:POOLPERIM runs", True)
+    check("P5 c:LINGUTTER runs", True)
     left = alive(vm)
     check("P5 six objects are left", len(left) == 6, len(left))
     pls = alive_of(vm, 'LWPOLYLINE')
@@ -452,10 +459,10 @@ line(vm, (300, 0), (300, 150))
 arc(vm, (250, 150), 50.0, 0.0, math.pi / 2)
 line(vm, (250, 200), (0, 200))
 line(vm, (0, 200), (0, 0))
-vm.loads('(setq pp:*runpaddle* nil)')
+vm.loads('(setq lg:*runpaddle* nil)')
 before = analyze(vm)['vts']
-vm.run('c:POOLPERIM', [None, "Yes"])
-after = vm.loads("(pp:lwverts (ssname (ssget \"_X\" '((0 . \"LWPOLYLINE\")))"
+vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+after = vm.loads("(lg:lwverts (ssname (ssget \"_X\" '((0 . \"LWPOLYLINE\")))"
                  " 0))")
 check("P5 the redrawn polyline is closed", after[0] is not NIL)
 check("P5 ...and carries the same vertices and bulges",
@@ -470,7 +477,7 @@ print("== P6. it asks before erasing, and No means no ==")
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 n = len(alive(vm))
-vm.run('c:POOLPERIM', [None, "No"])
+vm.run('c:LINGUTTER', [alive(vm), "No"])
 out = "".join(str(x) for x in vm.printed)
 check("P6 No erases nothing", len(alive(vm)) == n, len(alive(vm)))
 check("P6 ...and draws nothing", not alive_of(vm, 'LWPOLYLINE'))
@@ -484,18 +491,18 @@ check("P6 the bracket is the keyword list",
 vm = newvm()
 line(vm, (0, 0), (300, 0))
 n = len(alive(vm))
-vm.run('c:POOLPERIM', [None])
+vm.run('c:LINGUTTER', [alive(vm)])
 check("P6 with no perimeter it never asks", len(alive(vm)) == n)
 
 
 # ------------------------------------------------------ P7. the dry run
 
-print("== P7. POOLPERIMSCAN changes nothing ==")
+print("== P7. LINGUTTERSCAN changes nothing ==")
 
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 n = len(alive(vm))
-vm.run('c:POOLPERIMSCAN', [None])
+vm.run('c:LINGUTTERSCAN', [alive(vm)])
 out = "".join(str(x) for x in vm.printed)
 check("P7 nothing is erased", len(alive(vm)) == n, len(alive(vm)))
 check("P7 nothing is drawn", not alive_of(vm, 'LWPOLYLINE'))
@@ -511,11 +518,102 @@ check("P7 it asks nothing", vm.prompts and all(
 print("== P8. PADDLE missing is reported, not fatal ==")
 
 vm, d = keepvm()
-vm.run('c:POOLPERIM', [None, "Yes"])
+vm.run('c:LINGUTTER', [alive(vm), "Yes"])
 out = "".join(str(x) for x in vm.printed)
 check("P8 the strip still happens", len(alive_of(vm, 'LWPOLYLINE')) == 1)
 check("P8 ...and it says PADDLE is not loaded",
       "PADDLE is not loaded" in out)
+
+
+# ------------------------------------------- P9. only what was highlighted
+
+print("== P9. nothing outside the highlight is read, kept or erased ==")
+
+
+def twoareas():
+    """The pool, and a bigger rectangle with its own clutter well away
+    from it -- a title block border is exactly this shape of problem."""
+    vm = newvm()
+    inside = rectangle(vm, 0, 0, 300, 200) + rectangle(vm, 100, 60, 200, 140)
+    inside.append(dim(vm, "STANDARD", (0, 0), (300, 0)))
+    inside.append(dim(vm, "STANDARD", (100, 60), (200, 60)))
+    inside.append(other(vm, 'TEXT', 'NOTES'))
+    outside = rectangle(vm, 2000, 0, 4000, 3000)
+    outside.append(dim(vm, "STANDARD", (2000, 0), (4000, 0)))
+    outside.append(other(vm, 'TEXT', 'NOTES'))
+    return vm, inside, outside
+
+
+vm, inside, outside = twoareas()
+vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
+n_before = len(alive(vm))
+vm.run('c:LINGUTTER', [inside, "Yes"])
+left = set(alive(vm))
+check("P9 the perimeter is the pool, not the bigger loop outside it",
+      len(alive_of(vm, 'LWPOLYLINE')) == 1
+      and dxf(vm, alive_of(vm, 'LWPOLYLINE')[0]).get(90) == 4)
+if alive_of(vm, 'LWPOLYLINE'):
+    xs = [g[1] for g in vm.entdata[alive_of(vm, 'LWPOLYLINE')[0]]
+          if isinstance(g, list) and g[0] == 10]
+    check("P9 ...and it is drawn on the pool's coordinates", max(xs) == 300.0,
+          xs)
+check("P9 every object outside the highlight is still there",
+      all(e in left for e in outside),
+      [e for e in outside if e not in left])
+check("P9 the clutter inside it is gone",
+      not any(e in left for e in inside if e not in (inside[8],)),
+      "something highlighted survived")
+# 11 highlighted: 8 traced lines, 2 dims, 1 text.  The perimeter dim
+# is kept, so 10 go and the new polyline arrives -- and the 6 objects
+# outside the highlight are all still standing.
+check("P9 the count adds up", len(alive(vm)) == n_before - 10 + 1,
+      f"{len(alive(vm))} left of {n_before}")
+
+# the scan is scoped the same way
+vm, inside, outside = twoareas()
+res = analyze_sel(vm, inside)
+check("P9 nothing outside the highlight is even counted",
+      not any(e in set(res['kill']) for e in outside))
+vmres = analyze(vm)
+check("P9 ...and handed the whole drawing it would have taken the big loop",
+      len(vmres['vts'] or []) == 4
+      and max(float(v[0]) for v in vmres['vts']) == 4000.0)
+
+# nothing highlighted at all
+vm, d = keepvm()
+n = len(alive(vm))
+vm.run('c:LINGUTTER', [None, None])
+out = "".join(str(x) for x in vm.printed)
+check("P9 nothing highlighted, nothing gutted", len(alive(vm)) == n)
+check("P9 ...and it says so", "nothing highlighted" in out, out[-200:])
+
+
+# --------------------------------------- P10. the handover to PADDLE
+
+print("== P10. PADDLE is handed the perimeter, not left to guess ==")
+
+vm, inside, outside = twoareas()
+vm.loads('(defun c:PADDLE ( / ss)'
+         ' (setq ss (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))'
+         ' (princ (strcat "\\nSTUB-PADDLE-GOT " (if ss (itoa (sslength ss)) "0")))'
+         ' (princ))')
+vm.run('c:LINGUTTER', [inside, "Yes"])
+out = "".join(str(x) for x in vm.printed)
+check("P10 PADDLE's pickfirst probe finds exactly the new perimeter",
+      "STUB-PADDLE-GOT 1" in out, out[-300:])
+check("P10 ...so it never has to auto-detect past the drawing outside",
+      "STUB-PADDLE-GOT 0" not in out)
+
+# and the real PADDLE takes a pickfirst selection the same way
+vm = newvm()
+vm.load(PADDLE)
+rectangle(vm, 0, 0, 300, 200)
+vm.loads('(setq tst-ss (ssadd))')
+vm.loads('(foreach e (list (ssname (ssget "_X") 0)) (ssadd e tst-ss))')
+vm.loads('(sssetfirst nil tst-ss)')
+got = vm.loads('(sslength (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))')
+check("P10 PADDLE.lsp asks for its selection with an _I probe first",
+      '(ssget "_I"' in open(PADDLE).read() and int(got) == 1, got)
 
 
 print()
@@ -524,4 +622,4 @@ if failures:
     for f in failures:
         print("  - " + f)
     sys.exit(1)
-print("all POOLPERIM checks passed")
+print("all LINGUTTER checks passed")

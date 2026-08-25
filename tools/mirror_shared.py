@@ -176,34 +176,34 @@ TOOLS = {
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
     },
-    # POOLPERIM is new work, so it was written against the library from
+    # LINGUTTER is new work, so it was written against the library from
     # the start: its lisp/ copy embeds the helpers and its twin calls
     # cal: for them.  Generated from day one rather than hand-copied --
     # CLAUDE.md's "if you find yourself doing that twice" is a rule
     # easier to keep than to catch up with.
-    'POOLPERIM': {
-        'src': 'lisp/poolperim/POOLPERIM.lsp',
+    'LINGUTTER': {
+        'src': 'lisp/lingutter/LINGUTTER.lsp',
         'swap': {
-            'pp:askkw': 'cal:askkw', 'pp:askyn': 'cal:askyn',
-            'pp:syssave': 'cal:syssave',
-            'pp:sysrestore': 'cal:sysrestore',
-            'pp:ensure-layer': 'cal:ensure-layer',
-            'pp:2d': 'cal:2d', 'pp:v+': 'cal:v+', 'pp:v-': 'cal:v-',
-            'pp:v*': 'cal:v*', 'pp:dot': 'cal:dot',
-            'pp:angnorm': 'cal:angnorm',
+            'lg:askkw': 'cal:askkw', 'lg:askyn': 'cal:askyn',
+            'lg:syssave': 'cal:syssave',
+            'lg:sysrestore': 'cal:sysrestore',
+            'lg:ensure-layer': 'cal:ensure-layer',
+            'lg:2d': 'cal:2d', 'lg:v+': 'cal:v+', 'lg:v-': 'cal:v-',
+            'lg:v*': 'cal:v*', 'lg:dot': 'cal:dot',
+            'lg:angnorm': 'cal:angnorm',
         },
         # the snapshot global travels with syssave/sysrestore
-        'drop_globals': ['pp:*sysold*'],
+        'drop_globals': ['lg:*sysold*'],
         # pp:askkw takes a HIDDEN keyword list third and derives the
         # bracket itself, the way STANDARDS.md section 4 writes it, so
         # any call site left after the swap needs translating.  Today
         # the only one lives inside pp:askyn, which the swap takes with
-        # it -- this is here for the next prompt POOLPERIM grows.
+        # it -- this is here for the next prompt LINGUTTER grows.
         'askkw_hidden': True,
         # the Back sentinel travels with the ask helpers; nothing tests
         # for it yet, and the day something does it must be the
         # library's symbol, not this file's
-        'symbols': {'PP-BACK': 'CAL-BACK'},
+        'symbols': {'LG-BACK': 'CAL-BACK'},
     },
     # The chart form is like the panel: it draws its own picture and
     # asks nothing through the library, so its twin is the file plus the

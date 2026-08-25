@@ -35,6 +35,8 @@ bulges or ARC entities.
 3. Select the perimeter geometry (polylines, lines, arcs — any mix)
    — or just press **Enter** and PADDLE auto-detects the perimeter
    as the largest closed loop it can find in the current tab.
+   Highlighting the perimeter *before* step 2 skips this prompt: a
+   pickfirst selection is taken as-is.
 
 ## New users: TUTORIALPADDLE
 
@@ -52,8 +54,8 @@ watch each rule fire. At the end it offers to erase the demo again.
 ## Revisions
 
 `PADDLE.lsp` carries the auto-stamped banner `(setq *paddle-version*
-"v1.2")` that `tools/release_lisp.py` reads; run it after any change
-and the dated twin `releases/PADDLE_MMDDYY_REV12.lsp` regenerates
+"v1.3")` that `tools/release_lisp.py` reads; run it after any change
+and the dated twin `releases/PADDLE_MMDDYY_REV13.lsp` regenerates
 itself. Bump the banner with every revision.
 
 PADDLE reports what it found, e.g.:
@@ -94,6 +96,12 @@ Everything inserted in one run is a single undo step.
   segmented walls, slight drafting kinks, shallow sweeping curves,
   the tangent joints of a fillet — is passed over without a pad.
 
+A **pickfirst** selection is taken as-is: highlight the perimeter
+before typing `PADDLE` and it never asks. `LINGUTTER` hands its
+freshly drawn perimeter over that way, which matters because
+auto-detect reads the *whole* drawing for its largest closed loop and
+would otherwise be as happy with a title block border.
+
 ## Loose-geometry chaining
 
 Segment ends are considered connected when they are within
@@ -104,12 +112,12 @@ happens, check the perimeter for gaps (or bump `*paddle-fuzz*`).
 When several closed loops are selected, each one is processed;
 auto-detect (Enter) uses only the largest loop.
 
-`POOLPERIM` (`lisp/poolperim/`) carries a port of this chaining and
+`LINGUTTER` (`lisp/lingutter/`) carries a port of this chaining and
 uses it the other way round: it takes the largest closed loop as the
 perimeter, redraws it as one polyline on `POOL`, erases everything
 else bar the dimensions worth keeping, and then runs PADDLE on what
 is left. It also closes an almost-closed trace rather than skipping
-it. `tests/test_poolperim.py` runs both implementations on the same
+it. `tests/test_lingutter.py` runs both implementations on the same
 geometry, so a change here has to be ported there.
 
 ## The pad block

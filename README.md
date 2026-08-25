@@ -116,7 +116,7 @@ changing a routine.
 | `LINTXTCHK` | `lisp/lintxtchk/` | Places the vinyl-liner QA checklist into the drawing as text |
 | `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners - three files here, one `STEPS` release (see below) |
 | `PADDLE`, `TUTORIALPADDLE` | `lisp/paddle/` | Finds concave perimeter features and inserts pad blocks |
-| `POOLPERIM`, `POOLPERIMSCAN`, `POOLPERIMVER` | `lisp/poolperim/` | Strips a finished drawing back to the pool and nothing else: the outermost closed loop it can chain out of the lines, arcs and polylines in the tab becomes the perimeter, redrawn as one closed polyline on `POOL` (ByLayer, arcs kept as bulges), and everything else is erased -- except dimensions in `CROSS DIM*` wherever they sit, and `STANDARD` / `SIDE STANDARD` ones whose every attachment point lands on that perimeter. Then it hands the result to `PADDLE`. A trace that stopped short of closing is shut when its ends finished within `pp:*gap*`. It reports what it found and what it would drop -- by style, so nothing goes silently -- and asks before erasing, defaulting to `No`; `POOLPERIMSCAN` prints the same report and changes nothing |
+| `LINGUTTER`, `LINGUTTERSCAN`, `LINGUTTERVER` | `lisp/lingutter/` | Guts a highlighted area back to the pool and nothing else. Inside the highlight -- and only inside it -- the outermost closed loop it can chain out of the lines, arcs and polylines becomes the perimeter, redrawn as one closed polyline on `POOL` (ByLayer, arcs kept as bulges); everything else highlighted is erased, except dimensions in `CROSS DIM*` wherever they sit and `STANDARD` / `SIDE STANDARD` ones whose every attachment point lands on that perimeter. The new perimeter is then handed to `PADDLE` as a pickfirst selection, so it pads that loop rather than auto-detecting past it. A trace that stopped short of closing is shut when its ends finished within `lg:*gap*`. It reports what it found and what it would drop -- by style, so nothing goes silently -- and asks before erasing, defaulting to `No`; `LINGUTTERSCAN` prints the same report and changes nothing |
 | `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, joined with straight segments, arcs or a mix of both; asks whether the overall width has been re-measured, and has a repeat-on-the-new-polyline step |
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
 | `DCE`, `DIMCONTEND` | `lisp/dim_continue/` | Chains `DIMCONTINUE` from a seed dimension out to every remaining feature point |
@@ -340,9 +340,10 @@ python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
-python3 tests/test_poolperim.py       # POOLPERIM - the outermost loop, the
-                                      # keep rules, the strip, and its
-                                      # chaining port checked against PADDLE's
+python3 tests/test_lingutter.py       # LINGUTTER - the outermost loop, the
+                                      # keep rules, the gut scoped to the
+                                      # highlight, and its chaining port
+                                      # checked against PADDLE's
 python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
                                       # just made, in the same lispvm
 python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
