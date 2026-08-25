@@ -7,15 +7,52 @@
 and a tool that serves two jobs sits on both.
 
 **The job pages** are what you are actually doing this hour, and each
-runs in the order the work runs: lay the shape out, tie the points,
-build the steps, then dimension and check.
+is laid out in **columns that follow the work**: lay the shape out, tie
+the points, build the steps, dimension and check. A job is not a flat
+list of two dozen tools -- it is a few short lists in the order you
+reach for them.
+
+**Pool** -- 4 columns, in the order the work runs:
+
+| **Shape** | **Points** | **Steps** | **Dims & check** |
+| --- | --- | --- | --- |
+| `POOL` | `ABFIND` | `CORNERSTP` | `AUTODIM` |
+| `LAZFORM` | `ABMOVE` | `HEMISTEP` | `LINFINCHECK` |
+| `OASIS` | `CDCREATE` | `NORMIESTEP` | `LINFINSCAN` |
+| `ABHD` | `CDCALLOUT` | `AUTOBEAD` | `LITELINFINSCAN` |
+| `ADAB` | `BPCALLOUT` | `PERPPTS` | `DIMCHECK` |
+| `FITABHD` |  | `CPERPPTS` | `DIMSCAN` |
+| `XFTCONV` |  |  |  |
+
+**Cover** -- 3 columns, in the order the work runs:
+
+| **Shape** | **Points** | **Pads, dims & check** |
+| --- | --- | --- |
+| `POOLCOVER` | `ABFIND` | `PADDLE` |
+| `LAZFORMCOVER` | `ABMOVE` | `AUTODIM` |
+| `OASIS` | `CDCREATE` | `COVERCHECK` |
+| `ABHDCOVER` | `CDCALLOUT` | `COVERSCAN` |
+| `FITABHDCOVER` | `BPCALLOUT` | `LITECOVERSCAN` |
+| `STOCKCOVER` |  | `DIMCHECK` |
+| `XFTCONV` |  | `DIMSCAN` |
+
+`Spa` and `Rest` are a single column each:
 
 | Job | Buttons |
 | --- | --- |
-| Pool | POOL, LAZFORM, OASIS, ABHD, ADAB, FITABHD, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / CORNERSTP, HEMISTEP, NORMIESTEP, AUTOBEAD, PERPPTS, CPERPPTS / AUTODIM, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, DIMCHECK, DIMSCAN |
-| Cover | POOLCOVER, LAZFORMCOVER, OASIS, ABHDCOVER, FITABHDCOVER, STOCKCOVER, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / PADDLE, AUTODIM, COVERCHECK, COVERSCAN, LITECOVERSCAN, DIMCHECK, DIMSCAN |
-| Spa | SPA, AUTODIM, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, DIMCHECK, DIMSCAN |
-| Rest | POOLDEMO, CABHD, LHD, SMARTFILLET, WCALST, ABCDEF, ALTABCDEF, XYPLOT, DRONE, TYDRN, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CHECK, DIMARCCHECK, LINCHECK, LINTXTCHK, CCPRECHECK |
+| Spa | `SPA`, `AUTODIM`, `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `DIMCHECK`, `DIMSCAN` |
+| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
+
+**A page laid out in columns shows the command name alone**; the column
+heading carries the meaning instead of a caption on every button. That
+is a width limit, not a preference: a button reading
+`CDCALLOUT  -  Point-to-point cross dims` is about 39 character cells,
+four of those abreast is 147, and DCL will not scroll a dialog wider
+than the screen -- it simply fails to open. Names alone put the widest
+page at about 64. Single-column pages have the room and keep the
+caption, which is why the category pages below are the place to go to
+find out what a tool *is*, and the job pages are the place to go when
+you already know.
 
 **The category pages** are the roster filed by what each tool *is*
 rather than when you reach for it -- the four the panel has always had,

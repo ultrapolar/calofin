@@ -61509,12 +61509,19 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
-;;; Every headline calofin routine as a button, grouped the way the
-;;; drafter thinks about them (the same four group names as the VB.NET
-;;; palette in ui/calofin_net: Layout, Points, Dimensions, Checking).
+;;; Every headline calofin routine as a button, on tabbed pages of two
+;;; kinds.  Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
+;;; reach for while doing that job, in columns that follow the work:
+;;; lay the shape out, tie the points, build the steps, dimension and
+;;; check.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
+;;; the same four names the VB.NET palette in ui/calofin_net uses --
+;;; hold the whole roster filed by what each tool IS.  A tool that
+;;; serves two jobs is on both, so there are more buttons than commands.
 ;;; Clicking a button closes the panel and runs the command exactly as
 ;;; if its name had been typed -- the panel adds nothing in front of a
-;;; tool and nothing behind it.
+;;; tool and nothing behind it.  (The Cover page names the cover twins,
+;;; POOLCOVER and friends, which is not the panel meddling: they are
+;;; commands of their own and do the same thing typed.)
 ;;;
 ;;; ZERO INSTALL.  The dialog is plain DCL, and this file writes its own
 ;;; .dcl into the system temp folder each time the panel opens, so there
@@ -61563,7 +61570,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.9")
+(setq *lazpanel-version* "v2.0")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -61602,140 +61609,260 @@
 ;;  from the tree, so a tool added to the panel lands there by default
 ;;  instead of falling off the job pages unnoticed.
 
+;;  ONE CAPTION PER COMMAND, here and nowhere else.  A command appears
+;;  on several pages, so a caption kept beside each button would be the
+;;  same words written two or three times -- and would drift the first
+;;  time one copy was edited.  This is the only place they live.
+(setq lzp:*captions*
+  '(
+    ("ABCDEF"           "Rectangle plot")
+    ("ABFIND"           "A/B stake ties")
+    ("ABHD"             "Survey perimeter + bottom")
+    ("ABHDCOVER"        "Survey perimeter, no bottom")
+    ("ABMOVE"           "Move mis-taped point")
+    ("ADAB"             "Organic shape points")
+    ("ALTABCDEF"        "Clockwise rectangle plot")
+    ("AUTOBEAD"         "Bead offsets")
+    ("AUTODIM"          "Auto dimension")
+    ("AUTODIMSIDEPOV"   "Side-view dims")
+    ("BPCALLOUT"        "Bad point callout")
+    ("CABHD"            "Perimeter-only fit")
+    ("CCPRECHECK"       "Tech flow chart")
+    ("CDCALLOUT"        "Point-to-point cross dims")
+    ("CDCREATE"         "Lines to cross dims")
+    ("CHECK"            "Drawing check")
+    ("CORNERSTP"        "Corner step")
+    ("COVERCHECK"       "Cover review")
+    ("COVERSCAN"        "Cover scan")
+    ("CPERPPTS"         "Curved perp points")
+    ("DIMARCCHECK"      "Arc endpoint check")
+    ("DIMCHECK"         "Dimension review")
+    ("DIMCONTEND"       "Continue dim chains")
+    ("DIMSCAN"          "Dimension scan")
+    ("DRONE"            "Drone cleanup")
+    ("FITABHD"          "Typed template fit")
+    ("FITABHDCOVER"     "Typed template fit, no bottom")
+    ("FLOORDIM"         "Floor dims")
+    ("HEMISTEP"         "Hemi step")
+    ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZFORMCOVER"     "Chart to pool, no bottom")
+    ("LHD"              "Laser outline fit")
+    ("LINCHECK"         "Line checklist")
+    ("LINFINCHECK"      "Liner finish review")
+    ("LINFINSCAN"       "Liner finish scan")
+    ("LINTXTCHK"        "Liner checklist text")
+    ("LITECOVERSCAN"    "Cover scan, no dims")
+    ("LITELINFINSCAN"   "Liner scan, no dims")
+    ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("NORMIESTEP"       "Normie step")
+    ("OASIS"            "Freeform pool")
+    ("PADDLE"           "Paddle pads")
+    ("PERPPTS"          "Perpendicular points")
+    ("POOL"             "Pool layout")
+    ("POOLCOVER"        "Pool layout, no bottom")
+    ("POOLDEMO"         "Worked pool example")
+    ("SMARTFILLET"      "Corner radius, previewed")
+    ("SPA"              "Spa template")
+    ("SPACHECK"         "Spa sheet review")
+    ("SPACHECKSCAN"     "Spa sheet scan")
+    ("STAIRDIM"         "Stair dims")
+    ("STOCKCOVER"       "Stock cover placement")
+    ("TYDRN"            "Text + point tidy-up")
+    ("WCALST"           "Unroll curved band")
+    ("XFTCONV"          "Leica import cleanup")
+    ("XYPLOT"           "X/Y offset plot")
+   ))
+
+(defun lzp:caption (name / p)
+  (if (setq p (assoc name lzp:*captions*)) (cadr p) ""))
+
+;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
+;;  one entry per COLUMN, laid out side by side across the page.  The
+;;  job pages break their tools into the columns the work falls into:
+;;  lay the shape out, tie the points, build the steps, dimension and
+;;  check.  That is the grouping the drafter already carries; the
+;;  columns just stop it being a single list of twenty-four.
+;;
+;;  A column heading of "" means the page is one plain column -- what
+;;  the four category pages are.
+;;
+;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
+;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
+;;  four of those side by side is 147, and DCL will not scroll a dialog
+;;  wider than the screen -- the dialog simply fails to open.  So the
+;;  columns carry the meaning in their headings and the buttons carry
+;;  the command name, which puts the widest page at about 64 cells.
+;;  Single-column pages have the room, and keep the caption on the
+;;  button: the category pages stay the place to go to find out what a
+;;  tool is, and the job pages are the place to go when you know.
 (setq lzp:*groups*
   '(("Pool"
-     ("POOL"           "Pool layout")
-     ("LAZFORM"        "Pool from a filled-in chart")
-     ("OASIS"          "Freeform pool")
-     ("ABHD"           "Survey perimeter + bottom")
-     ("ADAB"           "Organic shape points")
-     ("FITABHD"        "Typed template fit")
-     ("XFTCONV"        "Leica import cleanup")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout")
-     ("CORNERSTP"      "Corner step")
-     ("HEMISTEP"       "Hemi step")
-     ("NORMIESTEP"     "Normie step")
-     ("AUTOBEAD"       "Bead offsets")
-     ("PERPPTS"        "Perpendicular points")
-     ("CPERPPTS"       "Curved perp points")
-     ("AUTODIM"        "Auto dimension")
-     ("LINFINCHECK"    "Liner finish review")
-     ("LINFINSCAN"     "Liner finish scan")
-     ("LITELINFINSCAN" "Liner scan, no dims")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan"))
-    ("Cover"
-     ("POOLCOVER"      "Pool layout, no bottom")
-     ("LAZFORMCOVER"   "Chart to pool, no bottom")
-     ("OASIS"          "Freeform pool")
-     ("ABHDCOVER"      "Survey perimeter, no bottom")
-     ("FITABHDCOVER"   "Typed template fit, no bottom")
-     ("STOCKCOVER"     "Stock cover placement")
-     ("XFTCONV"        "Leica import cleanup")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout")
-     ("PADDLE"         "Paddle pads")
-     ("AUTODIM"        "Auto dimension")
-     ("COVERCHECK"     "Cover review")
-     ("COVERSCAN"      "Cover scan")
-     ("LITECOVERSCAN"  "Cover scan, no dims")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan"))
-    ("Spa"
-     ("SPA"            "Spa template")
-     ("AUTODIM"        "Auto dimension")
-     ("SPACHECK"       "Spa sheet review")
-     ("SPACHECKSCAN"   "Spa sheet scan")
-     ("LITESPACHECKSCAN" "Spa scan, no dims")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan"))
-    ("Rest"
-     ("POOLDEMO"       "Worked pool example")
-     ("CABHD"          "Perimeter-only fit")
-     ("LHD"            "Laser outline fit")
-     ("SMARTFILLET"    "Corner radius, previewed")
-     ("WCALST"         "Unroll curved band")
-     ("ABCDEF"         "Rectangle plot")
-     ("ALTABCDEF"      "Clockwise rectangle plot")
-     ("XYPLOT"         "X/Y offset plot")
-     ("DRONE"          "Drone cleanup")
-     ("TYDRN"          "Text + point tidy-up")
-     ("AUTODIMSIDEPOV" "Side-view dims")
-     ("STAIRDIM"       "Stair dims")
-     ("FLOORDIM"       "Floor dims")
-     ("DIMCONTEND"     "Continue dim chains")
-     ("CHECK"          "Drawing check")
-     ("DIMARCCHECK"    "Arc endpoint check")
-     ("LINCHECK"       "Line checklist")
-     ("LINTXTCHK"      "Liner checklist text")
-     ("CCPRECHECK"     "Tech flow chart"))
-    ("Layout"
-     ("LAZFORM"        "Pool from a filled-in chart")
-     ("LAZFORMCOVER"   "Chart to pool, no bottom")
-     ("SPA"            "Spa template")
-     ("POOL"           "Pool layout")
-     ("POOLCOVER"      "Pool layout, no bottom")
-     ("POOLDEMO"       "Worked pool example")
-     ("OASIS"          "Freeform pool")
-     ("FITABHD"        "Typed template fit")
-     ("FITABHDCOVER"   "Typed template fit, no bottom")
-     ("ABHD"           "Survey perimeter + bottom")
-     ("ABHDCOVER"      "Survey perimeter, no bottom")
-     ("ADAB"           "Organic shape points")
-     ("CABHD"          "Perimeter-only fit")
-     ("LHD"            "Laser outline fit")
-     ("PADDLE"         "Paddle pads")
-     ("AUTOBEAD"       "Bead offsets")
-     ("CORNERSTP"      "Corner step")
-     ("HEMISTEP"       "Hemi step")
-     ("NORMIESTEP"     "Normie step")
-     ("SMARTFILLET"    "Corner radius, previewed")
-     ("STOCKCOVER"     "Stock cover placement")
-     ("WCALST"         "Unroll curved band"))
-    ("Points"
-     ("ABCDEF"         "Rectangle plot")
-     ("ALTABCDEF"      "Clockwise rectangle plot")
-     ("XYPLOT"         "X/Y offset plot")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("PERPPTS"        "Perpendicular points")
-     ("CPERPPTS"       "Curved perp points")
-     ("XFTCONV"        "Leica import cleanup")
-     ("DRONE"          "Drone cleanup")
-     ("TYDRN"          "Text + point tidy-up"))
-    ("Dimensions"
-     ("AUTODIM"        "Auto dimension")
-     ("AUTODIMSIDEPOV" "Side-view dims")
-     ("STAIRDIM"       "Stair dims")
-     ("FLOORDIM"       "Floor dims")
-     ("DIMCONTEND"     "Continue dim chains")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout"))
-    ("Checking"
-     ("CHECK"          "Drawing check")
-     ("DIMARCCHECK"    "Arc endpoint check")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan")
-     ("LINCHECK"       "Line checklist")
-     ("LINFINCHECK"    "Liner finish review")
-     ("LINFINSCAN"     "Liner finish scan")
-     ("LITELINFINSCAN" "Liner scan, no dims")
-     ("COVERCHECK"     "Cover review")
-     ("COVERSCAN"      "Cover scan")
-     ("LITECOVERSCAN"  "Cover scan, no dims")
-     ("SPACHECK"       "Spa sheet review")
-     ("SPACHECKSCAN"   "Spa sheet scan")
-     ("LITESPACHECKSCAN" "Spa scan, no dims")
-     ("LINTXTCHK"      "Liner checklist text")
-     ("CCPRECHECK"     "Tech flow chart"))))
+     ("Shape"
+      "POOL"
+      "LAZFORM"
+      "OASIS"
+      "ABHD"
+      "ADAB"
+      "FITABHD"
+      "XFTCONV"
+      )
+     ("Points"
+      "ABFIND"
+      "ABMOVE"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+     ("Steps"
+      "CORNERSTP"
+      "HEMISTEP"
+      "NORMIESTEP"
+      "AUTOBEAD"
+      "PERPPTS"
+      "CPERPPTS"
+      )
+     ("Dims & check"
+      "AUTODIM"
+      "LINFINCHECK"
+      "LINFINSCAN"
+      "LITELINFINSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Cover"
+     ("Shape"
+      "POOLCOVER"
+      "LAZFORMCOVER"
+      "OASIS"
+      "ABHDCOVER"
+      "FITABHDCOVER"
+      "STOCKCOVER"
+      "XFTCONV"
+      )
+     ("Points"
+      "ABFIND"
+      "ABMOVE"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+     ("Pads, dims & check"
+      "PADDLE"
+      "AUTODIM"
+      "COVERCHECK"
+      "COVERSCAN"
+      "LITECOVERSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Spa"
+     (""
+      "SPA"
+      "AUTODIM"
+      "SPACHECK"
+      "SPACHECKSCAN"
+      "LITESPACHECKSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Rest"
+     (""
+      "POOLDEMO"
+      "CABHD"
+      "LHD"
+      "SMARTFILLET"
+      "WCALST"
+      "ABCDEF"
+      "ALTABCDEF"
+      "XYPLOT"
+      "DRONE"
+      "TYDRN"
+      "AUTODIMSIDEPOV"
+      "STAIRDIM"
+      "FLOORDIM"
+      "DIMCONTEND"
+      "CHECK"
+      "DIMARCCHECK"
+      "LINCHECK"
+      "LINTXTCHK"
+      "CCPRECHECK"
+      )
+    )
+     ("Layout"
+     (""
+      "LAZFORM"
+      "LAZFORMCOVER"
+      "SPA"
+      "POOL"
+      "POOLCOVER"
+      "POOLDEMO"
+      "OASIS"
+      "FITABHD"
+      "FITABHDCOVER"
+      "ABHD"
+      "ABHDCOVER"
+      "ADAB"
+      "CABHD"
+      "LHD"
+      "PADDLE"
+      "AUTOBEAD"
+      "CORNERSTP"
+      "HEMISTEP"
+      "NORMIESTEP"
+      "SMARTFILLET"
+      "STOCKCOVER"
+      "WCALST"
+      )
+    )
+     ("Points"
+     (""
+      "ABCDEF"
+      "ALTABCDEF"
+      "XYPLOT"
+      "ABFIND"
+      "ABMOVE"
+      "PERPPTS"
+      "CPERPPTS"
+      "XFTCONV"
+      "DRONE"
+      "TYDRN"
+      )
+    )
+     ("Dimensions"
+     (""
+      "AUTODIM"
+      "AUTODIMSIDEPOV"
+      "STAIRDIM"
+      "FLOORDIM"
+      "DIMCONTEND"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+    )
+     ("Checking"
+     (""
+      "CHECK"
+      "DIMARCCHECK"
+      "DIMCHECK"
+      "DIMSCAN"
+      "LINCHECK"
+      "LINFINCHECK"
+      "LINFINSCAN"
+      "LITELINFINSCAN"
+      "COVERCHECK"
+      "COVERSCAN"
+      "LITECOVERSCAN"
+      "SPACHECK"
+      "SPACHECKSCAN"
+      "LITESPACHECKSCAN"
+      "LINTXTCHK"
+      "CCPRECHECK"
+      )
+    )))
 
 ;; How the tab strip is laid out: one DCL row per entry, in this order.
 ;; The jobs sit on one line and the categories on the next, which is
@@ -61759,21 +61886,30 @@
 
 ;;; -------------------- roster access -----------------------------------
 
-;; Every command on the panel, flat, in display order.
-(defun lzp:group-commands (name / g c out)
+;; One page's commands, flattened out of its columns, in display order:
+;; down the first column, then down the second.
+(defun lzp:group-commands (name / g col c out)
   (foreach g lzp:*groups*
     (if (= (car g) name)
-        (foreach c (cdr g) (setq out (cons (car c) out)))))
+        (foreach col (cdr g)
+          (foreach c (cdr col) (setq out (cons c out))))))
   (reverse out))
+
+;; A page's columns: (heading cmd ...) each.
+(defun lzp:group-columns (name / g out)
+  (foreach g lzp:*groups*
+    (if (= (car g) name) (setq out (cdr g))))
+  out)
 
 ;; Folded, because a command that serves two jobs is listed on both
 ;; pages and the status line counts tools, not buttons.  First
 ;; appearance wins, so the order still reads as the panel is laid out.
-(defun lzp:commands ( / g c out)
+(defun lzp:commands ( / g col c out)
   (foreach g lzp:*groups*
-    (foreach c (cdr g)
-      (if (not (member (car c) out))
-        (setq out (cons (car c) out)))))
+    (foreach col (cdr g)
+      (foreach c (cdr col)
+        (if (not (member c out))
+          (setq out (cons c out))))))
   (reverse out))
 
 ;; Is C:<name> defined in this session?  An unbound symbol evaluates to
@@ -61816,7 +61952,7 @@
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
-(defun lzp:dcl-one (g / out c)
+(defun lzp:dcl-one (g / out c col)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -61825,13 +61961,33 @@
                           "  -  " (car g) "\";")
                   (strcat (lzp:dlgname (car g)) " : dialog {")))
   (setq out (append (reverse (lzp:tabstrip)) out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons (strcat "    label = \"" (car g) "\";") out))
-  (foreach c (cdr g)
-    (setq out (cons (strcat "    : button { label = \"" (car c) "  -  "
-                            (cadr c) "\"; key = \"" (car c) "\"; }")
-                    out)))
-  (setq out (cons "  }" out))
+  (cond
+    ;; ONE COLUMN: the page has the width to spare, so every button
+    ;; carries its caption -- this is what the category pages are for.
+    ((= (length (cdr g)) 1)
+     (setq out (cons "  : boxed_column {" out))
+     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+     (foreach c (cdr (car (cdr g)))
+       (setq out (cons (strcat "    : button { label = \"" c "  -  "
+                               (lzp:caption c) "\"; key = \"" c "\"; }")
+                       out)))
+     (setq out (cons "  }" out)))
+    ;; SEVERAL COLUMNS, side by side: the heading says what the column
+    ;; is for and the buttons carry the command name alone.  Four
+    ;; captioned buttons abreast would be about 147 cells wide and the
+    ;; dialog would not open at all.
+    (t
+     (setq out (cons "  : boxed_row {" out))
+     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+     (foreach col (cdr g)
+       (setq out (cons "    : boxed_column {" out))
+       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       (foreach c (cdr col)
+         (setq out (cons (strcat "      : button { label = \"" c
+                                 "\"; key = \"" c "\"; }")
+                         out)))
+       (setq out (cons "    }" out)))
+     (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
                           "is_default = true; is_cancel = true; "
