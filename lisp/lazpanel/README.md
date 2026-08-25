@@ -2,10 +2,25 @@
 
 ## What it does
 
-`LAZPANEL` opens a dialog with one button per headline calofin command --
-51 of them, grouped the way the drafter thinks about them, under the
-same four group names the VB palette uses (a few commands sit in a
-different group here than there):
+`LAZPANEL` opens a dialog with one button per headline calofin command
+-- 51 of them across 119 buttons, because the pages come in two kinds
+and a tool that serves two jobs sits on both.
+
+**The job pages** are what you are actually doing this hour, and each
+runs in the order the work runs: lay the shape out, tie the points,
+build the steps, then dimension and check.
+
+| Job | Buttons |
+| --- | --- |
+| Pool | POOL, LAZFORM, OASIS, ABHD, ADAB, FITABHD, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / CORNERSTP, HEMISTEP, NORMIESTEP, AUTOBEAD, PERPPTS, CPERPPTS / AUTODIM, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, DIMCHECK, DIMSCAN |
+| Cover | POOL, LAZFORM, OASIS, ABHD, FITABHD, STOCKCOVER, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / PADDLE, AUTODIM, COVERCHECK, COVERSCAN, LITECOVERSCAN, DIMCHECK, DIMSCAN |
+| Spa | SPA, AUTODIM, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, DIMCHECK, DIMSCAN |
+| Rest | POOLDEMO, CABHD, LHD, WCALST, ABCDEF, ALTABCDEF, XYPLOT, DRONE, TYDRN, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CHECK, DIMARCCHECK, LINCHECK, LINTXTCHK, CCPRECHECK |
+
+**The category pages** are the roster filed by what each tool *is*
+rather than when you reach for it -- the four the panel has always had,
+and the same four group names the VB palette uses. Everything is on
+them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
@@ -14,12 +29,28 @@ different group here than there):
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
 | Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
-A **tab strip** across the top switches groups, so the eye lands on a
-dozen buttons rather than all fifty-one. The pages ARE `lzp:*groups*`
--- re-ordering the tools or re-grouping them is an edit to that one
-table and nothing else. The status line still counts the whole roster,
-not just the page you are looking at, and the panel reopens where you
-left it rather than jumping back to the middle of the screen.
+`AUTODIM` and `DIMCHECK`/`DIMSCAN` are on all three jobs, because every
+job ends the same way; 14 commands are shared between jobs in total.
+
+**Rest is not a hand-kept list.** It is every command Pool, Cover and
+Spa do not name, and the test recomputes that complement from the tree
+-- so a tool added to the panel and forgotten on the job pages shows up
+as a Rest omission instead of quietly falling out of the workflow.
+
+A **tab strip** across the top switches pages: jobs on the first row,
+categories on the second. That is both what they mean and what keeps
+the strip narrow -- eight tabs on one row run about 94 character cells,
+and DCL will not scroll a dialog wider than the screen. Two rows put
+the widest at 54.
+
+The pages ARE `lzp:*groups*` and the strip layout is `lzp:*rows*` --
+re-ordering the tools, re-grouping them or moving a tab to the other
+row is an edit to those two tables and nothing else, and the test
+asserts they name exactly the same groups so neither can drift. The
+status line counts tools rather than buttons (`lzp:commands` folds the
+repeats), so it still reports the whole 51 and not 119. The panel
+reopens where you left it rather than jumping back to the middle of the
+screen.
 
 Clicking a button closes the panel and runs that command exactly as if
 its name had been typed -- the panel adds nothing in front of a tool and
