@@ -112,13 +112,16 @@ happens, check the perimeter for gaps (or bump `*paddle-fuzz*`).
 When several closed loops are selected, each one is processed;
 auto-detect (Enter) uses only the largest loop.
 
-`LINGUTTER` (`lisp/lingutter/`) carries a port of this chaining and
-uses it the other way round: it takes the largest closed loop as the
-perimeter, redraws it as one polyline on `POOL`, erases everything
-else bar the dimensions worth keeping, and then runs PADDLE on what
-is left. It also closes an almost-closed trace rather than skipping
-it. `tests/test_lingutter.py` runs both implementations on the same
-geometry, so a change here has to be ported there.
+`LINGUTTER` (`lisp/lingutter/`) does not chain at all. It walks the
+**outer face** of the highlighted geometry — hardest right turn at every
+node — so interior geometry is never stepped onto and an outline with a
+gap in it fails loudly rather than being replaced by whatever else
+happened to close. It redraws that exterior as one polyline on `POOL`,
+erases everything else it was shown bar the dimensions worth keeping,
+and hands the polyline to PADDLE as a pickfirst selection. It does share
+this file's segment readers (`paddle--ent-segs` and friends), ported
+under `lg:`, and `tests/test_lingutter.py` runs both on the same
+geometry so those cannot drift.
 
 ## The pad block
 

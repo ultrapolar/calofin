@@ -175,7 +175,7 @@ def loop_xy(vts):
 
 # ------------------------------------------------- P1. the port vs PADDLE
 
-print("== P1. the chaining port still matches PADDLE's ==")
+print("== P1. the segment readers still match PADDLE's ==")
 
 PARITY = """
 (defun tst-segs (fn / ss i out)
@@ -186,10 +186,6 @@ PARITY = """
   out)
 (defun tst-pp ( / ) (tst-segs 'lg:ent-segs))
 (defun tst-pd ( / ) (tst-segs 'paddle--ent-segs))
-(defun tst-pploops ( / ) (car (lg:chain (tst-pp))))
-(defun tst-pdloops ( / ) (car (paddle--chain (tst-pd))))
-(defun tst-ppopen ( / ) (length (cdr (lg:chain (tst-pp)))))
-(defun tst-pdopen ( / ) (cdr (paddle--chain (tst-pd))))
 """
 
 
@@ -231,44 +227,77 @@ for label, build in [
     mine, theirs = flat(vm.run('tst-pp', [])), flat(vm.run('tst-pd', []))
     check(f"P1 segments agree: {label}", mine == theirs,
           f"{mine} != {theirs}")
-    ml, tl = flat(vm.run('tst-pploops', [])), flat(vm.run('tst-pdloops', []))
-    check(f"P1 closed loops agree: {label}", ml == tl, f"{ml} != {tl}")
-    mo = int(vm.run('tst-ppopen', []))
-    to = int(vm.run('tst-pdopen', []))
-    check(f"P1 open-chain count agrees: {label}", mo == to, f"{mo} != {to}")
-
-# the areas have to agree too, or "which loop is outermost" would differ
+# the areas have to agree too -- area is what ranks one traced exterior
+# against another, and PADDLE reads the same vertex lists
 vm = parity_vm()
 rectangle(vm, 0, 0, 300, 200)
-vm.loads("(setq tst-l (car (tst-pploops)))")
+vm.loads('(setq tst-l (car (lg:perimeter (tst-pp))))')
 a, b = vm.loads("(lg:area tst-l)"), vm.loads("(paddle--area tst-l)")
 check("P1 area agrees", round(float(a), 9) == round(float(b), 9), f"{a} {b}")
+vm.loads('(setq tst-s (lg:vts->segs T tst-l))')
+ms = flat(vm.loads('tst-s'))
+check("P1 a traced exterior reads back as segments PADDLE accepts",
+      len(ms) == 4 and all(len(x) == 3 for x in ms), ms)
 
 
-# ------------------------------------------------ P2. the outermost loop
+# --------------------------------------------- P2. walking the exterior
 
-print("== P2. the outermost loop is the perimeter ==")
+print("== P2. the exterior is walked, not guessed at ==")
+
+
+def perim(vm, ss='(ssget "_X")'):
+    """(vertices, snap-tolerance-used, covered-too-little) from lg:perimeter."""
+    r = vm.loads('(lg:perimeter (lg:trace-segs %s))' % ss)
+    if r is NIL:
+        return None, None, False
+    tol = r[1][0]
+    return r[0], (None if tol is NIL else tol), r[1][1] is not NIL
+
 
 vm = newvm()
 rectangle(vm, 0, 0, 300, 200)          # the pool
 rectangle(vm, 100, 60, 200, 140)       # the hopper, inside it
-res = analyze(vm)
-check("P2 a perimeter was found", res['vts'] is not None)
-check("P2 it is the outer rectangle, not the hopper",
-      res['vts'] is not None
-      and sorted(loop_xy(res['vts']))
+vts, tol, short = perim(vm)
+check("P2 the exterior is the outer rectangle, not the hopper",
+      vts is not None
+      and sorted(loop_xy(vts))
       == [(0.0, 0.0), (0.0, 200.0), (300.0, 0.0), (300.0, 200.0)],
-      loop_xy(res['vts'] or []))
-check("P2 it closed on its own", res['gap'] is None, res['gap'])
+      loop_xy(vts or []))
+check("P2 nothing had to be moved to get it", tol is None, tol)
+check("P2 ...and it covers what was highlighted", not short)
 
-# the hopper drawn as a closed polyline rather than loose lines: still inside
+# interior geometry TOUCHING the outline is still interior: reaching it
+# always needs a left turn, and the walk only ever turns right
 vm = newvm()
 rectangle(vm, 0, 0, 300, 200)
-lwpl(vm, [(100, 60), (200, 60), (200, 140), (100, 140)])
-res = analyze(vm)
-check("P2 a closed inner polyline does not win",
-      res['vts'] is not None and len(res['vts']) == 4
-      and sorted(loop_xy(res['vts']))[-1] == (300.0, 200.0))
+line(vm, (0, 0), (100, 60))            # a tie from the corner to the hopper
+rectangle(vm, 100, 60, 200, 140)
+vts, tol, short = perim(vm)
+check("P2 a hopper tied to the outline is walked past, not into",
+      vts is not None and len(vts) == 4
+      and sorted(loop_xy(vts))[-1] == (300.0, 200.0), loop_xy(vts or []))
+
+# a reflex corner is the whole point of walking rather than hulling
+vm = newvm()
+for a, b in [((0, 0), (300, 0)), ((300, 0), (300, 120)),
+             ((300, 120), (120, 120)), ((120, 120), (120, 300)),
+             ((120, 300), (0, 300)), ((0, 300), (0, 0))]:
+    line(vm, a, b)
+vts, tol, short = perim(vm)
+check("P2 an L keeps its reflex corner",
+      vts is not None and len(vts) == 6
+      and (120.0, 120.0) in loop_xy(vts), loop_xy(vts or []))
+
+# a stray tick hanging off the outline: the true outer face runs up it
+# and back, and that spur is pruned rather than handed to PADDLE as a
+# 180-degree inside corner
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+line(vm, (150, 200), (150, 230))
+vts, tol, short = perim(vm)
+check("P2 an outward spur is pruned",
+      vts is not None and len(vts) == 4
+      and (150.0, 230.0) not in loop_xy(vts), loop_xy(vts or []))
 
 # an arc in the perimeter survives as a bulge, and only the arc has one
 vm = newvm()
@@ -277,47 +306,117 @@ line(vm, (300, 0), (300, 150))
 arc(vm, (250, 150), 50.0, 0.0, math.pi / 2)
 line(vm, (250, 200), (0, 200))
 line(vm, (0, 200), (0, 0))
-res = analyze(vm)
-bulges = [float(v[2]) for v in (res['vts'] or [])]
+vts, tol, short = perim(vm)
+bulges = [float(v[2]) for v in (vts or [])]
 bent = [b for b in bulges if abs(b) > 1e-12]
 check("P2 a quarter-round corner keeps its bulge, and only it",
       len(bent) == 1 and abs(bent[0] - math.tan(math.pi / 8)) < 1e-9,
       bulges)
 
-# nothing closed and nothing close to closing
+# two pools highlighted at once: the bigger exterior wins, and the
+# coverage warning fires because half of what was highlighted is outside it
 vm = newvm()
-line(vm, (0, 0), (300, 0))
-line(vm, (300, 0), (300, 200))
+rectangle(vm, 0, 0, 300, 200)
+rectangle(vm, 1000, 0, 1400, 300)
+vts, tol, short = perim(vm)
+check("P2 the larger of two exteriors wins",
+      vts is not None and max(float(v[0]) for v in vts) == 1400.0,
+      loop_xy(vts or []))
+check("P2 ...and it warns that it covers only part of the highlight", short)
+
+# nothing to walk round at all
+vm = newvm()
+other(vm, 'TEXT', 'NOTES')
 res = analyze(vm)
-check("P2 an open trace with nowhere to close reports no perimeter",
-      res['vts'] is None)
+check("P2 no geometry, no perimeter", res['vts'] is None)
 check("P2 ...and nothing is queued for erasing", res['kill'] == [])
 
 
-# ------------------------------------------------------- P3. closing a gap
+# ------------------------------------------------ P3. the snap ladder
 
-print("== P3. an almost-closed trace is shut, and says so ==")
+print("== P3. an outline that will not close is snapped shut ==")
 
 vm = newvm()
 rectangle(vm, 0, 0, 300, 200, gap=3.0)   # bottom side 3 short of the corner
-res = analyze(vm)
-check("P3 a 3-unit gap is closed", res['vts'] is not None)
-check("P3 the gap is reported", res['gap'] is not None
-      and abs(float(res['gap']) - 3.0) < 1e-9, res['gap'])
+vts, tol, short = perim(vm)
+check("P3 a 3-unit gap is walked round", vts is not None and len(vts) == 4)
+check("P3 ...at the tolerance that closed it", tol == 6.0, tol)
 
 vm = newvm()
-rectangle(vm, 0, 0, 300, 200, gap=24.0)  # wider than lg:*gap*
-res = analyze(vm)
-check("P3 a 24-unit gap is left alone", res['vts'] is None)
+rectangle(vm, 0, 0, 300, 200, gap=18.0)  # needs the loosest rung
+vts, tol, short = perim(vm)
+check("P3 an 18-unit gap needs the loosest rung", tol == 24.0, tol)
 
-# a gap that closes must not beat a loop that closed itself
+# THE bug: the outline did not close, a hopper inside it did.  The old
+# largest-closed-loop guess handed over the hopper; coverage rejects it
+# and the ladder finds the outline one rung down.
 vm = newvm()
 rectangle(vm, 0, 0, 300, 200, gap=3.0)
-rectangle(vm, 500, 0, 900, 400)          # bigger, and closed
-res = analyze(vm)
-check("P3 a real closed loop wins over a gap that could be closed",
-      res['gap'] is None and res['vts'] is not None
-      and (900.0, 400.0) in loop_xy(res['vts']))
+rectangle(vm, 100, 60, 200, 140)         # closed, and entirely inside
+vts, tol, short = perim(vm)
+check("P3 a closed hopper never stands in for an open outline",
+      vts is not None and max(float(v[0]) for v in vts) == 300.0,
+      loop_xy(vts or []))
+check("P3 ...it climbed the ladder instead", tol == 6.0, tol)
+check("P3 ...and does not warn, because the outline does cover", not short)
+
+# the same, with the hopper tied to the outline so they are one piece
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200, gap=3.0)
+rectangle(vm, 100, 60, 200, 140)
+line(vm, (100, 60), (0, 0))
+vts, tol, short = perim(vm)
+check("P3 ...and still not when the hopper is tied to the outline",
+      vts is not None and max(float(v[0]) for v in vts) == 300.0,
+      loop_xy(vts or []))
+
+# an exterior that CAN be walked as drawn is never given up for a
+# looser one
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200, gap=3.0)
+rectangle(vm, 500, 0, 900, 400)          # bigger, and closed as drawn
+vts, tol, short = perim(vm)
+check("P3 a clean exterior wins over one that needs snapping",
+      tol is None and vts is not None
+      and (900.0, 400.0) in loop_xy(vts), (tol, loop_xy(vts or [])))
+
+
+# ------------------------------------------- P3b. the hull, last of all
+
+print("== P3b. when nothing can be walked, it wraps instead ==")
+
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200, gap=100.0)  # wider than the loosest rung
+vts, tol, short = perim(vm)
+check("P3b a 100-unit gap falls through to the hull",
+      str(tol).upper() == "HULL", tol)
+check("P3b the hull still encloses everything highlighted",
+      vts is not None
+      and (min(float(v[0]) for v in vts), min(float(v[1]) for v in vts),
+           max(float(v[0]) for v in vts), max(float(v[1]) for v in vts))
+      == (0.0, 0.0, 300.0, 200.0), loop_xy(vts or []))
+
+# a scattering of loose lines that share no endpoint at all: nothing to
+# walk, but there is still an answer
+vm = newvm()
+line(vm, (0, 0), (100, 5))
+line(vm, (200, 0), (300, 10))
+line(vm, (150, 180), (160, 200))
+vts, tol, short = perim(vm)
+check("P3b loose lines that touch nothing are wrapped, not refused",
+      vts is not None and str(tol).upper() == "HULL", (tol, len(vts or [])))
+check("P3b the wrap is convex - every bulge is zero",
+      all(abs(float(v[2])) < 1e-12 for v in (vts or [])))
+
+# and the report says what it did, because a hull gives PADDLE nothing
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200, gap=100.0)
+vm.loads('(lg:report (lg:analyze (ssget "_X")))')
+out = "".join(str(x) for x in vm.printed)
+check("P3b the report calls a wrap a wrap",
+      "wrapped" in out and "convex hull" in out, out[-300:])
+check("P3b ...and says PADDLE will find nothing to pad",
+      "PADDLE will find nothing to pad" in out, out[-300:])
 
 
 # --------------------------------------------------- P4. the keep rules
@@ -520,7 +619,7 @@ print("== P8. PADDLE missing is reported, not fatal ==")
 vm, d = keepvm()
 vm.run('c:LINGUTTER', [alive(vm), "Yes"])
 out = "".join(str(x) for x in vm.printed)
-check("P8 the strip still happens", len(alive_of(vm, 'LWPOLYLINE')) == 1)
+check("P8 the gut still happens", len(alive_of(vm, 'LWPOLYLINE')) == 1)
 check("P8 ...and it says PADDLE is not loaded",
       "PADDLE is not loaded" in out)
 

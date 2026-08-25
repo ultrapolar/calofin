@@ -22,20 +22,54 @@ does.
 
 ## What it does
 
-1. **Traces the perimeter.** Every `LINE`, `ARC`, `LWPOLYLINE` and
-   `POLYLINE` **in the highlight** is broken into segments and chained
-   end to end into closed loops — the same chaining `PADDLE` uses, so
-   loose lines and arcs are as good an input as a drawn polyline. The
-   loop enclosing the **largest area** is the outermost one, and that
-   is the perimeter. A trace that never quite closed is shut with a
-   straight segment when its two ends finished within `lg:*gap*` of
-   each other, and the run says how big a gap it closed.
-2. **Redraws it as one object.** The perimeter is written back as a
+1. **Walks the exterior and draws its own perimeter over it.** It does
+   *not* look for a closed loop and hope one of them is the pool —
+   that assumption is what used to fail, and what used to hand over a
+   hopper. Instead every `LINE`, `ARC`, `LWPOLYLINE` and `POLYLINE`
+   **in the highlight** becomes an edge of a graph, ends closer
+   together than a snap tolerance count as one point, and the **outer
+   face** is walked: from the lowest point of each connected piece,
+   always taking the hardest available **right** turn. That rule is
+   what keeps it outside. Interior geometry — the hopper, the steps, a
+   bottom break, a tie line — is never stepped onto, because reaching
+   it always needs a left turn. Loose lines and arcs are as good an
+   input as a drawn polyline, and arcs keep their bulge.
+
+   Three things fall out of it, and they are the three ways the old
+   guess got it wrong:
+
+   * **an outline with a gap in it encloses nothing** once its spurs
+     are pruned, so it fails loudly instead of quietly handing over
+     whatever else did close;
+   * **a hopper that closed while the outline did not can never win**,
+     because it does not span the highlight (see the ladder below);
+   * **a stray tick hanging off the outline is pruned.** The true outer
+     face really does run up it and back; left in, `PADDLE` would read
+     it as a 180° inside corner and pad it.
+2. **The snap ladder.** `lg:*snaps*` is tried in order — `0.05`, then
+   `6.0`, then `24.0` drawing units — and the first rung whose exterior
+   spans at least `lg:*cover*` (80%) of what you highlighted, both ways,
+   is the answer. A rung is only climbed when the one below could not
+   produce one, and the report always names the rung that worked, since
+   snapping *moves* a corner by up to that tolerance.
+
+   Covering too little is a **warning, never a veto**. Highlight two
+   pools and it traces the bigger one and says so; highlight a pool
+   next to a long stray line and the same warning fires through no
+   fault of the pool. Answering either with a convex hull would be
+   worse than answering with the pool and a word of caution.
+
+   When **no** exterior can be walked at any rung it still draws a
+   perimeter: the **convex hull** of everything highlighted. That is
+   reported as the wrap it is — a hull has no concave features, so
+   `PADDLE` will find nothing to pad. Close the outline and run it
+   again.
+3. **Redraws it as one object.** The perimeter is written back as a
    single **closed `LWPOLYLINE`** on the `POOL` layer, arcs carried as
    bulges, **ByLayer** — no per-entity colour, linetype or lineweight —
    so the result is one polyline whatever went in: one polyline, or
    fifty loose lines and arcs.
-3. **Keeps two kinds of dimension**, and nothing else highlighted
+4. **Keeps two kinds of dimension**, and nothing else highlighted
    survives:
 
    | Kept | Rule |
@@ -54,11 +88,11 @@ does.
    *Every* attachment point has to be on the perimeter, not just one: a
    dim running from the pool edge in to the hopper is measuring the
    hopper.
-4. **Erases everything else it was shown** — text, blocks, points,
+5. **Erases everything else it was shown** — text, blocks, points,
    hatches, the geometry the perimeter was traced from, and dimensions
    in any other style. `VIEWPORT` entities are never erased, and a layer
    named in `lg:*keeplayers*` is spared even inside the highlight.
-5. **Hands the new perimeter to `PADDLE`** as a pickfirst selection, and
+6. **Hands the new perimeter to `PADDLE`** as a pickfirst selection, and
    PADDLE pads its concave features without asking anything. *Handed,
    not hunted:* PADDLE's own auto-detect reads the **whole** drawing for
    its largest closed loop, which after a scoped gut may well be a title
@@ -118,8 +152,8 @@ needs different names.
 | `lg:*keeplayers*` | `nil` | layers left alone entirely |
 | `lg:*skiplayers*` | `("DEFPOINTS" "DIMENSION")` | layers the perimeter is never traced from |
 | `lg:*ontol*` | `1.0` | how far a dim's attachment point may sit off the perimeter and still count as on it |
-| `lg:*fuzz*` | `0.05` | largest gap between two segment ends that still chains them |
-| `lg:*gap*` | `6.0` | largest end-to-end gap LINGUTTER will close |
+| `lg:*snaps*` | `(0.05 6.0 24.0)` | the snap ladder: how far apart two ends may be and still count as one point, tried in order |
+| `lg:*cover*` | `0.8` | how much of the highlight's extent a traced exterior must span before it is believed |
 | `lg:*runpaddle*` | `T` | `nil` to stop after the gut |
 
 The style lists are wildcards, so `lg:*anystyles*` catches a drawing
@@ -147,10 +181,18 @@ case is folded, because `wcmatch` does not.
   and its 14 is the end of its leader out in space -- so an
   ordinate dim will normally be dropped whatever style it is in.
   None of the sheets these tools draw uses them.
-* When **nothing in the highlight closes** — no loop, and no open trace finishing within
-  `lg:*gap*` of its own start — LINGUTTER reports it and stops. Nothing
-  is erased, because it does not know what the perimeter is. Check for
-  gaps, or highlight the whole outline.
+* LINGUTTER stops with nothing erased only when the highlight holds no
+  drawable geometry at all. Short of that there is always an answer — a
+  walked exterior, or failing that a hull — and the report says which
+  and at what tolerance.
+* **Snapping moves a corner**, by up to the rung that healed the gap.
+  A 6" rung can shift a corner 6". That is the price of closing an
+  outline that was not closed, and the report names the rung so it is
+  never a surprise.
+* The walk uses **endpoint connectivity only** — it does not compute
+  crossings. Two lines that cross mid-span without sharing an endpoint
+  are not a junction to it. CAD outlines meet at endpoints, so this
+  costs nothing in practice and keeps the walk fast and exact.
 * `PADDLE` lives in its own file. When this session has not loaded it,
   the gut still happens and LINGUTTER says so instead of dying on an
   undefined function. `tools/check_lisp.py` lists `c:PADDLE` under

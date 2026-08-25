@@ -51460,14 +51460,26 @@
 ;;;  not traced from, not counted, and not erased, so a second pool, the
 ;;;  title block and the rest of the sheet are all safe from it.
 ;;;
-;;;    1. TRACE.  Every LINE, ARC, LWPOLYLINE and POLYLINE in the
-;;;       highlight is broken into segments and chained end to end into
-;;;       closed loops.  The loop enclosing the largest area is the
-;;;       outermost one, and that is the perimeter.  It is redrawn as
-;;;       ONE closed LWPOLYLINE on the "POOL" layer, ByLayer, arcs
-;;;       carried as bulges -- so what comes out is a single object
-;;;       however it was drawn going in: one polyline, or fifty loose
-;;;       lines and arcs.
+;;;    1. TRACE.  It does not look for a closed loop and hope one of
+;;;       them is the pool.  It walks the OUTER FACE of the highlighted
+;;;       geometry and draws its own perimeter over it -- the outline
+;;;       you would get walking round the outside with your hand on the
+;;;       wall.  Ends closer than a snap tolerance count as one point,
+;;;       so a drafting gap heals; the walk always takes the hardest
+;;;       available right turn, which is what keeps it outside -- the
+;;;       hopper, the steps and a bottom break are never stepped onto,
+;;;       because reaching them needs a left turn.  Three tolerances are
+;;;       tried in turn (lg:*snaps*), tightest first, and the result is
+;;;       measured against what was highlighted before it is believed.
+;;;       What comes out is redrawn as ONE closed LWPOLYLINE on the
+;;;       "POOL" layer, ByLayer, arcs carried as bulges -- a single
+;;;       object however it was drawn going in: one polyline, or fifty
+;;;       loose lines and arcs.
+;;;
+;;;       When no exterior can be walked at any tolerance it still draws
+;;;       a perimeter: the convex hull of everything highlighted.  That
+;;;       is reported as the wrap it is, because a hull has no concave
+;;;       features and PADDLE will find nothing to pad.
 ;;;
 ;;;    2. KEEP.  Two rules, and nothing else highlighted survives them:
 ;;;         * a dimension in a lg:*anystyles* style ("CROSS DIM*", which
@@ -51517,10 +51529,10 @@
 ;;;    lg:*skiplayers*   layers the perimeter is never traced from
 ;;;    lg:*ontol*        how far a dimension's attachment point may sit
 ;;;                      off the perimeter and still count as on it
-;;;    lg:*fuzz*         largest gap between two segment ends that still
-;;;                      chains them together
-;;;    lg:*gap*          largest end-to-end gap LINGUTTER will close to
-;;;                      turn an almost-closed trace into a perimeter
+;;;    lg:*snaps*        the snap ladder: how far apart two ends may be
+;;;                      and still count as one point, tried in order
+;;;    lg:*cover*        how much of the highlight's extent a traced
+;;;                      exterior must span before it is believed
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
 ;;;                      the gut
 ;;;
@@ -51528,6 +51540,14 @@
 ;;;    * A crossing window takes in whatever it touches, so a dimension
 ;;;      half inside the highlight is in the sweep and one wholly
 ;;;      outside it is not -- the highlight is the whole of the rule.
+;;;    * Snapping MOVES a corner, by up to the tolerance that healed it.
+;;;      A rung is only climbed when the one below could not produce an
+;;;      exterior covering the highlight, and the report always names the
+;;;      rung that worked.
+;;;    * Highlighting two pools at once traces the bigger one and warns
+;;;      that it covers only part of what you showed it.  That warning is
+;;;      never a veto -- the alternative to a partial answer is a convex
+;;;      hull, which is worse.
 ;;;    * "STANDARD INCHES" is deliberately NOT in lg:*perimstyles*: the
 ;;;      request named STANDARD and SIDE STANDARD.  A perimeter side
 ;;;      under 12" that AUTODIM put in STANDARD INCHES therefore goes
@@ -51550,7 +51570,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.0")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -51561,8 +51581,12 @@
 (setq lg:*keeplayers*  nil)        ; e.g. '("TITLEBLOCK") to spare one
 (setq lg:*skiplayers*  '("DEFPOINTS" "DIMENSION"))
 (setq lg:*ontol*       1.0)        ; drawing units; inches by default
-(setq lg:*fuzz*        0.05)       ; PADDLE's chaining tolerance
-(setq lg:*gap*         6.0)        ; largest end gap worth closing
+(setq lg:*snaps*  '(0.05 6.0 24.0)) ; snap ladder: how far apart two ends
+                                   ; may be and still be treated as one
+                                   ; node, tried tightest first
+(setq lg:*cover*       0.8)        ; how much of the highlight's extent a
+                                   ; traced exterior has to span to be
+                                   ; believed as the perimeter
 (setq lg:*runpaddle*   t)
 
 ;;; -------------------- ask layer ---------------------------------------
@@ -51726,88 +51750,328 @@
      (setq cv (lg:plverts ent))
      (if cv (lg:vts->segs (car cv) (cdr cv))))))
 
-;;; -------------------- chaining ----------------------------------------
+;;; -------------------- tracing the exterior ----------------------------
+;;; LINGUTTER does not look for a closed loop and hope one is the pool.
+;;; It walks the OUTER FACE of the highlighted geometry and draws its own
+;;; perimeter over it -- the outline you would get by walking round the
+;;; outside of everything with your hand on the wall.
+;;;
+;;; Endpoints closer together than the snap tolerance become one node, so
+;;; a drafting gap heals; every segment becomes two darts, one each way;
+;;; and from the lowest node of each connected piece the walk always takes
+;;; the hardest available RIGHT turn.  That rule is what hugs the outside:
+;;; interior geometry -- the hopper, the steps, a bottom break -- is never
+;;; stepped onto, because reaching it always needs a left turn.
+;;;
+;;; Three things follow, and they are the three ways the old
+;;; largest-closed-loop guess got it wrong:
+;;;   * a perimeter with a gap in it encloses nothing once its spurs are
+;;;     pruned, so it fails LOUDLY at the tight tolerance instead of
+;;;     quietly handing over whatever else did close;
+;;;   * a hopper that closed while the outline did not can never win,
+;;;     because it fails the coverage test below;
+;;;   * and when no exterior can be walked at any tolerance there is
+;;;     still an answer: the convex hull of everything highlighted.
 
-;; Chains touching segments (ends within lg:*fuzz*) end to end.  Returns
-;; (loops . opens): each loop is a closed vertex list, and each open
-;; entry is (vts . gap) -- the chain that ran out of neighbours, its
-;; loose tail carried as a final bulge-0 vertex, and how far that tail
-;; finished from the head.  PADDLE throws the open chains away and only
-;; counts them; LINGUTTER keeps them, because a perimeter drawn with one
-;; missed snap is still the perimeter and closing it is a better answer
-;; than "no closed loop found".
-(defun lg:chain (segs / loops opens chain head tail done found rest s gap)
-  ;; drop degenerate slivers
-  (setq segs (vl-remove-if
-               '(lambda (s) (<= (distance (car s) (cadr s)) lg:*fuzz*))
-               segs))
-  (while segs
-    (setq chain (list (car segs))
-          head  (car (car segs))
-          tail  (cadr (car segs))
-          segs  (cdr segs)
-          done  nil)
-    (while (not done)
-      (cond
-        ;; loop closed back onto its start?
-        ((and (> (length chain) 1) (<= (distance tail head) lg:*fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s))
-                                                      (cadr (car s))
-                                                      (caddr s)))
-                                   chain)
-                           loops)
-               done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-             (setq rest (cons s rest))
-             (cond
-               ((<= (distance tail (car s)) lg:*fuzz*)
-                (setq found s))
-               ((<= (distance tail (cadr s)) lg:*fuzz*)    ; reversed
-                (setq found (list (cadr s) (car s) (- (caddr s)))))
-               (T (setq rest (cons s rest))))))
-         (if found
-           (setq chain (append chain (list found))
-                 tail  (cadr found)
-                 segs  (reverse rest))
-           (progn                                ; dead end: open chain
-             (setq gap   (distance tail head)
-                   opens (cons (cons (append
-                                       (mapcar '(lambda (s)
-                                                  (list (car (car s))
-                                                        (cadr (car s))
-                                                        (caddr s)))
-                                               chain)
-                                       (list (list (car tail) (cadr tail)
-                                                   0.0)))
-                                     gap)
-                               opens)
-                   done  T)))))))
-  (cons (reverse loops) (reverse opens)))
+;; A handful of points along one segment, its two ends included -- what
+;; the coverage test measures and what the hull is wrapped round.  An arc
+;; gets interior samples too: its bulge can carry it well outside the
+;; straight line between its ends.
+(defun lg:seg-pts (seg / a b blg dat cen r sa th i n out)
+  (setq a   (car seg)
+        b   (cadr seg)
+        blg (caddr seg)
+        out (list (cal:2d a) (cal:2d b)))
+  (if (/= blg 0.0)
+    (progn
+      (setq dat (lg:arcdata a b blg)
+            th  (car dat)
+            r   (cadr dat)
+            cen (caddr dat)
+            sa  (angle cen a)
+            n   6
+            i   1)
+      (repeat (1- n)
+        (setq out (cons (cal:v+ cen (cal:v* (lg:dir (+ sa (* th (/ (float i) n))))
+                                          r))
+                        out)
+              i   (1+ i)))))
+  out)
 
-;; The outermost loop in SEGS, as (vts . gap-closed): the closed loop
-;; enclosing the largest area, or - when nothing closed on its own - the
-;; largest almost-closed chain whose two ends finished within lg:*gap*,
-;; shut with a straight segment.  nil when neither exists.
-(defun lg:outer (segs / res loops opens best bestarea a vts oc)
-  (setq res      (lg:chain segs)
-        loops    (car res)
-        opens    (cdr res)
-        bestarea 0.0)
-  (foreach vts loops
-    (setq a (abs (lg:area vts)))
-    (if (> a bestarea) (setq bestarea a best (cons vts nil))))
-  (if (null best)
-    (foreach oc opens
-      (if (<= (cdr oc) lg:*gap*)
-        (progn
-          (setq vts (car oc)
-                a   (abs (lg:area vts)))
-          (if (> a bestarea)
-            (setq bestarea a best (cons vts (cdr oc))))))))
+(defun lg:segs-pts (segs / s out)
+  (foreach s segs (setq out (append (lg:seg-pts s) out)))
+  out)
+
+;; The index of the node at P, adding P as a new node when nothing within
+;; TOL is already there.  Returns (index nodelist).
+(defun lg:node-of (p tol nodes / i n found)
+  (setq i 0 found nil)
+  (foreach n nodes
+    (if (and (null found) (<= (distance (cal:2d p) n) tol)) (setq found i))
+    (setq i (1+ i)))
+  (if found
+    (list found nodes)
+    (list (length nodes) (append nodes (list (cal:2d p))))))
+
+;; SEGS as a graph at snap tolerance TOL: (nodes segments), where each
+;; segment is (node-a node-b bulge).  A segment whose two ends land on
+;; the same node is dropped -- it is shorter than the tolerance and has
+;; no direction left to walk in.
+(defun lg:build-graph (segs tol / nodes segn s r ia ib)
+  (foreach s segs
+    (setq r     (lg:node-of (car s) tol nodes)
+          ia    (car r)
+          nodes (cadr r)
+          r     (lg:node-of (cadr s) tol nodes)
+          ib    (car r)
+          nodes (cadr r))
+    (if (/= ia ib) (setq segn (cons (list ia ib (caddr s)) segn))))
+  (list nodes (reverse segn)))
+
+;; The tangent angles of a segment travelled A -> B: (departing arriving).
+;; A straight one departs and arrives on the same heading; an arc does
+;; not, which is why the walk cannot just use (angle a b).
+(defun lg:dart-tangents (a b blg / dat)
+  (if (equal blg 0.0 1e-12)
+    (list (angle a b) (angle a b))
+    (progn
+      (setq dat (lg:arcdata a b blg))
+      (list (nth 3 dat) (nth 4 dat)))))
+
+;; Every dart leaving node V, as (seg dir to departing arriving bulge).
+(defun lg:darts-at (v nodes segn / i s a b tg out)
+  (setq i 0)
+  (foreach s segn
+    (if (= (car s) v)
+      (progn
+        (setq a  (nth (car s) nodes)
+              b  (nth (cadr s) nodes)
+              tg (lg:dart-tangents a b (caddr s))
+              out (cons (list i 1 (cadr s) (car tg) (cadr tg) (caddr s))
+                        out))))
+    (if (= (cadr s) v)
+      (progn
+        (setq a  (nth (cadr s) nodes)
+              b  (nth (car s) nodes)
+              tg (lg:dart-tangents a b (- (caddr s)))
+              out (cons (list i -1 (car s) (car tg) (cadr tg) (- (caddr s)))
+                        out))))
+    (setq i (1+ i)))
+  (reverse out))
+
+(defun lg:same-dart (a b)
+  (and a b (= (car a) (car b)) (= (cadr a) (cadr b))))
+
+(defun lg:reverse-dart-p (a b)
+  (and a b (= (car a) (car b)) (= (cadr a) (- (cadr b)))))
+
+;; Arriving at V travelling at AIN, the next dart of the outer face: the
+;; hardest right turn there is.  Measured as the smallest angle from the
+;; way back (AIN + pi) round to the dart's departing tangent, taken over
+;; (0, 2pi] so that turning straight back is the last resort rather than
+;; the first choice.  Swap the sense of this one comparison and the same
+;; walk traces interior faces instead.
+(defun lg:next-dart (v ain nodes segn / darts d t2 best bt)
+  (setq darts (lg:darts-at v nodes segn))
+  (foreach d darts
+    (setq t2 (cal:angnorm (- (nth 3 d) ain pi)))
+    (if (<= t2 1e-9) (setq t2 (+ t2 pi pi)))
+    (if (or (null best) (< t2 bt)) (setq best d bt t2)))
   best)
+
+;; Every node reachable from V, so each connected piece of the highlight
+;; is walked once and only once.
+(defun lg:component (v segn / seen frontier nxt n s)
+  (setq seen (list v) frontier (list v))
+  (while frontier
+    (setq nxt nil)
+    (foreach n frontier
+      (foreach s segn
+        (cond
+          ((and (= (car s) n) (not (member (cadr s) seen)))
+           (setq seen (cons (cadr s) seen) nxt (cons (cadr s) nxt)))
+          ((and (= (cadr s) n) (not (member (car s) seen)))
+           (setq seen (cons (car s) seen) nxt (cons (car s) nxt))))))
+    (setq frontier nxt))
+  seen)
+
+;; Node indices lowest first, leftmost breaking a tie.  A component's
+;; lowest node is always on its outer boundary, which is why the walk
+;; starts there and leaves along the shallowest edge it can find.
+(defun lg:node-order (nodes / i n out)
+  (setq i 0)
+  (foreach n nodes
+    (setq out (cons (list (cadr n) (car n) i) out)
+          i   (1+ i)))
+  (mapcar 'caddr
+          (vl-sort out '(lambda (a b)
+                          (if (equal (car a) (car b) 1e-9)
+                            (< (cadr a) (cadr b))
+                            (< (car a) (car b)))))))
+
+;; Walk the outer face of the piece START belongs to.  Returns the darts
+;; travelled, each consed onto the node it left, or nil when the walk
+;; never closed (which a sound graph does not do -- the guard is there so
+;; a pathological one cannot hang AutoCAD).
+(defun lg:walk (start nodes segn / darts d first cur v ain out done guard lim)
+  (setq darts (lg:darts-at start nodes segn))
+  (if darts
+    (progn
+      (setq first (car darts))
+      (foreach d darts
+        (if (< (cal:angnorm (nth 3 d)) (cal:angnorm (nth 3 first)))
+          (setq first d)))
+      (setq cur   first
+            v     start
+            guard 0
+            lim   (+ 10 (* 4 (length segn))))
+      (while (not done)
+        (setq out   (cons (cons v cur) out)
+              ain   (nth 4 cur)
+              v     (nth 2 cur)
+              cur   (lg:next-dart v ain nodes segn)
+              guard (1+ guard))
+        (if (or (null cur) (> guard lim)
+                (and (= v start) (lg:same-dart cur first)))
+          (setq done T)))
+      (if (> guard lim) nil (reverse out)))))
+
+;; Drop every out-and-back excursion.  A dart followed by itself reversed
+;; is a spur -- a tick mark, a stray line, or the whole of an outline that
+;; never closed -- and the outer face really does run up it and back.  It
+;; encloses nothing either way, and left in, PADDLE would read it as a
+;; 180-degree inside corner and pad it.
+(defun lg:prune (walk / out changed rest a b)
+  (setq changed T)
+  (while (and changed walk)
+    (setq changed nil out nil rest walk)
+    (while rest
+      (setq a (car rest) b (cadr rest))
+      (if (and b (lg:reverse-dart-p (cdr a) (cdr b)))
+        (setq rest (cddr rest) changed T)
+        (setq out (cons a out) rest (cdr rest))))
+    (setq walk (reverse out))
+    ;; the loop wraps, so its last dart and its first are neighbours too
+    (if (and (> (length walk) 1)
+             (lg:reverse-dart-p (cdr (last walk)) (cdr (car walk))))
+      (setq walk    (reverse (cdr (reverse (cdr walk))))
+            changed T)))
+  walk)
+
+(defun lg:walk-vts (walk nodes / w p out)
+  (foreach w walk
+    (setq p   (nth (car w) nodes)
+          out (cons (list (car p) (cadr p) (nth 6 w)) out)))
+  (reverse out))
+
+;; The largest exterior the highlight can be walked round at tolerance
+;; TOL.  Every connected piece is traced and the one enclosing the most
+;; area wins -- a pool beside a stray line, or beside a second pool, comes
+;; out right without anything having to rank them.
+(defun lg:exterior (segs tol / g nodes segn seen v comp walk vts a
+                                best bestarea)
+  (setq g        (lg:build-graph segs tol)
+        nodes    (car g)
+        segn     (cadr g)
+        bestarea 0.0)
+  (foreach v (lg:node-order nodes)
+    (if (not (member v seen))
+      (progn
+        (setq comp (lg:component v segn)
+              seen (append seen comp)
+              walk (lg:prune (lg:walk v nodes segn)))
+        (if (and walk (> (length walk) 2))
+          (progn
+            (setq vts (lg:walk-vts walk nodes)
+                  a   (abs (lg:area vts)))
+            (if (> a bestarea) (setq bestarea a best vts)))))))
+  best)
+
+(defun lg:bbox (pts / p mnx mny mxx mxy)
+  (foreach p pts
+    (if (null mnx)
+      (setq mnx (car p) mxx (car p) mny (cadr p) mxy (cadr p))
+      (setq mnx (min mnx (car p)) mxx (max mxx (car p))
+            mny (min mny (cadr p)) mxy (max mxy (cadr p)))))
+  (if mnx (list mnx mny mxx mxy)))
+
+;; T when the traced loop spans at least lg:*cover* of what was
+;; highlighted, both ways.  This is the "is that really the perimeter?"
+;; test, and it is the one the old code did not have: a hopper rectangle
+;; traced because the outline round it never closed is a perfectly good
+;; closed loop and a perfectly wrong answer.  Its extent gives it away.
+(defun lg:covers-p (vts pts / lb pb w h)
+  (setq lb (lg:bbox (lg:segs-pts (lg:vts->segs T vts)))
+        pb (lg:bbox pts))
+  (if (and lb pb)
+    (progn
+      (setq w (- (nth 2 pb) (car pb))
+            h (- (nth 3 pb) (cadr pb)))
+      (and (or (<= w 1e-9) (>= (/ (- (nth 2 lb) (car lb)) w) lg:*cover*))
+           (or (<= h 1e-9) (>= (/ (- (nth 3 lb) (cadr lb)) h) lg:*cover*))))))
+
+(defun lg:cross3 (o a b)
+  (- (* (- (car a) (car o)) (- (cadr b) (cadr o)))
+     (* (- (cadr a) (cadr o)) (- (car b) (car o)))))
+
+;; Convex hull of PTS (Andrew's monotone chain).  The last resort: when no
+;; exterior can be walked at any tolerance LINGUTTER still draws a
+;; perimeter, and this one is guaranteed to enclose every bit of what was
+;; highlighted.  It is reported as what it is -- a wrap, not a trace --
+;; because it straightens out every concave feature PADDLE exists to find.
+(defun lg:hull (pts / srt lower upper p out)
+  (setq srt (vl-sort pts '(lambda (a b)
+                            (if (equal (car a) (car b) 1e-9)
+                              (< (cadr a) (cadr b))
+                              (< (car a) (car b))))))
+  (foreach p srt
+    (while (and (cdr lower) (<= (lg:cross3 (cadr lower) (car lower) p) 0.0))
+      (setq lower (cdr lower)))
+    (setq lower (cons p lower)))
+  (foreach p (reverse srt)
+    (while (and (cdr upper) (<= (lg:cross3 (cadr upper) (car upper) p) 0.0))
+      (setq upper (cdr upper)))
+    (setq upper (cons p upper)))
+  (setq out (append (reverse (cdr lower)) (reverse (cdr upper))))
+  (if (> (length out) 2)
+    (mapcar '(lambda (q) (list (car q) (cadr q) 0.0)) out)))
+
+;; The perimeter of the highlighted geometry, and how it was arrived at.
+;; Returns (vts (tol short)), where tol is
+;;   nil     the exterior was walked with nothing moved,
+;;   <n>     ...after ends that far apart were treated as one to close it,
+;;   HULL    no exterior could be walked at all, so the geometry was
+;;           simply wrapped,
+;; and short is T when what was traced spans less of the highlight than
+;; lg:*cover* asks -- a warning, never a veto.  Coverage decides whether
+;; to try a looser tolerance, and the loosest run still wins over nothing:
+;; a pool highlighted alongside a long stray line fails the test through
+;; no fault of its own, and answering that with a convex hull would be
+;; worse than answering it with the pool and a word of warning.
+;; nil when there is not enough geometry to draw a perimeter round.
+(defun lg:perimeter (segs / pts tol vts a out fall falla falltol tight)
+  (setq pts   (lg:segs-pts segs)
+        falla 0.0
+        tight (car lg:*snaps*))
+  (foreach tol lg:*snaps*
+    (if (null out)
+      (progn
+        (setq vts (lg:exterior segs tol))
+        (if vts
+          (if (lg:covers-p vts pts)
+            (setq out (list vts (list (if (equal tol tight 1e-12) nil tol)
+                                      nil)))
+            (progn
+              (setq a (abs (lg:area vts)))
+              (if (> a falla) (setq fall vts falla a falltol tol))))))))
+  (if (and (null out) fall)
+    (setq out (list fall (list (if (equal falltol tight 1e-12) nil falltol)
+                               T))))
+  (if (and (null out) pts)
+    (progn
+      (setq vts (lg:hull pts))
+      (if vts (setq out (list vts (list 'HULL nil))))))
+  out)
 
 ;;; -------------------- is it on the perimeter? -------------------------
 
@@ -51957,18 +52221,19 @@
 ;; is in it can be kept or erased.
 ;; Returns (vts gap kill nany nperim dropped nother nspared):
 ;;   vts      the perimeter as (x y bulge) vertices, nil when none found
-;;   gap      the end gap closed to make it, nil when it closed itself
+;;   how      (tol short) from lg:perimeter: how the perimeter was
+;;            arrived at, and whether it covers the highlight
 ;;   kill     the entities that would be erased
 ;;   nany     dims kept for their style alone
 ;;   nperim   dims kept because they sit on the perimeter
 ;;   dropped  ((reason . count) ...) for the dimensions that would go
 ;;   nother   objects that would go which are not dimensions
 ;;   nspared  objects left alone because lg:*keeplayers* names their layer
-(defun lg:analyze (ss / best vts gap kill nany nperim dropped nother
+(defun lg:analyze (ss / best vts how kill nany nperim dropped nother
                         nspared en ed typ sty lay spare)
-  (setq best    (lg:outer (lg:trace-segs ss))
+  (setq best    (lg:perimeter (lg:trace-segs ss))
         vts     (car best)
-        gap     (cdr best)
+        how     (cadr best)
         nany    0
         nperim  0
         nother  0
@@ -51999,7 +52264,7 @@
                   kill (cons en kill)))))
         (t (setq nother (1+ nother)
                  kill   (cons en kill))))))
-  (list vts gap (reverse kill) nany nperim dropped nother nspared))
+  (list vts how (reverse kill) nany nperim dropped nother nspared))
 
 ;;; -------------------- writing the drawing -----------------------------
 
@@ -52030,9 +52295,9 @@
 
 ;;; -------------------- the report --------------------------------------
 
-(defun lg:report (res / vts gap kill nany nperim dropped nother nspared d)
+(defun lg:report (res / vts how kill nany nperim dropped nother nspared d)
   (setq vts     (nth 0 res)
-        gap     (nth 1 res)
+        how     (nth 1 res)
         kill    (nth 2 res)
         nany    (nth 3 res)
         nperim  (nth 4 res)
@@ -52040,18 +52305,32 @@
         nother  (nth 6 res)
         nspared (nth 7 res))
   (if (null vts)
-    (princ (strcat "\nLINGUTTER: no perimeter in the highlight - nothing"
-                   " closed into a loop, and no open trace finished"
-                   " within " (rtos lg:*gap* 2 2) " of its own start."
-                   "  Check for gaps, or highlight the whole outline."))
+    (princ (strcat "\nLINGUTTER: nothing to draw a perimeter round - the"
+                   " highlight holds no lines, arcs or polylines, or none"
+                   " off " (lg:names lg:*skiplayers*) "."))
     (progn
-      (princ (strcat "\nLINGUTTER: perimeter traced - " (itoa (length vts))
-                     " vertice" (lg:s (length vts)) ", "
+      (princ (strcat "\nLINGUTTER: perimeter "
+                     (if (eq (car how) 'HULL) "wrapped" "traced") " - "
+                     (itoa (length vts)) " vertice" (lg:s (length vts)) ", "
                      (rtos (lg:perim-len vts)) " around."))
-      (if gap
-        (princ (strcat "\nLINGUTTER: it did not close on its own - a "
-                       (rtos gap) " gap between its two ends was shut"
-                       " with a straight segment.")))
+      (cond
+        ((eq (car how) 'HULL)
+         (princ (strcat "\n** No exterior could be walked at any tolerance"
+                        " up to " (rtos (last lg:*snaps*) 2 2) " - the"
+                        " highlight is wrapped in its convex hull instead."
+                        "  That straightens out every concave feature, so"
+                        " PADDLE will find nothing to pad: close the"
+                        " outline and run it again.")))
+        ((car how)
+         (princ (strcat "\nLINGUTTER: it would not close as drawn - ends up"
+                        " to " (rtos (car how)) " apart were treated as one"
+                        " to walk round it."))))
+      (if (cadr how)
+        (princ (strcat "\n** What was traced spans less than "
+                       (rtos (* 100.0 lg:*cover*) 2 0) "% of what you"
+                       " highlighted.  Check it really is the pool before"
+                       " answering Yes - highlighting less, or closing the"
+                       " outline, is what fixes it.")))
       (princ (strcat "\nLINGUTTER: keeping " (itoa nany) " dimension"
                      (lg:s nany) " in " (lg:names lg:*anystyles*)
                      " (kept wherever they sit)."))
