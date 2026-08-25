@@ -1625,6 +1625,12 @@ BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
     str.maketrans(str(a[0]), str(a[1])))
 
 
+# (vl-string-trim char-set str) -- strip any leading and trailing
+# characters that appear in char-set.  A date attribute read out of a
+# block routinely arrives padded, so the check tools lean on this.
+BUILTINS[Sym('vl-string-trim')] = lambda vm, a: str(a[1]).strip(str(a[0]))
+
+
 # (vl-string->list "AB") -> (65 66) and back again -- the pair every
 # text-normalising helper in the check tools is built on.
 BUILTINS[Sym('vl-string->list')] = \

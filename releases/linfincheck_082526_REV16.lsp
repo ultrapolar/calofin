@@ -142,8 +142,11 @@
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
-;;;     "02/30" is reported in red with what is wrong; a clean date
-;;;     ("05/01/2024") is a quiet OK.
+;;;     "02/30" is reported in red with what is wrong. A well-formed
+;;;     calendar date that is NOT TODAY is reported too - a sheet going
+;;;     out under an old date is the mistake that catches. Only
+;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
+;;;     Title in reach the report says the date was not checked.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -246,7 +249,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.5")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -700,7 +703,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1813,7 +1816,18 @@
     ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29) ; leap Feb
     (t 28)))
 
-(defun lfc:date-verdict (raw / s mo dd yr)
+(defun lfc:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun lfc:mdy-str (mdy)
+  (strcat (lfc:pad2 (car mdy)) "/" (lfc:pad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+(defun lfc:date-verdict (raw / s mo dd yr now)
   ;; nil when raw is a clean MM/DD/YYYY calendar date; otherwise a
   ;; short string saying what is wrong with it
   (setq s (vl-string-trim " \t" (lfc:after-eq raw)))
@@ -1837,6 +1851,14 @@
        ((or (< dd 1) (> dd (lfc:days-in-month mo yr)))
         (strcat "'" raw "' - " (substr s 4 2)
                 " is not a valid day for that month - expected MM/DD/YYYY"))
+       ;; a real date, but is it TODAY?  A sheet going out under an old
+       ;; date is the mistake this catches -- the drawing was reworked
+       ;; and the title block never caught up.
+       ((progn (setq now (lfc:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now)
+                ") - update it"))
        (t nil)))))
 
 ;; --- dimension review ----------------------------------------------
@@ -2913,7 +2935,9 @@
               (if datebad
                 (strcat *lfc-date-tag* " " datebad)
                 (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
-            (princ (strcat "\n  Date: " datesum))))
+            (princ (strcat "\n  Date: " datesum)))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
         ;; --- Liner Material check -----------------------------------
         (setq liners      (vl-remove-if-not
@@ -3445,7 +3469,9 @@
          (setq datesum
            (if datebad
              (strcat *lfc-date-tag* " " datebad)
-             (strcat *lfc-date-tag* " = '" dateraw "' - OK")))))
+             (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
      ;; --- liner
      (setq liners (vl-remove-if-not

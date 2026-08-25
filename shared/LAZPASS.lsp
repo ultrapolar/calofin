@@ -33650,6 +33650,13 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
+;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
+;;;       TODAY, written MM/DD/YYYY - a sheet going out under an old
+;;;       date is the mistake this catches. The block is looked for in
+;;;       the selection and then across the drawing; with none in
+;;;       reach the report says the date was not checked rather than
+;;;       flagging it. LITECOVERSCAN keeps this one.
 ;;;     - FEET AND INCHES. Every text box in the selection - TEXT,
 ;;;       MTEXT and the ATTRIB values on blocks - must state its
 ;;;       inches wherever it states feet: 5' is flagged, 5'-0",
@@ -33772,7 +33779,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.7")
+(setq *cchk-version* "v0.8")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -33789,6 +33796,9 @@
 ;; every dimension belongs on this layer; CDIM is the command that
 ;; moves the strays there, and is what the report tells you to run
 (setq *cchk-dim-layer*   "DIMENSION")
+(setq *cchk-dimfix-cmd*  "CDIM")
+(setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
+(setq *cchk-date-tag*    "Date")
 (setq *cchk-dimfix-cmd*  "CDIM")
 (setq *cchk-constr-layer* "COVERCHECK-CONSTRUCTION")
 (setq *cchk-constr-color* 2)       ; yellow
@@ -34095,7 +34105,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -34262,6 +34272,120 @@
                  " - write 5'-0\" not 5'")))
     (> bad 0)
     (reverse lines)))
+
+;; --- the Tech Title date ---------------------------------------------
+;; The sheet's Tech Title block carries a Date attribute, and it must
+;; read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
+;; is the mistake this catches: the drawing was reworked and the title
+;; block never caught up.
+
+(defun cchk:datenorm (s)
+  ;; a value may arrive labelled ("Date = 05/01/2024"); the date is
+  ;; whatever follows the last "="
+  (cchk:after-eq (if s s "")))
+
+(defun cchk:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun cchk:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29)
+    (t 28)))
+
+(defun cchk:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun cchk:mdy-str (mdy)
+  (strcat (cal:zeropad2 (car mdy)) "/" (cal:zeropad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+;; nil when raw is today's date written MM/DD/YYYY; otherwise a short
+;; string saying what is wrong with it.
+(defun cchk:date-verdict (raw / s mo dd yr now)
+  (setq s (vl-string-trim " \t" (cchk:datenorm raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (cchk:all-digits-p (substr s 1 2)))
+         (not (cchk:all-digits-p (substr s 4 2)))
+         (not (cchk:all-digits-p (substr s 7 4))))
+     (strcat "'" s "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" s "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (cchk:days-in-month mo yr)))
+        (strcat "'" s "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       ((progn (setq now (cchk:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now)
+                ") - update it"))
+       (t nil)))))
+
+;; The Tech Title block: the first INSERT whose name carries it, looked
+;; for in the selection and then across the drawing, since the title
+;; block sits outside the area someone highlights as often as not.
+(defun cchk:find-title (ss / pat i e ed out ss2)
+  (setq pat (strcat "*" (cchk:squash *cchk-title-block*) "*") i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e))
+      (if (and (null out) ed (= "INSERT" (cdr (assoc 0 ed)))
+               (wcmatch (cchk:squash (cchk:block-name e)) pat))
+        (setq out e))))
+  (if (null out)
+    (progn
+      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
+      (if ss2
+        (repeat (sslength ss2)
+          (setq e (ssname ss2 i) i (1+ i))
+          (if (and (null out)
+                   (wcmatch (cchk:squash (cchk:block-name e)) pat))
+            (setq out e))))))
+  out)
+
+;; The verdict: (sentence . needs-attention).  With no Tech Title in
+;; reach there is nothing to read, and that is said plainly rather than
+;; flagged -- a cover or spa sheet may well be checked on its own.
+(defun cchk:audit-date (ss / blk ed raw bad)
+  (setq blk (cchk:find-title ss))
+  (if (null blk)
+    (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
+          nil)
+    (progn
+      (setq ed  (entget blk)
+            raw (if (and (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+                  (cchk:ins-attrib blk *cchk-date-tag*))
+            bad (if raw
+                  (cchk:date-verdict raw)
+                  (strcat "is missing from the block"
+                          " - expected MM/DD/YYYY")))
+      (if bad
+        (cons (strcat *cchk-date-tag* " " bad) T)
+        (cons (strcat *cchk-date-tag* " = '"
+                      (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+              nil)))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -36061,7 +36185,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay units)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -36327,7 +36451,8 @@
                             " - none found"))
                   (> noflag 0))))
         (setq dimlay (cchk:dimlayer-verdict dims)
-              units  (cchk:audit-units ss))
+              units  (cchk:audit-units ss)
+              datev  (cchk:audit-date ss))
         (foreach l (caddr units)
           (princ (strcat "\n  " l))
           (setq lines (cons l lines)))
@@ -36335,8 +36460,12 @@
                               (cdr dimlay))
                         (cons (cons (strcat "Feet & inches: " (car units))
                                     (cadr units))
-                              (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                      (car cres)))))
+                              (cons (cons (strcat "Tech Title date: "
+                                                  (car datev))
+                                          (cdr datev))
+                                    (mapcar '(lambda (s)
+                                               (cons s (cchk:attn-p s)))
+                                            (car cres))))))
         (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
                                        (reverse lines) nil
                                        minx miny maxx maxy))
@@ -36393,7 +36522,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres dimlay units
+                       nd ndbad na nabad hdr dhdr l cres dimlay units datev
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -36519,7 +36648,8 @@
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
      (setq dimlay (cchk:dimlayer-verdict dims)
-           units  (cchk:audit-units ss))
+           units  (cchk:audit-units ss)
+           datev  (cchk:audit-date ss))
      (foreach l (caddr units)
        (princ (strcat "\n  " l))
        (setq lines (cons l lines)))
@@ -36527,8 +36657,12 @@
                            (cdr dimlay))
                      (cons (cons (strcat "Feet & inches: " (car units))
                                  (cadr units))
-                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                   (car cres)))))
+                           (cons (cons (strcat "Tech Title date: "
+                                               (car datev))
+                                       (cdr datev))
+                                 (mapcar '(lambda (s)
+                                            (cons s (cchk:attn-p s)))
+                                         (car cres))))))
      (cchk:write-report (strcat name " REPORT")
                         (strcat "Read-only scan - nothing in the drawing"
                                 " was changed.  "
@@ -47116,7 +47250,12 @@
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
-;;;     "02/30" is reported in red with what is wrong; a clean date
+;;;     "02/30" is reported in red with what is wrong. A well-formed
+;;;     calendar date that is NOT TODAY is reported too - a sheet going
+;;;     out under an old date is the mistake that catches. Only
+;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
+;;;     Title in reach the report says the date was not checked.
+"02/30" is reported in red with what is wrong; a clean date
 ;;;     ("05/01/2024") is a quiet OK.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
@@ -47222,7 +47361,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.5")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -47615,7 +47754,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -48681,7 +48820,18 @@
     ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29) ; leap Feb
     (t 28)))
 
-(defun lfc:date-verdict (raw / s mo dd yr)
+(defun lfc:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun lfc:mdy-str (mdy)
+  (strcat (cal:zeropad2 (car mdy)) "/" (cal:zeropad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+(defun lfc:date-verdict (raw / s mo dd yr now)
   ;; nil when raw is a clean MM/DD/YYYY calendar date; otherwise a
   ;; short string saying what is wrong with it
   (setq s (vl-string-trim " \t" (lfc:after-eq raw)))
@@ -48705,6 +48855,14 @@
        ((or (< dd 1) (> dd (lfc:days-in-month mo yr)))
         (strcat "'" raw "' - " (substr s 4 2)
                 " is not a valid day for that month - expected MM/DD/YYYY"))
+       ;; a real date, but is it TODAY?  A sheet going out under an old
+       ;; date is the mistake this catches -- the drawing was reworked
+       ;; and the title block never caught up.
+       ((progn (setq now (lfc:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now)
+                ") - update it"))
        (t nil)))))
 
 ;; --- dimension review ----------------------------------------------
@@ -49783,7 +49941,9 @@
               (if datebad
                 (strcat *lfc-date-tag* " " datebad)
                 (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
-            (princ (strcat "\n  Date: " datesum))))
+            (princ (strcat "\n  Date: " datesum)))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
         ;; --- Liner Material check -----------------------------------
         (setq liners      (vl-remove-if-not
@@ -50315,7 +50475,9 @@
          (setq datesum
            (if datebad
              (strcat *lfc-date-tag* " " datebad)
-             (strcat *lfc-date-tag* " = '" dateraw "' - OK")))))
+             (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
      ;; --- liner
      (setq liners (vl-remove-if-not
@@ -54593,7 +54755,14 @@
 ;;;      straight after a digit, so "Water's Edge" is prose and never
 ;;;      flagged.  LITESPACHECKSCAN keeps this one.
 ;;;
-;;;   7. THE TITLE BLOCK.  Everything on the border layer is measured
+;;;   7. THE TECH TITLE DATE.  The Date attribute of the "Tech Title"
+;;;      block must read TODAY, written MM/DD/YYYY -- a sheet going
+;;;      out under an old date is the mistake this catches.  The block
+;;;      is looked for in the selection and then across the drawing;
+;;;      with none in reach the report says the date was not checked
+;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   8. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
 ;;;      four lines both measure the same.  A spa sheet's title block is
 ;;;      exactly 0.6x the liner block: the liner nominal is 704 x
@@ -54601,7 +54770,7 @@
 ;;;      is reported with the factor it actually came out at, and a
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
-;;;   8. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;   9. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
 ;;;      the SPA-specific findings under underlined section headings.
@@ -54623,7 +54792,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.4")
+(setq *spacheck-version* "v1.5")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -54641,6 +54810,11 @@
 ;; CDIM is the command that moves stray dimensions onto *lay-dim*, and
 ;; is what the report tells you to run when it finds any.
 (setq spachk:*dimfix-cmd* "CDIM")
+
+;; The sheet's title block, and the attribute in it carrying the date.
+;; This is the Tech Title BLOCK, not the drawn border section 7 checks.
+(setq spachk:*techtitle-block* "Tech Title")  ; spaces optional in the name
+(setq spachk:*date-tag*        "Date")
 
 ;; Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*).
 (setq spachk:*ds-cover*   "STANDARD INCHES")
@@ -55663,6 +55837,151 @@
           rows)
     nil))
 
+;;; --- the Tech Title date ------------------------------------------------
+;;;  The sheet's Tech Title block carries a Date attribute, and it must
+;;;  read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
+;;;  is the mistake this catches: the drawing was reworked and the title
+;;;  block never caught up.
+
+(defun spachk:pad2 (n)
+  (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
+
+;; uppercase with every non-alphanumeric dropped, so "Tech Title"
+;; matches a block actually named "TECHTITLE" or "Tech-Title"
+(defun spachk:squash (s)
+  (vl-list->string
+    (vl-remove nil
+      (mapcar '(lambda (c)
+                 (cond ((and (>= c 48) (<= c 57)) c)
+                       ((and (>= c 65) (<= c 90)) c)
+                       ((and (>= c 97) (<= c 122)) (- c 32))))
+              (vl-string->list (if s s ""))))))
+
+;; the block's effective name, so a dynamic block answers by the name
+;; it was drawn from rather than its anonymous one
+(defun spachk:block-name (ent / res)
+  (setq res (vl-catch-all-apply
+              'vla-get-EffectiveName
+              (list (vlax-ename->vla-object ent))))
+  (if (vl-catch-all-error-p res) (spachk:dxf 2 ent) res))
+
+(defun spachk:ins-attrib (ent tag)
+  (cdr (assoc (strcase tag) (spachk:attribs ent))))
+
+;; a value may arrive labelled ("Date: 05/01/2024" or "Date = ..."),
+;; so the date is whatever follows the last "=" and then the last ":"
+(defun spachk:after-eq (s / p)
+  (while (setq p (vl-string-search "=" s))
+    (setq s (substr s (+ p 2))))
+  s)
+
+(defun spachk:datenorm (s)
+  (spachk:aftercolon (spachk:after-eq (if s s ""))))
+
+(defun spachk:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun spachk:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29)
+    (t 28)))
+
+(defun spachk:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun spachk:mdy-str (mdy)
+  (strcat (spachk:pad2 (car mdy)) "/" (spachk:pad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+;; nil when raw is today's date written MM/DD/YYYY; otherwise a short
+;; string saying what is wrong with it.
+(defun spachk:date-verdict (raw / s mo dd yr now)
+  (setq s (cal:trim (spachk:datenorm raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (spachk:all-digits-p (substr s 1 2)))
+         (not (spachk:all-digits-p (substr s 4 2)))
+         (not (spachk:all-digits-p (substr s 7 4))))
+     (strcat "'" s "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" s "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (spachk:days-in-month mo yr)))
+        (strcat "'" s "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       ((progn (setq now (spachk:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now)
+                ") - update it"))
+       (t nil)))))
+
+;; The Tech Title block: the first INSERT whose name carries it, looked
+;; for in the selection and then across the drawing, since the title
+;; block sits outside the area someone highlights as often as not.
+(defun spachk:find-title (ss / pat i e out ss2)
+  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*") i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e (ssname ss i) i (1+ i))
+      (if (and (null out) (entget e) (= "INSERT" (spachk:etype e))
+               (wcmatch (spachk:squash (spachk:block-name e)) pat))
+        (setq out e))))
+  (if (null out)
+    (progn
+      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
+      (if ss2
+        (repeat (sslength ss2)
+          (setq e (ssname ss2 i) i (1+ i))
+          (if (and (null out)
+                   (wcmatch (spachk:squash (spachk:block-name e)) pat))
+            (setq out e))))))
+  out)
+
+;; With no Tech Title in reach there is nothing to read, and that is
+;; said plainly rather than flagged -- a spa sheet may well be checked
+;; on its own, away from the sheet it will sit on.
+(defun spachk:audit-date (ss / blk raw bad)
+  (setq blk (spachk:find-title ss))
+  (if (null blk)
+    (spachk:res
+      (list (spachk:row (strcat "Tech Title: no '" spachk:*techtitle-block*
+                                "' block in reach - date NOT CHECKED")
+                        nil))
+      nil)
+    (progn
+      (setq raw (spachk:ins-attrib blk spachk:*date-tag*)
+            bad (if raw
+                  (spachk:date-verdict raw)
+                  "is missing from the block - expected MM/DD/YYYY"))
+      (spachk:res
+        (list (spachk:row
+                (if bad
+                  (strcat "Tech Title: " spachk:*date-tag* " " bad)
+                  (strcat "Tech Title: " spachk:*date-tag* " = '"
+                          (cal:trim (spachk:datenorm raw)) "' - OK"))
+                (if bad 1 nil)))
+        nil))))
+
 ;;; ======================================================================
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
@@ -55745,7 +56064,12 @@
   (setq r (spachk:audit-units ss)
         rows (append rows (spachk:res-rows r)))
 
-  ;; 7 -- the title block
+  ;; 7 -- the Tech Title date (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "THE TECH TITLE" 3))))
+  (setq r (spachk:audit-date ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 8 -- the title block
   (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
