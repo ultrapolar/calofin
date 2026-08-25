@@ -1281,12 +1281,23 @@ def _command(vm, a):
                 meas = math.dist(p1[:2], p2[:2])
             elif len(pts) >= 3:
                 loc = pt(pts[2])
-                # the dim line stands off along whichever axis separates
-                # it from the points; it measures across the other one
                 dx, dy = abs(p2[0] - p1[0]), abs(p2[1] - p1[1])
-                off_y = abs(loc[1] - (p1[1] + p2[1]) / 2.0)
-                off_x = abs(loc[0] - (p1[0] + p2[0]) / 2.0)
-                meas = dx if off_y >= off_x else dy
+                # "_V"/"_H" among the arguments forces the axis, which
+                # is how a routine dimensions the drop between two
+                # corners that run diagonally to each other
+                forced = {x.upper().lstrip('_') for x in a
+                          if isinstance(x, str)} & {'V', 'H',
+                                                    'VERTICAL',
+                                                    'HORIZONTAL'}
+                if forced:
+                    meas = dy if forced & {'V', 'VERTICAL'} else dx
+                else:
+                    # the dim line stands off along whichever axis
+                    # separates it from the points; it measures across
+                    # the other one
+                    off_y = abs(loc[1] - (p1[1] + p2[1]) / 2.0)
+                    off_x = abs(loc[0] - (p1[0] + p2[0]) / 2.0)
+                    meas = dx if off_y >= off_x else dy
             else:
                 meas = math.dist(p1[:2], p2[:2])
             vm.entdata[e].append(Dot(42, meas))
@@ -1605,6 +1616,12 @@ def _vl_every(vm, a):
 
 @bi('vl-catch-all-apply')
 def _vl_catch_all_apply(vm, a):
+    # (vl-catch-all-apply 'function list) -- the list is REQUIRED, even
+    # for a function that takes no arguments.  Leaving it off is an
+    # error in AutoCAD, and one vl-catch-all-apply cannot catch: it is
+    # the call to vl-catch-all-apply itself that is malformed
+    if len(a) < 2:
+        raise LispError("vl-catch-all-apply: too few arguments", vm)
     try:
         return vm.call_value(a[0], list(a[1] or []))
     except LispError as e:
