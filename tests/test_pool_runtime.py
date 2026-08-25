@@ -375,8 +375,9 @@ assert any('_.MIRROR' in str(c) for c in vm.commands)
 _mir = [c for c in vm.commands if c and c[0] == '_.MIRROR'][0]
 assert abs(_mir[3][1] - _mir[4][1]) < 1e-9, _mir[3:5]
 # in-square: the parallel pairs must be held EXACTLY -- A-B and E-F
-# both dead horizontal, B-C at +45 and D-E at 225 (parallel), closure
-# error absorbed by the E-F / F-A lengths instead of bent corners
+# both dead horizontal, B-C at +45 and D-E at 225 (parallel) -- and the
+# three deep-end sides (A-B, E-F, F-A, what the hopper is measured off)
+# must come out ON the tape, with any closure error left in the wing
 segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
 
 
@@ -388,15 +389,61 @@ def _seg(pa, pb, tol=0.01):
                for a, b in segs)
 
 
+# (the VM records the MIRROR command without moving entities, so the
+# perimeter below is still read in the pool's own coordinates)
 _u = 0.7071067812
-_A, _B = (0.0, 0.0), (296.0, 0.0)
-_C = (_B[0] + 167.6*_u, 167.6*_u)
-_D = (_C[0] - 167.6*_u, _C[1] + 167.6*_u)
-_E = (_D[0] - 99.0*_u, _D[1] - 99.0*_u)
-_F = (0.0, _E[1])
-for pa, pb in [(_A, _B), (_B, _C), (_C, _D), (_D, _E), (_E, _F), (_F, _A)]:
-    assert _seg(pa, pb), f"in-square lazy L perimeter missing {pa}->{pb}"
-print("   lazy L mirrored; parallel pairs exact, closure -> E-F/F-A")
+_A, _B, _F, _E = (0.0, 0.0), (296.0, 0.0), (0.0, 168.0), (226.0, 168.0)
+assert _seg(_A, _B), "A-B must be held to the tape"
+assert _seg(_E, _F), "E-F must be held to the tape"
+assert _seg(_F, _A), "F-A must be held to the tape"
+# B-C and D-E still run at the 45-degree bend, so they stay parallel
+_wing = {}
+for _a, _b in segs[:6]:               # the perimeter is drawn before the bottom
+    for _corner, _key in ((_B, 'bc'), (_E, 'de')):
+        _p, _q = tuple(_a[:2]), tuple(_b[:2])
+        if _m.dist(_q, _corner) < 0.01:
+            _p, _q = _q, _p
+        if _m.dist(_p, _corner) < 0.01 and abs(_q[1] - _p[1]) > 0.01:
+            _wing[_key] = (_q[0] - _p[0], _q[1] - _p[1])
+assert set(_wing) == {'bc', 'de'}, _wing
+assert abs(_wing['bc'][0]*_wing['de'][1]
+           - _wing['bc'][1]*_wing['de'][0]) < 1e-6, "B-C // E-D must be exact"
+for _v in _wing.values():             # both on the 45-degree bend
+    assert abs(_v[0] - _v[1]) < 1e-6, _wing
+# this tape is only ~1" out, so the wing swallows it and nothing is
+# flagged
+assert not [d for d in drawn(vm, 'TEXT', 'POOL-NOTES')
+            if d.get(62) == 1], "a tape this close must not be flagged"
+print("   lazy L mirrored; deep end true, bends parallel, wing takes the slack")
+
+print("== R9b. lazy L whose six sides cannot close: flagged, not fudged ==")
+# 29'6 / 13'6 / 18'0 / 8'6 / 24'6 / 18'0 -- these six do not make a
+# 45-degree lazy L.  The deep end must still come out exactly on the
+# tape, the wing must carry all of it, and the report must SAY SO.
+vm = run(["Insquare", "LA"] + BASE +
+         [354.0, 162.0, 216.0, 102.0, 294.0, 216.0,
+          "No",                   # corners not modified
+          "No"] +                 # no hopper detail
+         ["No"],                  # mirror
+         "R9b")
+segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
+for pa, pb in [((0.0, 0.0), (354.0, 0.0)),          # A-B
+               ((294.0, 216.0), (0.0, 216.0)),      # E-F
+               ((0.0, 216.0), (0.0, 0.0))]:         # F-A
+    assert _seg(pa, pb), f"deep-end side moved: {pa}->{pb}"
+_notes = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES') if d.get(62) == 1]
+assert any("SIDES DO NOT CLOSE - B-C/C-D/D-E" in (t or '')
+           for t in _notes), _notes
+# every wing side that missed is red in the report, and the deep-end
+# rows are not
+for _lbl in ("SIDE B-C", "SIDE C-D", "SIDE D-E"):
+    assert any((t or '') == _lbl for t in _notes), (_lbl, _notes)
+for _lbl in ("SIDE A-B", "SIDE E-F", "SIDE F-A"):
+    assert not any((t or '') == _lbl for t in _notes), (_lbl, _notes)
+# ...and the dimensions that read those sides are red too
+assert len([d for d in drawn(vm, 'DIMENSION', 'DIMENSION')
+            if d.get(62) == 1]) == 3, "the three off-tape side dims go red"
+print("   deep end held exactly; wing off-tape sides flagged red")
 
 print("== R10. round, in-square (one prompt), oval hopper ==")
 vm = run(["Insquare", "ROU"] + BASE +

@@ -745,16 +745,39 @@ pinned down — with none at all you simply get the perfect right-angle
 (or 45°-jointed) shape. The two-triangle check is a rectangle-only
 computation and is not made for L pools.
 
-**In-square lazy L — parallel pairs held exactly.** Field side
+**In-square lazy L — deep end held, the wing gives.** Field side
 lengths never quite close, and letting a best-fit absorb that error
 would bend the corners, breaking the pairs that must read parallel
 (**A-B ∥ E-F** and **B-C ∥ D-E**). So the in-square lazy L is not
-relaxed at all: the chain A→B→C→D→E is walked at the **exact
-headings** (0°, 45°, 135°, 225°) with the taped lengths, and F drops
-straight down from E onto the left wall. Parallelism is perfect by
-construction; whatever closure error the tapes carried lands in the
-**lengths of E-F and F-A**, where the report shows it as small
-target/actual deltas instead of a subtly bent pool.
+relaxed at all, it is **built**:
+
+* the main section — **A-B, E-F and F-A** — is held **exactly** and
+  comes out a true rectangle (A-B and E-F dead horizontal, F-A dead
+  vertical, square corners at A and F). That is the deep end, and it
+  is the frame the **hopper** is measured off, so it is the part that
+  has to be right;
+* the bends **B-C** and **D-E** stay on the 45° heading, so they stay
+  parallel to each other whatever happens;
+* the only freedom left is how far C and D slide along those bend
+  lines, and it is spent spreading the closure error over the three
+  **wing** sides in the least-squares sense — B-C and D-E give up
+  half of it each (one grows exactly as much as the other shrinks)
+  and C-D takes the rest.
+
+Parallelism is perfect by construction, and the error lands where a
+lazy L can carry it. Earlier revisions walked the whole chain
+A→B→C→D→E at exact headings and dropped F onto the left wall, which
+piled every inch of closure error into **E-F and F-A** — the deep-end
+sides, the two that must not move.
+
+**And a tape that misses by feet is an error, not a fit.** Whatever
+the fit could not hold to within the 1" side tolerance is called out
+rather than absorbed quietly: those sides are **dimensioned in red**,
+their report rows are red, and **`SIDES DO NOT CLOSE - <sides> OFF THE
+TAPE, RE-MEASURE`** is written under the table (with the same warning
+at the command line). Six sides that miss each other by a foot are not
+a pool that got drawn slightly small — they are a measurement to go
+back and take again.
 
 ### Guided input
 

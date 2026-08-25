@@ -83,7 +83,16 @@
 ;;;           more tightly.
 ;;;  L/LazyL: six-corner pools with one wing (square step joint for
 ;;;           the true L, angled joint for the lazy L); six sides plus
-;;;           up to six cross dims, best-fit the same way.
+;;;           up to six cross dims, best-fit the same way.  An
+;;;           IN-SQUARE lazy L is built rather than fitted: the main
+;;;           section A-B / E-F / F-A (the deep end, where the hopper
+;;;           is measured from) is held EXACTLY and comes out a true
+;;;           rectangle, the 45-degree bends B-C and D-E stay
+;;;           parallel, and whatever the six measurements fail to
+;;;           close by is spread over the three WING sides.  Past the
+;;;           1" side tolerance that is a bad tape, so those sides are
+;;;           dimensioned red, listed red in the report and called out
+;;;           as "SIDES DO NOT CLOSE" under it.
 ;;;
 ;;;  Every cross-dim prompt also accepts NA when that measurement was
 ;;;  not taken in the field: the fitter skips it and the report shows
@@ -111,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV09")
+(setq pool:*version* "082526 REV10")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -2363,24 +2372,84 @@
             f (pool:v- e (list (nth 4 sides) 0.0))))
   (list a b c d e f))
 
-;; In-square lazy L: hold the direction of every side EXACTLY so the
-;; two parallel pairs stay parallel (A-B // E-F and B-C // D-E), rather
-;; than letting the relaxation bend the corners to absorb closure
-;; error.  The chain A->B->C->D->E is walked at the exact headings
-;; (0, 45, 135, 225 degrees) with the measured lengths, then F drops
-;; straight down from E onto the left wall (F = (0, Ey)).  Any closure
-;; error therefore lands in the LENGTHS of E-F and F-A (visible in the
-;; report as small deltas), never in the angles.
-(defun pool:hexsquare (sides / u ab bc cd de a b c d e f)
+;; In-square lazy L: the DEEP END is what has to be right.  The hopper
+;; sits in the main section (A - break - E - F) and is dimensioned off
+;; A-B, E-F and F-A, so those three are held EXACTLY and the main body
+;; comes out a true rectangle -- A-B and E-F dead horizontal, F-A dead
+;; vertical, square corners at A and F.
+;;
+;; That leaves the wing to absorb whatever the tape did not close.
+;; B-C and D-E are held PARALLEL (both on the 45-degree bend), so the
+;; only freedom left is how far C and D slide along their own bend
+;; lines: one number, m -- the slide of D relative to C, measured
+;; along the bend.  It is picked to spread the closure error over the
+;; three wing sides in the least-squares sense: B-C and D-E give up
+;; half of it each (one grows exactly as much as the other shrinks)
+;; and C-D takes what is left.  Every one of those deltas shows in the
+;; report, red past pool:*side-tol* (see the SIDES DO NOT CLOSE note).
+;;
+;; The old build walked the whole chain A->B->C->D->E at exact headings
+;; and dropped F onto the left wall, which piled the entire closure
+;; error into E-F and F-A -- the two sides the hopper is measured
+;; from, and the two that must not move.
+
+;; Summed squared length error of the three wing sides at slide m.
+;; m0 is the slide the taped B-C / D-E would have; (vx vy) is B->E,
+;; the wing's closing vector, so C-D comes to |(vx+m, vy+m)|.  B-C and
+;; D-E split (m - m0) between them, which lands their two squared
+;; errors at exactly (m - m0)^2 together.
+(defun pool:hexwing (m m0 vx vy cd / g)
+  (setq g (sqrt (max 0.0 (+ (* 2.0 m m) (* 2.0 m (+ vx vy))
+                            (* vx vx) (* vy vy)))))
+  (+ (* (- m m0) (- m m0)) (* (- g cd) (- g cd))))
+
+(defun pool:hexsquare (sides / u ab bc cd de ef fa a b c d e f vx vy m0
+                             lo hi n i step m fm bm bf m1 m2 sl s1 s2)
   (setq u 0.7071067812
-        ab (nth 0 sides) bc (nth 1 sides)
-        cd (nth 2 sides) de (nth 3 sides)
+        ab (nth 0 sides) bc (nth 1 sides) cd (nth 2 sides)
+        de (nth 3 sides) ef (nth 4 sides) fa (nth 5 sides)
         a (list 0.0 0.0)
-        b (list ab 0.0))
-  (setq c (pool:v+ b (list (* bc u) (* bc u)))
-        d (pool:v+ c (list (* cd (- u)) (* cd u)))
-        e (pool:v+ d (list (* de (- u)) (* de (- u))))
-        f (list 0.0 (cadr e)))
+        b (list ab 0.0)
+        f (list 0.0 fa)
+        e (list ef fa)
+        vx (- (car e) (car b))
+        vy (- (cadr e) (cadr b))
+        m0 (* u (- de bc))
+        ;; C stays past B and D past E: the slide can never eat more
+        ;; than a bend side's own length (a hair inside, so neither
+        ;; collapses to nothing)
+        lo (+ (- m0 (* 2.0 u de)) 0.001)
+        hi (- (+ m0 (* 2.0 u bc)) 0.001)
+        n 240
+        step (/ (- hi lo) n)
+        bm m0
+        bf (pool:hexwing m0 m0 vx vy cd)
+        i 0)
+  ;; coarse sweep first -- the wing error is a squared distance to a
+  ;; circle and can hold two dips, so start the polish in the deeper
+  ;; one rather than wherever a local slope points
+  (while (<= i n)
+    (setq m (+ lo (* i step))
+          fm (pool:hexwing m m0 vx vy cd))
+    (if (< fm bf) (setq bf fm bm m))
+    (setq i (1+ i)))
+  ;; ternary polish inside the winning bucket
+  (setq lo (max lo (- bm step))
+        hi (min hi (+ bm step))
+        i 0)
+  (while (< i 40)
+    (setq m1 (+ lo (/ (- hi lo) 3.0))
+          m2 (- hi (/ (- hi lo) 3.0)))
+    (if (< (pool:hexwing m1 m0 vx vy cd) (pool:hexwing m2 m0 vx vy cd))
+        (setq hi m2)
+        (setq lo m1))
+    (setq i (1+ i)))
+  (setq m (* 0.5 (+ lo hi))
+        sl (/ (- m m0) (* 2.0 u))     ; what each bend side gives up
+        s1 (- bc sl)
+        s2 (+ de sl)
+        c (pool:v+ b (list (* s1 u) (* s1 u)))
+        d (pool:v+ e (list (* s2 u) (* s2 u))))
   (list a b c d e f))
 
 ;; Side constraints (banded by +/-band) for the hexagon.
@@ -2431,7 +2500,8 @@
 (defun pool:fithex (sides diags lazy stol xtol / guess p1 e1 p2 e2 any dg)
   ;; In-square lazy L (no cross dims measured): build the shape at
   ;; exact headings instead of relaxing, so A-B // E-F and B-C // D-E
-  ;; hold perfectly and closure error goes to the E-F / F-A lengths.
+  ;; hold perfectly and the closure error goes into the WING lengths,
+  ;; leaving the deep-end sides (A-B, E-F, F-A) true -- pool:hexsquare.
   (setq any nil)
   (foreach dg diags (if dg (setq any t)))
   (if (and lazy (not any))
@@ -2519,7 +2589,7 @@
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast hxg
                             octy ocsz icty icsz oc ic hcs hce hcarcs ock
-                            rbox mprims mlbls)
+                            rbox mprims mlbls soff)
   (setq oldclay (getvar "CLAYER"))
   ;; The live guide geometry (see "live guide reshaping"): each side
   ;; answered so far is held, every side still open takes its nominal
@@ -2699,7 +2769,31 @@
   (pool:pvkill)
 
   ;; pts / res / failed were fit at the top of hx:corners, so the
-  ;; corner questions could be sized against the real corner angles
+  ;; corner questions could be sized against the real corner angles.
+  ;;
+  ;; soff = every side the fit could not build to the tape.  The
+  ;; in-square lazy L pushes closure error into the wing ON PURPOSE
+  ;; (pool:hexsquare), so a small delta there is the design working --
+  ;; but six measurements that miss each other by more than
+  ;; pool:*side-tol* are a bad tape, not a fit, and saying so is the
+  ;; whole point of the report.  Those sides are drawn with a red
+  ;; dimension, listed red in the table, and called out underneath.
+  ;; The trip point carries pool:fithexr's own 0.05 slack, so a side
+  ;; the out-of-square fit legitimately flexed to the edge of its
+  ;; +/-side-tol band is not reported as a bad measurement.
+  (setq soff nil k 0)
+  (foreach pr pool:*hexsides*
+    (if (> (abs (- (distance (nth (car pr) pts) (nth (cadr pr) pts))
+                   (nth k sides)))
+           (+ pool:*side-tol* 0.05))
+        (setq soff (cons k soff)))
+    (setq k (1+ k)))
+  (setq soff (reverse soff))
+  (if soff
+      (pool:valnote
+        (strcat "SIDES DO NOT CLOSE - "
+                (pool:fixnames soff pool:*hexsidenames*)
+                " OFF THE TAPE, RE-MEASURE")))
   (setq notes nil
         xmin (apply 'min (mapcar 'car pts))
         xmax (apply 'max (mapcar 'car pts))
@@ -2763,6 +2857,10 @@
         (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
                      (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
                                    pts doff)))
+    ;; a side the tape could not close reads its BUILT length, so the
+    ;; dimension goes red like any other measurement the validator had
+    ;; to move
+    (if (member k soff) (pool:dimred))
     (setq k (1+ k)))
   ;; corner annotations: one Typ. callout on an outer corner (B), the
   ;; inner corner E dimensioned on its own.  B carries its own fitted
@@ -2812,9 +2910,11 @@
   ;; report table
   (setq rows nil k 0)
   (foreach pr pool:*hexsides*
-    (setq rows (cons (list (strcat "SIDE " (nth k pool:*hexsidenames*))
-                           (nth k sides)
-                           (distance (nth (car pr) pts) (nth (cadr pr) pts)))
+    (setq rows (cons (pool:vrow (strcat "SIDE " (nth k pool:*hexsidenames*))
+                                (nth k sides)
+                                (distance (nth (car pr) pts)
+                                          (nth (cadr pr) pts))
+                                k soff)
                      rows)
           k (1+ k)))
   (if (not pool:*insq*)
@@ -2891,9 +2991,13 @@
     (setq mlbls (append mlbls (list (cons p (nth (length mlbls) lbls))))))
   (pool:minimap mprims pts mlbls (+ (car rbox) (* 3.0 th)) (cadr rbox)
                 (* 24.0 th) th)
-  (if failed
-      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
-      (princ "\nPool layout complete -- see the report table."))
+  (cond
+    (failed
+     (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***"))
+    (soff
+     (princ (strcat "\n*** SIDES DO NOT CLOSE -- deep end held true, the wing"
+                    " carries the error, see report table ***")))
+    (t (princ "\nPool layout complete -- see the report table.")))
   (princ))
 
 ;;; -------------------- report table -----------------------------------
