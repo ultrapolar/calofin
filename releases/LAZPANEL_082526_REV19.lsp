@@ -62,7 +62,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.8")
+(setq *lazpanel-version* "v1.9")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -78,15 +78,115 @@
 ;;    - the deprecated acady matcher (MATCHSTD, ACADY-*) never appears.
 ;;  tests/test_lazpanel.py enforces all five rules against the tree.
 
+;;  TWO KINDS OF TAB, and a command may sit on several.
+;;
+;;  The first four pages are JOBS -- what the drafter is actually doing
+;;  this hour: a pool, a cover, a spa, and everything those three do not
+;;  reach.  They run in the order the work runs: lay the shape out, tie
+;;  the points, build the steps, then dimension and check.  A command
+;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
+;;  all three, because every job ends the same way.  The last four are
+;;  the CATEGORIES the panel has always had -- the whole roster filed by
+;;  what each tool is rather than when you reach for it -- so a tool you
+;;  cannot place in a job is still one tab away.
+;;
+;;  Every command therefore appears at least twice: once on a job page
+;;  and once on a category page.  Keys are only required to be unique
+;;  within a page, and each page is its own dialog, so this is free --
+;;  but lzp:commands has to fold the repeats or the status line would
+;;  count the roster twice over.
+;;
+;;  "Rest" is not a hand-kept list: it is every command the Pool, Cover
+;;  and Spa pages do not name, and the test recomputes that complement
+;;  from the tree, so a tool added to the panel lands there by default
+;;  instead of falling off the job pages unnoticed.
+
 (setq lzp:*groups*
-  '(("Layout"
+  '(("Pool"
+     ("POOL"           "Pool layout")
      ("LAZFORM"        "Pool from a filled-in chart")
+     ("OASIS"          "Freeform pool")
+     ("ABHD"           "Survey perimeter + bottom")
+     ("ADAB"           "Organic shape points")
+     ("FITABHD"        "Typed template fit")
+     ("XFTCONV"        "Leica import cleanup")
+     ("ABFIND"         "A/B stake ties")
+     ("ABMOVE"         "Move mis-taped point")
+     ("CDCREATE"       "Lines to cross dims")
+     ("CDCALLOUT"      "Point-to-point cross dims")
+     ("BPCALLOUT"      "Bad point callout")
+     ("CORNERSTP"      "Corner step")
+     ("HEMISTEP"       "Hemi step")
+     ("NORMIESTEP"     "Normie step")
+     ("AUTOBEAD"       "Bead offsets")
+     ("PERPPTS"        "Perpendicular points")
+     ("CPERPPTS"       "Curved perp points")
+     ("AUTODIM"        "Auto dimension")
+     ("LINFINCHECK"    "Liner finish review")
+     ("LINFINSCAN"     "Liner finish scan")
+     ("LITELINFINSCAN" "Liner scan, no dims")
+     ("DIMCHECK"       "Dimension review")
+     ("DIMSCAN"        "Dimension scan"))
+    ("Cover"
+     ("POOLCOVER"      "Pool layout, no bottom")
+     ("LAZFORMCOVER"   "Chart to pool, no bottom")
+     ("OASIS"          "Freeform pool")
+     ("ABHDCOVER"      "Survey perimeter, no bottom")
+     ("FITABHDCOVER"   "Typed template fit, no bottom")
+     ("STOCKCOVER"     "Stock cover placement")
+     ("XFTCONV"        "Leica import cleanup")
+     ("ABFIND"         "A/B stake ties")
+     ("ABMOVE"         "Move mis-taped point")
+     ("CDCREATE"       "Lines to cross dims")
+     ("CDCALLOUT"      "Point-to-point cross dims")
+     ("BPCALLOUT"      "Bad point callout")
+     ("PADDLE"         "Paddle pads")
+     ("AUTODIM"        "Auto dimension")
+     ("COVERCHECK"     "Cover review")
+     ("COVERSCAN"      "Cover scan")
+     ("LITECOVERSCAN"  "Cover scan, no dims")
+     ("DIMCHECK"       "Dimension review")
+     ("DIMSCAN"        "Dimension scan"))
+    ("Spa"
+     ("SPA"            "Spa template")
+     ("AUTODIM"        "Auto dimension")
+     ("SPACHECK"       "Spa sheet review")
+     ("SPACHECKSCAN"   "Spa sheet scan")
+     ("LITESPACHECKSCAN" "Spa scan, no dims")
+     ("DIMCHECK"       "Dimension review")
+     ("DIMSCAN"        "Dimension scan"))
+    ("Rest"
+     ("POOLDEMO"       "Worked pool example")
+     ("CABHD"          "Perimeter-only fit")
+     ("LHD"            "Laser outline fit")
+     ("SMARTFILLET"    "Corner radius, previewed")
+     ("WCALST"         "Unroll curved band")
+     ("ABCDEF"         "Rectangle plot")
+     ("ALTABCDEF"      "Clockwise rectangle plot")
+     ("XYPLOT"         "X/Y offset plot")
+     ("DRONE"          "Drone cleanup")
+     ("TYDRN"          "Text + point tidy-up")
+     ("AUTODIMSIDEPOV" "Side-view dims")
+     ("STAIRDIM"       "Stair dims")
+     ("FLOORDIM"       "Floor dims")
+     ("DIMCONTEND"     "Continue dim chains")
+     ("CHECK"          "Drawing check")
+     ("DIMARCCHECK"    "Arc endpoint check")
+     ("LINCHECK"       "Line checklist")
+     ("LINTXTCHK"      "Liner checklist text")
+     ("CCPRECHECK"     "Tech flow chart"))
+    ("Layout"
+     ("LAZFORM"        "Pool from a filled-in chart")
+     ("LAZFORMCOVER"   "Chart to pool, no bottom")
      ("SPA"            "Spa template")
      ("POOL"           "Pool layout")
+     ("POOLCOVER"      "Pool layout, no bottom")
      ("POOLDEMO"       "Worked pool example")
      ("OASIS"          "Freeform pool")
      ("FITABHD"        "Typed template fit")
+     ("FITABHDCOVER"   "Typed template fit, no bottom")
      ("ABHD"           "Survey perimeter + bottom")
+     ("ABHDCOVER"      "Survey perimeter, no bottom")
      ("ADAB"           "Organic shape points")
      ("CABHD"          "Perimeter-only fit")
      ("LHD"            "Laser outline fit")
@@ -95,6 +195,7 @@
      ("CORNERSTP"      "Corner step")
      ("HEMISTEP"       "Hemi step")
      ("NORMIESTEP"     "Normie step")
+     ("SMARTFILLET"    "Corner radius, previewed")
      ("STOCKCOVER"     "Stock cover placement")
      ("WCALST"         "Unroll curved band"))
     ("Points"
@@ -135,6 +236,17 @@
      ("LINTXTCHK"      "Liner checklist text")
      ("CCPRECHECK"     "Tech flow chart"))))
 
+;; How the tab strip is laid out: one DCL row per entry, in this order.
+;; The jobs sit on one line and the categories on the next, which is
+;; both what they mean and what keeps the strip narrow -- eight tabs on
+;; a single row run about 94 character cells, and DCL will not scroll a
+;; dialog that is wider than the screen.  This is presentation only; the
+;; pages themselves are still lzp:*groups*.  The test asserts the two
+;; tables name exactly the same groups, so neither can drift.
+(setq lzp:*rows*
+  '(("Pool" "Cover" "Spa" "Rest")
+    ("Layout" "Points" "Dimensions" "Checking")))
+
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
@@ -153,10 +265,14 @@
         (foreach c (cdr g) (setq out (cons (car c) out)))))
   (reverse out))
 
+;; Folded, because a command that serves two jobs is listed on both
+;; pages and the status line counts tools, not buttons.  First
+;; appearance wins, so the order still reads as the panel is laid out.
 (defun lzp:commands ( / g c out)
   (foreach g lzp:*groups*
     (foreach c (cdr g)
-      (setq out (cons (car c) out))))
+      (if (not (member (car c) out))
+        (setq out (cons (car c) out)))))
   (reverse out))
 
 ;; Is C:<name> defined in this session?  An unbound symbol evaluates to
@@ -180,17 +296,21 @@
 
 (defun lzp:dlgname (group) (strcat "lazpanel_" (strcase group t)))
 
-;; The tab strip: one button per group.  DCL has no tab tile, so a tab
-;; is a button that closes this page and reopens the next -- and since
-;; done_dialog reports where the dialog was standing, it reopens there
-;; rather than jumping back to the middle of the screen.
-(defun lzp:tabstrip ( / out g)
-  (setq out (list "  : row {"))
-  (foreach g lzp:*groups*
-    (setq out (cons (strcat "    : button { key = \"tab_" (car g)
-                            "\"; label = \"" (car g) "\"; }")
-                    out)))
-  (reverse (cons "  }" out)))
+;; The tab strip: one button per group, laid out in the rows of
+;; lzp:*rows* -- jobs on the first line, categories on the second.  DCL
+;; has no tab tile, so a tab is a button that closes this page and
+;; reopens the next -- and since done_dialog reports where the dialog
+;; was standing, it reopens there rather than jumping back to the middle
+;; of the screen.
+(defun lzp:tabstrip ( / out r g)
+  (foreach r lzp:*rows*
+    (setq out (cons "  : row {" out))
+    (foreach g r
+      (setq out (cons (strcat "    : button { key = \"tab_" g
+                              "\"; label = \"" g "\"; }")
+                      out)))
+    (setq out (cons "  }" out)))
+  (reverse out))
 
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is

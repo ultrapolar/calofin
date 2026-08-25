@@ -100,9 +100,36 @@ vm = fresh()
 ver = vm.globals.get('*lazpanel-version*')
 assert ver and re.fullmatch(r'v\d+\.\d+', str(ver)), ver
 assert any('LAZPANEL' in str(p) for p in vm.printed), vm.printed
-PANEL = roster(vm)
-assert len(PANEL) == len(set(PANEL)), "duplicate buttons: %r" % PANEL
-print("   %s, %d buttons, no duplicates" % (ver, len(PANEL)))
+BUTTONS = roster(vm)                       # every button, repeats and all
+PANEL = sorted(set(BUTTONS))               # every command, once
+# A command may serve more than one job, so it may appear on more than
+# one page -- but never twice on the SAME page, which would be a
+# duplicate DCL key.  (The per-page key check below catches that too;
+# this one names the offender in roster terms.)
+for _g in vm.globals.get('lzp:*groups*') or []:
+    _names = [str(c[0]) for c in _g[1:]]
+    assert len(_names) == len(set(_names)), \
+        "%s lists a command twice: %r" % (_g[0], _names)
+# lzp:commands folds the repeats -- the status line counts tools, not
+# buttons, and would otherwise report more tools than exist.
+# A command that appears on several pages must read the same on each --
+# two captions for one button is the drift this arrangement invites.
+_caption = {}
+for _g in vm.globals.get('lzp:*groups*') or []:
+    for _c in _g[1:]:
+        _name, _cap = str(_c[0]), str(_c[1])
+        if _name in _caption:
+            assert _caption[_name][1] == _cap, (
+                "%s reads %r on %s but %r on %s"
+                % (_name, _caption[_name][1], _caption[_name][0], _cap, _g[0]))
+        else:
+            _caption[_name] = (str(_g[0]), _cap)
+vm.loads('(setq test:*all* (lzp:commands))')
+FOLDED = [str(x) for x in vm.globals['test:*all*']]
+assert len(FOLDED) == len(set(FOLDED)), "lzp:commands repeats: %r" % FOLDED
+assert set(FOLDED) == set(PANEL), "lzp:commands lost a command"
+print("   %s, %d buttons over %d commands, none twice on a page"
+      % (ver, len(BUTTONS), len(PANEL)))
 
 
 print("== roster pin: panel == headline commands under lisp/ ==")
@@ -148,6 +175,14 @@ print("== the generated DCL is well formed, one page per group ==")
 vm.loads('(setq test:*dcl* (lzp:dcl-lines))')
 dcl = [str(l) for l in vm.globals.get('test:*dcl*')]
 GROUPS = [str(g[0]) for g in vm.globals['lzp:*groups*']]
+ROWS = [[str(g) for g in r] for r in vm.globals['lzp:*rows*']]
+
+# The strip layout and the pages are two tables; neither may drift from
+# the other, or a group would be unreachable (no tab) or a tab would
+# open a page that does not exist.
+flat_rows = [g for r in ROWS for g in r]
+assert flat_rows == GROUPS, \
+    "lzp:*rows* names %r, lzp:*groups* names %r" % (flat_rows, GROUPS)
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
 assert len(opens) == len(GROUPS), (
@@ -204,22 +239,26 @@ for gname in GROUPS:
     tabs = re.findall(r'key = "tab_([^"]+)"; label = "([^"]+)"', text)
     assert [t[0] for t in tabs] == GROUPS, \
         "%s: tab strip is %r, expected %r" % (gname, [t[0] for t in tabs], GROUPS)
-    wide = sum(len(t[1]) + 6 for t in tabs)
+    # width is per ROW, not per strip: the tabs wrap onto the rows of
+    # lzp:*rows*, so what has to fit the screen is the widest single row.
+    wide = max(sum(len(g) + 6 for g in r) for r in ROWS)
     assert wide <= TAB_BUDGET, (
-        "%s: the tab strip is about %d characters wide, over the %d budget "
+        "%s: the widest tab row is about %d characters, over the %d budget "
         "-- DCL will not scroll a dialog wider than the screen" % (gname, wide, TAB_BUDGET))
-    # this page carries exactly its own group's commands
+    assert text.count(': row {') >= len(ROWS), \
+        "%s: %d tab rows emitted, expected %d" % (gname, text.count(': row {'), len(ROWS))
+    # this page carries exactly its own group's commands -- no more and
+    # no fewer.  It may well share commands with another page (AUTODIM
+    # is on Pool, Cover and Spa), so the test is against this group's
+    # own list rather than against every other group's.
     vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % gname)
     mine = [str(x) for x in vm.globals['test:*g*']]
     assert set(mine) <= set(keys), \
         "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
-    for other in GROUPS:
-        if other == gname:
-            continue
-        vm.loads('(setq test:*o* (lzp:group-commands "%s"))' % other)
-        strays = set(str(x) for x in vm.globals['test:*o*']) & set(keys)
-        assert not strays, \
-            "%s: carries %s's commands too: %r" % (gname, other, sorted(strays))
+    extra = set(keys) - set(mine) - {'status', 'cancel'} \
+            - {'tab_' + g for g in GROUPS}
+    assert not extra, \
+        "%s: buttons for commands not in its group: %r" % (gname, sorted(extra))
     seen_keys |= set(mine)
     assert 'status' in keys and 'cancel' in keys, gname
     assert text.count('is_cancel = true') == 1
@@ -241,13 +280,44 @@ for gname in GROUPS:
     print("   %-11s %2d lines, %2d commands, tab strip ~%d chars"
           % (gname, len(d), len(mine), wide))
 
-# every command on the roster lives on exactly one page
+# every command on the roster lives on at least one page
 assert seen_keys == set(PANEL), (
     "pages and roster disagree: %r" % sorted(seen_keys ^ set(PANEL)))
-print("   %d dialogs, %d commands across them, none on two pages"
-      % (len(opens), len(seen_keys)))
+
+# The job pages between them account for the whole roster, and "Rest" is
+# exactly what Pool, Cover and Spa leave over -- computed here rather
+# than trusted, so a tool added to the panel and forgotten on the job
+# pages shows up as a Rest omission instead of silently vanishing from
+# the workflow the drafter actually follows.
+JOBS = ['Pool', 'Cover', 'Spa']
+
+
+def page_cmds(name):
+    vm.loads('(setq test:*p* (lzp:group-commands "%s"))' % name)
+    return set(str(x) for x in vm.globals['test:*p*'])
+
+
+named = set()
+for j in JOBS:
+    named |= page_cmds(j)
+rest = page_cmds('Rest')
+assert rest == set(PANEL) - named, (
+    "Rest should be the complement of %s; missing from Rest: %r; "
+    "should not be there: %r"
+    % ('/'.join(JOBS), sorted((set(PANEL) - named) - rest),
+       sorted(rest - (set(PANEL) - named))))
+assert named | rest == set(PANEL), "the job pages do not cover the roster"
+print("   %d dialogs, %d commands across them (%d buttons)"
+      % (len(opens), len(seen_keys), len(BUTTONS)))
+print("   jobs cover %d, Rest holds the other %d, %d shared across jobs"
+      % (len(named), len(rest),
+         sum(1 for c in PANEL if sum(c in page_cmds(j) for j in JOBS) > 1)))
 
 print("== end-to-end with the DCL surface stubbed ==")
+# The stub session "has" exactly one command, LIVE, and deliberately
+# lacks MISSING; both must sit on the page the panel opens on.
+LIVE = 'POOL'
+MISSING = 'OASIS'
 # The stubs keep one ORDERED event log (stub:*events*) so the cleanup
 # sequence -- handle closed before load_dialog reads the file, dialog
 # unloaded and temp file deleted before anything launches -- is pinned,
@@ -336,8 +406,12 @@ STUB = '''
   (setq stub:*visible* v) (stub:ev "visible") t)
 (defun vla-float (tb top left rows)
   (setq stub:*float* (list top left rows)) (stub:ev "float") t)
-(defun c:SPA ()
-  (setq stub:*ran* (cons "SPA" stub:*ran*)) (stub:ev "run SPA") (princ))
+;; The one command this session "has".  It must live on the FIRST page,
+;; since that is the page the panel opens on and the only one whose
+;; buttons get bound -- see LIVE / MISSING below, which assert exactly
+;; that so a re-ordered roster fails here with a reason.
+(defun c:POOL ()
+  (setq stub:*ran* (cons "POOL" stub:*ran*)) (stub:ev "run POOL") (princ))
 '''
 
 # --- the ADODB.Stream surface, as Python builtins (variable arity) ---
@@ -462,6 +536,15 @@ assert str(vm.globals.get('stub:*dlgname*')) == str(vm.globals['test:*n*']), \
 # pages -- plus a tab for every group
 vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % GROUPS[0])
 first = [str(x) for x in vm.globals['test:*g*']]
+# Only the opening page's buttons are bound, so both commands the click
+# tests use have to be on it: LIVE is the one the stub defines, MISSING
+# is one it deliberately does not.
+assert LIVE in first, (
+    "the stub defines c:%s, but %s is not on the first page (%s) -- "
+    "the click test would click nothing" % (LIVE, LIVE, GROUPS[0]))
+assert MISSING in first and MISSING != LIVE, (
+    "%s is not on the first page (%s), so it cannot stand for a greyed "
+    "button there" % (MISSING, GROUPS[0]))
 acts = {str(a[0]) for a in vm.globals.get('stub:*action*')}
 assert set(first) <= acts, sorted(set(first) - acts)
 for g in GROUPS:
@@ -471,26 +554,27 @@ assert not strays, "another page's commands were bound too: %r" % sorted(strays)
 # the status line still counts the WHOLE roster, not just this page
 assert '1 of %d' % len(PANEL) in str(vm.globals.get('stub:*status*'))
 disabled = set(map(str, vm.globals.get('stub:*disabled*')))
-assert disabled == set(first) - {'SPA'}, disabled ^ (set(first) - {'SPA'})
+assert disabled == set(first) - {LIVE}, disabled ^ (set(first) - {LIVE})
 assert vm.globals.get('lzp:*pick*') is None, "pick survived the run"
 print("   Close: nothing ran, close->load->new->start->unload->delete,")
-print("   only the first page's %d commands bound, only SPA enabled"
-      % len(first))
+print("   only the first page's %d commands bound, only %s enabled"
+      % (len(first), LIVE))
 
 vm = stubbed()
-vm.loads('(setq stub:*click* "SPA")')
-run(vm, 'c:LAZPANEL', 'click-spa')
-assert [str(x) for x in vm.globals.get('stub:*ran*')] == ['SPA']
+vm.loads('(setq stub:*click* "%s")' % LIVE)
+run(vm, 'c:LAZPANEL', 'click-live')
+assert [str(x) for x in vm.globals.get('stub:*ran*') or []] == [LIVE]
 assert vm.globals.get('lzp:*pick*') is None, "pick not cleared after launch"
-assert events(vm) == DIALOG + ['run SPA'], events(vm)
-print("   click SPA: the real action expression fires, SPA runs once,")
+assert events(vm) == DIALOG + ['run %s' % LIVE], events(vm)
+print("   click %s: the real action expression fires, it runs once,"
+      % LIVE)
 print("   and only after the dialog is unloaded and the temp file gone")
 
 vm = stubbed()
-vm.loads('(setq stub:*click* "POOL")')
+vm.loads('(setq stub:*click* "%s")' % MISSING)
 run(vm, 'c:LAZPANEL', 'click-missing')
 assert not vm.globals.get('stub:*ran*')
-assert any('POOL is not loaded' in str(p) for p in vm.printed), vm.printed
+assert any('%s is not loaded' % MISSING in str(p) for p in vm.printed), vm.printed
 print("   click on a missing command reports it instead of erroring")
 
 

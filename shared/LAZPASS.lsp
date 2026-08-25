@@ -8,20 +8,21 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 46 files, 105 commands:
+;;; 47 files, 111 commands:
 ;;;
-;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABMOVE
-;;;   ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV
-;;;   BPCALLOUT  CABHD  CABHDVER  CALVER  CCPRECHECK  CDCALLOUT
-;;;   CDCREATE  CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE
-;;;   COVERCHECKVERSION  COVERSCAN  CPERPPTS  DCE  DDALT  DDCAL
-;;;   DDELEV  DDFIX  DDGPS  DDINFO  DDSET  DDTEST
-;;;   DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN
-;;;   DRONE  FITABHD  FITABHDVER  FLOORDIM  HEMISTEP  LAZBUTTON
-;;;   LAZFORM  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LHD
-;;;   LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK
-;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER
-;;;   PADDLE  PERPPTS  POOL  POOLDEMO  POOLVER  SPA
+;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABHDCOVER
+;;;   ABMOVE  ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM
+;;;   AUTODIMSIDEPOV  BPCALLOUT  CABHD  CABHDVER  CALVER  CCPRECHECK
+;;;   CDCALLOUT  CDCREATE  CDCREATEVER  CHECK  CORNERSTP  COVERCHECK
+;;;   COVERCHECKRESCUE  COVERCHECKVERSION  COVERSCAN  CPERPPTS  DCE  DDALT
+;;;   DDCAL  DDELEV  DDFIX  DDGPS  DDINFO  DDSET
+;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
+;;;   DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
+;;;   HEMISTEP  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON
+;;;   LAZPANEL  LAZPANELVER  LHD  LINCHECK  LINFINCHECK  LINFINCHECKRESCUE
+;;;   LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
+;;;   NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS  POOL
+;;;   POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER  SPA
 ;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM
 ;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
 ;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
@@ -684,7 +685,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV09")
+(setq pool:*version* "082526 REV10")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1113,6 +1114,12 @@
 
 (setq pool:*form* nil)
 
+;; Cover mode: no pool bottom, so the gate in pool:askbottom answers No
+;; and the whole depth interrogation behind it never runs.  Set by
+;; POOLCOVER (and by LAZFORM's cover twin), cleared on both exits from
+;; c:POOL.  nil for a typed POOL, always.
+(setq pool:*nobottom* nil)
+
 ;; Did the form answer KEY at all?  This is the absent/nil distinction
 ;; that (cdr (assoc ...)) throws away.
 (defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
@@ -1252,6 +1259,30 @@
         (setq w (strcat w c)))
     (setq i (1+ i)))
   out)
+
+;; THE POOL-BOTTOM GATE.  The same question in five places, one per
+;; shape family, and everything behind it -- the wall height C, the
+;; break depth C2, the deep end D, the hopper type and its corner
+;; method -- is asked only if the answer is Yes.
+;;
+;; A cover sheet records no floor work at all, so there is nothing on
+;; the other side of this question worth asking for: POOLCOVER sets
+;; pool:*nobottom* and the gate answers No without appearing.  That is
+;; the whole of "cover mode" -- one gate, closed.
+;;
+;; It is a run flag rather than an entry in pool:*form* on purpose.
+;; The store is consume-once (an answer is removed as it is read, so a
+;; range check can escape to the keyboard and Back cannot deadlock),
+;; which is right for a measurement asked once and wrong for a gate
+;; that five different shape paths may reach.  A flag answers wherever
+;; the run happens to land.
+;;
+;; Like the store, it is cleared on the way out of c:POOL -- both exits
+;; -- so a cover run can never leave the next POOL silently bottomless.
+(defun pool:askbottom ()
+  (if pool:*nobottom*
+      nil
+      (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil)))
 
 ;; Does this treatment cut real geometry off the corner?  NotGiven
 ;; does NOT: its corner is built square, so everything that asks
@@ -3333,7 +3364,7 @@
   ;; this virtual frame (dv has no corner at all; E's real treatment
   ;; is sized for the true reflex angle against D, not against dv), so
   ;; they stay plain "Square" the way they always have.
-  (if (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil)
+  (if (pool:askbottom)
       (progn
         ;; per the reference: the break line drops from the inner
         ;; corner E to the bottom side, and the hopper lives in the
@@ -4816,7 +4847,7 @@
 ;; Returns the report rows (nil if skipped).
 (defun pool:hopper (quad corners doff th / btype xmin xmax ymin ymax
                                            a b c d cen sres ln xi)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq xmin (apply 'min (mapcar 'car quad))
@@ -5446,7 +5477,7 @@
 
 (defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi
                                                  lline rline bline tline)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -5485,7 +5516,7 @@
 
 (defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln
                                       lline rline bline tline)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -7274,7 +7305,7 @@
 ;; tip, like every home sheet), square hopper corners, no corner
 ;; ties -- the ends are too varied to tie the hopper back to.
 (defun pool:hopmuttdsp (quad tipl tipr doff th / btype u v)
-  (if (not (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))
+  (if (not (pool:askbottom))
       nil
       (progn
         (setq btype (pool:askkwf 'btype "Bottom type"
@@ -7346,8 +7377,11 @@
     (pool:pvkill)
     ;; a form must never outlive the run it was given to: left behind,
     ;; the next POOL typed at the command line would answer itself with
-    ;; last time's numbers and draw a wrong pool with no error at all
+    ;; last time's numbers and draw a wrong pool with no error at all.
+    ;; Cover mode is the same hazard, quieter: a leaked flag draws the
+    ;; next pool with no bottom and never asks why
     (pool:fclear)
+    (setq pool:*nobottom* nil)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -7423,9 +7457,27 @@
   (pool:undoend)
   (cal:sysrestore)
   (pool:fclear)
+  (setq pool:*nobottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
+
+;; POOL for a cover sheet: the same command, with the pool-bottom gate
+;; already answered No.  A cover records the perimeter and nothing
+;; below it, so the depth chain -- C, C2, D, the hopper type and its
+;; corner method -- is work the sheet has no answers for and no room
+;; to show.
+;;
+;; It is a command of its own rather than a mode the panel switches on,
+;; so that clicking a button still runs exactly the command named on it
+;; and typing POOLCOVER does the same thing as clicking it.  The flag
+;; is cleared by c:POOL on both its exits, so this cannot leak into the
+;; next pool even if this run is cancelled half way.
+(defun c:POOLCOVER ()
+  (setq pool:*nobottom* t)
+  (princ "\nPOOLCOVER: cover sheet - no pool bottom will be asked for.")
+  (c:POOL)
+  (princ))
 
 (defun c:POOLVER ()
   (princ (strcat "\nPOOL " pool:*version*))
@@ -17997,7 +18049,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "081926 REV05") ; announced on load.  The
+(setq *PF-VERSION*      "082526 REV06") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -18006,6 +18058,12 @@
                                     ; re-copy the file so the twins
                                     ; stay identical (the tests check
                                     ; the name, the match, and this)
+;; Cover mode: the pool-bottom question in pf:bottom answers No without
+;; being asked, so a cover sheet is fitted to its perimeter and stops
+;; there.  Set by ABHDCOVER, cleared on both exits from c:ABHD; nil for
+;; a typed ABHD, always.
+(setq abhd:*nobottom* nil)
+
 (setq *PF-POOL-LAYER*   "POOL")     ; layer holding the drawn perimeter
 (setq *PF-POINT-LAYER*  "POINTS")   ; layer holding the survey points
 (setq *PF-POINT-BLOCK*  "ab_pt")    ; block name whose INSERTs mark survey
@@ -20679,10 +20737,18 @@
       ;; -- offer the bottom (the ABHD ending; ADAB starts at 1)
       ((= stage 0)
        (setq pf-phase "asking about the pool bottom")
-       (initget "Yes No")
-       (setq ans (getkword
-                   "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
-       (if (= ans "Yes") (setq stage 1) (setq go nil)))
+       (cond
+         ;; cover mode: a cover sheet records the perimeter and nothing
+         ;; below it, so this is answered No without being asked --
+         ;; ABHDCOVER sets the flag and c:ABHD clears it again
+         (abhd:*nobottom*
+          (princ "\n\n  Cover sheet - skipping the bottom of the pool.")
+          (setq go nil))
+         (t
+          (initget "Yes No")
+          (setq ans (getkword
+                      "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+          (if (= ans "Yes") (setq stage 1) (setq go nil)))))
 
       ;; -- the shallow break, one end per stage
       ((= stage 1)
@@ -21068,6 +21134,9 @@
                              " -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            ;; cover mode must not outlive the run that asked for it,
+            ;; or the next ABHD would skip its bottom without a word
+            (setq abhd:*nobottom* nil)
             (princ)))
 
   ;; sweep leftovers from a run that was interrupted before it could
@@ -21495,6 +21564,21 @@
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
   (setq *error* pf-old-err)   ; restore the previous error handler
+  (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (princ))
+
+;; ABHD for a cover sheet: the same fit, with the pool-bottom question
+;; answered No before it is asked.  A cover records the perimeter and
+;; nothing below it, so the breaks, the hopper offsets and the slope
+;; lines are work the sheet has no room for.
+;;
+;; A command of its own rather than a mode, so that a button runs
+;; exactly the command named on it; the flag is cleared by c:ABHD on
+;; both its exits, so it cannot leak into the next run.
+(defun c:ABHDCOVER ()
+  (setq abhd:*nobottom* t)
+  (princ "\nABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:ABHD)
   (princ))
 
 ;; ---- ADAB: the pool bottom on its own --------------------------------
@@ -32016,9 +32100,13 @@
 ;;;       Cut one stops the walls an offset short and the corner
 ;;;       piece finishes the trip.  In corner mode only the outer side
 ;;;       is drawn - with its back corner flare at the wall - since the
-;;;       steps run outward from the corner and the picked line closes
-;;;       the inner side.  The U already has its arms, so only a back
-;;;       corner asked for there is drawn.
+;;;       steps run outward from the corner and the line they sit
+;;;       against closes the inner side.  That outer side runs OUTWARD
+;;;       with the treads: it is the line they sit against offset by
+;;;       the step width, not a line square to the base, so it still
+;;;       meets every tread end where the corner is not a true 90.
+;;;       The U already has its arms, so only a back corner asked for
+;;;       there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
 ;;;       plus the step width once (it is the same for every step).
 ;;;   8.  Optionally a SIDE PROFILE: you give the STEP DEPTHS - the
@@ -32085,7 +32173,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.3") ; printed on load and at command start so a
+(setq *ns-version* "v2.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -32554,7 +32642,7 @@
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
-                        tt cnrs ca cb pfo)
+                        tt cnrs ca cb pfo lastinn)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -33046,11 +33134,26 @@
          (ns-mkline e (ns-add e (ns-scl dir (- cum coff))))
          (if (> coff 0.0)
            (ns-outer e u dir cum rtype coff)))
-        ;; the outer side only - the steps run outward from the corner,
-        ;; so the picked line closes the inner side already
+        ;; The outer side only - the steps run outward from the
+        ;; corner, so the line they sit against closes the inner side
+        ;; already.  That outer side is the line they sit against
+        ;; OFFSET by the step width, NOT a line square to the base:
+        ;; the treads all start on the leaning line and run outward
+        ;; from it, so a square side wall would lean into the run and
+        ;; miss every tread end but the first.  PPREV is the last
+        ;; tread that actually landed, so a step taken Back cannot
+        ;; leave this pointing at one that was undone.
         ((= mode "CORNER")
-         (ns-side (ns-add corner (ns-scl u wid))
-                  u dir cum rtype roff rrad))
+         (setq lastinn (inters pprev (ns-add pprev u)
+                               (car side) (cadr side) nil))
+         (if (null lastinn)
+           (princ (strcat "\n  Note: the run does not reach the line it"
+                          " sits against - no outer side drawn."))
+           (ns-side (ns-add corner (ns-scl u wid))
+                    u
+                    (ns-unit (ns-vec corner lastinn))
+                    (distance corner lastinn)
+                    rtype roff rrad)))
         ;; a U has its arms drawn already - only a back corner asked for
         ;; here is new geometry
         ((and (= mode "U") bc1 bc2)
@@ -40628,7 +40731,12 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.6")    ; announced on load; release_lisp.py
+;; Cover mode: the pool-bottom question answers No without being asked,
+;; so a cover sheet is fitted to its perimeter and stops there.  Set by
+;; FITABHDCOVER, cleared on both exits from c:FITABHD.
+(setq fit:*nobottom* nil)
+
+(setq *fitabhd-version* "v1.7")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -44044,6 +44152,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nFITABHD error: " msg)))
+    ;; cover mode lasts one run: leaked, it would quietly cost the next
+    ;; FITABHD its bottom
+    (setq fit:*nobottom* nil)
     (princ))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
@@ -44117,13 +44228,18 @@
           (fit:set-bylayer en)
           (princ (strcat "\nKept - the outline moved to layer "
                          fit:*pool-layer* " in ByLayer colour."))
-          (if (cal:askyn (if (= ptype "ROUnd")
-                           "Add the bottom of the pool (hopper ring)?"
-                           "Add the bottom of the pool (standard hopper)?")
-                         "No" nil)
+          ;; cover mode answers this No without asking: a cover sheet
+          ;; is the perimeter and nothing below it
+          (if (and (not fit:*nobottom*)
+                   (cal:askyn (if (= ptype "ROUnd")
+                                "Add the bottom of the pool (hopper ring)?"
+                                "Add the bottom of the pool (standard hopper)?")
+                              "No" nil))
             (if (= ptype "ROUnd")
               (fit:round-bottom res)
-              (fit:bottom res))))
+              (fit:bottom res))
+            (if fit:*nobottom*
+              (princ "\nCover sheet - the pool bottom was skipped."))))
          (T
           (fit:omit-clear)
           (if (and en (entget en)) (entdel en))
@@ -44132,6 +44248,17 @@
   (command "_.UNDO" "_End")
   (setq undo-open nil)
   (cal:sysrestore)
+  (setq fit:*nobottom* nil)
+  (princ))
+
+;; FITABHD for a cover sheet: the same template fit, with the
+;; pool-bottom question answered No before it is asked.  A command of
+;; its own rather than a mode, so a button runs exactly what it names;
+;; c:FITABHD clears the flag on both exits so it cannot leak.
+(defun c:FITABHDCOVER ()
+  (setq fit:*nobottom* t)
+  (princ "\nFITABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:FITABHD)
   (princ))
 
 ;; ----------------------------------------------------------------------
@@ -53912,6 +54039,645 @@
 
 
 ;;; ======================================================================
+;;; >>> SMARTFILLET.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; SMARTFILLET.lsp  --  show what every rounded corner would look like,
+;;;                      then cut the one that is clicked
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  SMARTFILLET     preview the radii that fit a corner, cut
+;;;                            the one that is clicked, dimension it, and
+;;;                            offer the rest of the corners at that size
+;;;            SMARTFILLETVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  FILLET wants the radius BEFORE it shows anything, so the answer is
+;;;  guessed, looked at, undone, and guessed again.  This turns that
+;;;  round.  Pick the two lines and every radius that actually fits the
+;;;  corner is drawn dashed, all at once, in 6-inch steps; click the one
+;;;  that looks right and that is the corner you get.
+;;;
+;;;    1. Select the two lines that make the corner.  Click each one on
+;;;       the side you want KEPT -- exactly how FILLET reads a pick:
+;;;       what lies beyond the corner is trimmed away.
+;;;    2. Every radius from 6 up, in 6s, that leaves both legs something
+;;;       to stand on is drawn as a dashed arc labelled R6, R12, R18 ...
+;;;       (at most sf:*maxshown* of them; when more fit, the routine
+;;;       says how many it left out rather than silently stopping).
+;;;    3. Click the arc you want.  The previews go, the corner is
+;;;       filleted for real at that radius, and the arc gets its radius
+;;;       dimension -- the number the shop needs, not just the shape.
+;;;    4. It then offers the SAME radius for the rest of the corners:
+;;;       two lines per corner until Done.  As soon as one repeat is
+;;;       cut, the single dimension becomes "R12 Typ.", which is how the
+;;;       radius would be lettered by hand.
+;;;
+;;;  The whole run is one undo group: a single U puts every corner back
+;;;  and takes the dimension away.
+;;;
+;;;  Usage
+;;;    Command: SMARTFILLET
+;;;    Command: SMARTFILLETVER   prints the version
+;;;
+;;;  Tunables (setq them after loading if a drawing needs different
+;;;  sizes or names, e.g. in a startup file):
+;;;    sf:*first*      smallest radius previewed          (6.0)
+;;;    sf:*step*       step between previews              (6.0)
+;;;    sf:*maxshown*   most previews drawn at once        (8)
+;;;    sf:*fit*        fraction of a leg a fillet may eat (0.98)
+;;;    sf:*layer*      layer the previews are drawn on
+;;;    sf:*color*      their colour
+;;;    sf:*ltype*      their linetype, created if missing ("DASHED")
+;;;    sf:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    sf:*label*      T to letter each preview R6, R12 ...
+;;;    sf:*txthgt*     height of those labels
+;;;    sf:*dimlayer*   layer the radius dimension goes on ("DIMENSION")
+;;;    sf:*smalldim*   radii under this are dimensioned in ...
+;;;    sf:*smallstyle* ... this dim style, when the drawing has it
+;;;    sf:*dimoff*     how far past the arc the dimension text sits,
+;;;                    nil = one radius, and never less than 12
+;;;    sf:*dimrepeat*  T to dimension every repeat corner too
+;;;    sf:*typ*        T to re-letter the one dimension "<> Typ." once
+;;;                    a repeat has been cut at the same radius
+;;;
+;;;  Notes
+;;;    * Two straight LINEs only.  A polyline corner is not filleted --
+;;;      the routine says so and asks again; explode it first.
+;;;    * Which side of each line survives comes from where it was
+;;;      clicked, as in FILLET.  Click near the corner and both legs
+;;;      keep the end you clicked toward.
+;;;    * A radius only makes the list when its tangent point lands on
+;;;      both legs (times sf:*fit*, so a fillet never eats a leg whole).
+;;;      A corner too short for even R6 is reported, not filleted.
+;;;    * The preview arcs are real entities on their own layer, erased
+;;;      on the way out -- on a clean finish, on Esc, and on an error.
+;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
+;;;      dimension style are all put back the way they were.
+;;; ======================================================================
+
+(setq *smartfillet-version* "v1.0")  ; announced on load; release_lisp.py
+                                     ; reads this banner and stamps the
+                                     ; dated twin in releases/ from it
+
+;;; -------------------- tunables ------------------------------------
+
+(setq sf:*first*      6.0)   ; the smallest radius offered, and the step
+(setq sf:*step*       6.0)   ; between the ones after it -- 6" of radius
+                             ; is the smallest difference that reads on
+                             ; a pool plan
+(setq sf:*maxshown*   8)     ; how many previews may be on screen at
+                             ; once; nil = every radius that fits, which
+                             ; on a long wall is a great many
+(setq sf:*fit*        0.98)  ; how much of the shorter leg a fillet may
+                             ; use up: 1.0 would put the tangent point
+                             ; exactly on the far end and leave a
+                             ; zero-length line behind
+(setq sf:*layer*      "SMART FILLET PREVIEW")
+(setq sf:*color*      3)     ; green, so a preview reads as a preview
+                             ; whatever the layer was set to by hand
+(setq sf:*ltype*      "DASHED")
+(setq sf:*ltscale*    0.25)  ; the stock DASHED pattern is 18 units
+                             ; long, so a 6" fillet arc (9 units of it)
+                             ; would come out as one unbroken dash; a
+                             ; quarter-scale pattern puts real gaps in
+                             ; even the smallest preview.  nil = leave
+                             ; the arcs at the drawing's own LTSCALE
+(setq sf:*label*      t)
+(setq sf:*txthgt*     6.0)
+(setq sf:*dimlayer*   "DIMENSION")
+(setq sf:*smalldim*   24.0)             ; POOL's small-dimension rule,
+(setq sf:*smallstyle* "STANDARD INCHES"); kept so a fillet callout
+                                        ; matches the dims beside it
+(setq sf:*dimoff*     nil)   ; nil = one radius past the arc
+(setq sf:*dimrepeat*  nil)   ; one callout plus "Typ." is how the sheet
+                             ; reads; set T to dimension every corner
+(setq sf:*typ*        t)
+(setq sf:*minang*     0.02)  ; how far off straight (radians) two legs
+                             ; must be before there is a corner at all
+
+(setq sf:*preview*    nil)   ; every entity drawn as a preview
+(setq sf:*picks*      nil)   ; (preview-arc . radius), what a click means
+(setq sf:*smallwarned* nil)  ; the missing-style note is said once
+
+;;; -------------------- shared helpers ------------------------------
+;;; The generic CALOFIN-LIB helpers this tool leans on.  Here they are
+;;; copies under this file's own prefix, so it loads alone with
+;;; APPLOAD; in the shared/ twin they are gone and every call site
+;;; reads cal: instead.  Bodies identical to the library's.
+
+;;; -------------------- small local helpers -------------------------
+
+;; A number without AutoLISP's trailing zeros: 12, not 12.000000.
+(defun sf:num (x)
+  (cond ((null x) "?")
+        ((= x (fix x)) (rtos x 2 0))
+        (t (rtos x 2 2))))
+
+;; "R12", the way a radius is lettered
+(defun sf:rlabel (r) (strcat "R" (sf:num r)))
+
+;; Make sure the preview linetype exists, with dashes sized for a
+;; drawing in inches so they read at pool scale (pf:ensure-dashed,
+;; abhd.lsp:1566).  A drawing that already has one by that name keeps
+;; its own.
+(defun sf:ensure-ltype ()
+  (if (and sf:*ltype* (not (tblsearch "LTYPE" sf:*ltype*)))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   (cons 2 sf:*ltype*) '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0))))
+  (if (tblsearch "LTYPE" sf:*ltype*) sf:*ltype* "CONTINUOUS"))
+
+;; the two endpoints of a LINE, in WCS (the entity's own OCS may be
+;; tilted, so go through the entity coordinate system)
+(defun sf:ends (en / ed)
+  (setq ed (entget en))
+  (list (cal:2d (trans (cdr (assoc 10 ed)) en 0))
+        (cal:2d (trans (cdr (assoc 11 ed)) en 0))))
+
+;;; -------------------- the corner ----------------------------------
+
+;; One leg of the corner: which way the line runs from the crossing
+;; point X on the side that was CLICKED -- the side FILLET keeps -- and
+;; how far it reaches that way.  Returns (unit-direction reach), or nil
+;; when the line has no length.  The pick decides the direction and the
+;; far endpoint decides the reach, so a line whose crossing point lies
+;; off its own end (the case FILLET handles by extending it) is
+;; measured the same way as one the corner sits inside.
+(defun sf:leg (en x pk / ends a b d s u av)
+  (setq ends (sf:ends en)
+        a    (car  ends)
+        b    (cadr ends)
+        d    (cal:unit (cal:v- b a)))
+  (if d
+    (progn
+      (setq s (cal:dot d (cal:v- pk x)))
+      ;; clicked on the corner itself, where neither side is nearer:
+      ;; take the end with more line behind it, the only one a fillet
+      ;; could stand on
+      (if (< (abs s) 1e-6)
+        (setq s (if (>= (cal:dist a x) (cal:dist b x))
+                  (cal:dot d (cal:v- a x))
+                  (cal:dot d (cal:v- b x)))))
+      (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      (if (> av 1e-9) (list u av)))))
+
+;; Everything about the corner two picked lines make, worked out once:
+;;   (X u1 reach1 u2 reach2 half-angle)
+;; X is where the two lines cross (extended if they have to be, as
+;; FILLET extends them), each u runs from X along the side that was
+;; clicked, and half-angle is half the turn between them -- the one
+;; number the whole fillet is built from.  nil when there is no corner:
+;; parallel lines, the same line twice, or two legs so nearly straight
+;; through that no arc could join them.
+(defun sf:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
+  (setq a (sf:ends e1)
+        b (sf:ends e2)
+        x (inters (car a) (cadr a) (car b) (cadr b) nil))
+  (if x
+    (progn
+      (setq x  (cal:2d x)
+            l1 (sf:leg e1 x pk1)
+            l2 (sf:leg e2 x pk2))
+      (if (and l1 l2)
+        (progn
+          (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
+                                        (angle '(0.0 0.0) (car l2)))))
+          (if (and (> th sf:*minang*) (< th (- pi sf:*minang*)))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+
+;; how far back from the corner a fillet of radius R starts
+(defun sf:tanlen (half r) (/ r (cal:tan half)))
+
+;; The biggest radius this corner can take: the tangent point has to
+;; land on both legs, and sf:*fit* keeps it clear of the far end so a
+;; fillet never eats a leg whole.
+(defun sf:rmax (geo)
+  (* sf:*fit* (min (caddr geo) (nth 4 geo)) (cal:tan (nth 5 geo))))
+
+;; centre and the two tangent points of the fillet arc of radius R
+(defun sf:arcpts (geo r / x u1 u2 half tl)
+  (setq x    (car geo)
+        u1   (cadr geo)
+        u2   (cadddr geo)
+        half (nth 5 geo)
+        tl   (sf:tanlen half r))
+  (list (cal:v+ x (cal:v* (cal:unit (cal:v+ u1 u2)) (/ r (sin half))))
+        (cal:v+ x (cal:v* u1 tl))
+        (cal:v+ x (cal:v* u2 tl))))
+
+;; every radius that fits, from sf:*first* up in sf:*step*s, capped at
+;; sf:*maxshown*
+(defun sf:candidates (rmax / r out)
+  (setq r sf:*first*)
+  (while (and (<= r rmax)
+              (or (null sf:*maxshown*) (< (length out) sf:*maxshown*)))
+    (setq out (cons r out)
+          r   (+ r sf:*step*)))
+  (reverse out))
+
+;; how many would have fitted if nothing capped the list -- what the
+;; cap hid has to be said out loud, or 8 previews read as "that is all
+;; this corner takes"
+(defun sf:howmany (rmax / r n)
+  (setq r sf:*first* n 0)
+  (while (<= r rmax) (setq n (1+ n) r (+ r sf:*step*)))
+  n)
+
+;;; -------------------- previews ------------------------------------
+
+;; Remember what was drawn: everything goes on the erase list, and an
+;; arc also goes on the list a click is looked up in.
+(defun sf:mark (en r)
+  (if en
+    (progn
+      (setq sf:*preview* (cons en sf:*preview*))
+      (if r (setq sf:*picks* (cons (cons en r) sf:*picks*)))))
+  en)
+
+;; the radius a preview arc stands for, nil for anything else in the
+;; drawing
+(defun sf:radof (en / p)
+  (setq p (assoc en sf:*picks*))
+  (if p (cdr p)))
+
+;; Take every preview back out of the drawing.  Called on the way out
+;; of the command however it ends -- a preview left behind would be
+;; read as drawn work by every other tool in the toolset.
+(defun sf:clear ( / e)
+  (foreach e sf:*preview* (if (and e (entget e)) (entdel e)))
+  (setq sf:*preview* nil
+        sf:*picks*   nil))
+
+;; one dashed preview arc, drawn the short way round between its two
+;; tangent points (a fillet arc is always less than a half circle)
+(defun sf:draw-arc (c r p1 p2 / a1 a2 dxf)
+  (setq a1 (angle c p1)
+        a2 (angle c p2))
+  (if (> (cal:angnorm (- a2 a1)) pi)
+    (setq a1 (angle c p2)
+          a2 (angle c p1)))
+  (setq dxf (list '(0 . "ARC") '(100 . "AcDbEntity")
+                  (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                  (cons 6 (sf:ensure-ltype))
+                  '(100 . "AcDbCircle")
+                  (list 10 (car c) (cadr c) 0.0)
+                  (cons 40 r)
+                  '(100 . "AcDbArc")
+                  (cons 50 a1) (cons 51 a2)))
+  (if sf:*ltscale* (setq dxf (append dxf (list (cons 48 sf:*ltscale*)))))
+  (if (entmake dxf) (entlast)))
+
+;; the radius, lettered beside a preview.  Middle-centre justified, so
+;; the text sits on the point it is given whatever it says.
+(defun sf:draw-label (p str / h)
+  (setq h (if sf:*txthgt* sf:*txthgt* 6.0))
+  (if (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                     (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                     '(100 . "AcDbText")
+                     (list 10 (car p) (cadr p) 0.0)
+                     (cons 40 h) (cons 1 str)
+                     '(72 . 1)                       ; centred across
+                     (list 11 (car p) (cadr p) 0.0)
+                     '(100 . "AcDbText")
+                     '(73 . 2)))                     ; and down
+    (entlast)))
+
+;; Draw the whole fan of previews.  Labels alternate between the two
+;; legs: consecutive tangent points sit one step apart along one leg,
+;; which is not room enough for two labels side by side.
+(defun sf:preview (geo rads / i r a c t1 t2 anchor)
+  (setq i 0)
+  (cal:ensure-layer sf:*layer* sf:*color*)
+  (foreach r rads
+    (setq a  (sf:arcpts geo r)
+          c  (car   a)
+          t1 (cadr  a)
+          t2 (caddr a))
+    (sf:mark (sf:draw-arc c r t1 t2) r)
+    (if sf:*label*
+      (progn
+        (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        ;; pushed straight off the arc, away from its centre, so the
+        ;; label never lands on the line it belongs to
+        (sf:mark (sf:draw-label
+                   (cal:v+ anchor
+                          (cal:v* (cal:unit (cal:v- anchor c))
+                                 (* 0.9 (if sf:*txthgt* sf:*txthgt* 6.0))))
+                   (sf:rlabel r))
+                 nil)))
+    (setq i (1+ i))))
+
+;;; -------------------- asking --------------------------------------
+
+;; One entsel that insists on a LINE.  KW is the single keyword the
+;; prompt offers as its way out, and it is also what Enter does -- the
+;; bracket text is the keyword itself, so a click on it sends exactly
+;; what is tested for, and the <default> says what an empty answer
+;; means.  OTHER is the line already picked for this corner, which
+;; cannot be picked twice.  Returns (ename pick-point-in-WCS), or nil
+;; when the way out is taken.  Nothing has been drawn at this point, so
+;; a click that lands on empty paper costing the loop is a fair trade
+;; for Enter meaning what it says.
+(defun sf:askline (msg kw other / sel ans typ)
+  (while (not ans)
+    (initget kw)
+    (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (cond
+      ((= (type sel) 'STR) (setq ans 'SF-NONE))
+      ((null sel) (setq ans 'SF-NONE))
+      ((and other (eq (car sel) other))
+       (princ "\n  (that is the line you just picked -- click the OTHER leg)"))
+      ((not (= "LINE" (setq typ (cdr (assoc 0 (entget (car sel)))))))
+       (princ (strcat "\n  (that is a " typ " -- SMARTFILLET rounds the"
+                      " corner between two straight LINEs; explode a"
+                      " polyline first)")))
+      (t (setq ans (list (car sel) (cal:2d (trans (cadr sel) 1 0)))))))
+  (if (eq ans 'SF-NONE) nil ans))
+
+;; Which preview was clicked, as its radius.  nil when the user gives
+;; up on the corner.  This one has no <default>, so Enter re-asks
+;; (STANDARDS.md section 1 rule 5): the arcs are thin and the near-miss
+;; that would throw a whole fan of them away is exactly the click this
+;; prompt invites.  Cancel is in the bracket, so there is a mouse-only
+;; way out that does not depend on hitting anything.
+(defun sf:pickpreview ( / sel ans r)
+  (while (not ans)
+    (initget "Cancel")
+    (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
+    (cond
+      ((= (type sel) 'STR) (setq ans 'SF-NONE))
+      ((null sel)
+       (princ (strcat "\n  (nothing there -- click one of the dashed"
+                      " corners, or type Cancel)")))
+      ((setq r (sf:radof (car sel))) (setq ans r))
+      (t (princ (strcat "\n  (that is not one of the previews -- click a"
+                        " dashed corner)")))))
+  (if (eq ans 'SF-NONE) nil ans))
+
+;;; -------------------- cutting and dimensioning --------------------
+
+;; Cut the corner for real.  The two picks go to FILLET exactly as the
+;; user made them, so the side each line keeps is the side clicked.
+;; Returns the arc FILLET made, or nil when it refused.
+(defun sf:dofillet (e1 pk1 e2 pk2 r / pre new ed)
+  (setq pre (entlast))
+  (setvar "FILLETRAD" r)
+  (command "_.FILLET" (list e1 (trans pk1 0 1)) (list e2 (trans pk2 0 1)))
+  (setq new (entlast))
+  (if (and new (not (eq new pre))
+           (setq ed (entget new))
+           (= "ARC" (cdr (assoc 0 ed))))
+    new))
+
+;; Switch to the small-dimension style for a measurement under
+;; sf:*smalldim*, POOL's rule (pool:dimsbegin, POOL.LSP:370), so a
+;; fillet callout matches the dims beside it.  Returns the style to go
+;; back to, nil when nothing moved.
+(defun sf:dimsbegin (d / od)
+  (if (< d sf:*smalldim*)
+    (if (tblsearch "DIMSTYLE" sf:*smallstyle*)
+      (progn
+        (setq od (getvar "DIMSTYLE"))
+        (if (= (strcase od) (strcase sf:*smallstyle*))
+          (setq od nil)                    ; already current
+          (command "_.-DIMSTYLE" "_Restore" sf:*smallstyle*))
+        od)
+      (progn
+        (if (not sf:*smallwarned*)
+          (progn
+            (princ (strcat "\n(no \"" sf:*smallstyle* "\" dim style in"
+                           " this drawing -- the radius is dimensioned"
+                           " in the current style)"))
+            (setq sf:*smallwarned* t)))
+        nil))))
+
+(defun sf:dimsend (od)
+  (if (and od (tblsearch "DIMSTYLE" od))
+    (command "_.-DIMSTYLE" "_Restore" od)))
+
+;; DIMSTYLE is read-only to setvar, so it goes back through a command,
+;; and command-s so the same call is legal from inside *error*.
+(defun sf:restyle (odim)
+  (if (and odim (tblsearch "DIMSTYLE" odim)
+           (not (equal odim (getvar "DIMSTYLE"))))
+    (vl-catch-all-apply 'command-s
+                        (list "_.-DIMSTYLE" "_Restore" odim))))
+
+;; Put the radius dimension on the arc just cut: leader out from the
+;; arc along the line from its centre through the corner, which is the
+;; one direction that is clear of both legs.  The centre comes from the
+;; geometry the arc was cut to rather than back out of the arc -- they
+;; are the same point, and the one we already hold cannot be read out
+;; of a tilted OCS wrong.  Returns the dimension.
+(defun sf:dimarc (arc r geo / c x out on loc od pre new)
+  (setq c   (car (sf:arcpts geo r))
+        x   (car geo)
+        out (cal:unit (cal:v- x c)))
+  (if out
+    (progn
+      (setq on  (cal:v+ c (cal:v* out r))
+            loc (cal:v+ c (cal:v* out (+ r (if sf:*dimoff*
+                                           sf:*dimoff*
+                                           (max r 12.0)))))
+            pre (entlast))
+      (setvar "CLAYER" (cal:ensure-layer sf:*dimlayer* 2))
+      (setq od (sf:dimsbegin r))
+      (command "_.DIMRADIUS" (list arc (trans on 0 1))
+               "_non" (trans loc 0 1))
+      (sf:dimsend od)
+      (setq new (entlast))
+      (if (and new (not (eq new pre))) new))))
+
+;; Re-letter a radius callout as typical.  The radius is called out
+;; once and the repeats read "Typ.", the way a drafter letters it -- and
+;; whether there WERE repeats is not known until the loop has run, so
+;; the note is added afterwards rather than guessed at.  "<>" is
+;; AutoCAD's stand-in for the measurement, so the dimension goes on
+;; measuring itself.
+(defun sf:typit (dim / ed)
+  (if (and dim (setq ed (entget dim)))
+    (progn
+      (setq ed (if (assoc 1 ed)
+                 (subst (cons 1 "<> Typ.") (assoc 1 ed) ed)
+                 (append ed (list (cons 1 "<> Typ.")))))
+      (entmod ed)
+      (entupd dim))))
+
+;; The rest of the corners, at the radius already settled on: two lines
+;; each until Done.  Returns how many were cut.
+(defun sf:repeat (r / n go a b geo arc)
+  (setq n 0 go t)
+  (while go
+    (setq a (sf:askline "Select the first line of the next corner"
+                        "Done" nil))
+    (setq b (if a (sf:askline "Select the second line of that corner"
+                              "Done" (car a))))
+    (if (or (null a) (null b))
+      (setq go nil)
+      (progn
+        (setq geo (sf:corner (car a) (cadr a) (car b) (cadr b)))
+        (cond
+          ((null geo)
+           (princ (strcat "\n  (those two never meet at an angle --"
+                          " left alone)")))
+          ((< (sf:rmax geo) r)
+           (princ (strcat "\n  (too short a corner for "
+                          (sf:rlabel r) " -- left alone)")))
+          ((setq arc (sf:dofillet (car a) (cadr a) (car b) (cadr b) r))
+           (setq n (1+ n))
+           (if sf:*dimrepeat* (sf:dimarc arc r geo)))
+          (t (princ (strcat "\n  (AutoCAD would not fillet that corner"
+                            " -- left alone)")))))))
+  n)
+
+;;; -------------------- the command ---------------------------------
+
+(defun c:SMARTFILLET ( / *error* olderr odim undo-open
+                         one two geo rmax rads extra r arc dim1 made)
+
+  ;; -- restore drawing state on error / Esc.  The previews go first:
+  ;;    they are entities like any other, and a run cut short partway
+  ;;    would otherwise leave a fan of dashed arcs in the drawing for
+  ;;    the next tool to read as work.  Then the user's settings, then
+  ;;    the undo group -- left open, the next U would swallow the
+  ;;    user's own work
+  (setq olderr *error*)
+  (defun *error* (m)
+    (sf:clear)
+    (cal:sysrestore)
+    (sf:restyle odim)
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq *error* olderr)
+    (if (and m (not (wcmatch (strcase m)
+                             "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSMARTFILLET error: " m)))
+    (princ))
+
+  (vl-load-com)
+  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
+  (setq odim (getvar "DIMSTYLE")
+        made 0)
+  (setvar "CMDECHO" 0)
+  (setvar "OSMODE"  0)
+  (setvar "TRIMMODE" 1)                    ; a fillet that leaves the
+                                           ; old corner standing is not
+                                           ; what anyone means by one
+
+  ;; -- 1. the corner: two lines, each clicked on the side to keep
+  (setq one (sf:askline "Select the first line of the corner" "Cancel" nil))
+  (if one
+    (setq two (sf:askline "Select the second line of the corner"
+                          "Cancel" (car one))))
+  (setq geo (if (and one two)
+              (sf:corner (car one) (cadr one) (car two) (cadr two))))
+
+  (cond
+    ((not (and one two))
+     (princ "\nSMARTFILLET cancelled -- nothing drawn."))
+
+    ((null geo)
+     (princ (strcat "\nThose two lines make no corner -- they are"
+                    " parallel, or they run straight through one"
+                    " another.  Nothing to round.")))
+
+    ((< (setq rmax (sf:rmax geo)) sf:*first*)
+     (princ (strcat "\nThe shorter leg of that corner only allows "
+                    (sf:rlabel rmax) " -- less than the smallest"
+                    " preview (" (sf:rlabel sf:*first*) ").  Nothing"
+                    " drawn; lower sf:*first* to work at that size.")))
+
+    (t
+     ;; -- 2. one undo group over the previews and everything they lead
+     ;;       to, so a single U undoes the lot
+     (command "_.UNDO" "_Begin")
+     (setq undo-open t
+           rads      (sf:candidates rmax)
+           extra     (- (sf:howmany rmax) (length rads)))
+     (sf:preview geo rads)
+     (princ (strcat "\n" (itoa (length rads)) " corner"
+                    (if (= 1 (length rads)) "" "s")
+                    " that fit, dashed: " (sf:rlabel (car rads))
+                    (if (cdr rads)
+                      (strcat " to " (sf:rlabel (last rads)))
+                      "")
+                    "."))
+     ;; a cap that says nothing reads as "that is all this corner
+     ;; takes", which is a different fact
+     (if (> extra 0)
+       (princ (strcat "\n" (itoa extra) " larger radi"
+                      (if (= 1 extra) "us" "i") " also fit"
+                      (if (= 1 extra) "s" "") " and "
+                      (if (= 1 extra) "is" "are") " not shown"
+                      " -- raise sf:*maxshown* to see "
+                      (if (= 1 extra) "it" "them") ".")))
+
+     ;; -- 3. the one that gets cut
+     (setq r (sf:pickpreview))
+     (sf:clear)
+     (cond
+       ((null r)
+        (princ "\nNothing picked -- the corner is as it was."))
+       ((null (setq arc (sf:dofillet (car one) (cadr one)
+                                     (car two) (cadr two) r)))
+        (princ (strcat "\nAutoCAD would not fillet that corner at "
+                       (sf:rlabel r) " -- the lines are as they were.")))
+       (t
+        (setq made 1
+              dim1 (sf:dimarc arc r geo))
+        (princ (strcat "\n" (sf:rlabel r) " corner cut and dimensioned"
+                       (if dim1 (strcat " on layer " sf:*dimlayer*) "")
+                       "."))
+
+        ;; -- 4. the same radius, for the rest of the corners
+        (if (cal:askyn (strcat "Fillet other corners at "
+                              (sf:rlabel r) "?")
+                      "Yes" nil)
+          (setq made (+ made (sf:repeat r))))
+        (if (and sf:*typ* dim1 (> made 1)) (sf:typit dim1))
+
+        (princ (strcat "\n" (itoa made) " corner"
+                       (if (= 1 made) "" "s") " filleted at "
+                       (sf:rlabel r)
+                       (if (and sf:*typ* (> made 1) dim1)
+                         " -- the one dimension now reads Typ."
+                         "")
+                       "."))))
+
+     (command "_.UNDO" "_End")
+     (setq undo-open nil)))
+
+  ;; every path out drops the snapshot, the quiet ones included: a run
+  ;; that found nothing to do and kept its snapshot would hand it to the
+  ;; NEXT run, which would then put the user's settings back to what
+  ;; they were two commands ago
+  (sf:restyle odim)
+  (cal:sysrestore)
+  (setq *error* olderr)
+  (princ))
+
+(defun c:SMARTFILLETVER ()
+  (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
+  (princ))
+
+(princ (strcat "\nSMARTFILLET " *smartfillet-version*
+               " loaded -- type SMARTFILLET, pick two lines, and click"
+               " the rounded corner you want."))
+(princ)
+
+
+;;; ======================================================================
 ;;; >>> SPACHECK.lsp
 ;;; ======================================================================
 
@@ -59608,7 +60374,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.7")
+(setq *lazform-version* "v1.8")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -60687,7 +61453,13 @@
 
 ;;; -------------------- commands ----------------------------------------
 
-(defun c:LAZFORM ( / form)
+;; The form, then POOL with what it collected.  COVER closes POOL's
+;; pool-bottom gate first: a cover sheet has no floor work on it, so
+;; the depth chain behind that gate is neither asked for nor drawn.
+;; The flag goes on at the last moment -- after the form comes back --
+;; so a cancelled form leaves the session exactly as it found it, and
+;; c:POOL clears it again on the way out either way.
+(defun lzf:run (cover / form)
   (cond
     ;; the chart fills POOL's answers in, so POOL has to be here to
     ;; receive them -- say so plainly rather than opening a form whose
@@ -60698,9 +61470,17 @@
     ((setq form (lzf:show (car (car lzf:*charts*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
+     (if cover
+       (progn
+         (setq pool:*nobottom* t)
+         (princ "\n         Cover sheet - no pool bottom will be asked for.")))
      (pool:run-with-answers form))
     (t (princ "\nLAZFORM: cancelled, nothing drawn.")))
   (princ))
+
+(defun c:LAZFORM () (lzf:run nil))
+
+(defun c:LAZFORMCOVER () (lzf:run t))
 
 (defun c:LAZFORMVER ()
   (princ (strcat "\nLAZFORM " *lazform-version* " (LAZFORM.lsp) - "
@@ -60783,7 +61563,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.8")
+(setq *lazpanel-version* "v1.9")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -60799,15 +61579,115 @@
 ;;    - the deprecated acady matcher (MATCHSTD, ACADY-*) never appears.
 ;;  tests/test_lazpanel.py enforces all five rules against the tree.
 
+;;  TWO KINDS OF TAB, and a command may sit on several.
+;;
+;;  The first four pages are JOBS -- what the drafter is actually doing
+;;  this hour: a pool, a cover, a spa, and everything those three do not
+;;  reach.  They run in the order the work runs: lay the shape out, tie
+;;  the points, build the steps, then dimension and check.  A command
+;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
+;;  all three, because every job ends the same way.  The last four are
+;;  the CATEGORIES the panel has always had -- the whole roster filed by
+;;  what each tool is rather than when you reach for it -- so a tool you
+;;  cannot place in a job is still one tab away.
+;;
+;;  Every command therefore appears at least twice: once on a job page
+;;  and once on a category page.  Keys are only required to be unique
+;;  within a page, and each page is its own dialog, so this is free --
+;;  but lzp:commands has to fold the repeats or the status line would
+;;  count the roster twice over.
+;;
+;;  "Rest" is not a hand-kept list: it is every command the Pool, Cover
+;;  and Spa pages do not name, and the test recomputes that complement
+;;  from the tree, so a tool added to the panel lands there by default
+;;  instead of falling off the job pages unnoticed.
+
 (setq lzp:*groups*
-  '(("Layout"
+  '(("Pool"
+     ("POOL"           "Pool layout")
      ("LAZFORM"        "Pool from a filled-in chart")
+     ("OASIS"          "Freeform pool")
+     ("ABHD"           "Survey perimeter + bottom")
+     ("ADAB"           "Organic shape points")
+     ("FITABHD"        "Typed template fit")
+     ("XFTCONV"        "Leica import cleanup")
+     ("ABFIND"         "A/B stake ties")
+     ("ABMOVE"         "Move mis-taped point")
+     ("CDCREATE"       "Lines to cross dims")
+     ("CDCALLOUT"      "Point-to-point cross dims")
+     ("BPCALLOUT"      "Bad point callout")
+     ("CORNERSTP"      "Corner step")
+     ("HEMISTEP"       "Hemi step")
+     ("NORMIESTEP"     "Normie step")
+     ("AUTOBEAD"       "Bead offsets")
+     ("PERPPTS"        "Perpendicular points")
+     ("CPERPPTS"       "Curved perp points")
+     ("AUTODIM"        "Auto dimension")
+     ("LINFINCHECK"    "Liner finish review")
+     ("LINFINSCAN"     "Liner finish scan")
+     ("LITELINFINSCAN" "Liner scan, no dims")
+     ("DIMCHECK"       "Dimension review")
+     ("DIMSCAN"        "Dimension scan"))
+    ("Cover"
+     ("POOLCOVER"      "Pool layout, no bottom")
+     ("LAZFORMCOVER"   "Chart to pool, no bottom")
+     ("OASIS"          "Freeform pool")
+     ("ABHDCOVER"      "Survey perimeter, no bottom")
+     ("FITABHDCOVER"   "Typed template fit, no bottom")
+     ("STOCKCOVER"     "Stock cover placement")
+     ("XFTCONV"        "Leica import cleanup")
+     ("ABFIND"         "A/B stake ties")
+     ("ABMOVE"         "Move mis-taped point")
+     ("CDCREATE"       "Lines to cross dims")
+     ("CDCALLOUT"      "Point-to-point cross dims")
+     ("BPCALLOUT"      "Bad point callout")
+     ("PADDLE"         "Paddle pads")
+     ("AUTODIM"        "Auto dimension")
+     ("COVERCHECK"     "Cover review")
+     ("COVERSCAN"      "Cover scan")
+     ("LITECOVERSCAN"  "Cover scan, no dims")
+     ("DIMCHECK"       "Dimension review")
+     ("DIMSCAN"        "Dimension scan"))
+    ("Spa"
+     ("SPA"            "Spa template")
+     ("AUTODIM"        "Auto dimension")
+     ("SPACHECK"       "Spa sheet review")
+     ("SPACHECKSCAN"   "Spa sheet scan")
+     ("LITESPACHECKSCAN" "Spa scan, no dims")
+     ("DIMCHECK"       "Dimension review")
+     ("DIMSCAN"        "Dimension scan"))
+    ("Rest"
+     ("POOLDEMO"       "Worked pool example")
+     ("CABHD"          "Perimeter-only fit")
+     ("LHD"            "Laser outline fit")
+     ("SMARTFILLET"    "Corner radius, previewed")
+     ("WCALST"         "Unroll curved band")
+     ("ABCDEF"         "Rectangle plot")
+     ("ALTABCDEF"      "Clockwise rectangle plot")
+     ("XYPLOT"         "X/Y offset plot")
+     ("DRONE"          "Drone cleanup")
+     ("TYDRN"          "Text + point tidy-up")
+     ("AUTODIMSIDEPOV" "Side-view dims")
+     ("STAIRDIM"       "Stair dims")
+     ("FLOORDIM"       "Floor dims")
+     ("DIMCONTEND"     "Continue dim chains")
+     ("CHECK"          "Drawing check")
+     ("DIMARCCHECK"    "Arc endpoint check")
+     ("LINCHECK"       "Line checklist")
+     ("LINTXTCHK"      "Liner checklist text")
+     ("CCPRECHECK"     "Tech flow chart"))
+    ("Layout"
+     ("LAZFORM"        "Pool from a filled-in chart")
+     ("LAZFORMCOVER"   "Chart to pool, no bottom")
      ("SPA"            "Spa template")
      ("POOL"           "Pool layout")
+     ("POOLCOVER"      "Pool layout, no bottom")
      ("POOLDEMO"       "Worked pool example")
      ("OASIS"          "Freeform pool")
      ("FITABHD"        "Typed template fit")
+     ("FITABHDCOVER"   "Typed template fit, no bottom")
      ("ABHD"           "Survey perimeter + bottom")
+     ("ABHDCOVER"      "Survey perimeter, no bottom")
      ("ADAB"           "Organic shape points")
      ("CABHD"          "Perimeter-only fit")
      ("LHD"            "Laser outline fit")
@@ -60816,6 +61696,7 @@
      ("CORNERSTP"      "Corner step")
      ("HEMISTEP"       "Hemi step")
      ("NORMIESTEP"     "Normie step")
+     ("SMARTFILLET"    "Corner radius, previewed")
      ("STOCKCOVER"     "Stock cover placement")
      ("WCALST"         "Unroll curved band"))
     ("Points"
@@ -60856,6 +61737,17 @@
      ("LINTXTCHK"      "Liner checklist text")
      ("CCPRECHECK"     "Tech flow chart"))))
 
+;; How the tab strip is laid out: one DCL row per entry, in this order.
+;; The jobs sit on one line and the categories on the next, which is
+;; both what they mean and what keeps the strip narrow -- eight tabs on
+;; a single row run about 94 character cells, and DCL will not scroll a
+;; dialog that is wider than the screen.  This is presentation only; the
+;; pages themselves are still lzp:*groups*.  The test asserts the two
+;; tables name exactly the same groups, so neither can drift.
+(setq lzp:*rows*
+  '(("Pool" "Cover" "Spa" "Rest")
+    ("Layout" "Points" "Dimensions" "Checking")))
+
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
@@ -60874,10 +61766,14 @@
         (foreach c (cdr g) (setq out (cons (car c) out)))))
   (reverse out))
 
+;; Folded, because a command that serves two jobs is listed on both
+;; pages and the status line counts tools, not buttons.  First
+;; appearance wins, so the order still reads as the panel is laid out.
 (defun lzp:commands ( / g c out)
   (foreach g lzp:*groups*
     (foreach c (cdr g)
-      (setq out (cons (car c) out))))
+      (if (not (member (car c) out))
+        (setq out (cons (car c) out)))))
   (reverse out))
 
 ;; Is C:<name> defined in this session?  An unbound symbol evaluates to
@@ -60901,17 +61797,21 @@
 
 (defun lzp:dlgname (group) (strcat "lazpanel_" (strcase group t)))
 
-;; The tab strip: one button per group.  DCL has no tab tile, so a tab
-;; is a button that closes this page and reopens the next -- and since
-;; done_dialog reports where the dialog was standing, it reopens there
-;; rather than jumping back to the middle of the screen.
-(defun lzp:tabstrip ( / out g)
-  (setq out (list "  : row {"))
-  (foreach g lzp:*groups*
-    (setq out (cons (strcat "    : button { key = \"tab_" (car g)
-                            "\"; label = \"" (car g) "\"; }")
-                    out)))
-  (reverse (cons "  }" out)))
+;; The tab strip: one button per group, laid out in the rows of
+;; lzp:*rows* -- jobs on the first line, categories on the second.  DCL
+;; has no tab tile, so a tab is a button that closes this page and
+;; reopens the next -- and since done_dialog reports where the dialog
+;; was standing, it reopens there rather than jumping back to the middle
+;; of the screen.
+(defun lzp:tabstrip ( / out r g)
+  (foreach r lzp:*rows*
+    (setq out (cons "  : row {" out))
+    (foreach g r
+      (setq out (cons (strcat "    : button { key = \"tab_" g
+                              "\"; label = \"" g "\"; }")
+                      out)))
+    (setq out (cons "  }" out)))
+  (reverse out))
 
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
@@ -61480,23 +62380,24 @@
 ;;; ======================================================================
 ;;; -------------------- what actually arrived ---------------------------
 (setq lazpass:*want* '(
-  "CALVER" "POOL" "POOLVER" "POOLDEMO" "TUTORIALPOOL" "SPA"
-  "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF" "ABCDEFVER"
-  "ABFIND" "ABMOVE" "ABFINDVER" "ALTABCDEF" "ABHD" "ADAB"
-  "TUTORIALABHD" "TUTORIALADAB" "CABHDVER" "CABHD" "AUTOBEAD" "AUTOBEADVER"
-  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "BPCALLOUT"
-  "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
-  "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP"
-  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
-  "COVERCHECKVERSION" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK"
-  "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DDFIX" "DDSET" "DDCAL"
-  "DDINFO" "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER"
-  "FITABHD" "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
-  "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE"
-  "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SPACHECKVER"
-  "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST"
-  "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV"
-  "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMVER" "LAZPANEL"
+  "CALVER" "POOL" "POOLCOVER" "POOLVER" "POOLDEMO" "TUTORIALPOOL"
+  "SPA" "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF"
+  "ABCDEFVER" "ABFIND" "ABMOVE" "ABFINDVER" "ALTABCDEF" "ABHD"
+  "ABHDCOVER" "ADAB" "TUTORIALABHD" "TUTORIALADAB" "CABHDVER" "CABHD"
+  "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM"
+  "AUTODIMSIDEPOV" "BPCALLOUT" "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER"
+  "CHECK" "DIMARCCHECK" "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP"
+  "NORMIESTEP" "TUTORIALNORMIESTEP" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN"
+  "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVERSION" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK"
+  "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DDFIX"
+  "DDSET" "DDCAL" "DDINFO" "DDALT" "DDGPS" "DDELEV"
+  "DDTEST" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD" "LINCHECK"
+  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
+  "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS" "CPERPPTS"
+  "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
+  "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG"
+  "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP"
+  "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
   "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
