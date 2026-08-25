@@ -129,6 +129,31 @@ TOOLS = {
         # every caller tests for it by name
         'symbols': {'FIT-BACK': 'CAL-BACK'},
     },
+    # SMARTFILLET was written against the library from the start: its
+    # lisp/ file carries copies of the CALOFIN-LIB helpers under sf:,
+    # and every one of them comes straight back out here.  What stays
+    # local is the linetype it draws previews with -- the library has no
+    # ensure-ltype -- and the corner geometry, which is the tool.
+    'SMARTFILLET': {
+        'src': 'lisp/smartfillet/SMARTFILLET.lsp',
+        'swap': {
+            'sf:askkw': 'cal:askkw', 'sf:askyn': 'cal:askyn',
+            'sf:syssave': 'cal:syssave',
+            'sf:sysrestore': 'cal:sysrestore',
+            'sf:ensure-layer': 'cal:ensure-layer',
+            'sf:2d': 'cal:2d', 'sf:dist': 'cal:dist',
+            'sf:v-': 'cal:v-', 'sf:v+': 'cal:v+', 'sf:v*': 'cal:v*',
+            'sf:dot': 'cal:dot', 'sf:vlen': 'cal:vlen',
+            'sf:unit': 'cal:unit', 'sf:angnorm': 'cal:angnorm',
+            'sf:signed-dang': 'cal:signed-dang', 'sf:tan': 'cal:tan',
+        },
+        'drop_globals': ['sf:*sysold*'],
+        # sf:askkw already takes the SHOWN bracket third, like the
+        # library's, and sf:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helpers
+        'symbols': {'SF-BACK': 'CAL-BACK'},
+    },
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {

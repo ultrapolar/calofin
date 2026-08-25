@@ -110,7 +110,7 @@
                  "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
-                 "SPACHECK.lsp"
+                 "SMARTFILLET.lsp" "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
                  "xftconv.lsp" "XYPLOT.lsp"
                  "LAZFORM.lsp" "LAZPANEL.lsp")

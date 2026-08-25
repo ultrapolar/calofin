@@ -65,7 +65,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.8")
+(setq *lazpanel-version* "v1.9")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -98,6 +98,7 @@
      ("CORNERSTP"      "Corner step")
      ("HEMISTEP"       "Hemi step")
      ("NORMIESTEP"     "Normie step")
+     ("SMARTFILLET"    "Corner radius, previewed")
      ("STOCKCOVER"     "Stock cover placement")
      ("WCALST"         "Unroll curved band"))
     ("Points"
