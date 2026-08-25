@@ -82,6 +82,11 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - DIMENSION LAYER. Every dimension must sit on the
+;;;       "DIMENSION" layer (tune *cchk-dim-layer*). Any that do not
+;;;       are counted, the layers they landed on are named, and the
+;;;       report tells you to run CDIM (tune *cchk-dimfix-cmd*) to
+;;;       move them. This one runs in LITECOVERSCAN too.
 ;;;     - POOL OUTLINE & AREA. Everything in the selection on layer
 ;;;       "POOL" (tune *cchk-pool-layer*) whose properties are all
 ;;;       ByLayer is the pool outline: a closed (lw)polyline, a
@@ -193,7 +198,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.5")
+(setq *cchk-version* "v0.6")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -207,6 +212,10 @@
 ;; come afterwards ("whatever else is left"), still left-to-right
 (setq *cchk-style-order*
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+;; every dimension belongs on this layer; CDIM is the command that
+;; moves the strays there, and is what the report tells you to run
+(setq *cchk-dim-layer*   "DIMENSION")
+(setq *cchk-dimfix-cmd*  "CDIM")
 (setq *cchk-constr-layer* "COVERCHECK-CONSTRUCTION")
 (setq *cchk-constr-color* 2)       ; yellow
 (setq *cchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
@@ -546,6 +555,38 @@
   ;; T for a line that belongs to the DIMENSION AUDIT column - the
   ;; DIMCHECK-style findings, as opposed to the cover's own checks
   (member (cchk:linegrp s) '("DIMENSIONS" "ARCS" "OVERLAPPING LINES")))
+
+;; Every dimension belongs on the dimension layer.  This is the one
+;; dimension check the lite scan keeps: it costs a layer read apiece,
+;; and a sheet whose dimensions sit on the wrong layer plots wrong
+;; however sound the dimensions themselves are - so the verdict, and
+;; the suggestion to run CDIM over them, belong on the main sheet
+;; rather than in the DIMENSION AUDIT column.  The offending layers
+;; are named, since that is what you need to go fix them.
+;; Returns (sentence . needs-attention).
+(defun cchk:dimlayer-verdict (dims / n off lays lay e)
+  (setq n 0 off 0 lays nil)
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq n   (1+ n)
+              lay (cdr (assoc 8 (entget e))))
+        (if (/= (strcase lay) (strcase *cchk-dim-layer*))
+          (progn
+            (setq off (1+ off))
+            (if (not (member (strcase lay) lays))
+              (setq lays (cons (strcase lay) lays))))))))
+  (cond
+    ((= n 0)
+     (cons "no dimensions in the selection" nil))
+    ((= off 0)
+     (cons (strcat "all " (itoa n) " on " *cchk-dim-layer*) nil))
+    (t
+     (cons (strcat (itoa off) " of " (itoa n) " NOT on layer "
+                   *cchk-dim-layer* " ("
+                   (cchk:join (reverse lays) ", ")
+                   ") - run " *cchk-dimfix-cmd* " to move them")
+           T))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -2345,7 +2386,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right)
+                      minx miny maxx maxy bb m dhdr right dimlay)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2610,8 +2651,11 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq hdr (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                          (car cres)))
+        (setq dimlay (cchk:dimlayer-verdict dims))
+        (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
+                              (cdr dimlay))
+                        (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                (car cres))))
         (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
                                        (reverse lines) nil
                                        minx miny maxx maxy))
@@ -2668,7 +2712,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres
+                       nd ndbad na nabad hdr dhdr l cres dimlay
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -2793,8 +2837,11 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq hdr (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                       (car cres)))
+     (setq dimlay (cchk:dimlayer-verdict dims))
+     (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
+                           (cdr dimlay))
+                     (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                             (car cres))))
      (cchk:write-report (strcat name " REPORT")
                         (strcat "Read-only scan - nothing in the drawing"
                                 " was changed.  "

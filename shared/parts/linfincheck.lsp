@@ -181,6 +181,12 @@
 ;;;     measure the same. The selection is used when it holds the
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
+;;;  8b. DIMENSION LAYER. Every dimension must sit on the
+;;;     "DIMENSION" layer (tune *lfc-dim-layer*). Any that do not are
+;;;     counted, the layers they landed on are named, and the report
+;;;     tells you to run CDIM (tune *lfc-dimfix-cmd*) to move them.
+;;;     This one runs in LITELINFINSCAN too.
+;;;
 ;;;  9. A LINFINCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer LINFINCHECK-REPORT, sized from the drawing's
 ;;;     extents so it sits to scale next to it.  The MAIN sheet leads
@@ -235,7 +241,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.3")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.4")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -273,6 +279,10 @@
 ;; come afterwards ("whatever else is left"), still left-to-right
 (setq *lfc-style-order*
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+;; every dimension belongs on this layer; CDIM is the command that
+;; moves the strays there, and is what the report tells you to run
+(setq *lfc-dim-layer*   "DIMENSION")
+(setq *lfc-dimfix-cmd*  "CDIM")
 (setq *lfc-constr-layer* "LINFINCHECK-CONSTRUCTION")
 (setq *lfc-constr-color* 2)       ; yellow
 (setq *lfc-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
@@ -663,6 +673,38 @@
   ;; T for a line that belongs to the DIMENSION AUDIT column - the
   ;; DIMCHECK-style findings, as opposed to the liner's own checks
   (member (lfc:linegrp s) '("DIMENSIONS" "ARCS" "OVERLAPPING LINES")))
+
+;; Every dimension belongs on the dimension layer.  This is the one
+;; dimension check the lite scan keeps: it costs a layer read apiece,
+;; and a sheet whose dimensions sit on the wrong layer plots wrong
+;; however sound the dimensions themselves are - so the verdict, and
+;; the suggestion to run CDIM over them, belong on the main sheet
+;; rather than in the DIMENSION AUDIT column.  The offending layers
+;; are named, since that is what you need to go fix them.
+;; Returns (sentence . needs-attention).
+(defun lfc:dimlayer-verdict (dims / n off lays lay e)
+  (setq n 0 off 0 lays nil)
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq n   (1+ n)
+              lay (cdr (assoc 8 (entget e))))
+        (if (/= (strcase lay) (strcase *lfc-dim-layer*))
+          (progn
+            (setq off (1+ off))
+            (if (not (member (strcase lay) lays))
+              (setq lays (cons (strcase lay) lays))))))))
+  (cond
+    ((= n 0)
+     (cons "no dimensions in the selection" nil))
+    ((= off 0)
+     (cons (strcat "all " (itoa n) " on " *lfc-dim-layer*) nil))
+    (t
+     (cons (strcat (itoa off) " of " (itoa n) " NOT on layer "
+                   *lfc-dim-layer* " ("
+                   (lfc:join (reverse lays) ", ")
+                   ") - run " *lfc-dimfix-cmd* " to move them")
+           T))))
 
 ;; The whole report: the liner-finish checks on the MAIN sheet - a
 ;; large title, the date and version, a verdict line, the colour
@@ -2047,7 +2089,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right)
+                      minx miny maxx maxy bb m dhdr right dimlay)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2841,8 +2883,10 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
+        (setq dimlay (lfc:dimlayer-verdict dims))
         (setq hdr
           (list
+            (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
             (cons (strcat "Steps: " stepsum)          (lfc:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -2922,7 +2966,7 @@
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
-                     nd ndbad na nabad m hdr dhdr l badtags
+                     nd ndbad na nabad m hdr dhdr l badtags dimlay
                      bordbb bordsum attundec
                      minx miny maxx maxy p13 p14 near s b w)
 
@@ -3251,7 +3295,9 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
+     (setq dimlay (lfc:dimlayer-verdict dims))
      (setq hdr (list
+                 (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
                  (cons (strcat "Steps: " stepsum)           (lfc:attn-p stepsum))
                  (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
