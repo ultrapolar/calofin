@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 46 files, 105 commands:
+;;; 47 files, 107 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABMOVE
 ;;;   ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV
@@ -21,13 +21,13 @@
 ;;;   LAZFORM  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LHD
 ;;;   LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK
 ;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER
-;;;   PADDLE  PERPPTS  POOL  POOLDEMO  POOLVER  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM
-;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
-;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
-;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
-;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV
-;;;   XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   PADDLE  PERPPTS  POOL  POOLDEMO  POOLVER  SMARTFILLET
+;;;   SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD
+;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
+;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
+;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
+;;;   WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -28341,7 +28341,11 @@
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
 ;;;       same convention POOL uses for the cross dims it draws.
-;;;    4. The line each dimension was made from is erased, so the tie
+;;;    4. A line whose two ends already carry a dimension is left
+;;;       alone -- no second dim on top of the first, and the line
+;;;       stays put so you can see what was skipped.  Two coincident
+;;;       lines in one selection count as the same tie.
+;;;    5. The line each dimension was made from is erased, so the tie
 ;;;       measurement is left as a dimension and nothing else.  Only
 ;;;       lines that really did get a dimension are erased, and the
 ;;;       report says how many went and off which layers (they are
@@ -28362,6 +28366,11 @@
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
 ;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
+;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
+;;;                  nil to dimension it again anyway
+;;;    cdc:*dupetol* how close two extension line origins have to be to
+;;;                  count as the same point; nil = a sixteenth of an
+;;;                  inch in the drawing's own units
 ;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
 ;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
 ;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
@@ -28374,6 +28383,11 @@
 ;;;      reported, not dimensioned -- explode a polyline first if its
 ;;;      segments need cross dims.
 ;;;    * Zero-length lines are skipped; they have nothing to measure.
+;;;    * "Dimensioned already" means SOME dimension in model space
+;;;      carries those same two extension line origins, either way
+;;;      round -- whatever its style, layer, or where its dimension
+;;;      line sits.  A dim of the same tie pushed out to one side still
+;;;      counts as that tie being dimensioned.
 ;;;    * The "DIMENSION" layer is created when the drawing lacks it,
 ;;;      and thawed / unlocked / switched back on when it is there but
 ;;;      not usable -- a run onto a frozen layer would otherwise look
@@ -28387,7 +28401,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -28397,6 +28411,8 @@
 (setq cdc:*erase*  t)
 (setq cdc:*textpos* 0.8)
 (setq cdc:*vertang* 15.0)
+(setq cdc:*skipdimmed* t)
+(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -28488,6 +28504,61 @@
       (entupd en)
       t)))
 
+;; one foot expressed in the current drawing units (INSUNITS), so the
+;; tolerances below mean the same thing whatever the drawing works in
+(defun cdc:onefoot (/ u)
+  (setq u (getvar "INSUNITS"))
+  (cond ((= u 2) 1.0)                   ; feet
+        ((= u 4) 304.8)                 ; millimetres
+        ((= u 5) 30.48)                 ; centimetres
+        ((= u 6) 0.3048)                ; metres
+        ((= u 10) (/ 1.0 3.0))          ; yards
+        (t 12.0)))                      ; inches / unitless
+
+;; how close two extension line origins have to be before they count as
+;; the same point - a sixteenth of an inch, in the drawing's own units,
+;; unless cdc:*dupetol* says otherwise
+(defun cdc:dupetol ()
+  (if cdc:*dupetol* cdc:*dupetol* (/ (cdc:onefoot) 192.0)))
+
+;; T when a and b are the same point on the plan, within tol.  Compared
+;; flat: a survey point carries an elevation, the dimension that
+;; measures to it does not, and that difference must not read as two
+;; different places.
+(defun cdc:samept (a b tol)
+  (and (<= (abs (- (car  a) (car  b))) tol)
+       (<= (abs (- (cadr a) (cadr b))) tol)))
+
+;; the pairs of extension line origins every dimension in model space
+;; already carries.  A radial, angular or ordinate dim has no such pair
+;; and is passed over.
+(defun cdc:dimscan ( / ss i ed out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "DIMENSION") (410 . "Model")))
+        i   0)
+  (if ss
+    (while (< i (sslength ss))
+      (setq ed (entget (ssname ss i))
+            i  (1+ i))
+      (if (and (assoc 13 ed) (assoc 14 ed))
+        (setq out (cons (list (cdr (assoc 13 ed)) (cdr (assoc 14 ed)))
+                        out)))))
+  out)
+
+;; T when p1-p2 is one of the pairs in LST, either way round: the
+;; "that tie is dimensioned already, leave it alone" test.  Where the
+;; existing dim line sits is deliberately not part of it -- a dim of
+;; this tie pushed off to one side is still a dim of this tie.
+(defun cdc:dimmed-p (p1 p2 lst / tol q hit)
+  (setq tol (cdc:dupetol))
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (or (and (cdc:samept (car q) p1 tol) (cdc:samept (cadr q) p2 tol))
+            (and (cdc:samept (car q) p2 tol) (cdc:samept (cadr q) p1 tol)))
+      (setq hit t)))
+  hit)
+
 ;; "POOL, POINTS" from a list of layer names
 (defun cdc:names (lst / out)
   (foreach n lst
@@ -28497,8 +28568,9 @@
 ;;; -------------------- the command --------------------------------
 
 (defun c:CDCREATE ( / *error* olderr odim
-                      ss i en ed typ ends pairs skipped plines
-                      havestyle undo-open pre new made gone lays p1 p2 )
+                      ss i en ed typ ends pairs skipped plines dimmed
+                      already havestyle undo-open pre new made gone lays
+                      p1 p2 )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -28532,8 +28604,12 @@
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
     (progn
-      ;; -- 2. keep the lines, count what was ignored
-      (setq i 0 pairs nil skipped 0 plines 0)
+      ;; -- 2. keep the lines, count what was ignored.  What the
+      ;;       drawing already carries is read once, up front, and each
+      ;;       tie kept is added to it -- so two coincident lines in one
+      ;;       selection are the same tie, dimensioned once
+      (setq i 0 pairs nil skipped 0 plines 0 already 0
+            dimmed (if cdc:*skipdimmed* (cdc:dimscan)))
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -28547,14 +28623,24 @@
              (setq ends (cdc:ends en)
                    p1   (car  ends)
                    p2   (cadr ends))
-             (if (> (distance p1 p2) 1e-9)
-               (setq pairs (cons (list en p1 p2 (cdr (assoc 8 ed))) pairs))
-               (setq skipped (1+ skipped)))))
+             (cond
+               ((<= (distance p1 p2) 1e-9)        ; nothing to measure
+                  (setq skipped (1+ skipped)))
+               ((and cdc:*skipdimmed* (cdc:dimmed-p p1 p2 dimmed))
+                  (setq already (1+ already)))
+               (t
+                  (setq pairs  (cons (list en p1 p2 (cdr (assoc 8 ed)))
+                                     pairs)
+                        dimmed (cons (list p1 p2) dimmed))))))
         (setq i (1+ i)))
       (setq pairs (reverse pairs))
 
       (if (null pairs)
-        (princ "\nNo lines in the selection -- nothing to dimension.")
+        (princ (if (> already 0)
+                 (strcat "\n" (itoa already) " tie"
+                         (if (= already 1) " is" "s are")
+                         " dimensioned already -- nothing new to draw.")
+                 "\nNo lines in the selection -- nothing to dimension."))
         (progn
           ;; -- 3. layer and style, all of it inside one undo group
           (setvar "CMDECHO" 0)
@@ -28622,6 +28708,11 @@
                            (if (= gone 1) "" "s") " erased (layer"
                            (if (= 1 (length lays)) " " "s ")
                            (cdc:names (reverse lays)) ").")))
+          (if (> already 0)
+            (princ (strcat "\n" (itoa already) " line"
+                           (if (= already 1) "" "s")
+                           " left alone -- those two points carry a"
+                           " dimension already.")))
           (if (> skipped 0)
             (princ (strcat "\n" (itoa skipped)
                            " selected object(s) were not lines and were"
@@ -29067,12 +29158,9 @@
 ;;;       step first - one per step PLUS one more for the drop after
 ;;;       the last tread, so 3 steps take 4 depths.  Enter repeats the
 ;;;       previous drop, Back (or Undo) steps back.  Then pick the top
-;;;       of the wall and which side the steps descend.  The staircase
-;;;       silhouette (drop, then tread, per step, ending on that final
-;;;       drop) is drawn from the pick; when dimensioning is on the
-;;;       depths are chained vertically behind the wall with the
-;;;       overall depth further out again, in the depth dim style.
-;;;       The treads carry no dims of their own.
+;;;       of the first tread: the flight always runs DOWN AND TO THE
+;;;       LEFT from there, so there is no side to pick.  See "The side
+;;;       profile" below for what is drawn and how it is dimensioned.
 ;;;     10. Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -29082,6 +29170,25 @@
 ;;;       so and finishes without beading.  The beads are their own
 ;;;       undo group - AutoCAD does not nest them - so one U undoes
 ;;;       the beads and the next undoes the steps.
+;;;
+;;; THE SIDE PROFILE
+;;;   The flight is drawn as an alternating drop/tread silhouette in
+;;;   world X/Y, always descending to the LEFT of the picked top of the
+;;;   first tread and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read.
+;;;   The dims climb with them, up and to the right, on the high side:
+;;;     * every depth is a dim of its own, standing the same distance
+;;;       right of the corner its drop lands on, so they step out with
+;;;       the flight instead of stacking in one chain;
+;;;     * the overall depth sits further out again;
+;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
+;;;   that bracket the drop.  Those corners run diagonally to each
+;;;   other, so binding the diagonal (rather than dimensioning the
+;;;   riser line) keeps the extension lines hooked to the geometry
+;;;   while the dim still reads the drop, not the slope.  The offset
+;;;   clears the widest tread in the flight, which is what keeps both
+;;;   extension lines running forward, out of the steps.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      step width tolerance in drawing units.  When
@@ -29116,7 +29223,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.8") ; printed on load and at command start so a
+(setq *cs-version* "v2.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -29366,11 +29473,15 @@
 (defun cs-setstyle (name / doc)
   (if (and (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    ;; the argument list is required, even for a lambda that takes
+    ;; none - without it this is a "too few arguments" error every
+    ;; time a style really has to be switched
     (vl-catch-all-apply
       '(lambda ()
          (setq doc (vla-get-activedocument (vlax-get-acad-object)))
          (vla-put-activedimstyle
-           doc (vla-item (vla-get-dimstyles doc) name))))))
+           doc (vla-item (vla-get-dimstyles doc) name)))
+      '())))
 
 ;; aligned dimension between A and B in dim style STYLE, dim line
 ;; passing through THRU.  Points are WCS and are translated to the
@@ -29383,6 +29494,24 @@
   (command "_.DIMALIGNED" "_non" (trans a 0 1)
                           "_non" (trans b 0 1)
                           "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; Vertical linear dimension between A and B in dim style STYLE, dim
+;; line passing through THRU.  A and B are the real step corners, which
+;; run diagonally to each other, so "_V" is forced: the dimension
+;; measures the DROP between them while its extension lines still hook
+;; the corners themselves.  Cleaner than dimensioning the riser line,
+;; which leaves the dim marooned beside the step instead of reading
+;; across to it.  Points are WCS.
+(defun cs-dimv (style a b thru / oldl)
+  (cs-setstyle style)
+  (if (and *cs-dim-layer* (cs-layerok *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.DIMLINEAR" "_non" (trans a 0 1)
+                         "_non" (trans b 0 1)
+                         "_V"
+                         "_non" (trans thru 0 1))
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; Draw the side (riser) line A-B unless it is degenerate or both points
@@ -29455,8 +29584,8 @@
                        bsides btreads bnums bside bdir bss pr be
                        bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
                        bns bnfar bnff bnl
-                       tlist tvals tds drops pd ix ppt pw p2 dx sgn
-                       px py totr totd)
+                       tlist tvals tds drops pd ix ppt pw
+                       px py totr totd cnrs ca cb pfo)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -30074,68 +30203,68 @@
                     ((null pd) (setq pd (car drops))))) ; Enter = previous
                 (setq drops (cons pd drops) ix (1+ ix)))
               (setq drops (reverse drops))
-              ;; place the profile
-              (setq ppt (getpoint
-                "\nPick the top of the wall for the side profile: "))
+              ;; Place the profile.  It always runs DOWN AND TO THE
+              ;; LEFT from the pick, so there is no side to ask about.
+              (setq ppt (getpoint (strcat "\nPick the top of the first"
+                                          " tread for the side profile: ")))
               (if (null ppt)
                 (princ "\nNo point picked - side profile skipped.")
                 (progn
-                  (setq pw (trans ppt 1 0) sgn 0.0)
-                  (while (and (zerop sgn)
-                              (setq p2 (getpoint ppt
-                                "\nPick a point on the side the steps descend: ")))
-                    (setq dx (- (car (trans p2 1 0)) (car pw)))
-                    (if (< (abs dx) 1e-10)
-                      (princ "\nPick left or right of the wall, not on it.")
-                      (setq sgn (if (> dx 0.0) 1.0 -1.0))))
-                  (if (zerop sgn)
-                    (princ "\nNo side picked - side profile skipped.")
+                  ;; The alternating drop/tread silhouette in world
+                  ;; X/Y, keeping the corner down its high side at
+                  ;; every level: the pick, then the foot of each
+                  ;; drop.  Those corners are what the dims bind to.
+                  (setq totd (apply '+ drops)
+                        totr (apply '+ tds)
+                        pw   (trans ppt 1 0)
+                        px   (car pw)
+                        py   (cadr pw)
+                        ix   0
+                        cnrs (list (list px py 0.0)))
+                  (foreach s tds
+                    (setq pd (nth ix drops))
+                    (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                    (setq py   (- py pd)
+                          cnrs (cons (list px py 0.0) cnrs))
+                    ;; the tread runs left, and carries no dim of its
+                    ;; own - the depths and the overall depth say it all
+                    (cs-mkline (list px py 0.0) (list (- px s) py 0.0))
+                    (setq px (- px s) ix (1+ ix)))
+                  ;; the last depth: the drop after the last tread
+                  (setq pd (nth ix drops))
+                  (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                  (setq py   (- py pd)
+                        cnrs (reverse (cons (list px py 0.0) cnrs)))
+                  (if dimflag
                     (progn
-                      ;; alternating drop/tread silhouette in world X/Y
-                      (setq totd (apply '+ drops)
-                            totr (apply '+ tds)
-                            px   (car pw)
-                            py   (cadr pw)
-                            ix   0)
-                      (foreach s tds
-                        (setq pd (nth ix drops))
-                        (cs-mkline (list px py 0.0)
-                                   (list px (- py pd) 0.0))
-                        (if dimflag   ; depth dims: one chain behind the wall
-                          (cs-dim *cs-depth-dimstyle*
-                                  (list px py 0.0)
-                                  (list px (- py pd) 0.0)
-                                  (list (- (car pw) (* sgn 2.0 txth))
-                                        (- py (* 0.5 pd)) 0.0)))
-                        (setq py (- py pd))
-                        ;; the tread carries no dim of its own - the
-                        ;; depths and the overall depth say it all
-                        (cs-mkline (list px py 0.0)
-                                   (list (+ px (* sgn s)) py 0.0))
-                        (setq px (+ px (* sgn s)) ix (1+ ix)))
-                      ;; the last depth: the drop after the last tread
-                      (setq pd (nth ix drops))
-                      (cs-mkline (list px py 0.0)
-                                 (list px (- py pd) 0.0))
-                      (if dimflag
-                        (cs-dim *cs-depth-dimstyle*
-                                (list px py 0.0)
-                                (list px (- py pd) 0.0)
-                                (list (- (car pw) (* sgn 2.0 txth))
-                                      (- py (* 0.5 pd)) 0.0)))
-                      (setq py (- py pd))
-                      (if dimflag   ; the overall depth, further out again
-                        (cs-dim *cs-depth-dimstyle*
-                                (list (car pw) (cadr pw) 0.0)
-                                (list (car pw) py 0.0)
-                                (list (- (car pw) (* sgn 5.0 txth))
-                                      (- (cadr pw) (* 0.5 totd)) 0.0)))
-                      (princ (strcat "\nSide profile drawn: "
-                                     (itoa (length tds))
-                                     " step(s), " (itoa (length drops))
-                                     " depths, total run " (rtos totr)
-                                     ", overall depth " (rtos totd)
-                                     "."))))))))))))
+                      ;; Every depth dim stands the same distance right
+                      ;; of the corner its drop lands on, so the dims
+                      ;; climb up and to the right with the steps
+                      ;; instead of stacking in one chain.  Clearing
+                      ;; the widest tread is what keeps BOTH extension
+                      ;; lines running forward, out of the flight.
+                      (setq pfo (+ (apply 'max tds) (* 2.0 txth))
+                            ix  1)
+                      (while (< ix (length cnrs))
+                        (setq ca (nth (1- ix) cnrs)
+                              cb (nth ix cnrs))
+                        (cs-dimv *cs-depth-dimstyle* ca cb
+                                 (list (+ (car cb) pfo)
+                                       (* 0.5 (+ (cadr ca) (cadr cb)))
+                                       0.0))
+                        (setq ix (1+ ix)))
+                      ;; the overall depth, further out again - the
+                      ;; whole diagonal, top corner to bottom corner
+                      (cs-dimv *cs-depth-dimstyle*
+                               (car cnrs) (last cnrs)
+                               (list (+ (car pw) pfo (* 3.0 txth))
+                                     (- (cadr pw) (* 0.5 totd)) 0.0))))
+                  (princ (strcat "\nSide profile drawn: "
+                                 (itoa (length tds))
+                                 " step(s), " (itoa (length drops))
+                                 " depths, down to the left; total run "
+                                 (rtos totr) ", overall depth "
+                                 (rtos totd) "."))))))))))
 
   ;; ---- 10. done --------------------------------------------------------
   (if (zerop drawn)
@@ -30275,9 +30404,12 @@
   (princ "\n     far end of its wall.")
   (princ "\n  5. Add a side profile? [Yes/No] - give the step depths, top")
   (princ "\n     step first: one per step plus the drop after the last")
-  (princ "\n     tread (3 steps take 4 depths).  Then pick the wall top")
-  (princ "\n     and which side the steps descend.  The depths and the")
-  (princ "\n     overall depth are dimensioned; the treads are not.")
+  (princ "\n     tread (3 steps take 4 depths).  Then pick the top of the")
+  (princ "\n     first tread - the flight always runs down and to the")
+  (princ "\n     LEFT from there, so the steps rise to the right and the")
+  (princ "\n     dims climb with them.  Each depth is dimensioned beside")
+  (princ "\n     its own step and the overall depth further out; the")
+  (princ "\n     treads are not dimensioned.")
   (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
@@ -30484,12 +30616,9 @@
 ;;;       give the step depths (the vertical drops), top step first -
 ;;;       one per step PLUS one more for the drop after the last
 ;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
-;;;       previous one; then pick the top of the wall and the side the
-;;;       steps descend.  The alternating drop/tread silhouette ends
-;;;       on that final drop and, when the plan steps are dimensioned,
-;;;       every depth is too - chained behind the wall, the overall
-;;;       depth further out again.  The treads carry no dims of their
-;;;       own.
+;;;       previous one; then pick the top of the first tread.  The
+;;;       flight always runs DOWN AND TO THE LEFT from there, so there
+;;;       is no side to pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -30499,6 +30628,23 @@
 ;;;       so and finishes without beading.  The beads are their own
 ;;;       undo group - AutoCAD does not nest them - so one U undoes
 ;;;       the beads and the next undoes the steps.
+;;;
+;;; THE SIDE PROFILE
+;;;   The flight is drawn as an alternating drop/tread silhouette in
+;;;   world X/Y, always descending to the LEFT of the picked top of the
+;;;   first tread and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read.
+;;;   The dims climb with them, up and to the right, on the high side:
+;;;     * every depth is a dim of its own, standing the same distance
+;;;       right of the corner its drop lands on, so they step out with
+;;;       the flight instead of stacking in one chain;
+;;;     * the overall depth sits further out again;
+;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
+;;;   that bracket the drop.  Those corners run diagonally to each
+;;;   other, so binding the diagonal (rather than dimensioning the
+;;;   riser line) keeps the extension lines hooked to the geometry
+;;;   while the dim still reads the drop, not the slope.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -30533,7 +30679,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.0") ; printed on load and at command start so a
+(setq *hs-version* "v3.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -30944,11 +31090,15 @@
 (defun hs-setstyle (name / doc)
   (if (and (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    ;; the argument list is required, even for a lambda that takes
+    ;; none - without it this is a "too few arguments" error every
+    ;; time a style really has to be switched
     (vl-catch-all-apply
       '(lambda ()
          (setq doc (vla-get-activedocument (vlax-get-acad-object)))
          (vla-put-activedimstyle
-           doc (vla-item (vla-get-dimstyles doc) name))))))
+           doc (vla-item (vla-get-dimstyles doc) name)))
+      '())))
 
 ;; aligned dimension between A and B in dim style STYLE, dim line
 ;; passing through THRU.  Points are WCS and are translated to the
@@ -30961,6 +31111,24 @@
   (command "_.DIMALIGNED" "_non" (trans a 0 1)
                           "_non" (trans b 0 1)
                           "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; Vertical linear dimension between A and B in dim style STYLE, dim
+;; line passing through THRU.  A and B are the real step corners, which
+;; run diagonally to each other, so "_V" is forced: the dimension
+;; measures the DROP between them while its extension lines still hook
+;; the corners themselves.  Cleaner than dimensioning the riser line,
+;; which leaves the dim marooned beside the step instead of reading
+;; across to it.  Points are WCS.
+(defun hs-dimv (style a b thru / oldl)
+  (hs-setstyle style)
+  (if (and *cs-dim-layer* (hs-layerok *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.DIMLINEAR" "_non" (trans a 0 1)
+                         "_non" (trans b 0 1)
+                         "_V"
+                         "_non" (trans thru 0 1))
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -30979,8 +31147,8 @@
                       dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
-                      tlist srt treads pv drops dd jx tcount ptop pu
-                      pcancel pside dxs sgn px py lowy totrun totdrop td)
+                      tlist srt treads pv drops dd jx tcount ptop
+                      px py totrun totdrop td cnrs pfo)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -31454,74 +31622,67 @@
               (T
                (setq drops (cons dd drops) jx (1+ jx)))))
           (setq drops (reverse drops))
-          ;; placement: the top of the wall, then which side it descends
-          (setq ptop (getpoint
-                       "\nPick the top of the wall for the side profile: "))
+          ;; Placement.  The profile always runs DOWN AND TO THE LEFT
+          ;; from the pick, so there is no side to ask about.
+          (setq ptop (getpoint (strcat "\nPick the top of the first tread"
+                                       " for the side profile: ")))
           (if (null ptop)
             (princ "\nNo point picked - side profile skipped.")
             (progn
-              (setq pu      ptop               ; the pick, still in UCS
-                    ptop    (trans ptop 1 0)
-                    sgn     nil
-                    pcancel nil)
-              (while (and (null sgn) (not pcancel))
-                (setq pside (getpoint pu
-                              "\nPick a point on the side the steps descend: "))
-                (cond
-                  ((null pside)
-                   (princ "\nNo side picked - side profile skipped.")
-                   (setq pcancel T))
-                  (T
-                   (setq dxs (- (car (trans pside 1 0)) (car ptop)))
-                   (if (< (abs dxs) 1e-10)
-                     (princ "\nPick left or right of the wall, not on it.")
-                     (setq sgn (if (< dxs 0.0) -1.0 1.0))))))
-              (if sgn
+              (setq totdrop 0.0 totrun 0.0)
+              (foreach dd drops (setq totdrop (+ totdrop dd)))
+              (foreach td treads (setq totrun (+ totrun td)))
+              ;; The alternating drop/tread silhouette in world X/Y,
+              ;; keeping the corner down its high side at every level:
+              ;; the pick, then the foot of each drop.  Those corners
+              ;; are what the dims bind to.
+              (setq ptop (trans ptop 1 0)
+                    px   (car ptop)
+                    py   (cadr ptop)
+                    jx   0
+                    cnrs (list (list px py 0.0)))
+              (foreach td treads
+                (setq dd (nth jx drops))
+                (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+                (setq py   (- py dd)
+                      cnrs (cons (list px py 0.0) cnrs))
+                ;; the tread runs left, and carries no dim of its own -
+                ;; the depths and the overall depth say it all
+                (hs-mkline (list px py 0.0) (list (- px td) py 0.0))
+                (setq px (- px td)
+                      jx (1+ jx)))
+              ;; the last depth: the drop after the last tread
+              (setq dd (nth jx drops))
+              (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+              (setq py   (- py dd)
+                    cnrs (reverse (cons (list px py 0.0) cnrs)))
+              (if dimflag
                 (progn
-                  (setq totdrop 0.0 totrun 0.0)
-                  (foreach dd drops (setq totdrop (+ totdrop dd)))
-                  (foreach td treads (setq totrun (+ totrun td)))
-                  (setq lowy (- (cadr ptop) totdrop)
-                        px   (car ptop)
-                        py   (cadr ptop)
-                        jx   0)
-                  (foreach td treads
-                    (setq dd (nth jx drops)
-                          e1 (list px py 0.0)
-                          e2 (list px (- py dd) 0.0))
-                    (hs-mkline e1 e2)          ; the drop
-                    (if dimflag                ; one vertical chain, behind
-                      (hs-dim *cs-depth-dimstyle* e1 e2   ; the wall
-                              (list (- (car ptop) (* sgn 2.0 txth))
-                                    (- py (* 0.5 dd)) 0.0)))
-                    (setq py (- py dd)
-                          e1 (list px py 0.0)
-                          e2 (list (+ px (* sgn td)) py 0.0))
-                    ;; the tread carries no dim of its own - the depths
-                    ;; and the overall depth say it all
-                    (hs-mkline e1 e2)          ; the tread
-                    (setq px (+ px (* sgn td))
-                          jx (1+ jx)))
-                  ;; the last depth: the drop after the last tread
-                  (setq dd (nth jx drops)
-                        e1 (list px py 0.0)
-                        e2 (list px (- py dd) 0.0))
-                  (hs-mkline e1 e2)
-                  (if dimflag
-                    (hs-dim *cs-depth-dimstyle* e1 e2
-                            (list (- (car ptop) (* sgn 2.0 txth))
-                                  (- py (* 0.5 dd)) 0.0)))
-                  (if dimflag                  ; the overall depth,
-                    (hs-dim *cs-depth-dimstyle* ; further out again
-                            (list (car ptop) (cadr ptop) 0.0)
-                            (list (car ptop) lowy 0.0)
-                            (list (- (car ptop) (* sgn 5.0 txth))
-                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0)))
-                  (princ (strcat "\nSide profile drawn: " (itoa tcount)
-                                 " step(s), " (itoa (length drops))
-                                 " depths, total run " (rtos totrun)
-                                 ", overall depth " (rtos totdrop)
-                                 "."))))))))))
+                  ;; Every depth dim stands the same distance right of
+                  ;; the corner its drop lands on, so the dims climb up
+                  ;; and to the right with the steps instead of
+                  ;; stacking in one chain.  Clearing the widest tread
+                  ;; is what keeps BOTH extension lines running
+                  ;; forward, out of the flight.
+                  (setq pfo (+ (apply 'max treads) (* 2.0 txth))
+                        jx  1)
+                  (while (< jx (length cnrs))
+                    (setq e1 (nth (1- jx) cnrs)
+                          e2 (nth jx cnrs))
+                    (hs-dimv *cs-depth-dimstyle* e1 e2
+                             (list (+ (car e2) pfo)
+                                   (* 0.5 (+ (cadr e1) (cadr e2))) 0.0))
+                    (setq jx (1+ jx)))
+                  ;; the overall depth, further out again - the whole
+                  ;; diagonal, top corner to bottom corner
+                  (hs-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
+                           (list (+ (car ptop) pfo (* 3.0 txth))
+                                 (- (cadr ptop) (* 0.5 totdrop)) 0.0))))
+              (princ (strcat "\nSide profile drawn: " (itoa tcount)
+                             " step(s), " (itoa (length drops))
+                             " depths, down to the left; total run "
+                             (rtos totrun) ", overall depth "
+                             (rtos totdrop) "."))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
   (if (zerop drawn)
@@ -31656,9 +31817,10 @@
   (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
   (princ "\n     (top step first, plus the drop after the last tread, so")
   (princ "\n     3 steps take 4 depths; Back supported), then pick the")
-  (princ "\n     top of the wall and the side the steps descend.  The")
-  (princ "\n     depths and the overall depth are dimensioned; the")
-  (princ "\n     treads are not.")
+  (princ "\n     top of the first tread.  The flight always runs down and")
+  (princ "\n     to the LEFT from there, so the steps rise to the right")
+  (princ "\n     and the dims climb with them - each depth beside its own")
+  (princ "\n     step, the overall further out; the treads are not dimmed.")
   (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
@@ -31854,20 +32016,22 @@
 ;;;       Cut one stops the walls an offset short and the corner
 ;;;       piece finishes the trip.  In corner mode only the outer side
 ;;;       is drawn - with its back corner flare at the wall - since the
-;;;       steps run outward from the corner and the picked line closes
-;;;       the inner side.  The U already has its arms, so only a back
-;;;       corner asked for there is drawn.
+;;;       steps run outward from the corner and the line they sit
+;;;       against closes the inner side.  That outer side runs OUTWARD
+;;;       with the treads: it is the line they sit against offset by
+;;;       the step width, not a line square to the base, so it still
+;;;       meets every tread end where the corner is not a true 90.
+;;;       The U already has its arms, so only a back corner asked for
+;;;       there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
 ;;;       plus the step width once (it is the same for every step).
 ;;;   8.  Optionally a SIDE PROFILE: you give the STEP DEPTHS - the
 ;;;       vertical drops, top step first, one per step PLUS one more
 ;;;       for the drop after the last tread, so 3 steps take 4 depths
 ;;;       (Enter repeats the previous one, Back steps back) - then
-;;;       pick the top of the wall and the side the steps descend,
-;;;       and the staircase silhouette is drawn in world X/Y, ending
-;;;       on that final drop.  When dims are on the depths chain
-;;;       behind the wall with the overall depth further out again;
-;;;       the treads carry no dims of their own.
+;;;       pick the top of the first tread.  The flight always runs
+;;;       DOWN AND TO THE LEFT from there, so there is no side to
+;;;       pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -31877,6 +32041,23 @@
 ;;;       so and finishes without beading.  The beads are their own
 ;;;       undo group - AutoCAD does not nest them - so one U undoes
 ;;;       the beads and the next undoes the steps.
+;;;
+;;; THE SIDE PROFILE
+;;;   The flight is drawn as an alternating drop/tread silhouette in
+;;;   world X/Y, always descending to the LEFT of the picked top of the
+;;;   first tread and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read.
+;;;   The dims climb with them, up and to the right, on the high side:
+;;;     * every depth is a dim of its own, standing the same distance
+;;;       right of the corner its drop lands on, so they step out with
+;;;       the flight instead of stacking in one chain;
+;;;     * the overall depth sits further out again;
+;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
+;;;   that bracket the drop.  Those corners run diagonally to each
+;;;   other, so binding the diagonal (rather than dimensioning the
+;;;   riser line) keeps the extension lines hooked to the geometry
+;;;   while the dim still reads the drop, not the slope.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -31908,7 +32089,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.2") ; printed on load and at command start so a
+(setq *ns-version* "v2.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -32315,11 +32496,15 @@
 (defun ns-setstyle (name / doc)
   (if (and (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    ;; the argument list is required, even for a lambda that takes
+    ;; none - without it this is a "too few arguments" error every
+    ;; time a style really has to be switched
     (vl-catch-all-apply
       '(lambda ()
          (setq doc (vla-get-activedocument (vlax-get-acad-object)))
          (vla-put-activedimstyle
-           doc (vla-item (vla-get-dimstyles doc) name))))))
+           doc (vla-item (vla-get-dimstyles doc) name)))
+      '())))
 
 ;; aligned dimension between A and B in dim style STYLE, dim line
 ;; passing through THRU.  Points are WCS and are translated to the
@@ -32332,6 +32517,24 @@
   (command "_.DIMALIGNED" "_non" (trans a 0 1)
                           "_non" (trans b 0 1)
                           "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; Vertical linear dimension between A and B in dim style STYLE, dim
+;; line passing through THRU.  A and B are the real step corners, which
+;; run diagonally to each other, so "_V" is forced: the dimension
+;; measures the DROP between them while its extension lines still hook
+;; the corners themselves.  Cleaner than dimensioning the riser line,
+;; which leaves the dim marooned beside the step instead of reading
+;; across to it.  Points are WCS.
+(defun ns-dimv (style a b thru / oldl)
+  (ns-setstyle style)
+  (if (and *cs-dim-layer* (ns-layerok *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.DIMLINEAR" "_non" (trans a 0 1)
+                         "_non" (trans b 0 1)
+                         "_V"
+                         "_non" (trans thru 0 1))
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -32354,8 +32557,8 @@
                         rsubj ngp ngv
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
-                        wpu wpt spt dx sgn totrun totdrop px0 cx cy
-                        lowy tt)
+                        wpu wpt totrun totdrop px0 cx cy
+                        tt cnrs ca cb pfo lastinn)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -32847,11 +33050,26 @@
          (ns-mkline e (ns-add e (ns-scl dir (- cum coff))))
          (if (> coff 0.0)
            (ns-outer e u dir cum rtype coff)))
-        ;; the outer side only - the steps run outward from the corner,
-        ;; so the picked line closes the inner side already
+        ;; The outer side only - the steps run outward from the
+        ;; corner, so the line they sit against closes the inner side
+        ;; already.  That outer side is the line they sit against
+        ;; OFFSET by the step width, NOT a line square to the base:
+        ;; the treads all start on the leaning line and run outward
+        ;; from it, so a square side wall would lean into the run and
+        ;; miss every tread end but the first.  PPREV is the last
+        ;; tread that actually landed, so a step taken Back cannot
+        ;; leave this pointing at one that was undone.
         ((= mode "CORNER")
-         (ns-side (ns-add corner (ns-scl u wid))
-                  u dir cum rtype roff rrad))
+         (setq lastinn (inters pprev (ns-add pprev u)
+                               (car side) (cadr side) nil))
+         (if (null lastinn)
+           (princ (strcat "\n  Note: the run does not reach the line it"
+                          " sits against - no outer side drawn."))
+           (ns-side (ns-add corner (ns-scl u wid))
+                    u
+                    (ns-unit (ns-vec corner lastinn))
+                    (distance corner lastinn)
+                    rtype roff rrad)))
         ;; a U has its arms drawn already - only a back corner asked for
         ;; here is new geometry
         ((and (= mode "U") bc1 bc2)
@@ -32940,68 +33158,68 @@
               (T
                (setq drops (cons dv drops) k (1+ k)))))
           (setq drops (reverse drops))
-          ;; where the profile goes and which way the steps descend
-          (setq wpu (getpoint
-                      "\nPick the top of the wall for the side profile: "))
+          ;; Where the profile goes.  It always runs DOWN AND TO THE
+          ;; LEFT from the pick, so there is no side to ask about.
+          (setq wpu (getpoint (strcat "\nPick the top of the first tread"
+                                      " for the side profile: ")))
           (if (null wpu)
             (princ "\nNo point picked - no side profile drawn.")
             (progn
-              (setq wpt (ns-flat (trans wpu 1 0))
-                    sgn nil)
-              (while (and (null sgn)
-                          (setq spt (getpoint wpu
-                                      (strcat "\nPick a point on the side"
-                                              " the steps descend: "))))
-                (setq dx (- (car (trans spt 1 0)) (car wpt)))
-                (if (< (abs dx) 1e-10)
-                  (princ "\nPick left or right of the wall, not on it.")
-                  (setq sgn (if (< dx 0.0) -1.0 1.0))))
-              (if (null sgn)
-                (princ "\nNo side picked - no side profile drawn.")
+              ;; The alternating drop/tread silhouette in world X/Y,
+              ;; keeping the corner down its high side at every level:
+              ;; the pick, then the foot of each drop.  Those corners
+              ;; are what the dims bind to.
+              (setq wpt     (ns-flat (trans wpu 1 0))
+                    totrun  (apply '+ treads)
+                    totdrop (apply '+ drops)
+                    px0     (car wpt)
+                    cx      px0
+                    cy      (cadr wpt)
+                    k       0
+                    cnrs    (list (list cx cy 0.0)))
+              (foreach tt treads
+                (setq dv (nth k drops))
+                ;; the drop, straight down ...
+                (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                (setq cy   (- cy dv)
+                      cnrs (cons (list cx cy 0.0) cnrs))
+                ;; ... then the tread, running left - no dim of its
+                ;; own: the depths and the overall depth say it all
+                (ns-mkline (list cx cy 0.0) (list (- cx tt) cy 0.0))
+                (setq cx (- cx tt)
+                      k  (1+ k)))
+              ;; the last depth: the drop after the last tread
+              (setq dv (nth k drops))
+              (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+              (setq cy   (- cy dv)
+                    cnrs (reverse (cons (list cx cy 0.0) cnrs)))
+              (if dimflag
                 (progn
-                  (setq totrun  (apply '+ treads)
-                        totdrop (apply '+ drops)
-                        px0     (car wpt)
-                        cx      px0
-                        cy      (cadr wpt)
-                        lowy    (- (cadr wpt) totdrop)
-                        k       0)
-                  (foreach tt treads
-                    (setq dv (nth k drops))
-                    ;; the drop, straight down ...
-                    (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
-                    (if dimflag                  ; one chain behind the wall
-                      (ns-dim *cs-depth-dimstyle*
-                              (list cx cy 0.0) (list cx (- cy dv) 0.0)
-                              (list (- px0 (* sgn offd))
-                                    (- cy (* 0.5 dv)) 0.0)))
-                    (setq cy (- cy dv))
-                    ;; ... then the tread, out the way the steps
-                    ;; descend - no dim of its own: the depths and
-                    ;; the overall depth say it all
-                    (ns-mkline (list cx cy 0.0)
-                               (list (+ cx (* sgn tt)) cy 0.0))
-                    (setq cx (+ cx (* sgn tt))
-                          k  (1+ k)))
-                  ;; the last depth: the drop after the last tread
-                  (setq dv (nth k drops))
-                  (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
-                  (if dimflag
-                    (ns-dim *cs-depth-dimstyle*
-                            (list cx cy 0.0) (list cx (- cy dv) 0.0)
-                            (list (- px0 (* sgn offd))
-                                  (- cy (* 0.5 dv)) 0.0)))
-                  (if dimflag                    ; the overall depth,
-                    (ns-dim *cs-depth-dimstyle*  ; further out again
-                            (list px0 (cadr wpt) 0.0)
-                            (list px0 lowy 0.0)
-                            (list (- px0 (* sgn (+ offd (* 3.0 txth))))
-                                  (- (cadr wpt) (* 0.5 totdrop)) 0.0)))
-                  (princ (strcat "\nSide profile drawn: " (itoa nsteps)
-                                 " step(s), " (itoa (length drops))
-                                 " depths, total run " (rtos totrun)
-                                 ", overall depth " (rtos totdrop)
-                                 "."))))))))))
+                  ;; Every depth dim stands the same distance right of
+                  ;; the corner its drop lands on, so the dims climb up
+                  ;; and to the right with the steps instead of
+                  ;; stacking in one chain.  Clearing the widest tread
+                  ;; is what keeps BOTH extension lines running
+                  ;; forward, out of the flight.
+                  (setq pfo (+ (apply 'max treads) (* 2.0 txth))
+                        k   1)
+                  (while (< k (length cnrs))
+                    (setq ca (nth (1- k) cnrs)
+                          cb (nth k cnrs))
+                    (ns-dimv *cs-depth-dimstyle* ca cb
+                             (list (+ (car cb) pfo)
+                                   (* 0.5 (+ (cadr ca) (cadr cb))) 0.0))
+                    (setq k (1+ k)))
+                  ;; the overall depth, further out again - the whole
+                  ;; diagonal, top corner to bottom corner
+                  (ns-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
+                           (list (+ px0 pfo (* 3.0 txth))
+                                 (- (cadr wpt) (* 0.5 totdrop)) 0.0))))
+              (princ (strcat "\nSide profile drawn: " (itoa nsteps)
+                             " step(s), " (itoa (length drops))
+                             " depths, down to the left; total run "
+                             (rtos totrun) ", overall depth "
+                             (rtos totdrop) "."))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
   (if (zerop drawn)
@@ -33148,9 +33366,10 @@
   (princ "\n  5. Add a side profile? [Yes/No] - the STEP DEPTHS, top")
   (princ "\n     step first: one per step plus the drop after the last")
   (princ "\n     tread (3 steps take 4 depths).  Then pick the top of")
-  (princ "\n     the wall and the side the steps descend; the")
-  (princ "\n     silhouette is drawn in world X/Y, with the depths and")
-  (princ "\n     the overall depth dimensioned - the treads are not.")
+  (princ "\n     the first tread - the flight always runs down and to")
+  (princ "\n     the LEFT from there, so the steps rise to the right")
+  (princ "\n     and the dims climb with them: each depth beside its")
+  (princ "\n     own step, the overall further out, treads not dimmed.")
   (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so")
   (princ "\n     the only question is which steps have beaded SIDE")
   (princ "\n     WALLS: [All/Some], and Some takes the step numbers")
@@ -33347,6 +33566,12 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - FEET AND INCHES. Every text box in the selection - TEXT,
+;;;       MTEXT and the ATTRIB values on blocks - must state its
+;;;       inches wherever it states feet: 5' is flagged, 5'-0",
+;;;       3'-2" and a plain 40" are fine. A feet mark is an
+;;;       apostrophe straight after a digit, so "Water's Edge" is
+;;;       prose and never flagged. LITECOVERSCAN keeps this one.
 ;;;     - DIMENSION LAYER. Every dimension must sit on the
 ;;;       "DIMENSION" layer (tune *cchk-dim-layer*). Any that do not
 ;;;       are counted, the layers they landed on are named, and the
@@ -33463,7 +33688,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.6")
+(setq *cchk-version* "v0.7")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -33786,7 +34011,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -33814,6 +34039,7 @@
   (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
         ((wcmatch s "Arc *")              "ARCS")
         ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
         (t                                "COVER CHECKS")))
 
 (defun cchk:dimline-p (s)
@@ -33852,6 +34078,106 @@
                    (cchk:join (reverse lays) ", ")
                    ") - run " *cchk-dimfix-cmd* " to move them")
            T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun cchk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun cchk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun cchk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun cchk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (cchk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (cchk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun cchk:audit-units (ss / items it s n bad lines)
+  (setq items (cchk:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (cchk:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (cchk:mtsafe (cchk:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -35651,7 +35977,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -35916,11 +36242,17 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq dimlay (cchk:dimlayer-verdict dims))
+        (setq dimlay (cchk:dimlayer-verdict dims)
+              units  (cchk:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
         (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
                               (cdr dimlay))
-                        (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                (car cres))))
+                        (cons (cons (strcat "Feet & inches: " (car units))
+                                    (cadr units))
+                              (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                      (car cres)))))
         (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
                                        (reverse lines) nil
                                        minx miny maxx maxy))
@@ -35977,7 +36309,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres dimlay
+                       nd ndbad na nabad hdr dhdr l cres dimlay units
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -36102,11 +36434,17 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq dimlay (cchk:dimlayer-verdict dims))
+     (setq dimlay (cchk:dimlayer-verdict dims)
+           units  (cchk:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
                            (cdr dimlay))
-                     (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                             (car cres))))
+                     (cons (cons (strcat "Feet & inches: " (car units))
+                                 (cadr units))
+                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                   (car cres)))))
      (cchk:write-report (strcat name " REPORT")
                         (strcat "Read-only scan - nothing in the drawing"
                                 " was changed.  "
@@ -46709,6 +47047,13 @@
 ;;;     measure the same. The selection is used when it holds the
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
+;;;  8a. FEET AND INCHES. Every text box in the selection - TEXT,
+;;;     MTEXT and the ATTRIB values on blocks - must state its inches
+;;;     wherever it states feet: 5' is flagged, 5'-0", 3'-2" and a
+;;;     plain 40" are fine. A feet mark is an apostrophe straight
+;;;     after a digit, so "Water's Edge" is prose and never flagged.
+;;;     This one runs in LITELINFINSCAN too.
+;;;
 ;;;  8b. DIMENSION LAYER. Every dimension must sit on the
 ;;;     "DIMENSION" layer (tune *lfc-dim-layer*). Any that do not are
 ;;;     counted, the layers they landed on are named, and the report
@@ -46769,7 +47114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.4")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.5")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -47162,7 +47507,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -47195,6 +47540,7 @@
         ((wcmatch s "Height dim *,*CHECK THE WALL HEIGHT*")
          "WALL HEIGHT")
         ((wcmatch s "Liner Material*")    "THE LINER")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
         (t                                "OTHER CHECKS")))
 
 (defun lfc:dimline-p (s)
@@ -47233,6 +47579,106 @@
                    (lfc:join (reverse lays) ", ")
                    ") - run " *lfc-dimfix-cmd* " to move them")
            T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun lfc:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun lfc:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun lfc:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun lfc:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (lfc:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (lfc:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun lfc:audit-units (ss / items it s n bad lines)
+  (setq items (lfc:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (lfc:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (lfc:mtsafe (lfc:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
 
 ;; The whole report: the liner-finish checks on the MAIN sheet - a
 ;; large title, the date and version, a verdict line, the colour
@@ -48617,7 +49063,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -49411,10 +49857,15 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq dimlay (lfc:dimlayer-verdict dims))
+        (setq dimlay (lfc:dimlayer-verdict dims)
+              units  (lfc:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
         (setq hdr
           (list
             (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+            (cons (strcat "Feet & inches: " (car units)) (cadr units))
             (cons (strcat "Steps: " stepsum)          (lfc:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -49494,7 +49945,7 @@
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
-                     nd ndbad na nabad m hdr dhdr l badtags dimlay
+                     nd ndbad na nabad m hdr dhdr l badtags dimlay units
                      bordbb bordsum attundec
                      minx miny maxx maxy p13 p14 near s b w)
 
@@ -49823,9 +50274,14 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq dimlay (lfc:dimlayer-verdict dims))
+     (setq dimlay (lfc:dimlayer-verdict dims)
+           units  (lfc:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (list
                  (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+                 (cons (strcat "Feet & inches: " (car units)) (cadr units))
                  (cons (strcat "Steps: " stepsum)           (lfc:attn-p stepsum))
                  (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -53313,6 +53769,645 @@
 
 
 ;;; ======================================================================
+;;; >>> SMARTFILLET.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; SMARTFILLET.lsp  --  show what every rounded corner would look like,
+;;;                      then cut the one that is clicked
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  SMARTFILLET     preview the radii that fit a corner, cut
+;;;                            the one that is clicked, dimension it, and
+;;;                            offer the rest of the corners at that size
+;;;            SMARTFILLETVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  FILLET wants the radius BEFORE it shows anything, so the answer is
+;;;  guessed, looked at, undone, and guessed again.  This turns that
+;;;  round.  Pick the two lines and every radius that actually fits the
+;;;  corner is drawn dashed, all at once, in 6-inch steps; click the one
+;;;  that looks right and that is the corner you get.
+;;;
+;;;    1. Select the two lines that make the corner.  Click each one on
+;;;       the side you want KEPT -- exactly how FILLET reads a pick:
+;;;       what lies beyond the corner is trimmed away.
+;;;    2. Every radius from 6 up, in 6s, that leaves both legs something
+;;;       to stand on is drawn as a dashed arc labelled R6, R12, R18 ...
+;;;       (at most sf:*maxshown* of them; when more fit, the routine
+;;;       says how many it left out rather than silently stopping).
+;;;    3. Click the arc you want.  The previews go, the corner is
+;;;       filleted for real at that radius, and the arc gets its radius
+;;;       dimension -- the number the shop needs, not just the shape.
+;;;    4. It then offers the SAME radius for the rest of the corners:
+;;;       two lines per corner until Done.  As soon as one repeat is
+;;;       cut, the single dimension becomes "R12 Typ.", which is how the
+;;;       radius would be lettered by hand.
+;;;
+;;;  The whole run is one undo group: a single U puts every corner back
+;;;  and takes the dimension away.
+;;;
+;;;  Usage
+;;;    Command: SMARTFILLET
+;;;    Command: SMARTFILLETVER   prints the version
+;;;
+;;;  Tunables (setq them after loading if a drawing needs different
+;;;  sizes or names, e.g. in a startup file):
+;;;    sf:*first*      smallest radius previewed          (6.0)
+;;;    sf:*step*       step between previews              (6.0)
+;;;    sf:*maxshown*   most previews drawn at once        (8)
+;;;    sf:*fit*        fraction of a leg a fillet may eat (0.98)
+;;;    sf:*layer*      layer the previews are drawn on
+;;;    sf:*color*      their colour
+;;;    sf:*ltype*      their linetype, created if missing ("DASHED")
+;;;    sf:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    sf:*label*      T to letter each preview R6, R12 ...
+;;;    sf:*txthgt*     height of those labels
+;;;    sf:*dimlayer*   layer the radius dimension goes on ("DIMENSION")
+;;;    sf:*smalldim*   radii under this are dimensioned in ...
+;;;    sf:*smallstyle* ... this dim style, when the drawing has it
+;;;    sf:*dimoff*     how far past the arc the dimension text sits,
+;;;                    nil = one radius, and never less than 12
+;;;    sf:*dimrepeat*  T to dimension every repeat corner too
+;;;    sf:*typ*        T to re-letter the one dimension "<> Typ." once
+;;;                    a repeat has been cut at the same radius
+;;;
+;;;  Notes
+;;;    * Two straight LINEs only.  A polyline corner is not filleted --
+;;;      the routine says so and asks again; explode it first.
+;;;    * Which side of each line survives comes from where it was
+;;;      clicked, as in FILLET.  Click near the corner and both legs
+;;;      keep the end you clicked toward.
+;;;    * A radius only makes the list when its tangent point lands on
+;;;      both legs (times sf:*fit*, so a fillet never eats a leg whole).
+;;;      A corner too short for even R6 is reported, not filleted.
+;;;    * The preview arcs are real entities on their own layer, erased
+;;;      on the way out -- on a clean finish, on Esc, and on an error.
+;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
+;;;      dimension style are all put back the way they were.
+;;; ======================================================================
+
+(setq *smartfillet-version* "v1.0")  ; announced on load; release_lisp.py
+                                     ; reads this banner and stamps the
+                                     ; dated twin in releases/ from it
+
+;;; -------------------- tunables ------------------------------------
+
+(setq sf:*first*      6.0)   ; the smallest radius offered, and the step
+(setq sf:*step*       6.0)   ; between the ones after it -- 6" of radius
+                             ; is the smallest difference that reads on
+                             ; a pool plan
+(setq sf:*maxshown*   8)     ; how many previews may be on screen at
+                             ; once; nil = every radius that fits, which
+                             ; on a long wall is a great many
+(setq sf:*fit*        0.98)  ; how much of the shorter leg a fillet may
+                             ; use up: 1.0 would put the tangent point
+                             ; exactly on the far end and leave a
+                             ; zero-length line behind
+(setq sf:*layer*      "SMART FILLET PREVIEW")
+(setq sf:*color*      3)     ; green, so a preview reads as a preview
+                             ; whatever the layer was set to by hand
+(setq sf:*ltype*      "DASHED")
+(setq sf:*ltscale*    0.25)  ; the stock DASHED pattern is 18 units
+                             ; long, so a 6" fillet arc (9 units of it)
+                             ; would come out as one unbroken dash; a
+                             ; quarter-scale pattern puts real gaps in
+                             ; even the smallest preview.  nil = leave
+                             ; the arcs at the drawing's own LTSCALE
+(setq sf:*label*      t)
+(setq sf:*txthgt*     6.0)
+(setq sf:*dimlayer*   "DIMENSION")
+(setq sf:*smalldim*   24.0)             ; POOL's small-dimension rule,
+(setq sf:*smallstyle* "STANDARD INCHES"); kept so a fillet callout
+                                        ; matches the dims beside it
+(setq sf:*dimoff*     nil)   ; nil = one radius past the arc
+(setq sf:*dimrepeat*  nil)   ; one callout plus "Typ." is how the sheet
+                             ; reads; set T to dimension every corner
+(setq sf:*typ*        t)
+(setq sf:*minang*     0.02)  ; how far off straight (radians) two legs
+                             ; must be before there is a corner at all
+
+(setq sf:*preview*    nil)   ; every entity drawn as a preview
+(setq sf:*picks*      nil)   ; (preview-arc . radius), what a click means
+(setq sf:*smallwarned* nil)  ; the missing-style note is said once
+
+;;; -------------------- shared helpers ------------------------------
+;;; The generic CALOFIN-LIB helpers this tool leans on.  Here they are
+;;; copies under this file's own prefix, so it loads alone with
+;;; APPLOAD; in the shared/ twin they are gone and every call site
+;;; reads cal: instead.  Bodies identical to the library's.
+
+;;; -------------------- small local helpers -------------------------
+
+;; A number without AutoLISP's trailing zeros: 12, not 12.000000.
+(defun sf:num (x)
+  (cond ((null x) "?")
+        ((= x (fix x)) (rtos x 2 0))
+        (t (rtos x 2 2))))
+
+;; "R12", the way a radius is lettered
+(defun sf:rlabel (r) (strcat "R" (sf:num r)))
+
+;; Make sure the preview linetype exists, with dashes sized for a
+;; drawing in inches so they read at pool scale (pf:ensure-dashed,
+;; abhd.lsp:1566).  A drawing that already has one by that name keeps
+;; its own.
+(defun sf:ensure-ltype ()
+  (if (and sf:*ltype* (not (tblsearch "LTYPE" sf:*ltype*)))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   (cons 2 sf:*ltype*) '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0))))
+  (if (tblsearch "LTYPE" sf:*ltype*) sf:*ltype* "CONTINUOUS"))
+
+;; the two endpoints of a LINE, in WCS (the entity's own OCS may be
+;; tilted, so go through the entity coordinate system)
+(defun sf:ends (en / ed)
+  (setq ed (entget en))
+  (list (cal:2d (trans (cdr (assoc 10 ed)) en 0))
+        (cal:2d (trans (cdr (assoc 11 ed)) en 0))))
+
+;;; -------------------- the corner ----------------------------------
+
+;; One leg of the corner: which way the line runs from the crossing
+;; point X on the side that was CLICKED -- the side FILLET keeps -- and
+;; how far it reaches that way.  Returns (unit-direction reach), or nil
+;; when the line has no length.  The pick decides the direction and the
+;; far endpoint decides the reach, so a line whose crossing point lies
+;; off its own end (the case FILLET handles by extending it) is
+;; measured the same way as one the corner sits inside.
+(defun sf:leg (en x pk / ends a b d s u av)
+  (setq ends (sf:ends en)
+        a    (car  ends)
+        b    (cadr ends)
+        d    (cal:unit (cal:v- b a)))
+  (if d
+    (progn
+      (setq s (cal:dot d (cal:v- pk x)))
+      ;; clicked on the corner itself, where neither side is nearer:
+      ;; take the end with more line behind it, the only one a fillet
+      ;; could stand on
+      (if (< (abs s) 1e-6)
+        (setq s (if (>= (cal:dist a x) (cal:dist b x))
+                  (cal:dot d (cal:v- a x))
+                  (cal:dot d (cal:v- b x)))))
+      (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      (if (> av 1e-9) (list u av)))))
+
+;; Everything about the corner two picked lines make, worked out once:
+;;   (X u1 reach1 u2 reach2 half-angle)
+;; X is where the two lines cross (extended if they have to be, as
+;; FILLET extends them), each u runs from X along the side that was
+;; clicked, and half-angle is half the turn between them -- the one
+;; number the whole fillet is built from.  nil when there is no corner:
+;; parallel lines, the same line twice, or two legs so nearly straight
+;; through that no arc could join them.
+(defun sf:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
+  (setq a (sf:ends e1)
+        b (sf:ends e2)
+        x (inters (car a) (cadr a) (car b) (cadr b) nil))
+  (if x
+    (progn
+      (setq x  (cal:2d x)
+            l1 (sf:leg e1 x pk1)
+            l2 (sf:leg e2 x pk2))
+      (if (and l1 l2)
+        (progn
+          (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
+                                        (angle '(0.0 0.0) (car l2)))))
+          (if (and (> th sf:*minang*) (< th (- pi sf:*minang*)))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+
+;; how far back from the corner a fillet of radius R starts
+(defun sf:tanlen (half r) (/ r (cal:tan half)))
+
+;; The biggest radius this corner can take: the tangent point has to
+;; land on both legs, and sf:*fit* keeps it clear of the far end so a
+;; fillet never eats a leg whole.
+(defun sf:rmax (geo)
+  (* sf:*fit* (min (caddr geo) (nth 4 geo)) (cal:tan (nth 5 geo))))
+
+;; centre and the two tangent points of the fillet arc of radius R
+(defun sf:arcpts (geo r / x u1 u2 half tl)
+  (setq x    (car geo)
+        u1   (cadr geo)
+        u2   (cadddr geo)
+        half (nth 5 geo)
+        tl   (sf:tanlen half r))
+  (list (cal:v+ x (cal:v* (cal:unit (cal:v+ u1 u2)) (/ r (sin half))))
+        (cal:v+ x (cal:v* u1 tl))
+        (cal:v+ x (cal:v* u2 tl))))
+
+;; every radius that fits, from sf:*first* up in sf:*step*s, capped at
+;; sf:*maxshown*
+(defun sf:candidates (rmax / r out)
+  (setq r sf:*first*)
+  (while (and (<= r rmax)
+              (or (null sf:*maxshown*) (< (length out) sf:*maxshown*)))
+    (setq out (cons r out)
+          r   (+ r sf:*step*)))
+  (reverse out))
+
+;; how many would have fitted if nothing capped the list -- what the
+;; cap hid has to be said out loud, or 8 previews read as "that is all
+;; this corner takes"
+(defun sf:howmany (rmax / r n)
+  (setq r sf:*first* n 0)
+  (while (<= r rmax) (setq n (1+ n) r (+ r sf:*step*)))
+  n)
+
+;;; -------------------- previews ------------------------------------
+
+;; Remember what was drawn: everything goes on the erase list, and an
+;; arc also goes on the list a click is looked up in.
+(defun sf:mark (en r)
+  (if en
+    (progn
+      (setq sf:*preview* (cons en sf:*preview*))
+      (if r (setq sf:*picks* (cons (cons en r) sf:*picks*)))))
+  en)
+
+;; the radius a preview arc stands for, nil for anything else in the
+;; drawing
+(defun sf:radof (en / p)
+  (setq p (assoc en sf:*picks*))
+  (if p (cdr p)))
+
+;; Take every preview back out of the drawing.  Called on the way out
+;; of the command however it ends -- a preview left behind would be
+;; read as drawn work by every other tool in the toolset.
+(defun sf:clear ( / e)
+  (foreach e sf:*preview* (if (and e (entget e)) (entdel e)))
+  (setq sf:*preview* nil
+        sf:*picks*   nil))
+
+;; one dashed preview arc, drawn the short way round between its two
+;; tangent points (a fillet arc is always less than a half circle)
+(defun sf:draw-arc (c r p1 p2 / a1 a2 dxf)
+  (setq a1 (angle c p1)
+        a2 (angle c p2))
+  (if (> (cal:angnorm (- a2 a1)) pi)
+    (setq a1 (angle c p2)
+          a2 (angle c p1)))
+  (setq dxf (list '(0 . "ARC") '(100 . "AcDbEntity")
+                  (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                  (cons 6 (sf:ensure-ltype))
+                  '(100 . "AcDbCircle")
+                  (list 10 (car c) (cadr c) 0.0)
+                  (cons 40 r)
+                  '(100 . "AcDbArc")
+                  (cons 50 a1) (cons 51 a2)))
+  (if sf:*ltscale* (setq dxf (append dxf (list (cons 48 sf:*ltscale*)))))
+  (if (entmake dxf) (entlast)))
+
+;; the radius, lettered beside a preview.  Middle-centre justified, so
+;; the text sits on the point it is given whatever it says.
+(defun sf:draw-label (p str / h)
+  (setq h (if sf:*txthgt* sf:*txthgt* 6.0))
+  (if (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                     (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                     '(100 . "AcDbText")
+                     (list 10 (car p) (cadr p) 0.0)
+                     (cons 40 h) (cons 1 str)
+                     '(72 . 1)                       ; centred across
+                     (list 11 (car p) (cadr p) 0.0)
+                     '(100 . "AcDbText")
+                     '(73 . 2)))                     ; and down
+    (entlast)))
+
+;; Draw the whole fan of previews.  Labels alternate between the two
+;; legs: consecutive tangent points sit one step apart along one leg,
+;; which is not room enough for two labels side by side.
+(defun sf:preview (geo rads / i r a c t1 t2 anchor)
+  (setq i 0)
+  (cal:ensure-layer sf:*layer* sf:*color*)
+  (foreach r rads
+    (setq a  (sf:arcpts geo r)
+          c  (car   a)
+          t1 (cadr  a)
+          t2 (caddr a))
+    (sf:mark (sf:draw-arc c r t1 t2) r)
+    (if sf:*label*
+      (progn
+        (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        ;; pushed straight off the arc, away from its centre, so the
+        ;; label never lands on the line it belongs to
+        (sf:mark (sf:draw-label
+                   (cal:v+ anchor
+                          (cal:v* (cal:unit (cal:v- anchor c))
+                                 (* 0.9 (if sf:*txthgt* sf:*txthgt* 6.0))))
+                   (sf:rlabel r))
+                 nil)))
+    (setq i (1+ i))))
+
+;;; -------------------- asking --------------------------------------
+
+;; One entsel that insists on a LINE.  KW is the single keyword the
+;; prompt offers as its way out, and it is also what Enter does -- the
+;; bracket text is the keyword itself, so a click on it sends exactly
+;; what is tested for, and the <default> says what an empty answer
+;; means.  OTHER is the line already picked for this corner, which
+;; cannot be picked twice.  Returns (ename pick-point-in-WCS), or nil
+;; when the way out is taken.  Nothing has been drawn at this point, so
+;; a click that lands on empty paper costing the loop is a fair trade
+;; for Enter meaning what it says.
+(defun sf:askline (msg kw other / sel ans typ)
+  (while (not ans)
+    (initget kw)
+    (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (cond
+      ((= (type sel) 'STR) (setq ans 'SF-NONE))
+      ((null sel) (setq ans 'SF-NONE))
+      ((and other (eq (car sel) other))
+       (princ "\n  (that is the line you just picked -- click the OTHER leg)"))
+      ((not (= "LINE" (setq typ (cdr (assoc 0 (entget (car sel)))))))
+       (princ (strcat "\n  (that is a " typ " -- SMARTFILLET rounds the"
+                      " corner between two straight LINEs; explode a"
+                      " polyline first)")))
+      (t (setq ans (list (car sel) (cal:2d (trans (cadr sel) 1 0)))))))
+  (if (eq ans 'SF-NONE) nil ans))
+
+;; Which preview was clicked, as its radius.  nil when the user gives
+;; up on the corner.  This one has no <default>, so Enter re-asks
+;; (STANDARDS.md section 1 rule 5): the arcs are thin and the near-miss
+;; that would throw a whole fan of them away is exactly the click this
+;; prompt invites.  Cancel is in the bracket, so there is a mouse-only
+;; way out that does not depend on hitting anything.
+(defun sf:pickpreview ( / sel ans r)
+  (while (not ans)
+    (initget "Cancel")
+    (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
+    (cond
+      ((= (type sel) 'STR) (setq ans 'SF-NONE))
+      ((null sel)
+       (princ (strcat "\n  (nothing there -- click one of the dashed"
+                      " corners, or type Cancel)")))
+      ((setq r (sf:radof (car sel))) (setq ans r))
+      (t (princ (strcat "\n  (that is not one of the previews -- click a"
+                        " dashed corner)")))))
+  (if (eq ans 'SF-NONE) nil ans))
+
+;;; -------------------- cutting and dimensioning --------------------
+
+;; Cut the corner for real.  The two picks go to FILLET exactly as the
+;; user made them, so the side each line keeps is the side clicked.
+;; Returns the arc FILLET made, or nil when it refused.
+(defun sf:dofillet (e1 pk1 e2 pk2 r / pre new ed)
+  (setq pre (entlast))
+  (setvar "FILLETRAD" r)
+  (command "_.FILLET" (list e1 (trans pk1 0 1)) (list e2 (trans pk2 0 1)))
+  (setq new (entlast))
+  (if (and new (not (eq new pre))
+           (setq ed (entget new))
+           (= "ARC" (cdr (assoc 0 ed))))
+    new))
+
+;; Switch to the small-dimension style for a measurement under
+;; sf:*smalldim*, POOL's rule (pool:dimsbegin, POOL.LSP:370), so a
+;; fillet callout matches the dims beside it.  Returns the style to go
+;; back to, nil when nothing moved.
+(defun sf:dimsbegin (d / od)
+  (if (< d sf:*smalldim*)
+    (if (tblsearch "DIMSTYLE" sf:*smallstyle*)
+      (progn
+        (setq od (getvar "DIMSTYLE"))
+        (if (= (strcase od) (strcase sf:*smallstyle*))
+          (setq od nil)                    ; already current
+          (command "_.-DIMSTYLE" "_Restore" sf:*smallstyle*))
+        od)
+      (progn
+        (if (not sf:*smallwarned*)
+          (progn
+            (princ (strcat "\n(no \"" sf:*smallstyle* "\" dim style in"
+                           " this drawing -- the radius is dimensioned"
+                           " in the current style)"))
+            (setq sf:*smallwarned* t)))
+        nil))))
+
+(defun sf:dimsend (od)
+  (if (and od (tblsearch "DIMSTYLE" od))
+    (command "_.-DIMSTYLE" "_Restore" od)))
+
+;; DIMSTYLE is read-only to setvar, so it goes back through a command,
+;; and command-s so the same call is legal from inside *error*.
+(defun sf:restyle (odim)
+  (if (and odim (tblsearch "DIMSTYLE" odim)
+           (not (equal odim (getvar "DIMSTYLE"))))
+    (vl-catch-all-apply 'command-s
+                        (list "_.-DIMSTYLE" "_Restore" odim))))
+
+;; Put the radius dimension on the arc just cut: leader out from the
+;; arc along the line from its centre through the corner, which is the
+;; one direction that is clear of both legs.  The centre comes from the
+;; geometry the arc was cut to rather than back out of the arc -- they
+;; are the same point, and the one we already hold cannot be read out
+;; of a tilted OCS wrong.  Returns the dimension.
+(defun sf:dimarc (arc r geo / c x out on loc od pre new)
+  (setq c   (car (sf:arcpts geo r))
+        x   (car geo)
+        out (cal:unit (cal:v- x c)))
+  (if out
+    (progn
+      (setq on  (cal:v+ c (cal:v* out r))
+            loc (cal:v+ c (cal:v* out (+ r (if sf:*dimoff*
+                                           sf:*dimoff*
+                                           (max r 12.0)))))
+            pre (entlast))
+      (setvar "CLAYER" (cal:ensure-layer sf:*dimlayer* 2))
+      (setq od (sf:dimsbegin r))
+      (command "_.DIMRADIUS" (list arc (trans on 0 1))
+               "_non" (trans loc 0 1))
+      (sf:dimsend od)
+      (setq new (entlast))
+      (if (and new (not (eq new pre))) new))))
+
+;; Re-letter a radius callout as typical.  The radius is called out
+;; once and the repeats read "Typ.", the way a drafter letters it -- and
+;; whether there WERE repeats is not known until the loop has run, so
+;; the note is added afterwards rather than guessed at.  "<>" is
+;; AutoCAD's stand-in for the measurement, so the dimension goes on
+;; measuring itself.
+(defun sf:typit (dim / ed)
+  (if (and dim (setq ed (entget dim)))
+    (progn
+      (setq ed (if (assoc 1 ed)
+                 (subst (cons 1 "<> Typ.") (assoc 1 ed) ed)
+                 (append ed (list (cons 1 "<> Typ.")))))
+      (entmod ed)
+      (entupd dim))))
+
+;; The rest of the corners, at the radius already settled on: two lines
+;; each until Done.  Returns how many were cut.
+(defun sf:repeat (r / n go a b geo arc)
+  (setq n 0 go t)
+  (while go
+    (setq a (sf:askline "Select the first line of the next corner"
+                        "Done" nil))
+    (setq b (if a (sf:askline "Select the second line of that corner"
+                              "Done" (car a))))
+    (if (or (null a) (null b))
+      (setq go nil)
+      (progn
+        (setq geo (sf:corner (car a) (cadr a) (car b) (cadr b)))
+        (cond
+          ((null geo)
+           (princ (strcat "\n  (those two never meet at an angle --"
+                          " left alone)")))
+          ((< (sf:rmax geo) r)
+           (princ (strcat "\n  (too short a corner for "
+                          (sf:rlabel r) " -- left alone)")))
+          ((setq arc (sf:dofillet (car a) (cadr a) (car b) (cadr b) r))
+           (setq n (1+ n))
+           (if sf:*dimrepeat* (sf:dimarc arc r geo)))
+          (t (princ (strcat "\n  (AutoCAD would not fillet that corner"
+                            " -- left alone)")))))))
+  n)
+
+;;; -------------------- the command ---------------------------------
+
+(defun c:SMARTFILLET ( / *error* olderr odim undo-open
+                         one two geo rmax rads extra r arc dim1 made)
+
+  ;; -- restore drawing state on error / Esc.  The previews go first:
+  ;;    they are entities like any other, and a run cut short partway
+  ;;    would otherwise leave a fan of dashed arcs in the drawing for
+  ;;    the next tool to read as work.  Then the user's settings, then
+  ;;    the undo group -- left open, the next U would swallow the
+  ;;    user's own work
+  (setq olderr *error*)
+  (defun *error* (m)
+    (sf:clear)
+    (cal:sysrestore)
+    (sf:restyle odim)
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq *error* olderr)
+    (if (and m (not (wcmatch (strcase m)
+                             "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSMARTFILLET error: " m)))
+    (princ))
+
+  (vl-load-com)
+  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
+  (setq odim (getvar "DIMSTYLE")
+        made 0)
+  (setvar "CMDECHO" 0)
+  (setvar "OSMODE"  0)
+  (setvar "TRIMMODE" 1)                    ; a fillet that leaves the
+                                           ; old corner standing is not
+                                           ; what anyone means by one
+
+  ;; -- 1. the corner: two lines, each clicked on the side to keep
+  (setq one (sf:askline "Select the first line of the corner" "Cancel" nil))
+  (if one
+    (setq two (sf:askline "Select the second line of the corner"
+                          "Cancel" (car one))))
+  (setq geo (if (and one two)
+              (sf:corner (car one) (cadr one) (car two) (cadr two))))
+
+  (cond
+    ((not (and one two))
+     (princ "\nSMARTFILLET cancelled -- nothing drawn."))
+
+    ((null geo)
+     (princ (strcat "\nThose two lines make no corner -- they are"
+                    " parallel, or they run straight through one"
+                    " another.  Nothing to round.")))
+
+    ((< (setq rmax (sf:rmax geo)) sf:*first*)
+     (princ (strcat "\nThe shorter leg of that corner only allows "
+                    (sf:rlabel rmax) " -- less than the smallest"
+                    " preview (" (sf:rlabel sf:*first*) ").  Nothing"
+                    " drawn; lower sf:*first* to work at that size.")))
+
+    (t
+     ;; -- 2. one undo group over the previews and everything they lead
+     ;;       to, so a single U undoes the lot
+     (command "_.UNDO" "_Begin")
+     (setq undo-open t
+           rads      (sf:candidates rmax)
+           extra     (- (sf:howmany rmax) (length rads)))
+     (sf:preview geo rads)
+     (princ (strcat "\n" (itoa (length rads)) " corner"
+                    (if (= 1 (length rads)) "" "s")
+                    " that fit, dashed: " (sf:rlabel (car rads))
+                    (if (cdr rads)
+                      (strcat " to " (sf:rlabel (last rads)))
+                      "")
+                    "."))
+     ;; a cap that says nothing reads as "that is all this corner
+     ;; takes", which is a different fact
+     (if (> extra 0)
+       (princ (strcat "\n" (itoa extra) " larger radi"
+                      (if (= 1 extra) "us" "i") " also fit"
+                      (if (= 1 extra) "s" "") " and "
+                      (if (= 1 extra) "is" "are") " not shown"
+                      " -- raise sf:*maxshown* to see "
+                      (if (= 1 extra) "it" "them") ".")))
+
+     ;; -- 3. the one that gets cut
+     (setq r (sf:pickpreview))
+     (sf:clear)
+     (cond
+       ((null r)
+        (princ "\nNothing picked -- the corner is as it was."))
+       ((null (setq arc (sf:dofillet (car one) (cadr one)
+                                     (car two) (cadr two) r)))
+        (princ (strcat "\nAutoCAD would not fillet that corner at "
+                       (sf:rlabel r) " -- the lines are as they were.")))
+       (t
+        (setq made 1
+              dim1 (sf:dimarc arc r geo))
+        (princ (strcat "\n" (sf:rlabel r) " corner cut and dimensioned"
+                       (if dim1 (strcat " on layer " sf:*dimlayer*) "")
+                       "."))
+
+        ;; -- 4. the same radius, for the rest of the corners
+        (if (cal:askyn (strcat "Fillet other corners at "
+                              (sf:rlabel r) "?")
+                      "Yes" nil)
+          (setq made (+ made (sf:repeat r))))
+        (if (and sf:*typ* dim1 (> made 1)) (sf:typit dim1))
+
+        (princ (strcat "\n" (itoa made) " corner"
+                       (if (= 1 made) "" "s") " filleted at "
+                       (sf:rlabel r)
+                       (if (and sf:*typ* (> made 1) dim1)
+                         " -- the one dimension now reads Typ."
+                         "")
+                       "."))))
+
+     (command "_.UNDO" "_End")
+     (setq undo-open nil)))
+
+  ;; every path out drops the snapshot, the quiet ones included: a run
+  ;; that found nothing to do and kept its snapshot would hand it to the
+  ;; NEXT run, which would then put the user's settings back to what
+  ;; they were two commands ago
+  (sf:restyle odim)
+  (cal:sysrestore)
+  (setq *error* olderr)
+  (princ))
+
+(defun c:SMARTFILLETVER ()
+  (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
+  (princ))
+
+(princ (strcat "\nSMARTFILLET " *smartfillet-version*
+               " loaded -- type SMARTFILLET, pick two lines, and click"
+               " the rounded corner you want."))
+(princ)
+
+
+;;; ======================================================================
 ;;; >>> SPACHECK.lsp
 ;;; ======================================================================
 
@@ -53383,7 +54478,14 @@
 ;;;      Hardware called for by the longest hinge -- velcro hinges,
 ;;;      double C channel, hold down kit -- is reported as advice.
 ;;;
-;;;   6. THE TITLE BLOCK.  Everything on the border layer is measured
+;;;   6. FEET AND INCHES.  Every text box in the selection -- TEXT,
+;;;      MTEXT and the ATTRIB values on blocks -- must state its
+;;;      inches wherever it states feet: 5' is flagged, 5'-0", 3'-2"
+;;;      and a plain 40" are fine.  A feet mark is an apostrophe
+;;;      straight after a digit, so "Water's Edge" is prose and never
+;;;      flagged.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   7. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
 ;;;      four lines both measure the same.  A spa sheet's title block is
 ;;;      exactly 0.6x the liner block: the liner nominal is 704 x
@@ -53391,7 +54493,7 @@
 ;;;      is reported with the factor it actually came out at, and a
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
-;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;   8. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
 ;;;      the SPA-specific findings under underlined section headings.
@@ -53413,7 +54515,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.3")
+(setq *spacheck-version* "v1.4")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -54345,6 +55447,114 @@
                       (if (spachk:has s "OK") nil 1)))
     nil))
 
+;;; --- feet-and-inch text -------------------------------------------------
+;;;  A distance written in feet must state its inches too: 5' is wrong,
+;;;  5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun spachk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+(defun spachk:clip (s n)
+  (if (> (strlen s) n) (strcat (substr s 1 n) "...") s))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun spachk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun spachk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+(defun spachk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (spachk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (spachk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, then one row per offender.  The
+;; report itself is skipped: SPACHECK writes it onto its own layer, but
+;; a rerun reads the drawing before clearing the old one.
+(defun spachk:audit-units (ss / items it s n bad rows)
+  (setq items (spachk:text-items ss) n 0 bad 0 rows nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (spachk:feet-open-p s)
+          (setq bad  (1+ bad)
+                rows (append rows
+                       (list (spachk:row
+                               (strcat "Text " (car it) ": \""
+                                       (spachk:mtsafe (spachk:clip s 40))
+                                       "\" gives feet with NO INCHES"
+                                       " - write it 5'-0\" not 5'")
+                               1))))))))
+  (spachk:res
+    (cons (spachk:row
+            (cond
+              ((= n 0) "Feet & inches: no text in the selection")
+              ((= bad 0) (strcat "Feet & inches: all " (itoa n) " text item"
+                                 (if (= 1 n) "" "s") " OK"))
+              (t (strcat "Feet & inches: " (itoa bad) " of " (itoa n)
+                         " text item" (if (= 1 n) "" "s")
+                         " give feet with NO INCHES"
+                         " - write 5'-0\" not 5'")))
+            (if (> bad 0) 1 nil))
+          rows)
+    nil))
+
 ;;; ======================================================================
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
@@ -54422,7 +55632,12 @@
                         "Hinges: not checked - no taper to check against"
                         1)))))
 
-  ;; 6 -- the title block
+  ;; 6 -- the text boxes: feet must carry inches (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "TEXT & UNITS" 3))))
+  (setq r (spachk:audit-units ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 7 -- the title block
   (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
@@ -60030,6 +61245,7 @@
      ("CORNERSTP"      "Corner step")
      ("HEMISTEP"       "Hemi step")
      ("NORMIESTEP"     "Normie step")
+     ("SMARTFILLET"    "Corner radius, previewed")
      ("STOCKCOVER"     "Stock cover placement")
      ("WCALST"         "Unroll curved band"))
     ("Points"
@@ -60726,11 +61942,11 @@
   "DDINFO" "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER"
   "FITABHD" "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
   "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE"
-  "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SPACHECKVER"
-  "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST"
-  "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV"
-  "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMVER" "LAZPANEL"
-  "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET"
+  "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
+  "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN"
+  "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZFORM"
+  "LAZFORMVER" "LAZPANEL" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

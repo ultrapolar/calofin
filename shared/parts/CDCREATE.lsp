@@ -23,7 +23,11 @@
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
 ;;;       same convention POOL uses for the cross dims it draws.
-;;;    4. The line each dimension was made from is erased, so the tie
+;;;    4. A line whose two ends already carry a dimension is left
+;;;       alone -- no second dim on top of the first, and the line
+;;;       stays put so you can see what was skipped.  Two coincident
+;;;       lines in one selection count as the same tie.
+;;;    5. The line each dimension was made from is erased, so the tie
 ;;;       measurement is left as a dimension and nothing else.  Only
 ;;;       lines that really did get a dimension are erased, and the
 ;;;       report says how many went and off which layers (they are
@@ -44,6 +48,11 @@
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
 ;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
+;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
+;;;                  nil to dimension it again anyway
+;;;    cdc:*dupetol* how close two extension line origins have to be to
+;;;                  count as the same point; nil = a sixteenth of an
+;;;                  inch in the drawing's own units
 ;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
 ;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
 ;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
@@ -56,6 +65,11 @@
 ;;;      reported, not dimensioned -- explode a polyline first if its
 ;;;      segments need cross dims.
 ;;;    * Zero-length lines are skipped; they have nothing to measure.
+;;;    * "Dimensioned already" means SOME dimension in model space
+;;;      carries those same two extension line origins, either way
+;;;      round -- whatever its style, layer, or where its dimension
+;;;      line sits.  A dim of the same tie pushed out to one side still
+;;;      counts as that tie being dimensioned.
 ;;;    * The "DIMENSION" layer is created when the drawing lacks it,
 ;;;      and thawed / unlocked / switched back on when it is there but
 ;;;      not usable -- a run onto a frozen layer would otherwise look
@@ -69,7 +83,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -79,6 +93,8 @@
 (setq cdc:*erase*  t)
 (setq cdc:*textpos* 0.8)
 (setq cdc:*vertang* 15.0)
+(setq cdc:*skipdimmed* t)
+(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -170,6 +186,61 @@
       (entupd en)
       t)))
 
+;; one foot expressed in the current drawing units (INSUNITS), so the
+;; tolerances below mean the same thing whatever the drawing works in
+(defun cdc:onefoot (/ u)
+  (setq u (getvar "INSUNITS"))
+  (cond ((= u 2) 1.0)                   ; feet
+        ((= u 4) 304.8)                 ; millimetres
+        ((= u 5) 30.48)                 ; centimetres
+        ((= u 6) 0.3048)                ; metres
+        ((= u 10) (/ 1.0 3.0))          ; yards
+        (t 12.0)))                      ; inches / unitless
+
+;; how close two extension line origins have to be before they count as
+;; the same point - a sixteenth of an inch, in the drawing's own units,
+;; unless cdc:*dupetol* says otherwise
+(defun cdc:dupetol ()
+  (if cdc:*dupetol* cdc:*dupetol* (/ (cdc:onefoot) 192.0)))
+
+;; T when a and b are the same point on the plan, within tol.  Compared
+;; flat: a survey point carries an elevation, the dimension that
+;; measures to it does not, and that difference must not read as two
+;; different places.
+(defun cdc:samept (a b tol)
+  (and (<= (abs (- (car  a) (car  b))) tol)
+       (<= (abs (- (cadr a) (cadr b))) tol)))
+
+;; the pairs of extension line origins every dimension in model space
+;; already carries.  A radial, angular or ordinate dim has no such pair
+;; and is passed over.
+(defun cdc:dimscan ( / ss i ed out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "DIMENSION") (410 . "Model")))
+        i   0)
+  (if ss
+    (while (< i (sslength ss))
+      (setq ed (entget (ssname ss i))
+            i  (1+ i))
+      (if (and (assoc 13 ed) (assoc 14 ed))
+        (setq out (cons (list (cdr (assoc 13 ed)) (cdr (assoc 14 ed)))
+                        out)))))
+  out)
+
+;; T when p1-p2 is one of the pairs in LST, either way round: the
+;; "that tie is dimensioned already, leave it alone" test.  Where the
+;; existing dim line sits is deliberately not part of it -- a dim of
+;; this tie pushed off to one side is still a dim of this tie.
+(defun cdc:dimmed-p (p1 p2 lst / tol q hit)
+  (setq tol (cdc:dupetol))
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (or (and (cdc:samept (car q) p1 tol) (cdc:samept (cadr q) p2 tol))
+            (and (cdc:samept (car q) p2 tol) (cdc:samept (cadr q) p1 tol)))
+      (setq hit t)))
+  hit)
+
 ;; "POOL, POINTS" from a list of layer names
 (defun cdc:names (lst / out)
   (foreach n lst
@@ -179,8 +250,9 @@
 ;;; -------------------- the command --------------------------------
 
 (defun c:CDCREATE ( / *error* olderr odim
-                      ss i en ed typ ends pairs skipped plines
-                      havestyle undo-open pre new made gone lays p1 p2 )
+                      ss i en ed typ ends pairs skipped plines dimmed
+                      already havestyle undo-open pre new made gone lays
+                      p1 p2 )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -214,8 +286,12 @@
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
     (progn
-      ;; -- 2. keep the lines, count what was ignored
-      (setq i 0 pairs nil skipped 0 plines 0)
+      ;; -- 2. keep the lines, count what was ignored.  What the
+      ;;       drawing already carries is read once, up front, and each
+      ;;       tie kept is added to it -- so two coincident lines in one
+      ;;       selection are the same tie, dimensioned once
+      (setq i 0 pairs nil skipped 0 plines 0 already 0
+            dimmed (if cdc:*skipdimmed* (cdc:dimscan)))
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -229,14 +305,24 @@
              (setq ends (cdc:ends en)
                    p1   (car  ends)
                    p2   (cadr ends))
-             (if (> (distance p1 p2) 1e-9)
-               (setq pairs (cons (list en p1 p2 (cdr (assoc 8 ed))) pairs))
-               (setq skipped (1+ skipped)))))
+             (cond
+               ((<= (distance p1 p2) 1e-9)        ; nothing to measure
+                  (setq skipped (1+ skipped)))
+               ((and cdc:*skipdimmed* (cdc:dimmed-p p1 p2 dimmed))
+                  (setq already (1+ already)))
+               (t
+                  (setq pairs  (cons (list en p1 p2 (cdr (assoc 8 ed)))
+                                     pairs)
+                        dimmed (cons (list p1 p2) dimmed))))))
         (setq i (1+ i)))
       (setq pairs (reverse pairs))
 
       (if (null pairs)
-        (princ "\nNo lines in the selection -- nothing to dimension.")
+        (princ (if (> already 0)
+                 (strcat "\n" (itoa already) " tie"
+                         (if (= already 1) " is" "s are")
+                         " dimensioned already -- nothing new to draw.")
+                 "\nNo lines in the selection -- nothing to dimension."))
         (progn
           ;; -- 3. layer and style, all of it inside one undo group
           (setvar "CMDECHO" 0)
@@ -304,6 +390,11 @@
                            (if (= gone 1) "" "s") " erased (layer"
                            (if (= 1 (length lays)) " " "s ")
                            (cdc:names (reverse lays)) ").")))
+          (if (> already 0)
+            (princ (strcat "\n" (itoa already) " line"
+                           (if (= already 1) "" "s")
+                           " left alone -- those two points carry a"
+                           " dimension already.")))
           (if (> skipped 0)
             (princ (strcat "\n" (itoa skipped)
                            " selected object(s) were not lines and were"

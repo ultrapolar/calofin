@@ -181,6 +181,13 @@
 ;;;     measure the same. The selection is used when it holds the
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
+;;;  8a. FEET AND INCHES. Every text box in the selection - TEXT,
+;;;     MTEXT and the ATTRIB values on blocks - must state its inches
+;;;     wherever it states feet: 5' is flagged, 5'-0", 3'-2" and a
+;;;     plain 40" are fine. A feet mark is an apostrophe straight
+;;;     after a digit, so "Water's Edge" is prose and never flagged.
+;;;     This one runs in LITELINFINSCAN too.
+;;;
 ;;;  8b. DIMENSION LAYER. Every dimension must sit on the
 ;;;     "DIMENSION" layer (tune *lfc-dim-layer*). Any that do not are
 ;;;     counted, the layers they landed on are named, and the report
@@ -241,7 +248,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.4")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.5")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -634,7 +641,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -667,6 +674,7 @@
         ((wcmatch s "Height dim *,*CHECK THE WALL HEIGHT*")
          "WALL HEIGHT")
         ((wcmatch s "Liner Material*")    "THE LINER")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
         (t                                "OTHER CHECKS")))
 
 (defun lfc:dimline-p (s)
@@ -705,6 +713,106 @@
                    (lfc:join (reverse lays) ", ")
                    ") - run " *lfc-dimfix-cmd* " to move them")
            T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun lfc:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun lfc:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun lfc:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun lfc:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (lfc:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (lfc:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun lfc:audit-units (ss / items it s n bad lines)
+  (setq items (lfc:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (lfc:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (lfc:mtsafe (lfc:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
 
 ;; The whole report: the liner-finish checks on the MAIN sheet - a
 ;; large title, the date and version, a verdict line, the colour
@@ -2089,7 +2197,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2883,10 +2991,15 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq dimlay (lfc:dimlayer-verdict dims))
+        (setq dimlay (lfc:dimlayer-verdict dims)
+              units  (lfc:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
         (setq hdr
           (list
             (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+            (cons (strcat "Feet & inches: " (car units)) (cadr units))
             (cons (strcat "Steps: " stepsum)          (lfc:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -2966,7 +3079,7 @@
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
-                     nd ndbad na nabad m hdr dhdr l badtags dimlay
+                     nd ndbad na nabad m hdr dhdr l badtags dimlay units
                      bordbb bordsum attundec
                      minx miny maxx maxy p13 p14 near s b w)
 
@@ -3295,9 +3408,14 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq dimlay (lfc:dimlayer-verdict dims))
+     (setq dimlay (lfc:dimlayer-verdict dims)
+           units  (lfc:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (list
                  (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+                 (cons (strcat "Feet & inches: " (car units)) (cadr units))
                  (cons (strcat "Steps: " stepsum)           (lfc:attn-p stepsum))
                  (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))

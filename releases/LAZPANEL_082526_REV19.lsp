@@ -190,6 +190,7 @@
      ("CORNERSTP"      "Corner step")
      ("HEMISTEP"       "Hemi step")
      ("NORMIESTEP"     "Normie step")
+     ("SMARTFILLET"    "Corner radius, previewed")
      ("STOCKCOVER"     "Stock cover placement")
      ("WCALST"         "Unroll curved band"))
     ("Points"
