@@ -201,6 +201,31 @@ TOOLS = {
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
     },
+    # POOLSIDE was written against the library from the start: the whole
+    # of its ask layer, its vector helpers and its ensure-layer are
+    # CALOFIN-LIB bodies carried under psd:, so they all come back out
+    # here.  What stays local is the section itself -- the three bottom
+    # tables, the chain resolver and the drawing.
+    'POOLSIDE': {
+        'src': 'lisp/poolside/POOLSIDE.lsp',
+        'swap': {
+            'psd:2d': 'cal:2d', 'psd:v+': 'cal:v+', 'psd:v*': 'cal:v*',
+            'psd:mid': 'cal:mid',
+            'psd:askkw': 'cal:askkw', 'psd:askyn': 'cal:askyn',
+            'psd:osup': 'cal:osup', 'psd:osdown': 'cal:osdown',
+            'psd:syssave': 'cal:syssave',
+            'psd:sysrestore': 'cal:sysrestore',
+            'psd:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': ['psd:*sysold*'],
+        # psd:askkw already takes the SHOWN bracket third, like the
+        # library's, so no bracket translation is needed
+        'askkw_hidden': False,
+        # the Back sentinel travels with the ask helpers, and the sysvar
+        # snapshot global travels with syssave/sysrestore
+        'symbols': {'PSD-BACK': 'CAL-BACK',
+                    'psd:*sysold*': 'cal:*sysold*'},
+    },
     # The chart form is like the panel: it draws its own picture and
     # asks nothing through the library, so its twin is the file plus the
     # shared banner.  Listed so it can never drift.
@@ -238,6 +263,11 @@ EXPAND = {
     # POOL also saves LUNITS -- it switches the drawing to architectural
     # units for the run and must put the user's back.
     'POOL': {
+        '(cal:syssave)':
+            ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+    },
+    # ...and so does POOLSIDE, for the same reason.
+    'POOLSIDE': {
         '(cal:syssave)':
             ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
     },

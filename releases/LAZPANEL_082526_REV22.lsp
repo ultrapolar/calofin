@@ -74,7 +74,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.1")
+(setq *lazpanel-version* "v2.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -170,6 +170,7 @@
     ("POOL"             "Pool layout")
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
+    ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
@@ -208,6 +209,7 @@
   '(("Pool"
      ("Shape"
       "POOL"
+      "POOLSIDE"
       "LAZFORM"
       "OASIS"
       "ABHD"
@@ -307,6 +309,7 @@
       "SPA"
       "POOL"
       "POOLCOVER"
+      "POOLSIDE"
       "POOLDEMO"
       "OASIS"
       "FITABHD"
