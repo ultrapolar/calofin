@@ -82,6 +82,12 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - FEET AND INCHES. Every text box in the selection - TEXT,
+;;;       MTEXT and the ATTRIB values on blocks - must state its
+;;;       inches wherever it states feet: 5' is flagged, 5'-0",
+;;;       3'-2" and a plain 40" are fine. A feet mark is an
+;;;       apostrophe straight after a digit, so "Water's Edge" is
+;;;       prose and never flagged. LITECOVERSCAN keeps this one.
 ;;;     - DIMENSION LAYER. Every dimension must sit on the
 ;;;       "DIMENSION" layer (tune *cchk-dim-layer*). Any that do not
 ;;;       are counted, the layers they landed on are named, and the
@@ -196,7 +202,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.6")
+(setq *cchk-version* "v0.7")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -586,7 +592,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -614,6 +620,7 @@
   (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
         ((wcmatch s "Arc *")              "ARCS")
         ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
         (t                                "COVER CHECKS")))
 
 (defun cchk:dimline-p (s)
@@ -652,6 +659,106 @@
                    (cchk:join (reverse lays) ", ")
                    ") - run " *cchk-dimfix-cmd* " to move them")
            T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun cchk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun cchk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun cchk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun cchk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (cchk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (cchk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun cchk:audit-units (ss / items it s n bad lines)
+  (setq items (cchk:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (cchk:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (cchk:mtsafe (cchk:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -2506,7 +2613,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2770,11 +2877,17 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq dimlay (cchk:dimlayer-verdict dims))
+        (setq dimlay (cchk:dimlayer-verdict dims)
+              units  (cchk:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
         (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
                               (cdr dimlay))
-                        (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                (car cres))))
+                        (cons (cons (strcat "Feet & inches: " (car units))
+                                    (cadr units))
+                              (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                      (car cres)))))
         (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
                                        (reverse lines) nil
                                        minx miny maxx maxy))
@@ -2831,7 +2944,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres dimlay
+                       nd ndbad na nabad hdr dhdr l cres dimlay units
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -2956,11 +3069,17 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq dimlay (cchk:dimlayer-verdict dims))
+     (setq dimlay (cchk:dimlayer-verdict dims)
+           units  (cchk:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
                            (cdr dimlay))
-                     (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                             (car cres))))
+                     (cons (cons (strcat "Feet & inches: " (car units))
+                                 (cadr units))
+                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                   (car cres)))))
      (cchk:write-report (strcat name " REPORT")
                         (strcat "Read-only scan - nothing in the drawing"
                                 " was changed.  "

@@ -68,7 +68,7 @@ with what the code actually does.
 | --- | --- |
 | `LINFINCHECK` | The full interactive review. Fixes what you approve, flags what you don't. |
 | `LINFINSCAN` | The same audits, **read-only** — reports everything, changes nothing. Good as a pre-flight. |
-| `LITELINFINSCAN` | The scan minus the `DIMCHECK`-style pass (dimensions, arcs, overlapping lines) — for a drawing `DIMCHECK` already went over, when only the liner-finish rules are wanted. It keeps the dimension-layer verdict, which is cheap and tells you to run `CDIM`. |
+| `LITELINFINSCAN` | The scan minus the `DIMCHECK`-style pass (dimensions, arcs, overlapping lines) — for a drawing `DIMCHECK` already went over, when only the liner-finish rules are wanted. It keeps the dimension-layer verdict (which tells you to run `CDIM`) and the feet-and-inches check. |
 | `LINFINCHECKRESCUE` | Restores every colour LINFINCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. |
 | `LINFINCHECKVER` | Prints which build is loaded. |
 | `TUTORIALLINFINCHECK` | Teaches the tool — see below. |

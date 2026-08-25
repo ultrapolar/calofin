@@ -28341,7 +28341,11 @@
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
 ;;;       same convention POOL uses for the cross dims it draws.
-;;;    4. The line each dimension was made from is erased, so the tie
+;;;    4. A line whose two ends already carry a dimension is left
+;;;       alone -- no second dim on top of the first, and the line
+;;;       stays put so you can see what was skipped.  Two coincident
+;;;       lines in one selection count as the same tie.
+;;;    5. The line each dimension was made from is erased, so the tie
 ;;;       measurement is left as a dimension and nothing else.  Only
 ;;;       lines that really did get a dimension are erased, and the
 ;;;       report says how many went and off which layers (they are
@@ -28362,6 +28366,11 @@
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
 ;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
+;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
+;;;                  nil to dimension it again anyway
+;;;    cdc:*dupetol* how close two extension line origins have to be to
+;;;                  count as the same point; nil = a sixteenth of an
+;;;                  inch in the drawing's own units
 ;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
 ;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
 ;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
@@ -28374,6 +28383,11 @@
 ;;;      reported, not dimensioned -- explode a polyline first if its
 ;;;      segments need cross dims.
 ;;;    * Zero-length lines are skipped; they have nothing to measure.
+;;;    * "Dimensioned already" means SOME dimension in model space
+;;;      carries those same two extension line origins, either way
+;;;      round -- whatever its style, layer, or where its dimension
+;;;      line sits.  A dim of the same tie pushed out to one side still
+;;;      counts as that tie being dimensioned.
 ;;;    * The "DIMENSION" layer is created when the drawing lacks it,
 ;;;      and thawed / unlocked / switched back on when it is there but
 ;;;      not usable -- a run onto a frozen layer would otherwise look
@@ -28387,7 +28401,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -28397,6 +28411,8 @@
 (setq cdc:*erase*  t)
 (setq cdc:*textpos* 0.8)
 (setq cdc:*vertang* 15.0)
+(setq cdc:*skipdimmed* t)
+(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -28488,6 +28504,61 @@
       (entupd en)
       t)))
 
+;; one foot expressed in the current drawing units (INSUNITS), so the
+;; tolerances below mean the same thing whatever the drawing works in
+(defun cdc:onefoot (/ u)
+  (setq u (getvar "INSUNITS"))
+  (cond ((= u 2) 1.0)                   ; feet
+        ((= u 4) 304.8)                 ; millimetres
+        ((= u 5) 30.48)                 ; centimetres
+        ((= u 6) 0.3048)                ; metres
+        ((= u 10) (/ 1.0 3.0))          ; yards
+        (t 12.0)))                      ; inches / unitless
+
+;; how close two extension line origins have to be before they count as
+;; the same point - a sixteenth of an inch, in the drawing's own units,
+;; unless cdc:*dupetol* says otherwise
+(defun cdc:dupetol ()
+  (if cdc:*dupetol* cdc:*dupetol* (/ (cdc:onefoot) 192.0)))
+
+;; T when a and b are the same point on the plan, within tol.  Compared
+;; flat: a survey point carries an elevation, the dimension that
+;; measures to it does not, and that difference must not read as two
+;; different places.
+(defun cdc:samept (a b tol)
+  (and (<= (abs (- (car  a) (car  b))) tol)
+       (<= (abs (- (cadr a) (cadr b))) tol)))
+
+;; the pairs of extension line origins every dimension in model space
+;; already carries.  A radial, angular or ordinate dim has no such pair
+;; and is passed over.
+(defun cdc:dimscan ( / ss i ed out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "DIMENSION") (410 . "Model")))
+        i   0)
+  (if ss
+    (while (< i (sslength ss))
+      (setq ed (entget (ssname ss i))
+            i  (1+ i))
+      (if (and (assoc 13 ed) (assoc 14 ed))
+        (setq out (cons (list (cdr (assoc 13 ed)) (cdr (assoc 14 ed)))
+                        out)))))
+  out)
+
+;; T when p1-p2 is one of the pairs in LST, either way round: the
+;; "that tie is dimensioned already, leave it alone" test.  Where the
+;; existing dim line sits is deliberately not part of it -- a dim of
+;; this tie pushed off to one side is still a dim of this tie.
+(defun cdc:dimmed-p (p1 p2 lst / tol q hit)
+  (setq tol (cdc:dupetol))
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (or (and (cdc:samept (car q) p1 tol) (cdc:samept (cadr q) p2 tol))
+            (and (cdc:samept (car q) p2 tol) (cdc:samept (cadr q) p1 tol)))
+      (setq hit t)))
+  hit)
+
 ;; "POOL, POINTS" from a list of layer names
 (defun cdc:names (lst / out)
   (foreach n lst
@@ -28497,8 +28568,9 @@
 ;;; -------------------- the command --------------------------------
 
 (defun c:CDCREATE ( / *error* olderr odim
-                      ss i en ed typ ends pairs skipped plines
-                      havestyle undo-open pre new made gone lays p1 p2 )
+                      ss i en ed typ ends pairs skipped plines dimmed
+                      already havestyle undo-open pre new made gone lays
+                      p1 p2 )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -28532,8 +28604,12 @@
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
     (progn
-      ;; -- 2. keep the lines, count what was ignored
-      (setq i 0 pairs nil skipped 0 plines 0)
+      ;; -- 2. keep the lines, count what was ignored.  What the
+      ;;       drawing already carries is read once, up front, and each
+      ;;       tie kept is added to it -- so two coincident lines in one
+      ;;       selection are the same tie, dimensioned once
+      (setq i 0 pairs nil skipped 0 plines 0 already 0
+            dimmed (if cdc:*skipdimmed* (cdc:dimscan)))
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -28547,14 +28623,24 @@
              (setq ends (cdc:ends en)
                    p1   (car  ends)
                    p2   (cadr ends))
-             (if (> (distance p1 p2) 1e-9)
-               (setq pairs (cons (list en p1 p2 (cdr (assoc 8 ed))) pairs))
-               (setq skipped (1+ skipped)))))
+             (cond
+               ((<= (distance p1 p2) 1e-9)        ; nothing to measure
+                  (setq skipped (1+ skipped)))
+               ((and cdc:*skipdimmed* (cdc:dimmed-p p1 p2 dimmed))
+                  (setq already (1+ already)))
+               (t
+                  (setq pairs  (cons (list en p1 p2 (cdr (assoc 8 ed)))
+                                     pairs)
+                        dimmed (cons (list p1 p2) dimmed))))))
         (setq i (1+ i)))
       (setq pairs (reverse pairs))
 
       (if (null pairs)
-        (princ "\nNo lines in the selection -- nothing to dimension.")
+        (princ (if (> already 0)
+                 (strcat "\n" (itoa already) " tie"
+                         (if (= already 1) " is" "s are")
+                         " dimensioned already -- nothing new to draw.")
+                 "\nNo lines in the selection -- nothing to dimension."))
         (progn
           ;; -- 3. layer and style, all of it inside one undo group
           (setvar "CMDECHO" 0)
@@ -28622,6 +28708,11 @@
                            (if (= gone 1) "" "s") " erased (layer"
                            (if (= 1 (length lays)) " " "s ")
                            (cdc:names (reverse lays)) ").")))
+          (if (> already 0)
+            (princ (strcat "\n" (itoa already) " line"
+                           (if (= already 1) "" "s")
+                           " left alone -- those two points carry a"
+                           " dimension already.")))
           (if (> skipped 0)
             (princ (strcat "\n" (itoa skipped)
                            " selected object(s) were not lines and were"
@@ -33475,6 +33566,12 @@
 ;;;
 ;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
+;;;     - FEET AND INCHES. Every text box in the selection - TEXT,
+;;;       MTEXT and the ATTRIB values on blocks - must state its
+;;;       inches wherever it states feet: 5' is flagged, 5'-0",
+;;;       3'-2" and a plain 40" are fine. A feet mark is an
+;;;       apostrophe straight after a digit, so "Water's Edge" is
+;;;       prose and never flagged. LITECOVERSCAN keeps this one.
 ;;;     - DIMENSION LAYER. Every dimension must sit on the
 ;;;       "DIMENSION" layer (tune *cchk-dim-layer*). Any that do not
 ;;;       are counted, the layers they landed on are named, and the
@@ -33591,7 +33688,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.6")
+(setq *cchk-version* "v0.7")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -33914,7 +34011,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -33942,6 +34039,7 @@
   (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
         ((wcmatch s "Arc *")              "ARCS")
         ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
         (t                                "COVER CHECKS")))
 
 (defun cchk:dimline-p (s)
@@ -33980,6 +34078,106 @@
                    (cchk:join (reverse lays) ", ")
                    ") - run " *cchk-dimfix-cmd* " to move them")
            T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun cchk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun cchk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun cchk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun cchk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (cchk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (cchk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun cchk:audit-units (ss / items it s n bad lines)
+  (setq items (cchk:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (cchk:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (cchk:mtsafe (cchk:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -35779,7 +35977,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -36044,11 +36242,17 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq dimlay (cchk:dimlayer-verdict dims))
+        (setq dimlay (cchk:dimlayer-verdict dims)
+              units  (cchk:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
         (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
                               (cdr dimlay))
-                        (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                (car cres))))
+                        (cons (cons (strcat "Feet & inches: " (car units))
+                                    (cadr units))
+                              (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                      (car cres)))))
         (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
                                        (reverse lines) nil
                                        minx miny maxx maxy))
@@ -36105,7 +36309,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres dimlay
+                       nd ndbad na nabad hdr dhdr l cres dimlay units
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -36230,11 +36434,17 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq dimlay (cchk:dimlayer-verdict dims))
+     (setq dimlay (cchk:dimlayer-verdict dims)
+           units  (cchk:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (cons (cons (strcat "Dimension layer: " (car dimlay))
                            (cdr dimlay))
-                     (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                             (car cres))))
+                     (cons (cons (strcat "Feet & inches: " (car units))
+                                 (cadr units))
+                           (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                                   (car cres)))))
      (cchk:write-report (strcat name " REPORT")
                         (strcat "Read-only scan - nothing in the drawing"
                                 " was changed.  "
@@ -46837,6 +47047,13 @@
 ;;;     measure the same. The selection is used when it holds the
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
+;;;  8a. FEET AND INCHES. Every text box in the selection - TEXT,
+;;;     MTEXT and the ATTRIB values on blocks - must state its inches
+;;;     wherever it states feet: 5' is flagged, 5'-0", 3'-2" and a
+;;;     plain 40" are fine. A feet mark is an apostrophe straight
+;;;     after a digit, so "Water's Edge" is prose and never flagged.
+;;;     This one runs in LITELINFINSCAN too.
+;;;
 ;;;  8b. DIMENSION LAYER. Every dimension must sit on the
 ;;;     "DIMENSION" layer (tune *lfc-dim-layer*). Any that do not are
 ;;;     counted, the layers they landed on are named, and the report
@@ -46897,7 +47114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.4")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.5")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -47290,7 +47507,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -47323,6 +47540,7 @@
         ((wcmatch s "Height dim *,*CHECK THE WALL HEIGHT*")
          "WALL HEIGHT")
         ((wcmatch s "Liner Material*")    "THE LINER")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
         (t                                "OTHER CHECKS")))
 
 (defun lfc:dimline-p (s)
@@ -47361,6 +47579,106 @@
                    (lfc:join (reverse lays) ", ")
                    ") - run " *lfc-dimfix-cmd* " to move them")
            T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun lfc:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun lfc:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun lfc:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun lfc:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (lfc:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (lfc:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun lfc:audit-units (ss / items it s n bad lines)
+  (setq items (lfc:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (lfc:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (lfc:mtsafe (lfc:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
 
 ;; The whole report: the liner-finish checks on the MAIN sheet - a
 ;; large title, the date and version, a verdict line, the colour
@@ -48745,7 +49063,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -49539,10 +49857,15 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq dimlay (lfc:dimlayer-verdict dims))
+        (setq dimlay (lfc:dimlayer-verdict dims)
+              units  (lfc:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
         (setq hdr
           (list
             (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+            (cons (strcat "Feet & inches: " (car units)) (cadr units))
             (cons (strcat "Steps: " stepsum)          (lfc:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -49622,7 +49945,7 @@
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
-                     nd ndbad na nabad m hdr dhdr l badtags dimlay
+                     nd ndbad na nabad m hdr dhdr l badtags dimlay units
                      bordbb bordsum attundec
                      minx miny maxx maxy p13 p14 near s b w)
 
@@ -49951,9 +50274,14 @@
                     (cons (strcat "Overlapping line pairs: "
                                   (itoa (length olaps)))
                           (> (length olaps) 0)))))
-     (setq dimlay (lfc:dimlayer-verdict dims))
+     (setq dimlay (lfc:dimlayer-verdict dims)
+           units  (lfc:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (list
                  (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+                 (cons (strcat "Feet & inches: " (car units)) (cadr units))
                  (cons (strcat "Steps: " stepsum)           (lfc:attn-p stepsum))
                  (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -53511,7 +53839,14 @@
 ;;;      Hardware called for by the longest hinge -- velcro hinges,
 ;;;      double C channel, hold down kit -- is reported as advice.
 ;;;
-;;;   6. THE TITLE BLOCK.  Everything on the border layer is measured
+;;;   6. FEET AND INCHES.  Every text box in the selection -- TEXT,
+;;;      MTEXT and the ATTRIB values on blocks -- must state its
+;;;      inches wherever it states feet: 5' is flagged, 5'-0", 3'-2"
+;;;      and a plain 40" are fine.  A feet mark is an apostrophe
+;;;      straight after a digit, so "Water's Edge" is prose and never
+;;;      flagged.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   7. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
 ;;;      four lines both measure the same.  A spa sheet's title block is
 ;;;      exactly 0.6x the liner block: the liner nominal is 704 x
@@ -53519,7 +53854,7 @@
 ;;;      is reported with the factor it actually came out at, and a
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
-;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;   8. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
 ;;;      the SPA-specific findings under underlined section headings.
@@ -53541,7 +53876,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.3")
+(setq *spacheck-version* "v1.4")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -54473,6 +54808,114 @@
                       (if (spachk:has s "OK") nil 1)))
     nil))
 
+;;; --- feet-and-inch text -------------------------------------------------
+;;;  A distance written in feet must state its inches too: 5' is wrong,
+;;;  5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun spachk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+(defun spachk:clip (s n)
+  (if (> (strlen s) n) (strcat (substr s 1 n) "...") s))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun spachk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun spachk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+(defun spachk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (spachk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (spachk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, then one row per offender.  The
+;; report itself is skipped: SPACHECK writes it onto its own layer, but
+;; a rerun reads the drawing before clearing the old one.
+(defun spachk:audit-units (ss / items it s n bad rows)
+  (setq items (spachk:text-items ss) n 0 bad 0 rows nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (spachk:feet-open-p s)
+          (setq bad  (1+ bad)
+                rows (append rows
+                       (list (spachk:row
+                               (strcat "Text " (car it) ": \""
+                                       (spachk:mtsafe (spachk:clip s 40))
+                                       "\" gives feet with NO INCHES"
+                                       " - write it 5'-0\" not 5'")
+                               1))))))))
+  (spachk:res
+    (cons (spachk:row
+            (cond
+              ((= n 0) "Feet & inches: no text in the selection")
+              ((= bad 0) (strcat "Feet & inches: all " (itoa n) " text item"
+                                 (if (= 1 n) "" "s") " OK"))
+              (t (strcat "Feet & inches: " (itoa bad) " of " (itoa n)
+                         " text item" (if (= 1 n) "" "s")
+                         " give feet with NO INCHES"
+                         " - write 5'-0\" not 5'")))
+            (if (> bad 0) 1 nil))
+          rows)
+    nil))
+
 ;;; ======================================================================
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
@@ -54550,7 +54993,12 @@
                         "Hinges: not checked - no taper to check against"
                         1)))))
 
-  ;; 6 -- the title block
+  ;; 6 -- the text boxes: feet must carry inches (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "TEXT & UNITS" 3))))
+  (setq r (spachk:audit-units ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 7 -- the title block
   (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
