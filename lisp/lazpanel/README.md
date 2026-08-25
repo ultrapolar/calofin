@@ -3,19 +3,19 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command --
-47 of them, grouped the way the drafter thinks about them, under the
+51 of them, grouped the way the drafter thinks about them, under the
 same four group names the VB palette uses (a few commands sit in a
 different group here than there):
 
 | Group | Buttons |
 | --- | --- |
-| Layout | SPA, POOL, POOLDEMO, OASIS, FITABHD, ABHD, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, STOCKCOVER, WCALST |
+| Layout | LAZFORM, SPA, POOL, POOLDEMO, OASIS, FITABHD, ABHD, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, STOCKCOVER, WCALST |
 | Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
-| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, COVERCHECK, COVERSCAN, SPACHECK, SPACHECKSCAN, LINTXTCHK, CCPRECHECK |
+| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
 A **tab strip** across the top switches groups, so the eye lands on a
-dozen buttons rather than all forty-eight. The pages ARE `lzp:*groups*`
+dozen buttons rather than all fifty-one. The pages ARE `lzp:*groups*`
 -- re-ordering the tools or re-grouping them is an edit to that one
 table and nothing else. The status line still counts the whole roster,
 not just the page you are looking at, and the panel reopens where you
