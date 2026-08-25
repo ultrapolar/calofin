@@ -176,6 +176,35 @@ TOOLS = {
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
     },
+    # POOLPERIM is new work, so it was written against the library from
+    # the start: its lisp/ copy embeds the helpers and its twin calls
+    # cal: for them.  Generated from day one rather than hand-copied --
+    # CLAUDE.md's "if you find yourself doing that twice" is a rule
+    # easier to keep than to catch up with.
+    'POOLPERIM': {
+        'src': 'lisp/poolperim/POOLPERIM.lsp',
+        'swap': {
+            'pp:askkw': 'cal:askkw', 'pp:askyn': 'cal:askyn',
+            'pp:syssave': 'cal:syssave',
+            'pp:sysrestore': 'cal:sysrestore',
+            'pp:ensure-layer': 'cal:ensure-layer',
+            'pp:2d': 'cal:2d', 'pp:v+': 'cal:v+', 'pp:v-': 'cal:v-',
+            'pp:v*': 'cal:v*', 'pp:dot': 'cal:dot',
+            'pp:angnorm': 'cal:angnorm',
+        },
+        # the snapshot global travels with syssave/sysrestore
+        'drop_globals': ['pp:*sysold*'],
+        # pp:askkw takes a HIDDEN keyword list third and derives the
+        # bracket itself, the way STANDARDS.md section 4 writes it, so
+        # any call site left after the swap needs translating.  Today
+        # the only one lives inside pp:askyn, which the swap takes with
+        # it -- this is here for the next prompt POOLPERIM grows.
+        'askkw_hidden': True,
+        # the Back sentinel travels with the ask helpers; nothing tests
+        # for it yet, and the day something does it must be the
+        # library's symbol, not this file's
+        'symbols': {'PP-BACK': 'CAL-BACK'},
+    },
     # The chart form is like the panel: it draws its own picture and
     # asks nothing through the library, so its twin is the file plus the
     # shared banner.  Listed so it can never drift.

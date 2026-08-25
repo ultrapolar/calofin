@@ -93,7 +93,8 @@
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
     ;; The library first -- every tool below calls into it.  POOL and SPA
-    ;; precede their demo/tutorial satellites; LAZFORM comes after POOL,
+    ;; precede their demo/tutorial satellites; POOLPERIM follows PADDLE,
+    ;; which it hands its stripped drawing to; LAZFORM comes after POOL,
     ;; whose answers it fills in, and the LAZPANEL launcher loads last of
     ;; all, after everything its buttons name.
     (foreach m '(
@@ -108,6 +109,7 @@
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
                  "FITABHD.lsp" "lhd.lsp" "lincheck.lsp"
                  "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
+                 "POOLPERIM.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
                  "SPACHECK.lsp"

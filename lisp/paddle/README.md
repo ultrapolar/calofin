@@ -104,6 +104,14 @@ happens, check the perimeter for gaps (or bump `*paddle-fuzz*`).
 When several closed loops are selected, each one is processed;
 auto-detect (Enter) uses only the largest loop.
 
+`POOLPERIM` (`lisp/poolperim/`) carries a port of this chaining and
+uses it the other way round: it takes the largest closed loop as the
+perimeter, redraws it as one polyline on `POOL`, erases everything
+else bar the dimensions worth keeping, and then runs PADDLE on what
+is left. It also closes an almost-closed trace rather than skipping
+it. `tests/test_poolperim.py` runs both implementations on the same
+geometry, so a change here has to be ported there.
+
 ## The pad block
 
 PADDLE finds the pad block (`Pad36x36`) in this order:

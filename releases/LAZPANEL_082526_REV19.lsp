@@ -62,7 +62,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.8")
+(setq *lazpanel-version* "v1.9")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -91,6 +91,8 @@
      ("CABHD"          "Perimeter-only fit")
      ("LHD"            "Laser outline fit")
      ("PADDLE"         "Paddle pads")
+     ("POOLPERIM"      "Perimeter only, then pads")
+     ("POOLPERIMSCAN"  "Perimeter-only scan")
      ("AUTOBEAD"       "Bead offsets")
      ("CORNERSTP"      "Corner step")
      ("HEMISTEP"       "Hemi step")

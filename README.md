@@ -116,6 +116,7 @@ changing a routine.
 | `LINTXTCHK` | `lisp/lintxtchk/` | Places the vinyl-liner QA checklist into the drawing as text |
 | `CORNERSTP`, `HEMISTEP`, `NORMIESTEP`, ... | `lisp/cornerstp/` | Corner-step layout routines for pool corners - three files here, one `STEPS` release (see below) |
 | `PADDLE`, `TUTORIALPADDLE` | `lisp/paddle/` | Finds concave perimeter features and inserts pad blocks |
+| `POOLPERIM`, `POOLPERIMSCAN`, `POOLPERIMVER` | `lisp/poolperim/` | Strips a finished drawing back to the pool and nothing else: the outermost closed loop it can chain out of the lines, arcs and polylines in the tab becomes the perimeter, redrawn as one closed polyline on `POOL` (ByLayer, arcs kept as bulges), and everything else is erased -- except dimensions in `CROSS DIM*` wherever they sit, and `STANDARD` / `SIDE STANDARD` ones whose every attachment point lands on that perimeter. Then it hands the result to `PADDLE`. A trace that stopped short of closing is shut when its ends finished within `pp:*gap*`. It reports what it found and what it would drop -- by style, so nothing goes silently -- and asks before erasing, defaulting to `No`; `POOLPERIMSCAN` prints the same report and changes nothing |
 | `PERPPTS`, `CPERPPTS`, ... | `lisp/perp_points/` | Perpendicular offset points along a line or curve, joined with straight segments, arcs or a mix of both; asks whether the overall width has been re-measured, and has a repeat-on-the-new-polyline step |
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
 | `DCE`, `DIMCONTEND` | `lisp/dim_continue/` | Chains `DIMCONTINUE` from a seed dimension out to every remaining feature point |
@@ -127,7 +128,7 @@ changing a routine.
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 | `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
 | `LAZFORM`, `LAZFORMVER` | `lisp/lazform/` | Fill a dimension chart in and draw the pool from it. Six charts - Rectangle, True Oval, Roman, both Grecians and True L Left - each the one off the paper: outline, hopper, dimension chain with its letters. The chart is the background: it is sliced into horizontal bands and each dimension's box is wedged into the band its letter sits on, so you type the number where the letter is on the paper. Corners get a dropdown each - `Square`, `Radius`, `Cut`, `NotGiven` - and the size box beside it un-greys only for `Radius` and `Cut`. Fill in what you know, leave the rest blank, press Insert: `POOL` runs and asks only for the gaps. `NA` in a box means not measured and is passed through as such; a blank box just means ask. Drawn with `vector_image` from a table of lines, so there is no artwork file to ship - see `lisp/lazform/README.md` |
-| `LAZPANEL`, `LAZBUTTON`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 51 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Buttons are grouped Layout / Points / Dimensions / Checking (the same four group names as the VB palette); a command not loaded in this session is greyed out. A click closes the panel and runs the command exactly as if typed. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
+| `LAZPANEL`, `LAZBUTTON`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 53 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Buttons are grouped Layout / Points / Dimensions / Checking (the same four group names as the VB palette); a command not loaded in this session is greyed out. A click closes the panel and runs the command exactly as if typed. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
 
 ### Going back a step
 
@@ -274,7 +275,7 @@ everything else releases one file per source.
 
 The palette needs its DLL `NETLOAD`ed on every machine. For a
 button panel with nothing to install, see `lisp/lazpanel/` above:
-`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 51
+`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 53
 headline drafting commands, and puts its own one-button toolbar on
 screen to open it; the VB palette remains the richer surface (docks,
 stays open while a tool runs, POOL/SPA forms).
@@ -339,6 +340,9 @@ python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
+python3 tests/test_poolperim.py       # POOLPERIM - the outermost loop, the
+                                      # keep rules, the strip, and its
+                                      # chaining port checked against PADDLE's
 python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
                                       # just made, in the same lispvm
 python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
