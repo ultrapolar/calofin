@@ -344,16 +344,24 @@ def check_page(name):
                for d in vm.globals['t:*alldims*']}
     body_lines = d
     pos = None
+    expect = False          # a wedge row IMMEDIATELY follows its band
     for line in body_lines:
         t2 = line.strip()
         if re.match(r': image \{ key = "chart\d+"', t2):
+            expect = True
             pos = None
-        elif t2 == ': row {' and pos is None:
+        elif expect and t2 == ': row {':
             pos = 0.0
+            expect = False
+        elif expect:
+            expect = False
         elif pos is not None:
             m = re.match(r': spacer \{ width = ([0-9.]+); \}', t2)
             if m:
                 pos += float(m.group(1))
+                continue
+            if t2 == '}':
+                pos = None
                 continue
             m = re.match(r': edit_box \{ key = "([^"]+)"; label = "([^"]+)"; '
                          r'edit_width = 6', t2)
@@ -541,6 +549,73 @@ print("   a tab reopens on the other chart, keeps what was typed,")
 print("   and puts the dialog back where the user had dragged it")
 
 
+print("== corners: dropdown, un-greying size box, packing ==")
+
+
+# an alist pair is a Dot when it has a value and a one-element LIST
+# when it does not -- (cons 'g nil) is the list (g)
+def pair(p):
+    return (str(p.a), p.b) if isinstance(p, Dot) else (str(p[0]), None)
+
+
+# structure: Rectangle and L carry corner rows, the rest none
+for c in charts:
+    name = str(c[0])
+    d = page(name)
+    text = '\n'.join(d)
+    vm.loads('(setq t:*cor* (lzf:corners (lzf:chart "%s")))' % name)
+    cors = [str(x[0]) for x in (vm.globals.get('t:*cor*') or [])]
+    for stem in cors:
+        assert re.search(r': popup_list \{ key = "%s"' % stem, text), \
+            "%s: no dropdown for %s" % (name, stem)
+        assert re.search(r': edit_box \{ key = "%s-sz"' % stem, text), \
+            "%s: no size box for %s" % (name, stem)
+    if not cors:
+        assert 'Corners' not in text, \
+            "%s: a Corners section with nothing in it" % name
+assert [str(x[0]) for x in vm.globals['lzf:*corners*']] == ['Rectangle', 'L']
+print("   Rectangle and L carry corner rows; the others none")
+
+# picking a sized treatment un-greys the size box; picking Square
+# greys it again -- driven through the REAL action expression
+vmc = stubbed()
+vmc.loads('(setq stub:*type* \'(("cornera" "3")))'
+          '(setq t:*f* (lzf:show "Rectangle"))')
+modes = [(str(a[0]), int(a[1])) for a in (vmc.globals.get('stub:*mode*') or [])]
+assert ('cornera-sz', 0) in modes, \
+    "picking Cut did not un-grey the size box: %r" % modes
+vmc2 = stubbed()
+vmc2.loads('(setq stub:*type* \'(("cornera" "1")))'
+          '(setq t:*f* (lzf:show "Rectangle"))')
+modes = [(str(a[0]), int(a[1])) for a in (vmc2.globals.get('stub:*mode*') or [])]
+assert ('cornera-sz', 1) in modes and ('cornera-sz', 0) not in modes, \
+    "picking Square should leave the size box greyed: %r" % modes
+print("   Cut un-greys its size box; Square keeps it greyed")
+
+# packing: (ask) sends nothing; Square sends the treatment alone;
+# Cut sends treatment + size when the size parses
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+         '(setq lzf:*vals* nil lzf:*cvals* nil)'
+         '(lzf:cput "cornera" 3) (lzf:put "cornera-sz" "24")'
+         '(lzf:cput "cornerb" 1)'
+         '(lzf:cput "cornerc" 2)'      # Radius, size left empty
+         '(setq t:*f* (lzf:form "Rectangle" nil "Normal"))')
+form = dict(pair(p2) for p2 in vm.globals['t:*f*'])
+assert str(form.get('cornera-ty')) == 'Cut' and \
+    abs(float(form['cornera-sz']) - 24.0) < 1e-9, form
+assert str(form.get('cornerb-ty')) == 'Square' and 'cornerb-sz' not in form
+assert str(form.get('cornerc-ty')) == 'Radius' and 'cornerc-sz' not in form, \
+    "an empty size box must send the treatment alone (POOL asks the size)"
+assert 'cornerd-ty' not in form, "(ask) sent a corner it should not have"
+# in-square: corner A's row speaks for all four, under the one key
+vm.loads('(setq t:*f2* (lzf:form "Rectangle" T "Normal"))')
+form2 = dict(pair(p2) for p2 in vm.globals['t:*f2*'])
+assert str(form2.get('corners-ty')) == 'Cut' and \
+    abs(float(form2['corners-sz']) - 24.0) < 1e-9, form2
+assert 'cornera-ty' not in form2 and 'cornerc-ty' not in form2, form2
+print("   (ask)/Square/Radius/Cut all pack the way POOL reads them")
+
+
 print("== the three-state answer contract ==")
 # NOTE on the feet-inch case: this VM's distof only takes the leading
 # number off a string, where AutoCAD's mode 4 reads the whole
@@ -619,7 +694,14 @@ def snapshot(vm):
 # M/L/K are typed in both runs, so what is being compared is the route
 # the answers took, not the answers.
 TYPED = [('tp', '240'), ('bo', '240'), ('le', '120'), ('ri', '120'),
-         ('h', '30'), ('f', '180'), ('c', '40'), ('d', '60')]
+         ('h', '30'), ('f', '180'), ('c', '40'), ('d', '60'),
+         # the corners through the GUI: every dropdown to Cut (index 3)
+         # with 24 in its size box -- what the prompt run types as
+         # "Cut", 24 and six Enter-defaults
+         ('cornera', '3'), ('cornera-sz', '24'),
+         ('cornerb', '3'), ('cornerb-sz', '24'),
+         ('cornerc', '3'), ('cornerc-sz', '24'),
+         ('cornerd', '3'), ('cornerd-sz', '24')]
 CORNERS = ["Cut", 24.0, None, None, None, None, None, None]
 CROSS = ["Ends", 260.0, 260.0, 260.0, 260.0]
 REST = [None, 60.0, None]                      # M takes its suggestion, L, K
@@ -633,15 +715,16 @@ vm.loads('(setq stub:*type* \'(%s))'
 # value read back after the dialog closes would not survive this test
 try:
     # no chart prompt any more -- the tab strip picks the chart
+    # no corner answers in this script: the dropdowns supplied them
     vm.run('c:LAZFORM',
-           [(0.0, 0.0, 0.0)] + CORNERS + CROSS + ["Yes"] + REST)
+           [(0.0, 0.0, 0.0)] + CROSS + ["Yes"] + REST)
 except LispError as e:
     raise AssertionError("form run: %s" % e) from None
 a = snapshot(vm)
 assert a, "the form run drew nothing"
 assert not vm.globals.get('pool:*form*'), "pool:*form* survived the run"
 asked = [pr for pr, _ in vm.prompts]
-for gone in ('\nPool shape', '\nBottom type'):
+for gone in ('\nPool shape', '\nBottom type', '\nCorner '):
     assert not any(pr.startswith(gone) for pr in asked), \
         "%r was asked even though the chart answered it" % gone
 assert not any(pr.startswith('\nH -') or pr.startswith('\nC -')
@@ -661,6 +744,7 @@ assert a == b, (
     "the prompts" % (len(a), len(b)))
 print("   %d entities, identical from the chart and from the command line"
       % len(a))
-print("   and the chart's answers were not asked for again")
+print("   and the chart's answers -- corners included -- were not")
+print("   asked for again")
 
 print("ALL LAZFORM TESTS PASSED")
