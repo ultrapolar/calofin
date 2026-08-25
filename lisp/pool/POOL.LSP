@@ -83,7 +83,16 @@
 ;;;           more tightly.
 ;;;  L/LazyL: six-corner pools with one wing (square step joint for
 ;;;           the true L, angled joint for the lazy L); six sides plus
-;;;           up to six cross dims, best-fit the same way.
+;;;           up to six cross dims, best-fit the same way.  An
+;;;           IN-SQUARE lazy L is built rather than fitted: the main
+;;;           section A-B / E-F / F-A (the deep end, where the hopper
+;;;           is measured from) is held EXACTLY and comes out a true
+;;;           rectangle, the 45-degree bends B-C and D-E stay
+;;;           parallel, and whatever the six measurements fail to
+;;;           close by is spread over the three WING sides.  Past the
+;;;           1" side tolerance that is a bad tape, so those sides are
+;;;           dimensioned red, listed red in the report and called out
+;;;           as "SIDES DO NOT CLOSE" under it.
 ;;;
 ;;;  Every cross-dim prompt also accepts NA when that measurement was
 ;;;  not taken in the field: the fitter skips it and the report shows
@@ -111,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV10")
+(setq pool:*version* "082526 REV11")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -515,7 +524,7 @@
 ;;;  A block of related measurements runs through pool:askseq so every
 ;;;  prompt after the first also offers *Back*, which re-asks the
 ;;;  previous question -- a typo no longer means Esc and start over.
-;;;  Each item: (key kind msg ents dflt skip skipmsg)
+;;;  Each item: (key kind msg ents dflt skip skipmsg sug)
 ;;;    key   symbol the answer is stored under
 ;;;    kind  REQ  a value is required
 ;;;          NAX  NA accepted (returns nil)
@@ -525,6 +534,15 @@
 ;;;    dflt  for SUG: a number, or a list of keys -- the first of those
 ;;;          keys with a non-nil answer supplies the suggestion
 ;;;    skip  optional quoted expression; non-nil -> answered 0.0 unasked
+;;;    sug   optional quoted expression, evaluated just before asking
+;;;          (it sees the answers so far, in ans): a number from it is
+;;;          the suggestion -- one WORKED OUT from what has been given
+;;;          rather than copied off another letter, e.g. the last
+;;;          member of a chain, which is whatever the total has left.
+;;;          It beats dflt, and it turns a plain NA question into one
+;;;          Enter can answer.  A REQ or ZER question keeps its kind:
+;;;          those two mean something about what is a valid answer,
+;;;          not about what is offered.
 
 (defun pool:sq (ans key) (cdr (assoc key ans)))
 
@@ -536,6 +554,39 @@
   (foreach k keys
     (if (and (not out) (pool:sq ans k)) (setq out (pool:sq ans k))))
   out)
+
+;; What a chain has LEFT for its last member: the total less every
+;; other member, once all of them have been answered.  This is the
+;; suggestion a crew gets when the second-to-last letter of a loop
+;; goes in -- H, G and F given means E can only be one number, so it
+;; is offered rather than asked for cold (Enter takes it, NA still
+;; leaves it to pool:chainfix, and typing over it still wins).
+;;
+;; nil unless every named key carries a real answer and what is left
+;; is a length that could be built: a chain already over its total
+;; must not suggest a negative offset, and one that lands on the total
+;; exactly has nothing left to suggest.
+(defun pool:chainrest (ans keys total / out k v)
+  (setq out total)
+  (foreach k keys
+    (if out
+        (if (setq v (pool:sq ans k))
+            (setq out (- out v))
+            (setq out nil))))
+  (if (and out (> out 1.0e-6)) out))
+
+;; M answered the same as H is the crew saying the deep end sits
+;; SQUARE in the pool -- the same offset off every wall -- so the
+;; hopper width is what is left with that offset taken off both sides:
+;; 2M + L = A.  Suggest it; anything else (M measured different from
+;; H, or either one not given) has nothing to say about L and asks.
+(defun pool:sugsym (ans total / m h rest)
+  (setq m (pool:sq ans 'm)
+        h (pool:sq ans 'h))
+  (if (and m h (equal m h 0.5))
+      (progn
+        (setq rest (- total (* 2.0 m)))
+        (if (> rest 1.0e-6) rest))))
 
 ;;; -------------------- form answers -----------------------------------
 ;;;
@@ -843,7 +894,7 @@
   (setq ans (pool:askseqb items nil))
   ans)
 
-(defun pool:askseqb (items bk / ans i n it v dflt asked out)
+(defun pool:askseqb (items bk / ans i n it v dflt asked out kind sg)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items))
@@ -853,14 +904,22 @@
           (setq ans (pool:sqput ans (car it) 0.0)
                 i (1+ i)))
         (progn
-          (setq dflt (nth 4 it))
+          (setq dflt (nth 4 it)
+                kind (cadr it))
           (if (and dflt (listp dflt))
               (setq dflt (pool:sqfirst ans dflt)))
+          ;; a suggestion WORKED OUT from the answers so far -- the one
+          ;; member a chain has left, say -- beats one copied off
+          ;; another letter, and lets a plain NA question be answered
+          ;; with Enter
+          (if (and (nth 7 it) (setq sg (eval (nth 7 it))))
+              (setq dflt sg
+                    kind (if (eq kind 'NAX) 'SUG kind)))
           ;; the form answers first, and its answer is consumed --
           ;; see "form answers" above for why removing beats marking
           (setq v (if (pool:fhas (car it))
                       (pool:ftake (car it))
-                      (pool:asks (cadr it) (caddr it) (cadddr it) dflt
+                      (pool:asks kind (caddr it) (cadddr it) dflt
                                  (if (or asked bk) t nil))))
           (if (eq v 'POOL-BACK)
               (if asked
@@ -2393,24 +2452,84 @@
             f (pool:v- e (list (nth 4 sides) 0.0))))
   (list a b c d e f))
 
-;; In-square lazy L: hold the direction of every side EXACTLY so the
-;; two parallel pairs stay parallel (A-B // E-F and B-C // D-E), rather
-;; than letting the relaxation bend the corners to absorb closure
-;; error.  The chain A->B->C->D->E is walked at the exact headings
-;; (0, 45, 135, 225 degrees) with the measured lengths, then F drops
-;; straight down from E onto the left wall (F = (0, Ey)).  Any closure
-;; error therefore lands in the LENGTHS of E-F and F-A (visible in the
-;; report as small deltas), never in the angles.
-(defun pool:hexsquare (sides / u ab bc cd de a b c d e f)
+;; In-square lazy L: the DEEP END is what has to be right.  The hopper
+;; sits in the main section (A - break - E - F) and is dimensioned off
+;; A-B, E-F and F-A, so those three are held EXACTLY and the main body
+;; comes out a true rectangle -- A-B and E-F dead horizontal, F-A dead
+;; vertical, square corners at A and F.
+;;
+;; That leaves the wing to absorb whatever the tape did not close.
+;; B-C and D-E are held PARALLEL (both on the 45-degree bend), so the
+;; only freedom left is how far C and D slide along their own bend
+;; lines: one number, m -- the slide of D relative to C, measured
+;; along the bend.  It is picked to spread the closure error over the
+;; three wing sides in the least-squares sense: B-C and D-E give up
+;; half of it each (one grows exactly as much as the other shrinks)
+;; and C-D takes what is left.  Every one of those deltas shows in the
+;; report, red past pool:*side-tol* (see the SIDES DO NOT CLOSE note).
+;;
+;; The old build walked the whole chain A->B->C->D->E at exact headings
+;; and dropped F onto the left wall, which piled the entire closure
+;; error into E-F and F-A -- the two sides the hopper is measured
+;; from, and the two that must not move.
+
+;; Summed squared length error of the three wing sides at slide m.
+;; m0 is the slide the taped B-C / D-E would have; (vx vy) is B->E,
+;; the wing's closing vector, so C-D comes to |(vx+m, vy+m)|.  B-C and
+;; D-E split (m - m0) between them, which lands their two squared
+;; errors at exactly (m - m0)^2 together.
+(defun pool:hexwing (m m0 vx vy cd / g)
+  (setq g (sqrt (max 0.0 (+ (* 2.0 m m) (* 2.0 m (+ vx vy))
+                            (* vx vx) (* vy vy)))))
+  (+ (* (- m m0) (- m m0)) (* (- g cd) (- g cd))))
+
+(defun pool:hexsquare (sides / u ab bc cd de ef fa a b c d e f vx vy m0
+                             lo hi n i step m fm bm bf m1 m2 sl s1 s2)
   (setq u 0.7071067812
-        ab (nth 0 sides) bc (nth 1 sides)
-        cd (nth 2 sides) de (nth 3 sides)
+        ab (nth 0 sides) bc (nth 1 sides) cd (nth 2 sides)
+        de (nth 3 sides) ef (nth 4 sides) fa (nth 5 sides)
         a (list 0.0 0.0)
-        b (list ab 0.0))
-  (setq c (pool:v+ b (list (* bc u) (* bc u)))
-        d (pool:v+ c (list (* cd (- u)) (* cd u)))
-        e (pool:v+ d (list (* de (- u)) (* de (- u))))
-        f (list 0.0 (cadr e)))
+        b (list ab 0.0)
+        f (list 0.0 fa)
+        e (list ef fa)
+        vx (- (car e) (car b))
+        vy (- (cadr e) (cadr b))
+        m0 (* u (- de bc))
+        ;; C stays past B and D past E: the slide can never eat more
+        ;; than a bend side's own length (a hair inside, so neither
+        ;; collapses to nothing)
+        lo (+ (- m0 (* 2.0 u de)) 0.001)
+        hi (- (+ m0 (* 2.0 u bc)) 0.001)
+        n 240
+        step (/ (- hi lo) n)
+        bm m0
+        bf (pool:hexwing m0 m0 vx vy cd)
+        i 0)
+  ;; coarse sweep first -- the wing error is a squared distance to a
+  ;; circle and can hold two dips, so start the polish in the deeper
+  ;; one rather than wherever a local slope points
+  (while (<= i n)
+    (setq m (+ lo (* i step))
+          fm (pool:hexwing m m0 vx vy cd))
+    (if (< fm bf) (setq bf fm bm m))
+    (setq i (1+ i)))
+  ;; ternary polish inside the winning bucket
+  (setq lo (max lo (- bm step))
+        hi (min hi (+ bm step))
+        i 0)
+  (while (< i 40)
+    (setq m1 (+ lo (/ (- hi lo) 3.0))
+          m2 (- hi (/ (- hi lo) 3.0)))
+    (if (< (pool:hexwing m1 m0 vx vy cd) (pool:hexwing m2 m0 vx vy cd))
+        (setq hi m2)
+        (setq lo m1))
+    (setq i (1+ i)))
+  (setq m (* 0.5 (+ lo hi))
+        sl (/ (- m m0) (* 2.0 u))     ; what each bend side gives up
+        s1 (- bc sl)
+        s2 (+ de sl)
+        c (pool:v+ b (list (* s1 u) (* s1 u)))
+        d (pool:v+ e (list (* s2 u) (* s2 u))))
   (list a b c d e f))
 
 ;; Side constraints (banded by +/-band) for the hexagon.
@@ -2461,7 +2580,8 @@
 (defun pool:fithex (sides diags lazy stol xtol / guess p1 e1 p2 e2 any dg)
   ;; In-square lazy L (no cross dims measured): build the shape at
   ;; exact headings instead of relaxing, so A-B // E-F and B-C // D-E
-  ;; hold perfectly and closure error goes to the E-F / F-A lengths.
+  ;; hold perfectly and the closure error goes into the WING lengths,
+  ;; leaving the deep-end sides (A-B, E-F, F-A) true -- pool:hexsquare.
   (setq any nil)
   (foreach dg diags (if dg (setq any t)))
   (if (and lazy (not any))
@@ -2549,7 +2669,7 @@
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast hxg
                             octy ocsz icty icsz oc ic hcs hce hcarcs ock
-                            rbox mprims mlbls)
+                            rbox mprims mlbls soff)
   (setq oldclay (getvar "CLAYER"))
   ;; The live guide geometry (see "live guide reshaping"): each side
   ;; answered so far is held, every side still open takes its nominal
@@ -2729,7 +2849,31 @@
   (pool:pvkill)
 
   ;; pts / res / failed were fit at the top of hx:corners, so the
-  ;; corner questions could be sized against the real corner angles
+  ;; corner questions could be sized against the real corner angles.
+  ;;
+  ;; soff = every side the fit could not build to the tape.  The
+  ;; in-square lazy L pushes closure error into the wing ON PURPOSE
+  ;; (pool:hexsquare), so a small delta there is the design working --
+  ;; but six measurements that miss each other by more than
+  ;; pool:*side-tol* are a bad tape, not a fit, and saying so is the
+  ;; whole point of the report.  Those sides are drawn with a red
+  ;; dimension, listed red in the table, and called out underneath.
+  ;; The trip point carries pool:fithexr's own 0.05 slack, so a side
+  ;; the out-of-square fit legitimately flexed to the edge of its
+  ;; +/-side-tol band is not reported as a bad measurement.
+  (setq soff nil k 0)
+  (foreach pr pool:*hexsides*
+    (if (> (abs (- (distance (nth (car pr) pts) (nth (cadr pr) pts))
+                   (nth k sides)))
+           (+ pool:*side-tol* 0.05))
+        (setq soff (cons k soff)))
+    (setq k (1+ k)))
+  (setq soff (reverse soff))
+  (if soff
+      (pool:valnote
+        (strcat "SIDES DO NOT CLOSE - "
+                (pool:fixnames soff pool:*hexsidenames*)
+                " OFF THE TAPE, RE-MEASURE")))
   (setq notes nil
         xmin (apply 'min (mapcar 'car pts))
         xmax (apply 'max (mapcar 'car pts))
@@ -2793,6 +2937,10 @@
         (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
                      (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
                                    pts doff)))
+    ;; a side the tape could not close reads its BUILT length, so the
+    ;; dimension goes red like any other measurement the validator had
+    ;; to move
+    (if (member k soff) (pool:dimred))
     (setq k (1+ k)))
   ;; corner annotations: one Typ. callout on an outer corner (B), the
   ;; inner corner E dimensioned on its own.  B carries its own fitted
@@ -2842,9 +2990,11 @@
   ;; report table
   (setq rows nil k 0)
   (foreach pr pool:*hexsides*
-    (setq rows (cons (list (strcat "SIDE " (nth k pool:*hexsidenames*))
-                           (nth k sides)
-                           (distance (nth (car pr) pts) (nth (cadr pr) pts)))
+    (setq rows (cons (pool:vrow (strcat "SIDE " (nth k pool:*hexsidenames*))
+                                (nth k sides)
+                                (distance (nth (car pr) pts)
+                                          (nth (cadr pr) pts))
+                                k soff)
                      rows)
           k (1+ k)))
   (if (not pool:*insq*)
@@ -2921,9 +3071,13 @@
     (setq mlbls (append mlbls (list (cons p (nth (length mlbls) lbls))))))
   (pool:minimap mprims pts mlbls (+ (car rbox) (* 3.0 th)) (cadr rbox)
                 (* 24.0 th) th)
-  (if failed
-      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
-      (princ "\nPool layout complete -- see the report table."))
+  (cond
+    (failed
+     (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***"))
+    (soff
+     (princ (strcat "\n*** SIDES DO NOT CLOSE -- deep end held true, the wing"
+                    " carries the error, see report table ***")))
+    (t (princ "\nPool layout complete -- see the report table.")))
   (princ))
 
 ;;; -------------------- report table -----------------------------------
@@ -3963,7 +4117,7 @@
                        / pv h g f e m l k gg tl odl sp whn hdn nom
                          hraw graw fraw eraw mraw lraw kraw wh dp c2
                          a b c d cen toth totv hres vres skipe rows
-                         cv hfx vfx ans lmode2 toth2)
+                         cv hfx vfx ans lmode2 toth2 totv2)
   (setq sp (pool:btmspec style))
   ;; wall-to-wall totals through the pool centre: B1 along the run,
   ;; V1 across it
@@ -4003,9 +4157,16 @@
   (princ "\n(after the first answer, Back re-asks the previous one)")
   ;; L pools: when H+G+F are all given and already span the main
   ;; section (B1), the break lands on the inner corner and E is moot.
-  ;; H, M and K are usually the same offset, so M/K suggest the last
-  ;; one entered -- Enter accepts it.
-  (setq lmode2 lmode toth2 toth
+  ;;
+  ;; Suggestions, all taken with Enter and all still typeable over:
+  ;;   * H, M and K are usually the same offset, so M suggests H;
+  ;;   * the LAST member of either chain is arithmetic once the rest
+  ;;     are in -- E is what B1 has left of H+G+F, K what A has left
+  ;;     of M+L -- so it is offered rather than asked for cold;
+  ;;   * M answered the same as H says the deep end sits square in the
+  ;;     pool, which fixes L at A - 2M (pool:sugsym).
+  ;; Between them a squarely-set hopper is four Enters.
+  (setq lmode2 lmode toth2 toth totv2 totv
         ans (pool:askseq
               (append
                 (list (list 'h 'NAX "H - left end to deep end" (cdr (assoc "H" pv))))
@@ -4028,11 +4189,14 @@
                                                      (pool:sq ans 'f))
                                                   toth2))
                                           0.5)))
-                            "\nH + G + F span the main section -- E not needed.")
+                            "\nH + G + F span the main section -- E not needed."
+                            '(pool:chainrest ans '(h g f) toth2))
                       (list 'm 'SUG "M - top side to deep end" (cdr (assoc "M" pv)) '(h))
-                      (list 'l 'NAX "L - deep end width" (cdr (assoc "L" pv)))
+                      (list 'l 'NAX "L - deep end width" (cdr (assoc "L" pv))
+                            nil nil nil '(pool:sugsym ans totv2))
                       (list 'k 'SUG "K - deep end to bottom side"
-                            (cdr (assoc "K" pv)) '(m h)))))
+                            (cdr (assoc "K" pv)) '(m h) nil nil
+                            '(pool:chainrest ans '(m l) totv2)))))
         hraw (pool:sq ans 'h) graw (pool:sq ans 'g) fraw (pool:sq ans 'f)
         eraw (pool:sq ans 'e) mraw (pool:sq ans 'm) lraw (pool:sq ans 'l)
         kraw (pool:sq ans 'k)
@@ -4219,11 +4383,14 @@
 (defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax doff th
                       / wid whn hdn ggn pv e2r f2r gr f1r e1r mraw lraw kraw
                         wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
-                        brks tl xd nopad cv hfx vfx ans)
+                        brks tl xd nopad cv hfx vfx ans total2 wid2)
   (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
                       (pool:linex cen (cadr lline) (car tline) (cadr tline)))
         whn (* 0.25 wid)
-        hdn (* 0.55 wid))
+        hdn (* 0.55 wid)
+        ;; the two chain totals under names of their own, for the
+        ;; suggestion expressions below to read
+        total2 total wid2 wid)
   ;; nominal guide: plan + profile (padded proportions -- whether the
   ;; pool has a pad is only known once G is answered)
   (setq ggn (pool:hopsportc lline rline bline tline cen
@@ -4261,11 +4428,13 @@
                     (list 'g 'ZER "G - deep flat length, 0 = no hopper pad"
                           (cdr (assoc "G" pv)))
                     (list 'f1 'NAX "F1 - right slope" (cdr (assoc "F1" pv)))
-                    (list 'e1 'NAX "E1 - right end shallow flat" (cdr (assoc "E1" pv)))
+                    (list 'e1 'NAX "E1 - right end shallow flat" (cdr (assoc "E1" pv))
+                          nil nil nil '(pool:chainrest ans '(e2 f2 g f1) total2))
                     (list 'm 'NAX "M - top side to deep flat" (cdr (assoc "M" pv)))
                     (list 'l 'NAX "L - deep flat width" (cdr (assoc "L" pv)))
                     (list 'k 'SUG "K - deep flat to bottom side"
-                          (cdr (assoc "K" pv)) '(m))))
+                          (cdr (assoc "K" pv)) '(m) nil nil
+                          '(pool:chainrest ans '(m l) wid2))))
         e2r (pool:sq ans 'e2) f2r (pool:sq ans 'f2) gr (pool:sq ans 'g)
         f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
         mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
@@ -4509,7 +4678,7 @@
                                               h g f e m l k r3 r3raw w tt o
                                               hraw graw fraw eraw mraw lraw kraw
                                               totv hres vres cv hfx vfx r3wbad
-                                              ans xmin xmax ymin ymax)
+                                              ans xmin xmax ymin ymax len2 totv2)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
@@ -4539,16 +4708,32 @@
           (pool:pvtie (cadddr quad) (caddr quad) "T" th)))
         (princ "\nPool bottom -- offsets along the pool axis; the RED tie is being asked for.")
         (princ "\n(after the first answer, Back re-asks the previous one)")
+        ;; the two chain totals -- tip to tip along the pool, wall to
+        ;; wall across it -- are worked out BEFORE the questions now,
+        ;; so the last letter of each chain can be suggested as it is
+        ;; reached rather than only resolved afterwards
+        (setq len2 (distance tipl tipr)
+              totv (distance
+                     (pool:linex (pool:mid (car quad) (caddr quad))
+                                 (pool:v- (cadddr quad) (car quad))
+                                 (car quad) (pool:v- (cadr quad) (car quad)))
+                     (pool:linex (pool:mid (car quad) (caddr quad))
+                                 (pool:v- (cadddr quad) (car quad))
+                                 (cadddr quad) (pool:v- (caddr quad) (cadddr quad))))
+              totv2 totv)
         (setq ans (pool:askseq
                     (list (list 'h 'NAX "H - pool left tip to hopper tip" (cdr (assoc "H" pv)))
                           (list 'g 'NAX "G - hopper length (tip to right edge)" (cdr (assoc "G" pv)))
                           (list 'r3 'NAX "R3 - hopper end radius" (cdr (assoc "R3" pv)))
                           (list 'w 'NAX "W - hopper flat top" (cdr (assoc "W" pv)))
                           (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
-                          (list 'e 'NAX "E - slope break to pool right tip" (cdr (assoc "E" pv)))
+                          (list 'e 'NAX "E - slope break to pool right tip" (cdr (assoc "E" pv))
+                                nil nil nil '(pool:chainrest ans '(h g f) len2))
                           (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
-                          (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv)))
-                          (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h))
+                          (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv))
+                                nil nil nil '(pool:sugsym ans totv2))
+                          (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h)
+                                nil nil '(pool:chainrest ans '(m l) totv2))
                           (list 'tt 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g) r3raw (pool:sq ans 'r3)
               w (pool:sq ans 'w) fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
@@ -4556,14 +4741,8 @@
               tt (pool:sq ans 'tt))
         (pool:pvkill)
         ;; resolve against tip-to-tip length and side-to-side width
-        (setq totv (distance
-                     (pool:linex (pool:mid (car quad) (caddr quad))
-                                 (pool:v- (cadddr quad) (car quad))
-                                 (car quad) (pool:v- (cadr quad) (car quad)))
-                     (pool:linex (pool:mid (car quad) (caddr quad))
-                                 (pool:v- (cadddr quad) (car quad))
-                                 (cadddr quad) (pool:v- (caddr quad) (cadddr quad))))
-              hres (pool:chainfix (list hraw graw fraw eraw) (distance tipl tipr) 1)
+        ;; (both measured out above, before the questions)
+        (setq hres (pool:chainfix (list hraw graw fraw eraw) (distance tipl tipr) 1)
               vres (pool:chainfix (list mraw lraw kraw) totv 1)
               cv (pool:chainval hres (distance tipl tipr))
               hres (car cv) hfx (cadr cv)
@@ -4759,7 +4938,7 @@
                                    h g f e m l k w l1 x co coraw xcal sixbad
                                    hraw graw fraw eraw mraw lraw kraw
                                    cen p u vv toth totv hres vres cv hfx vfx ans
-                                   xmin xmax ymin ymax mm ud proj)
+                                   xmin xmax ymin ymax mm ud proj toth2 totv2)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
@@ -4815,6 +4994,21 @@
                                     "X" th))))))
         (princ "\nPool bottom -- offsets from the end walls; the RED tie is being asked for.")
         (princ "\n(after the first answer, Back re-asks the previous one)")
+        ;; wall-to-wall totals through the pool centre, worked out
+        ;; BEFORE the questions so the last letter of each chain can be
+        ;; suggested as it is reached rather than only resolved after
+        (setq cen (list 0.0 0.0))
+        (foreach p pts (setq cen (pool:v+ cen p)))
+        (setq cen (pool:v* cen 0.125)
+              u (pool:v- (nth 1 pts) (nth 0 pts))
+              vv (pool:v- (nth 5 pts) (nth 0 pts))
+              toth (distance
+                     (pool:linex cen u (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
+                     (pool:linex cen u (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts))))
+              totv (distance
+                     (pool:linex cen vv (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
+                     (pool:linex cen vv (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts))))
+              toth2 toth totv2 totv)
         (setq ans (pool:askseq
                     (append
                       (list (list 'h 'NAX "H - left end to hopper" (cdr (assoc "H" pv)))
@@ -4833,31 +5027,22 @@
                                (list 'x 'NAX "X - hopper cut face length (check)"
                                      (cdr (assoc "X" pv))))))
                       (list (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
-                            (list 'e 'NAX "E - slope break to right end" (cdr (assoc "E" pv)))
+                            (list 'e 'NAX "E - slope break to right end" (cdr (assoc "E" pv))
+                                  nil nil nil '(pool:chainrest ans '(h g f) toth2))
                             (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
-                            (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv)))
+                            (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv))
+                                  nil nil nil '(pool:sugsym ans totv2))
                             (list 'k 'SUG "K - hopper to bottom side"
-                                  (cdr (assoc "K" pv)) '(m h)))))
+                                  (cdr (assoc "K" pv)) '(m h) nil nil
+                                  '(pool:chainrest ans '(m l) totv2)))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g)
               coraw (pool:sq ans 'co)
               w (pool:sq ans 'w) l1 (pool:sq ans 'l1) x (pool:sq ans 'x)
               fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
               mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k))
         (pool:pvkill)
-        ;; resolve against wall-to-wall totals (end wall to end wall,
-        ;; side to side) through the pool centre
-        (setq cen (list 0.0 0.0))
-        (foreach p pts (setq cen (pool:v+ cen p)))
-        (setq cen (pool:v* cen 0.125)
-              u (pool:v- (nth 1 pts) (nth 0 pts))
-              vv (pool:v- (nth 5 pts) (nth 0 pts))
-              toth (distance
-                     (pool:linex cen u (nth 7 pts) (pool:v- (nth 6 pts) (nth 7 pts)))
-                     (pool:linex cen u (nth 2 pts) (pool:v- (nth 3 pts) (nth 2 pts))))
-              totv (distance
-                     (pool:linex cen vv (nth 0 pts) (pool:v- (nth 1 pts) (nth 0 pts)))
-                     (pool:linex cen vv (nth 5 pts) (pool:v- (nth 4 pts) (nth 5 pts))))
-              hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
+        ;; resolve against the wall-to-wall totals measured out above
+        (setq hres (pool:chainfix (list hraw graw fraw eraw) toth 1)
               vres (pool:chainfix (list mraw lraw kraw) totv 1)
               cv (pool:chainval hres toth) hres (car cv) hfx (cadr cv)
               cv (pool:chainval vres totv) vres (car cv) vfx (cadr cv)
