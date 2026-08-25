@@ -95,6 +95,54 @@ assert len(drawn(vm, 'LINE', 'POOL')) >= 9    # perimeter + hopper + ties
 assert drawn(vm, 'TEXT', 'POOL-NOTES')        # labels + report
 print("   perimeter, hopper and report all drawn")
 
+print("== R1b. the last letter of each chain is offered, not asked ==")
+# H, G, F given -> E is what the length has left; M suggests H; M the
+# same as H says the hopper sits square, which fixes L at A - 2M; and
+# M + L given -> K is what the width has left.  Four Enters.
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Square",
+          "Yes", "Normal",
+          60.0, 90.0, 210.0,      # H G F -> E = 480 - 360
+          None,                   # E: Enter takes 120
+          None, None, None],      # M (=H 60), L (240 - 2*60), K (240 - 180)
+         "R1b")
+
+
+def _sugg(letter):
+    """The <number> a prompt offered, or None if it asked cold."""
+    for p, a in vm.prompts:
+        if p.lstrip().startswith(letter + " -") and " <" in p:
+            return float(p.split(" <")[1].split(">")[0])
+    return None
+
+
+assert _sugg("E") == 120.0, vm.prompts
+assert _sugg("M") == 60.0
+assert _sugg("L") == 120.0          # 2M + L = A
+assert _sugg("K") == 60.0           # A - M - L
+for _lbl, _want in (("HOP E", "120.00"), ("HOP M", "60.00"),
+                    ("HOP L", "120.00"), ("HOP K", "60.00")):
+    _row = reportrow(vm, _lbl)
+    assert _row[1] == _want and _row[2] == _want, (_lbl, _row)
+print("   E, M, L and K all offered; four Enters closed both chains")
+
+print("== R1c. M measured off H leaves L alone, K still adds up ==")
+# The 2M + L = A suggestion is the crew SAYING the pool is square about
+# the hopper -- M different from H says nothing about L, so L is asked
+# cold.  K is still the width's remainder, and no longer just "same as M".
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Square",
+          "Yes", "Normal",
+          60.0, 90.0, 210.0, None,
+          40.0,                   # M measured, and not H
+          120.0,                  # L asked cold
+          None],                  # K = 240 - 40 - 120 = 80, not M
+         "R1c")
+assert _sugg("L") is None, "L must be asked cold when M is not H"
+assert _sugg("K") == 80.0, vm.prompts
+assert reportrow(vm, "HOP K")[1] == "80.00"
+print("   L asked cold; K offered the remainder (80), not M (40)")
+
 print("== R2. rectangle, out-of-square, Cut corners, Ends mode, wedge ==")
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,        # TOP BOTTOM LEFT RIGHT

@@ -305,6 +305,29 @@ offset, so once one is entered the next offers it as a default —
 press Enter to accept, type a number to override, `NA` as always.
 (Sport bottoms do the same between `M` and `K`.)
 
+**The last letter of a chain is worked out for you.** Each loop closes
+against a total the pool already knows — H+G+F+E against the length,
+M+L+K against the width — so once every other member is in, the last
+one can only be one number, and that number is the default:
+
+* `H`, `G` and `F` given → **`E`** is offered as what the length has
+  left (on an L pool where they already span the main section, `E`
+  isn't even asked — the break lands on the inner corner);
+* `M` and `L` given → **`K`** is offered as what the width has left,
+  in place of the plain "same as M" default;
+* the sport bottom does the same for **`E1`** (after E2/F2/G/F1) and
+  for **`K`**.
+
+**`M` answered the same as `H` fixes `L`.** The same offset off the
+end wall and the side is the crew saying the deep end sits **square in
+the pool**, which leaves the hopper width as `A - 2M` (i.e. `2M + L =
+A`) — so that is what `L` offers. Measure `M` different from `H` and
+`L` is asked cold, as before.
+
+Every one of these is a *suggestion*: Enter takes it, a typed number
+overrides it, `NA` still hands the letter to the chain resolver. A
+squarely-set hopper is now `H`, `G`, `F` and four Enters.
+
 **Oval (True Oval sheet):** same phase, prompting the interior letters
 only (A, B, R1, R2 come from the perimeter). The hopper is a box with
 a radius **R3** left end set out along the pool axis (arc tip to arc
