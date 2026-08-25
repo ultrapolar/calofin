@@ -87,8 +87,10 @@ Spa do not name, and the test recomputes that complement from the tree
 -- so a tool added to the panel and forgotten on the job pages shows up
 as a Rest omission instead of quietly falling out of the workflow.
 
-A **tab strip** across the top switches pages: jobs on the first row,
-categories on the second. That is both what they mean and what keeps
+A **tab strip** across the top switches pages: two labelled boxed rows,
+`Job` (Pool / Cover / Spa / Rest) and `Or by category` (Layout / Points
+/ Dimensions / Checking) -- they are not eight equal things, and the
+labels say so. That is both what they mean and what keeps
 the strip narrow -- eight tabs on one row run about 94 character cells,
 and DCL will not scroll a dialog wider than the screen. Two rows put
 the widest at 54.
@@ -102,12 +104,45 @@ repeats), so it still reports the whole 56 and not 125. The panel
 reopens where you left it rather than jumping back to the middle of the
 screen.
 
+**The panel reopens itself.** Click a button, the panel closes, the
+tool runs to its own end, and the panel comes straight back -- on the
+page and at the screen position it was at, with the session re-probed
+so a tool loaded meanwhile is no longer greyed. Close is the way out,
+and it is the default button. DCL dialogs are modal, so the panel still
+has to close while a tool runs; what it no longer needs is you typing
+`LAZPANEL` again afterwards.
+
+A tool you cancel with Escape comes back to the panel exactly as a
+finished one does. A tool that dies with a hard error does **not** --
+its own error handler runs, the panel stays closed, and `LAZPANEL`
+brings it back. That is the right way round: the alternative is a panel
+bouncing back in front of the error you are trying to read.
+
+**The Pinned row.** Pins are the answer to "I run four of these
+fifty-six all day": ticked tools sit in a row at the top of *every*
+page, in the order you pinned them, so the ones you actually use stop
+being three tabs apart. `Pin...` on the row opens the editor -- every
+tool as a toggle, three columns -- and so does the `LAZPIN` command.
+The list is remembered under
+`HKEY_CURRENT_USER\Software\Calofin\LazPanel`, beside the key the
+multi-file loader already uses, so it survives the session. Cancel in
+the editor re-reads the stored list rather than unwinding the ticks one
+by one. A pin naming a tool that no longer exists is dropped on read,
+so an old pin cannot put a dead button on screen.
+
+Pins wrap onto as many rows as they need. That is not cosmetic: the
+pinned row is on every page and is the one part of the panel you can
+make arbitrarily wide, and a DCL dialog that is too wide does not clip
+-- it fails to open. Eight of the longest tool names would be a
+150-cell row; packed, they are two rows of 83 or less, and the test
+holds that line.
+
 Clicking a button closes the panel and runs that command exactly as if
 its name had been typed -- the panel adds nothing in front of a tool and
 nothing behind it. A command that is not loaded in this session shows as
 a greyed button instead of one that would fail, and the status line
-across the top says how many tools the session has. `LAZPANELVER`
-prints the loaded version.
+across the top says how many tools the session has. `LAZPANELVER` prints the loaded version, the page count and how many
+tools are pinned.
 
 **The screen button.** Loading the file also puts a one-button toolbar
 named "LazPanel" on screen -- drag it anywhere or dock it like any
@@ -150,7 +185,7 @@ assembly loaded on every machine.
 APPLOAD `LAZPANEL.lsp` on its own, or load `shared/LAZPASS.lsp`, which
 carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
-re-summon the button.
+re-summon the button, or `LAZPIN` to choose the pinned tools.
 
 ## Assumptions
 

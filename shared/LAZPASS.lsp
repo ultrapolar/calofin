@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 47 files, 111 commands:
+;;; 47 files, 112 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABHDCOVER
 ;;;   ABMOVE  ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM
@@ -19,16 +19,16 @@
 ;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
 ;;;   DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
 ;;;   HEMISTEP  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON
-;;;   LAZPANEL  LAZPANELVER  LHD  LINCHECK  LINFINCHECK  LINFINCHECKRESCUE
-;;;   LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
-;;;   NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS  POOL
-;;;   POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM
-;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
-;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
-;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
-;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV
-;;;   XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   LAZPANEL  LAZPANELVER  LAZPIN  LHD  LINCHECK  LINFINCHECK
+;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN
+;;;   LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS
+;;;   POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER
+;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
+;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST
+;;;   XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -61180,6 +61180,7 @@
 ;;; Commands:  LAZPANEL       open the panel
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
+;;;            LAZPIN         choose the pinned tools
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -61232,8 +61233,12 @@
 ;;; session has.
 ;;;
 ;;; DCL dialogs are modal, so the panel cannot stay open while a tool
-;;; runs the way a docked palette can: click, the panel closes, the tool
-;;; runs, LAZPANEL reopens it.  The *SCAN companions are on the panel;
+;;; runs the way a docked palette can -- but it no longer has to be
+;;; reopened by hand: click, the panel closes, the tool runs to its own
+;;; end, and the panel COMES BACK on the page and at the screen position
+;;; it was at.  Close is the way out, and is the default button.  A
+;;; PINNED row on every page carries the handful of tools you actually
+;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.  The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
 ;;; walkthroughs, *VER reporters, *RESCUE undo companions, -CFG /
 ;;; -SETUP partners) stay off on purpose, and so does the DD*
@@ -61246,11 +61251,12 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.0")
+(setq *lazpanel-version* "v2.1")
 
 ;;; -------------------- the roster --------------------------------------
-;;  One entry per button: (label (command caption) ...) per group.  The
-;;  rules for what belongs here:
+;;  Two tables: lzp:*captions* names every command once, and
+;;  lzp:*groups* lays the pages out in columns of those names.  The
+;;  rules for what belongs on the panel at all:
 ;;    - every headline drafting command under lisp/ gets a button;
 ;;    - satellites do not: TUTORIAL* walkthroughs, *VER reporters,
 ;;      *RESCUE undo companions, -CFG / -SETUP partners, DCE (alias of
@@ -61279,6 +61285,10 @@
 ;;  within a page, and each page is its own dialog, so this is free --
 ;;  but lzp:commands has to fold the repeats or the status line would
 ;;  count the roster twice over.
+;;
+;;  The job pages are laid out in COLUMNS, which is the other half of
+;;  the same idea: a job is not a flat list of two dozen tools, it is
+;;  four short lists in the order you reach for them.
 ;;
 ;;  "Rest" is not a hand-kept list: it is every command the Pool, Cover
 ;;  and Spa pages do not name, and the test recomputes that complement
@@ -61548,8 +61558,8 @@
 ;; pages themselves are still lzp:*groups*.  The test asserts the two
 ;; tables name exactly the same groups, so neither can drift.
 (setq lzp:*rows*
-  '(("Pool" "Cover" "Spa" "Rest")
-    ("Layout" "Points" "Dimensions" "Checking")))
+  '(("Job"            "Pool" "Cover" "Spa" "Rest")
+    ("Or by category" "Layout" "Points" "Dimensions" "Checking")))
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
@@ -61559,6 +61569,9 @@
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
+(setq lzp:*page* nil)             ; the page the panel reopens on
+(setq lzp:*pins* nil)             ; the pinned tools, in pin order
+(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -61617,12 +61630,69 @@
 ;; of the screen.
 (defun lzp:tabstrip ( / out r g)
   (foreach r lzp:*rows*
-    (setq out (cons "  : row {" out))
-    (foreach g r
+    (setq out (cons "  : boxed_row {" out))
+    (setq out (cons (strcat "    label = \"" (car r) "\";") out))
+    (foreach g (cdr r)
       (setq out (cons (strcat "    : button { key = \"tab_" g
                               "\"; label = \"" g "\"; }")
                       out)))
     (setq out (cons "  }" out)))
+  (reverse out))
+
+;;; -------------------- the pinned row ----------------------------------
+;;  Pins are the answer to "I run four of these fifty-six all day": the
+;;  tools you tick sit on EVERY page, in the order you pinned them, so
+;;  the ones you actually use stop being three tabs apart.
+;;
+;;  A pinned button carries a "pin_" key so it cannot collide with the
+;;  same tool's own button further down the page, and it is greyed by
+;;  the same availability probe.
+;;
+;;  WIDTH.  The pinned row is generated DCL like everything else, and a
+;;  handful of long names abreast -- LITESPACHECKSCAN is sixteen
+;;  characters -- would push the dialog past the width DCL refuses to
+;;  scroll, which does not clip the page, it stops it opening at all.
+;;  So pins are packed greedily into as many rows as they need, with
+;;  the Pin... button packed last like any other item.  Pin thirty
+;;  tools and you get a tall panel, never a broken one.
+(setq lzp:*pinbudget* 84)
+
+(defun lzp:pin-label (n) (strcat "    : button { label = \"" n
+                                 "\"; key = \"pin_" n "\"; }"))
+
+;; (name width) for every pinned tool, then the editor button last.
+(defun lzp:pin-items ( / out n)
+  (foreach n lzp:*pins* (setq out (cons n out)))
+  (reverse (cons "*edit*" out)))
+
+(defun lzp:pinrows ( / out row w n cw items)
+  (setq items (lzp:pin-items) row nil w 0)
+  (foreach n items
+    (setq cw (+ (strlen (if (= n "*edit*") "Pin..." n)) 6))
+    (if (and row (> (+ w cw) lzp:*pinbudget*))
+      (setq out (cons (reverse row) out) row nil w 0))
+    (setq row (cons n row) w (+ w cw)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
+
+(defun lzp:pinrow ( / out rows r n first)
+  (setq rows (lzp:pinrows) first t)
+  (foreach r rows
+    (setq out (cons "  : boxed_row {" out))
+    ;; only the first row is labelled: two boxes both saying "Pinned"
+    ;; would read as two different things
+    (setq out (cons (strcat "    label = \""
+                            (if first "Pinned" "") "\";") out))
+    (foreach n r
+      (setq out
+        (cons (if (= n "*edit*")
+                "    : button { label = \"Pin...\"; key = \"pin_edit\"; }"
+                (lzp:pin-label n))
+              out)))
+    (if (and first (not lzp:*pins*))
+      (setq out (cons "    : text { label = \"nothing pinned yet\"; }" out)))
+    (setq out (cons "  }" out))
+    (setq first nil))
   (reverse out))
 
 ;; One page per group.  The whole roster is still one list -- the pages
@@ -61637,6 +61707,7 @@
                           "  -  " (car g) "\";")
                   (strcat (lzp:dlgname (car g)) " : dialog {")))
   (setq out (append (reverse (lzp:tabstrip)) out))
+  (setq out (append (reverse (lzp:pinrow)) out))
   (cond
     ;; ONE COLUMN: the page has the width to spare, so every button
     ;; carries its caption -- this is what the category pages are for.
@@ -61671,11 +61742,42 @@
                   out))
   (reverse (cons "}" out)))
 
-;; Every page, one after another, in one generated file.
+;; The pin editor: every tool on the panel as a toggle, in three
+;; columns so fifty-six of them fit on a screen rather than a scroll
+;; DCL would not give.
+(defun lzp:dcl-pins ( / out cmds n per i j c)
+  (setq cmds (lzp:commands)
+        n    (length cmds)
+        per  (1+ (/ (1- n) 3))
+        i    0)
+  (setq out (list "lazpanel_pins : dialog {"
+                  "  label = \"LazPanel  -  pinned tools\";"
+                  (strcat "  : text { label = \"Ticked tools sit in the "
+                          "Pinned row on every page.\"; }")
+                  "  : row {"))
+  (while (< i n)
+    (setq out (append out (list "    : column {")) j 0)
+    (while (and (< j per) (< i n))
+      (setq c (nth i cmds))
+      (setq out (append out
+        (list (strcat "      : toggle { label = \"" c
+                      "\"; key = \"tg_" c "\"; }"))))
+      (setq i (1+ i) j (1+ j)))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }" "  spacer;"
+          (strcat "  : row { alignment = centered; "
+                  ": button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; } "
+                  ": button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; } }")
+          "}")))
+
+;; Every page, then the pin editor, in one generated file.
 (defun lzp:dcl-lines ( / out g)
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
-  out)
+  (append out (lzp:dcl-pins) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -61701,6 +61803,61 @@
 ;; Run a roster command by name, exactly as if it had been typed.  The
 ;; probe guards the greyed-button race: a command that vanished between
 ;; opening the panel and clicking reports itself instead of erroring.
+(defun lzp:split (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (if (/= cur "") (setq out (cons cur out))) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (if (/= cur "") (setq out (cons cur out)))
+  (reverse out))
+
+;; Read the pins back, dropping any name no longer on the roster: a pin
+;; left over from an older build must not put a dead button on screen,
+;; and the roster is the only thing that says what is real.
+(defun lzp:pins-read ( / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Pins")))
+  (setq lzp:*pins*
+    (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+      (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
+                        (lzp:split s ";"))))
+  lzp:*pins*)
+
+(defun lzp:pins-write ( / s n)
+  (setq s "")
+  (foreach n lzp:*pins*
+    (setq s (strcat s (if (= s "") "" ";") n)))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Pins" s))
+  lzp:*pins*)
+
+;; Pin order is click order: a newly ticked tool goes on the END rather
+;; than jumping into the middle of a row the hand has already learned.
+(defun lzp:pin-toggle (name val)
+  (if (= val "1")
+    (if (not (member name lzp:*pins*))
+      (setq lzp:*pins* (append lzp:*pins* (list name))))
+    (setq lzp:*pins* (vl-remove name lzp:*pins*)))
+  (princ))
+
+;; The toggle dialog.  Cancel re-reads the registry rather than trying
+;; to undo the ticks one by one -- the stored list is the truth, so
+;; going back to it is exact where unwinding would be approximate.
+(defun lzp:pin-edit (dcl / n rc)
+  (cond
+    ((not (new_dialog "lazpanel_pins" dcl)) nil)
+    (t
+     (foreach n (lzp:commands)
+       (set_tile (strcat "tg_" n) (if (member n lzp:*pins*) "1" "0"))
+       (action_tile (strcat "tg_" n)
+                    (strcat "(lzp:pin-toggle \"" n "\" $value)")))
+     (action_tile "accept" "(done_dialog 1)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:pins-write) (lzp:pins-read))
+     t)))
+
 (defun lzp:launch (name / fn)
   (setq fn (read (strcat "C:" name)))
   (cond
@@ -62062,9 +62219,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
     (princ))
-  (setq lzp:*pick* nil
-        lzp:*pos* nil
-        g (car (car lzp:*groups*)))
+  ;; NOT reset here: the panel reopens after every tool it launches, and
+  ;; coming back to page one in the middle of the screen each time would
+  ;; undo the whole point of reopening.  lzp:*page* and lzp:*pos* are
+  ;; where the user last had it.
+  (setq lzp:*pick* nil)
+  (if (not (and lzp:*page* (assoc lzp:*page* lzp:*groups*)))
+    (setq lzp:*page* (car (car lzp:*groups*))))
+  (setq g lzp:*page*)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
@@ -62080,7 +62242,8 @@
           (princ "\nLAZPANEL error: could not open the panel.")
           (setq done t))
          (t
-          (setq have (lzp:loaded))
+          (setq lzp:*page* g
+                have (lzp:loaded))
           (set_tile "status"
                     (strcat (itoa (length have)) " of "
                             (itoa (length (lzp:commands)))
@@ -62090,6 +62253,15 @@
               "(setq lzp:*pick* $key lzp:*pos* (done_dialog 1))")
             (if (not (member n have))
               (mode_tile n 1)))
+          ;; the pinned row: same launch, its own keys, greyed the same
+          ;; way -- $key would read "pin_POOL", so the name is baked in
+          (foreach n lzp:*pins*
+            (action_tile (strcat "pin_" n)
+              (strcat "(setq lzp:*pick* \"" n
+                      "\" lzp:*pos* (done_dialog 1))"))
+            (if (not (member n have))
+              (mode_tile (strcat "pin_" n) 1)))
+          (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
           (foreach n lzp:*groups*
             (action_tile (strcat "tab_" (car n))
               (strcat "(setq lzp:*go* \"" (car n)
@@ -62097,7 +62269,13 @@
           (action_tile "cancel" "(setq lzp:*pos* (done_dialog 0))")
           (setq rc (start_dialog))
           (cond
-            ((= rc 4) (setq g lzp:*go*))      ; a tab: go round again
+            ((= rc 4) (setq g lzp:*go* lzp:*page* lzp:*go*))  ; a tab
+            ;; the pin editor runs on the same loaded handle, then the
+            ;; caller reopens: the Pinned row is generated DCL, so it
+            ;; only changes when the file is written again
+            ((= rc 5)
+             (lzp:pin-edit dcl)
+             (setq done t out "*pins*"))
             (t (setq done t
                      out (if (= rc 1) lzp:*pick*)))))))))
   ;; the dialog and its temp file go away BEFORE anything is launched,
@@ -62122,9 +62300,42 @@
 
 ;;; -------------------- commands ----------------------------------------
 
+;;  THE REOPEN.  A DCL dialog is modal, so the panel still has to close
+;;  for a tool to run -- but it no longer has to be reopened by hand.
+;;  The loop is the feature: click, the panel closes, the tool runs to
+;;  its own end, the panel comes straight back on the page and at the
+;;  screen position it was at, with the session re-probed so a tool
+;;  loaded meanwhile is no longer greyed.  Close is the way out, and it
+;;  is the default button.
+;;
+;;  A tool cancelled with Escape comes back here exactly as a finished
+;;  one does: lzp:launch has already returned by then, so the reopen is
+;;  not conditional on the tool having succeeded.  A tool that dies with
+;;  a hard error DOES end the loop -- its own *error* runs, the panel
+;;  simply does not come back, and LAZPANEL reopens it.  That is the
+;;  right way round: the alternative is a panel that keeps bouncing back
+;;  in front of someone trying to read the error it just printed.
 (defun c:LAZPANEL ( / pick)
-  (if (setq pick (lzp:show))
-    (lzp:launch pick))
+  (lzp:pins-read)
+  (while (setq pick (lzp:show))
+    (if (/= pick "*pins*")
+      (lzp:launch pick)))
+  (princ))
+
+;; Open the pin editor on its own, without going through the panel.
+(defun c:LAZPIN ( / f dcl)
+  (lzp:pins-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZPIN error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZPIN error: could not load the dialog file."))
+    (t
+     (lzp:pin-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
 (defun c:LAZBUTTON ( / tb)
@@ -62195,17 +62406,21 @@
 
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
-                 (itoa (length (lzp:commands))) " tools on the panel."))
+                 (itoa (length (lzp:commands))) " tools on the panel across "
+                 (itoa (length lzp:*groups*)) " pages, "
+                 (itoa (length lzp:*pins*)) " pinned."))
   (princ))
 
 ;; Put the button up as the file loads, quietly: in a session where
 ;; the COM menu API is missing the panel still loads and LAZPANEL
 ;; still runs -- the button is a convenience, never a gate.
 (vl-catch-all-apply 'lzp:button-init nil)
+(vl-catch-all-apply 'lzp:pins-read nil)
 
 (princ (strcat "\nLAZPANEL " *lazpanel-version*
                " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen."))
+               " LAZBUTTON puts its button on screen;"
+               " LAZPIN edits the pinned row."))
 (princ)
 
 
@@ -62230,7 +62445,7 @@
   "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG"
   "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP"
   "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
-  "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
