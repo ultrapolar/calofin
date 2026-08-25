@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_082526_REV29-31-23.lsp
+;;; STEPS_082526_REV29-31-24.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -10,7 +10,7 @@
 ;;;
 ;;;     CORNERSTP.lsp   v2.9 -> REV29   CORNERSTP, TUTORIALCORNERSTP
 ;;;     HEMISTEP.lsp    v3.1 -> REV31   HEMISTEP, TUTORIALHEMISTEP
-;;;     NORMIESTEP.lsp  v2.3 -> REV23   NORMIESTEP, TUTORIALNORMIESTEP
+;;;     NORMIESTEP.lsp  v2.4 -> REV24   NORMIESTEP, TUTORIALNORMIESTEP
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -2910,7 +2910,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v2.3) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v2.4) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -2998,9 +2998,13 @@
 ;;;       Cut one stops the walls an offset short and the corner
 ;;;       piece finishes the trip.  In corner mode only the outer side
 ;;;       is drawn - with its back corner flare at the wall - since the
-;;;       steps run outward from the corner and the picked line closes
-;;;       the inner side.  The U already has its arms, so only a back
-;;;       corner asked for there is drawn.
+;;;       steps run outward from the corner and the line they sit
+;;;       against closes the inner side.  That outer side runs OUTWARD
+;;;       with the treads: it is the line they sit against offset by
+;;;       the step width, not a line square to the base, so it still
+;;;       meets every tread end where the corner is not a true 90.
+;;;       The U already has its arms, so only a back corner asked for
+;;;       there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
 ;;;       plus the step width once (it is the same for every step).
 ;;;   8.  Optionally a SIDE PROFILE: you give the STEP DEPTHS - the
@@ -3065,7 +3069,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.3") ; printed on load and at command start so a
+(setq *ns-version* "v2.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -3574,7 +3578,7 @@
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
-                        tt cnrs ca cb pfo)
+                        tt cnrs ca cb pfo lastinn)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -4066,11 +4070,26 @@
          (ns-mkline e (ns-add e (ns-scl dir (- cum coff))))
          (if (> coff 0.0)
            (ns-outer e u dir cum rtype coff)))
-        ;; the outer side only - the steps run outward from the corner,
-        ;; so the picked line closes the inner side already
+        ;; The outer side only - the steps run outward from the
+        ;; corner, so the line they sit against closes the inner side
+        ;; already.  That outer side is the line they sit against
+        ;; OFFSET by the step width, NOT a line square to the base:
+        ;; the treads all start on the leaning line and run outward
+        ;; from it, so a square side wall would lean into the run and
+        ;; miss every tread end but the first.  PPREV is the last
+        ;; tread that actually landed, so a step taken Back cannot
+        ;; leave this pointing at one that was undone.
         ((= mode "CORNER")
-         (ns-side (ns-add corner (ns-scl u wid))
-                  u dir cum rtype roff rrad))
+         (setq lastinn (inters pprev (ns-add pprev u)
+                               (car side) (cadr side) nil))
+         (if (null lastinn)
+           (princ (strcat "\n  Note: the run does not reach the line it"
+                          " sits against - no outer side drawn."))
+           (ns-side (ns-add corner (ns-scl u wid))
+                    u
+                    (ns-unit (ns-vec corner lastinn))
+                    (distance corner lastinn)
+                    rtype roff rrad)))
         ;; a U has its arms drawn already - only a back corner asked for
         ;; here is new geometry
         ((and (= mode "U") bc1 bc2)
