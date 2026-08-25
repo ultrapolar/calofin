@@ -804,6 +804,31 @@ BUILTINS[Sym('angle')] = lambda vm, a: math.atan2(
 BUILTINS[Sym('polar')] = lambda vm, a: [pt(a[0])[0] + a[2] * math.cos(a[1]),
                                         pt(a[0])[1] + a[2] * math.sin(a[1])]
 
+
+@bi('inters')
+def _inters(vm, a):
+    """(inters p1 p2 p3 p4 [onseg]) -- where the two lines cross, in
+    plan.  With onseg absent or non-nil the crossing must lie on both
+    segments; an explicit nil intersects the INFINITE lines, which is
+    how the drafting routines project a tread onto a wall."""
+    (x1, y1), (x2, y2) = pt(a[0])[:2], pt(a[1])[:2]
+    (x3, y3), (x4, y4) = pt(a[2])[:2], pt(a[3])[:2]
+    d1x, d1y = x2 - x1, y2 - y1
+    d2x, d2y = x4 - x3, y4 - y3
+    den = d1x * d2y - d1y * d2x
+    if abs(den) < 1e-12:
+        return NIL
+    t = ((x3 - x1) * d2y - (y3 - y1) * d2x) / den
+    u = ((x3 - x1) * d1y - (y3 - y1) * d1x) / den
+    if (len(a) < 5 or truthy(a[4])) \
+            and not (-1e-9 <= t <= 1.0 + 1e-9 and -1e-9 <= u <= 1.0 + 1e-9):
+        return NIL
+    return [x1 + t * d1x, y1 + t * d1y, 0.0]
+
+
+# vector graphics: previews the VM has no screen for
+BUILTINS[Sym('grdraw')] = lambda vm, a: NIL
+
 # strings
 @bi('strcat')
 def _strcat(vm, a):

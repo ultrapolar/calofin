@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_082526_REV27-30-22.lsp
+;;; STEPS_082526_REV28-30-22.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,7 +8,7 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v2.7 -> REV27   CORNERSTP, TUTORIALCORNERSTP
+;;;     CORNERSTP.lsp   v2.8 -> REV28   CORNERSTP, TUTORIALCORNERSTP
 ;;;     HEMISTEP.lsp    v3.0 -> REV30   HEMISTEP, TUTORIALHEMISTEP
 ;;;     NORMIESTEP.lsp  v2.2 -> REV22   NORMIESTEP, TUTORIALNORMIESTEP
 ;;;
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v2.7) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v2.8) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -40,6 +40,10 @@
 ;;;   within the width tolerance of the wall opening (1/8" by default).
 ;;;   The step DEPTH, by contrast, is the vertical drop of a step - it is
 ;;;   only asked for by the optional side profile at the end of the run.
+;;;   A BENCH can ride along one of the two walls (inside out only): you
+;;;   say which wall, its offset off that wall, and which step it is
+;;;   attached to, and every step past that tread runs to the bench's
+;;;   front edge instead of the wall it stands in for.
 ;;;
 ;;; WORKFLOW
 ;;;   1.  Select the two walls that form the corner.  Walls may be LINEs
@@ -103,14 +107,23 @@
 ;;;           "SIDE STANDARD".
 ;;;       If a style is missing the current style is used and a note is
 ;;;       printed.
-;;;   7.  Enter at a step tread prompt means no more steps are
+;;;   7.  Inside out you may add a BENCH along one of the walls
+;;;       [Yes/No]: pick the wall it sits against, give its offset off
+;;;       that wall (its depth), then the step it is attached to.
+;;;       Steps up to that one meet the wall as usual; the bench's
+;;;       front edge starts on that tread and runs to the far end of
+;;;       its wall, capped there, and every later step is bounded by
+;;;       the front edge instead of the wall - a fitted width now runs
+;;;       wall to bench.  When dimensioning is on the bench's length
+;;;       and offset are dimensioned too.
+;;;   8.  Enter at a step tread prompt means no more steps are
 ;;;       required.  Back at a step tread prompt steps back one step:
 ;;;       it removes the step just drawn (its lines and its dimensions)
 ;;;       so a mistyped number does not cost the whole run (Undo, the
 ;;;       old keyword, is still accepted).  Same repeats the previous
 ;;;       step tread.  Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
-;;;   8.  When at least one step was drawn you may add a SIDE PROFILE.
+;;;   9.  When at least one step was drawn you may add a SIDE PROFILE.
 ;;;       If Yes, you give the step depths (the vertical drops), top
 ;;;       step first - one per step PLUS one more for the drop after
 ;;;       the last tread, so 3 steps take 4 depths.  Enter repeats the
@@ -121,7 +134,7 @@
 ;;;       depths are chained vertically behind the wall with the
 ;;;       overall depth further out again, in the depth dim style.
 ;;;       The treads carry no dims of their own.
-;;;     9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
+;;;     10. Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
 ;;;       step number.  AUTOBEAD does the work on its own rules (2"
@@ -162,7 +175,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.7") ; printed on load and at command start so a
+(setq *cs-version* "v2.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -509,6 +522,8 @@
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
                        bsides btreads bnums bside bdir bss pr be
+                       bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
+                       bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw p2 dx sgn
                        px py totr totd)
 
@@ -801,6 +816,44 @@
                        "\" is missing or not drawable - using the"
                        " current layer.")))))
 
+  ;; ---- 7b. a bench along one wall? (inside out only) ------------------
+  ;; The bench stands in for a stretch of its wall: steps up to the
+  ;; attachment tread meet the wall, the bench's front edge starts on
+  ;; that tread, and every later step is bounded by the front edge
+  ;; instead.  Outside in walks toward the corner without knowing its
+  ;; step count in advance, so the bench is an inside-out feature.
+  (if (not outflag)
+    (progn
+      (initget "Yes No")
+      (if (= "Yes" (getkword "\nAdd a bench along a wall? [Yes/No] <No>: "))
+        (progn
+          (setq tmp (getpoint "\nPick the wall the bench sits against: "))
+          (if (null tmp)
+            (princ "\nNo wall picked - no bench added.")
+            (progn
+              (setq tmp  (trans tmp 1 0)
+                    bnsd (if (<= (cs-ptseg tmp (car w1) (cadr w1))
+                                 (cs-ptseg tmp (car w2) (cadr w2)))
+                           1 2)
+                    bnw  (if (= bnsd 1) w1 w2))
+              (initget 7)
+              (setq bno (getdist "\nBench offset off the wall (its depth): "))
+              (initget 7)
+              (setq bnk (getint (strcat "\nWhich step is the bench attached"
+                                        " to (it ends on that tread): ")))
+              ;; the front edge: the bench's wall shifted into the pool
+              (setq bnrm (cs-unit (cs-perp90 (cs-vec (car bnw) (cadr bnw)))))
+              (if (< (cs-dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
+              (setq bnf  (list (cs-add (car bnw) (cs-scl bnrm bno))
+                               (cs-add (cadr bnw) (cs-scl bnrm bno)))
+                    ;; which end of a normalized step that wall bounds
+                    ;; (1 = the E1 end, 2 = the E2 end)
+                    bnpe (if (> (cs-dot (if (= bnsd 1) d1 d2) perp) 0.0)
+                           2 1))
+              (princ (strcat "\n  Bench: " (rtos bno) " off that wall;"
+                             " steps past step " (itoa bnk)
+                             " run to its front edge."))))))))
+
   ;; ---- 8. prompt for each step and draw it ----------------------------
   (command "_.UNDO" "_Begin")
   (setq undoflag T dist 0.0 n 1 drawn 0
@@ -946,12 +999,17 @@
                                  " - step width <Enter = fit to walls>: ")))
       (setq dist (+ dist dep)                       ; step tread held exactly
             p    (cs-add start (cs-scl bis dist))
-            h1   (inters p (cs-add p perp) (car w1) (cadr w1) nil)
-            h2   (inters p (cs-add p perp) (car w2) (cadr w2) nil)
+            ;; past the bench tread the bench's front edge stands in
+            ;; for the wall it rides along
+            bact (and bnf (> n bnk))
+            bu1  (if (and bact (= bnsd 1)) bnf w1)
+            bu2  (if (and bact (= bnsd 2)) bnf w2)
+            h1   (inters p (cs-add p perp) (car bu1) (cadr bu1) nil)
+            h2   (inters p (cs-add p perp) (car bu2) (cadr bu2) nil)
             nat  (if (and h1 h2) (distance h1 h2))  ; wall opening here
             bey  (if (and h1 h2)
-                   (max (cs-beyond h1 (car w1) (cadr w1))
-                        (cs-beyond h2 (car w2) (cadr w2)))
+                   (max (cs-beyond h1 (car bu1) (cadr bu1))
+                        (cs-beyond h2 (car bu2) (cadr bu2)))
                    0.0)
             tmp  (cs-resolve wid nat h1 h2 p perp n tol)
             e1   (car tmp)
@@ -966,8 +1024,10 @@
                  (cs-dot (cs-vec start e2) perp))
             (setq tmp e1 e1 e2 e2 tmp))
           (cs-mkline e1 e2)          ; the step (tread) edge
-          (cs-conn prevL e1 w1 w2)   ; side lines where the walls
-          (cs-conn prevR e2 w1 w2)   ; do not already close the step
+          ;; side lines where the walls do not already close the step;
+          ;; past the bench tread its front edge closes the bench side
+          (if (not (and bact (= bnpe 1))) (cs-conn prevL e1 w1 w2))
+          (if (not (and bact (= bnpe 2))) (cs-conn prevR e2 w1 w2))
           (if dimflag
             (progn
               (setq w (distance e1 e2))
@@ -991,6 +1051,46 @@
                            slog)
                 tlist (cons dist tlist))))
       (setq n (1+ n))))
+
+  ;; ---- 8b. the bench ---------------------------------------------------
+  ;; Drawn once the treads exist: the front edge starts where the
+  ;; attachment tread crosses it, runs to the far end of its wall and
+  ;; is capped there; the attachment tread itself closes the near end.
+  (if bnf
+    (progn
+      (foreach pr (cs-treadents slog)
+        (if (= (car pr) bnk) (setq bnl (cdr pr))))
+      (cond
+        ((null bnl)
+         (princ (strcat "\nOnly " (itoa drawn) " step(s) landed - step "
+                        (itoa bnk) " does not exist, so no bench was"
+                        " drawn.")))
+        ((progn
+           (setq ed  (entget bnl)
+                 bns (inters (cdr (assoc 10 ed)) (cdr (assoc 11 ed))
+                             (car bnf) (cadr bnf) nil))
+           (null bns))
+         (princ (strcat "\nStep " (itoa bnk) " runs parallel to the"
+                        " bench's front edge - no bench drawn.")))
+        (T
+         (setq bnfar (cs-far bnw corner)
+               bnff  (cs-add bnfar (cs-scl bnrm bno)))
+         (cs-mkline bns bnff)             ; the front edge
+         (cs-mkline bnff bnfar)           ; the cap at the wall's far end
+         (if dimflag
+           (progn
+             ;; its length, placed behind the wall
+             (cs-dim *cs-width-dimstyle* bns bnff
+                     (cs-add (cs-mid2 bns bnff)
+                             (cs-scl bnrm (- (+ bno (* 2.0 txth))))))
+             ;; its offset off the wall, just past the cap
+             (cs-dim *cs-depth-dimstyle* bnfar bnff
+                     (cs-add (cs-mid2 bnfar bnff)
+                             (cs-scl (cs-unit (cs-vec corner bnfar))
+                                     (* 2.0 txth))))))
+         (princ (strcat "\nBench drawn: " (rtos (distance bns bnff))
+                        " along the wall, " (rtos bno)
+                        " off it, ending on step " (itoa bnk) "."))))))
 
   ;; ---- 9. optional side profile ---------------------------------------
   ;; Drawn while the UNDO group is still open and before the entry dim
@@ -1236,12 +1336,18 @@
   (princ "\n     corner, and treads Parallel to the diagonal or square to")
   (princ "\n     the true-angle bisector.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
-  (princ "\n  4. Add a side profile? [Yes/No] - give the step depths, top")
+  (princ "\n  4. Add a bench along a wall? [Yes/No] (inside out) - pick")
+  (princ "\n     the wall it sits against, give its offset off that wall,")
+  (princ "\n     then the step it is attached to.  Steps past that tread")
+  (princ "\n     are bounded by the bench's front edge instead of the")
+  (princ "\n     wall; the bench ends on that tread and runs out to the")
+  (princ "\n     far end of its wall.")
+  (princ "\n  5. Add a side profile? [Yes/No] - give the step depths, top")
   (princ "\n     step first: one per step plus the drop after the last")
   (princ "\n     tread (3 steps take 4 depths).  Then pick the wall top")
   (princ "\n     and which side the steps descend.  The depths and the")
   (princ "\n     overall depth are dimensioned; the treads are not.")
-  (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
+  (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
