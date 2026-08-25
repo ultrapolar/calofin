@@ -60374,7 +60374,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.8")
+(setq *lazform-version* "v1.9")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -60481,7 +60481,8 @@
    (("bo" "overall across, bottom side (out-of-square only)")
     ("ri" "overall up, right end (out-of-square only)")
     ("c"  "C - wall height (shallow depth)")
-    ("d"  "D - deep end depth")))
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 
   ;; ---------------- True Oval ----------------
   ;;  Careful: B is NOT the key it is on the rectangle.  A rectangle's B
@@ -60513,7 +60514,10 @@
     ("rr" "R2 - RIGHT oval end radius")
     ("r3" "R3 - hopper end radius")
     ("bo" "side length BOTTOM (out-of-square only)")
-    ("ri" "end length RIGHT (out-of-square only)")))
+    ("ri" "end length RIGHT (out-of-square only)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 
   ;; ---------------- Roman ----------------
   ;;  S / S1 / V / R are asked once per end when both ends are "perfect"
@@ -60550,7 +60554,10 @@
     ("r3" "R3 - hopper end radius")
     ("sr"  "S - RIGHT end setback (ends not perfect)")
     ("s1r" "S1 - RIGHT corner drop (ends not perfect)")
-    ("vr"  "V - RIGHT end width (ends not perfect)")))
+    ("vr"  "V - RIGHT end width (ends not perfect)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 
   ;; ---------------- Grecian, six-sided hopper ----------------
   ;;  These letters exist only on the Overall input path with a SIX
@@ -60580,7 +60587,10 @@
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
    (("x"  "X - hopper cut face length (check)")
-    ("s2" "S2 - corner cut face (check)"))
+    ("s2" "S2 - corner cut face (check)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break"))
    (("imeth" . "Overall") ("htype" . "SIX") ("hmode" . "Letters")))
 
   ;; ---------------- Grecian, square hopper ----------------
@@ -60605,7 +60615,10 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)"))
+   (("s2" "S2 - corner cut face (check)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break"))
    (("imeth" . "Overall") ("htype" . "Square")))
 
   ;; ---------------- True L Left ----------------
@@ -60638,7 +60651,8 @@
     ("L"  "l"  430 520 430 730 "v" "L - hopper width")
     ("K"  "k"  430 730 430 850 "v" "K - hopper to bottom side"))
    (("c" "C - wall height (shallow depth)")
-    ("d" "D - deep end depth")))
+    ("d" "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 ))
 
 ;;; -------------------- chart access ------------------------------------
@@ -61288,14 +61302,57 @@
   (if (> i n) "" (substr s i (1+ (- n i)))))
 
 ;; The alist POOL reads, built from what was typed.
-(defun lzf:form (shape insq btype / out k v a)
+;;; -------------------- what this bottom actually asks -------------------
+;;;  A bottom type does not ask for every letter on the sheet, and the
+;;;  form offered all of them anyway: type a C against a Normal hopper
+;;;  and POOL never asks for it, so the number goes nowhere and nothing
+;;;  says so.  These grey the boxes the chosen bottom will not reach.
+;;;
+;;;  The truth comes from POOL'S OWN pool:btmspec rather than a copy of
+;;;  it here -- (ask-G ask-E has-profile ask-C2 slack) -- so the two
+;;;  cannot drift.  LAZFORM already refuses to open without POOL loaded,
+;;;  so it is always there to ask.
+;;;
+;;;  SPORT IS THE EXCEPTION, and not a small one.  btmspec's has-profile
+;;;  flag reads nil for Sport, which would say "no C or D" -- but that
+;;;  flag is only ever consulted inside pool:hopnormal, and a Sport
+;;;  never goes near it.  Sport has its own path, which DOES ask C and
+;;;  D, and which asks a different plan chain entirely: E2 F2 G F1 E1 M
+;;;  K, not H G F E.  So on a Sport the chart's H, F and E boxes are
+;;;  greyed: they are not what POOL will ask for, and a number typed
+;;;  into one would be read by nothing.
+(defun lzf:btskip (bt / sp out)
+  (cond
+    ((= bt "Sport") (list "h" "f" "e" "c2"))
+    ((not pool:btmspec) nil)          ; no POOL: grey nothing, ask everything
+    (t
+     (setq sp (pool:btmspec bt))
+     (if (not (car sp))    (setq out (cons "g" out)))
+     (if (not (cadr sp))   (setq out (cons "e" out)))
+     (if (not (caddr sp))  (setq out (append (list "c" "d") out)))
+     (if (not (cadddr sp)) (setq out (cons "c2" out)))
+     out)))
+
+;; Grey every box this bottom will not ask about, un-grey the rest.
+;; Only keys the CURRENT chart carries are touched -- mode_tile on a key
+;; that is not on this page would error.
+(defun lzf:btgrey (c / skip k)
+  (setq skip (lzf:btskip (nth lzf:*btype* lzf:*btypes*)))
+  (foreach k (lzf:keys c)
+    (mode_tile k (if (member k skip) 1 0))))
+
+(defun lzf:form (shape insq btype / out k v a noask)
   (setq out (list (cons 'shape shape)
                   (cons 'insq (if insq "Insquare" "Outofsquare"))))
   (if (and btype (/= btype "")) (setq out (cons (cons 'btype btype) out)))
+  ;; a key this bottom never asks about does not travel: it would sit in
+  ;; the store unread, and a form that quietly carries dead answers is
+  ;; harder to reason about than one that does not
+  (setq noask (lzf:btskip btype))
   (foreach k (lzf:keys lzf:*chart*)
     (setq v (lzf:get k)
           a (lzf:answer v))
-    (if (not (eq a 'SKIP))
+    (if (and (not (eq a 'SKIP)) (not (member k noask)))
         (setq out (cons (cons (read k) a) out))))
   ;; the corners: a dropdown left on (ask) sends nothing, a sized
   ;; treatment carries its size when one parses.  In-square asks ONE
@@ -61421,11 +61478,14 @@
           ;; These two capture their value as it changes: get_tile
           ;; answers about a LIVE dialog, and by the time the answers
           ;; are assembled this one is closed and unloaded.
-          (action_tile "btype" "(setq lzf:*btype* (atoi $value)) (lzf:redraw)")
+          (action_tile "btype"
+            (strcat "(setq lzf:*btype* (atoi $value)) (lzf:redraw)"
+                    " (lzf:btgrey lzf:*chart*)"))
           (action_tile "insq" "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)")
           (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
+          (lzf:btgrey c)
           (setq rc (start_dialog))
           (cond
             ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again
@@ -61562,7 +61622,9 @@
 ;;; end, and the panel COMES BACK on the page and at the screen position
 ;;; it was at.  Close is the way out, and is the default button.  A
 ;;; PINNED row on every page carries the handful of tools you actually
-;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.  The *SCAN companions are on the panel;
+;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
+;;;
+;;; The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
 ;;; walkthroughs, *VER reporters, *RESCUE undo companions, -CFG /
 ;;; -SETUP partners) stay off on purpose, and so does the DD*

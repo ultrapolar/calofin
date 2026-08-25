@@ -64,7 +64,9 @@
 ;;; end, and the panel COMES BACK on the page and at the screen position
 ;;; it was at.  Close is the way out, and is the default button.  A
 ;;; PINNED row on every page carries the handful of tools you actually
-;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.  The *SCAN companions are on the panel;
+;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
+;;;
+;;; The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
 ;;; walkthroughs, *VER reporters, *RESCUE undo companions, -CFG /
 ;;; -SETUP partners) stay off on purpose, and so does the DD*
