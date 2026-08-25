@@ -89,12 +89,15 @@
 ;;;       corner asked for there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
 ;;;       plus the step width once (it is the same for every step).
-;;;   8.  Optionally a SIDE PROFILE: you give each step's STEP DEPTH -
-;;;       its vertical drop, top step first (Enter repeats the previous
-;;;       one, Back steps back) - then pick the top of the wall and the
-;;;       side the steps descend, and the staircase silhouette is drawn
-;;;       in world X/Y, with a drop-dim chain behind the wall and a
-;;;       tread-dim chain along the bottom when dims are on.
+;;;   8.  Optionally a SIDE PROFILE: you give the STEP DEPTHS - the
+;;;       vertical drops, top step first, one per step PLUS one more
+;;;       for the drop after the last tread, so 3 steps take 4 depths
+;;;       (Enter repeats the previous one, Back steps back) - then
+;;;       pick the top of the wall and the side the steps descend,
+;;;       and the staircase silhouette is drawn in world X/Y, ending
+;;;       on that final drop.  When dims are on the depths chain
+;;;       behind the wall with the overall depth further out again;
+;;;       the treads carry no dims of their own.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -133,7 +136,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.1") ; printed on load and at command start so a
+(setq *ns-version* "v2.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1173,10 +1176,12 @@
             (setq prevv tt))
           (setq treads (reverse treads)
                 nsteps (length treads))
-          ;; the drops, top step first, with Back (Undo, the old
-          ;; keyword, is a hidden synonym)
+          ;; the depths, top step first, with Back (Undo, the old
+          ;; keyword, is a hidden synonym): one per step PLUS one
+          ;; more for the drop after the last tread, so 3 steps
+          ;; take 4 depths
           (setq drops nil k 1)
-          (while (<= k nsteps)
+          (while (<= k (1+ nsteps))
             (if (= k 1)
               (progn
                 (initget 7 "Back Undo")
@@ -1184,9 +1189,12 @@
               (progn
                 (initget 6 "Back Undo")
                 (setq dv (getdist
-                           (strcat "\nStep " (itoa k)
-                                   " - step depth [Back] <"
-                                   (rtos (car drops)) ">: ")))))
+                           (if (> k nsteps)
+                             (strcat "\nDepth after the last tread [Back] <"
+                                     (rtos (car drops)) ">: ")
+                             (strcat "\nStep " (itoa k)
+                                     " - step depth [Back] <"
+                                     (rtos (car drops)) ">: "))))))
             (cond
               ((and (= (type dv) 'STR)
                     (or (= dv "Back") (= dv "Undo")))
@@ -1236,20 +1244,31 @@
                               (list (- px0 (* sgn offd))
                                     (- cy (* 0.5 dv)) 0.0)))
                     (setq cy (- cy dv))
-                    ;; ... then the tread, out the way the steps descend
+                    ;; ... then the tread, out the way the steps
+                    ;; descend - no dim of its own: the depths and
+                    ;; the overall depth say it all
                     (ns-mkline (list cx cy 0.0)
                                (list (+ cx (* sgn tt)) cy 0.0))
-                    (if dimflag                  ; one chain along the bottom
-                      (ns-dim *cs-depth-dimstyle*
-                              (list cx cy 0.0)
-                              (list (+ cx (* sgn tt)) cy 0.0)
-                              (list (+ cx (* sgn 0.5 tt))
-                                    (- lowy offd) 0.0)))
                     (setq cx (+ cx (* sgn tt))
                           k  (1+ k)))
+                  ;; the last depth: the drop after the last tread
+                  (setq dv (nth k drops))
+                  (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                  (if dimflag
+                    (ns-dim *cs-depth-dimstyle*
+                            (list cx cy 0.0) (list cx (- cy dv) 0.0)
+                            (list (- px0 (* sgn offd))
+                                  (- cy (* 0.5 dv)) 0.0)))
+                  (if dimflag                    ; the overall depth,
+                    (ns-dim *cs-depth-dimstyle*  ; further out again
+                            (list px0 (cadr wpt) 0.0)
+                            (list px0 lowy 0.0)
+                            (list (- px0 (* sgn (+ offd (* 3.0 txth))))
+                                  (- (cadr wpt) (* 0.5 totdrop)) 0.0)))
                   (princ (strcat "\nSide profile drawn: " (itoa nsteps)
-                                 " step(s), total run " (rtos totrun)
-                                 ", total drop " (rtos totdrop)
+                                 " step(s), " (itoa (length drops))
+                                 " depths, total run " (rtos totrun)
+                                 ", overall depth " (rtos totdrop)
                                  "."))))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
@@ -1394,10 +1413,12 @@
   (princ "\n  4. Step treads, one per step, each from the previous")
   (princ "\n     tread.  Enter = done, Back = step back one (removes")
   (princ "\n     it), Same = repeat the previous step tread.")
-  (princ "\n  5. Add a side profile? [Yes/No] - each step's STEP DEPTH")
-  (princ "\n     (its vertical drop), top step first, then pick the top")
-  (princ "\n     of the wall and the side the steps descend; the")
-  (princ "\n     silhouette is drawn in world X/Y, dims and all.")
+  (princ "\n  5. Add a side profile? [Yes/No] - the STEP DEPTHS, top")
+  (princ "\n     step first: one per step plus the drop after the last")
+  (princ "\n     tread (3 steps take 4 depths).  Then pick the top of")
+  (princ "\n     the wall and the side the steps descend; the")
+  (princ "\n     silhouette is drawn in world X/Y, with the depths and")
+  (princ "\n     the overall depth dimensioned - the treads are not.")
   (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so")
   (princ "\n     the only question is which steps have beaded SIDE")
   (princ "\n     WALLS: [All/Some], and Some takes the step numbers")

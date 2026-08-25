@@ -86,11 +86,15 @@
 ;;;       a wider one still follows its curvature instead of spiking in
 ;;;       to the point where the axis met it.
 ;;;   8.  When steps were drawn you may add a SIDE PROFILE [Yes/No]:
-;;;       give each step's step depth (the vertical drop), top step
-;;;       first, with Back to re-ask the previous one; then pick the
-;;;       top of the wall and the side the steps descend.  The
-;;;       alternating drop/tread silhouette is drawn as lines and, when
-;;;       the plan steps are dimensioned, every drop and tread is too.
+;;;       give the step depths (the vertical drops), top step first -
+;;;       one per step PLUS one more for the drop after the last
+;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
+;;;       previous one; then pick the top of the wall and the side the
+;;;       steps descend.  The alternating drop/tread silhouette ends
+;;;       on that final drop and, when the plan steps are dimensioned,
+;;;       every depth is too - chained behind the wall, the overall
+;;;       depth further out again.  The treads carry no dims of their
+;;;       own.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -134,7 +138,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.9") ; printed on load and at command start so a
+(setq *hs-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1026,18 +1030,23 @@
               (setq treads (append treads (list (- td pv)))))
             (setq pv td))
           (setq tcount (length treads))
-          ;; the drops, top step first, with Back (Undo accepted too)
+          ;; the depths, top step first, with Back (Undo accepted
+          ;; too): one per step PLUS one more for the drop after the
+          ;; last tread, so 3 steps take 4 depths
           (setq jx 1 drops nil)
-          (while (<= jx tcount)
+          (while (<= jx (1+ tcount))
             (if (= jx 1)
               (initget 7 "Back Undo")
               (initget 6 "Back Undo"))
             (setq dd (getdist
-                       (if (= jx 1)
-                         "\nStep 1 - step depth (the drop): "
-                         (strcat "\nStep " (itoa jx)
-                                 " - step depth [Back] <"
-                                 (rtos (car drops)) ">: "))))
+                       (cond
+                         ((= jx 1) "\nStep 1 - step depth (the drop): ")
+                         ((> jx tcount)
+                          (strcat "\nDepth after the last tread [Back] <"
+                                  (rtos (car drops)) ">: "))
+                         (T (strcat "\nStep " (itoa jx)
+                                    " - step depth [Back] <"
+                                    (rtos (car drops)) ">: ")))))
             (cond
               ((and (= (type dd) 'STR)
                     (or (= dd "Back") (= dd "Undo")))
@@ -1093,16 +1102,30 @@
                     (setq py (- py dd)
                           e1 (list px py 0.0)
                           e2 (list (+ px (* sgn td)) py 0.0))
+                    ;; the tread carries no dim of its own - the depths
+                    ;; and the overall depth say it all
                     (hs-mkline e1 e2)          ; the tread
-                    (if dimflag                ; one horizontal chain, below
-                      (hs-dim *cs-depth-dimstyle* e1 e2
-                              (list (+ px (* sgn 0.5 td))
-                                    (- lowy (* 2.0 txth)) 0.0)))
                     (setq px (+ px (* sgn td))
                           jx (1+ jx)))
+                  ;; the last depth: the drop after the last tread
+                  (setq dd (nth jx drops)
+                        e1 (list px py 0.0)
+                        e2 (list px (- py dd) 0.0))
+                  (hs-mkline e1 e2)
+                  (if dimflag
+                    (hs-dim *cs-depth-dimstyle* e1 e2
+                            (list (- (car ptop) (* sgn 2.0 txth))
+                                  (- py (* 0.5 dd)) 0.0)))
+                  (if dimflag                  ; the overall depth,
+                    (hs-dim *cs-depth-dimstyle* ; further out again
+                            (list (car ptop) (cadr ptop) 0.0)
+                            (list (car ptop) lowy 0.0)
+                            (list (- (car ptop) (* sgn 5.0 txth))
+                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0)))
                   (princ (strcat "\nSide profile drawn: " (itoa tcount)
-                                 " step(s), total run " (rtos totrun)
-                                 ", total drop " (rtos totdrop)
+                                 " step(s), " (itoa (length drops))
+                                 " depths, total run " (rtos totrun)
+                                 ", overall depth " (rtos totdrop)
                                  "."))))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
@@ -1235,9 +1258,12 @@
   (princ "\n     or repeats the previous width (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
-  (princ "\n  4. Finally you may add a SIDE PROFILE: give each step depth")
-  (princ "\n     (the vertical drop, top step first, Back supported), then")
-  (princ "\n     pick the top of the wall and the side the steps descend.")
+  (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
+  (princ "\n     (top step first, plus the drop after the last tread, so")
+  (princ "\n     3 steps take 4 depths; Back supported), then pick the")
+  (princ "\n     top of the wall and the side the steps descend.  The")
+  (princ "\n     depths and the overall depth are dimensioned; the")
+  (princ "\n     treads are not.")
   (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")

@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 46 files, 102 commands:
+;;; 46 files, 105 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABMOVE
 ;;;   ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV
@@ -20,13 +20,14 @@
 ;;;   DRONE  FITABHD  FITABHDVER  FLOORDIM  HEMISTEP  LAZBUTTON
 ;;;   LAZFORM  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LHD
 ;;;   LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK
-;;;   NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS  POOL
-;;;   POOLDEMO  POOLVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
-;;;   SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST
-;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
-;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
-;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
-;;;   TYDRN  WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER
+;;;   PADDLE  PERPPTS  POOL  POOLDEMO  POOLVER  SPA
+;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM
+;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
+;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
+;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
+;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV
+;;;   XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -29006,14 +29007,16 @@
 ;;;       step tread.  Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
 ;;;   8.  When at least one step was drawn you may add a SIDE PROFILE.
-;;;       If Yes, you give each step's step depth (its vertical drop),
-;;;       top step first - Enter repeats the previous drop, Back (or
-;;;       Undo) steps back - then pick the top of the wall and which
-;;;       side the steps descend.  The staircase silhouette (drop, then
-;;;       tread, per step) is drawn from the pick; when dimensioning is
-;;;       on the drops are chained vertically behind the wall and the
-;;;       step treads horizontally below the profile, in the depth dim
-;;;       style.
+;;;       If Yes, you give the step depths (the vertical drops), top
+;;;       step first - one per step PLUS one more for the drop after
+;;;       the last tread, so 3 steps take 4 depths.  Enter repeats the
+;;;       previous drop, Back (or Undo) steps back.  Then pick the top
+;;;       of the wall and which side the steps descend.  The staircase
+;;;       silhouette (drop, then tread, per step, ending on that final
+;;;       drop) is drawn from the pick; when dimensioning is on the
+;;;       depths are chained vertically behind the wall with the
+;;;       overall depth further out again, in the depth dim style.
+;;;       The treads carry no dims of their own.
 ;;;     9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -29057,7 +29060,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.6") ; printed on load and at command start so a
+(setq *cs-version* "v2.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -29896,9 +29899,11 @@
           (if (null tds)
             (princ "\nNo usable tread spacing - side profile skipped.")
             (progn
-              ;; ask each step's drop, top step first, with Back support
+              ;; ask the depths, top step first, with Back support:
+              ;; one per step PLUS one more for the drop after the
+              ;; last tread, so 3 steps take 4 depths
               (setq drops nil ix 0)
-              (while (< ix (length tds))
+              (while (<= ix (length tds))
                 (setq pd 'RETRY)
                 (while (eq pd 'RETRY)
                   (if (zerop ix)
@@ -29910,8 +29915,11 @@
                     (progn
                       ;; Undo is the old keyword, kept as a hidden synonym
                       (initget 6 "Back Undo")
-                      (setq pd (getdist (strcat "\nStep " (itoa (1+ ix))
-                                  " - step depth [Back] <"
+                      (setq pd (getdist (strcat
+                                  (if (= ix (length tds))
+                                    "\nDepth after the last tread [Back] <"
+                                    (strcat "\nStep " (itoa (1+ ix))
+                                            " - step depth [Back] <"))
                                   (rtos (car drops)) ">: ")))))
                   (cond
                     ((= (type pd) 'STR)             ; Back or Undo
@@ -29950,27 +29958,40 @@
                         (setq pd (nth ix drops))
                         (cs-mkline (list px py 0.0)
                                    (list px (- py pd) 0.0))
-                        (if dimflag   ; drop dims: one chain behind the wall
+                        (if dimflag   ; depth dims: one chain behind the wall
                           (cs-dim *cs-depth-dimstyle*
                                   (list px py 0.0)
                                   (list px (- py pd) 0.0)
                                   (list (- (car pw) (* sgn 2.0 txth))
                                         (- py (* 0.5 pd)) 0.0)))
                         (setq py (- py pd))
+                        ;; the tread carries no dim of its own - the
+                        ;; depths and the overall depth say it all
                         (cs-mkline (list px py 0.0)
                                    (list (+ px (* sgn s)) py 0.0))
-                        (if dimflag   ; tread dims: one chain along the bottom
-                          (cs-dim *cs-depth-dimstyle*
-                                  (list px py 0.0)
-                                  (list (+ px (* sgn s)) py 0.0)
-                                  (list (+ px (* sgn 0.5 s))
-                                        (- (- (cadr pw) totd) (* 2.0 txth))
-                                        0.0)))
                         (setq px (+ px (* sgn s)) ix (1+ ix)))
+                      ;; the last depth: the drop after the last tread
+                      (setq pd (nth ix drops))
+                      (cs-mkline (list px py 0.0)
+                                 (list px (- py pd) 0.0))
+                      (if dimflag
+                        (cs-dim *cs-depth-dimstyle*
+                                (list px py 0.0)
+                                (list px (- py pd) 0.0)
+                                (list (- (car pw) (* sgn 2.0 txth))
+                                      (- py (* 0.5 pd)) 0.0)))
+                      (setq py (- py pd))
+                      (if dimflag   ; the overall depth, further out again
+                        (cs-dim *cs-depth-dimstyle*
+                                (list (car pw) (cadr pw) 0.0)
+                                (list (car pw) py 0.0)
+                                (list (- (car pw) (* sgn 5.0 txth))
+                                      (- (cadr pw) (* 0.5 totd)) 0.0)))
                       (princ (strcat "\nSide profile drawn: "
                                      (itoa (length tds))
-                                     " step(s), total run " (rtos totr)
-                                     ", total drop " (rtos totd)
+                                     " step(s), " (itoa (length drops))
+                                     " depths, total run " (rtos totr)
+                                     ", overall depth " (rtos totd)
                                      "."))))))))))))
 
   ;; ---- 10. done --------------------------------------------------------
@@ -30103,9 +30124,11 @@
   (princ "\n     corner, and treads Parallel to the diagonal or square to")
   (princ "\n     the true-angle bisector.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
-  (princ "\n  4. Add a side profile? [Yes/No] - give each step's drop")
-  (princ "\n     (its step depth), top step first, then pick the wall top")
-  (princ "\n     and which side the steps descend.")
+  (princ "\n  4. Add a side profile? [Yes/No] - give the step depths, top")
+  (princ "\n     step first: one per step plus the drop after the last")
+  (princ "\n     tread (3 steps take 4 depths).  Then pick the wall top")
+  (princ "\n     and which side the steps descend.  The depths and the")
+  (princ "\n     overall depth are dimensioned; the treads are not.")
   (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
@@ -30309,11 +30332,15 @@
 ;;;       a wider one still follows its curvature instead of spiking in
 ;;;       to the point where the axis met it.
 ;;;   8.  When steps were drawn you may add a SIDE PROFILE [Yes/No]:
-;;;       give each step's step depth (the vertical drop), top step
-;;;       first, with Back to re-ask the previous one; then pick the
-;;;       top of the wall and the side the steps descend.  The
-;;;       alternating drop/tread silhouette is drawn as lines and, when
-;;;       the plan steps are dimensioned, every drop and tread is too.
+;;;       give the step depths (the vertical drops), top step first -
+;;;       one per step PLUS one more for the drop after the last
+;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
+;;;       previous one; then pick the top of the wall and the side the
+;;;       steps descend.  The alternating drop/tread silhouette ends
+;;;       on that final drop and, when the plan steps are dimensioned,
+;;;       every depth is too - chained behind the wall, the overall
+;;;       depth further out again.  The treads carry no dims of their
+;;;       own.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -30357,7 +30384,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v2.9") ; printed on load and at command start so a
+(setq *hs-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -31249,18 +31276,23 @@
               (setq treads (append treads (list (- td pv)))))
             (setq pv td))
           (setq tcount (length treads))
-          ;; the drops, top step first, with Back (Undo accepted too)
+          ;; the depths, top step first, with Back (Undo accepted
+          ;; too): one per step PLUS one more for the drop after the
+          ;; last tread, so 3 steps take 4 depths
           (setq jx 1 drops nil)
-          (while (<= jx tcount)
+          (while (<= jx (1+ tcount))
             (if (= jx 1)
               (initget 7 "Back Undo")
               (initget 6 "Back Undo"))
             (setq dd (getdist
-                       (if (= jx 1)
-                         "\nStep 1 - step depth (the drop): "
-                         (strcat "\nStep " (itoa jx)
-                                 " - step depth [Back] <"
-                                 (rtos (car drops)) ">: "))))
+                       (cond
+                         ((= jx 1) "\nStep 1 - step depth (the drop): ")
+                         ((> jx tcount)
+                          (strcat "\nDepth after the last tread [Back] <"
+                                  (rtos (car drops)) ">: "))
+                         (T (strcat "\nStep " (itoa jx)
+                                    " - step depth [Back] <"
+                                    (rtos (car drops)) ">: ")))))
             (cond
               ((and (= (type dd) 'STR)
                     (or (= dd "Back") (= dd "Undo")))
@@ -31316,16 +31348,30 @@
                     (setq py (- py dd)
                           e1 (list px py 0.0)
                           e2 (list (+ px (* sgn td)) py 0.0))
+                    ;; the tread carries no dim of its own - the depths
+                    ;; and the overall depth say it all
                     (hs-mkline e1 e2)          ; the tread
-                    (if dimflag                ; one horizontal chain, below
-                      (hs-dim *cs-depth-dimstyle* e1 e2
-                              (list (+ px (* sgn 0.5 td))
-                                    (- lowy (* 2.0 txth)) 0.0)))
                     (setq px (+ px (* sgn td))
                           jx (1+ jx)))
+                  ;; the last depth: the drop after the last tread
+                  (setq dd (nth jx drops)
+                        e1 (list px py 0.0)
+                        e2 (list px (- py dd) 0.0))
+                  (hs-mkline e1 e2)
+                  (if dimflag
+                    (hs-dim *cs-depth-dimstyle* e1 e2
+                            (list (- (car ptop) (* sgn 2.0 txth))
+                                  (- py (* 0.5 dd)) 0.0)))
+                  (if dimflag                  ; the overall depth,
+                    (hs-dim *cs-depth-dimstyle* ; further out again
+                            (list (car ptop) (cadr ptop) 0.0)
+                            (list (car ptop) lowy 0.0)
+                            (list (- (car ptop) (* sgn 5.0 txth))
+                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0)))
                   (princ (strcat "\nSide profile drawn: " (itoa tcount)
-                                 " step(s), total run " (rtos totrun)
-                                 ", total drop " (rtos totdrop)
+                                 " step(s), " (itoa (length drops))
+                                 " depths, total run " (rtos totrun)
+                                 ", overall depth " (rtos totdrop)
                                  "."))))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
@@ -31458,9 +31504,12 @@
   (princ "\n     or repeats the previous width (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
-  (princ "\n  4. Finally you may add a SIDE PROFILE: give each step depth")
-  (princ "\n     (the vertical drop, top step first, Back supported), then")
-  (princ "\n     pick the top of the wall and the side the steps descend.")
+  (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
+  (princ "\n     (top step first, plus the drop after the last tread, so")
+  (princ "\n     3 steps take 4 depths; Back supported), then pick the")
+  (princ "\n     top of the wall and the side the steps descend.  The")
+  (princ "\n     depths and the overall depth are dimensioned; the")
+  (princ "\n     treads are not.")
   (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
@@ -31661,12 +31710,15 @@
 ;;;       corner asked for there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
 ;;;       plus the step width once (it is the same for every step).
-;;;   8.  Optionally a SIDE PROFILE: you give each step's STEP DEPTH -
-;;;       its vertical drop, top step first (Enter repeats the previous
-;;;       one, Back steps back) - then pick the top of the wall and the
-;;;       side the steps descend, and the staircase silhouette is drawn
-;;;       in world X/Y, with a drop-dim chain behind the wall and a
-;;;       tread-dim chain along the bottom when dims are on.
+;;;   8.  Optionally a SIDE PROFILE: you give the STEP DEPTHS - the
+;;;       vertical drops, top step first, one per step PLUS one more
+;;;       for the drop after the last tread, so 3 steps take 4 depths
+;;;       (Enter repeats the previous one, Back steps back) - then
+;;;       pick the top of the wall and the side the steps descend,
+;;;       and the staircase silhouette is drawn in world X/Y, ending
+;;;       on that final drop.  When dims are on the depths chain
+;;;       behind the wall with the overall depth further out again;
+;;;       the treads carry no dims of their own.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -31707,7 +31759,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.1") ; printed on load and at command start so a
+(setq *ns-version* "v2.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -32707,10 +32759,12 @@
             (setq prevv tt))
           (setq treads (reverse treads)
                 nsteps (length treads))
-          ;; the drops, top step first, with Back (Undo, the old
-          ;; keyword, is a hidden synonym)
+          ;; the depths, top step first, with Back (Undo, the old
+          ;; keyword, is a hidden synonym): one per step PLUS one
+          ;; more for the drop after the last tread, so 3 steps
+          ;; take 4 depths
           (setq drops nil k 1)
-          (while (<= k nsteps)
+          (while (<= k (1+ nsteps))
             (if (= k 1)
               (progn
                 (initget 7 "Back Undo")
@@ -32718,9 +32772,12 @@
               (progn
                 (initget 6 "Back Undo")
                 (setq dv (getdist
-                           (strcat "\nStep " (itoa k)
-                                   " - step depth [Back] <"
-                                   (rtos (car drops)) ">: ")))))
+                           (if (> k nsteps)
+                             (strcat "\nDepth after the last tread [Back] <"
+                                     (rtos (car drops)) ">: ")
+                             (strcat "\nStep " (itoa k)
+                                     " - step depth [Back] <"
+                                     (rtos (car drops)) ">: "))))))
             (cond
               ((and (= (type dv) 'STR)
                     (or (= dv "Back") (= dv "Undo")))
@@ -32770,20 +32827,31 @@
                               (list (- px0 (* sgn offd))
                                     (- cy (* 0.5 dv)) 0.0)))
                     (setq cy (- cy dv))
-                    ;; ... then the tread, out the way the steps descend
+                    ;; ... then the tread, out the way the steps
+                    ;; descend - no dim of its own: the depths and
+                    ;; the overall depth say it all
                     (ns-mkline (list cx cy 0.0)
                                (list (+ cx (* sgn tt)) cy 0.0))
-                    (if dimflag                  ; one chain along the bottom
-                      (ns-dim *cs-depth-dimstyle*
-                              (list cx cy 0.0)
-                              (list (+ cx (* sgn tt)) cy 0.0)
-                              (list (+ cx (* sgn 0.5 tt))
-                                    (- lowy offd) 0.0)))
                     (setq cx (+ cx (* sgn tt))
                           k  (1+ k)))
+                  ;; the last depth: the drop after the last tread
+                  (setq dv (nth k drops))
+                  (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                  (if dimflag
+                    (ns-dim *cs-depth-dimstyle*
+                            (list cx cy 0.0) (list cx (- cy dv) 0.0)
+                            (list (- px0 (* sgn offd))
+                                  (- cy (* 0.5 dv)) 0.0)))
+                  (if dimflag                    ; the overall depth,
+                    (ns-dim *cs-depth-dimstyle*  ; further out again
+                            (list px0 (cadr wpt) 0.0)
+                            (list px0 lowy 0.0)
+                            (list (- px0 (* sgn (+ offd (* 3.0 txth))))
+                                  (- (cadr wpt) (* 0.5 totdrop)) 0.0)))
                   (princ (strcat "\nSide profile drawn: " (itoa nsteps)
-                                 " step(s), total run " (rtos totrun)
-                                 ", total drop " (rtos totdrop)
+                                 " step(s), " (itoa (length drops))
+                                 " depths, total run " (rtos totrun)
+                                 ", overall depth " (rtos totdrop)
                                  "."))))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
@@ -32928,10 +32996,12 @@
   (princ "\n  4. Step treads, one per step, each from the previous")
   (princ "\n     tread.  Enter = done, Back = step back one (removes")
   (princ "\n     it), Same = repeat the previous step tread.")
-  (princ "\n  5. Add a side profile? [Yes/No] - each step's STEP DEPTH")
-  (princ "\n     (its vertical drop), top step first, then pick the top")
-  (princ "\n     of the wall and the side the steps descend; the")
-  (princ "\n     silhouette is drawn in world X/Y, dims and all.")
+  (princ "\n  5. Add a side profile? [Yes/No] - the STEP DEPTHS, top")
+  (princ "\n     step first: one per step plus the drop after the last")
+  (princ "\n     tread (3 steps take 4 depths).  Then pick the top of")
+  (princ "\n     the wall and the side the steps descend; the")
+  (princ "\n     silhouette is drawn in world X/Y, with the depths and")
+  (princ "\n     the overall depth dimensioned - the treads are not.")
   (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so")
   (princ "\n     the only question is which steps have beaded SIDE")
   (princ "\n     WALLS: [All/Some], and Some takes the step numbers")
@@ -33187,23 +33257,29 @@
 ;;;       construction layer and SUGGESTED in the report.
 ;;;
 ;;;  6. A COVERCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer COVERCHECK-REPORT listing every dimension —
-;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc and every overlapping line
-;;;     pair (with its overlap length), plus totals. The report text
-;;;     is sized from the drawing's extents so it sits to scale next
-;;;     to it, and reads top to bottom as: a large title, the date
-;;;     and version, a verdict line (ALL CLEAR, or the count of red
-;;;     lines), the colour legend, then a SUMMARY dashboard and the
-;;;     findings grouped under underlined section headings
-;;;     (DIMENSIONS, ARCS, OVERLAPPING LINES, COVER CHECKS). Any
-;;;     line describing something questionable or that needs looking
-;;;     over (a flagged/wrong item, a missing block, a "NOT" find,
-;;;     an "add ..." note, a skipped check) is coloured RED in the
+;;;     drawing on layer COVERCHECK-REPORT, sized from the drawing's
+;;;     extents so it sits to scale next to it.  The MAIN sheet leads
+;;;     with what matters to the cover itself: a large title, the
+;;;     date and version, a verdict line (ALL CLEAR, or the count of
+;;;     red lines), the colour legend, a SUMMARY dashboard, then the
+;;;     COVER CHECKS findings under underlined section headings.
+;;;     The DIMCHECK-style findings — every dimension with its
+;;;     measured distance, every arc, every overlapping line pair
+;;;     with its overlap length — go in a separate DIMENSION AUDIT
+;;;     column to the RIGHT of the main sheet, so the cover verdicts
+;;;     lead and the mechanical audit reads alongside.  Any line
+;;;     describing something questionable or that needs looking over
+;;;     (a flagged/wrong item, a missing block, a "NOT" find, an
+;;;     "add ..." note, a skipped check) is coloured RED in the
 ;;;     report; everything that checked out stays the report's
 ;;;     normal colour and is drawn at *cchk-green-scale* (3/4) of
 ;;;     the red text's height, so the problems are the big lines on
 ;;;     the sheet.
+;;;
+;;;  LITECOVERSCAN is COVERSCAN minus the DIMCHECK-style pass: no
+;;;     dimension, arc or overlap audit and no DIMENSION AUDIT
+;;;     column - just the cover rules, for a drawing DIMCHECK
+;;;     already went over.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -33233,7 +33309,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.4")
+(setq *cchk-version* "v0.5")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -33581,6 +33657,145 @@
         ((wcmatch s "Arc *")              "ARCS")
         ((wcmatch s "Lines *")            "OVERLAPPING LINES")
         (t                                "COVER CHECKS")))
+
+(defun cchk:dimline-p (s)
+  ;; T for a line that belongs to the DIMENSION AUDIT column - the
+  ;; DIMCHECK-style findings, as opposed to the cover's own checks
+  (member (cchk:linegrp s) '("DIMENSIONS" "ARCS" "OVERLAPPING LINES")))
+
+;; The whole report: the cover checks on the MAIN sheet - a large
+;; title, the date and version, a verdict line, the colour legend, a
+;; SUMMARY dashboard, then the findings under underlined headings -
+;; and the DIMCHECK-style findings (dimensions, arcs, overlapping
+;; lines) in a DIMENSION AUDIT column to its right.  A lite run
+;; writes the main sheet alone.
+;;   title   the report's big first line ("COVERCHECK REPORT", ...)
+;;   note    extra legend sentence(s) up front, or nil
+;;   hdr     (text . attn) pairs for the SUMMARY dashboard
+;;   dhdr    (text . attn) pairs for the dimension column's dashboard
+;;   lines   every finding line, report order
+;;   lite    T = skip the dimension column
+;; Returns the x of the report's right edge, for the caller's zoom.
+(defun cchk:write-report (title note hdr dhdr lines lite
+                          minx miny maxx maxy
+                          / mainl diml l pr nred nmain ndim nlin grps grp
+                            ref h ins ins2 txt right)
+  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+  (foreach l lines
+    (if (cchk:dimline-p l)
+      (setq diml (cons l diml))
+      (setq mainl (cons l mainl))))
+  (setq mainl (reverse mainl)
+        diml  (reverse diml))
+  ;; the verdict counts every line that will render red, either column
+  (setq nred 0)
+  (foreach pr (append hdr dhdr)
+    (if (cdr pr) (setq nred (1+ nred))))
+  (foreach l lines
+    (if (cchk:attn-p l) (setq nred (1+ nred))))
+  ;; sizing: weighted line count per column - the head is ~4.5 lines,
+  ;; a heading is a line plus its 0.4 gap - and the taller column
+  ;; drives the text height, clamped as before
+  (setq nmain 4.5 grps nil)
+  (foreach l mainl
+    (if (not (member (cchk:linegrp l) grps))
+      (setq grps (cons (cchk:linegrp l) grps))))
+  (setq nmain (+ nmain (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
+  (setq nmain (+ nmain (* (length hdr) *cchk-green-scale*)))
+  (foreach l mainl
+    (setq nmain (+ nmain (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
+  (setq ndim 0.0)
+  (if (not lite)
+    (progn
+      (setq ndim 2.5 grps nil)                        ; column title + legend
+      (foreach l diml
+        (if (not (member (cchk:linegrp l) grps))
+          (setq grps (cons (cchk:linegrp l) grps))))
+      (setq ndim (+ ndim (* 1.4 (length grps))))
+      (setq ndim (+ ndim (* (length dhdr) *cchk-green-scale*)))
+      (foreach l diml
+        (setq ndim (+ ndim (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))))
+  (setq nlin (max nmain ndim))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+    (progn
+      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
+            h   (/ ref (* 1.66 nlin)))
+      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
+      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+    (progn
+      (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
+      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+  (setq ins (if minx
+              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list 0.0 0.0 0.0)))
+  ;; --- the main sheet
+  (setq txt (strcat (cchk:big title)
+                    "\\P"
+                    (cchk:small (strcat (cal:datestr)
+                                        "  -  COVERCHECK "
+                                        *cchk-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (if (> nred 0)
+                      (cchk:red (strcat (itoa nred) " LINE"
+                                        (if (= 1 nred) "" "S")
+                                        " NEED"
+                                        (if (= 1 nred) "S" "")
+                                        " ATTENTION"))
+                      "ALL CLEAR - every check passed")
+                    "}"
+                    "\\P"
+                    (cchk:small
+                      (strcat (if note note "")
+                              "Lines needing attention are in "
+                              (cchk:red "red")
+                              " at full size; lines that checked out"
+                              " are smaller."))))
+  (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
+  (foreach pr hdr
+    (setq txt (strcat txt "\\P"
+                      (if (cdr pr)
+                        (cchk:red (strcat "  " (car pr)))
+                        (cchk:small (strcat "  " (car pr)))))))
+  (setq grp nil)
+  (foreach l mainl
+    (if (/= grp (cchk:linegrp l))
+      (setq grp (cchk:linegrp l)
+            txt (strcat txt "\\P" (cchk:hdg grp))))
+    (setq txt (strcat txt "\\P"
+                      (if (cchk:attn-p l)
+                        (cchk:red (strcat "  " l))
+                        (cchk:small (strcat "  " l))))))
+  (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+  (setq right (+ (car ins) (* *cchk-report-chars* h)))
+  ;; --- the DIMENSION AUDIT column
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ *cchk-report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (cchk:small
+                           (strcat "Dimensions, arcs and overlapping"
+                                   " lines - DIMCHECK's ground, kept"
+                                   " off the main sheet."))))
+      (foreach pr dhdr
+        (setq txt (strcat txt "\\P"
+                          (if (cdr pr)
+                            (cchk:red (strcat "  " (car pr)))
+                            (cchk:small (strcat "  " (car pr)))))))
+      (setq grp nil)
+      (foreach l diml
+        (if (/= grp (cchk:linegrp l))
+          (setq grp (cchk:linegrp l)
+                txt (strcat txt "\\P" (cchk:hdg grp))))
+        (setq txt (strcat txt "\\P"
+                          (if (cchk:attn-p l)
+                            (cchk:red (strcat "  " l))
+                            (cchk:small (strcat "  " l))))))
+      (cchk:mtext ins2 h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+      (setq right (+ (car ins2) (* *cchk-report-chars* h)))))
+  right)
 
 ;; --- geometry ------------------------------------------------------
 
@@ -35246,8 +35461,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb h m ins txt nlin ref
-                      nred grp grps)
+                      minx miny maxx maxy bb m dhdr right)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -35491,37 +35705,9 @@
           (setq lines (cons l lines)))
 
         ;; --- report on the right side, to scale with the drawing ----
-        ;; text height picked from the drawing's extents so the whole
-        ;; report roughly matches the drawing's height (MTEXT line
-        ;; spacing is ~1.66 x text height), clamped so a short report
-        ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing;
-        ;; the head (title, date, verdict, legend) is ~4.5 lines and
-        ;; each underlined section heading is a line plus its 0.4 gap
-        (setq nlin 4.5)
-        (setq grps nil)
-        (foreach l lines
-          (if (not (member (cchk:linegrp l) grps))
-            (setq grps (cons (cchk:linegrp l) grps))))
-        (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
-        (foreach l lines
-          (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-        (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))   ; the header dashboard
-        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-          (progn
-            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-                  h   (/ ref (* 1.66 nlin)))
-            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-          (progn
-            (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
-        (setq ins (if minx
-                    (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                    (list 0.0 0.0 0.0)))
-        ;; header dashboard: each line carries a "needs attention" flag
-        ;; so a category with anything to look over turns red
-        (setq hdr
+        ;; the cover checks lead on the main sheet; the DIMCHECK-style
+        ;; findings go in the DIMENSION AUDIT column beside it
+        (setq dhdr
           (list
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
@@ -35540,56 +35726,11 @@
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
                   (> noflag 0))))
-        (setq hdr (append hdr
-                          (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                                  (car cres))))
-        ;; how many lines will render red - the verdict states it
-        (setq nred 0)
-        (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
-        (foreach l lines (if (cchk:attn-p l) (setq nred (1+ nred))))
-        ;; the head: a large title, the date and version small under
-        ;; it, the verdict, then the colour legend.  The verdict is
-        ;; wrapped in its height code first so it reads as a banner,
-        ;; not as one of the finding lines.
-        (setq txt (strcat (cchk:big "COVERCHECK REPORT")
-                          "\\P"
-                          (cchk:small (strcat (cal:datestr)
-                                              "  -  COVERCHECK "
-                                              *cchk-version*))
-                          "\\P"
-                          "{\\H1.2x;"
-                          (if (> nred 0)
-                            (cchk:red (strcat (itoa nred) " LINE"
-                                              (if (= 1 nred) "" "S")
-                                              " NEED"
-                                              (if (= 1 nred) "S" "")
-                                              " ATTENTION"))
-                            "ALL CLEAR - every check passed")
-                          "}"
-                          "\\P"
-                          (cchk:small
-                            (strcat "Lines needing attention are in "
-                                    (cchk:red "red")
-                                    " at full size; lines that checked"
-                                    " out are smaller."))))
-        ;; the dashboard, under its own heading
-        (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
-        (foreach pr hdr
-          (setq txt (strcat txt "\\P"
-                            (if (cdr pr)
-                              (cchk:red (strcat "  " (car pr)))
-                              (cchk:small (strcat "  " (car pr)))))))
-        ;; the findings, grouped under underlined section headings
-        (setq grp nil)
-        (foreach l (reverse lines)
-          (if (/= grp (cchk:linegrp l))
-            (setq grp (cchk:linegrp l)
-                  txt (strcat txt "\\P" (cchk:hdg grp))))
-          (setq txt (strcat txt "\\P"
-                            (if (cchk:attn-p l)
-                              (cchk:red (strcat "  " l))
-                              (cchk:small (strcat "  " l))))))
-        (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+        (setq hdr (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                          (car cres)))
+        (setq right (cchk:write-report "COVERCHECK REPORT" nil hdr dhdr
+                                       (reverse lines) nil
+                                       minx miny maxx maxy))
 
         ;; --- show the drawing plus the report -----------------------
         (if minx
@@ -35597,9 +35738,7 @@
             (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
-                     (trans (list (+ (car ins) (* *cchk-report-chars* h) m)
-                                  (+ maxy m) 0.0)
-                            0 1)))
+                     (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
         (command "_.UNDO" "_End")
@@ -35631,24 +35770,32 @@
                        "\nOne UNDO reverts everything COVERCHECK changed (including the report)."))))))
   (princ))
 
-;; --- COVERSCAN: the read-only twin -----------------------------------
-;;  Runs every audit, asks nothing, and changes nothing in the drawing
-;;  except writing the report. Use it as a quick pre-flight, or when
+;; --- COVERSCAN / LITECOVERSCAN: the read-only twins -------------------
+;;  Run every audit, ask nothing, and change nothing in the drawing
+;;  except writing the report. Use them as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
+;;  LITECOVERSCAN skips the DIMCHECK-style pass entirely - no
+;;  dimension, arc or overlap audit and no DIMENSION AUDIT column -
+;;  for a drawing DIMCHECK already went over.
 
-(defun c:COVERSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
-                     blks lines olaps pr bb bad
-                     nd ndbad na nabad h ins txt nlin ref hdr l cres
-                     minx miny maxx maxy p13 p14 near s
-                     nred grp grps)
+(defun c:COVERSCAN () (cchk:scan nil))
 
+(defun c:LITECOVERSCAN () (cchk:scan T))
+
+(defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
+                       plns segs blks lines olaps pr bb bad
+                       nd ndbad na nabad hdr dhdr l cres
+                       minx miny maxx maxy p13 p14 near s)
+
+  (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nCOVERSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to COVERSCAN (Enter = whole drawing): ")
+  (prompt (strcat "\nHighlight the drawing to " name
+                  " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
@@ -35679,10 +35826,14 @@
                maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
      (setq dims (reverse dims) arcs (reverse arcs)
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
-           segs (cchk:collect-segs plns))
+           segs (if lite nil (cchk:collect-segs plns)))
 
      ;; --- dimensions: report stray definition points, move nothing
-     (foreach e (cchk:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+     ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
+     (foreach e (if lite
+                  nil
+                  (cchk:sort-dims dims (if (and miny maxy)
+                                         (* 0.05 (- maxy miny)) 1.0)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -35710,7 +35861,7 @@
                          lines)))
 
      ;; --- arcs: report unattached endpoints, move nothing
-     (foreach e arcs
+     (foreach e (if lite nil arcs)
        (setq na  (1+ na)
              bad nil)
        (if (cchk:planar-arc-p (entget e))
@@ -35726,7 +35877,7 @@
                          lines)))
 
      ;; --- overlaps
-     (setq olaps (cchk:find-overlaps segs))
+     (setq olaps (if lite nil (cchk:find-overlaps segs)))
      (foreach pr olaps
        (setq lines (cons (strcat "Lines "
                                  (cdr (assoc 5 (entget (cchk:seg-ent (car pr)))))
@@ -35744,83 +35895,43 @@
        (princ (strcat "\n  " l))
        (setq lines (cons l lines)))
 
-     ;; --- report (the only thing COVERSCAN writes) ------------------
-     (setq hdr (list
-                 (cons (strcat "Dimensions scanned: " (itoa nd) " ("
-                               (itoa ndbad) " with a stray definition point)")
-                       (> ndbad 0))
-                 (cons (strcat "Arcs scanned: " (itoa na) " ("
-                               (itoa nabad) " with an unattached end)")
-                       (> nabad 0))
-                 (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
-                       (> (length olaps) 0))))
-     (setq hdr (append hdr
-                       (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
-                               (car cres))))
-     (setq nlin 4.5)                     ; title, date, verdict, legend
-     (setq grps nil)
-     (foreach l lines
-       (if (not (member (cchk:linegrp l) grps))
-         (setq grps (cons (cchk:linegrp l) grps))))
-     (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
-     (foreach l lines
-       (setq nlin (+ nlin (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))
-     (setq nlin (+ nlin (* 8.0 *cchk-green-scale*)))
-     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-       (progn
-         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-               h   (/ ref (* 1.66 nlin)))
-         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-       (setq h 2.5))
-     (setq ins (if minx
-                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                 (list 0.0 0.0 0.0)))
-     ;; how many lines will render red - the verdict states it
-     (setq nred 0)
-     (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
-     (foreach l lines (if (cchk:attn-p l) (setq nred (1+ nred))))
-     (setq txt (strcat (cchk:big "COVERSCAN REPORT")
-                       "\\P"
-                       (cchk:small (strcat (cal:datestr)
-                                           "  -  COVERCHECK "
-                                           *cchk-version*))
-                       "\\P"
-                       "{\\H1.2x;"
-                       (if (> nred 0)
-                         (cchk:red (strcat (itoa nred) " LINE"
-                                           (if (= 1 nred) "" "S")
-                                           " NEED"
-                                           (if (= 1 nred) "S" "")
-                                           " ATTENTION"))
-                         "ALL CLEAR - every check passed")
-                       "}"
-                       "\\P"
-                       (cchk:small
-                         (strcat "Read-only scan - nothing in the drawing"
-                                 " was changed.  Lines needing attention"
-                                 " are in " (cchk:red "red")
-                                 " at full size; lines that checked out"
-                                 " are smaller."))))
-     (setq txt (strcat txt "\\P" (cchk:hdg "SUMMARY")))
-     (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr)
-                                     (cchk:red (strcat "  " (car pr)))
-                                     (cchk:small (strcat "  " (car pr)))))))
-     (setq grp nil)
-     (foreach l (reverse lines)
-       (if (/= grp (cchk:linegrp l))
-         (setq grp (cchk:linegrp l)
-               txt (strcat txt "\\P" (cchk:hdg grp))))
-       (setq txt (strcat txt "\\P" (if (cchk:attn-p l)
-                                     (cchk:red (strcat "  " l))
-                                     (cchk:small (strcat "  " l))))))
-     (cchk:mtext ins h (* *cchk-report-chars* h) txt *cchk-report-layer*)
+     ;; --- report (the only thing the scan writes) -------------------
+     (setq dhdr (if lite
+                  nil
+                  (list
+                    (cons (strcat "Dimensions scanned: " (itoa nd) " ("
+                                  (itoa ndbad)
+                                  " with a stray definition point)")
+                          (> ndbad 0))
+                    (cons (strcat "Arcs scanned: " (itoa na) " ("
+                                  (itoa nabad) " with an unattached end)")
+                          (> nabad 0))
+                    (cons (strcat "Overlapping line pairs: "
+                                  (itoa (length olaps)))
+                          (> (length olaps) 0)))))
+     (setq hdr (mapcar '(lambda (s) (cons s (cchk:attn-p s)))
+                       (car cres)))
+     (cchk:write-report (strcat name " REPORT")
+                        (strcat "Read-only scan - nothing in the drawing"
+                                " was changed.  "
+                                (if lite
+                                  (strcat "Lite: dimensions, arcs and"
+                                          " overlaps were not audited -"
+                                          " run DIMCHECK or COVERSCAN"
+                                          " for those.  ")
+                                  ""))
+                        hdr dhdr (reverse lines) lite
+                        minx miny maxx maxy)
      (setvar "CMDECHO" oldecho)
-     (princ (strcat "\n--- COVERSCAN complete (read-only) ---"
-                    "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
-                    "\nArcs: " (itoa na) " scanned, " (itoa nabad) " with an unattached end"
-                    "\nOverlapping line pairs: " (itoa (length olaps))))
+     (princ (strcat "\n--- " name " complete (read-only) ---"
+                    (if lite
+                      "\nLite: dimensions, arcs and overlaps were not audited."
+                      (strcat "\nDimensions: " (itoa nd) " scanned, "
+                              (itoa ndbad) " with a stray point"
+                              "\nArcs: " (itoa na) " scanned, "
+                              (itoa nabad) " with an unattached end"
+                              "\nOverlapping line pairs: "
+                              (itoa (length olaps))))))
      (foreach l (car cres) (princ (strcat "\n" l)))
      (princ (strcat "\nReport written on layer " *cchk-report-layer*
                     "; nothing else was changed."))))
@@ -46403,24 +46514,29 @@
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
 ;;;  9. A LINFINCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer LINFINCHECK-REPORT listing every dimension —
-;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc, every overlapping line
-;;;     pair (with its overlap length), every step pattern, the Step
-;;;     Attachment verdict and the Liner Material verdict, plus
-;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it, and reads top to bottom as: a
-;;;     large title, the date and version, a verdict line (ALL CLEAR,
-;;;     or the count of red lines), the colour legend, then a SUMMARY
-;;;     dashboard and the findings grouped under underlined section
-;;;     headings (DIMENSIONS, ARCS, OVERLAPPING LINES, STEPS & SIDE
-;;;     VIEWS, WALL HEIGHT, THE LINER). Any line describing something
-;;;     questionable or that needs looking over (a flagged/wrong
-;;;     item, a missing block, a "NOT" find, an "add ..." note, a
-;;;     skipped check) is coloured RED in the report; everything
-;;;     that checked out stays the report's normal colour and is
-;;;     drawn at *lfc-green-scale* (3/4) of the red text's height,
-;;;     so the problems are the big lines on the sheet.
+;;;     drawing on layer LINFINCHECK-REPORT, sized from the drawing's
+;;;     extents so it sits to scale next to it.  The MAIN sheet leads
+;;;     with what matters to the liner finish itself: a large title,
+;;;     the date and version, a verdict line (ALL CLEAR, or the count
+;;;     of red lines), the colour legend, a SUMMARY dashboard, then
+;;;     the findings under underlined section headings (STEPS & SIDE
+;;;     VIEWS, WALL HEIGHT, THE LINER, ...).  The DIMCHECK-style
+;;;     findings — every dimension with its measured distance, every
+;;;     arc, every overlapping line pair with its overlap length — go
+;;;     in a separate DIMENSION AUDIT column to the RIGHT of the main
+;;;     sheet, so the liner verdicts lead and the mechanical audit
+;;;     reads alongside.  Any line describing something questionable
+;;;     or that needs looking over (a flagged/wrong item, a missing
+;;;     block, a "NOT" find, an "add ..." note, a skipped check) is
+;;;     coloured RED in the report; everything that checked out stays
+;;;     the report's normal colour and is drawn at *lfc-green-scale*
+;;;     (3/4) of the red text's height, so the problems are the big
+;;;     lines on the sheet.
+;;;
+;;;  LITELINFINSCAN is LINFINSCAN minus the DIMCHECK-style pass: no
+;;;     dimension, arc or overlap audit and no DIMENSION AUDIT
+;;;     column - just the liner-finish rules, for a drawing DIMCHECK
+;;;     already went over.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -46451,7 +46567,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.2")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.3")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -46874,6 +46990,145 @@
          "WALL HEIGHT")
         ((wcmatch s "Liner Material*")    "THE LINER")
         (t                                "OTHER CHECKS")))
+
+(defun lfc:dimline-p (s)
+  ;; T for a line that belongs to the DIMENSION AUDIT column - the
+  ;; DIMCHECK-style findings, as opposed to the liner's own checks
+  (member (lfc:linegrp s) '("DIMENSIONS" "ARCS" "OVERLAPPING LINES")))
+
+;; The whole report: the liner-finish checks on the MAIN sheet - a
+;; large title, the date and version, a verdict line, the colour
+;; legend, a SUMMARY dashboard, then the findings under underlined
+;; headings - and the DIMCHECK-style findings (dimensions, arcs,
+;; overlapping lines) in a DIMENSION AUDIT column to its right.  A
+;; lite run writes the main sheet alone.
+;;   title   the report's big first line ("LINFINCHECK REPORT", ...)
+;;   note    extra legend sentence(s) up front, or nil
+;;   hdr     (text . attn) pairs for the SUMMARY dashboard
+;;   dhdr    (text . attn) pairs for the dimension column's dashboard
+;;   lines   every finding line, report order
+;;   lite    T = skip the dimension column
+;; Returns the x of the report's right edge, for the caller's zoom.
+(defun lfc:write-report (title note hdr dhdr lines lite
+                         minx miny maxx maxy
+                         / mainl diml l pr nred nmain ndim nlin grps grp
+                           ref h ins ins2 txt right)
+  (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+  (foreach l lines
+    (if (lfc:dimline-p l)
+      (setq diml (cons l diml))
+      (setq mainl (cons l mainl))))
+  (setq mainl (reverse mainl)
+        diml  (reverse diml))
+  ;; the verdict counts every line that will render red, either column
+  (setq nred 0)
+  (foreach pr (append hdr dhdr)
+    (if (cdr pr) (setq nred (1+ nred))))
+  (foreach l lines
+    (if (lfc:attn-p l) (setq nred (1+ nred))))
+  ;; sizing: weighted line count per column - the head is ~4.5 lines,
+  ;; a heading is a line plus its 0.4 gap - and the taller column
+  ;; drives the text height, clamped as before
+  (setq nmain 4.5 grps nil)
+  (foreach l mainl
+    (if (not (member (lfc:linegrp l) grps))
+      (setq grps (cons (lfc:linegrp l) grps))))
+  (setq nmain (+ nmain (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
+  (setq nmain (+ nmain (* (length hdr) *lfc-green-scale*)))
+  (foreach l mainl
+    (setq nmain (+ nmain (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
+  (setq ndim 0.0)
+  (if (not lite)
+    (progn
+      (setq ndim 2.5 grps nil)                        ; column title + legend
+      (foreach l diml
+        (if (not (member (lfc:linegrp l) grps))
+          (setq grps (cons (lfc:linegrp l) grps))))
+      (setq ndim (+ ndim (* 1.4 (length grps))))
+      (setq ndim (+ ndim (* (length dhdr) *lfc-green-scale*)))
+      (foreach l diml
+        (setq ndim (+ ndim (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))))
+  (setq nlin (max nmain ndim))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+    (progn
+      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
+            h   (/ ref (* 1.66 nlin)))
+      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
+      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+    (progn
+      (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
+      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+  (setq ins (if minx
+              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list 0.0 0.0 0.0)))
+  ;; --- the main sheet
+  (setq txt (strcat (lfc:big title)
+                    "\\P"
+                    (lfc:small (strcat (cal:datestr)
+                                       "  -  LINFINCHECK "
+                                       *lfc-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (if (> nred 0)
+                      (lfc:red (strcat (itoa nred) " LINE"
+                                       (if (= 1 nred) "" "S")
+                                       " NEED"
+                                       (if (= 1 nred) "S" "")
+                                       " ATTENTION"))
+                      "ALL CLEAR - every check passed")
+                    "}"
+                    "\\P"
+                    (lfc:small
+                      (strcat (if note note "")
+                              "Lines needing attention are in "
+                              (lfc:red "red")
+                              " at full size; lines that checked out"
+                              " are smaller."))))
+  (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
+  (foreach pr hdr
+    (setq txt (strcat txt "\\P"
+                      (if (cdr pr)
+                        (lfc:red (strcat "  " (car pr)))
+                        (lfc:small (strcat "  " (car pr)))))))
+  (setq grp nil)
+  (foreach l mainl
+    (if (/= grp (lfc:linegrp l))
+      (setq grp (lfc:linegrp l)
+            txt (strcat txt "\\P" (lfc:hdg grp))))
+    (setq txt (strcat txt "\\P"
+                      (if (lfc:attn-p l)
+                        (lfc:red (strcat "  " l))
+                        (lfc:small (strcat "  " l))))))
+  (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+  (setq right (+ (car ins) (* *lfc-report-chars* h)))
+  ;; --- the DIMENSION AUDIT column
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ *lfc-report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (lfc:small
+                           (strcat "Dimensions, arcs and overlapping"
+                                   " lines - DIMCHECK's ground, kept"
+                                   " off the main sheet."))))
+      (foreach pr dhdr
+        (setq txt (strcat txt "\\P"
+                          (if (cdr pr)
+                            (lfc:red (strcat "  " (car pr)))
+                            (lfc:small (strcat "  " (car pr)))))))
+      (setq grp nil)
+      (foreach l diml
+        (if (/= grp (lfc:linegrp l))
+          (setq grp (lfc:linegrp l)
+                txt (strcat txt "\\P" (lfc:hdg grp))))
+        (setq txt (strcat txt "\\P"
+                          (if (lfc:attn-p l)
+                            (lfc:red (strcat "  " l))
+                            (lfc:small (strcat "  " l))))))
+      (lfc:mtext ins2 h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+      (setq right (+ (car ins2) (* *lfc-report-chars* h)))))
+  right)
 
 ;; --- geometry ------------------------------------------------------
 
@@ -48124,8 +48379,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb h m ins txt nlin ref
-                      nred grp grps)
+                      minx miny maxx maxy bb m dhdr right)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -48897,37 +49151,10 @@
                            "")))))
 
         ;; --- report on the right side, to scale with the drawing ----
-        ;; text height picked from the drawing's extents so the whole
-        ;; report roughly matches the drawing's height (MTEXT line
-        ;; spacing is ~1.66 x text height), clamped so a short report
-        ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing;
-        ;; the head (title, date, verdict, legend) is ~4.5 lines and
-        ;; each underlined section heading is a line plus its 0.4 gap
-        (setq nlin 4.5)
-        (setq grps nil)
-        (foreach l lines
-          (if (not (member (lfc:linegrp l) grps))
-            (setq grps (cons (lfc:linegrp l) grps))))
-        (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
-        (foreach l lines
-          (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
-        (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))   ; the header dashboard
-        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-          (progn
-            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-                  h   (/ ref (* 1.66 nlin)))
-            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-          (progn
-            (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
-        (setq ins (if minx
-                    (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                    (list 0.0 0.0 0.0)))
-        ;; header dashboard: each line carries a "needs attention" flag
-        ;; so a category with anything to look over turns red
-        (setq hdr
+        ;; the liner-finish checks lead on the main sheet; the
+        ;; DIMCHECK-style findings go in the DIMENSION AUDIT column
+        ;; beside it
+        (setq dhdr
           (list
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
@@ -48945,7 +49172,9 @@
                                     ", flagged: " (itoa noflag)
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
-                  (> noflag 0))
+                  (> noflag 0))))
+        (setq hdr
+          (list
             (cons (strcat "Steps: " stepsum)          (lfc:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -48955,53 +49184,9 @@
         (if datesum
           (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                             (lfc:attn-p datesum))))))
-        ;; how many lines will render red - the verdict states it
-        (setq nred 0)
-        (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
-        (foreach l lines (if (lfc:attn-p l) (setq nred (1+ nred))))
-        ;; the head: a large title, the date and version small under
-        ;; it, the verdict, then the colour legend.  The verdict is
-        ;; wrapped in its height code first so it reads as a banner,
-        ;; not as one of the finding lines.
-        (setq txt (strcat (lfc:big "LINFINCHECK REPORT")
-                          "\\P"
-                          (lfc:small (strcat (cal:datestr)
-                                             "  -  LINFINCHECK "
-                                             *lfc-version*))
-                          "\\P"
-                          "{\\H1.2x;"
-                          (if (> nred 0)
-                            (lfc:red (strcat (itoa nred) " LINE"
-                                             (if (= 1 nred) "" "S")
-                                             " NEED"
-                                             (if (= 1 nred) "S" "")
-                                             " ATTENTION"))
-                            "ALL CLEAR - every check passed")
-                          "}"
-                          "\\P"
-                          (lfc:small
-                            (strcat "Lines needing attention are in "
-                                    (lfc:red "red")
-                                    " at full size; lines that checked"
-                                    " out are smaller."))))
-        ;; the dashboard, under its own heading
-        (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
-        (foreach pr hdr
-          (setq txt (strcat txt "\\P"
-                            (if (cdr pr)
-                              (lfc:red (strcat "  " (car pr)))
-                              (lfc:small (strcat "  " (car pr)))))))
-        ;; the findings, grouped under underlined section headings
-        (setq grp nil)
-        (foreach l (reverse lines)
-          (if (/= grp (lfc:linegrp l))
-            (setq grp (lfc:linegrp l)
-                  txt (strcat txt "\\P" (lfc:hdg grp))))
-          (setq txt (strcat txt "\\P"
-                            (if (lfc:attn-p l)
-                              (lfc:red (strcat "  " l))
-                              (lfc:small (strcat "  " l))))))
-        (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+        (setq right (lfc:write-report "LINFINCHECK REPORT" nil hdr dhdr
+                                      (reverse lines) nil
+                                      minx miny maxx maxy))
 
         ;; --- show the drawing plus the report -----------------------
         (if minx
@@ -49009,9 +49194,7 @@
             (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
-                     (trans (list (+ (car ins) (* *lfc-report-chars* h) m)
-                                  (+ maxy m) 0.0)
-                            0 1)))
+                     (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
         (command "_.UNDO" "_End")
@@ -49047,12 +49230,23 @@
                        "\nOne UNDO reverts everything LINFINCHECK changed (including the report)."))))))
   (princ))
 
-;; --- LINFINSCAN: the read-only twin -----------------------------------
+;; --- LINFINSCAN / LITELINFINSCAN: the read-only twins -----------------
+;;  LITELINFINSCAN skips the DIMCHECK-style pass entirely - no
+;;  dimension, arc or overlap audit and no DIMENSION AUDIT column -
+;;  for a drawing DIMCHECK already went over.
 ;;  Runs every audit, asks nothing, and changes nothing in the drawing
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
-(defun c:LINFINSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
+(defun c:LINFINSCAN () (lfc:scan nil))
+
+(defun c:LITELINFINSCAN () (lfc:scan T))
+
+;; The read-only scan.  lite = T skips the DIMCHECK-style pass - no
+;; dimension, arc or overlap audit and no DIMENSION AUDIT column -
+;; for a drawing DIMCHECK already went over.
+(defun lfc:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
+                     plns segs
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
                      beadss beadbbs bb gbb tlist tins bp cx cy d tbest
@@ -49060,18 +49254,19 @@
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
-                     nd ndbad na nabad h m ins txt nlin ref hdr l badtags
+                     nd ndbad na nabad m hdr dhdr l badtags
                      bordbb bordsum attundec
-                     minx miny maxx maxy p13 p14 near s b w
-                     nred grp grps)
+                     minx miny maxx maxy p13 p14 near s b w)
 
+  (setq name (if lite "LITELINFINSCAN" "LINFINSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nLINFINSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to LINFINSCAN (Enter = whole drawing): ")
+  (prompt (strcat "\nHighlight the drawing to " name
+                  " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
@@ -49097,10 +49292,14 @@
                maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
      (setq dims (reverse dims) arcs (reverse arcs)
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
-           segs (lfc:collect-segs plns))
+           segs (if lite nil (lfc:collect-segs plns)))
 
      ;; --- dimensions: report stray definition points, move nothing
-     (foreach e (lfc:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+     ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
+     (foreach e (if lite
+                  nil
+                  (lfc:sort-dims dims (if (and miny maxy)
+                                        (* 0.05 (- maxy miny)) 1.0)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -49128,7 +49327,7 @@
                          lines)))
 
      ;; --- arcs: report unattached endpoints, move nothing
-     (foreach e arcs
+     (foreach e (if lite nil arcs)
        (setq na  (1+ na)
              bad nil)
        (if (lfc:planar-arc-p (entget e))
@@ -49144,7 +49343,7 @@
                          lines)))
 
      ;; --- overlaps
-     (setq olaps (lfc:find-overlaps segs))
+     (setq olaps (if lite nil (lfc:find-overlaps segs)))
      (foreach pr olaps
        (setq lines (cons (strcat "Lines "
                                  (cdr (assoc 5 (entget (lfc:seg-ent (car pr)))))
@@ -49368,18 +49567,23 @@
                       (ssget "_X" (list (cons 8 *lfc-border-layer*))))))
      (setq bordsum (lfc:border-verdict bordbb))
 
-     ;; --- report (the only thing LINFINSCAN writes) ------------------
+     ;; --- report (the only thing the scan writes) --------------------
      (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
      (lfc:clear-old)
+     (setq dhdr (if lite
+                  nil
+                  (list
+                    (cons (strcat "Dimensions scanned: " (itoa nd) " ("
+                                  (itoa ndbad)
+                                  " with a stray definition point)")
+                          (> ndbad 0))
+                    (cons (strcat "Arcs scanned: " (itoa na) " ("
+                                  (itoa nabad) " with an unattached end)")
+                          (> nabad 0))
+                    (cons (strcat "Overlapping line pairs: "
+                                  (itoa (length olaps)))
+                          (> (length olaps) 0)))))
      (setq hdr (list
-                 (cons (strcat "Dimensions scanned: " (itoa nd) " ("
-                               (itoa ndbad) " with a stray definition point)")
-                       (> ndbad 0))
-                 (cons (strcat "Arcs scanned: " (itoa na) " ("
-                               (itoa nabad) " with an unattached end)")
-                       (> nabad 0))
-                 (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
-                       (> (length olaps) 0))
                  (cons (strcat "Steps: " stepsum)           (lfc:attn-p stepsum))
                  (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -49389,70 +49593,27 @@
      (if datesum
        (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                          (lfc:attn-p datesum))))))
-     (setq nlin 4.5)                     ; title, date, verdict, legend
-     (setq grps nil)
-     (foreach l lines
-       (if (not (member (lfc:linegrp l) grps))
-         (setq grps (cons (lfc:linegrp l) grps))))
-     (setq nlin (+ nlin (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
-     (foreach l lines
-       (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
-     (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))
-     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-       (progn
-         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-               h   (/ ref (* 1.66 nlin)))
-         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-       (setq h 2.5))
-     (setq ins (if minx
-                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                 (list 0.0 0.0 0.0)))
-     ;; how many lines will render red - the verdict states it
-     (setq nred 0)
-     (foreach pr hdr (if (cdr pr) (setq nred (1+ nred))))
-     (foreach l lines (if (lfc:attn-p l) (setq nred (1+ nred))))
-     (setq txt (strcat (lfc:big "LINFINSCAN REPORT")
-                       "\\P"
-                       (lfc:small (strcat (cal:datestr)
-                                          "  -  LINFINCHECK "
-                                          *lfc-version*))
-                       "\\P"
-                       "{\\H1.2x;"
-                       (if (> nred 0)
-                         (lfc:red (strcat (itoa nred) " LINE"
-                                          (if (= 1 nred) "" "S")
-                                          " NEED"
-                                          (if (= 1 nred) "S" "")
-                                          " ATTENTION"))
-                         "ALL CLEAR - every check passed")
-                       "}"
-                       "\\P"
-                       (lfc:small
-                         (strcat "Read-only scan - nothing in the drawing"
-                                 " was changed.  Lines needing attention"
-                                 " are in " (lfc:red "red")
-                                 " at full size; lines that checked out"
-                                 " are smaller."))))
-     (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
-     (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr)
-                                     (lfc:red (strcat "  " (car pr)))
-                                     (lfc:small (strcat "  " (car pr)))))))
-     (setq grp nil)
-     (foreach l (reverse lines)
-       (if (/= grp (lfc:linegrp l))
-         (setq grp (lfc:linegrp l)
-               txt (strcat txt "\\P" (lfc:hdg grp))))
-       (setq txt (strcat txt "\\P" (if (lfc:attn-p l)
-                                     (lfc:red (strcat "  " l))
-                                     (lfc:small (strcat "  " l))))))
-     (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+     (lfc:write-report (strcat name " REPORT")
+                       (strcat "Read-only scan - nothing in the drawing"
+                               " was changed.  "
+                               (if lite
+                                 (strcat "Lite: dimensions, arcs and"
+                                         " overlaps were not audited -"
+                                         " run DIMCHECK or LINFINSCAN"
+                                         " for those.  ")
+                                 ""))
+                       hdr dhdr (reverse lines) lite
+                       minx miny maxx maxy)
      (setvar "CMDECHO" oldecho)
-     (princ (strcat "\n--- LINFINSCAN complete (read-only) ---"
-                    "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
-                    "\nArcs: " (itoa na) " scanned, " (itoa nabad) " with an unattached end"
-                    "\nOverlapping line pairs: " (itoa (length olaps))
+     (princ (strcat "\n--- " name " complete (read-only) ---"
+                    (if lite
+                      "\nLite: dimensions, arcs and overlaps were not audited."
+                      (strcat "\nDimensions: " (itoa nd) " scanned, "
+                              (itoa ndbad) " with a stray point"
+                              "\nArcs: " (itoa na) " scanned, "
+                              (itoa nabad) " with an unattached end"
+                              "\nOverlapping line pairs: "
+                              (itoa (length olaps))))
                     "\nSteps: " stepsum
                     "\nLiner Material: " linersum
                     "\nTitle block border: " bordsum
@@ -52920,6 +53081,7 @@
 ;;;
 ;;; Commands:  SPACHECK        guided review of everything it flags
 ;;;            SPACHECKSCAN    the same audits, read-only
+;;;            LITESPACHECKSCAN  the scan minus the dimension audit
 ;;;            SPACHECKVER     print the loaded version
 ;;;            SPACHECKRESCUE  put back every colour, remove the markers
 ;;;            TUTORIALSPACHECK   the checklist, a worked demo, or both
@@ -52986,8 +53148,13 @@
 ;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
 ;;;      version under it, an ALL CLEAR / problem-count verdict, then
-;;;      every finding under underlined section headings.  Problems in
-;;;      RED at full size, advice in CYAN, all-clear in green at 75%.
+;;;      the SPA-specific findings under underlined section headings.
+;;;      The mechanical per-dimension audit (each dimension's layer,
+;;;      style and span agreement) is set apart in a DIMENSION AUDIT
+;;;      column to the RIGHT of the main sheet, since DIMCHECK covers
+;;;      the same ground; LITESPACHECKSCAN skips that audit entirely,
+;;;      for drawings DIMCHECK already went over.  Problems in RED at
+;;;      full size, advice in CYAN, all-clear in green at 75%.
 ;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
@@ -53000,7 +53167,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.1")
+(setq *spacheck-version* "v1.2")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -53891,10 +54058,13 @@
 ;;; ======================================================================
 
 ;; Everything, in report order, each section under its heading row.
-;; Returns (rows . flagged-entities).
-(defun spachk:audit (ss / rows ents blk att g tp cov wat covo wato
-                          dims covn r)
-  (setq rows nil ents nil)
+;; The mechanical per-dimension audit (layer, style, span agreement)
+;; is DIMCHECK's ground, so its rows come back separately for the
+;; report's second column - and a lite run skips it altogether.
+;; Returns (main-rows dim-rows flagged-entities).
+(defun spachk:audit (ss lite / rows drows ents blk att g tp cov wat covo
+                             wato dims covn r)
+  (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
   (setq rows (append rows (list (spachk:row "THE DETAILS BLOCK" 3))))
@@ -53929,12 +54099,15 @@
   (setq r (spachk:audit-nesting cov wat)
         rows (append rows (spachk:res-rows r)))
 
-  ;; 4 -- the dimensions
-  (setq rows (append rows (list (spachk:row "THE DIMENSIONS" 3))))
-  (setq dims (spachk:dims ss)
-        r    (spachk:audit-dims dims cov wat)
-        rows (append rows (spachk:res-rows r))
-        ents (append ents (spachk:res-ents r)))
+  ;; 4 -- the dimensions.  The per-dimension audit fills the second
+  ;; column; the roster and standoffs are SPA's own rules and stay on
+  ;; the main sheet.
+  (setq rows (append rows (list (spachk:row "THE OVERALLS" 3))))
+  (setq dims (spachk:dims ss))
+  (if (not lite)
+    (setq r     (spachk:audit-dims dims cov wat)
+          drows (spachk:res-rows r)
+          ents  (append ents (spachk:res-ents r))))
   (setq r (spachk:audit-roster dims cov wat)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
@@ -53959,24 +54132,32 @@
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
 
-  (cons rows ents))
+  (list rows drows ents))
 
 ;;; -------------------- the report --------------------------------------
 
-(defun spachk:write-report (rows bb readonly / nlin ref h ins txt r nbad nadv)
+;; The whole report: the SPA-specific findings on the MAIN sheet and,
+;; unless lite, the per-dimension audit in a DIMENSION AUDIT column to
+;; its right - the DIMCHECK-style pass, set apart so the spa verdicts
+;; lead.  Returns (problem-count advisory-count), over both columns.
+(defun spachk:write-report (rows drows bb readonly lite
+                            / nlin ndim ref h ins ins2 txt r nbad nadv)
   (cal:ensure-layer spachk:*report-layer* spachk:*report-color*)
   (setq nbad 0 nadv 0)
-  (foreach r rows
+  (foreach r (append rows drows)
     (cond ((spachk:lvl-p r 1) (setq nbad (1+ nbad)))
           ((spachk:lvl-p r 2) (setq nadv (1+ nadv)))))
   ;; height: scale the sheet to the drawing, as the siblings do.  The
   ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
-  ;; row is one line plus the 0.4 gap above it.
+  ;; row is one line plus the 0.4 gap above it.  The dimension column
+  ;; is counted the same way, and the taller column drives the height.
   (setq nlin 4.5)
   (foreach r rows
     (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
                              ((spachk:row-lvl r) 1.0)
                              (t spachk:*green-scale*)))))
+  (setq ndim (+ 2.5 (if drows (length drows) 1)))
+  (if (and (not lite) (> ndim nlin)) (setq nlin ndim))
   (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
     (progn
       (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
@@ -53993,9 +54174,10 @@
   ;; plain ALL CLEAR otherwise -- then the colour legend.  The verdict
   ;; is wrapped in its height code first so it never renders as (or
   ;; counts among) the finding rows, which start with a colour code.
-  (setq txt (strcat (spachk:big (if readonly
-                                    "SPACHECKSCAN REPORT"
-                                    "SPACHECK REPORT"))
+  (setq txt (strcat (spachk:big (cond ((and readonly lite)
+                                       "LITESPACHECKSCAN REPORT")
+                                      (readonly "SPACHECKSCAN REPORT")
+                                      (t "SPACHECK REPORT")))
                     "\\P"
                     (spachk:small (strcat (cal:datestr)
                                           "  -  SPACHECK "
@@ -54022,12 +54204,33 @@
                       (strcat (if readonly
                                   "Read-only scan - nothing in the drawing was changed.  "
                                   "")
+                              (if lite
+                                  "Lite: the dimension audit was skipped - run SPACHECKSCAN or DIMCHECK for it.  "
+                                  "")
                               "Problems in " (spachk:red "red")
                               ", advice in " (spachk:cyan "cyan")
                               "; lines that checked out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (spachk:render r))))
   (cal:mtext ins h (* spachk:*report-chars* h) txt spachk:*report-layer*)
+  ;; the DIMENSION AUDIT column, to the right of the main sheet
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ spachk:*report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (spachk:small
+                           (strcat "Each dimension against its layer, its"
+                                   " style and its own span - DIMCHECK's"
+                                   " ground, kept off the main sheet."))))
+      (if drows
+        (foreach r drows
+          (setq txt (strcat txt "\\P" (spachk:render r))))
+        (setq txt (strcat txt "\\P"
+                          (spachk:small "  Every dimension checks out."))))
+      (cal:mtext ins2 h (* spachk:*report-chars* h) txt
+                    spachk:*report-layer*)))
   (list nbad nadv))
 
 ;;; -------------------- marking (SPACHECK only) -------------------------
@@ -54101,18 +54304,25 @@
                  (rtos (* spachk:*title-frac* spachk:*liner-h*))))
   (princ))
 
-;;; --- SPACHECKSCAN: the audits, read-only -------------------------------
+;;; --- SPACHECKSCAN / LITESPACHECKSCAN: the audits, read-only ------------
+;;;  The lite scan is the same audits minus the per-dimension pass,
+;;;  for a drawing DIMCHECK already went over.
 
-(defun c:SPACHECKSCAN ( / *error* oldecho ss res rows bb ents n)
+(defun c:SPACHECKSCAN () (spachk:scan nil))
+
+(defun c:LITESPACHECKSCAN () (spachk:scan T))
+
+(defun spachk:scan (lite / *error* oldecho name ss res rows drows bb ents n)
+  (setq name (if lite "LITESPACHECKSCAN" "SPACHECKSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nSPACHECKSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
   (prompt (strcat "\nHighlight the spa drawing and its "
                   spachk:*details-block*
-                  " block to SPACHECKSCAN (Enter = whole drawing): "))
+                  " block to " name " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
@@ -54120,24 +54330,28 @@
     (progn
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (setq res  (spachk:audit ss)
-            rows (car res)
-            ents (cdr res)
-            bb   (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*))
-            n    (spachk:write-report rows bb t))
+      (setq res   (spachk:audit ss lite)
+            rows  (car res)
+            drows (cadr res)
+            ents  (caddr res)
+            bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*))
+            n     (spachk:write-report rows drows bb t lite))
       (setvar "CMDECHO" oldecho)
-      (princ (strcat "\n--- SPACHECKSCAN complete (read-only) ---"
+      (princ (strcat "\n--- " name " complete (read-only) ---"
                      "\n" (itoa (car n)) " problem"
                      (if (= 1 (car n)) "" "s") ", "
                      (itoa (cadr n)) " advisor"
                      (if (= 1 (cadr n)) "y" "ies")
+                     (if lite
+                         "\nLite: the dimension audit was skipped."
+                         "")
                      "\nReport written on layer " spachk:*report-layer*
                      "; nothing else was changed."))))
   (princ))
 
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
 
-(defun c:SPACHECK ( / *error* oldecho undo-open ss res rows ents bb n
+(defun c:SPACHECK ( / *error* oldecho undo-open ss res rows drows ents bb n
                       e k tot ans marked)
   (defun *error* (msg)
     (cal:sysrestore)
@@ -54159,10 +54373,11 @@
       (setvar "CMDECHO" 0)
       (command "_.UNDO" "_Begin")
       (setq undo-open T)
-      (setq res  (spachk:audit ss)
-            rows (car res)
-            ents (cdr res)
-            bb   (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
+      (setq res   (spachk:audit ss nil)
+            rows  (car res)
+            drows (cadr res)
+            ents  (caddr res)
+            bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
       ;; walk what was flagged, one at a time
       (setq tot (length ents) k 0 marked 0)
       (if (> tot 0)
@@ -54184,7 +54399,7 @@
                    (spachk:stash-color e spachk:*flag-color*)
                    (setq marked (1+ marked)))
                   ((= ans "Skip") (setq k tot))))))))
-      (setq n (spachk:write-report rows bb nil))
+      (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
       (command "_.UNDO" "_End")
       (setq undo-open nil)
@@ -59283,7 +59498,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.7")
+(setq *lazpanel-version* "v1.8")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -59346,10 +59561,13 @@
      ("LINCHECK"       "Line checklist")
      ("LINFINCHECK"    "Liner finish review")
      ("LINFINSCAN"     "Liner finish scan")
+     ("LITELINFINSCAN" "Liner scan, no dims")
      ("COVERCHECK"     "Cover review")
      ("COVERSCAN"      "Cover scan")
+     ("LITECOVERSCAN"  "Cover scan, no dims")
      ("SPACHECK"       "Spa sheet review")
      ("SPACHECKSCAN"   "Spa sheet scan")
+     ("LITESPACHECKSCAN" "Spa scan, no dims")
      ("LINTXTCHK"      "Liner checklist text")
      ("CCPRECHECK"     "Tech flow chart"))))
 
@@ -59984,16 +60202,17 @@
   "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "BPCALLOUT"
   "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
   "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP"
-  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVERSION"
-  "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN"
-  "DIMCONTEND" "DCE" "DDFIX" "DDSET" "DDCAL" "DDINFO"
-  "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER" "FITABHD"
-  "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN"
-  "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS"
-  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SPACHECKVER" "SPACHECKSCAN" "SPACHECK"
-  "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE"
-  "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER"
-  "LAZFORM" "LAZFORMVER" "LAZPANEL" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
+  "COVERCHECKVERSION" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK"
+  "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DDFIX" "DDSET" "DDCAL"
+  "DDINFO" "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER"
+  "FITABHD" "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
+  "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE"
+  "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SPACHECKVER"
+  "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST"
+  "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV"
+  "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMVER" "LAZPANEL"
+  "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

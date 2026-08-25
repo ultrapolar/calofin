@@ -62,7 +62,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.7")
+(setq *lazpanel-version* "v1.8")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  One entry per button: (label (command caption) ...) per group.  The
@@ -125,10 +125,13 @@
      ("LINCHECK"       "Line checklist")
      ("LINFINCHECK"    "Liner finish review")
      ("LINFINSCAN"     "Liner finish scan")
+     ("LITELINFINSCAN" "Liner scan, no dims")
      ("COVERCHECK"     "Cover review")
      ("COVERSCAN"      "Cover scan")
+     ("LITECOVERSCAN"  "Cover scan, no dims")
      ("SPACHECK"       "Spa sheet review")
      ("SPACHECKSCAN"   "Spa sheet scan")
+     ("LITESPACHECKSCAN" "Spa scan, no dims")
      ("LINTXTCHK"      "Liner checklist text")
      ("CCPRECHECK"     "Tech flow chart"))))
 

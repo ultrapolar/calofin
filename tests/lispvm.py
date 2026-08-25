@@ -1508,6 +1508,23 @@ BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
     str.maketrans(str(a[0]), str(a[1])))
 
 
+# (vl-string->list "AB") -> (65 66) and back again -- the pair every
+# text-normalising helper in the check tools is built on.
+BUILTINS[Sym('vl-string->list')] = \
+    lambda vm, a: [ord(c) for c in str(a[0])] or NIL
+BUILTINS[Sym('vl-list->string')] = \
+    lambda vm, a: ''.join(chr(int(c)) for c in (a[0] or []))
+
+
+# (vl-string-search pattern str [start]) -> index of the first hit,
+# nil when the pattern is not there.  0 is a real answer, so the miss
+# must be NIL by name, never a falsy 0.
+@bi('vl-string-search')
+def _vl_string_search(vm, a):
+    i = str(a[1]).find(str(a[0]), int(a[2]) if len(a) > 2 else 0)
+    return i if i >= 0 else NIL
+
+
 # vl- list functions.  All of them return nil for an empty result, which
 # is the whole reason a routine can write (if (vl-remove-if ...) ...).
 @bi('vl-remove')
