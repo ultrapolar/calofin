@@ -111,7 +111,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV08")
+(setq pool:*version* "082526 REV09")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -596,6 +596,19 @@
           (if (wcmatch s "@,@#") (setq out (read s)))))
     (setq n (1+ n)))
   out)
+
+;; The form-key stem for a corner question, from the subject string
+;; every flow already passes pool:askcorner -- "Corner A" is cornera,
+;; and the collective questions get names of their own.  A subject no
+;; form addresses comes back nil and the corner is asked as always.
+(defun pool:fckey (subject / s)
+  (setq s (strcase subject t))
+  (cond
+    ((= s "all four corners") "corners")
+    ((= s "the outer corners") "outercorners")
+    ((= s "the inner corner e") "innercorner")
+    ((and (> (strlen s) 7) (= (substr s 1 7) "corner "))
+     (strcat "corner" (substr s 8)))))
 
 ;; The shape, from the form when it named one the dispatch knows, else
 ;; asked.  Checked against the same list the prompt offers: an unknown
@@ -3348,7 +3361,25 @@
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (subject prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed dflt szmsg nofit)
+                       / ty sz cols sb wed dflt szmsg nofit fk fty fsz)
+  ;; A form can answer this corner: <stem>-ty carries the treatment,
+  ;; <stem>-sz the radius or cut face.  Both are consumed NOW, valid or
+  ;; not -- consume-once is what keeps Back from deadlocking, and what
+  ;; lets a rejected size be retyped at the keyboard instead of re-fed.
+  ;; An answer the question would not accept falls through to the
+  ;; prompt exactly as if the box had been left empty.
+  (if (setq fk (pool:fckey subject))
+      (progn
+        (if (pool:fhas (read (strcat fk "-ty")))
+            (progn
+              (setq fty (pool:ftake (read (strcat fk "-ty"))))
+              (if (not (member fty '("Square" "Radius" "Cut" "NotGiven")))
+                  (setq fty nil))))
+        (if (pool:fhas (read (strcat fk "-sz")))
+            (progn
+              (setq fsz (pool:ftake (read (strcat fk "-sz"))))
+              (if (not (and (numberp fsz) (> fsz 0.0)))
+                  (setq fsz nil))))))
   ;; A corner whose walls leave no room for a cut cannot be given one:
   ;; every size would be rejected and re-asked forever.  That is a fact
   ;; about the GEOMETRY, though, and it must not answer the question
@@ -3359,20 +3390,25 @@
       (progn
         (princ (strcat "\nNo room for a cut on " subject
                        " -- Radius and Cut are not offered."))
-        (setq maxsb nil nofit t)))
+        (setq maxsb nil nofit t)
+        ;; the geometry outranks the form: a sized treatment cannot fit
+        ;; here whoever supplied it, so the question is put after all
+        (if (pool:cutp fty) (setq fty nil))))
   (progn
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (pool:osup)
-  (setq ty (if nofit
-               ;; a remembered Radius/Cut is not among the offered
-               ;; words, and pool:askkw hands a default straight back
-               ;; on Enter without checking it -- so drop it
-               (pool:asktreatng subject
-                                (if (member prevty '("Square" "NotGiven"))
-                                    prevty nil)
-                                back)
-               (pool:asktreat subject prevty back)))
+  (setq ty (cond
+             (fty fty)
+             (nofit
+              ;; a remembered Radius/Cut is not among the offered
+              ;; words, and pool:askkw hands a default straight back
+              ;; on Enter without checking it -- so drop it
+              (pool:asktreatng subject
+                               (if (member prevty '("Square" "NotGiven"))
+                                   prevty nil)
+                               back))
+             (t (pool:asktreat subject prevty back))))
   (pool:osdown)
   (if (eq ty 'POOL-BACK)
       (progn (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
@@ -3396,11 +3432,18 @@
                                      "Cut face length for ")
                             subject))
         (pool:osup)
-        (initget (if dflt 6 7))
-        (setq sz (getdist (strcat szmsg
-                                  (if dflt (strcat " <" (rtos dflt) ">") "")
-                                  ": ")))
-        (if (null sz) (setq sz dflt))
+        (if fsz
+            ;; the form's size skips the prompt but NOT the cap check
+            ;; below: one that will not fit is rejected there and
+            ;; retyped at the keyboard, the store already being empty
+            (setq sz fsz)
+            (progn
+              (initget (if dflt 6 7))
+              (setq sz (getdist (strcat szmsg
+                                        (if dflt (strcat " <" (rtos dflt) ">")
+                                            "")
+                                        ": ")))
+              (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
         ;; skewed out-of-square corner, not just on a square one

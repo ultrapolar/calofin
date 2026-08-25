@@ -684,7 +684,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082426 REV08")
+(setq pool:*version* "082526 REV09")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1142,6 +1142,19 @@
           (if (wcmatch s "@,@#") (setq out (read s)))))
     (setq n (1+ n)))
   out)
+
+;; The form-key stem for a corner question, from the subject string
+;; every flow already passes pool:askcorner -- "Corner A" is cornera,
+;; and the collective questions get names of their own.  A subject no
+;; form addresses comes back nil and the corner is asked as always.
+(defun pool:fckey (subject / s)
+  (setq s (strcase subject t))
+  (cond
+    ((= s "all four corners") "corners")
+    ((= s "the outer corners") "outercorners")
+    ((= s "the inner corner e") "innercorner")
+    ((and (> (strlen s) 7) (= (substr s 1 7) "corner "))
+     (strcat "corner" (substr s 8)))))
 
 ;; The shape, from the form when it named one the dispatch knows, else
 ;; asked.  Checked against the same list the prompt offers: an unknown
@@ -3839,7 +3852,25 @@
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (subject prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed dflt szmsg nofit)
+                       / ty sz cols sb wed dflt szmsg nofit fk fty fsz)
+  ;; A form can answer this corner: <stem>-ty carries the treatment,
+  ;; <stem>-sz the radius or cut face.  Both are consumed NOW, valid or
+  ;; not -- consume-once is what keeps Back from deadlocking, and what
+  ;; lets a rejected size be retyped at the keyboard instead of re-fed.
+  ;; An answer the question would not accept falls through to the
+  ;; prompt exactly as if the box had been left empty.
+  (if (setq fk (pool:fckey subject))
+      (progn
+        (if (pool:fhas (read (strcat fk "-ty")))
+            (progn
+              (setq fty (pool:ftake (read (strcat fk "-ty"))))
+              (if (not (member fty '("Square" "Radius" "Cut" "NotGiven")))
+                  (setq fty nil))))
+        (if (pool:fhas (read (strcat fk "-sz")))
+            (progn
+              (setq fsz (pool:ftake (read (strcat fk "-sz"))))
+              (if (not (and (numberp fsz) (> fsz 0.0)))
+                  (setq fsz nil))))))
   ;; A corner whose walls leave no room for a cut cannot be given one:
   ;; every size would be rejected and re-asked forever.  That is a fact
   ;; about the GEOMETRY, though, and it must not answer the question
@@ -3850,20 +3881,25 @@
       (progn
         (princ (strcat "\nNo room for a cut on " subject
                        " -- Radius and Cut are not offered."))
-        (setq maxsb nil nofit t)))
+        (setq maxsb nil nofit t)
+        ;; the geometry outranks the form: a sized treatment cannot fit
+        ;; here whoever supplied it, so the question is put after all
+        (if (pool:cutp fty) (setq fty nil))))
   (progn
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
-  (setq ty (if nofit
-               ;; a remembered Radius/Cut is not among the offered
-               ;; words, and pool:askkw hands a default straight back
-               ;; on Enter without checking it -- so drop it
-               (pool:asktreatng subject
-                                (if (member prevty '("Square" "NotGiven"))
-                                    prevty nil)
-                                back)
-               (cal:asktreat subject prevty back)))
+  (setq ty (cond
+             (fty fty)
+             (nofit
+              ;; a remembered Radius/Cut is not among the offered
+              ;; words, and pool:askkw hands a default straight back
+              ;; on Enter without checking it -- so drop it
+              (pool:asktreatng subject
+                               (if (member prevty '("Square" "NotGiven"))
+                                   prevty nil)
+                               back))
+             (t (cal:asktreat subject prevty back))))
   (cal:osdown)
   (if (eq ty 'CAL-BACK)
       (progn (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
@@ -3887,11 +3923,18 @@
                                      "Cut face length for ")
                             subject))
         (cal:osup)
-        (initget (if dflt 6 7))
-        (setq sz (getdist (strcat szmsg
-                                  (if dflt (strcat " <" (rtos dflt) ">") "")
-                                  ": ")))
-        (if (null sz) (setq sz dflt))
+        (if fsz
+            ;; the form's size skips the prompt but NOT the cap check
+            ;; below: one that will not fit is rejected there and
+            ;; retyped at the keyboard, the store already being empty
+            (setq sz fsz)
+            (progn
+              (initget (if dflt 6 7))
+              (setq sz (getdist (strcat szmsg
+                                        (if dflt (strcat " <" (rtos dflt) ">")
+                                            "")
+                                        ": ")))
+              (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
         ;; skewed out-of-square corner, not just on a square one
@@ -28298,7 +28341,11 @@
 ;;;       style and on the "DIMENSION" layer, ByLayer, with no
 ;;;       per-entity colour / linetype / lineweight override -- the
 ;;;       same convention POOL uses for the cross dims it draws.
-;;;    4. The line each dimension was made from is erased, so the tie
+;;;    4. A line whose two ends already carry a dimension is left
+;;;       alone -- no second dim on top of the first, and the line
+;;;       stays put so you can see what was skipped.  Two coincident
+;;;       lines in one selection count as the same tie.
+;;;    5. The line each dimension was made from is erased, so the tie
 ;;;       measurement is left as a dimension and nothing else.  Only
 ;;;       lines that really did get a dimension are erased, and the
 ;;;       report says how many went and off which layers (they are
@@ -28319,6 +28366,11 @@
 ;;;    cdc:*offset*  distance the dimension line is pushed off the
 ;;;                  line it measures, drawing units (0.0 = on it)
 ;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
+;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
+;;;                  nil to dimension it again anyway
+;;;    cdc:*dupetol* how close two extension line origins have to be to
+;;;                  count as the same point; nil = a sixteenth of an
+;;;                  inch in the drawing's own units
 ;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
 ;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
 ;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
@@ -28331,6 +28383,11 @@
 ;;;      reported, not dimensioned -- explode a polyline first if its
 ;;;      segments need cross dims.
 ;;;    * Zero-length lines are skipped; they have nothing to measure.
+;;;    * "Dimensioned already" means SOME dimension in model space
+;;;      carries those same two extension line origins, either way
+;;;      round -- whatever its style, layer, or where its dimension
+;;;      line sits.  A dim of the same tie pushed out to one side still
+;;;      counts as that tie being dimensioned.
 ;;;    * The "DIMENSION" layer is created when the drawing lacks it,
 ;;;      and thawed / unlocked / switched back on when it is there but
 ;;;      not usable -- a run onto a frozen layer would otherwise look
@@ -28344,7 +28401,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -28354,6 +28411,8 @@
 (setq cdc:*erase*  t)
 (setq cdc:*textpos* 0.8)
 (setq cdc:*vertang* 15.0)
+(setq cdc:*skipdimmed* t)
+(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -28445,6 +28504,61 @@
       (entupd en)
       t)))
 
+;; one foot expressed in the current drawing units (INSUNITS), so the
+;; tolerances below mean the same thing whatever the drawing works in
+(defun cdc:onefoot (/ u)
+  (setq u (getvar "INSUNITS"))
+  (cond ((= u 2) 1.0)                   ; feet
+        ((= u 4) 304.8)                 ; millimetres
+        ((= u 5) 30.48)                 ; centimetres
+        ((= u 6) 0.3048)                ; metres
+        ((= u 10) (/ 1.0 3.0))          ; yards
+        (t 12.0)))                      ; inches / unitless
+
+;; how close two extension line origins have to be before they count as
+;; the same point - a sixteenth of an inch, in the drawing's own units,
+;; unless cdc:*dupetol* says otherwise
+(defun cdc:dupetol ()
+  (if cdc:*dupetol* cdc:*dupetol* (/ (cdc:onefoot) 192.0)))
+
+;; T when a and b are the same point on the plan, within tol.  Compared
+;; flat: a survey point carries an elevation, the dimension that
+;; measures to it does not, and that difference must not read as two
+;; different places.
+(defun cdc:samept (a b tol)
+  (and (<= (abs (- (car  a) (car  b))) tol)
+       (<= (abs (- (cadr a) (cadr b))) tol)))
+
+;; the pairs of extension line origins every dimension in model space
+;; already carries.  A radial, angular or ordinate dim has no such pair
+;; and is passed over.
+(defun cdc:dimscan ( / ss i ed out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "DIMENSION") (410 . "Model")))
+        i   0)
+  (if ss
+    (while (< i (sslength ss))
+      (setq ed (entget (ssname ss i))
+            i  (1+ i))
+      (if (and (assoc 13 ed) (assoc 14 ed))
+        (setq out (cons (list (cdr (assoc 13 ed)) (cdr (assoc 14 ed)))
+                        out)))))
+  out)
+
+;; T when p1-p2 is one of the pairs in LST, either way round: the
+;; "that tie is dimensioned already, leave it alone" test.  Where the
+;; existing dim line sits is deliberately not part of it -- a dim of
+;; this tie pushed off to one side is still a dim of this tie.
+(defun cdc:dimmed-p (p1 p2 lst / tol q hit)
+  (setq tol (cdc:dupetol))
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (or (and (cdc:samept (car q) p1 tol) (cdc:samept (cadr q) p2 tol))
+            (and (cdc:samept (car q) p2 tol) (cdc:samept (cadr q) p1 tol)))
+      (setq hit t)))
+  hit)
+
 ;; "POOL, POINTS" from a list of layer names
 (defun cdc:names (lst / out)
   (foreach n lst
@@ -28454,8 +28568,9 @@
 ;;; -------------------- the command --------------------------------
 
 (defun c:CDCREATE ( / *error* olderr odim
-                      ss i en ed typ ends pairs skipped plines
-                      havestyle undo-open pre new made gone lays p1 p2 )
+                      ss i en ed typ ends pairs skipped plines dimmed
+                      already havestyle undo-open pre new made gone lays
+                      p1 p2 )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -28489,8 +28604,12 @@
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
     (progn
-      ;; -- 2. keep the lines, count what was ignored
-      (setq i 0 pairs nil skipped 0 plines 0)
+      ;; -- 2. keep the lines, count what was ignored.  What the
+      ;;       drawing already carries is read once, up front, and each
+      ;;       tie kept is added to it -- so two coincident lines in one
+      ;;       selection are the same tie, dimensioned once
+      (setq i 0 pairs nil skipped 0 plines 0 already 0
+            dimmed (if cdc:*skipdimmed* (cdc:dimscan)))
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -28504,14 +28623,24 @@
              (setq ends (cdc:ends en)
                    p1   (car  ends)
                    p2   (cadr ends))
-             (if (> (distance p1 p2) 1e-9)
-               (setq pairs (cons (list en p1 p2 (cdr (assoc 8 ed))) pairs))
-               (setq skipped (1+ skipped)))))
+             (cond
+               ((<= (distance p1 p2) 1e-9)        ; nothing to measure
+                  (setq skipped (1+ skipped)))
+               ((and cdc:*skipdimmed* (cdc:dimmed-p p1 p2 dimmed))
+                  (setq already (1+ already)))
+               (t
+                  (setq pairs  (cons (list en p1 p2 (cdr (assoc 8 ed)))
+                                     pairs)
+                        dimmed (cons (list p1 p2) dimmed))))))
         (setq i (1+ i)))
       (setq pairs (reverse pairs))
 
       (if (null pairs)
-        (princ "\nNo lines in the selection -- nothing to dimension.")
+        (princ (if (> already 0)
+                 (strcat "\n" (itoa already) " tie"
+                         (if (= already 1) " is" "s are")
+                         " dimensioned already -- nothing new to draw.")
+                 "\nNo lines in the selection -- nothing to dimension."))
         (progn
           ;; -- 3. layer and style, all of it inside one undo group
           (setvar "CMDECHO" 0)
@@ -28579,6 +28708,11 @@
                            (if (= gone 1) "" "s") " erased (layer"
                            (if (= 1 (length lays)) " " "s ")
                            (cdc:names (reverse lays)) ").")))
+          (if (> already 0)
+            (princ (strcat "\n" (itoa already) " line"
+                           (if (= already 1) "" "s")
+                           " left alone -- those two points carry a"
+                           " dimension already.")))
           (if (> skipped 0)
             (princ (strcat "\n" (itoa skipped)
                            " selected object(s) were not lines and were"
@@ -28936,6 +29070,10 @@
 ;;;   within the width tolerance of the wall opening (1/8" by default).
 ;;;   The step DEPTH, by contrast, is the vertical drop of a step - it is
 ;;;   only asked for by the optional side profile at the end of the run.
+;;;   A BENCH can ride along one of the two walls (inside out only): you
+;;;   say which wall, its offset off that wall, and which step it is
+;;;   attached to, and every step past that tread runs to the bench's
+;;;   front edge instead of the wall it stands in for.
 ;;;
 ;;; WORKFLOW
 ;;;   1.  Select the two walls that form the corner.  Walls may be LINEs
@@ -28999,25 +29137,31 @@
 ;;;           "SIDE STANDARD".
 ;;;       If a style is missing the current style is used and a note is
 ;;;       printed.
-;;;   7.  Enter at a step tread prompt means no more steps are
+;;;   7.  Inside out you may add a BENCH along one of the walls
+;;;       [Yes/No]: pick the wall it sits against, give its offset off
+;;;       that wall (its depth), then the step it is attached to.
+;;;       Steps up to that one meet the wall as usual; the bench's
+;;;       front edge starts on that tread and runs to the far end of
+;;;       its wall, capped there, and every later step is bounded by
+;;;       the front edge instead of the wall - a fitted width now runs
+;;;       wall to bench.  When dimensioning is on the bench's length
+;;;       and offset are dimensioned too.
+;;;   8.  Enter at a step tread prompt means no more steps are
 ;;;       required.  Back at a step tread prompt steps back one step:
 ;;;       it removes the step just drawn (its lines and its dimensions)
 ;;;       so a mistyped number does not cost the whole run (Undo, the
 ;;;       old keyword, is still accepted).  Same repeats the previous
 ;;;       step tread.  Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
-;;;   8.  When at least one step was drawn you may add a SIDE PROFILE.
+;;;   9.  When at least one step was drawn you may add a SIDE PROFILE.
 ;;;       If Yes, you give the step depths (the vertical drops), top
 ;;;       step first - one per step PLUS one more for the drop after
 ;;;       the last tread, so 3 steps take 4 depths.  Enter repeats the
 ;;;       previous drop, Back (or Undo) steps back.  Then pick the top
-;;;       of the wall and which side the steps descend.  The staircase
-;;;       silhouette (drop, then tread, per step, ending on that final
-;;;       drop) is drawn from the pick; when dimensioning is on the
-;;;       depths are chained vertically behind the wall with the
-;;;       overall depth further out again, in the depth dim style.
-;;;       The treads carry no dims of their own.
-;;;     9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
+;;;       of the first tread: the flight always runs DOWN AND TO THE
+;;;       LEFT from there, so there is no side to pick.  See "The side
+;;;       profile" below for what is drawn and how it is dimensioned.
+;;;     10. Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
 ;;;       step number.  AUTOBEAD does the work on its own rules (2"
@@ -29026,6 +29170,25 @@
 ;;;       so and finishes without beading.  The beads are their own
 ;;;       undo group - AutoCAD does not nest them - so one U undoes
 ;;;       the beads and the next undoes the steps.
+;;;
+;;; THE SIDE PROFILE
+;;;   The flight is drawn as an alternating drop/tread silhouette in
+;;;   world X/Y, always descending to the LEFT of the picked top of the
+;;;   first tread and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read.
+;;;   The dims climb with them, up and to the right, on the high side:
+;;;     * every depth is a dim of its own, standing the same distance
+;;;       right of the corner its drop lands on, so they step out with
+;;;       the flight instead of stacking in one chain;
+;;;     * the overall depth sits further out again;
+;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
+;;;   that bracket the drop.  Those corners run diagonally to each
+;;;   other, so binding the diagonal (rather than dimensioning the
+;;;   riser line) keeps the extension lines hooked to the geometry
+;;;   while the dim still reads the drop, not the slope.  The offset
+;;;   clears the widest tread in the flight, which is what keeps both
+;;;   extension lines running forward, out of the steps.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      step width tolerance in drawing units.  When
@@ -29060,7 +29223,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.7") ; printed on load and at command start so a
+(setq *cs-version* "v2.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -29310,11 +29473,15 @@
 (defun cs-setstyle (name / doc)
   (if (and (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    ;; the argument list is required, even for a lambda that takes
+    ;; none - without it this is a "too few arguments" error every
+    ;; time a style really has to be switched
     (vl-catch-all-apply
       '(lambda ()
          (setq doc (vla-get-activedocument (vlax-get-acad-object)))
          (vla-put-activedimstyle
-           doc (vla-item (vla-get-dimstyles doc) name))))))
+           doc (vla-item (vla-get-dimstyles doc) name)))
+      '())))
 
 ;; aligned dimension between A and B in dim style STYLE, dim line
 ;; passing through THRU.  Points are WCS and are translated to the
@@ -29327,6 +29494,24 @@
   (command "_.DIMALIGNED" "_non" (trans a 0 1)
                           "_non" (trans b 0 1)
                           "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; Vertical linear dimension between A and B in dim style STYLE, dim
+;; line passing through THRU.  A and B are the real step corners, which
+;; run diagonally to each other, so "_V" is forced: the dimension
+;; measures the DROP between them while its extension lines still hook
+;; the corners themselves.  Cleaner than dimensioning the riser line,
+;; which leaves the dim marooned beside the step instead of reading
+;; across to it.  Points are WCS.
+(defun cs-dimv (style a b thru / oldl)
+  (cs-setstyle style)
+  (if (and *cs-dim-layer* (cs-layerok *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.DIMLINEAR" "_non" (trans a 0 1)
+                         "_non" (trans b 0 1)
+                         "_V"
+                         "_non" (trans thru 0 1))
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; Draw the side (riser) line A-B unless it is degenerate or both points
@@ -29397,8 +29582,10 @@
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
                        bsides btreads bnums bside bdir bss pr be
-                       tlist tvals tds drops pd ix ppt pw p2 dx sgn
-                       px py totr totd)
+                       bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
+                       bns bnfar bnff bnl
+                       tlist tvals tds drops pd ix ppt pw
+                       px py totr totd cnrs ca cb pfo)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -29689,6 +29876,44 @@
                        "\" is missing or not drawable - using the"
                        " current layer.")))))
 
+  ;; ---- 7b. a bench along one wall? (inside out only) ------------------
+  ;; The bench stands in for a stretch of its wall: steps up to the
+  ;; attachment tread meet the wall, the bench's front edge starts on
+  ;; that tread, and every later step is bounded by the front edge
+  ;; instead.  Outside in walks toward the corner without knowing its
+  ;; step count in advance, so the bench is an inside-out feature.
+  (if (not outflag)
+    (progn
+      (initget "Yes No")
+      (if (= "Yes" (getkword "\nAdd a bench along a wall? [Yes/No] <No>: "))
+        (progn
+          (setq tmp (getpoint "\nPick the wall the bench sits against: "))
+          (if (null tmp)
+            (princ "\nNo wall picked - no bench added.")
+            (progn
+              (setq tmp  (trans tmp 1 0)
+                    bnsd (if (<= (cs-ptseg tmp (car w1) (cadr w1))
+                                 (cs-ptseg tmp (car w2) (cadr w2)))
+                           1 2)
+                    bnw  (if (= bnsd 1) w1 w2))
+              (initget 7)
+              (setq bno (getdist "\nBench offset off the wall (its depth): "))
+              (initget 7)
+              (setq bnk (getint (strcat "\nWhich step is the bench attached"
+                                        " to (it ends on that tread): ")))
+              ;; the front edge: the bench's wall shifted into the pool
+              (setq bnrm (cs-unit (cs-perp90 (cs-vec (car bnw) (cadr bnw)))))
+              (if (< (cs-dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
+              (setq bnf  (list (cs-add (car bnw) (cs-scl bnrm bno))
+                               (cs-add (cadr bnw) (cs-scl bnrm bno)))
+                    ;; which end of a normalized step that wall bounds
+                    ;; (1 = the E1 end, 2 = the E2 end)
+                    bnpe (if (> (cs-dot (if (= bnsd 1) d1 d2) perp) 0.0)
+                           2 1))
+              (princ (strcat "\n  Bench: " (rtos bno) " off that wall;"
+                             " steps past step " (itoa bnk)
+                             " run to its front edge."))))))))
+
   ;; ---- 8. prompt for each step and draw it ----------------------------
   (command "_.UNDO" "_Begin")
   (setq undoflag T dist 0.0 n 1 drawn 0
@@ -29834,12 +30059,17 @@
                                  " - step width <Enter = fit to walls>: ")))
       (setq dist (+ dist dep)                       ; step tread held exactly
             p    (cs-add start (cs-scl bis dist))
-            h1   (inters p (cs-add p perp) (car w1) (cadr w1) nil)
-            h2   (inters p (cs-add p perp) (car w2) (cadr w2) nil)
+            ;; past the bench tread the bench's front edge stands in
+            ;; for the wall it rides along
+            bact (and bnf (> n bnk))
+            bu1  (if (and bact (= bnsd 1)) bnf w1)
+            bu2  (if (and bact (= bnsd 2)) bnf w2)
+            h1   (inters p (cs-add p perp) (car bu1) (cadr bu1) nil)
+            h2   (inters p (cs-add p perp) (car bu2) (cadr bu2) nil)
             nat  (if (and h1 h2) (distance h1 h2))  ; wall opening here
             bey  (if (and h1 h2)
-                   (max (cs-beyond h1 (car w1) (cadr w1))
-                        (cs-beyond h2 (car w2) (cadr w2)))
+                   (max (cs-beyond h1 (car bu1) (cadr bu1))
+                        (cs-beyond h2 (car bu2) (cadr bu2)))
                    0.0)
             tmp  (cs-resolve wid nat h1 h2 p perp n tol)
             e1   (car tmp)
@@ -29854,8 +30084,10 @@
                  (cs-dot (cs-vec start e2) perp))
             (setq tmp e1 e1 e2 e2 tmp))
           (cs-mkline e1 e2)          ; the step (tread) edge
-          (cs-conn prevL e1 w1 w2)   ; side lines where the walls
-          (cs-conn prevR e2 w1 w2)   ; do not already close the step
+          ;; side lines where the walls do not already close the step;
+          ;; past the bench tread its front edge closes the bench side
+          (if (not (and bact (= bnpe 1))) (cs-conn prevL e1 w1 w2))
+          (if (not (and bact (= bnpe 2))) (cs-conn prevR e2 w1 w2))
           (if dimflag
             (progn
               (setq w (distance e1 e2))
@@ -29879,6 +30111,46 @@
                            slog)
                 tlist (cons dist tlist))))
       (setq n (1+ n))))
+
+  ;; ---- 8b. the bench ---------------------------------------------------
+  ;; Drawn once the treads exist: the front edge starts where the
+  ;; attachment tread crosses it, runs to the far end of its wall and
+  ;; is capped there; the attachment tread itself closes the near end.
+  (if bnf
+    (progn
+      (foreach pr (cs-treadents slog)
+        (if (= (car pr) bnk) (setq bnl (cdr pr))))
+      (cond
+        ((null bnl)
+         (princ (strcat "\nOnly " (itoa drawn) " step(s) landed - step "
+                        (itoa bnk) " does not exist, so no bench was"
+                        " drawn.")))
+        ((progn
+           (setq ed  (entget bnl)
+                 bns (inters (cdr (assoc 10 ed)) (cdr (assoc 11 ed))
+                             (car bnf) (cadr bnf) nil))
+           (null bns))
+         (princ (strcat "\nStep " (itoa bnk) " runs parallel to the"
+                        " bench's front edge - no bench drawn.")))
+        (T
+         (setq bnfar (cs-far bnw corner)
+               bnff  (cs-add bnfar (cs-scl bnrm bno)))
+         (cs-mkline bns bnff)             ; the front edge
+         (cs-mkline bnff bnfar)           ; the cap at the wall's far end
+         (if dimflag
+           (progn
+             ;; its length, placed behind the wall
+             (cs-dim *cs-width-dimstyle* bns bnff
+                     (cs-add (cs-mid2 bns bnff)
+                             (cs-scl bnrm (- (+ bno (* 2.0 txth))))))
+             ;; its offset off the wall, just past the cap
+             (cs-dim *cs-depth-dimstyle* bnfar bnff
+                     (cs-add (cs-mid2 bnfar bnff)
+                             (cs-scl (cs-unit (cs-vec corner bnfar))
+                                     (* 2.0 txth))))))
+         (princ (strcat "\nBench drawn: " (rtos (distance bns bnff))
+                        " along the wall, " (rtos bno)
+                        " off it, ending on step " (itoa bnk) "."))))))
 
   ;; ---- 9. optional side profile ---------------------------------------
   ;; Drawn while the UNDO group is still open and before the entry dim
@@ -29931,68 +30203,68 @@
                     ((null pd) (setq pd (car drops))))) ; Enter = previous
                 (setq drops (cons pd drops) ix (1+ ix)))
               (setq drops (reverse drops))
-              ;; place the profile
-              (setq ppt (getpoint
-                "\nPick the top of the wall for the side profile: "))
+              ;; Place the profile.  It always runs DOWN AND TO THE
+              ;; LEFT from the pick, so there is no side to ask about.
+              (setq ppt (getpoint (strcat "\nPick the top of the first"
+                                          " tread for the side profile: ")))
               (if (null ppt)
                 (princ "\nNo point picked - side profile skipped.")
                 (progn
-                  (setq pw (trans ppt 1 0) sgn 0.0)
-                  (while (and (zerop sgn)
-                              (setq p2 (getpoint ppt
-                                "\nPick a point on the side the steps descend: ")))
-                    (setq dx (- (car (trans p2 1 0)) (car pw)))
-                    (if (< (abs dx) 1e-10)
-                      (princ "\nPick left or right of the wall, not on it.")
-                      (setq sgn (if (> dx 0.0) 1.0 -1.0))))
-                  (if (zerop sgn)
-                    (princ "\nNo side picked - side profile skipped.")
+                  ;; The alternating drop/tread silhouette in world
+                  ;; X/Y, keeping the corner down its high side at
+                  ;; every level: the pick, then the foot of each
+                  ;; drop.  Those corners are what the dims bind to.
+                  (setq totd (apply '+ drops)
+                        totr (apply '+ tds)
+                        pw   (trans ppt 1 0)
+                        px   (car pw)
+                        py   (cadr pw)
+                        ix   0
+                        cnrs (list (list px py 0.0)))
+                  (foreach s tds
+                    (setq pd (nth ix drops))
+                    (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                    (setq py   (- py pd)
+                          cnrs (cons (list px py 0.0) cnrs))
+                    ;; the tread runs left, and carries no dim of its
+                    ;; own - the depths and the overall depth say it all
+                    (cs-mkline (list px py 0.0) (list (- px s) py 0.0))
+                    (setq px (- px s) ix (1+ ix)))
+                  ;; the last depth: the drop after the last tread
+                  (setq pd (nth ix drops))
+                  (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                  (setq py   (- py pd)
+                        cnrs (reverse (cons (list px py 0.0) cnrs)))
+                  (if dimflag
                     (progn
-                      ;; alternating drop/tread silhouette in world X/Y
-                      (setq totd (apply '+ drops)
-                            totr (apply '+ tds)
-                            px   (car pw)
-                            py   (cadr pw)
-                            ix   0)
-                      (foreach s tds
-                        (setq pd (nth ix drops))
-                        (cs-mkline (list px py 0.0)
-                                   (list px (- py pd) 0.0))
-                        (if dimflag   ; depth dims: one chain behind the wall
-                          (cs-dim *cs-depth-dimstyle*
-                                  (list px py 0.0)
-                                  (list px (- py pd) 0.0)
-                                  (list (- (car pw) (* sgn 2.0 txth))
-                                        (- py (* 0.5 pd)) 0.0)))
-                        (setq py (- py pd))
-                        ;; the tread carries no dim of its own - the
-                        ;; depths and the overall depth say it all
-                        (cs-mkline (list px py 0.0)
-                                   (list (+ px (* sgn s)) py 0.0))
-                        (setq px (+ px (* sgn s)) ix (1+ ix)))
-                      ;; the last depth: the drop after the last tread
-                      (setq pd (nth ix drops))
-                      (cs-mkline (list px py 0.0)
-                                 (list px (- py pd) 0.0))
-                      (if dimflag
-                        (cs-dim *cs-depth-dimstyle*
-                                (list px py 0.0)
-                                (list px (- py pd) 0.0)
-                                (list (- (car pw) (* sgn 2.0 txth))
-                                      (- py (* 0.5 pd)) 0.0)))
-                      (setq py (- py pd))
-                      (if dimflag   ; the overall depth, further out again
-                        (cs-dim *cs-depth-dimstyle*
-                                (list (car pw) (cadr pw) 0.0)
-                                (list (car pw) py 0.0)
-                                (list (- (car pw) (* sgn 5.0 txth))
-                                      (- (cadr pw) (* 0.5 totd)) 0.0)))
-                      (princ (strcat "\nSide profile drawn: "
-                                     (itoa (length tds))
-                                     " step(s), " (itoa (length drops))
-                                     " depths, total run " (rtos totr)
-                                     ", overall depth " (rtos totd)
-                                     "."))))))))))))
+                      ;; Every depth dim stands the same distance right
+                      ;; of the corner its drop lands on, so the dims
+                      ;; climb up and to the right with the steps
+                      ;; instead of stacking in one chain.  Clearing
+                      ;; the widest tread is what keeps BOTH extension
+                      ;; lines running forward, out of the flight.
+                      (setq pfo (+ (apply 'max tds) (* 2.0 txth))
+                            ix  1)
+                      (while (< ix (length cnrs))
+                        (setq ca (nth (1- ix) cnrs)
+                              cb (nth ix cnrs))
+                        (cs-dimv *cs-depth-dimstyle* ca cb
+                                 (list (+ (car cb) pfo)
+                                       (* 0.5 (+ (cadr ca) (cadr cb)))
+                                       0.0))
+                        (setq ix (1+ ix)))
+                      ;; the overall depth, further out again - the
+                      ;; whole diagonal, top corner to bottom corner
+                      (cs-dimv *cs-depth-dimstyle*
+                               (car cnrs) (last cnrs)
+                               (list (+ (car pw) pfo (* 3.0 txth))
+                                     (- (cadr pw) (* 0.5 totd)) 0.0))))
+                  (princ (strcat "\nSide profile drawn: "
+                                 (itoa (length tds))
+                                 " step(s), " (itoa (length drops))
+                                 " depths, down to the left; total run "
+                                 (rtos totr) ", overall depth "
+                                 (rtos totd) "."))))))))))
 
   ;; ---- 10. done --------------------------------------------------------
   (if (zerop drawn)
@@ -30124,12 +30396,21 @@
   (princ "\n     corner, and treads Parallel to the diagonal or square to")
   (princ "\n     the true-angle bisector.")
   (princ "\n  3. Dimension the steps? [Yes/No]")
-  (princ "\n  4. Add a side profile? [Yes/No] - give the step depths, top")
+  (princ "\n  4. Add a bench along a wall? [Yes/No] (inside out) - pick")
+  (princ "\n     the wall it sits against, give its offset off that wall,")
+  (princ "\n     then the step it is attached to.  Steps past that tread")
+  (princ "\n     are bounded by the bench's front edge instead of the")
+  (princ "\n     wall; the bench ends on that tread and runs out to the")
+  (princ "\n     far end of its wall.")
+  (princ "\n  5. Add a side profile? [Yes/No] - give the step depths, top")
   (princ "\n     step first: one per step plus the drop after the last")
-  (princ "\n     tread (3 steps take 4 depths).  Then pick the wall top")
-  (princ "\n     and which side the steps descend.  The depths and the")
-  (princ "\n     overall depth are dimensioned; the treads are not.")
-  (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
+  (princ "\n     tread (3 steps take 4 depths).  Then pick the top of the")
+  (princ "\n     first tread - the flight always runs down and to the")
+  (princ "\n     LEFT from there, so the steps rise to the right and the")
+  (princ "\n     dims climb with them.  Each depth is dimensioned beside")
+  (princ "\n     its own step and the overall depth further out; the")
+  (princ "\n     treads are not dimensioned.")
+  (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
@@ -30335,12 +30616,9 @@
 ;;;       give the step depths (the vertical drops), top step first -
 ;;;       one per step PLUS one more for the drop after the last
 ;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
-;;;       previous one; then pick the top of the wall and the side the
-;;;       steps descend.  The alternating drop/tread silhouette ends
-;;;       on that final drop and, when the plan steps are dimensioned,
-;;;       every depth is too - chained behind the wall, the overall
-;;;       depth further out again.  The treads carry no dims of their
-;;;       own.
+;;;       previous one; then pick the top of the first tread.  The
+;;;       flight always runs DOWN AND TO THE LEFT from there, so there
+;;;       is no side to pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -30350,6 +30628,23 @@
 ;;;       so and finishes without beading.  The beads are their own
 ;;;       undo group - AutoCAD does not nest them - so one U undoes
 ;;;       the beads and the next undoes the steps.
+;;;
+;;; THE SIDE PROFILE
+;;;   The flight is drawn as an alternating drop/tread silhouette in
+;;;   world X/Y, always descending to the LEFT of the picked top of the
+;;;   first tread and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read.
+;;;   The dims climb with them, up and to the right, on the high side:
+;;;     * every depth is a dim of its own, standing the same distance
+;;;       right of the corner its drop lands on, so they step out with
+;;;       the flight instead of stacking in one chain;
+;;;     * the overall depth sits further out again;
+;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
+;;;   that bracket the drop.  Those corners run diagonally to each
+;;;   other, so binding the diagonal (rather than dimensioning the
+;;;   riser line) keeps the extension lines hooked to the geometry
+;;;   while the dim still reads the drop, not the slope.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -30384,7 +30679,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.0") ; printed on load and at command start so a
+(setq *hs-version* "v3.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -30795,11 +31090,15 @@
 (defun hs-setstyle (name / doc)
   (if (and (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    ;; the argument list is required, even for a lambda that takes
+    ;; none - without it this is a "too few arguments" error every
+    ;; time a style really has to be switched
     (vl-catch-all-apply
       '(lambda ()
          (setq doc (vla-get-activedocument (vlax-get-acad-object)))
          (vla-put-activedimstyle
-           doc (vla-item (vla-get-dimstyles doc) name))))))
+           doc (vla-item (vla-get-dimstyles doc) name)))
+      '())))
 
 ;; aligned dimension between A and B in dim style STYLE, dim line
 ;; passing through THRU.  Points are WCS and are translated to the
@@ -30812,6 +31111,24 @@
   (command "_.DIMALIGNED" "_non" (trans a 0 1)
                           "_non" (trans b 0 1)
                           "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; Vertical linear dimension between A and B in dim style STYLE, dim
+;; line passing through THRU.  A and B are the real step corners, which
+;; run diagonally to each other, so "_V" is forced: the dimension
+;; measures the DROP between them while its extension lines still hook
+;; the corners themselves.  Cleaner than dimensioning the riser line,
+;; which leaves the dim marooned beside the step instead of reading
+;; across to it.  Points are WCS.
+(defun hs-dimv (style a b thru / oldl)
+  (hs-setstyle style)
+  (if (and *cs-dim-layer* (hs-layerok *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.DIMLINEAR" "_non" (trans a 0 1)
+                         "_non" (trans b 0 1)
+                         "_V"
+                         "_non" (trans thru 0 1))
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -30830,8 +31147,8 @@
                       dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
-                      tlist srt treads pv drops dd jx tcount ptop pu
-                      pcancel pside dxs sgn px py lowy totrun totdrop td)
+                      tlist srt treads pv drops dd jx tcount ptop
+                      px py totrun totdrop td cnrs pfo)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -31305,74 +31622,67 @@
               (T
                (setq drops (cons dd drops) jx (1+ jx)))))
           (setq drops (reverse drops))
-          ;; placement: the top of the wall, then which side it descends
-          (setq ptop (getpoint
-                       "\nPick the top of the wall for the side profile: "))
+          ;; Placement.  The profile always runs DOWN AND TO THE LEFT
+          ;; from the pick, so there is no side to ask about.
+          (setq ptop (getpoint (strcat "\nPick the top of the first tread"
+                                       " for the side profile: ")))
           (if (null ptop)
             (princ "\nNo point picked - side profile skipped.")
             (progn
-              (setq pu      ptop               ; the pick, still in UCS
-                    ptop    (trans ptop 1 0)
-                    sgn     nil
-                    pcancel nil)
-              (while (and (null sgn) (not pcancel))
-                (setq pside (getpoint pu
-                              "\nPick a point on the side the steps descend: "))
-                (cond
-                  ((null pside)
-                   (princ "\nNo side picked - side profile skipped.")
-                   (setq pcancel T))
-                  (T
-                   (setq dxs (- (car (trans pside 1 0)) (car ptop)))
-                   (if (< (abs dxs) 1e-10)
-                     (princ "\nPick left or right of the wall, not on it.")
-                     (setq sgn (if (< dxs 0.0) -1.0 1.0))))))
-              (if sgn
+              (setq totdrop 0.0 totrun 0.0)
+              (foreach dd drops (setq totdrop (+ totdrop dd)))
+              (foreach td treads (setq totrun (+ totrun td)))
+              ;; The alternating drop/tread silhouette in world X/Y,
+              ;; keeping the corner down its high side at every level:
+              ;; the pick, then the foot of each drop.  Those corners
+              ;; are what the dims bind to.
+              (setq ptop (trans ptop 1 0)
+                    px   (car ptop)
+                    py   (cadr ptop)
+                    jx   0
+                    cnrs (list (list px py 0.0)))
+              (foreach td treads
+                (setq dd (nth jx drops))
+                (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+                (setq py   (- py dd)
+                      cnrs (cons (list px py 0.0) cnrs))
+                ;; the tread runs left, and carries no dim of its own -
+                ;; the depths and the overall depth say it all
+                (hs-mkline (list px py 0.0) (list (- px td) py 0.0))
+                (setq px (- px td)
+                      jx (1+ jx)))
+              ;; the last depth: the drop after the last tread
+              (setq dd (nth jx drops))
+              (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+              (setq py   (- py dd)
+                    cnrs (reverse (cons (list px py 0.0) cnrs)))
+              (if dimflag
                 (progn
-                  (setq totdrop 0.0 totrun 0.0)
-                  (foreach dd drops (setq totdrop (+ totdrop dd)))
-                  (foreach td treads (setq totrun (+ totrun td)))
-                  (setq lowy (- (cadr ptop) totdrop)
-                        px   (car ptop)
-                        py   (cadr ptop)
-                        jx   0)
-                  (foreach td treads
-                    (setq dd (nth jx drops)
-                          e1 (list px py 0.0)
-                          e2 (list px (- py dd) 0.0))
-                    (hs-mkline e1 e2)          ; the drop
-                    (if dimflag                ; one vertical chain, behind
-                      (hs-dim *cs-depth-dimstyle* e1 e2   ; the wall
-                              (list (- (car ptop) (* sgn 2.0 txth))
-                                    (- py (* 0.5 dd)) 0.0)))
-                    (setq py (- py dd)
-                          e1 (list px py 0.0)
-                          e2 (list (+ px (* sgn td)) py 0.0))
-                    ;; the tread carries no dim of its own - the depths
-                    ;; and the overall depth say it all
-                    (hs-mkline e1 e2)          ; the tread
-                    (setq px (+ px (* sgn td))
-                          jx (1+ jx)))
-                  ;; the last depth: the drop after the last tread
-                  (setq dd (nth jx drops)
-                        e1 (list px py 0.0)
-                        e2 (list px (- py dd) 0.0))
-                  (hs-mkline e1 e2)
-                  (if dimflag
-                    (hs-dim *cs-depth-dimstyle* e1 e2
-                            (list (- (car ptop) (* sgn 2.0 txth))
-                                  (- py (* 0.5 dd)) 0.0)))
-                  (if dimflag                  ; the overall depth,
-                    (hs-dim *cs-depth-dimstyle* ; further out again
-                            (list (car ptop) (cadr ptop) 0.0)
-                            (list (car ptop) lowy 0.0)
-                            (list (- (car ptop) (* sgn 5.0 txth))
-                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0)))
-                  (princ (strcat "\nSide profile drawn: " (itoa tcount)
-                                 " step(s), " (itoa (length drops))
-                                 " depths, total run " (rtos totrun)
-                                 ", overall depth " (rtos totdrop)
-                                 "."))))))))))
+                  ;; Every depth dim stands the same distance right of
+                  ;; the corner its drop lands on, so the dims climb up
+                  ;; and to the right with the steps instead of
+                  ;; stacking in one chain.  Clearing the widest tread
+                  ;; is what keeps BOTH extension lines running
+                  ;; forward, out of the flight.
+                  (setq pfo (+ (apply 'max treads) (* 2.0 txth))
+                        jx  1)
+                  (while (< jx (length cnrs))
+                    (setq e1 (nth (1- jx) cnrs)
+                          e2 (nth jx cnrs))
+                    (hs-dimv *cs-depth-dimstyle* e1 e2
+                             (list (+ (car e2) pfo)
+                                   (* 0.5 (+ (cadr e1) (cadr e2))) 0.0))
+                    (setq jx (1+ jx)))
+                  ;; the overall depth, further out again - the whole
+                  ;; diagonal, top corner to bottom corner
+                  (hs-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
+                           (list (+ (car ptop) pfo (* 3.0 txth))
+                                 (- (cadr ptop) (* 0.5 totdrop)) 0.0))))
+              (princ (strcat "\nSide profile drawn: " (itoa tcount)
+                             " step(s), " (itoa (length drops))
+                             " depths, down to the left; total run "
+                             (rtos totrun) ", overall depth "
+                             (rtos totdrop) "."))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
   (if (zerop drawn)
@@ -31507,9 +31817,10 @@
   (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
   (princ "\n     (top step first, plus the drop after the last tread, so")
   (princ "\n     3 steps take 4 depths; Back supported), then pick the")
-  (princ "\n     top of the wall and the side the steps descend.  The")
-  (princ "\n     depths and the overall depth are dimensioned; the")
-  (princ "\n     treads are not.")
+  (princ "\n     top of the first tread.  The flight always runs down and")
+  (princ "\n     to the LEFT from there, so the steps rise to the right")
+  (princ "\n     and the dims climb with them - each depth beside its own")
+  (princ "\n     step, the overall further out; the treads are not dimmed.")
   (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
   (princ "\n     only question is which steps have beaded SIDE WALLS:")
   (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
@@ -31714,11 +32025,9 @@
 ;;;       vertical drops, top step first, one per step PLUS one more
 ;;;       for the drop after the last tread, so 3 steps take 4 depths
 ;;;       (Enter repeats the previous one, Back steps back) - then
-;;;       pick the top of the wall and the side the steps descend,
-;;;       and the staircase silhouette is drawn in world X/Y, ending
-;;;       on that final drop.  When dims are on the depths chain
-;;;       behind the wall with the overall depth further out again;
-;;;       the treads carry no dims of their own.
+;;;       pick the top of the first tread.  The flight always runs
+;;;       DOWN AND TO THE LEFT from there, so there is no side to
+;;;       pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - so the only thing asked is which steps carry the
 ;;;       bead along their side walls: All of them, or Some, given by
@@ -31728,6 +32037,23 @@
 ;;;       so and finishes without beading.  The beads are their own
 ;;;       undo group - AutoCAD does not nest them - so one U undoes
 ;;;       the beads and the next undoes the steps.
+;;;
+;;; THE SIDE PROFILE
+;;;   The flight is drawn as an alternating drop/tread silhouette in
+;;;   world X/Y, always descending to the LEFT of the picked top of the
+;;;   first tread and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read.
+;;;   The dims climb with them, up and to the right, on the high side:
+;;;     * every depth is a dim of its own, standing the same distance
+;;;       right of the corner its drop lands on, so they step out with
+;;;       the flight instead of stacking in one chain;
+;;;     * the overall depth sits further out again;
+;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
+;;;   that bracket the drop.  Those corners run diagonally to each
+;;;   other, so binding the diagonal (rather than dimensioning the
+;;;   riser line) keeps the extension lines hooked to the geometry
+;;;   while the dim still reads the drop, not the slope.
 ;;;
 ;;; OPTIONAL SETTINGS (set these before running the command)
 ;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
@@ -31759,7 +32085,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.2") ; printed on load and at command start so a
+(setq *ns-version* "v2.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -32166,11 +32492,15 @@
 (defun ns-setstyle (name / doc)
   (if (and (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
+    ;; the argument list is required, even for a lambda that takes
+    ;; none - without it this is a "too few arguments" error every
+    ;; time a style really has to be switched
     (vl-catch-all-apply
       '(lambda ()
          (setq doc (vla-get-activedocument (vlax-get-acad-object)))
          (vla-put-activedimstyle
-           doc (vla-item (vla-get-dimstyles doc) name))))))
+           doc (vla-item (vla-get-dimstyles doc) name)))
+      '())))
 
 ;; aligned dimension between A and B in dim style STYLE, dim line
 ;; passing through THRU.  Points are WCS and are translated to the
@@ -32183,6 +32513,24 @@
   (command "_.DIMALIGNED" "_non" (trans a 0 1)
                           "_non" (trans b 0 1)
                           "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; Vertical linear dimension between A and B in dim style STYLE, dim
+;; line passing through THRU.  A and B are the real step corners, which
+;; run diagonally to each other, so "_V" is forced: the dimension
+;; measures the DROP between them while its extension lines still hook
+;; the corners themselves.  Cleaner than dimensioning the riser line,
+;; which leaves the dim marooned beside the step instead of reading
+;; across to it.  Points are WCS.
+(defun ns-dimv (style a b thru / oldl)
+  (ns-setstyle style)
+  (if (and *cs-dim-layer* (ns-layerok *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.DIMLINEAR" "_non" (trans a 0 1)
+                         "_non" (trans b 0 1)
+                         "_V"
+                         "_non" (trans thru 0 1))
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -32205,8 +32553,8 @@
                         rsubj ngp ngv
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
-                        wpu wpt spt dx sgn totrun totdrop px0 cx cy
-                        lowy tt)
+                        wpu wpt totrun totdrop px0 cx cy
+                        tt cnrs ca cb pfo)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -32791,68 +33139,68 @@
               (T
                (setq drops (cons dv drops) k (1+ k)))))
           (setq drops (reverse drops))
-          ;; where the profile goes and which way the steps descend
-          (setq wpu (getpoint
-                      "\nPick the top of the wall for the side profile: "))
+          ;; Where the profile goes.  It always runs DOWN AND TO THE
+          ;; LEFT from the pick, so there is no side to ask about.
+          (setq wpu (getpoint (strcat "\nPick the top of the first tread"
+                                      " for the side profile: ")))
           (if (null wpu)
             (princ "\nNo point picked - no side profile drawn.")
             (progn
-              (setq wpt (ns-flat (trans wpu 1 0))
-                    sgn nil)
-              (while (and (null sgn)
-                          (setq spt (getpoint wpu
-                                      (strcat "\nPick a point on the side"
-                                              " the steps descend: "))))
-                (setq dx (- (car (trans spt 1 0)) (car wpt)))
-                (if (< (abs dx) 1e-10)
-                  (princ "\nPick left or right of the wall, not on it.")
-                  (setq sgn (if (< dx 0.0) -1.0 1.0))))
-              (if (null sgn)
-                (princ "\nNo side picked - no side profile drawn.")
+              ;; The alternating drop/tread silhouette in world X/Y,
+              ;; keeping the corner down its high side at every level:
+              ;; the pick, then the foot of each drop.  Those corners
+              ;; are what the dims bind to.
+              (setq wpt     (ns-flat (trans wpu 1 0))
+                    totrun  (apply '+ treads)
+                    totdrop (apply '+ drops)
+                    px0     (car wpt)
+                    cx      px0
+                    cy      (cadr wpt)
+                    k       0
+                    cnrs    (list (list cx cy 0.0)))
+              (foreach tt treads
+                (setq dv (nth k drops))
+                ;; the drop, straight down ...
+                (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                (setq cy   (- cy dv)
+                      cnrs (cons (list cx cy 0.0) cnrs))
+                ;; ... then the tread, running left - no dim of its
+                ;; own: the depths and the overall depth say it all
+                (ns-mkline (list cx cy 0.0) (list (- cx tt) cy 0.0))
+                (setq cx (- cx tt)
+                      k  (1+ k)))
+              ;; the last depth: the drop after the last tread
+              (setq dv (nth k drops))
+              (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+              (setq cy   (- cy dv)
+                    cnrs (reverse (cons (list cx cy 0.0) cnrs)))
+              (if dimflag
                 (progn
-                  (setq totrun  (apply '+ treads)
-                        totdrop (apply '+ drops)
-                        px0     (car wpt)
-                        cx      px0
-                        cy      (cadr wpt)
-                        lowy    (- (cadr wpt) totdrop)
-                        k       0)
-                  (foreach tt treads
-                    (setq dv (nth k drops))
-                    ;; the drop, straight down ...
-                    (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
-                    (if dimflag                  ; one chain behind the wall
-                      (ns-dim *cs-depth-dimstyle*
-                              (list cx cy 0.0) (list cx (- cy dv) 0.0)
-                              (list (- px0 (* sgn offd))
-                                    (- cy (* 0.5 dv)) 0.0)))
-                    (setq cy (- cy dv))
-                    ;; ... then the tread, out the way the steps
-                    ;; descend - no dim of its own: the depths and
-                    ;; the overall depth say it all
-                    (ns-mkline (list cx cy 0.0)
-                               (list (+ cx (* sgn tt)) cy 0.0))
-                    (setq cx (+ cx (* sgn tt))
-                          k  (1+ k)))
-                  ;; the last depth: the drop after the last tread
-                  (setq dv (nth k drops))
-                  (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
-                  (if dimflag
-                    (ns-dim *cs-depth-dimstyle*
-                            (list cx cy 0.0) (list cx (- cy dv) 0.0)
-                            (list (- px0 (* sgn offd))
-                                  (- cy (* 0.5 dv)) 0.0)))
-                  (if dimflag                    ; the overall depth,
-                    (ns-dim *cs-depth-dimstyle*  ; further out again
-                            (list px0 (cadr wpt) 0.0)
-                            (list px0 lowy 0.0)
-                            (list (- px0 (* sgn (+ offd (* 3.0 txth))))
-                                  (- (cadr wpt) (* 0.5 totdrop)) 0.0)))
-                  (princ (strcat "\nSide profile drawn: " (itoa nsteps)
-                                 " step(s), " (itoa (length drops))
-                                 " depths, total run " (rtos totrun)
-                                 ", overall depth " (rtos totdrop)
-                                 "."))))))))))
+                  ;; Every depth dim stands the same distance right of
+                  ;; the corner its drop lands on, so the dims climb up
+                  ;; and to the right with the steps instead of
+                  ;; stacking in one chain.  Clearing the widest tread
+                  ;; is what keeps BOTH extension lines running
+                  ;; forward, out of the flight.
+                  (setq pfo (+ (apply 'max treads) (* 2.0 txth))
+                        k   1)
+                  (while (< k (length cnrs))
+                    (setq ca (nth (1- k) cnrs)
+                          cb (nth k cnrs))
+                    (ns-dimv *cs-depth-dimstyle* ca cb
+                             (list (+ (car cb) pfo)
+                                   (* 0.5 (+ (cadr ca) (cadr cb))) 0.0))
+                    (setq k (1+ k)))
+                  ;; the overall depth, further out again - the whole
+                  ;; diagonal, top corner to bottom corner
+                  (ns-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
+                           (list (+ px0 pfo (* 3.0 txth))
+                                 (- (cadr wpt) (* 0.5 totdrop)) 0.0))))
+              (princ (strcat "\nSide profile drawn: " (itoa nsteps)
+                             " step(s), " (itoa (length drops))
+                             " depths, down to the left; total run "
+                             (rtos totrun) ", overall depth "
+                             (rtos totdrop) "."))))))))
 
   ;; ---- 7. done ---------------------------------------------------------
   (if (zerop drawn)
@@ -32999,9 +33347,10 @@
   (princ "\n  5. Add a side profile? [Yes/No] - the STEP DEPTHS, top")
   (princ "\n     step first: one per step plus the drop after the last")
   (princ "\n     tread (3 steps take 4 depths).  Then pick the top of")
-  (princ "\n     the wall and the side the steps descend; the")
-  (princ "\n     silhouette is drawn in world X/Y, with the depths and")
-  (princ "\n     the overall depth dimensioned - the treads are not.")
+  (princ "\n     the first tread - the flight always runs down and to")
+  (princ "\n     the LEFT from there, so the steps rise to the right")
+  (princ "\n     and the dims climb with them: each depth beside its")
+  (princ "\n     own step, the overall further out, treads not dimmed.")
   (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so")
   (princ "\n     the only question is which steps have beaded SIDE")
   (princ "\n     WALLS: [All/Some], and Some takes the step numbers")
@@ -58935,7 +59284,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.5")
+(setq *lazform-version* "v1.7")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -59126,7 +59475,7 @@
      (420 380 690 250) (420 620 690 750) (690 250 690 750)
      (190 250 250 440) (190 750 250 560))
    (("B"  "b"  100 120 900 120 "h" "B - overall length")
-    ("S"  "ss" 100 195 190 195 "h" "S - corner cut along the side")
+    ("S"  "ss" 100 205 190 205 "h" "S - corner cut along the side")
     ("T"  "tt" 190 205 780 205 "h" "T - top side length")
     ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
     ("A"  "a"   20 250  20 750 "v" "A - overall width")
@@ -59154,7 +59503,7 @@
      (420 380 690 250) (420 620 690 750) (690 250 690 750)
      (190 250 250 380) (190 750 250 620))
    (("B"  "b"  100 120 900 120 "h" "B - overall length")
-    ("S"  "ss" 100 195 190 195 "h" "S - corner cut along the side")
+    ("S"  "ss" 100 205 190 205 "h" "S - corner cut along the side")
     ("T"  "tt" 190 205 780 205 "h" "T - top side length")
     ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
     ("A"  "a"   20 250  20 750 "v" "A - overall width")
@@ -59220,6 +59569,106 @@
 ;; nothing to imply simply has none.
 (defun lzf:gates (c) (nth 6 c))
 
+;;; -------------------- where the chart is cut ---------------------------
+;;;  The closest DCL comes to boxes ON the drawing: the chart is cut
+;;;  into horizontal bands at the heights where its horizontal
+;;;  dimension rows run, and those rows are REAL edit boxes wedged
+;;;  between the bands, pushed to their letters' positions by spacers.
+;;;  The vertical dimensions cannot be wedged -- a box cannot stand
+;;;  sideways in a row -- so they keep their boxes in the side column
+;;;  with their values drawn on the chart as before.
+;;;
+;;;  A cut is a per-mille y that must land EXACTLY on a horizontal
+;;;  dimension's line; every "h" dimension at that y becomes a wedge
+;;;  box and loses its drawn arrow, since the row of boxes IS that row
+;;;  of the drawing now.  tests/test_lazform.py checks both ways: no
+;;;  cut without dims on it, and the wedge boxes sitting where the
+;;;  letters were, within the tolerance spacer widths allow.
+
+(setq lzf:*cuts* '(("Rectangle" 175 580)
+                   ("Oval" 130 205 345 580)
+                   ("ROman" 130 205 345 580)
+                   ("Grecian" 120 205 330 580)
+                   ("GRSquare" 120 205 580)
+                   ("L" 90 340 625 920)))
+
+(defun lzf:cuts (c) (cdr (assoc (car c) lzf:*cuts*)))
+
+;;; -------------------- corners -----------------------------------------
+;;;  A corner is a treatment plus, when the treatment is Radius or Cut,
+;;;  a size -- so each gets a dropdown and a size box that is greyed
+;;;  until a sized treatment is picked.  The dropdown's first entry is
+;;;  "(ask)": the form's version of leaving a box empty, and the only
+;;;  honest default, since POOL offers no default on a first corner
+;;;  either.  Only the charts whose POOL flow asks in these terms carry
+;;;  corner rows; Roman and the Grecians spell their corners as letter
+;;;  dimensions that are already on the chart.
+;;;
+;;;  In-square is the one wrinkle: an in-square rectangle asks ONE
+;;;  question for all four corners, under its own key -- so when the
+;;;  toggle is on, corner A's row speaks for all four and the other
+;;;  three are ignored (lzf:form does the mapping).
+
+(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+
+(setq lzf:*corners*
+  '(("Rectangle"
+     ("cornera" "Corner A (bottom left)")
+     ("cornerb" "Corner B (bottom right)")
+     ("cornerc" "Corner C (top right)")
+     ("cornerd" "Corner D (top left)"))
+    ("L"
+     ("outercorners" "Outer corners (all five)")
+     ("innercorner" "Reverse corner E"))))
+
+(defun lzf:corners (c) (cdr (assoc (car c) lzf:*corners*)))
+
+;; the dropdown selections, by stem: ((\"cornera\" . 3) ...)
+(setq lzf:*cvals* nil)
+
+(defun lzf:cget (stem / p)
+  (if (setq p (assoc stem lzf:*cvals*)) (cdr p) 0))
+
+(defun lzf:cput (stem i / out p)
+  (foreach p lzf:*cvals* (if (/= (car p) stem) (setq out (cons p out))))
+  (setq lzf:*cvals* (reverse (cons (cons stem i) out))))
+
+;; is selection I a sized treatment?  2 = Radius, 3 = Cut
+(defun lzf:csized (i) (member i '(2 3)))
+
+;; the dropdown changed: remember it, grey or un-grey the size box,
+;; and repaint the chart the list may have unrolled across
+(defun lzf:cornerpick (stem v / i)
+  (setq i (atoi v))
+  (lzf:cput stem i)
+  (mode_tile (strcat stem "-sz") (if (lzf:csized i) 0 1))
+  (lzf:redraw)
+  (princ))
+
+;; The horizontal dims whose line IS this cut.
+(defun lzf:cutdims (c y / d out)
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "h") (= (nth 3 d) y) (= (nth 5 d) y))
+        (setq out (cons d out))))
+  (reverse out))
+
+;; Keys of every dim that lives in a wedge row rather than the column.
+(defun lzf:wedge-keys (c / y d out)
+  (foreach y (lzf:cuts c)
+    (foreach d (lzf:cutdims c y)
+      (setq out (cons (cadr d) out))))
+  (reverse out))
+
+;; The bands between the cuts: ((y0 . y1) ...), whole chart when a
+;; chart declares no cuts.
+(defun lzf:bands (c / ys prev out y)
+  (setq ys (append (list 0) (lzf:cuts c) (list 1000))
+        prev (car ys))
+  (foreach y (cdr ys)
+    (setq out (cons (cons prev y) out)
+          prev y))
+  (reverse out))
+
 ;; Every POOL key the chart can answer, drawn ones first, in order.
 (defun lzf:keys (c / d out)
   (foreach d (lzf:dims c) (setq out (cons (cadr d) out)))
@@ -59255,6 +59704,8 @@
 
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
+(setq lzf:*y0* 0)               ; the band being drawn, in per-mille --
+(setq lzf:*y1* 1000)            ; the whole chart when nothing is cut
 
 (setq lzf:*col-line* -16)       ; dialog foreground: the outline
 (setq lzf:*col-back* -15)       ; dialog background: the clear
@@ -59264,7 +59715,26 @@
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
-(defun lzf:py (v) (fix (/ (* v lzf:*dy*) 1000.0)))
+(defun lzf:py (v)
+  (fix (/ (* (- v lzf:*y0*) lzf:*dy*) (float (- lzf:*y1* lzf:*y0*)))))
+
+(defun lzf:iny (v) (and (<= lzf:*y0* v) (<= v lzf:*y1*)))
+
+;; The segment, clipped to the band, or nil when none of it is inside.
+;; Everything the bands draw goes through this, so a cut is one rule
+;; applied everywhere rather than per-shape case work.
+(defun lzf:clipseg (x1 y1 x2 y2 / ta tb lo hi)
+  (cond
+    ((= y1 y2)
+     (if (lzf:iny y1) (list x1 y1 x2 y2)))
+    (t
+     (setq ta (/ (- lzf:*y0* y1) (float (- y2 y1)))
+           tb (/ (- lzf:*y1* y1) (float (- y2 y1)))
+           lo (max 0.0 (min ta tb))
+           hi (min 1.0 (max ta tb)))
+     (if (< lo hi)
+         (list (+ x1 (* (- x2 x1) lo)) (+ y1 (* (- y2 y1) lo))
+               (+ x1 (* (- x2 x1) hi)) (+ y1 (* (- y2 y1) hi)))))))
 
 ;;  An outline element is either a POLYLINE -- a flat list of per-mille
 ;;  numbers, x y x y ... -- or an ARC, written
@@ -59300,12 +59770,13 @@
 (defun lzf:flatten (e)
   (if (= (type (car e)) 'STR) (lzf:arcpts e) e))
 
-;; A polyline given as a flat per-mille list, in pixels.
-(defun lzf:pline (flat col / a b)
+;; A polyline given as a flat per-mille list, clipped to the band.
+(defun lzf:pline (flat col / s)
   (while (and flat (cddr flat))
-    (setq a (list (lzf:px (car flat)) (lzf:py (cadr flat)))
-          b (list (lzf:px (caddr flat)) (lzf:py (cadddr flat))))
-    (vector_image (car a) (cadr a) (car b) (cadr b) col)
+    (if (setq s (lzf:clipseg (car flat) (cadr flat)
+                             (caddr flat) (cadddr flat)))
+        (vector_image (lzf:px (car s)) (lzf:py (cadr s))
+                      (lzf:px (caddr s)) (lzf:py (cadddr s)) col))
     (setq flat (cddr flat))))
 
 ;; A polyline already in pixels, given as (x y x y ...).
@@ -59353,23 +59824,36 @@
           i (1+ i)))
   pen)
 
-;; The dimension line with an arrowhead at each end.  Only horizontal
-;; and vertical dimensions exist on these charts, which is why the two
-;; cases below are the whole of it.
-(defun lzf:arrow (x1 y1 x2 y2 col / a b)
-  (vector_image x1 y1 x2 y2 col)
+;; The dimension line with an arrowhead at each end, in per-mille,
+;; clipped to the band.  A head is drawn only when its own end is
+;; inside the band -- the shaft of a vertical dimension can run
+;; through several bands, and each draws just its stretch.
+(defun lzf:arrow (x1 y1 x2 y2 col / s a b p q)
+  (if (setq s (lzf:clipseg x1 y1 x2 y2))
+      (vector_image (lzf:px (car s)) (lzf:py (cadr s))
+                    (lzf:px (caddr s)) (lzf:py (cadddr s)) col))
   (setq a 6 b 3)
   (cond
-    ((= y1 y2)                          ; horizontal: heads point out
-     (vector_image x1 y1 (+ x1 a) (- y1 b) col)
-     (vector_image x1 y1 (+ x1 a) (+ y1 b) col)
-     (vector_image x2 y2 (- x2 a) (- y2 b) col)
-     (vector_image x2 y2 (- x2 a) (+ y2 b) col))
+    ((= y1 y2)                          ; horizontal: heads point in
+     (if (lzf:iny y1)
+         (progn
+           (setq p (list (lzf:px (min x1 x2)) (lzf:py y1))
+                 q (list (lzf:px (max x1 x2)) (lzf:py y1)))
+           (vector_image (car p) (cadr p) (+ (car p) a) (- (cadr p) b) col)
+           (vector_image (car p) (cadr p) (+ (car p) a) (+ (cadr p) b) col)
+           (vector_image (car q) (cadr q) (- (car q) a) (- (cadr q) b) col)
+           (vector_image (car q) (cadr q) (- (car q) a) (+ (cadr q) b) col))))
     (t                                  ; vertical
-     (vector_image x1 y1 (- x1 b) (+ y1 a) col)
-     (vector_image x1 y1 (+ x1 b) (+ y1 a) col)
-     (vector_image x2 y2 (- x2 b) (- y2 a) col)
-     (vector_image x2 y2 (+ x2 b) (- y2 a) col))))
+     (if (lzf:iny (min y1 y2))
+         (progn
+           (setq p (list (lzf:px x1) (lzf:py (min y1 y2))))
+           (vector_image (car p) (cadr p) (- (car p) b) (+ (cadr p) a) col)
+           (vector_image (car p) (cadr p) (+ (car p) b) (+ (cadr p) a) col)))
+     (if (lzf:iny (max y1 y2))
+         (progn
+           (setq q (list (lzf:px x1) (lzf:py (max y1 y2))))
+           (vector_image (car q) (cadr q) (- (car q) b) (- (cadr q) a) col)
+           (vector_image (car q) (cadr q) (+ (car q) b) (- (cadr q) a) col))))))
 
 ;; Where one dimension's text belongs, and what it says: the LETTER
 ;; until a value is typed, then the value in the letter's place.  A
@@ -59425,21 +59909,47 @@
   (lzf:text txt lx ly sc
             (if (= (lzf:get key) "") lzf:*col-line* lzf:*col-val*)))
 
-;; The whole picture, start to end.  Every vector goes between one
-;; start_image and one end_image so the tile is painted once.
-(defun lzf:redraw ( / c poly d)
+;; The band a dimension's TEXT belongs to: a horizontal dim sits on
+;; its own line, a vertical one labels at the top of its span.
+(defun lzf:anchor (d)
+  (if (= (nth 6 d) "h")
+      (nth 3 d)
+      (min (nth 3 d) (nth 5 d))))
+
+(defun lzf:inband (v) (and (<= lzf:*y0* v) (< v lzf:*y1*)))
+
+;; The whole picture: every band painted once, each between its own
+;; start_image and end_image.  Wedge dims draw nothing at all -- their
+;; row of the drawing IS a row of real boxes now -- while every other
+;; dim draws its clipped arrow in every band it crosses and its text
+;; in the band its anchor falls in.
+(defun lzf:redraw ( / c wk bands b i key poly d)
   (setq c lzf:*chart*
-        lzf:*dx* (dimx_tile "chart")
-        lzf:*dy* (dimy_tile "chart"))
-  (start_image "chart")
-  (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
-  (foreach poly (lzf:outline c)
-    (lzf:pline (lzf:flatten poly) lzf:*col-line*))
-  (foreach d (lzf:dims c)
-    (lzf:arrow (lzf:px (nth 2 d)) (lzf:py (nth 3 d))
-               (lzf:px (nth 4 d)) (lzf:py (nth 5 d)) lzf:*col-dim*))
-  (foreach d (lzf:dims c) (lzf:label d))
-  (end_image)
+        wk (lzf:wedge-keys c)
+        bands (lzf:bands c)
+        i 0)
+  (foreach b bands
+    (setq key (strcat "chart" (itoa i))
+          lzf:*y0* (car b)
+          lzf:*y1* (cdr b)
+          lzf:*dx* (dimx_tile key)
+          lzf:*dy* (dimy_tile key))
+    (start_image key)
+    (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
+    (foreach poly (lzf:outline c)
+      (lzf:pline (lzf:flatten poly) lzf:*col-line*))
+    (foreach d (lzf:dims c)
+      (if (not (member (cadr d) wk))
+          (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
+                     lzf:*col-dim*)))
+    (foreach d (lzf:dims c)
+      (if (and (not (member (cadr d) wk))
+               (lzf:inband (lzf:anchor d)))
+          (lzf:label d)))
+    (end_image)
+    (setq i (1+ i)))
+  (setq lzf:*y0* 0
+        lzf:*y1* 1000)
   (princ))
 
 ;;; -------------------- why the picture is not clickable ----------------
@@ -59485,10 +59995,66 @@
                     out)))
   (reverse (cons "  }" out)))
 
+(setq lzf:*chart-w* 52)         ; the chart column, in character cells
+(setq lzf:*chart-h* 19)         ; its total height, spread over the bands
+
+;; character cells across for a per-mille x
+(defun lzf:cellx (v) (/ (* v lzf:*chart-w*) 1000.0))
+
+;; One wedge row: the cut's dims as real edit boxes, pushed to their
+;; letters' positions by spacers.  Positions are in character cells and
+;; a box has its own minimum size, so this is honest about being
+;; approximate: a box lands within a cell or so of its letter, and two
+;; that would collide get pushed apart rather than overlapped.
+(defun lzf:wedgerow (c y / out d lbl w want pos)
+  (setq out (list "      : row {")
+        pos 0.0)
+  ;; LEFT TO RIGHT, whatever order the chart lists them in: the row is
+  ;; built by walking a cursor across it, and a dim listed before its
+  ;; left-hand neighbour would shove that neighbour to the wrong side
+  ;; of the chart
+  (foreach d (vl-sort (lzf:cutdims c y)
+                      '(lambda (p q)
+                         (< (+ (nth 2 p) (nth 4 p))
+                            (+ (nth 2 q) (nth 4 q)))))
+    (setq lbl (car d)
+          w (+ (strlen lbl) 10.0)       ; label + borders + 6-char box
+          want (- (lzf:cellx (/ (+ (nth 2 d) (nth 4 d)) 2)) (/ w 2)))
+    (if (< want (+ pos 0.5)) (setq want (+ pos 0.5)))
+    (setq out (cons (strcat "        : spacer { width = "
+                            (rtos (- want pos) 2 1) "; }")
+                    out))
+    (setq out (cons (strcat "        : edit_box { key = \"" (cadr d)
+                            "\"; label = \"" lbl
+                            "\"; edit_width = 6; fixed_width = true; }")
+                    out))
+    (setq pos (+ want w)))
+  (setq out (cons "        spacer;" out))
+  (reverse (cons "      }" out)))
+
+;; The chart as a stack: an image tile per band, a wedge row at every
+;; cut, heights split in proportion to the bands they show.
+(defun lzf:bandtiles (c / out bands b i h)
+  (setq i 0
+        bands (lzf:bands c))
+  (foreach b bands
+    (setq h (/ (* (- (cdr b) (car b)) lzf:*chart-h*) 1000.0))
+    (if (< h 0.8) (setq h 0.8))
+    (setq out (append out
+                      (list (strcat "      : image { key = \"chart" (itoa i)
+                                    "\"; width = " (itoa lzf:*chart-w*)
+                                    "; height = " (rtos h 2 1)
+                                    "; fixed_width = true; "
+                                    "fixed_height = true; color = -15; }"))))
+    (if (< (1+ i) (length bands))
+        (setq out (append out (lzf:wedgerow c (cdr b)))))
+    (setq i (1+ i)))
+  out)
+
 ;; One dialog per chart.  They all live in one generated file so the
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
-(defun lzf:dcl-one (c / out d)
+(defun lzf:dcl-one (c / out d wk l)
   ;; out is consed newest-first and reversed once at the end, so this
   ;; seed list reads BACKWARDS: the label second here puts it second in
   ;; the file, after the line that opens the dialog.  The other way
@@ -59497,13 +60063,13 @@
                   (strcat (lzf:dlgname (car c)) " : dialog {")))
   (setq out (append (reverse (lzf:tabstrip (car c))) out))
   (setq out (cons "  : row {" out))
-  ;; A PASSIVE image tile, deliberately -- see "why the picture is not
-  ;; clickable" above.
-  (setq out (cons (strcat "    : image { key = \"chart\"; "
-                          "width = 52; aspect_ratio = 0.72; "
-                          "fixed_width = true; fixed_height = true; "
-                          "color = -15; }")
-                  out))
+  ;; PASSIVE image tiles, deliberately -- see "why the picture is not
+  ;; clickable" above -- stacked with the wedge rows between them.
+  (setq wk (lzf:wedge-keys c))
+  (setq out (cons "    : column {" out))
+  (foreach l (lzf:bandtiles c)
+    (setq out (cons l out)))
+  (setq out (cons "    }" out))
   (setq out (cons "    : column {" out))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"Dimensions\";" out))
@@ -59512,17 +60078,22 @@
   ;; dimension on the chart -- which is as close to clicking the
   ;; drawing itself as DCL allows, and the button sits against the box
   ;; it fills rather than off in a separate list.
+  ;; only the dims that could NOT be wedged into the drawing -- the
+  ;; vertical ones -- keep a row here; the horizontal chains live on
+  ;; the chart itself now
   (foreach d (lzf:dims c)
-    (setq out (cons "        : row {" out))
-    (setq out (cons (strcat "          : button { key = \"pick_" (cadr d)
-                            "\"; label = \"" (car d)
-                            "\"; fixed_width = true; }")
-                    out))
-    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
-                            "\"; edit_width = 9; label = \"" (nth 7 d)
-                            "\"; }")
-                    out))
-    (setq out (cons "        }" out)))
+    (if (not (member (cadr d) wk))
+        (progn
+          (setq out (cons "        : row {" out))
+          (setq out (cons (strcat "          : button { key = \"pick_"
+                                  (cadr d) "\"; label = \"" (car d)
+                                  "\"; fixed_width = true; }")
+                          out))
+          (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                                  "\"; edit_width = 9; label = \"" (nth 7 d)
+                                  "\"; }")
+                          out))
+          (setq out (cons "        }" out)))))
   (setq out (cons "      }" out))
   (if (lzf:extra c)
     (progn
@@ -59533,6 +60104,22 @@
                                 "\"; edit_width = 9; label = \"" (cadr d)
                                 "\"; }")
                         out)))
+      (setq out (cons "      }" out))))
+  (if (lzf:corners c)
+    (progn
+      (setq out (cons "      : boxed_column {" out))
+      (setq out (cons "        label = \"Corners\";" out))
+      (foreach d (lzf:corners c)
+        (setq out (cons "        : row {" out))
+        (setq out (cons (strcat "          : popup_list { key = \"" (car d)
+                                "\"; label = \"" (cadr d)
+                                "\"; edit_width = 9; }")
+                        out))
+        (setq out (cons (strcat "          : edit_box { key = \"" (car d)
+                                "-sz\"; label = \"size\"; "
+                                "edit_width = 6; fixed_width = true; }")
+                        out))
+        (setq out (cons "        }" out)))
       (setq out (cons "      }" out))))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"The rest of the run\";" out))
@@ -59547,7 +60134,7 @@
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
-                          "label = \"Click a letter to jump to its box.  "
+                          "label = \"The chain boxes sit on the drawing itself.  "
                           "Type NA where nothing was measured; leave a box "
                           "empty and POOL will ask.\"; }")
                   out))
@@ -59620,10 +60207,35 @@
           a (lzf:answer v))
     (if (not (eq a 'SKIP))
         (setq out (cons (cons (read k) a) out))))
+  ;; the corners: a dropdown left on (ask) sends nothing, a sized
+  ;; treatment carries its size when one parses.  In-square asks ONE
+  ;; question for all four rectangle corners, under its own key, so
+  ;; corner A's row speaks for all four there and B-D are ignored.
+  (foreach k (lzf:cornerpairs insq)
+    (setq out (cons k out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
     (setq out (cons (cons (read (car k)) (cdr k)) out)))
+  (reverse out))
+
+;; The (key . value) pairs the corner rows contribute.
+(defun lzf:cornerpairs (insq / out d stem use i ty a)
+  (foreach d (lzf:corners lzf:*chart*)
+    (setq stem (car d)
+          use stem)
+    (if (and insq (= (car lzf:*chart*) "Rectangle"))
+        (setq use (if (= stem "cornera") "corners" nil)))
+    (if (and use (> (setq i (lzf:cget stem)) 0))
+        (progn
+          (setq ty (nth i lzf:*ctreat*))
+          (setq out (cons (cons (read (strcat use "-ty")) ty) out))
+          (if (lzf:csized i)
+              (progn
+                (setq a (lzf:answer (lzf:get (strcat stem "-sz"))))
+                (if (numberp a)
+                    (setq out (cons (cons (read (strcat use "-sz")) a)
+                                    out))))))))
   (reverse out))
 
 ;;; -------------------- the run -----------------------------------------
@@ -59631,7 +60243,7 @@
 ;;  out of scope by the time POOL is started: POOL installs its own, and
 ;;  a POOL that fails must report as POOL.
 
-(defun lzf:show (chartkey / *error* f dcl rc c d go done out)
+(defun lzf:show (chartkey / *error* f dcl rc c d n go done out)
   (defun *error* (msg)
     (term_dialog)
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
@@ -59643,6 +60255,7 @@
       (princ (strcat "\nLAZFORM error: " msg)))
     (princ))
   (setq lzf:*vals* nil
+        lzf:*cvals* nil                 ; corner dropdowns back to (ask)
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
         lzf:*pos* nil                   ; where the user last had it
@@ -59674,6 +60287,22 @@
           (foreach d lzf:*btypes* (add_list d))
           (end_list)
           (set_tile "btype" (itoa lzf:*btype*))
+          ;; the corner dropdowns: filled, put back to their remembered
+          ;; pick, size boxes greyed unless that pick takes a size --
+          ;; and each harvests into its own store the moment it changes
+          (foreach d (lzf:corners c)
+            (start_list (car d))
+            (foreach n lzf:*ctreat* (add_list n))
+            (end_list)
+            (set_tile (car d) (itoa (lzf:cget (car d))))
+            (set_tile (strcat (car d) "-sz")
+                      (lzf:get (strcat (car d) "-sz")))
+            (mode_tile (strcat (car d) "-sz")
+                       (if (lzf:csized (lzf:cget (car d))) 0 1))
+            (action_tile (car d)
+              (strcat "(lzf:cornerpick \"" (car d) "\" $value)"))
+            (action_tile (strcat (car d) "-sz")
+              (strcat "(lzf:put \"" (car d) "-sz\" $value)")))
           (if lzf:*insq* (set_tile "insq" "1"))
           ;; put back what was typed before this page was opened
           (foreach d (lzf:keys c) (set_tile d (lzf:get d)))
@@ -59685,11 +60314,14 @@
           ;; the box's contents selected so the first keystroke
           ;; replaces rather than appends, and the dimension ringed on
           ;; the chart
+          ;; wedge dims have no pick button -- their box already sits
+          ;; on the drawing where the letter was
           (foreach d (lzf:dims c)
-            (action_tile (strcat "pick_" (cadr d))
-              (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
-                      " (mode_tile \"" (cadr d) "\" 2)"
-                      " (mode_tile \"" (cadr d) "\" 3)")))
+            (if (not (member (cadr d) (lzf:wedge-keys c)))
+                (action_tile (strcat "pick_" (cadr d))
+                  (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
+                          " (mode_tile \"" (cadr d) "\" 2)"
+                          " (mode_tile \"" (cadr d) "\" 3)"))))
           ;; the tabs -- each closes this page and names the next
           (foreach d lzf:*charts*
             (action_tile (strcat "tab_" (car d))

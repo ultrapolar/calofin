@@ -47,7 +47,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.5")
+(setq *lazform-version* "v1.7")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -238,7 +238,7 @@
      (420 380 690 250) (420 620 690 750) (690 250 690 750)
      (190 250 250 440) (190 750 250 560))
    (("B"  "b"  100 120 900 120 "h" "B - overall length")
-    ("S"  "ss" 100 195 190 195 "h" "S - corner cut along the side")
+    ("S"  "ss" 100 205 190 205 "h" "S - corner cut along the side")
     ("T"  "tt" 190 205 780 205 "h" "T - top side length")
     ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
     ("A"  "a"   20 250  20 750 "v" "A - overall width")
@@ -266,7 +266,7 @@
      (420 380 690 250) (420 620 690 750) (690 250 690 750)
      (190 250 250 380) (190 750 250 620))
    (("B"  "b"  100 120 900 120 "h" "B - overall length")
-    ("S"  "ss" 100 195 190 195 "h" "S - corner cut along the side")
+    ("S"  "ss" 100 205 190 205 "h" "S - corner cut along the side")
     ("T"  "tt" 190 205 780 205 "h" "T - top side length")
     ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
     ("A"  "a"   20 250  20 750 "v" "A - overall width")
@@ -332,6 +332,106 @@
 ;; nothing to imply simply has none.
 (defun lzf:gates (c) (nth 6 c))
 
+;;; -------------------- where the chart is cut ---------------------------
+;;;  The closest DCL comes to boxes ON the drawing: the chart is cut
+;;;  into horizontal bands at the heights where its horizontal
+;;;  dimension rows run, and those rows are REAL edit boxes wedged
+;;;  between the bands, pushed to their letters' positions by spacers.
+;;;  The vertical dimensions cannot be wedged -- a box cannot stand
+;;;  sideways in a row -- so they keep their boxes in the side column
+;;;  with their values drawn on the chart as before.
+;;;
+;;;  A cut is a per-mille y that must land EXACTLY on a horizontal
+;;;  dimension's line; every "h" dimension at that y becomes a wedge
+;;;  box and loses its drawn arrow, since the row of boxes IS that row
+;;;  of the drawing now.  tests/test_lazform.py checks both ways: no
+;;;  cut without dims on it, and the wedge boxes sitting where the
+;;;  letters were, within the tolerance spacer widths allow.
+
+(setq lzf:*cuts* '(("Rectangle" 175 580)
+                   ("Oval" 130 205 345 580)
+                   ("ROman" 130 205 345 580)
+                   ("Grecian" 120 205 330 580)
+                   ("GRSquare" 120 205 580)
+                   ("L" 90 340 625 920)))
+
+(defun lzf:cuts (c) (cdr (assoc (car c) lzf:*cuts*)))
+
+;;; -------------------- corners -----------------------------------------
+;;;  A corner is a treatment plus, when the treatment is Radius or Cut,
+;;;  a size -- so each gets a dropdown and a size box that is greyed
+;;;  until a sized treatment is picked.  The dropdown's first entry is
+;;;  "(ask)": the form's version of leaving a box empty, and the only
+;;;  honest default, since POOL offers no default on a first corner
+;;;  either.  Only the charts whose POOL flow asks in these terms carry
+;;;  corner rows; Roman and the Grecians spell their corners as letter
+;;;  dimensions that are already on the chart.
+;;;
+;;;  In-square is the one wrinkle: an in-square rectangle asks ONE
+;;;  question for all four corners, under its own key -- so when the
+;;;  toggle is on, corner A's row speaks for all four and the other
+;;;  three are ignored (lzf:form does the mapping).
+
+(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+
+(setq lzf:*corners*
+  '(("Rectangle"
+     ("cornera" "Corner A (bottom left)")
+     ("cornerb" "Corner B (bottom right)")
+     ("cornerc" "Corner C (top right)")
+     ("cornerd" "Corner D (top left)"))
+    ("L"
+     ("outercorners" "Outer corners (all five)")
+     ("innercorner" "Reverse corner E"))))
+
+(defun lzf:corners (c) (cdr (assoc (car c) lzf:*corners*)))
+
+;; the dropdown selections, by stem: ((\"cornera\" . 3) ...)
+(setq lzf:*cvals* nil)
+
+(defun lzf:cget (stem / p)
+  (if (setq p (assoc stem lzf:*cvals*)) (cdr p) 0))
+
+(defun lzf:cput (stem i / out p)
+  (foreach p lzf:*cvals* (if (/= (car p) stem) (setq out (cons p out))))
+  (setq lzf:*cvals* (reverse (cons (cons stem i) out))))
+
+;; is selection I a sized treatment?  2 = Radius, 3 = Cut
+(defun lzf:csized (i) (member i '(2 3)))
+
+;; the dropdown changed: remember it, grey or un-grey the size box,
+;; and repaint the chart the list may have unrolled across
+(defun lzf:cornerpick (stem v / i)
+  (setq i (atoi v))
+  (lzf:cput stem i)
+  (mode_tile (strcat stem "-sz") (if (lzf:csized i) 0 1))
+  (lzf:redraw)
+  (princ))
+
+;; The horizontal dims whose line IS this cut.
+(defun lzf:cutdims (c y / d out)
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "h") (= (nth 3 d) y) (= (nth 5 d) y))
+        (setq out (cons d out))))
+  (reverse out))
+
+;; Keys of every dim that lives in a wedge row rather than the column.
+(defun lzf:wedge-keys (c / y d out)
+  (foreach y (lzf:cuts c)
+    (foreach d (lzf:cutdims c y)
+      (setq out (cons (cadr d) out))))
+  (reverse out))
+
+;; The bands between the cuts: ((y0 . y1) ...), whole chart when a
+;; chart declares no cuts.
+(defun lzf:bands (c / ys prev out y)
+  (setq ys (append (list 0) (lzf:cuts c) (list 1000))
+        prev (car ys))
+  (foreach y (cdr ys)
+    (setq out (cons (cons prev y) out)
+          prev y))
+  (reverse out))
+
 ;; Every POOL key the chart can answer, drawn ones first, in order.
 (defun lzf:keys (c / d out)
   (foreach d (lzf:dims c) (setq out (cons (cadr d) out)))
@@ -367,6 +467,8 @@
 
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
+(setq lzf:*y0* 0)               ; the band being drawn, in per-mille --
+(setq lzf:*y1* 1000)            ; the whole chart when nothing is cut
 
 (setq lzf:*col-line* -16)       ; dialog foreground: the outline
 (setq lzf:*col-back* -15)       ; dialog background: the clear
@@ -376,7 +478,26 @@
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
-(defun lzf:py (v) (fix (/ (* v lzf:*dy*) 1000.0)))
+(defun lzf:py (v)
+  (fix (/ (* (- v lzf:*y0*) lzf:*dy*) (float (- lzf:*y1* lzf:*y0*)))))
+
+(defun lzf:iny (v) (and (<= lzf:*y0* v) (<= v lzf:*y1*)))
+
+;; The segment, clipped to the band, or nil when none of it is inside.
+;; Everything the bands draw goes through this, so a cut is one rule
+;; applied everywhere rather than per-shape case work.
+(defun lzf:clipseg (x1 y1 x2 y2 / ta tb lo hi)
+  (cond
+    ((= y1 y2)
+     (if (lzf:iny y1) (list x1 y1 x2 y2)))
+    (t
+     (setq ta (/ (- lzf:*y0* y1) (float (- y2 y1)))
+           tb (/ (- lzf:*y1* y1) (float (- y2 y1)))
+           lo (max 0.0 (min ta tb))
+           hi (min 1.0 (max ta tb)))
+     (if (< lo hi)
+         (list (+ x1 (* (- x2 x1) lo)) (+ y1 (* (- y2 y1) lo))
+               (+ x1 (* (- x2 x1) hi)) (+ y1 (* (- y2 y1) hi)))))))
 
 ;;  An outline element is either a POLYLINE -- a flat list of per-mille
 ;;  numbers, x y x y ... -- or an ARC, written
@@ -412,12 +533,13 @@
 (defun lzf:flatten (e)
   (if (= (type (car e)) 'STR) (lzf:arcpts e) e))
 
-;; A polyline given as a flat per-mille list, in pixels.
-(defun lzf:pline (flat col / a b)
+;; A polyline given as a flat per-mille list, clipped to the band.
+(defun lzf:pline (flat col / s)
   (while (and flat (cddr flat))
-    (setq a (list (lzf:px (car flat)) (lzf:py (cadr flat)))
-          b (list (lzf:px (caddr flat)) (lzf:py (cadddr flat))))
-    (vector_image (car a) (cadr a) (car b) (cadr b) col)
+    (if (setq s (lzf:clipseg (car flat) (cadr flat)
+                             (caddr flat) (cadddr flat)))
+        (vector_image (lzf:px (car s)) (lzf:py (cadr s))
+                      (lzf:px (caddr s)) (lzf:py (cadddr s)) col))
     (setq flat (cddr flat))))
 
 ;; A polyline already in pixels, given as (x y x y ...).
@@ -465,23 +587,36 @@
           i (1+ i)))
   pen)
 
-;; The dimension line with an arrowhead at each end.  Only horizontal
-;; and vertical dimensions exist on these charts, which is why the two
-;; cases below are the whole of it.
-(defun lzf:arrow (x1 y1 x2 y2 col / a b)
-  (vector_image x1 y1 x2 y2 col)
+;; The dimension line with an arrowhead at each end, in per-mille,
+;; clipped to the band.  A head is drawn only when its own end is
+;; inside the band -- the shaft of a vertical dimension can run
+;; through several bands, and each draws just its stretch.
+(defun lzf:arrow (x1 y1 x2 y2 col / s a b p q)
+  (if (setq s (lzf:clipseg x1 y1 x2 y2))
+      (vector_image (lzf:px (car s)) (lzf:py (cadr s))
+                    (lzf:px (caddr s)) (lzf:py (cadddr s)) col))
   (setq a 6 b 3)
   (cond
-    ((= y1 y2)                          ; horizontal: heads point out
-     (vector_image x1 y1 (+ x1 a) (- y1 b) col)
-     (vector_image x1 y1 (+ x1 a) (+ y1 b) col)
-     (vector_image x2 y2 (- x2 a) (- y2 b) col)
-     (vector_image x2 y2 (- x2 a) (+ y2 b) col))
+    ((= y1 y2)                          ; horizontal: heads point in
+     (if (lzf:iny y1)
+         (progn
+           (setq p (list (lzf:px (min x1 x2)) (lzf:py y1))
+                 q (list (lzf:px (max x1 x2)) (lzf:py y1)))
+           (vector_image (car p) (cadr p) (+ (car p) a) (- (cadr p) b) col)
+           (vector_image (car p) (cadr p) (+ (car p) a) (+ (cadr p) b) col)
+           (vector_image (car q) (cadr q) (- (car q) a) (- (cadr q) b) col)
+           (vector_image (car q) (cadr q) (- (car q) a) (+ (cadr q) b) col))))
     (t                                  ; vertical
-     (vector_image x1 y1 (- x1 b) (+ y1 a) col)
-     (vector_image x1 y1 (+ x1 b) (+ y1 a) col)
-     (vector_image x2 y2 (- x2 b) (- y2 a) col)
-     (vector_image x2 y2 (+ x2 b) (- y2 a) col))))
+     (if (lzf:iny (min y1 y2))
+         (progn
+           (setq p (list (lzf:px x1) (lzf:py (min y1 y2))))
+           (vector_image (car p) (cadr p) (- (car p) b) (+ (cadr p) a) col)
+           (vector_image (car p) (cadr p) (+ (car p) b) (+ (cadr p) a) col)))
+     (if (lzf:iny (max y1 y2))
+         (progn
+           (setq q (list (lzf:px x1) (lzf:py (max y1 y2))))
+           (vector_image (car q) (cadr q) (- (car q) b) (- (cadr q) a) col)
+           (vector_image (car q) (cadr q) (+ (car q) b) (- (cadr q) a) col))))))
 
 ;; Where one dimension's text belongs, and what it says: the LETTER
 ;; until a value is typed, then the value in the letter's place.  A
@@ -537,21 +672,47 @@
   (lzf:text txt lx ly sc
             (if (= (lzf:get key) "") lzf:*col-line* lzf:*col-val*)))
 
-;; The whole picture, start to end.  Every vector goes between one
-;; start_image and one end_image so the tile is painted once.
-(defun lzf:redraw ( / c poly d)
+;; The band a dimension's TEXT belongs to: a horizontal dim sits on
+;; its own line, a vertical one labels at the top of its span.
+(defun lzf:anchor (d)
+  (if (= (nth 6 d) "h")
+      (nth 3 d)
+      (min (nth 3 d) (nth 5 d))))
+
+(defun lzf:inband (v) (and (<= lzf:*y0* v) (< v lzf:*y1*)))
+
+;; The whole picture: every band painted once, each between its own
+;; start_image and end_image.  Wedge dims draw nothing at all -- their
+;; row of the drawing IS a row of real boxes now -- while every other
+;; dim draws its clipped arrow in every band it crosses and its text
+;; in the band its anchor falls in.
+(defun lzf:redraw ( / c wk bands b i key poly d)
   (setq c lzf:*chart*
-        lzf:*dx* (dimx_tile "chart")
-        lzf:*dy* (dimy_tile "chart"))
-  (start_image "chart")
-  (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
-  (foreach poly (lzf:outline c)
-    (lzf:pline (lzf:flatten poly) lzf:*col-line*))
-  (foreach d (lzf:dims c)
-    (lzf:arrow (lzf:px (nth 2 d)) (lzf:py (nth 3 d))
-               (lzf:px (nth 4 d)) (lzf:py (nth 5 d)) lzf:*col-dim*))
-  (foreach d (lzf:dims c) (lzf:label d))
-  (end_image)
+        wk (lzf:wedge-keys c)
+        bands (lzf:bands c)
+        i 0)
+  (foreach b bands
+    (setq key (strcat "chart" (itoa i))
+          lzf:*y0* (car b)
+          lzf:*y1* (cdr b)
+          lzf:*dx* (dimx_tile key)
+          lzf:*dy* (dimy_tile key))
+    (start_image key)
+    (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
+    (foreach poly (lzf:outline c)
+      (lzf:pline (lzf:flatten poly) lzf:*col-line*))
+    (foreach d (lzf:dims c)
+      (if (not (member (cadr d) wk))
+          (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
+                     lzf:*col-dim*)))
+    (foreach d (lzf:dims c)
+      (if (and (not (member (cadr d) wk))
+               (lzf:inband (lzf:anchor d)))
+          (lzf:label d)))
+    (end_image)
+    (setq i (1+ i)))
+  (setq lzf:*y0* 0
+        lzf:*y1* 1000)
   (princ))
 
 ;;; -------------------- why the picture is not clickable ----------------
@@ -597,10 +758,66 @@
                     out)))
   (reverse (cons "  }" out)))
 
+(setq lzf:*chart-w* 52)         ; the chart column, in character cells
+(setq lzf:*chart-h* 19)         ; its total height, spread over the bands
+
+;; character cells across for a per-mille x
+(defun lzf:cellx (v) (/ (* v lzf:*chart-w*) 1000.0))
+
+;; One wedge row: the cut's dims as real edit boxes, pushed to their
+;; letters' positions by spacers.  Positions are in character cells and
+;; a box has its own minimum size, so this is honest about being
+;; approximate: a box lands within a cell or so of its letter, and two
+;; that would collide get pushed apart rather than overlapped.
+(defun lzf:wedgerow (c y / out d lbl w want pos)
+  (setq out (list "      : row {")
+        pos 0.0)
+  ;; LEFT TO RIGHT, whatever order the chart lists them in: the row is
+  ;; built by walking a cursor across it, and a dim listed before its
+  ;; left-hand neighbour would shove that neighbour to the wrong side
+  ;; of the chart
+  (foreach d (vl-sort (lzf:cutdims c y)
+                      '(lambda (p q)
+                         (< (+ (nth 2 p) (nth 4 p))
+                            (+ (nth 2 q) (nth 4 q)))))
+    (setq lbl (car d)
+          w (+ (strlen lbl) 10.0)       ; label + borders + 6-char box
+          want (- (lzf:cellx (/ (+ (nth 2 d) (nth 4 d)) 2)) (/ w 2)))
+    (if (< want (+ pos 0.5)) (setq want (+ pos 0.5)))
+    (setq out (cons (strcat "        : spacer { width = "
+                            (rtos (- want pos) 2 1) "; }")
+                    out))
+    (setq out (cons (strcat "        : edit_box { key = \"" (cadr d)
+                            "\"; label = \"" lbl
+                            "\"; edit_width = 6; fixed_width = true; }")
+                    out))
+    (setq pos (+ want w)))
+  (setq out (cons "        spacer;" out))
+  (reverse (cons "      }" out)))
+
+;; The chart as a stack: an image tile per band, a wedge row at every
+;; cut, heights split in proportion to the bands they show.
+(defun lzf:bandtiles (c / out bands b i h)
+  (setq i 0
+        bands (lzf:bands c))
+  (foreach b bands
+    (setq h (/ (* (- (cdr b) (car b)) lzf:*chart-h*) 1000.0))
+    (if (< h 0.8) (setq h 0.8))
+    (setq out (append out
+                      (list (strcat "      : image { key = \"chart" (itoa i)
+                                    "\"; width = " (itoa lzf:*chart-w*)
+                                    "; height = " (rtos h 2 1)
+                                    "; fixed_width = true; "
+                                    "fixed_height = true; color = -15; }"))))
+    (if (< (1+ i) (length bands))
+        (setq out (append out (lzf:wedgerow c (cdr b)))))
+    (setq i (1+ i)))
+  out)
+
 ;; One dialog per chart.  They all live in one generated file so the
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
-(defun lzf:dcl-one (c / out d)
+(defun lzf:dcl-one (c / out d wk l)
   ;; out is consed newest-first and reversed once at the end, so this
   ;; seed list reads BACKWARDS: the label second here puts it second in
   ;; the file, after the line that opens the dialog.  The other way
@@ -609,13 +826,13 @@
                   (strcat (lzf:dlgname (car c)) " : dialog {")))
   (setq out (append (reverse (lzf:tabstrip (car c))) out))
   (setq out (cons "  : row {" out))
-  ;; A PASSIVE image tile, deliberately -- see "why the picture is not
-  ;; clickable" above.
-  (setq out (cons (strcat "    : image { key = \"chart\"; "
-                          "width = 52; aspect_ratio = 0.72; "
-                          "fixed_width = true; fixed_height = true; "
-                          "color = -15; }")
-                  out))
+  ;; PASSIVE image tiles, deliberately -- see "why the picture is not
+  ;; clickable" above -- stacked with the wedge rows between them.
+  (setq wk (lzf:wedge-keys c))
+  (setq out (cons "    : column {" out))
+  (foreach l (lzf:bandtiles c)
+    (setq out (cons l out)))
+  (setq out (cons "    }" out))
   (setq out (cons "    : column {" out))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"Dimensions\";" out))
@@ -624,17 +841,22 @@
   ;; dimension on the chart -- which is as close to clicking the
   ;; drawing itself as DCL allows, and the button sits against the box
   ;; it fills rather than off in a separate list.
+  ;; only the dims that could NOT be wedged into the drawing -- the
+  ;; vertical ones -- keep a row here; the horizontal chains live on
+  ;; the chart itself now
   (foreach d (lzf:dims c)
-    (setq out (cons "        : row {" out))
-    (setq out (cons (strcat "          : button { key = \"pick_" (cadr d)
-                            "\"; label = \"" (car d)
-                            "\"; fixed_width = true; }")
-                    out))
-    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
-                            "\"; edit_width = 9; label = \"" (nth 7 d)
-                            "\"; }")
-                    out))
-    (setq out (cons "        }" out)))
+    (if (not (member (cadr d) wk))
+        (progn
+          (setq out (cons "        : row {" out))
+          (setq out (cons (strcat "          : button { key = \"pick_"
+                                  (cadr d) "\"; label = \"" (car d)
+                                  "\"; fixed_width = true; }")
+                          out))
+          (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                                  "\"; edit_width = 9; label = \"" (nth 7 d)
+                                  "\"; }")
+                          out))
+          (setq out (cons "        }" out)))))
   (setq out (cons "      }" out))
   (if (lzf:extra c)
     (progn
@@ -645,6 +867,22 @@
                                 "\"; edit_width = 9; label = \"" (cadr d)
                                 "\"; }")
                         out)))
+      (setq out (cons "      }" out))))
+  (if (lzf:corners c)
+    (progn
+      (setq out (cons "      : boxed_column {" out))
+      (setq out (cons "        label = \"Corners\";" out))
+      (foreach d (lzf:corners c)
+        (setq out (cons "        : row {" out))
+        (setq out (cons (strcat "          : popup_list { key = \"" (car d)
+                                "\"; label = \"" (cadr d)
+                                "\"; edit_width = 9; }")
+                        out))
+        (setq out (cons (strcat "          : edit_box { key = \"" (car d)
+                                "-sz\"; label = \"size\"; "
+                                "edit_width = 6; fixed_width = true; }")
+                        out))
+        (setq out (cons "        }" out)))
       (setq out (cons "      }" out))))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"The rest of the run\";" out))
@@ -659,7 +897,7 @@
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
-                          "label = \"Click a letter to jump to its box.  "
+                          "label = \"The chain boxes sit on the drawing itself.  "
                           "Type NA where nothing was measured; leave a box "
                           "empty and POOL will ask.\"; }")
                   out))
@@ -732,10 +970,35 @@
           a (lzf:answer v))
     (if (not (eq a 'SKIP))
         (setq out (cons (cons (read k) a) out))))
+  ;; the corners: a dropdown left on (ask) sends nothing, a sized
+  ;; treatment carries its size when one parses.  In-square asks ONE
+  ;; question for all four rectangle corners, under its own key, so
+  ;; corner A's row speaks for all four there and B-D are ignored.
+  (foreach k (lzf:cornerpairs insq)
+    (setq out (cons k out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
     (setq out (cons (cons (read (car k)) (cdr k)) out)))
+  (reverse out))
+
+;; The (key . value) pairs the corner rows contribute.
+(defun lzf:cornerpairs (insq / out d stem use i ty a)
+  (foreach d (lzf:corners lzf:*chart*)
+    (setq stem (car d)
+          use stem)
+    (if (and insq (= (car lzf:*chart*) "Rectangle"))
+        (setq use (if (= stem "cornera") "corners" nil)))
+    (if (and use (> (setq i (lzf:cget stem)) 0))
+        (progn
+          (setq ty (nth i lzf:*ctreat*))
+          (setq out (cons (cons (read (strcat use "-ty")) ty) out))
+          (if (lzf:csized i)
+              (progn
+                (setq a (lzf:answer (lzf:get (strcat stem "-sz"))))
+                (if (numberp a)
+                    (setq out (cons (cons (read (strcat use "-sz")) a)
+                                    out))))))))
   (reverse out))
 
 ;;; -------------------- the run -----------------------------------------
@@ -743,7 +1006,7 @@
 ;;  out of scope by the time POOL is started: POOL installs its own, and
 ;;  a POOL that fails must report as POOL.
 
-(defun lzf:show (chartkey / *error* f dcl rc c d go done out)
+(defun lzf:show (chartkey / *error* f dcl rc c d n go done out)
   (defun *error* (msg)
     (term_dialog)
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
@@ -755,6 +1018,7 @@
       (princ (strcat "\nLAZFORM error: " msg)))
     (princ))
   (setq lzf:*vals* nil
+        lzf:*cvals* nil                 ; corner dropdowns back to (ask)
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
         lzf:*pos* nil                   ; where the user last had it
@@ -786,6 +1050,22 @@
           (foreach d lzf:*btypes* (add_list d))
           (end_list)
           (set_tile "btype" (itoa lzf:*btype*))
+          ;; the corner dropdowns: filled, put back to their remembered
+          ;; pick, size boxes greyed unless that pick takes a size --
+          ;; and each harvests into its own store the moment it changes
+          (foreach d (lzf:corners c)
+            (start_list (car d))
+            (foreach n lzf:*ctreat* (add_list n))
+            (end_list)
+            (set_tile (car d) (itoa (lzf:cget (car d))))
+            (set_tile (strcat (car d) "-sz")
+                      (lzf:get (strcat (car d) "-sz")))
+            (mode_tile (strcat (car d) "-sz")
+                       (if (lzf:csized (lzf:cget (car d))) 0 1))
+            (action_tile (car d)
+              (strcat "(lzf:cornerpick \"" (car d) "\" $value)"))
+            (action_tile (strcat (car d) "-sz")
+              (strcat "(lzf:put \"" (car d) "-sz\" $value)")))
           (if lzf:*insq* (set_tile "insq" "1"))
           ;; put back what was typed before this page was opened
           (foreach d (lzf:keys c) (set_tile d (lzf:get d)))
@@ -797,11 +1077,14 @@
           ;; the box's contents selected so the first keystroke
           ;; replaces rather than appends, and the dimension ringed on
           ;; the chart
+          ;; wedge dims have no pick button -- their box already sits
+          ;; on the drawing where the letter was
           (foreach d (lzf:dims c)
-            (action_tile (strcat "pick_" (cadr d))
-              (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
-                      " (mode_tile \"" (cadr d) "\" 2)"
-                      " (mode_tile \"" (cadr d) "\" 3)")))
+            (if (not (member (cadr d) (lzf:wedge-keys c)))
+                (action_tile (strcat "pick_" (cadr d))
+                  (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
+                          " (mode_tile \"" (cadr d) "\" 2)"
+                          " (mode_tile \"" (cadr d) "\" 3)"))))
           ;; the tabs -- each closes this page and names the next
           (foreach d lzf:*charts*
             (action_tile (strcat "tab_" (car d))

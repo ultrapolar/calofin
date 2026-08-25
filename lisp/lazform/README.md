@@ -2,12 +2,15 @@
 
 ## What it does
 
-`LAZFORM` puts the chart on screen the way it looks on paper -- the pool
-outline, the hopper, and the dimension chain with its letters -- next to
-a box for every letter. Type a number against a letter and **the letter
-is replaced by what you typed**, which is what the letter was standing
-in for all along. Every box is labelled with its own letter, so the list
-and the picture read as one thing.
+`LAZFORM` puts the chart on screen the way it looks on paper -- and the
+horizontal dimension rows of that chart **are rows of real textboxes**:
+the drawing is cut into bands at the heights where B, T, S, W and the
+H-G-F-E chain run, and those rows carry edit boxes pushed to their
+letters' positions. You type where the chart says the measurement
+lives. The vertical dimensions (A, M, L, K, S1, V) cannot stand in a
+row, so they keep boxes in the side column, labelled with their
+letters, and what you type there is drawn onto the chart in the
+letter's place.
 
 Fill in what you know, leave the rest blank, press **Insert**: `POOL`
 runs and asks only for the gaps.
@@ -32,6 +35,22 @@ A **tab strip** across the top switches charts. Six are drawn:
 | `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E |
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K |
+
+**Corners** get their own section on the Rectangle and True L charts:
+a dropdown per corner -- `(ask)`, `Square`, `Radius`, `Cut`,
+`NotGiven` -- with a size box that stays greyed until a sized
+treatment is picked. `(ask)` is the dropdown's version of an empty
+box: POOL asks that corner at the command line as always. A sized
+treatment with the size left empty sends the treatment alone and POOL
+asks for just the number; a size its walls cannot fit is rejected by
+POOL's own cap check and retyped at the keyboard. In-square is the one
+wrinkle: an in-square rectangle asks ONE question for all four
+corners, so when that toggle is on, corner A's row speaks for all four
+and the other three are ignored. The True L's rows are its two real
+questions -- the outer corners as a set, and the reverse corner E,
+which until now could not be answered from a form at all. Roman and
+the Grecians spell their corners as letter dimensions (S, S1, S2, X)
+that are already on the chart.
 
 Anything a sheet carries that has no place on the plan view gets a box
 and no letter: the depths `C` and `D` (read off a section), the radii
@@ -77,6 +96,15 @@ So the chart is **drawn** rather than loaded, from a table of lines, and
 the numbers appear on it as they are typed -- which recovers most of
 what a box sitting on the artwork would have given, with nothing to
 install.
+
+Why bands and not the drawing as one background with boxes floated on
+it: DCL has no z-order at all -- no tile may overlap any other tile, so
+there is no "behind" to put a drawing in. Cutting the chart where its
+dimension rows run is the closest the language comes, and it is honest
+about two costs: the bands are separated by strips of dialog
+background, and box positions are in character cells, so a box lands
+within a cell or so of its letter and chains pack shoulder to
+shoulder.
 
 An earlier version also let you click the picture to jump to a box, via
 an `image_button`. That had to go, and the reason is worth writing down

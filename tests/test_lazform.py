@@ -236,7 +236,7 @@ print("   %d keys across %d charts" % (total, len(charts)))
 
 print("== the generated DCL is well formed, for every chart ==")
 TILES = {'row', 'column', 'boxed_column', 'button', 'text', 'edit_box',
-         'image', 'image_button', 'toggle', 'popup_list'}
+         'image', 'image_button', 'toggle', 'popup_list', 'spacer'}
 
 vm.loads('(setq t:*all* (lzf:dcl-lines))')
 ALL = [str(x) for x in vm.globals['t:*all*']]
@@ -293,7 +293,28 @@ def check_page(name):
     assert set(answer_keys) <= set(tilekeys), (
         "%s: answers with no box: %r"
         % (name, sorted(set(answer_keys) - set(tilekeys))))
-    for extra in ('chart', 'insq', 'btype', 'accept', 'cancel'):
+    # one image band per stretch between cuts, a wedge row at each cut
+    vm.loads('(setq t:*cuts* (lzf:cuts lzf:*chart*))'
+             '(setq t:*wk* (lzf:wedge-keys lzf:*chart*))')
+    cuts = [int(x) for x in (vm.globals.get('t:*cuts*') or [])]
+    wk = [str(x) for x in (vm.globals.get('t:*wk*') or [])]
+    for b in range(len(cuts) + 1):
+        assert 'chart%d' % b in tilekeys, "%s: no band tile chart%d" % (name, b)
+    assert 'chart%d' % (len(cuts) + 1) not in tilekeys, \
+        "%s: more band tiles than bands" % name
+    # every cut carries at least one wedge box -- a grey strip with
+    # nothing in it would cut the drawing for no reason at all
+    assert cuts, "%s: no cuts declared" % name
+    vm.loads('(setq t:*cd* (mapcar \'(lambda (y) (length (lzf:cutdims '
+             'lzf:*chart* y))) (lzf:cuts lzf:*chart*)))')
+    for y, n in zip(cuts, [int(x) for x in vm.globals['t:*cd*']]):
+        assert n > 0, "%s: cut at %d has no dimension on it" % (name, y)
+    # a wedge dim's box is on the chart, so it has NO pick button and
+    # NO row in the side column; a column dim has both
+    for k in wk:
+        assert 'pick_%s' % k not in tilekeys, \
+            "%s: wedge dim %s also has a pick button" % (name, k)
+    for extra in ('insq', 'btype', 'accept', 'cancel'):
         assert extra in tilekeys, "%s: no %r tile" % (name, extra)
     # a tab for every chart, on every page -- including this one, so the
     # strip does not change width as you move along it
@@ -302,6 +323,8 @@ def check_page(name):
             "%s: no tab for %s" % (name, str(c2[0]))
     # and a letter button for every dimension, keyed off its answer
     for dim in vm.globals['t:*dims*']:
+        if str(dim[1]) in wk:
+            continue
         assert 'pick_%s' % str(dim[1]) in tilekeys, \
             "%s: dimension %s has no letter button" % (name, str(dim[0]))
     assert text.count('is_cancel = true') == 1
@@ -309,8 +332,47 @@ def check_page(name):
     assert ': image_button' not in text, (
         "%s: the chart is an image_button again -- it will be wiped the "
         "first time the mouse crosses it" % name)
-    assert re.search(r': image \{ key = "chart"', text), \
+    assert re.search(r': image \{ key = "chart0"', text), \
         "%s: no passive chart image tile" % name
+    # and the wedge boxes land near their letters: replay the spacer
+    # arithmetic and compare each box's centre with its dimension's,
+    # in character cells.  Chains pack shoulder to shoulder, so the
+    # tolerance is real -- but a box a quarter of the chart away from
+    # its letter means the layout maths broke
+    vm.loads('(setq t:*alldims* (lzf:dims lzf:*chart*))')
+    centers = {str(d[1]): (int(d[2]) + int(d[4])) / 2.0 * 52 / 1000.0
+               for d in vm.globals['t:*alldims*']}
+    body_lines = d
+    pos = None
+    expect = False          # a wedge row IMMEDIATELY follows its band
+    for line in body_lines:
+        t2 = line.strip()
+        if re.match(r': image \{ key = "chart\d+"', t2):
+            expect = True
+            pos = None
+        elif expect and t2 == ': row {':
+            pos = 0.0
+            expect = False
+        elif expect:
+            expect = False
+        elif pos is not None:
+            m = re.match(r': spacer \{ width = ([0-9.]+); \}', t2)
+            if m:
+                pos += float(m.group(1))
+                continue
+            if t2 == '}':
+                pos = None
+                continue
+            m = re.match(r': edit_box \{ key = "([^"]+)"; label = "([^"]+)"; '
+                         r'edit_width = 6', t2)
+            if m:
+                k, lbl = m.group(1), m.group(2)
+                w = len(lbl) + 10.0
+                got = pos + w / 2.0
+                assert abs(got - centers[k]) <= 6.5, (
+                    "%s: wedge box %s centred at %.1f cells, its letter at "
+                    "%.1f" % (name, k, got, centers[k]))
+                pos += w
     for line in d[1:]:
         t = line.strip()
         if t in ('}', 'spacer;'):
@@ -378,8 +440,12 @@ blank = len(DRAW['vec'])
 print("== a typed value replaces its letter on the chart ==")
 assert not [v for v in DRAW['vec'] if v[4] == COLS['val']], \
     "nothing has been typed, yet something is drawn as a value"
+# the WEDGE dims draw nothing at all -- their row of the drawing is a
+# row of real boxes -- so the value-replaces-letter rule is checked on
+# the vertical dims, which still live in the side column and on the
+# chart: A ('le') and M ('m')
 _reset()
-vm.loads('(lzf:put "tp" "32\'0\\"") (lzf:put "h" "4\'0\\"") (lzf:redraw)')
+vm.loads('(lzf:put "le" "16\'0\\"") (lzf:put "m" "5\'0\\"") (lzf:redraw)')
 vals = [v for v in DRAW['vec'] if v[4] == COLS['val']]
 assert vals, "a typed value was not drawn"
 # B and H are gone from the picture, replaced by what was typed, so the
@@ -390,10 +456,22 @@ _reset()
 vm.loads('(setq lzf:*vals* nil) (lzf:redraw)')
 line_blank = len([v for v in DRAW['vec'] if v[4] == COLS['line']])
 assert line_now < line_blank, (
-    "the letters B and H are still being drawn after being answered "
+    "the letters A and M are still being drawn after being answered "
     "(%d outline strokes vs %d blank)" % (line_now, line_blank))
 print("   %d value strokes appear; outline strokes fall %d -> %d"
       % (len(vals), line_blank, line_now))
+
+# and typing into a WEDGE key changes nothing on the chart: its box is
+# a real tile sitting on the drawing, not strokes to redraw
+_reset()
+vm.loads('(setq lzf:*vals* nil) (lzf:redraw)')
+base = len(DRAW['vec'])
+_reset()
+vm.loads('(lzf:put "tp" "240") (lzf:put "h" "48") (lzf:redraw)')
+assert len(DRAW['vec']) == base, (
+    "typing into a wedge box changed the drawing: %d -> %d strokes"
+    % (base, len(DRAW['vec'])))
+print("   wedge keys draw nothing -- their boxes are real tiles")
 
 
 print("== the page loop: tabs, letter buttons, nothing on the chart ==")
@@ -407,14 +485,25 @@ vm2.loads('(setq t:*f* (lzf:show "Rectangle"))')
 assert DRAW['vec'], "lzf:show opened a page and drew nothing into the chart"
 drew_open = len(DRAW['vec'])
 wired = {str(a[0]) for a in (vm2.globals.get('stub:*act*') or [])}
-assert 'chart' not in wired, \
-    "an action is wired to the chart tile: it would be repainted on hover"
+assert not [k for k in wired if k.startswith('chart')], (
+    "an action is wired to a chart tile: it would be repainted on hover")
 for k in ('btype', 'insq', 'accept', 'cancel'):
     assert k in wired, "%r has no callback" % k
-vm2.loads('(setq t:*dims* (lzf:dims (lzf:chart "Rectangle")))')
+vm2.loads('(setq t:*dims* (lzf:dims (lzf:chart "Rectangle")))'
+          '(setq t:*wk* (lzf:wedge-keys (lzf:chart "Rectangle")))')
+wk2 = {str(x) for x in vm2.globals['t:*wk*']}
 for dim in vm2.globals['t:*dims*']:
-    assert 'pick_%s' % str(dim[1]) in wired, \
-        "dimension %s has no letter-button callback" % str(dim[0])
+    k = str(dim[1])
+    if k in wk2:
+        # a wedge dim's box IS on the drawing -- no pick button at all
+        assert 'pick_%s' % k not in wired, \
+            "wedge dim %s has a pick callback for a button that " \
+            "does not exist" % str(dim[0])
+    else:
+        assert 'pick_%s' % k in wired, \
+            "dimension %s has no letter-button callback" % str(dim[0])
+    # but EVERY dim's edit box, wedged or not, harvests what is typed
+    assert k in wired, "dimension %s's box has no callback" % str(dim[0])
 for c in charts:
     assert 'tab_%s' % str(c[0]) in wired, "no tab callback for %s" % str(c[0])
 print("   %d callbacks bound, none on the chart, %d vectors drawn"
@@ -422,14 +511,16 @@ print("   %d callbacks bound, none on the chart, %d vectors drawn"
 
 # clicking a letter must put the caret in that box AND select what is
 # there, so the first keystroke replaces rather than appends
+# M is a side-column dim (vertical dims cannot be wedged), so it still
+# has a letter button to click
 vm3 = stubbed()
-vm3.loads('(setq stub:*type* \'(("pick_g" "")))'
+vm3.loads('(setq stub:*type* \'(("pick_m" "")))'
           '(setq t:*f* (lzf:show "Rectangle"))')
 modes = [(str(a[0]), int(a[1])) for a in (vm3.globals.get('stub:*mode*') or [])]
-assert ('g', 2) in modes, "clicking G did not move the caret to its box: %r" % modes
-assert ('g', 3) in modes, "clicking G did not select the box contents: %r" % modes
-assert str(vm3.globals.get('lzf:*focus*')) == 'g', \
-    "clicking G did not ring G on the chart"
+assert ('m', 2) in modes, "clicking M did not move the caret to its box: %r" % modes
+assert ('m', 3) in modes, "clicking M did not select the box contents: %r" % modes
+assert str(vm3.globals.get('lzf:*focus*')) == 'm', \
+    "clicking M did not ring M on the chart"
 print("   clicking a letter focuses its box, selects it, and rings the chart")
 
 # a tab click reopens on the other chart, and what was typed survives it
@@ -456,6 +547,73 @@ assert [n for _, n in OPENED] == [2, 4], (
     "the reopened page did not carry the position back: %r" % OPENED)
 print("   a tab reopens on the other chart, keeps what was typed,")
 print("   and puts the dialog back where the user had dragged it")
+
+
+print("== corners: dropdown, un-greying size box, packing ==")
+
+
+# an alist pair is a Dot when it has a value and a one-element LIST
+# when it does not -- (cons 'g nil) is the list (g)
+def pair(p):
+    return (str(p.a), p.b) if isinstance(p, Dot) else (str(p[0]), None)
+
+
+# structure: Rectangle and L carry corner rows, the rest none
+for c in charts:
+    name = str(c[0])
+    d = page(name)
+    text = '\n'.join(d)
+    vm.loads('(setq t:*cor* (lzf:corners (lzf:chart "%s")))' % name)
+    cors = [str(x[0]) for x in (vm.globals.get('t:*cor*') or [])]
+    for stem in cors:
+        assert re.search(r': popup_list \{ key = "%s"' % stem, text), \
+            "%s: no dropdown for %s" % (name, stem)
+        assert re.search(r': edit_box \{ key = "%s-sz"' % stem, text), \
+            "%s: no size box for %s" % (name, stem)
+    if not cors:
+        assert 'Corners' not in text, \
+            "%s: a Corners section with nothing in it" % name
+assert [str(x[0]) for x in vm.globals['lzf:*corners*']] == ['Rectangle', 'L']
+print("   Rectangle and L carry corner rows; the others none")
+
+# picking a sized treatment un-greys the size box; picking Square
+# greys it again -- driven through the REAL action expression
+vmc = stubbed()
+vmc.loads('(setq stub:*type* \'(("cornera" "3")))'
+          '(setq t:*f* (lzf:show "Rectangle"))')
+modes = [(str(a[0]), int(a[1])) for a in (vmc.globals.get('stub:*mode*') or [])]
+assert ('cornera-sz', 0) in modes, \
+    "picking Cut did not un-grey the size box: %r" % modes
+vmc2 = stubbed()
+vmc2.loads('(setq stub:*type* \'(("cornera" "1")))'
+          '(setq t:*f* (lzf:show "Rectangle"))')
+modes = [(str(a[0]), int(a[1])) for a in (vmc2.globals.get('stub:*mode*') or [])]
+assert ('cornera-sz', 1) in modes and ('cornera-sz', 0) not in modes, \
+    "picking Square should leave the size box greyed: %r" % modes
+print("   Cut un-greys its size box; Square keeps it greyed")
+
+# packing: (ask) sends nothing; Square sends the treatment alone;
+# Cut sends treatment + size when the size parses
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+         '(setq lzf:*vals* nil lzf:*cvals* nil)'
+         '(lzf:cput "cornera" 3) (lzf:put "cornera-sz" "24")'
+         '(lzf:cput "cornerb" 1)'
+         '(lzf:cput "cornerc" 2)'      # Radius, size left empty
+         '(setq t:*f* (lzf:form "Rectangle" nil "Normal"))')
+form = dict(pair(p2) for p2 in vm.globals['t:*f*'])
+assert str(form.get('cornera-ty')) == 'Cut' and \
+    abs(float(form['cornera-sz']) - 24.0) < 1e-9, form
+assert str(form.get('cornerb-ty')) == 'Square' and 'cornerb-sz' not in form
+assert str(form.get('cornerc-ty')) == 'Radius' and 'cornerc-sz' not in form, \
+    "an empty size box must send the treatment alone (POOL asks the size)"
+assert 'cornerd-ty' not in form, "(ask) sent a corner it should not have"
+# in-square: corner A's row speaks for all four, under the one key
+vm.loads('(setq t:*f2* (lzf:form "Rectangle" T "Normal"))')
+form2 = dict(pair(p2) for p2 in vm.globals['t:*f2*'])
+assert str(form2.get('corners-ty')) == 'Cut' and \
+    abs(float(form2['corners-sz']) - 24.0) < 1e-9, form2
+assert 'cornera-ty' not in form2 and 'cornerc-ty' not in form2, form2
+print("   (ask)/Square/Radius/Cut all pack the way POOL reads them")
 
 
 print("== the three-state answer contract ==")
@@ -536,7 +694,14 @@ def snapshot(vm):
 # M/L/K are typed in both runs, so what is being compared is the route
 # the answers took, not the answers.
 TYPED = [('tp', '240'), ('bo', '240'), ('le', '120'), ('ri', '120'),
-         ('h', '30'), ('f', '180'), ('c', '40'), ('d', '60')]
+         ('h', '30'), ('f', '180'), ('c', '40'), ('d', '60'),
+         # the corners through the GUI: every dropdown to Cut (index 3)
+         # with 24 in its size box -- what the prompt run types as
+         # "Cut", 24 and six Enter-defaults
+         ('cornera', '3'), ('cornera-sz', '24'),
+         ('cornerb', '3'), ('cornerb-sz', '24'),
+         ('cornerc', '3'), ('cornerc-sz', '24'),
+         ('cornerd', '3'), ('cornerd-sz', '24')]
 CORNERS = ["Cut", 24.0, None, None, None, None, None, None]
 CROSS = ["Ends", 260.0, 260.0, 260.0, 260.0]
 REST = [None, 60.0, None]                      # M takes its suggestion, L, K
@@ -550,15 +715,16 @@ vm.loads('(setq stub:*type* \'(%s))'
 # value read back after the dialog closes would not survive this test
 try:
     # no chart prompt any more -- the tab strip picks the chart
+    # no corner answers in this script: the dropdowns supplied them
     vm.run('c:LAZFORM',
-           [(0.0, 0.0, 0.0)] + CORNERS + CROSS + ["Yes"] + REST)
+           [(0.0, 0.0, 0.0)] + CROSS + ["Yes"] + REST)
 except LispError as e:
     raise AssertionError("form run: %s" % e) from None
 a = snapshot(vm)
 assert a, "the form run drew nothing"
 assert not vm.globals.get('pool:*form*'), "pool:*form* survived the run"
 asked = [pr for pr, _ in vm.prompts]
-for gone in ('\nPool shape', '\nBottom type'):
+for gone in ('\nPool shape', '\nBottom type', '\nCorner '):
     assert not any(pr.startswith(gone) for pr in asked), \
         "%r was asked even though the chart answered it" % gone
 assert not any(pr.startswith('\nH -') or pr.startswith('\nC -')
@@ -578,6 +744,7 @@ assert a == b, (
     "the prompts" % (len(a), len(b)))
 print("   %d entities, identical from the chart and from the command line"
       % len(a))
-print("   and the chart's answers were not asked for again")
+print("   and the chart's answers -- corners included -- were not")
+print("   asked for again")
 
 print("ALL LAZFORM TESTS PASSED")
