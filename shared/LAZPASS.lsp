@@ -61214,6 +61214,7 @@
      ("POOLDEMO"       "Worked pool example")
      ("CABHD"          "Perimeter-only fit")
      ("LHD"            "Laser outline fit")
+     ("SMARTFILLET"    "Corner radius, previewed")
      ("WCALST"         "Unroll curved band")
      ("ABCDEF"         "Rectangle plot")
      ("ALTABCDEF"      "Clockwise rectangle plot")

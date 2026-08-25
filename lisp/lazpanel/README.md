@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 51 of them across 119 buttons, because the pages come in two kinds
+-- 52 of them across 121 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both.
 
 **The job pages** are what you are actually doing this hour, and each
@@ -15,7 +15,7 @@ build the steps, then dimension and check.
 | Pool | POOL, LAZFORM, OASIS, ABHD, ADAB, FITABHD, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / CORNERSTP, HEMISTEP, NORMIESTEP, AUTOBEAD, PERPPTS, CPERPPTS / AUTODIM, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, DIMCHECK, DIMSCAN |
 | Cover | POOL, LAZFORM, OASIS, ABHD, FITABHD, STOCKCOVER, XFTCONV / ABFIND, ABMOVE, CDCREATE, CDCALLOUT, BPCALLOUT / PADDLE, AUTODIM, COVERCHECK, COVERSCAN, LITECOVERSCAN, DIMCHECK, DIMSCAN |
 | Spa | SPA, AUTODIM, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, DIMCHECK, DIMSCAN |
-| Rest | POOLDEMO, CABHD, LHD, WCALST, ABCDEF, ALTABCDEF, XYPLOT, DRONE, TYDRN, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CHECK, DIMARCCHECK, LINCHECK, LINTXTCHK, CCPRECHECK |
+| Rest | POOLDEMO, CABHD, LHD, SMARTFILLET, WCALST, ABCDEF, ALTABCDEF, XYPLOT, DRONE, TYDRN, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CHECK, DIMARCCHECK, LINCHECK, LINTXTCHK, CCPRECHECK |
 
 **The category pages** are the roster filed by what each tool *is*
 rather than when you reach for it -- the four the panel has always had,
@@ -24,7 +24,7 @@ them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, SPA, POOL, POOLDEMO, OASIS, FITABHD, ABHD, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, STOCKCOVER, WCALST |
+| Layout | LAZFORM, SPA, POOL, POOLDEMO, OASIS, FITABHD, ABHD, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
 | Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
 | Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
@@ -48,7 +48,7 @@ re-ordering the tools, re-grouping them or moving a tab to the other
 row is an edit to those two tables and nothing else, and the test
 asserts they name exactly the same groups so neither can drift. The
 status line counts tools rather than buttons (`lzp:commands` folds the
-repeats), so it still reports the whole 51 and not 119. The panel
+repeats), so it still reports the whole 52 and not 121. The panel
 reopens where you left it rather than jumping back to the middle of the
 screen.
 

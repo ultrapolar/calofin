@@ -112,6 +112,18 @@ for _g in vm.globals.get('lzp:*groups*') or []:
         "%s lists a command twice: %r" % (_g[0], _names)
 # lzp:commands folds the repeats -- the status line counts tools, not
 # buttons, and would otherwise report more tools than exist.
+# A command that appears on several pages must read the same on each --
+# two captions for one button is the drift this arrangement invites.
+_caption = {}
+for _g in vm.globals.get('lzp:*groups*') or []:
+    for _c in _g[1:]:
+        _name, _cap = str(_c[0]), str(_c[1])
+        if _name in _caption:
+            assert _caption[_name][1] == _cap, (
+                "%s reads %r on %s but %r on %s"
+                % (_name, _caption[_name][1], _caption[_name][0], _cap, _g[0]))
+        else:
+            _caption[_name] = (str(_g[0]), _cap)
 vm.loads('(setq test:*all* (lzp:commands))')
 FOLDED = [str(x) for x in vm.globals['test:*all*']]
 assert len(FOLDED) == len(set(FOLDED)), "lzp:commands repeats: %r" % FOLDED
