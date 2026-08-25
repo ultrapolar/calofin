@@ -347,6 +347,7 @@ python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
                                       # DCL well-formed, run with stubs,
                                       # toolbar + generated icon bytes
 python3 tests/test_cornerstp_geometry.py
+python3 tests/test_cornerstp_bench.py  # CORNERSTP's bench, run in lispvm
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
 python3 tests/test_cloud_mesher.py    # point cloud mesher
