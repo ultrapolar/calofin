@@ -197,6 +197,17 @@ Two details worth knowing, because both were wrong first time round:
   attempt and nothing else. `LAZICON` names the version that carried
   the bytes -- `bin.base64 via MSXML2.DOMDocument.3.0` -- rather than
   a generic label that says nothing about which of four routes worked.
+- **When no array works at all, `certutil` does.** Every failure
+  reported from the field has been about handing AutoLISP's idea of an
+  array to COM: `VT_UI1` accepted and `Write` refusing it anyway,
+  wrapped in a variant or not, with MSXML coming back empty. So the
+  last route has no array in it. `certutil` has shipped with Windows
+  since Vista and decodes base64 to binary in one command, so
+  LAZPANEL writes the base64 as **ordinary text** with `write-line` --
+  the one thing AutoLISP has never had trouble with -- and Windows
+  does the decoding. Nothing crosses the COM boundary but a command
+  line. It runs only when the stream route has failed, because it
+  costs a process and a scratch file (which it deletes).
 - **`Write` has two spellings.** It takes a `Variant`, and whether a
   raw safearray marshals into one is another per-release question, so
   a refused plain call is retried wrapped in `vlax-make-variant`

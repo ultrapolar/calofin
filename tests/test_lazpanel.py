@@ -544,6 +544,7 @@ STUB = '''
   (if stub:*done* stub:*done* stub:*rc*))
 (defun unload_dialog (id) (stub:ev "unload"))
 (defun vl-file-delete (f) (stub:ev (strcat "delete " f)) t)
+(defun findfile (f) (if (stub:ondisk f) f nil))
 (defun vlax-get-acad-object () "ACAD")
 (defun vla-get-menugroups (app) "MGS")
 (defun vla-get-toolbars (mg) "TBS")
@@ -597,7 +598,7 @@ def _reset_com():
     COM.clear()
     COM.update(created=[], props={}, calls=[], bytes=None, saved=None,
                released=0, fail_at=None, b64=None, wrote=[],
-               refused=[], xmldoc=None)
+               refused=[], xmldoc=None, shell=[], ondisk=set())
 
 
 def _b(name):
@@ -628,6 +629,10 @@ def _create(vm, a):
     COM['created'].append(name)
     if COM.get('fail_at') == 'create':
         raise lispvm.LispError('Automation Error', vm)
+    if name.lower() == 'wscript.shell':
+        if COM.get('fail_at') == 'wshell':
+            raise lispvm.LispError('Automation Error', vm)
+        return 'WSHELL'
     if name.lower().startswith(('msxml', 'microsoft.xmldom')):
         if COM.get('fail_at') == 'msxml':
             raise lispvm.LispError('Automation Error', vm)
@@ -641,6 +646,7 @@ def _create(vm, a):
     return 'STREAM' 
 
 
+@_b('vlax-put-property')
 @_b('vlax-put')
 def _put(vm, a):
     prop = str(a[1]).lower()
@@ -654,6 +660,7 @@ def _put(vm, a):
     return a[2]
 
 
+@_b('vlax-get-property')
 @_b('vlax-get')
 def _get(vm, a):
     # MSXML's bin.base64 element hands back a real byte array -- which
@@ -677,18 +684,30 @@ def _fill(vm, a):
     return a[0]
 
 
+@_b('stub:ondisk')
+def _ondisk(vm, a):
+    return str(a[0]) if str(a[0]) in COM.get('ondisk', set()) else None
+
+
 @_b('vlax-release-object')
 def _rel(vm, a):
     COM['released'] += 1
     return None
 
 
+@_b('vlax-invoke-method')
 @_b('vlax-invoke')
 def _invoke(vm, a):
     m = str(a[1]).lower()
     COM['calls'].append(m)
     if COM.get('fail_at') == m:
         raise lispvm.LispError('Automation Error', vm)
+    if m == 'run':
+        COM.setdefault('shell', []).append(str(a[2]))
+        # certutil really does produce the file, so findfile must see it
+        COM.setdefault('ondisk', set()).add(
+            str(a[2]).rsplit('"', 2)[-2])
+        return 0
     if m == 'createelement':
         return 'XMLEL6' if str(a[0]) == 'XMLDOC6' else 'XMLEL'
     if m == 'write':
@@ -997,6 +1016,44 @@ assert str(mv.globals.get('lzp:*icontype*')).startswith('bin.base64 via'), \
     ("the icon fell back to a safearray instead of using MSXML: %r"
      % mv.globals.get('lzp:*icontype*'))
 print("   a real run reports %r" % str(mv.globals.get('lzp:*icontype*')))
+
+
+# --------------------------------------------------------------------
+# certutil: the route with no byte array in it at all.
+# --------------------------------------------------------------------
+# Every failure reported from the field has been about handing
+# AutoLISP's idea of an array to COM -- VT_UI1 accepted and Write
+# refusing it anyway, wrapped in a variant or not, with MSXML coming
+# back empty.  certutil has shipped with Windows since Vista and
+# decodes base64 to binary in one command, so AutoLISP writes ordinary
+# TEXT and Windows does the decoding.  Nothing crosses the COM boundary
+# but a command line.
+print("== certutil: the fallback that asks AutoLISP for text only ==")
+cv = stubbed()
+COM['fail_at'] = 'write'          # exactly the field failure
+cv.loads('(setq test:*w* (lzp:bmp-write "/stub/x/lazpanel-16.bmp" 16 lzp:*icon16*))')
+assert str(cv.globals['test:*w*']) == '/stub/x/lazpanel-16.bmp', \
+    "the stream route failed and certutil did not pick it up"
+assert str(cv.globals.get('lzp:*iconroute*')) == 'certutil', \
+    "route says %r" % cv.globals.get('lzp:*iconroute*')
+assert 'certutil' in str(cv.globals.get('lzp:*icontype*')), \
+    cv.globals.get('lzp:*icontype*')
+# it shelled out with -decode, and cleaned its temp file up
+ran = [str(x) for x in COM.get('shell', [])]
+assert ran and 'certutil' in ran[0] and '-decode' in ran[0], ran
+assert ran[0].count('"') == 4, "the paths must be quoted: %r" % ran[0]
+ev = events(cv)
+assert any(e.startswith('delete') and e.endswith('.b64') for e in ev), \
+    "the base64 scratch file was left behind: %r" % ev
+print("   Write refused -> certutil -decode ran, base64 scratch deleted")
+
+# and when the stream route works, certutil is never reached
+cv2 = stubbed()
+cv2.loads('(setq test:*w2* (lzp:bmp-write "/stub/x/lazpanel-16.bmp" 16 lzp:*icon16*))')
+assert str(cv2.globals.get('lzp:*iconroute*')) == 'ADODB.Stream', \
+    cv2.globals.get('lzp:*iconroute*')
+assert not COM.get('shell'), "certutil ran even though the stream worked"
+print("   and it stays out of the way when the stream route works")
 
 
 print("== no support folder: full temp paths, the best that is left ==")

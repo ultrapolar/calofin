@@ -63274,7 +63274,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.3")
+(setq *lazpanel-version* "v2.4")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -63597,6 +63597,8 @@
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*iconstep* nil)         ; the COM call the icon write died on
+(setq lzp:*msxmlwhy* nil)         ; what each MSXML ProgID said, newest first
+(setq lzp:*iconroute* nil)        ; which route actually wrote the file
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
@@ -64098,27 +64100,40 @@
 ;; The whole chain on one document: an element typed bin.base64, the
 ;; base64 text put into it, and the byte array read back out.
 (defun lzp:b64-chain (doc b64 / el out)
-  (setq el (vlax-invoke doc 'createElement "b"))
-  (vlax-put el 'dataType "bin.base64")
-  (vlax-put el 'text b64)
-  (setq out (vlax-get el 'nodeTypedValue))
+  ;; the documented long spellings, not the vlax-get / vlax-put /
+  ;; vlax-invoke shorthands: the shorthands are what the rest of this
+  ;; file uses and they clearly work here, but this chain is the part
+  ;; that keeps coming back empty, so it does not get to be the place
+  ;; a spelling is also in question
+  (setq el (vlax-invoke-method doc 'createElement "b"))
+  (vlax-put-property el 'dataType "bin.base64")
+  (vlax-put-property el 'text b64)
+  (setq out (vlax-get-property el 'nodeTypedValue))
   (vl-catch-all-apply 'vlax-release-object (list el))
   out)
 
 ;; One ProgID, tried all the way through.  nil if this version cannot
 ;; carry it.
+(defun lzp:whynot (id msg)
+  (setq lzp:*msxmlwhy*
+        (cons (strcat id ": " msg) lzp:*msxmlwhy*))
+  nil)
+
 (defun lzp:b64-try (id b64 / doc r)
   (setq r (vl-catch-all-apply 'vlax-create-object (list id)))
   (cond
-    ((vl-catch-all-error-p r) nil)
-    ((null r) nil)
+    ((vl-catch-all-error-p r)
+     (lzp:whynot id (vl-catch-all-error-message r)))
+    ((null r) (lzp:whynot id "came back nil"))
     (t
      (setq doc r)
      (setq r (vl-catch-all-apply 'lzp:b64-chain (list doc b64)))
      (vl-catch-all-apply 'vlax-release-object (list doc))
      (cond
-       ((vl-catch-all-error-p r) nil)
-       (r (setq lzp:*icontype* (strcat "bin.base64 via " id))
+       ((vl-catch-all-error-p r)
+        (lzp:whynot id (vl-catch-all-error-message r)))
+       ((null r) (lzp:whynot id "the chain ran but gave back nothing"))
+       (t (setq lzp:*icontype* (strcat "bin.base64 via " id))
           r)))))
 
 ;;  EVERY ProgID IS TRIED ALL THE WAY THROUGH, not just far enough to
@@ -64134,6 +64149,7 @@
 ;;  both carry XDR -- and 6.0 stays at the back where it costs one
 ;;  failed attempt and nothing else.
 (defun lzp:bytes-msxml (bytes / b64 out id)
+  (setq lzp:*msxmlwhy* nil)
   (setq b64 (lzp:b64 bytes))
   (foreach id '("MSXML2.DOMDocument.3.0" "Microsoft.XMLDOM"
                 "MSXML2.DOMDocument" "MSXML2.DOMDocument.6.0")
@@ -64194,8 +64210,78 @@
   (setq lzp:*iconstep* nil)
   t)
 
-(defun lzp:bmp-write (path size grid / st ok)
-  (setq lzp:*iconerr* nil)
+;;; -------------------- the route that needs no byte array ---------------
+;;  Every failure so far has been about handing AutoLISP's idea of an
+;;  array to COM.  VT_UI1 was accepted on the machine that reported it
+;;  and Write refused the array anyway, wrapped in a variant or not;
+;;  MSXML, which exists to sidestep that, came back empty.
+;;
+;;  So here is the route with no array in it at all.  certutil has
+;;  shipped with Windows since Vista and decodes base64 to binary in
+;;  one command.  AutoLISP writes the base64 as ORDINARY TEXT with
+;;  write-line -- which is the one thing it has never had trouble with
+;;  -- and Windows does the decoding.  Nothing crosses the COM boundary
+;;  except a command line.
+;;
+;;  It is last because it costs a process and writes a second file;
+;;  when the stream route works this never runs.
+(defun lzp:b64-lines (b64 fh / i n)
+  ;; certutil wants the base64 wrapped rather than one enormous line
+  (setq i 1 n (strlen b64))
+  (while (<= i n)
+    (write-line (substr b64 i 76) fh)
+    (setq i (+ i 76))))
+
+(defun lzp:bmp-certutil (path bytes / tmp fh sh r out)
+  (setq tmp (strcat path ".b64"))
+  (cond
+    ((not (setq fh (open tmp "w")))
+     (setq lzp:*iconerr*
+           (strcat lzp:*iconerr* "  certutil: could not write " tmp "."))
+     nil)
+    (t
+     (setq r (vl-catch-all-apply 'lzp:b64-lines (list (lzp:b64 bytes) fh)))
+     (close fh)
+     (cond
+       ((vl-catch-all-error-p r)
+        (vl-file-delete tmp)
+        (setq lzp:*iconerr*
+              (strcat lzp:*iconerr* "  certutil: writing the base64 failed: "
+                      (vl-catch-all-error-message r)))
+        nil)
+       (t
+        (setq sh (vl-catch-all-apply 'vlax-create-object
+                                     (list "WScript.Shell")))
+        (cond
+          ((vl-catch-all-error-p sh)
+           (vl-file-delete tmp)
+           (setq lzp:*iconerr*
+                 (strcat lzp:*iconerr* "  certutil: WScript.Shell would not "
+                         "start: " (vl-catch-all-error-message sh)))
+           nil)
+          (t
+           ;; the third argument waits for it, so the file is there by
+           ;; the time this returns rather than some moments later
+           (setq r (vl-catch-all-apply
+                     'vlax-invoke-method
+                     (list sh 'Run
+                           (strcat "cmd /c certutil -f -decode \"" tmp
+                                   "\" \"" path "\"")
+                           0 :vlax-true)))
+           (vl-catch-all-apply 'vlax-release-object (list sh))
+           (vl-file-delete tmp)
+           (cond
+             ((vl-catch-all-error-p r)
+              (setq lzp:*iconerr*
+                    (strcat lzp:*iconerr* "  certutil: " 
+                            (vl-catch-all-error-message r)))
+              nil)
+             ((findfile path) (setq lzp:*icontype* "base64 text + certutil") t)
+             (t (setq lzp:*iconerr*
+                      (strcat lzp:*iconerr* "  certutil ran but wrote nothing."))
+                nil)))))))))
+
+(defun lzp:bmp-via-stream (path bytes / st ok)
   (setq st (vl-catch-all-apply 'vlax-create-object (list "ADODB.Stream")))
   (cond
     ((vl-catch-all-error-p st)
@@ -64207,8 +64293,7 @@
      (setq lzp:*iconerr* "ADODB.Stream came back nil.")
      nil)
     (t
-     (setq ok (vl-catch-all-apply
-                'lzp:bmp-stream (list st path (lzp:bmp-bytes size grid))))
+     (setq ok (vl-catch-all-apply 'lzp:bmp-stream (list st path bytes)))
      (vl-catch-all-apply 'vlax-release-object (list st))
      (cond
        ((vl-catch-all-error-p ok)
@@ -64218,6 +64303,23 @@
                       ": " (vl-catch-all-error-message ok)))
         nil)
        (t path)))))
+
+;; The icon, by whichever route this machine allows.  The stream first
+;; because it writes the file directly; certutil after it, because it
+;; costs a process and a second file but asks nothing of AutoLISP but
+;; text.  Which one won is recorded for LAZICON to report.
+(defun lzp:bmp-write (path size grid / bytes)
+  (setq lzp:*iconerr* ""
+        lzp:*iconroute* nil
+        bytes (lzp:bmp-bytes size grid))
+  (cond
+    ((lzp:bmp-via-stream path bytes)
+     (setq lzp:*iconroute* "ADODB.Stream" lzp:*iconerr* nil)
+     path)
+    ((lzp:bmp-certutil path bytes)
+     (setq lzp:*iconroute* "certutil")
+     path)
+    (t nil)))
 
 ;; A STABLE path, not a fresh temp name each time: SetBitmaps stores the
 ;; path rather than the image, and AutoCAD re-reads it whenever the
@@ -64517,7 +64619,7 @@
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
-(defun c:LAZICON ( / paths tb btn r)
+(defun c:LAZICON ( / paths tb btn r w)
   ;; The icon path is best effort and fails silently on purpose: a
   ;; missing picture must never stop the panel working.  Silence is the
   ;; right default and a poor answer to "why is my button blank", so
@@ -64533,9 +64635,10 @@
   (cond
     (paths
      (princ (strcat "\n  written to : "
-                    (if lzp:*icondir* lzp:*icondir* "?")
-                    "  (as a " (if lzp:*icontype* lzp:*icontype* "?")
-                    " array)"))
+                    (if lzp:*icondir* lzp:*icondir* "?")))
+     (princ (strcat "\n  route      : "
+                    (if lzp:*iconroute* lzp:*iconroute* "?")
+                    "  (" (if lzp:*icontype* lzp:*icontype* "?") ")"))
      (princ (strcat "\n  handed on  : " (car paths)
                     (if (= lzp:*iconref* "name")
                         "  (a name the support path resolves)"
@@ -64573,6 +64676,14 @@
                     (if lzp:*icontype* lzp:*icontype* "none was made")))
      (princ (strcat "\n  died at    : "
                     (if lzp:*iconstep* lzp:*iconstep* "an unnamed step")))
+     ;; the MSXML route failing silently is what cost two rounds of
+     ;; this; every ProgID now says what it said
+     (if lzp:*msxmlwhy*
+       (progn
+         (princ "\n  MSXML      : every version refused it --")
+         (foreach w (reverse lzp:*msxmlwhy*)
+           (princ (strcat "\n               " w))))
+       (princ "\n  MSXML      : carried it, so the array is not the story"))
      (princ (strcat "\n  written    : NO - "
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
