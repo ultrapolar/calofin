@@ -154,6 +154,34 @@ TOOLS = {
         # ...but the Back sentinel travels with the ask helpers
         'symbols': {'SF-BACK': 'CAL-BACK'},
     },
+    # ABCURCHECK was written against the library from the start
+    # (STANDARDS section 6): its ask pair, sysvar pair and vector set
+    # already carry the library's shapes, so the twin is a rename and
+    # nothing else.  acc:circumcenter is NOT in here -- it is ABHD's
+    # 2-element, looser-gated form, which the library deliberately does
+    # not carry (see shared/README.md).
+    'ABCURCHECK': {
+        'src': 'lisp/abcurcheck/ABCURCHECK.lsp',
+        'swap': {
+            'acc:askkw': 'cal:askkw',
+            'acc:syssave': 'cal:syssave',
+            'acc:sysrestore': 'cal:sysrestore',
+            'acc:ensure-layer': 'cal:ensure-layer',
+            'acc:2d': 'cal:2d', 'acc:dist': 'cal:dist',
+            'acc:v-': 'cal:v-', 'acc:v+': 'cal:v+', 'acc:v*': 'cal:v*',
+            'acc:cross': 'cal:cross', 'acc:angnorm': 'cal:angnorm',
+            'acc:signed-dang': 'cal:signed-dang',
+            'acc:tan': 'cal:tan', 'acc:ceil': 'cal:ceil',
+            'acc:pad': 'cal:pad',
+        },
+        'drop_globals': ['acc:*sysold*'],
+        # acc:askkw already takes the SHOWN bracket third, like the
+        # library's, and acc:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helper, and
+        # acc:run tests for it by name
+        'symbols': {'ACC-BACK': 'CAL-BACK'},
+    },
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
