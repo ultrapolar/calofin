@@ -399,13 +399,21 @@ for c in charts:
     body = '\n'.join(d)
     tabs = re.findall(r'key = "tab_[^"]+"; label = "([^"]+)"', body)
     assert len(tabs) == len(charts), "%s: %d tabs" % (str(c[0]), len(tabs))
-    wide = sum(len(t) + 6 for t in tabs)
+    # the tabs WRAP now, so what has to fit the screen is the widest
+    # single row, not the whole strip: eight keys on one line ran 94
+    # against this budget, which is a dialog that does not open
+    vm.loads('(setq t:*tr* (lzf:tabrows))')
+    rows = [[str(x) for x in r] for r in vm.globals['t:*tr*']]
+    assert [t for r in rows for t in r] == tabs, (
+        "%s: lzf:tabrows names %r but the page emits %r"
+        % (str(c[0]), rows, tabs))
+    wide = max(sum(len(t) + 6 for t in r) for r in rows)
     assert wide <= TAB_BUDGET, (
-        "%s: the tab strip is about %d characters wide, over the %d budget "
+        "%s: the widest tab row is about %d characters, over the %d budget "
         "-- a dialog wider than the screen cannot be shown and DCL will not "
-        "scroll it: %r" % (str(c[0]), wide, TAB_BUDGET, tabs))
-    print("   %-10s %2d lines, %2d tile keys, tab strip ~%d chars"
-          % (str(c[0]), len(d), len(tk), wide))
+        "scroll it: %r" % (str(c[0]), wide, TAB_BUDGET, rows))
+    print("   %-10s %2d lines, %2d tile keys, %d tab row(s), widest ~%d"
+          % (str(c[0]), len(d), len(tk), len(rows), wide))
 
 dcl = ALL
 vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
@@ -873,6 +881,49 @@ for need in ('b', 'a', 'h', 'g', 'f', 'e', 'w', 'm', 'l', 'k', 'c', 'd', 'c2'):
 print("   %d entities; POOL asked only for the insertion point and the"
       % len(drawn))
 print("   bottom gate -- the two things a form never sends")
+
+
+# --------------------------------------------------------------------
+# Octagon, end to end.
+# --------------------------------------------------------------------
+# POOL reaches the octagon through (pool:grecflow t), so its letters are
+# the grecian square-hopper set -- and S2 is one POOL really asks for,
+# which this found the hard way: the first run of it answered the S2
+# prompt with the word meant for the bottom gate.
+print("== an octagon, drawn from the chart's own keys ==")
+ov = VM()
+ov.load(POOL)
+OCT = """\'((shape . "OCtagon") (insq . "Insquare") (imeth . "Overall")
+            (htype . "Square") (btype . "Wedge")
+            (b . 300.0) (a . 300.0) (ss . 60.0) (tt . 180.0) (s1 . 60.0)
+            (vv . 180.0) (s2 . 85.0) (h . 40.0) (g . 70.0) (f . 110.0)
+            (e . 80.0) (m . 70.0) (l . 160.0) (k . 70.0)
+            (c . 42.0) (d . 72.0))"""
+ov.eval(parse_all("(setq pool:*form* %s)" % OCT)[0])
+ov.run('c:POOL', [(0.0, 0.0, 0.0), "No", "Yes"])
+odrawn = [e for e in ov.entities if e not in ov.deleted]
+assert odrawn, "an octagon from the form drew nothing"
+oleft = [p.strip() for p, _ in ov.prompts]
+assert len(oleft) == 3, (
+    "POOL still had to ask %d questions, not 3: %r" % (len(oleft), oleft))
+assert 'Insertion base point' in oleft[0], oleft
+assert 'corners' in oleft[1], oleft
+assert 'Add pool bottom' in oleft[2], oleft
+# no dimension was re-asked: the chart answered every letter it draws
+for lead in ('B -', 'S -', 'T -', 'S1 -', 'A -', 'V -', 'S2 -',
+             'H -', 'G -', 'F -', 'E -', 'M -', 'L -', 'K -'):
+    assert not any(q.startswith(lead) for q in oleft), \
+        "%s was asked again despite being on the chart: %r" % (lead, oleft)
+ov2 = VM()
+ov2.load(LSP)
+ov2.loads('(setq test:*ok* (lzf:keys (lzf:chart "OCtagon")))')
+ok = [str(x) for x in ov2.globals['test:*ok*']]
+for need in ('b', 'ss', 'tt', 's1', 'a', 'vv', 's2', 'h', 'g', 'f', 'e',
+             'm', 'l', 'k', 'c', 'd', 'c2'):
+    assert need in ok, "the Octagon chart lost %s" % need
+print("   %d entities; POOL asked only for the insertion point, the"
+      % len(odrawn))
+print("   corners and the bottom gate -- no dimension asked twice")
 
 
 print("ALL LAZFORM TESTS PASSED")
