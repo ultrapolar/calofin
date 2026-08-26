@@ -135,12 +135,16 @@ Knowing the type does half the work:
   are left alone, and a Round pool is never asked.
 * **An arc is not promised to be one radius.** What the drawing calls
   one R is, on a built shell, very often a run of arcs -- it slumps as
-  it cures. An end (or a Round pool's whole outline) that a single
-  radius cannot hold **within the distance you typed at step 3** is
-  rebuilt as a polyline of arcs, and the report names it -- `End A is
-  a run of 4 arcs  R 7'-2 1/2" / 6'-9 1/4" / ...  (joints smooth to
-  4.7 deg)`. No question is asked: the tolerance you already typed
-  *is* the control, and raising it gives the single clean radius back.
+  it cures. **Every curve the outline draws as a single R** -- a Roman
+  or Oval end, a Round pool's whole outline, a corner fillet, a bowed
+  wall -- is rebuilt as a polyline of arcs when a single radius cannot
+  hold its points **within the distance you typed at step 3**, and the
+  report names it: `End A is a run of 4 arcs  R 7'-2 1/2" / 6'-9 1/4"
+  / ...  (joints smooth to 4.7 deg)`, `Corner B is a run of 2 arcs`,
+  `Wall A-B is a run of 3 arcs`. No question is asked: the tolerance
+  you already typed *is* the control, and raising it gives the single
+  clean radius back. A straight wall has no curve to break up, so
+  nothing happens to one.
   * **Every joint sits on a survey point**, so the run is continuous
     by construction and each joint is a real measurement rather than
     an invented one.
@@ -156,14 +160,23 @@ Knowing the type does half the work:
     why the joints stay on real shots instead of being pulled off them
     for perfect tangency.
   * **The run keeps hugging while it earns.** It only starts when a
-    single radius misses the tolerance -- an end that really is one
+    single radius misses the tolerance -- a curve that really is one
     radius stays one arc -- but from there it does not stop at the
     first count that scrapes back inside: each extra arc is kept while
-    it beats its predecessor by a clear margin, because stopping at
-    "good enough" leaves the shell's real shape on the table. A caved
-    oval end goes `one R 3.71" -> 2 arcs 0.96" -> 4 arcs 0.50"`.
-    (`fit:*arc-max*` caps the count, `fit:*arc-pts-min*` keeps an arc
-    from being fitted to two stray shots.)
+    it beats the best so far by a clear margin, and a count that
+    *doesn't* earn is not the end of the search either, because a
+    shape can need several more arcs before the next real gain
+    arrives. A caved oval end goes `one R 3.71" -> 2 arcs 0.96" ->
+    6 arcs 0.37"`; a caved Round pool `one circle 2.50" -> 9 arcs
+    0.24"`.
+  * **How many arcs: a third of the points on the curve.** Each arc
+    needs `fit:*arc-pts-min*` (3) points to mean anything, and that is
+    the *only* ceiling -- there is no fixed limit. A shell shot 84
+    times round its outline may become up to 28 arcs; one shot 9 times
+    may become 3. Two things stop it long before that on anything real:
+    the earning margin above, and the fact that nothing is chased once
+    every point sits within `fit:*on-eps*` of the run -- at that point
+    they are all **on** the line and there is nothing left but noise.
   * A *symmetric* cave-in is still a circle -- the single arc just
     takes a smaller radius, and no chain appears. This is for the ends
     that slumped to **one side**, which no circle can follow.
@@ -311,7 +324,8 @@ points allowed off (`fit:*miss-pct*`), what counts as a bow at all
 (`fit:*oos-max*`, `fit:*oos-min*`), how far a Roman or Oval's side
 walls may lean and diverge (`fit:*cap-oos-max*`), how far an arc may
 be broken up
-(`fit:*arc-max*`, `fit:*arc-pts-min*`), how smooth its joints have to
+(`fit:*arc-pts-min*`, which is also what caps a run at a third of the
+points on the curve), how smooth its joints have to
 stay (`fit:*tang-tol*`, `fit:*tang-steps*` -- ABHD's own numbers) and
 the K/L/M offset
 (`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
@@ -338,6 +352,10 @@ mirror agree on the ones that shape the fit.
 * An arc chain is reported, not snapped: each arc's radius is whatever
   the shell made it. The nominal single-arc radius is still what the
   end dimension reports.
+* A run on a corner or a wall changes the shape drawn there, never a
+  dimension: the corner radius, the cut face and the bow all still
+  report the nominal single R that was fitted, exactly as an end's
+  radius does.
 * A run's joints are smooth to within the tangency window, never
   perfectly tangent -- perfect tangency would mean joints that are not
   survey points, and this tool would rather stay on the shots. The

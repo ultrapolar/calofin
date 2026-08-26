@@ -108,7 +108,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v1.8")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v1.9")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -187,11 +187,19 @@
                                    ; template holds its own: they are
                                    ; two independent walls that happen
                                    ; to start out parallel
-(setq fit:*arc-max*     6)         ; most arcs one end may be broken
-                                   ; into when a single radius cannot
-                                   ; hold it
-(setq fit:*arc-pts-min* 3)         ; points each arc of such a run
-                                   ; needs before it means anything
+(setq fit:*arc-pts-min* 3)         ; points each arc of a run needs
+                                   ; before it means anything - and so,
+                                   ; the only thing that limits how many
+                                   ; arcs a curve may be broken into: a
+                                   ; curve carrying N points may become
+                                   ; at most N/3 arcs.  There is no
+                                   ; fixed ceiling.  A shell that
+                                   ; wandered over forty shots has
+                                   ; earned more arcs than one shot ten
+                                   ; times, and the earning rule below
+                                   ; stops the run long before this
+                                   ; limit on anything that is really
+                                   ; one radius
 (setq fit:*tang-tol* (/ pi 22.5))  ; ABHD's own tangency window (8
                                    ; degrees): how far the next arc of
                                    ; a run may start off the tangent
@@ -2121,17 +2129,20 @@
       (if (<= worst tol)
         best                                ; one radius holds them
         (progn
-          (setq kmax (min fit:*arc-max*
-                          (max 1 (/ (length qs) fit:*arc-pts-min*)))
+          (setq kmax (max 1 (/ (length qs) fit:*arc-pts-min*))
                 k    1
                 done nil)
           (while (and (not done) (< k kmax))
-            (setq k     (1+ k)
-                  trial (fit:arc-chain qs a z k tol)
-                  w     (fit:chain-worst trial z qs))
-            (if (> w (* worst fit:*both-edge*))
-              (setq done T)                 ; not a clear enough gain
-              (setq best trial worst w)))
+            (setq k (1+ k))
+            (if (<= worst fit:*on-eps*)
+              (setq done T)     ; every point is ON it: nothing left to
+              (progn            ; chase but the noise
+                (setq trial (fit:arc-chain qs a z k tol)
+                      w     (fit:chain-worst trial z qs))
+                ;; not a clear enough gain - but a plateau is not the
+                ;; end of the curve either, so keep looking
+                (if (<= w (* worst fit:*both-edge*))
+                  (setq best trial worst w)))))
           best)))))
 
 ;; The points sorted along the arc SEG, start to end.
@@ -2746,25 +2757,31 @@
       (setq qs    (mapcar 'cdr (fit:sort-asc keyed))
             worst (fit:outline-worst qs segs)
             best  nil
-            kmax  (min fit:*arc-max* (/ n fit:*arc-pts-min*))
+            kmax  (/ n fit:*arc-pts-min*)
             k     2
             done  nil)
-      (while (and (not done) (> worst tol) (< k kmax))
+      ;; the ring only STARTS breaking up when one circle misses; from
+      ;; there it keeps going while each extra arc earns its place,
+      ;; exactly as an end cap's run does
+      (if (<= worst tol) (setq done T))
+      (while (and (not done) (< k kmax))
         (setq k  (1+ k)
               tw nil tc nil)
-        ;; a closed ring has no natural first joint, and where the
-        ;; joints land decides how well they bracket the cave-in, so
-        ;; try the aligned run and one shifted half a span
-        (foreach off (list 0 (/ n (* 2 k)))
-          (setq trial (fit:round-chain-of
-                        (append (fit:sublist qs off (- n off))
-                                (fit:sublist qs 0 off))
-                        n k tol)
-                w     (fit:chain-worst trial (car (car trial)) qs))
-          (if (or (null tw) (< w tw)) (setq tw w tc trial)))
-        (if (> tw (* worst fit:*both-edge*))
-          (setq done T)
-          (setq best tc worst tw)))
+        (if (<= worst fit:*on-eps*)
+          (setq done T)                     ; every point is ON it
+          (progn
+            ;; a closed ring has no natural first joint, and where the
+            ;; joints land decides how well they bracket the cave-in,
+            ;; so try the aligned run and one shifted half a span
+            (foreach off (list 0 (/ n (* 2 k)))
+              (setq trial (fit:round-chain-of
+                            (append (fit:sublist qs off (- n off))
+                                    (fit:sublist qs 0 off))
+                            n k tol)
+                    w     (fit:chain-worst trial (car (car trial)) qs))
+              (if (or (null tw) (< w tw)) (setq tw w tc trial)))
+            (if (<= tw (* worst fit:*both-edge*))
+              (setq best tc worst tw)))))
       (if (null best)
         res
         (progn
@@ -2801,8 +2818,103 @@
                                   (fit:rget res 'bows) chains)))
     res))
 
+;; ---- the same rule on a polygon's own curves -------------------------
+;; A corner fillet and a bowed wall are drawn as ONE arc for the same
+;; reason an oval's end is: that is how the shape is described, not how
+;; it was built.  Anything the outline draws as a single R may become a
+;; run of arcs under exactly the rules the ends follow - it only starts
+;; when one arc cannot hold the points within the typed tolerance, the
+;; joints sit on survey points, every joint stays inside the tangency
+;; window, each extra arc has to earn its place, and a curve carrying N
+;; points may become at most N/3 arcs.  A straight wall has no bulge to
+;; break up, so nothing happens to one.
+
+;; Which vert each wall leaves from, and which vert each corner's own
+;; curve starts at - the same walk fit:build-polygon does, so a run can
+;; say WHICH corner or wall it rebuilt.  Returns (leaves starts).
+(defun fit:poly-vert-map (dirs offs treat size which / corners n leaves
+                                                      starts i cf k m)
+  (setq corners (fit:poly-corners dirs offs)
+        n       (length corners)
+        leaves  nil
+        starts  nil
+        k       0
+        i       0)
+  (while (< i n)
+    (setq cf (fit:corner-frame dirs i)
+          m  (if which
+               (length (fit:corner-verts
+                         (nth (rem (+ i n -1) n) corners)
+                         (nth i corners)
+                         (nth (rem (1+ i) n) corners)
+                         (car cf) treat size))
+               1)
+          starts (cons k starts)             ; the corner's own curve
+          k      (+ k m)
+          leaves (cons (1- k) leaves)        ; wall i leaves here
+          i      (1+ i)))
+  (list (reverse leaves) (reverse starts)))
+
+;; Splice the run RUN in for vert K: the run's arcs replace the single
+;; one, and every vert after it shifts along.
+(defun fit:splice-run (verts k run / out i n v)
+  (setq out nil i 0 n (length verts))
+  (while (< i n)
+    (if (= i k)
+      (foreach v run (setq out (cons v out)))
+      (setq out (cons (nth i verts) out)))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; Rebuild every curve of a polygon outline that one arc cannot hold.
+;; Works back to front so an earlier splice cannot move a later index.
+(defun fit:poly-chains (res fpts segs bulged tol / verts map leaves
+                                                  starts runs k s qs run
+                                                  nm j rest)
+  (setq verts (fit:rget res 'verts)
+        map   (fit:poly-vert-map (fit:rget res 'dirs) (fit:rget res 'offs)
+                                 (fit:rget res 'treat)
+                                 (if (= 8 (length (fit:rget res 'offs)))
+                                   (fit:rget res 'vsize)
+                                   (fit:rget res 'size))
+                                 (fit:rget res 'which))
+        leaves (car map)
+        starts (cadr map)
+        runs   nil)
+  (foreach k (reverse bulged)
+    (setq s  (nth k segs)
+          qs (fit:order-along-arc (fit:arc-seg-points fpts segs k) s))
+    (if (>= (length qs) (* 2 fit:*arc-pts-min*))
+      (progn
+        (setq run (fit:fit-arc-run qs (car s) (cadr s) tol))
+        (if (> (length run) 1)
+          (progn
+            ;; name it before the splice moves anything
+            (setq j  (fit:index-of k leaves)
+                  nm (if j
+                       (cons 'wall j)
+                       (cons 'corner (fit:index-of k starts))))
+            (setq runs (cons (list nm (length run)
+                                   (fit:chain-kink run (cadr s) nil)
+                                   (fit:chain-segs run (cadr s)))
+                             runs)
+                  verts (fit:splice-run verts k run)))))))
+  (if (null runs)
+    res
+    (progn
+      (setq res (fit:rput res 'runs runs))
+      (fit:rput res 'verts verts))))
+
+;; Where VAL sits in LST, or nil.
+(defun fit:index-of (val lst / i out x)
+  (setq i 0)
+  (foreach x lst
+    (if (and (null out) (= x val)) (setq out i))
+    (setq i (1+ i)))
+  out)
+
 (defun fit:apply-arc-chains (res fpts tol / segs bulged i s)
-  (if (not (member (fit:rget res 'kind) '(cap round)))
+  (if (not (member (fit:rget res 'kind) '(cap round poly)))
     res
     (progn
       (setq segs (fit:res-fsegs res) bulged nil i 0)
@@ -2814,6 +2926,8 @@
         ((null bulged) res)
         ((eq (fit:rget res 'kind) 'round)
          (fit:round-chain res fpts segs tol))
+        ((eq (fit:rget res 'kind) 'poly)
+         (fit:poly-chains res fpts segs bulged tol))
         (T (fit:cap-chains res fpts segs bulged tol))))))
 
 ;; worst distance from QS to a whole outline
@@ -3175,9 +3289,26 @@
     (strcat "  (joints smooth to "
             (rtos (/ (* 180.0 k) pi) 2 1) " deg)")))
 
-(defun fit:chain-lines (res / out chains chain z segs s txt r i nm)
+(defun fit:chain-lines (res / out chains chain z segs s txt r r2 i nm)
   (setq out nil)
   (cond
+    ((and (eq (fit:rget res 'kind) 'poly) (fit:rget res 'runs))
+     (foreach r (fit:rget res 'runs)
+       (setq segs (cadddr r) txt "")
+       (foreach s segs
+         (setq r2  (fit:bulge-radius (car s) (cadr s) (caddr s))
+               txt (strcat txt (if (= txt "") "" " / ")
+                           (if r2 (fit:ftin r2) "straight"))))
+       (setq nm  (if (eq (car (car r)) 'wall)
+                   (strcat "Wall "
+                           (fit:wall-name (cdr (car r))
+                                          (length (fit:rget res 'dirs))))
+                   (strcat "Corner "
+                           (chr (+ 65 (cdr (car r))))))
+             out (cons (cons (strcat nm " is a run of")
+                             (strcat (itoa (cadr r)) " arcs  R " txt
+                                     (fit:kink-text (caddr r))))
+                       out))))
     ((eq (fit:rget res 'kind) 'cap)
      (setq chains (fit:rget res 'chains) i 0)
      (foreach chain chains
