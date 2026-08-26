@@ -37,6 +37,7 @@ Runs against either tier: standalone by default, the grouped build with
 CALOFIN_LISP_ROOT=shared.
 """
 
+import base64
 import os
 import re
 import sys
@@ -60,12 +61,20 @@ def fresh():
     return vm
 
 
+def columns(vm, page):
+    """One page's columns as (heading, [command, ...])."""
+    for g in vm.globals.get('lzp:*groups*') or []:
+        if str(g[0]) == page:
+            return [(str(c[0]), [str(x) for x in c[1:]]) for c in g[1:]]
+    raise AssertionError("no such page: %r" % page)
+
+
 def roster(vm):
-    groups = vm.globals.get('lzp:*groups*') or []
+    """Every button on the panel, repeats and all, in display order."""
     out = []
-    for g in groups:
-        for cmd, _caption in g[1:]:
-            out.append(str(cmd))
+    for g in vm.globals.get('lzp:*groups*') or []:
+        for col in g[1:]:
+            out.extend(str(x) for x in col[1:])
     return out
 
 
@@ -100,9 +109,41 @@ vm = fresh()
 ver = vm.globals.get('*lazpanel-version*')
 assert ver and re.fullmatch(r'v\d+\.\d+', str(ver)), ver
 assert any('LAZPANEL' in str(p) for p in vm.printed), vm.printed
-PANEL = roster(vm)
-assert len(PANEL) == len(set(PANEL)), "duplicate buttons: %r" % PANEL
-print("   %s, %d buttons, no duplicates" % (ver, len(PANEL)))
+BUTTONS = roster(vm)                       # every button, repeats and all
+PANEL = sorted(set(BUTTONS))               # every command, once
+# A command may serve more than one job, so it may appear on more than
+# one page -- but never twice on the SAME page, which would be a
+# duplicate DCL key.  (The per-page key check below catches that too;
+# this one names the offender in roster terms.)
+for _g in vm.globals.get('lzp:*groups*') or []:
+    _names = [str(x) for _c in _g[1:] for x in _c[1:]]
+    assert len(_names) == len(set(_names)), \
+        "%s lists a command twice: %r" % (_g[0], _names)
+
+# Captions live in one table now, so a command cannot carry two of
+# them; what CAN go wrong is a button with no caption at all, or a
+# caption left behind for a command that no longer has a button.
+CAPTIONS = {str(c[0]): str(c[1])
+            for c in vm.globals.get('lzp:*captions*') or []}
+missing_caption = [c for c in set(BUTTONS) if c not in CAPTIONS]
+assert not missing_caption, "buttons with no caption: %r" % missing_caption
+orphan_caption = [c for c in CAPTIONS if c not in set(BUTTONS)]
+assert not orphan_caption, "captions with no button: %r" % orphan_caption
+assert all(CAPTIONS.values()), \
+    "blank caption: %r" % [c for c, v in CAPTIONS.items() if not v]
+# and the lookup agrees with the table
+for _c in sorted(CAPTIONS)[:5]:
+    vm.loads('(setq test:*cap* (lzp:caption "%s"))' % _c)
+    assert str(vm.globals['test:*cap*']) == CAPTIONS[_c], _c
+
+# lzp:commands folds the repeats -- the status line counts tools, not
+# buttons, and would otherwise report more tools than exist.
+vm.loads('(setq test:*all* (lzp:commands))')
+FOLDED = [str(x) for x in vm.globals['test:*all*']]
+assert len(FOLDED) == len(set(FOLDED)), "lzp:commands repeats: %r" % FOLDED
+assert set(FOLDED) == set(PANEL), "lzp:commands lost a command"
+print("   %s, %d buttons over %d commands, none twice on a page"
+      % (ver, len(BUTTONS), len(PANEL)))
 
 
 print("== roster pin: panel == headline commands under lisp/ ==")
@@ -129,10 +170,14 @@ for c in ALL:
         satellites.add(c)
 # DCE is DIMCONTEND's short alias; STOCKLIST is STOCKCOVER's listing
 # companion -- both reachable, neither needs its own button.  LAZPANEL
-# is the panel itself, LAZBUTTON its toolbar summoner and LAZICON the
-# diagnostic that reports where the button's picture came from: none of
-# the three is a drafting tool, so none belongs on the panel.
-satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON'}
+# is the panel itself, LAZBUTTON its toolbar summoner, LAZICON the
+# diagnostic that reports where the button's picture came from, and
+# LAZPIN the pin editor the Pin... button already opens: none of the
+# four is a drafting tool, so none belongs on the panel.
+# LAZASCII is LAZFORM's font probe -- it draws nothing and answers
+# nothing, it exists to be looked at once -- so it is machinery too.
+satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON',
+               'LAZPIN', 'LAZASCII'}
 
 headline = ALL - satellites - HELD
 assert headline == set(PANEL), (
@@ -148,10 +193,25 @@ print("== the generated DCL is well formed, one page per group ==")
 vm.loads('(setq test:*dcl* (lzp:dcl-lines))')
 dcl = [str(l) for l in vm.globals.get('test:*dcl*')]
 GROUPS = [str(g[0]) for g in vm.globals['lzp:*groups*']]
+# Each row is (label page page ...) -- the label names the row on
+# screen ("Job", "Or by category"), the rest are the pages it links to.
+ROW_LABELS = [str(r[0]) for r in vm.globals['lzp:*rows*']]
+ROWS = [[str(g) for g in r[1:]] for r in vm.globals['lzp:*rows*']]
+assert all(ROW_LABELS), "a navigation row has no label"
+
+# The strip layout and the pages are two tables; neither may drift from
+# the other, or a group would be unreachable (no tab) or a tab would
+# open a page that does not exist.
+flat_rows = [g for r in ROWS for g in r]
+assert flat_rows == GROUPS, \
+    "lzp:*rows* names %r, lzp:*groups* names %r" % (flat_rows, GROUPS)
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-assert len(opens) == len(GROUPS), (
-    "%d dialogs for %d groups" % (len(opens), len(GROUPS)))
+# one dialog per page, plus the pin editor
+assert len(opens) == len(GROUPS) + 1, (
+    "%d dialogs for %d groups + the pin editor" % (len(opens), len(GROUPS)))
+assert 'lazpanel_pins : dialog {' in opens, \
+    "the pin editor dialog is not in the generated file"
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
@@ -159,7 +219,8 @@ for line in dcl:
     assert depth >= 0, line
 assert depth == 0, "unbalanced braces across the file"
 
-TILES = {'row', 'boxed_column', 'button', 'text'}
+TILES = {'row', 'boxed_row', 'boxed_column', 'column', 'button',
+         'text', 'toggle'}
 ATTRS = {'label', 'key', 'width', 'alignment',
          'is_default', 'is_cancel', 'fixed_width'}
 CLAUSE = r'[a-z_]+ = (?:"[^"]*"|[a-z0-9]+);'
@@ -204,22 +265,33 @@ for gname in GROUPS:
     tabs = re.findall(r'key = "tab_([^"]+)"; label = "([^"]+)"', text)
     assert [t[0] for t in tabs] == GROUPS, \
         "%s: tab strip is %r, expected %r" % (gname, [t[0] for t in tabs], GROUPS)
-    wide = sum(len(t[1]) + 6 for t in tabs)
+    # width is per ROW, not per strip: the tabs wrap onto the rows of
+    # lzp:*rows*, so what has to fit the screen is the widest single row.
+    wide = max(sum(len(g) + 6 for g in r) for r in ROWS)
     assert wide <= TAB_BUDGET, (
-        "%s: the tab strip is about %d characters wide, over the %d budget "
+        "%s: the widest tab row is about %d characters, over the %d budget "
         "-- DCL will not scroll a dialog wider than the screen" % (gname, wide, TAB_BUDGET))
-    # this page carries exactly its own group's commands
+    # the navigation rows are labelled boxed rows now, one per lzp:*rows*
+    for lbl in ROW_LABELS:
+        assert 'label = "%s";' % lbl in text, \
+            "%s: no navigation row labelled %r" % (gname, lbl)
+    assert 'key = "pin_edit"' in text, \
+        "%s: no Pin... button -- the pinned row is missing" % gname
+    # this page carries exactly its own group's commands -- no more and
+    # no fewer.  It may well share commands with another page (AUTODIM
+    # is on Pool, Cover and Spa), so the test is against this group's
+    # own list rather than against every other group's.
     vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % gname)
     mine = [str(x) for x in vm.globals['test:*g*']]
     assert set(mine) <= set(keys), \
         "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
-    for other in GROUPS:
-        if other == gname:
-            continue
-        vm.loads('(setq test:*o* (lzp:group-commands "%s"))' % other)
-        strays = set(str(x) for x in vm.globals['test:*o*']) & set(keys)
-        assert not strays, \
-            "%s: carries %s's commands too: %r" % (gname, other, sorted(strays))
+    # pinned buttons carry a pin_ prefix and repeat a tool already on
+    # some page; pin_edit opens the editor.  Neither is a page command.
+    extra = set(keys) - set(mine) - {'status', 'cancel', 'pin_edit'} \
+            - {'tab_' + g for g in GROUPS} \
+            - {k for k in keys if k.startswith('pin_')}
+    assert not extra, \
+        "%s: buttons for commands not in its group: %r" % (gname, sorted(extra))
     seen_keys |= set(mine)
     assert 'status' in keys and 'cancel' in keys, gname
     assert text.count('is_cancel = true') == 1
@@ -241,13 +313,183 @@ for gname in GROUPS:
     print("   %-11s %2d lines, %2d commands, tab strip ~%d chars"
           % (gname, len(d), len(mine), wide))
 
-# every command on the roster lives on exactly one page
+# every command on the roster lives on at least one page
 assert seen_keys == set(PANEL), (
     "pages and roster disagree: %r" % sorted(seen_keys ^ set(PANEL)))
-print("   %d dialogs, %d commands across them, none on two pages"
-      % (len(opens), len(seen_keys)))
+
+# The job pages between them account for the whole roster, and "Rest" is
+# exactly what Pool, Cover and Spa leave over -- computed here rather
+# than trusted, so a tool added to the panel and forgotten on the job
+# pages shows up as a Rest omission instead of silently vanishing from
+# the workflow the drafter actually follows.
+JOBS = ['Pool', 'Cover', 'Spa']
+
+
+def page_cmds(name):
+    vm.loads('(setq test:*p* (lzp:group-commands "%s"))' % name)
+    return set(str(x) for x in vm.globals['test:*p*'])
+
+
+named = set()
+for j in JOBS:
+    named |= page_cmds(j)
+rest = page_cmds('Rest')
+assert rest == set(PANEL) - named, (
+    "Rest should be the complement of %s; missing from Rest: %r; "
+    "should not be there: %r"
+    % ('/'.join(JOBS), sorted((set(PANEL) - named) - rest),
+       sorted(rest - (set(PANEL) - named))))
+assert named | rest == set(PANEL), "the job pages do not cover the roster"
+print("   %d dialogs, %d commands across them (%d buttons)"
+      % (len(opens), len(seen_keys), len(BUTTONS)))
+print("   jobs cover %d, Rest holds the other %d, %d shared across jobs"
+      % (len(named), len(rest),
+         sum(1 for c in PANEL if sum(c in page_cmds(j) for j in JOBS) > 1)))
+
+
+# --------------------------------------------------------------------
+# Columns: the shape of a page, and the width that shape has to fit.
+# --------------------------------------------------------------------
+# The job pages break their tools into the columns the work falls into.
+# A page laid out in columns shows the command name alone on each
+# button, because four captioned buttons abreast would be about 147
+# character cells and DCL will not scroll a dialog wider than the
+# screen -- it just fails to open, which is how this budget came to
+# exist for the tab strip in the first place.
+print("== columns: the page layout, and what it has to fit ==")
+BODY_BUDGET = 90
+EXPECT_COLUMNS = {'Pool': 4, 'Cover': 3, 'Spa': 1, 'Rest': 1,
+                  'Layout': 1, 'Points': 1, 'Dimensions': 1, 'Checking': 1}
+
+for gname in GROUPS:
+    cols = columns(vm, gname)
+    assert len(cols) == EXPECT_COLUMNS[gname], \
+        "%s has %d column(s), expected %d" % (gname, len(cols),
+                                              EXPECT_COLUMNS[gname])
+    text = '\n'.join(page(gname))
+    # key -> the label the page actually renders for it
+    rendered = dict((k, lb) for lb, k in
+                    re.findall(r': button \{ label = "([^"]*)"; key = "([^"]+)"',
+                               text))
+    if len(cols) == 1:
+        heading, cmds = cols[0]
+        assert heading == '', \
+            "%s is a single column but carries a heading %r" % (gname, heading)
+        for c in cmds:
+            assert rendered[c] == '%s  -  %s' % (c, CAPTIONS[c]), \
+                "%s: %s lost its caption: %r" % (gname, c, rendered[c])
+        wide = max(len(c) + 5 + len(CAPTIONS[c]) for c in cmds) + 6
+    else:
+        for heading, cmds in cols:
+            assert heading, "%s has a column with no heading" % gname
+            for c in cmds:
+                assert rendered[c] == c, (
+                    "%s: %s is captioned on a multi-column page (%r) -- that "
+                    "is what blows the width budget" % (gname, c, rendered[c]))
+        wide = sum(max([len(h)] + [len(c) for c in cs]) + 6 for h, cs in cols)
+    assert wide <= BODY_BUDGET, (
+        "%s is about %d cells wide, over the %d budget -- DCL will not "
+        "scroll it and the dialog will not open" % (gname, wide, BODY_BUDGET))
+    print("   %-11s %d column(s), about %2d cells wide%s"
+          % (gname, len(cols), wide,
+             '  [' + ' | '.join(h for h, _ in cols) + ']'
+             if len(cols) > 1 else ''))
+
+# --------------------------------------------------------------------
+# Pins: the row that follows you across every page.
+# --------------------------------------------------------------------
+# Pins sit on EVERY page, so they are the one part of the panel a user
+# can make arbitrarily wide -- and a DCL dialog that is too wide does
+# not clip, it fails to open.  The row therefore packs greedily onto as
+# many rows as it needs.  These are the cases that break it.
+print("== pins: pinned row, packing, order and persistence ==")
+pv = fresh()
+
+
+def pinrow_lines(vm_):
+    vm_.loads('(setq test:*pr* (lzp:pinrow))')
+    return [str(l) for l in vm_.globals['test:*pr*']]
+
+
+def widest_row(lines):
+    worst = cur = 0
+    for l in lines:
+        if l.strip() == '}':
+            worst, cur = max(worst, cur), 0
+        else:
+            m = re.search(r'label = "([^"]*)"', l)
+            if m and ('button {' in l or 'text {' in l):
+                cur += len(m.group(1)) + 6
+    return max(worst, cur)
+
+
+# nothing pinned: the row still exists, says so, and offers the editor
+pv.loads("(setq lzp:*pins* nil)")
+empty = pinrow_lines(pv)
+assert any('nothing pinned yet' in l for l in empty), empty
+assert any('pin_edit' in l for l in empty), empty
+
+# the worst case a user can actually reach: the longest names there are
+LONG = ["LITESPACHECKSCAN", "LITELINFINSCAN", "AUTODIMSIDEPOV",
+        "LITECOVERSCAN", "FITABHDCOVER", "LAZFORMCOVER", "SPACHECKSCAN",
+        "DIMARCCHECK"]
+pv.loads("(setq lzp:*pins* '(%s))" % ' '.join('"%s"' % n for n in LONG))
+wide = pinrow_lines(pv)
+budget = int(str(pv.globals['lzp:*pinbudget*']))
+w = widest_row(wide)
+assert w <= budget, (
+    "eight long pins made a %d-cell row against a %d budget -- one row "
+    "that wide is a dialog that will not open" % (w, budget))
+assert wide.count('  : boxed_row {') > 1, \
+    "the long pins did not wrap; they were all put on one row"
+# only the first of the wrapped rows is labelled
+assert [l for l in wide if 'label = "Pinned";' in l], wide
+assert len([l for l in wide if l.strip().startswith('label =')]) == \
+    wide.count('  : boxed_row {'), "every wrapped row needs a label clause"
+# every pin is still there, none dropped by the packing
+for n in LONG:
+    assert any('key = "pin_%s"' % n in l for l in wide), "%s lost" % n
+print("   %d long pins wrap onto %d rows, widest %d cells (budget %d)"
+      % (len(LONG), wide.count('  : boxed_row {'), w, budget))
+
+# pin order is click order: a newly ticked tool goes on the END
+pv.loads("(setq lzp:*pins* '(\"POOL\" \"SPA\"))")
+pv.loads('(lzp:pin-toggle "AUTODIM" "1")')
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'SPA', 'AUTODIM']
+pv.loads('(lzp:pin-toggle "SPA" "0")')
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'AUTODIM']
+pv.loads('(lzp:pin-toggle "POOL" "1")')      # already pinned: no duplicate
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'AUTODIM']
+print("   ticking appends, unticking removes, re-ticking does not double")
+
+# a pin left over from an older build must not put a dead button on
+# screen: pins-read keeps only what is on the roster today
+pv.loads('(defun vl-registry-read (k v) "POOL;NOSUCHTOOL;AUTODIM")')
+pv.loads('(lzp:pins-read)')
+assert [str(x) for x in pv.globals['lzp:*pins*']] == ['POOL', 'AUTODIM'], \
+    "a stale pin survived: %r" % pv.globals['lzp:*pins*']
+# and a session with no registry at all simply has no pins
+pv2 = fresh()
+pv2.loads('(setq lzp:*pins* nil)')
+pv2.loads('(lzp:pins-read)')
+assert not pv2.globals.get('lzp:*pins*'), "no registry should mean no pins"
+print("   stale pins dropped against the roster; no registry = no pins")
+
+# every page carries the pinned row, not just the first
+pv.loads("(setq lzp:*pins* '(\"POOL\"))")
+pv.loads('(setq test:*d* (lzp:dcl-lines))')
+alld = '\n'.join(str(l) for l in pv.globals['test:*d*'])
+assert alld.count('key = "pin_POOL"') == len(GROUPS), (
+    "the pinned tool appears on %d pages, expected %d"
+    % (alld.count('key = "pin_POOL"'), len(GROUPS)))
+print("   a pinned tool gets a button on all %d pages" % len(GROUPS))
+
 
 print("== end-to-end with the DCL surface stubbed ==")
+# The stub session "has" exactly one command, LIVE, and deliberately
+# lacks MISSING; both must sit on the page the panel opens on.
+LIVE = 'POOL'
+MISSING = 'OASIS'
 # The stubs keep one ORDERED event log (stub:*events*) so the cleanup
 # sequence -- handle closed before load_dialog reads the file, dialog
 # unloaded and temp file deleted before anything launches -- is pinned,
@@ -302,6 +544,7 @@ STUB = '''
   (if stub:*done* stub:*done* stub:*rc*))
 (defun unload_dialog (id) (stub:ev "unload"))
 (defun vl-file-delete (f) (stub:ev (strcat "delete " f)) t)
+(defun findfile (f) (if (stub:ondisk f) f nil))
 (defun vlax-get-acad-object () "ACAD")
 (defun vla-get-menugroups (app) "MGS")
 (defun vla-get-toolbars (mg) "TBS")
@@ -336,8 +579,12 @@ STUB = '''
   (setq stub:*visible* v) (stub:ev "visible") t)
 (defun vla-float (tb top left rows)
   (setq stub:*float* (list top left rows)) (stub:ev "float") t)
-(defun c:SPA ()
-  (setq stub:*ran* (cons "SPA" stub:*ran*)) (stub:ev "run SPA") (princ))
+;; The one command this session "has".  It must live on the FIRST page,
+;; since that is the page the panel opens on and the only one whose
+;; buttons get bound -- see LIVE / MISSING below, which assert exactly
+;; that so a re-ordered roster fails here with a reason.
+(defun c:POOL ()
+  (setq stub:*ran* (cons "POOL" stub:*ran*)) (stub:ev "run POOL") (princ))
 '''
 
 # --- the ADODB.Stream surface, as Python builtins (variable arity) ---
@@ -350,7 +597,8 @@ def _reset_com():
     OPENED.clear()
     COM.clear()
     COM.update(created=[], props={}, calls=[], bytes=None, saved=None,
-               released=0, fail_at=None)
+               released=0, fail_at=None, b64=None, wrote=[],
+               refused=[], xmldoc=None, shell=[], ondisk=set())
 
 
 def _b(name):
@@ -377,16 +625,52 @@ def _newdlg(vm, a):
 
 @_b('vlax-create-object')
 def _create(vm, a):
-    COM['created'].append(str(a[0]))
+    name = str(a[0])
+    COM['created'].append(name)
     if COM.get('fail_at') == 'create':
         raise lispvm.LispError('Automation Error', vm)
-    return 'STREAM'
+    if name.lower() == 'wscript.shell':
+        if COM.get('fail_at') == 'wshell':
+            raise lispvm.LispError('Automation Error', vm)
+        return 'WSHELL'
+    if name.lower().startswith(('msxml', 'microsoft.xmldom')):
+        if COM.get('fail_at') == 'msxml':
+            raise lispvm.LispError('Automation Error', vm)
+        # MSXML 6.0 creates perfectly well and refuses dataType later:
+        # XDR schema support, of which bin.base64 is part, was removed
+        # in 6.0.  The stub models that, because a probe that stops at
+        # "did the object appear?" picks 6.0 and then reports nothing --
+        # which is what happened in the field.
+        COM['xmldoc'] = name
+        return 'XMLDOC6' if '6.0' in name else 'XMLDOC'
+    return 'STREAM' 
 
 
+@_b('vlax-put-property')
 @_b('vlax-put')
 def _put(vm, a):
-    COM['props'][str(a[1]).lower()] = a[2]
+    prop = str(a[1]).lower()
+    if str(a[0]) == 'XMLEL6' and prop == 'datatype':
+        COM.setdefault('refused', []).append(COM.get('xmldoc'))
+        raise lispvm.LispError(
+            'Automation Error. Description was not provided.', vm)
+    COM['props'][prop] = a[2]
+    if str(a[0]) == 'XMLEL' and prop == 'text':
+        COM['b64'] = str(a[2])
     return a[2]
+
+
+@_b('vlax-get-property')
+@_b('vlax-get')
+def _get(vm, a):
+    # MSXML's bin.base64 element hands back a real byte array -- which
+    # is the whole point of the detour, so the stub does the decoding
+    # for real rather than waving it through.  Everything downstream
+    # then checks bytes that actually travelled as base64.
+    if str(a[1]).lower() == 'nodetypedvalue':
+        COM['bytes'] = list(base64.b64decode(COM['b64']))
+        return 'BYTEARRAY'
+    return None
 
 
 @_b('vlax-make-safearray')
@@ -400,18 +684,36 @@ def _fill(vm, a):
     return a[0]
 
 
+@_b('stub:ondisk')
+def _ondisk(vm, a):
+    return str(a[0]) if str(a[0]) in COM.get('ondisk', set()) else None
+
+
 @_b('vlax-release-object')
 def _rel(vm, a):
     COM['released'] += 1
     return None
 
 
+@_b('vlax-invoke-method')
 @_b('vlax-invoke')
 def _invoke(vm, a):
     m = str(a[1]).lower()
     COM['calls'].append(m)
     if COM.get('fail_at') == m:
         raise lispvm.LispError('Automation Error', vm)
+    if m == 'run':
+        COM.setdefault('shell', []).append(str(a[2]))
+        # certutil really does produce the file, so findfile must see it
+        COM.setdefault('ondisk', set()).add(
+            str(a[2]).rsplit('"', 2)[-2])
+        return 0
+    if m == 'createelement':
+        return 'XMLEL6' if str(a[0]) == 'XMLDOC6' else 'XMLEL'
+    if m == 'write':
+        # Write must be handed the byte array, never a safearray: a
+        # VT_I2 safearray is exactly what AutoCAD refused in the field
+        COM.setdefault('wrote', []).append(a[2])
     if m == 'savetofile':
         COM['saved'] = (str(a[2]), a[3])
         COM.setdefault('saves', []).append(str(a[2]))
@@ -462,6 +764,15 @@ assert str(vm.globals.get('stub:*dlgname*')) == str(vm.globals['test:*n*']), \
 # pages -- plus a tab for every group
 vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % GROUPS[0])
 first = [str(x) for x in vm.globals['test:*g*']]
+# Only the opening page's buttons are bound, so both commands the click
+# tests use have to be on it: LIVE is the one the stub defines, MISSING
+# is one it deliberately does not.
+assert LIVE in first, (
+    "the stub defines c:%s, but %s is not on the first page (%s) -- "
+    "the click test would click nothing" % (LIVE, LIVE, GROUPS[0]))
+assert MISSING in first and MISSING != LIVE, (
+    "%s is not on the first page (%s), so it cannot stand for a greyed "
+    "button there" % (MISSING, GROUPS[0]))
 acts = {str(a[0]) for a in vm.globals.get('stub:*action*')}
 assert set(first) <= acts, sorted(set(first) - acts)
 for g in GROUPS:
@@ -471,26 +782,36 @@ assert not strays, "another page's commands were bound too: %r" % sorted(strays)
 # the status line still counts the WHOLE roster, not just this page
 assert '1 of %d' % len(PANEL) in str(vm.globals.get('stub:*status*'))
 disabled = set(map(str, vm.globals.get('stub:*disabled*')))
-assert disabled == set(first) - {'SPA'}, disabled ^ (set(first) - {'SPA'})
+assert disabled == set(first) - {LIVE}, disabled ^ (set(first) - {LIVE})
 assert vm.globals.get('lzp:*pick*') is None, "pick survived the run"
 print("   Close: nothing ran, close->load->new->start->unload->delete,")
-print("   only the first page's %d commands bound, only SPA enabled"
-      % len(first))
+print("   only the first page's %d commands bound, only %s enabled"
+      % (len(first), LIVE))
 
 vm = stubbed()
-vm.loads('(setq stub:*click* "SPA")')
-run(vm, 'c:LAZPANEL', 'click-spa')
-assert [str(x) for x in vm.globals.get('stub:*ran*')] == ['SPA']
+vm.loads('(setq stub:*click* "%s")' % LIVE)
+run(vm, 'c:LAZPANEL', 'click-live')
+assert [str(x) for x in vm.globals.get('stub:*ran*') or []] == [LIVE]
 assert vm.globals.get('lzp:*pick*') is None, "pick not cleared after launch"
-assert events(vm) == DIALOG + ['run SPA'], events(vm)
-print("   click SPA: the real action expression fires, SPA runs once,")
+# THE REOPEN, which is the point of the loop: the panel closes, the tool
+# runs, and the panel comes straight back rather than leaving the user to
+# type LAZPANEL again.  The stub clicks once and then closes, so the
+# sequence is exactly one full dialog cycle, the run, and a second cycle.
+assert events(vm) == DIALOG + ['run %s' % LIVE] + DIALOG, events(vm)
+assert events(vm).count('new') == 2, \
+    "the panel did not reopen after the tool finished: %r" % events(vm)
+assert events(vm).index('run %s' % LIVE) < events(vm).index('new', 3), \
+    "the panel reopened before the tool ran"
+print("   click %s: the real action expression fires, it runs once,"
+      % LIVE)
 print("   and only after the dialog is unloaded and the temp file gone")
+print("   then the panel REOPENS itself -- close is the way out")
 
 vm = stubbed()
-vm.loads('(setq stub:*click* "POOL")')
+vm.loads('(setq stub:*click* "%s")' % MISSING)
 run(vm, 'c:LAZPANEL', 'click-missing')
 assert not vm.globals.get('stub:*ran*')
-assert any('POOL is not loaded' in str(p) for p in vm.printed), vm.printed
+assert any('%s is not loaded' % MISSING in str(p) for p in vm.printed), vm.printed
 print("   click on a missing command reports it instead of erroring")
 
 
@@ -520,11 +841,25 @@ print("   button at index 0, ^C^C macro as raw ASCII 3, floated at 200,300")
 
 
 print("== the icon is written as real binary, not text ==")
-assert COM['created'] == ['ADODB.Stream'] * 2, COM['created']
+# Two icons, and each takes both objects: MSXML to turn the base64 back
+# into a byte array, ADODB.Stream to put that array on disk.
+# Each icon takes the stream plus whichever MSXML version carries the
+# whole chain.  3.0 is tried first and works, so 6.0 is never reached.
+assert COM['created'] == ['ADODB.Stream', 'MSXML2.DOMDocument.3.0'] * 2, \
+    COM['created']
 assert int(COM['props']['type']) == 1, COM['props']      # adTypeBinary
+assert str(COM['props']['datatype']) == 'bin.base64', COM['props']
 assert COM['calls'].count('open') == 2 and COM['calls'].count('write') == 2
 assert COM['saved'][1] == 2, COM['saved']                # overwrite if present
-assert COM['released'] == 2, "the stream object must be released"
+# the stream AND the two MSXML objects per icon all get released
+assert COM['released'] >= 2, "the stream object must be released"
+# Write is handed the MSXML byte array, never a safearray: a VT_I2
+# safearray is precisely what AutoCAD refused in the field, with
+# "Arguments are of the wrong type, are out of acceptable range, or are
+# in conflict with one another".
+for w in COM['wrote']:
+    assert str(w) == 'BYTEARRAY', \
+        "Write was handed %r, not the byte array MSXML made" % (w,)
 # The FILES go into the first support-path folder; SetBitmaps is handed
 # the bare NAMES.  The CUI resolves a toolbar bitmap by name along the
 # support search path, and a full path into the temp folder -- which is
@@ -588,6 +923,137 @@ assert nuls > 0
 print("   and every pixel of the 16x16 -- %d of its bytes are NUL, which is"
       % nuls)
 print("   exactly why write-char could never have written this file")
+
+
+# --------------------------------------------------------------------
+# Base64: the route the bytes take to become a real byte array.
+# --------------------------------------------------------------------
+# ADODB.Stream's Write wants a VT_UI1 array and AutoLISP cannot reliably
+# make one -- vlax-make-safearray's documented types stop short of
+# VT_UI1, and where it is refused the old fallback produced a VT_I2
+# array that Write rejected outright ("Arguments are of the wrong type
+# ...").  So the bytes travel as base64, which is pure ASCII, and MSXML
+# turns the string back into a byte array on the other side.
+#
+# That makes the encoder load-bearing: get it wrong and the icon is
+# silently corrupt rather than absent.  It is checked against Python's
+# own base64 on the real BMP bytes, not on a toy string.
+print("== base64: the bytes as a string AutoLISP can actually hold ==")
+import base64  # noqa: E402
+
+bv = fresh()
+for raw in [b'M', b'Ma', b'Man', b'Many', b'Manyx',
+            b'\x00', b'\x00\x00', b'\x00\x00\x00',
+            b'\xff', b'\xff\xff\xff', b'\x00\xff\x00', b'\xfb\xff\xbf']:
+    bv.loads("(setq test:*b* (lzp:b64 '(%s)))"
+             % ' '.join(str(b) for b in raw))
+    got = str(bv.globals['test:*b*'])
+    want = base64.b64encode(raw).decode()
+    assert got == want, "b64(%r) gave %r, Python says %r" % (raw, got, want)
+# every remainder-of-3 lands on the right padding
+assert str(bv.globals['test:*b*']).count('=') == 0
+bv.loads("(setq test:*e* (lzp:b64 nil))")
+assert str(bv.globals['test:*e*']) == '', "no bytes should encode to no string"
+print("   12 padding and edge cases match Python byte for byte")
+
+for size, grid in (('16', 'lzp:*icon16*'), ('32', 'lzp:*icon32*')):
+    bv.loads("(setq test:*by* (lzp:bmp-bytes %s %s))" % (size, grid))
+    raw = bytes(int(x) for x in bv.globals['test:*by*'])
+    bv.loads("(setq test:*enc* (lzp:b64 test:*by*))")
+    got = str(bv.globals['test:*enc*'])
+    assert got == base64.b64encode(raw).decode(), \
+        "the %sx%s icon does not encode the way Python encodes it" % (size, size)
+    assert base64.b64decode(got) == raw, "the round trip lost bytes"
+    # the whole point: what AutoLISP has to carry is printable ASCII
+    assert all(32 <= ord(c) < 127 for c in got), \
+        "base64 produced a character AutoLISP could not hold"
+    print("   %sx%s: %d bytes, %d of them NUL, become %d ASCII characters"
+          % (size, size, len(raw), raw.count(0), len(got)))
+
+# MSXML is tried before the safearray, because the safearray is the
+# thing that failed in the field
+src = open(LSP).read()  # noqa: F841  (also used by the ProgID checks below)
+i_msxml = src.index('lzp:bytes-msxml bytes')
+i_safe = src.index("'vlax-make-safearray", src.index('defun lzp:bytearray'))
+assert i_msxml < i_safe, \
+    "the safearray is tried before MSXML -- that is the order that failed"
+print("   MSXML is tried first; the safearray spellings remain as fallbacks")
+
+# THE BUG THESE TWO CHECKS EXIST FOR.  MSXML 6.0 creates fine and
+# refuses dataType, because XDR schema support -- of which bin.base64 is
+# part -- was removed in 6.0.  The shipped code stopped at "did the
+# object appear?", so it picked 6.0, died on the next line, and fell
+# back to the safearray without a word.  The field report is that
+# failure:  array : VT_UI1 safearray   died at : Write
+#
+# The STRUCTURAL fix is carrying every ProgID all the way through, which
+# is what the lzp:b64-try / lzp:b64-chain assertion below holds; with
+# that in place a bad order still recovers.  The ORDER assertion is the
+# cheaper half: an XDR-capable version first means 6.0's refusal is
+# never paid for at all.
+ids = re.search(r"\(foreach id\s*'\(([^)]*)\)", src, re.S)
+assert ids, "the MSXML ProgID list is no longer a foreach over a quoted list"
+order = re.findall(r'"([^"]+)"', ids.group(1))
+assert order, order
+assert '6.0' not in order[0], (
+    "MSXML %s is tried first, and 6.0 refuses dataType -- that is the bug"
+    % order[0])
+assert any('3.0' in i or 'XMLDOM' in i for i in order[:2]), (
+    "neither of the first two ProgIDs carries XDR: %r" % order[:2])
+# and the chain really is attempted per ProgID, not once after the loop
+assert 'lzp:b64-try' in src and 'lzp:b64-chain' in src, \
+    "the per-ProgID chain probe is gone"
+print("   ProgIDs tried in %s order; 6.0 last, where its refusal costs nothing"
+      % order[0])
+
+# drive it: the stub refuses dataType on 6.0, so a run must land on a
+# version that works rather than falling back to the safearray
+mv = stubbed(preload=True)
+assert COM['created'].count('MSXML2.DOMDocument.3.0') >= 1, COM['created']
+assert 'MSXML2.DOMDocument.6.0' not in COM['created'], \
+    "6.0 was reached, so an earlier ProgID must have failed: %r" % COM['created']
+assert str(mv.globals.get('lzp:*icontype*')).startswith('bin.base64 via'), \
+    ("the icon fell back to a safearray instead of using MSXML: %r"
+     % mv.globals.get('lzp:*icontype*'))
+print("   a real run reports %r" % str(mv.globals.get('lzp:*icontype*')))
+
+
+# --------------------------------------------------------------------
+# certutil: the route with no byte array in it at all.
+# --------------------------------------------------------------------
+# Every failure reported from the field has been about handing
+# AutoLISP's idea of an array to COM -- VT_UI1 accepted and Write
+# refusing it anyway, wrapped in a variant or not, with MSXML coming
+# back empty.  certutil has shipped with Windows since Vista and
+# decodes base64 to binary in one command, so AutoLISP writes ordinary
+# TEXT and Windows does the decoding.  Nothing crosses the COM boundary
+# but a command line.
+print("== certutil: the fallback that asks AutoLISP for text only ==")
+cv = stubbed()
+COM['fail_at'] = 'write'          # exactly the field failure
+cv.loads('(setq test:*w* (lzp:bmp-write "/stub/x/lazpanel-16.bmp" 16 lzp:*icon16*))')
+assert str(cv.globals['test:*w*']) == '/stub/x/lazpanel-16.bmp', \
+    "the stream route failed and certutil did not pick it up"
+assert str(cv.globals.get('lzp:*iconroute*')) == 'certutil', \
+    "route says %r" % cv.globals.get('lzp:*iconroute*')
+assert 'certutil' in str(cv.globals.get('lzp:*icontype*')), \
+    cv.globals.get('lzp:*icontype*')
+# it shelled out with -decode, and cleaned its temp file up
+ran = [str(x) for x in COM.get('shell', [])]
+assert ran and 'certutil' in ran[0] and '-decode' in ran[0], ran
+assert ran[0].count('"') == 4, "the paths must be quoted: %r" % ran[0]
+ev = events(cv)
+assert any(e.startswith('delete') and e.endswith('.b64') for e in ev), \
+    "the base64 scratch file was left behind: %r" % ev
+print("   Write refused -> certutil -decode ran, base64 scratch deleted")
+
+# and when the stream route works, certutil is never reached
+cv2 = stubbed()
+cv2.loads('(setq test:*w2* (lzp:bmp-write "/stub/x/lazpanel-16.bmp" 16 lzp:*icon16*))')
+assert str(cv2.globals.get('lzp:*iconroute*')) == 'ADODB.Stream', \
+    cv2.globals.get('lzp:*iconroute*')
+assert not COM.get('shell'), "certutil ran even though the stream worked"
+print("   and it stays out of the way when the stream route works")
 
 
 print("== no support folder: full temp paths, the best that is left ==")

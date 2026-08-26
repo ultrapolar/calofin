@@ -6,17 +6,25 @@
 ;;; Commands:  LAZPANEL       open the panel
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
+;;;            LAZPIN         choose the pinned tools
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
-;;; Every headline calofin routine as a button, grouped the way the
-;;; drafter thinks about them (the same four group names as the VB.NET
-;;; palette in ui/calofin_net: Layout, Points, Dimensions, Checking).
+;;; Every headline calofin routine as a button, on tabbed pages of two
+;;; kinds.  Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
+;;; reach for while doing that job, in columns that follow the work:
+;;; lay the shape out, tie the points, build the steps, dimension and
+;;; check.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
+;;; the same four names the VB.NET palette in ui/calofin_net uses --
+;;; hold the whole roster filed by what each tool IS.  A tool that
+;;; serves two jobs is on both, so there are more buttons than commands.
 ;;; Clicking a button closes the panel and runs the command exactly as
 ;;; if its name had been typed -- the panel adds nothing in front of a
-;;; tool and nothing behind it.
+;;; tool and nothing behind it.  (The Cover page names the cover twins,
+;;; POOLCOVER and friends, which is not the panel meddling: they are
+;;; commands of their own and do the same thing typed.)
 ;;;
 ;;; ZERO INSTALL.  The dialog is plain DCL, and this file writes its own
 ;;; .dcl into the system temp folder each time the panel opens, so there
@@ -51,8 +59,14 @@
 ;;; session has.
 ;;;
 ;;; DCL dialogs are modal, so the panel cannot stay open while a tool
-;;; runs the way a docked palette can: click, the panel closes, the tool
-;;; runs, LAZPANEL reopens it.  The *SCAN companions are on the panel;
+;;; runs the way a docked palette can -- but it no longer has to be
+;;; reopened by hand: click, the panel closes, the tool runs to its own
+;;; end, and the panel COMES BACK on the page and at the screen position
+;;; it was at.  Close is the way out, and is the default button.  A
+;;; PINNED row on every page carries the handful of tools you actually
+;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
+;;;
+;;; The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
 ;;; walkthroughs, *VER reporters, *RESCUE undo companions, -CFG /
 ;;; -SETUP partners) stay off on purpose, and so does the DD*
@@ -65,11 +79,12 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v1.8")
+(setq *lazpanel-version* "v2.4")
 
 ;;; -------------------- the roster --------------------------------------
-;;  One entry per button: (label (command caption) ...) per group.  The
-;;  rules for what belongs here:
+;;  Two tables: lzp:*captions* names every command once, and
+;;  lzp:*groups* lays the pages out in columns of those names.  The
+;;  rules for what belongs on the panel at all:
 ;;    - every headline drafting command under lisp/ gets a button;
 ;;    - satellites do not: TUTORIAL* walkthroughs, *VER reporters,
 ;;      *RESCUE undo companions, -CFG / -SETUP partners, DCE (alias of
@@ -81,62 +96,304 @@
 ;;    - the deprecated acady matcher (MATCHSTD, ACADY-*) never appears.
 ;;  tests/test_lazpanel.py enforces all five rules against the tree.
 
+;;  TWO KINDS OF TAB, and a command may sit on several.
+;;
+;;  The first four pages are JOBS -- what the drafter is actually doing
+;;  this hour: a pool, a cover, a spa, and everything those three do not
+;;  reach.  They run in the order the work runs: lay the shape out, tie
+;;  the points, build the steps, then dimension and check.  A command
+;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
+;;  all three, because every job ends the same way.  The last four are
+;;  the CATEGORIES the panel has always had -- the whole roster filed by
+;;  what each tool is rather than when you reach for it -- so a tool you
+;;  cannot place in a job is still one tab away.
+;;
+;;  Every command therefore appears at least twice: once on a job page
+;;  and once on a category page.  Keys are only required to be unique
+;;  within a page, and each page is its own dialog, so this is free --
+;;  but lzp:commands has to fold the repeats or the status line would
+;;  count the roster twice over.
+;;
+;;  The job pages are laid out in COLUMNS, which is the other half of
+;;  the same idea: a job is not a flat list of two dozen tools, it is
+;;  four short lists in the order you reach for them.
+;;
+;;  "Rest" is not a hand-kept list: it is every command the Pool, Cover
+;;  and Spa pages do not name, and the test recomputes that complement
+;;  from the tree, so a tool added to the panel lands there by default
+;;  instead of falling off the job pages unnoticed.
+
+;;  ONE CAPTION PER COMMAND, here and nowhere else.  A command appears
+;;  on several pages, so a caption kept beside each button would be the
+;;  same words written two or three times -- and would drift the first
+;;  time one copy was edited.  This is the only place they live.
+(setq lzp:*captions*
+  '(
+    ("ABCDEF"           "Rectangle plot")
+    ("ABCURCHECK"       "Perimeter continuity")
+    ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
+    ("ABFIND"           "A/B stake ties")
+    ("ABHD"             "Survey perimeter + bottom")
+    ("ABHDCOVER"        "Survey perimeter, no bottom")
+    ("ABMOVE"           "Move mis-taped point")
+    ("ADAB"             "Organic shape points")
+    ("ALTABCDEF"        "Clockwise rectangle plot")
+    ("AUTOBEAD"         "Bead offsets")
+    ("AUTODIM"          "Auto dimension")
+    ("AUTODIMSIDEPOV"   "Side-view dims")
+    ("BPCALLOUT"        "Bad point callout")
+    ("CABHD"            "Perimeter-only fit")
+    ("CCPRECHECK"       "Tech flow chart")
+    ("CDCALLOUT"        "Point-to-point cross dims")
+    ("CDCREATE"         "Lines to cross dims")
+    ("CHECK"            "Drawing check")
+    ("CORNERSTP"        "Corner step")
+    ("COVERCHECK"       "Cover review")
+    ("COVERSCAN"        "Cover scan")
+    ("CPERPPTS"         "Curved perp points")
+    ("DIMARCCHECK"      "Arc endpoint check")
+    ("DIMCHECK"         "Dimension review")
+    ("DIMCONTEND"       "Continue dim chains")
+    ("DIMSCAN"          "Dimension scan")
+    ("DRONE"            "Drone cleanup")
+    ("FITABHD"          "Typed template fit")
+    ("FITABHDCOVER"     "Typed template fit, no bottom")
+    ("FLOORDIM"         "Floor dims")
+    ("HEMISTEP"         "Hemi step")
+    ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZFORMCOVER"     "Chart to pool, no bottom")
+    ("LHD"              "Laser outline fit")
+    ("LINCHECK"         "Line checklist")
+    ("LINFINCHECK"      "Liner finish review")
+    ("LINFINSCAN"       "Liner finish scan")
+    ("LINTXTCHK"        "Liner checklist text")
+    ("LITECOVERSCAN"    "Cover scan, no dims")
+    ("LITELINFINSCAN"   "Liner scan, no dims")
+    ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("NORMIESTEP"       "Normie step")
+    ("OASIS"            "Freeform pool")
+    ("PADDLE"           "Paddle pads")
+    ("PERPPTS"          "Perpendicular points")
+    ("POOL"             "Pool layout")
+    ("POOLCOVER"        "Pool layout, no bottom")
+    ("POOLDEMO"         "Worked pool example")
+    ("SMARTFILLET"      "Corner radius, previewed")
+    ("SPA"              "Spa template")
+    ("SPACHECK"         "Spa sheet review")
+    ("SPACHECKSCAN"     "Spa sheet scan")
+    ("STAIRDIM"         "Stair dims")
+    ("STOCKCOVER"       "Stock cover placement")
+    ("TYDRN"            "Text + point tidy-up")
+    ("WCALST"           "Unroll curved band")
+    ("XFTCONV"          "Leica import cleanup")
+    ("XYPLOT"           "X/Y offset plot")
+   ))
+
+(defun lzp:caption (name / p)
+  (if (setq p (assoc name lzp:*captions*)) (cadr p) ""))
+
+;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
+;;  one entry per COLUMN, laid out side by side across the page.  The
+;;  job pages break their tools into the columns the work falls into:
+;;  lay the shape out, tie the points, build the steps, dimension and
+;;  check.  That is the grouping the drafter already carries; the
+;;  columns just stop it being a single list of twenty-four.
+;;
+;;  A column heading of "" means the page is one plain column -- what
+;;  the four category pages are.
+;;
+;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
+;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
+;;  four of those side by side is 147, and DCL will not scroll a dialog
+;;  wider than the screen -- the dialog simply fails to open.  So the
+;;  columns carry the meaning in their headings and the buttons carry
+;;  the command name, which puts the widest page at about 64 cells.
+;;  Single-column pages have the room, and keep the caption on the
+;;  button: the category pages stay the place to go to find out what a
+;;  tool is, and the job pages are the place to go when you know.
 (setq lzp:*groups*
-  '(("Layout"
-     ("LAZFORM"        "Pool from a filled-in chart")
-     ("SPA"            "Spa template")
-     ("POOL"           "Pool layout")
-     ("POOLDEMO"       "Worked pool example")
-     ("OASIS"          "Freeform pool")
-     ("FITABHD"        "Typed template fit")
-     ("ABHD"           "Survey perimeter + bottom")
-     ("ADAB"           "Organic shape points")
-     ("CABHD"          "Perimeter-only fit")
-     ("LHD"            "Laser outline fit")
-     ("PADDLE"         "Paddle pads")
-     ("AUTOBEAD"       "Bead offsets")
-     ("CORNERSTP"      "Corner step")
-     ("HEMISTEP"       "Hemi step")
-     ("NORMIESTEP"     "Normie step")
-     ("STOCKCOVER"     "Stock cover placement")
-     ("WCALST"         "Unroll curved band"))
-    ("Points"
-     ("ABCDEF"         "Rectangle plot")
-     ("ALTABCDEF"      "Clockwise rectangle plot")
-     ("XYPLOT"         "X/Y offset plot")
-     ("ABFIND"         "A/B stake ties")
-     ("ABMOVE"         "Move mis-taped point")
-     ("PERPPTS"        "Perpendicular points")
-     ("CPERPPTS"       "Curved perp points")
-     ("XFTCONV"        "Leica import cleanup")
-     ("DRONE"          "Drone cleanup")
-     ("TYDRN"          "Text + point tidy-up"))
-    ("Dimensions"
-     ("AUTODIM"        "Auto dimension")
-     ("AUTODIMSIDEPOV" "Side-view dims")
-     ("STAIRDIM"       "Stair dims")
-     ("FLOORDIM"       "Floor dims")
-     ("DIMCONTEND"     "Continue dim chains")
-     ("CDCREATE"       "Lines to cross dims")
-     ("CDCALLOUT"      "Point-to-point cross dims")
-     ("BPCALLOUT"      "Bad point callout"))
-    ("Checking"
-     ("CHECK"          "Drawing check")
-     ("DIMARCCHECK"    "Arc endpoint check")
-     ("DIMCHECK"       "Dimension review")
-     ("DIMSCAN"        "Dimension scan")
-     ("LINCHECK"       "Line checklist")
-     ("LINFINCHECK"    "Liner finish review")
-     ("LINFINSCAN"     "Liner finish scan")
-     ("LITELINFINSCAN" "Liner scan, no dims")
-     ("COVERCHECK"     "Cover review")
-     ("COVERSCAN"      "Cover scan")
-     ("LITECOVERSCAN"  "Cover scan, no dims")
-     ("SPACHECK"       "Spa sheet review")
-     ("SPACHECKSCAN"   "Spa sheet scan")
-     ("LITESPACHECKSCAN" "Spa scan, no dims")
-     ("LINTXTCHK"      "Liner checklist text")
-     ("CCPRECHECK"     "Tech flow chart"))))
+  '(("Pool"
+     ("Shape"
+      "POOL"
+      "LAZFORM"
+      "OASIS"
+      "ABHD"
+      "ADAB"
+      "FITABHD"
+      "XFTCONV"
+      )
+     ("Points"
+      "ABFIND"
+      "ABMOVE"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+     ("Steps"
+      "CORNERSTP"
+      "HEMISTEP"
+      "NORMIESTEP"
+      "AUTOBEAD"
+      "PERPPTS"
+      "CPERPPTS"
+      )
+     ("Dims & check"
+      "AUTODIM"
+      "ABCURCHECK"
+      "ABCURCHECKSCAN"
+      "LINFINCHECK"
+      "LINFINSCAN"
+      "LITELINFINSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Cover"
+     ("Shape"
+      "POOLCOVER"
+      "LAZFORMCOVER"
+      "OASIS"
+      "ABHDCOVER"
+      "FITABHDCOVER"
+      "STOCKCOVER"
+      "XFTCONV"
+      )
+     ("Points"
+      "ABFIND"
+      "ABMOVE"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+     ("Pads, dims & check"
+      "PADDLE"
+      "AUTODIM"
+      "COVERCHECK"
+      "COVERSCAN"
+      "LITECOVERSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Spa"
+     (""
+      "SPA"
+      "AUTODIM"
+      "SPACHECK"
+      "SPACHECKSCAN"
+      "LITESPACHECKSCAN"
+      "DIMCHECK"
+      "DIMSCAN"
+      )
+    )
+     ("Rest"
+     (""
+      "POOLDEMO"
+      "CABHD"
+      "LHD"
+      "SMARTFILLET"
+      "WCALST"
+      "ABCDEF"
+      "ALTABCDEF"
+      "XYPLOT"
+      "DRONE"
+      "TYDRN"
+      "AUTODIMSIDEPOV"
+      "STAIRDIM"
+      "FLOORDIM"
+      "DIMCONTEND"
+      "CHECK"
+      "DIMARCCHECK"
+      "LINCHECK"
+      "LINTXTCHK"
+      "CCPRECHECK"
+      )
+    )
+     ("Layout"
+     (""
+      "LAZFORM"
+      "LAZFORMCOVER"
+      "SPA"
+      "POOL"
+      "POOLCOVER"
+      "POOLDEMO"
+      "OASIS"
+      "FITABHD"
+      "FITABHDCOVER"
+      "ABHD"
+      "ABHDCOVER"
+      "ADAB"
+      "CABHD"
+      "LHD"
+      "PADDLE"
+      "AUTOBEAD"
+      "CORNERSTP"
+      "HEMISTEP"
+      "NORMIESTEP"
+      "SMARTFILLET"
+      "STOCKCOVER"
+      "WCALST"
+      )
+    )
+     ("Points"
+     (""
+      "ABCDEF"
+      "ALTABCDEF"
+      "XYPLOT"
+      "ABFIND"
+      "ABMOVE"
+      "PERPPTS"
+      "CPERPPTS"
+      "XFTCONV"
+      "DRONE"
+      "TYDRN"
+      )
+    )
+     ("Dimensions"
+     (""
+      "AUTODIM"
+      "AUTODIMSIDEPOV"
+      "STAIRDIM"
+      "FLOORDIM"
+      "DIMCONTEND"
+      "CDCREATE"
+      "CDCALLOUT"
+      "BPCALLOUT"
+      )
+    )
+     ("Checking"
+     (""
+      "CHECK"
+      "DIMARCCHECK"
+      "DIMCHECK"
+      "DIMSCAN"
+      "ABCURCHECK"
+      "ABCURCHECKSCAN"
+      "LINCHECK"
+      "LINFINCHECK"
+      "LINFINSCAN"
+      "LITELINFINSCAN"
+      "COVERCHECK"
+      "COVERSCAN"
+      "LITECOVERSCAN"
+      "SPACHECK"
+      "SPACHECKSCAN"
+      "LITESPACHECKSCAN"
+      "LINTXTCHK"
+      "CCPRECHECK"
+      )
+    )))
+
+;; How the tab strip is laid out: one DCL row per entry, in this order.
+;; The jobs sit on one line and the categories on the next, which is
+;; both what they mean and what keeps the strip narrow -- eight tabs on
+;; a single row run about 94 character cells, and DCL will not scroll a
+;; dialog that is wider than the screen.  This is presentation only; the
+;; pages themselves are still lzp:*groups*.  The test asserts the two
+;; tables name exactly the same groups, so neither can drift.
+(setq lzp:*rows*
+  '(("Job"            "Pool" "Cover" "Spa" "Rest")
+    ("Or by category" "Layout" "Points" "Dimensions" "Checking")))
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
@@ -144,22 +401,41 @@
 (setq lzp:*pos* nil)              ; where the panel was last standing
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
+(setq lzp:*iconstep* nil)         ; the COM call the icon write died on
+(setq lzp:*msxmlwhy* nil)         ; what each MSXML ProgID said, newest first
+(setq lzp:*iconroute* nil)        ; which route actually wrote the file
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
+(setq lzp:*page* nil)             ; the page the panel reopens on
+(setq lzp:*pins* nil)             ; the pinned tools, in pin order
+(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
 
 ;;; -------------------- roster access -----------------------------------
 
-;; Every command on the panel, flat, in display order.
-(defun lzp:group-commands (name / g c out)
+;; One page's commands, flattened out of its columns, in display order:
+;; down the first column, then down the second.
+(defun lzp:group-commands (name / g col c out)
   (foreach g lzp:*groups*
     (if (= (car g) name)
-        (foreach c (cdr g) (setq out (cons (car c) out)))))
+        (foreach col (cdr g)
+          (foreach c (cdr col) (setq out (cons c out))))))
   (reverse out))
 
-(defun lzp:commands ( / g c out)
+;; A page's columns: (heading cmd ...) each.
+(defun lzp:group-columns (name / g out)
   (foreach g lzp:*groups*
-    (foreach c (cdr g)
-      (setq out (cons (car c) out))))
+    (if (= (car g) name) (setq out (cdr g))))
+  out)
+
+;; Folded, because a command that serves two jobs is listed on both
+;; pages and the status line counts tools, not buttons.  First
+;; appearance wins, so the order still reads as the panel is laid out.
+(defun lzp:commands ( / g col c out)
+  (foreach g lzp:*groups*
+    (foreach col (cdr g)
+      (foreach c (cdr col)
+        (if (not (member c out))
+          (setq out (cons c out))))))
   (reverse out))
 
 ;; Is C:<name> defined in this session?  An unbound symbol evaluates to
@@ -183,22 +459,83 @@
 
 (defun lzp:dlgname (group) (strcat "lazpanel_" (strcase group t)))
 
-;; The tab strip: one button per group.  DCL has no tab tile, so a tab
-;; is a button that closes this page and reopens the next -- and since
-;; done_dialog reports where the dialog was standing, it reopens there
-;; rather than jumping back to the middle of the screen.
-(defun lzp:tabstrip ( / out g)
-  (setq out (list "  : row {"))
-  (foreach g lzp:*groups*
-    (setq out (cons (strcat "    : button { key = \"tab_" (car g)
-                            "\"; label = \"" (car g) "\"; }")
-                    out)))
-  (reverse (cons "  }" out)))
+;; The tab strip: one button per group, laid out in the rows of
+;; lzp:*rows* -- jobs on the first line, categories on the second.  DCL
+;; has no tab tile, so a tab is a button that closes this page and
+;; reopens the next -- and since done_dialog reports where the dialog
+;; was standing, it reopens there rather than jumping back to the middle
+;; of the screen.
+(defun lzp:tabstrip ( / out r g)
+  (foreach r lzp:*rows*
+    (setq out (cons "  : boxed_row {" out))
+    (setq out (cons (strcat "    label = \"" (car r) "\";") out))
+    (foreach g (cdr r)
+      (setq out (cons (strcat "    : button { key = \"tab_" g
+                              "\"; label = \"" g "\"; }")
+                      out)))
+    (setq out (cons "  }" out)))
+  (reverse out))
+
+;;; -------------------- the pinned row ----------------------------------
+;;  Pins are the answer to "I run four of these fifty-six all day": the
+;;  tools you tick sit on EVERY page, in the order you pinned them, so
+;;  the ones you actually use stop being three tabs apart.
+;;
+;;  A pinned button carries a "pin_" key so it cannot collide with the
+;;  same tool's own button further down the page, and it is greyed by
+;;  the same availability probe.
+;;
+;;  WIDTH.  The pinned row is generated DCL like everything else, and a
+;;  handful of long names abreast -- LITESPACHECKSCAN is sixteen
+;;  characters -- would push the dialog past the width DCL refuses to
+;;  scroll, which does not clip the page, it stops it opening at all.
+;;  So pins are packed greedily into as many rows as they need, with
+;;  the Pin... button packed last like any other item.  Pin thirty
+;;  tools and you get a tall panel, never a broken one.
+(setq lzp:*pinbudget* 84)
+
+(defun lzp:pin-label (n) (strcat "    : button { label = \"" n
+                                 "\"; key = \"pin_" n "\"; }"))
+
+;; (name width) for every pinned tool, then the editor button last.
+(defun lzp:pin-items ( / out n)
+  (foreach n lzp:*pins* (setq out (cons n out)))
+  (reverse (cons "*edit*" out)))
+
+(defun lzp:pinrows ( / out row w n cw items)
+  (setq items (lzp:pin-items) row nil w 0)
+  (foreach n items
+    (setq cw (+ (strlen (if (= n "*edit*") "Pin..." n)) 6))
+    (if (and row (> (+ w cw) lzp:*pinbudget*))
+      (setq out (cons (reverse row) out) row nil w 0))
+    (setq row (cons n row) w (+ w cw)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
+
+(defun lzp:pinrow ( / out rows r n first)
+  (setq rows (lzp:pinrows) first t)
+  (foreach r rows
+    (setq out (cons "  : boxed_row {" out))
+    ;; only the first row is labelled: two boxes both saying "Pinned"
+    ;; would read as two different things
+    (setq out (cons (strcat "    label = \""
+                            (if first "Pinned" "") "\";") out))
+    (foreach n r
+      (setq out
+        (cons (if (= n "*edit*")
+                "    : button { label = \"Pin...\"; key = \"pin_edit\"; }"
+                (lzp:pin-label n))
+              out)))
+    (if (and first (not lzp:*pins*))
+      (setq out (cons "    : text { label = \"nothing pinned yet\"; }" out)))
+    (setq out (cons "  }" out))
+    (setq first nil))
+  (reverse out))
 
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
-(defun lzp:dcl-one (g / out c)
+(defun lzp:dcl-one (g / out c col)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -207,13 +544,34 @@
                           "  -  " (car g) "\";")
                   (strcat (lzp:dlgname (car g)) " : dialog {")))
   (setq out (append (reverse (lzp:tabstrip)) out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons (strcat "    label = \"" (car g) "\";") out))
-  (foreach c (cdr g)
-    (setq out (cons (strcat "    : button { label = \"" (car c) "  -  "
-                            (cadr c) "\"; key = \"" (car c) "\"; }")
-                    out)))
-  (setq out (cons "  }" out))
+  (setq out (append (reverse (lzp:pinrow)) out))
+  (cond
+    ;; ONE COLUMN: the page has the width to spare, so every button
+    ;; carries its caption -- this is what the category pages are for.
+    ((= (length (cdr g)) 1)
+     (setq out (cons "  : boxed_column {" out))
+     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+     (foreach c (cdr (car (cdr g)))
+       (setq out (cons (strcat "    : button { label = \"" c "  -  "
+                               (lzp:caption c) "\"; key = \"" c "\"; }")
+                       out)))
+     (setq out (cons "  }" out)))
+    ;; SEVERAL COLUMNS, side by side: the heading says what the column
+    ;; is for and the buttons carry the command name alone.  Four
+    ;; captioned buttons abreast would be about 147 cells wide and the
+    ;; dialog would not open at all.
+    (t
+     (setq out (cons "  : boxed_row {" out))
+     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+     (foreach col (cdr g)
+       (setq out (cons "    : boxed_column {" out))
+       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       (foreach c (cdr col)
+         (setq out (cons (strcat "      : button { label = \"" c
+                                 "\"; key = \"" c "\"; }")
+                         out)))
+       (setq out (cons "    }" out)))
+     (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
                           "is_default = true; is_cancel = true; "
@@ -221,11 +579,42 @@
                   out))
   (reverse (cons "}" out)))
 
-;; Every page, one after another, in one generated file.
+;; The pin editor: every tool on the panel as a toggle, in three
+;; columns so fifty-six of them fit on a screen rather than a scroll
+;; DCL would not give.
+(defun lzp:dcl-pins ( / out cmds n per i j c)
+  (setq cmds (lzp:commands)
+        n    (length cmds)
+        per  (1+ (/ (1- n) 3))
+        i    0)
+  (setq out (list "lazpanel_pins : dialog {"
+                  "  label = \"LazPanel  -  pinned tools\";"
+                  (strcat "  : text { label = \"Ticked tools sit in the "
+                          "Pinned row on every page.\"; }")
+                  "  : row {"))
+  (while (< i n)
+    (setq out (append out (list "    : column {")) j 0)
+    (while (and (< j per) (< i n))
+      (setq c (nth i cmds))
+      (setq out (append out
+        (list (strcat "      : toggle { label = \"" c
+                      "\"; key = \"tg_" c "\"; }"))))
+      (setq i (1+ i) j (1+ j)))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }" "  spacer;"
+          (strcat "  : row { alignment = centered; "
+                  ": button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; } "
+                  ": button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; } }")
+          "}")))
+
+;; Every page, then the pin editor, in one generated file.
 (defun lzp:dcl-lines ( / out g)
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
-  out)
+  (append out (lzp:dcl-pins) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -251,6 +640,61 @@
 ;; Run a roster command by name, exactly as if it had been typed.  The
 ;; probe guards the greyed-button race: a command that vanished between
 ;; opening the panel and clicking reports itself instead of erroring.
+(defun lzp:split (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (if (/= cur "") (setq out (cons cur out))) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (if (/= cur "") (setq out (cons cur out)))
+  (reverse out))
+
+;; Read the pins back, dropping any name no longer on the roster: a pin
+;; left over from an older build must not put a dead button on screen,
+;; and the roster is the only thing that says what is real.
+(defun lzp:pins-read ( / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Pins")))
+  (setq lzp:*pins*
+    (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+      (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
+                        (lzp:split s ";"))))
+  lzp:*pins*)
+
+(defun lzp:pins-write ( / s n)
+  (setq s "")
+  (foreach n lzp:*pins*
+    (setq s (strcat s (if (= s "") "" ";") n)))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Pins" s))
+  lzp:*pins*)
+
+;; Pin order is click order: a newly ticked tool goes on the END rather
+;; than jumping into the middle of a row the hand has already learned.
+(defun lzp:pin-toggle (name val)
+  (if (= val "1")
+    (if (not (member name lzp:*pins*))
+      (setq lzp:*pins* (append lzp:*pins* (list name))))
+    (setq lzp:*pins* (vl-remove name lzp:*pins*)))
+  (princ))
+
+;; The toggle dialog.  Cancel re-reads the registry rather than trying
+;; to undo the ticks one by one -- the stored list is the truth, so
+;; going back to it is exact where unwinding would be approximate.
+(defun lzp:pin-edit (dcl / n rc)
+  (cond
+    ((not (new_dialog "lazpanel_pins" dcl)) nil)
+    (t
+     (foreach n (lzp:commands)
+       (set_tile (strcat "tg_" n) (if (member n lzp:*pins*) "1" "0"))
+       (action_tile (strcat "tg_" n)
+                    (strcat "(lzp:pin-toggle \"" n "\" $value)")))
+     (action_tile "accept" "(done_dialog 1)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:pins-write) (lzp:pins-read))
+     t)))
+
 (defun lzp:launch (name / fn)
   (setq fn (read (strcat "C:" name)))
   (cond
@@ -396,34 +840,253 @@
 ;; accepted is a property of the release rather than of the code.  Both
 ;; spellings are tried before giving up, and which one worked is
 ;; recorded for LAZICON to report.
-(defun lzp:bytearray (bytes / sa)
-  (setq sa (vl-catch-all-apply
-             'vlax-make-safearray
-             (list 17 (cons 0 (1- (length bytes))))))
-  (if (vl-catch-all-error-p sa)
-      (setq sa (vl-catch-all-apply
-                 'vlax-make-safearray
-                 (list vlax-vbInteger (cons 0 (1- (length bytes))))))
-      (setq lzp:*icontype* "VT_UI1"))
+;;  BASE64, AND WHY THE ICON GOES OUT THROUGH IT.
+;;
+;;  ADODB.Stream's Write wants a VT_UI1 (byte) array and nothing else.
+;;  AutoLISP cannot reliably make one: vlax-make-safearray's documented
+;;  type constants stop at vlax-vbVariant, VT_UI1 (17) is not among
+;;  them, and whether a release accepts it anyway is a property of that
+;;  release.  Where it is refused the old code fell back to a
+;;  vbInteger (VT_I2) array, which Write then rejected with
+;;
+;;      Arguments are of the wrong type, are out of acceptable range,
+;;      or are in conflict with one another
+;;
+;;  -- reported from the field, and the reason the button had no
+;;  picture at all rather than a wrong one.
+;;
+;;  The way round it is to stop trying to build a byte array in
+;;  AutoLISP.  Base64 is a pure-ASCII encoding of arbitrary bytes --
+;;  no NUL, nothing AutoLISP's character model lacks -- so the bytes
+;;  can be carried in an ordinary string, and MSXML turns that string
+;;  into a real VT_UI1 array on the other side.  Both components ship
+;;  with Windows, and the toolbar this icon goes on already needs COM.
+(setq lzp:*b64*
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+
+;; Join a list of strings without the quadratic cost of strcat-ing onto
+;; one accumulator: a 32x32 icon is 4168 base64 characters, and growing
+;; that a chunk at a time copies the whole string every time.  Pairwise
+;; merging is O(n log n) and finishes instantly.
+(defun lzp:joinstr (lst / out a)
+  (while (cdr lst)
+    (setq out nil)
+    (while lst
+      (setq a (car lst) lst (cdr lst))
+      (if lst
+        (setq out (cons (strcat a (car lst)) out) lst (cdr lst))
+        (setq out (cons a out))))
+    (setq lst (reverse out)))
+  (if lst (car lst) ""))
+
+;; Bytes to base64.  Plain integer arithmetic rather than lsh/logand:
+;; the shifts are all by 2, 4 and 6 bits, which is division and
+;; multiplication by 4, 16 and 64, and every AutoLISP has those.
+(defun lzp:b64 (bytes / out n b1 b2 b3)
+  (while bytes
+    (setq b1 (car bytes) bytes (cdr bytes) n 1 b2 0 b3 0)
+    (if bytes (setq b2 (car bytes) bytes (cdr bytes) n 2))
+    (if bytes (setq b3 (car bytes) bytes (cdr bytes) n 3))
+    (setq out
+      (cons
+        (strcat
+          (substr lzp:*b64* (1+ (/ b1 4)) 1)
+          (substr lzp:*b64* (1+ (+ (* (rem b1 4) 16) (/ b2 16))) 1)
+          (if (>= n 2)
+            (substr lzp:*b64* (1+ (+ (* (rem b2 16) 4) (/ b3 64))) 1)
+            "=")
+          (if (>= n 3) (substr lzp:*b64* (1+ (rem b3 64)) 1) "="))
+        out)))
+  (lzp:joinstr (reverse out)))
+
+;; The base64 string as a real byte array, via MSXML's bin.base64
+;; element.  nodeTypedValue on such an element IS a VT_UI1 array, which
+;; is exactly what Write will take.
+;; The whole chain on one document: an element typed bin.base64, the
+;; base64 text put into it, and the byte array read back out.
+(defun lzp:b64-chain (doc b64 / el out)
+  ;; the documented long spellings, not the vlax-get / vlax-put /
+  ;; vlax-invoke shorthands: the shorthands are what the rest of this
+  ;; file uses and they clearly work here, but this chain is the part
+  ;; that keeps coming back empty, so it does not get to be the place
+  ;; a spelling is also in question
+  (setq el (vlax-invoke-method doc 'createElement "b"))
+  (vlax-put-property el 'dataType "bin.base64")
+  (vlax-put-property el 'text b64)
+  (setq out (vlax-get-property el 'nodeTypedValue))
+  (vl-catch-all-apply 'vlax-release-object (list el))
+  out)
+
+;; One ProgID, tried all the way through.  nil if this version cannot
+;; carry it.
+(defun lzp:whynot (id msg)
+  (setq lzp:*msxmlwhy*
+        (cons (strcat id ": " msg) lzp:*msxmlwhy*))
+  nil)
+
+(defun lzp:b64-try (id b64 / doc r)
+  (setq r (vl-catch-all-apply 'vlax-create-object (list id)))
   (cond
-    ((vl-catch-all-error-p sa) nil)
-    (t (if (not lzp:*icontype*) (setq lzp:*icontype* "vbInteger"))
-       (vlax-safearray-fill sa bytes)
-       sa)))
+    ((vl-catch-all-error-p r)
+     (lzp:whynot id (vl-catch-all-error-message r)))
+    ((null r) (lzp:whynot id "came back nil"))
+    (t
+     (setq doc r)
+     (setq r (vl-catch-all-apply 'lzp:b64-chain (list doc b64)))
+     (vl-catch-all-apply 'vlax-release-object (list doc))
+     (cond
+       ((vl-catch-all-error-p r)
+        (lzp:whynot id (vl-catch-all-error-message r)))
+       ((null r) (lzp:whynot id "the chain ran but gave back nothing"))
+       (t (setq lzp:*icontype* (strcat "bin.base64 via " id))
+          r)))))
+
+;;  EVERY ProgID IS TRIED ALL THE WAY THROUGH, not just far enough to
+;;  create.  MSXML 6.0 creates perfectly happily and then refuses
+;;  dataType -- XDR schema support, of which bin.base64 is part, was
+;;  removed in 6.0 -- so a version test that stops at "did the object
+;;  appear?" picks 6.0, fails on the next line, and reports nothing.
+;;  That is exactly what happened in the field: the report said
+;;  "array: VT_UI1 safearray", meaning this returned nil and the
+;;  fallback ran.
+;;
+;;  So 3.0 and the version-independent Microsoft.XMLDOM come first --
+;;  both carry XDR -- and 6.0 stays at the back where it costs one
+;;  failed attempt and nothing else.
+(defun lzp:bytes-msxml (bytes / b64 out id)
+  (setq lzp:*msxmlwhy* nil)
+  (setq b64 (lzp:b64 bytes))
+  (foreach id '("MSXML2.DOMDocument.3.0" "Microsoft.XMLDOM"
+                "MSXML2.DOMDocument" "MSXML2.DOMDocument.6.0")
+    (if (not out) (setq out (lzp:b64-try id b64))))
+  out)
+
+;; A byte array by whichever route this AutoCAD allows.  MSXML first
+;; because it is the one that does not depend on an undocumented
+;; safearray type; the two safearray spellings stay as fallbacks so a
+;; machine where they DO work is no worse off.  Which route won is
+;; recorded for LAZICON to report.
+(defun lzp:bytearray (bytes / sa)
+  (cond
+    ;; lzp:b64-try has already recorded WHICH MSXML version carried it,
+    ;; which is the part worth knowing; do not flatten that back to a
+    ;; generic label here
+    ((setq sa (lzp:bytes-msxml bytes)) sa)
+    (t
+     (setq sa (vl-catch-all-apply
+                'vlax-make-safearray
+                (list 17 (cons 0 (1- (length bytes))))))
+     (if (vl-catch-all-error-p sa)
+         (setq sa (vl-catch-all-apply
+                    'vlax-make-safearray
+                    (list vlax-vbInteger (cons 0 (1- (length bytes)))))
+               lzp:*icontype* "vbInteger (VT_I2 - Write may refuse this)")
+         (setq lzp:*icontype* "VT_UI1 safearray"))
+     (cond
+       ((vl-catch-all-error-p sa) (setq lzp:*icontype* "none - no array could be made") nil)
+       (t (vlax-safearray-fill sa bytes)
+          sa)))))
 
 (defun lzp:bmp-stream (st path bytes / sa)
   (setq lzp:*icontype* nil)
+  ;; each step names itself before it runs, so a failure reports WHICH
+  ;; call refused rather than one COM message with no address on it
+  (setq lzp:*iconstep* "building the byte array")
   (if (not (setq sa (lzp:bytearray bytes)))
       (exit))                                 ; caught by the caller
-  (vlax-put st 'Type 1)                       ; adTypeBinary
+  (setq lzp:*iconstep* "Type = 1 (adTypeBinary)")
+  (vlax-put st 'Type 1)
+  (setq lzp:*iconstep* "Open")
   (vlax-invoke st 'Open)
-  (vlax-invoke st 'Write sa)
+  ;; Two spellings.  Write takes a Variant, and whether a raw safearray
+  ;; marshals into one is another thing that varies by release -- so if
+  ;; the plain call is refused, the wrapped one is tried before giving
+  ;; up.  The step name says which was in play.
+  (setq lzp:*iconstep* "Write")
+  (if (vl-catch-all-error-p
+        (vl-catch-all-apply 'vlax-invoke (list st 'Write sa)))
+    (progn
+      (setq lzp:*iconstep* "Write (variant-wrapped)")
+      (vlax-invoke st 'Write (vlax-make-variant sa))))
+  (setq lzp:*iconstep* "SaveToFile")
   (vlax-invoke st 'SaveToFile path 2)         ; overwrite if present
+  (setq lzp:*iconstep* "Close")
   (vlax-invoke st 'Close)
+  (setq lzp:*iconstep* nil)
   t)
 
-(defun lzp:bmp-write (path size grid / st ok)
-  (setq lzp:*iconerr* nil)
+;;; -------------------- the route that needs no byte array ---------------
+;;  Every failure so far has been about handing AutoLISP's idea of an
+;;  array to COM.  VT_UI1 was accepted on the machine that reported it
+;;  and Write refused the array anyway, wrapped in a variant or not;
+;;  MSXML, which exists to sidestep that, came back empty.
+;;
+;;  So here is the route with no array in it at all.  certutil has
+;;  shipped with Windows since Vista and decodes base64 to binary in
+;;  one command.  AutoLISP writes the base64 as ORDINARY TEXT with
+;;  write-line -- which is the one thing it has never had trouble with
+;;  -- and Windows does the decoding.  Nothing crosses the COM boundary
+;;  except a command line.
+;;
+;;  It is last because it costs a process and writes a second file;
+;;  when the stream route works this never runs.
+(defun lzp:b64-lines (b64 fh / i n)
+  ;; certutil wants the base64 wrapped rather than one enormous line
+  (setq i 1 n (strlen b64))
+  (while (<= i n)
+    (write-line (substr b64 i 76) fh)
+    (setq i (+ i 76))))
+
+(defun lzp:bmp-certutil (path bytes / tmp fh sh r out)
+  (setq tmp (strcat path ".b64"))
+  (cond
+    ((not (setq fh (open tmp "w")))
+     (setq lzp:*iconerr*
+           (strcat lzp:*iconerr* "  certutil: could not write " tmp "."))
+     nil)
+    (t
+     (setq r (vl-catch-all-apply 'lzp:b64-lines (list (lzp:b64 bytes) fh)))
+     (close fh)
+     (cond
+       ((vl-catch-all-error-p r)
+        (vl-file-delete tmp)
+        (setq lzp:*iconerr*
+              (strcat lzp:*iconerr* "  certutil: writing the base64 failed: "
+                      (vl-catch-all-error-message r)))
+        nil)
+       (t
+        (setq sh (vl-catch-all-apply 'vlax-create-object
+                                     (list "WScript.Shell")))
+        (cond
+          ((vl-catch-all-error-p sh)
+           (vl-file-delete tmp)
+           (setq lzp:*iconerr*
+                 (strcat lzp:*iconerr* "  certutil: WScript.Shell would not "
+                         "start: " (vl-catch-all-error-message sh)))
+           nil)
+          (t
+           ;; the third argument waits for it, so the file is there by
+           ;; the time this returns rather than some moments later
+           (setq r (vl-catch-all-apply
+                     'vlax-invoke-method
+                     (list sh 'Run
+                           (strcat "cmd /c certutil -f -decode \"" tmp
+                                   "\" \"" path "\"")
+                           0 :vlax-true)))
+           (vl-catch-all-apply 'vlax-release-object (list sh))
+           (vl-file-delete tmp)
+           (cond
+             ((vl-catch-all-error-p r)
+              (setq lzp:*iconerr*
+                    (strcat lzp:*iconerr* "  certutil: " 
+                            (vl-catch-all-error-message r)))
+              nil)
+             ((findfile path) (setq lzp:*icontype* "base64 text + certutil") t)
+             (t (setq lzp:*iconerr*
+                      (strcat lzp:*iconerr* "  certutil ran but wrote nothing."))
+                nil)))))))))
+
+(defun lzp:bmp-via-stream (path bytes / st ok)
   (setq st (vl-catch-all-apply 'vlax-create-object (list "ADODB.Stream")))
   (cond
     ((vl-catch-all-error-p st)
@@ -435,16 +1098,33 @@
      (setq lzp:*iconerr* "ADODB.Stream came back nil.")
      nil)
     (t
-     (setq ok (vl-catch-all-apply
-                'lzp:bmp-stream (list st path (lzp:bmp-bytes size grid))))
+     (setq ok (vl-catch-all-apply 'lzp:bmp-stream (list st path bytes)))
      (vl-catch-all-apply 'vlax-release-object (list st))
      (cond
        ((vl-catch-all-error-p ok)
         (setq lzp:*iconerr*
-              (strcat "writing " path " failed: "
-                      (vl-catch-all-error-message ok)))
+              (strcat "writing " path " failed at "
+                      (if lzp:*iconstep* lzp:*iconstep* "an unnamed step")
+                      ": " (vl-catch-all-error-message ok)))
         nil)
        (t path)))))
+
+;; The icon, by whichever route this machine allows.  The stream first
+;; because it writes the file directly; certutil after it, because it
+;; costs a process and a second file but asks nothing of AutoLISP but
+;; text.  Which one won is recorded for LAZICON to report.
+(defun lzp:bmp-write (path size grid / bytes)
+  (setq lzp:*iconerr* ""
+        lzp:*iconroute* nil
+        bytes (lzp:bmp-bytes size grid))
+  (cond
+    ((lzp:bmp-via-stream path bytes)
+     (setq lzp:*iconroute* "ADODB.Stream" lzp:*iconerr* nil)
+     path)
+    ((lzp:bmp-certutil path bytes)
+     (setq lzp:*iconroute* "certutil")
+     path)
+    (t nil)))
 
 ;; A STABLE path, not a fresh temp name each time: SetBitmaps stores the
 ;; path rather than the image, and AutoCAD re-reads it whenever the
@@ -612,9 +1292,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
     (princ))
-  (setq lzp:*pick* nil
-        lzp:*pos* nil
-        g (car (car lzp:*groups*)))
+  ;; NOT reset here: the panel reopens after every tool it launches, and
+  ;; coming back to page one in the middle of the screen each time would
+  ;; undo the whole point of reopening.  lzp:*page* and lzp:*pos* are
+  ;; where the user last had it.
+  (setq lzp:*pick* nil)
+  (if (not (and lzp:*page* (assoc lzp:*page* lzp:*groups*)))
+    (setq lzp:*page* (car (car lzp:*groups*))))
+  (setq g lzp:*page*)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
@@ -630,7 +1315,8 @@
           (princ "\nLAZPANEL error: could not open the panel.")
           (setq done t))
          (t
-          (setq have (lzp:loaded))
+          (setq lzp:*page* g
+                have (lzp:loaded))
           (set_tile "status"
                     (strcat (itoa (length have)) " of "
                             (itoa (length (lzp:commands)))
@@ -640,6 +1326,15 @@
               "(setq lzp:*pick* $key lzp:*pos* (done_dialog 1))")
             (if (not (member n have))
               (mode_tile n 1)))
+          ;; the pinned row: same launch, its own keys, greyed the same
+          ;; way -- $key would read "pin_POOL", so the name is baked in
+          (foreach n lzp:*pins*
+            (action_tile (strcat "pin_" n)
+              (strcat "(setq lzp:*pick* \"" n
+                      "\" lzp:*pos* (done_dialog 1))"))
+            (if (not (member n have))
+              (mode_tile (strcat "pin_" n) 1)))
+          (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
           (foreach n lzp:*groups*
             (action_tile (strcat "tab_" (car n))
               (strcat "(setq lzp:*go* \"" (car n)
@@ -647,7 +1342,13 @@
           (action_tile "cancel" "(setq lzp:*pos* (done_dialog 0))")
           (setq rc (start_dialog))
           (cond
-            ((= rc 4) (setq g lzp:*go*))      ; a tab: go round again
+            ((= rc 4) (setq g lzp:*go* lzp:*page* lzp:*go*))  ; a tab
+            ;; the pin editor runs on the same loaded handle, then the
+            ;; caller reopens: the Pinned row is generated DCL, so it
+            ;; only changes when the file is written again
+            ((= rc 5)
+             (lzp:pin-edit dcl)
+             (setq done t out "*pins*"))
             (t (setq done t
                      out (if (= rc 1) lzp:*pick*)))))))))
   ;; the dialog and its temp file go away BEFORE anything is launched,
@@ -672,9 +1373,42 @@
 
 ;;; -------------------- commands ----------------------------------------
 
+;;  THE REOPEN.  A DCL dialog is modal, so the panel still has to close
+;;  for a tool to run -- but it no longer has to be reopened by hand.
+;;  The loop is the feature: click, the panel closes, the tool runs to
+;;  its own end, the panel comes straight back on the page and at the
+;;  screen position it was at, with the session re-probed so a tool
+;;  loaded meanwhile is no longer greyed.  Close is the way out, and it
+;;  is the default button.
+;;
+;;  A tool cancelled with Escape comes back here exactly as a finished
+;;  one does: lzp:launch has already returned by then, so the reopen is
+;;  not conditional on the tool having succeeded.  A tool that dies with
+;;  a hard error DOES end the loop -- its own *error* runs, the panel
+;;  simply does not come back, and LAZPANEL reopens it.  That is the
+;;  right way round: the alternative is a panel that keeps bouncing back
+;;  in front of someone trying to read the error it just printed.
 (defun c:LAZPANEL ( / pick)
-  (if (setq pick (lzp:show))
-    (lzp:launch pick))
+  (lzp:pins-read)
+  (while (setq pick (lzp:show))
+    (if (/= pick "*pins*")
+      (lzp:launch pick)))
+  (princ))
+
+;; Open the pin editor on its own, without going through the panel.
+(defun c:LAZPIN ( / f dcl)
+  (lzp:pins-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZPIN error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZPIN error: could not load the dialog file."))
+    (t
+     (lzp:pin-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
 (defun c:LAZBUTTON ( / tb)
@@ -690,7 +1424,7 @@
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
-(defun c:LAZICON ( / paths tb btn r)
+(defun c:LAZICON ( / paths tb btn r w)
   ;; The icon path is best effort and fails silently on purpose: a
   ;; missing picture must never stop the panel working.  Silence is the
   ;; right default and a poor answer to "why is my button blank", so
@@ -706,9 +1440,10 @@
   (cond
     (paths
      (princ (strcat "\n  written to : "
-                    (if lzp:*icondir* lzp:*icondir* "?")
-                    "  (as a " (if lzp:*icontype* lzp:*icontype* "?")
-                    " array)"))
+                    (if lzp:*icondir* lzp:*icondir* "?")))
+     (princ (strcat "\n  route      : "
+                    (if lzp:*iconroute* lzp:*iconroute* "?")
+                    "  (" (if lzp:*icontype* lzp:*icontype* "?") ")"))
      (princ (strcat "\n  handed on  : " (car paths)
                     (if (= lzp:*iconref* "name")
                         "  (a name the support path resolves)"
@@ -739,21 +1474,40 @@
                               (vl-catch-all-error-message r)
                               "accepted - the button should show it now"))))))))
     (t
+     ;; the failure branch has to say as much as the success one, or
+     ;; the next report leaves the same two questions open: which route
+     ;; produced the array, and which COM call refused it
+     (princ (strcat "\n  array      : "
+                    (if lzp:*icontype* lzp:*icontype* "none was made")))
+     (princ (strcat "\n  died at    : "
+                    (if lzp:*iconstep* lzp:*iconstep* "an unnamed step")))
+     ;; the MSXML route failing silently is what cost two rounds of
+     ;; this; every ProgID now says what it said
+     (if lzp:*msxmlwhy*
+       (progn
+         (princ "\n  MSXML      : every version refused it --")
+         (foreach w (reverse lzp:*msxmlwhy*)
+           (princ (strcat "\n               " w))))
+       (princ "\n  MSXML      : carried it, so the array is not the story"))
      (princ (strcat "\n  written    : NO - "
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
 
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
-                 (itoa (length (lzp:commands))) " tools on the panel."))
+                 (itoa (length (lzp:commands))) " tools on the panel across "
+                 (itoa (length lzp:*groups*)) " pages, "
+                 (itoa (length lzp:*pins*)) " pinned."))
   (princ))
 
 ;; Put the button up as the file loads, quietly: in a session where
 ;; the COM menu API is missing the panel still loads and LAZPANEL
 ;; still runs -- the button is a convenience, never a gate.
 (vl-catch-all-apply 'lzp:button-init nil)
+(vl-catch-all-apply 'lzp:pins-read nil)
 
 (princ (strcat "\nLAZPANEL " *lazpanel-version*
                " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen."))
+               " LAZBUTTON puts its button on screen;"
+               " LAZPIN edits the pinned row."))
 (princ)

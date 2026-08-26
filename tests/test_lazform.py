@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import lispvm  # noqa: E402
-from lispvm import VM, LispError, Dot  # noqa: E402
+from lispvm import VM, LispError, Dot, parse_all  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
@@ -246,6 +246,10 @@ ALL = [str(x) for x in vm.globals['t:*all*']]
 # to disk
 opens = [l for l in ALL if l.endswith(' : dialog {')]
 names = [l.split(' : ')[0] for l in opens]
+# one dialog per chart, plus the LAZASCII probe
+assert 'lazform_ascii : dialog {' in opens, \
+    "the LAZASCII probe dialog is not in the generated file"
+opens = [o for o in opens if o != 'lazform_ascii : dialog {']
 assert len(opens) == len(charts), (
     "%d dialogs for %d charts" % (len(opens), len(charts)))
 assert len(names) == len(set(names)), "duplicate dialog names: %r" % names
@@ -395,13 +399,21 @@ for c in charts:
     body = '\n'.join(d)
     tabs = re.findall(r'key = "tab_[^"]+"; label = "([^"]+)"', body)
     assert len(tabs) == len(charts), "%s: %d tabs" % (str(c[0]), len(tabs))
-    wide = sum(len(t) + 6 for t in tabs)
+    # the tabs WRAP now, so what has to fit the screen is the widest
+    # single row, not the whole strip: eight keys on one line ran 94
+    # against this budget, which is a dialog that does not open
+    vm.loads('(setq t:*tr* (lzf:tabrows))')
+    rows = [[str(x) for x in r] for r in vm.globals['t:*tr*']]
+    assert [t for r in rows for t in r] == tabs, (
+        "%s: lzf:tabrows names %r but the page emits %r"
+        % (str(c[0]), rows, tabs))
+    wide = max(sum(len(t) + 6 for t in r) for r in rows)
     assert wide <= TAB_BUDGET, (
-        "%s: the tab strip is about %d characters wide, over the %d budget "
+        "%s: the widest tab row is about %d characters, over the %d budget "
         "-- a dialog wider than the screen cannot be shown and DCL will not "
-        "scroll it: %r" % (str(c[0]), wide, TAB_BUDGET, tabs))
-    print("   %-10s %2d lines, %2d tile keys, tab strip ~%d chars"
-          % (str(c[0]), len(d), len(tk), wide))
+        "scroll it: %r" % (str(c[0]), wide, TAB_BUDGET, rows))
+    print("   %-10s %2d lines, %2d tile keys, %d tab row(s), widest ~%d"
+          % (str(c[0]), len(d), len(tk), len(rows), wide))
 
 dcl = ALL
 vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
@@ -746,5 +758,172 @@ print("   %d entities, identical from the chart and from the command line"
       % len(a))
 print("   and the chart's answers -- corners included -- were not")
 print("   asked for again")
+
+# --------------------------------------------------------------------
+# What the chosen bottom actually asks for.
+# --------------------------------------------------------------------
+# A bottom type does not reach every letter on the sheet.  The form used
+# to offer them all anyway, so a C typed against a Normal hopper went
+# nowhere and nothing said so.  lzf:btskip names what to grey -- read
+# off POOL's own pool:btmspec, so it cannot drift from the command it
+# feeds.  What follows is NOT a second copy of that table: it is derived
+# from btmspec here too, and only Sport is stated outright, because
+# Sport is the one case btmspec does not describe.
+print("== the bottom type decides which boxes are live ==")
+bv = stubbed(with_pool=True)
+
+BOTTOMS = ["Normal", "Sport", "Wedge", "SLope", "MOdflat", "SHallow"]
+
+
+def skip_of(bt):
+    bv.loads('(setq test:*s* (lzf:btskip "%s"))' % bt)
+    return set(str(x) for x in (bv.globals['test:*s*'] or []))
+
+
+def spec_of(bt):
+    bv.loads('(setq test:*sp* (pool:btmspec "%s"))' % bt)
+    return [bool(x) for x in bv.globals['test:*sp*'][:4]]
+
+
+for bt in BOTTOMS:
+    got = skip_of(bt)
+    if bt == "Sport":
+        # Sport never reaches pool:hopnormal, so btmspec does not
+        # describe it: its own path asks C and D, and asks a chain of
+        # E2 F2 G F1 E1 M K rather than H G F E.
+        want = {"h", "f", "e", "c2"}
+    else:
+        ask_g, ask_e, profile, ask_c2 = spec_of(bt)
+        want = set()
+        if not ask_g:
+            want.add("g")
+        if not ask_e:
+            want.add("e")
+        if not profile:
+            want |= {"c", "d"}
+        if not ask_c2:
+            want.add("c2")
+    assert got == want, "%s: greys %r, POOL's own spec says %r" % (bt, got, want)
+    print("   %-8s greys %s" % (bt, sorted(got) or "nothing"))
+
+# the two that would actually mislead someone, stated plainly
+assert skip_of("Normal") == {"c", "d", "c2"}, \
+    "a Normal hopper draws no side view, so C and D must be greyed"
+assert skip_of("SHallow") == set(), \
+    "SHallow asks everything including C2 -- nothing should be greyed"
+assert "c2" in skip_of("Wedge") and "c2" not in skip_of("SHallow"), \
+    "C2 is a SHallow-only question"
+
+# every chart carries the depth rows, or a bottom that asks for them
+# would have nowhere to put them -- and the Grecians' gate lists, which
+# sit in the same s-expression, must be untouched by that
+for ck in [str(c[0]) for c in bv.globals['lzf:*charts*']]:
+    bv.loads('(setq test:*e* (lzf:extra (lzf:chart "%s")))' % ck)
+    ex = [str(x[0]) for x in bv.globals['test:*e*']]
+    for need in ('c', 'd', 'c2'):
+        assert need in ex, "%s has no %s box" % (ck, need)
+    bv.loads('(setq test:*g* (lzf:gates (lzf:chart "%s")))' % ck)
+    g = bv.globals['test:*g*']
+    gk = [str(x.a) for x in g] if g else []
+    assert not ({'c', 'd', 'c2'} & set(gk)), \
+        "%s: a depth leaked into the gates list: %r" % (ck, gk)
+print("   all %d charts carry C, D and C2; no gate list disturbed"
+      % len(bv.globals['lzf:*charts*']))
+
+# and a value the bottom will not ask for does not travel to POOL
+bv.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
+bv.loads('(setq lzf:*vals* nil)')
+bv.loads('(lzf:put "c" "40") (lzf:put "d" "60") (lzf:put "tp" "240")')
+bv.loads('(setq test:*f* (lzf:form "Rectangle" nil "Normal"))')
+keys = [str(pr.a) for pr in bv.globals['test:*f*']]
+assert 'c' not in keys and 'd' not in keys, (
+    "a Normal run still carried C/D to POOL, which never asks for them: %r"
+    % keys)
+assert 'tp' in keys, "the plan dimension was dropped too: %r" % keys
+bv.loads('(setq test:*f2* (lzf:form "Rectangle" nil "Wedge"))')
+keys2 = [str(pr.a) for pr in bv.globals['test:*f2*']]
+assert 'c' in keys2 and 'd' in keys2, \
+    "a Wedge DOES ask C and D -- they must travel: %r" % keys2
+print("   C and D travel on a Wedge and are dropped on a Normal")
+
+
+# --------------------------------------------------------------------
+# Round, end to end: the newest chart actually drives POOL.
+# --------------------------------------------------------------------
+# A chart is only worth having if POOL accepts what it collects.  The
+# keys check above says the letters map to real questions; this says
+# the whole set drives a drawing and leaves POOL with nothing to ask
+# but the two things a form never sends -- where to put it, and whether
+# there is a bottom.
+print("== a round pool, drawn from the chart's own keys ==")
+rv = VM()
+rv.load(POOL)
+ROUND = """\'((shape . "ROUnd") (insq . "Insquare") (btype . "Wedge")
+              (b . 360.0) (h . 40.0) (g . 90.0) (f . 140.0)
+              (m . 90.0) (l . 180.0) (k . 90.0)
+              (c . 42.0) (d . 72.0))"""
+rv.eval(parse_all("(setq pool:*form* %s)" % ROUND)[0])
+rv.run('c:POOL', [(0.0, 0.0, 0.0), "Yes"])
+drawn = [e for e in rv.entities if e not in rv.deleted]
+assert drawn, "a round pool from the form drew nothing"
+left = [p.strip() for p, _ in rv.prompts]
+assert len(left) == 2, (
+    "POOL still had to ask %d questions, not 2: %r" % (len(left), left))
+assert 'Insertion base point' in left[0], left
+assert 'Add pool bottom' in left[1], left
+# and every key the chart offers is one POOL really asks for
+rv2 = VM()
+rv2.load(LSP)
+rv2.loads('(setq test:*rk* (lzf:keys (lzf:chart "ROUnd")))')
+rk = [str(x) for x in rv2.globals['test:*rk*']]
+for need in ('b', 'a', 'h', 'g', 'f', 'e', 'w', 'm', 'l', 'k', 'c', 'd', 'c2'):
+    assert need in rk, "the Round chart lost %s" % need
+print("   %d entities; POOL asked only for the insertion point and the"
+      % len(drawn))
+print("   bottom gate -- the two things a form never sends")
+
+
+# --------------------------------------------------------------------
+# Octagon, end to end.
+# --------------------------------------------------------------------
+# POOL reaches the octagon through (pool:grecflow t), so its letters are
+# the grecian square-hopper set -- and S2 is one POOL really asks for,
+# which this found the hard way: the first run of it answered the S2
+# prompt with the word meant for the bottom gate.
+print("== an octagon, drawn from the chart's own keys ==")
+ov = VM()
+ov.load(POOL)
+OCT = """\'((shape . "OCtagon") (insq . "Insquare") (imeth . "Overall")
+            (htype . "Square") (btype . "Wedge")
+            (b . 300.0) (a . 300.0) (ss . 60.0) (tt . 180.0) (s1 . 60.0)
+            (vv . 180.0) (s2 . 85.0) (h . 40.0) (g . 70.0) (f . 110.0)
+            (e . 80.0) (m . 70.0) (l . 160.0) (k . 70.0)
+            (c . 42.0) (d . 72.0))"""
+ov.eval(parse_all("(setq pool:*form* %s)" % OCT)[0])
+ov.run('c:POOL', [(0.0, 0.0, 0.0), "No", "Yes"])
+odrawn = [e for e in ov.entities if e not in ov.deleted]
+assert odrawn, "an octagon from the form drew nothing"
+oleft = [p.strip() for p, _ in ov.prompts]
+assert len(oleft) == 3, (
+    "POOL still had to ask %d questions, not 3: %r" % (len(oleft), oleft))
+assert 'Insertion base point' in oleft[0], oleft
+assert 'corners' in oleft[1], oleft
+assert 'Add pool bottom' in oleft[2], oleft
+# no dimension was re-asked: the chart answered every letter it draws
+for lead in ('B -', 'S -', 'T -', 'S1 -', 'A -', 'V -', 'S2 -',
+             'H -', 'G -', 'F -', 'E -', 'M -', 'L -', 'K -'):
+    assert not any(q.startswith(lead) for q in oleft), \
+        "%s was asked again despite being on the chart: %r" % (lead, oleft)
+ov2 = VM()
+ov2.load(LSP)
+ov2.loads('(setq test:*ok* (lzf:keys (lzf:chart "OCtagon")))')
+ok = [str(x) for x in ov2.globals['test:*ok*']]
+for need in ('b', 'ss', 'tt', 's1', 'a', 'vv', 's2', 'h', 'g', 'f', 'e',
+             'm', 'l', 'k', 'c', 'd', 'c2'):
+    assert need in ok, "the Octagon chart lost %s" % need
+print("   %d entities; POOL asked only for the insertion point, the"
+      % len(odrawn))
+print("   corners and the bottom gate -- no dimension asked twice")
+
 
 print("ALL LAZFORM TESTS PASSED")

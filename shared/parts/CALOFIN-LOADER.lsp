@@ -100,7 +100,8 @@
                  "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
                  "TUTORIALPOOL.lsp" "SPA.lsp" "TUTORIALSPA.lsp"
                  "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
-                 "ALTABCDEF.lsp" "abhd.lsp" "CABHD.lsp" "AUTOBEAD.lsp"
+                 "ALTABCDEF.lsp" "abhd.lsp" "ABCURCHECK.lsp"
+                 "CABHD.lsp" "AUTOBEAD.lsp"
                  "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
@@ -110,7 +111,7 @@
                  "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
-                 "SPACHECK.lsp"
+                 "SMARTFILLET.lsp" "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
                  "xftconv.lsp" "XYPLOT.lsp"
                  "LAZFORM.lsp" "LAZPANEL.lsp")

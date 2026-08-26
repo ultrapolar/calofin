@@ -49,7 +49,14 @@ on-drawing MTEXT report — with the spa rules in place of the liner ones.
    `5'` is flagged; `5'-0"`, `3'-2"` and a plain `40"` are fine. A feet
    mark is an apostrophe **straight after a digit**, so `Water's Edge`
    is prose and never flagged. `LITESPACHECKSCAN` keeps this one.
-8. **The title block.** Everything on the `border` layer is measured
+8. **The Tech Title date.** The `Date` attribute of the `Tech Title`
+   block must read **today**, written `MM/DD/YYYY` — a sheet going out
+   under an old date is the mistake this catches. Wrong format, an
+   impossible day (`02/30`), a blank, and a stale-but-valid date are
+   all reported. The block is looked for in the selection and then
+   across the drawing; with none in reach the report says the date was
+   not checked rather than flagging it. `LITESPACHECKSCAN` keeps this.
+9. **The title block.** Everything on the `border` layer is measured
    together, so a frame drawn as one polyline and one drawn as four
    lines both measure the same. **A spa title block is exactly 0.6× the
    liner block**: the liner nominal is 704 × 543.625, so the spa nominal
@@ -110,6 +117,7 @@ they are named after the SPA globals they shadow.
 | `spachk:*lay-cover*` / `*lay-water*` | `COVER` / `POOL` | where each outline lives |
 | `spachk:*lay-dim*` / `*lay-text*` | `DIMENSION` / `TEXT` | dimensions, hinge labels |
 | `spachk:*dimfix-cmd*` | `CDIM` | the command the report tells you to run when dimensions are off `*lay-dim*` |
+| `spachk:*techtitle-block*` / `*date-tag*` | `Tech Title` / `Date` | the block and attribute carrying the sheet date (spaces optional in the name) |
 | `spachk:*ds-cover*` / `*ds-water*` | `STANDARD INCHES` / `... 0.5` | the two dimension styles |
 | `spachk:*sfx-cover*` / `*sfx-water*` / `*sfx-lap*` | `Cover Size` / `Water's Edge` / `Overlap` | the notes stacked under a measurement |
 | `spachk:*topoff*` / `*dimoff*` / `*off-tol*` | 24 / 36 / 2 | SPA's standoffs, and the slack allowed on them |

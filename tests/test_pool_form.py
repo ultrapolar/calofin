@@ -238,4 +238,52 @@ assert not leaked, "pool:*form* still armed after the run: %r" % (leaked,)
 print("   pool:*form* cleared once the command finished")
 
 
+# --------------------------------------------------------------------
+# 8.  Cover mode: the pool-bottom gate is closed, not asked.
+# --------------------------------------------------------------------
+# A cover sheet records the perimeter and nothing below it, so POOLCOVER
+# answers "Add pool bottom (hopper) detail?" No before it is asked --
+# and with it the whole depth chain behind it, C and D included.  The
+# flag is a run flag rather than a form entry because five shape paths
+# reach that one gate and the store is consume-once; this is what says
+# the gate is really closed and that the flag does not survive the run.
+print("== 8. cover mode: no bottom asked for, no depths, no leak ==")
+
+# every answer up to but NOT including the "Yes" that opens the bottom
+COVER = LEAD[:-1]
+
+
+def bottom_asked(vm):
+    return [p for p, _ in vm.prompts if 'Add pool bottom' in p]
+
+
+def depth_asked(vm):
+    return [p for p, _ in vm.prompts
+            if p.startswith('\nC -') or p.startswith('\nD -')
+            or p.startswith('\nC2 -')]
+
+
+cv = VM()
+cv.load(LSP)
+cv.run('c:POOLCOVER', COVER)
+assert not bottom_asked(cv), \
+    "cover mode still asked for the bottom: %r" % bottom_asked(cv)
+assert not depth_asked(cv), \
+    "cover mode asked for a depth: %r" % depth_asked(cv)
+assert snapshot(cv), "cover mode drew nothing at all"
+assert not cv.globals.get('pool:*nobottom*'), \
+    "pool:*nobottom* survived the run -- the next pool would lose its bottom"
+print("   %d entities drawn, bottom never asked, %d prompts answered"
+      % (len(snapshot(cv)), len(cv.prompts)))
+
+# the guard that matters: plain POOL must be untouched by any of this
+pl = VM()
+pl.load(LSP)
+pl.run('c:POOL', LEAD + ["Wedge", 30.0, 180.0, None, 60.0, None, 40.0, 60.0])
+assert bottom_asked(pl), "plain POOL stopped asking about the bottom"
+assert not pl.globals.get('pool:*nobottom*'), \
+    "a typed POOL set the cover flag"
+print("   typed POOL still asks it, and never sets the flag itself")
+
+
 print("\nALL POOL FORM SCENARIOS PASSED")

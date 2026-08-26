@@ -25,7 +25,7 @@ A typo counts as an empty box on purpose: something that is neither `NA`
 nor a distance AutoCAD can read leaves POOL asking, rather than quietly
 feeding it a nil that means something else entirely.
 
-A **tab strip** across the top switches charts. Six are drawn:
+A **tab strip** across the top switches charts. Eight are drawn, on two rows -- eight keys on one line run about 94 character cells against a budget of 90, which is a dialog that does not open, so they wrap:
 
 | Chart | POOL shape | Letters on the picture |
 | --- | --- | --- |
@@ -35,6 +35,68 @@ A **tab strip** across the top switches charts. Six are drawn:
 | `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E |
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K |
+| `ROUnd` | ROUnd | B A W (H G F E M L K in the list) |
+| `OCtagon` | OCtagon | B S T A S1 V H G F E M L K (S2 in the list) |
+
+**The bottom type decides which boxes are live.** A style does not ask
+for every letter on the sheet, and the form used to offer them all
+anyway -- type a `C` against a Normal hopper and POOL never asks for
+it, so the number went nowhere and nothing said so. Picking a bottom
+now greys what that bottom will never reach, and a greyed value is not
+sent to POOL either.
+
+| Bottom | Greyed |
+| --- | --- |
+| Standard Hopper (`Normal`) | C, D, C2 -- it draws no side view at all |
+| `Sport` | H, F, E, C2 |
+| `Wedge` | G, E, C2 |
+| `SLope` | G, C2 |
+| `MOdflat` | E, C2 |
+| `SHallow` | nothing -- it is the only style that asks C2 |
+
+That table is not kept here in code: `lzf:btskip` reads POOL's own
+`pool:btmspec` -- `(ask-G ask-E has-profile ask-C2 slack)` -- so the
+form cannot drift from the command it feeds. LAZFORM already refuses to
+open without POOL loaded, so it is always there to ask.
+
+**Sport is the exception, and not a small one.** `btmspec`'s
+has-profile flag reads nil for Sport, which would say "no C or D" --
+but that flag is only ever consulted inside `pool:hopnormal`, and a
+Sport never goes near it. Sport has its own path, which *does* ask C
+and D, and which asks a different plan chain entirely: **E2 F2 G F1 E1
+M K**, not H G F E. So on a Sport the chart's H, F and E are greyed:
+they are not what POOL will ask for, and a number typed into one would
+be read by nothing. Only G, M and K carry over from the drawn chain.
+Sport's own letters have no boxes yet -- that is the open gap on this
+sheet.
+
+Every chart carries C, D and C2 rows. Four of the original six never had
+them, so on a Roman, an Oval or either Grecian the depths always fell
+through to the command line whatever you did.
+
+**Round** is the newest sheet, and the one that behaves differently.
+POOL's `ROUnd` flow asks two overalls -- `B` across and `A` up, both
+through the middle -- then hands the bottom to the *same* routine the
+oval uses, so the hopper letters are the oval's (`H G F E`, `W`,
+`M L K`) while the plan pair is not (`b` and `a`, where an oval answers
+`tot`, `tp` and `le`). Tick **in-square** and POOL asks one diameter,
+keyed `b`, so `B` is the box that matters.
+
+Two things about it are worth knowing:
+
+- **`M L K` run through the centre, and they have to.** POOL resolves
+  that chain against the overall width, so `M+L+K` must equal `A` --
+  and on a circle the only vertical that is a full diameter is the one
+  through the middle. The first draft measured them at the hopper's
+  own x and the chain-closure test caught it: 460 against an `A` of
+  500.
+- **`H G F E` are answered in the list, not on the drawing.** A wedge
+  box is its letter plus ten cells, so four of them need 44 of the
+  chart's 52 -- and a round pool spans about 31. On the rectangle that
+  chain runs the full width and just fits; on a circle it cannot, and
+  forcing it puts boxes nowhere near the letters they belong to. Every
+  dimension is still enterable; only the position of four boxes
+  differs.
 
 **Corners** get their own section on the Rectangle and True L charts:
 a dropdown per corner -- `(ask)`, `Square`, `Radius`, `Cut`,
@@ -180,6 +242,78 @@ out of step with the drawing.
 - The "Reverse Corner" the True L sheet names is a corner treatment,
   not a measurement, so it has no box -- POOL asks for it directly.
 - The insertion base point is still picked at the command line.
+
+## Could the chart be drawn in characters? (`LAZASCII`) -- ANSWERED: no
+
+**Run on AutoCAD 2018+, and the answer is no.** The dialog font is
+proportional: `WWWWWWWWWWWW` came out roughly three times the width of
+`iiiiiiiiiiii` for the same twelve characters, so the right-hand bars
+were nowhere near a column and the pool drawn in characters sheared
+apart line by line, exactly as feared. Character art in a DCL dialog
+is not on.
+
+Two useful things came out of it anyway:
+
+- **Leading spaces DO survive.** The three indented bars made a clean
+  staircase, so DCL is not trimming them. That was the other way this
+  could have died, and it did not -- it just does not help while the
+  font is proportional.
+- **Section 4 lined up perfectly.** A row built from `text` tiles with
+  explicit widths and an `edit_box` between them renders straight in a
+  proportional font, because the alignment comes from tile widths
+  rather than glyphs. `B` and `A` sat exactly above one another.
+
+That last point is the important one, and it is **what the wedge rows
+already do**: the boxes on this form are positioned by spacer widths,
+not by counting characters. So the answer to "could we draw the pool in
+ASCII and put the boxes in it" is that the boxes-in-the-line half
+already works and the ASCII half never will. Switching would have cost
+the outline drawing and bought nothing.
+
+The retention worry that motivated the question stands -- DCL does not
+retain an `image` tile, and a `text` tile it does -- but the passive
+tile has held up in practice, and a chart with no picture on it is a
+poor trade for a hazard that has not recurred.
+
+`LAZASCII` stays in the file. It is cheap, and the answer is a property
+of the AutoCAD build rather than of this code, so it is worth being
+able to re-ask on another machine or another release.
+
+### What it shows
+
+Drawing the pool in **text** rather than vectors would win something
+real, and it is worth being clear about what. DCL does not *retain* an
+image tile: anything that repaints the dialog clears the picture and
+there is no expose callback to draw it again. That is the structural
+reason the chart has vanished on people -- the passive `image` tile
+holds up in practice, but nothing in DCL promises it will. A `text`
+tile is retained by the dialog manager like any other control, so a
+chart drawn in characters could not vanish at all. The boxes could
+also sit *in* the drawing rather than beside it.
+
+It turns on one thing this repo cannot answer for itself: **is the DCL
+dialog font fixed-pitch?** Character art needs every glyph the same
+width. DCL gives no way to choose a font, and its widths are quoted in
+"character cells" that are an average rather than a guarantee -- so
+this is a property of the AutoCAD build, not of the code.
+
+`LAZASCII` asks AutoCAD instead of guessing. It opens a dialog with
+four sections:
+
+1. **Fixed-pitch test** -- five lines of twelve characters each
+   (`iiii…`, `WWWW…`, digits, dashes, spaces) between bars. If the
+   right-hand bars form one straight column the font is fixed-pitch
+   and character art is on.
+2. **Leading spaces** -- three bars indented 0, 4 and 8 spaces. A
+   staircase means DCL keeps the indent; three bars in one column
+   means it trims them and art is impossible whatever the font.
+3. **The pool in characters** -- what a chart would look like.
+4. **A box in the dimension line** -- the fallback that works either
+   way, where alignment comes from tile *widths* rather than glyphs.
+
+Run it and read off which sections lined up. Section 4 is the answer
+if 1 or 2 fail: it costs the fine detail of the outline but puts the
+edit box in the line, and it cannot vanish.
 
 ## Tests
 

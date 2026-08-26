@@ -58,6 +58,18 @@
 ;;;     the frame angle is fitted too - the edge vote cannot find the
 ;;;     body's axis when the walls disagree, and a crooked axis draws a
 ;;;     crooked flat end.
+;;;   * AN ARC IS NOT PROMISED TO BE ONE RADIUS.  What a drawing
+;;;     calls one R is, on a built shell, very often a run of arcs -
+;;;     it slumps as it cures.  An arc a single radius cannot hold
+;;;     within the typed tolerance is rebuilt as a polyline of arcs
+;;;     whose joints sit on survey points, and the run keeps going
+;;;     while each extra arc clearly earns its place, not just until
+;;;     it scrapes inside the tolerance.  Every joint is held to
+;;;     ABHD's own tangency window - fit:*tang-tol*, 8 degrees,
+;;;     stretched through fit:*tang-steps* rather than abandoned - so
+;;;     the run reads as a curve rather than a row of facets while
+;;;     the POINTS still choose inside that window.  An end that
+;;;     really is one radius stays one arc.
 ;;;   * Roman and Oval ends are found, not declared: square-end and
 ;;;     arc-end placements (one end and both ends) all compete, and a
 ;;;     both-ends fit must beat a single-ended one by a clear margin -
@@ -94,7 +106,12 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.6")    ; announced on load; release_lisp.py
+;; Cover mode: the pool-bottom question answers No without being asked,
+;; so a cover sheet is fitted to its perimeter and stops there.  Set by
+;; FITABHDCOVER, cleared on both exits from c:FITABHD.
+(setq fit:*nobottom* nil)
+
+(setq *fitabhd-version* "v1.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -178,6 +195,25 @@
                                    ; hold it
 (setq fit:*arc-pts-min* 3)         ; points each arc of such a run
                                    ; needs before it means anything
+(setq fit:*tang-tol* (/ pi 22.5))  ; ABHD's own tangency window (8
+                                   ; degrees): how far the next arc of
+                                   ; a run may start off the tangent
+                                   ; the last one ended on.  A run that
+                                   ; only shares its joints is
+                                   ; continuous but not SMOOTH - the
+                                   ; end of the pool reads as a row of
+                                   ; facets - and holding the joints
+                                   ; perfectly tangent would take them
+                                   ; off the survey points.  A window
+                                   ; keeps both: smooth to the eye,
+                                   ; with the points still choosing
+                                   ; inside it
+(setq fit:*tang-steps* '(1.0 1.25 1.5)) ; when nothing inside the window
+                                   ; holds the points, stretch it by
+                                   ; these in turn rather than abandon
+                                   ; it - ABHD's rule, and for ABHD's
+                                   ; reason: smoothness is worth more
+                                   ; than an exact hit
 (setq fit:*oos-min*     1.0)       ; the drift from one end of a wall
                                    ; to the other below which the wall
                                    ; reads as true and is held there
@@ -1772,6 +1808,118 @@
         (if (or (null bd) (< d bd)) (setq best bl bd d)))
       best)))
 
+;; ---- tangency: ABHD's continuity, on FITABHD's runs -----------------
+;; At each joint the next arc's start tangent may differ from the
+;; previous arc's end tangent by at most fit:*tang-tol*, so the curve
+;; stays smooth while the POINTS still choose inside that window.
+
+;; Tangent direction at the END of the arc A->B: the chord direction
+;; plus half the included angle.
+(defun fit:end-tangent (a b bul)
+  (+ (angle (cal:2d a) (cal:2d b)) (* 2.0 (atan bul))))
+
+;; Tangent direction where the arc A->B leaves A.
+(defun fit:start-tangent (a b bul)
+  (- (angle (cal:2d a) (cal:2d b)) (* 2.0 (atan bul))))
+
+;; The bulges the span A->B may take if its START tangent is to stay
+;; within WF * fit:*tang-tol* of the incoming tangent TE, as (lo . hi).
+;; The edges are clamped so U-turn geometry stays finite.
+(defun fit:tang-window (te a b wf / tt phi lo hi)
+  (setq tt  (* fit:*tang-tol* wf)
+        phi (cal:signed-dang te (angle (cal:2d a) (cal:2d b)))
+        lo  (cal:tan (max -1.373 (min 1.373 (/ (- phi tt) 2.0))))
+        hi  (cal:tan (max -1.373 (min 1.373 (/ (+ phi tt) 2.0)))))
+  (if (<= lo hi) (cons lo hi) (cons hi lo)))
+
+;; The bulges the CLOSING span A->B may take if its END tangent is to
+;; stay within WF * fit:*tang-tol* of the ring's start tangent TS0.
+(defun fit:end-window (ts0 a b wf / tt psi lo hi)
+  (setq tt  (* fit:*tang-tol* wf)
+        psi (cal:signed-dang (angle (cal:2d a) (cal:2d b)) ts0)
+        lo  (cal:tan (max -1.373 (min 1.373 (/ (- psi tt) 2.0))))
+        hi  (cal:tan (max -1.373 (min 1.373 (/ (+ psi tt) 2.0)))))
+  (if (<= lo hi) (cons lo hi) (cons hi lo)))
+
+;; Where two bulge windows overlap; nil when they do not.
+(defun fit:isect-win (w1 w2 / lo hi)
+  (cond
+    ((null w1) w2)
+    ((null w2) w1)
+    (T (setq lo (max (car w1) (car w2))
+             hi (min (cdr w1) (cdr w2)))
+       (if (<= lo hi) (cons lo hi)))))
+
+;; BUL held inside the window W.
+(defun fit:clamp-bulge (bul w)
+  (max (car w) (min (cdr w) bul)))
+
+;; fit:best-bulge, but every candidate held inside the window W - so
+;; the arc answers its points as well as it can WITHOUT leaving the
+;; joint visibly kinked.
+(defun fit:best-bulge-win (a b qs w / bls sum q bl best bd d)
+  (cond
+    ((null w) (fit:best-bulge a b qs))
+    ((null qs) (fit:clamp-bulge 0.0 w))
+    (T
+     (setq bls (mapcar '(lambda (q) (fit:bulge-3pt a q b)) qs)
+           sum 0.0)
+     (foreach bl bls (setq sum (+ sum bl)))
+     (setq bls  (mapcar '(lambda (bl) (fit:clamp-bulge bl w))
+                        (append bls (list (/ sum (length bls)))))
+           best (car bls) bd nil)
+     (foreach bl bls
+       (setq d (fit:span-dev a b bl qs))
+       (if (or (null bd) (< d bd)) (setq best bl bd d)))
+     best)))
+
+;; The arc that continues the tangent TE smoothly and still answers QS.
+;; The window is STRETCHED through fit:*tang-steps* rather than
+;; abandoned, and the first stretch whose arc holds the points within
+;; TOL wins.  TS0, on the closing span of a ring, also holds the far
+;; end to the tangent the ring started with.
+(defun fit:smooth-bulge (te a b qs tol ts0 / out done wf w)
+  (setq out nil done nil)
+  (foreach wf fit:*tang-steps*
+    (if (not done)
+      (progn
+        (setq w (fit:tang-window te a b wf))
+        (if ts0 (setq w (fit:isect-win w (fit:end-window ts0 a b wf))))
+        (if w
+          (progn
+            (setq out (fit:best-bulge-win a b qs w))
+            (if (<= (fit:span-dev a b out qs) tol) (setq done T)))))))
+  (if (null out)                       ; the two ends cannot agree
+    (setq out (fit:best-bulge-win
+                a b qs (fit:tang-window te a b (last fit:*tang-steps*)))))
+  out)
+
+;; The worst joint in a run: how far the next arc's start tangent
+;; departs from the previous arc's end tangent, in radians.  CLOSED
+;; counts the seam as a joint too.
+(defun fit:chain-kink (chain z closed / segs worst n i s1 s2 k)
+  (setq segs  (fit:chain-segs chain z)
+        n     (length segs)
+        worst 0.0
+        i     1)
+  (while (< i n)
+    (setq s1 (nth (1- i) segs)
+          s2 (nth i segs)
+          k  (abs (cal:signed-dang
+                    (fit:end-tangent (car s1) (cadr s1) (caddr s1))
+                    (fit:start-tangent (car s2) (cadr s2) (caddr s2)))))
+    (if (> k worst) (setq worst k))
+    (setq i (1+ i)))
+  (if (and closed (> n 1))
+    (progn
+      (setq s1 (nth (1- n) segs)
+            s2 (car segs)
+            k  (abs (cal:signed-dang
+                      (fit:end-tangent (car s1) (cadr s1) (caddr s1))
+                      (fit:start-tangent (car s2) (cadr s2) (caddr s2)))))
+      (if (> k worst) (setq worst k))))
+  worst)
+
 ;; The (p1 p2 bulge) segments of a (point bulge) run ending at Z.
 (defun fit:chain-segs (chain z / pts out i n)
   (setq pts (append (mapcar 'car chain) (list z))
@@ -1785,24 +1933,29 @@
   (reverse out))
 
 ;; A run of K arcs from A to Z through the ordered points QS.  The K-1
-;; joints are survey points themselves.
-(defun fit:arc-chain (qs a z k / n bounds s lo hi start end out)
+;; joints are survey points themselves, and every one of them is
+;; SMOOTH: the first arc is free, each one after it starts inside the
+;; tangency window of the arc before it.
+(defun fit:arc-chain (qs a z k tol / n bounds s lo hi start end sub bl te
+                                     out)
   (setq n      (length qs)
         bounds (list 0)
         s      1)
   (while (< s k)
     (setq bounds (append bounds (list (/ (* s n) k))) s (1+ s)))
   (setq bounds (append bounds (list n))
-        out    nil s 0)
+        out    nil te nil s 0)
   (while (< s k)
     (setq lo    (nth s bounds)
           hi    (nth (1+ s) bounds)
           start (if (= s 0) a (nth lo qs))
           end   (if (= s (1- k)) z (nth hi qs))
-          out   (cons (list start
-                            (fit:best-bulge start end
-                                            (fit:sublist qs lo (- hi lo))))
-                      out)
+          sub   (fit:sublist qs lo (- hi lo))
+          bl    (if te
+                  (fit:smooth-bulge te start end sub tol nil)
+                  (fit:best-bulge start end sub))
+          out   (cons (list start bl) out)
+          te    (fit:end-tangent start end bl)
           s     (1+ s)))
   (reverse out))
 
@@ -1817,27 +1970,35 @@
     (if (> dmin mx) (setq mx dmin)))
   mx)
 
-;; The fewest arcs from A to Z that hold the ordered points QS.  One if
-;; it can; more only while each extra arc clearly earns it.  Returns
-;; the (point bulge) run from A up to but not including Z.
+;; The run of arcs from A to Z that best answers the ordered points QS.
+;; ONE arc if one holds them within TOL - an end that really is one
+;; radius stays one radius, and no chain appears.  Once a single arc
+;; has failed, though, the run keeps going while each extra arc clearly
+;; earns its place: stopping the moment it scrapes inside the tolerance
+;; would leave the shell's real shape on the table, and the tangency
+;; window is what keeps the result a curve rather than a row of facets.
+;; Returns the (point bulge) run from A up to but not including Z.
 (defun fit:fit-arc-run (qs a z tol / best worst kmax k trial w done)
   (setq best (list (list a (fit:best-bulge a z qs))))
   (if (null qs)
     best
     (progn
-      (setq worst (fit:chain-worst best z qs)
-            kmax  (min fit:*arc-max*
-                       (max 1 (/ (length qs) fit:*arc-pts-min*)))
-            k     1
-            done  nil)
-      (while (and (not done) (> worst tol) (< k kmax))
-        (setq k     (1+ k)
-              trial (fit:arc-chain qs a z k)
-              w     (fit:chain-worst trial z qs))
-        (if (> w (* worst fit:*both-edge*))
-          (setq done T)                     ; not a clear enough gain
-          (setq best trial worst w)))
-      best)))
+      (setq worst (fit:chain-worst best z qs))
+      (if (<= worst tol)
+        best                                ; one radius holds them
+        (progn
+          (setq kmax (min fit:*arc-max*
+                          (max 1 (/ (length qs) fit:*arc-pts-min*)))
+                k    1
+                done nil)
+          (while (and (not done) (< k kmax))
+            (setq k     (1+ k)
+                  trial (fit:arc-chain qs a z k tol)
+                  w     (fit:chain-worst trial z qs))
+            (if (> w (* worst fit:*both-edge*))
+              (setq done T)                 ; not a clear enough gain
+              (setq best trial worst w)))
+          best)))))
 
 ;; The points sorted along the arc SEG, start to end.
 (defun fit:order-along-arc (qs seg / g c a1 ccw keyed q rel)
@@ -2409,25 +2570,32 @@
 ;; Rebuild any arc a single radius cannot hold as a run of arcs
 ;; through the points.  This runs LAST, after the dimensions are
 ;; settled: a chain changes no dimension, it just stops the outline
-;; lying about where the shell actually went.
+;; lying about where the shell actually went.  The joints sit on
+;; survey points and stay inside the tangency window, so the run is
+;; both a real measurement and a smooth curve.
 
 ;; The whole outline of a Round pool as one closed run of K arcs, the
 ;; joints spaced evenly round the (already rotated) survey.
-(defun fit:round-chain-of (qs n k / trial i lo hi nxt)
+(defun fit:round-chain-of (qs n k tol / trial i lo hi a nxt sub bl te
+                                       ts0)
   (setq trial nil i 0)
   (while (< i k)
     (setq trial (cons (list (nth (/ (* i n) k) qs) 0.0) trial)
           i     (1+ i)))
-  (setq trial (reverse trial) i 0)
+  (setq trial (reverse trial) i 0 te nil ts0 nil)
   (while (< i k)
-    (setq lo    (/ (* i n) k)
-          hi    (if (= i (1- k)) n (/ (* (1+ i) n) k))
-          nxt   (car (nth (rem (1+ i) k) trial))
-          trial (fit:setnth trial i
-                            (list (car (nth i trial))
-                                  (fit:best-bulge
-                                    (car (nth i trial)) nxt
-                                    (fit:sublist qs lo (- hi lo)))))
+    (setq lo  (/ (* i n) k)
+          hi  (if (= i (1- k)) n (/ (* (1+ i) n) k))
+          a   (car (nth i trial))
+          nxt (car (nth (rem (1+ i) k) trial))
+          sub (fit:sublist qs lo (- hi lo)))
+    (if (null te)
+      (setq bl  (fit:best-bulge a nxt sub)
+            ts0 (fit:start-tangent a nxt bl))
+      (setq bl (fit:smooth-bulge te a nxt sub tol
+                                 (if (= i (1- k)) ts0))))
+    (setq trial (fit:setnth trial i (list a bl))
+          te    (fit:end-tangent a nxt bl)
           i     (1+ i)))
   trial)
 
@@ -2457,7 +2625,7 @@
           (setq trial (fit:round-chain-of
                         (append (fit:sublist qs off (- n off))
                                 (fit:sublist qs 0 off))
-                        n k)
+                        n k tol)
                 w     (fit:chain-worst trial (car (car trial)) qs))
           (if (or (null tw) (< w tw)) (setq tw w tc trial)))
         (if (> tw (* worst fit:*both-edge*))
@@ -2466,12 +2634,15 @@
       (if (null best)
         res
         (progn
-          (setq res (fit:rput res 'chain best))
+          (setq res (fit:rput res 'chain best)
+                res (fit:rput res 'kink
+                              (fit:chain-kink best (car (car best)) T)))
           (fit:rput res 'verts
                     (fit:round-verts (fit:rget res 'prm) best)))))))
 
-(defun fit:cap-chains (res fpts segs bulged tol / chains side i s qs run)
-  (setq chains (list nil nil) side 0)
+(defun fit:cap-chains (res fpts segs bulged tol / chains kinks side i s
+                                                 qs run)
+  (setq chains (list nil nil) kinks (list 0.0 0.0) side 0)
   (foreach i bulged
     (if (< side 2)
       (progn
@@ -2481,11 +2652,14 @@
           (progn
             (setq run (fit:fit-arc-run qs (car s) (cadr s) tol))
             (if (> (length run) 1)
-              (setq chains (fit:setnth chains side run)))))
+              (setq chains (fit:setnth chains side run)
+                    kinks  (fit:setnth kinks side
+                                       (fit:chain-kink run (cadr s) nil))))))
         (setq side (1+ side)))))
   (if (or (car chains) (cadr chains))
     (progn
-      (setq res (fit:rput res 'chains chains))
+      (setq res (fit:rput res 'chains chains)
+            res (fit:rput res 'kinks kinks))
       (fit:rput res 'verts
                 (fit:endcap-verts (fit:rget res 'prm)
                                   (fit:rget res 'type)
@@ -2858,6 +3032,15 @@
 ;; A line for any arc the fit had to rebuild as a run of arcs: how
 ;; many, and the radius of each - the shape a shell that caved in
 ;; actually took, instead of the one clean radius it was drawn with.
+;; How smooth a run came out, for the report.  A joint is never
+;; perfectly tangent - the arcs stay ON the survey points instead -
+;; but it is always inside the window, and that is worth printing.
+(defun fit:kink-text (k)
+  (if (or (null k) (< k 1.0e-9))
+    ""
+    (strcat "  (joints smooth to "
+            (rtos (/ (* 180.0 k) pi) 2 1) " deg)")))
+
 (defun fit:chain-lines (res / out chains chain z segs s txt r i nm)
   (setq out nil)
   (cond
@@ -2876,7 +3059,9 @@
            (setq nm  (if (= i 0) "A" "B")
                  out (cons (cons (strcat "End " nm " is a run of")
                                  (strcat (itoa (length segs))
-                                         " arcs  R " txt))
+                                         " arcs  R " txt
+                                         (fit:kink-text
+                                           (nth i (fit:rget res 'kinks)))))
                            out))))
        (setq i (1+ i))))
     ((and (eq (fit:rget res 'kind) 'round) (fit:rget res 'chain))
@@ -2889,7 +3074,9 @@
                          (if r (fit:ftin r) "straight"))))
      (setq out (list (cons "Outline is a run of"
                            (strcat (itoa (length segs))
-                                   " arcs  R " txt))))))
+                                   " arcs  R " txt
+                                   (fit:kink-text
+                                     (fit:rget res 'kink))))))))
   (reverse out))
 
 ;; Where a cap's run of arcs lands: the far spring point of that end.
@@ -3510,6 +3697,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nFITABHD error: " msg)))
+    ;; cover mode lasts one run: leaked, it would quietly cost the next
+    ;; FITABHD its bottom
+    (setq fit:*nobottom* nil)
     (princ))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
@@ -3583,13 +3773,18 @@
           (fit:set-bylayer en)
           (princ (strcat "\nKept - the outline moved to layer "
                          fit:*pool-layer* " in ByLayer colour."))
-          (if (cal:askyn (if (= ptype "ROUnd")
-                           "Add the bottom of the pool (hopper ring)?"
-                           "Add the bottom of the pool (standard hopper)?")
-                         "No" nil)
+          ;; cover mode answers this No without asking: a cover sheet
+          ;; is the perimeter and nothing below it
+          (if (and (not fit:*nobottom*)
+                   (cal:askyn (if (= ptype "ROUnd")
+                                "Add the bottom of the pool (hopper ring)?"
+                                "Add the bottom of the pool (standard hopper)?")
+                              "No" nil))
             (if (= ptype "ROUnd")
               (fit:round-bottom res)
-              (fit:bottom res))))
+              (fit:bottom res))
+            (if fit:*nobottom*
+              (princ "\nCover sheet - the pool bottom was skipped."))))
          (T
           (fit:omit-clear)
           (if (and en (entget en)) (entdel en))
@@ -3598,6 +3793,17 @@
   (command "_.UNDO" "_End")
   (setq undo-open nil)
   (cal:sysrestore)
+  (setq fit:*nobottom* nil)
+  (princ))
+
+;; FITABHD for a cover sheet: the same template fit, with the
+;; pool-bottom question answered No before it is asked.  A command of
+;; its own rather than a mode, so a button runs exactly what it names;
+;; c:FITABHD clears the flag on both exits so it cannot leak.
+(defun c:FITABHDCOVER ()
+  (setq fit:*nobottom* t)
+  (princ "\nFITABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:FITABHD)
   (princ))
 
 ;; ----------------------------------------------------------------------

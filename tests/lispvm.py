@@ -230,6 +230,13 @@ class VM:
             raise LispError(f"SCRIPT EXHAUSTED at {kind} prompt: {prompt!r}",
                             self)
         v = self.script.pop(0)
+        if callable(v):
+            # A scripted answer that is a function is CALLED here, with
+            # the VM, at the moment the prompt is reached.  That is the
+            # only way to answer a prompt about something the run itself
+            # drew: a preview a command makes and then asks you to click
+            # has no entity name until the command has made it.
+            v = v(self)
         self.prompts.append((prompt, v))
         return v
 
@@ -1323,6 +1330,69 @@ def _command(vm, a):
             data = [Dot(g.a, g.b | 128) if isinstance(g, Dot) and g.a == 70
                     else g for g in data]
             vm.entdata[a[1]] = data + [[11] + [float(v) for v in loc[0]]]
+    # FILLET leaves the arc it cut behind as the last entity, which is
+    # how a routine gets hold of what it just made.  The VM does NOT do
+    # fillet geometry: the two lines are left exactly as they were and
+    # the arc's centre is a stand-in, halfway between the two picks.
+    # What IS real is the radius on it -- the FILLETRAD that reached
+    # AutoCAD -- because a routine that sets FILLETRAD and then trusts
+    # (entlast) has to be held to both halves of that.
+    if a and a[0] == '_.FILLET':
+        picks = [x[1] for x in a[1:]
+                 if isinstance(x, list) and len(x) == 2
+                 and isinstance(x[0], Ent) and isinstance(x[1], list)]
+        if len(picks) >= 2:
+            p1, q1 = pt(picks[0]), pt(picks[1])
+            c = [0.5 * (p1[i] + q1[i]) for i in range(2)]
+            e = Ent()
+            vm.entities.append(e)
+            vm.entdata[e] = [Dot(0, 'ARC'),
+                             Dot(8, vm.sysvars.get('CLAYER', '0')),
+                             [10] + c + [0.0],
+                             Dot(40, float(num(vm.sysvars.get('FILLETRAD',
+                                                              0))))]
+    # DIMRADIUS: (command "_.DIMRADIUS" (list arc point-on-it) [_T s] loc)
+    # A radial dim is group 70 bit 4 with the centre in 10 and the point
+    # it was picked at in 15 -- that pair is how the tools recognize one
+    # (ad:raddimpts, AutoDim.lsp:312), so it is what the VM writes.
+    if a and a[0] == '_.DIMRADIUS':
+        arc = next((x[0] for x in a[1:]
+                    if isinstance(x, list) and len(x) == 2
+                    and isinstance(x[0], Ent)), None)
+        on = next((x[1] for x in a[1:]
+                   if isinstance(x, list) and len(x) == 2
+                   and isinstance(x[0], Ent)), None)
+        loc = [x for x in a[2:] if isinstance(x, list) and len(x) >= 2
+               and not isinstance(x[0], Ent)]
+        if arc is not None and on is not None:
+            ctr, rad = None, None
+            for g in vm.entdata.get(arc, []):
+                if isinstance(g, list) and g and g[0] == 10:
+                    ctr = list(g[1:])
+                elif isinstance(g, Dot) and g.a == 40:
+                    rad = g.b
+            if ctr is None:
+                ctr = list(pt(on))
+            if rad is None:
+                rad = math.dist(pt(on)[:2], ctr[:2])
+            lay = vm.sysvars.get('DIMLAYER')
+            if not (isinstance(lay, str) and lay in vm.tables['LAYER']):
+                lay = vm.sysvars.get('CLAYER', '0')
+            e = Ent()
+            vm.entities.append(e)
+            vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay),
+                             Dot(410, 'Model'), Dot(70, 4),
+                             Dot(3, vm.sysvars.get('DIMSTYLE', 'STANDARD')),
+                             [10] + [float(v) for v in ctr[:2]] + [0.0],
+                             [15] + [float(v) for v in pt(on)[:2]] + [0.0],
+                             Dot(40, float(rad)), Dot(42, float(rad))]
+            if loc:
+                vm.entdata[e].append([11] + [float(v) for v in loc[0]])
+            for i, x in enumerate(a[:-1]):
+                if isinstance(x, str) and x.upper() in ('_T', 'T', '_TEXT') \
+                        and isinstance(a[i + 1], str):
+                    vm.entdata[e].append(Dot(1, a[i + 1]))
+                    break
     return NIL
 
 
@@ -1446,6 +1516,17 @@ def _entsel(vm, a):
         return NIL
     if isinstance(v, Ent):
         return [v, [0.0, 0.0, 0.0]]
+    if isinstance(v, str):
+        # initget keywords work at entsel too, and AutoCAD hands a typed
+        # one straight back as a string -- which is what a routine tests
+        # for when it offers a way out of a pick (wcalst.lsp:473).  So a
+        # scripted string is a keyword, checked against the live initget
+        # list like every other keyword answer.
+        kw = _match_kw(vm, v)
+        if kw is None:
+            raise LispError(f"entsel: keyword {v!r} not among "
+                            f"{vm.initget_kws!r} at {prompt!r}", vm)
+        return kw
     return list(v)
 
 
@@ -1542,6 +1623,12 @@ def _vl_sort(vm, a):
 # (vl-string-translate source-chars dest-chars str)
 BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
     str.maketrans(str(a[0]), str(a[1])))
+
+
+# (vl-string-trim char-set str) -- strip any leading and trailing
+# characters that appear in char-set.  A date attribute read out of a
+# block routinely arrives padded, so the check tools lean on this.
+BUILTINS[Sym('vl-string-trim')] = lambda vm, a: str(a[1]).strip(str(a[0]))
 
 
 # (vl-string->list "AB") -> (65 66) and back again -- the pair every
