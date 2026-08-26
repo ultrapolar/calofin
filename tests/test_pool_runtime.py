@@ -596,8 +596,11 @@ _cham = [s for s in segs
          if abs(_m.dist(*s) - 18.0) < 0.05 and
          _m.dist(((s[0][0]+s[1][0])/2, (s[0][1]+s[1][1])/2), _E) < 15.0]
 assert _cham, "inner chamfer face missing at E"
-# side dims still read to the TRUE corners: the full 296 bottom
-assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 296.0) < 0.5 for c in dimcalls(vm))
+# side dims still MEASURE to the true corners -- the full 296 bottom --
+# even though their extension lines now hang off the rounded wall
+# rather than the hypothetical corner behind it (see R14d)
+assert any(abs(d.get(42, -1.0) - 296.0) < 0.5
+           for d in drawn(vm, 'DIMENSION', 'DIMENSION'))
 # the Typ. radius callout ran for the outer corners
 assert any(c[0] == '_.DIMRADIUS' and any('Typ.' in str(x) for x in c)
            for c in vm.commands), "outer corner Typ. callout"
@@ -691,6 +694,99 @@ _hbl1 = other_end(min(tieA1, key=lambda s: _m.dist(*s)), _aface[0])
 _hbl2 = other_end(min(tieA2, key=lambda s: _m.dist(*s)), _aface[1])
 assert _m.dist(_hbl1, _hbl2) < 0.05, (_hbl1, _hbl2)
 print("   lazy L deep-end ties land on the cut too (same code path as true L)")
+
+print("== R14d. a rounded corner moves the dim ONTO the pool, not the number ==")
+
+
+def _pool_edges(vm):
+    lines = [(tuple(d[10][:2]), tuple(d[11][:2]))
+             for d in drawn(vm, 'LINE', 'POOL')]
+    arcs = [(tuple(d[10][:2]), d[40], d[50], d[51])
+            for d in drawn(vm, 'ARC', 'POOL')]
+    return lines, arcs
+
+
+def on_pool(vm, p, tol=0.02):
+    """Does p sit on a drawn POOL wall or corner treatment?"""
+    lines, arcs = _pool_edges(vm)
+    for a, b in lines:
+        ab = (b[0] - a[0], b[1] - a[1])
+        n2 = ab[0] ** 2 + ab[1] ** 2
+        if n2 < 1e-12:
+            continue
+        t = ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / n2
+        if -1e-6 <= t <= 1.0 + 1e-6 and \
+                _m.dist((a[0] + t * ab[0], a[1] + t * ab[1]), p) < tol:
+            return True
+    for cen, r, s0, e0 in arcs:
+        if abs(_m.dist(cen, p) - r) > tol:
+            continue
+        off = (_m.atan2(p[1] - cen[1], p[0] - cen[0]) - s0) % (2 * _m.pi)
+        if off <= ((e0 - s0) % (2 * _m.pi)) + 1e-6:
+            return True
+    return False
+
+
+# the reported case: an L pool with the corners rounded out.  Same pool
+# twice -- square corners, then a 24" radius all the way round -- so
+# the six side dims can be compared number for number.
+_LZ = [296.0, 167.6, 167.6, 99.0, 226.0, 168.0]
+vm_sq = run(["Insquare", "LA"] + BASE + _LZ + [None, "No", "No"], "R14d-square")
+vm_rd = run(["Insquare", "LA"] + BASE + _LZ +
+            ["Yes", "Radius", 24.0,   # the five outer corners
+             None, None,              # Enter reuses Radius 24 at inner E
+             "No", "No"], "R14d-radius")
+
+
+def sidedims(vm):
+    # DXF 70 low bits: 0 rotated/linear, 1 aligned -- the corner
+    # callouts are radial dims (bit 4) and are not side dims
+    return sorted(round(d[42], 4)
+                  for d in drawn(vm, 'DIMENSION', 'DIMENSION')
+                  if d.get(70) in (0, 1))
+
+
+# every side dim reads what it read before the corners were rounded:
+# the treatment moved the extension lines, not the tape.  Two of this
+# pool's bends come out a quarter-degree off square (the in-square
+# build dumps its closure error into the wing), so those two walls
+# split a hair between their ends -- a THOUSANDTH of an inch, far
+# inside the 1/16" pool:*hookslack* allows, and nothing else moves.
+_sq, _rd = sidedims(vm_sq), sidedims(vm_rd)
+assert len(_sq) == 6 and len(_rd) == 6, (_sq, _rd)
+assert max(abs(a - b) for a, b in zip(_sq, _rd)) < 0.005, (_sq, _rd)
+# ... and now every one of those extension lines starts ON the pool.
+# Five of the six corners here are 90 degrees or the 135-degree bends;
+# the hooks land on the arcs and the walls, never out at the
+# hypothetical corner behind the fillet.
+for c in dimcalls(vm_rd):
+    for q in (tuple(c[1][:2]), tuple(c[2][:2])):
+        assert on_pool(vm_rd, q), ("dim origin off the pool", q, c)
+# the square-corner run is the control: its origins are the true
+# corners, which ARE on the pool when nothing is cut away
+for c in dimcalls(vm_sq):
+    for q in (tuple(c[1][:2]), tuple(c[2][:2])):
+        assert on_pool(vm_sq, q), ("control origin off the pool", q, c)
+# a corner UNDER 90 degrees pokes out past its own treatment, so its
+# nearest station is up the wall rather than at the corner: a 60-degree
+# Radius 12 corner cannot be hooked closer than 12/tan(30) x cos(60)
+_span = vm_rd.loads('(pool:hookspan \'(0.0 0.0) \'(0.5 0.866) \'(1.0 0.0)'
+                    ' "Radius" 12.0 \'(1.0 0.0))')
+assert abs(float(_span[0]) - 12.0 / _m.tan(_m.radians(30.0)) * 0.5) < 1e-3, _span
+# ... and against a square corner, which reaches station 0 and nothing
+# else, there is no shared station at all -- the wall falls back to its
+# true corners rather than drawing a dim that reads short.  The
+# triangle below bends 60 degrees at the treated corner (index 1).
+_tri = "'((0.0 0.0) (100.0 0.0) (50.0 86.6025))"
+_cs = '\'(("Square" 0.0) ("Radius" 12.0) ("Square" 0.0))'
+assert float(vm_rd.loads(
+    f"(if (pool:ringhooks {_tri} {_cs} 1 2) 1.0 0.0)")) == 0.0
+# the same wall with both corners square hooks straight at station 0
+_sq3 = '\'(("Square" 0.0) ("Square" 0.0) ("Square" 0.0))'
+assert float(vm_rd.loads(
+    f"(if (pool:ringhooks {_tri} {_sq3} 1 2) 1.0 0.0)")) == 1.0
+print("   same six numbers, every extension line now on the drawn pool")
+
 
 print("== R15. dims under 24\" use the STANDARD INCHES dim style ==")
 # same pool as R14 (24" outer radius, 18" inner chamfer) in a drawing

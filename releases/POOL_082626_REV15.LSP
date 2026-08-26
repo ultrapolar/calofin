@@ -120,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV14")
+(setq pool:*version* "082626 REV15")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -158,6 +158,18 @@
 ;; 135, a full 45 degrees away.  20 degrees clears any real rectangle
 ;; and still leaves more than twice that margin to 135.
 (setq pool:*sq90-tol* (* pi (/ 20.0 180.0)))
+;; How far a wall dim may read off its true corner-to-corner run in
+;; order to keep both of its extension lines ON the pool -- see the
+;; "dims attached to the pool" block below.  A corner UNDER 90 degrees
+;; pokes out past its own treatment, so the drawn edge near it starts a
+;; little way up the wall and the far end cannot always meet it exactly
+;; there.  Splitting that mismatch between the two ends costs 1/16" on
+;; a pool built two degrees off square and a thousandth of an inch on
+;; one built a quarter-degree off -- under what a tape can read either
+;; way, so the dim still says what was measured.  A genuinely sharp
+;; corner misses by INCHES, blows this budget, and keeps the true
+;; corners instead.
+(setq pool:*hookslack* 0.0625)
 (setq pool:*valnotes* nil)            ; validation problems for the report
 (setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
@@ -2372,9 +2384,9 @@
         (pool:dimalgs (list (car p) ymax) qq
                       (list (* 0.5 (+ (car p) (car qq))) (+ ymax doff)))
         ;; T: the top side D-C (row 1)
-        (pool:dimalgs (nth 5 pts) (nth 4 pts)
-                      (list (car (pool:mid (nth 5 pts) (nth 4 pts)))
-                            (+ ymax doff)))
+        (pool:dimwalls pts gcs 5 4
+                       (list (car (pool:mid (nth 5 pts) (nth 4 pts)))
+                             (+ ymax doff)))
         ;; B: overall, tip to tip LT-RT (row 2, outboard)
         (pool:dimalg (nth 6 pts) (nth 3 pts)
                      (list (car (pool:mid (nth 6 pts) (nth 3 pts)))
@@ -2384,16 +2396,16 @@
                       (list (- xmin doff)
                             (* 0.5 (+ ymax (cadr (nth 6 pts))))))
         ;; V: the left end LT-LB (column 1)
-        (pool:dimalgs (nth 6 pts) (nth 7 pts)
-                      (list (- xmin doff)
-                            (cadr (pool:mid (nth 6 pts) (nth 7 pts)))))
+        (pool:dimwalls pts gcs 6 7
+                       (list (- xmin doff)
+                             (cadr (pool:mid (nth 6 pts) (nth 7 pts)))))
         ;; A: overall, the A-D chord (column 2, outboard)
         (pool:dimalg (nth 0 pts) (nth 5 pts)
                      (list (- xmin (* 1.9 doff))
                            (cadr (pool:mid (nth 0 pts) (nth 5 pts)))))
         ;; S2: the bottom-right corner cut, once
-        (pool:dimalg (nth 1 pts) (nth 2 pts)
-                     (pool:outoffp (nth 1 pts) (nth 2 pts) pts doff)))
+        (pool:dimwall pts gcs 1 2
+                      (pool:outoffp (nth 1 pts) (nth 2 pts) pts doff)))
       (foreach e pool:*grecedges*
         (setq p (nth (car e) pts) qq (nth (cadr e) pts))
         (cond
@@ -2401,8 +2413,9 @@
            (pool:dimalg p qq (list (- xmin (* 0.6 doff)) (cadr (pool:mid p qq)))))
           ((= (caddr e) 'bc)            ; right end chord -> outboard right
            (pool:dimalg p qq (list (+ xmax (* 0.6 doff)) (cadr (pool:mid p qq)))))
-          (t
-           (pool:dimalgs p qq (pool:outoffp p qq pts doff))))))
+          (t                            ; a wall -> hooked to the pool
+           (pool:dimwalls pts gcs (car e) (cadr e)
+                          (pool:outoffp p qq pts doff))))))
   ;; provided cross dims, in the CROSS DIMENSIONS style when available
   (setq odim (pool:dimxbegin) k 0)
   (foreach cc crosscons
@@ -3003,8 +3016,10 @@
     (setq k (1+ k)))
   (setq hcarcs (reverse hcarcs))
 
-  ;; dimensions (layer DIMENSION) -- side dims read to the TRUE
-  ;; corners, same convention as the rectangle.  Per the reference
+  ;; dimensions (layer DIMENSION) -- side dims MEASURE to the TRUE
+  ;; corners, same convention as the rectangle, but they hang off the
+  ;; drawn wall rather than the hypothetical point behind a treatment
+  ;; (pool:dimwall).  Per the reference
   ;; sheet, the wing/step detail sides read in SIDE STANDARD while the
   ;; principal walls (main run, far end, deep end) stay standard:
   ;; true L -> C-D, D-E, E-F secondary; lazy L -> the bends B-C, D-E
@@ -3013,12 +3028,12 @@
   (setq k 0)
   (foreach pr pool:*hexsides*
     (if (member k (if lazy '(1 3 4) '(2 3 4)))
-        (pool:dimalgs (nth (car pr) pts) (nth (cadr pr) pts)
+        (pool:dimwalls pts hcs (car pr) (cadr pr)
+                       (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
+                                     pts doff))
+        (pool:dimwall pts hcs (car pr) (cadr pr)
                       (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
-                                    pts doff))
-        (pool:dimalg (nth (car pr) pts) (nth (cadr pr) pts)
-                     (pool:outoffp (nth (car pr) pts) (nth (cadr pr) pts)
-                                   pts doff)))
+                                    pts doff)))
     ;; a side the tape could not close reads its BUILT length, so the
     ;; dimension goes red like any other measurement the validator had
     ;; to move
@@ -3403,6 +3418,172 @@
         ((eq spec 'next) (cadr ce))
         ((eq spec 'mid) (if (caddr ce) (caddr ce) (pool:mid (car ce) (cadr ce))))
         (t (nth i q))))
+
+;;; -------------------- dims attached to the pool ----------------------
+;;;
+;;; A treated corner is no longer ON the pool: round B off and the true
+;;; corner sits out in space past the fillet, so a side dim taken to it
+;;; hangs its extension line on that hypothetical point instead of on
+;;; the drawing.  The MEASUREMENT still has to be the true
+;;; corner-to-corner run -- that is what was taped, what the report
+;;; lists, and what the builder sets out to -- so the fix moves the
+;;; ORIGIN, not the number.
+;;;
+;;; A dim measures along its own direction, so what a rotated linear
+;;; dim reads is the two origins' STATIONS along the wall.  Slide both
+;;; origins the same distance along the wall and the number does not
+;;; move at all; slide each down onto the drawn edge and the dim
+;;; touches the pool.  So: find the stations each corner's treatment
+;;; can be hooked at, take a station both can reach, and hook there.
+;;;
+;;;   station 0 -- the true corners' own -- is used whenever both ends
+;;;   can reach it, which is every corner of 90 degrees or more: the
+;;;   arc tangent on the adjacent wall at a square corner, a point
+;;;   part-way round the arc at a 135-degree L bend, the cut face where
+;;;   the corner is chamfered.  The extension lines then run through
+;;;   the true corners exactly as they always did.
+;;;
+;;;   a corner UNDER 90 degrees pokes out past its own treatment, so
+;;;   the drawn edge near it does not start until a little way up the
+;;;   wall.  The other end follows it up there, and the dim still reads
+;;;   the full run.  Its blunter opposite number cannot always come
+;;;   quite that far, though -- the same degree off square that pushed
+;;;   one station up the wall shortens the other's reach -- so the two
+;;;   split what is left between them and the dim reads off by the gap.
+;;;   pool:*hookslack* caps that at less than a tape can read: a pool
+;;;   built a quarter-degree off square, which is what an in-square L
+;;;   dumping its closure error into one bend comes to, pays a
+;;;   thousandth of an inch for it.
+;;;
+;;; When the two ends miss each other by more than that budget -- a
+;;; genuinely sharp corner, inches out -- nothing on the pool reads
+;;; right, and the true corners stay the origins.  Hence "whenever
+;;; possible", not always.
+
+;; The stations along u, measured from the true corner p, that the
+;; drawn treatment at p reaches: (lo hi).  An untreated corner reaches
+;; only its own station, (0 0).
+(defun pool:hookspan (p pp pn ctype size u / uprev unext sb a b)
+  (setq uprev (pool:unit (pool:v- pp p))
+        unext (pool:unit (pool:v- pn p))
+        sb (* (if size size 0.0)
+              (pool:cornerk ctype (pool:wedge p pp pn))))
+  (if (> sb 1.0e8) (setq sb 0.0))       ; degenerate corner: no treatment
+  (setq a (* sb (pool:dot uprev u))
+        b (* sb (pool:dot unext u)))
+  (if (< a b) (list a b) (list b a)))
+
+;; The point on the treatment at p standing s along u from p -- where
+;; the extension line at that station meets the drawn edge.  nil if the
+;; treatment does not reach it (pool:hookspan is what says whether it
+;; does; this only refuses what the arithmetic cannot place).
+(defun pool:cornerhook (p pp pn ctype size u s / uprev unext ang h sb den t0
+                                                 bis cen p0 w bw cw disc rt xa xb)
+  (setq uprev (pool:unit (pool:v- pp p))
+        unext (pool:unit (pool:v- pn p))
+        ang (pool:wedge p pp pn)
+        h (* 0.5 ang)
+        sb (* (if size size 0.0) (pool:cornerk ctype ang)))
+  (cond
+    ((or (< (sin h) 1.0e-9) (> sb 1.0e8)) nil)
+    ;; no treatment -- the true corner is the only point there is
+    ((<= sb 1.0e-9) (if (< (abs s) 1.0e-9) p nil))
+    ;; the cut face, from the previous wall's end across to the next
+    ((= ctype "Cut")
+     (setq den (* sb (- (pool:dot unext u) (pool:dot uprev u)))
+           t0 (if (< (abs den) 1.0e-9)
+                  nil
+                  (/ (- s (* sb (pool:dot uprev u))) den)))
+     (if (and t0 (> t0 -1.0e-6) (< t0 1.000001))
+         (pool:v+ p (pool:v+ (pool:v* uprev (* sb (- 1.0 t0)))
+                             (pool:v* unext (* sb t0))))
+         nil))
+    ;; the fillet arc: where the station's extension line cuts the circle
+    ((= ctype "Radius")
+     (setq bis (pool:unit (pool:v+ uprev unext))
+           cen (pool:v+ p (pool:v* bis (/ size (sin h))))
+           p0 (pool:v+ p (pool:v* u s))
+           w (pool:unit (pool:perp u))
+           bw (pool:dot (pool:v- cen p0) w)
+           cw (- (pool:dot (pool:v- cen p0) (pool:v- cen p0)) (* size size))
+           disc (- (* bw bw) cw))
+     (if (< disc 0.0)
+         nil
+         (progn
+           (setq rt (sqrt disc)
+                 xa (pool:v+ p0 (pool:v* w (+ bw rt)))
+                 xb (pool:v+ p0 (pool:v* w (- bw rt))))
+           ;; of the two crossings only the one nearer the corner can
+           ;; be on the arc -- the other is round the back of the
+           ;; circle, inside the pool
+           (if (> (pool:dot (pool:v- xa cen) bis) (pool:dot (pool:v- xb cen) bis))
+               (setq xa xb))
+           ;; ... and it is on the arc only within the treatment's own
+           ;; sweep, which reaches sin(ang/2) x radius back from the
+           ;; centre along the bisector
+           (if (<= (pool:dot (pool:v- xa cen) bis)
+                   (+ (* (- size) (sin h)) 1.0e-6))
+               xa
+               nil))))
+    (t (if (< (abs s) 1.0e-9) p nil))))
+
+;; The two extension-line origins for the wall between corners i and j
+;; of a closed ring of TRUE corners, or nil when the two ends share no
+;; station and the dim has to fall back to the corners themselves.
+(defun pool:ringhooks (pts corners i j / n p q u ip in2 jp jn
+                                         sp sq lo hi s hp hq)
+  (setq n (length pts)
+        p (nth i pts) q (nth j pts)
+        u (pool:unit (pool:v- q p))
+        ip (nth (rem (+ i (1- n)) n) pts) in2 (nth (rem (+ i 1) n) pts)
+        jp (nth (rem (+ j (1- n)) n) pts) jn (nth (rem (+ j 1) n) pts)
+        sp (pool:hookspan p ip in2
+                          (car (nth i corners)) (cadr (nth i corners)) u)
+        sq (pool:hookspan q jp jn
+                          (car (nth j corners)) (cadr (nth j corners)) u)
+        lo (max (car sp) (car sq))
+        hi (min (cadr sp) (cadr sq)))
+  (if (> (- lo hi) pool:*hookslack*)
+      nil                               ; too far apart -- true corners
+      (progn
+        ;; a shared station: the true corners' own when both ends reach
+        ;; it, otherwise the shared one closest to it.  When the spans
+        ;; only just miss each other, each end takes the station of its
+        ;; own nearest to the midpoint and the dim reads off by the
+        ;; gap, which pool:*hookslack* has already capped.
+        (setq s (cond ((> lo hi) (* 0.5 (+ lo hi)))
+                      ((> lo 0.0) lo)
+                      ((< hi 0.0) hi)
+                      (t 0.0))
+              hp (pool:cornerhook p ip in2
+                                  (car (nth i corners)) (cadr (nth i corners))
+                                  u (min (max s (car sp)) (cadr sp)))
+              hq (pool:cornerhook q jp jn
+                                  (car (nth j corners)) (cadr (nth j corners))
+                                  u (min (max s (car sq)) (cadr sq))))
+        (if (and hp hq) (list hp hq) nil))))
+
+;; One perimeter WALL dim, hooked to the pool wherever the treatments
+;; allow.  The number does not move with it: both origins stand at the
+;; same station along the wall (to within pool:*hookslack*), so the
+;; rotated dim reads the true corner-to-corner run.  Nothing moved ->
+;; straight through pool:dimalg, so square corners keep their true
+;; _H / _V linear dims.
+(defun pool:dimwall (pts corners i j loc / p q hk)
+  (setq p (nth i pts)
+        q (nth j pts)
+        hk (pool:ringhooks pts corners i j))
+  (if (or (null hk)
+          (and (< (distance p (car hk)) 1.0e-9)
+               (< (distance q (cadr hk)) 1.0e-9)))
+      (pool:dimalg p q loc)
+      (pool:dimrot (car hk) (cadr hk) (angle p q) loc)))
+
+;; The same, in the SIDE STANDARD style (the secondary sheet letters).
+(defun pool:dimwalls (pts corners i j loc / od)
+  (setq od (pool:dimsdbeg))
+  (pool:dimwall pts corners i j loc)
+  (pool:dimsdend od))
 
 ;; Draw the rectangle perimeter with corner treatments on layer POOL.
 ;; Returns the list of fillet-arc entity names per corner (nil where
@@ -5963,17 +6144,15 @@
   (setvar "CLAYER" "DIMENSION")
   (if (= ptype "Rectangle")
       ;; per the reference: only the northern and western perimeter
-      ;; dims, hooked to the wall endpoints (object-bounded) and
-      ;; rotated along the side directions
+      ;; dims, hooked to the drawn wall (object-bounded) rather than to
+      ;; the hypothetical corner a treatment cut away.  pool:dimwall
+      ;; finds the hook by dropping each corner's own extension line
+      ;; onto the treatment, so an out-of-square wall lands right too
+      ;; -- picking the neighbouring treatment end by hand only
+      ;; measured the full run while the corner stayed at 90 degrees.
       (progn
-        (pool:dimrot (pool:cornerpoint quad corners 3 'next)   ; left wall top
-                     (pool:cornerpoint quad corners 2 'prev)   ; right wall top
-                     (angle d c)
-                     (pool:outoff d c cen doff))
-        (pool:dimrot (pool:cornerpoint quad corners 0 'next)   ; bottom wall left
-                     (pool:cornerpoint quad corners 3 'prev)   ; top wall left
-                     (angle a d)
-                     (pool:outoff a d cen doff)))
+        (pool:dimwall quad corners 3 2 (pool:outoff d c cen doff))
+        (pool:dimwall quad corners 0 3 (pool:outoff a d cen doff)))
       (if pool:*insq*
           ;; oval in-square, per the field sheet: T above the top side
           ;; and A outside the left arc -- the bottom side and right
@@ -6568,7 +6747,8 @@
         ;; row 1: S (left tip to side start), T, S (side end to right tip)
         (pool:dimalgs (list (car tipl) ymax) d
                       (list (* 0.5 (+ (car tipl) (car d))) (+ ymax doff)))
-        (pool:dimalgs d c (list (car (pool:mid d c)) (+ ymax doff)))
+        (pool:dimwalls quad rcs 3 2
+                       (list (car (pool:mid d c)) (+ ymax doff)))
         (pool:dimalgs c (list (car tipr) ymax)
                       (list (* 0.5 (+ (car c) (car tipr))) (+ ymax doff)))
         ;; row 2: B, tip to tip
@@ -6584,8 +6764,8 @@
         ;; column 2: A, the overall width
         (pool:dimalg a d (list xa (cadr (pool:mid a d)))))
       (progn
-        (pool:dimalgs a b (pool:outoff a b cen doff))
-        (pool:dimalgs d c (pool:outoff d c cen doff))
+        (pool:dimwalls quad rcs 0 1 (pool:outoff a b cen doff))
+        (pool:dimwalls quad rcs 3 2 (pool:outoff d c cen doff))
         (pool:dimalg tipl tipr (list (car (pool:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))
         (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
