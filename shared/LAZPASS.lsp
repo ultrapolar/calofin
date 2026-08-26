@@ -63274,7 +63274,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.2")
+(setq *lazpanel-version* "v2.3")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -64095,26 +64095,50 @@
 ;; The base64 string as a real byte array, via MSXML's bin.base64
 ;; element.  nodeTypedValue on such an element IS a VT_UI1 array, which
 ;; is exactly what Write will take.
-(defun lzp:bytes-msxml (bytes / doc el sa r n)
-  (foreach n '("Msxml2.DOMDocument.6.0" "Msxml2.DOMDocument.3.0"
-               "Msxml2.DOMDocument" "Microsoft.XMLDOM")
-    (if (not doc)
-      (progn
-        (setq r (vl-catch-all-apply 'vlax-create-object (list n)))
-        (if (not (vl-catch-all-error-p r)) (setq doc r)))))
+;; The whole chain on one document: an element typed bin.base64, the
+;; base64 text put into it, and the byte array read back out.
+(defun lzp:b64-chain (doc b64 / el out)
+  (setq el (vlax-invoke doc 'createElement "b"))
+  (vlax-put el 'dataType "bin.base64")
+  (vlax-put el 'text b64)
+  (setq out (vlax-get el 'nodeTypedValue))
+  (vl-catch-all-apply 'vlax-release-object (list el))
+  out)
+
+;; One ProgID, tried all the way through.  nil if this version cannot
+;; carry it.
+(defun lzp:b64-try (id b64 / doc r)
+  (setq r (vl-catch-all-apply 'vlax-create-object (list id)))
   (cond
-    ((not doc) nil)
+    ((vl-catch-all-error-p r) nil)
+    ((null r) nil)
     (t
-     (setq r (vl-catch-all-apply
-               '(lambda ()
-                  (setq el (vlax-invoke doc 'createElement "b"))
-                  (vlax-put el 'dataType "bin.base64")
-                  (vlax-put el 'text (lzp:b64 bytes))
-                  (vlax-get el 'nodeTypedValue))
-               nil))
-     (if el (vl-catch-all-apply 'vlax-release-object (list el)))
+     (setq doc r)
+     (setq r (vl-catch-all-apply 'lzp:b64-chain (list doc b64)))
      (vl-catch-all-apply 'vlax-release-object (list doc))
-     (if (vl-catch-all-error-p r) nil (setq sa r)))))
+     (cond
+       ((vl-catch-all-error-p r) nil)
+       (r (setq lzp:*icontype* (strcat "bin.base64 via " id))
+          r)))))
+
+;;  EVERY ProgID IS TRIED ALL THE WAY THROUGH, not just far enough to
+;;  create.  MSXML 6.0 creates perfectly happily and then refuses
+;;  dataType -- XDR schema support, of which bin.base64 is part, was
+;;  removed in 6.0 -- so a version test that stops at "did the object
+;;  appear?" picks 6.0, fails on the next line, and reports nothing.
+;;  That is exactly what happened in the field: the report said
+;;  "array: VT_UI1 safearray", meaning this returned nil and the
+;;  fallback ran.
+;;
+;;  So 3.0 and the version-independent Microsoft.XMLDOM come first --
+;;  both carry XDR -- and 6.0 stays at the back where it costs one
+;;  failed attempt and nothing else.
+(defun lzp:bytes-msxml (bytes / b64 out id)
+  (setq b64 (lzp:b64 bytes))
+  (foreach id '("MSXML2.DOMDocument.3.0" "Microsoft.XMLDOM"
+                "MSXML2.DOMDocument" "MSXML2.DOMDocument.6.0")
+    (if (not out) (setq out (lzp:b64-try id b64))))
+  out)
 
 ;; A byte array by whichever route this AutoCAD allows.  MSXML first
 ;; because it is the one that does not depend on an undocumented
@@ -64123,9 +64147,10 @@
 ;; recorded for LAZICON to report.
 (defun lzp:bytearray (bytes / sa)
   (cond
-    ((setq sa (lzp:bytes-msxml bytes))
-     (setq lzp:*icontype* "MSXML bin.base64")
-     sa)
+    ;; lzp:b64-try has already recorded WHICH MSXML version carried it,
+    ;; which is the part worth knowing; do not flatten that back to a
+    ;; generic label here
+    ((setq sa (lzp:bytes-msxml bytes)) sa)
     (t
      (setq sa (vl-catch-all-apply
                 'vlax-make-safearray
@@ -64152,8 +64177,16 @@
   (vlax-put st 'Type 1)
   (setq lzp:*iconstep* "Open")
   (vlax-invoke st 'Open)
+  ;; Two spellings.  Write takes a Variant, and whether a raw safearray
+  ;; marshals into one is another thing that varies by release -- so if
+  ;; the plain call is refused, the wrapped one is tried before giving
+  ;; up.  The step name says which was in play.
   (setq lzp:*iconstep* "Write")
-  (vlax-invoke st 'Write sa)
+  (if (vl-catch-all-error-p
+        (vl-catch-all-apply 'vlax-invoke (list st 'Write sa)))
+    (progn
+      (setq lzp:*iconstep* "Write (variant-wrapped)")
+      (vlax-invoke st 'Write (vlax-make-variant sa))))
   (setq lzp:*iconstep* "SaveToFile")
   (vlax-invoke st 'SaveToFile path 2)         ; overwrite if present
   (setq lzp:*iconstep* "Close")

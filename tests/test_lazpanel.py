@@ -596,7 +596,8 @@ def _reset_com():
     OPENED.clear()
     COM.clear()
     COM.update(created=[], props={}, calls=[], bytes=None, saved=None,
-               released=0, fail_at=None, b64=None, wrote=[])
+               released=0, fail_at=None, b64=None, wrote=[],
+               refused=[], xmldoc=None)
 
 
 def _b(name):
@@ -630,14 +631,25 @@ def _create(vm, a):
     if name.lower().startswith(('msxml', 'microsoft.xmldom')):
         if COM.get('fail_at') == 'msxml':
             raise lispvm.LispError('Automation Error', vm)
-        return 'XMLDOC'
+        # MSXML 6.0 creates perfectly well and refuses dataType later:
+        # XDR schema support, of which bin.base64 is part, was removed
+        # in 6.0.  The stub models that, because a probe that stops at
+        # "did the object appear?" picks 6.0 and then reports nothing --
+        # which is what happened in the field.
+        COM['xmldoc'] = name
+        return 'XMLDOC6' if '6.0' in name else 'XMLDOC'
     return 'STREAM' 
 
 
 @_b('vlax-put')
 def _put(vm, a):
-    COM['props'][str(a[1]).lower()] = a[2]
-    if str(a[0]) == 'XMLEL' and str(a[1]).lower() == 'text':
+    prop = str(a[1]).lower()
+    if str(a[0]) == 'XMLEL6' and prop == 'datatype':
+        COM.setdefault('refused', []).append(COM.get('xmldoc'))
+        raise lispvm.LispError(
+            'Automation Error. Description was not provided.', vm)
+    COM['props'][prop] = a[2]
+    if str(a[0]) == 'XMLEL' and prop == 'text':
         COM['b64'] = str(a[2])
     return a[2]
 
@@ -678,7 +690,7 @@ def _invoke(vm, a):
     if COM.get('fail_at') == m:
         raise lispvm.LispError('Automation Error', vm)
     if m == 'createelement':
-        return 'XMLEL'
+        return 'XMLEL6' if str(a[0]) == 'XMLDOC6' else 'XMLEL'
     if m == 'write':
         # Write must be handed the byte array, never a safearray: a
         # VT_I2 safearray is exactly what AutoCAD refused in the field
@@ -812,7 +824,9 @@ print("   button at index 0, ^C^C macro as raw ASCII 3, floated at 200,300")
 print("== the icon is written as real binary, not text ==")
 # Two icons, and each takes both objects: MSXML to turn the base64 back
 # into a byte array, ADODB.Stream to put that array on disk.
-assert COM['created'] == ['ADODB.Stream', 'Msxml2.DOMDocument.6.0'] * 2, \
+# Each icon takes the stream plus whichever MSXML version carries the
+# whole chain.  3.0 is tried first and works, so 6.0 is never reached.
+assert COM['created'] == ['ADODB.Stream', 'MSXML2.DOMDocument.3.0'] * 2, \
     COM['created']
 assert int(COM['props']['type']) == 1, COM['props']      # adTypeBinary
 assert str(COM['props']['datatype']) == 'bin.base64', COM['props']
@@ -939,12 +953,50 @@ for size, grid in (('16', 'lzp:*icon16*'), ('32', 'lzp:*icon32*')):
 
 # MSXML is tried before the safearray, because the safearray is the
 # thing that failed in the field
-src = open(LSP).read()
+src = open(LSP).read()  # noqa: F841  (also used by the ProgID checks below)
 i_msxml = src.index('lzp:bytes-msxml bytes')
 i_safe = src.index("'vlax-make-safearray", src.index('defun lzp:bytearray'))
 assert i_msxml < i_safe, \
     "the safearray is tried before MSXML -- that is the order that failed"
 print("   MSXML is tried first; the safearray spellings remain as fallbacks")
+
+# THE BUG THESE TWO CHECKS EXIST FOR.  MSXML 6.0 creates fine and
+# refuses dataType, because XDR schema support -- of which bin.base64 is
+# part -- was removed in 6.0.  The shipped code stopped at "did the
+# object appear?", so it picked 6.0, died on the next line, and fell
+# back to the safearray without a word.  The field report is that
+# failure:  array : VT_UI1 safearray   died at : Write
+#
+# The STRUCTURAL fix is carrying every ProgID all the way through, which
+# is what the lzp:b64-try / lzp:b64-chain assertion below holds; with
+# that in place a bad order still recovers.  The ORDER assertion is the
+# cheaper half: an XDR-capable version first means 6.0's refusal is
+# never paid for at all.
+ids = re.search(r"\(foreach id\s*'\(([^)]*)\)", src, re.S)
+assert ids, "the MSXML ProgID list is no longer a foreach over a quoted list"
+order = re.findall(r'"([^"]+)"', ids.group(1))
+assert order, order
+assert '6.0' not in order[0], (
+    "MSXML %s is tried first, and 6.0 refuses dataType -- that is the bug"
+    % order[0])
+assert any('3.0' in i or 'XMLDOM' in i for i in order[:2]), (
+    "neither of the first two ProgIDs carries XDR: %r" % order[:2])
+# and the chain really is attempted per ProgID, not once after the loop
+assert 'lzp:b64-try' in src and 'lzp:b64-chain' in src, \
+    "the per-ProgID chain probe is gone"
+print("   ProgIDs tried in %s order; 6.0 last, where its refusal costs nothing"
+      % order[0])
+
+# drive it: the stub refuses dataType on 6.0, so a run must land on a
+# version that works rather than falling back to the safearray
+mv = stubbed(preload=True)
+assert COM['created'].count('MSXML2.DOMDocument.3.0') >= 1, COM['created']
+assert 'MSXML2.DOMDocument.6.0' not in COM['created'], \
+    "6.0 was reached, so an earlier ProgID must have failed: %r" % COM['created']
+assert str(mv.globals.get('lzp:*icontype*')).startswith('bin.base64 via'), \
+    ("the icon fell back to a safearray instead of using MSXML: %r"
+     % mv.globals.get('lzp:*icontype*'))
+print("   a real run reports %r" % str(mv.globals.get('lzp:*icontype*')))
 
 
 print("== no support folder: full temp paths, the best that is left ==")
