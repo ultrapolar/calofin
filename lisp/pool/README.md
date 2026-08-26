@@ -973,7 +973,15 @@ previous style is always restored right afterwards:
   (24")**: corner radii and cut faces, short hopper offsets,
   profile depths. A dimension of exactly 2' stays in the current
   style (`STANDARD`, or `CROSS DIMENSIONS` inside a cross-dim block) —
-  the cutover is *under* 24", not *at or under*. The switch happens
+  the cutover is *under* 24", not *at or under*, and it is read with a
+  millionth of an inch of slack so that holds for a **2 ft corner**:
+  a corner's size is measured back off the geometry the routine built
+  from it, and a 24" radius comes back as 23.99999999999913 as
+  readily as 24.000000000001137. Without the slack the same 2 ft
+  corner drew in inches or not depending on which way the last bit
+  fell. The slack is float noise only — a million times the wobble it
+  absorbs, and orders below the 1/16" a tape can read — so every real
+  measurement under 2 ft is still an inches dim. The switch happens
   per dimension, keyed on that dimension's own measurement, so a 96"
   side and an 18" cut face on the same pool each get the right style.
   (POOL draws no angular dimensions: a square corner is marked with a

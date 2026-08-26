@@ -790,6 +790,34 @@ assert vm2.dimstyle_log == ['CROSS DIMENSIONS', 'STANDARD INCHES',
                             'CROSS DIMENSIONS', 'STANDARD'], vm2.dimstyle_log
 print("   4 corner faces in inches; a nested small dim unwinds to CROSS DIMENSIONS")
 
+print("== R15d. a 2 ft corner is a STANDARD dim, not an inches one ==")
+# The rule is UNDER 24", so 24" itself belongs in STANDARD -- but a
+# corner's size is measured back off geometry the routine built from
+# it, and a 24" radius reads 23.99999999999913 as readily as
+# 24.000000000001137.  Compared raw, the same 2 ft corner drew in
+# inches or not depending on which way the last bit fell.
+for _ty, _sz in (("Radius", 24.0), ("Cut", 24.0)):
+    vm = run(["Insquare", "Rectangle"] + BASE +
+             [480.0, 240.0, _ty, _sz,
+              "Yes", "Normal", 60.0, 90.0, 210.0, None, None, None, None],
+             "R15d-" + _ty, dimstyles=("STANDARD INCHES", "CROSS DIMENSIONS"))
+    assert 'STANDARD INCHES' not in vm.dimstyle_log, (_ty, vm.dimstyle_log)
+# and the corner really is 2 ft: the arcs on the drawing sit a hair
+# either side of 24, which is exactly the noise being defended against
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Radius", 24.0,
+          "Yes", "Normal", 60.0, 90.0, 210.0, None, None, None, None],
+         "R15d-arc", dimstyles=("STANDARD INCHES",))
+_r = [d[40] for d in drawn(vm, 'ARC', 'POOL')]
+assert _r and all(abs(r - 24.0) < 0.01 for r in _r), _r
+# a corner that is genuinely under 2 ft still reads in inches
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Cut", 23.9375,      # 23 15/16", a real tape reading
+          "Yes", "Normal", 60.0, 90.0, 210.0, None, None, None, None],
+         "R15d-under", dimstyles=("STANDARD INCHES",))
+assert 'STANDARD INCHES' in vm.dimstyle_log, vm.dimstyle_log
+print("   24\" corners in STANDARD, 23 15/16\" still in STANDARD INCHES")
+
 print("== R16. grecian Overall: WALL letters beat CORNER letters ==")
 # The field case from beforeaftergrecianoosexample.dxf.  A tape can be
 # held flat along T and V, so they are held true; S and S1 only locate

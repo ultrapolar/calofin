@@ -120,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV11")
+(setq pool:*version* "082526 REV12")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -172,7 +172,19 @@
 ;; ("SIDE STANDARD"), per the reference drawings.  A dim inside a
 ;; SIDE STANDARD block keeps that style even under 24 inches: the
 ;; reference sheets show a 19" S1 in SIDE STANDARD, not inches.
+;; The cut-off is "UNDER 24 inches": a 2 ft corner is a STANDARD dim,
+;; not an inches one.  It has to be read with a hair of tolerance,
+;; because most of these lengths are not the number the crew typed --
+;; they are measured back off geometry the routine built from it, and a
+;; 24" radius corner comes back as 23.99999999999913 as readily as
+;; 24.000000000001137 (a three-point arc's circumcentre, a treated
+;; corner's two end points).  Compared raw, the same 2 ft corner draws
+;; in inches or not depending on which way the last bit fell.  The
+;; tolerance is float noise only -- a MILLIONTH of an inch, a million
+;; times the noise it absorbs and orders below the 1/16" a tape can
+;; read, so every real measurement under 2 ft is still an inches dim.
 (setq pool:*smalldim*    24.0)
+(setq pool:*smallfuzz*   1.0e-6)
 (setq pool:*smallstyle*  "STANDARD INCHES")
 (setq pool:*smallwarned* nil)
 (setq pool:*crossstyle*  "CROSS DIMENSIONS")
@@ -368,7 +380,9 @@
       (pool:line p1 p3 lay)))
 
 ;;; Small dimensions read in inches.  Any measurement under 24" is
-;;; drawn in the "STANDARD INCHES" dim style when the drawing has one,
+;;; drawn in the "STANDARD INCHES" dim style when the drawing has one
+;;; -- under, so a 2 ft corner is a STANDARD dim (pool:*smallfuzz*
+;;; keeps that true when the 24 is measured back off the geometry),
 ;;; and the previous style comes straight back afterwards.  Every
 ;;; dimension the routine draws goes through pool:dimalg / pool:dimrot
 ;;; / pool:dimrad / pool:dimcorner1, so switching in those four covers
@@ -380,7 +394,7 @@
   ;; inside a SIDE STANDARD block the letter keeps that style however
   ;; small it is -- the reference sheets show a 19" S1 in SIDE
   ;; STANDARD, not in inches
-  (if (and (< d pool:*smalldim*) (not pool:*sideon*))
+  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*)) (not pool:*sideon*))
       (if (tblsearch "DIMSTYLE" pool:*smallstyle*)
           (progn
             (setq odim (getvar "DIMSTYLE"))
