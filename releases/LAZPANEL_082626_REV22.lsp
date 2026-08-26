@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.1")
+(setq *lazpanel-version* "v2.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -127,6 +127,8 @@
 (setq lzp:*captions*
   '(
     ("ABCDEF"           "Rectangle plot")
+    ("ABCURCHECK"       "Perimeter continuity")
+    ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
     ("ABFIND"           "A/B stake ties")
     ("ABHD"             "Survey perimeter + bottom")
     ("ABHDCOVER"        "Survey perimeter, no bottom")
@@ -234,6 +236,8 @@
       )
      ("Dims & check"
       "AUTODIM"
+      "ABCURCHECK"
+      "ABCURCHECKSCAN"
       "LINFINCHECK"
       "LINFINSCAN"
       "LITELINFINSCAN"
@@ -360,6 +364,8 @@
       "DIMARCCHECK"
       "DIMCHECK"
       "DIMSCAN"
+      "ABCURCHECK"
+      "ABCURCHECKSCAN"
       "LINCHECK"
       "LINFINCHECK"
       "LINFINSCAN"
@@ -392,6 +398,7 @@
 (setq lzp:*pos* nil)              ; where the panel was last standing
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
+(setq lzp:*iconstep* nil)         ; the COM call the icon write died on
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
@@ -828,30 +835,132 @@
 ;; accepted is a property of the release rather than of the code.  Both
 ;; spellings are tried before giving up, and which one worked is
 ;; recorded for LAZICON to report.
-(defun lzp:bytearray (bytes / sa)
-  (setq sa (vl-catch-all-apply
-             'vlax-make-safearray
-             (list 17 (cons 0 (1- (length bytes))))))
-  (if (vl-catch-all-error-p sa)
-      (setq sa (vl-catch-all-apply
-                 'vlax-make-safearray
-                 (list vlax-vbInteger (cons 0 (1- (length bytes))))))
-      (setq lzp:*icontype* "VT_UI1"))
+;;  BASE64, AND WHY THE ICON GOES OUT THROUGH IT.
+;;
+;;  ADODB.Stream's Write wants a VT_UI1 (byte) array and nothing else.
+;;  AutoLISP cannot reliably make one: vlax-make-safearray's documented
+;;  type constants stop at vlax-vbVariant, VT_UI1 (17) is not among
+;;  them, and whether a release accepts it anyway is a property of that
+;;  release.  Where it is refused the old code fell back to a
+;;  vbInteger (VT_I2) array, which Write then rejected with
+;;
+;;      Arguments are of the wrong type, are out of acceptable range,
+;;      or are in conflict with one another
+;;
+;;  -- reported from the field, and the reason the button had no
+;;  picture at all rather than a wrong one.
+;;
+;;  The way round it is to stop trying to build a byte array in
+;;  AutoLISP.  Base64 is a pure-ASCII encoding of arbitrary bytes --
+;;  no NUL, nothing AutoLISP's character model lacks -- so the bytes
+;;  can be carried in an ordinary string, and MSXML turns that string
+;;  into a real VT_UI1 array on the other side.  Both components ship
+;;  with Windows, and the toolbar this icon goes on already needs COM.
+(setq lzp:*b64*
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+
+;; Join a list of strings without the quadratic cost of strcat-ing onto
+;; one accumulator: a 32x32 icon is 4168 base64 characters, and growing
+;; that a chunk at a time copies the whole string every time.  Pairwise
+;; merging is O(n log n) and finishes instantly.
+(defun lzp:joinstr (lst / out a)
+  (while (cdr lst)
+    (setq out nil)
+    (while lst
+      (setq a (car lst) lst (cdr lst))
+      (if lst
+        (setq out (cons (strcat a (car lst)) out) lst (cdr lst))
+        (setq out (cons a out))))
+    (setq lst (reverse out)))
+  (if lst (car lst) ""))
+
+;; Bytes to base64.  Plain integer arithmetic rather than lsh/logand:
+;; the shifts are all by 2, 4 and 6 bits, which is division and
+;; multiplication by 4, 16 and 64, and every AutoLISP has those.
+(defun lzp:b64 (bytes / out n b1 b2 b3)
+  (while bytes
+    (setq b1 (car bytes) bytes (cdr bytes) n 1 b2 0 b3 0)
+    (if bytes (setq b2 (car bytes) bytes (cdr bytes) n 2))
+    (if bytes (setq b3 (car bytes) bytes (cdr bytes) n 3))
+    (setq out
+      (cons
+        (strcat
+          (substr lzp:*b64* (1+ (/ b1 4)) 1)
+          (substr lzp:*b64* (1+ (+ (* (rem b1 4) 16) (/ b2 16))) 1)
+          (if (>= n 2)
+            (substr lzp:*b64* (1+ (+ (* (rem b2 16) 4) (/ b3 64))) 1)
+            "=")
+          (if (>= n 3) (substr lzp:*b64* (1+ (rem b3 64)) 1) "="))
+        out)))
+  (lzp:joinstr (reverse out)))
+
+;; The base64 string as a real byte array, via MSXML's bin.base64
+;; element.  nodeTypedValue on such an element IS a VT_UI1 array, which
+;; is exactly what Write will take.
+(defun lzp:bytes-msxml (bytes / doc el sa r n)
+  (foreach n '("Msxml2.DOMDocument.6.0" "Msxml2.DOMDocument.3.0"
+               "Msxml2.DOMDocument" "Microsoft.XMLDOM")
+    (if (not doc)
+      (progn
+        (setq r (vl-catch-all-apply 'vlax-create-object (list n)))
+        (if (not (vl-catch-all-error-p r)) (setq doc r)))))
   (cond
-    ((vl-catch-all-error-p sa) nil)
-    (t (if (not lzp:*icontype*) (setq lzp:*icontype* "vbInteger"))
-       (vlax-safearray-fill sa bytes)
-       sa)))
+    ((not doc) nil)
+    (t
+     (setq r (vl-catch-all-apply
+               '(lambda ()
+                  (setq el (vlax-invoke doc 'createElement "b"))
+                  (vlax-put el 'dataType "bin.base64")
+                  (vlax-put el 'text (lzp:b64 bytes))
+                  (vlax-get el 'nodeTypedValue))
+               nil))
+     (if el (vl-catch-all-apply 'vlax-release-object (list el)))
+     (vl-catch-all-apply 'vlax-release-object (list doc))
+     (if (vl-catch-all-error-p r) nil (setq sa r)))))
+
+;; A byte array by whichever route this AutoCAD allows.  MSXML first
+;; because it is the one that does not depend on an undocumented
+;; safearray type; the two safearray spellings stay as fallbacks so a
+;; machine where they DO work is no worse off.  Which route won is
+;; recorded for LAZICON to report.
+(defun lzp:bytearray (bytes / sa)
+  (cond
+    ((setq sa (lzp:bytes-msxml bytes))
+     (setq lzp:*icontype* "MSXML bin.base64")
+     sa)
+    (t
+     (setq sa (vl-catch-all-apply
+                'vlax-make-safearray
+                (list 17 (cons 0 (1- (length bytes))))))
+     (if (vl-catch-all-error-p sa)
+         (setq sa (vl-catch-all-apply
+                    'vlax-make-safearray
+                    (list vlax-vbInteger (cons 0 (1- (length bytes)))))
+               lzp:*icontype* "vbInteger (VT_I2 - Write may refuse this)")
+         (setq lzp:*icontype* "VT_UI1 safearray"))
+     (cond
+       ((vl-catch-all-error-p sa) (setq lzp:*icontype* "none - no array could be made") nil)
+       (t (vlax-safearray-fill sa bytes)
+          sa)))))
 
 (defun lzp:bmp-stream (st path bytes / sa)
   (setq lzp:*icontype* nil)
+  ;; each step names itself before it runs, so a failure reports WHICH
+  ;; call refused rather than one COM message with no address on it
+  (setq lzp:*iconstep* "building the byte array")
   (if (not (setq sa (lzp:bytearray bytes)))
       (exit))                                 ; caught by the caller
-  (vlax-put st 'Type 1)                       ; adTypeBinary
+  (setq lzp:*iconstep* "Type = 1 (adTypeBinary)")
+  (vlax-put st 'Type 1)
+  (setq lzp:*iconstep* "Open")
   (vlax-invoke st 'Open)
+  (setq lzp:*iconstep* "Write")
   (vlax-invoke st 'Write sa)
+  (setq lzp:*iconstep* "SaveToFile")
   (vlax-invoke st 'SaveToFile path 2)         ; overwrite if present
+  (setq lzp:*iconstep* "Close")
   (vlax-invoke st 'Close)
+  (setq lzp:*iconstep* nil)
   t)
 
 (defun lzp:bmp-write (path size grid / st ok)
@@ -873,8 +982,9 @@
      (cond
        ((vl-catch-all-error-p ok)
         (setq lzp:*iconerr*
-              (strcat "writing " path " failed: "
-                      (vl-catch-all-error-message ok)))
+              (strcat "writing " path " failed at "
+                      (if lzp:*iconstep* lzp:*iconstep* "an unnamed step")
+                      ": " (vl-catch-all-error-message ok)))
         nil)
        (t path)))))
 
@@ -1225,6 +1335,13 @@
                               (vl-catch-all-error-message r)
                               "accepted - the button should show it now"))))))))
     (t
+     ;; the failure branch has to say as much as the success one, or
+     ;; the next report leaves the same two questions open: which route
+     ;; produced the array, and which COM call refused it
+     (princ (strcat "\n  array      : "
+                    (if lzp:*icontype* lzp:*icontype* "none was made")))
+     (princ (strcat "\n  died at    : "
+                    (if lzp:*iconstep* lzp:*iconstep* "an unnamed step")))
      (princ (strcat "\n  written    : NO - "
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))

@@ -37,6 +37,7 @@ Runs against either tier: standalone by default, the grouped build with
 CALOFIN_LISP_ROOT=shared.
 """
 
+import base64
 import os
 import re
 import sys
@@ -595,7 +596,7 @@ def _reset_com():
     OPENED.clear()
     COM.clear()
     COM.update(created=[], props={}, calls=[], bytes=None, saved=None,
-               released=0, fail_at=None)
+               released=0, fail_at=None, b64=None, wrote=[])
 
 
 def _b(name):
@@ -622,16 +623,35 @@ def _newdlg(vm, a):
 
 @_b('vlax-create-object')
 def _create(vm, a):
-    COM['created'].append(str(a[0]))
+    name = str(a[0])
+    COM['created'].append(name)
     if COM.get('fail_at') == 'create':
         raise lispvm.LispError('Automation Error', vm)
-    return 'STREAM'
+    if name.lower().startswith(('msxml', 'microsoft.xmldom')):
+        if COM.get('fail_at') == 'msxml':
+            raise lispvm.LispError('Automation Error', vm)
+        return 'XMLDOC'
+    return 'STREAM' 
 
 
 @_b('vlax-put')
 def _put(vm, a):
     COM['props'][str(a[1]).lower()] = a[2]
+    if str(a[0]) == 'XMLEL' and str(a[1]).lower() == 'text':
+        COM['b64'] = str(a[2])
     return a[2]
+
+
+@_b('vlax-get')
+def _get(vm, a):
+    # MSXML's bin.base64 element hands back a real byte array -- which
+    # is the whole point of the detour, so the stub does the decoding
+    # for real rather than waving it through.  Everything downstream
+    # then checks bytes that actually travelled as base64.
+    if str(a[1]).lower() == 'nodetypedvalue':
+        COM['bytes'] = list(base64.b64decode(COM['b64']))
+        return 'BYTEARRAY'
+    return None
 
 
 @_b('vlax-make-safearray')
@@ -657,6 +677,12 @@ def _invoke(vm, a):
     COM['calls'].append(m)
     if COM.get('fail_at') == m:
         raise lispvm.LispError('Automation Error', vm)
+    if m == 'createelement':
+        return 'XMLEL'
+    if m == 'write':
+        # Write must be handed the byte array, never a safearray: a
+        # VT_I2 safearray is exactly what AutoCAD refused in the field
+        COM.setdefault('wrote', []).append(a[2])
     if m == 'savetofile':
         COM['saved'] = (str(a[2]), a[3])
         COM.setdefault('saves', []).append(str(a[2]))
@@ -784,11 +810,23 @@ print("   button at index 0, ^C^C macro as raw ASCII 3, floated at 200,300")
 
 
 print("== the icon is written as real binary, not text ==")
-assert COM['created'] == ['ADODB.Stream'] * 2, COM['created']
+# Two icons, and each takes both objects: MSXML to turn the base64 back
+# into a byte array, ADODB.Stream to put that array on disk.
+assert COM['created'] == ['ADODB.Stream', 'Msxml2.DOMDocument.6.0'] * 2, \
+    COM['created']
 assert int(COM['props']['type']) == 1, COM['props']      # adTypeBinary
+assert str(COM['props']['datatype']) == 'bin.base64', COM['props']
 assert COM['calls'].count('open') == 2 and COM['calls'].count('write') == 2
 assert COM['saved'][1] == 2, COM['saved']                # overwrite if present
-assert COM['released'] == 2, "the stream object must be released"
+# the stream AND the two MSXML objects per icon all get released
+assert COM['released'] >= 2, "the stream object must be released"
+# Write is handed the MSXML byte array, never a safearray: a VT_I2
+# safearray is precisely what AutoCAD refused in the field, with
+# "Arguments are of the wrong type, are out of acceptable range, or are
+# in conflict with one another".
+for w in COM['wrote']:
+    assert str(w) == 'BYTEARRAY', \
+        "Write was handed %r, not the byte array MSXML made" % (w,)
 # The FILES go into the first support-path folder; SetBitmaps is handed
 # the bare NAMES.  The CUI resolves a toolbar bitmap by name along the
 # support search path, and a full path into the temp folder -- which is
@@ -852,6 +890,61 @@ assert nuls > 0
 print("   and every pixel of the 16x16 -- %d of its bytes are NUL, which is"
       % nuls)
 print("   exactly why write-char could never have written this file")
+
+
+# --------------------------------------------------------------------
+# Base64: the route the bytes take to become a real byte array.
+# --------------------------------------------------------------------
+# ADODB.Stream's Write wants a VT_UI1 array and AutoLISP cannot reliably
+# make one -- vlax-make-safearray's documented types stop short of
+# VT_UI1, and where it is refused the old fallback produced a VT_I2
+# array that Write rejected outright ("Arguments are of the wrong type
+# ...").  So the bytes travel as base64, which is pure ASCII, and MSXML
+# turns the string back into a byte array on the other side.
+#
+# That makes the encoder load-bearing: get it wrong and the icon is
+# silently corrupt rather than absent.  It is checked against Python's
+# own base64 on the real BMP bytes, not on a toy string.
+print("== base64: the bytes as a string AutoLISP can actually hold ==")
+import base64  # noqa: E402
+
+bv = fresh()
+for raw in [b'M', b'Ma', b'Man', b'Many', b'Manyx',
+            b'\x00', b'\x00\x00', b'\x00\x00\x00',
+            b'\xff', b'\xff\xff\xff', b'\x00\xff\x00', b'\xfb\xff\xbf']:
+    bv.loads("(setq test:*b* (lzp:b64 '(%s)))"
+             % ' '.join(str(b) for b in raw))
+    got = str(bv.globals['test:*b*'])
+    want = base64.b64encode(raw).decode()
+    assert got == want, "b64(%r) gave %r, Python says %r" % (raw, got, want)
+# every remainder-of-3 lands on the right padding
+assert str(bv.globals['test:*b*']).count('=') == 0
+bv.loads("(setq test:*e* (lzp:b64 nil))")
+assert str(bv.globals['test:*e*']) == '', "no bytes should encode to no string"
+print("   12 padding and edge cases match Python byte for byte")
+
+for size, grid in (('16', 'lzp:*icon16*'), ('32', 'lzp:*icon32*')):
+    bv.loads("(setq test:*by* (lzp:bmp-bytes %s %s))" % (size, grid))
+    raw = bytes(int(x) for x in bv.globals['test:*by*'])
+    bv.loads("(setq test:*enc* (lzp:b64 test:*by*))")
+    got = str(bv.globals['test:*enc*'])
+    assert got == base64.b64encode(raw).decode(), \
+        "the %sx%s icon does not encode the way Python encodes it" % (size, size)
+    assert base64.b64decode(got) == raw, "the round trip lost bytes"
+    # the whole point: what AutoLISP has to carry is printable ASCII
+    assert all(32 <= ord(c) < 127 for c in got), \
+        "base64 produced a character AutoLISP could not hold"
+    print("   %sx%s: %d bytes, %d of them NUL, become %d ASCII characters"
+          % (size, size, len(raw), raw.count(0), len(got)))
+
+# MSXML is tried before the safearray, because the safearray is the
+# thing that failed in the field
+src = open(LSP).read()
+i_msxml = src.index('lzp:bytes-msxml bytes')
+i_safe = src.index("'vlax-make-safearray", src.index('defun lzp:bytearray'))
+assert i_msxml < i_safe, \
+    "the safearray is tried before MSXML -- that is the order that failed"
+print("   MSXML is tried first; the safearray spellings remain as fallbacks")
 
 
 print("== no support folder: full temp paths, the best that is left ==")

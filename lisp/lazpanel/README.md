@@ -159,6 +159,28 @@ you have docked or moved is left where you put it.
 
 Two details worth knowing, because both were wrong first time round:
 
+- **The bytes travel as base64.** `ADODB.Stream`'s `Write` wants a
+  `VT_UI1` byte array and nothing else, and AutoLISP cannot reliably
+  make one: `vlax-make-safearray`'s documented type constants stop at
+  `vlax-vbVariant`, `VT_UI1` (17) is not among them, and whether a
+  given release accepts it anyway is a property of that release. Where
+  it is refused, the old fallback built a `vbInteger` (`VT_I2`) array
+  and `Write` rejected it outright --
+
+  ```
+    written : NO - writing ...lazpanel-16.bmp failed: ADODB.Stream:
+    Arguments are of the wrong type, are out of acceptable range, or
+    are in conflict with one another.
+  ```
+
+  -- which is a blank button rather than a wrong one, and was reported
+  from the field. The way round it is to stop building a byte array in
+  AutoLISP at all: base64 is a pure-ASCII encoding of arbitrary bytes,
+  so the icon can be carried in an ordinary string, and MSXML's
+  `bin.base64` element turns that string back into a real byte array
+  on the other side. Both components ship with Windows, and the
+  toolbar already needs COM. The safearray spellings stay as
+  fallbacks, so a machine where they do work is no worse off.
 - **The icon is written through an `ADODB.Stream` in binary mode, not
   with `write-char`.** AutoLISP writes text-mode files and has no NUL
   in its character model at all -- `(chr 0)` is the empty string --
@@ -261,8 +283,10 @@ the CUI's own test -- `findfile` on the name it handed over -- and says
 
 The two steps most likely to fail, and what they mean:
 
-- **`written : NO`** -- the bytes never reached the disk. The reason is
-  printed after it. The usual cause is the byte array: writing binary
+- **`written : NO`** -- the bytes never reached the disk. Three lines
+  now say why: `array` names the route that produced (or failed to
+  produce) the byte array, `died at` names the COM call that refused,
+  and `written` carries the message itself. One report pins it. The usual cause is the byte array: writing binary
   from AutoLISP needs a `VT_UI1` safearray, and `vlax-make-safearray`'s
   documented type constants stop at `vlax-vbVariant`, so whether type
   17 is accepted is a property of the release rather than of this code.
