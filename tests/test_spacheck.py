@@ -139,7 +139,7 @@ def test_water_edge_nesting_passes():
     """Both outlines drawn: the water's edge is inside the cover."""
     vm = build([None, 'Coversize', 'Rectangle', None,
                 84.0, None, '90', None, None, None,
-                'Yes', 'Offset', 3.0, 'No'])
+                'No', 'Yes', 'Offset', 3.0])
     txt = report_of(vm)
     assert 'contains water' in txt, txt
     assert not any('NOT INSIDE' in p for p in problems(txt)), problems(txt)
@@ -185,7 +185,7 @@ def test_overall_dims_are_found_and_agree():
 def test_overlap_dim_is_found():
     vm = build([None, 'Coversize', 'Rectangle', None,
                 84.0, None, '90', None, None, None,
-                'Yes', 'Offset', 3.0, 'No'])
+                'No', 'Yes', 'Offset', 3.0])
     txt = report_of(vm)
     assert 'Overlap: 3' in txt, txt
     assert not any('NO ' in p and 'Overlap' in p for p in problems(txt))
@@ -195,7 +195,7 @@ def test_missing_overlap_is_caught():
     """Delete the Overlap dimension and SPACHECK names it."""
     vm = build([None, 'Coversize', 'Rectangle', None,
                 84.0, None, '90', None, None, None,
-                'Yes', 'Offset', 3.0, 'No'])
+                'No', 'Yes', 'Offset', 3.0])
     # erase every dimension whose text carries the Overlap note
     for e in list(vm.entities):
         if e in vm.deleted:
@@ -298,7 +298,7 @@ def test_hinges_drawn_by_spa_are_read_back():
     reads the same arrangement off the chart, and fits the same foam."""
     vm = build([None, 'Coversize', 'Rectangle', None, 230.0, 60.0,
                 '90', None, None, None,
-                'No', 'Yes', 'No', None, '4-3'])
+                'Yes', 'No', None, '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     txt = report_of(vm)
     assert 'Hinges: 4 drawn, so 5 pieces (STD 4-3)' in txt, txt
@@ -313,7 +313,7 @@ def test_piece_count_off_the_foam_sheet_is_flagged():
     two tools disagree about the same chart."""
     vm = build([None, 'Coversize', 'Rectangle', None, 230.0, 60.0,
                 '90', None, None, None,
-                'No', 'Yes', 'No', None, '4-3'])
+                'Yes', 'No', None, '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     bad = problems(report_of(vm))
     assert any('5 is NOT an acceptable count' in p for p in bad), bad
@@ -342,7 +342,7 @@ def test_thermolight_with_a_fold_hinge_is_caught():
     block's rule -- Thermo-Light is velcro only."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
                 '90', None, None, None,
-                'No', 'Yes', 'No', None, '1-3/8'])
+                'Yes', 'No', None, '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     bad = problems(report_of(vm))
     assert any('reads H V but the chart says V V' in p for p in bad), bad
@@ -353,7 +353,7 @@ def test_hardware_advice_only_speaks_up_when_needed():
     for, and the three "no" answers must not be dressed as advice."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
                 '90', None, None, None,
-                'No', 'Yes', 'No', None, '1-3/8'])
+                'Yes', 'No', None, '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     txt = report_of(vm)
     assert 'Velcro hinges: YES - always for this grade' in txt, txt
@@ -391,7 +391,7 @@ def test_hinges_without_a_cover_outline_still_audit():
 def test_octagon_audits_clean():
     vm = build([None, 'Coversize', 'OCtagon', None, 95.0, None,
                 'NA', 'NA', 'NA', 'NA', 'NA',
-                'No', 'Yes', 'No', None, '4-3'])
+                'Yes', 'No', None, '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     border(vm, 422.4, 326.175)
     assert problems(report_of(vm)) == []
@@ -399,7 +399,7 @@ def test_octagon_audits_clean():
 
 def test_round_audits_clean():
     vm = build([None, 'Coversize', 'ROund', None, 84.0,
-                'No', 'Yes', 'No', None, '4-3'])
+                'Yes', 'No', None, '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     border(vm, 422.4, 326.175)
     assert problems(report_of(vm)) == []
@@ -413,7 +413,7 @@ def test_the_guided_walk_marks_and_rescue_puts_it_back():
     take the report away with it."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
                 '90', None, None, None,
-                'No', 'Yes', 'No', None, '1-3/8'])
+                'Yes', 'No', None, '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     vm.load(CHK)
 

@@ -27,7 +27,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082126 REV05")
+(setq tut:*version* "082626 REV06")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -100,17 +100,30 @@
     "    the number -- 600mm, 1524 MM -- and is converted to inches."
     "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
     "    Corner A's answer autofills B, C and D -- Enter accepts."
-    "7.  Draw the other outline as well?  By Offset (give the lap) or by"
+    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
+    "    then the grade and taper if the block did not give them."
+    "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
+    "    is dodged by turning the spa, and nothing already on the screen"
+    "    can be turned.  The hinges are drawn at the end all the same."
+    "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
-    "    Skipped on Thermo-Light."
-    "8.  Auto-hinge?  Then the spillaways, in a loop defaulting to No."))
+    "    Skipped on Thermo-Light."))
 
 (setq tut:*decides*
   (list
-    "*   ORIENTATION.  The long overall always ends up running west to"
-    "    east.  A taller-than-wide cover is turned a quarter turn, and"
-    "    the corner treatments and their letters travel round with it,"
-    "    so the corner you called B is still B in the report."
+    "*   ORIENTATION.  The long overall normally ends up running west"
+    "    to east.  A taller-than-wide cover is turned a quarter turn,"
+    "    and the corner treatments and their letters travel round with"
+    "    it, so the corner you called B is still B in the report."
+    "*   WHETHER TO TURN FOR A SPILLWAY.  Hinges run north-south, so a"
+    "    spillway on the top or bottom wall blocks every one of them"
+    "    while the same spillway on a side wall blocks none.  If the"
+    "    hinges cannot be got clear one way round and can the other,"
+    "    the spa is turned -- unless the turn would run the hinges past"
+    "    the foam length.  The drawing says which turn it took and why."
+    "*   WHERE THE CORNER LETTERS GO.  Not on the drawing: on a small"
+    "    copy of the outline beside the report, so the sheet carries"
+    "    nothing but geometry and dimensions."
     "*   WHICH DIMS GO WHERE.  The cover's overalls go outside it -- 2 ft"
     "    above, 3 ft to the left.  When both outlines are drawn the"
     "    water's edge's go a third of the way INTO the water's edge."
@@ -188,7 +201,8 @@
     "DIMENSION    every dimension, in standard inches (fractional to"
     "             1/8\" with the inch mark), always outside the shape"
     "TEXT         the Hinge / Velcro Hinge labels"
-    "SPA-NOTES    corner letters, the mode note, the report table"
+    "SPA-NOTES    the mini-model and its corner letters, the mode"
+    "             note, the report table"
     ""
     "Freeze SPA-NOTES and what is left is the outline and its"
     "dimensions -- the drawing as the order sheet shows it."))
@@ -227,7 +241,7 @@
 
 (defun tut:demo ( / base w l cut gap corners quad cen doff th arcs
                     w2 l2 c2 org2 q2 ip2 sb2 desc n xs res nmin htys
-                    k x ch rows stop)
+                    k x ch rows stop rbox)
   (setq base (getpoint "\nWhere shall the demo go <0,0>: ")
         spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
   (setvar "OSMODE" 0)
@@ -414,6 +428,10 @@
               "Recommendations print in CYAN.  This 110\" hinge is over"
               "108\", so Standard & Deluxe calls for a double C channel."
               ""
+              "Beside the table goes the MINI-MODEL: a small copy of the"
+              "outline carrying the corner letters, so the sheet itself"
+              "stays clear of them."
+              ""
               "The whole run is one UNDO group: a single U clears it.")
         '(lambda ()
            (spa:advise "DOUBLE C CHANNEL: YES - hinge 110.0 over 108")
@@ -428,7 +446,12 @@
                             (list "PIECES (STD 4-3)" nil (float n))
                             (list "FOAM WIDTH MAX" tut:*fw* (/ w n))
                             (list "FOAM LENGTH MAX" tut:*fl* l)))
-           (spa:report rows nil (+ w spa:*dimoff*) l th "SPA-NOTES"))))
+           (setq rbox (spa:report rows nil (+ w spa:*dimoff*) l th
+                                   "SPA-NOTES"))
+           (spa:minimap (spa:rectprims quad corners) quad
+                        (spa:mlbls quad (list "A" "B" "C" "D"))
+                        (+ (car rbox) (* 3.0 th)) (cadr rbox)
+                        (* 24.0 th) th))))
 
   (tut:head "THAT IS THE WHOLE THING")
   (tut:say "  Type SPA to do it for real.  The grey guide will show you")

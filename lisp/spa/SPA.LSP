@@ -64,13 +64,20 @@
 ;;;
 ;;;  AUTO-HINGE
 ;;;  ----------
-;;;  After the cover is dimensioned the command offers to auto-hinge it.
-;;;  Spillaways (corner or centred-on-a-wall) are asked first as no-go
-;;;  zones, then the "Spa Cover Details" block supplies the grade and
-;;;  taper, which set the foam width (max hinge spacing), foam length
-;;;  (max hinge run) and the acceptable piece counts.  A taper can carry
-;;;  MORE THAN ONE foam sheet and one may work where the other will not,
-;;;  so every sheet is solved and scored before fewest pieces decides.
+;;;  The command offers to auto-hinge the cover.  The offer, and the
+;;;  spillaways and the grade / taper behind it, are ASKED AS SOON AS
+;;;  THE SPA IS MEASURED -- before a line is drawn -- because their
+;;;  answers can still turn the spa (see THE QUARTER TURN below), and
+;;;  nothing already on the screen can be turned.  The hinges themselves
+;;;  are drawn at the end, on whichever outline they belong to.
+;;;
+;;;  Spillaways (corner or centred-on-a-wall) are the no-go zones, and
+;;;  they are answered against the spa AS MEASURED; the "Spa Cover
+;;;  Details" block supplies the grade and taper, which set the foam
+;;;  width (max hinge spacing), foam length (max hinge run) and the
+;;;  acceptable piece counts.  A taper can carry MORE THAN ONE foam
+;;;  sheet and one may work where the other will not, so every sheet is
+;;;  solved and scored before fewest pieces decides.
 ;;;  The longest hinge is then checked against the hinge-length chart
 ;;;  and velcro hinges / double C channel / hold down kit recommended.  The fewest hinges
 ;;;  that fit are placed evenly and nudged off the no-go zones; fold
@@ -78,6 +85,33 @@
 ;;;  from both ends), labels on the TEXT layer.  Anything out of spec --
 ;;;  foam length exceeded, piece count not acceptable, a zone that
 ;;;  could not be dodged -- is still drawn but flagged in the report.
+;;;
+;;;  THE QUARTER TURN
+;;;  ----------------
+;;;  The spa is drawn with its long overall running west to east, which
+;;;  can mean turning it a quarter turn clockwise from the way it was
+;;;  measured; the corners, their treatments and their letters all
+;;;  travel with the shape.
+;;;
+;;;  Hinges run north-south, so a spillaway on the top or the bottom
+;;;  wall stands in the way of every one of them -- while the same
+;;;  spillaway on a LEFT or RIGHT wall cannot touch any.  A quarter turn
+;;;  moves it there, so when the spa laid out the way the long-overall
+;;;  rule wants cannot get a hinge clear of a spillaway and the other
+;;;  way round can, the spillway wins and the spa is turned.  Both ways
+;;;  round are scored on the same three things the layout is scored on
+;;;  -- dodging every zone, fitting the foam length, an acceptable piece
+;;;  count -- so the turn is never taken to clear a zone at the price of
+;;;  a hinge that overruns the foam.  The drawing says which turn it
+;;;  took and why, under the outline.
+;;;
+;;;  THE MINI-MODEL
+;;;  --------------
+;;;  The corner letters are not written on the drawing.  They go on a
+;;;  small copy of the outline beside the report table -- the same move
+;;;  POOL made -- so the drawing itself carries nothing but geometry and
+;;;  dimensions, and the report's rows (OVERALL ACROSS (A-B), CORNER C
+;;;  RADIUS) still read back against a picture of the shape.
 ;;;
 ;;;  DIMENSION STYLES
 ;;;  ----------------
@@ -172,7 +206,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082126 REV05")
+(setq spa:*version* "082626 REV06")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -232,6 +266,9 @@
 (setq spa:*dsfac*    0.5)                     ; its furniture factor
 (setq spa:*odstyle*  nil)            ; the drawing's dim style before we ran
 (setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
+(setq spa:*spillturn* nil)           ; ...and it was the spillway that turned it
+(setq spa:*hingeon*   nil)           ; the cover is being auto-hinged
+(setq spa:*spills*    nil)           ; spillaways, as measured (see spa:askspill)
 (setq spa:*hingerows* nil)           ; hinge/spillaway rows for the report
 (setq spa:*advice*    nil)           ; hardware recommendations
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
@@ -908,6 +945,8 @@
 
 ;; rows  = list of (label target actual [red]); a nil target prints N/A
 ;; notes = list of failure strings (written big and red)
+;; Returns the table's box as (xr ytop y0) so the caller can hang the
+;; perimeter mini-model off its right edge (spa:minimap).
 (defun spa:report (rows notes x y h lay / lh ytop y0 xr r tgt act dl ds n)
   (setq lh (* 2.2 h)
         ytop (+ y lh)
@@ -947,7 +986,114 @@
   (spa:line (list xr y0) (list xr ytop) lay nil)
   (spa:line (list xr ytop) (list (- x h) ytop) lay nil)
   (spa:line (list (- x h) ytop) (list (- x h) y0) lay nil)
+  (list xr ytop y0))
+
+;;; -------------------- the mini-model ---------------------------------
+;;;
+;;;  The corner letters used to sit on the corners of the full-size
+;;;  drawing, where they crowd the dimensions, the corner callouts and
+;;;  the hinge labels.  They live on a small copy of the outline beside
+;;;  the report instead -- the same move POOL made -- so the drawing
+;;;  itself carries nothing but its geometry and its dimensions, and the
+;;;  report's rows still read back against a picture of the shape.
+
+;; Map a spa-space point into the mini-model's box.  Called only from
+;; spa:minimap -- sc / ox / oy / xmin / ymax are ITS locals, seen here
+;; through dynamic scope (top-left anchored, y measured downward).
+(defun spa:mms (p)
+  (list (+ ox (* sc (- (car p) xmin)))
+        (- oy (* sc (- ymax (cadr p))))))
+
+;; The perimeter mini-model drawn beside the report: the outline at a
+;; small fixed size with the corner LETTERS on it.
+;;   prims  ('l p1 p2) line | ('a p1 pmid p2) arc as three points
+;;          (uniform scaling keeps an arc an arc) | ('rb cen b a) a
+;;          round / elliptical body
+;;   poly   the corner ring, for keeping letters outside the outline
+;;          (nil -> plain outward-from-centre offsets)
+;;   lbls   ((pt . "A") ...); nil on a shape with no corners
+;;   x y    top-left anchor (report space); size = the fit box
+(defun spa:minimap (prims poly lbls x y size th / pts p l xmin xmax ymin ymax
+                                                  sc ox oy w hh spoly cen tx
+                                                  lth)
+  (setq pts nil)
+  (foreach p prims
+    (if (eq (car p) 'rb)
+        (setq pts (cons (spa:v- (cadr p) (list (* 0.5 (caddr p))
+                                               (* 0.5 (cadddr p))))
+                        (cons (spa:v+ (cadr p) (list (* 0.5 (caddr p))
+                                                     (* 0.5 (cadddr p))))
+                              pts)))
+        (setq pts (append (cdr p) pts))))
+  (foreach l lbls (setq pts (cons (car l) pts)))
+  (if pts
+      (progn
+        (setq xmin (apply 'min (mapcar 'car pts))
+              xmax (apply 'max (mapcar 'car pts))
+              ymin (apply 'min (mapcar 'cadr pts))
+              ymax (apply 'max (mapcar 'cadr pts))
+              w (max 1.0e-6 (- xmax xmin))
+              hh (max 1.0e-6 (- ymax ymin))
+              sc (min (/ size w) (/ size hh))
+              ox x oy y
+              lth (* 1.4 th))
+        (foreach p prims
+          (cond
+            ((eq (car p) 'l)
+             (spa:line (spa:mms (cadr p)) (spa:mms (caddr p)) "SPA-NOTES" nil))
+            ((eq (car p) 'a)
+             (spa:arc3p (spa:mms (cadr p)) (spa:mms (caddr p))
+                        (spa:mms (cadddr p)) "SPA-NOTES" nil))
+            ((eq (car p) 'rb)
+             (spa:body-round (spa:mms (cadr p)) (* sc (caddr p))
+                             (* sc (cadddr p)) "SPA-NOTES" nil))))
+        (setq spoly (if poly (mapcar 'spa:mms poly))
+              cen (list 0.0 0.0))
+        (foreach l lbls (setq cen (spa:v+ cen (spa:mms (car l)))))
+        (if lbls (setq cen (spa:v* cen (/ 1.0 (length lbls)))))
+        (foreach l lbls
+          (setq tx (spa:mms (car l)))
+          (spa:text (if spoly
+                        (spa:lbloff tx cen spoly (* 1.6 lth))
+                        (spa:v+ tx (spa:v* (spa:unit (spa:v- tx cen))
+                                           (* 1.6 lth))))
+                    lth (cdr l) "SPA-NOTES"))))
   (princ))
+
+;; ((point . letter) ...) for the mini-model, corners in their own order.
+(defun spa:mlbls (pts names / out i p)
+  (setq out nil i 0)
+  (foreach p pts
+    (setq out (cons (cons p (nth i names)) out)
+          i (1+ i)))
+  (reverse out))
+
+;; A closed ring of points as mini-model line primitives.
+(defun spa:polyprims (pts / out n i)
+  (setq out nil n (length pts) i 0)
+  (while (< i n)
+    (setq out (cons (list 'l (nth i pts) (nth (rem (1+ i) n) pts)) out)
+          i (1+ i)))
+  out)
+
+;; The rectangle as mini-model primitives: the straight run between one
+;; corner's treatment and the next corner's, plus the treatment itself
+;; -- an arc on a Radius corner, the cut face on a Diagonal, nothing on
+;; a 90 (its two ends are the corner).
+(defun spa:rectprims (q corners / ce out i n)
+  (setq ce (spa:allends q corners) out nil i 0)
+  (while (< i 4)
+    (setq n (rem (1+ i) 4)
+          out (cons (list 'l (cadr (nth i ce)) (car (nth n ce))) out))
+    (cond
+      ((caddr (nth i ce))
+       (setq out (cons (list 'a (car (nth i ce)) (caddr (nth i ce))
+                             (cadr (nth i ce)))
+                       out)))
+      ((> (distance (car (nth i ce)) (cadr (nth i ce))) 1.0e-9)
+       (setq out (cons (list 'l (car (nth i ce)) (cadr (nth i ce))) out))))
+    (setq i (1+ i)))
+  out)
 
 ;; The Water's Edge / Cover Size note under the drawing, plus a line
 ;; saying so when the cover was turned to lie long-ways.
@@ -956,7 +1102,9 @@
              (strcat "SPA OUTLINE DRAWN AT " spa:*modename*) "SPA-NOTES" 7)
   (if spa:*turned*
       (spa:textc (list x (- y (* 2.2 th))) (* 1.2 th)
-                 "TURNED A QUARTER TURN - LONG OVERALL RUNS ACROSS"
+                 (if spa:*spillturn*
+                     "TURNED A QUARTER TURN - HINGES CLEAR OF THE SPILLWAY"
+                     "TURNED A QUARTER TURN - LONG OVERALL RUNS ACROSS")
                  "SPA-NOTES" 7)))
 
 ;;; -------------------- water's edge <-> cover -------------------------
@@ -1467,26 +1615,28 @@
 (defun spa:hask (msg back)
   (spa:askd msg nil nil back))
 
-;; Ask the spillaways.  Returns the forbidden x-intervals.
+;; Ask the spillaways.  Returns them as measured -- (kind name length),
+;; kind "Corner" or "Wall" -- NOT as x-intervals: the spa may still be
+;; turned a quarter turn to get a hinge clear of one, and the turn is
+;; applied where the zones are worked out (spa:spillzones).
 ;;
 ;; This is one of the repo's commit-as-you-go loops, so Back follows
 ;; that convention: it steps back a question within a spillaway, and
 ;; from the first question of one it REMOVES the spillaway just
-;; committed -- its zone and its report row -- before re-asking.  The
-;; feedback wording is the shared one.
-(defun spa:askspill (x1 x2 / forb loc cnr d wall len v stage done)
-  (setq forb nil done nil)
+;; committed before re-asking.  The feedback wording is the shared one.
+(defun spa:askspill ( / spills loc cnr d wall v stage done)
+  (setq spills nil done nil)
+  (princ "\n(a spillaway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
   (while (not done)
     (setq v (spa:askkw "Is there a spillaway" "Yes No" "Yes/No" "No"
-                       (if forb t nil)))
+                       (if spills t nil)))
     (cond
       ;; Back from the top question: drop the last spillaway and re-ask
       ((eq v 'SPA-BACK)
-       (if forb
+       (if spills
            (progn
              (princ "\nStepping back one spillaway.")
-             (setq forb (cdr forb)
-                   spa:*hingerows* (reverse (cdr (reverse spa:*hingerows*)))))
+             (setq spills (cdr spills)))
            (princ "\nAlready at the first spillaway.")))
       ((= v "No") (setq done t))
       (t
@@ -1516,30 +1666,88 @@
                 (setq stage 1)
                 (progn
                   ;; commit it
-                  (if (= loc "Corner")
-                      (progn
-                        (if (member cnr '("BottomLeft" "TopLeft"))
-                            (setq forb (cons (list x1 (+ x1 d)) forb))
-                            (setq forb (cons (list (- x2 d) x2) forb)))
-                        (setq spa:*hingerows*
-                              (append spa:*hingerows*
-                                      (list (list (strcat "SPILLWAY "
-                                                          (strcase cnr))
-                                                  nil d)))))
-                      (progn
-                        (if (member wall '("Top" "Bottom"))
-                            (setq forb
-                                  (cons (list (- (* 0.5 (+ x1 x2)) (* 0.5 d))
-                                              (+ (* 0.5 (+ x1 x2)) (* 0.5 d)))
-                                        forb))
-                            (princ "\n(a left/right wall spillaway cannot meet a north-south hinge; recorded only)"))
-                        (setq spa:*hingerows*
-                              (append spa:*hingerows*
-                                      (list (list (strcat "SPILLWAY "
-                                                          (strcase wall) " WALL")
-                                                  nil d))))))
+                  (setq spills (cons (if (= loc "Corner")
+                                         (list "Corner" cnr d)
+                                         (list "Wall" wall d))
+                                     spills))
+                  (if (and (= loc "Wall") (member wall '("Left" "Right")))
+                      (princ "\n(a left/right wall spillaway cannot meet a north-south hinge)"))
                   (setq stage 3)))))))))
+  (reverse spills))
+
+;;; ---------- spillaways in drawing space ----------
+;;;
+;;;  One quarter turn CLOCKWISE is the turn this file makes, and it
+;;;  carries every wall and corner round with the shape:
+;;;
+;;;      bottom -> left    right -> bottom    top -> right    left -> top
+;;;      A (BL) -> TL      B (BR) -> BL       C (TR) -> BR    D (TL) -> TR
+;;;
+;;;  which is the whole reason a turn can save a hinge: a spillaway that
+;;;  was on the top or the bottom wall, square in the path of every
+;;;  north-south hinge, comes to rest on a side wall where no hinge can
+;;;  reach it.
+
+;; A wall name after the turn (nil turn = as measured).
+(defun spa:spillwall (w turn)
+  (if turn
+      (cond ((= w "Bottom") "Left")
+            ((= w "Right") "Bottom")
+            ((= w "Top") "Right")
+            (t "Top"))
+      w))
+
+;; A corner name after the turn.
+(defun spa:spillcnr (c turn)
+  (if turn
+      (cond ((= c "BottomLeft") "TopLeft")
+            ((= c "BottomRight") "BottomLeft")
+            ((= c "TopRight") "BottomRight")
+            (t "TopRight"))
+      c))
+
+;; The forbidden x-intervals a spillaway list makes of the run [x1 x2]
+;; with the shape drawn turned or not.  A corner spillaway blocks its
+;; typed length in from that end of the run; a top or bottom wall one
+;; blocks its length centred on the wall; a left or right wall one
+;; blocks nothing at all -- no north-south hinge can meet it.
+(defun spa:spillzones (spills x1 x2 turn / forb sp nm d)
+  (setq forb nil)
+  (foreach sp spills
+    (setq d (caddr sp))
+    (if (= (car sp) "Corner")
+        (progn
+          (setq nm (spa:spillcnr (cadr sp) turn))
+          (if (member nm '("BottomLeft" "TopLeft"))
+              (setq forb (cons (list x1 (+ x1 d)) forb))
+              (setq forb (cons (list (- x2 d) x2) forb))))
+        (progn
+          (setq nm (spa:spillwall (cadr sp) turn))
+          (if (member nm '("Top" "Bottom"))
+              (setq forb (cons (list (- (* 0.5 (+ x1 x2)) (* 0.5 d))
+                                     (+ (* 0.5 (+ x1 x2)) (* 0.5 d)))
+                               forb))))))
   forb)
+
+;; One report row per spillaway, named as it was MEASURED -- that is how
+;; the field sheet reads -- with where it ended up on the drawing added
+;; when the turn moved it.
+(defun spa:spillrows (spills turn / rows sp nm as)
+  (setq rows nil)
+  (foreach sp spills
+    (setq nm (cadr sp)
+          as (if (= (car sp) "Corner")
+                 (spa:spillcnr nm turn)
+                 (spa:spillwall nm turn))
+          rows (append rows
+                       (list (list (strcat "SPILLWAY " (strcase nm)
+                                           (if (= (car sp) "Wall") " WALL" "")
+                                           (if (= as nm)
+                                               ""
+                                               (strcat " (DRAWN " (strcase as)
+                                                       ")")))
+                                   nil (caddr sp))))))
+  rows)
 
 ;; Is this a Thermo-Light cover?  Its water's edge and cover size are
 ;; the same thing, and every one of its hinges is velcro.
@@ -1593,74 +1801,153 @@
       (progn (setq spa:*taper* nil) 'SPA-BACK)
       (list spa:*grade* spa:*taper*)))
 
-;; The whole auto-hinge pass.  desc / x1 / x2 describe the COVER
+;;; ---------- the foam sheet and the best layout on it ----------
+
+;; The foam sheets a grade + taper may be cut from: (options counts got).
+;; An Economy taper that only the Standard sheet carries falls back to
+;; Standard; nothing on the sheet at all falls back to 48 x 96 with the
+;; flag down.  It says nothing itself -- this is asked twice, once to
+;; settle which way round the spa is drawn and once to lay the hinges
+;; out -- so the caller that draws does the reporting.
+(defun spa:foamopts (grade taper / row r)
+  (foreach r spa:*foamtab*
+    (if (and (not row) (= (car r) grade) (= (cadr r) taper))
+        (setq row r)))
+  (if (not row)
+      (foreach r spa:*foamtab*
+        (if (and (not row) (= (car r) "STANDARD") (= (cadr r) taper))
+            (setq row r))))
+  (if row
+      (list (caddr row) (cadddr row) t)
+      (list (list (cons 48.0 96.0)) (list 2 3 4 5) nil)))
+
+;; The best layout over every foam sheet the taper carries.  A
+;; grade/taper can carry MORE THAN ONE -- Standard 3-2 and 4-2 each come
+;; in a 48 x 144/96 and a 49-1/2 x 102 -- and one can work where the
+;; other will not: the wider sheet needs fewer hinges, the longer one
+;; lets a hinge run further.  So every option is solved and SCORED on
+;; what it satisfies -- dodging the spillaways (4), fitting the foam
+;; length (2), an acceptable piece count (1) -- and only then on fewest
+;; pieces.  Returns (n xs fw fl solved lenok pcok maxchord score).
+(defun spa:hbest (desc x1 x2 forb opts allowed / best bestsc opt fw fl nmin
+                                                 res mc lenok pcok sc cand)
+  (setq best nil bestsc -1)
+  (foreach opt opts
+    (setq fw (car opt)
+          fl (cdr opt)
+          nmin (max 2 (spa:ceilv (/ (- x2 x1) fw)))
+          res (spa:hsolve x1 x2 fw forb nmin)
+          mc (spa:hmaxchord desc (cadr res))
+          lenok (or (null fl) (<= mc (+ fl 0.01)))
+          pcok (if (spa:hallow (car res) allowed) t nil)
+          sc (+ (if (caddr res) 4 0) (if lenok 2 0) (if pcok 1 0))
+          cand (list (car res) (cadr res) fw fl (caddr res) lenok pcok mc sc))
+    (if (or (null best)
+            (> sc bestsc)
+            (and (= sc bestsc) (< (car cand) (car best)))
+            ;; nothing to choose on either -> the longer sheet, so a
+            ;; hinge that overruns overruns by as little as it can
+            (and (= sc bestsc) (= (car cand) (car best))
+                 (> (if fl fl 0.0)
+                    (if (nth 3 best) (nth 3 best) 0.0))))
+        (setq best cand bestsc sc)))
+  best)
+
+;;; ---------- which way round to draw the spa ----------
+;;;
+;;;  Hinges run north-south, so a spillaway on the top or the bottom
+;;;  wall stands in the way of every one of them while the same
+;;;  spillaway on a side wall cannot touch any.  A quarter turn moves it
+;;;  there -- the drafter's own dodge -- and it is taken here whenever
+;;;  the spa laid out the way the long-overall rule wants cannot get its
+;;;  hinges clear and the other way round can.  Both ways round are
+;;;  scored on the layout score above, so the turn is never taken to
+;;;  clear a zone at the price of a hinge that overruns the foam.
+;;;
+;;;  It is a PROBE: nothing is drawn yet.  The run it measures is the
+;;;  outline in hand, which may still grow a water's edge (or a cover)
+;;;  afterwards -- a lap of an inch or three either way, against zones
+;;;  measured in feet.  The layout that is finally drawn is solved again
+;;;  on the real cover, in spa:hingeflow.
+
+;; c = (desc x1 x2), one way round.  Its layout score.
+(defun spa:hscore (c turn opts allowed)
+  (nth 8 (spa:hbest (car c) (cadr c) (caddr c)
+                    (spa:spillzones spa:*spills* (cadr c) (caddr c) turn)
+                    opts allowed)))
+
+;; pref = the way round the long-overall rule asks for (T = turned).
+;; c0 / c1 describe the spa unturned and turned.  Returns the way round
+;; to draw it: pref unless the other way round scores strictly better.
+(defun spa:pickturn (pref c0 c1 / fo opts allowed sp so)
+  (if (or (null spa:*hingeon*) (null spa:*spills*))
+      pref
+      (progn
+        (setq fo (spa:foamopts (if spa:*grade* spa:*grade* "STANDARD")
+                               spa:*taper*)
+              opts (car fo)
+              allowed (cadr fo)
+              sp (spa:hscore (if pref c1 c0) pref opts allowed)
+              so (spa:hscore (if pref c0 c1) (not pref) opts allowed))
+        (if (> so sp)
+            (progn
+              (setq spa:*spillturn* t)
+              (princ (strcat "\nA hinge cannot be got clear of the spillway that way round"
+                             " -- the spa is turned a quarter turn instead."))
+              (spa:advise "TURNED A QUARTER TURN TO CLEAR THE SPILLWAY")
+              (not pref))
+            pref))))
+
+;; The questions the hinges need, asked BEFORE the outline is drawn:
+;; the answers can still turn the spa at that point, and nothing that is
+;; already on the screen can be turned.  Fills spa:*spills* and the
+;; grade / taper globals; returns T when the cover is to be hinged.
+(defun spa:hingeask ( / gt)
+  (setq spa:*spills* nil
+        spa:*hingeon*
+        (= "Yes" (spa:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil)))
+  (if spa:*hingeon*
+      ;; 1 -- where hinges cannot go, then 2 -- grade + taper.  Back at
+      ;; the taper re-opens the spillaways, its previous question.
+      (progn
+        (setq gt 'SPA-BACK)
+        (while (eq gt 'SPA-BACK)
+          (setq spa:*spills* (spa:askspill)
+                gt (spa:askdetails)))))
+  spa:*hingeon*)
+
+;; The auto-hinge pass itself.  desc / x1 / x2 describe the COVER
 ;; outline; coverp nil means only the water's edge was drawn and the
-;; hinges are being laid on that.  Draws the hinges and returns report
-;; rows (also via spillaway rows gathered in spa:*hingerows*).
-(defun spa:hingeflow (desc x1 x2 th coverp / forb gt grade taper row r opts
-                         allowed best bestsc cand opt fw fl nmin res n xs
-                         mc lenok pcok sc hw h nm vd allvel htys hty
+;; hinges are being laid on that.  Everything it asks was asked before
+;; the spa was drawn (spa:hingeask); this draws the hinges on the
+;; outline as it ended up and returns the report rows.
+(defun spa:hingeflow (desc x1 x2 th coverp / forb grade taper fo opts allowed
+                         best n xs fw fl hw h nm vd allvel htys hty
                          k x ch maxch maxpc prev lbl)
   (setq spa:*hingerows* nil)
-  (if (/= "Yes" (spa:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil))
+  (if (not spa:*hingeon*)
       nil
       (progn
         (if (not coverp)
             (spa:valnote "NO COVER OUTLINE - HINGES LAID ON THE WATER'S EDGE"))
-        ;; 1 -- where hinges cannot go, then 2 -- grade + taper.  Back
-        ;; at the taper re-opens the spillaways, its previous question.
-        (setq gt 'SPA-BACK)
-        (while (eq gt 'SPA-BACK)
-          (setq forb (spa:askspill x1 x2)
-                gt (spa:askdetails)))
-        (setq grade (car gt) taper (cadr gt)
+        (setq grade (if spa:*grade* spa:*grade* "STANDARD")
+              taper spa:*taper*
               ;; Thermo-Light is velcro throughout -- no fold hinge
-              allvel (spa:thermop)
-              row nil)
+              allvel (spa:thermop))
         (if allvel
             (spa:advise "THERMO-LIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
-        (foreach r spa:*foamtab*
-          (if (and (not row) (= (car r) grade) (= (cadr r) taper))
-              (setq row r)))
-        (if (not row)                    ; e.g. an Economy taper only the
-            (foreach r spa:*foamtab*     ; Standard sheet carries
-              (if (and (not row) (= (car r) "STANDARD") (= (cadr r) taper))
-                  (setq row r))))
-        (if row
-            (setq opts (caddr row) allowed (cadddr row))
-            (progn
-              (spa:valnote (strcat "GRADE/TAPER " grade " " taper
-                                   " NOT ON THE FOAM SHEET - 48/96 ASSUMED"))
-              (setq opts (list (cons 48.0 96.0)) allowed (list 2 3 4 5))))
-        ;; 3 -- pick the foam option and the layout.
-        ;; A grade/taper can carry MORE THAN ONE foam sheet -- Standard
-        ;; 3-2 and 4-2 each come in a 48 x 144/96 and a 49-1/2 x 102 --
-        ;; and one can work where the other will not: the wider sheet
-        ;; needs fewer hinges, the longer one lets a hinge run further.
-        ;; So every option is solved and scored on what it satisfies --
-        ;; dodging the spillaways, fitting the foam length, an
-        ;; acceptable piece count -- and only then on fewest pieces.
-        (setq best nil bestsc -1)
-        (foreach opt opts
-          (setq fw (car opt)
-                fl (cdr opt)
-                nmin (max 2 (spa:ceilv (/ (- x2 x1) fw)))
-                res (spa:hsolve x1 x2 fw forb nmin)
-                mc (spa:hmaxchord desc (cadr res))
-                lenok (or (null fl) (<= mc (+ fl 0.01)))
-                pcok (if (spa:hallow (car res) allowed) t nil)
-                sc (+ (if (caddr res) 4 0) (if lenok 2 0) (if pcok 1 0))
-                cand (list (car res) (cadr res) fw fl (caddr res) lenok pcok mc))
-          (if (or (null best)
-                  (> sc bestsc)
-                  (and (= sc bestsc) (< (car cand) (car best)))
-                  ;; nothing to choose on either -> the longer sheet, so
-                  ;; a hinge that overruns overruns by as little as it can
-                  (and (= sc bestsc) (= (car cand) (car best))
-                       (> (if fl fl 0.0)
-                          (if (nth 3 best) (nth 3 best) 0.0))))
-              (setq best cand bestsc sc)))
-        (setq n (car best) xs (cadr best) fw (caddr best) fl (nth 3 best))
+        (setq fo (spa:foamopts grade taper)
+              opts (car fo)
+              allowed (cadr fo))
+        (if (not (caddr fo))
+            (spa:valnote (strcat "GRADE/TAPER " grade " " taper
+                                 " NOT ON THE FOAM SHEET - 48/96 ASSUMED")))
+        ;; 3 -- the spillaway zones as the spa was finally drawn, then
+        ;; the foam sheet and the layout on it
+        (setq spa:*hingerows* (spa:spillrows spa:*spills* spa:*turned*)
+              forb (spa:spillzones spa:*spills* x1 x2 spa:*turned*)
+              best (spa:hbest desc x1 x2 forb opts allowed)
+              n (car best) xs (cadr best) fw (caddr best) fl (nth 3 best))
         (if (not (nth 4 best))
             (spa:valnote "SPILLAWAY ZONES COULD NOT ALL BE AVOIDED - CHECK HINGES"))
         (if (not (spa:hallow n allowed))
@@ -2017,7 +2304,8 @@
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
                         a b c d cen doff th allsame i j tmp lbls cc back
                         rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
-                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done)
+                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done turn
+                        rbox)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -2086,19 +2374,36 @@
   (spa:stages (list 'rc:sides 'rc:corners))
   (spa:pvkill)
 
+  ;; -------------------------------------------------- hinges, asked now
+  ;; The hinge questions come BEFORE anything is drawn because their
+  ;; answers can still turn the spa -- a spillaway no north-south hinge
+  ;; can dodge is dodged by turning the cover instead, and there is no
+  ;; turning it once it is on the screen.  The hinges themselves are
+  ;; drawn at the end, on whichever outline they belong to.
+  (spa:hingeask)
+
   ;; -------------------------------------------------- orientation
   ;; The long overall always runs west to east, whichever order the two
   ;; were typed in.  Turning the cover a quarter turn clockwise carries
   ;; the corners round with it: the corner that was B lands bottom-left,
   ;; so the treatments and their letters rotate one step with the shape.
-  (if (> l w)
+  ;; A spillaway that blocks every hinge one way round and none the
+  ;; other overrules the long overall -- see spa:pickturn.
+  (setq turn (spa:pickturn
+               (> l w)
+               (list (list "RECT" (spa:quadat (list 0.0 0.0) w l) corners)
+                     0.0 w)
+               (list (list "RECT" (spa:quadat (list 0.0 0.0) l w)
+                           (append (cdr corners) (list (car corners))))
+                     0.0 l)))
+  (if turn
       (setq tmp w
             w l
             l tmp
             corners (append (cdr corners) (list (car corners)))
             lbls (append (cdr lbls) (list (car lbls)))
             spa:*turned* t))
-  (if spa:*turned*
+  (if (and spa:*turned* (not spa:*spillturn*))
       (princ "\nThe long overall runs across, so the cover is drawn a quarter turn over."))
 
   (setq quad (spa:quadat (list 0.0 0.0) w l)
@@ -2224,14 +2529,10 @@
       nil)
   (setvar "CLAYER" oldclay)
 
-  ;; -------------------------------------------------- labels + report
-  ;; the letters travel with their corners, so a turned cover still reads
-  ;; back against the report table
-  (setq i 0)
-  (foreach lbl quad
-    (spa:text (spa:v+ lbl (spa:v* (spa:unit (spa:v- lbl cen)) (* 1.6 th)))
-              th (nth i lbls) "SPA-NOTES")
-    (setq i (1+ i)))
+  ;; -------------------------------------------------- report
+  ;; the corner letters are NOT written on the drawing: they go on the
+  ;; mini-model beside the report, below.  The letters travel with their
+  ;; corners, so a turned cover still reads back against the table.
   (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list (strcat "OVERALL ACROSS (" (nth 0 lbls) "-" (nth 1 lbls) ")")
                          w w)
@@ -2268,7 +2569,11 @@
           (t
            (spa:hingeflow (list "RECT" quad corners) 0.0 w th nil))))
   (if hrows (setq rows (append rows hrows)))
-  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
+  (setq rbox (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th
+                         "SPA-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the report
+  (spa:minimap (spa:rectprims quad corners) quad (spa:mlbls quad lbls)
+               (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -2366,7 +2671,7 @@
                        ovres s tv s1 v pts cen doff th e p q k rows
                        tact vact s2act alleq tmp
                        mode1 meth g kk b2 a2 s2 s12 ovr org2 pts2 cen2
-                       xlo xhi ylo yhi out1 ip1 ip2 hrows done)
+                       xlo xhi ylo yhi out1 ip1 ip2 hrows done turn rbox)
   (setq oldclay (getvar "CLAYER")
         pvs (spa:octpreview)
         pv (car pvs) pvo (cdr pvs))
@@ -2415,17 +2720,26 @@
         (setq s1 (min 6.0 (* 0.125 aov)) v (- aov s1 s1))
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
+  ;; -------------------------------------------------- hinges, asked now
+  ;; before anything is drawn, so a spillaway can still turn the spa
+  (spa:hingeask)
+
   ;; -------------------------------------------------- orientation
   ;; the long overall runs west to east; a quarter turn swaps the two
-  ;; overalls and, with them, the flats and the cut legs
-  (if (> aov bov)
+  ;; overalls and, with them, the flats and the cut legs.  A spillaway
+  ;; no hinge can dodge one way round overrules that (spa:pickturn).
+  (setq turn (spa:pickturn
+               (> aov bov)
+               (list (list "OCT" (spa:octpts bov aov s s1)) 0.0 bov)
+               (list (list "OCT" (spa:octpts aov bov s1 s)) 0.0 aov)))
+  (if turn
       (setq tmp bov  bov  aov   aov   tmp
             tmp s    s    s1    s1    tmp
             tmp tv   tv   v     v     tmp
             tmp traw traw vraw  vraw  tmp
             tmp sraw sraw s1raw s1raw tmp
             spa:*turned* t))
-  (if spa:*turned*
+  (if (and spa:*turned* (not spa:*spillturn*))
       (princ "\nThe long overall runs across, so the spa is drawn a quarter turn over."))
 
   (setq pts (spa:octpts bov aov s s1)
@@ -2550,11 +2864,9 @@
         (spa:dimlap (* 0.5 (+ xlo xhi)) ylo (max 0.0 (cadr org2)))))
   (setvar "CLAYER" oldclay)
 
-  ;; -------------------------------------------------- labels + report
-  (setq k 0)
-  (foreach p pts
-    (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) "SPA-NOTES")
-    (setq k (1+ k)))
+  ;; -------------------------------------------------- report
+  ;; the corner letters go on the mini-model beside the report, below,
+  ;; not on the drawing itself
   (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list "OVERALL ACROSS" bov bov)
                    (list "OVERALL UP" aov aov)
@@ -2581,7 +2893,11 @@
           (t
            (spa:hingeflow (list "OCT" pts) 0.0 bov th nil))))
   (if hrows (setq rows (append rows hrows)))
-  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
+  (setq rbox (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th
+                         "SPA-NOTES"))
+  ;; perimeter mini-model with the corner letters, right of the report
+  (spa:minimap (spa:polyprims pts) pts (spa:mlbls pts spa:*octnames*)
+               (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -2603,7 +2919,7 @@
 
 (defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp
                          mode1 meth g b2 a2 cen2 xlo xhi ylo yhi
-                         out1 bl br ab at hrows done)
+                         out1 bl br ab at hrows done turn rbox)
   (setq oldclay (getvar "CLAYER")
         pv (spa:roundpreview))
   (command "_.ZOOM" "_Window"
@@ -2627,11 +2943,23 @@
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
   (spa:pvkill)
-  ;; an out-of-round spa lies with its long overall west to east
-  (if (> aov bov)
+
+  ;; hinges are asked before anything is drawn, so a spillaway can still
+  ;; turn the spa (a round one turns too: the spillway travels with it)
+  (spa:hingeask)
+
+  ;; an out-of-round spa lies with its long overall west to east, unless
+  ;; a spillaway no hinge can dodge asks for the other way round
+  (setq turn (spa:pickturn
+               (> aov bov)
+               (list (list "ROUND" (list (* 0.5 bov) (* 0.5 aov)) bov aov)
+                     0.0 bov)
+               (list (list "ROUND" (list (* 0.5 aov) (* 0.5 bov)) aov bov)
+                     0.0 aov)))
+  (if turn
       (setq tmp bov bov aov aov tmp
             spa:*turned* t))
-  (if spa:*turned*
+  (if (and spa:*turned* (not spa:*spillturn*))
       (princ "\nThe long overall runs across, so the spa is drawn a quarter turn over."))
 
   (setq cen (list (* 0.5 bov) (* 0.5 aov))
@@ -2749,7 +3077,12 @@
           (t
            (spa:hingeflow (list "ROUND" cen bov aov) 0.0 bov th nil))))
   (if hrows (setq rows (append rows hrows)))
-  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
+  (setq rbox (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th
+                         "SPA-NOTES"))
+  ;; the mini-model beside the report -- a round spa has no corners, so
+  ;; it carries no letters; it is there to say which way round it lies
+  (spa:minimap (list (list 'rb cen bov aov)) nil nil
+               (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -2821,6 +3154,9 @@
   (spa:syssave)
   (setq spa:*valnotes* nil
         spa:*turned* nil
+        spa:*spillturn* nil
+        spa:*hingeon* nil
+        spa:*spills* nil
         spa:*hingerows* nil
         spa:*advice* nil
         spa:*grade* nil

@@ -211,6 +211,61 @@ and is still labelled `B`, so the drawing reads back against the report
 table. The turn is announced at the command line and noted under the
 drawing.
 
+The turn is clockwise, and it carries every wall and corner round with
+the shape:
+
+| as measured | drawn |
+| --- | --- |
+| bottom wall | left wall |
+| right wall | bottom wall |
+| top wall | right wall |
+| left wall | top wall |
+| `A` (bottom-left) | top-left |
+| `B` (bottom-right) | bottom-left |
+| `C` (top-right) | bottom-right |
+| `D` (top-left) | top-right |
+
+### Turning to clear a spillway
+
+Hinges run north-south, so a spillway on the **top or the bottom** wall
+stands in the way of every one of them — while the same spillway on a
+**left or right** wall cannot touch any. A quarter turn moves it there.
+
+So when the cover laid out the way the long-overall rule wants cannot
+get a hinge clear of a spillway and the other way round can, **the
+spillway wins and the spa is turned**. Both ways round are scored on the
+same three things the hinge layout itself is scored on — dodging every
+zone (4), fitting the foam length (2), an acceptable piece count (1) —
+so the turn is never taken to clear a zone at the price of a hinge that
+overruns the foam, and a tie always leaves the long overall running
+across. The drawing says which way it went and why:
+
+```
+TURNED A QUARTER TURN - HINGES CLEAR OF THE SPILLWAY
+```
+
+and the spillway's report row is named as it was **measured**, with
+where it ended up added: `SPILLWAY TOP WALL (DRAWN RIGHT)`.
+
+This is why the hinge questions are asked **before anything is drawn**
+(see [Auto-hinge](#auto-hinge)): nothing already on the screen can be
+turned.
+
+## The mini-model
+
+The corner letters are **not** written on the drawing. They go on a
+small copy of the outline beside the report table — the same move
+`POOL` made — so the drawing itself carries nothing but its geometry and
+its dimensions, and the report's rows (`OVERALL ACROSS (A-B)`,
+`CORNER C RADIUS`) still read back against a picture of the shape.
+
+The mini-model is drawn to the right of the report box, at a fixed fit
+size, with the corner treatments in place: a radius corner is an arc on
+it, a diagonal is its cut face. It lives on `SPA-NOTES` with the rest of
+the annotation, so freezing that layer takes it away with the report. A
+round spa has no corners, so its mini-model carries no letters — it is
+still drawn, to say which way round the spa lies.
+
 ## Where the dimensions go
 
 The **cover's** overalls go outside it: the across dim **2 ft above**,
@@ -320,7 +375,7 @@ architectural units while it is prompting.
 | `POOL` | the outline at water's edge (dashed) |
 | `COVER` | the outline at cover size |
 | `DIMENSION` | every dimension |
-| `SPA-NOTES` | corner letters, the mode note, the report table, and the grey input guide |
+| `SPA-NOTES` | the mini-model and its corner letters, the mode note, the report table, and the grey input guide |
 | `TEXT` | the `Hinge` / `Velcro Hinge` labels |
 
 ## While it is asking
@@ -351,9 +406,15 @@ cuts, all eight sides equal.
 
 ## Auto-hinge
 
-After the cover is dimensioned the command asks **"Auto-hinge the
-cover?"**. Hinges run north-south, splitting the cover into side-by-side
-pieces along its west-east length.
+The command asks **"Auto-hinge the cover?"** as soon as the spa is
+measured — **before a line is drawn**. That is deliberate: the answers
+below can still turn the spa a quarter turn to get a hinge clear of a
+spillway (see [Orientation](#orientation)), and nothing already on the
+screen can be turned. The hinges themselves are drawn at the end, on
+whichever outline they belong to.
+
+Hinges run north-south, splitting the cover into side-by-side pieces
+along its west-east length.
 
 **1. Spillaways** — places a hinge cannot go, asked in a loop that always
 defaults to `No`:
@@ -363,6 +424,9 @@ defaults to `No`:
 * `Wall` — give the spillaway's overall length; it is assumed centred on
   its wall. A left/right wall spillaway cannot meet a north-south hinge,
   so it is recorded but blocks nothing.
+
+Both are answered against the spa **as measured**; the turn, if one is
+taken, is applied afterwards when the zones are worked out.
 
 **2. Grade and taper** — from the "Spa Cover Details" block read at the
 start, or asked for here if that was skipped. The `GRADE` and
@@ -431,9 +495,10 @@ hinge length vs foam length, and each hinge's offset from the left edge.
 
 ## Getting the clean sheet drawing
 
-The corner letters, the mode note and the report table all live on
-`SPA-NOTES`. Freeze that one layer and what is left is the outline and
-its dimensions — the drawing as the order sheet shows it.
+The mini-model with its corner letters, the mode note and the report
+table all live on `SPA-NOTES`. Freeze that one layer and what is left is
+the outline and its dimensions — the drawing as the order sheet shows
+it.
 
 ## Notes
 
