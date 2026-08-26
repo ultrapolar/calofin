@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.5")
+(setq *lazpanel-version* "v2.6")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -119,6 +119,17 @@
 ;;  and Spa pages do not name, and the test recomputes that complement
 ;;  from the tree, so a tool added to the panel lands there by default
 ;;  instead of falling off the job pages unnoticed.
+;;
+;;  THE AB CHECKS LIVE IN "Rest" AND NOWHERE ELSE among the jobs.
+;;  ABCURCHECK and its scan read the A/B survey ties themselves -- the
+;;  tape rather than the pool -- so they are bench work over the
+;;  numbers, not a step in laying out a pool, a cover or a spa.  Any
+;;  further AB* check joins them on Rest and stays off the other three
+;;  job pages; test_lazpanel.py enforces that against the tree, so a
+;;  new one dropped onto Pool out of habit fails the suite instead of
+;;  quietly widening a job page.  The Checking CATEGORY page still
+;;  carries them: that page answers "what is this tool", which is a
+;;  different question from "what am I doing this hour".
 
 ;;  ONE CAPTION PER COMMAND, here and nowhere else.  A command appears
 ;;  on several pages, so a caption kept beside each button would be the
@@ -238,8 +249,6 @@
       )
      ("Dims & check"
       "AUTODIM"
-      "ABCURCHECK"
-      "ABCURCHECKSCAN"
       "LINFINCHECK"
       "LINFINSCAN"
       "LITELINFINSCAN"
@@ -303,6 +312,8 @@
       "DIMCONTEND"
       "CHECK"
       "DIMARCCHECK"
+      "ABCURCHECK"
+      "ABCURCHECKSCAN"
       "LINCHECK"
       "LINTXTCHK"
       "CCPRECHECK"

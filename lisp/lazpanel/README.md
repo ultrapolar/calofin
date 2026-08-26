@@ -18,10 +18,11 @@ reach for them.
 | --- | --- | --- | --- |
 | `POOL` | `ABFIND` | `CORNERSTP` | `AUTODIM` |
 | `LAZFORM` | `ABMOVE` | `HEMISTEP` | `LINFINCHECK` |
-| `OASIS` | `CDCREATE` | `NORMIESTEP` | `LINFINSCAN` |
-| `ABHD` | `CDCALLOUT` | `AUTOBEAD` | `LITELINFINSCAN` |
-| `ADAB` | `BPCALLOUT` | `PERPPTS` | `DIMCHECK` |
-| `FITABHD` |  | `CPERPPTS` | `DIMSCAN` |
+| `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `LINFINSCAN` |
+| `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `LITELINFINSCAN` |
+| `ABHD` | `BPCALLOUT` | `PERPPTS` | `DIMCHECK` |
+| `ADAB` |  | `CPERPPTS` | `DIMSCAN` |
+| `FITABHD` |  |  |  |
 | `XFTCONV` |  |  |  |
 
 **Cover** -- 3 columns, in the order the work runs:
@@ -41,7 +42,7 @@ reach for them.
 | Job | Buttons |
 | --- | --- |
 | Spa | `SPA`, `AUTODIM`, `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `DIMCHECK`, `DIMSCAN` |
-| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
+| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `ABCURCHECK`, `ABCURCHECKSCAN`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
 
 **A page laid out in columns shows the command name alone**; the column
 heading carries the meaning instead of a caption on every button. That
@@ -61,10 +62,10 @@ them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
+| Layout | LAZFORM, LAZTXT, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
 | Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
-| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
+| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
 `AUTODIM` and `DIMCHECK`/`DIMSCAN` are on all three jobs, because every
 job ends the same way; 10 commands are shared between jobs in total.
@@ -86,6 +87,15 @@ next pool silently bottomless. `OASIS` is on the Cover page unchanged
 Spa do not name, and the test recomputes that complement from the tree
 -- so a tool added to the panel and forgotten on the job pages shows up
 as a Rest omission instead of quietly falling out of the workflow.
+
+**The AB checks are on Rest and on no other job.** `ABCURCHECK` and
+`ABCURCHECKSCAN` read the A/B survey ties themselves -- the tape rather
+than the pool -- so they are bench work over the numbers, not a step in
+laying out a pool, a cover or a spa. Any further `AB*` check joins them
+there and stays off Pool, Cover and Spa; the test derives the rule from
+the roster, so a new one dropped onto Pool out of habit fails the suite.
+The **Checking** category page still carries them, because that page
+answers what a tool *is* rather than what you are doing this hour.
 
 A **tab strip** across the top switches pages: two labelled boxed rows,
 `Job` (Pool / Cover / Spa / Rest) and `Or by category` (Layout / Points

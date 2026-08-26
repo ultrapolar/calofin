@@ -340,6 +340,21 @@ assert rest == set(PANEL) - named, (
     % ('/'.join(JOBS), sorted((set(PANEL) - named) - rest),
        sorted(rest - (set(PANEL) - named))))
 assert named | rest == set(PANEL), "the job pages do not cover the roster"
+
+# The AB checks are bench work over the survey ties, not a step in
+# laying a pool, a cover or a spa out, so among the job pages they
+# belong to Rest alone.  Derived from the roster rather than listed
+# here, so a NEW AB check put on Pool out of habit fails right here
+# instead of quietly widening a job page.  (The Checking CATEGORY page
+# still carries them -- that page answers a different question.)
+AB_CHECKS = sorted(c for c in PANEL
+                   if c.startswith('AB') and ('CHECK' in c or 'SCAN' in c))
+assert AB_CHECKS, "no AB check on the panel at all -- has one been renamed?"
+for _c in AB_CHECKS:
+    on = [j for j in JOBS if _c in page_cmds(j)]
+    assert not on, "%s is an AB check and belongs on Rest, not on %r" % (_c, on)
+    assert _c in rest, "%s is an AB check and is not on Rest" % _c
+print("   %d AB check(s) on Rest only: %s" % (len(AB_CHECKS), ', '.join(AB_CHECKS)))
 print("   %d dialogs, %d commands across them (%d buttons)"
       % (len(opens), len(seen_keys), len(BUTTONS)))
 print("   jobs cover %d, Rest holds the other %d, %d shared across jobs"
