@@ -114,7 +114,7 @@ def problems(txt):
 def test_loads_and_reports():
     """SPACHECK runs over a SPA drawing and writes a report."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert 'SPACHECKSCAN REPORT' in txt, txt[:200]
     assert 'SPACHECK v' in txt
@@ -124,7 +124,7 @@ def test_finds_the_cover_outline():
     """The bounded cover outline SPA draws is recognised as one closed
     entity, not reported as missing or loose."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert 'Cover outline: one closed LWPOLYLINE, OK' in txt, txt
 
@@ -138,7 +138,7 @@ def test_round_cover_is_a_bounded_circle():
 def test_water_edge_nesting_passes():
     """Both outlines drawn: the water's edge is inside the cover."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None,
+                84.0, None, 'Square', None, None, None,
                 'No', 'Yes', 'Offset', 3.0])
     txt = report_of(vm)
     assert 'contains water' in txt, txt
@@ -148,7 +148,7 @@ def test_water_edge_nesting_passes():
 def test_one_outline_is_not_a_problem():
     """A drawing that shows the cover only is legitimate."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert "Water's edge: not drawn" in txt, txt
     assert not any("Water's edge" in p and 'NO OUTLINE' in p
@@ -174,7 +174,7 @@ def test_overall_dims_are_found_and_agree():
     """SPA's overalls carry the Cover Size note and read the true size,
     so neither the roster nor the agreement check fires."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, 60.0, '90', None, None, None, 'No', 'No'])
+                84.0, 60.0, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert "noted 'Cover Size'" in txt, txt
     bad = problems(txt)
@@ -184,7 +184,7 @@ def test_overall_dims_are_found_and_agree():
 
 def test_overlap_dim_is_found():
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None,
+                84.0, None, 'Square', None, None, None,
                 'No', 'Yes', 'Offset', 3.0])
     txt = report_of(vm)
     assert 'Overlap: 3' in txt, txt
@@ -194,7 +194,7 @@ def test_overlap_dim_is_found():
 def test_missing_overlap_is_caught():
     """Delete the Overlap dimension and SPACHECK names it."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None,
+                84.0, None, 'Square', None, None, None,
                 'No', 'Yes', 'Offset', 3.0])
     # erase every dimension whose text carries the Overlap note
     for e in list(vm.entities):
@@ -219,7 +219,7 @@ def test_missing_details_block_is_reported():
     """No Spa Cover Details block in the drawing -> named, and the hinge
     checks say they could not run."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     bad = problems(txt)
     assert any('NO BLOCK' in p for p in bad), bad
@@ -231,7 +231,7 @@ def test_missing_details_block_is_reported():
 def test_title_block_exact_ratio_passes():
     """A border at exactly 0.6x the liner block passes."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     border(vm, 422.4, 326.175)
     txt = report_of(vm)
     assert '0.60x the liner block, OK' in txt, txt
@@ -241,7 +241,7 @@ def test_title_block_at_full_liner_size_is_caught():
     """A border left at the LINER size is the mistake the check exists
     for -- it must be named, with the factor it actually came out at."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     border(vm, 704.0, 543.625)
     txt = report_of(vm)
     bad = problems(txt)
@@ -251,7 +251,7 @@ def test_title_block_at_full_liner_size_is_caught():
 
 def test_title_block_stretched_is_caught():
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     border(vm, 422.4, 500.0)
     txt = report_of(vm)
     assert any('STRETCHED' in p for p in problems(txt)), problems(txt)
@@ -259,7 +259,7 @@ def test_title_block_stretched_is_caught():
 
 def test_no_border_is_reported():
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert any('NO BORDER' in p for p in problems(txt)), problems(txt)
 
@@ -268,11 +268,11 @@ def test_standoffs_pass_on_spas_own_output_and_catch_a_moved_dim():
     """SPA stands the top overall 2 ft above the cover.  Its own output
     must not be reported for that, and a dim dragged off it must."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, 60.0, '90', None, None, None, 'No', 'No'])
+                84.0, 60.0, 'Square', None, None, None, 'No', 'No'])
     assert not any('above the cover' in p for p in problems(report_of(vm)))
 
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, 60.0, '90', None, None, None, 'No', 'No'])
+                84.0, 60.0, 'Square', None, None, None, 'No', 'No'])
     moved = False
     for e in vm.entities:
         d = {p.a: p.b for p in vm.entdata[e] if isinstance(p, Dot)}
@@ -297,7 +297,7 @@ def test_hinges_drawn_by_spa_are_read_back():
     """SPA lays out a 5-piece cover; SPACHECK counts the same 4 hinges,
     reads the same arrangement off the chart, and fits the same foam."""
     vm = build([None, 'Coversize', 'Rectangle', None, 230.0, 60.0,
-                '90', None, None, None,
+                'Square', None, None, None,
                 'Yes', 'No', None, '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     txt = report_of(vm)
@@ -312,7 +312,7 @@ def test_piece_count_off_the_foam_sheet_is_flagged():
     it anyway and says so; SPACHECK must reach the same verdict, or the
     two tools disagree about the same chart."""
     vm = build([None, 'Coversize', 'Rectangle', None, 230.0, 60.0,
-                '90', None, None, None,
+                'Square', None, None, None,
                 'Yes', 'No', None, '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     bad = problems(report_of(vm))
@@ -329,7 +329,7 @@ def test_thermolight_drawn_all_velcro_reads_back_clean():
     # Thermo-Light reads the block first, so it is the opening answer;
     # the water's-edge question is then skipped (cover size is the same)
     vm.run('c:SPA', [blk, 'Rectangle', None, 140.0, 60.0,
-                     '90', None, None, None, 'Yes', 'No'])
+                     'Square', None, None, None, 'Yes', 'No'])
     txt = report_of(vm)
     assert 'grade THERMO, taper 1-3/8' in txt, txt
     assert 'Arrangement: V V, matches' in txt, txt
@@ -341,7 +341,7 @@ def test_thermolight_with_a_fold_hinge_is_caught():
     labelled Thermo-Light on the block: SPACHECK must side with the
     block's rule -- Thermo-Light is velcro only."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
-                '90', None, None, None,
+                'Square', None, None, None,
                 'Yes', 'No', None, '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     bad = problems(report_of(vm))
@@ -352,7 +352,7 @@ def test_hardware_advice_only_speaks_up_when_needed():
     """Thermo-Light always takes velcro hinges; nothing else is called
     for, and the three "no" answers must not be dressed as advice."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
-                '90', None, None, None,
+                'Square', None, None, None,
                 'Yes', 'No', None, '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     txt = report_of(vm)
@@ -412,7 +412,7 @@ def test_the_guided_walk_marks_and_rescue_puts_it_back():
     SPACHECKRESCUE must restore every one of those colours exactly and
     take the report away with it."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
-                '90', None, None, None,
+                'Square', None, None, None,
                 'Yes', 'No', None, '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     vm.load(CHK)
@@ -489,7 +489,7 @@ def test_the_report_is_split_the_way_mtext_needs():
     written as one group 1 would lose everything past character 250 the
     moment AutoCAD read it back."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, 60.0, '90', None, None, None, 'No', 'No'])
+                84.0, 60.0, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert len(txt) > 250, len(txt)
     for e in vm.entities:
@@ -522,7 +522,7 @@ def test_dimension_layer_verdict_is_clean_on_spas_own_output():
     """Every dimension SPA draws is on DIMENSION, so the roster-wide
     verdict passes and nothing suggests running CDIM."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert 'Dimension layer: all ' in txt, txt
     assert 'CDIM' not in txt, txt
@@ -532,7 +532,7 @@ def test_a_dim_on_the_wrong_layer_is_caught_and_names_cdim():
     """A dimension dragged onto another layer is counted, the layer it
     landed on is named, and the report says to run CDIM."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     assert _move_one_dim(vm, 'JUNK'), "found no dimension to move"
     bad = problems(report_of(vm))
     assert any('NOT on layer DIMENSION' in p and 'JUNK' in p
@@ -544,7 +544,7 @@ def test_the_lite_scan_keeps_the_dimension_layer_check():
     layer verdict -- a sheet whose dims sit on the wrong layer plots
     wrong however sound the dimensions are."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     assert _move_one_dim(vm, 'JUNK')
     txt = report_of(vm, cmd='c:LITESPACHECKSCAN')
     assert 'LITESPACHECKSCAN REPORT' in txt, txt[:120]
@@ -566,7 +566,7 @@ def test_feet_without_inches_is_flagged_and_good_notation_is_not():
     """A text box reading 5' is caught; 5'-0", 3'-2" and 40" pass, and
     so does an apostrophe that is a possessive rather than a feet mark."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     _add_text(vm, "Depth 5'", 'BAD1')
     _add_text(vm, 'Wall 3\'-2"', 'OK1')
     _add_text(vm, 'Skimmer 40"', 'OK2')
@@ -583,7 +583,7 @@ def test_the_feet_mark_predicate_itself():
     """The rule, case by case: an apostrophe straight after a digit is a
     feet mark and needs an inch mark; anything else is prose."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     vm.load(CHK)
     for src, want in [("5'", True), ("5'-0\"", False), ("3'-2\"", False),
                       ('40"', False), ("5'-0''", False), ("12''", False),
@@ -599,7 +599,7 @@ def test_spas_own_text_states_its_inches():
     """Everything SPA writes passes -- the check must not cry wolf on
     the tool's own output."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert 'Feet & inches: all ' in txt, txt
     assert not any('NO INCHES' in p for p in problems(txt)), problems(txt)
@@ -609,7 +609,7 @@ def test_the_lite_scan_keeps_the_units_check():
     """LITESPACHECKSCAN drops the per-dimension audit but keeps the
     feet-and-inches check -- it is about drawing text, not dimensions."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     _add_text(vm, "Depth 5'", 'BAD1')
     bad = problems(report_of(vm, cmd='c:LITESPACHECKSCAN'))
     assert any('Text BAD1' in p and 'NO INCHES' in p for p in bad), bad
@@ -633,7 +633,7 @@ def _today():
 
 def test_todays_date_in_the_tech_title_passes():
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     _add_title(vm, _today())
     txt = report_of(vm)
     assert "Tech Title: Date = '" in txt and "' - OK" in txt, txt
@@ -644,7 +644,7 @@ def test_a_stale_date_is_reported():
     """The mistake this is for: the drawing was reworked and the title
     block never caught up."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     _add_title(vm, '01/02/2020')
     bad = problems(report_of(vm))
     assert any("NOT TODAY'S DATE" in p and _today() in p for p in bad), bad
@@ -656,7 +656,7 @@ def test_a_malformed_or_impossible_date_is_reported():
                         ('02/30/2026', 'not a valid day for that month'),
                         ('13/01/2026', 'is not a month')]:
         vm = build([None, 'Coversize', 'Rectangle', None,
-                    84.0, None, '90', None, None, None, 'No', 'No'])
+                    84.0, None, 'Square', None, None, None, 'No', 'No'])
         _add_title(vm, value)
         bad = problems(report_of(vm))
         assert any(want in p for p in bad), (value, want, bad)
@@ -664,7 +664,7 @@ def test_a_malformed_or_impossible_date_is_reported():
 
 def test_the_block_name_may_be_spelled_without_spaces():
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     _add_title(vm, _today(), name='TECHTITLE')
     assert not any('Tech Title' in p for p in problems(report_of(vm)))
 
@@ -673,7 +673,7 @@ def test_no_tech_title_says_so_without_crying_wolf():
     """A spa sheet checked on its own has no Tech Title in reach; that
     is stated, not flagged."""
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     txt = report_of(vm)
     assert 'date NOT CHECKED' in txt, txt
     assert not any('NOT CHECKED' in p for p in problems(txt)), problems(txt)
@@ -681,7 +681,7 @@ def test_no_tech_title_says_so_without_crying_wolf():
 
 def test_the_lite_scan_keeps_the_date_check():
     vm = build([None, 'Coversize', 'Rectangle', None,
-                84.0, None, '90', None, None, None, 'No', 'No'])
+                84.0, None, 'Square', None, None, None, 'No', 'No'])
     _add_title(vm, '01/02/2020')
     bad = problems(report_of(vm, cmd='c:LITESPACHECKSCAN'))
     assert any("NOT TODAY'S DATE" in p for p in bad), bad

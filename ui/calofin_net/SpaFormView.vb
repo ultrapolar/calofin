@@ -91,8 +91,11 @@ Public Class SpaCorner
     Public Property X As Double
     Public Property Y As Double
 
+    ' The canonical Treatment set (STANDARDS section 2).  SPA.LSP still
+    ' accepts the legacy words (90, Diagonal) typed at the command line,
+    ' but the form only ever sends canonical values.
     Public ReadOnly Property Treatments As String() =
-        {"", "90", "Radius", "Diagonal"}
+        {"", "Square", "Radius", "Cut", "NotGiven"}
 
     Private _treatment As String = ""
     Private _size As String = ""
@@ -121,10 +124,10 @@ Public Class SpaCorner
         End Set
     End Property
 
-    ''' <summary>A 90 corner has no size; radius and diagonal do.</summary>
+    ''' <summary>Square and NotGiven have no size; Radius and Cut do.</summary>
     Public ReadOnly Property NeedsSize As Boolean
         Get
-            Return _treatment = "Radius" OrElse _treatment = "Diagonal"
+            Return _treatment = "Radius" OrElse _treatment = "Cut"
         End Get
     End Property
 

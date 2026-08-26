@@ -132,7 +132,7 @@ def test_rectangle_length_suggests_width():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0,            # width
               None,            # Enter -> length takes 84
-              '90', None, None, None,   # corner A, then Enter x3
+              'Square', None, None, None,   # corner A, then Enter x3
               'No', 'No'],
              'rect/suggest')
     vs, _ = plverts(vm, 'COVER')
@@ -145,7 +145,7 @@ def test_rectangle_length_suggests_width():
 def test_rectangle_can_decline_the_suggestion():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, 60.0,      # decline: type a different length
-              '90', None, None, None,
+              'Square', None, None, None,
               'No', 'No'],
              'rect/decline')
     vs, _ = plverts(vm, 'COVER')
@@ -163,7 +163,7 @@ def test_back_at_every_measurement():
          # a stage is re-asked from ITS first question, so both sides
          # come round again
          62.0, None,
-         '90', None, None,  # corners A, B, C
+         'Square', None, None,  # corners A, B, C
          'Back',            # at corner D -> back to corner C
          None, None,        # re-answer C, then D
          'No', 'No'],
@@ -175,7 +175,7 @@ def test_back_at_the_corner_size():
     run([None, 'Coversize', 'Rectangle', None,
          84.0, None,
          'Radius', 'Back',   # size -> back to the type
-         '90', None, None, None,
+         'Square', None, None, None,
          'No', 'No'],
         'rect/back-corner-size')
 
@@ -186,7 +186,7 @@ def test_back_out_of_the_offset_reopens_the_offer():
     SPA-BACK symbol to (+ ...)."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              '90', None, None, None,
+              'Square', None, None, None,
               'No',                # no auto-hinge (asked before drawing)
               'Yes', 'Offset',
               'Back',              # back out of the lap
@@ -204,7 +204,7 @@ def test_back_undo_synonym():
          # Back out of a stage re-asks that stage from ITS first
          # question, so both sides come round again
          62.0, None,
-         '90', None, None, None,
+         'Square', None, None, None,
          'No', 'No'],
         'rect/undo-synonym')
 
@@ -216,7 +216,7 @@ def test_each_outline_is_one_closed_entity():
     scatter of loose lines."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              '90', None, None, None,
+              'Square', None, None, None,
               'No',                # no auto-hinge
               'Yes', 'Offset', 3.0],
              'bounded/two-outlines')
@@ -250,8 +250,8 @@ def test_radius_corner_becomes_an_arc_segment():
 def test_diagonal_corner_stays_straight():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              'Diagonal', 21.0,      # corner A: a 21" cut face
-              '90', '90', '90',      # B, C, D square
+              'Cut', 21.0,           # corner A: a 21" cut face
+              'Square', 'Square', 'Square',
               'No', 'No'],
              'bounded/diagonal')
     vs, bs = plverts(vm, 'COVER')
@@ -266,7 +266,7 @@ def test_mm_measurement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               '2134mm',        # 2134 mm = 84.0157 in
               '1524mm',        # 1524 mm = 60 in exactly
-              '90', None, None, None,
+              'Square', None, None, None,
               'No', 'No'],
              'mm/rectangle')
     vs, _ = plverts(vm, 'COVER')
@@ -289,7 +289,7 @@ def test_mm_at_a_typed_prompt():
     """The lap, a spa:askd prompt, takes mm too."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              '90', None, None, None,
+              'Square', None, None, None,
               'No',                        # no auto-hinge
               'Yes', 'Offset', '76.2mm'],  # 76.2 mm = 3 in
              'mm/lap')
@@ -305,7 +305,7 @@ def test_junk_is_re_asked_not_accepted():
               'banana',        # rejected...
               84.0,            # ...then a real answer
               None,
-              '90', None, None, None,
+              'Square', None, None, None,
               'No', 'No'],
              'mm/junk')
     # the width prompt came round twice: junk did not slip through
@@ -322,7 +322,7 @@ def test_five_piece_hinge_arrangement():
     """A cover wide enough for 5 pieces reads H V V H."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,          # 230/48 -> 5 pieces
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes',                # auto-hinge -- asked before the draw
               'No',                 # no spillaway
               None,                 # no details block
@@ -336,7 +336,7 @@ def test_five_piece_hinge_arrangement():
 def test_three_piece_hinge_arrangement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,          # 140/48 -> 3 pieces
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes', 'No', None, '4-3', 'No'],
              'hinge/3-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
@@ -346,7 +346,7 @@ def test_back_in_the_spillaway_loop():
     """Back at the top of the loop drops the spillaway just committed."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes',
               'Yes', 'Wall', 'Top', 20.0,   # commit one
               'Back',                        # ... and take it back
@@ -376,10 +376,123 @@ def test_thermolight_style_all_velcro():
     exercised through the taper instead."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes', 'No', None, '1-3/8', 'No'],
              'hinge/thermolight-taper')
     assert hinge_labels(vm), "no hinges drawn"
+
+
+# ------------------------------------------- the Treatment question
+
+def leaders(vm):
+    """The LEADER texts, as the VM logs commands rather than making
+    leader entities."""
+    return [c[-2] for c in vm.commands if c and c[0] == '_.LEADER']
+
+
+def notes_text(vm, layer='DIMENSION'):
+    return [d.get(1) for d in drawn(vm, 'TEXT', layer)]
+
+
+def test_corner_question_is_the_canonical_treatment_question():
+    """How should Corner A be treated? [Square/Radius/Cut/NotGiven] --
+    the STANDARDS section 2 wording, bracket derived from the keywords."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Square', None, None, None,
+              'No', 'No'],
+             'treat/wording')
+    p = [p for p, _ in vm.prompts if 'Corner A' in p]
+    assert p, [q for q, _ in vm.prompts]
+    assert 'How should Corner A be treated?' in p[0], p[0]
+    assert '[Square/Radius/Cut/NotGiven' in p[0], p[0]
+
+
+def test_legacy_corner_words_still_accepted_and_normalised():
+    """90 / ROUNDED / DIAG stay accepted typed in full, unlisted, and
+    are normalised at the ask site -- the report speaks canonical."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'ROUNDED', 12.0,      # legacy word for Radius
+              'DIAG', 21.0,         # legacy word for Cut
+              '90',                 # legacy word for Square
+              'NG',                 # legacy short form of NotGiven
+              'No', 'No'],
+             'treat/legacy')
+    rows = [d.get(1) for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert any('CORNER A RADIUS' in str(r) for r in rows), rows
+    assert any('CORNER B CUT' in str(r) for r in rows), rows
+    assert any('CORNER C SQUARE' in str(r) for r in rows), rows
+    assert any('CORNER D NOTGIVEN' in str(r) for r in rows), rows
+
+
+def test_cut_size_prompt_wording():
+    """Radius for <subject> / Cut face length for <subject> -- the
+    fixed follow-up wording of STANDARDS section 2."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Radius', 12.0, 'Cut', 21.0, 'Square', 'Square',
+              'No', 'No'],
+             'treat/size-wording')
+    ps = [p for p, _ in vm.prompts]
+    assert any('Radius for Corner A' in p for p in ps), ps
+    assert any('Cut face length for Corner B' in p for p in ps), ps
+
+
+def test_all_square_gets_one_90_typ_mark():
+    """A plain all-Square rectangle used to get no corner notes at all;
+    per the standard it now carries ONE 90%%d Typ. mark."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Square', None, None, None,
+              'No', 'No'],
+             'treat/all-square-typ')
+    assert leaders(vm) == ['90%%d Typ.'], leaders(vm)
+
+
+def test_not_given_is_drawn_square_and_flagged():
+    """A NotGiven corner is BUILT square -- same outline as a Square
+    one -- but the sheet says the treatment was never recorded: a ?
+    leader with a Not Given note, and an N/A report row."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'NotGiven', 'Square', 'Square', 'Square',
+              'No', 'No'],
+             'treat/notgiven')
+    vs, bs = plverts(vm, 'COVER')
+    assert len(vs) == 4, vs                    # square geometry, no cut
+    assert all(abs(b) < 1e-12 for b in bs), bs
+    txts = leaders(vm)
+    assert '?' in txts, txts                   # its own mark, and the
+    # shared mark of the three Square corners, Typ. because > 1
+    assert '90%%d Typ.' in txts, txts
+    assert sorted(txts) == ['90%%d Typ.', '?'], txts
+    assert 'Not Given' in notes_text(vm), notes_text(vm)
+    # the report row reads N/A in both columns: nothing was measured
+    rows = [str(t) for t in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert any('CORNER A NOTGIVEN' in str(d.get(1))
+               for d in drawn(vm, 'TEXT', 'SPA-NOTES')), rows
+
+
+def test_all_not_given_gets_one_typ_mark():
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'NotGiven', None, None, None,
+              'No', 'No'],
+             'treat/all-notgiven')
+    assert leaders(vm) == ['? Typ.'], leaders(vm)
+    assert 'Not Given' in notes_text(vm), notes_text(vm)
+
+
+def test_not_given_never_asks_for_a_size():
+    """NotGiven takes no size follow-up: nothing was measured."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'NotGiven', None, None, None,
+              'No', 'No'],
+             'treat/notgiven-no-size')
+    ps = [p for p, _ in vm.prompts]
+    assert not any('Radius for' in p or 'Cut face' in p for p in ps), ps
 
 
 # ---------------------------------------------------------- mini-model
@@ -404,7 +517,7 @@ def test_corner_letters_are_off_the_drawing_and_on_the_mini_model():
     and the hinge labels."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, 60.0,
-              '90', None, None, None,
+              'Square', None, None, None,
               'No', 'No'],
              'mini/rect')
     lb = letters(vm)
@@ -475,7 +588,7 @@ def test_a_spillway_no_hinge_can_dodge_turns_the_spa():
     where a north-south hinge cannot meet it."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               100.0, 60.0,
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes',                        # auto-hinge
               'Yes', 'Wall', 'Top', 60.0,   # right across the top wall
               'No',
@@ -498,7 +611,7 @@ def test_a_side_wall_spillway_leaves_the_spa_alone():
     hinge, so there is nothing to turn away from."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               100.0, 60.0,
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes',
               'Yes', 'Wall', 'Left', 60.0,
               'No',
@@ -517,7 +630,7 @@ def test_a_spillway_the_hinges_already_clear_turns_nothing():
     and the long-overall rule keeps the drawing."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               100.0, 60.0,
-              '90', None, None, None,
+              'Square', None, None, None,
               'Yes',
               'Yes', 'Wall', 'Top', 20.0,
               'No',
@@ -536,7 +649,7 @@ def test_a_turned_spa_still_reports_its_letters():
     turned spa reads back against the report."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               60.0, 100.0,          # typed the tall way round
-              'Radius', 6.0, '90', '90', '90',
+              'Radius', 6.0, 'Square', 'Square', 'Square',
               'No', 'No'],
              'turn/letters')
     lb = letters(vm)

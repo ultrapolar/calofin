@@ -82,14 +82,14 @@ print("== 1. full form == command line ==")
 PROMPTS = [None,                       # skip the Spa Cover Details block
            "Watersedge", "Rectangle", (0, 0),
            84.0, 72.0,                 # overall width / length
-           "90", "90", "90", "90",     # corners A..D
+           "Square", "Square", "Square", "Square",     # corners A..D
            "No",                       # no cover size
            "No"]                       # no auto-hinge
 
 FULL = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
             (w . 84.0) (l . 72.0)
-            (cornera-ty . "90") (cornerb-ty . "90")
-            (cornerc-ty . "90") (cornerd-ty . "90"))"""
+            (cornera-ty . "Square") (cornerb-ty . "Square")
+            (cornerc-ty . "Square") (cornerd-ty . "Square"))"""
 
 a = by_prompts(PROMPTS)
 b = by_form(FULL, [None, "No", "No"])
@@ -109,7 +109,7 @@ print("== 2. half-filled form still prompts for what is missing ==")
 PARTIAL = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                (w . 84.0) (l . 72.0))"""
 
-c = by_form(PARTIAL, [None, "90", "90", "90", "90", "No", "No"])
+c = by_form(PARTIAL, [None, "Square", "Square", "Square", "Square", "No", "No"])
 same(a, c, "partial form")
 asked = [p for p, _ in c.prompts if 'Corner' in p]
 assert len(asked) == 4, "expected the 4 corners to be asked, got %d" % len(asked)
@@ -127,9 +127,9 @@ print("== 3. per-field mixing inside one block ==")
 
 MIXED = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
              (w . 84.0) (l . 72.0)
-             (cornera-ty . "90") (cornerb-ty . "90"))"""
+             (cornera-ty . "Square") (cornerb-ty . "Square"))"""
 
-d = by_form(MIXED, [None, "90", "90", "No", "No"])
+d = by_form(MIXED, [None, "Square", "Square", "No", "No"])
 same(a, d, "mixed form")
 asked = [p for p, _ in d.prompts if 'Corner' in p]
 assert len(asked) == 2, "expected 2 corners asked, got %d" % len(asked)
@@ -192,8 +192,8 @@ print("== 6. the exact expression the palette sends ==")
 WIRE = ("(spa:run-with-answers '("
         '(mode . "Watersedge") (shape . "Rectangle") '
         "(w . 84.0) (l . 72.0) "
-        '(cornera-ty . "90") (cornerb-ty . "90") '
-        '(cornerc-ty . "90") (cornerd-ty . "90")'
+        '(cornera-ty . "Square") (cornerb-ty . "Square") '
+        '(cornerc-ty . "Square") (cornerd-ty . "Square")'
         "))")
 
 h = VM()
@@ -217,7 +217,7 @@ NIL_WIRE = ("(spa:run-with-answers '("
             "))")
 i = VM()
 i.load(LSP)
-i.script = [None, (0, 0), "90", "90", "90", "90", "No", "No"]
+i.script = [None, (0, 0), "Square", "Square", "Square", "Square", "No", "No"]
 i.prompts = []
 i.eval(parse_all(NIL_WIRE)[0])
 same(a, i, "explicit nil")

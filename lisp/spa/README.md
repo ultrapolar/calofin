@@ -163,9 +163,22 @@ command finishes.
 
 ## Rectangle corners
 
-Every corner is asked for separately, using the order sheet's own corner
-legend — `Radius` (sized by its radius), `Diagonal` (a cut, sized by its
-face length) or `90`. (`Square` is accepted as a synonym for `90`.)
+Every corner is asked for separately, with the canonical **Treatment
+question** (`STANDARDS.md` section 2):
+
+```
+How should Corner A be treated? [Square/Radius/Cut/NotGiven] <previous>:
+```
+
+`Square` is a true 90° corner; `Radius` is sized by its radius; `Cut` (a
+chamfer) by its face length; `NotGiven` means the order sheet never
+recorded the treatment — the corner is *drawn* square but flagged on the
+sheet and in the report, so a guess is never presented as a measurement.
+The legacy words (`90`, `Rounded`, `Diag`/`Diagonal`, `NG`) stay
+accepted typed in full, unlisted, and are normalised to the canonical
+word at the ask site. The size follow-ups are fixed too: `Radius for
+Corner A`, `Cut face length for Corner B`; `Square` and `NotGiven` take
+none.
 
 **Corner A's answer autofills B, C and D** — press Enter at each of them
 to accept it, or type a different treatment for that corner, so a cover
@@ -175,9 +188,13 @@ treatment cuts inward from there, and a treatment too big for its walls
 is re‑asked.
 
 Callouts sit outside the corner on its 45° line: a radius dimension on a
-`Radius` corner (`R12"`), an aligned dimension across a `Diagonal` cut
-face (`21"`), and a circled corner point with a `90°` leader on a `90`
-corner.
+`Radius` corner (`R12"`), an aligned dimension across a `Cut` face
+(`21"`), and a circled corner point with a `90°` leader on a `Square`
+corner — one `90° Typ.` mark when every corner is Square, one shared
+mark for the Square corners of a mixed set. A `NotGiven` corner gets the
+circled point with a `?` leader and a `Not Given` note, one per corner
+(`?` asserts nothing, so it is never shared), with the `Typ.` logic
+applying the same way when all four are NotGiven.
 
 ## Going back a step
 

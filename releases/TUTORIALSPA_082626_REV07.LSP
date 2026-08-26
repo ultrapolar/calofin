@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082626 REV06")
+(setq tut:*version* "082626 REV07")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -95,8 +95,12 @@
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524 MM -- and is converted to inches."
-    "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
-    "    Corner A's answer autofills B, C and D -- Enter accepts."
+    "6.  Rectangle corners, one at a time -- the canonical Treatment"
+    "    question: How should Corner A be treated?  Square / Radius /"
+    "    Cut / NotGiven (NotGiven = the sheet never said; drawn square"
+    "    and flagged).  The old words -- 90, Rounded, Diag -- still"
+    "    work typed in full.  Corner A's answer autofills B, C and D"
+    "    -- Enter accepts."
     "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
     "    then the grade and taper if the block did not give them."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
@@ -252,8 +256,8 @@
   (spa:setmode "Coversize")
 
   (setq w tut:*w* l tut:*l* cut tut:*cut* gap tut:*gap*
-        corners (list (list "90" 0.0) (list "90" 0.0)
-                      (list "Diagonal" cut) (list "90" 0.0))
+        corners (list (list "Square" 0.0) (list "Square" 0.0)
+                      (list "Cut" cut) (list "Square" 0.0))
         quad (spa:quadat (list 0.0 0.0) w l)
         cen (list (* 0.5 w) (* 0.5 l))
         doff (max 6.0 (/ (max w l) 12.0))
@@ -272,7 +276,7 @@
         (eq 'TUT-STOP
           (tut:step "STEP 1 -- THE COVER OUTLINE"
             (list "Corners A and B (bottom) and D (top-left) are 90."
-                  "Corner C (top-right) is a Diagonal with a 21\" cut FACE."
+                  "Corner C (top-right) is a Cut with a 21\" cut FACE."
                   ""
                   "The overalls are always measured to the TRUE, sharp"
                   "corner; the treatment then cuts inward from there.  So"
