@@ -142,8 +142,11 @@
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
-;;;     "02/30" is reported in red with what is wrong; a clean date
-;;;     ("05/01/2024") is a quiet OK.
+;;;     "02/30" is reported in red with what is wrong. A well-formed
+;;;     calendar date that is NOT TODAY is reported too - a sheet going
+;;;     out under an old date is the mistake that catches. Only
+;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
+;;;     Title in reach the report says the date was not checked.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -181,20 +184,43 @@
 ;;;     measure the same. The selection is used when it holds the
 ;;;     border, otherwise the whole drawing is searched.
 ;;;
+;;;  8a. FEET AND INCHES. Every text box in the selection - TEXT,
+;;;     MTEXT and the ATTRIB values on blocks - must state its inches
+;;;     wherever it states feet: 5' is flagged, 5'-0", 3'-2" and a
+;;;     plain 40" are fine. A feet mark is an apostrophe straight
+;;;     after a digit, so "Water's Edge" is prose and never flagged.
+;;;     This one runs in LITELINFINSCAN too.
+;;;
+;;;  8b. DIMENSION LAYER. Every dimension must sit on the
+;;;     "DIMENSION" layer (tune *lfc-dim-layer*). Any that do not are
+;;;     counted, the layers they landed on are named, and the report
+;;;     tells you to run CDIM (tune *lfc-dimfix-cmd*) to move them.
+;;;     This one runs in LITELINFINSCAN too.
+;;;
 ;;;  9. A LINFINCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer LINFINCHECK-REPORT listing every dimension —
-;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc, every overlapping line
-;;;     pair (with its overlap length), every step pattern, the Step
-;;;     Attachment verdict and the Liner Material verdict, plus
-;;;     totals. The report text is sized from the drawing's extents
-;;;     so it sits to scale next to it. Any line describing something
-;;;     questionable or that needs looking over (a flagged/wrong
-;;;     item, a missing block, a "NOT" find, an "add ..." note, a
-;;;     skipped check) is coloured RED in the report; everything
-;;;     that checked out stays the report's normal colour and is
-;;;     drawn at *lfc-green-scale* (3/4) of the red text's height,
-;;;     so the problems are the big lines on the sheet.
+;;;     drawing on layer LINFINCHECK-REPORT, sized from the drawing's
+;;;     extents so it sits to scale next to it.  The MAIN sheet leads
+;;;     with what matters to the liner finish itself: a large title,
+;;;     the date and version, a verdict line (ALL CLEAR, or the count
+;;;     of red lines), the colour legend, a SUMMARY dashboard, then
+;;;     the findings under underlined section headings (STEPS & SIDE
+;;;     VIEWS, WALL HEIGHT, THE LINER, ...).  The DIMCHECK-style
+;;;     findings — every dimension with its measured distance, every
+;;;     arc, every overlapping line pair with its overlap length — go
+;;;     in a separate DIMENSION AUDIT column to the RIGHT of the main
+;;;     sheet, so the liner verdicts lead and the mechanical audit
+;;;     reads alongside.  Any line describing something questionable
+;;;     or that needs looking over (a flagged/wrong item, a missing
+;;;     block, a "NOT" find, an "add ..." note, a skipped check) is
+;;;     coloured RED in the report; everything that checked out stays
+;;;     the report's normal colour and is drawn at *lfc-green-scale*
+;;;     (3/4) of the red text's height, so the problems are the big
+;;;     lines on the sheet.
+;;;
+;;;  LITELINFINSCAN is LINFINSCAN minus the DIMCHECK-style pass: no
+;;;     dimension, arc or overlap audit and no DIMENSION AUDIT
+;;;     column - just the liner-finish rules, for a drawing DIMCHECK
+;;;     already went over.
 ;;;
 ;;;  All original colours are restored when the review ends — except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
@@ -223,7 +249,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.1")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -261,6 +287,10 @@
 ;; come afterwards ("whatever else is left"), still left-to-right
 (setq *lfc-style-order*
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+;; every dimension belongs on this layer; CDIM is the command that
+;; moves the strays there, and is what the report tells you to run
+(setq *lfc-dim-layer*   "DIMENSION")
+(setq *lfc-dimfix-cmd*  "CDIM")
 (setq *lfc-constr-layer* "LINFINCHECK-CONSTRUCTION")
 (setq *lfc-constr-color* 2)       ; yellow
 (setq *lfc-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
@@ -673,7 +703,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -684,6 +714,301 @@
   ;; all-clear text renders at *lfc-green-scale* of the height the
   ;; red attention text gets, so problems stand out on the sheet
   (strcat "{\\H" (rtos *lfc-green-scale* 2 4) "x;" s "}"))
+
+(defun lfc:big (s)
+  ;; the report's title line: half again the base height
+  (strcat "{\\H1.5x;" s "}"))
+
+(defun lfc:hdg (s)
+  ;; a section heading: underlined, with a thin blank line above it
+  ;; so the sections read as blocks (the \P inside the first group is
+  ;; a paragraph break at 0.4x height - a narrow gap, not a full line)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+(defun lfc:linegrp (s)
+  ;; which underlined section a report line files under, keyed on the
+  ;; fixed prefixes the review gives its lines
+  (cond ((wcmatch s "Dim *,Dimensions:*") "DIMENSIONS")
+        ((wcmatch s "Arc *")              "ARCS")
+        ((wcmatch s "Lines *")            "OVERLAPPING LINES")
+        ((wcmatch s "Steps:*,Step Attachment*,Bead Track:*")
+         "STEPS & SIDE VIEWS")
+        ((wcmatch s "Height dim *,*CHECK THE WALL HEIGHT*")
+         "WALL HEIGHT")
+        ((wcmatch s "Liner Material*")    "THE LINER")
+        ((wcmatch s "Text *")             "TEXT & UNITS")
+        (t                                "OTHER CHECKS")))
+
+(defun lfc:dimline-p (s)
+  ;; T for a line that belongs to the DIMENSION AUDIT column - the
+  ;; DIMCHECK-style findings, as opposed to the liner's own checks
+  (member (lfc:linegrp s) '("DIMENSIONS" "ARCS" "OVERLAPPING LINES")))
+
+;; Every dimension belongs on the dimension layer.  This is the one
+;; dimension check the lite scan keeps: it costs a layer read apiece,
+;; and a sheet whose dimensions sit on the wrong layer plots wrong
+;; however sound the dimensions themselves are - so the verdict, and
+;; the suggestion to run CDIM over them, belong on the main sheet
+;; rather than in the DIMENSION AUDIT column.  The offending layers
+;; are named, since that is what you need to go fix them.
+;; Returns (sentence . needs-attention).
+(defun lfc:dimlayer-verdict (dims / n off lays lay e)
+  (setq n 0 off 0 lays nil)
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq n   (1+ n)
+              lay (cdr (assoc 8 (entget e))))
+        (if (/= (strcase lay) (strcase *lfc-dim-layer*))
+          (progn
+            (setq off (1+ off))
+            (if (not (member (strcase lay) lays))
+              (setq lays (cons (strcase lay) lays))))))))
+  (cond
+    ((= n 0)
+     (cons "no dimensions in the selection" nil))
+    ((= off 0)
+     (cons (strcat "all " (itoa n) " on " *lfc-dim-layer*) nil))
+    (t
+     (cons (strcat (itoa off) " of " (itoa n) " NOT on layer "
+                   *lfc-dim-layer* " ("
+                   (lfc:join (reverse lays) ", ")
+                   ") - run " *lfc-dimfix-cmd* " to move them")
+           T))))
+
+;; --- feet-and-inch text ----------------------------------------------
+;; A distance written in feet must state its inches too: 5' is wrong,
+;; 5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+;;
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun lfc:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun lfc:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun lfc:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+;; Returns ((handle . string) ...).
+(defun lfc:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (lfc:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (lfc:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, plus one report line per offender.
+;; Returns (sentence needs-attention (line ...)).
+(defun lfc:audit-units (ss / items it s n bad lines)
+  (setq items (lfc:text-items ss) n 0 bad 0 lines nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (lfc:feet-open-p s)
+          (setq bad   (1+ bad)
+                lines (cons (strcat "Text " (car it) ": \""
+                                    (lfc:mtsafe (lfc:clip s 40))
+                                    "\" gives feet with NO INCHES"
+                                    " - write it 5'-0\" not 5'")
+                            lines))))))
+  (list
+    (cond
+      ((= n 0) "no text in the selection")
+      ((= bad 0) (strcat "all " (itoa n) " text item"
+                         (if (= 1 n) "" "s") " OK"))
+      (t (strcat (itoa bad) " of " (itoa n) " text item"
+                 (if (= 1 n) "" "s") " give feet with NO INCHES"
+                 " - write 5'-0\" not 5'")))
+    (> bad 0)
+    (reverse lines)))
+
+;; The whole report: the liner-finish checks on the MAIN sheet - a
+;; large title, the date and version, a verdict line, the colour
+;; legend, a SUMMARY dashboard, then the findings under underlined
+;; headings - and the DIMCHECK-style findings (dimensions, arcs,
+;; overlapping lines) in a DIMENSION AUDIT column to its right.  A
+;; lite run writes the main sheet alone.
+;;   title   the report's big first line ("LINFINCHECK REPORT", ...)
+;;   note    extra legend sentence(s) up front, or nil
+;;   hdr     (text . attn) pairs for the SUMMARY dashboard
+;;   dhdr    (text . attn) pairs for the dimension column's dashboard
+;;   lines   every finding line, report order
+;;   lite    T = skip the dimension column
+;; Returns the x of the report's right edge, for the caller's zoom.
+(defun lfc:write-report (title note hdr dhdr lines lite
+                         minx miny maxx maxy
+                         / mainl diml l pr nred nmain ndim nlin grps grp
+                           ref h ins ins2 txt right)
+  (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
+  (foreach l lines
+    (if (lfc:dimline-p l)
+      (setq diml (cons l diml))
+      (setq mainl (cons l mainl))))
+  (setq mainl (reverse mainl)
+        diml  (reverse diml))
+  ;; the verdict counts every line that will render red, either column
+  (setq nred 0)
+  (foreach pr (append hdr dhdr)
+    (if (cdr pr) (setq nred (1+ nred))))
+  (foreach l lines
+    (if (lfc:attn-p l) (setq nred (1+ nred))))
+  ;; sizing: weighted line count per column - the head is ~4.5 lines,
+  ;; a heading is a line plus its 0.4 gap - and the taller column
+  ;; drives the text height, clamped as before
+  (setq nmain 4.5 grps nil)
+  (foreach l mainl
+    (if (not (member (lfc:linegrp l) grps))
+      (setq grps (cons (lfc:linegrp l) grps))))
+  (setq nmain (+ nmain (* 1.4 (1+ (length grps)))))   ; SUMMARY + sections
+  (setq nmain (+ nmain (* (length hdr) *lfc-green-scale*)))
+  (foreach l mainl
+    (setq nmain (+ nmain (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
+  (setq ndim 0.0)
+  (if (not lite)
+    (progn
+      (setq ndim 2.5 grps nil)                        ; column title + legend
+      (foreach l diml
+        (if (not (member (lfc:linegrp l) grps))
+          (setq grps (cons (lfc:linegrp l) grps))))
+      (setq ndim (+ ndim (* 1.4 (length grps))))
+      (setq ndim (+ ndim (* (length dhdr) *lfc-green-scale*)))
+      (foreach l diml
+        (setq ndim (+ ndim (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))))
+  (setq nlin (max nmain ndim))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+    (progn
+      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
+            h   (/ ref (* 1.66 nlin)))
+      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
+      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+    (progn
+      (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
+      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+  (setq ins (if minx
+              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list 0.0 0.0 0.0)))
+  ;; --- the main sheet
+  (setq txt (strcat (lfc:big title)
+                    "\\P"
+                    (lfc:small (strcat (lfc:datestr)
+                                       "  -  LINFINCHECK "
+                                       *lfc-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (if (> nred 0)
+                      (lfc:red (strcat (itoa nred) " LINE"
+                                       (if (= 1 nred) "" "S")
+                                       " NEED"
+                                       (if (= 1 nred) "S" "")
+                                       " ATTENTION"))
+                      "ALL CLEAR - every check passed")
+                    "}"
+                    "\\P"
+                    (lfc:small
+                      (strcat (if note note "")
+                              "Lines needing attention are in "
+                              (lfc:red "red")
+                              " at full size; lines that checked out"
+                              " are smaller."))))
+  (setq txt (strcat txt "\\P" (lfc:hdg "SUMMARY")))
+  (foreach pr hdr
+    (setq txt (strcat txt "\\P"
+                      (if (cdr pr)
+                        (lfc:red (strcat "  " (car pr)))
+                        (lfc:small (strcat "  " (car pr)))))))
+  (setq grp nil)
+  (foreach l mainl
+    (if (/= grp (lfc:linegrp l))
+      (setq grp (lfc:linegrp l)
+            txt (strcat txt "\\P" (lfc:hdg grp))))
+    (setq txt (strcat txt "\\P"
+                      (if (lfc:attn-p l)
+                        (lfc:red (strcat "  " l))
+                        (lfc:small (strcat "  " l))))))
+  (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+  (setq right (+ (car ins) (* *lfc-report-chars* h)))
+  ;; --- the DIMENSION AUDIT column
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ *lfc-report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (lfc:small
+                           (strcat "Dimensions, arcs and overlapping"
+                                   " lines - DIMCHECK's ground, kept"
+                                   " off the main sheet."))))
+      (foreach pr dhdr
+        (setq txt (strcat txt "\\P"
+                          (if (cdr pr)
+                            (lfc:red (strcat "  " (car pr)))
+                            (lfc:small (strcat "  " (car pr)))))))
+      (setq grp nil)
+      (foreach l diml
+        (if (/= grp (lfc:linegrp l))
+          (setq grp (lfc:linegrp l)
+                txt (strcat txt "\\P" (lfc:hdg grp))))
+        (setq txt (strcat txt "\\P"
+                          (if (lfc:attn-p l)
+                            (lfc:red (strcat "  " l))
+                            (lfc:small (strcat "  " l))))))
+      (lfc:mtext ins2 h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+      (setq right (+ (car ins2) (* *lfc-report-chars* h)))))
+  right)
 
 ;; --- geometry ------------------------------------------------------
 
@@ -1491,7 +1816,18 @@
     ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29) ; leap Feb
     (t 28)))
 
-(defun lfc:date-verdict (raw / s mo dd yr)
+(defun lfc:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun lfc:mdy-str (mdy)
+  (strcat (lfc:pad2 (car mdy)) "/" (lfc:pad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+(defun lfc:date-verdict (raw / s mo dd yr now)
   ;; nil when raw is a clean MM/DD/YYYY calendar date; otherwise a
   ;; short string saying what is wrong with it
   (setq s (vl-string-trim " \t" (lfc:after-eq raw)))
@@ -1515,6 +1851,14 @@
        ((or (< dd 1) (> dd (lfc:days-in-month mo yr)))
         (strcat "'" raw "' - " (substr s 4 2)
                 " is not a valid day for that month - expected MM/DD/YYYY"))
+       ;; a real date, but is it TODAY?  A sheet going out under an old
+       ;; date is the mistake this catches -- the drawing was reworked
+       ;; and the title block never caught up.
+       ((progn (setq now (lfc:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now)
+                ") - update it"))
        (t nil)))))
 
 ;; --- dimension review ----------------------------------------------
@@ -1981,7 +2325,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb h m ins txt nlin ref)
+                      minx miny maxx maxy bb m dhdr right dimlay units)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2591,7 +2935,9 @@
               (if datebad
                 (strcat *lfc-date-tag* " " datebad)
                 (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
-            (princ (strcat "\n  Date: " datesum))))
+            (princ (strcat "\n  Date: " datesum)))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
         ;; --- Liner Material check -----------------------------------
         (setq liners      (vl-remove-if-not
@@ -2751,30 +3097,10 @@
                            "")))))
 
         ;; --- report on the right side, to scale with the drawing ----
-        ;; text height picked from the drawing's extents so the whole
-        ;; report roughly matches the drawing's height (MTEXT line
-        ;; spacing is ~1.66 x text height), clamped so a short report
-        ;; is not gigantic nor a long one unreadably small
-        ;; all-clear lines are shorter, so weight them when sizing
-        (setq nlin 3.0)                          ; title, legend, separator
-        (foreach l lines
-          (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
-        (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))   ; the header dashboard
-        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-          (progn
-            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-                  h   (/ ref (* 1.66 nlin)))
-            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-          (progn
-            (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
-        (setq ins (if minx
-                    (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                    (list 0.0 0.0 0.0)))
-        ;; header dashboard: each line carries a "needs attention" flag
-        ;; so a category with anything to look over turns red
-        (setq hdr
+        ;; the liner-finish checks lead on the main sheet; the
+        ;; DIMCHECK-style findings go in the DIMENSION AUDIT column
+        ;; beside it
+        (setq dhdr
           (list
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
@@ -2792,7 +3118,16 @@
                                     ", flagged: " (itoa noflag)
                                     ", left as drawn: " (itoa noleft) ")")
                             " - none found"))
-                  (> noflag 0))
+                  (> noflag 0))))
+        (setq dimlay (lfc:dimlayer-verdict dims)
+              units  (lfc:audit-units ss))
+        (foreach l (caddr units)
+          (princ (strcat "\n  " l))
+          (setq lines (cons l lines)))
+        (setq hdr
+          (list
+            (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+            (cons (strcat "Feet & inches: " (car units)) (cadr units))
             (cons (strcat "Steps: " stepsum)          (lfc:attn-p stepsum))
             (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
             (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -2802,23 +3137,9 @@
         (if datesum
           (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                             (lfc:attn-p datesum))))))
-        (setq txt (strcat "LINFINCHECK REPORT - " (lfc:datestr)
-                          "  [LINFINCHECK " *lfc-version* "]"
-                          "\\P"
-                          (lfc:small
-                            (strcat "Items needing attention are shown in "
-                                    (lfc:red "red") ", larger than the rest."))))
-        (foreach pr hdr
-          (setq txt (strcat txt "\\P"
-                            (if (cdr pr)
-                              (lfc:red (car pr))
-                              (lfc:small (car pr))))))
-        (setq txt (strcat txt "\\P"
-                          (lfc:small "----------------------------------------")))
-        (foreach l (reverse lines)
-          (setq txt (strcat txt "\\P"
-                            (if (lfc:attn-p l) (lfc:red l) (lfc:small l)))))
-        (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+        (setq right (lfc:write-report "LINFINCHECK REPORT" nil hdr dhdr
+                                      (reverse lines) nil
+                                      minx miny maxx maxy))
 
         ;; --- show the drawing plus the report -----------------------
         (if minx
@@ -2826,9 +3147,7 @@
             (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
-                     (trans (list (+ (car ins) (* *lfc-report-chars* h) m)
-                                  (+ maxy m) 0.0)
-                            0 1)))
+                     (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
         (command "_.UNDO" "_End")
@@ -2864,12 +3183,23 @@
                        "\nOne UNDO reverts everything LINFINCHECK changed (including the report)."))))))
   (princ))
 
-;; --- LINFINSCAN: the read-only twin -----------------------------------
+;; --- LINFINSCAN / LITELINFINSCAN: the read-only twins -----------------
+;;  LITELINFINSCAN skips the DIMCHECK-style pass entirely - no
+;;  dimension, arc or overlap audit and no DIMENSION AUDIT column -
+;;  for a drawing DIMCHECK already went over.
 ;;  Runs every audit, asks nothing, and changes nothing in the drawing
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
-(defun c:LINFINSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
+(defun c:LINFINSCAN () (lfc:scan nil))
+
+(defun c:LITELINFINSCAN () (lfc:scan T))
+
+;; The read-only scan.  lite = T skips the DIMCHECK-style pass - no
+;; dimension, arc or overlap audit and no DIMENSION AUDIT column -
+;; for a drawing DIMCHECK already went over.
+(defun lfc:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
+                     plns segs
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
                      beadss beadbbs bb gbb tlist tins bp cx cy d tbest
@@ -2877,17 +3207,19 @@
                      wallht hdim dimht
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
-                     nd ndbad na nabad h m ins txt nlin ref hdr l badtags
+                     nd ndbad na nabad m hdr dhdr l badtags dimlay units
                      bordbb bordsum attundec
                      minx miny maxx maxy p13 p14 near s b w)
 
+  (setq name (if lite "LITELINFINSCAN" "LINFINSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nLINFINSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to LINFINSCAN (Enter = whole drawing): ")
+  (prompt (strcat "\nHighlight the drawing to " name
+                  " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
@@ -2913,10 +3245,14 @@
                maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
      (setq dims (reverse dims) arcs (reverse arcs)
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
-           segs (lfc:collect-segs plns))
+           segs (if lite nil (lfc:collect-segs plns)))
 
      ;; --- dimensions: report stray definition points, move nothing
-     (foreach e (lfc:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+     ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
+     (foreach e (if lite
+                  nil
+                  (lfc:sort-dims dims (if (and miny maxy)
+                                        (* 0.05 (- maxy miny)) 1.0)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -2944,7 +3280,7 @@
                          lines)))
 
      ;; --- arcs: report unattached endpoints, move nothing
-     (foreach e arcs
+     (foreach e (if lite nil arcs)
        (setq na  (1+ na)
              bad nil)
        (if (lfc:planar-arc-p (entget e))
@@ -2960,7 +3296,7 @@
                          lines)))
 
      ;; --- overlaps
-     (setq olaps (lfc:find-overlaps segs))
+     (setq olaps (if lite nil (lfc:find-overlaps segs)))
      (foreach pr olaps
        (setq lines (cons (strcat "Lines "
                                  (cdr (assoc 5 (entget (lfc:seg-ent (car pr)))))
@@ -3133,7 +3469,9 @@
          (setq datesum
            (if datebad
              (strcat *lfc-date-tag* " " datebad)
-             (strcat *lfc-date-tag* " = '" dateraw "' - OK")))))
+             (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
+          (setq datesum (strcat "no '" *lfc-title-block*
+                                "' block in reach - date NOT CHECKED")))
 
      ;; --- liner
      (setq liners (vl-remove-if-not
@@ -3184,18 +3522,30 @@
                       (ssget "_X" (list (cons 8 *lfc-border-layer*))))))
      (setq bordsum (lfc:border-verdict bordbb))
 
-     ;; --- report (the only thing LINFINSCAN writes) ------------------
+     ;; --- report (the only thing the scan writes) --------------------
      (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
      (lfc:clear-old)
+     (setq dhdr (if lite
+                  nil
+                  (list
+                    (cons (strcat "Dimensions scanned: " (itoa nd) " ("
+                                  (itoa ndbad)
+                                  " with a stray definition point)")
+                          (> ndbad 0))
+                    (cons (strcat "Arcs scanned: " (itoa na) " ("
+                                  (itoa nabad) " with an unattached end)")
+                          (> nabad 0))
+                    (cons (strcat "Overlapping line pairs: "
+                                  (itoa (length olaps)))
+                          (> (length olaps) 0)))))
+     (setq dimlay (lfc:dimlayer-verdict dims)
+           units  (lfc:audit-units ss))
+     (foreach l (caddr units)
+       (princ (strcat "\n  " l))
+       (setq lines (cons l lines)))
      (setq hdr (list
-                 (cons (strcat "Dimensions scanned: " (itoa nd) " ("
-                               (itoa ndbad) " with a stray definition point)")
-                       (> ndbad 0))
-                 (cons (strcat "Arcs scanned: " (itoa na) " ("
-                               (itoa nabad) " with an unattached end)")
-                       (> nabad 0))
-                 (cons (strcat "Overlapping line pairs: " (itoa (length olaps)))
-                       (> (length olaps) 0))
+                 (cons (strcat "Dimension layer: " (car dimlay)) (cdr dimlay))
+                 (cons (strcat "Feet & inches: " (car units)) (cadr units))
                  (cons (strcat "Steps: " stepsum)           (lfc:attn-p stepsum))
                  (cons (strcat "Liner Material: " linersum) (lfc:attn-p linersum))
                  (cons (strcat "Title block border: " bordsum) (lfc:attn-p bordsum))))
@@ -3205,38 +3555,27 @@
      (if datesum
        (setq hdr (append hdr (list (cons (strcat "Date: " datesum)
                                          (lfc:attn-p datesum))))))
-     (setq nlin 3.0)
-     (foreach l lines
-       (setq nlin (+ nlin (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))
-     (setq nlin (+ nlin (* 8.0 *lfc-green-scale*)))
-     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
-       (progn
-         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-               h   (/ ref (* 1.66 nlin)))
-         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-       (setq h 2.5))
-     (setq ins (if minx
-                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
-                 (list 0.0 0.0 0.0)))
-     (setq txt (strcat "LINFINSCAN REPORT - " (lfc:datestr)
-                       "  [LINFINCHECK " *lfc-version* "]"
-                       "\\P"
-                       (lfc:small (strcat "Read-only scan - nothing in the drawing was changed. "
-                                           "Items needing attention are shown in "
-                                           (lfc:red "red") "."))))
-     (foreach pr hdr
-       (setq txt (strcat txt "\\P" (if (cdr pr) (lfc:red (car pr))
-                                     (lfc:small (car pr))))))
-     (setq txt (strcat txt "\\P" (lfc:small "----------------------------------------")))
-     (foreach l (reverse lines)
-       (setq txt (strcat txt "\\P" (if (lfc:attn-p l) (lfc:red l) (lfc:small l)))))
-     (lfc:mtext ins h (* *lfc-report-chars* h) txt *lfc-report-layer*)
+     (lfc:write-report (strcat name " REPORT")
+                       (strcat "Read-only scan - nothing in the drawing"
+                               " was changed.  "
+                               (if lite
+                                 (strcat "Lite: dimensions, arcs and"
+                                         " overlaps were not audited -"
+                                         " run DIMCHECK or LINFINSCAN"
+                                         " for those.  ")
+                                 ""))
+                       hdr dhdr (reverse lines) lite
+                       minx miny maxx maxy)
      (setvar "CMDECHO" oldecho)
-     (princ (strcat "\n--- LINFINSCAN complete (read-only) ---"
-                    "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
-                    "\nArcs: " (itoa na) " scanned, " (itoa nabad) " with an unattached end"
-                    "\nOverlapping line pairs: " (itoa (length olaps))
+     (princ (strcat "\n--- " name " complete (read-only) ---"
+                    (if lite
+                      "\nLite: dimensions, arcs and overlaps were not audited."
+                      (strcat "\nDimensions: " (itoa nd) " scanned, "
+                              (itoa ndbad) " with a stray point"
+                              "\nArcs: " (itoa na) " scanned, "
+                              (itoa nabad) " with an unattached end"
+                              "\nOverlapping line pairs: "
+                              (itoa (length olaps))))
                     "\nSteps: " stepsum
                     "\nLiner Material: " linersum
                     "\nTitle block border: " bordsum

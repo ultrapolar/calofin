@@ -6,7 +6,7 @@ AutoCAD only lets it look along the support file search path -- which
 is not where APPLOAD's file dialog just sent you.  A single file has
 nothing to find, so this is the build to hand someone:
 
-    python3 tools/build_shared_bundle.py   ->  shared/CALOFIN-ALL.lsp
+    python3 tools/build_shared_bundle.py   ->  shared/LAZPASS.lsp
 
 Same idea as the STEPS bundle in release_lisp.py: members are included
 verbatim, in the loader's own order, library first.
@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
 PARTS = SHARED / "parts"
 LOADER = PARTS / "CALOFIN-LOADER.lsp"
-BUNDLE = SHARED / "CALOFIN-ALL.lsp"
+BUNDLE = SHARED / "LAZPASS.lsp"
 
 RULE = ";;; " + "=" * 70
 COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
@@ -55,7 +55,7 @@ def main():
 
     out = [
         RULE,
-        ";;; CALOFIN-ALL.lsp  --  the whole shared build in one file",
+        ";;; LAZPASS.lsp  --  the whole shared build in one file",
         ";;; " + "-" * 70,
         ";;; GENERATED - do not edit.  Rebuild it with:",
         ";;;     python3 tools/build_shared_bundle.py",
@@ -90,8 +90,35 @@ def main():
     out += [
         "",
         RULE,
-        '(princ (strcat "\\nCALOFIN: shared build loaded - %d commands '
-        'in one session."))' % len(commands),
+        # The count used to be baked in here, so a build that half
+        # loaded still announced every command it was BUILT with.  A
+        # command that never arrived is exactly what a greyed button on
+        # the panel means, so the footer checks its own claim: an
+        # unbound C: name evaluates to nil, and anything missing is
+        # named rather than counted over.
+        ";;; -------------------- what actually arrived ---------------------------",
+        "(setq lazpass:*want* '(",
+    ] + ["  " + " ".join('"%s"' % c for c in commands[i:i + 6])
+         for i in range(0, len(commands), 6)] + [
+        "))",
+        "",
+        "(setq lazpass:*missing* nil)",
+        "(foreach n lazpass:*want*",
+        "  (if (not (eval (read (strcat \"C:\" n))))",
+        "    (setq lazpass:*missing* (cons n lazpass:*missing*))))",
+        "",
+        "(if lazpass:*missing*",
+        "  (progn",
+        '    (princ (strcat "\\nLAZPASS: only " (itoa (- (length lazpass:*want*)',
+        "                                             (length lazpass:*missing*)))",
+        '                   " of " (itoa (length lazpass:*want*))',
+        '                   " commands loaded -- this build is incomplete."))',
+        '    (princ "\\nLAZPASS: missing:")',
+        "    (foreach n (reverse lazpass:*missing*)",
+        '      (princ (strcat " " n))))',
+        '  (princ (strcat "\\nLAZPASS: calofin shared build loaded - "',
+        '                 (itoa (length lazpass:*want*))',
+        '                 " commands in one session.")))',
         "(princ)",
         "",
     ]

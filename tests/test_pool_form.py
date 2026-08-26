@@ -1,13 +1,13 @@
 """Form-driven POOL: prove the palette path draws what the command line
 draws, including the side-view depths.
 
-KNOWN FAILING as of the branch consolidation: this file was written
-against calofin_net's forked copy of POOL.LSP. lisp/pool/POOL.LSP is
-now the canonical, actively-developed version instead (see the repo
-README), and its prompt sequence has since diverged from what the
-palette's LispBridge expects. Expect this to fail until the palette is
-reconciled with the canonical POOL.LSP - that's tracked work, not a
-regression from the restructure.
+This file was written against the contract before the contract was
+built: pool:*form*, pool:run-with-answers and pool:fkeyof existed in
+ui/PLAN.md, in STANDARDS.md and here, and in no .lsp anywhere. It was
+the specification, and it failed for as long as the receiving end was
+missing. That end is now in lisp/pool/POOL.LSP and this passes at both
+tiers, so a form and the command line have to keep drawing the same
+pool from here on.
 
 POOL is a harder case than SPA. Its plan chain (H G F E, or E2 F2 G F1
 E1 on a Sport) comes through pool:askseqb and is keyed like SPA's, but
@@ -182,9 +182,51 @@ print("   bad D reported and retyped once; no infinite loop")
 
 
 # --------------------------------------------------------------------
-# 6.  Answers must not survive the command.
+# 6.  Corners from the form: the treatment dropdown and its size.
 # --------------------------------------------------------------------
-print("== 6. answers do not leak into the next run ==")
+print("== 6. corners answered by the form ==")
+
+# all four corners Cut 24 -- what scenario 1's PROMPTS typed as
+# "Cut", 24.0 and six Enter-defaults -- supplied as form keys instead
+CORNER_LEAD = (["Outofsquare", "Rectangle"] + BASE +
+               [240.0, 240.0, 120.0, 120.0])
+CORNER_FORM = """'((btype . "Wedge") (h . 30.0) (f . 180.0)
+                  (c . 40.0) (d . 60.0)
+                  (cornera-ty . "Cut") (cornera-sz . 24.0)
+                  (cornerb-ty . "Cut") (cornerb-sz . 24.0)
+                  (cornerc-ty . "Cut") (cornerc-sz . 24.0)
+                  (cornerd-ty . "Cut") (cornerd-sz . 24.0))"""
+
+f = by_form(CORNER_FORM,
+            CORNER_LEAD + ["Ends", 260.0, 260.0, 260.0, 260.0,
+                           "Yes", None, 60.0, None])
+same(a, f, "form corners")
+assert not any(p.startswith('\nCorner') or 'corners be treated' in p
+               for p, _ in f.prompts), \
+    "a corner was asked despite the form answering all four"
+print("   all four corners from the form; no corner prompt appeared")
+
+# treatment without a size: POOL asks for JUST the number
+g2 = by_form("""'((btype . "Wedge") (h . 30.0) (f . 180.0)
+                 (c . 40.0) (d . 60.0)
+                 (cornera-ty . "Cut"))""",
+             CORNER_LEAD + [24.0,                  # A's size, prompted
+                            None, None, None, None, None, None,
+                            "Ends", 260.0, 260.0, 260.0, 260.0,
+                            "Yes", None, 60.0, None])
+same(a, g2, "ty without sz")
+assert any(p.startswith('\nCut face length for Corner A')
+           for p, _ in g2.prompts), \
+    "A's size should have been prompted"
+assert not any('Corner A' in p and 'treated' in p for p, _ in g2.prompts), \
+    "A's treatment was asked despite the form supplying it"
+print("   treatment from the form, size typed; B-D default as always")
+
+
+# --------------------------------------------------------------------
+# 7.  Answers must not survive the command.
+# --------------------------------------------------------------------
+print("== 7. answers do not leak into the next run ==")
 
 g = VM()
 g.load(LSP)
@@ -194,6 +236,54 @@ g.eval(parse_all("(pool:run-with-answers %s)" % FULL)[0])
 leaked = g.globals.get('pool:*form*')
 assert not leaked, "pool:*form* still armed after the run: %r" % (leaked,)
 print("   pool:*form* cleared once the command finished")
+
+
+# --------------------------------------------------------------------
+# 8.  Cover mode: the pool-bottom gate is closed, not asked.
+# --------------------------------------------------------------------
+# A cover sheet records the perimeter and nothing below it, so POOLCOVER
+# answers "Add pool bottom (hopper) detail?" No before it is asked --
+# and with it the whole depth chain behind it, C and D included.  The
+# flag is a run flag rather than a form entry because five shape paths
+# reach that one gate and the store is consume-once; this is what says
+# the gate is really closed and that the flag does not survive the run.
+print("== 8. cover mode: no bottom asked for, no depths, no leak ==")
+
+# every answer up to but NOT including the "Yes" that opens the bottom
+COVER = LEAD[:-1]
+
+
+def bottom_asked(vm):
+    return [p for p, _ in vm.prompts if 'Add pool bottom' in p]
+
+
+def depth_asked(vm):
+    return [p for p, _ in vm.prompts
+            if p.startswith('\nC -') or p.startswith('\nD -')
+            or p.startswith('\nC2 -')]
+
+
+cv = VM()
+cv.load(LSP)
+cv.run('c:POOLCOVER', COVER)
+assert not bottom_asked(cv), \
+    "cover mode still asked for the bottom: %r" % bottom_asked(cv)
+assert not depth_asked(cv), \
+    "cover mode asked for a depth: %r" % depth_asked(cv)
+assert snapshot(cv), "cover mode drew nothing at all"
+assert not cv.globals.get('pool:*nobottom*'), \
+    "pool:*nobottom* survived the run -- the next pool would lose its bottom"
+print("   %d entities drawn, bottom never asked, %d prompts answered"
+      % (len(snapshot(cv)), len(cv.prompts)))
+
+# the guard that matters: plain POOL must be untouched by any of this
+pl = VM()
+pl.load(LSP)
+pl.run('c:POOL', LEAD + ["Wedge", 30.0, 180.0, None, 60.0, None, 40.0, 60.0])
+assert bottom_asked(pl), "plain POOL stopped asking about the bottom"
+assert not pl.globals.get('pool:*nobottom*'), \
+    "a typed POOL set the cover flag"
+print("   typed POOL still asks it, and never sets the flag itself")
 
 
 print("\nALL POOL FORM SCENARIOS PASSED")

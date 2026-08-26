@@ -239,19 +239,27 @@ corners (a small circle on the corner point with a `90°` leader) —
 and a circled `?` plus a `Not Given` note on any `NotGiven` corner.
 
 The **guide updates live**: as soon as the corner answers are in, the
-gray guide redraws its corners with the cuts/fillets (display
-sizes capped so oversized inputs can't fold the nominal shape), and
-the dashed cross-dim guide lines are re-drawn between the actual
-reference points for the chosen mode — in Ends mode each of the four
-ties is its own line, highlighted individually as it's prompted.
+gray guide redraws its corners with the cuts/fillets at their real
+sizes (the guide sits on the live measured quad, so nothing needs
+display-capping any more), and the dashed cross-dim guide lines are
+drawn between the actual reference points for the chosen mode — in
+Ends mode each of the four ties is its own line, highlighted
+individually as it's prompted. Each cross dim answered then reshapes
+the quad under all of them, corners and ties walking along with it.
 
 ### Pool bottom / hopper (every shape)
 
 After the perimeter is drawn and dimensioned, the routine offers a
 **pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A lettered
 field-sheet guide appears inside the fitted pool; each tie **and its
-letter** turn red as that letter is prompted. The interior draws on the
-**`POOL`** layer. For the rectangle:
+letter** turn red as that letter is prompted — and the floor guide is
+**live** exactly like the perimeter's: every letter answered reshapes
+the hopper on the spot, the letters still open sharing whatever the
+pool's totals have left, so the chain always closes against the walls
+and a mistyped offset shows up as a hopper that visibly lands in the
+wrong place. On the styles with a side profile, the section under the
+plan reshapes the same way as `C`, `D` (and `C2`) come in. The
+interior then draws on the **`POOL`** layer. For the rectangle:
 
 ```
 D ------------------------------ C     H  left end -> hopper
@@ -302,6 +310,29 @@ like the field sheet, and every letter gets a report row.
 offset, so once one is entered the next offers it as a default —
 press Enter to accept, type a number to override, `NA` as always.
 (Sport bottoms do the same between `M` and `K`.)
+
+**The last letter of a chain is worked out for you.** Each loop closes
+against a total the pool already knows — H+G+F+E against the length,
+M+L+K against the width — so once every other member is in, the last
+one can only be one number, and that number is the default:
+
+* `H`, `G` and `F` given → **`E`** is offered as what the length has
+  left (on an L pool where they already span the main section, `E`
+  isn't even asked — the break lands on the inner corner);
+* `M` and `L` given → **`K`** is offered as what the width has left,
+  in place of the plain "same as M" default;
+* the sport bottom does the same for **`E1`** (after E2/F2/G/F1) and
+  for **`K`**.
+
+**`M` answered the same as `H` fixes `L`.** The same offset off the
+end wall and the side is the crew saying the deep end sits **square in
+the pool**, which leaves the hopper width as `A - 2M` (i.e. `2M + L =
+A`) — so that is what `L` offers. Measure `M` different from `H` and
+`L` is asked cold, as before.
+
+Every one of these is a *suggestion*: Enter takes it, a typed number
+overrides it, `NA` still hands the letter to the chain resolver. A
+squarely-set hopper is now `H`, `G`, `F` and four Enters.
 
 **Oval (True Oval sheet):** same phase, prompting the interior letters
 only (A, B, R1, R2 come from the perimeter). The hopper is a box with
@@ -743,22 +774,45 @@ pinned down — with none at all you simply get the perfect right-angle
 (or 45°-jointed) shape. The two-triangle check is a rectangle-only
 computation and is not made for L pools.
 
-**In-square lazy L — parallel pairs held exactly.** Field side
+**In-square lazy L — deep end held, the wing gives.** Field side
 lengths never quite close, and letting a best-fit absorb that error
 would bend the corners, breaking the pairs that must read parallel
 (**A-B ∥ E-F** and **B-C ∥ D-E**). So the in-square lazy L is not
-relaxed at all: the chain A→B→C→D→E is walked at the **exact
-headings** (0°, 45°, 135°, 225°) with the taped lengths, and F drops
-straight down from E onto the left wall. Parallelism is perfect by
-construction; whatever closure error the tapes carried lands in the
-**lengths of E-F and F-A**, where the report shows it as small
-target/actual deltas instead of a subtly bent pool.
+relaxed at all, it is **built**:
+
+* the main section — **A-B, E-F and F-A** — is held **exactly** and
+  comes out a true rectangle (A-B and E-F dead horizontal, F-A dead
+  vertical, square corners at A and F). That is the deep end, and it
+  is the frame the **hopper** is measured off, so it is the part that
+  has to be right;
+* the bends **B-C** and **D-E** stay on the 45° heading, so they stay
+  parallel to each other whatever happens;
+* the only freedom left is how far C and D slide along those bend
+  lines, and it is spent spreading the closure error over the three
+  **wing** sides in the least-squares sense — B-C and D-E give up
+  half of it each (one grows exactly as much as the other shrinks)
+  and C-D takes the rest.
+
+Parallelism is perfect by construction, and the error lands where a
+lazy L can carry it. Earlier revisions walked the whole chain
+A→B→C→D→E at exact headings and dropped F onto the left wall, which
+piled every inch of closure error into **E-F and F-A** — the deep-end
+sides, the two that must not move.
+
+**And a tape that misses by feet is an error, not a fit.** Whatever
+the fit could not hold to within the 1" side tolerance is called out
+rather than absorbed quietly: those sides are **dimensioned in red**,
+their report rows are red, and **`SIDES DO NOT CLOSE - <sides> OFF THE
+TAPE, RE-MEASURE`** is written under the table (with the same warning
+at the command line). Six sides that miss each other by a foot are not
+a pool that got drawn slightly small — they are a measurement to go
+back and take again.
 
 ### Guided input
 
-As soon as the shape is chosen, a gray nominal "guide" pool of that
-shape (with corner labels) is drawn at the base point and the view
-zooms to it. The pool outline is drawn solid in **gray**, while all
+As soon as the shape is chosen, a gray "guide" pool of that shape
+(with corner labels) is drawn at the base point and the view zooms to
+it. The pool outline is drawn solid in **gray**, while all
 **cross dims (and other measuring lines) are WHITE and DOTTED**, so
 the diagonals read clearly over the shape even on the L pools where
 nine diagonals cross the body. The dot pattern is defined in inches
@@ -766,6 +820,19 @@ by the routine itself and scaled to cancel the drawing's `LTSCALE`,
 so it looks the same in any drawing (no dependency on `acad.lin`
 being found, which used to make the pattern silently fall back to
 continuous).
+
+**The guide is live** (the way an OASIS preview redraws before every
+question): it starts at a familiar nominal size, and every accepted
+answer reshapes it on the spot — type the bottom side and the box
+stretches to it, give an oval end radius and that end's bulge follows,
+answer a cross dim on a rectangle and the guide leans out of square
+exactly the way the final fit will hold it. Values not yet given are
+filled with the same derivations the drawing pass will use (an
+unanswered side borrows its partner, a Grecian letter falls back to
+the overall sheet's split, an oval end without a radius is a
+semicircle), and the view follows the reshaped guide so a pool bigger
+than the nominal never grows out of sight. `Back` and re-answer, and
+the guide snaps to the corrected number.
 
 When a prompt names corners — a side "A-B", a cross dim "A-C", or a
 rectangle corner treatment — **the corner letters turn red too**,
@@ -912,7 +979,15 @@ previous style is always restored right afterwards:
   (24")**: corner radii and cut faces, short hopper offsets,
   profile depths. A dimension of exactly 2' stays in the current
   style (`STANDARD`, or `CROSS DIMENSIONS` inside a cross-dim block) —
-  the cutover is *under* 24", not *at or under*. The switch happens
+  the cutover is *under* 24", not *at or under*, and it is read with a
+  millionth of an inch of slack so that holds for a **2 ft corner**:
+  a corner's size is measured back off the geometry the routine built
+  from it, and a 24" radius comes back as 23.99999999999913 as
+  readily as 24.000000000001137. Without the slack the same 2 ft
+  corner drew in inches or not depending on which way the last bit
+  fell. The slack is float noise only — a million times the wobble it
+  absorbs, and orders below the 1/16" a tape can read — so every real
+  measurement under 2 ft is still an inches dim. The switch happens
   per dimension, keyed on that dimension's own measurement, so a 96"
   side and an 18" cut face on the same pool each get the right style.
   (POOL draws no angular dimensions: a square corner is marked with a

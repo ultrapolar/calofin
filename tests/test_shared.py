@@ -118,14 +118,14 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:SPAVER'):
 print('  CALVER / POOLVER / SPAVER ok')
 
 print('shared -- the one-file bundle carries the whole build')
-BUNDLE = os.path.join(SHARED, 'CALOFIN-ALL.lsp')
+BUNDLE = os.path.join(SHARED, 'LAZPASS.lsp')
 if not os.path.exists(BUNDLE):
-    fail('CALOFIN-ALL.lsp missing - run python3 tools/build_shared_bundle.py')
+    fail('LAZPASS.lsp missing - run python3 tools/build_shared_bundle.py')
 bvm = VM()
 try:
     bvm.load(BUNDLE)                        # ONE file, nothing beside it
 except Exception as e:                      # noqa: BLE001 - report the file
-    fail('CALOFIN-ALL.lsp failed to load: %s' % e)
+    fail('LAZPASS.lsp failed to load: %s' % e)
 bundle_cmds = {str(k)[2:] for k in bvm.globals if str(k).startswith('c:')}
 
 # what the manifest alone should put in the bundle
@@ -136,7 +136,7 @@ for f in ORDER:
             expected.add(n.lower()[2:])
 short = sorted(expected - bundle_cmds)
 if short:
-    fail('commands missing from CALOFIN-ALL.lsp: %s (rebuild it with '
+    fail('commands missing from LAZPASS.lsp: %s (rebuild it with '
          'python3 tools/build_shared_bundle.py)' % short)
 
 # and a held-back tool must NOT have leaked in
@@ -149,10 +149,39 @@ for f, why in sorted(HELD.items()):
         if n.lower().startswith('c:') and n.lower()[2:] in bundle_cmds:
             leaked.append('%s (%s, from %s)' % (n, why, f))
 if leaked:
-    fail('held-back commands leaked into CALOFIN-ALL.lsp: %s' % leaked)
+    fail('held-back commands leaked into LAZPASS.lsp: %s' % leaked)
 for cmd in ('c:CALVER', 'c:POOLVER', 'c:ABFINDVER'):
     bvm.run(cmd, [])
 print('  %d commands from one APPLOAD, %d file(s) held back'
       % (len(bundle_cmds), len(HELD)))
+
+# The bundle checks its own claim.  The count used to be baked in at
+# build time, so a build that half loaded still announced every command
+# it was BUILT with -- and a command that never arrived is exactly what
+# a greyed button on the panel means.
+want = bvm.globals.get('lazpass:*want*')
+if not want:
+    fail('the bundle does not declare lazpass:*want*, so its load message '
+         'is an unchecked claim')
+want = set(str(x).lower() for x in want)
+if want != bundle_cmds:
+    fail('the bundle announces a different command set than it defines: %s'
+         % sorted(want ^ bundle_cmds))
+if bvm.globals.get('lazpass:*missing*'):
+    fail('the bundle reported commands missing on a clean load: %s'
+         % bvm.globals.get('lazpass:*missing*'))
+# and it must NAME what is missing rather than just counting
+mvm = VM()
+mvm.load(BUNDLE)
+mvm.loads('(setq c:OASIS nil)'
+          '(setq lazpass:*missing* nil)'
+          '(foreach n lazpass:*want*'
+          '  (if (not (eval (read (strcat "C:" n))))'
+          '    (setq lazpass:*missing* (cons n lazpass:*missing*))))')
+gone = [str(x) for x in (mvm.globals.get('lazpass:*missing*') or [])]
+if gone != ['OASIS']:
+    fail('the bundle self-check did not notice a missing command: %r' % gone)
+print('  and it checks its own claim: %d names declared, missing ones named'
+      % len(want))
 
 print('ALL SHARED-BUILD CHECKS PASSED')

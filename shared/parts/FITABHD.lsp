@@ -106,7 +106,12 @@
 ;;; structural checks hold this file to the conventions above.
 ;;; ======================================================================
 
-(setq *fitabhd-version* "v1.7")    ; announced on load; release_lisp.py
+;; Cover mode: the pool-bottom question answers No without being asked,
+;; so a cover sheet is fitted to its perimeter and stops there.  Set by
+;; FITABHDCOVER, cleared on both exits from c:FITABHD.
+(setq fit:*nobottom* nil)
+
+(setq *fitabhd-version* "v1.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -3692,6 +3697,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nFITABHD error: " msg)))
+    ;; cover mode lasts one run: leaked, it would quietly cost the next
+    ;; FITABHD its bottom
+    (setq fit:*nobottom* nil)
     (princ))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
@@ -3765,13 +3773,18 @@
           (fit:set-bylayer en)
           (princ (strcat "\nKept - the outline moved to layer "
                          fit:*pool-layer* " in ByLayer colour."))
-          (if (cal:askyn (if (= ptype "ROUnd")
-                           "Add the bottom of the pool (hopper ring)?"
-                           "Add the bottom of the pool (standard hopper)?")
-                         "No" nil)
+          ;; cover mode answers this No without asking: a cover sheet
+          ;; is the perimeter and nothing below it
+          (if (and (not fit:*nobottom*)
+                   (cal:askyn (if (= ptype "ROUnd")
+                                "Add the bottom of the pool (hopper ring)?"
+                                "Add the bottom of the pool (standard hopper)?")
+                              "No" nil))
             (if (= ptype "ROUnd")
               (fit:round-bottom res)
-              (fit:bottom res))))
+              (fit:bottom res))
+            (if fit:*nobottom*
+              (princ "\nCover sheet - the pool bottom was skipped."))))
          (T
           (fit:omit-clear)
           (if (and en (entget en)) (entdel en))
@@ -3780,6 +3793,17 @@
   (command "_.UNDO" "_End")
   (setq undo-open nil)
   (cal:sysrestore)
+  (setq fit:*nobottom* nil)
+  (princ))
+
+;; FITABHD for a cover sheet: the same template fit, with the
+;; pool-bottom question answered No before it is asked.  A command of
+;; its own rather than a mode, so a button runs exactly what it names;
+;; c:FITABHD clears the flag on both exits so it cannot leak.
+(defun c:FITABHDCOVER ()
+  (setq fit:*nobottom* t)
+  (princ "\nFITABHDCOVER: cover sheet - the pool bottom will be skipped.")
+  (c:FITABHD)
   (princ))
 
 ;; ----------------------------------------------------------------------

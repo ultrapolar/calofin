@@ -505,6 +505,188 @@ def test_the_report_is_split_the_way_mtext_needs():
     raise AssertionError("no report found")
 
 
+def _move_one_dim(vm, layer):
+    """Shove the first dimension in the drawing onto another layer."""
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = {p.a: p.b for p in vm.entdata[e] if isinstance(p, Dot)}
+        if d.get(0) == 'DIMENSION':
+            vm.entdata[e] = [Dot(8, layer) if (isinstance(p, Dot) and p.a == 8)
+                             else p for p in vm.entdata[e]]
+            return True
+    return False
+
+
+def test_dimension_layer_verdict_is_clean_on_spas_own_output():
+    """Every dimension SPA draws is on DIMENSION, so the roster-wide
+    verdict passes and nothing suggests running CDIM."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    txt = report_of(vm)
+    assert 'Dimension layer: all ' in txt, txt
+    assert 'CDIM' not in txt, txt
+
+
+def test_a_dim_on_the_wrong_layer_is_caught_and_names_cdim():
+    """A dimension dragged onto another layer is counted, the layer it
+    landed on is named, and the report says to run CDIM."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    assert _move_one_dim(vm, 'JUNK'), "found no dimension to move"
+    bad = problems(report_of(vm))
+    assert any('NOT on layer DIMENSION' in p and 'JUNK' in p
+               and 'run CDIM' in p for p in bad), bad
+
+
+def test_the_lite_scan_keeps_the_dimension_layer_check():
+    """LITESPACHECKSCAN drops the per-dimension audit but NOT the
+    layer verdict -- a sheet whose dims sit on the wrong layer plots
+    wrong however sound the dimensions are."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    assert _move_one_dim(vm, 'JUNK')
+    txt = report_of(vm, cmd='c:LITESPACHECKSCAN')
+    assert 'LITESPACHECKSCAN REPORT' in txt, txt[:120]
+    bad = problems(txt)
+    assert any('run CDIM' in p for p in bad), bad
+    # ...and the per-dimension audit really is gone
+    assert 'DIMENSION AUDIT' not in txt, txt
+
+
+def _add_text(vm, s, handle):
+    """Drop a TEXT entity carrying s into the drawing."""
+    esc = s.replace('\\', '\\\\').replace('"', '\\"')
+    vm.loads('(entmakex (list (cons 0 "TEXT") (cons 8 "TEXT") (cons 5 "%s")'
+             ' (list 10 0.0 -50.0) (cons 40 2.0) (cons 1 "%s")))'
+             % (handle, esc))
+
+
+def test_feet_without_inches_is_flagged_and_good_notation_is_not():
+    """A text box reading 5' is caught; 5'-0", 3'-2" and 40" pass, and
+    so does an apostrophe that is a possessive rather than a feet mark."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_text(vm, "Depth 5'", 'BAD1')
+    _add_text(vm, 'Wall 3\'-2"', 'OK1')
+    _add_text(vm, 'Skimmer 40"', 'OK2')
+    _add_text(vm, "Owner's Manual", 'OK3')
+    txt = report_of(vm)
+    bad = problems(txt)
+    assert any('Text BAD1' in p and 'NO INCHES' in p for p in bad), bad
+    for h in ('OK1', 'OK2', 'OK3'):
+        assert not any(h in p for p in bad), (h, bad)
+    assert any('Feet & inches: 1 of ' in p for p in bad), bad
+
+
+def test_the_feet_mark_predicate_itself():
+    """The rule, case by case: an apostrophe straight after a digit is a
+    feet mark and needs an inch mark; anything else is prose."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    vm.load(CHK)
+    for src, want in [("5'", True), ("5'-0\"", False), ("3'-2\"", False),
+                      ('40"', False), ("5'-0''", False), ("12''", False),
+                      ("Water's Edge", False), ("don't", False),
+                      ("3' 4 1/2\"", False), ("5' and 7'-0\"", True),
+                      ("A 5'x10' pad", True)]:
+        esc = src.replace('\\', '\\\\').replace('"', '\\"')
+        got = bool(vm.loads('(spachk:feet-open-p "%s")' % esc))
+        assert got == want, (src, got, want)
+
+
+def test_spas_own_text_states_its_inches():
+    """Everything SPA writes passes -- the check must not cry wolf on
+    the tool's own output."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    txt = report_of(vm)
+    assert 'Feet & inches: all ' in txt, txt
+    assert not any('NO INCHES' in p for p in problems(txt)), problems(txt)
+
+
+def test_the_lite_scan_keeps_the_units_check():
+    """LITESPACHECKSCAN drops the per-dimension audit but keeps the
+    feet-and-inches check -- it is about drawing text, not dimensions."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_text(vm, "Depth 5'", 'BAD1')
+    bad = problems(report_of(vm, cmd='c:LITESPACHECKSCAN'))
+    assert any('Text BAD1' in p and 'NO INCHES' in p for p in bad), bad
+
+
+def _add_title(vm, date, name='Tech Title'):
+    """Put a Tech Title block carrying a Date attribute in the drawing."""
+    vm.loads("""(progn
+      (setq b (entmakex (list '(0 . "INSERT") '(8 . "0") (cons 2 "%s")
+                              '(10 0.0 400.0) '(66 . 1))))
+      (entmake (list '(0 . "ATTRIB") '(8 . "0") '(2 . "Date") (cons 1 "%s")))
+      (entmake (list '(0 . "SEQEND") '(8 . "0"))))""" % (name, date))
+
+
+def _today():
+    """The date the VM's clock reports, as MM/DD/YYYY."""
+    vm = VM()
+    vm.load(CHK)
+    return vm.loads('(spachk:mdy-str (spachk:today-mdy))')
+
+
+def test_todays_date_in_the_tech_title_passes():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, _today())
+    txt = report_of(vm)
+    assert "Tech Title: Date = '" in txt and "' - OK" in txt, txt
+    assert not any('Tech Title' in p for p in problems(txt)), problems(txt)
+
+
+def test_a_stale_date_is_reported():
+    """The mistake this is for: the drawing was reworked and the title
+    block never caught up."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, '01/02/2020')
+    bad = problems(report_of(vm))
+    assert any("NOT TODAY'S DATE" in p and _today() in p for p in bad), bad
+
+
+def test_a_malformed_or_impossible_date_is_reported():
+    for value, want in [('8/1/26', 'not in MM/DD/YYYY format'),
+                        ('', 'is blank'),
+                        ('02/30/2026', 'not a valid day for that month'),
+                        ('13/01/2026', 'is not a month')]:
+        vm = build([None, 'Coversize', 'Rectangle', None,
+                    84.0, None, '90', None, None, None, 'No', 'No'])
+        _add_title(vm, value)
+        bad = problems(report_of(vm))
+        assert any(want in p for p in bad), (value, want, bad)
+
+
+def test_the_block_name_may_be_spelled_without_spaces():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, _today(), name='TECHTITLE')
+    assert not any('Tech Title' in p for p in problems(report_of(vm)))
+
+
+def test_no_tech_title_says_so_without_crying_wolf():
+    """A spa sheet checked on its own has no Tech Title in reach; that
+    is stated, not flagged."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    txt = report_of(vm)
+    assert 'date NOT CHECKED' in txt, txt
+    assert not any('NOT CHECKED' in p for p in problems(txt)), problems(txt)
+
+
+def test_the_lite_scan_keeps_the_date_check():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, '90', None, None, None, 'No', 'No'])
+    _add_title(vm, '01/02/2020')
+    bad = problems(report_of(vm, cmd='c:LITESPACHECKSCAN'))
+    assert any("NOT TODAY'S DATE" in p for p in bad), bad
+
+
 def test_the_ratio_itself():
     """0.6 x the liner block is 422.4 x 326.175 -- the numbers the check
     is built on."""

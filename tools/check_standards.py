@@ -50,7 +50,7 @@ def mirrored(p):
 
 #: Generated, and a copy of everything else here, so the per-file rules
 #: below do not apply to it -- it is checked as a whole instead.
-GENERATED = {"CALOFIN-ALL.lsp"}
+GENERATED = {"LAZPASS.lsp"}
 
 #: Files that may define cal: symbols.  The loader needs a couple of
 #: private cal-- helpers and cal:*dir* to find its siblings.
@@ -229,10 +229,10 @@ def check_release_twins(problems):
 
 def check_bundle_current(problems):
     """The one-file bundle carries exactly today's members."""
-    bundle = SHARED_DIR / "CALOFIN-ALL.lsp"
+    bundle = SHARED_DIR / "LAZPASS.lsp"
     if not bundle.is_file():
         problems.append(
-            "shared/CALOFIN-ALL.lsp is missing - run "
+            "shared/LAZPASS.lsp is missing - run "
             "python3 tools/build_shared_bundle.py")
         return
     text = read(bundle)
@@ -242,7 +242,7 @@ def check_bundle_current(problems):
             continue                # no loader, and held files are not in
         if (";;; >>> %s" % p.name) not in text:
             problems.append(
-                "shared/parts/%s is not in CALOFIN-ALL.lsp - rebuild it with "
+                "shared/parts/%s is not in LAZPASS.lsp - rebuild it with "
                 "python3 tools/build_shared_bundle.py" % p.name)
 
 

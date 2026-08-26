@@ -5,6 +5,7 @@
 ;;;
 ;;; Commands:  SPACHECK        guided review of everything it flags
 ;;;            SPACHECKSCAN    the same audits, read-only
+;;;            LITESPACHECKSCAN  the scan minus the dimension audit
 ;;;            SPACHECKVER     print the loaded version
 ;;;            SPACHECKRESCUE  put back every colour, remove the markers
 ;;;            TUTORIALSPACHECK   the checklist, a worked demo, or both
@@ -32,7 +33,11 @@
 ;;;      entity, on layer POOL, drawn dashed, and it must lie INSIDE the
 ;;;      cover: the cover is always the larger of the two.
 ;;;
-;;;   4. THE DIMENSIONS.  Every one is checked for
+;;;   4. THE DIMENSIONS.  First the roster-wide verdict: every
+;;;      dimension must sit on the DIMENSION layer, and any that do
+;;;      not are counted, their layers named, and CDIM suggested to
+;;;      move them -- the one dimension check LITESPACHECKSCAN keeps.
+;;;      Then every dimension is checked for
 ;;;        - the right layer (DIMENSION),
 ;;;        - the right style: STANDARD INCHES for the cover's, and
 ;;;          STANDARD INCHES 0.5 for the water's edge's,
@@ -57,7 +62,21 @@
 ;;;      Hardware called for by the longest hinge -- velcro hinges,
 ;;;      double C channel, hold down kit -- is reported as advice.
 ;;;
-;;;   6. THE TITLE BLOCK.  Everything on the border layer is measured
+;;;   6. FEET AND INCHES.  Every text box in the selection -- TEXT,
+;;;      MTEXT and the ATTRIB values on blocks -- must state its
+;;;      inches wherever it states feet: 5' is flagged, 5'-0", 3'-2"
+;;;      and a plain 40" are fine.  A feet mark is an apostrophe
+;;;      straight after a digit, so "Water's Edge" is prose and never
+;;;      flagged.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   7. THE TECH TITLE DATE.  The Date attribute of the "Tech Title"
+;;;      block must read TODAY, written MM/DD/YYYY -- a sheet going
+;;;      out under an old date is the mistake this catches.  The block
+;;;      is looked for in the selection and then across the drawing;
+;;;      with none in reach the report says the date was not checked
+;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
+;;;
+;;;   8. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
 ;;;      four lines both measure the same.  A spa sheet's title block is
 ;;;      exactly 0.6x the liner block: the liner nominal is 704 x
@@ -65,9 +84,16 @@
 ;;;      is reported with the factor it actually came out at, and a
 ;;;      border out of proportion is reported separately as STRETCHED.
 ;;;
-;;;   7. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;      drawing, sized to scale with it.  Problems in RED at full
-;;;      size, advice in CYAN, all-clear in green at 75%.
+;;;   9. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
+;;;      drawing, sized to scale with it: a large title, the date and
+;;;      version under it, an ALL CLEAR / problem-count verdict, then
+;;;      the SPA-specific findings under underlined section headings.
+;;;      The mechanical per-dimension audit (each dimension's layer,
+;;;      style and span agreement) is set apart in a DIMENSION AUDIT
+;;;      column to the RIGHT of the main sheet, since DIMCHECK covers
+;;;      the same ground; LITESPACHECKSCAN skips that audit entirely,
+;;;      for drawings DIMCHECK already went over.  Problems in RED at
+;;;      full size, advice in CYAN, all-clear in green at 75%.
 ;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
@@ -80,7 +106,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.0")
+(setq *spacheck-version* "v1.5")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -94,6 +120,15 @@
 (setq spachk:*lay-dim*    "DIMENSION")  ; every dimension
 (setq spachk:*lay-text*   "TEXT")       ; the hinge labels
 (setq spachk:*lay-notes*  "SPA-NOTES")  ; corner letters, mode note, report
+
+;; CDIM is the command that moves stray dimensions onto *lay-dim*, and
+;; is what the report tells you to run when it finds any.
+(setq spachk:*dimfix-cmd* "CDIM")
+
+;; The sheet's title block, and the attribute in it carrying the date.
+;; This is the Tech Title BLOCK, not the drawn border section 7 checks.
+(setq spachk:*techtitle-block* "Tech Title")  ; spaces optional in the name
+(setq spachk:*date-tag*        "Date")
 
 ;; Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*).
 (setq spachk:*ds-cover*   "STANDARD INCHES")
@@ -209,11 +244,12 @@
 
 ;;; -------------------- report text -------------------------------------
 ;;;  A report row is (text . level): level nil = all clear, 1 = a
-;;;  problem, 2 = advice.  The three render differently in the MTEXT.
+;;;  problem, 2 = advice, 3 = a section heading.  The four render
+;;;  differently in the MTEXT.
 
 ;; A report row is (text . level): nil = all clear, 1 = a problem,
-;; 2 = advice.  spachk:lvl-p compares nil-safely -- (= nil 1) is not
-;; something to rely on.
+;; 2 = advice, 3 = a section heading.  spachk:lvl-p compares
+;; nil-safely -- (= nil 1) is not something to rely on.
 (defun spachk:row (s lvl) (cons s lvl))
 (defun spachk:row-txt (r) (car r))
 (defun spachk:row-lvl (r) (cdr r))
@@ -228,10 +264,25 @@
 (defun spachk:small (s)
   (strcat "{\\H" (rtos spachk:*green-scale* 2 2) "x;" s "}"))
 
+;; The report's title line: half again the base height.
+(defun spachk:big (s)
+  (strcat "{\\H1.5x;" s "}"))
+
+;; A section heading: underlined, with a thin blank line above it so
+;; the sections read as blocks.  The braces scope both codes, and the
+;; \P inside the first group is a paragraph break at 0.4x height --
+;; a narrow gap, not a full empty line.
+(defun spachk:hdg (s)
+  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+
+;; Findings are indented two spaces under their heading; the indent
+;; sits INSIDE the colour/height wrap so a problem row still starts
+;; with its colour code.
 (defun spachk:render (r)
-  (cond ((spachk:lvl-p r 1) (spachk:red (spachk:row-txt r)))
-        ((spachk:lvl-p r 2) (spachk:cyan (spachk:row-txt r)))
-        (t (spachk:small (spachk:row-txt r)))))
+  (cond ((spachk:lvl-p r 3) (spachk:hdg (spachk:row-txt r)))
+        ((spachk:lvl-p r 1) (spachk:red (strcat "  " (spachk:row-txt r))))
+        ((spachk:lvl-p r 2) (spachk:cyan (strcat "  " (spachk:row-txt r))))
+        (t (spachk:small (strcat "  " (spachk:row-txt r))))))
 
 ;; MTEXT carries at most 250 characters in group 1; anything longer goes
 ;; out as leading group 3 chunks with the tail in group 1.  A report is
@@ -711,6 +762,48 @@
                     ents (cons e ents))))))))
   (spachk:res rows (reverse ents)))
 
+;; Every dimension belongs on spachk:*lay-dim*.  The per-dimension
+;; audit says so one dimension at a time, in the report's DIMENSION
+;; AUDIT column; this is the roster-wide verdict, and it carries the
+;; suggestion to run CDIM over the strays.  It is the one dimension
+;; check LITESPACHECKSCAN keeps -- it costs a layer read apiece, and a
+;; sheet whose dimensions sit on the wrong layer plots wrong however
+;; sound the dimensions themselves are.  The offending layers are
+;; named, since that is what you need to go fix them.
+(defun spachk:audit-dimlayer (dims / n off lays lay e s)
+  (setq n 0 off 0 lays nil)
+  (foreach e dims
+    (if (entget e)
+      (progn
+        (setq n   (1+ n)
+              lay (spachk:layer e))
+        (if (/= (strcase lay) (strcase spachk:*lay-dim*))
+          (progn
+            (setq off (1+ off))
+            (if (not (member (strcase lay) lays))
+              (setq lays (cons (strcase lay) lays))))))))
+  (cond
+    ((= n 0)
+     (spachk:res (list (spachk:row (strcat "Dimension layer: no dimensions"
+                                           " in the selection")
+                                   1))
+                 nil))
+    ((= off 0)
+     (spachk:res (list (spachk:row (strcat "Dimension layer: all " (itoa n)
+                                           " on " spachk:*lay-dim*)
+                                   nil))
+                 nil))
+    (t
+     (spachk:res (list (spachk:row
+                         (strcat "Dimension layer: " (itoa off) " of "
+                                 (itoa n) " NOT on layer "
+                                 spachk:*lay-dim* " ("
+                                 (spachk:join (reverse lays) ", ")
+                                 ") - run " spachk:*dimfix-cmd*
+                                 " to move them")
+                         1))
+                 nil))))
+
 ;; The roster: are the dimensions a finished spa sheet needs present,
 ;; and do the overalls read the outline's true size?
 (defun spachk:audit-roster (dims cov wat / rows ents covn watn lapn bb
@@ -1014,16 +1107,274 @@
                       (if (spachk:has s "OK") nil 1)))
     nil))
 
+;;; --- feet-and-inch text -------------------------------------------------
+;;;  A distance written in feet must state its inches too: 5' is wrong,
+;;;  5'-0" (or 5'-0'') is right, and a plain 40" is right as it stands.
+
+;; A FEET MARK is an apostrophe standing straight after a DIGIT, and
+;; that is what keeps prose out of this: "Water's Edge", "Owner's" and
+;; "don't" are possessives, not measurements, and are never flagged.
+;; Two apostrophes together are the inch mark AutoCAD text often uses
+;; in place of ", so 5'-0'' closes exactly as 5'-0" does.
+;;
+;; T when some feet mark in s is never closed by an inch mark before
+;; the next feet mark or the end of the string -- so "5' and 7'-0"" is
+;; caught on its first value while "3'-2"" passes.
+(defun spachk:feet-open-p (s / lst n i c prev open found)
+  (setq lst   (vl-string->list s)
+        n     (length lst)
+        i     0
+        prev  0
+        open  nil
+        found nil)
+  (while (< i n)
+    (setq c (nth i lst))
+    (cond
+      ((= c 34)                                    ; " closes it
+       (setq open nil i (1+ i)))
+      ((and (= c 39) (< (1+ i) n) (= (nth (1+ i) lst) 39))
+       (setq open nil i (+ i 2)))                  ; '' closes it too
+      ((and (= c 39) (>= prev 48) (<= prev 57))    ; digit then ' = feet
+       (if open (setq found T))                    ; the one before never closed
+       (setq open T i (1+ i)))
+      (t (setq i (1+ i))))
+    (setq prev (nth (1- i) lst)))
+  (or found open))
+
+(defun spachk:clip (s n)
+  (if (> (strlen s) n) (strcat (substr s 1 n) "...") s))
+
+;; MTEXT reads \, { and } as formatting, so a snippet quoted out of the
+;; drawing has them blanked before it goes anywhere near the report.
+(defun spachk:mtsafe (s)
+  (vl-list->string
+    (mapcar '(lambda (c) (if (member c '(92 123 125)) 32 c))
+            (vl-string->list s))))
+
+;; The text an entity carries: TEXT and ATTRIB keep it in group 1,
+;; MTEXT spills the overflow into group 3 chunks ahead of that.
+(defun spachk:ent-text (ent / ed g head tail)
+  (setq ed (entget ent) head "" tail "")
+  (foreach g ed
+    (cond ((= 3 (car g)) (setq head (strcat head (cdr g))))
+          ((= 1 (car g)) (setq tail (cdr g)))))
+  (strcat head tail))
+
+;; Every text box in the selection: TEXT and MTEXT, plus the ATTRIB
+;; values on blocks -- the parts of a block someone types into.  Text
+;; baked into a block DEFINITION is left alone: it reads the same on
+;; every insert and is not fixable from this drawing.
+(defun spachk:text-items (ss / i e ed et out a ad)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            ed (entget e)
+            et (if ed (cdr (assoc 0 ed))))
+      (cond
+        ((member et '("TEXT" "MTEXT"))
+         (setq out (cons (cons (cdr (assoc 5 ed)) (spachk:ent-text e)) out)))
+        ((and (= et "INSERT") (assoc 66 ed) (= 1 (cdr (assoc 66 ed))))
+         (setq a (entnext e))
+         (while (and a (setq ad (entget a)) (= "ATTRIB" (cdr (assoc 0 ad))))
+           (setq out (cons (cons (cdr (assoc 5 ad)) (spachk:ent-text a)) out)
+                 a   (entnext a)))))))
+  (reverse out))
+
+;; The verdict over every text box, then one row per offender.  The
+;; report itself is skipped: SPACHECK writes it onto its own layer, but
+;; a rerun reads the drawing before clearing the old one.
+(defun spachk:audit-units (ss / items it s n bad rows)
+  (setq items (spachk:text-items ss) n 0 bad 0 rows nil)
+  (foreach it items
+    (setq s (cdr it))
+    (if (and s (/= s ""))
+      (progn
+        (setq n (1+ n))
+        (if (spachk:feet-open-p s)
+          (setq bad  (1+ bad)
+                rows (append rows
+                       (list (spachk:row
+                               (strcat "Text " (car it) ": \""
+                                       (spachk:mtsafe (spachk:clip s 40))
+                                       "\" gives feet with NO INCHES"
+                                       " - write it 5'-0\" not 5'")
+                               1))))))))
+  (spachk:res
+    (cons (spachk:row
+            (cond
+              ((= n 0) "Feet & inches: no text in the selection")
+              ((= bad 0) (strcat "Feet & inches: all " (itoa n) " text item"
+                                 (if (= 1 n) "" "s") " OK"))
+              (t (strcat "Feet & inches: " (itoa bad) " of " (itoa n)
+                         " text item" (if (= 1 n) "" "s")
+                         " give feet with NO INCHES"
+                         " - write 5'-0\" not 5'")))
+            (if (> bad 0) 1 nil))
+          rows)
+    nil))
+
+;;; --- the Tech Title date ------------------------------------------------
+;;;  The sheet's Tech Title block carries a Date attribute, and it must
+;;;  read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
+;;;  is the mistake this catches: the drawing was reworked and the title
+;;;  block never caught up.
+
+(defun spachk:pad2 (n)
+  (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
+
+;; uppercase with every non-alphanumeric dropped, so "Tech Title"
+;; matches a block actually named "TECHTITLE" or "Tech-Title"
+(defun spachk:squash (s)
+  (vl-list->string
+    (vl-remove nil
+      (mapcar '(lambda (c)
+                 (cond ((and (>= c 48) (<= c 57)) c)
+                       ((and (>= c 65) (<= c 90)) c)
+                       ((and (>= c 97) (<= c 122)) (- c 32))))
+              (vl-string->list (if s s ""))))))
+
+;; the block's effective name, so a dynamic block answers by the name
+;; it was drawn from rather than its anonymous one
+(defun spachk:block-name (ent / res)
+  (setq res (vl-catch-all-apply
+              'vla-get-EffectiveName
+              (list (vlax-ename->vla-object ent))))
+  (if (vl-catch-all-error-p res) (spachk:dxf 2 ent) res))
+
+(defun spachk:ins-attrib (ent tag)
+  (cdr (assoc (strcase tag) (spachk:attribs ent))))
+
+;; a value may arrive labelled ("Date: 05/01/2024" or "Date = ..."),
+;; so the date is whatever follows the last "=" and then the last ":"
+(defun spachk:after-eq (s / p)
+  (while (setq p (vl-string-search "=" s))
+    (setq s (substr s (+ p 2))))
+  s)
+
+(defun spachk:datenorm (s)
+  (spachk:aftercolon (spachk:after-eq (if s s ""))))
+
+(defun spachk:all-digits-p (s / i n c ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (setq c (ascii (substr s i 1)))
+    (if (or (< c 48) (> c 57)) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun spachk:days-in-month (mo yr)
+  (cond
+    ((member mo '(1 3 5 7 8 10 12)) 31)
+    ((member mo '(4 6 9 11)) 30)
+    ((and (= 0 (rem yr 4)) (or (/= 0 (rem yr 100)) (= 0 (rem yr 400)))) 29)
+    (t 28)))
+
+(defun spachk:today-mdy ( / d)
+  ;; (month day year) off the computer clock.  CDATE is
+  ;; YYYYMMDD.HHMMSSmsec, decoded arithmetically so DIMZIN (which trims
+  ;; rtos output) cannot mangle it.
+  (setq d (fix (getvar "CDATE")))
+  (list (rem (fix (/ d 100)) 100) (rem d 100) (fix (/ d 10000))))
+
+(defun spachk:mdy-str (mdy)
+  (strcat (spachk:pad2 (car mdy)) "/" (spachk:pad2 (cadr mdy)) "/"
+          (itoa (caddr mdy))))
+
+;; nil when raw is today's date written MM/DD/YYYY; otherwise a short
+;; string saying what is wrong with it.
+(defun spachk:date-verdict (raw / s mo dd yr now)
+  (setq s (spachk:trim (spachk:datenorm raw)))
+  (cond
+    ((= s "") "is blank - expected MM/DD/YYYY")
+    ((or (/= (strlen s) 10)
+         (/= (substr s 3 1) "/")
+         (/= (substr s 6 1) "/")
+         (not (spachk:all-digits-p (substr s 1 2)))
+         (not (spachk:all-digits-p (substr s 4 2)))
+         (not (spachk:all-digits-p (substr s 7 4))))
+     (strcat "'" s "' is not in MM/DD/YYYY format - expected MM/DD/YYYY"))
+    (t
+     (setq mo (atoi (substr s 1 2))
+           dd (atoi (substr s 4 2))
+           yr (atoi (substr s 7 4)))
+     (cond
+       ((or (< mo 1) (> mo 12))
+        (strcat "'" s "' - " (substr s 1 2)
+                " is not a month (01-12) - expected MM/DD/YYYY"))
+       ((or (< dd 1) (> dd (spachk:days-in-month mo yr)))
+        (strcat "'" s "' - " (substr s 4 2)
+                " is not a valid day for that month - expected MM/DD/YYYY"))
+       ((progn (setq now (spachk:today-mdy))
+               (not (and (= mo (car now)) (= dd (cadr now))
+                         (= yr (caddr now)))))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now)
+                ") - update it"))
+       (t nil)))))
+
+;; The Tech Title block: the first INSERT whose name carries it, looked
+;; for in the selection and then across the drawing, since the title
+;; block sits outside the area someone highlights as often as not.
+(defun spachk:find-title (ss / pat i e out ss2)
+  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*") i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq e (ssname ss i) i (1+ i))
+      (if (and (null out) (entget e) (= "INSERT" (spachk:etype e))
+               (wcmatch (spachk:squash (spachk:block-name e)) pat))
+        (setq out e))))
+  (if (null out)
+    (progn
+      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
+      (if ss2
+        (repeat (sslength ss2)
+          (setq e (ssname ss2 i) i (1+ i))
+          (if (and (null out)
+                   (wcmatch (spachk:squash (spachk:block-name e)) pat))
+            (setq out e))))))
+  out)
+
+;; With no Tech Title in reach there is nothing to read, and that is
+;; said plainly rather than flagged -- a spa sheet may well be checked
+;; on its own, away from the sheet it will sit on.
+(defun spachk:audit-date (ss / blk raw bad)
+  (setq blk (spachk:find-title ss))
+  (if (null blk)
+    (spachk:res
+      (list (spachk:row (strcat "Tech Title: no '" spachk:*techtitle-block*
+                                "' block in reach - date NOT CHECKED")
+                        nil))
+      nil)
+    (progn
+      (setq raw (spachk:ins-attrib blk spachk:*date-tag*)
+            bad (if raw
+                  (spachk:date-verdict raw)
+                  "is missing from the block - expected MM/DD/YYYY"))
+      (spachk:res
+        (list (spachk:row
+                (if bad
+                  (strcat "Tech Title: " spachk:*date-tag* " " bad)
+                  (strcat "Tech Title: " spachk:*date-tag* " = '"
+                          (spachk:trim (spachk:datenorm raw)) "' - OK"))
+                (if bad 1 nil)))
+        nil))))
+
 ;;; ======================================================================
 ;;;  RUNNING THE AUDIT
 ;;; ======================================================================
 
-;; Everything, in report order.  Returns (rows . flagged-entities).
-(defun spachk:audit (ss / rows ents blk att g tp cov wat covo wato
-                          dims covn r)
-  (setq rows nil ents nil)
+;; Everything, in report order, each section under its heading row.
+;; The mechanical per-dimension audit (layer, style, span agreement)
+;; is DIMCHECK's ground, so its rows come back separately for the
+;; report's second column - and a lite run skips it altogether.
+;; Returns (main-rows dim-rows flagged-entities).
+(defun spachk:audit (ss lite / rows drows ents blk att g tp cov wat covo
+                             wato dims covn r)
+  (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
+  (setq rows (append rows (list (spachk:row "THE DETAILS BLOCK" 3))))
   (setq r (spachk:audit-block ss)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
@@ -1038,6 +1389,7 @@
   (if (and (= g "THERMOLIGHT") (null tp)) (setq tp "1-3/8"))
 
   ;; 2 -- the cover outline
+  (setq rows (append rows (list (spachk:row "THE OUTLINES" 3))))
   (setq r (spachk:audit-outline ss spachk:*lay-cover* "Cover outline" t)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r))
@@ -1054,11 +1406,18 @@
   (setq r (spachk:audit-nesting cov wat)
         rows (append rows (spachk:res-rows r)))
 
-  ;; 4 -- the dimensions
-  (setq dims (spachk:dims ss)
-        r    (spachk:audit-dims dims cov wat)
-        rows (append rows (spachk:res-rows r))
-        ents (append ents (spachk:res-ents r)))
+  ;; 4 -- the dimensions.  The per-dimension audit fills the second
+  ;; column; the roster and standoffs are SPA's own rules and stay on
+  ;; the main sheet.
+  (setq rows (append rows (list (spachk:row "THE OVERALLS" 3))))
+  (setq dims (spachk:dims ss))
+  ;; the dimension-layer verdict runs in every mode, lite included
+  (setq r (spachk:audit-dimlayer dims)
+        rows (append rows (spachk:res-rows r)))
+  (if (not lite)
+    (setq r     (spachk:audit-dims dims cov wat)
+          drows (spachk:res-rows r)
+          ents  (append ents (spachk:res-ents r))))
   (setq r (spachk:audit-roster dims cov wat)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
@@ -1067,6 +1426,7 @@
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
+  (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
       (setq r (spachk:audit-hinges ss cov g tp)
@@ -1077,24 +1437,47 @@
                         "Hinges: not checked - no taper to check against"
                         1)))))
 
-  ;; 6 -- the title block
+  ;; 6 -- the text boxes: feet must carry inches (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "TEXT & UNITS" 3))))
+  (setq r (spachk:audit-units ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 7 -- the Tech Title date (every mode, lite too)
+  (setq rows (append rows (list (spachk:row "THE TECH TITLE" 3))))
+  (setq r (spachk:audit-date ss)
+        rows (append rows (spachk:res-rows r)))
+
+  ;; 8 -- the title block
+  (setq rows (append rows (list (spachk:row "THE TITLE BLOCK" 3))))
   (setq r (spachk:audit-title ss)
         rows (append rows (spachk:res-rows r)))
 
-  (cons rows ents))
+  (list rows drows ents))
 
 ;;; -------------------- the report --------------------------------------
 
-(defun spachk:write-report (rows bb readonly / nlin ref h ins txt r nbad nadv)
+;; The whole report: the SPA-specific findings on the MAIN sheet and,
+;; unless lite, the per-dimension audit in a DIMENSION AUDIT column to
+;; its right - the DIMCHECK-style pass, set apart so the spa verdicts
+;; lead.  Returns (problem-count advisory-count), over both columns.
+(defun spachk:write-report (rows drows bb readonly lite
+                            / nlin ndim ref h ins ins2 txt r nbad nadv)
   (spachk:ensure-layer spachk:*report-layer* spachk:*report-color*)
   (setq nbad 0 nadv 0)
-  (foreach r rows
+  (foreach r (append rows drows)
     (cond ((spachk:lvl-p r 1) (setq nbad (1+ nbad)))
           ((spachk:lvl-p r 2) (setq nadv (1+ nadv)))))
-  ;; height: scale the sheet to the drawing, as the siblings do
-  (setq nlin 4.0)
+  ;; height: scale the sheet to the drawing, as the siblings do.  The
+  ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
+  ;; row is one line plus the 0.4 gap above it.  The dimension column
+  ;; is counted the same way, and the taller column drives the height.
+  (setq nlin 4.5)
   (foreach r rows
-    (setq nlin (+ nlin (if (spachk:row-lvl r) 1.0 spachk:*green-scale*))))
+    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
+                             ((spachk:row-lvl r) 1.0)
+                             (t spachk:*green-scale*)))))
+  (setq ndim (+ 2.5 (if drows (length drows) 1)))
+  (if (and (not lite) (> ndim nlin)) (setq nlin ndim))
   (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
     (progn
       (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
@@ -1106,27 +1489,68 @@
                 (list (+ (caadr bb) (* 0.05 (max (spachk:bw bb) 1.0)))
                       (cadadr bb) 0.0)
                 (list 0.0 0.0 0.0)))
-  (setq txt (strcat (if readonly "SPACHECKSCAN REPORT - " "SPACHECK REPORT - ")
-                    (spachk:datestr)
-                    "  [SPACHECK " *spacheck-version* "]"
+  ;; the head: a large title, the date and version small under it, a
+  ;; verdict line -- red with the problem count, cyan when only advice,
+  ;; plain ALL CLEAR otherwise -- then the colour legend.  The verdict
+  ;; is wrapped in its height code first so it never renders as (or
+  ;; counts among) the finding rows, which start with a colour code.
+  (setq txt (strcat (spachk:big (cond ((and readonly lite)
+                                       "LITESPACHECKSCAN REPORT")
+                                      (readonly "SPACHECKSCAN REPORT")
+                                      (t "SPACHECK REPORT")))
+                    "\\P"
+                    (spachk:small (strcat (spachk:datestr)
+                                          "  -  SPACHECK "
+                                          *spacheck-version*))
+                    "\\P"
+                    "{\\H1.2x;"
+                    (cond
+                      ((> nbad 0)
+                       (spachk:red
+                         (strcat (itoa nbad) " PROBLEM"
+                                 (if (= 1 nbad) "" "S")
+                                 (if (> nadv 0)
+                                     (strcat ", " (itoa nadv) " ADVISOR"
+                                             (if (= 1 nadv) "Y" "IES"))
+                                     ""))))
+                      ((> nadv 0)
+                       (spachk:cyan
+                         (strcat "ALL CLEAR - " (itoa nadv) " advisor"
+                                 (if (= 1 nadv) "y" "ies"))))
+                      (t "ALL CLEAR - every check passed"))
+                    "}"
                     "\\P"
                     (spachk:small
                       (strcat (if readonly
                                   "Read-only scan - nothing in the drawing was changed.  "
                                   "")
+                              (if lite
+                                  "Lite: the dimension audit was skipped - run SPACHECKSCAN or DIMCHECK for it.  "
+                                  "")
                               "Problems in " (spachk:red "red")
-                              ", advice in " (spachk:cyan "cyan") "."))
-                    "\\P"
-                    (spachk:small
-                      (strcat (itoa nbad) " problem"
-                              (if (= 1 nbad) "" "s") ", "
-                              (itoa nadv) " advisor"
-                              (if (= 1 nadv) "y" "ies")))
-                    "\\P"
-                    (spachk:small "----------------------------------------")))
+                              ", advice in " (spachk:cyan "cyan")
+                              "; lines that checked out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (spachk:render r))))
   (spachk:mtext ins h (* spachk:*report-chars* h) txt spachk:*report-layer*)
+  ;; the DIMENSION AUDIT column, to the right of the main sheet
+  (if (not lite)
+    (progn
+      (setq ins2 (list (+ (car ins) (* (+ spachk:*report-chars* 2.0) h))
+                       (cadr ins) 0.0)
+            txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
+                         "\\P"
+                         (spachk:small
+                           (strcat "Each dimension against its layer, its"
+                                   " style and its own span - DIMCHECK's"
+                                   " ground, kept off the main sheet."))))
+      (if drows
+        (foreach r drows
+          (setq txt (strcat txt "\\P" (spachk:render r))))
+        (setq txt (strcat txt "\\P"
+                          (spachk:small "  Every dimension checks out."))))
+      (spachk:mtext ins2 h (* spachk:*report-chars* h) txt
+                    spachk:*report-layer*)))
   (list nbad nadv))
 
 ;;; -------------------- marking (SPACHECK only) -------------------------
@@ -1227,18 +1651,25 @@
                  (rtos (* spachk:*title-frac* spachk:*liner-h*))))
   (princ))
 
-;;; --- SPACHECKSCAN: the audits, read-only -------------------------------
+;;; --- SPACHECKSCAN / LITESPACHECKSCAN: the audits, read-only ------------
+;;;  The lite scan is the same audits minus the per-dimension pass,
+;;;  for a drawing DIMCHECK already went over.
 
-(defun c:SPACHECKSCAN ( / *error* oldecho ss res rows bb ents n)
+(defun c:SPACHECKSCAN () (spachk:scan nil))
+
+(defun c:LITESPACHECKSCAN () (spachk:scan T))
+
+(defun spachk:scan (lite / *error* oldecho name ss res rows drows bb ents n)
+  (setq name (if lite "LITESPACHECKSCAN" "SPACHECKSCAN"))
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nSPACHECKSCAN error: " msg)))
+      (princ (strcat "\n" name " error: " msg)))
     (princ))
   (prompt (strcat "\nHighlight the spa drawing and its "
                   spachk:*details-block*
-                  " block to SPACHECKSCAN (Enter = whole drawing): "))
+                  " block to " name " (Enter = whole drawing): "))
   (setq ss (ssget))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
@@ -1246,24 +1677,28 @@
     (progn
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (setq res  (spachk:audit ss)
-            rows (car res)
-            ents (cdr res)
-            bb   (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*))
-            n    (spachk:write-report rows bb t))
+      (setq res   (spachk:audit ss lite)
+            rows  (car res)
+            drows (cadr res)
+            ents  (caddr res)
+            bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*))
+            n     (spachk:write-report rows drows bb t lite))
       (setvar "CMDECHO" oldecho)
-      (princ (strcat "\n--- SPACHECKSCAN complete (read-only) ---"
+      (princ (strcat "\n--- " name " complete (read-only) ---"
                      "\n" (itoa (car n)) " problem"
                      (if (= 1 (car n)) "" "s") ", "
                      (itoa (cadr n)) " advisor"
                      (if (= 1 (cadr n)) "y" "ies")
+                     (if lite
+                         "\nLite: the dimension audit was skipped."
+                         "")
                      "\nReport written on layer " spachk:*report-layer*
                      "; nothing else was changed."))))
   (princ))
 
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
 
-(defun c:SPACHECK ( / *error* oldecho undo-open ss res rows ents bb n
+(defun c:SPACHECK ( / *error* oldecho undo-open ss res rows drows ents bb n
                       e k tot ans marked)
   (defun *error* (msg)
     (spachk:sysrestore)
@@ -1285,10 +1720,11 @@
       (setvar "CMDECHO" 0)
       (command "_.UNDO" "_Begin")
       (setq undo-open T)
-      (setq res  (spachk:audit ss)
-            rows (car res)
-            ents (cdr res)
-            bb   (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
+      (setq res   (spachk:audit ss nil)
+            rows  (car res)
+            drows (cadr res)
+            ents  (caddr res)
+            bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
       ;; walk what was flagged, one at a time
       (setq tot (length ents) k 0 marked 0)
       (if (> tot 0)
@@ -1310,7 +1746,7 @@
                    (spachk:stash-color e spachk:*flag-color*)
                    (setq marked (1+ marked)))
                   ((= ans "Skip") (setq k tot))))))))
-      (setq n (spachk:write-report rows bb nil))
+      (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
       (command "_.UNDO" "_End")
       (setq undo-open nil)

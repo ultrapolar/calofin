@@ -26,7 +26,7 @@ in step:
 | draft | `wip/` | being drafted, no version banner yet. Optional - absent until a first draft lands. | yes |
 | standalone | `lisp/<tool>/` | one self-contained file, loads alone with APPLOAD. **All tool logic starts here.** | yes |
 | released | `releases/` | dated `REV`-stamped twin, so a loaded routine never changes underfoot | no - generated |
-| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/CALOFIN-ALL.lsp` is the generated one-file build | generated for the tools in `tools/mirror_shared.py`, by hand otherwise; bundle generated |
+| grouped | `shared/parts/` | the same tools on one helper library (`cal:`); `shared/LAZPASS.lsp` is the generated one-file build | generated for the tools in `tools/mirror_shared.py`, by hand otherwise; bundle generated |
 
 Change a tool in `lisp/`, mirror it into `shared/parts/<FILE>.lsp` in the same
 commit, then regenerate both artifacts:
@@ -34,11 +34,11 @@ commit, then regenerate both artifacts:
 ```
 python3 tools/mirror_shared.py <TOOL>  # the shared/parts/ twin, where generated
 python3 tools/release_lisp.py          # releases/ dated twins
-python3 tools/build_shared_bundle.py   # shared/CALOFIN-ALL.lsp
+python3 tools/build_shared_bundle.py   # shared/LAZPASS.lsp
 python3 tools/check_standards.py       # did anything drift?
 ```
 
-Never hand-edit `releases/` or `shared/CALOFIN-ALL.lsp`.
+Never hand-edit `releases/` or `shared/LAZPASS.lsp`.
 
 A tool can be in `lisp/` and `shared/parts/` yet deliberately kept out of
 the compiled bundle while it is being reworked (or for good, if it never
@@ -91,13 +91,14 @@ changing a routine.
 
 | Command(s) | Folder | What it does |
 | --- | --- | --- |
-| `POOL`, `POOLDEMO`, `POOLVER`, `TUTORIALPOOL` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements |
+| `POOL`, `POOLCOVER`, `POOLDEMO`, `POOLVER`, `TUTORIALPOOL` | `lisp/pool/` | As-built pool plan generator - Rectangle, Oval, Grecian, L, Lazy L - from field measurements. `POOLCOVER` is the same command for a cover sheet: the pool-bottom question is answered No before it is asked, so the depth chain behind it (C, C2, D, the hopper type and its corner method) never runs |
 | `SPA`, `SPAVER`, `TUTORIALSPA` | `lisp/spa/` | Spa/hot-tub template - Rectangle, Octagon, Round |
 | `OASIS`, `OASISVER` | `lisp/oasis/` | Continuous-tangent pool - centre bulge, top-right bulge, cloud (straight or rounded bottom) or kidney (true or asymmetric) - drawn live as its X/Y envelope and radii are answered, with a centre-to-corner check drawing beside it.  A `Complex` run takes a straight tangent run in place of any joiner and moves the centre hump off centre.  Finishes by offering the pool bottom - shallow and deep breaks, hopper and slope lines, ABHD's flow with the break located by a change of tangency, a nearest point or an offset in from a bound |
-| `ABHD`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points |
+| `ABHD`, `ABHDCOVER`, `ADAB`, `TUTORIALABHD`, `TUTORIALADAB` | `lisp/abhd/` | Fits a pool perimeter and bottom through surveyed points. `ABHDCOVER` answers the "add the bottom" question No before it is asked, for a cover sheet that stops at the perimeter |
+| `ABCURCHECK`, `ABCURCHECKSCAN`, `ABCURCHECKRESCUE`, `ABCURCHECKVER` | `lisp/abcurcheck/` | ABHD's reader turned round: grades how CONTINUOUS a perimeter already drawn is, as one word - `Smooth` / `Fair` / `Rough` / `Broken` - set by the single worst thing found and naming it, with a 0-100 index underneath for comparing two candidates.  Measures gaps, zero-length and doubled segments and crossings (G0); the kink angle at every joint, banded on ABHD's own 8 and 45 degrees, so the 8-45 band a fabricator finds in the bead is the headline; and the noise a traced outline leaves behind - micro-segments, inflections, and the turning excess over the 360 degrees any simple closed loop turns.  Breaks that are MEANT to be there are picked and stamped onto the drawing, so they leave the grade and the next run remembers them; what is left is the undeclared list, ringed on `POOL-CONT`.  Draws the curvature comb on `POOL-COMB` - a tooth per sample, sided by which way the curve turns - where every break is a step in the envelope |
 | `CABHD`, `CABHDVER` | `lisp/cabhd/` | ABHD's perimeter half, for a survey that runs past the pool: asks the LAST point number belonging to the pool edge and leaves everything past it out entirely.  No pool bottom |
 | `LHD` | `lisp/lhd/` | Fits a top-down 2D outline (closed or open) through laser-scanned points |
-| `FITABHD`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- the type says how to READ the survey, the points decide the shape: out-of-square walls, side walls that lean apart on a Roman or Oval, corner sizes, bows, and caved-in arcs rebuilt as smooth runs of arcs (ABHD's tangency window) are all measured from the survey and kept only where it proves them, Redo to refit -- then a standard-hopper bottom |
+| `FITABHD`, `FITABHDCOVER`, `FITABHDVER` | `lisp/fitabhd/` | Fits a TYPED pool template (Rectangle, Grecian, Roman, Oval, L, Lazy L, Round) through surveyed points -- the type says how to READ the survey, the points decide the shape: out-of-square walls, side walls that lean apart on a Roman or Oval, corner sizes, bows, and caved-in arcs rebuilt as smooth runs of arcs (ABHD's tangency window) are all measured from the survey and kept only where it proves them, Redo to refit -- then a standard-hopper bottom. `FITABHDCOVER` skips that bottom question for a cover sheet |
 | `BPCALLOUT` | `lisp/bpcallout/` | Rings clicked bad points with 5" circles on `FGStep` and writes a "Pt.12, Pt.15 and Pt.20 are bad" callout |
 | `CDCALLOUT` | `lisp/cdcallout/` | Cross-dimensions from Pt.## to Pt.## by typed number - `CROSS DIMENSIONS` style, `DIMENSION` layer, repeat until Enter |
 | `ABFIND`, `ABMOVE`, `ABFINDVER` | `lisp/abfind/` | Ties `Pt.##` back to the **A** and **B** survey stakes with a cross dim to each, then asks whether that point wants moving. `ABMOVE` takes one point and also offers every place it lands if one tape was read wrong - the moved tape swept a foot at a time, ten feet each way, plus the look-alike readings (`21'-1"` written as `21'-7"`, the 1"/11" slip, transposed feet) - drawn yellow, tagged by the tape they move (`1A`, `-3B`), each group on the dashed grey arc it sits on - and moves it to `Pt.##m`, rings the old spot with a 5" circle on `FGStep` and writes the `Moved Pt.17 B from 18'-6" to 18'-5"` note |
@@ -106,9 +107,9 @@ changing a routine.
 | `XYPLOT`, `XYPLOTVER` | `lisp/xyplot/` | `ABCDEF`'s sister for a survey that arrives already reduced: a sheet of X/Y offsets, one picked origin, drawn twice - graph 1 the points as given (`ab_pt` on `POINTS`, ready for `ABHD`), graph 2 the same points with the X and Y offsets dimensioned as two continuous linear chains |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
 | `DIMCHECK`, `DIMSCAN`, `DIMCHECKVER`, ... | `lisp/dimcheck/` | Guided, one-at-a-time review of dimension placement, arc-end attachment and overlapping lines, grouped by dimension style |
-| `LINFINCHECK`, `LINFINSCAN`, ... | `lisp/linfincheck/` | `DIMCHECK`'s checks plus steps & side views, wall height, the liner pattern and the title block border - the full liner-finish drawing QA |
-| `COVERCHECK`, `COVERSCAN`, ... | `lisp/covercheck/` | Same guided review, rules swapped for pool-cover QA |
-| `SPACHECK`, `SPACHECKSCAN`, `SPACHECKRESCUE`, `SPACHECKVER`, `TUTORIALSPACHECK` | `lisp/spacheck/` | The same guided review for spa sheets: audits a drawing against what `SPA` draws - bounded outlines, the dimension roster and its notes, hinges against the block's grade/taper and the Hinge Arrangement Chart, and a title block at exactly 0.6x the liner block |
+| `LINFINCHECK`, `LINFINSCAN`, `LITELINFINSCAN`, ... | `lisp/linfincheck/` | `DIMCHECK`'s checks plus steps & side views, wall height, the liner pattern and the title block border - the full liner-finish drawing QA. The report leads with the liner checks; the `DIMCHECK`-style findings sit in a DIMENSION AUDIT column beside it, and `LITELINFINSCAN` skips them entirely for a drawing `DIMCHECK` already went over |
+| `COVERCHECK`, `COVERSCAN`, `LITECOVERSCAN`, ... | `lisp/covercheck/` | Same guided review, rules swapped for pool-cover QA; same split report, with `LITECOVERSCAN` as the cover-rules-only scan |
+| `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `SPACHECKRESCUE`, `SPACHECKVER`, `TUTORIALSPACHECK` | `lisp/spacheck/` | The same guided review for spa sheets: audits a drawing against what `SPA` draws - bounded outlines, the dimension roster and its notes, hinges against the block's grade/taper and the Hinge Arrangement Chart, and a title block at exactly 0.6x the liner block |
 | `CCPRECHECK` | `lisp/ccprecheck/` | Walks the "Tech Flow Chart" product-type decision tree and prints a summary. Renamed from `CHECK` to resolve a name collision with `lisp/check/` |
 | `LINCHECK` | `lisp/lincheck/` | Companion checklist routine, shipped alongside the flowchart walker |
 | `STOCKCOVER`, `STOCKLIST`, `STOCKCOVER-CFG` | `lisp/stockcover/` | Replaces a highlighted perimeter with a stock cover drawing pulled straight out of the stock DWG folder, lined up on what was highlighted |
@@ -120,12 +121,15 @@ changing a routine.
 | `AUTOBEAD`, `AUTOBEADVER`, `TUTORIALAUTOBEAD` | `lisp/autobead/` | Offsets ("beads") selected pool lines toward a clicked side |
 | `DCE`, `DIMCONTEND` | `lisp/dim_continue/` | Chains `DIMCONTINUE` from a seed dimension out to every remaining feature point |
 | `AUTODIM`, `FLOORDIM`, `STAIRDIM`, `AUTODIMSIDEPOV` | `lisp/autodim/` | Auto-dimensions a highlighted plan - perimeter sides and arc radii, stairs, the floor dims it asks about, two overall dims. A size that repeats is called out once and noted `Typ.` (from two equal sides, or four equal radii). Perimeter and stairs `SIDE STANDARD`, floor and overall dims `STANDARD`, anything under 12" `STANDARD INCHES`; a place that is dimensioned already is left alone. Highlight a flight of steps drawn in side view instead and `AUTODIM` recognises it and dimensions the depth of every step down the right in `STANDARD INCHES` |
-| `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, text 80% toward the right/bottom end, source line erased |
+| `SMARTFILLET`, `SMARTFILLETVER` | `lisp/smartfillet/` | Fillet a corner after showing what each radius would look like: pick the two lines and every radius that fits - 6 up in 6s, tangent points landing on both legs - is drawn as a dashed, lettered arc. Click one and that corner is cut for real and given its radius dimension; it then offers the same radius for the rest of the corners, and the one callout becomes `R12 Typ.` as soon as a repeat is cut |
+| `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, text 80% toward the right/bottom end, source line erased. A tie that is dimensioned already is left alone |
 | `DRONE` | `lisp/drone/` | Drawing cleanup: text style/height, pool/spa points onto `POINTS`, spa perimeter onto `POOL`, and more in one pass |
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 | `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
+| `LAZFORM`, `LAZFORMCOVER`, `LAZASCII`, `LAZFORMVER` | `lisp/lazform/` | Fill a dimension chart in and draw the pool from it. Seven charts - Rectangle, True Oval, Roman, both Grecians, True L Left and Round - each the one off the paper: outline, hopper, dimension chain with its letters. The chart is the background: it is sliced into horizontal bands and each dimension's box is wedged into the band its letter sits on, so you type the number where the letter is on the paper. Corners get a dropdown each - `Square`, `Radius`, `Cut`, `NotGiven` - and the size box beside it un-greys only for `Radius` and `Cut`. Fill in what you know, leave the rest blank, press Insert: `POOL` runs and asks only for the gaps. Picking a bottom type greys the boxes that bottom will never ask for - a Normal hopper draws no side view, so C, D and C2 grey out; a Sport asks a different plan chain (E2 F2 G F1 E1) so H, F and E grey out - and a greyed value is not sent. That table is read off POOL's own `pool:btmspec`, so it cannot drift. `NA` in a box means not measured and is passed through as such; a blank box just means ask. Drawn with `vector_image` from a table of lines, so there is no artwork file to ship. `LAZFORMCOVER` is the same form for a cover sheet: POOL runs with its pool-bottom gate already closed - `LAZASCII` is a probe, not a tool: it asks whether this AutoCAD's dialog font is fixed-pitch, which decides whether the chart could be drawn in characters instead of vectors - worth knowing because DCL never retains an image tile but always retains a text one - see `lisp/lazform/README.md` |
+| `LAZPANEL`, `LAZBUTTON`, `LAZPIN`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 56 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Tabs come in two rows: the **jobs** (Pool / Cover / Spa / Rest), each laid out in columns that follow the work - shape, points, steps, dims and check - and the **categories** (Layout / Points / Dimensions / Checking, the same four group names as the VB palette) holding the whole roster filed by what each tool is. A tool that serves two jobs sits on both, so 56 commands make 125 buttons; `Rest` is computed as whatever the three named jobs leave over. A command not loaded in this session is greyed out. A click closes the panel, runs the command exactly as if typed, and the panel then REOPENS itself on the same page at the same position - Close is the way out. A **Pinned** row on every page carries the few tools you run all day, remembered between sessions in the registry; `Pin...` or `LAZPIN` edits it. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
 
 ### Going back a step
 
@@ -205,7 +209,7 @@ placed, and the whole run is one `U`.
 ## Shared build (`shared/`)
 
 The same tools built against one common helper library instead of each
-embedding its own copies. APPLOAD `shared/CALOFIN-ALL.lsp` - the whole
+embedding its own copies. APPLOAD `shared/LAZPASS.lsp` - the whole
 build concatenated into one file, so there is nothing for it to find on
 disk - and every command loads in one go. (`CALOFIN-LOADER.lsp` is the
 multi-file alternative for when you are editing the files; it has to
@@ -270,13 +274,23 @@ everything else releases one file per source.
 | Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: one button per command, plus forms for POOL and SPA |
 | Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest |
 
+The palette needs its DLL `NETLOAD`ed on every machine. For a
+button panel with nothing to install, see `lisp/lazpanel/` above:
+`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 56
+headline drafting commands, and puts its own one-button toolbar on
+screen to open it; the VB palette remains the richer surface (docks,
+stays open while a tool runs, POOL/SPA forms).
+
 **Status:** `lisp/pool/POOL.LSP` and `lisp/spa/SPA.LSP` are the
-canonical, actively-developed versions of those tools. The palette's
-`PoolFormView`/`SpaFormView` were built against an earlier fork of both
-with a different prompt sequence, so `tests/test_pool_form.py` and
-`tests/test_spa_form.py` currently fail - that's a known, open gap
-(reconciling the palette's `LispBridge` with the canonical POOL/SPA),
-not a bug in either side.
+canonical, actively-developed versions of those tools. The receiving
+end a form needs - an answer store the ask helpers read before they
+prompt - now exists in POOL: `pool:*form*`, `pool:run-with-answers`,
+and the hooks described under `LAZFORM` above. `tests/test_pool_form.py`
+passes at both tiers because of it.
+
+SPA has no such store yet, so `tests/test_spa_form.py` still fails on a
+clean checkout - a known, open gap (the same work again on the smaller
+surface), not a bug in either side.
 
 `ui/PLAN.md` is the execution plan for closing it - what is built, what
 is missing, and the day-by-day for making the forms actually drive the
@@ -287,7 +301,7 @@ routines.
 | Script | What it does |
 | --- | --- |
 | `release_lisp.py` | Regenerates every REV twin in `releases/` from its `lisp/<tool>/` source's version banner, and the one-file `STEPS` bundle from its three sources |
-| `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/CALOFIN-ALL.lsp` |
+| `build_shared_bundle.py` | Concatenates `shared/` into the single-file `shared/LAZPASS.lsp` |
 | `mirror_shared.py` | Regenerates a `shared/parts/` twin from its `lisp/` original - drops the helpers the library provides and rewrites the call sites onto `cal:`. Table-driven, one entry per tool |
 | `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin **and that twin carries the same version banner**, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
@@ -311,11 +325,13 @@ python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
 python3 tests/test_tutorialpool.py    # TUTORIALPOOL, run in lispvm
 python3 tests/test_oasis.py           # OASIS loaded and run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
+python3 tests/test_abcurcheck.py      # ABCURCHECK, run in lispvm
 python3 tests/test_cabhd.py           # CABHD, run in lispvm
 python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_fitabhd.py         # FITABHD (engine also run in lispvm)
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
 python3 tests/test_cdcreate.py        # CDCREATE loaded and run in lispvm
+python3 tests/test_smartfillet.py     # SMARTFILLET loaded and run in lispvm
 python3 tests/test_bpcallout.py       # BPCALLOUT loaded and run in lispvm
 python3 tests/test_cdcallout.py       # CDCALLOUT loaded and run in lispvm
 python3 tests/test_abfind.py          # ABFIND / ABMOVE, run in lispvm
@@ -329,14 +345,23 @@ python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
 python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
                                       # just made, in the same lispvm
+python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
+                                      # and the pool it draws vs the prompts
+python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
+                                      # DCL well-formed, run with stubs,
+                                      # toolbar + generated icon bytes
 python3 tests/test_cornerstp_geometry.py
+python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
+python3 tests/test_cornerstp_profile.py # the side profile all three draw
+python3 tests/test_normiestep_corner.py # NORMIESTEP corner mode, run in lispvm
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
 python3 tests/test_cloud_mesher.py    # point cloud mesher
 python3 tests/test_dxf_reader.py      # Merlin import
 python3 tests/test_mesh_layers.py     # Merlin layered export
 python3 tests/test_dewrangler.py      # mesh dewrangler
-python3 tests/test_pool_form.py       # palette <-> POOL (currently failing, see above)
+python3 tests/test_pool_form.py       # a form drives POOL and draws what
+                                      # the command line draws
 python3 tests/test_spa_form.py        # palette <-> SPA (currently failing, see above)
 python3 tests/test_shared.py          # shared/ build - everything loads together
 ```

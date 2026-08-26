@@ -305,16 +305,44 @@ def hexerr(pts, sides, diags):
            for k, (i, j) in enumerate(HEXDIAGS) if diags[k] is not None]
     return smax, max(xds) if xds else 0.0
 
+def hexwing(m, m0, vx, vy, cd):
+    g = math.sqrt(max(0.0, 2.0 * m * m + 2.0 * m * (vx + vy)
+                      + vx * vx + vy * vy))
+    return (m - m0) ** 2 + (g - cd) ** 2
+
 def hexsquare(sides):
-    # in-square lazy L: exact headings (0/45/135/225 deg), closure
-    # error lands in the E-F / F-A lengths, never the angles
+    # in-square lazy L: the deep-end sides A-B / E-F / F-A are held
+    # EXACTLY (true rectangle, square at A and F), the bends B-C and
+    # D-E stay parallel, and the closure error is spread over the
+    # three wing sides -- least squares in the one free number, the
+    # slide m of D against C along the bend
     u = 0.7071067812
     ab, bc, cd, de, ef, fa = sides
     a, b = (0.0, 0.0), (ab, 0.0)
-    c = (b[0] + bc * u, b[1] + bc * u)
-    d = (c[0] - cd * u, c[1] + cd * u)
-    e = (d[0] - de * u, d[1] - de * u)
-    f = (0.0, e[1])
+    f, e = (0.0, fa), (ef, fa)
+    vx, vy = e[0] - b[0], e[1] - b[1]
+    m0 = u * (de - bc)
+    lo, hi = m0 - 2.0 * u * de + 0.001, m0 + 2.0 * u * bc - 0.001
+    n = 240
+    step = (hi - lo) / n
+    bm, bf = m0, hexwing(m0, m0, vx, vy, cd)
+    for i in range(n + 1):
+        m = lo + i * step
+        fm = hexwing(m, m0, vx, vy, cd)
+        if fm < bf:
+            bf, bm = fm, m
+    lo, hi = max(lo, bm - step), min(hi, bm + step)
+    for _ in range(40):
+        m1, m2 = lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0
+        if hexwing(m1, m0, vx, vy, cd) < hexwing(m2, m0, vx, vy, cd):
+            hi = m2
+        else:
+            lo = m1
+    m = 0.5 * (lo + hi)
+    sl = (m - m0) / (2.0 * u)
+    s1, s2 = bc - sl, de + sl
+    c = (b[0] + s1 * u, b[1] + s1 * u)
+    d = (e[0] + s2 * u, e[1] + s2 * u)
     return [a, b, c, d, e, f]
 
 def fithex(sides, diags, lazy, stol=1.0, xtol=2.0):
@@ -1711,10 +1739,12 @@ pts,failed,_,_ = grec_fit(TRUE_G,GREC_CENTER,_c2,'Center')
 assert not failed
 print("   measured LT-RT/LB-RB behave exactly like walls; NA stays free")
 
-print("== 65. in-square lazy L: parallel pairs held EXACTLY ==")
+print("== 65. in-square lazy L: the deep end is held, the wing gives ==")
 # Field lengths that don't quite close (real tapes never do).  The
 # in-square build must keep A-B // E-F and B-C // D-E perfectly
-# parallel and put the closure error into the E-F / F-A lengths.
+# parallel, hold the three deep-end sides (A-B, E-F, F-A -- what the
+# hopper is measured from) EXACTLY, and put the closure error into the
+# wing instead.
 _s = [296.0, 167.6, 167.6, 99.0, 226.0, 168.0]
 pts, failed = fithex(_s, [None]*9, lazy=True)
 assert not failed
@@ -1726,22 +1756,58 @@ ab, ef = _vec(0, 1), _vec(5, 4)   # E->F reversed = F->E; parallel either way
 bc, de = _vec(1, 2), _vec(4, 3)
 assert abs(_crossz(ab, ef)) < 1e-6, "A-B // E-F must be exact"
 assert abs(_crossz(bc, de)) < 1e-6, "B-C // D-E must be exact"
-# F-A is the left wall: dead vertical, A at the origin
+# the main section is a true rectangle: F-A dead vertical with A at the
+# origin, A-B and E-F dead horizontal
 assert abs(pts[5][0]) < 1e-9 and abs(pts[0][0]) < 1e-9
-# A-B..D-E keep their taped lengths exactly
-for k in range(4):
-    assert abs(dist(pts[HEXSIDES[k][0]], pts[HEXSIDES[k][1]]) - _s[k]) < 1e-6
-# closure error shows up ONLY as small E-F / F-A length deltas
-d_ef = dist(pts[4], pts[5]) - _s[4]
-d_fa = dist(pts[5], pts[0]) - _s[5]
-assert abs(d_ef) < 1.0 and abs(d_fa) < 1.5 and (abs(d_ef) > 0 or abs(d_fa) > 0)
+assert abs(pts[0][1]) < 1e-9 and abs(pts[1][1]) < 1e-9
+assert abs(pts[4][1] - pts[5][1]) < 1e-9
+# A-B, E-F and F-A keep their taped lengths exactly
+for k in (0, 4, 5):
+    assert abs(dist(pts[HEXSIDES[k][0]], pts[HEXSIDES[k][1]]) - _s[k]) < 1e-6, k
+# closure error shows up only in the wing, and on this near-closing
+# tape it stays inside the 1" side tolerance
+_wd = [dist(pts[HEXSIDES[k][0]], pts[HEXSIDES[k][1]]) - _s[k] for k in (1, 2, 3)]
+assert any(abs(d) > 1e-9 for d in _wd)
+assert all(abs(d) <= 1.0 for d in _wd), _wd
+# B-C and D-E give up exactly as much as each other -- one grows by
+# what the other loses, so the bend keeps its shape
+assert abs(_wd[0] + _wd[2]) < 1e-6, _wd
 # the out-of-square path (measured diagonals) is untouched: test 17's
 # reference lazy L still fits through the relaxation
 _sd, _dd = hexmeas(LAZY_L)
 _dd = [_dd[k] if k != 7 else None for k in range(9)]
 pts2, failed2 = fithex(_sd, _dd, lazy=True)
 assert not failed2
-print("   parallelism exact; closure error -> E-F/F-A lengths only")
+print("   parallel pairs exact; deep end true, closure error -> the wing")
+
+print("== 65b. a tape that misses by feet: the wing eats it, red ==")
+# The field sheet that started this: 29'6 / 13'6 / 18'0 / 8'6 / 24'6 /
+# 18'0.  Those six cannot close as a 45-degree lazy L -- the old build
+# walked the chain and left E-F 50" and F-A 21" short, silently.  Now
+# the deep end comes out dead on and the wing carries every inch of it.
+_s2 = [354.0, 162.0, 216.0, 102.0, 294.0, 216.0]
+pts3, failed3 = fithex(_s2, [None]*9, lazy=True)
+_d3 = [dist(pts3[i], pts3[j]) - _s2[k] for k, (i, j) in enumerate(HEXSIDES)]
+for k in (0, 4, 5):
+    assert abs(_d3[k]) < 1e-6, ("deep-end side moved", k, _d3)
+assert max(abs(_d3[k]) for k in (1, 2, 3)) > 1.0, _d3   # past pool:*side-tol*
+# still a proper lazy L: the bends stay parallel and both wing sides
+# stay real lengths, not folded back through B or E
+assert abs(_crossz((pts3[1][0]-pts3[0][0], pts3[1][1]-pts3[0][1]),
+                   (pts3[4][0]-pts3[5][0], pts3[4][1]-pts3[5][1]))) < 1e-6
+assert abs(_crossz((pts3[2][0]-pts3[1][0], pts3[2][1]-pts3[1][1]),
+                   (pts3[3][0]-pts3[4][0], pts3[3][1]-pts3[4][1]))) < 1e-6
+assert dist(pts3[1], pts3[2]) > 0.0 and dist(pts3[3], pts3[4]) > 0.0
+# and the fit is the best one available: nudging the slide either way
+# makes the three wing sides fit WORSE overall
+_u = 0.7071067812
+_m0 = _u * (_s2[3] - _s2[1])
+_vx, _vy = 294.0 - 354.0, 216.0
+_msol = _m0 + (dist(pts3[3], pts3[4]) - _s2[3]) * 2.0 * _u
+_here = hexwing(_msol, _m0, _vx, _vy, _s2[2])
+for _eps in (-2.0, -0.5, 0.5, 2.0):
+    assert hexwing(_msol + _eps, _m0, _vx, _vy, _s2[2]) >= _here - 1e-6
+print("   deep end exact, wing off by more than the tolerance -> flagged")
 
 print("== 66. mutt ends: per-style resolution against the overalls ==")
 def romres(aov, s1raw, vraw):

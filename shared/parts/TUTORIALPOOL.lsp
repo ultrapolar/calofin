@@ -26,7 +26,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "082126 REV03")
+(setq tutorial:*version* "082526 REV05")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -96,6 +96,7 @@
   (princ "\nAs soon as you pick the shape, a gray guide (like the three")
   (princ "\nsides above) is drawn at the base point and the view zooms to it.")
   (tutorial:bullet "The element being asked about right now turns RED (the D-A side, here) -- there is never any doubt which measurement you are answering.")
+  (tutorial:bullet "The guide is LIVE: every answer reshapes it on the spot -- type the bottom side and the box stretches to it, type a cross dim and the pool leans out of square -- so you watch the real pool take shape instead of a fixed cartoon.")
   (tutorial:bullet "When a prompt names corners (a side, a cross dim, a corner treatment) the corner LETTERS turn red too.")
   (tutorial:bullet "Object snaps stay LIVE the whole time you are answering, including the very first base-point pick, so you can snap to the real site.")
   (tutorial:bullet "Back (type B -- or U for Undo, its unlisted synonym) re-asks the previous question, from ANYWHERE in the process, right back to the very first one.")
@@ -199,6 +200,7 @@
   (tutorial:bullet "H / G / F / E along the main run: left end -> hopper start (H), hopper length (G), hopper -> slope break (F), break -> right end (E).")
   (tutorial:bullet "M / L / K across the width: top -> hopper (M), hopper width (L), hopper -> bottom (K).")
   (tutorial:bullet "F and L are redundant with the others and reported as CHECKS, with their delta against the perimeter.")
+  (tutorial:bullet "The floor guide is LIVE too: each letter answered moves the hopper on the spot, the open letters splitting what the pool has left -- so the chain always closes against the walls and a wrong offset is visible immediately.  The side-profile styles dig their section live as C and D come in.")
   (princ "\nEvery other bottom is this SAME chain, just with letters pinned:")
   (tutorial:bullet "Wedge    -- G=0, E=0 (deep line at H, floor rises all the way to the far wall)")
   (tutorial:bullet "SLope    -- G=0 (deep line at H, rises to a full-width break, then flat)")
