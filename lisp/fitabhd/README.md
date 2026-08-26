@@ -133,22 +133,37 @@ Knowing the type does half the work:
   wall's own points by a clear margin. A wall that really is straight
   stays straight. Roman and Oval side walls bow too; their arc ends
   are left alone, and a Round pool is never asked.
-* **An arc that caved in becomes a run of arcs.** A drawn end is one
-  clean radius; a built one very often is not, because a gunite shell
-  slumps a little as it cures. An end (or a Round pool's whole
-  outline) that a single radius cannot hold **within the distance you
-  typed at step 3** is rebuilt as a polyline of arcs, and the report
-  names it -- `End A is a run of 2 arcs  R 7'-2 1/2" / 6'-9 1/4"`.
-  No question is asked: the tolerance you already typed *is* the
-  control, and raising it gives the single clean radius back.
+* **An arc is not promised to be one radius.** What the drawing calls
+  one R is, on a built shell, very often a run of arcs -- it slumps as
+  it cures. An end (or a Round pool's whole outline) that a single
+  radius cannot hold **within the distance you typed at step 3** is
+  rebuilt as a polyline of arcs, and the report names it -- `End A is
+  a run of 4 arcs  R 7'-2 1/2" / 6'-9 1/4" / ...  (joints smooth to
+  4.7 deg)`. No question is asked: the tolerance you already typed
+  *is* the control, and raising it gives the single clean radius back.
   * **Every joint sits on a survey point**, so the run is continuous
     by construction and each joint is a real measurement rather than
     an invented one.
-  * Extra arcs have to earn their place: the run keeps the **fewest
-    that hold the points**, each one required to beat its predecessor
-    by a clear margin (`fit:*arc-max*` caps it, `fit:*arc-pts-min*`
-    keeps an arc from being fitted to two stray shots). An end that
-    really is one radius stays one arc.
+  * **Every joint is smooth.** A run that merely shares its joints is
+    continuous but not smooth -- each arc can arrive pointing
+    somewhere else, and the end of the pool reads as a row of facets.
+    ABHD solved this with a *window* rather than a chain, and the same
+    window governs a run here: at each joint the next arc may start no
+    more than `fit:*tang-tol*` (8°) off the tangent the last one ended
+    on, stretched through `fit:*tang-steps*` (to 12°) rather than
+    abandoned when nothing inside it reaches the points. **Smoothness
+    is the constraint; the points still choose inside it**, which is
+    why the joints stay on real shots instead of being pulled off them
+    for perfect tangency.
+  * **The run keeps hugging while it earns.** It only starts when a
+    single radius misses the tolerance -- an end that really is one
+    radius stays one arc -- but from there it does not stop at the
+    first count that scrapes back inside: each extra arc is kept while
+    it beats its predecessor by a clear margin, because stopping at
+    "good enough" leaves the shell's real shape on the table. A caved
+    oval end goes `one R 3.71" -> 2 arcs 0.96" -> 4 arcs 0.50"`.
+    (`fit:*arc-max*` caps the count, `fit:*arc-pts-min*` keeps an arc
+    from being fitted to two stray shots.)
   * A *symmetric* cave-in is still a circle -- the single arc just
     takes a smaller radius, and no chain appears. This is for the ends
     that slumped to **one side**, which no circle can follow.
@@ -296,7 +311,9 @@ points allowed off (`fit:*miss-pct*`), what counts as a bow at all
 (`fit:*oos-max*`, `fit:*oos-min*`), how far a Roman or Oval's side
 walls may lean and diverge (`fit:*cap-oos-max*`), how far an arc may
 be broken up
-(`fit:*arc-max*`, `fit:*arc-pts-min*`) and the K/L/M offset
+(`fit:*arc-max*`, `fit:*arc-pts-min*`), how smooth its joints have to
+stay (`fit:*tang-tol*`, `fit:*tang-steps*` -- ABHD's own numbers) and
+the K/L/M offset
 (`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
 
@@ -321,6 +338,10 @@ mirror agree on the ones that shape the fit.
 * An arc chain is reported, not snapped: each arc's radius is whatever
   the shell made it. The nominal single-arc radius is still what the
   end dimension reports.
+* A run's joints are smooth to within the tangency window, never
+  perfectly tangent -- perfect tangency would mean joints that are not
+  survey points, and this tool would rather stay on the shots. The
+  report prints how far the worst joint came out.
 * A Lazy L's bend is nominally 45 degrees -- that is the point of
   declaring the type -- and `Outofsquare` lets it swing up to 5 degrees
   off that. A pool bent much further will show up in the report as

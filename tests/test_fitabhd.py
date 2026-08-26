@@ -69,6 +69,12 @@ ARC_MAX = 6                        # fit:*arc-max*  (most arcs one end
                                    # may be broken into)
 ARC_PTS_MIN = 3                    # fit:*arc-pts-min*  (points each arc
                                    # of a chain needs to mean anything)
+TANG_TOL = math.pi / 22.5          # fit:*tang-tol*  (8 degrees: ABHD's
+                                   # own tangency window - how far a
+                                   # joint in a run of arcs may depart
+                                   # from smooth)
+TANG_STEPS = (1.0, 1.25, 1.5)      # fit:*tang-steps*  (stretch the
+                                   # window rather than abandon it)
 OOS_MIN = 1.0                      # fit:*oos-min*  (the drift from one
                                    # end of a wall to the other, below
                                    # which the wall reads as true)
@@ -1203,36 +1209,163 @@ def span_dev(a, b, bul, qs):
     return max((seg_dist(q, (a, b, bul)) for q in qs), default=0.0)
 
 
+# ---- tangency: ABHD's continuity, on FITABHD's runs -------------------
+# A run of arcs that merely shares its joints is continuous but not
+# SMOOTH - each arc can arrive at a joint pointing somewhere else, and
+# the end of a pool reads as a row of facets.  ABHD solved this with a
+# window rather than a chain: at each joint the next arc's start
+# tangent may differ from the previous arc's end tangent by at most
+# TANG_TOL, so the curve stays smooth while the POINTS still choose
+# inside that window.  The same window governs a run here.
+
+
+def end_tangent(a, b, bul):
+    """Tangent direction at the END of the arc A -> B: the chord
+    direction plus half the included angle."""
+    return ang(a, b) + 2.0 * math.atan(bul)
+
+
+def start_tangent(a, b, bul):
+    """Tangent direction where the arc A -> B leaves A."""
+    return ang(a, b) - 2.0 * math.atan(bul)
+
+
+def tang_window(te, a, b, wf):
+    """The bulges the span A -> B may take if its start tangent is to
+    stay within WF * TANG_TOL of the incoming tangent TE.  The edges are
+    clamped so U-turn geometry stays finite."""
+    tt = TANG_TOL * wf
+    phi = signed_dang(te, ang(a, b))
+    lo = fit_tan(max(-1.373, min(1.373, (phi - tt) / 2.0)))
+    hi = fit_tan(max(-1.373, min(1.373, (phi + tt) / 2.0)))
+    return (lo, hi) if lo <= hi else (hi, lo)
+
+
+def end_window(ts0, a, b, wf):
+    """The bulges the CLOSING span A -> B may take if its end tangent is
+    to stay within WF * TANG_TOL of the ring's start tangent TS0."""
+    tt = TANG_TOL * wf
+    psi = signed_dang(ang(a, b), ts0)
+    lo = fit_tan(max(-1.373, min(1.373, (psi - tt) / 2.0)))
+    hi = fit_tan(max(-1.373, min(1.373, (psi + tt) / 2.0)))
+    return (lo, hi) if lo <= hi else (hi, lo)
+
+
+def isect_win(w1, w2):
+    """Where two bulge windows overlap; None when they do not."""
+    if w1 is None:
+        return w2
+    if w2 is None:
+        return w1
+    lo, hi = max(w1[0], w2[0]), min(w1[1], w2[1])
+    return (lo, hi) if lo <= hi else None
+
+
+def best_bulge_win(a, b, qs, win):
+    """best_bulge, but every candidate held inside the window WIN - so
+    the arc answers its points as well as it can WITHOUT leaving the
+    joint visibly kinked."""
+    if win is None:
+        return best_bulge(a, b, qs)
+    if not qs:
+        return max(win[0], min(win[1], 0.0))
+    cands = [bulge_3pt(a, q, b) for q in qs]
+    cands.append(sum(cands) / len(cands))
+    cands = [max(win[0], min(win[1], c)) for c in cands]
+    best, bd = cands[0], None
+    for bl in cands:
+        d = span_dev(a, b, bl, qs)
+        if bd is None or d < bd:
+            best, bd = bl, d
+    return best
+
+
+def smooth_bulge(te, a, b, qs, tol, ts0=None):
+    """The arc that continues the tangent TE smoothly and still answers
+    QS.  The window is STRETCHED through TANG_STEPS rather than
+    abandoned - smoothness is worth more than an exact hit - and the
+    first stretch whose arc holds the points within TOL wins.  TS0, on
+    the closing span of a ring, also holds the far end to the tangent
+    the ring started with."""
+    out = None
+    for wf in TANG_STEPS:
+        win = tang_window(te, a, b, wf)
+        if ts0 is not None:
+            win = isect_win(win, end_window(ts0, a, b, wf))
+            if win is None:
+                continue
+        out = best_bulge_win(a, b, qs, win)
+        if span_dev(a, b, out, qs) <= tol:
+            return out
+    if out is None:                        # the two ends cannot agree
+        out = best_bulge_win(a, b, qs,
+                             tang_window(te, a, b, TANG_STEPS[-1]))
+    return out
+
+
+def chain_kink(chain, z, closed=False):
+    """The worst joint in a run: how far the next arc's start tangent
+    departs from the previous arc's end tangent, in radians."""
+    segs = chain_segs(chain, z)
+    worst = 0.0
+    for i in range(1, len(segs)):
+        k = abs(signed_dang(end_tangent(*segs[i - 1]),
+                            start_tangent(*segs[i])))
+        worst = max(worst, k)
+    if closed and len(segs) > 1:
+        worst = max(worst, abs(signed_dang(end_tangent(*segs[-1]),
+                                           start_tangent(*segs[0]))))
+    return worst
+
+
 def chain_segs(chain, z):
     """The (p1 p2 bulge) segments of a (point bulge) run ending at Z."""
     pts = [c[0] for c in chain] + [z]
     return [(pts[i], pts[i + 1], chain[i][1]) for i in range(len(chain))]
 
 
-def round_chain_of(qs, k):
+def round_chain_of(qs, k, tol):
     """The whole outline of a Round pool as one closed run of K arcs,
-    the joints spaced evenly round the (already rotated) survey."""
+    the joints spaced evenly round the (already rotated) survey.  The
+    first arc is free; each one after it leaves its joint smooth, and
+    the last has to close on the tangent the ring started with."""
     n = len(qs)
     trial = [(qs[s * n // k], 0.0) for s in range(k)]
+    te = ts0 = None
     for s in range(k):
         lo = s * n // k
         hi = (s + 1) * n // k if s < k - 1 else n
-        nxt = trial[(s + 1) % k][0]
-        trial[s] = (trial[s][0], best_bulge(trial[s][0], nxt, qs[lo:hi]))
+        a, nxt = trial[s][0], trial[(s + 1) % k][0]
+        if te is None:
+            bl = best_bulge(a, nxt, qs[lo:hi])
+            ts0 = start_tangent(a, nxt, bl)
+        else:
+            bl = smooth_bulge(te, a, nxt, qs[lo:hi], tol,
+                              ts0 if s == k - 1 else None)
+        trial[s] = (a, bl)
+        te = end_tangent(a, nxt, bl)
     return trial
 
 
-def arc_chain(qs, a, z, k):
+def arc_chain(qs, a, z, k, tol):
     """A run of K arcs from A to Z through the ordered points QS.  The
-    K-1 joints are survey points themselves."""
+    K-1 joints are survey points themselves, and every one of them is
+    smooth: the first arc is free, each one after it starts within the
+    tangency window of the arc before it."""
     n = len(qs)
     bounds = [0] + [s * n // k for s in range(1, k)] + [n]
     out = []
+    te = None
     for s in range(k):
         lo, hi = bounds[s], bounds[s + 1]
         start = a if s == 0 else qs[lo]
         end = z if s == k - 1 else qs[hi]
-        out.append((start, best_bulge(start, end, qs[lo:hi])))
+        if te is None:
+            bl = best_bulge(start, end, qs[lo:hi])
+        else:
+            bl = smooth_bulge(te, start, end, qs[lo:hi], tol)
+        out.append((start, bl))
+        te = end_tangent(start, end, bl)
     return out
 
 
@@ -1243,18 +1376,26 @@ def chain_worst(chain, z, qs):
 
 
 def fit_arc_run(qs, a, z, tol):
-    """The fewest arcs from A to Z that hold the ordered points QS.
-    One if it can; more only while each extra arc clearly earns it.
-    Returns the (point, bulge) run from A up to but not including Z."""
+    """The run of arcs from A to Z that best answers the ordered points
+    QS.  ONE arc if one holds them within TOL - an end that really is
+    one radius stays one radius, and no chain appears.  Once a single
+    arc has failed, though, the run keeps going while each extra arc
+    clearly earns its place: stopping the moment it scrapes inside the
+    tolerance would leave the shell's real shape on the table, and the
+    tangency window is what keeps the result a curve rather than a row
+    of facets.  Returns the (point, bulge) run from A up to but not
+    including Z."""
     best = [(a, best_bulge(a, z, qs))]
     if not qs:
         return best
     worst = chain_worst(best, z, qs)
+    if worst <= tol:                       # one radius holds them
+        return best
     kmax = min(ARC_MAX, max(1, len(qs) // ARC_PTS_MIN))
     k = 1
-    while worst > tol and k < kmax:
+    while k < kmax:
         k += 1
-        trial = arc_chain(qs, a, z, k)
+        trial = arc_chain(qs, a, z, k, tol)
         w = chain_worst(trial, z, qs)
         if w > worst * BOTH_EDGE:          # not a clear enough gain
             break
@@ -1894,7 +2035,7 @@ def apply_arc_chains(res, fpts, tol):
             # try the aligned run and one shifted half a span
             tw, tc = None, None
             for off in (0, n // (2 * k)):
-                trial = round_chain_of(qs[off:] + qs[:off], k)
+                trial = round_chain_of(qs[off:] + qs[:off], k, tol)
                 w = chain_worst(trial, trial[0][0], qs)
                 if tw is None or w < tw:
                     tw, tc = w, trial
@@ -1905,9 +2046,10 @@ def apply_arc_chains(res, fpts, tol):
             return res
         res = dict(res)
         res["chain"] = best
+        res["kink"] = chain_kink(best, best[0][0], True)
         res["segs"] = round_segs(res["prm"], best)
         return res
-    chains = [None, None]
+    chains, kinks = [None, None], [0.0, 0.0]
     for side, i in enumerate(bulged[:2]):
         qs = order_along_arc(arc_seg_points(fpts, segs, i), segs[i])
         if len(qs) < 2 * ARC_PTS_MIN:
@@ -1915,10 +2057,12 @@ def apply_arc_chains(res, fpts, tol):
         run = fit_arc_run(qs, segs[i][0], segs[i][1], tol)
         if len(run) > 1:
             chains[side] = run
+            kinks[side] = chain_kink(run, segs[i][1])
     if not any(chains):
         return res
     res = dict(res)
     res["chains"] = chains
+    res["kinks"] = kinks
     res["segs"] = endcap_segs(res["prm"], res["type"], res["both"],
                               res.get("bows"), chains)
     return res
@@ -2636,6 +2780,110 @@ def test_arc_chain_joints_sit_on_survey_points():
     print("  every joint of a run sits on a surveyed point")
 
 
+def rough_caved_oval(depth, sigma, noise, seed):
+    """A caved end shot the way a site really is: a narrow slump and
+    noise that a run of arcs will chase if nothing holds it back."""
+    pts = survey(endcap_segs(OVAL_PRM, "Oval", True), 10.0, noise, seed)
+    c = (OVAL_PRM["cx"], (OVAL_PRM["By"] + OVAL_PRM["Ty"]) / 2.0)
+    out = []
+    for p in pts:
+        if p[0] > c[0]:
+            rel = (ang(c, p) + math.pi / 2.0) / math.pi
+            pull = depth * math.exp(-((rel - 0.30) / sigma) ** 2)
+            d = dist(c, p)
+            out.append((c[0] + (p[0] - c[0]) * (d - pull) / d,
+                        c[1] + (p[1] - c[1]) * (d - pull) / d))
+        else:
+            out.append(p)
+    return out
+
+
+def kinky_chain(qs, a, z, k):
+    """The same run built with no tangency window at all - what the
+    joints do when nothing holds them together."""
+    n = len(qs)
+    bounds = [0] + [s * n // k for s in range(1, k)] + [n]
+    out = []
+    for s in range(k):
+        lo, hi = bounds[s], bounds[s + 1]
+        start = a if s == 0 else qs[lo]
+        end = z if s == k - 1 else qs[hi]
+        out.append((start, best_bulge(start, end, qs[lo:hi])))
+    return out
+
+
+def arc_spans(pts, ptype, tol):
+    """The end arcs of the UNCHAINED fit, as (points, a, z) - what the
+    chain pass is handed."""
+    res = no_chains(pts, ptype, "Square", tol)
+    fpts = to_frame(dedupe(pts), res["angle"], res["mirror"])
+    out = []
+    for i, s in enumerate(res["fsegs"]):
+        if abs(s[2]) < 1.0e-9:
+            continue
+        qs = order_along_arc(arc_seg_points(fpts, res["fsegs"], i), s)
+        if len(qs) >= 2 * ARC_PTS_MIN:
+            out.append((qs, s[0], s[1]))
+    return out
+
+
+def test_a_run_of_arcs_stays_smooth():
+    # ABHD's continuity, on FITABHD's runs: a joint may depart from
+    # tangent by the window, and the window may stretch, but nothing
+    # past that - a run that only shares its joints draws facets
+    lim = TANG_TOL * max(TANG_STEPS) + 1.0e-9
+    loose, tight, seen = 0.0, 0.0, 0
+    for sigma, noise, seed in ((0.10, 0.5, 77), (0.08, 0.6, 5),
+                               (0.12, 0.45, 203)):
+        pts = rough_caved_oval(6.0, sigma, noise, seed)
+        res = fit_and_snap(pts, "Oval", "Square", 1.0, 0.15, False, False)
+        for k in res.get("kinks", []):
+            assert k <= lim, (math.degrees(k), seed)
+            if k > 0.0:
+                seen += 1
+                tight = max(tight, k)
+        # and the window really is doing the work: the same splits with
+        # nothing holding the joints kink well past it
+        for qs, a, z in arc_spans(pts, "Oval", 1.0):
+            for kk in range(3, min(ARC_MAX, len(qs) // ARC_PTS_MIN) + 1):
+                loose = max(loose, chain_kink(kinky_chain(qs, a, z, kk), z))
+                assert chain_kink(arc_chain(qs, a, z, kk, 1.0), z) <= lim
+    assert seen, "expected at least one run of arcs"
+    assert loose > TANG_TOL * max(TANG_STEPS), math.degrees(loose)
+    print("  runs stay smooth: joints %.1f deg, %.1f deg without the "
+          "window (limit %.1f)"
+          % (math.degrees(tight), math.degrees(loose),
+             math.degrees(TANG_TOL * max(TANG_STEPS))))
+
+
+def test_a_run_keeps_hugging_while_it_earns():
+    # one R that holds is left alone; one that does not is answered by
+    # as many arcs as keep earning their place, not by the first count
+    # that scrapes inside the tolerance
+    tol, best = 1.0, None
+    for qs, a, z in arc_spans(caved_oval(6.0), "Oval", tol):
+        one = span_dev(a, z, best_bulge(a, z, qs), qs)
+        run = fit_arc_run(qs, a, z, tol)
+        if one <= tol:                     # this end is one radius
+            assert len(run) == 1, len(run)
+            continue
+        two = chain_worst(arc_chain(qs, a, z, 2, tol), z, qs)
+        got = chain_worst(run, z, qs)
+        assert got <= two + 1.0e-9, (got, two)
+        if len(run) > 2:
+            # it went past the count that already met the tolerance,
+            # and every arc it added earned its place
+            assert two <= tol, (two, tol)
+            assert got < two * BOTH_EDGE, (got, two)
+        if best is None or len(run) > best[0]:
+            best = (len(run), one, two, got)
+    assert best, "expected an end a single radius could not hold"
+    assert best[0] > 2, best               # kept hugging past "enough"
+    n, one, two, got = best
+    print("  a run keeps earning: one R %.2f\", 2 arcs %.2f\", "
+          "%d arcs %.2f\"" % (one, two, n, got))
+
+
 def test_a_caved_round_pool():
     c = (77.0, -33.0)
     circle = [((c[0] + 108.0, c[1]), (c[0] - 108.0, c[1]), 1.0),
@@ -2833,6 +3081,16 @@ def test_lisp_engine_matches_mirror():
     lc = vm.loads("(fit:rget fit-test-res 'chains)")
     assert lc and [0 if c is None else len(c) for c in lc] == \
         [0 if c is None else len(c) for c in py["chains"]], lc
+    # every arc of every run, and how smooth the joints came out
+    for c, pc in zip(lc, py["chains"]):
+        if not pc:
+            continue
+        for arc, parc in zip(c, pc):
+            assert abs(arc[1] - parc[1]) < 1.0e-9, (arc, parc)
+    lk = vm.loads("(fit:rget fit-test-res 'kinks)")
+    for a, b in zip(lk, py["kinks"]):
+        assert abs(a - b) < 1.0e-9, (lk, py["kinks"])
+    assert max(lk) <= TANG_TOL * max(TANG_STEPS) + 1.0e-9, lk
     lines = vm.loads("(fit:chain-lines fit-test-res)")
     assert lines and all("run of" in str(x.a) for x in lines), lines
 
@@ -2998,6 +3256,10 @@ def test_lisp_file_is_well_formed():
                "fit:bow-bulge", "fit:fit-cap-bows",
                "fit:apply-refinement", "fit:square-lines-poly",
                "fit:wall-y", "fit:cap-cy", "fit:cap-half",
+               "fit:end-tangent", "fit:start-tangent", "fit:tang-window",
+               "fit:end-window", "fit:isect-win", "fit:clamp-bulge",
+               "fit:best-bulge-win", "fit:smooth-bulge", "fit:chain-kink",
+               "fit:kink-text",
                "fit:cap-wall", "fit:cap-slopes", "fit:cap-divergence",
                "fit:cap-at", "fit:refine-cap-angle",
                "fit:held-worst", "fit:snap-ok", "fit:on-eps",
@@ -3068,6 +3330,12 @@ def test_constants_match_lisp():
     m = re.search(r"\(setq\s+fit:\*cap-oos-max\*\s+\(/\s+pi\s+([0-9.]+)\)",
                   src)
     assert m and abs(math.pi / float(m.group(1)) - CAP_OOS_MAX) < 1e-12
+    m = re.search(r"\(setq\s+fit:\*tang-tol\*\s+\(/\s+pi\s+([0-9.]+)\)",
+                  src)
+    assert m and abs(math.pi / float(m.group(1)) - TANG_TOL) < 1e-12
+    m = re.search(r"\(setq\s+fit:\*tang-steps\*\s+'\(([^)]*)\)", src)
+    assert m, "could not read fit:*tang-steps*"
+    assert tuple(float(x) for x in m.group(1).split()) == TANG_STEPS
     assert '"Insquare Outofsquare"' in src, \
         "the squareness question no longer uses POOL's vocabulary"
     assert int(setq_value("icp-iters")) == ICP_ITERS
@@ -3121,6 +3389,8 @@ def main():
     test_a_caved_end_becomes_a_run_of_arcs()
     test_a_true_end_stays_one_arc()
     test_arc_chain_joints_sit_on_survey_points()
+    test_a_run_of_arcs_stays_smooth()
+    test_a_run_keeps_hugging_while_it_earns()
     test_a_caved_round_pool()
     test_hopper_layout()
     test_lisp_engine_matches_mirror()
