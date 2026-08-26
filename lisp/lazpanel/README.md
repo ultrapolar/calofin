@@ -174,13 +174,33 @@ Two details worth knowing, because both were wrong first time round:
   ```
 
   -- which is a blank button rather than a wrong one, and was reported
-  from the field. The way round it is to stop building a byte array in
+  from the field. (On the machine that reported it `VT_UI1` turned out
+  to be *accepted*, and `Write` refused the array anyway -- so the
+  undocumented type constant was never the whole story.) The way round it is to stop building a byte array in
   AutoLISP at all: base64 is a pure-ASCII encoding of arbitrary bytes,
   so the icon can be carried in an ordinary string, and MSXML's
   `bin.base64` element turns that string back into a real byte array
   on the other side. Both components ship with Windows, and the
   toolbar already needs COM. The safearray spellings stay as
   fallbacks, so a machine where they do work is no worse off.
+- **Every MSXML version is tried all the way through, not just far
+  enough to create.** MSXML 6.0 creates perfectly happily and then
+  refuses `dataType`, because XDR schema support -- of which
+  `bin.base64` is part -- was removed in 6.0. A probe that stops at
+  "did the object appear?" therefore picks 6.0, dies on the next line
+  and falls back without a word. That is exactly what the second field
+  report caught: `array : VT_UI1 safearray`, meaning the MSXML route
+  had returned nothing while a working version sat three entries
+  further down the list. `MSXML2.DOMDocument.3.0` and the
+  version-independent `Microsoft.XMLDOM` both carry XDR and come
+  first; 6.0 sits at the back where its refusal costs one failed
+  attempt and nothing else. `LAZICON` names the version that carried
+  the bytes -- `bin.base64 via MSXML2.DOMDocument.3.0` -- rather than
+  a generic label that says nothing about which of four routes worked.
+- **`Write` has two spellings.** It takes a `Variant`, and whether a
+  raw safearray marshals into one is another per-release question, so
+  a refused plain call is retried wrapped in `vlax-make-variant`
+  before giving up. `died at` distinguishes them.
 - **The icon is written through an `ADODB.Stream` in binary mode, not
   with `write-char`.** AutoLISP writes text-mode files and has no NUL
   in its character model at all -- `(chr 0)` is the empty string --
