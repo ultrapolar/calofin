@@ -73,6 +73,25 @@ TOOLS = {
         },
         'drop_globals': ['cdc:*sysold*'],
     },
+    # CUSTBLOCK was written against the library from the start
+    # (STANDARDS section 6): its ask helper, sysvar pair and ensure-layer
+    # are the CALOFIN-LIB bodies under cbk:, so they all come back out
+    # here.  Its dim-style pair stays local for CDCREATE's reason -- it
+    # restores a style only when the style really moved, which
+    # cal:dimstyrestore does not model.
+    'CUSTBLOCK': {
+        'src': 'lisp/custblock/CUSTBLOCK.lsp',
+        'swap': {
+            'cbk:askdist': 'cal:askdist',
+            'cbk:syssave': 'cal:syssave',
+            'cbk:sysrestore': 'cal:sysrestore',
+            'cbk:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': ['cbk:*sysold*'],
+        # the Back sentinel travels with the ask helper, and every
+        # question in the run tests for it by name
+        'symbols': {'CBK-BACK': 'CAL-BACK'},
+    },
     # ABCDEF and XYPLOT carry the same feet-inch parser, so the same two
     # generic helpers come out of both.  Mirrored rather than hand-copied
     # because the twins were drifting: the shared abcdef.lsp still had

@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 56 of them across 125 buttons, because the pages come in two kinds
+-- 57 of them across 128 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both.
 
 **The job pages** are what you are actually doing this hour, and each
@@ -18,10 +18,11 @@ reach for them.
 | --- | --- | --- | --- |
 | `POOL` | `ABFIND` | `CORNERSTP` | `AUTODIM` |
 | `LAZFORM` | `ABMOVE` | `HEMISTEP` | `LINFINCHECK` |
-| `OASIS` | `CDCREATE` | `NORMIESTEP` | `LINFINSCAN` |
-| `ABHD` | `CDCALLOUT` | `AUTOBEAD` | `LITELINFINSCAN` |
-| `ADAB` | `BPCALLOUT` | `PERPPTS` | `DIMCHECK` |
-| `FITABHD` |  | `CPERPPTS` | `DIMSCAN` |
+| `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `LINFINSCAN` |
+| `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `LITELINFINSCAN` |
+| `ABHD` | `BPCALLOUT` | `PERPPTS` | `DIMCHECK` |
+| `ADAB` |  | `CPERPPTS` | `DIMSCAN` |
+| `FITABHD` |  |  |  |
 | `XFTCONV` |  |  |  |
 
 **Cover** -- 3 columns, in the order the work runs:
@@ -34,14 +35,15 @@ reach for them.
 | `ABHDCOVER` | `CDCALLOUT` | `COVERSCAN` |
 | `FITABHDCOVER` | `BPCALLOUT` | `LITECOVERSCAN` |
 | `STOCKCOVER` |  | `DIMCHECK` |
-| `XFTCONV` |  | `DIMSCAN` |
+| `CUSTBLOCK` |  | `DIMSCAN` |
+| `XFTCONV` |  |  |
 
 `Spa` and `Rest` are a single column each:
 
 | Job | Buttons |
 | --- | --- |
-| Spa | `SPA`, `AUTODIM`, `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `DIMCHECK`, `DIMSCAN` |
-| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
+| Spa | `SPA`, `CUSTBLOCK`, `AUTODIM`, `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `DIMCHECK`, `DIMSCAN` |
+| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `ABCURCHECK`, `ABCURCHECKSCAN`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
 
 **A page laid out in columns shows the command name alone**; the column
 heading carries the meaning instead of a caption on every button. That
@@ -61,10 +63,10 @@ them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
+| Layout | LAZFORM, LAZTXT, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
 | Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
-| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
+| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
 `AUTODIM` and `DIMCHECK`/`DIMSCAN` are on all three jobs, because every
 job ends the same way; 10 commands are shared between jobs in total.
@@ -87,6 +89,21 @@ Spa do not name, and the test recomputes that complement from the tree
 -- so a tool added to the panel and forgotten on the job pages shows up
 as a Rest omission instead of quietly falling out of the workflow.
 
+**`CUSTBLOCK` is on Cover and Spa.** A custom block drawn from three
+typed sizes is what you reach for on those two sheets -- the custom
+answer where `STOCKCOVER` is the stock one, and the block a spa sheet
+needs beside the spa. It stays off Pool, which is why it is not
+"everything the other jobs leave over" and so not on Rest.
+
+**The AB checks are on Rest and on no other job.** `ABCURCHECK` and
+`ABCURCHECKSCAN` read the A/B survey ties themselves -- the tape rather
+than the pool -- so they are bench work over the numbers, not a step in
+laying out a pool, a cover or a spa. Any further `AB*` check joins them
+there and stays off Pool, Cover and Spa; the test derives the rule from
+the roster, so a new one dropped onto Pool out of habit fails the suite.
+The **Checking** category page still carries them, because that page
+answers what a tool *is* rather than what you are doing this hour.
+
 A **tab strip** across the top switches pages: two labelled boxed rows,
 `Job` (Pool / Cover / Spa / Rest) and `Or by category` (Layout / Points
 / Dimensions / Checking) -- they are not eight equal things, and the
@@ -100,7 +117,7 @@ re-ordering the tools, re-grouping them or moving a tab to the other
 row is an edit to those two tables and nothing else, and the test
 asserts they name exactly the same groups so neither can drift. The
 status line counts tools rather than buttons (`lzp:commands` folds the
-repeats), so it still reports the whole 56 and not 125. The panel
+repeats), so it still reports the whole 57 and not 128. The panel
 reopens where you left it rather than jumping back to the middle of the
 screen.
 
