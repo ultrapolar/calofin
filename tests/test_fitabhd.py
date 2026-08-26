@@ -65,10 +65,12 @@ CAP_OOS_MAX = math.pi / 18.0       # fit:*cap-oos-max*  (10 degrees: how
                                    # as it cures and the walls slant
                                    # away, so they are never held
                                    # parallel)
-ARC_MAX = 6                        # fit:*arc-max*  (most arcs one end
-                                   # may be broken into)
 ARC_PTS_MIN = 3                    # fit:*arc-pts-min*  (points each arc
-                                   # of a chain needs to mean anything)
+                                   # of a run needs to mean anything -
+                                   # and so the only limit on how many
+                                   # arcs a curve may become: N points
+                                   # on it allow at most N/3 arcs, with
+                                   # no fixed ceiling)
 TANG_TOL = math.pi / 22.5          # fit:*tang-tol*  (8 degrees: ABHD's
                                    # own tangency window - how far a
                                    # joint in a run of arcs may depart
@@ -1391,15 +1393,15 @@ def fit_arc_run(qs, a, z, tol):
     worst = chain_worst(best, z, qs)
     if worst <= tol:                       # one radius holds them
         return best
-    kmax = min(ARC_MAX, max(1, len(qs) // ARC_PTS_MIN))
-    k = 1
-    while k < kmax:
-        k += 1
-        trial = arc_chain(qs, a, z, k, tol)
+    kmax = max(1, len(qs) // ARC_PTS_MIN)
+    for k in range(2, kmax + 1):
+        if worst <= ON_EPS:
+            break            # every point is ON it: nothing left to
+        trial = arc_chain(qs, a, z, k, tol)   # chase but the noise
         w = chain_worst(trial, z, qs)
-        if w > worst * BOTH_EDGE:          # not a clear enough gain
-            break
-        best, worst = trial, w
+        if w > worst * BOTH_EDGE:          # not a clear enough gain -
+            continue                       # but a plateau is not the
+        best, worst = trial, w             # end of the curve either
     return best
 
 
@@ -2005,17 +2007,76 @@ def apply_refinement(res, fpts, oos, bowed):
     return res                              # a round pool has no walls
 
 
+def poly_vert_map(dirs, offs, treat, size, which):
+    """Which vert each wall leaves from, and which vert each corner's
+    own curve starts at - the same walk build_polygon does, so a run
+    can say WHICH corner or wall it rebuilt."""
+    corners = poly_corners(dirs, offs)
+    n = len(corners)
+    leaves, starts, k = [], [], 0
+    for i in range(n):
+        turn, _bis = corner_frame(dirs, i)
+        m = len(corner_verts(corners[(i - 1) % n], corners[i],
+                             corners[(i + 1) % n], turn, treat,
+                             size)) if which else 1
+        starts.append(k)
+        k += m
+        leaves.append(k - 1)
+    return leaves, starts
+
+
+def splice_run(verts, k, run):
+    """The run's arcs replace the single one at vert K."""
+    return verts[:k] + list(run) + verts[k + 1:]
+
+
+def poly_chains(res, fpts, segs, bulged, tol):
+    """Rebuild every curve of a polygon outline that one arc cannot
+    hold.  Back to front, so an earlier splice cannot move a later
+    index."""
+    verts = list(res["verts"])
+    leaves, starts = poly_vert_map(
+        res["dirs"], res["offs"], res["treat"],
+        res.get("vsize") if len(res["offs"]) == 8 else res.get("size"),
+        res["which"])
+    runs = []
+    for k in reversed(bulged):
+        s = segs[k]
+        qs = order_along_arc(arc_seg_points(fpts, segs, k), s)
+        if len(qs) < 2 * ARC_PTS_MIN:
+            continue
+        run = fit_arc_run(qs, s[0], s[1], tol)
+        if len(run) > 1:
+            nm = (("wall", leaves.index(k)) if k in leaves
+                  else ("corner", starts.index(k)))
+            runs.append((nm, len(run), chain_kink(run, s[1]),
+                         chain_segs(run, s[1])))
+            verts = splice_run(verts, k, run)
+    if not runs:
+        return res
+    res = dict(res)
+    res["runs"] = runs
+    res["verts"] = verts
+    res["segs"] = verts_to_segs(verts)
+    return res
+
+
 def apply_arc_chains(res, fpts, tol):
     """Rebuild any arc a single radius cannot hold as a run of arcs
     through the points.  This runs LAST, after the dimensions are
     settled: a chain changes no dimension, it just stops the outline
-    lying about where the shell actually went."""
-    if res["kind"] not in ("cap", "round"):
+    lying about where the shell actually went.  A corner fillet and a
+    bowed wall are drawn as one R for the same reason an oval's end is
+    - because that is how the shape is DESCRIBED - so the same rules
+    reach them too.  A straight wall has no bulge to break up."""
+    if res["kind"] not in ("cap", "round", "poly"):
         return res
     segs = frame_segs(res)
     bulged = [i for i, s in enumerate(segs) if abs(s[2]) > 1.0e-9]
     if not bulged:
         return res
+    if res["kind"] == "poly":
+        return poly_chains(res, fpts, segs, bulged, tol)
     if res["kind"] == "round":
         qs = list(fpts)
         if len(qs) < 2 * ARC_PTS_MIN:
@@ -2028,8 +2089,15 @@ def apply_arc_chains(res, fpts, tol):
                                 for q in qs)
         n = len(qs)
         k = 2
-        while worst > tol and k < min(ARC_MAX, n // ARC_PTS_MIN):
+        # the ring only STARTS breaking up when one circle misses; from
+        # there it keeps going while each extra arc earns its place,
+        # exactly as an end cap's run does
+        if worst <= tol:
+            return res
+        while k < n // ARC_PTS_MIN:
             k += 1
+            if worst <= ON_EPS:
+                break
             # a closed ring has no natural first joint, and where the
             # joints land decides how well they bracket the cave-in, so
             # try the aligned run and one shifted half a span
@@ -2040,7 +2108,7 @@ def apply_arc_chains(res, fpts, tol):
                 if tw is None or w < tw:
                     tw, tc = w, trial
             if tw > worst * BOTH_EDGE:
-                break
+                continue
             best, worst = tc, tw
         if best is None:
             return res
@@ -2845,7 +2913,7 @@ def test_a_run_of_arcs_stays_smooth():
         # and the window really is doing the work: the same splits with
         # nothing holding the joints kink well past it
         for qs, a, z in arc_spans(pts, "Oval", 1.0):
-            for kk in range(3, min(ARC_MAX, len(qs) // ARC_PTS_MIN) + 1):
+            for kk in range(3, len(qs) // ARC_PTS_MIN + 1):
                 loose = max(loose, chain_kink(kinky_chain(qs, a, z, kk), z))
                 assert chain_kink(arc_chain(qs, a, z, kk, 1.0), z) <= lim
     assert seen, "expected at least one run of arcs"
@@ -2882,6 +2950,96 @@ def test_a_run_keeps_hugging_while_it_earns():
     n, one, two, got = best
     print("  a run keeps earning: one R %.2f\", 2 arcs %.2f\", "
           "%d arcs %.2f\"" % (one, two, n, got))
+
+
+def oval_corner(sx, sy, sp=5.0, seed=19):
+    """A rectangle whose first corner was not built as one radius: an
+    as-built corner pulled a little oval.  Nothing exotic - a shell
+    corner that came out of the ground slightly egg-shaped, which no
+    single R can hold."""
+    true = verts_to_segs(build_polygon(RECT_DIRS, [96.0, 192.0, 96.0,
+                                                   192.0],
+                                       "Radius", 30.0, set(range(4))))
+    pts = survey(true, sp, 0.2, seed)
+    seg = [s for s in true if abs(s[2]) > 1.0e-9][0]
+    c, r, a1, a2 = arc_geom(seg[0], seg[1], seg[2])
+    sweep = max(1.0e-9, norm_ang(a2 - a1))
+    out = []
+    for p in pts:
+        d = dist(c, p)
+        rel = norm_ang(ang(c, p) - a1) / sweep
+        if abs(d - r) < 3.0 and 0.0 <= rel <= 1.0:
+            out.append((c[0] + (p[0] - c[0]) * sx,
+                        c[1] + (p[1] - c[1]) * sy))
+        else:
+            out.append(p)
+    a = math.radians(11.0)
+    return [(rot(q, a)[0] + 60.0, rot(q, a)[1] - 20.0) for q in out]
+
+
+def test_a_corner_can_be_a_run_of_arcs():
+    # a corner fillet is drawn as one R for the same reason an oval's
+    # end is - that is how the shape is DESCRIBED - so the same rules
+    # reach it: this one was not built that way and says so
+    pts = oval_corner(1.12, 0.88)
+    one = no_chains(pts, "Rectangle", "Radius", 1.0)
+    run = fit_and_snap(pts, "Rectangle", "Radius", 1.0, 0.15, False,
+                       False)
+    runs = run.get("runs")
+    assert runs, "the corner should not have stayed one arc"
+    (kind, which), narcs, kink, _segs = runs[0]
+    assert kind == "corner", runs
+    assert narcs >= 2, runs
+    assert kink <= TANG_TOL * max(TANG_STEPS) + 1.0e-9, math.degrees(kink)
+    assert run["worst"] < one["worst"] * BOTH_EDGE, \
+        (one["worst"], run["worst"])
+    # a run changes the shape of the corner, never the dimensions
+    assert close(get_dim(run, "SIZE"), get_dim(one, "SIZE"), 1.0e-9)
+    assert close(get_dim(run, "LEN"), get_dim(one, "LEN"), 1.0e-9)
+    # every joint of the run is a real shot, as on any other run
+    fpts = to_frame(dedupe(pts), run["angle"], run["mirror"])
+    for _nm, _n, _k, csegs in runs:
+        for s in csegs[1:]:
+            assert min(dist(s[0], p) for p in fpts) < 1.0e-9, s[0]
+    print("  corner %s is a run of %d arcs: %.2f\" -> %.2f\""
+          % (chr(65 + which), narcs, one["worst"], run["worst"]))
+
+
+def test_a_true_corner_stays_one_arc():
+    pts = oval_corner(1.0, 1.0)
+    res = fit_and_snap(pts, "Rectangle", "Radius", 1.0, 0.15, False,
+                       False)
+    assert not res.get("runs"), res.get("runs")
+    assert close(get_dim(res, "SIZE"), 30.0, 2.0), get_dim(res, "SIZE")
+    print("  a corner that really is one radius stays one arc")
+
+
+def test_a_run_may_reach_a_third_of_the_points():
+    # the only ceiling is a third of the points on the curve: each arc
+    # needs three of them to mean anything.  No fixed limit - a shell
+    # shot forty times has earned more arcs than one shot ten times
+    c = (77.0, -33.0)
+    circle = [((c[0] + 108.0, c[1]), (c[0] - 108.0, c[1]), 1.0),
+              ((c[0] - 108.0, c[1]), (c[0] + 108.0, c[1]), 1.0)]
+    base = survey(circle, 8.0, 0.2, seed=17)
+    pts = []
+    for p in base:
+        rel = (ang(c, p) + math.pi) / (2.0 * math.pi)
+        pull = 8.0 * math.exp(-((rel - 0.35) / 0.10) ** 2)
+        d = dist(c, p)
+        pts.append((c[0] + (p[0] - c[0]) * (d - pull) / d,
+                    c[1] + (p[1] - c[1]) * (d - pull) / d))
+    n = len(dedupe(pts))
+    one = no_chains(pts, "ROUnd", "Square", 1.0)
+    run = fit_and_snap(pts, "ROUnd", "Square", 1.0, 0.15, False, False)
+    got = len(run["chain"])
+    assert got <= n // ARC_PTS_MIN, (got, n)
+    assert got > 6, got                    # past every old fixed cap
+    assert run["worst"] < one["worst"] * BOTH_EDGE
+    assert run["kink"] <= TANG_TOL * max(TANG_STEPS) + 1.0e-9
+    print("  %d points on the outline, %d arcs (a third of them would "
+          "be %d): %.2f\" -> %.2f\""
+          % (n, got, n // ARC_PTS_MIN, one["worst"], run["worst"]))
 
 
 def test_a_caved_round_pool():
@@ -3072,6 +3230,25 @@ def test_lisp_engine_matches_mirror():
     labels = [str(x.a) for x in vm.loads("(fit:square-lines fit-test-res)")]
     assert labels[-1] == "Side walls off parallel", labels
 
+    # a corner a single radius cannot hold: the polygon run pass, the
+    # vert map that names it and the splice, all through the .lsp
+    pts = oval_corner(1.12, 0.88)
+    py = fit_and_snap(pts, "Rectangle", "Radius", 1.0, MISS_PCT, False,
+                      False)
+    vm = vmfit(pts, "Rectangle", "Radius", MISS_PCT, False, False)
+    lw = vm.loads("(fit:rget fit-test-res 'worst)")
+    assert abs(lw - py["worst"]) < 1.0e-6, (lw, py["worst"])
+    lr = vm.loads("(fit:rget fit-test-res 'runs)")
+    assert lr and len(lr) == len(py["runs"]), (lr, py["runs"])
+    for got, want in zip(lr, py["runs"]):
+        assert str(got[0].a).lower() == want[0][0], (got[0], want[0])
+        assert got[0].b == want[0][1], (got[0], want[0])
+        assert got[1] == want[1], (got[1], want[1])
+        assert abs(got[2] - want[2]) < 1.0e-9, (got[2], want[2])
+    lines = vm.loads("(fit:chain-lines fit-test-res)")
+    assert lines and "is a run of" in str(lines[0].a), lines
+    assert "joints smooth to" in str(lines[0].b), lines
+
     # a caved end, and a caved round pool: the arc-chain pass end to end
     pts = caved_oval(6.0)
     py = fit_and_snap(pts, "Oval", "Square", 1.0, MISS_PCT, False, False)
@@ -3256,6 +3433,8 @@ def test_lisp_file_is_well_formed():
                "fit:bow-bulge", "fit:fit-cap-bows",
                "fit:apply-refinement", "fit:square-lines-poly",
                "fit:wall-y", "fit:cap-cy", "fit:cap-half",
+               "fit:poly-vert-map", "fit:splice-run", "fit:poly-chains",
+               "fit:index-of",
                "fit:end-tangent", "fit:start-tangent", "fit:tang-window",
                "fit:end-window", "fit:isect-win", "fit:clamp-bulge",
                "fit:best-bulge-win", "fit:smooth-bulge", "fit:chain-kink",
@@ -3323,7 +3502,8 @@ def test_constants_match_lisp():
     assert float(setq_value("bow-max-frac")) == BOW_MAX_FRAC
     assert int(setq_value("bow-pts-min")) == BOW_PTS_MIN
     assert float(setq_value("oos-min")) == OOS_MIN
-    assert int(setq_value("arc-max")) == ARC_MAX
+    assert "fit:*arc-max*" not in src, \
+        "the fixed ceiling on a run is gone - N/3 is the only limit"
     assert int(setq_value("arc-pts-min")) == ARC_PTS_MIN
     m = re.search(r"\(setq\s+fit:\*oos-max\*\s+\(/\s+pi\s+([0-9.]+)\)", src)
     assert m and abs(math.pi / float(m.group(1)) - OOS_MAX) < 1e-12
@@ -3391,6 +3571,9 @@ def main():
     test_arc_chain_joints_sit_on_survey_points()
     test_a_run_of_arcs_stays_smooth()
     test_a_run_keeps_hugging_while_it_earns()
+    test_a_corner_can_be_a_run_of_arcs()
+    test_a_true_corner_stays_one_arc()
+    test_a_run_may_reach_a_third_of_the_points()
     test_a_caved_round_pool()
     test_hopper_layout()
     test_lisp_engine_matches_mirror()
