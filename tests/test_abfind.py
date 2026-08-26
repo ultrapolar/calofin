@@ -134,6 +134,34 @@ def ab_pt(vm, x, y, number, layer='POINTS'):
     return e
 
 
+def rich_pt(vm, x, y, number, layer='SURVEY-PTS'):
+    """A survey point with a drawing's own properties on it: its own
+    layer, colour, linetype, lineweight, scale and rotation, and a
+    second attribute beside the number.  What a moved point has to
+    carry over, and what building one from ABFIND's defaults lost."""
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, 'INSERT'), Dot(8, layer), Dot(2, 'ab_pt'),
+                     Dot(62, 3), Dot(6, 'HIDDEN'), Dot(370, 50),
+                     Dot(66, 1), [10, float(x), float(y), 0.0],
+                     Dot(41, 2.0), Dot(42, 2.0), Dot(43, 2.0),
+                     Dot(50, 0.5)]
+    for tag, val, off, hgt in (('number', str(number), NUM_OFF, 4.0),
+                               ('elev', '104.25', ELEV_OFF, 3.0)):
+        att = Ent()
+        vm.entities.append(att)
+        vm.entdata[att] = [Dot(0, 'ATTRIB'), Dot(8, layer), Dot(62, 3),
+                           Dot(2, tag), Dot(1, val), Dot(40, hgt),
+                           Dot(7, 'ROMANS'), Dot(50, 0.5),
+                           [10, float(x) + off[0], float(y) + off[1], 0.0],
+                           [11, float(x) + off[0], float(y) + off[1], 0.0]]
+    return e
+
+
+NUM_OFF = (0.87, -3.53)          # where each attribute sits relative
+ELEV_OFF = (0.87, -9.0)          # to the point it belongs to
+
+
 def survey(vm, stakes=('A', 'B')):
     """The three points every test starts from; returns the sweep list."""
     out = []
@@ -331,7 +359,7 @@ def test_abfind_moves_and_carries_on():
     newpt = (ins[-1][1][10][0], ins[-1][1][10][1])
     for d in ds:
         assert pt3(d[14]) == pt3(newpt), d
-    assert len([q for q, _ in vm.prompts if 'Point number' in q]) == 3
+    assert len([q for q, _ in vm.prompts if 'type its number' in q]) == 3
     print("ok  ABFIND Yes moves the point and then asks for the next one")
 
 
@@ -350,7 +378,7 @@ def test_abfind_back_from_the_suggestions():
     pts = survey(vm)
     run(vm, 'c:ABFIND', ['17', 'Yes', 'Back', 'No', None], 'back to ask')
     assert len([q for q, _ in vm.prompts if 'different reading' in q]) == 2
-    assert len([q for q, _ in vm.prompts if 'Point number' in q]) == 2
+    assert len([q for q, _ in vm.prompts if 'type its number' in q]) == 2
     assert len(dims(vm)) == 2, dims(vm)          # the ties were never lost
     assert sug_positions(vm) == []
     print("ok  ABFIND Back at the suggestions re-asks the move question")
@@ -639,7 +667,7 @@ def test_abmove_suggestions_keep_off_the_points_layer():
     survey points off it."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'None'], 'own layer')
+    run(vm, 'c:ABMOVE', ['17', 'None'], 'own layer')
     for etype in ('POINT', 'CIRCLE', 'TEXT', 'ARC'):
         assert ever(vm, etype, 'POINTS') == [], \
             (etype, ever(vm, etype, 'POINTS'))
@@ -653,7 +681,7 @@ def test_the_chosen_one_lands_on_points():
     """The one that is picked IS a survey point, so that one does."""
     vm = newvm()
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None], 'chosen')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'chosen')
     assert len(live(vm, 'INSERT', 'POINTS')) == 4, live(vm, 'INSERT', 'POINTS')
     nums = [d.get(1) for _, d in live(vm, 'ATTRIB')]
     assert nums[-1] == '17m', nums
@@ -667,7 +695,7 @@ def test_points_layer_is_made_when_the_drawing_lacks_it():
     """A drawing with no POINTS layer still gets its moved point."""
     vm = newvm(block=False, points=False)
     pts = survey(vm)
-    run(vm, 'c:ABMOVE', [pts, '17', 'R1B', None], 'no points layer')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'no points layer')
     assert 'POINTS' in {x.upper() for x in vm.tables['LAYER']}
     assert texts(vm, 'POINTS') == ['17m'], texts(vm, 'POINTS')
     print("ok  the points layer is created when the drawing lacks it")
@@ -694,8 +722,9 @@ def test_abmove_prompt_stays_short():
     run(vm, 'c:ABMOVE', ['17', 'None'], 'prompt')
     asked = [q for q, _ in vm.prompts if 'type a tag' in q]
     assert len(asked) == 1, asked
-    assert [q for q, _ in vm.prompts if 'Point number' in q] == \
-        ['\nPoint number (Enter to cancel): '], vm.prompts
+    assert [q for q, _ in vm.prompts if 'type its number' in q] == \
+        ['\nPick the point, or type its number (Enter to cancel): '], \
+        vm.prompts
     assert asked[0].endswith('[Pick/None/Back] <None>: '), asked[0]
     assert '1A' not in asked[0], asked[0]
     print("ok  ABMOVE's choice prompt shows Pick/None/Back, not 45 tags")
@@ -751,6 +780,119 @@ def test_abmove_note_placed_by_hand():
     # #2 is the +2" misreading of B: 18'-6" -> 18'-8"
     assert note[0][1][1] == 'Moved Pt.17 B from 18\'-6" to 18\'-8"', note
     print("ok  ABMOVE the note goes where it is placed")
+
+
+def test_the_moved_point_copies_the_one_it_came_from():
+    """The moved point IS the point it came from, one reading on: same
+    block, layer, colour, linetype, lineweight, scale and rotation, and
+    every attribute it carried - only the number is different."""
+    vm = newvm()
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, B[0], B[1], 'B')
+    src = rich_pt(vm, P17[0], P17[1], 17)
+    was = dict(_alist_dict(vm.entdata[src]))
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'copy')
+
+    newpt = cross(PA, PB - 1.0)
+    moved = [(e, d) for e, d in live(vm, 'INSERT') if e is not src][-1]
+    got = moved[1]
+    assert pt3(got[10]) == pt3(newpt), got
+    for code in (2, 8, 62, 6, 370, 41, 42, 43, 50, 66):
+        assert got[code] == was[code], (code, got.get(code), was[code])
+
+    # both attributes travel with it, each keeping its own offset -
+    # and only the number's value is written
+    atts = [d for _, d in live(vm, 'ATTRIB')][-2:]
+    assert [d[2] for d in atts] == ['number', 'elev'], atts
+    assert [d[1] for d in atts] == ['17m', '104.25'], atts
+    for d, off in zip(atts, (NUM_OFF, ELEV_OFF)):
+        assert pt3(d[10]) == pt3((newpt[0] + off[0], newpt[1] + off[1])), d
+        assert pt3(d[11]) == pt3((newpt[0] + off[0], newpt[1] + off[1])), d
+        assert d[8] == 'SURVEY-PTS' and d[62] == 3, d
+        assert d[7] == 'ROMANS' and d[50] == 0.5, d
+    assert [d[40] for d in atts] == [4.0, 3.0], atts
+    assert len(live(vm, 'SEQEND')) == 1, live(vm, 'SEQEND')
+
+    # the point it came from is untouched - it is ringed, not erased
+    assert pt3(_alist_dict(vm.entdata[src])[10]) == pt3(P17)
+    assert 'SURVEY-PTS' in {x.upper() for x in vm.tables['LAYER']}
+    print("ok  the moved point is a COPY of the old one, number apart")
+
+
+def test_the_copy_keeps_off_the_default_layer():
+    """A point surveyed onto its own layer stays on it when it moves -
+    the copy follows the point, not abf:*point-layer*."""
+    vm = newvm()
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, B[0], B[1], 'B')
+    rich_pt(vm, P17[0], P17[1], 17, layer='FIELD-SHOT')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'own layer copy')
+    assert len(live(vm, 'INSERT', 'FIELD-SHOT')) == 2, \
+        live(vm, 'INSERT', 'FIELD-SHOT')
+    # only the two stakes are on POINTS - the copy never went there
+    assert len(live(vm, 'INSERT', 'POINTS')) == 2, \
+        live(vm, 'INSERT', 'POINTS')
+    print("ok  the copy stays on the layer its point was surveyed onto")
+
+
+def test_a_copy_that_cannot_be_made_falls_back():
+    """No block definition to insert again: the fallback builds one."""
+    vm = newvm(block=False)
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, B[0], B[1], 'B')
+    rich_pt(vm, P17[0], P17[1], 17)
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'fallback')
+    assert len(live(vm, 'POINT', 'POINTS')) == 1, live(vm, 'POINT', 'POINTS')
+    assert texts(vm, 'POINTS') == ['17m'], texts(vm, 'POINTS')
+    print("ok  a point block the drawing cannot insert falls back")
+
+
+def test_abmove_the_point_is_picked():
+    """Click the point instead of typing its number."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE',
+        [(P17[0] + 4.0, P17[1] - 3.0, 0.0), 'R1B', None], 'pick pt')
+    rings = live(vm, 'CIRCLE', 'FGStep')
+    assert len(rings) == 1 and pt3(rings[0][1][10]) == pt3(P17), rings
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+        texts(vm, 'FGStep')
+    nums = [d.get(1) for _, d in live(vm, 'ATTRIB')]
+    assert nums[-1] == '17m', nums
+    print("ok  ABMOVE the point itself can be clicked, not typed")
+
+
+def test_abfind_the_point_is_picked():
+    """ABFIND takes a click at the same prompt, and keeps looping."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABFIND',
+        [(P17[0] - 2.0, P17[1] + 1.0, 0.0), 'No', None], 'pick pt')
+    ds = dims(vm)
+    assert len(ds) == 2, ds
+    assert pt3(ds[0][13]) == pt3(A) and pt3(ds[0][14]) == pt3(P17), ds[0]
+    print("ok  ABFIND ties the point that was clicked")
+
+
+def test_a_click_on_nothing_names_nothing():
+    """A click with no survey point under it draws nothing and re-asks
+    - a stray click is a typo."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [(9000.0, 9000.0, 0.0), '17', 'None'], 'pick miss')
+    assert len(dims(vm)) == 2, dims(vm)
+    assert len([q for q, _ in vm.prompts if 'type its number' in q]) == 2
+    print("ok  a click on nothing draws nothing and re-asks")
+
+
+def test_a_click_on_a_stake_is_refused():
+    """Clicking a stake is refused the same way naming one is."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', [(A[0] + 1.0, A[1] + 1.0, 0.0), '17', 'None'],
+        'pick stake')
+    assert len(dims(vm)) == 2, dims(vm)
+    print("ok  clicking a stake ties nothing - it is what ties are from")
 
 
 def test_abmove_pick_on_screen():
@@ -810,7 +952,7 @@ def test_abmove_ends_after_one_point():
     # the script has no answer left for a second round: a rinse-repeat
     # ABMOVE would run off the end of it and the VM would say so
     run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'one shot')
-    assert len([q for q, _ in vm.prompts if 'Point number' in q]) == 1
+    assert len([q for q, _ in vm.prompts if 'type its number' in q]) == 1
     assert len(dims(vm)) == 2, dims(vm)
     assert len(texts(vm, 'FGStep')) == 1, texts(vm, 'FGStep')
     print("ok  ABMOVE settles one point and ends")

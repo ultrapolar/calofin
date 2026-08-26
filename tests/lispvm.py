@@ -1492,6 +1492,12 @@ def _getpoint(vm, a):
     if isinstance(v, str):
         kw = _match_kw(vm, v)
         if kw is None:
+            # initget bit 128 = arbitrary input: unmatched text comes
+            # back as the string itself instead of being rejected.  It
+            # is what lets ONE prompt take a click or a typed answer
+            # (ABFIND: "Pick the point, or type its number").
+            if vm.initget_bits & 128:
+                return v
             raise LispError(f"getpoint: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
