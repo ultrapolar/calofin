@@ -5,10 +5,11 @@ field sheet is two tape readings, one from each stake, and the point is
 wherever those two distances cross. These two commands work that way
 round.
 
-* **`ABFIND`** — type a point number, get the two ties: an aligned
-  dimension from A to the point and one from B to it. Then it asks
-  whether that point wants moving, and if you say Yes it runs
-  everything `ABMOVE` does before coming back for the next number.
+* **`ABFIND`** — name a point (type its number, or click the point
+  itself), get the two ties: an aligned dimension from A to the point
+  and one from B to it. Then it asks whether that point wants moving,
+  and if you say Yes it runs everything `ABMOVE` does before coming
+  back for the next point.
 * **`ABMOVE`** — that flow on its own, without the question, for when
   you already know a point is wrong: *if this point is in the wrong
   place, where should it be?* One tape is
@@ -17,9 +18,10 @@ round.
   been misread as. Each candidate is drawn **yellow**, on a scratch
   layer of its own, tagged by the tape it moves and how far: `1A`,
   `-3B`.
-  Type the tag you believe and the point moves there, renamed, ringed
-  and noted — **one point per run**: moving a point is a decision, not
-  a sweep, so the command ends as soon as that point is settled.
+  Type the tag you believe and the point is **copied** there, renamed,
+  and its old spot ringed and noted — **one point per run**: moving a
+  point is a decision, not a sweep, so the command ends as soon as that
+  point is settled.
 
 ## What it does
 
@@ -36,6 +38,9 @@ and `CDCREATE` make cross dims:
 * the dimension line sitting **right on the tie** (nudge
   `abf:*offset*` to push it off).
 
+Name the point either way round: type its number, or click it. Both
+answer the same prompt.
+
 It prints both readings as it goes:
 
 ```
@@ -48,13 +53,13 @@ Then it asks:
   Move Pt.17 to a different reading? [Yes/No/Back] <No>:
 ```
 
-**No** (the Enter answer) moves on to the next point number. **Yes**
-runs everything under `ABMOVE` below — the readings, the pick, the
-move — and then `ABFIND` comes back and asks for the next number.
-Either way it keeps going until you press **Enter** at the number.
+**No** (the Enter answer) moves on to the next point. **Yes** runs
+everything under `ABMOVE` below — the readings, the pick, the move —
+and then `ABFIND` comes back and asks for the next one. Either way it
+keeps going until you press **Enter** at the prompt.
 
-Nothing is clicked — unless the drawing does not name its stakes (see
-below).
+The stakes themselves are found by name, and are only clicked when the
+drawing does not name them (see below).
 
 ### `ABMOVE`
 
@@ -181,11 +186,20 @@ point number cancels the run outright.
 
 Pick one and four things happen:
 
-1. a **new point** is made there, numbered `17m` — the original number
-   with `abf:*moved-suffix*` on it, so the drawing says plainly that
-   this one was moved. It is an `ab_pt` block carrying the new number
-   when the drawing has that block, a `POINT` with a text label beside
-   it when it does not;
+1. the point is **copied** there and numbered `17m` — the original
+   number with `abf:*moved-suffix*` on it, so the drawing says plainly
+   that this one was moved. A *copy*: the same block, the same layer,
+   colour, linetype, lineweight, scale and rotation, and every
+   attribute it carried — same tag, same height, same style, each
+   keeping the offset it had from the point. Only the attribute that
+   holds the number is written, and only with `17m`. A survey point is
+   more than a position — the layer the survey put it on, a block
+   scaled to the sheet, an elevation or a description in a second
+   attribute — and the moved point is that same point one reading
+   further on, so it has to read as one. (A drawing whose point block
+   is not in its block table has nothing to insert again; that one
+   falls back to a `POINT` on `abf:*point-layer*` with a text label
+   beside it.);
 2. the **original point is ringed** with a 5" radius circle on the
    **FGStep** layer, so the spot it came off is still visible — the
    same mark `BPCALLOUT` puts round a bad point;
@@ -216,10 +230,17 @@ snapping to the nearest survey point within `abf:*snap*`; a click with
 nothing under it is taken as the stake position itself. Enter at that
 prompt cancels the run.
 
-## Typing point numbers
+## Naming the point
 
-Numbers are matched against the same `number` attribute. Type them the
-way they read in the drawing — all of these name the same point:
+```
+  Pick the point, or type its number <Enter = done>:
+```
+
+One prompt, two ways to answer it.
+
+**Type the number.** Numbers are matched against the same `number`
+attribute. Type them the way they read in the drawing — all of these
+name the same point:
 
 ```
 35    Pt.35    pt35    PT.35    #35    035    35.0
@@ -229,6 +250,17 @@ Only the dot right after `Pt` is treated as a prefix — a point
 genuinely named `40.5` keeps its decimal. A number that names no point
 is reported and the prompt re-asks: **nothing is drawn from a typo**.
 When a drawing carries a duplicate number, the first match wins.
+
+**Or click it.** A click is snapped to the survey point within
+`abf:*snap*` (12") of it, and from there it is that point's number that
+the run works with — the ties, the table, the note and the `m` all read
+the same as if you had typed it. A click with **no** survey point under
+it names nothing: it is reported and the prompt re-asks, exactly the
+way a typo is, and a click on a stake is refused the way naming one is.
+
+The one prompt takes both because it is a `getpoint` under
+`(initget 128)`: typed text comes back as the string it is, a click
+comes back as the point it is.
 
 ## Going back a step
 
@@ -258,11 +290,13 @@ error, or Esc.
 
 1. Load `ABFIND.lsp` (`APPLOAD`, or drag it into the drawing). Both
    commands come with the one file.
-2. `ABFIND` → `Point number <Enter = done>:` → `17` → the two ties are
-   drawn → `Move Pt.17 to a different reading? [Yes/No/Back] <No>:` →
-   Enter to move on, or `Yes` to go through step 3 → next number, or
+2. `ABFIND` → `Pick the point, or type its number <Enter = done>:` →
+   `17`, or click the point → the two ties are drawn →
+   `Move Pt.17 to a different reading? [Yes/No/Back] <No>:` →
+   Enter to move on, or `Yes` to go through step 3 → next point, or
    Enter to finish.
-3. `ABMOVE` → `Point number (Enter to cancel):` → `17` → read the table
+3. `ABMOVE` → `Pick the point, or type its number (Enter to cancel):`
+   → `17`, or click the point → read the table
    (`F2` opens the text window if it runs off the command line) →
    `Move Pt.17 - type a tag from the table [Pick/None/Back] <None>:`
    → a tag such as `-1B`, or `Pick` and click the marker → `Place the
@@ -290,6 +324,10 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*ring-radius*  5.0)           ; ring RADIUS, inches
 (setq abf:*note-hgt*     6.0)           ; note text height
 (setq abf:*moved-suffix* "m")           ; Pt.17 -> Pt.17m
+(setq abf:*att-height*   4.0)           ; the FALLBACK point's number,
+(setq abf:*att-offset*   '(0.87 -3.53)) ; and where it sits: a COPIED
+                                        ; point keeps the attribute
+                                        ; the point it came from had
 (setq abf:*sug-radius*   3.0)           ; suggestion marker radius
 (setq abf:*sug-layer*    "ABMOVE-POINTS") ; scratch layer, NOT POINTS
 (setq abf:*sug-color*    2)             ; suggestion colour: yellow
@@ -328,6 +366,16 @@ one of the two answers.
 * The original point is **kept** — ringed, not erased. `Pt.17` and
   `Pt.17m` both exist afterwards, which is the point of the ring: the
   drawing shows where it was and where it went.
+* `Pt.17m` is a **copy** of `Pt.17`, so it lands wherever `Pt.17`
+  lived — its layer, not `abf:*point-layer*`. That layer is turned on,
+  thawed and unlocked first, the way every other output layer is.
+  `abf:*point-layer*` still names the layer the **fallback** point goes
+  on, and the layer whose `INSERT`s count as survey points.
+* Everything `entget` reports is copied, extended data included; what
+  it does not report — an object-dictionary entry, a reactor, a
+  field — is not. If the copy is refused (a block the drawing cannot
+  insert again), the fallback point is built instead, so a run never
+  ends with the note and the ring but no point.
 * A missing `CROSS DIMENSIONS` style is **not** invented: the dims are
   drawn in whatever style is current and the routine says so, so a
   drawing started from the wrong template is obvious.
@@ -341,6 +389,11 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.7** — the moved point is a **copy** of the point it came from
+  (block, layer, colour, linetype, lineweight, scale, rotation and
+  every attribute, offsets and all) with only its number rewritten,
+  instead of a fresh point built from this file's defaults; and the
+  point can be **clicked** as well as typed, at the one prompt.
 * **v1.6** — the suggestions and their guide lines get their own
   layer (`abf:*sug-layer*`, `ABMOVE-POINTS`) instead of `POINTS`; only
   the chosen point lands on `POINTS`, which is created in
@@ -374,7 +427,13 @@ transpositions, the shift cap and the suggestion cap), the circle
 crossing, the whole move (new point, ring, note wording, redrawn ties),
 the yellow markers and their tags, the dashed grey guide lines and
 what they span, the `None` and `Pick` answers, the Back steps, the
-one-shot shape and the no-point-block fallback:
+one-shot shape and the no-point-block fallback — and, for the two
+newest behaviours, that the moved point carries the original's block,
+layer, colour, linetype, lineweight, scale, rotation and both of its
+attributes with only the number rewritten, that it stays off
+`abf:*point-layer*` when its original did, and that a clicked point
+ties and moves exactly as a typed one does (with a click on nothing,
+and a click on a stake, refused):
 
 ```
 python3 tests/test_abfind.py                          # standalone tier

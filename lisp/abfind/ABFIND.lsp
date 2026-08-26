@@ -19,13 +19,14 @@
 ;;; those two distances cross.  These two commands work that way round.
 ;;;
 ;;; ABFIND
-;;;   Type a point number.  Two aligned dimensions are drawn, A to the
-;;;   point and B to the point -- the pair of readings the point was
+;;;   Name a point -- type its number, or click the point itself: the
+;;;   one prompt takes either.  Two aligned dimensions are drawn, A to
+;;;   the point and B to the point -- the pair of readings the point was
 ;;;   plotted from -- in the "CROSS DIMENSIONS" dimension style, on the
 ;;;   "DIMENSION" layer, ByLayer, the dimension line sitting right on
 ;;;   the tie, exactly the convention CDCALLOUT and CDCREATE use.  It
-;;;   keeps asking for the next number until you press Enter.  Nothing
-;;;   is clicked: the stakes are found by name and the point by number.
+;;;   keeps asking for the next point until you press Enter.  The
+;;;   stakes are found by name.
 ;;;
 ;;; ABMOVE
 ;;;   ABFIND asks this itself, once its two ties are drawn:
@@ -85,12 +86,19 @@
 ;;;   scaffolding like the markers and go when the round does.
 ;;;
 ;;;   Picking one:
-;;;     * a new point is made there ON THE POINTS LAYER, numbered
-;;;       "17m" -- the original
-;;;       number with abf:*moved-suffix* on it, so the drawing says
-;;;       plainly that this one was moved (an "ab_pt" block carrying
-;;;       the new number when the drawing has that block, a POINT with
-;;;       a text label beside it when it does not),
+;;;     * the point is COPIED to there and numbered "17m" -- the
+;;;       original number with abf:*moved-suffix* on it, so the drawing
+;;;       says plainly that this one was moved.  A COPY: the same
+;;;       block, the same layer, colour, linetype, lineweight, scale
+;;;       and rotation, and every attribute it carries, each keeping
+;;;       the offset it had -- only the number is different.  A survey
+;;;       point is more than a position, and the moved one is the SAME
+;;;       point one reading further on, so it has to read as one:
+;;;       building a fresh point from this file's defaults threw the
+;;;       drawing's own away.  Only a drawing whose point block is not
+;;;       in its block table has nothing to copy, and that one falls
+;;;       back to a POINT on the points layer with a text label beside
+;;;       it,
 ;;;     * the ORIGINAL point is ringed with a 5" radius circle on the
 ;;;       FGStep layer, so the spot it came off is still visible,
 ;;;     * a note is written on FGStep reading
@@ -119,10 +127,15 @@
 ;;; that does not name them asks you to click each one instead, once
 ;;; per run, snapping to the nearest survey point within abf:*snap*.
 ;;;
-;;; Point numbers are typed the way they read in the drawing: "35",
-;;; "Pt.35", "pt 35", "#35" and "035" all name the same point.  A
-;;; number that names nothing is reported and the prompt re-asks --
-;;; nothing is drawn from a typo.
+;;; NAMING THE POINT.  Type its number the way it reads in the drawing
+;;; -- "35", "Pt.35", "pt 35", "#35" and "035" all name the same point
+;;; -- or click the point on screen: the one prompt takes both, because
+;;; (initget 128) hands typed text back from getpoint as the string it
+;;; is while a click comes back as the point it is.  A click is snapped
+;;; to the survey point within abf:*snap* of it, so it names a point
+;;; exactly as a typed number does.  A number that names nothing, and a
+;;; click with no survey point under it, are both reported and the
+;;; prompt re-asks -- nothing is drawn from a typo or a stray click.
 ;;;
 ;;; Going back a step follows the shared Back convention (see the root
 ;;; README).  In ABFIND, B/BACK/U/UNDO typed at the point number undoes
@@ -155,7 +168,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.6")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.7")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -234,7 +247,11 @@
 (setq abf:*att-height*   4.0)       ; height of the moved point's
 (setq abf:*att-offset*   '(0.8697246 -3.5316825)) ; number, and where
                                     ; it sits relative to the point
-                                    ; (both as the ab_pt block has it)
+                                    ; (both as the ab_pt block has it).
+                                    ; The FALLBACK's only: a point that
+                                    ; is copied keeps the attribute the
+                                    ; point it came from had, height,
+                                    ; place and all
 (setq abf:*digit-pairs*             ; digits a field sheet confuses for
   '(("1" "7") ("1" "4") ("3" "8")   ; each other, both ways round
     ("3" "5") ("5" "6") ("6" "8")
@@ -309,27 +326,41 @@
 
 ;;; ---------------------- point lookup ----------------------------------
 
-;; The name carried by a point block, read from its abf:*pt-tag*
-;; attribute; when the block has no such attribute, the first attribute
-;; whose value reads as a number is taken instead (survey exports do
-;; not all use the ab_pt tag).  nil when neither exists.
-;; (cal:block-number, copied under this file's prefix.)
-(defun abf:block-number (en / sub ed val fall v)
-  (setq sub (entnext en) val nil fall nil)
+;; WHICH attribute of a point block carries its number, and what that
+;; number is, as (index tag value): the abf:*pt-tag* one when the block
+;; has it, otherwise the first whose value reads as a number (survey
+;; exports do not all use the ab_pt tag).  nil when neither exists.
+;; The index is what copying the point needs - it is the one attribute
+;; of the copy whose value is not the original's.
+(defun abf:number-att (en / sub ed hit fall v i)
+  (setq sub (entnext en) hit nil fall nil i 0)
   (while (and sub
               (setq ed (entget sub))
               (= "ATTRIB" (cdr (assoc 0 ed))))
     (setq v (cdr (assoc 1 ed)))
-    (if (and (null val)
+    (if (and (null hit) v
              (cdr (assoc 2 ed))
              (= (strcase (cdr (assoc 2 ed))) (strcase abf:*pt-tag*)))
-      (setq val v))
+      (setq hit (list i (cdr (assoc 2 ed)) v)))
     (if (and (null fall) v (distof v 2))
-      (setq fall v))
-    (setq sub (entnext sub)))
-  (if val val fall))
+      (setq fall (list i (cdr (assoc 2 ed)) v)))
+    (setq sub (entnext sub) i (1+ i)))
+  (if hit hit fall))
 
-;; Every NAMED survey point in the drawing, as ((x y z) . name) pairs.
+;; The name carried by a point block: the value abf:number-att found.
+;; (cal:block-number, copied under this file's prefix.)
+(defun abf:block-number (en / a)
+  (if (setq a (abf:number-att en)) (caddr a)))
+
+;; What the routine knows about one survey point: where it is, what it
+;; is called, and the ENTITY it is.  The entity is carried so that a
+;; point which moves can be COPIED rather than re-invented from this
+;; file's defaults - it is what makes the moved point the same point.
+(defun abf:cd-pt (c) (car c))       ; (x y z)
+(defun abf:cd-nm (c) (cadr c))      ; "17"
+(defun abf:cd-en (c) (caddr c))     ; the INSERT it was read from
+
+;; Every NAMED survey point in the drawing, as (position name entity).
 ;; What counts as a point matches BPCALLOUT/CDCALLOUT/LHD; a point
 ;; whose number cannot be read is left out -- it cannot be asked for by
 ;; name, and it cannot be a stake either.
@@ -350,7 +381,7 @@
           (progn
             (setq nm (abf:block-number en))
             (if (and nm (/= nm ""))
-              (setq out (cons (cons (list (car p) (cadr p) 0.0) nm)
+              (setq out (cons (list (list (car p) (cadr p) 0.0) nm en)
                               out)))))
         (setq i (1+ i)))))
   (reverse out))
@@ -381,7 +412,7 @@
 (defun abf:find-point (s cands / want found c)
   (setq want (abf:canon s) found nil)
   (foreach c cands
-    (if (and (null found) (= (abf:canon (cdr c)) want))
+    (if (and (null found) (= (abf:canon (abf:cd-nm c)) want))
       (setq found c)))
   found)
 
@@ -390,7 +421,7 @@
 (defun abf:nearest (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
-    (setq d (abf:dist pk (car c)))
+    (setq d (abf:dist pk (abf:cd-pt c)))
     (if (and (<= d abf:*snap*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
@@ -401,8 +432,9 @@
 (defun abf:stake (name cands / hit pk)
   (if (setq hit (abf:find-point name cands))
     (progn
-      (princ (strcat "\n  Stake " name " found at Pt." (cdr hit) "."))
-      (car hit))
+      (princ (strcat "\n  Stake " name " found at Pt."
+                     (abf:cd-nm hit) "."))
+      (abf:cd-pt hit))
     (progn
       (princ (strcat "\nNo point is numbered \"" name
                      "\" in this drawing - click the " name
@@ -413,8 +445,8 @@
           (setq hit (abf:nearest pk cands))
           (if hit
             (progn
-              (princ (strcat "\n  Taken from Pt." (cdr hit) "."))
-              (car hit))
+              (princ (strcat "\n  Taken from Pt." (abf:cd-nm hit) "."))
+              (abf:cd-pt hit))
             (progn
               (princ (strcat "\n  No survey point within "
                              (rtos abf:*snap* 4 0)
@@ -732,9 +764,14 @@
         (- (cadr ctr) (* 2.0 abf:*ring-radius*))
         0.0))
 
-;; A survey point at P numbered NM: the drawing's own point block when
-;; it has one, a POINT with a text label beside it when it does not.
-;; Returns the entities it made.
+;; A survey point at P numbered NM, built from this file's defaults:
+;; the drawing's own point block when it has one, a POINT with a text
+;; label beside it when it does not.  Returns the entities it made.
+;;
+;; This is the FALLBACK.  A point that moves is copied from the point
+;; it came from (abf:copy-point) so that it keeps that point's layer,
+;; block, scale and attributes; only a drawing whose point block is not
+;; in its block table has nothing to copy from and comes here.
 (defun abf:make-point (p nm / out apt)
   (setq out nil
         apt (list (+ (car  p) (car  abf:*att-offset*))
@@ -769,6 +806,95 @@
                      (cons 1 nm)))
       (setq out (cons (entlast) out))))
   (reverse out))
+
+;; An entget list ready to be entmade as a NEW entity: the codes that
+;; name the entity it was read from, rather than describe it, are
+;; dropped.  Everything else - layer, colour, linetype, lineweight,
+;; block name, scale, rotation, extrusion, extended data - is what
+;; makes the copy the same thing as the original, and stays.
+(defun abf:cloneable (ed / out g)
+  (foreach g ed
+    (if (not (member (car g) '(-1 -2 5 102 330 331 340 360 361)))
+      (setq out (cons g out))))
+  (reverse out))
+
+;; ED with CODE set to VAL: the entry it has replaced, or a new one on
+;; the end when it has none.
+(defun abf:put (ed code val / g)
+  (if (setq g (assoc code ed))
+    (subst (cons code val) g ed)
+    (append ed (list (cons code val)))))
+
+;; ED's point at CODE moved by (DX DY), when it has one.  An attribute
+;; travels with the block it belongs to, keeping the offset it had.
+(defun abf:shift (ed code dx dy / g)
+  (if (setq g (assoc code ed))
+    (abf:put ed code (list (+ (cadr g) dx) (+ (caddr g) dy)
+                           (if (cdddr g) (cadddr g) 0.0)))
+    ed))
+
+;; A COPY of the survey point EN, standing at P and numbered NM.  The
+;; same point in every other way: the same block, layer, colour,
+;; linetype, lineweight, scale, rotation and extended data, and every
+;; attribute it carries - same tag, same height, same style, each
+;; keeping the offset it had from the point.  Only the attribute that
+;; holds the number is written, and only with NM.
+;;
+;; A survey point carries more than a position: the layer the survey
+;; put it on, a block scaled to the sheet, an elevation or a
+;; description in a second attribute.  A moved point is that same point
+;; one reading further on, so it is copied rather than rebuilt - a
+;; rebuilt one silently dropped all of it.
+;;
+;; Returns the entities it made, or nil when EN is not a block
+;; reference this drawing can insert again - the caller falls back to
+;; abf:make-point then.
+(defun abf:copy-point (en p nm / ed atts sub sd base dx dy lay numi
+                                 out i)
+  (setq ed (if en (entget en '("*"))))
+  (if (and ed
+           (= "INSERT" (cdr (assoc 0 ed)))
+           (assoc 10 ed)
+           (assoc 2 ed)
+           (tblsearch "BLOCK" (cdr (assoc 2 ed))))
+    (progn
+      (setq base (cdr (assoc 10 ed))
+            dx   (- (car  p) (car  base))
+            dy   (- (cadr p) (cadr base))
+            lay  (if (assoc 8 ed) (cdr (assoc 8 ed)) "0")
+            numi (car (abf:number-att en))
+            atts nil
+            sub  (entnext en)
+            i    0)
+      ;; the attributes first, so the INSERT can be made knowing
+      ;; whether it needs the (66 . 1) that says it has some
+      (while (and sub
+                  (setq sd (entget sub '("*")))
+                  (= "ATTRIB" (cdr (assoc 0 sd))))
+        (setq sd (abf:shift (abf:shift (abf:cloneable sd) 10 dx dy)
+                            11 dx dy))
+        (if (and numi (= i numi)) (setq sd (abf:put sd 1 nm)))
+        (setq atts (cons sd atts)
+              sub  (entnext sub)
+              i    (1+ i)))
+      (setq atts (reverse atts)
+            ed   (abf:put (abf:cloneable ed) 10
+                          (list (car p) (cadr p) 0.0))
+            ed   (if atts (abf:put ed 66 1) (abf:strip 66 ed))
+            out  nil)
+      ;; the point goes back on its own layer, so that layer has to be
+      ;; visible for the same reason every other output layer does
+      (abf:ensure-layer lay abf:*point-color*)
+      (if (entmake ed)                     ; nil when the copy is
+        (progn                             ; refused - fall back then
+          (setq out (list (entlast)))
+          (foreach sd atts
+            (if (entmake sd) (setq out (cons (entlast) out))))
+          (if atts
+            (if (entmake (list '(0 . "SEQEND") '(100 . "AcDbEntity")
+                               (cons 8 lay)))
+              (setq out (cons (entlast) out))))
+          (reverse out))))))
 
 ;; One suggestion on screen: a point where it would sit, a small circle
 ;; so it can be seen and clicked, and its tag beside it.  On
@@ -885,9 +1011,10 @@
 ;; - an AutoLISP local SHADOWS the function of the same name for the
 ;; whole call (the BPCALLOUT v1.0 lesson).
 (defun abf:run (movep / *error* undo-open oce ocl oos odim cmd cands
-                        pa pb hist stage done made moves s hit nm pp
+                        pa pb hist stage done made moves hit sce nm pp
                         pair sugs temps c kws shown ans sug havestyle
-                        np newpt tried lasthold ments ring note npair)
+                        np newpt newnm tried lasthold ments ring note
+                        npair)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -917,8 +1044,8 @@
                    cmd " has nothing to tie to."))
     (progn
       (princ (strcat "\n" (itoa (length cands)) " named survey point(s)"
-                     " found.  Type numbers as they read in the"
-                     " drawing (\"35\" or \"Pt.35\")."))
+                     " found.  Click one, or type its number as it"
+                     " reads in the drawing (\"35\" or \"Pt.35\")."))
       ;; -- the two stakes, before OSMODE goes down: a drawing that
       ;;    does not name them wants object snap for the clicks
       (setq pa (abf:stake abf:*a-name* cands))
@@ -963,17 +1090,26 @@
          (while (not done)
            (cond
 
-             ;; -- 1: which point
+             ;; -- 1: which point.  Typed or clicked, the one prompt
+             ;;       takes both: (initget 128) hands typed text back
+             ;;       from getpoint as the string it is, and a click
+             ;;       comes back as the point it is.  Back is typed
+             ;;       like a value here, the way it is at every prompt
+             ;;       that is not a keyword one.
              ((= stage 1)
-              (setq s (getstring
-                        (if movep
-                          "\nPoint number (Enter to cancel): "
-                          (strcat "\nPoint number"
-                                  (if hist " [Back]" "")
-                                  " <Enter = done>: "))))
+              (initget 128)
+              (setq ans (getpoint
+                          (if movep
+                            (strcat "\nPick the point, or type its"
+                                    " number (Enter to cancel): ")
+                            (strcat "\nPick the point, or type its"
+                                    " number"
+                                    (if hist " [Back]" "")
+                                    " <Enter = done>: ")))
+                    hit nil)
               (cond
-                ((= s "") (setq done T))
-                ((abf:back-word-p s)
+                ((null ans) (setq done T))
+                ((and (not (listp ans)) (abf:back-word-p ans))
                  (if hist
                    (progn
                      (abf:undo-round (car hist))
@@ -987,28 +1123,44 @@
                            made (1- made))
                      (princ "\nStepping back one point."))
                    (princ "\nAlready at the first point.")))
-                ((null (setq hit (abf:find-point s cands)))
-                 (princ (strcat "\n  No point numbered \"" s
-                                "\" in the drawing - nothing drawn.")))
-                ((or (< (abf:dist (car hit) pa) abf:*fuzz*)
-                     (< (abf:dist (car hit) pb) abf:*fuzz*))
-                 (princ (strcat "\n  Pt." (cdr hit) " IS a stake - the"
-                                " ties are measured FROM it.")))
                 (t
-                 (setq nm   (cdr hit)
-                       pp   (car hit)
-                       pair (abf:dim-pair pa pb pp havestyle))
-                 (if (null pair)
-                   (princ (strcat "\n  Pt." nm " sits on a stake - "
-                                  "there is nothing to measure."))
-                   (progn
-                     (setq made  (1+ made)
-                           stage (if movep 3 2))
-                     (princ (strcat "\n  Pt." nm ":  " abf:*a-name* " "
-                                    (abf:fmt (abf:dist pa pp)) "   "
-                                    abf:*b-name* " "
-                                    (abf:fmt (abf:dist pb pp))
-                                    "  dimensioned.")))))))
+                 ;; a click names the survey point under it, exactly as
+                 ;; a typed number names one; nothing under it names
+                 ;; nothing, and is reported the way a typo is
+                 (setq hit (if (listp ans)
+                             (abf:nearest ans cands)
+                             (abf:find-point ans cands)))
+                 (cond
+                   ((null hit)
+                    (if (listp ans)
+                      (princ (strcat "\n  No survey point within "
+                                     (rtos abf:*snap* 4 0)
+                                     " of that click - nothing drawn."))
+                      (princ (strcat "\n  No point numbered \"" ans
+                                     "\" in the drawing - nothing"
+                                     " drawn."))))
+                   ((or (< (abf:dist (abf:cd-pt hit) pa) abf:*fuzz*)
+                        (< (abf:dist (abf:cd-pt hit) pb) abf:*fuzz*))
+                    (princ (strcat "\n  Pt." (abf:cd-nm hit) " IS a"
+                                   " stake - the ties are measured"
+                                   " FROM it.")))
+                   (t
+                    (setq nm   (abf:cd-nm hit)
+                          sce  (abf:cd-en hit)   ; what a move copies
+                          pp   (abf:cd-pt hit)
+                          pair (abf:dim-pair pa pb pp havestyle))
+                    (if (null pair)
+                      (princ (strcat "\n  Pt." nm " sits on a stake - "
+                                     "there is nothing to measure."))
+                      (progn
+                        (setq made  (1+ made)
+                              stage (if movep 3 2))
+                        (princ (strcat "\n  Pt." nm ":  "
+                                       abf:*a-name* " "
+                                       (abf:fmt (abf:dist pa pp)) "   "
+                                       abf:*b-name* " "
+                                       (abf:fmt (abf:dist pb pp))
+                                       "  dimensioned.")))))))))
 
              ;; -- 2: does this one want moving?  (ABFIND only)
              ((= stage 2)
@@ -1185,10 +1337,17 @@
                         newpt (nth 5 sug)
                         ments nil)
                   ;; the chosen one is a survey point, so THIS is what
-                  ;; lands on the points layer
+                  ;; lands on the points layer - and it is the point it
+                  ;; came from, copied: same block, same layer, same
+                  ;; scale, same attributes, one number different.
+                  ;; Only a drawing whose point block is not in its
+                  ;; block table has nothing to copy from
                   (abf:ensure-layer abf:*point-layer* abf:*point-color*)
-                  (setq ments (abf:make-point
-                                newpt (strcat nm abf:*moved-suffix*)))
+                  (setq newnm (strcat nm abf:*moved-suffix*)
+                        ments (if (setq ments
+                                    (abf:copy-point sce newpt newnm))
+                                ments
+                                (abf:make-point newpt newnm)))
                   (abf:ensure-layer abf:*ring-layer* 1)
                   (setq ring (abf:ring pp)
                         note (abf:note np
@@ -1209,13 +1368,14 @@
                     (setq hist  (cons (list "MOVE" pair npair ments
                                             ring note)
                                       hist)
-                          cands (cons (cons newpt
-                                            (strcat nm
-                                                    abf:*moved-suffix*))
+                          ;; the point it just made is a point like
+                          ;; any other from here - and a later round
+                          ;; that moves IT copies it in turn
+                          cands (cons (list newpt newnm (car ments))
                                       cands)
                           stage 1))
-                  (princ (strcat "\n  Pt." nm " moved to Pt." nm
-                                 abf:*moved-suffix* " - " (cadr sug)
+                  (princ (strcat "\n  Pt." nm " moved to Pt." newnm
+                                 " - " (cadr sug)
                                  " held at "
                                  (abf:fmt (abf:dist
                                             (if (= (cadr sug) abf:*a-name*)
