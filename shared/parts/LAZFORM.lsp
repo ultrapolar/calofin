@@ -1004,6 +1004,20 @@
 ;;;  no way to choose a font, and widths are quoted in "character
 ;;;  cells" that are an AVERAGE, not a guarantee.
 ;;;
+;;;  ANSWERED, on AutoCAD 2018+: the font is PROPORTIONAL.  Twelve W's
+;;;  came out about three times the width of twelve i's, the bars were
+;;;  nowhere near a column, and the pool drawn in characters sheared
+;;;  apart line by line.  Leading spaces do survive -- the staircase in
+;;;  section 2 was clean -- but that does not help on its own.
+;;;
+;;;  Section 4 is the half that works, and it is what the wedge rows
+;;;  already do: a row of text tiles with explicit widths and an edit
+;;;  box between them lines up in a proportional font, because the
+;;;  alignment comes from tile widths and not from glyphs.  So the
+;;;  boxes-in-the-line half was already here and the ASCII half never
+;;;  will be.  Kept because the answer belongs to the AutoCAD build,
+;;;  not to this code, and is worth re-asking elsewhere.
+;;;
 ;;;  So this asks AutoCAD instead of guessing.  Run LAZASCII and look:
 ;;;  section 1 says whether the font is fixed-pitch, section 2 shows
 ;;;  what a pool would look like if it is, and section 3 shows the

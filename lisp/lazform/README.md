@@ -242,7 +242,43 @@ out of step with the drawing.
   not a measurement, so it has no box -- POOL asks for it directly.
 - The insertion base point is still picked at the command line.
 
-## Could the chart be drawn in characters? (`LAZASCII`)
+## Could the chart be drawn in characters? (`LAZASCII`) -- ANSWERED: no
+
+**Run on AutoCAD 2018+, and the answer is no.** The dialog font is
+proportional: `WWWWWWWWWWWW` came out roughly three times the width of
+`iiiiiiiiiiii` for the same twelve characters, so the right-hand bars
+were nowhere near a column and the pool drawn in characters sheared
+apart line by line, exactly as feared. Character art in a DCL dialog
+is not on.
+
+Two useful things came out of it anyway:
+
+- **Leading spaces DO survive.** The three indented bars made a clean
+  staircase, so DCL is not trimming them. That was the other way this
+  could have died, and it did not -- it just does not help while the
+  font is proportional.
+- **Section 4 lined up perfectly.** A row built from `text` tiles with
+  explicit widths and an `edit_box` between them renders straight in a
+  proportional font, because the alignment comes from tile widths
+  rather than glyphs. `B` and `A` sat exactly above one another.
+
+That last point is the important one, and it is **what the wedge rows
+already do**: the boxes on this form are positioned by spacer widths,
+not by counting characters. So the answer to "could we draw the pool in
+ASCII and put the boxes in it" is that the boxes-in-the-line half
+already works and the ASCII half never will. Switching would have cost
+the outline drawing and bought nothing.
+
+The retention worry that motivated the question stands -- DCL does not
+retain an `image` tile, and a `text` tile it does -- but the passive
+tile has held up in practice, and a chart with no picture on it is a
+poor trade for a hazard that has not recurred.
+
+`LAZASCII` stays in the file. It is cheap, and the answer is a property
+of the AutoCAD build rather than of this code, so it is worth being
+able to re-ask on another machine or another release.
+
+### What it shows
 
 Drawing the pool in **text** rather than vectors would win something
 real, and it is worth being clear about what. DCL does not *retain* an
