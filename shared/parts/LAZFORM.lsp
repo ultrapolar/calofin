@@ -5,6 +5,7 @@
 ;;;
 ;;; Commands:  LAZFORM        fill in a shape chart and run POOL from it
 ;;;            LAZASCII       probe: could the chart be drawn in text?
+;;;            LAZTXT         the same form, drawn out of tiles
 ;;;            LAZFORMVER     print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -48,7 +49,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.2")
+(setq *lazform-version* "v2.3")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -1052,7 +1053,8 @@
 (defun lzf:dcl-lines ( / out c)
   (foreach c lzf:*charts*
     (setq out (append out (lzf:dcl-one c) (list ""))))
-  (append out (lzf:dcl-ascii) (list "")))
+  (setq out (append out (lzf:dcl-ascii) (list "")))
+  (append out (lzf:dcl-txt (lzf:chart "Rectangle")) (list "")))
 
 ;;; -------------------- the character-drawing probe ----------------------
 ;;;  Could the chart be drawn in CHARACTERS instead of vectors, with the
@@ -1166,6 +1168,185 @@
      (princ (strcat "\nLAZASCII: if sections 1-3 lined up, the chart can be"
                     " drawn in characters -- and a text tile, unlike an"
                     " image tile, is never wiped by a repaint."))))
+  (princ))
+
+;;; -------------------- the text view -----------------------------------
+;;;  LAZTXT: the pool drawn out of TILES rather than out of vectors,
+;;;  with the boxes inside it.
+;;;
+;;;  The LAZASCII probe killed character art -- the dialog font is
+;;;  proportional, so a pool drawn in "+---+" shears apart line by line.
+;;;  But it also showed the half that works: a row of tiles with
+;;;  declared widths lines up perfectly, because the alignment comes
+;;;  from the tiles and not from the glyphs.
+;;;
+;;;  DCL has something better than dashes for the outline.  A
+;;;  boxed_row or boxed_column draws a REAL etched border -- drawn by
+;;;  the widget, so it is straight by construction and cannot shear.
+;;;  Nest one inside another and you have a pool with a hopper in it;
+;;;  put the edit boxes inside those clusters and the fields are IN the
+;;;  drawing rather than beside it.
+;;;
+;;;  What it buys over the vector chart: every tile here is RETAINED.
+;;;  DCL does not retain an image tile -- a repaint clears it and there
+;;;  is no expose callback -- which is the standing hazard behind the
+;;;  chart having vanished on people.  Nothing in this view can vanish.
+;;;
+;;;  What it costs: the outline is a rectangle whatever the pool is.  A
+;;;  boxed cluster cannot be round, cut-cornered or L-shaped, so this
+;;;  is a schematic of where the numbers sit, not a picture of the
+;;;  pool.  Which is why it is a SECOND view and not a replacement.
+
+;; The v dim that spans the most: the overall, which belongs outside the
+;; hopper rather than in it.
+(defun lzf:txt-tallest (c / d best bs sp)
+  (foreach d (lzf:dims c)
+    (if (= (nth 6 d) "v")
+      (progn
+        (setq sp (abs (- (nth 5 d) (nth 3 d))))
+        (if (or (not best) (> sp bs)) (setq best d bs sp)))))
+  best)
+
+(defun lzf:txt-box (d w)
+  (strcat "        : edit_box { key = \"" (cadr d) "\"; label = \""
+          (car d) "\"; edit_width = " (itoa w) "; }"))
+
+;; One row per cut, in drawing order: the across-chain the way it reads
+;; on the sheet.
+(defun lzf:txt-rows (c / out y ds d)
+  (foreach y (lzf:cuts c)
+    (setq ds (lzf:cutdims c y))
+    (if ds
+      (progn
+        (setq out (cons "      : row {" out))
+        (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+        (setq out (cons "      }" out)))))
+  (reverse out))
+
+;; Every h dim the cuts did not claim, plus the column-only fields.
+(defun lzf:txt-rest (c / out d wk)
+  (setq wk (lzf:wedge-keys c))
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "h") (not (member (cadr d) wk)))
+      (setq out (cons (lzf:txt-box d 8) out))))
+  (reverse out))
+
+;; The first cut's row on its own -- the overall length, above the pool
+;; the way the sheet has it.
+(defun lzf:txt-firstrow (c / out ds d)
+  (setq ds (lzf:cutdims c (car (lzf:cuts c))))
+  (if ds
+    (progn
+      (setq out (list "    : row {"))
+      (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+      (reverse (cons "    }" out)))))
+
+;; Every cut row after the first.
+(defun lzf:txt-restrows (c / out y ds d first)
+  (setq first t)
+  (foreach y (lzf:cuts c)
+    (cond
+      (first (setq first nil))
+      (t
+       (setq ds (lzf:cutdims c y))
+       (if ds
+         (progn
+           (setq out (cons "      : row {" out))
+           (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+           (setq out (cons "      }" out)))))))
+  (reverse out))
+
+(defun lzf:dcl-txt (c / out tall d rows)
+  (setq tall (lzf:txt-tallest c))
+  (setq out (list
+    "lazform_txt : dialog {"
+    (strcat "  label = \"LAZFORM text view  -  " (nth 2 c) "\";")
+    (strcat "  : text { label = \"The boxes sit IN the drawing.\"; }")
+    (strcat "  : text { label = \"Nothing here is an image tile, so "
+            "nothing here can be wiped.\"; }")
+    (strcat "  : boxed_column {")
+    (strcat "    label = \"" (nth 2 c) "\";")))
+  ;; the first across-row -- the overall length -- goes ABOVE the body,
+  ;; where the sheet puts it
+  (setq rows (lzf:txt-rows c))
+  (if rows
+    (progn
+      (setq out (append out (lzf:txt-firstrow c)))
+      (setq rows (lzf:txt-restrows c))))
+  ;; the overall width, outside the hopper, then the pool body
+  (setq out (append out (list "    : boxed_row {" "      label = \"\";")))
+  (if tall
+    (setq out (append out (list "      : boxed_column {"
+                                "        label = \"Overall\";"
+                                (lzf:txt-box tall 8)
+                                "      }"))))
+  (setq out (append out (list "      : boxed_column {"
+                              "        label = \"Hopper\";")))
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "v") (not (equal d tall)))
+      (setq out (append out (list (lzf:txt-box d 6))))))
+  (setq out (append out (list "      }" "    }")))
+  ;; the remaining across-chains, one row per cut, in drawing order
+  (if rows
+    (setq out (append out (list "    : boxed_column {"
+                                "      label = \"Across\";")
+                      rows
+                      (list "    }"))))
+  ;; anything the cuts did not claim, and the column-only fields
+  (setq out (append out (list "    : boxed_column {"
+                              "      label = \"And the rest\";")))
+  (setq out (append out (lzf:txt-rest c)))
+  (foreach d (lzf:extra c)
+    (setq out (append out (list (strcat "        : edit_box { key = \""
+                                        (car d) "\"; label = \"" (cadr d)
+                                        "\"; edit_width = 8; }")))))
+  (setq out (append out (list "    }" "  }")))
+  (append out
+    (list "  spacer;"
+          "  : row {"
+          (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { key = \"cancel\"; label = \"Cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}")))
+
+;; Show it, collect it, and hand POOL the same alist LAZFORM would.
+(defun lzf:txt-show (c / f dcl rc k out)
+  (setq lzf:*vals* nil lzf:*chart* c)
+  (cond
+    ((not (setq f (lzf:write-dcl)))
+     (princ "\nLAZTXT error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZTXT error: could not load the dialog file."))
+    (t
+     (cond
+       ((not (new_dialog "lazform_txt" dcl))
+        (princ "\nLAZTXT error: could not open the view."))
+       (t
+        (foreach k (lzf:keys c)
+          (action_tile k (strcat "(lzf:put \"" k "\" $value)")))
+        (action_tile "accept" "(done_dialog 1)")
+        (action_tile "cancel" "(done_dialog 0)")
+        (setq rc (start_dialog))
+        (if (= rc 1)
+          (setq out (lzf:form (cadr c) lzf:*insq*
+                              (nth lzf:*btype* lzf:*btypes*))))))
+     (unload_dialog dcl)
+     (vl-file-delete f)))
+  out)
+
+(defun c:LAZTXT ( / c form)
+  (setq c (lzf:chart "Rectangle"))
+  (cond
+    ((not pool:run-with-answers)
+     (princ "\nLAZTXT: POOL is not loaded in this session -- APPLOAD")
+     (princ "\n        lisp/pool/POOL.LSP, or LAZPASS.lsp which has both."))
+    ((setq form (lzf:txt-show c))
+     (princ (strcat "\nLAZTXT: " (itoa (length form))
+                    " answers to POOL; it will ask for whatever is left."))
+     (pool:run-with-answers form))
+    (t (princ "\nLAZTXT: cancelled, nothing drawn.")))
   (princ))
 
 (defun lzf:write-lines (fh / l)

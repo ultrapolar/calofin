@@ -249,7 +249,12 @@ names = [l.split(' : ')[0] for l in opens]
 # one dialog per chart, plus the LAZASCII probe
 assert 'lazform_ascii : dialog {' in opens, \
     "the LAZASCII probe dialog is not in the generated file"
-opens = [o for o in opens if o != 'lazform_ascii : dialog {']
+# the two extra dialogs in the same generated file: the font probe and
+# the text view
+assert 'lazform_txt : dialog {' in opens, \
+    "the LAZTXT text-view dialog is not in the generated file"
+opens = [o for o in opens
+         if o not in ('lazform_ascii : dialog {', 'lazform_txt : dialog {')]
 assert len(opens) == len(charts), (
     "%d dialogs for %d charts" % (len(opens), len(charts)))
 assert len(names) == len(set(names)), "duplicate dialog names: %r" % names
@@ -924,6 +929,73 @@ for need in ('b', 'ss', 'tt', 's1', 'a', 'vv', 's2', 'h', 'g', 'f', 'e',
 print("   %d entities; POOL asked only for the insertion point, the"
       % len(odrawn))
 print("   corners and the bottom gate -- no dimension asked twice")
+
+
+# --------------------------------------------------------------------
+# LAZTXT: the pool drawn out of tiles, with the boxes inside it.
+# --------------------------------------------------------------------
+# The LAZASCII probe killed character art -- the dialog font is
+# proportional -- but showed the half that works: tiles with declared
+# widths line up because the alignment comes from the tiles, not the
+# glyphs. A boxed cluster goes one better and draws a REAL etched
+# border, so the outline is straight by construction.
+print("== LAZTXT: a pool made of nested boxes, fields inside it ==")
+tv = fresh()
+tv.loads('(setq test:*tx* (lzf:dcl-txt (lzf:chart "Rectangle")))')
+tx = [str(l) for l in tv.globals['test:*tx*']]
+body = '\n'.join(tx)
+
+# it is a dialog, and it balances
+assert tx[0] == 'lazform_txt : dialog {', tx[0]
+depth = 0
+for line in tx:
+    assert line.count('"') % 2 == 0, "odd quotes: %r" % line
+    depth += line.count('{') - line.count('}')
+assert depth == 0, "the text view does not balance"
+
+# the pool is a real box with the hopper nested inside it -- that is
+# the whole idea, so it is asserted rather than assumed
+assert body.count(': boxed_column {') >= 3, body
+assert 'label = "Hopper";' in body, "no hopper box"
+i_pool = body.index('label = "Rectangle";')
+i_hop = body.index('label = "Hopper";')
+assert i_pool < i_hop, "the hopper is not inside the pool box"
+
+# every key the chart offers has a box here too, or the view collects
+# less than the chart it claims to mirror
+keys = [str(x) for x in
+        (tv.loads('(setq test:*k* (lzf:keys (lzf:chart "Rectangle")))')
+         or tv.globals['test:*k*'])]
+boxed = set(re.findall(r'edit_box \{ key = "([^"]+)"', body))
+missing = [k for k in keys if k not in boxed]
+assert not missing, "the text view has no box for %r" % missing
+
+# WIDTH.  Same rule as everywhere else in this file: DCL does not
+# scroll, so a line wider than the screen is a dialog that will not
+# open.  The label plus its edit box is what sets it.
+widest = 0
+for lb, w in re.findall(r'label = "([^"]*)"; edit_width = (\d+)', body):
+    widest = max(widest, len(lb) + int(w) + 8)
+for lb in re.findall(r': text \{ label = "([^"]*)"', body):
+    widest = max(widest, len(lb) + 4)
+assert widest <= 90, (
+    "the text view is about %d cells wide, over 90 -- it would not open"
+    % widest)
+print("   %d boxes, hopper nested in the pool, widest line ~%d cells"
+      % (len(boxed), widest))
+
+# and it drives POOL: same alist, same command, no image tile anywhere
+assert ': image' not in body, \
+    "the text view has an image tile in it -- the point is that it has none"
+tv.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
+tv.loads('(setq lzf:*vals* nil)')
+tv.loads('(lzf:put "tp" "240") (lzf:put "le" "120") (lzf:put "h" "30")')
+tv.loads('(setq test:*tf* (lzf:form "Rectangle" T "Wedge"))')
+tf = dict((str(pr.a), pr.b) for pr in tv.globals['test:*tf*']
+          if hasattr(pr, 'a'))
+for k in ('tp', 'le', 'h', 'shape', 'insq', 'btype'):
+    assert k in tf, "the text view lost %s on the way to POOL: %r" % (k, tf)
+print("   what it collects reaches POOL as the same alist LAZFORM sends")
 
 
 print("ALL LAZFORM TESTS PASSED")

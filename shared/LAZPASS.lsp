@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 48 files, 117 commands:
+;;; 48 files, 118 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABMOVE  ADAB
@@ -20,16 +20,16 @@
 ;;;   DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN  DRONE
 ;;;   FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  HEMISTEP  LAZASCII
 ;;;   LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL
-;;;   LAZPANELVER  LAZPIN  LHD  LINCHECK  LINFINCHECK  LINFINCHECKRESCUE
-;;;   LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
-;;;   NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS  POOL
-;;;   POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM
-;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
-;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
-;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
-;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV
-;;;   XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   LAZPANELVER  LAZPIN  LAZTXT  LHD  LINCHECK  LINFINCHECK
+;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN
+;;;   LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS
+;;;   POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER
+;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
+;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST
+;;;   XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -30802,6 +30802,9 @@
 ;;;       the flight instead of stacking in one chain;
 ;;;     * the overall depth sits further out again;
 ;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   How far out the fan sits is *CS-PROFILE-DIMGAP* - the gap on top
+;;;   of the clearance the geometry needs.  Raise it to open the dims
+;;;   out further, lower it to tuck them in.
 ;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
 ;;;   that bracket the drop.  Those corners run diagonally to each
 ;;;   other, so binding the diagonal (rather than dimensioning the
@@ -30819,6 +30822,14 @@
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
+;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
+;;;                       flight, on top of the clearance the geometry
+;;;                       needs.  nil (the default) is four text
+;;;                       heights or three quarters of a tread,
+;;;                       whichever is more, so the fan keeps its
+;;;                       proportions whether or not the drawing has a
+;;;                       dim scale set up.  It also sets how much
+;;;                       further out again the overall depth sits.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -30840,10 +30851,15 @@
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
+;; How far the side profile's dims stand off the flight, on top of the
+;; clearance the geometry itself needs.  nil = four text heights, which
+;; is what the shop's own elevations read like; raise it to open the
+;; fan out further, lower it to tuck the dims in.
+(if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.9") ; printed on load and at command start so a
+(setq *cs-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -31205,7 +31221,7 @@
                        bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
-                       px py totr totd cnrs ca cb pfo)
+                       px py totr totd cnrs ca cb pfo pgap)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -31857,14 +31873,22 @@
                         cnrs (reverse (cons (list px py 0.0) cnrs)))
                   (if dimflag
                     (progn
-                      ;; Every depth dim stands the same distance right
-                      ;; of the corner its drop lands on, so the dims
-                      ;; climb up and to the right with the steps
-                      ;; instead of stacking in one chain.  Clearing
-                      ;; the widest tread is what keeps BOTH extension
-                      ;; lines running forward, out of the flight.
-                      (setq pfo (+ (apply 'max tds) (* 2.0 txth))
-                            ix  1)
+                      ;; Every depth dim stands the same distance right of
+                      ;; the corner its drop lands on, so the dims climb up
+                      ;; and to the right with the steps instead of stacking
+                      ;; in one chain.  Clearing the widest tread is what
+                      ;; keeps BOTH extension lines running forward, out of
+                      ;; the flight; the gap on top of that is what makes
+                      ;; the fan readable, and *cs-profile-dimgap* sets it.
+                      ;; four text heights, or three quarters of a tread -
+                      ;; whichever is more, so the fan keeps its proportions
+                      ;; whether or not the drawing has a dim scale set up
+                      (setq pgap (cond ((numberp *cs-profile-dimgap*)
+                                        *cs-profile-dimgap*)
+                                       ((max (* 4.0 txth)
+                                             (* 0.75 (apply 'max tds)))))
+                            pfo  (+ (apply 'max tds) pgap)
+                            ix   1)
                       (while (< ix (length cnrs))
                         (setq ca (nth (1- ix) cnrs)
                               cb (nth ix cnrs))
@@ -31877,7 +31901,7 @@
                       ;; whole diagonal, top corner to bottom corner
                       (cs-dimv *cs-depth-dimstyle*
                                (car cnrs) (last cnrs)
-                               (list (+ (car pw) pfo (* 3.0 txth))
+                               (list (+ (car pw) pfo pgap)
                                      (- (cadr pw) (* 0.5 totd)) 0.0))))
                   (princ (strcat "\nSide profile drawn: "
                                  (itoa (length tds))
@@ -32260,6 +32284,9 @@
 ;;;       the flight instead of stacking in one chain;
 ;;;     * the overall depth sits further out again;
 ;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   How far out the fan sits is *CS-PROFILE-DIMGAP* - the gap on top
+;;;   of the clearance the geometry needs.  Raise it to open the dims
+;;;   out further, lower it to tuck them in.
 ;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
 ;;;   that bracket the drop.  Those corners run diagonally to each
 ;;;   other, so binding the diagonal (rather than dimensioning the
@@ -32275,6 +32302,14 @@
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
+;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
+;;;                       flight, on top of the clearance the geometry
+;;;                       needs.  nil (the default) is four text
+;;;                       heights or three quarters of a tread,
+;;;                       whichever is more, so the fan keeps its
+;;;                       proportions whether or not the drawing has a
+;;;                       dim scale set up.  It also sets how much
+;;;                       further out again the overall depth sits.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -32296,10 +32331,15 @@
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
+;; How far the side profile's dims stand off the flight, on top of the
+;; clearance the geometry itself needs.  nil = four text heights, which
+;; is what the shop's own elevations read like; raise it to open the
+;; fan out further, lower it to tuck the dims in.
+(if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.1") ; printed on load and at command start so a
+(setq *hs-version* "v3.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -32768,7 +32808,7 @@
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
-                      px py totrun totdrop td cnrs pfo)
+                      px py totrun totdrop td cnrs pfo pgap)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -33280,12 +33320,20 @@
                 (progn
                   ;; Every depth dim stands the same distance right of
                   ;; the corner its drop lands on, so the dims climb up
-                  ;; and to the right with the steps instead of
-                  ;; stacking in one chain.  Clearing the widest tread
-                  ;; is what keeps BOTH extension lines running
-                  ;; forward, out of the flight.
-                  (setq pfo (+ (apply 'max treads) (* 2.0 txth))
-                        jx  1)
+                  ;; and to the right with the steps instead of stacking
+                  ;; in one chain.  Clearing the widest tread is what
+                  ;; keeps BOTH extension lines running forward, out of
+                  ;; the flight; the gap on top of that is what makes
+                  ;; the fan readable, and *cs-profile-dimgap* sets it.
+                  ;; four text heights, or three quarters of a tread -
+                  ;; whichever is more, so the fan keeps its proportions
+                  ;; whether or not the drawing has a dim scale set up
+                  (setq pgap (cond ((numberp *cs-profile-dimgap*)
+                                    *cs-profile-dimgap*)
+                                   ((max (* 4.0 txth)
+                                         (* 0.75 (apply 'max treads)))))
+                        pfo  (+ (apply 'max treads) pgap)
+                        jx   1)
                   (while (< jx (length cnrs))
                     (setq e1 (nth (1- jx) cnrs)
                           e2 (nth jx cnrs))
@@ -33296,7 +33344,7 @@
                   ;; the overall depth, further out again - the whole
                   ;; diagonal, top corner to bottom corner
                   (hs-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
-                           (list (+ (car ptop) pfo (* 3.0 txth))
+                           (list (+ (car ptop) pfo pgap)
                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0))))
               (princ (strcat "\nSide profile drawn: " (itoa tcount)
                              " step(s), " (itoa (length drops))
@@ -33673,6 +33721,9 @@
 ;;;       the flight instead of stacking in one chain;
 ;;;     * the overall depth sits further out again;
 ;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   How far out the fan sits is *CS-PROFILE-DIMGAP* - the gap on top
+;;;   of the clearance the geometry needs.  Raise it to open the dims
+;;;   out further, lower it to tuck them in.
 ;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
 ;;;   that bracket the drop.  Those corners run diagonally to each
 ;;;   other, so binding the diagonal (rather than dimensioning the
@@ -33688,6 +33739,14 @@
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
+;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
+;;;                       flight, on top of the clearance the geometry
+;;;                       needs.  nil (the default) is four text
+;;;                       heights or three quarters of a tread,
+;;;                       whichever is more, so the fan keeps its
+;;;                       proportions whether or not the drawing has a
+;;;                       dim scale set up.  It also sets how much
+;;;                       further out again the overall depth sits.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -33706,10 +33765,15 @@
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
+;; How far the side profile's dims stand off the flight, on top of the
+;; clearance the geometry itself needs.  nil = four text heights, which
+;; is what the shop's own elevations read like; raise it to open the
+;; fan out further, lower it to tuck the dims in.
+(if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.4") ; printed on load and at command start so a
+(setq *ns-version* "v2.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -34178,7 +34242,7 @@
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
-                        tt cnrs ca cb pfo lastinn)
+                        tt cnrs ca cb pfo pgap lastinn)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -34817,12 +34881,20 @@
                 (progn
                   ;; Every depth dim stands the same distance right of
                   ;; the corner its drop lands on, so the dims climb up
-                  ;; and to the right with the steps instead of
-                  ;; stacking in one chain.  Clearing the widest tread
-                  ;; is what keeps BOTH extension lines running
-                  ;; forward, out of the flight.
-                  (setq pfo (+ (apply 'max treads) (* 2.0 txth))
-                        k   1)
+                  ;; and to the right with the steps instead of stacking
+                  ;; in one chain.  Clearing the widest tread is what
+                  ;; keeps BOTH extension lines running forward, out of
+                  ;; the flight; the gap on top of that is what makes
+                  ;; the fan readable, and *cs-profile-dimgap* sets it.
+                  ;; four text heights, or three quarters of a tread -
+                  ;; whichever is more, so the fan keeps its proportions
+                  ;; whether or not the drawing has a dim scale set up
+                  (setq pgap (cond ((numberp *cs-profile-dimgap*)
+                                    *cs-profile-dimgap*)
+                                   ((max (* 4.0 txth)
+                                         (* 0.75 (apply 'max treads)))))
+                        pfo  (+ (apply 'max treads) pgap)
+                        k    1)
                   (while (< k (length cnrs))
                     (setq ca (nth (1- k) cnrs)
                           cb (nth k cnrs))
@@ -34833,7 +34905,7 @@
                   ;; the overall depth, further out again - the whole
                   ;; diagonal, top corner to bottom corner
                   (ns-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
-                           (list (+ px0 pfo (* 3.0 txth))
+                           (list (+ px0 pfo pgap)
                                  (- (cadr wpt) (* 0.5 totdrop)) 0.0))))
               (princ (strcat "\nSide profile drawn: " (itoa nsteps)
                              " step(s), " (itoa (length drops))
@@ -62181,6 +62253,7 @@
 ;;;
 ;;; Commands:  LAZFORM        fill in a shape chart and run POOL from it
 ;;;            LAZASCII       probe: could the chart be drawn in text?
+;;;            LAZTXT         the same form, drawn out of tiles
 ;;;            LAZFORMVER     print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -62224,7 +62297,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.2")
+(setq *lazform-version* "v2.3")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -63228,7 +63301,8 @@
 (defun lzf:dcl-lines ( / out c)
   (foreach c lzf:*charts*
     (setq out (append out (lzf:dcl-one c) (list ""))))
-  (append out (lzf:dcl-ascii) (list "")))
+  (setq out (append out (lzf:dcl-ascii) (list "")))
+  (append out (lzf:dcl-txt (lzf:chart "Rectangle")) (list "")))
 
 ;;; -------------------- the character-drawing probe ----------------------
 ;;;  Could the chart be drawn in CHARACTERS instead of vectors, with the
@@ -63342,6 +63416,185 @@
      (princ (strcat "\nLAZASCII: if sections 1-3 lined up, the chart can be"
                     " drawn in characters -- and a text tile, unlike an"
                     " image tile, is never wiped by a repaint."))))
+  (princ))
+
+;;; -------------------- the text view -----------------------------------
+;;;  LAZTXT: the pool drawn out of TILES rather than out of vectors,
+;;;  with the boxes inside it.
+;;;
+;;;  The LAZASCII probe killed character art -- the dialog font is
+;;;  proportional, so a pool drawn in "+---+" shears apart line by line.
+;;;  But it also showed the half that works: a row of tiles with
+;;;  declared widths lines up perfectly, because the alignment comes
+;;;  from the tiles and not from the glyphs.
+;;;
+;;;  DCL has something better than dashes for the outline.  A
+;;;  boxed_row or boxed_column draws a REAL etched border -- drawn by
+;;;  the widget, so it is straight by construction and cannot shear.
+;;;  Nest one inside another and you have a pool with a hopper in it;
+;;;  put the edit boxes inside those clusters and the fields are IN the
+;;;  drawing rather than beside it.
+;;;
+;;;  What it buys over the vector chart: every tile here is RETAINED.
+;;;  DCL does not retain an image tile -- a repaint clears it and there
+;;;  is no expose callback -- which is the standing hazard behind the
+;;;  chart having vanished on people.  Nothing in this view can vanish.
+;;;
+;;;  What it costs: the outline is a rectangle whatever the pool is.  A
+;;;  boxed cluster cannot be round, cut-cornered or L-shaped, so this
+;;;  is a schematic of where the numbers sit, not a picture of the
+;;;  pool.  Which is why it is a SECOND view and not a replacement.
+
+;; The v dim that spans the most: the overall, which belongs outside the
+;; hopper rather than in it.
+(defun lzf:txt-tallest (c / d best bs sp)
+  (foreach d (lzf:dims c)
+    (if (= (nth 6 d) "v")
+      (progn
+        (setq sp (abs (- (nth 5 d) (nth 3 d))))
+        (if (or (not best) (> sp bs)) (setq best d bs sp)))))
+  best)
+
+(defun lzf:txt-box (d w)
+  (strcat "        : edit_box { key = \"" (cadr d) "\"; label = \""
+          (car d) "\"; edit_width = " (itoa w) "; }"))
+
+;; One row per cut, in drawing order: the across-chain the way it reads
+;; on the sheet.
+(defun lzf:txt-rows (c / out y ds d)
+  (foreach y (lzf:cuts c)
+    (setq ds (lzf:cutdims c y))
+    (if ds
+      (progn
+        (setq out (cons "      : row {" out))
+        (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+        (setq out (cons "      }" out)))))
+  (reverse out))
+
+;; Every h dim the cuts did not claim, plus the column-only fields.
+(defun lzf:txt-rest (c / out d wk)
+  (setq wk (lzf:wedge-keys c))
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "h") (not (member (cadr d) wk)))
+      (setq out (cons (lzf:txt-box d 8) out))))
+  (reverse out))
+
+;; The first cut's row on its own -- the overall length, above the pool
+;; the way the sheet has it.
+(defun lzf:txt-firstrow (c / out ds d)
+  (setq ds (lzf:cutdims c (car (lzf:cuts c))))
+  (if ds
+    (progn
+      (setq out (list "    : row {"))
+      (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+      (reverse (cons "    }" out)))))
+
+;; Every cut row after the first.
+(defun lzf:txt-restrows (c / out y ds d first)
+  (setq first t)
+  (foreach y (lzf:cuts c)
+    (cond
+      (first (setq first nil))
+      (t
+       (setq ds (lzf:cutdims c y))
+       (if ds
+         (progn
+           (setq out (cons "      : row {" out))
+           (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+           (setq out (cons "      }" out)))))))
+  (reverse out))
+
+(defun lzf:dcl-txt (c / out tall d rows)
+  (setq tall (lzf:txt-tallest c))
+  (setq out (list
+    "lazform_txt : dialog {"
+    (strcat "  label = \"LAZFORM text view  -  " (nth 2 c) "\";")
+    (strcat "  : text { label = \"The boxes sit IN the drawing.\"; }")
+    (strcat "  : text { label = \"Nothing here is an image tile, so "
+            "nothing here can be wiped.\"; }")
+    (strcat "  : boxed_column {")
+    (strcat "    label = \"" (nth 2 c) "\";")))
+  ;; the first across-row -- the overall length -- goes ABOVE the body,
+  ;; where the sheet puts it
+  (setq rows (lzf:txt-rows c))
+  (if rows
+    (progn
+      (setq out (append out (lzf:txt-firstrow c)))
+      (setq rows (lzf:txt-restrows c))))
+  ;; the overall width, outside the hopper, then the pool body
+  (setq out (append out (list "    : boxed_row {" "      label = \"\";")))
+  (if tall
+    (setq out (append out (list "      : boxed_column {"
+                                "        label = \"Overall\";"
+                                (lzf:txt-box tall 8)
+                                "      }"))))
+  (setq out (append out (list "      : boxed_column {"
+                              "        label = \"Hopper\";")))
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "v") (not (equal d tall)))
+      (setq out (append out (list (lzf:txt-box d 6))))))
+  (setq out (append out (list "      }" "    }")))
+  ;; the remaining across-chains, one row per cut, in drawing order
+  (if rows
+    (setq out (append out (list "    : boxed_column {"
+                                "      label = \"Across\";")
+                      rows
+                      (list "    }"))))
+  ;; anything the cuts did not claim, and the column-only fields
+  (setq out (append out (list "    : boxed_column {"
+                              "      label = \"And the rest\";")))
+  (setq out (append out (lzf:txt-rest c)))
+  (foreach d (lzf:extra c)
+    (setq out (append out (list (strcat "        : edit_box { key = \""
+                                        (car d) "\"; label = \"" (cadr d)
+                                        "\"; edit_width = 8; }")))))
+  (setq out (append out (list "    }" "  }")))
+  (append out
+    (list "  spacer;"
+          "  : row {"
+          (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { key = \"cancel\"; label = \"Cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}")))
+
+;; Show it, collect it, and hand POOL the same alist LAZFORM would.
+(defun lzf:txt-show (c / f dcl rc k out)
+  (setq lzf:*vals* nil lzf:*chart* c)
+  (cond
+    ((not (setq f (lzf:write-dcl)))
+     (princ "\nLAZTXT error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZTXT error: could not load the dialog file."))
+    (t
+     (cond
+       ((not (new_dialog "lazform_txt" dcl))
+        (princ "\nLAZTXT error: could not open the view."))
+       (t
+        (foreach k (lzf:keys c)
+          (action_tile k (strcat "(lzf:put \"" k "\" $value)")))
+        (action_tile "accept" "(done_dialog 1)")
+        (action_tile "cancel" "(done_dialog 0)")
+        (setq rc (start_dialog))
+        (if (= rc 1)
+          (setq out (lzf:form (cadr c) lzf:*insq*
+                              (nth lzf:*btype* lzf:*btypes*))))))
+     (unload_dialog dcl)
+     (vl-file-delete f)))
+  out)
+
+(defun c:LAZTXT ( / c form)
+  (setq c (lzf:chart "Rectangle"))
+  (cond
+    ((not pool:run-with-answers)
+     (princ "\nLAZTXT: POOL is not loaded in this session -- APPLOAD")
+     (princ "\n        lisp/pool/POOL.LSP, or LAZPASS.lsp which has both."))
+    ((setq form (lzf:txt-show c))
+     (princ (strcat "\nLAZTXT: " (itoa (length form))
+                    " answers to POOL; it will ask for whatever is left."))
+     (pool:run-with-answers form))
+    (t (princ "\nLAZTXT: cancelled, nothing drawn.")))
   (princ))
 
 (defun lzf:write-lines (fh / l)
@@ -63720,7 +63973,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.4")
+(setq *lazpanel-version* "v2.5")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -63802,6 +64055,7 @@
     ("FLOORDIM"         "Floor dims")
     ("HEMISTEP"         "Hemi step")
     ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
     ("LHD"              "Laser outline fit")
     ("LINCHECK"         "Line checklist")
@@ -63857,6 +64111,7 @@
      ("Shape"
       "POOL"
       "LAZFORM"
+      "LAZTXT"
       "OASIS"
       "ABHD"
       "ADAB"
@@ -63953,6 +64208,7 @@
      ("Layout"
      (""
       "LAZFORM"
+      "LAZTXT"
       "LAZFORMCOVER"
       "SPA"
       "POOL"
@@ -65175,8 +65431,8 @@
   "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK"
   "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE"
   "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER"
-  "LAZASCII" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
-  "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
+  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
