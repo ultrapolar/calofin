@@ -310,6 +310,24 @@ poor trade for a hazard that has not recurred.
 of the AutoCAD build rather than of this code, so it is worth being
 able to re-ask on another machine or another release.
 
+### Section 5: the one question still open
+
+Sections 1-4 tested `text` tiles, and a text tile is proportional. A
+**`list_box` is a different control**, and if it happens to be
+fixed-pitch the pool can be drawn in characters after all. So section 5
+puts the same twelve-character ruler in a list box, and under it the
+pool exactly as it is drawn on paper -- outline, hopper, the four
+slopes, and the `H G F E` chain reading straight through the middle.
+
+If those bars line up, that picture is buildable: retained like any
+control, never wiped by a repaint, and the *real shape* rather than the
+rectangle `LAZTXT` has to stand in with. The cost would be that a list
+box holds text and nothing else, so the fields would sit beside the
+drawing rather than in it -- the opposite trade from `LAZTXT`.
+
+If they do not line up, that is the end of it, and the vector chart
+stays the only way to see the pool.
+
 ### What it shows
 
 Drawing the pool in **text** rather than vectors would win something

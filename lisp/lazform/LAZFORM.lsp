@@ -46,7 +46,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.3")
+(setq *lazform-version* "v2.4")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -1090,6 +1090,31 @@
 ;;;  what a pool would look like if it is, and section 3 shows the
 ;;;  fallback that works either way -- a row of tiles, where alignment
 ;;;  comes from tile widths rather than from glyphs.
+;; The pool exactly as it is drawn on paper, in characters.  If a list
+;; box turns out to be fixed-pitch this is what the form could show --
+;; retained, never wiped by a repaint, and the real shape rather than a
+;; rectangle standing in for one.
+(setq lzf:*poolart* (list
+    "    <--------------------------------- B --------------------------------->"
+    "    +---------------------------------------------------------------------+"
+    " ^  |\\                  ^                        ______/|                 |"
+    " |  | \\                 M                 ______/       |                 |"
+    " |  |  \\                |          ______/              |                 |"
+    " |  |   \\               v   ______/                     |                 |"
+    " |  |    \\+-----------+_____                            |                 |"
+    " |  |     |           |  ^                              |                 |"
+    " |  |     |           |  L                              |                 |"
+    " A  |<-H->|<--- G --->|<-------------- F -------------->|<------ E ------>|"
+    " |  |     |           |  |                              |                 |"
+    " |  |     |           |  v                              |                 |"
+    " |  |    /+-----------+_____                            |                 |"
+    " |  |   /               ^   \\______                     |                 |"
+    " |  |  /                |          \\______              |                 |"
+    " |  | /                 K                 \\______       |                 |"
+    " v  |/                  v                        \\______|                 |"
+    "    +---------------------------------------------------------------------+"
+  ))
+
 (defun lzf:dcl-ascii ( / out)
   (setq out (list
     "lazform_ascii : dialog {"
@@ -1139,6 +1164,15 @@
     "      : text { label = \"--->|\"; width = 7; }"
     "    }"
     "  }"
+    "  : boxed_column {"
+    "    label = \"5.  Is a LIST BOX fixed-pitch?\";"
+    (strcat "    : text { label = \"A text tile is not.  A list box is a "
+            "different control -- if ITS bars line up,\"; }")
+    (strcat "    : text { label = \"the pool below can be drawn in "
+            "characters after all.\"; }")
+    "    : list_box { key = \"ruler\"; width = 32; height = 5; }"
+    "    : list_box { key = \"pool\"; width = 78; height = 18; }"
+    "  }"
     "  spacer;"
     "  : text { label = \"Tell the session which sections lined up.\"; alignment = centered; }"
     (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
@@ -1149,7 +1183,7 @@
 
 ;; The probe, on its own loaded handle.  It draws nothing and answers
 ;; nothing -- it exists to be looked at.
-(defun c:LAZASCII ( / f dcl)
+(defun c:LAZASCII ( / f dcl l)
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
@@ -1158,6 +1192,16 @@
     (t
      (if (new_dialog "lazform_ascii" dcl)
        (progn
+         ;; the same twelve characters the text tiles got, and then the
+         ;; pool -- populated at run time, which is how a list box is fed
+         (start_list "ruler")
+         (foreach l '("|iiiiiiiiiiii|" "|WWWWWWWWWWWW|" "|000000000000|"
+                      "|------------|" "|            |")
+           (add_list l))
+         (end_list)
+         (start_list "pool")
+         (foreach l lzf:*poolart* (add_list l))
+         (end_list)
          (action_tile "cancel" "(done_dialog 0)")
          (start_dialog)))
      (unload_dialog dcl)

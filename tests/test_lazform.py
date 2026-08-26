@@ -998,4 +998,42 @@ for k in ('tp', 'le', 'h', 'shape', 'insq', 'btype'):
 print("   what it collects reaches POOL as the same alist LAZFORM sends")
 
 
+# --------------------------------------------------------------------
+# The pool art the probe carries, and the tiles that would show it.
+# --------------------------------------------------------------------
+# Section 5 of LAZASCII asks the one question sections 1-4 left open: a
+# TEXT tile is proportional, but a list_box is a different control, and
+# if it happens to be fixed-pitch the pool can be drawn in characters
+# after all -- retained, and the real shape rather than a rectangle
+# standing in for one.
+print("== the probe carries the pool art, intact ==")
+av = fresh()
+art = [str(l) for l in av.globals['lzf:*poolart*']]
+assert len(art) >= 16, "the pool art lost lines: %d" % len(art)
+# the backslashes survive the LISP string escaping -- half the slopes
+# are drawn with them, and a lost one is a silently broken picture
+assert sum(a.count('\\') for a in art) >= 6, \
+    "the pool art lost its backslashes: %r" % [a for a in art if '\\' in a]
+assert sum(a.count('/') for a in art) >= 6, "the pool art lost its slashes"
+# every dimension letter the rectangle chart names is on the picture
+# each letter stands alone somewhere on the picture -- H reads as
+# "<-H->", B as "--- B ---", so a bare substring test would pass on
+# anything and a space-delimited one fails on the arrows
+joined = '\n'.join(art)
+for letter in ('B', 'A', 'H', 'G', 'F', 'E', 'M', 'L', 'K'):
+    assert re.search(r'(?<![A-Za-z])%s(?![A-Za-z])' % letter, joined), \
+        "%s is not on the pool art" % letter
+widest = max(len(a) for a in art)
+av.loads('(setq test:*a* (lzf:dcl-ascii))')
+adcl = '\n'.join(str(l) for l in av.globals['test:*a*'])
+m = re.search(r'list_box \{ key = "pool"; width = (\d+)', adcl)
+assert m, "no pool list box in the probe"
+assert int(m.group(1)) >= widest, (
+    "the pool list box is %s wide but the art is %d -- it would clip"
+    % (m.group(1), widest))
+assert 'key = "ruler"' in adcl, "no fixed-pitch ruler beside the pool"
+print("   %d lines, widest %d, in a %s-wide list box; letters all present"
+      % (len(art), widest, m.group(1)))
+
+
 print("ALL LAZFORM TESTS PASSED")
