@@ -45,7 +45,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.0")
+(setq *lazform-version* "v2.1")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -324,6 +324,56 @@
    (("c" "C - wall height (shallow depth)")
     ("d" "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")))
+
+  ;; ---------------- Round ----------------
+  ;;  POOL's ROUnd flow asks two overalls -- B across and A up, both
+  ;;  through the middle -- and then hands the bottom to the SAME
+  ;;  hopper routine the oval uses (pool:hopovaldsp), so the hopper
+  ;;  letters here are the oval's: H G F E, W, M L K.  The plan pair is
+  ;;  NOT the oval's: a round pool answers b and a, where an oval
+  ;;  answers tot, tp and le.
+  ;;
+  ;;  In square, POOL asks one diameter and keys it 'b -- so B is the
+  ;;  box that matters and A goes unread.  Tick the in-square toggle
+  ;;  and fill B in.
+  ;;
+  ;;  M L K RUN THROUGH THE CENTRE, and they have to.  POOL resolves
+  ;;  that chain against the overall width, so M+L+K must equal A --
+  ;;  and on a circle the only vertical that is a full diameter is the
+  ;;  one through the middle.  Measured anywhere else it comes up short
+  ;;  (the first draft put them at the hopper's own x and the chain
+  ;;  closure test caught it: 460 against an A of 500).  So the hopper
+  ;;  is drawn wide enough to cross that centre line, which is also
+  ;;  where the tape goes.
+  ;;
+  ;;  H G F E ARE COLUMN BOXES HERE, not a wedge row on the drawing.
+  ;;  A wedge box is its letter plus ten cells, so four of them need 44
+  ;;  of the chart's 52 -- and a round pool spans about 31.  On the
+  ;;  rectangle the chain runs the full width and just fits; on a
+  ;;  circle it cannot, and forcing it makes boxes that sit nowhere
+  ;;  near the letters they belong to.  So this chart declares cuts for
+  ;;  B and W only and the chain is answered in the list, where it has
+  ;;  room.  Every dimension is still enterable; only the position of
+  ;;  four boxes differs.
+  ("ROUnd" "ROUnd" "Round"
+   (("A" 500 500 250 250 0 360)
+    ("A" 390 500 70 70 90 270)
+    (390 430 540 430) (540 430 540 570) (390 570 540 570)
+    (540 430 660 350) (540 570 660 650)
+    (660 350 660 650))
+   (("B"  "b"  250 150 750 150 "h" "B - overall length (across)")
+    ("A"  "a"  175 250 175 750 "v" "A - overall width (up)")
+    ("H"  "h"  250 600 320 600 "h" "H - pool left edge to hopper tip")
+    ("G"  "g"  320 600 540 600 "h" "G - hopper length, tip to right edge")
+    ("F"  "f"  540 600 660 600 "h" "F - hopper to slope break")
+    ("E"  "e"  660 600 750 600 "h" "E - slope break to pool right edge")
+    ("W"  "w"  390 405 540 405 "h" "W - hopper flat top")
+    ("M"  "m"  500 250 500 430 "v" "M - top of pool to hopper")
+    ("L"  "l"  500 430 500 570 "v" "L - hopper width")
+    ("K"  "k"  500 570 500 750 "v" "K - hopper to bottom of pool"))
+   (("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 ))
 
 ;;; -------------------- chart access ------------------------------------
@@ -365,7 +415,8 @@
                    ("ROman" 130 205 345 580)
                    ("Grecian" 120 205 330 580)
                    ("GRSquare" 120 205 580)
-                   ("L" 90 340 625 920)))
+                   ("L" 90 340 625 920)
+                   ("ROUnd" 150 405)))
 
 (defun lzf:cuts (c) (cdr (assoc (car c) lzf:*cuts*)))
 

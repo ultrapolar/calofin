@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import lispvm  # noqa: E402
-from lispvm import VM, LispError, Dot  # noqa: E402
+from lispvm import VM, LispError, Dot, parse_all  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
@@ -837,6 +837,42 @@ keys2 = [str(pr.a) for pr in bv.globals['test:*f2*']]
 assert 'c' in keys2 and 'd' in keys2, \
     "a Wedge DOES ask C and D -- they must travel: %r" % keys2
 print("   C and D travel on a Wedge and are dropped on a Normal")
+
+
+# --------------------------------------------------------------------
+# Round, end to end: the newest chart actually drives POOL.
+# --------------------------------------------------------------------
+# A chart is only worth having if POOL accepts what it collects.  The
+# keys check above says the letters map to real questions; this says
+# the whole set drives a drawing and leaves POOL with nothing to ask
+# but the two things a form never sends -- where to put it, and whether
+# there is a bottom.
+print("== a round pool, drawn from the chart's own keys ==")
+rv = VM()
+rv.load(POOL)
+ROUND = """\'((shape . "ROUnd") (insq . "Insquare") (btype . "Wedge")
+              (b . 360.0) (h . 40.0) (g . 90.0) (f . 140.0)
+              (m . 90.0) (l . 180.0) (k . 90.0)
+              (c . 42.0) (d . 72.0))"""
+rv.eval(parse_all("(setq pool:*form* %s)" % ROUND)[0])
+rv.run('c:POOL', [(0.0, 0.0, 0.0), "Yes"])
+drawn = [e for e in rv.entities if e not in rv.deleted]
+assert drawn, "a round pool from the form drew nothing"
+left = [p.strip() for p, _ in rv.prompts]
+assert len(left) == 2, (
+    "POOL still had to ask %d questions, not 2: %r" % (len(left), left))
+assert 'Insertion base point' in left[0], left
+assert 'Add pool bottom' in left[1], left
+# and every key the chart offers is one POOL really asks for
+rv2 = VM()
+rv2.load(LSP)
+rv2.loads('(setq test:*rk* (lzf:keys (lzf:chart "ROUnd")))')
+rk = [str(x) for x in rv2.globals['test:*rk*']]
+for need in ('b', 'a', 'h', 'g', 'f', 'e', 'w', 'm', 'l', 'k', 'c', 'd', 'c2'):
+    assert need in rk, "the Round chart lost %s" % need
+print("   %d entities; POOL asked only for the insertion point and the"
+      % len(drawn))
+print("   bottom gate -- the two things a form never sends")
 
 
 print("ALL LAZFORM TESTS PASSED")

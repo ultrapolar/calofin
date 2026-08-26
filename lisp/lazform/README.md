@@ -25,7 +25,7 @@ A typo counts as an empty box on purpose: something that is neither `NA`
 nor a distance AutoCAD can read leaves POOL asking, rather than quietly
 feeding it a nil that means something else entirely.
 
-A **tab strip** across the top switches charts. Six are drawn:
+A **tab strip** across the top switches charts. Seven are drawn:
 
 | Chart | POOL shape | Letters on the picture |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ A **tab strip** across the top switches charts. Six are drawn:
 | `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E |
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K |
+| `ROUnd` | ROUnd | B A W (H G F E M L K in the list) |
 
 **The bottom type decides which boxes are live.** A style does not ask
 for every letter on the sheet, and the form used to offer them all
@@ -68,9 +69,33 @@ be read by nothing. Only G, M and K carry over from the drawn chain.
 Sport's own letters have no boxes yet -- that is the open gap on this
 sheet.
 
-Every chart now carries C, D and C2 rows. Four of the six never had
+Every chart now carries C, D and C2 rows. Four of the original six never had
 them, so on a Roman, an Oval or either Grecian the depths always fell
 through to the command line whatever you did.
+
+**Round** is the newest sheet, and the one that behaves differently.
+POOL's `ROUnd` flow asks two overalls -- `B` across and `A` up, both
+through the middle -- then hands the bottom to the *same* routine the
+oval uses, so the hopper letters are the oval's (`H G F E`, `W`,
+`M L K`) while the plan pair is not (`b` and `a`, where an oval answers
+`tot`, `tp` and `le`). Tick **in-square** and POOL asks one diameter,
+keyed `b`, so `B` is the box that matters.
+
+Two things about it are worth knowing:
+
+- **`M L K` run through the centre, and they have to.** POOL resolves
+  that chain against the overall width, so `M+L+K` must equal `A` --
+  and on a circle the only vertical that is a full diameter is the one
+  through the middle. The first draft measured them at the hopper's
+  own x and the chain-closure test caught it: 460 against an `A` of
+  500.
+- **`H G F E` are answered in the list, not on the drawing.** A wedge
+  box is its letter plus ten cells, so four of them need 44 of the
+  chart's 52 -- and a round pool spans about 31. On the rectangle that
+  chain runs the full width and just fits; on a circle it cannot, and
+  forcing it puts boxes nowhere near the letters they belong to. Every
+  dimension is still enterable; only the position of four boxes
+  differs.
 
 **Corners** get their own section on the Rectangle and True L charts:
 a dropdown per corner -- `(ask)`, `Square`, `Radius`, `Cut`,
