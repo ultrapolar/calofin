@@ -154,6 +154,34 @@ TOOLS = {
         # ...but the Back sentinel travels with the ask helpers
         'symbols': {'SF-BACK': 'CAL-BACK'},
     },
+    # ABPCHECK was forked from ABHD and written against the library from
+    # the start: everything generic in it -- the vector set, the ask-free
+    # helpers, ensure-layer, mtext, the point-block reader -- is a
+    # CALOFIN-LIB body under its own prefix, so all of it comes back out
+    # here.  What stays local is the segment math it forked (abp:seg-dist
+    # and its 2-element abp:circumcenter, which the library's 3-element
+    # form would break) and the report.
+    'ABPCHECK': {
+        'src': 'lisp/abpcheck/ABPCHECK.lsp',
+        'swap': {
+            'abp:2d': 'cal:2d', 'abp:dist': 'cal:dist',
+            'abp:v-': 'cal:v-', 'abp:v+': 'cal:v+', 'abp:v*': 'cal:v*',
+            'abp:dot': 'cal:dot', 'abp:mid': 'cal:mid',
+            'abp:perp': 'cal:perp', 'abp:angnorm': 'cal:angnorm',
+            'abp:tan': 'cal:tan', 'abp:dedupe': 'cal:dedupe',
+            'abp:pad': 'cal:pad', 'abp:zeropad2': 'cal:zeropad2',
+            'abp:datestr': 'cal:datestr',
+            'abp:syssave': 'cal:syssave',
+            'abp:sysrestore': 'cal:sysrestore',
+            'abp:ensure-layer': 'cal:ensure-layer',
+            'abp:mtext': 'cal:mtext',
+            'abp:block-number': 'cal:block-number',
+        },
+        # abp:syssave already takes its sysvar list, like the library's,
+        # so there is nothing to expand -- but the snapshot global goes
+        # with it, and only the two dropped helpers ever read it
+        'drop_globals': ['abp:*sysold*'],
+    },
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
