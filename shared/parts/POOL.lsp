@@ -123,7 +123,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV12")
+(setq pool:*version* "082526 REV14")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -837,7 +837,10 @@
         (progn
           (if (nth 6 it) (princ (nth 6 it)))
           (setq ans (pool:sqput ans (car it) 0.0)
-                i (1+ i)))
+                i (1+ i))
+          ;; a skipped answer is still an answer: the live guide gets
+          ;; the 0 too, so a spanned-out E collapses exactly
+          (pool:pvnote (car it) 0.0))
         (progn
           (setq dflt (nth 4 it)
                 kind (cadr it))
@@ -1045,8 +1048,7 @@
      (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
-;; line and its letter beside the midpoint -- laid out exactly as
-;; pool:pvtie draws them.
+;; line and its letter beside the midpoint.
 (defun pool:pvtiespec (p q lbl th)
   (list (list "LINED" p q)
         (list "TEXT" (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
@@ -1182,6 +1184,72 @@
              (cons (car km)
                    (mapcar '(lambda (i) (nth i ents)) (cdr km))))
           (cadr g)))
+
+;;; The BOTTOM-phase guides (the floor dims: the H/G/F/E/M/L/K hopper
+;;; chains and the section depths) ride the same engine through a
+;;; COLLECTOR.  The hopper draw routines (pool:hgl / pool:hga /
+;;; pool:profdraw) have always had a pvflag preview path; arming the
+;;; collector makes that same path EMIT primitives instead of drawing,
+;;; so the existing compute-and-draw code doubles as the geometry
+;;; function and the hopper reshapes with every letter answered.
+
+(setq pool:*pvcoll* nil)                ; T while a spec is being collected
+(setq pool:*pvcsp* nil)                 ; collected primitives, reversed
+(setq pool:*pvckm* nil)                 ; collected keymap entries
+
+;; Arm the collector (a bottom geometry function's first act).
+(defun pool:pvcopen ()
+  (setq pool:*pvcoll* t
+        pool:*pvcsp* nil
+        pool:*pvckm* nil))
+
+;; One primitive into the collector.
+(defun pool:pvcput (pr)
+  (setq pool:*pvcsp* (cons pr pool:*pvcsp*))
+  nil)
+
+;; One keyed field-sheet tie into the collector -- the live counterpart
+;; of the old pool:pvtie: the dotted line and its letter, highlighted
+;; together while that letter is prompted.
+(defun pool:pvctie (p q lbl th / n pr)
+  (setq n (length pool:*pvcsp*))
+  (foreach pr (pool:pvtiespec p q lbl th) (pool:pvcput pr))
+  (setq pool:*pvckm* (cons (list lbl n (1+ n)) pool:*pvckm*))
+  nil)
+
+;; Close the collector into the (spec keymap box) a geometry function
+;; returns.  pts joins the view box without being drawn, so the pool
+;; the bottom guide sits inside stays on screen however the guide
+;; moves.
+(defun pool:pvcout (pts / spec km box p px py qx qy)
+  (setq spec (reverse pool:*pvcsp*)
+        km (reverse pool:*pvckm*)
+        box (pool:pvspecbox spec)
+        pool:*pvcoll* nil
+        px (car (car box)) py (cadr (car box))
+        qx (car (cadr box)) qy (cadr (cadr box)))
+  (foreach p pts
+    (setq px (min px (- (car p) 20.0)) py (min py (- (cadr p) 20.0))
+          qx (max qx (+ (car p) 20.0)) qy (max qy (+ (cadr p) 20.0))))
+  (list spec km (list (list px py) (list qx qy))))
+
+;; Live fill-in for a measurement chain: answered members are held,
+;; open ones share whatever the total has left in proportion to their
+;; nominals -- so the chain closes against the pool at every step, and
+;; once all but one member is in, the last shows exactly the remainder
+;; the resolver will hand it.  An overspent chain squeezes the open
+;; members toward zero instead of going negative.
+(defun pool:pvchain (vals noms total / sum nsum s out k v)
+  (setq sum 0.0 nsum 0.0 k 0)
+  (foreach v vals
+    (if v (setq sum (+ sum v)) (setq nsum (+ nsum (nth k noms))))
+    (setq k (1+ k)))
+  (setq s (if (> nsum 1.0e-6) (max 0.05 (/ (- total sum) nsum)) 0.0)
+        out nil k 0)
+  (foreach v vals
+    (setq out (cons (if v v (* s (nth k noms))) out)
+          k (1+ k)))
+  (reverse out))
 
 ;; Mirror everything drawn after `after` about the HORIZONTAL line
 ;; y = y0 -- a top-to-bottom flip.
@@ -3911,43 +3979,10 @@
           (list (list "M" 'pht 'pt) (list "L" 'phb 'pht)
                 (list "K" 'pb 'phb))))
 
-;; Gray field-sheet guide inside the fitted pool: nominal hopper,
-;; break line and ties (solid), plus a dashed lettered measuring tie
-;; per input.  Returns the highlight assoc keyed by letter.
-(defun pool:hopguide (quad corners th style tie / len wid nom gg pr tl e et pv)
-  (setq len (distance (car quad) (cadr quad))
-        wid (distance (car quad) (cadddr quad))
-        nom (pool:btmnom style len)
-        gg (pool:hopcalc quad corners
-                         (car nom) (cadr nom) (caddr nom)
-                         (* 0.25 wid) (* 0.25 wid)))
-  (foreach pr (append (list (list 'hbl 'htl))
-                      (if (cadr (assoc 'zg gg)) nil
-                          (list (list 'htl 'htr) (list 'htr 'hbr)
-                                (list 'hbr 'hbl)))
-                      (if (cadr (assoc 'ze gg)) nil (list (list 'brkb 'brkt)))
-                      (if tie
-                          (list (list 'lab1 'hbl) (list 'lab2 'hbl)
-                                (list 'lat1 'htl) (list 'lat2 'htl))
-                          nil)
-                      ;; E = 0 breaks to the right corner treatments
-                      (if (and (cadr (assoc 'ze gg)) tie)
-                          (list (list 'rab1 'hbr) (list 'rab2 'hbr)
-                                (list 'rat1 'htr) (list 'rat2 'htr))
-                          (list (list 'htr 'brkt) (list 'hbr 'brkb))))
-    (pool:pvadd (pool:pvline (cadr (assoc (car pr) gg))
-                             (cadr (assoc (cadr pr) gg)))))
-  (setq pv nil)
-  (foreach tl (pool:btmties style)
-    (setq e (pool:pvadd (pool:pvlined (cadr (assoc (cadr tl) gg))
-                                      (cadr (assoc (caddr tl) gg)))))
-    (pool:text (cal:v+ (cal:mid (cadr (assoc (cadr tl) gg))
-                                  (cadr (assoc (caddr tl) gg)))
-                        (list (* 0.5 th) (* 0.5 th)))
-               (* 1.2 th) (car tl) "POOL-NOTES")
-    (setq et (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))
-          pv (cons (cons (car tl) (list e et)) pv)))
-  pv)
+;; The field-sheet guide inside the fitted pool is LIVE: hn:geo inside
+;; pool:hopnormal builds it through the collector (see "live guide
+;; reshaping"), so the hopper, its ties and the nominal section all
+;; reshape as the letters and depths come in.
 
 ;; Resolve a bottom measurement chain against the pool total:
 ;;   * NA (nil) entries take the remainder -- split evenly when there
@@ -4049,7 +4084,7 @@
 ;; x0/y0 place the side profile below the pool; tie draws the left
 ;; corner ties.
 (defun pool:hopnormal (quad corners doff th lmode style x0 y0 tie
-                       / pv h g f e m l k gg tl odl sp whn hdn nom
+                       / pv h g f e m l k gg tl odl sp
                          hraw graw fraw eraw mraw lraw kraw wh dp c2
                          a b c d cen toth totv hres vres skipe rows
                          cv hfx vfx ans lmode2 toth2 totv2)
@@ -4062,32 +4097,79 @@
                        (pool:linex cen (cal:v- b a) b (cal:v- c b)))
         totv (distance (pool:linex cen (cal:v- d a) a (cal:v- b a))
                        (pool:linex cen (cal:v- d a) d (cal:v- c d))))
-  (setq pv (pool:hopguide quad corners th style tie))
-  ;; the profile styles get a nominal section under the plan, so the
-  ;; depth prompts highlight a tie the same way the plan letters do
-  (if (caddr sp)
-      (progn
-        (setq whn (* 0.25 totv) hdn (* 0.55 totv)
-              nom (pool:btmnom style toth))
-        (pool:profdraw x0 y0 toth whn
-                       (pool:btmbrks style (car nom) (cadr nom)
-                                     (- toth (car nom) (cadr nom) (caddr nom))
-                                     whn hdn (* 0.5 (+ whn hdn)))
-                       "POOL-NOTES" t)
-        (setq pv (append pv
-                   (list (pool:pvtie (list (+ x0 toth (* 0.6 doff)) y0)
-                                     (list (+ x0 toth (* 0.6 doff)) (- y0 whn))
-                                     "C" th)
-                         (pool:pvtie (list (+ x0 (car nom)) y0)
-                                     (list (+ x0 (car nom)) (- y0 hdn))
-                                     "D" th))
-                   (if (cadddr sp)
-                       (list (pool:pvtie
-                               (list (- (+ x0 toth) (caddr nom)) y0)
-                               (list (- (+ x0 toth) (caddr nom))
-                                     (- y0 (* 0.5 (+ whn hdn))))
-                               "C2" th))
-                       nil)))))
+  ;; The live guide geometry (see "live guide reshaping"): the chain
+  ;; letters answered so far are held and the open ones share what the
+  ;; two totals have left (pool:pvchain), so the hopper on screen
+  ;; closes against the pool at every answer -- and, on the profile
+  ;; styles, the section under the plan reshapes the same way as the
+  ;; depths come in.
+  (defun hn:geo ( / len nom res hv gv fv ev mv kv gg pr tl wh2 dp2 c22 fb)
+    (setq len (distance (car quad) (cadr quad))
+          nom (pool:btmnom style len)
+          res (pool:pvchain
+                (list (pool:pvdim 'h)
+                      (if (car sp) (pool:pvdim 'g) 0.0)
+                      (pool:pvdim 'f)
+                      (if (cadr sp) (pool:pvdim 'e) 0.0))
+                (list (car nom) (cadr nom)
+                      (max 1.0 (- len (car nom) (cadr nom) (caddr nom)))
+                      (caddr nom))
+                toth)
+          hv (car res) gv (cadr res) fv (caddr res) ev (cadddr res)
+          res (pool:pvchain
+                (list (pool:pvdim 'm) (pool:pvdim 'l) (pool:pvdim 'k))
+                (list (* 0.25 totv) (* 0.5 totv) (* 0.25 totv))
+                totv)
+          mv (car res) kv (caddr res)
+          gg (pool:hopcalc quad corners hv gv ev mv kv))
+    (pool:pvcopen)
+    ;; the outline, with the structure the STYLE fixes -- a pad or a
+    ;; break that shrinks to nothing simply collapses in place
+    (foreach pr (append (list (list 'hbl 'htl))
+                        (if (car sp)
+                            (list (list 'htl 'htr) (list 'htr 'hbr)
+                                  (list 'hbr 'hbl))
+                            nil)
+                        (if (cadr sp) (list (list 'brkb 'brkt)) nil)
+                        (if tie
+                            (list (list 'lab1 'hbl) (list 'lab2 'hbl)
+                                  (list 'lat1 'htl) (list 'lat2 'htl))
+                            nil)
+                        ;; a style with E pinned to 0 breaks to the
+                        ;; right corner treatments instead
+                        (if (and (not (cadr sp)) tie)
+                            (list (list 'rab1 'hbr) (list 'rab2 'hbr)
+                                  (list 'rat1 'htr) (list 'rat2 'htr))
+                            (list (list 'htr 'brkt) (list 'hbr 'brkb))))
+      (pool:pvcput (list "LINE" (cadr (assoc (car pr) gg))
+                         (cadr (assoc (cadr pr) gg)))))
+    (foreach tl (pool:btmties style)
+      (pool:pvctie (cadr (assoc (cadr tl) gg))
+                   (cadr (assoc (caddr tl) gg))
+                   (car tl) th))
+    ;; the profile styles get a section under the plan, so the depth
+    ;; prompts highlight a tie the same way the plan letters do
+    (if (caddr sp)
+        (progn
+          (setq wh2 (cond ((pool:pvdim 'wh)) ((* 0.25 totv)))
+                dp2 (cond ((pool:pvdim 'dp)) ((* 0.55 totv)))
+                ;; a deep C with D still open must not float the floor
+                ;; above the wall bottoms while D is being asked
+                dp2 (max dp2 (* 1.15 wh2))
+                c22 (cond ((pool:pvdim 'c2)) ((* 0.5 (+ wh2 dp2))))
+                fb (max 0.0 (- toth hv gv ev)))
+          (pool:profdraw x0 y0 toth wh2
+                         (pool:btmbrks style hv gv fb wh2 dp2 c22)
+                         "POOL-NOTES" t)
+          (pool:pvctie (list (+ x0 toth (* 0.6 doff)) y0)
+                       (list (+ x0 toth (* 0.6 doff)) (- y0 wh2)) "C" th)
+          (pool:pvctie (list (+ x0 hv) y0)
+                       (list (+ x0 hv) (- y0 dp2)) "D" th)
+          (if (cadddr sp)
+              (pool:pvctie (list (+ x0 hv gv fb) y0)
+                           (list (+ x0 hv gv fb) (- y0 c22)) "C2" th))))
+    (pool:pvcout quad))
+  (setq pv (pool:pvlive 'hn:geo))
   (princ "\nPool bottom -- offsets from the perimeter; the RED tie is the one being asked for.")
   (princ "\n(after the first answer, Back re-asks the previous one)")
   ;; L pools: when H+G+F are all given and already span the main
@@ -4138,14 +4220,20 @@
         skipe (and (cadr sp) (equal eraw 0.0)))
   (if (not (car sp)) (setq graw 0.0))
   (if (not (cadr sp)) (setq eraw 0.0))
-  ;; depths, while the nominal section is still on screen
+  ;; depths, while the live section is still on screen -- each answer
+  ;; reshapes it, so C sets the walls and D digs the deep end in front
+  ;; of the user
   (if (caddr sp)
-      (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
-            dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh)
-            c2 (if (cadddr sp)
-                   (pool:askc2 "C2 - depth where the shallow floor meets the break"
-                               (cdr (assoc "C2" pv)) wh dp)
-                   wh)))
+      (progn
+        (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))))
+        (pool:pvnote 'wh wh)
+        (setq dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh))
+        (pool:pvnote 'dp dp)
+        (setq c2 (if (cadddr sp)
+                     (pool:askc2 "C2 - depth where the shallow floor meets the break"
+                                 (cdr (assoc "C2" pv)) wh dp)
+                     wh))
+        (if (cadddr sp) (pool:pvnote 'c2 c2))))
   (pool:pvkill)
   ;; resolve the chains: NA takes the remainder (split when several);
   ;; the style's slack member (G with a pad, F without) absorbs any
@@ -4316,7 +4404,7 @@
 ;; dim/report row are skipped -- the old NOhopper variant, now just a
 ;; zero answer at the G prompt.
 (defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax doff th
-                      / wid whn hdn ggn pv e2r f2r gr f1r e1r mraw lraw kraw
+                      / wid whn hdn pv e2r f2r gr f1r e1r mraw lraw kraw
                         wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
                         brks tl xd nopad cv hfx vfx ans total2 wid2)
   (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
@@ -4326,35 +4414,54 @@
         ;; the two chain totals under names of their own, for the
         ;; suggestion expressions below to read
         total2 total wid2 wid)
-  ;; nominal guide: plan + profile (padded proportions -- whether the
-  ;; pool has a pad is only known once G is answered)
-  (setq ggn (pool:hopsportc lline rline bline tline cen
-                            (* 0.12 total) (* 0.20 total) (* 0.30 total)
-                            (* 0.26 total) (* 0.12 total)
-                            (* 0.2 wid) (* 0.2 wid)))
-  (pool:hopsportdraw ggn nil "POOL-NOTES" t)
-  (pool:profdraw x0 y0 total whn
-                 (list (cons (* 0.12 total) whn)
-                       (cons (* 0.32 total) hdn)
-                       (cons (* 0.62 total) hdn)
-                       (cons (* 0.88 total) whn))
-                 "POOL-NOTES" t)
-  (setq pv (append
-    (list (pool:pvtie (cadr (assoc 'pl ggn)) (cadr (assoc 'pobl ggn)) "E2" th)
-          (pool:pvtie (cadr (assoc 'pobl ggn)) (cadr (assoc 'pdfl ggn)) "F2" th)
-          (pool:pvtie (cadr (assoc 'pdfl ggn)) (cadr (assoc 'pdfr ggn)) "G" th)
-          (pool:pvtie (cadr (assoc 'pdfr ggn)) (cadr (assoc 'pobr ggn)) "F1" th)
-          (pool:pvtie (cadr (assoc 'pobr ggn)) (cadr (assoc 'pr ggn)) "E1" th)
-          (pool:pvtie (cadr (assoc 'pdt ggn)) (cadr (assoc 'pt ggn)) "M" th)
-          (pool:pvtie (cadr (assoc 'pdb ggn)) (cadr (assoc 'pdt ggn)) "L" th)
-          (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'pdb ggn)) "K" th)
-          (pool:pvtie (list (+ x0 total (* 0.6 doff)) y0)
-                      (list (+ x0 total (* 0.6 doff)) (- y0 whn)) "C" th)
-          (pool:pvtie (list (+ x0 (* 0.5 total)) y0)
-                      (list (+ x0 (* 0.5 total)) (- y0 hdn)) "D" th))))
-  (command "_.ZOOM" "_Window"
-           (pool:wp (list (- x0 doff) (- y0 hdn (* 3.0 doff))))
-           (pool:wp (list (+ x0 total (* 3.0 doff)) (+ ymax doff))))
+  ;; The live guide geometry (see "live guide reshaping"): plan and
+  ;; profile together, the chain closing against the pool at every
+  ;; answer and the section digging itself as C and D come in.  The
+  ;; padded structure is kept whatever G does -- a zero pad simply
+  ;; collapses onto the V line.
+  (defun hs:geo ( / res e2v f2v gv f1v e1v mv kv wh2 dp2 gg)
+    (setq res (pool:pvchain
+                (list (pool:pvdim 'e2) (pool:pvdim 'f2) (pool:pvdim 'g)
+                      (pool:pvdim 'f1) (pool:pvdim 'e1))
+                (list (* 0.12 total) (* 0.20 total) (* 0.30 total)
+                      (* 0.26 total) (* 0.12 total))
+                total)
+          e2v (car res) f2v (cadr res) gv (caddr res)
+          f1v (cadddr res) e1v (nth 4 res)
+          res (pool:pvchain
+                (list (pool:pvdim 'm) (pool:pvdim 'l) (pool:pvdim 'k))
+                (list (* 0.2 wid) (* 0.6 wid) (* 0.2 wid))
+                wid)
+          mv (car res) kv (caddr res)
+          wh2 (cond ((pool:pvdim 'wh)) (whn))
+          dp2 (cond ((pool:pvdim 'dp)) (hdn))
+          ;; a deep C with D still open must not float the floor above
+          ;; the wall bottoms while D is being asked
+          dp2 (max dp2 (* 1.15 wh2))
+          gg (pool:hopsportc lline rline bline tline cen
+                             e2v f2v gv f1v e1v mv kv))
+    (pool:pvcopen)
+    (pool:hopsportdraw gg nil "POOL-NOTES" t)
+    (pool:profdraw x0 y0 total wh2
+                   (list (cons e2v wh2) (cons (+ e2v f2v) dp2)
+                         (cons (+ e2v f2v gv) dp2)
+                         (cons (- total e1v) wh2))
+                   "POOL-NOTES" t)
+    (pool:pvctie (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg)) "E2" th)
+    (pool:pvctie (cadr (assoc 'pobl gg)) (cadr (assoc 'pdfl gg)) "F2" th)
+    (pool:pvctie (cadr (assoc 'pdfl gg)) (cadr (assoc 'pdfr gg)) "G" th)
+    (pool:pvctie (cadr (assoc 'pdfr gg)) (cadr (assoc 'pobr gg)) "F1" th)
+    (pool:pvctie (cadr (assoc 'pobr gg)) (cadr (assoc 'pr gg)) "E1" th)
+    (pool:pvctie (cadr (assoc 'pdt gg)) (cadr (assoc 'pt gg)) "M" th)
+    (pool:pvctie (cadr (assoc 'pdb gg)) (cadr (assoc 'pdt gg)) "L" th)
+    (pool:pvctie (cadr (assoc 'pb gg)) (cadr (assoc 'pdb gg)) "K" th)
+    (pool:pvctie (list (+ x0 total (* 0.6 doff)) y0)
+                 (list (+ x0 total (* 0.6 doff)) (- y0 wh2)) "C" th)
+    (pool:pvctie (list (+ x0 e2v f2v (* 0.5 gv)) y0)
+                 (list (+ x0 e2v f2v (* 0.5 gv)) (- y0 dp2)) "D" th)
+    (pool:pvcout (append (pool:bodyquad lline rline bline tline)
+                         (list (list x0 ymax)))))
+  (setq pv (pool:pvlive 'hs:geo))
   (princ "\nSport bottom -- plan hopper letters; the RED tie is being asked for.")
   (princ "\n(after the first answer, Back re-asks the previous one)")
   (setq ans (pool:askseq
@@ -4374,8 +4481,10 @@
         f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
         mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
         nopad (and gr (< gr 1.0e-6))
-        wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv)))
-        hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh))
+        wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))))
+  (pool:pvnote 'wh wh)
+  (setq hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh))
+  (pool:pvnote 'dp hd)
   (pool:pvkill)
   ;; resolve: horizontal chain vs the pool length (G absorbs; the
   ;; no-pad sport fixes G = 0 and splits its residual across F2/F1),
@@ -4504,8 +4613,11 @@
                           (list x0 y0)))
         prev (car pts))
   (foreach p (cdr pts)
-    ;; a break sitting exactly on a wall bottom repeats that point
-    (if (> (distance prev p) 1.0e-6)
+    ;; a break sitting exactly on a wall bottom repeats that point --
+    ;; but a COLLECTED profile keeps every segment, even zero-length,
+    ;; so the live guide's primitive count never changes as the
+    ;; answers move the breaks around
+    (if (or (and pvflag pool:*pvcoll*) (> (distance prev p) 1.0e-6))
         (progn
           (pool:hgl prev p lay pvflag)
           ;; remember the real (non-preview) section lines so an L
@@ -4514,29 +4626,24 @@
               (setq pool:*profents* (cons (entlast) pool:*profents*)))))
     (setq prev p)))
 
-;; Dashed lettered guide tie from p to q; returns the (lbl ent...)
-;; highlight assoc entry.
-(defun pool:pvtie (p q lbl th / e et)
-  (setq e (pool:pvadd (pool:pvlined p q)))
-  (pool:text (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
-             (* 1.2 th) lbl "POOL-NOTES")
-  (setq et (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
-  ;; the tie AND its letter highlight together while it is prompted
-  (cons lbl (list e et)))
-
-;; Line/arc makers used by the shape-specific hopper draws: when
-;; pvflag is set they draw tracked gray guide entities instead.
+;; Line/arc makers used by the shape-specific hopper draws.  Three
+;; ways out: the real drawing on layer lay; the old gray-guide preview
+;; (pvflag); and, when the live-guide collector is armed, the pvflag
+;; path emits a spec primitive instead of an entity -- which is how
+;; the bottom guides reshape with every answer.
 (defun pool:hgl (p q lay pvflag)
-  (if pvflag
-      (pool:pvadd (pool:pvline p q))
-      (pool:line p q lay)))
+  (cond
+    ((and pvflag pool:*pvcoll*) (pool:pvcput (list "LINE" p q)))
+    (pvflag (pool:pvadd (pool:pvline p q)))
+    (t (pool:line p q lay))))
 
 (defun pool:hga (p mm q lay pvflag)
-  (if pvflag
-      (progn
-        (pool:arc3p p mm q "POOL-NOTES")
-        (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
-      (pool:arc3p p mm q lay)))
+  (cond
+    ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
+    (pvflag
+     (pool:arc3p p mm q "POOL-NOTES")
+     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+    (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
 ;;;
@@ -4609,38 +4716,61 @@
   (pool:hgl hbr brkb lay pvflag))
 
 ;; Guided oval bottom phase.  Returns report rows (nil if skipped).
-(defun pool:hopoval (quad tipl tipr doff th / len wid ggn pv gg rows tl odl
+(defun pool:hopoval (quad tipl tipr doff th / pv gg rows tl odl
                                               h g f e m l k r3 r3raw w tt o
                                               hraw graw fraw eraw mraw lraw kraw
                                               totv hres vres cv hfx vfx r3wbad
-                                              ans xmin xmax ymin ymax len2 totv2)
+                                              ans len2 totv2)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
-        (setq xmin (- (min (car tipl) (car tipr)) doff)
-              xmax (+ (max (car tipl) (car tipr)) doff)
-              ymin (- (apply 'min (mapcar 'cadr quad)) doff)
-              ymax (+ (apply 'max (mapcar 'cadr quad)) doff))
-        (command "_.ZOOM" "_Window" (pool:wp (list xmin ymin))
-                 (pool:wp (list xmax ymax)))
-        ;; nominal guide
-        (setq len (distance tipl tipr)
-              wid (distance (car quad) (cadddr quad))
-              ggn (pool:hopovalc quad tipl tipr (* 0.10 len) (* 0.24 len)
-                                 (* 0.38 len) (* 0.25 wid) (* 0.25 wid)
-                                 (* 0.20 wid)))
-        (pool:hopovaldraw ggn "POOL-NOTES" t)
-        (setq pv (list
-          (pool:pvtie (cadr (assoc 'pl ggn)) (cadr (assoc 'phl ggn)) "H" th)
-          (pool:pvtie (cadr (assoc 'phl ggn)) (cadr (assoc 'phr ggn)) "G" th)
-          (pool:pvtie (cadr (assoc 'phl ggn)) (cadr (assoc 'ptan ggn)) "R3" th)
-          (pool:pvtie (cadr (assoc 'ttop ggn)) (cadr (assoc 'htr ggn)) "W" th)
-          (pool:pvtie (cadr (assoc 'phr ggn)) (cadr (assoc 'pbrk ggn)) "F" th)
-          (pool:pvtie (cadr (assoc 'pbrk ggn)) (cadr (assoc 'pr ggn)) "E" th)
-          (pool:pvtie (cadr (assoc 'pht ggn)) (cadr (assoc 'pt ggn)) "M" th)
-          (pool:pvtie (cadr (assoc 'phb ggn)) (cadr (assoc 'pht ggn)) "L" th)
-          (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'phb ggn)) "K" th)
-          (pool:pvtie (cadddr quad) (caddr quad) "T" th)))
+        ;; The live guide geometry (see "live guide reshaping"): the
+        ;; axis chain closes against the tip-to-tip length at every
+        ;; answer, the M/L/K chain against the width, and the radius
+        ;; end follows R3 / W -- or stays the tangent semicircle of
+        ;; whatever hopper width the offsets currently give.
+        (defun ho:geo ( / len wid res hv gv ev mv lv kv r3v gg)
+          (setq len (distance tipl tipr)
+                wid (distance (car quad) (cadddr quad))
+                res (pool:pvchain
+                      (list (pool:pvdim 'h) (pool:pvdim 'g)
+                            (pool:pvdim 'f) (pool:pvdim 'e))
+                      (list (* 0.10 len) (* 0.24 len)
+                            (* 0.28 len) (* 0.38 len))
+                      len)
+                hv (car res) gv (cadr res) ev (cadddr res)
+                res (pool:pvchain
+                      (list (pool:pvdim 'm) (pool:pvdim 'l) (pool:pvdim 'k))
+                      (list (* 0.25 wid) (* 0.5 wid) (* 0.25 wid))
+                      wid)
+                mv (car res) lv (cadr res) kv (caddr res)
+                ;; the same precedence the resolver applies below: a
+                ;; given R3 wins, else the tangent semicircle of the
+                ;; hopper width, and only a collapsed width lets W
+                ;; spend the hopper length -- so the end the user
+                ;; watches is the end the final draw keeps
+                r3v (cond ((pool:pvdim 'r3))
+                          ((> lv 1.0e-6) (* 0.5 lv))
+                          ((and (pool:pvdim 'w)
+                                (> (- gv (pool:pvdim 'w)) 1.0))
+                           (- gv (pool:pvdim 'w)))
+                          (t (* 0.20 wid)))
+                r3v (max (min r3v (* 0.9 gv)) (* 0.02 len))
+                gg (pool:hopovalc quad tipl tipr hv gv ev mv kv r3v))
+          (pool:pvcopen)
+          (pool:hopovaldraw gg "POOL-NOTES" t)
+          (pool:pvctie (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg)) "H" th)
+          (pool:pvctie (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg)) "G" th)
+          (pool:pvctie (cadr (assoc 'phl gg)) (cadr (assoc 'ptan gg)) "R3" th)
+          (pool:pvctie (cadr (assoc 'ttop gg)) (cadr (assoc 'htr gg)) "W" th)
+          (pool:pvctie (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg)) "F" th)
+          (pool:pvctie (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg)) "E" th)
+          (pool:pvctie (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg)) "M" th)
+          (pool:pvctie (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg)) "L" th)
+          (pool:pvctie (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg)) "K" th)
+          (pool:pvctie (cadddr quad) (caddr quad) "T" th)
+          (pool:pvcout (append quad (list tipl tipr))))
+        (setq pv (pool:pvlive 'ho:geo))
         (princ "\nPool bottom -- offsets along the pool axis; the RED tie is being asked for.")
         (princ "\n(after the first answer, Back re-asks the previous one)")
         ;; the two chain totals -- tip to tip along the pool, wall to
@@ -4869,11 +4999,11 @@
         (pool:hgl lbp hbl lay pvflag))))
 
 ;; Guided grecian bottom phase.  Returns report rows (nil if skipped).
-(defun pool:hopgrec (pts doff th / htype six mode len wid ggn pv gg rows tl odl
+(defun pool:hopgrec (pts doff th / htype six mode pv gg rows tl odl
                                    h g f e m l k w l1 x co coraw xcal sixbad
                                    hraw graw fraw eraw mraw lraw kraw
                                    cen p u vv toth totv hres vres cv hfx vfx ans
-                                   xmin xmax ymin ymax mm ud proj toth2 totv2)
+                                   mm ud proj toth2 totv2)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
@@ -4888,45 +5018,80 @@
             (setq mode (pool:askkwf 'hmode "SIX-sided corners measured by"
                                     "Offsets Letters" "Offsets/Letters"
                                     "Offsets" nil)))
-        (setq xmin (- (apply 'min (mapcar 'car pts)) doff)
-              xmax (+ (apply 'max (mapcar 'car pts)) doff)
-              ymin (- (apply 'min (mapcar 'cadr pts)) doff)
-              ymax (+ (apply 'max (mapcar 'cadr pts)) doff))
-        (command "_.ZOOM" "_Window" (pool:wp (list xmin ymin))
-                 (pool:wp (list xmax ymax)))
-        ;; nominal guide
-        (setq len (distance (nth 0 pts) (nth 1 pts))
-              wid (distance (nth 0 pts) (nth 5 pts))
-              ggn (pool:hopgrecc pts (* 0.10 len) (* 0.20 len) (* 0.38 len)
-                                 (* 0.27 wid) (* 0.27 wid)
-                                 (cond
-                                   ((not six) nil)
-                                   ((= mode "Offsets")
-                                    (list "Offsets" (* 0.10 len)))
-                                   (t (list "Letters" (* 0.12 len)
-                                            (* 0.26 wid) (* 0.46 wid))))))
-        (pool:hopgrecdraw ggn "POOL-NOTES" six t)
-        (setq pv (list
-          (pool:pvtie (cadr (assoc 'pl ggn)) (cadr (assoc 'phl ggn)) "H" th)
-          (pool:pvtie (cadr (assoc 'phl ggn)) (cadr (assoc 'phr ggn)) "G" th)
-          (pool:pvtie (cadr (assoc 'phr ggn)) (cadr (assoc 'pbrk ggn)) "F" th)
-          (pool:pvtie (cadr (assoc 'pbrk ggn)) (cadr (assoc 'pr ggn)) "E" th)
-          (pool:pvtie (cadr (assoc 'pht ggn)) (cadr (assoc 'pt ggn)) "M" th)
-          (pool:pvtie (cadr (assoc 'phb ggn)) (cadr (assoc 'pht ggn)) "L" th)
-          (pool:pvtie (cadr (assoc 'pb ggn)) (cadr (assoc 'phb ggn)) "K" th)))
-        (if six
-            (setq pv (append pv
+        ;; The live guide geometry (see "live guide reshaping"): the
+        ;; chain closes against the end-wall-to-end-wall total at every
+        ;; answer, and the six-sided corner letters move their own cut
+        ;; faces as they come in.
+        (defun hg:geo ( / len wid gcen gu p2 gth gtv res
+                          hv gv ev mv lv kv hx gg)
+          (setq len (distance (nth 0 pts) (nth 1 pts))
+                wid (distance (nth 0 pts) (nth 5 pts))
+                gcen (list 0.0 0.0))
+          (foreach p2 pts (setq gcen (cal:v+ gcen p2)))
+          (setq gcen (cal:v* gcen 0.125)
+                gu (cal:v- (nth 1 pts) (nth 0 pts))
+                gth (distance
+                      (pool:linex gcen gu (nth 7 pts)
+                                  (cal:v- (nth 6 pts) (nth 7 pts)))
+                      (pool:linex gcen gu (nth 2 pts)
+                                  (cal:v- (nth 3 pts) (nth 2 pts))))
+                gtv (distance
+                      (pool:linex gcen (cal:v- (nth 5 pts) (nth 0 pts))
+                                  (nth 0 pts)
+                                  (cal:v- (nth 1 pts) (nth 0 pts)))
+                      (pool:linex gcen (cal:v- (nth 5 pts) (nth 0 pts))
+                                  (nth 5 pts)
+                                  (cal:v- (nth 4 pts) (nth 5 pts))))
+                res (pool:pvchain
+                      (list (pool:pvdim 'h) (pool:pvdim 'g)
+                            (pool:pvdim 'f) (pool:pvdim 'e))
+                      (list (* 0.10 len) (* 0.20 len)
+                            (* 0.32 len) (* 0.38 len))
+                      gth)
+                hv (car res) gv (cadr res) ev (cadddr res)
+                res (pool:pvchain
+                      (list (pool:pvdim 'm) (pool:pvdim 'l) (pool:pvdim 'k))
+                      (list (* 0.27 wid) (* 0.46 wid) (* 0.27 wid))
+                      gtv)
+                mv (car res) lv (cadr res) kv (caddr res)
+                hx (cond
+                     ((not six) nil)
+                     ((= mode "Offsets")
+                      (list "Offsets" (cond ((pool:pvdim 'co)) (hv))))
+                     (t (list "Letters"
+                              ;; clamped the way the resolver will
+                              ;; clamp them, so a W or L1 typo cannot
+                              ;; draw a preview that crosses itself
+                              (min (cond ((pool:pvdim 'w)) ((* 0.12 len)))
+                                   gv)
+                              (min (cond ((pool:pvdim 'l1)) ((* 0.26 wid)))
+                                   lv)
+                              lv)))
+                gg (pool:hopgrecc pts hv gv ev mv kv hx))
+          (pool:pvcopen)
+          (pool:hopgrecdraw gg "POOL-NOTES" six t)
+          (pool:pvctie (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg)) "H" th)
+          (pool:pvctie (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg)) "G" th)
+          (pool:pvctie (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg)) "F" th)
+          (pool:pvctie (cadr (assoc 'pbrk gg)) (cadr (assoc 'pr gg)) "E" th)
+          (pool:pvctie (cadr (assoc 'pht gg)) (cadr (assoc 'pt gg)) "M" th)
+          (pool:pvctie (cadr (assoc 'phb gg)) (cadr (assoc 'pht gg)) "L" th)
+          (pool:pvctie (cadr (assoc 'pb gg)) (cadr (assoc 'phb gg)) "K" th)
+          (if six
               (if (= mode "Offsets")
-                  (list (pool:pvtie
-                          (cal:mid (cadr (assoc 'dd ggn)) (cadr (assoc 'ltp ggn)))
-                          (cal:mid (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn)))
-                          "CUT" th))
-                  (list (pool:pvtie (cadr (assoc 'ct1 ggn)) (cadr (assoc 'htr ggn))
-                                    "W" th)
-                        (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'cb2 ggn))
-                                    "L1" th)
-                        (pool:pvtie (cadr (assoc 'ct2 ggn)) (cadr (assoc 'ct1 ggn))
-                                    "X" th))))))
+                  (pool:pvctie
+                    (cal:mid (cadr (assoc 'dd gg)) (cadr (assoc 'ltp gg)))
+                    (cal:mid (cadr (assoc 'ct2 gg)) (cadr (assoc 'ct1 gg)))
+                    "CUT" th)
+                  (progn
+                    (pool:pvctie (cadr (assoc 'ct1 gg))
+                                 (cadr (assoc 'htr gg)) "W" th)
+                    (pool:pvctie (cadr (assoc 'ct2 gg))
+                                 (cadr (assoc 'cb2 gg)) "L1" th)
+                    (pool:pvctie (cadr (assoc 'ct2 gg))
+                                 (cadr (assoc 'ct1 gg)) "X" th))))
+          (pool:pvcout pts))
+        (setq pv (pool:pvlive 'hg:geo))
         (princ "\nPool bottom -- offsets from the end walls; the RED tie is being asked for.")
         (princ "\n(after the first answer, Back re-asks the previous one)")
         ;; wall-to-wall totals through the pool centre, worked out

@@ -36,6 +36,42 @@ A **tab strip** across the top switches charts. Six are drawn:
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K |
 
+**The bottom type decides which boxes are live.** A style does not ask
+for every letter on the sheet, and the form used to offer them all
+anyway -- type a `C` against a Normal hopper and POOL never asks for
+it, so the number went nowhere and nothing said so. Picking a bottom
+now greys what that bottom will never reach, and a greyed value is not
+sent to POOL either.
+
+| Bottom | Greyed |
+| --- | --- |
+| Standard Hopper (`Normal`) | C, D, C2 -- it draws no side view at all |
+| `Sport` | H, F, E, C2 |
+| `Wedge` | G, E, C2 |
+| `SLope` | G, C2 |
+| `MOdflat` | E, C2 |
+| `SHallow` | nothing -- it is the only style that asks C2 |
+
+That table is not kept here in code: `lzf:btskip` reads POOL's own
+`pool:btmspec` -- `(ask-G ask-E has-profile ask-C2 slack)` -- so the
+form cannot drift from the command it feeds. LAZFORM already refuses to
+open without POOL loaded, so it is always there to ask.
+
+**Sport is the exception, and not a small one.** `btmspec`'s
+has-profile flag reads nil for Sport, which would say "no C or D" --
+but that flag is only ever consulted inside `pool:hopnormal`, and a
+Sport never goes near it. Sport has its own path, which *does* ask C
+and D, and which asks a different plan chain entirely: **E2 F2 G F1 E1
+M K**, not H G F E. So on a Sport the chart's H, F and E are greyed:
+they are not what POOL will ask for, and a number typed into one would
+be read by nothing. Only G, M and K carry over from the drawn chain.
+Sport's own letters have no boxes yet -- that is the open gap on this
+sheet.
+
+Every chart now carries C, D and C2 rows. Four of the six never had
+them, so on a Roman, an Oval or either Grecian the depths always fell
+through to the command line whatever you did.
+
 **Corners** get their own section on the Rectangle and True L charts:
 a dropdown per corner -- `(ask)`, `Square`, `Radius`, `Cut`,
 `NotGiven` -- with a size box that stays greyed until a sized
@@ -180,6 +216,42 @@ out of step with the drawing.
 - The "Reverse Corner" the True L sheet names is a corner treatment,
   not a measurement, so it has no box -- POOL asks for it directly.
 - The insertion base point is still picked at the command line.
+
+## Could the chart be drawn in characters? (`LAZASCII`)
+
+Drawing the pool in **text** rather than vectors would win something
+real, and it is worth being clear about what. DCL does not *retain* an
+image tile: anything that repaints the dialog clears the picture and
+there is no expose callback to draw it again. That is the structural
+reason the chart has vanished on people -- the passive `image` tile
+holds up in practice, but nothing in DCL promises it will. A `text`
+tile is retained by the dialog manager like any other control, so a
+chart drawn in characters could not vanish at all. The boxes could
+also sit *in* the drawing rather than beside it.
+
+It turns on one thing this repo cannot answer for itself: **is the DCL
+dialog font fixed-pitch?** Character art needs every glyph the same
+width. DCL gives no way to choose a font, and its widths are quoted in
+"character cells" that are an average rather than a guarantee -- so
+this is a property of the AutoCAD build, not of the code.
+
+`LAZASCII` asks AutoCAD instead of guessing. It opens a dialog with
+four sections:
+
+1. **Fixed-pitch test** -- five lines of twelve characters each
+   (`iiii…`, `WWWW…`, digits, dashes, spaces) between bars. If the
+   right-hand bars form one straight column the font is fixed-pitch
+   and character art is on.
+2. **Leading spaces** -- three bars indented 0, 4 and 8 spaces. A
+   staircase means DCL keeps the indent; three bars in one column
+   means it trims them and art is impossible whatever the font.
+3. **The pool in characters** -- what a chart would look like.
+4. **A box in the dimension line** -- the fallback that works either
+   way, where alignment comes from tile *widths* rather than glyphs.
+
+Run it and read off which sections lined up. Section 4 is the answer
+if 1 or 2 fail: it costs the fine detail of the outline but puts the
+edit box in the line, and it cannot vanish.
 
 ## Tests
 

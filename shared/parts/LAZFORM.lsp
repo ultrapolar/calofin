@@ -4,6 +4,7 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
 ;;; Commands:  LAZFORM        fill in a shape chart and run POOL from it
+;;;            LAZASCII       probe: could the chart be drawn in text?
 ;;;            LAZFORMVER     print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -47,7 +48,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.8")
+(setq *lazform-version* "v2.0")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -154,7 +155,8 @@
    (("bo" "overall across, bottom side (out-of-square only)")
     ("ri" "overall up, right end (out-of-square only)")
     ("c"  "C - wall height (shallow depth)")
-    ("d"  "D - deep end depth")))
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 
   ;; ---------------- True Oval ----------------
   ;;  Careful: B is NOT the key it is on the rectangle.  A rectangle's B
@@ -186,7 +188,10 @@
     ("rr" "R2 - RIGHT oval end radius")
     ("r3" "R3 - hopper end radius")
     ("bo" "side length BOTTOM (out-of-square only)")
-    ("ri" "end length RIGHT (out-of-square only)")))
+    ("ri" "end length RIGHT (out-of-square only)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 
   ;; ---------------- Roman ----------------
   ;;  S / S1 / V / R are asked once per end when both ends are "perfect"
@@ -223,7 +228,10 @@
     ("r3" "R3 - hopper end radius")
     ("sr"  "S - RIGHT end setback (ends not perfect)")
     ("s1r" "S1 - RIGHT corner drop (ends not perfect)")
-    ("vr"  "V - RIGHT end width (ends not perfect)")))
+    ("vr"  "V - RIGHT end width (ends not perfect)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 
   ;; ---------------- Grecian, six-sided hopper ----------------
   ;;  These letters exist only on the Overall input path with a SIX
@@ -253,7 +261,10 @@
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
    (("x"  "X - hopper cut face length (check)")
-    ("s2" "S2 - corner cut face (check)"))
+    ("s2" "S2 - corner cut face (check)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break"))
    (("imeth" . "Overall") ("htype" . "SIX") ("hmode" . "Letters")))
 
   ;; ---------------- Grecian, square hopper ----------------
@@ -278,7 +289,10 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)"))
+   (("s2" "S2 - corner cut face (check)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break"))
    (("imeth" . "Overall") ("htype" . "Square")))
 
   ;; ---------------- True L Left ----------------
@@ -311,7 +325,8 @@
     ("L"  "l"  430 520 430 730 "v" "L - hopper width")
     ("K"  "k"  430 730 430 850 "v" "K - hopper to bottom side"))
    (("c" "C - wall height (shallow depth)")
-    ("d" "D - deep end depth")))
+    ("d" "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break")))
 ))
 
 ;;; -------------------- chart access ------------------------------------
@@ -918,7 +933,107 @@
 (defun lzf:dcl-lines ( / out c)
   (foreach c lzf:*charts*
     (setq out (append out (lzf:dcl-one c) (list ""))))
+  (append out (lzf:dcl-ascii) (list "")))
+
+;;; -------------------- the character-drawing probe ----------------------
+;;;  Could the chart be drawn in CHARACTERS instead of vectors, with the
+;;;  edit boxes sitting in the drawing rather than beside it?
+;;;
+;;;  There is a real prize in it.  DCL does not RETAIN an image tile:
+;;;  anything that repaints the dialog clears the picture, and there is
+;;;  no expose callback to draw it again -- which is why the chart has
+;;;  vanished on people twice.  A text tile is retained by the dialog
+;;;  manager like any other control, so a chart drawn in characters
+;;;  could not vanish at all.
+;;;
+;;;  It turns on one thing this file cannot answer for itself: whether
+;;;  the DCL dialog font is FIXED-PITCH.  Character art needs every
+;;;  glyph the same width; a proportional font makes "WWWW" far wider
+;;;  than "iiii" and the drawing shears apart line by line.  DCL gives
+;;;  no way to choose a font, and widths are quoted in "character
+;;;  cells" that are an AVERAGE, not a guarantee.
+;;;
+;;;  So this asks AutoCAD instead of guessing.  Run LAZASCII and look:
+;;;  section 1 says whether the font is fixed-pitch, section 2 shows
+;;;  what a pool would look like if it is, and section 3 shows the
+;;;  fallback that works either way -- a row of tiles, where alignment
+;;;  comes from tile widths rather than from glyphs.
+(defun lzf:dcl-ascii ( / out)
+  (setq out (list
+    "lazform_ascii : dialog {"
+    "  label = \"LAZFORM  -  can this dialog draw in characters?\";"
+    "  : boxed_column {"
+    "    label = \"1.  Is the dialog font fixed-pitch?\";"
+    "    : text { label = \"Twelve characters sit between the bars on every line.\"; }"
+    "    : text { label = \"|iiiiiiiiiiii|  thin letters\"; }"
+    "    : text { label = \"|WWWWWWWWWWWW|  wide letters\"; }"
+    "    : text { label = \"|000000000000|  digits\"; }"
+    "    : text { label = \"|------------|  dashes\"; }"
+    "    : text { label = \"|            |  spaces\"; }"
+    "    : text { label = \"FIXED-PITCH if the right-hand bars form one straight column.\"; }"
+    "  }"
+    "  : boxed_column {"
+    "    label = \"2.  Do leading spaces survive?\";"
+    "    : text { label = \"|column zero\"; }"
+    "    : text { label = \"    |four spaces in\"; }"
+    "    : text { label = \"        |eight spaces in\"; }"
+    "    : text { label = \"A staircase means indenting works; three bars in one\"; }"
+    "    : text { label = \"column means DCL trimmed the spaces and art is impossible.\"; }"
+    "  }"
+    "  : boxed_column {"
+    "    label = \"3.  The pool, drawn in characters\";"
+    "    : text { label = \"    +--------------------------+\"; }"
+    "    : text { label = \"    |                          |\"; }"
+    "    : text { label = \"    |      +------------+      |\"; }"
+    "    : text { label = \"    |      |            |      |\"; }"
+    "    : text { label = \"    |      +------------+      |\"; }"
+    "    : text { label = \"    |                          |\"; }"
+    "    : text { label = \"    +--------------------------+\"; }"
+    "  }"
+    "  : boxed_column {"
+    "    label = \"4.  A box IN the dimension line -- works either way\";"
+    "    : text { label = \"Alignment here comes from tile widths, not from glyphs,\"; }"
+    "    : text { label = \"so this reads straight even in a proportional font.\"; }"
+    "    : row {"
+    "      : text { label = \"B\"; width = 3; }"
+    "      : text { label = \"|<---\"; width = 7; }"
+    "      : edit_box { key = \"probe_b\"; edit_width = 8; }"
+    "      : text { label = \"--->|\"; width = 7; }"
+    "    }"
+    "    : row {"
+    "      : text { label = \"A\"; width = 3; }"
+    "      : text { label = \"|<---\"; width = 7; }"
+    "      : edit_box { key = \"probe_a\"; edit_width = 8; }"
+    "      : text { label = \"--->|\"; width = 7; }"
+    "    }"
+    "  }"
+    "  spacer;"
+    "  : text { label = \"Tell the session which sections lined up.\"; alignment = centered; }"
+    (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
+            "is_default = true; is_cancel = true; "
+            "fixed_width = true; alignment = centered; }")
+    "}"))
   out)
+
+;; The probe, on its own loaded handle.  It draws nothing and answers
+;; nothing -- it exists to be looked at.
+(defun c:LAZASCII ( / f dcl)
+  (cond
+    ((not (setq f (lzf:write-dcl)))
+     (princ "\nLAZASCII error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZASCII error: could not load the dialog file."))
+    (t
+     (if (new_dialog "lazform_ascii" dcl)
+       (progn
+         (action_tile "cancel" "(done_dialog 0)")
+         (start_dialog)))
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZASCII: if sections 1-3 lined up, the chart can be"
+                    " drawn in characters -- and a text tile, unlike an"
+                    " image tile, is never wiped by a repaint."))))
+  (princ))
 
 (defun lzf:write-lines (fh / l)
   (foreach l (lzf:dcl-lines) (write-line l fh)))
@@ -961,14 +1076,57 @@
   (if (> i n) "" (substr s i (1+ (- n i)))))
 
 ;; The alist POOL reads, built from what was typed.
-(defun lzf:form (shape insq btype / out k v a)
+;;; -------------------- what this bottom actually asks -------------------
+;;;  A bottom type does not ask for every letter on the sheet, and the
+;;;  form offered all of them anyway: type a C against a Normal hopper
+;;;  and POOL never asks for it, so the number goes nowhere and nothing
+;;;  says so.  These grey the boxes the chosen bottom will not reach.
+;;;
+;;;  The truth comes from POOL'S OWN pool:btmspec rather than a copy of
+;;;  it here -- (ask-G ask-E has-profile ask-C2 slack) -- so the two
+;;;  cannot drift.  LAZFORM already refuses to open without POOL loaded,
+;;;  so it is always there to ask.
+;;;
+;;;  SPORT IS THE EXCEPTION, and not a small one.  btmspec's has-profile
+;;;  flag reads nil for Sport, which would say "no C or D" -- but that
+;;;  flag is only ever consulted inside pool:hopnormal, and a Sport
+;;;  never goes near it.  Sport has its own path, which DOES ask C and
+;;;  D, and which asks a different plan chain entirely: E2 F2 G F1 E1 M
+;;;  K, not H G F E.  So on a Sport the chart's H, F and E boxes are
+;;;  greyed: they are not what POOL will ask for, and a number typed
+;;;  into one would be read by nothing.
+(defun lzf:btskip (bt / sp out)
+  (cond
+    ((= bt "Sport") (list "h" "f" "e" "c2"))
+    ((not pool:btmspec) nil)          ; no POOL: grey nothing, ask everything
+    (t
+     (setq sp (pool:btmspec bt))
+     (if (not (car sp))    (setq out (cons "g" out)))
+     (if (not (cadr sp))   (setq out (cons "e" out)))
+     (if (not (caddr sp))  (setq out (append (list "c" "d") out)))
+     (if (not (cadddr sp)) (setq out (cons "c2" out)))
+     out)))
+
+;; Grey every box this bottom will not ask about, un-grey the rest.
+;; Only keys the CURRENT chart carries are touched -- mode_tile on a key
+;; that is not on this page would error.
+(defun lzf:btgrey (c / skip k)
+  (setq skip (lzf:btskip (nth lzf:*btype* lzf:*btypes*)))
+  (foreach k (lzf:keys c)
+    (mode_tile k (if (member k skip) 1 0))))
+
+(defun lzf:form (shape insq btype / out k v a noask)
   (setq out (list (cons 'shape shape)
                   (cons 'insq (if insq "Insquare" "Outofsquare"))))
   (if (and btype (/= btype "")) (setq out (cons (cons 'btype btype) out)))
+  ;; a key this bottom never asks about does not travel: it would sit in
+  ;; the store unread, and a form that quietly carries dead answers is
+  ;; harder to reason about than one that does not
+  (setq noask (lzf:btskip btype))
   (foreach k (lzf:keys lzf:*chart*)
     (setq v (lzf:get k)
           a (lzf:answer v))
-    (if (not (eq a 'SKIP))
+    (if (and (not (eq a 'SKIP)) (not (member k noask)))
         (setq out (cons (cons (read k) a) out))))
   ;; the corners: a dropdown left on (ask) sends nothing, a sized
   ;; treatment carries its size when one parses.  In-square asks ONE
@@ -1094,11 +1252,14 @@
           ;; These two capture their value as it changes: get_tile
           ;; answers about a LIVE dialog, and by the time the answers
           ;; are assembled this one is closed and unloaded.
-          (action_tile "btype" "(setq lzf:*btype* (atoi $value)) (lzf:redraw)")
+          (action_tile "btype"
+            (strcat "(setq lzf:*btype* (atoi $value)) (lzf:redraw)"
+                    " (lzf:btgrey lzf:*chart*)"))
           (action_tile "insq" "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)")
           (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
+          (lzf:btgrey c)
           (setq rc (start_dialog))
           (cond
             ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again

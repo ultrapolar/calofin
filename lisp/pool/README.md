@@ -252,8 +252,14 @@ the quad under all of them, corners and ties walking along with it.
 After the perimeter is drawn and dimensioned, the routine offers a
 **pool bottom (hopper) phase** (`Yes`/`No`, default Yes). A lettered
 field-sheet guide appears inside the fitted pool; each tie **and its
-letter** turn red as that letter is prompted. The interior draws on the
-**`POOL`** layer. For the rectangle:
+letter** turn red as that letter is prompted — and the floor guide is
+**live** exactly like the perimeter's: every letter answered reshapes
+the hopper on the spot, the letters still open sharing whatever the
+pool's totals have left, so the chain always closes against the walls
+and a mistyped offset shows up as a hopper that visibly lands in the
+wrong place. On the styles with a side profile, the section under the
+plan reshapes the same way as `C`, `D` (and `C2`) come in. The
+interior then draws on the **`POOL`** layer. For the rectangle:
 
 ```
 D ------------------------------ C     H  left end -> hopper

@@ -246,6 +246,10 @@ ALL = [str(x) for x in vm.globals['t:*all*']]
 # to disk
 opens = [l for l in ALL if l.endswith(' : dialog {')]
 names = [l.split(' : ')[0] for l in opens]
+# one dialog per chart, plus the LAZASCII probe
+assert 'lazform_ascii : dialog {' in opens, \
+    "the LAZASCII probe dialog is not in the generated file"
+opens = [o for o in opens if o != 'lazform_ascii : dialog {']
 assert len(opens) == len(charts), (
     "%d dialogs for %d charts" % (len(opens), len(charts)))
 assert len(names) == len(set(names)), "duplicate dialog names: %r" % names
@@ -746,5 +750,93 @@ print("   %d entities, identical from the chart and from the command line"
       % len(a))
 print("   and the chart's answers -- corners included -- were not")
 print("   asked for again")
+
+# --------------------------------------------------------------------
+# What the chosen bottom actually asks for.
+# --------------------------------------------------------------------
+# A bottom type does not reach every letter on the sheet.  The form used
+# to offer them all anyway, so a C typed against a Normal hopper went
+# nowhere and nothing said so.  lzf:btskip names what to grey -- read
+# off POOL's own pool:btmspec, so it cannot drift from the command it
+# feeds.  What follows is NOT a second copy of that table: it is derived
+# from btmspec here too, and only Sport is stated outright, because
+# Sport is the one case btmspec does not describe.
+print("== the bottom type decides which boxes are live ==")
+bv = stubbed(with_pool=True)
+
+BOTTOMS = ["Normal", "Sport", "Wedge", "SLope", "MOdflat", "SHallow"]
+
+
+def skip_of(bt):
+    bv.loads('(setq test:*s* (lzf:btskip "%s"))' % bt)
+    return set(str(x) for x in (bv.globals['test:*s*'] or []))
+
+
+def spec_of(bt):
+    bv.loads('(setq test:*sp* (pool:btmspec "%s"))' % bt)
+    return [bool(x) for x in bv.globals['test:*sp*'][:4]]
+
+
+for bt in BOTTOMS:
+    got = skip_of(bt)
+    if bt == "Sport":
+        # Sport never reaches pool:hopnormal, so btmspec does not
+        # describe it: its own path asks C and D, and asks a chain of
+        # E2 F2 G F1 E1 M K rather than H G F E.
+        want = {"h", "f", "e", "c2"}
+    else:
+        ask_g, ask_e, profile, ask_c2 = spec_of(bt)
+        want = set()
+        if not ask_g:
+            want.add("g")
+        if not ask_e:
+            want.add("e")
+        if not profile:
+            want |= {"c", "d"}
+        if not ask_c2:
+            want.add("c2")
+    assert got == want, "%s: greys %r, POOL's own spec says %r" % (bt, got, want)
+    print("   %-8s greys %s" % (bt, sorted(got) or "nothing"))
+
+# the two that would actually mislead someone, stated plainly
+assert skip_of("Normal") == {"c", "d", "c2"}, \
+    "a Normal hopper draws no side view, so C and D must be greyed"
+assert skip_of("SHallow") == set(), \
+    "SHallow asks everything including C2 -- nothing should be greyed"
+assert "c2" in skip_of("Wedge") and "c2" not in skip_of("SHallow"), \
+    "C2 is a SHallow-only question"
+
+# every chart carries the depth rows, or a bottom that asks for them
+# would have nowhere to put them -- and the Grecians' gate lists, which
+# sit in the same s-expression, must be untouched by that
+for ck in [str(c[0]) for c in bv.globals['lzf:*charts*']]:
+    bv.loads('(setq test:*e* (lzf:extra (lzf:chart "%s")))' % ck)
+    ex = [str(x[0]) for x in bv.globals['test:*e*']]
+    for need in ('c', 'd', 'c2'):
+        assert need in ex, "%s has no %s box" % (ck, need)
+    bv.loads('(setq test:*g* (lzf:gates (lzf:chart "%s")))' % ck)
+    g = bv.globals['test:*g*']
+    gk = [str(x.a) for x in g] if g else []
+    assert not ({'c', 'd', 'c2'} & set(gk)), \
+        "%s: a depth leaked into the gates list: %r" % (ck, gk)
+print("   all %d charts carry C, D and C2; no gate list disturbed"
+      % len(bv.globals['lzf:*charts*']))
+
+# and a value the bottom will not ask for does not travel to POOL
+bv.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
+bv.loads('(setq lzf:*vals* nil)')
+bv.loads('(lzf:put "c" "40") (lzf:put "d" "60") (lzf:put "tp" "240")')
+bv.loads('(setq test:*f* (lzf:form "Rectangle" nil "Normal"))')
+keys = [str(pr.a) for pr in bv.globals['test:*f*']]
+assert 'c' not in keys and 'd' not in keys, (
+    "a Normal run still carried C/D to POOL, which never asks for them: %r"
+    % keys)
+assert 'tp' in keys, "the plan dimension was dropped too: %r" % keys
+bv.loads('(setq test:*f2* (lzf:form "Rectangle" nil "Wedge"))')
+keys2 = [str(pr.a) for pr in bv.globals['test:*f2*']]
+assert 'c' in keys2 and 'd' in keys2, \
+    "a Wedge DOES ask C and D -- they must travel: %r" % keys2
+print("   C and D travel on a Wedge and are dropped on a Normal")
+
 
 print("ALL LAZFORM TESTS PASSED")
