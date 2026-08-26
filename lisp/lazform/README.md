@@ -217,6 +217,42 @@ out of step with the drawing.
   not a measurement, so it has no box -- POOL asks for it directly.
 - The insertion base point is still picked at the command line.
 
+## Could the chart be drawn in characters? (`LAZASCII`)
+
+Drawing the pool in **text** rather than vectors would win something
+real, and it is worth being clear about what. DCL does not *retain* an
+image tile: anything that repaints the dialog clears the picture and
+there is no expose callback to draw it again. That is the structural
+reason the chart has vanished on people -- the passive `image` tile
+holds up in practice, but nothing in DCL promises it will. A `text`
+tile is retained by the dialog manager like any other control, so a
+chart drawn in characters could not vanish at all. The boxes could
+also sit *in* the drawing rather than beside it.
+
+It turns on one thing this repo cannot answer for itself: **is the DCL
+dialog font fixed-pitch?** Character art needs every glyph the same
+width. DCL gives no way to choose a font, and its widths are quoted in
+"character cells" that are an average rather than a guarantee -- so
+this is a property of the AutoCAD build, not of the code.
+
+`LAZASCII` asks AutoCAD instead of guessing. It opens a dialog with
+four sections:
+
+1. **Fixed-pitch test** -- five lines of twelve characters each
+   (`iiii…`, `WWWW…`, digits, dashes, spaces) between bars. If the
+   right-hand bars form one straight column the font is fixed-pitch
+   and character art is on.
+2. **Leading spaces** -- three bars indented 0, 4 and 8 spaces. A
+   staircase means DCL keeps the indent; three bars in one column
+   means it trims them and art is impossible whatever the font.
+3. **The pool in characters** -- what a chart would look like.
+4. **A box in the dimension line** -- the fallback that works either
+   way, where alignment comes from tile *widths* rather than glyphs.
+
+Run it and read off which sections lined up. Section 4 is the answer
+if 1 or 2 fail: it costs the fine detail of the outline but puts the
+edit box in the line, and it cannot vanish.
+
 ## Tests
 
 ```

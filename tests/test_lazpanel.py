@@ -173,8 +173,10 @@ for c in ALL:
 # diagnostic that reports where the button's picture came from, and
 # LAZPIN the pin editor the Pin... button already opens: none of the
 # four is a drafting tool, so none belongs on the panel.
+# LAZASCII is LAZFORM's font probe -- it draws nothing and answers
+# nothing, it exists to be looked at once -- so it is machinery too.
 satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON',
-               'LAZPIN'}
+               'LAZPIN', 'LAZASCII'}
 
 headline = ALL - satellites - HELD
 assert headline == set(PANEL), (

@@ -246,6 +246,10 @@ ALL = [str(x) for x in vm.globals['t:*all*']]
 # to disk
 opens = [l for l in ALL if l.endswith(' : dialog {')]
 names = [l.split(' : ')[0] for l in opens]
+# one dialog per chart, plus the LAZASCII probe
+assert 'lazform_ascii : dialog {' in opens, \
+    "the LAZASCII probe dialog is not in the generated file"
+opens = [o for o in opens if o != 'lazform_ascii : dialog {']
 assert len(opens) == len(charts), (
     "%d dialogs for %d charts" % (len(opens), len(charts)))
 assert len(names) == len(set(names)), "duplicate dialog names: %r" % names

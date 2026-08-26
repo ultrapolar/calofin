@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 47 files, 112 commands:
+;;; 47 files, 113 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABFIND  ABFINDVER  ABHD  ABHDCOVER
 ;;;   ABMOVE  ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM
@@ -18,17 +18,17 @@
 ;;;   DDCAL  DDELEV  DDFIX  DDGPS  DDINFO  DDSET
 ;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
 ;;;   DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
-;;;   HEMISTEP  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON
-;;;   LAZPANEL  LAZPANELVER  LAZPIN  LHD  LINCHECK  LINFINCHECK
-;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN
-;;;   LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS
-;;;   POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
-;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB
-;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
-;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
-;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST
-;;;   XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   HEMISTEP  LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER
+;;;   LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LHD  LINCHECK
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN
+;;;   LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE
+;;;   PERPPTS  POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET
+;;;   SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD
+;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
+;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
+;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
+;;;   WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -60682,6 +60682,7 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
 ;;; Commands:  LAZFORM        fill in a shape chart and run POOL from it
+;;;            LAZASCII       probe: could the chart be drawn in text?
 ;;;            LAZFORMVER     print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -60725,7 +60726,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v1.9")
+(setq *lazform-version* "v2.0")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -61610,7 +61611,107 @@
 (defun lzf:dcl-lines ( / out c)
   (foreach c lzf:*charts*
     (setq out (append out (lzf:dcl-one c) (list ""))))
+  (append out (lzf:dcl-ascii) (list "")))
+
+;;; -------------------- the character-drawing probe ----------------------
+;;;  Could the chart be drawn in CHARACTERS instead of vectors, with the
+;;;  edit boxes sitting in the drawing rather than beside it?
+;;;
+;;;  There is a real prize in it.  DCL does not RETAIN an image tile:
+;;;  anything that repaints the dialog clears the picture, and there is
+;;;  no expose callback to draw it again -- which is why the chart has
+;;;  vanished on people twice.  A text tile is retained by the dialog
+;;;  manager like any other control, so a chart drawn in characters
+;;;  could not vanish at all.
+;;;
+;;;  It turns on one thing this file cannot answer for itself: whether
+;;;  the DCL dialog font is FIXED-PITCH.  Character art needs every
+;;;  glyph the same width; a proportional font makes "WWWW" far wider
+;;;  than "iiii" and the drawing shears apart line by line.  DCL gives
+;;;  no way to choose a font, and widths are quoted in "character
+;;;  cells" that are an AVERAGE, not a guarantee.
+;;;
+;;;  So this asks AutoCAD instead of guessing.  Run LAZASCII and look:
+;;;  section 1 says whether the font is fixed-pitch, section 2 shows
+;;;  what a pool would look like if it is, and section 3 shows the
+;;;  fallback that works either way -- a row of tiles, where alignment
+;;;  comes from tile widths rather than from glyphs.
+(defun lzf:dcl-ascii ( / out)
+  (setq out (list
+    "lazform_ascii : dialog {"
+    "  label = \"LAZFORM  -  can this dialog draw in characters?\";"
+    "  : boxed_column {"
+    "    label = \"1.  Is the dialog font fixed-pitch?\";"
+    "    : text { label = \"Twelve characters sit between the bars on every line.\"; }"
+    "    : text { label = \"|iiiiiiiiiiii|  thin letters\"; }"
+    "    : text { label = \"|WWWWWWWWWWWW|  wide letters\"; }"
+    "    : text { label = \"|000000000000|  digits\"; }"
+    "    : text { label = \"|------------|  dashes\"; }"
+    "    : text { label = \"|            |  spaces\"; }"
+    "    : text { label = \"FIXED-PITCH if the right-hand bars form one straight column.\"; }"
+    "  }"
+    "  : boxed_column {"
+    "    label = \"2.  Do leading spaces survive?\";"
+    "    : text { label = \"|column zero\"; }"
+    "    : text { label = \"    |four spaces in\"; }"
+    "    : text { label = \"        |eight spaces in\"; }"
+    "    : text { label = \"A staircase means indenting works; three bars in one\"; }"
+    "    : text { label = \"column means DCL trimmed the spaces and art is impossible.\"; }"
+    "  }"
+    "  : boxed_column {"
+    "    label = \"3.  The pool, drawn in characters\";"
+    "    : text { label = \"    +--------------------------+\"; }"
+    "    : text { label = \"    |                          |\"; }"
+    "    : text { label = \"    |      +------------+      |\"; }"
+    "    : text { label = \"    |      |            |      |\"; }"
+    "    : text { label = \"    |      +------------+      |\"; }"
+    "    : text { label = \"    |                          |\"; }"
+    "    : text { label = \"    +--------------------------+\"; }"
+    "  }"
+    "  : boxed_column {"
+    "    label = \"4.  A box IN the dimension line -- works either way\";"
+    "    : text { label = \"Alignment here comes from tile widths, not from glyphs,\"; }"
+    "    : text { label = \"so this reads straight even in a proportional font.\"; }"
+    "    : row {"
+    "      : text { label = \"B\"; width = 3; }"
+    "      : text { label = \"|<---\"; width = 7; }"
+    "      : edit_box { key = \"probe_b\"; edit_width = 8; }"
+    "      : text { label = \"--->|\"; width = 7; }"
+    "    }"
+    "    : row {"
+    "      : text { label = \"A\"; width = 3; }"
+    "      : text { label = \"|<---\"; width = 7; }"
+    "      : edit_box { key = \"probe_a\"; edit_width = 8; }"
+    "      : text { label = \"--->|\"; width = 7; }"
+    "    }"
+    "  }"
+    "  spacer;"
+    "  : text { label = \"Tell the session which sections lined up.\"; alignment = centered; }"
+    (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
+            "is_default = true; is_cancel = true; "
+            "fixed_width = true; alignment = centered; }")
+    "}"))
   out)
+
+;; The probe, on its own loaded handle.  It draws nothing and answers
+;; nothing -- it exists to be looked at.
+(defun c:LAZASCII ( / f dcl)
+  (cond
+    ((not (setq f (lzf:write-dcl)))
+     (princ "\nLAZASCII error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZASCII error: could not load the dialog file."))
+    (t
+     (if (new_dialog "lazform_ascii" dcl)
+       (progn
+         (action_tile "cancel" "(done_dialog 0)")
+         (start_dialog)))
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZASCII: if sections 1-3 lined up, the chart can be"
+                    " drawn in characters -- and a text tile, unlike an"
+                    " image tile, is never wiped by a repaint."))))
+  (princ))
 
 (defun lzf:write-lines (fh / l)
   (foreach l (lzf:dcl-lines) (write-line l fh)))
@@ -63181,8 +63282,8 @@
   "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
   "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG"
   "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP"
-  "XYPLOT" "XYPLOTVER" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
-  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "XYPLOT" "XYPLOTVER" "LAZASCII" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
+  "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
