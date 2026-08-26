@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.1")
+(setq *lazpanel-version* "v2.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -146,6 +146,7 @@
     ("COVERCHECK"       "Cover review")
     ("COVERSCAN"        "Cover scan")
     ("CPERPPTS"         "Curved perp points")
+    ("CUSTBLOCK"        "Block from L/W/H")
     ("DIMARCCHECK"      "Arc endpoint check")
     ("DIMCHECK"         "Dimension review")
     ("DIMCONTEND"       "Continue dim chains")
@@ -286,6 +287,7 @@
       "LHD"
       "SMARTFILLET"
       "WCALST"
+      "CUSTBLOCK"
       "ABCDEF"
       "ALTABCDEF"
       "XYPLOT"
@@ -326,6 +328,7 @@
       "SMARTFILLET"
       "STOCKCOVER"
       "WCALST"
+      "CUSTBLOCK"
       )
     )
      ("Points"

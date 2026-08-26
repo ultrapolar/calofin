@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 56 of them across 125 buttons, because the pages come in two kinds
+-- 57 of them across 127 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both.
 
 **The job pages** are what you are actually doing this hour, and each
@@ -41,7 +41,7 @@ reach for them.
 | Job | Buttons |
 | --- | --- |
 | Spa | `SPA`, `AUTODIM`, `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `DIMCHECK`, `DIMSCAN` |
-| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
+| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `CUSTBLOCK`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
 
 **A page laid out in columns shows the command name alone**; the column
 heading carries the meaning instead of a caption on every button. That
@@ -61,7 +61,7 @@ them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST |
+| Layout | LAZFORM, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
 | Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
 | Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
@@ -100,7 +100,7 @@ re-ordering the tools, re-grouping them or moving a tab to the other
 row is an edit to those two tables and nothing else, and the test
 asserts they name exactly the same groups so neither can drift. The
 status line counts tools rather than buttons (`lzp:commands` folds the
-repeats), so it still reports the whole 56 and not 125. The panel
+repeats), so it still reports the whole 57 and not 127. The panel
 reopens where you left it rather than jumping back to the middle of the
 screen.
 
