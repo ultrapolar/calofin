@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.4")
+(setq *lazpanel-version* "v2.5")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -158,6 +158,7 @@
     ("FLOORDIM"         "Floor dims")
     ("HEMISTEP"         "Hemi step")
     ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
     ("LHD"              "Laser outline fit")
     ("LINCHECK"         "Line checklist")
@@ -213,6 +214,7 @@
      ("Shape"
       "POOL"
       "LAZFORM"
+      "LAZTXT"
       "OASIS"
       "ABHD"
       "ADAB"
@@ -309,6 +311,7 @@
      ("Layout"
      (""
       "LAZFORM"
+      "LAZTXT"
       "LAZFORMCOVER"
       "SPA"
       "POOL"

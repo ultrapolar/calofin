@@ -243,6 +243,37 @@ out of step with the drawing.
   not a measurement, so it has no box -- POOL asks for it directly.
 - The insertion base point is still picked at the command line.
 
+## `LAZTXT` -- the pool drawn out of tiles, boxes inside it
+
+The probe below killed *character* art, but it showed the half that
+works, and `LAZTXT` is that half built out.
+
+DCL has something better than dashes for an outline: a `boxed_row` or
+`boxed_column` draws a **real etched border**. The widget draws it, so
+it is straight by construction and cannot shear whatever the font is
+doing. Nest one inside another and you have a pool with a hopper in
+it; put the edit boxes inside those clusters and the fields are *in*
+the drawing rather than beside it.
+
+The Rectangle reads down the page the way the sheet does: `B` across
+the top, then the pool body with `Overall` (`A`) on the left and the
+`Hopper` (`M L K`) nested inside it, then the `H G F E` chain, then
+the column-only fields. Insert hands POOL the same alist `LAZFORM`
+sends -- it is the same form wearing different clothes, not a second
+contract.
+
+**What it buys:** every tile in it is *retained*. DCL does not retain
+an `image` tile -- a repaint clears it and there is no expose callback
+-- which is the standing hazard behind the chart having vanished on
+people. Nothing in this view can vanish. The test asserts there is no
+`image` tile in it at all.
+
+**What it costs:** the outline is a rectangle whatever the pool is. A
+boxed cluster cannot be round, cut-cornered or L-shaped, so this is a
+schematic of *where the numbers sit*, not a picture of the pool. That
+is why it is a second view rather than a replacement, and why it is
+built for the Rectangle first.
+
 ## Could the chart be drawn in characters? (`LAZASCII`) -- ANSWERED: no
 
 **Run on AutoCAD 2018+, and the answer is no.** The dialog font is
