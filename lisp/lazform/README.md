@@ -25,7 +25,7 @@ A typo counts as an empty box on purpose: something that is neither `NA`
 nor a distance AutoCAD can read leaves POOL asking, rather than quietly
 feeding it a nil that means something else entirely.
 
-A **tab strip** across the top switches charts. Seven are drawn:
+A **tab strip** across the top switches charts. Eight are drawn, on two rows -- eight keys on one line run about 94 character cells against a budget of 90, which is a dialog that does not open, so they wrap:
 
 | Chart | POOL shape | Letters on the picture |
 | --- | --- | --- |
@@ -36,6 +36,7 @@ A **tab strip** across the top switches charts. Seven are drawn:
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K |
 | `ROUnd` | ROUnd | B A W (H G F E M L K in the list) |
+| `OCtagon` | OCtagon | B S T A S1 V H G F E M L K (S2 in the list) |
 
 **The bottom type decides which boxes are live.** A style does not ask
 for every letter on the sheet, and the form used to offer them all
@@ -69,7 +70,7 @@ be read by nothing. Only G, M and K carry over from the drawn chain.
 Sport's own letters have no boxes yet -- that is the open gap on this
 sheet.
 
-Every chart now carries C, D and C2 rows. Four of the original six never had
+Every chart carries C, D and C2 rows. Four of the original six never had
 them, so on a Roman, an Oval or either Grecian the depths always fell
 through to the command line whatever you did.
 

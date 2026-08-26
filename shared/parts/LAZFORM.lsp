@@ -48,7 +48,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.1")
+(setq *lazform-version* "v2.2")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -377,6 +377,53 @@
    (("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")))
+
+  ;; ---------------- Octagon ----------------
+  ;;  POOL reaches the octagon through the SAME flow as the grecian --
+  ;;  (pool:grecflow t) -- so the letters are the grecian square-hopper
+  ;;  set exactly: B S T on the top, A S1 V down the end, H G F E across
+  ;;  the middle, M L K at the hopper, and S2 for the far corner cut.
+  ;;  The sheet bears that out.  The geometry is GRSquare's, deliberately
+  ;;  and to the coordinate: that outline already IS an eight-sided pool
+  ;;  with a cut at every corner, and its numbers are the ones the
+  ;;  box-position audit has been passing all along.
+  ;;
+  ;;  S2 IS A COLUMN BOX, like GRSquare's.  It measures the far corner's
+  ;;  cut FACE, which runs diagonally; a dim on this chart is "h" or "v"
+  ;;  and nothing else, so a diagonal has no place to be drawn and is
+  ;;  answered in the list.
+  ;;
+  ;;  The gates pin what the drawing assumes, the way both grecians do:
+  ;;  Overall input (which is what an octagon defaults to anyway, since
+  ;;  A and B are enough), and the square hopper this chart draws.  An
+  ;;  octagon with a SIX-sided hopper asks for W and L1 as well and
+  ;;  wants a sheet of its own; we do not have one.
+  ("OCtagon" "OCtagon" "Octagon"
+   ((190 250 780 250) (780 250 900 380) (900 380 900 620)
+     (900 620 780 750) (780 750 190 750) (190 750 100 620)
+     (100 620 100 380) (100 380 190 250)
+     (250 380 420 380) (420 380 420 620) (250 620 420 620)
+     (250 380 250 620)
+     (420 380 690 250) (420 620 690 750) (690 250 690 750)
+     (190 250 250 380) (190 750 250 620))
+   (("B"  "b"  100 120 900 120 "h" "B - overall length")
+    ("S"  "ss" 100 205 190 205 "h" "S - corner cut along the side")
+    ("T"  "tt" 190 205 780 205 "h" "T - top side length")
+    ("S1" "s1"  70 250  70 380 "v" "S1 - corner cut down the end")
+    ("A"  "a"   20 250  20 750 "v" "A - overall width")
+    ("V"  "vv"  55 380  55 620 "v" "V - end width")
+    ("H"  "h"  100 580 250 580 "h" "H - left end to hopper")
+    ("G"  "g"  250 580 420 580 "h" "G - hopper length")
+    ("M"  "m"  455 250 455 380 "v" "M - top side to hopper")
+    ("L"  "l"  455 380 455 620 "v" "L - hopper width")
+    ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
+    ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
+    ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
+   (("s2" "S2 - corner cut face (check)")
+    ("c"  "C - wall height (shallow depth)")
+    ("d"  "D - deep end depth")
+    ("c2" "C2 - shallow floor at the break"))
+   (("imeth" . "Overall") ("htype" . "Square")))
 ))
 
 ;;; -------------------- chart access ------------------------------------
@@ -419,7 +466,8 @@
                    ("Grecian" 120 205 330 580)
                    ("GRSquare" 120 205 580)
                    ("L" 90 340 625 920)
-                   ("ROUnd" 150 405)))
+                   ("ROUnd" 150 405)
+                   ("OCtagon" 120 205 580)))
 
 (defun lzf:cuts (c) (cdr (assoc (car c) lzf:*cuts*)))
 
@@ -809,20 +857,40 @@
 
 (setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
 
-(defun lzf:tabstrip (cur / out c)
+(defun lzf:tabstrip (cur / out c n)
   ;; The tab strip: one button per chart, the current one disabled so
   ;; it reads as the page you are on.  DCL has no tab tile and no way
   ;; to hide or restyle one, so "which page am I on" is carried by that
   ;; greyed button and by the dialog's own title bar.
-  (setq out (list "  : row {"))
   ;; the KEY, not the title: six full chart titles make a row 117
   ;; characters wide, twice the chart it sits above, and a dialog wider
-  ;; than the screen has nowhere to go -- DCL does not scroll
+  ;; than the screen has nowhere to go -- DCL does not scroll.
+  ;;
+  ;; The keys alone were not enough either.  Eight of them run about 94
+  ;; cells against a budget of 90, which is a dialog that does not open
+  ;; -- so they WRAP, greedily, the way the panel's pinned row does.
+  ;; Adding a ninth chart costs a row rather than the whole form.
+  (foreach c (lzf:tabrows)
+    (setq out (cons "  : row {" out))
+    (foreach n c
+      (setq out (cons (strcat "    : button { key = \"tab_" n
+                              "\"; label = \"" n "\"; }")
+                      out)))
+    (setq out (cons "  }" out)))
+  (reverse out))
+
+;; Chart keys packed into rows no wider than the budget.
+(setq lzf:*tabbudget* 84)
+
+(defun lzf:tabrows ( / out row w c cw)
+  (setq row nil w 0)
   (foreach c lzf:*charts*
-    (setq out (cons (strcat "    : button { key = \"tab_" (car c)
-                            "\"; label = \"" (car c) "\"; }")
-                    out)))
-  (reverse (cons "  }" out)))
+    (setq cw (+ (strlen (car c)) 6))
+    (if (and row (> (+ w cw) lzf:*tabbudget*))
+      (setq out (cons (reverse row) out) row nil w 0))
+    (setq row (cons (car c) row) w (+ w cw)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
 
 (setq lzf:*chart-w* 52)         ; the chart column, in character cells
 (setq lzf:*chart-h* 19)         ; its total height, spread over the bands
