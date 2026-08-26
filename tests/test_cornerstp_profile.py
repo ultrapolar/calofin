@@ -54,11 +54,16 @@ def walls(vm, pair=True):
     return list(vm.entities)
 
 
-def run(path, cmd, script, label, styles=('STANDARD INCHES', 'SIDE STANDARD')):
+def run(path, cmd, script, label, styles=('STANDARD INCHES', 'SIDE STANDARD'),
+        gap=None):
     vm = VM()
     vm.load(path)                       # CALOFIN_LISP_ROOT picks the tier
     for s in styles:
         vm.tables['DIMSTYLE'].add(s)
+    # a drawing scaled the way the shop's are: DIMTXT 1/8" at 1/4"=1'
+    vm.sysvars['DIMTXT'], vm.sysvars['DIMSCALE'] = 0.125, 48.0
+    if gap is not None:
+        vm.loads('(setq *cs-profile-dimgap* %r)' % gap)
     script = list(script)
     if script[0] == 'WALLS':
         script[0] = walls(vm, pair=(cmd == 'c:CORNERSTP'))
@@ -248,6 +253,51 @@ def test_overall_binds_the_whole_diagonal_and_sits_furthest_out():
         "the overall must sit further out than every depth dim"
 
 
+def test_the_fan_stands_clear_of_the_flight():
+    """The dims sit out where they can be read: past the widest tread -
+    which is what keeps the extension lines forward - plus a readable
+    gap on top, four text heights or three quarters of a tread."""
+    vm = run(CORNERSTP, 'c:CORNERSTP', cornerstp_script(dims="Yes"),
+             "standoff")
+    pd, cs = profile_dims(vm), corners()
+    txth = 0.125 * 48.0
+    gap = max(4.0 * txth, 0.75 * max(TREADS))
+    want = max(TREADS) + gap
+    for i, d in enumerate(pd[:len(DEPTHS)]):
+        stand = d[2][0] - cs[i + 1][0]
+        assert abs(stand - want) < 1e-6, \
+            f"depth {i + 1} stands off {stand}, not {want}"
+    # ...and the overall one gap further out again
+    assert abs(pd[-1][2][0] - (PICK[0] + want + gap)) < 1e-6, \
+        f"the overall sits at {pd[-1][2][0]}, not {PICK[0] + want + gap}"
+
+
+def test_the_gap_is_tunable():
+    """*cs-profile-dimgap* opens the fan out or tucks it in, and the
+    overall moves with it."""
+    tight = run(CORNERSTP, 'c:CORNERSTP', cornerstp_script(dims="Yes"),
+                "tight", gap=6.0)
+    wide = run(CORNERSTP, 'c:CORNERSTP', cornerstp_script(dims="Yes"),
+               "wide", gap=96.0)
+    for label, vm, g in (("tight", tight, 6.0), ("wide", wide, 96.0)):
+        pd, cs = profile_dims(vm), corners()
+        want = max(TREADS) + g
+        for i, d in enumerate(pd[:len(DEPTHS)]):
+            stand = d[2][0] - cs[i + 1][0]
+            assert abs(stand - want) < 1e-6, \
+                f"{label}: depth {i + 1} stands off {stand}, not {want}"
+        assert abs(pd[-1][2][0] - (PICK[0] + want + g)) < 1e-6, \
+            f"{label}: the overall did not move with the gap"
+    # the wider setting really is further out than the tighter one
+    assert wide and tight
+    assert profile_dims(wide)[0][2][0] > profile_dims(tight)[0][2][0]
+    # ...and the extension lines still run forward at either setting
+    for vm in (tight, wide):
+        for o1, o2, loc, meas, kind in profile_dims(vm):
+            assert loc[0] > max(o1[0], o2[0]) + 1e-6, \
+                f"the dim line at {loc} must stay right of its origins"
+
+
 def test_the_treads_carry_no_dims():
     vm = run(CORNERSTP, 'c:CORNERSTP', cornerstp_script(dims="Yes"),
              "no tread dims")
@@ -310,6 +360,8 @@ def main():
     test_every_depth_is_a_vertical_linear_dim_on_the_diagonal()
     test_depth_dims_climb_up_and_to_the_right()
     test_both_extension_lines_run_forward_clear_of_the_flight()
+    test_the_fan_stands_clear_of_the_flight()
+    test_the_gap_is_tunable()
     test_overall_binds_the_whole_diagonal_and_sits_furthest_out()
     test_the_treads_carry_no_dims()
     test_the_siblings_draw_the_same_profile()

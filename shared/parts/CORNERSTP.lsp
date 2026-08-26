@@ -126,6 +126,9 @@
 ;;;       the flight instead of stacking in one chain;
 ;;;     * the overall depth sits further out again;
 ;;;     * the treads carry no dims - the depths and the overall say it.
+;;;   How far out the fan sits is *CS-PROFILE-DIMGAP* - the gap on top
+;;;   of the clearance the geometry needs.  Raise it to open the dims
+;;;   out further, lower it to tuck them in.
 ;;;   Each one is a VERTICAL LINEAR dim bound to the two step corners
 ;;;   that bracket the drop.  Those corners run diagonally to each
 ;;;   other, so binding the diagonal (rather than dimensioning the
@@ -143,6 +146,14 @@
 ;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
 ;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
 ;;;                       default) the current layer is used.
+;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
+;;;                       flight, on top of the clearance the geometry
+;;;                       needs.  nil (the default) is four text
+;;;                       heights or three quarters of a tread,
+;;;                       whichever is more, so the fan keeps its
+;;;                       proportions whether or not the drawing has a
+;;;                       dim scale set up.  It also sets how much
+;;;                       further out again the overall depth sits.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -164,10 +175,15 @@
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
+;; How far the side profile's dims stand off the flight, on top of the
+;; clearance the geometry itself needs.  nil = four text heights, which
+;; is what the shop's own elevations read like; raise it to open the
+;; fan out further, lower it to tuck the dims in.
+(if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v2.9") ; printed on load and at command start so a
+(setq *cs-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -529,7 +545,7 @@
                        bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
-                       px py totr totd cnrs ca cb pfo)
+                       px py totr totd cnrs ca cb pfo pgap)
 
   (defun *error* (msg)
     (if undoflag (command-s "_.UNDO" "_End"))
@@ -1181,14 +1197,22 @@
                         cnrs (reverse (cons (list px py 0.0) cnrs)))
                   (if dimflag
                     (progn
-                      ;; Every depth dim stands the same distance right
-                      ;; of the corner its drop lands on, so the dims
-                      ;; climb up and to the right with the steps
-                      ;; instead of stacking in one chain.  Clearing
-                      ;; the widest tread is what keeps BOTH extension
-                      ;; lines running forward, out of the flight.
-                      (setq pfo (+ (apply 'max tds) (* 2.0 txth))
-                            ix  1)
+                      ;; Every depth dim stands the same distance right of
+                      ;; the corner its drop lands on, so the dims climb up
+                      ;; and to the right with the steps instead of stacking
+                      ;; in one chain.  Clearing the widest tread is what
+                      ;; keeps BOTH extension lines running forward, out of
+                      ;; the flight; the gap on top of that is what makes
+                      ;; the fan readable, and *cs-profile-dimgap* sets it.
+                      ;; four text heights, or three quarters of a tread -
+                      ;; whichever is more, so the fan keeps its proportions
+                      ;; whether or not the drawing has a dim scale set up
+                      (setq pgap (cond ((numberp *cs-profile-dimgap*)
+                                        *cs-profile-dimgap*)
+                                       ((max (* 4.0 txth)
+                                             (* 0.75 (apply 'max tds)))))
+                            pfo  (+ (apply 'max tds) pgap)
+                            ix   1)
                       (while (< ix (length cnrs))
                         (setq ca (nth (1- ix) cnrs)
                               cb (nth ix cnrs))
@@ -1201,7 +1225,7 @@
                       ;; whole diagonal, top corner to bottom corner
                       (cs-dimv *cs-depth-dimstyle*
                                (car cnrs) (last cnrs)
-                               (list (+ (car pw) pfo (* 3.0 txth))
+                               (list (+ (car pw) pfo pgap)
                                      (- (cadr pw) (* 0.5 totd)) 0.0))))
                   (princ (strcat "\nSide profile drawn: "
                                  (itoa (length tds))
