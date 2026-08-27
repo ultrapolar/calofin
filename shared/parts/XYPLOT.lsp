@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.1")
+(setq *xyplot-version* "v1.2")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -755,10 +755,20 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:XYPLOT (/ file base bpx bpy rows r nm x y pts skipped
+(defun c:XYPLOT (/ *error* undo-open
+                    file base bpx bpy rows r nm x y pts skipped
                     minx miny maxx maxy spanx spany th org2 gap
                     xstops ystops xline yline nxd nyd mark ss
                     rep p path stage done g1 g2 pad)
+  ;; an Esc mid-plot used to leave a half-drawn plot that took N undos
+  ;; to clear and printed a raw AutoLISP message (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nXYPLOT error: " msg)))
+    (princ))
   (vl-load-com)
   (princ (strcat "\nXYPLOT " *xyplot-version*))
   ;; ---- the questions: Back at the second re-opens the first -------------
@@ -778,6 +788,8 @@
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))
     (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
       (setq bpx (car base) bpy (cadr base))
       (princ "\nReading spreadsheet ... ")
@@ -953,6 +965,10 @@
                    (vl-cmdf "_.zoom" "_Extents"))
                 '())
               (princ "\n  View reset to plan (top).")
+              ;; close the group before any ABHD handoff - the whole plot
+              ;; is one U, and ABHD grouped separately is ABHD's own U
+              (command "_.UNDO" "_End")
+              (setq undo-open nil)
               ;; ---- on to the pool perimeter ------------------------------
               (if (= "Yes" (xyp:askkw
                              "Fit a pool perimeter through graph 1's points now?"

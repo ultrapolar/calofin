@@ -123,7 +123,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV14")
+(setq pool:*version* "082726 REV15")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -253,7 +253,11 @@
 
 ;;; -------------------- entity makers ----------------------------------
 
-(defun pool:layer (name color)
+;; Create the output layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked (STANDARDS section 5).  Without the repair
+;; a run onto a frozen or switched-off DIMENSION layer looks like the
+;; command drew nothing.
+(defun pool:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
       (entmake (list '(0 . "LAYER")
                      '(100 . "AcDbSymbolTableRecord")
@@ -261,7 +265,26 @@
                      (cons 2 name)
                      '(70 . 0)
                      (cons 62 color)
-                     '(6 . "Continuous"))))
+                     '(6 . "Continuous")))
+      (progn
+        (setq rec   (tblobjname "LAYER" name)
+              ed    (entget rec)
+              flags (cdr (assoc 70 ed))
+              col   (cdr (assoc 62 ed))
+              fixed nil)
+        (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+            (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                               (assoc 70 ed) ed)
+                  fixed T))
+        (if (< col 0)                        ; layer switched off
+            (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+                  fixed T))
+        (if fixed
+            (progn
+              (entmod ed)
+              (princ (strcat "\nPOOL: layer " name
+                             " was off, frozen or locked - restored so"
+                             " the result is visible."))))))
   name)
 
 (defun pool:line (p1 p2 lay)
@@ -7157,8 +7180,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOL error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)

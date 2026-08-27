@@ -26,7 +26,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "082526 REV05")
+(setq tutorial:*version* "082726 REV06")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -337,8 +337,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
     (cal:sysrestore)
     (pool:undoend)

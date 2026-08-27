@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.1")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.2")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2133,10 +2133,8 @@
         lh-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nLHD stopped while "
                              (if lh-phase lh-phase "starting up")
                              " -- " m)))

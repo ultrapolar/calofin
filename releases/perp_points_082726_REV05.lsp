@@ -114,7 +114,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.4")
+(setq *perp-version* "v0.5")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -560,7 +560,7 @@
 
   (defun *error* (msg)
     (perp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))

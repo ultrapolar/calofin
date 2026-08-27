@@ -50,7 +50,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.2") ; printed on load and at command
+(setq *stockcover-version* "v1.3") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -274,7 +274,7 @@
   ;; mode was pushed beforehand; command-s is the sanctioned
   ;; replacement and needs no setup, so the handler uses only that.
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSTOCKCOVER error: " msg)))
     (stock:restore)
     (if undone

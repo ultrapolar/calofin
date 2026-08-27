@@ -32,6 +32,9 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
+(setq *dimcontinue-version* "v1.0")   ; announced on load; release_lisp.py
+                                         ; stamps the dated twin in releases/
+
 (defun dce:axis (ed)
   (if (and (member '(100 . "AcDbRotatedDimension") ed) (assoc 50 ed))
     (cdr (assoc 50 ed))                       ; rotated dim: explicit angle
@@ -78,7 +81,7 @@
     (if ocl (setvar "CLAYER"  ocl))
     (if oos (setvar "OSMODE"  oos))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 

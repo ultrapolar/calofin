@@ -55,7 +55,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.2") ; printed on load and at command start
+(setq *paddle-version* "v1.3") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -489,7 +489,7 @@
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
     (if doc (vla-EndUndoMark doc))
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
 

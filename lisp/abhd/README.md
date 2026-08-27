@@ -29,11 +29,11 @@ The folder carries the same program twice, byte for byte:
   glance which revision is sitting in a colleague's stack.
 
 Both announce their version on load (`ABHD 081926 REV05 loaded.`),
-taken from `*PF-VERSION*` at the top of the file. When revising:
-edit `abhd.lsp`, bump `*PF-VERSION*` to the new date and REV, delete
+taken from `pf:*version*` at the top of the file. When revising:
+edit `abhd.lsp`, bump `pf:*version*` to the new date and REV, delete
 the old twin and copy `abhd.lsp` to the new name. The test suite
 fails if the twins differ, if there is more than one versioned file,
-or if the file name and `*PF-VERSION*` disagree — the convention
+or if the file name and `pf:*version*` disagree — the convention
 enforces itself.
 
 ## TUTORIALABHD — the guided introduction

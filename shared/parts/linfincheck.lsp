@@ -147,8 +147,6 @@
 ;;;     out under an old date is the mistake that catches. Only
 ;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
 ;;;     Title in reach the report says the date was not checked.
-"02/30" is reported in red with what is wrong; a clean date
-;;;     ("05/01/2024") is a quiet OK.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -253,7 +251,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.7")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 

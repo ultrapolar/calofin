@@ -22,6 +22,9 @@
 ;;; Helpers
 ;;; ------------------------------------------------------------------
 
+(setq *lincheck-version* "v1.0")   ; announced on load; release_lisp.py
+                                      ; stamps the dated twin in releases/
+
 (setq *lin:log* nil)   ; collected report lines
 
 ;; Record a line for the report.

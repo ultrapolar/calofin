@@ -47,6 +47,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 ;; ---------------------------------------------------------------
@@ -160,7 +163,7 @@
   (if *drone-unlocked* (drone:relock-layers *drone-unlocked*))
   (setq *drone-unlocked* nil)
   (if *drone-doc* (vla-EndUndoMark *drone-doc*))
-  (if (and msg (/= (strcase msg t) "function cancelled"))
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
     (princ (strcat "\nDRONE error: " msg)))
   (if *drone-old-error* (setq *error* *drone-old-error*))
   (princ))

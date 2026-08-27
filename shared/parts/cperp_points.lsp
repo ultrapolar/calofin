@@ -112,7 +112,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.3")
+(setq *cperp-version* "v0.4")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -324,7 +324,7 @@
 
   (defun *error* (msg)
     (cperp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))

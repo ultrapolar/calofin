@@ -249,7 +249,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.7")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -414,14 +414,38 @@
 
 ;; --- small helpers -------------------------------------------------
 
-(defun lfc:ensure-layer (name color)
+;; Create the report layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked (STANDARDS section 5).  The shared build
+;; has repaired for a while (cal:ensure-layer); without it here a report
+;; written onto a frozen report layer is silently invisible.
+(defun lfc:ensure-layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
     (entmake (list '(0 . "LAYER")
                    '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 name)
                    '(70 . 0)
-                   (cons 62 color)))))
+                   (cons 62 color)
+                   '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLINFINCHECK: layer " name
+                         " was off, frozen or locked - restored so the"
+                         " report is visible.")))))))
 
 (defun lfc:ent-color (ent / c)
   ;; the entity's explicit colour, 256 (ByLayer) when it has none
@@ -590,7 +614,10 @@
   ;; 'yes 'no 'back (redo the previous item) 'skip (stop asking,
   ;; finish the run and still write the report)
   (initget "Yes No Back Skip Undo")   ; Undo = hidden synonym for Back
-  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
+  ;; the bracket is exactly the keyword list (STANDARDS section 1 rule
+  ;; 1): a click sends the bracket text, and "Skip rest" was a click
+  ;; the initget list could not accept
+  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)

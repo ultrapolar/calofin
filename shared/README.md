@@ -115,7 +115,7 @@ helper's comment names the tool implementation it was lifted from.
 Deliberately NOT absorbed (divergent behavior the tools rely on):
 POOL/SPA's `unit` (returns `(0.0 0.0)` on a zero vector, not nil),
 abhd/lhd's 2-element `circumcenter` and flat `bbox`, abhd's
-`pf:block-number` (no numeric fallback), perp_points' consecutive-only
+`pf:block-number` and `cab:block-number` (no numeric fallback - reviewed 2026-08-27 and kept strict on purpose: the fitters consume every point handed to them, so a stray numbered block joining the survey would warp the whole fit, where a dropped untagged point is the visible failure), perp_points' consecutive-only
 `dedupe`, the cornerstp 3-element vector set, `xft:mid` (3-D), the
 tutorials' pauses (they can stop the tour, with opposite polarities),
 and every false friend (`report`, `say`, `log`, the non-string

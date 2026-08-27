@@ -106,7 +106,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.1")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.2")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 

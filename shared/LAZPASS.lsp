@@ -8,28 +8,29 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 49 files, 120 commands:
+;;; 49 files, 121 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABMOVE  ADAB
 ;;;   ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV  BPCALLOUT
 ;;;   CABHD  CABHDVER  CALVER  CCPRECHECK  CDCALLOUT  CDCREATE
-;;;   CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVERSION
-;;;   COVERSCAN  CPERPPTS  CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT
-;;;   DDCAL  DDELEV  DDFIX  DDGPS  DDINFO  DDSET
-;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
-;;;   DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
-;;;   HEMISTEP  LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER
-;;;   LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LAZTXT  LHD
-;;;   LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK
-;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER
-;;;   PADDLE  PERPPTS  POOL  POOLCOVER  POOLDEMO  POOLVER
-;;;   SMARTFILLET  SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
-;;;   SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST
-;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
-;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
-;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
-;;;   TYDRN  WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVER
+;;;   COVERCHECKVERSION  COVERSCAN  CPERPPTS  CUSTBLOCK  CUSTBLOCKVER  DCE
+;;;   DDALT  DDCAL  DDELEV  DDFIX  DDGPS  DDINFO
+;;;   DDSET  DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER
+;;;   DIMCONTEND  DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER
+;;;   FLOORDIM  HEMISTEP  LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER
+;;;   LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LAZTXT
+;;;   LHD  LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN
+;;;   LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS
+;;;   OASISVER  PADDLE  PERPPTS  POOL  POOLCOVER  POOLDEMO
+;;;   POOLVER  SMARTFILLET  SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
+;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
+;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
+;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
+;;;   TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT
+;;;   XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -72,7 +73,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.2")
+(setq cal:*version* "v1.3")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -169,7 +170,10 @@
 ;; (covercheck.lsp:501; dchk:/lfc: byte-identical).
 (defun cal:ask-yn-nav (msg / ans)
   (initget "Yes No Back Skip Undo")   ; Undo = hidden synonym for Back
-  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
+  ;; the bracket is exactly the keyword list (STANDARDS section 1 rule
+  ;; 1): a click sends the bracket text, and "Skip rest" was a click
+  ;; the initget list could not accept
+  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -227,9 +231,31 @@
   (if (not cal:*odstyle*) (setq cal:*odstyle* (getvar "DIMSTYLE"))))
 
 (defun cal:dimstyrestore ()
+  ;; called from *error* handlers, where a bare (command ...) can itself
+  ;; fail -- so command-s under vl-catch-all-apply (STANDARDS section 5)
   (if (and cal:*odstyle* (tblsearch "DIMSTYLE" cal:*odstyle*))
-      (command "_.-DIMSTYLE" "_Restore" cal:*odstyle*))
+      (vl-catch-all-apply 'command-s
+        (list "_.-DIMSTYLE" "_Restore" cal:*odstyle*)))
   (setq cal:*odstyle* nil))
+
+;; T when MSG is the message of a plain cancel (Esc, quit) rather than
+;; a real error.  The canonical test of STANDARDS section 5 -- ten
+;; hand-copied variants of it existed, two with the same typo, which is
+;; why it is a helper now.
+(defun cal:error-cancel-p (msg)
+  (and msg (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+
+;; One undo group per command, in the one casing (STANDARDS section 5).
+;; Track the open group in a local and close it from *error* too:
+;;   (setq undo-open (cal:undobegin))
+;;   ... (if undo-open (cal:undoend)) ...
+(defun cal:undobegin ()
+  (command "_.UNDO" "_Begin")
+  T)
+
+(defun cal:undoend ()
+  (command "_.UNDO" "_End")
+  nil)
 
 ;; The user's own object snaps stay LIVE during every measurement
 ;; prompt; OSMODE is zeroed only while a routine feeds points to
@@ -695,7 +721,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV14")
+(setq pool:*version* "082726 REV15")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -825,7 +851,11 @@
 
 ;;; -------------------- entity makers ----------------------------------
 
-(defun pool:layer (name color)
+;; Create the output layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked (STANDARDS section 5).  Without the repair
+;; a run onto a frozen or switched-off DIMENSION layer looks like the
+;; command drew nothing.
+(defun pool:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
       (entmake (list '(0 . "LAYER")
                      '(100 . "AcDbSymbolTableRecord")
@@ -833,7 +863,26 @@
                      (cons 2 name)
                      '(70 . 0)
                      (cons 62 color)
-                     '(6 . "Continuous"))))
+                     '(6 . "Continuous")))
+      (progn
+        (setq rec   (tblobjname "LAYER" name)
+              ed    (entget rec)
+              flags (cdr (assoc 70 ed))
+              col   (cdr (assoc 62 ed))
+              fixed nil)
+        (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+            (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                               (assoc 70 ed) ed)
+                  fixed T))
+        (if (< col 0)                        ; layer switched off
+            (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+                  fixed T))
+        (if fixed
+            (progn
+              (entmod ed)
+              (princ (strcat "\nPOOL: layer " name
+                             " was off, frozen or locked - restored so"
+                             " the result is visible."))))))
   name)
 
 (defun pool:line (p1 p2 lay)
@@ -7729,8 +7778,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOL error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -7894,7 +7942,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq pooldemo:*version* "082126 REV02")
+(setq pooldemo:*version* "082726 REV03")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -8191,7 +8239,7 @@
 (defun c:POOLDEMO ( / *error* cells k org)
 
   (defun *error* (msg)
-    (if (and msg (/= (strcase msg t) "function cancelled"))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
     (pool:undoend)
@@ -8280,7 +8328,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "082526 REV05")
+(setq tutorial:*version* "082726 REV06")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -8591,8 +8639,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
     (cal:sysrestore)
     (pool:undoend)
@@ -8834,7 +8881,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082126 REV05")
+(setq spa:*version* "082726 REV06")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -8975,7 +9022,11 @@
 
 ;;; -------------------- entity makers ----------------------------------
 
-(defun spa:layer (name color)
+;; Create the output layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked (STANDARDS section 5).  Without the repair
+;; a run onto a frozen or switched-off DIMENSION layer looks like the
+;; command drew nothing.
+(defun spa:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
       (entmake (list '(0 . "LAYER")
                      '(100 . "AcDbSymbolTableRecord")
@@ -8983,7 +9034,26 @@
                      (cons 2 name)
                      '(70 . 0)
                      (cons 62 color)
-                     '(6 . "Continuous"))))
+                     '(6 . "Continuous")))
+      (progn
+        (setq rec   (tblobjname "LAYER" name)
+              ed    (entget rec)
+              flags (cdr (assoc 70 ed))
+              col   (cdr (assoc 62 ed))
+              fixed nil)
+        (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+            (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                               (assoc 70 ed) ed)
+                  fixed T))
+        (if (< col 0)                        ; layer switched off
+            (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+                  fixed T))
+        (if fixed
+            (progn
+              (entmod ed)
+              (princ (strcat "\nSPA: layer " name
+                             " was off, frozen or locked - restored so"
+                             " the result is visible."))))))
   name)
 
 ;; Build a linetype from an explicit pattern (positive = dash length,
@@ -11401,8 +11471,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nSPA error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -11536,7 +11605,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082126 REV05")
+(setq tut:*version* "082726 REV06")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -11951,8 +12020,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (spa:sysrestore)
     (spa:undoend)
@@ -17518,6 +17586,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *altabcdef-version* "v1.0")   ; announced on load; release_lisp.py
+                                       ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 ;;; --------------------------------------------------------------------------
@@ -18415,7 +18486,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "082526 REV06") ; announced on load.  The
+(setq pf:*version*      "082726 REV07") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -19114,6 +19185,14 @@
 ;; The surveyed number carried by a point block, read from its
 ;; *PF-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
 ;; no such attribute.
+;;
+;; DELIBERATELY strict: no first-numeric-attribute fallback, unlike
+;; ABFIND/BPCALLOUT/LHD/FITABHD and cal:block-number.  The fitter
+;; consumes every point it is handed, so a stray numbered block (a
+;; detail bubble, a keynote) silently joining the survey would warp the
+;; whole fit - a dropped untagged point is the visible, recoverable
+;; failure.  Reviewed 2026-08-27 and kept on purpose; CABHD's copy
+;; holds the same line for the same reason.
 (defun pf:block-number (en / sub ed val)
   (setq sub (entnext en) val nil)
   (while (and sub
@@ -21491,10 +21570,8 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nABHD stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
@@ -21965,10 +22042,8 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nADAB stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
@@ -22226,7 +22301,7 @@
   (princ "\n  are picked up automatically (strays are set aside).  Scaffolding")
   (princ "\n  - markers, previews, labels - sweeps itself on any exit, ESC")
   (princ "\n  included, and a run interrupted mid-flight is tidied by the next.")
-  (princ (strcat "\n  This is ABHD " *PF-VERSION*
+  (princ (strcat "\n  This is ABHD " pf:*version*
                  " - the versioned twin file carries the same name."))
   (princ))
 
@@ -22350,16 +22425,14 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
             (princ)))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
-                 *PF-VERSION* ")."))
+                 pf:*version* ")."))
   (initget "Checks Demo")
   (setq mode (getkword
                "\n  Read the [Checks] it applies, or watch a drawn [Demo]? <Demo>: "))
@@ -22374,7 +22447,7 @@
 ;; goes looking for it there.
 (defun c:TUTORIALADAB () (c:TUTORIALABHD))
 
-(princ (strcat "\nABHD " *PF-VERSION*
+(princ (strcat "\nABHD " pf:*version*
                " loaded.  ABHD fits the pool perimeter through its"
                " points;"))
 (princ "\nADAB draws the pool bottom over an existing perimeter;")
@@ -23756,7 +23829,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.1")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.2")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -24407,6 +24480,14 @@
 ;; The surveyed number carried by a point block, read from its
 ;; *CAB-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
 ;; no such attribute.
+;;
+;; DELIBERATELY strict: no first-numeric-attribute fallback, unlike
+;; ABFIND/BPCALLOUT/LHD/FITABHD and cal:block-number.  The fitter
+;; consumes every point it is handed, so a stray numbered block (a
+;; detail bubble, a keynote) silently joining the survey would warp the
+;; whole fit - a dropped untagged point is the visible, recoverable
+;; failure.  Reviewed 2026-08-27 and kept on purpose; this is ABHD's
+;; pf:block-number line, held here too.
 (defun cab:block-number (en / sub ed val)
   (setq sub (entnext en) val nil)
   (while (and sub
@@ -26056,10 +26137,8 @@
             ;; nobody can debug from the other end of a phone
             (princ (strcat "\nCABHD stopped while "
                            (if cab-phase cab-phase "starting up")
-                           (if (and m
-                                    (/= m "Function cancelled")
-                                    (/= m "quit / exit abort")
-                                    (/= m "console break"))
+                           (if (and m (not (wcmatch (strcase m)
+                                    "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
                              (strcat " -- " m)
                              " (cancelled).")))
             (cab:temp-clear)
@@ -26608,7 +26687,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.4"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.5"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -26861,7 +26940,7 @@
     (if oldos (setvar "OSMODE" oldos))
     (command "._undo" "_end")
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*,*BREAK*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (princ))
 
@@ -27527,6 +27606,9 @@
 ;;; ======================================================================
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+
+(setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
+                                     ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -28660,7 +28742,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -28695,7 +28777,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (setq oldcmd (getvar "CMDECHO")
@@ -28717,7 +28799,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (setq oldcmd (getvar "CMDECHO")
@@ -28748,7 +28830,7 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side view:"
@@ -28834,7 +28916,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -28967,7 +29049,7 @@
 (defun c:BPCALLOUT (/ *error* cands pk hit ctr nm old picked names txtpt
                       phrase lastpt)
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
     (princ))
 
@@ -29061,6 +29143,9 @@
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+(setq *ccprecheck-version* "v1.0")   ; announced on load; release_lisp.py
+                                        ; stamps the dated twin in releases/
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
 
@@ -29656,7 +29741,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -29812,7 +29897,7 @@
     (if oce (setvar "CMDECHO" oce))
     (if grouped (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 
@@ -30394,6 +30479,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *checkdrawing-version* "v1.0")   ; announced on load; release_lisp.py
+                                          ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 ;; --- tunables ------------------------------------------------------
@@ -30859,7 +30947,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.0") ; printed on load and at command start so a
+(setq *cs-version* "v3.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -31229,7 +31317,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nCORNERSTP: " msg)))
     (princ))
 
@@ -32339,7 +32427,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.2") ; printed on load and at command start so a
+(setq *hs-version* "v3.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -32816,7 +32904,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nHEMISTEP: " msg)))
     (princ))
 
@@ -33773,7 +33861,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.5") ; printed on load and at command start so a
+(setq *ns-version* "v2.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -34250,7 +34338,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nNORMIESTEP: " msg)))
     (princ))
 
@@ -35198,7 +35286,7 @@
 ;;;  history keeps the earlier dated copies).
 ;;;  *cchk-version* is also stamped into the load banner, into every
 ;;;  COVERCHECK/COVERSCAN report's title line, and is available on
-;;;  demand via the COVERCHECKVERSION command - so even a renamed or
+;;;  demand via the COVERCHECKVER command - so even a renamed or
 ;;;  copy-pasted file always tells you which revision produced it.
 ;;;
 ;;;  Type COVERCHECK, then:
@@ -35387,7 +35475,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.8")
+(setq *cchk-version* "v0.9")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -35404,7 +35492,8 @@
 ;; every dimension belongs on this layer; CDIM is the command that
 ;; moves the strays there, and is what the report tells you to run
 (setq *cchk-dim-layer*   "DIMENSION")
-(setq *cchk-dimfix-cmd*  "CDIM")
+;; the sheet's title block, and the attribute in it carrying the date;
+;; the date must read today, written MM/DD/YYYY
 (setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
 (setq *cchk-date-tag*    "Date")
 (setq *cchk-dimfix-cmd*  "CDIM")
@@ -38573,14 +38662,18 @@
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
   (princ))
 
-(defun c:COVERCHECKVERSION ()
+(defun c:COVERCHECKVER ()
   (princ (strcat "\nThis file's COVERCHECK / COVERSCAN: " *cchk-version*))
   (princ "\n(covercheck.lsp and its dated covercheck_MMDDYY_REV##.lsp twin should always match this.)")
   (princ))
 
+;; the pre-standard name, kept as an alias - STANDARDS section 5 names
+;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
+(defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
+
 (princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
 (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
-(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVERSION prints this file's version.")
+(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")
 (princ)
 
 
@@ -39035,7 +39128,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.1")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.2")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -40746,6 +40839,9 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
+(setq *dimcontinue-version* "v1.0")   ; announced on load; release_lisp.py
+                                         ; stamps the dated twin in releases/
+
 (defun dce:axis (ed)
   (if (and (member '(100 . "AcDbRotatedDimension") ed) (assoc 50 ed))
     (cdr (assoc 50 ed))                       ; rotated dim: explicit angle
@@ -40792,7 +40888,7 @@
     (if ocl (setvar "CLAYER"  ocl))
     (if oos (setvar "OSMODE"  oos))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 
@@ -40949,6 +41045,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *dronedistortion-version* "v1.0")   ; announced on load; release_lisp.py
+                                             ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 (setq *DD-STORE* "DRONE_DISTORTION")   ; LDATA dictionary key (per-drawing)
@@ -41032,7 +41131,7 @@
   (setq cmd (getvar "CMDECHO"))
   (defun *error* (m)
     (setvar "CMDECHO" cmd)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
     (princ))
 
@@ -41462,6 +41561,9 @@
 ;;; ============================================================================
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+
+(setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
+                                            ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -42176,7 +42278,7 @@
                    pt g gft gsrc absft hraw hsel ht lines placed ans
                    stage done manual mark)
   (defun *error* (m)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
     (princ))
 
@@ -46588,7 +46690,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.1")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.2")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -48564,10 +48666,8 @@
         lh-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nLHD stopped while "
                              (if lh-phase lh-phase "starting up")
                              " -- " m)))
@@ -49019,6 +49119,9 @@
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+(setq *lincheck-version* "v1.0")   ; announced on load; release_lisp.py
+                                      ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
 
@@ -49515,8 +49618,6 @@
 ;;;     out under an old date is the mistake that catches. Only
 ;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
 ;;;     Title in reach the report says the date was not checked.
-"02/30" is reported in red with what is wrong; a clean date
-;;;     ("05/01/2024") is a quiet OK.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -49621,7 +49722,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.7")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -53190,6 +53291,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *lintxtchk-version* "v1.0")   ; announced on load; release_lisp.py
+                                       ; stamps the dated twin in releases/
+
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
                        startx y z x lvl txt )
 
@@ -53341,7 +53445,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.2") ; printed on load and at command start
+(setq *paddle-version* "v1.3") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -53767,7 +53871,7 @@
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
     (if doc (vla-EndUndoMark doc))
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
 
@@ -54072,7 +54176,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.4")
+(setq *perp-version* "v0.5")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -54481,7 +54585,7 @@
 
   (defun *error* (msg)
     (perp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))
@@ -54985,7 +55089,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.3")
+(setq *cperp-version* "v0.4")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -55197,7 +55301,7 @@
 
   (defun *error* (msg)
     (cperp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))
@@ -55577,7 +55681,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.3")
+(setq *tutperp-version* "v0.4")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -55643,7 +55747,7 @@
 
   (defun *error* (msg)
     (tutp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
     (princ))
 
@@ -55947,7 +56051,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.3")
+(setq *tutcperp-version* "v0.4")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -56036,7 +56140,7 @@
 
   (defun *error* (msg)
     (tutc:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
     (princ))
 
@@ -59002,7 +59106,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.2") ; printed on load and at command
+(setq *stockcover-version* "v1.3") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -59226,7 +59330,7 @@
   ;; mode was pushed beforehand; command-s is the sanctioned
   ;; replacement and needs no setup, so the handler uses only that.
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSTOCKCOVER error: " msg)))
     (stock:restore)
     (if undone
@@ -59446,6 +59550,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 ;; ---------------------------------------------------------------
@@ -59559,7 +59666,7 @@
   (if *drone-unlocked* (drone:relock-layers *drone-unlocked*))
   (setq *drone-unlocked* nil)
   (if *drone-doc* (vla-EndUndoMark *drone-doc*))
-  (if (and msg (/= (strcase msg t) "function cancelled"))
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
     (princ (strcat "\nDRONE error: " msg)))
   (if *drone-old-error* (setq *error* *drone-old-error*))
   (princ))
@@ -59740,6 +59847,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 ;; ---------------------------------------------------------------
@@ -59842,7 +59952,7 @@
   (if *tydrn-unlocked* (tydrn:relock-layers *tydrn-unlocked*))
   (setq *tydrn-unlocked* nil)
   (if *tydrn-doc* (vla-EndUndoMark *tydrn-doc*))
-  (if (and msg (/= (strcase msg t) "function cancelled"))
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
     (princ (strcat "\nTYDRN error: " msg)))
   (if *tydrn-old-error* (setq *error* *tydrn-old-error*))
   (princ))
@@ -59990,6 +60100,9 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------ small math helpers ----------------------
+
+(setq *wcalst-version* "v1.0")   ; announced on load; release_lisp.py
+                                    ; stamps the dated twin in releases/
 
 (defun wc:key (p)
   ;; fuzzy node key so touching endpoints share one node
@@ -60376,7 +60489,7 @@
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
     (if oldlay (setvar "CLAYER" oldlay))
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
     )
     (princ)
@@ -61129,7 +61242,7 @@
   (princ)
 )
 
-(princ "\nWCALST loaded — select the band, pick the side to straighten.")
+(princ "\nWCALST loaded -- select the band, pick the side to straighten.")
 (princ)
 
 
@@ -61170,7 +61283,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.2") ; printed on load and at command start so a
+(setq *xft-version* "v1.3") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -61415,7 +61528,7 @@
   )
 
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
     (while (> (getvar "CMDACTIVE") 0) (command))   ; back out of SCALE etc.
     (xft:restore)
@@ -61667,7 +61780,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.1")
+(setq *xyplot-version* "v1.2")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -62364,10 +62477,20 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:XYPLOT (/ file base bpx bpy rows r nm x y pts skipped
+(defun c:XYPLOT (/ *error* undo-open
+                    file base bpx bpy rows r nm x y pts skipped
                     minx miny maxx maxy spanx spany th org2 gap
                     xstops ystops xline yline nxd nyd mark ss
                     rep p path stage done g1 g2 pad)
+  ;; an Esc mid-plot used to leave a half-drawn plot that took N undos
+  ;; to clear and printed a raw AutoLISP message (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nXYPLOT error: " msg)))
+    (princ))
   (vl-load-com)
   (princ (strcat "\nXYPLOT " *xyplot-version*))
   ;; ---- the questions: Back at the second re-opens the first -------------
@@ -62387,6 +62510,8 @@
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))
     (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
       (setq bpx (car base) bpy (cadr base))
       (princ "\nReading spreadsheet ... ")
@@ -62562,6 +62687,10 @@
                    (vl-cmdf "_.zoom" "_Extents"))
                 '())
               (princ "\n  View reset to plan (top).")
+              ;; close the group before any ABHD handoff - the whole plot
+              ;; is one U, and ABHD grouped separately is ABHD's own U
+              (command "_.UNDO" "_End")
+              (setq undo-open nil)
               ;; ---- on to the pool perimeter ------------------------------
               (if (= "Yes" (xyp:askkw
                              "Fit a pool perimeter through graph 1's points now?"
@@ -65820,17 +65949,18 @@
   "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
   "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP"
   "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
-  "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK"
-  "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DDFIX"
-  "DDSET" "DDCAL" "DDINFO" "DDALT" "DDGPS" "DDELEV"
-  "DDTEST" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD" "LINCHECK"
-  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
-  "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS" "CPERPPTS"
-  "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
-  "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG"
-  "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP"
-  "XYPLOT" "XYPLOTVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER"
-  "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE"
+  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
+  "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT" "DDGPS"
+  "DDELEV" "DDTEST" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD"
+  "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN"
+  "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS"
+  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER"
+  "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST"
+  "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN" "WCALST" "XFTCONV"
+  "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZASCII" "LAZTXT" "LAZFORM"
+  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON"
+  "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

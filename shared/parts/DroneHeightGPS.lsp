@@ -134,6 +134,9 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
+(setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
+                                            ; stamps the dated twin in releases/
+
 (vl-load-com)
 
 (setq *DDG-STORE* "DRONE_DISTORTION")  ; same per-drawing LDATA dictionary as
@@ -847,7 +850,7 @@
                    pt g gft gsrc absft hraw hsel ht lines placed ans
                    stage done manual mark)
   (defun *error* (m)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
     (princ))
 

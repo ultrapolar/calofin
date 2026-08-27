@@ -28,7 +28,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.2") ; printed on load and at command start so a
+(setq *xft-version* "v1.3") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -299,7 +299,7 @@
   )
 
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
     (while (> (getvar "CMDACTIVE") 0) (command))   ; back out of SCALE etc.
     (xft:restore)

@@ -28,6 +28,9 @@
 ;;; Helpers
 ;;; ------------------------------------------------------------------
 
+(setq *ccprecheck-version* "v1.0")   ; announced on load; release_lisp.py
+                                        ; stamps the dated twin in releases/
+
 (setq *chk:log* nil)   ; collected checklist lines for the summary
 
 ;; Record a line for the final summary.

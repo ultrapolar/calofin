@@ -36,7 +36,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -215,7 +215,7 @@
 (defun c:BPCALLOUT (/ *error* cands pk hit ctr nm old picked names txtpt
                       phrase lastpt)
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
     (princ))
 

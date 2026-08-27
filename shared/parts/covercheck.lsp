@@ -22,7 +22,7 @@
 ;;;  history keeps the earlier dated copies).
 ;;;  *cchk-version* is also stamped into the load banner, into every
 ;;;  COVERCHECK/COVERSCAN report's title line, and is available on
-;;;  demand via the COVERCHECKVERSION command - so even a renamed or
+;;;  demand via the COVERCHECKVER command - so even a renamed or
 ;;;  copy-pasted file always tells you which revision produced it.
 ;;;
 ;;;  Type COVERCHECK, then:
@@ -211,7 +211,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.8")
+(setq *cchk-version* "v0.9")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -228,7 +228,8 @@
 ;; every dimension belongs on this layer; CDIM is the command that
 ;; moves the strays there, and is what the report tells you to run
 (setq *cchk-dim-layer*   "DIMENSION")
-(setq *cchk-dimfix-cmd*  "CDIM")
+;; the sheet's title block, and the attribute in it carrying the date;
+;; the date must read today, written MM/DD/YYYY
 (setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
 (setq *cchk-date-tag*    "Date")
 (setq *cchk-dimfix-cmd*  "CDIM")
@@ -3397,12 +3398,16 @@
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
   (princ))
 
-(defun c:COVERCHECKVERSION ()
+(defun c:COVERCHECKVER ()
   (princ (strcat "\nThis file's COVERCHECK / COVERSCAN: " *cchk-version*))
   (princ "\n(covercheck.lsp and its dated covercheck_MMDDYY_REV##.lsp twin should always match this.)")
   (princ))
 
+;; the pre-standard name, kept as an alias - STANDARDS section 5 names
+;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
+(defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
+
 (princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
 (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
-(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVERSION prints this file's version.")
+(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")
 (princ)

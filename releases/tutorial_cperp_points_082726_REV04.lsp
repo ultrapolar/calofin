@@ -24,7 +24,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.3")
+(setq *tutcperp-version* "v0.4")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -113,7 +113,7 @@
 
   (defun *error* (msg)
     (tutc:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
     (princ))
 

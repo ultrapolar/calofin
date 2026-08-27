@@ -49,7 +49,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.4"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.5"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -306,7 +306,7 @@
     (if oldos (setvar "OSMODE" oldos))
     (command "._undo" "_end")
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*,*BREAK*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (princ))
 

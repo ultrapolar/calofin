@@ -198,7 +198,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.1")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.2")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -849,6 +849,14 @@
 ;; The surveyed number carried by a point block, read from its
 ;; *CAB-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
 ;; no such attribute.
+;;
+;; DELIBERATELY strict: no first-numeric-attribute fallback, unlike
+;; ABFIND/BPCALLOUT/LHD/FITABHD and cal:block-number.  The fitter
+;; consumes every point it is handed, so a stray numbered block (a
+;; detail bubble, a keynote) silently joining the survey would warp the
+;; whole fit - a dropped untagged point is the visible, recoverable
+;; failure.  Reviewed 2026-08-27 and kept on purpose; this is ABHD's
+;; pf:block-number line, held here too.
 (defun cab:block-number (en / sub ed val)
   (setq sub (entnext en) val nil)
   (while (and sub
@@ -2498,10 +2506,8 @@
             ;; nobody can debug from the other end of a phone
             (princ (strcat "\nCABHD stopped while "
                            (if cab-phase cab-phase "starting up")
-                           (if (and m
-                                    (/= m "Function cancelled")
-                                    (/= m "quit / exit abort")
-                                    (/= m "console break"))
+                           (if (and m (not (wcmatch (strcase m)
+                                    "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
                              (strcat " -- " m)
                              " (cancelled).")))
             (cab:temp-clear)
