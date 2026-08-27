@@ -62,21 +62,22 @@
     "octagon": {
       "image": "octagon.png",
       "lispShape": "OCtagon",
+      "_note": "rows in SPA's own ask order: the cut FACE S2 right after the overalls",
       "dimensions": [
         { "letter": "B",  "key": "b",  "x": 0.53,  "y": 0.245,
           "required": true,  "label": "B - overall size ACROSS" },
         { "letter": "A",  "key": "a",  "x": 0.265, "y": 0.63,
           "required": false, "label": "A - overall size UP",
           "suggestFrom": "b" },
+        { "letter": "S2", "key": "s2", "x": 0.735, "y": 0.86,
+          "required": false,
+          "label": "S2 - corner cut FACE (the tape across the cut)" },
         { "letter": "T",  "key": "tt", "x": 0.545, "y": 0.30,
           "required": false, "label": "T - flat across (top & bottom)" },
         { "letter": "S",  "key": "ss", "x": 0.435, "y": 0.30,
           "required": false, "label": "S - corner cut along the side" },
         { "letter": "S1", "key": "s1", "x": 0.325, "y": 0.44,
           "required": false, "label": "S1 - corner cut up the end" },
-        { "letter": "S2", "key": "s2", "x": 0.735, "y": 0.86,
-          "required": false,
-          "label": "S2 - corner cut FACE (the tape across the cut)" },
         { "letter": "V",  "key": "vv", "x": 0.305, "y": 0.63,
           "required": false, "label": "V - flat up (left & right)" }
       ],
@@ -104,12 +105,20 @@
     "_comment": [
       "Once the first outline is drawn SPA offers the other one (water's",
       "edge vs cover size). Taken from Dims rather than an Offset it",
-      "asks its own overalls, which are separate keys on every shape."
+      "asks its own overalls, which are separate keys on every shape --",
+      "and NAMED per shape: the rectangle flow echoes its w/l as w2/l2,",
+      "where octagon and round echo their b/a as b2/a2. b2/a2 sent to",
+      "the rectangle flow would be silently dropped."
     ],
     "fields": [
-      { "key": "b2", "required": true,  "label": "Overall ACROSS" },
+      { "key": "w2", "required": true,  "label": "cover size overall ACROSS",
+        "shapes": ["rectangle"] },
+      { "key": "l2", "required": false, "label": "cover size overall UP",
+        "suggestFrom": "w2", "shapes": ["rectangle"] },
+      { "key": "b2", "required": true,  "label": "Overall ACROSS",
+        "shapes": ["octagon", "round"] },
       { "key": "a2", "required": false, "label": "Overall UP",
-        "suggestFrom": "b2" },
+        "suggestFrom": "b2", "shapes": ["octagon", "round"] },
       { "key": "f2", "required": false, "label": "Corner cut FACE",
         "shapes": ["octagon"] }
     ]

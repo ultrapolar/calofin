@@ -132,6 +132,110 @@ End Class
 
 
 ''' <summary>
+''' The cover questions that follow the outline: the offer of the second
+''' outline, then the auto-hinge details.  One set for the whole form --
+''' SPA asks them the same way whatever the shape.
+'''
+''' Each keyword is tri-state through its blank row: blank sends
+''' NOTHING, so the key stays absent and SPA asks at the command line.
+''' There is deliberately no explicit-nil state here -- (key . nil)
+''' reads as an answered NA, which none of these keyword prompts
+''' accepts; the store would consume it and ask anyway.
+''' </summary>
+Public Class SpaCover
+    Implements INotifyPropertyChanged
+
+    Public Event PropertyChanged As PropertyChangedEventHandler _
+        Implements INotifyPropertyChanged.PropertyChanged
+
+    ''' <summary>Spelled exactly as the prompts spell them: SPA.LSP
+    ''' matches the canonical spelling, so a "yes" would be consumed,
+    ''' ignored, and asked all over again.</summary>
+    Public ReadOnly Property SecondChoices As String() = {"", "Yes", "No"}
+    Public ReadOnly Property MethodChoices As String() = {"", "Offset", "Dims"}
+    Public ReadOnly Property AutohingeChoices As String() = {"", "Yes", "No"}
+    Public ReadOnly Property GradeChoices As String() =
+        {"", "STANDARD", "THERMOLIGHT"}
+    Public ReadOnly Property TaperChoices As String() =
+        {"", "3-2", "4-2", "4-3", "5-3", "5-4", "3-3", "1-3/8"}
+
+    ''' <summary>The cover's lap past the water's edge -- read when the
+    ''' second outline is taken from an Offset.  An ordinary field, so
+    ''' blank means not answered exactly as everywhere else.</summary>
+    Public Property Gap As New SpaField() With {
+        .Key = "gap", .Letter = "",
+        .Label = "How far does the cover lap the water's edge (Offset)"}
+
+    Private _second As String = ""
+    Private _method As String = ""
+    Private _autohinge As String = ""
+    Private _grade As String = ""
+    Private _taper As String = ""
+
+    ''' <summary>Draw the other outline as well?</summary>
+    Public Property Second As String
+        Get
+            Return _second
+        End Get
+        Set(v As String)
+            If _second = v Then Return
+            _second = v
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("Second"))
+        End Set
+    End Property
+
+    ''' <summary>Where the other outline comes from: an Offset of the
+    ''' first, or its own Dims.</summary>
+    Public Property Method As String
+        Get
+            Return _method
+        End Get
+        Set(v As String)
+            If _method = v Then Return
+            _method = v
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("Method"))
+        End Set
+    End Property
+
+    Public Property Autohinge As String
+        Get
+            Return _autohinge
+        End Get
+        Set(v As String)
+            If _autohinge = v Then Return
+            _autohinge = v
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("Autohinge"))
+        End Set
+    End Property
+
+    ''' <summary>The Spa Cover Details values.  Normally read off the
+    ''' block in the drawing; a form answer wins over the block's.</summary>
+    Public Property Grade As String
+        Get
+            Return _grade
+        End Get
+        Set(v As String)
+            If _grade = v Then Return
+            _grade = v
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("Grade"))
+        End Set
+    End Property
+
+    Public Property Taper As String
+        Get
+            Return _taper
+        End Get
+        Set(v As String)
+            If _taper = v Then Return
+            _taper = v
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("Taper"))
+        End Set
+    End Property
+
+End Class
+
+
+''' <summary>
 ''' The shape currently on the form: its picture, its fields, its corners.
 ''' </summary>
 Public Class SpaShape
@@ -140,6 +244,12 @@ Public Class SpaShape
     Public Property ImageFile As String
     Public Property Fields As New ObservableCollection(Of SpaField)
     Public Property Corners As New ObservableCollection(Of SpaCorner)
+
+    ''' <summary>The second outline's own overalls, asked when the other
+    ''' outline is taken from Dims.  Keyed per shape -- the rectangle
+    ''' flow says w2/l2 where octagon and round say b2/a2 -- and kept
+    ''' off the diagram: the chart has no letters for them.</summary>
+    Public Property SecondOutline As New ObservableCollection(Of SpaField)
 End Class
 
 
@@ -157,6 +267,7 @@ Public Class SpaViewModel
     Public Property Modes As String() = {"Watersedge", "Coversize"}
     Public Property Mode As String = "Watersedge"
     Public Property Current As SpaShape
+    Public Property Cover As New SpaCover()
 
     Public Sub New()
         For Each s In ShapeCatalog.Load()
@@ -198,6 +309,38 @@ Public Class SpaViewModel
             End If
         Next
 
+        ' The cover questions, in the order the run reaches them.  A
+        ' keyword row left on its blank row sends nothing at all -- the
+        ' key stays absent and SPA asks -- while a chosen answer goes
+        ' out spelled exactly as the prompt would spell it.  Only the
+        ' lap and the by-dims overalls are numbers, under the same
+        ' filled-or-omitted rule as the fields above.
+        If Not String.IsNullOrWhiteSpace(Cover.Second) Then
+            pairs.Add(LispBridge.StrPair("second", Cover.Second))
+        End If
+        If Not String.IsNullOrWhiteSpace(Cover.Method) Then
+            pairs.Add(LispBridge.StrPair("method", Cover.Method))
+        End If
+        If Cover.Gap.IsFilled Then
+            pairs.Add(LispBridge.NumPair("gap", Cover.Gap.AsNumber()))
+        End If
+
+        For Each f In Current.SecondOutline
+            If f.IsFilled Then
+                pairs.Add(LispBridge.NumPair(f.Key, f.AsNumber()))
+            End If
+        Next
+
+        If Not String.IsNullOrWhiteSpace(Cover.Autohinge) Then
+            pairs.Add(LispBridge.StrPair("autohinge", Cover.Autohinge))
+        End If
+        If Not String.IsNullOrWhiteSpace(Cover.Grade) Then
+            pairs.Add(LispBridge.StrPair("grade", Cover.Grade))
+        End If
+        If Not String.IsNullOrWhiteSpace(Cover.Taper) Then
+            pairs.Add(LispBridge.StrPair("taper", Cover.Taper))
+        End If
+
         Return LispBridge.BuildCall("spa:run-with-answers", pairs)
     End Function
 
@@ -212,10 +355,19 @@ Public Class SpaViewModel
         For Each f In Current.Fields
             f.Value = ""
         Next
+        For Each f In Current.SecondOutline
+            f.Value = ""
+        Next
         For Each c In Current.Corners
             c.Treatment = ""
             c.Size = ""
         Next
+        Cover.Second = ""
+        Cover.Method = ""
+        Cover.Gap.Value = ""
+        Cover.Autohinge = ""
+        Cover.Grade = ""
+        Cover.Taper = ""
     End Sub
 
 End Class
@@ -261,19 +413,33 @@ Public NotInheritable Class ShapeCatalog
         rect.Corners.Add(C("Corner B", "cornerb-ty", "cornerb-sz", 0.9, 0.86))
         rect.Corners.Add(C("Corner C", "cornerc-ty", "cornerc-sz", 0.9, 0.28))
         rect.Corners.Add(C("Corner D", "cornerd-ty", "cornerd-sz", 0.1, 0.28))
+        ' the second outline by dims -- the rectangle flow echoes its
+        ' w/l as w2/l2 (b2/a2 here would be silently dropped)
+        rect.SecondOutline.Add(F("w2", "", "cover size overall ACROSS",
+                                 True, 0.0, 0.0))
+        rect.SecondOutline.Add(F("l2", "", "cover size overall UP",
+                                 False, 0.0, 0.0))
         out.Add(rect)
 
-        ' --- Octagon. These keys line up with the chart letters exactly.
+        ' --- Octagon. These keys line up with the chart letters exactly,
+        '     and the rows run in SPA's own ask order: the cut FACE S2
+        '     comes right after the overalls, before the flats.
         Dim oct As New SpaShape() With {
             .Name = "Octagon", .LispShape = "OCtagon",
             .ImageFile = "octagon.png"}
         oct.Fields.Add(F("b", "B", "B - overall size ACROSS", True, 0.53, 0.245))
         oct.Fields.Add(F("a", "A", "A - overall size UP", False, 0.265, 0.63))
+        oct.Fields.Add(F("s2", "S2",
+                         "S2 - corner cut FACE (the tape across the cut)",
+                         False, 0.735, 0.86))
         oct.Fields.Add(F("tt", "T", "T - flat across (top & bottom)", False, 0.545, 0.3))
         oct.Fields.Add(F("ss", "S", "S - corner cut along the side", False, 0.435, 0.3))
         oct.Fields.Add(F("s1", "S1", "S1 - corner cut up the end", False, 0.325, 0.44))
-        oct.Fields.Add(F("s2", "S2", "S2 - corner cut FACE", False, 0.735, 0.86))
         oct.Fields.Add(F("vv", "V", "V - flat up (left & right)", False, 0.305, 0.63))
+        ' the second outline by dims -- b2/a2 echo b/a, f2 the cut face
+        oct.SecondOutline.Add(F("b2", "", "Overall ACROSS", True, 0.0, 0.0))
+        oct.SecondOutline.Add(F("a2", "", "Overall UP", False, 0.0, 0.0))
+        oct.SecondOutline.Add(F("f2", "", "Corner cut FACE", False, 0.0, 0.0))
         out.Add(oct)
 
         ' --- Round: a circle when the overalls match, an ellipse when not.
@@ -282,6 +448,9 @@ Public NotInheritable Class ShapeCatalog
             .ImageFile = "round.png"}
         rnd.Fields.Add(F("b", "B", "B - overall size ACROSS", True, 0.5, 0.24))
         rnd.Fields.Add(F("a", "A", "A - overall size UP", False, 0.225, 0.6))
+        ' the second outline by dims -- the same two keys as the octagon's
+        rnd.SecondOutline.Add(F("b2", "", "Overall ACROSS", True, 0.0, 0.0))
+        rnd.SecondOutline.Add(F("a2", "", "Overall UP", False, 0.0, 0.0))
         out.Add(rnd)
 
         Return out
@@ -413,26 +582,7 @@ Public Class SpaFormView
         If _vm.Current Is Nothing Then Return
 
         For Each f In _vm.Current.Fields
-            Dim row As New DockPanel() With {.Margin = New Thickness(0, 2, 0, 2)}
-
-            Dim letter As New TextBlock() With {
-                .Text = f.Letter, .Width = 32, .FontWeight = FontWeights.Bold,
-                .VerticalAlignment = VerticalAlignment.Center}
-            DockPanel.SetDock(letter, Dock.Left)
-            row.Children.Add(letter)
-
-            Dim box As New TextBox() With {.Width = 80, .Tag = f}
-            Bind(box, f)
-            DockPanel.SetDock(box, Dock.Right)
-            row.Children.Add(box)
-
-            row.Children.Add(New TextBlock() With {
-                .Text = f.Label, .TextTrimming = TextTrimming.CharacterEllipsis,
-                .VerticalAlignment = VerticalAlignment.Center,
-                .Margin = New Thickness(0, 0, 8, 0),
-                .ToolTip = f.Label})
-
-            _rows.Children.Add(row)
+            AddFieldRow(f)
         Next
 
         If _vm.Current.Corners.Count > 0 Then
@@ -462,6 +612,80 @@ Public Class SpaFormView
                 _rows.Children.Add(row)
             Next
         End If
+
+        ' ------- the cover: the offer of the other outline, then the
+        '         auto-hinge details.  A dropdown left on its blank row
+        '         sends nothing, so SPA asks at the command line; the
+        '         lap and the by-dims overalls are ordinary fields.
+        _rows.Children.Add(New TextBlock() With {
+            .Text = "Cover", .FontWeight = FontWeights.Bold,
+            .Margin = New Thickness(0, 12, 0, 4)})
+
+        AddCoverRow("Draw the other outline",
+                    "second - add the water's edge / cover size as well",
+                    "Second", _vm.Cover.SecondChoices)
+        AddCoverRow("Take it from",
+                    "method - an Offset of the first outline, or its own Dims",
+                    "Method", _vm.Cover.MethodChoices)
+        AddFieldRow(_vm.Cover.Gap)
+        For Each f In _vm.Current.SecondOutline
+            AddFieldRow(f)
+        Next
+        AddCoverRow("Auto-hinge the cover",
+                    "autohinge - lay the hinges out automatically",
+                    "Autohinge", _vm.Cover.AutohingeChoices)
+        AddCoverRow("Grade",
+                    "grade - the Spa Cover Details grade; a form answer " &
+                    "wins over the block's",
+                    "Grade", _vm.Cover.GradeChoices)
+        AddCoverRow("Taper",
+                    "taper - the foam-sheet taper from the Spa Cover Details",
+                    "Taper", _vm.Cover.TaperChoices)
+    End Sub
+
+    ''' <summary>One measurement row: letter, description, value box.</summary>
+    Private Sub AddFieldRow(f As SpaField)
+        Dim row As New DockPanel() With {.Margin = New Thickness(0, 2, 0, 2)}
+
+        Dim letter As New TextBlock() With {
+            .Text = f.Letter, .Width = 32, .FontWeight = FontWeights.Bold,
+            .VerticalAlignment = VerticalAlignment.Center}
+        DockPanel.SetDock(letter, Dock.Left)
+        row.Children.Add(letter)
+
+        Dim box As New TextBox() With {.Width = 80, .Tag = f}
+        Bind(box, f)
+        DockPanel.SetDock(box, Dock.Right)
+        row.Children.Add(box)
+
+        row.Children.Add(New TextBlock() With {
+            .Text = f.Label, .TextTrimming = TextTrimming.CharacterEllipsis,
+            .VerticalAlignment = VerticalAlignment.Center,
+            .Margin = New Thickness(0, 0, 8, 0),
+            .ToolTip = f.Label})
+
+        _rows.Children.Add(row)
+    End Sub
+
+    ''' <summary>One cover question: description, dropdown.  The blank
+    ''' row means not answered -- the key is simply never sent.</summary>
+    Private Sub AddCoverRow(label As String, tip As String,
+                            path As String, choices As String())
+        Dim row As New DockPanel() With {.Margin = New Thickness(0, 2, 0, 2)}
+
+        Dim box As New ComboBox() With {
+            .Width = 96, .ItemsSource = choices, .ToolTip = tip}
+        BindSelected(box, _vm.Cover, path)
+        DockPanel.SetDock(box, Dock.Right)
+        row.Children.Add(box)
+
+        row.Children.Add(New TextBlock() With {
+            .Text = label, .TextTrimming = TextTrimming.CharacterEllipsis,
+            .VerticalAlignment = VerticalAlignment.Center,
+            .Margin = New Thickness(0, 0, 8, 0),
+            .ToolTip = tip})
+
+        _rows.Children.Add(row)
     End Sub
 
     ' -------------------------------------------------------------- diagram

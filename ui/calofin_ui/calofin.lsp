@@ -12,13 +12,27 @@
 
 ;; Every command the palette can show.  A name here that is not loaded
 ;; is simply reported as missing, so the list is safe to keep ahead of
-;; whatever a given machine has.
+;; whatever a given machine has.  One group per palette group, in the
+;; palette's own order, so the two rosters can be compared by eye --
+;; CommandCatalog.Groups in CalofinPalette.vb is the other half.
 (setq calofin:*commands*
-  '("SPA" "POOL" "POOLDEMO" "ABHD" "LHD" "ABCDEF" "PADDLE" "AUTOBEAD"
-    "CHECK" "LINCHECK" "DIMCHECK" "DIMSCAN" "COVERCHECK" "COVERSCAN"
-    "LINTXTCHK" "MATCHSTD" "ACADY-SCAN"
-    "AUTODIM" "STAIRDIM" "FLOORDIM" "DIMCONTEND" "DIMARCCHECK"
-    "PERPPTS" "DRONE" "CORNERSTP" "HEMISTEP" "WCALST" "ADAB" "XYPLOT"))
+  '(;; Layout
+    "LAZFORM" "LAZTXT" "LAZFORMCOVER" "SPA" "POOL" "POOLCOVER" "POOLDEMO"
+    "OASIS" "FITABHD" "FITABHDCOVER" "ABHD" "ABHDCOVER" "ADAB" "CABHD"
+    "LHD" "PADDLE" "AUTOBEAD" "CORNERSTP" "HEMISTEP" "NORMIESTEP"
+    "SMARTFILLET" "STOCKCOVER" "WCALST" "CUSTBLOCK"
+    ;; Checking
+    "CHECK" "DIMARCCHECK" "DIMCHECK" "DIMSCAN" "ABCURCHECK"
+    "ABCURCHECKSCAN" "LINCHECK" "LINFINCHECK" "LINFINSCAN"
+    "LITELINFINSCAN" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN"
+    "SPACHECK" "SPACHECKSCAN" "LITESPACHECKSCAN" "LINTXTCHK"
+    "CCPRECHECK"
+    ;; Dimensions
+    "AUTODIM" "AUTODIMSIDEPOV" "STAIRDIM" "FLOORDIM" "DIMCONTEND"
+    "CDCREATE" "CDCALLOUT" "BPCALLOUT"
+    ;; Points
+    "ABCDEF" "ALTABCDEF" "XYPLOT" "ABFIND" "ABMOVE" "PERPPTS" "CPERPPTS"
+    "XFTCONV" "DRONE" "TYDRN"))
 
 ;; Is C:<name> defined in this session?
 ;;
