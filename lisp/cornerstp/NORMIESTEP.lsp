@@ -155,6 +155,11 @@
 ;;;   - Steps are drawn as LINEs on the current layer.
 ;;;   - One U / UNDO reverses the whole command; a bead run added at
 ;;;     the end is its own group, so it takes a U of its own.
+;;;   - A form (the Calofin palette / LAZFORM) can pre-answer the
+;;;     questions - the step COUNT included, which the prompts only
+;;;     ever learn from Enter - by leaving (key . value) pairs in
+;;;     *NS-FORM*; see "form answers" below.  Selections and point
+;;;     picks are always made by hand.
 ;;; ======================================================================
 
 ;; Settings - only defined if not already set, so this file, CORNERSTP
@@ -171,7 +176,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.5") ; printed on load and at command start so a
+(setq *ns-version* "v2.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -665,6 +670,128 @@
   (while e (setq out (cons e out) e (entnext e)))
   out)
 
+;;; --------------------------- form answers -----------------------------
+;;;
+;;;  A form - the Calofin palette, or LAZFORM - can answer some or all
+;;;  of NORMIESTEP's questions before the run starts.  It leaves them
+;;;  in *ns-form* as (key . value) pairs and the question sites look
+;;;  there first, so a filled-in sheet drives the whole run and a
+;;;  half-filled one simply shortens it.
+;;;
+;;;  Three states, and the difference between the last two IS the
+;;;  feature:
+;;;
+;;;    key absent      the form did not answer it  -> ask, as usual
+;;;    (key . nil)     what Enter means there      -> taken, no prompt
+;;;    (key . 24.0)    the form answered it        -> 24.0, no prompt
+;;;
+;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
+;;;
+;;;  THE KEYS.  steps is the STEP COUNT - the one answer the prompts
+;;;  never ask for directly: when it is known the tread loop stops
+;;;  itself after that many steps instead of waiting for Enter.
+;;;  tread1..treadN feed the per-step prompts; depth1..depthN and
+;;;  depthafter feed the side profile's depths; width is the one width
+;;;  every step gets.  treat answers the corner-treatment question
+;;;  (the hidden aliases are accepted and normalized exactly as typing
+;;;  them would be), treat-sz its number - the radius, or the cut's
+;;;  face/offset value, whichever cutgiven ("Offset"/"Cut") says it
+;;;  is.  dims, profile and bead answer the named gates; a keyword is
+;;;  checked against the live prompt's own list and falls through to
+;;;  the prompt when it does not fit.  Selections and point picks are
+;;;  never form-answered.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
+;;;  Otherwise Back deadlocks: step back onto a form-answered question,
+;;;  it answers itself instantly and walks forward again, and there is
+;;;  no key the user can press to get out.  The store is cleared on
+;;;  both exits from the command, so nothing leaks into the next run.
+
+(setq *ns-form* nil)
+
+;; Did the form answer KEY at all?  This is the absent/nil distinction
+;; that (cdr (assoc ...)) throws away.
+(defun ns-fhas (key) (if (assoc key *ns-form*) t nil))
+
+;; The form's answer for KEY, removed from the store as it is read.
+(defun ns-ftake (key / p)
+  (setq p (assoc key *ns-form*))
+  (setq *ns-form* (vl-remove p *ns-form*))
+  (cdr p))
+
+(defun ns-fclear () (setq *ns-form* nil))
+
+;; The form's numeric answer for KEY, spent as it is read: the number
+;; as a REAL (the way getdist hands one back), nil for anything else.
+(defun ns-fnum (key / v)
+  (setq v (ns-ftake key))
+  (if (numberp v) (* 1.0 v)))
+
+;; The key of a numbered question: (ns-fnkey "tread" 3) -> tread3.
+(defun ns-fnkey (stem i) (read (strcat stem (itoa i))))
+
+;; V as the question would spell it, or nil when the question does not
+;; accept it at all: an answer the live prompt does not offer falls
+;; through to the prompt instead of being handed on to fail later, and
+;; the canonical SPELLING comes back, not the caller's, so downstream
+;; (= rtype "Cut") tests keep working.
+(defun ns-fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
+
+;; The form's keyword answer for KEY against the live list KWS: the
+;; canonical keyword, DFLT when the form said nil (what Enter means at
+;; every keyword prompt here), or nil when the form did not answer -
+;; or answered a word the prompt does not offer - so the caller asks
+;; as always.
+(defun ns-fkw (key kws dflt / v)
+  (if (ns-fhas key)
+    (progn
+      (setq v (ns-ftake key))
+      (cond ((null v) dflt)
+            ((and (= (type v) 'STR) (setq v (ns-fkword v kws))) v)))))
+
+;; The Treatment question a form can answer: the form's word runs
+;; through the same alias list and the same normalization typing it
+;; would get (NG, 90, ROUNDED, DIAG and DIAGONAL all land on their
+;; canonical words), nil reads as the Enter default, and a word the
+;; question does not offer falls through to the prompt.  A WRAPPER
+;; around the ask helper, not an argument on it: the grouped build
+;; swaps that helper for the library's, so this defun is what the
+;; mirror leaves alone while the ask call inside it is rewritten like
+;; any other call site.
+(defun ns-ftreat (subject dflt / v)
+  (cond
+    ((not (ns-fhas 'treat)) (ns-asktreat subject dflt))
+    ((null (setq v (ns-ftake 'treat))) dflt)
+    ((and (= (type v) 'STR)
+          (setq v (ns-fkword
+                    v
+                    "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL")))
+     (cond ((= v "NG") "NotGiven")
+           ((= v "90") "Square")
+           ((= v "ROUNDED") "Radius")
+           ((member v '("DIAG" "DIAGONAL")) "Cut")
+           (t v)))
+    (T (ns-asktreat subject dflt))))
+
+;; Run NORMIESTEP with a form's answers already in hand.  Nothing
+;; happens here that the direct path misses: a caller may equally set
+;; *ns-form* itself and call c:NORMIESTEP, which is what the tests do.
+(defun ns-run-with-answers (answers)
+  (setq *ns-form* answers)
+  (c:NORMIESTEP)
+  (ns-fclear)
+  (princ))
+
 ;;; --------------------------- main command -----------------------------
 
 (defun c:NORMIESTEP ( / *error* ns-popstep undoflag ss i en ed et zf
@@ -680,9 +807,10 @@
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
-                        tt cnrs ca cb pfo pgap lastinn)
+                        tt cnrs ca cb pfo pgap lastinn fsteps fkey)
 
   (defun *error* (msg)
+    (ns-fclear)                     ; both exits clear the form store
     (if undoflag (command-s "_.UNDO" "_End"))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
@@ -712,6 +840,12 @@
   ;; ---- 0. environment checks -------------------------------------------
   (princ (strcat "\nNORMIESTEP " *ns-version*
                  " - every step the same width."))
+  ;; the form's step COUNT, spent here once for the whole run: when it
+  ;; is known the tread loop stops itself after that many steps
+  (if (ns-fhas 'steps)
+    (progn
+      (setq fsteps (ns-ftake 'steps))
+      (if (not (and (numberp fsteps) (> fsteps 0))) (setq fsteps nil))))
   (setq tol  (ns-tolerance)
         txth (ns-txth))
   ;; Read distances architectural-style for the whole command: a bare
@@ -913,8 +1047,13 @@
   ;; ---- 3. the one width every step gets --------------------------------
   (if (/= mode "U")
     (progn
-      (initget 7)                              ; required, no zero/negative
-      (setq wid (getdist "\nStep width (the same for every step): "))))
+      ;; the width can come off the form; the prompt refuses Enter, so
+      ;; nil (or anything not a number) falls back to the keyboard
+      (if (ns-fhas 'width) (setq wid (ns-fnum 'width)))
+      (if (not (numberp wid))
+        (progn
+          (initget 7)                          ; required, no zero/negative
+          (setq wid (getdist "\nStep width (the same for every step): "))))))
 
   ;; ---- 3b. the corner treatment ----------------------------------------
   ;; The corners are square (90 degrees), radiused, or cut at 45
@@ -935,29 +1074,43 @@
       (setq rsubj (if (= mode "LINE")
                     "the corners of the last step"
                     "the back corners")
-            rtype (ns-asktreat rsubj "Square"))
+            rtype (ns-ftreat rsubj "Square"))
       (cond
         ((= rtype "Radius")
-         (initget 7)
-         (setq rrad (getdist (strcat "\nRadius for " rsubj ": "))
-               roff rrad))
+         ;; treat-sz is its radius; the prompt refuses Enter, so nil
+         ;; falls back to the keyboard
+         (if (ns-fhas 'treat-sz) (setq rrad (ns-fnum 'treat-sz)))
+         (if (not (numberp rrad))
+           (progn
+             (initget 7)
+             (setq rrad (getdist (strcat "\nRadius for " rsubj ": ")))))
+         (setq roff rrad))
         ((= rtype "Cut")
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
-         ;; gives the other
-         (initget "Offset Cut")
-         (if (= "Cut" (getkword
-                        (strcat "\nIs the cut given as its"
-                                " [Offset/Cut] <Offset>: ")))
+         ;; gives the other; cutgiven says which one treat-sz is
+         (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" "Offset")))
            (progn
-             (initget 7)
-             (setq rcut (getdist (strcat "\nCut face length for "
-                                         rsubj ": "))
-                   roff (/ rcut (sqrt 2.0))))
+             (initget "Offset Cut")
+             (setq fkey (getkword
+                          (strcat "\nIs the cut given as its"
+                                  " [Offset/Cut] <Offset>: ")))))
+         (if (= "Cut" fkey)
            (progn
-             (initget 7)
-             (setq roff (getdist "\nOffset back along each line: ")
-                   rcut (* roff (sqrt 2.0)))))
+             (if (ns-fhas 'treat-sz) (setq rcut (ns-fnum 'treat-sz)))
+             (if (not (numberp rcut))
+               (progn
+                 (initget 7)
+                 (setq rcut (getdist (strcat "\nCut face length for "
+                                             rsubj ": ")))))
+             (setq roff (/ rcut (sqrt 2.0))))
+           (progn
+             (if (ns-fhas 'treat-sz) (setq roff (ns-fnum 'treat-sz)))
+             (if (not (numberp roff))
+               (progn
+                 (initget 7)
+                 (setq roff (getdist "\nOffset back along each line: "))))
+             (setq rcut (* roff (sqrt 2.0)))))
          (princ (strcat "\n  A 45 degree cut on " rsubj ": offset "
                         (rtos roff) " each way, cut face "
                         (rtos rcut) ".")))
@@ -981,8 +1134,11 @@
               (setq bc1 nil bc2 nil rtype "Square")))))))
 
   ;; ---- 4. dimension the steps? -----------------------------------------
-  (initget "Yes No")
-  (setq dimflag (/= "No" (getkword "\nDimension the steps? [Yes/No] <Yes>: ")))
+  (if (null (setq fkey (ns-fkw 'dims "Yes No" "Yes")))
+    (progn
+      (initget "Yes No")
+      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))))
+  (setq dimflag (/= "No" fkey))
   (if dimflag
     (progn
       (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
@@ -1015,26 +1171,35 @@
          (progn
            (setq dep 'RETRY)
            (while (eq dep 'RETRY)
-             ;; Undo is the old keyword, kept as a hidden synonym
-             (initget 6 (strcat "Back" (if lastdep " Same" "") " Undo"))
-             (setq dep (getdist
-                         (strcat "\nStep " (itoa n)
-                                 " - step tread [Back"
-                                 (if lastdep "/Same" "") "]"
-                                 (if lastdep
-                                   (strcat " <Enter = done, Same = "
-                                           (rtos lastdep) ">: ")
-                                   " <Enter = done>: "))))
-             (if (= (type dep) 'STR)
-               (cond
-                 ((or (= dep "Back") (= dep "Undo"))
-                  (ns-popstep) (setq dep 'RETRY))
-                 ((= dep "Same")
-                  (if lastdep
-                    (setq dep lastdep)
-                    (progn (princ "\n  No previous step tread.")
-                           (setq dep 'RETRY))))
-                 (T (setq dep 'RETRY)))))
+             (cond
+               ;; the form gave the step COUNT: past it the run stops
+               ;; itself - the auto-done no prompt ever offered
+               ((and fsteps (> n fsteps)) (setq dep nil))
+               ;; this step's tread from the form, spent as it is
+               ;; read - a Back onto it re-asks at the keyboard
+               ((ns-fhas (ns-fnkey "tread" n))
+                (setq dep (ns-fnum (ns-fnkey "tread" n))))
+               (T
+                ;; Undo is the old keyword, kept as a hidden synonym
+                (initget 6 (strcat "Back" (if lastdep " Same" "") " Undo"))
+                (setq dep (getdist
+                            (strcat "\nStep " (itoa n)
+                                    " - step tread [Back"
+                                    (if lastdep "/Same" "") "]"
+                                    (if lastdep
+                                      (strcat " <Enter = done, Same = "
+                                              (rtos lastdep) ">: ")
+                                      " <Enter = done>: "))))
+                (if (= (type dep) 'STR)
+                  (cond
+                    ((or (= dep "Back") (= dep "Undo"))
+                     (ns-popstep) (setq dep 'RETRY))
+                    ((= dep "Same")
+                     (if lastdep
+                       (setq dep lastdep)
+                       (progn (princ "\n  No previous step tread.")
+                              (setq dep 'RETRY))))
+                    (T (setq dep 'RETRY)))))))
            dep))
     (setq mark (entlast)
           svcum cum svp pprev svn n
@@ -1233,8 +1398,11 @@
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
-      (initget "Yes No")
-      (if (/= "No" (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+      (if (null (setq fkey (ns-fkw 'profile "Yes No" "Yes")))
+        (progn
+          (initget "Yes No")
+          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))))
+      (if (/= "No" fkey)
         (progn
           ;; the treads, top step first: sort the recorded distances
           ;; from the run start ascending - the first is the first
@@ -1254,19 +1422,26 @@
           ;; take 4 depths
           (setq drops nil k 1)
           (while (<= k (1+ nsteps))
-            (if (= k 1)
-              (progn
-                (initget 7 "Back Undo")
-                (setq dv (getdist "\nStep 1 - step depth (the drop): ")))
-              (progn
-                (initget 6 "Back Undo")
-                (setq dv (getdist
-                           (if (> k nsteps)
-                             (strcat "\nDepth after the last tread [Back] <"
-                                     (rtos (car drops)) ">: ")
-                             (strcat "\nStep " (itoa k)
-                                     " - step depth [Back] <"
-                                     (rtos (car drops)) ">: "))))))
+            ;; depth1..depthN and depthafter can come off the form,
+            ;; spent as they are read; nil reads as Enter, which the
+            ;; first depth refuses - that one falls back to the
+            ;; keyboard, its key now spent
+            (setq fkey (if (> k nsteps) 'depthafter (ns-fnkey "depth" k)))
+            (setq dv (if (ns-fhas fkey) (ns-fnum fkey) 'RETRY))
+            (if (or (eq dv 'RETRY) (and (null dv) (= k 1)))
+              (if (= k 1)
+                (progn
+                  (initget 7 "Back Undo")
+                  (setq dv (getdist "\nStep 1 - step depth (the drop): ")))
+                (progn
+                  (initget 6 "Back Undo")
+                  (setq dv (getdist
+                             (if (> k nsteps)
+                               (strcat "\nDepth after the last tread [Back] <"
+                                       (rtos (car drops)) ">: ")
+                               (strcat "\nStep " (itoa k)
+                                       " - step depth [Back] <"
+                                       (rtos (car drops)) ">: ")))))))
             (cond
               ((and (= (type dv) 'STR)
                     (or (= dv "Back") (= dv "Undo")))
@@ -1378,8 +1553,11 @@
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
                      " if you want these steps beaded."))
       (progn
-        (initget "Yes No")
-        (if (/= "No" (getkword "\nBead the steps? [Yes/No] <Yes>: "))
+        (if (null (setq fkey (ns-fkw 'bead "Yes No" "Yes")))
+          (progn
+            (initget "Yes No")
+            (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+        (if (/= "No" fkey)
           (progn
             (setq btreads (ns-treadents slog)
                   bnums   nil)
@@ -1431,6 +1609,7 @@
                                    (ns-entmid (cdr (assoc k btreads))))
                                 bnums)
                         nil)))))))))))
+  (ns-fclear)                       ; both exits clear the form store
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
