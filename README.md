@@ -125,12 +125,13 @@ changing a routine.
 | `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, text 80% toward the right/bottom end, source line erased. A tie that is dimensioned already is left alone |
 | `CUSTBLOCK`, `CUSTBLOCKVER` | `lisp/custblock/` | Draws a custom block in pictorial view from three typed sizes - length (the long axis, receding back-right at 45 degrees and at true length), width across the front face, height up it - based at its front bottom left corner. Nine lines on `COVER`: the front, top and right-hand faces, with the three hidden edges left out so it reads as a solid rather than a wire cage. Dimensioned three times on `DIMENSION` in `STANDARD INCHES` - the length aligned along the top-left receding edge, the height and width linear with their axes forced |
 | `DRONE` | `lisp/drone/` | Drawing cleanup: text style/height, pool/spa points onto `POINTS`, spa perimeter onto `POOL`, and more in one pass |
+| `TYDRN` | `lisp/tydrn/` | `DRONE`'s pool-only sibling for a drone trace with no spa: the same text and point cleanup with no SPA-point sweep and the `SPA` layer never touched (see `lisp/tydrn/README.md` for the exact split) |
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 | `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
 | `LAZFORM`, `LAZFORMCOVER`, `LAZTXT`, `LAZASCII`, `LAZFORMVER` | `lisp/lazform/` | Fill a dimension chart in and draw the pool from it. Eight charts - Rectangle, True Oval, Roman, both Grecians, True L Left, Round and Octagon - each the one off the paper: outline, hopper, dimension chain with its letters. The chart is the background: it is sliced into horizontal bands and each dimension's box is wedged into the band its letter sits on, so you type the number where the letter is on the paper. Corners get a dropdown each - `Square`, `Radius`, `Cut`, `NotGiven` - and the size box beside it un-greys only for `Radius` and `Cut`. Fill in what you know, leave the rest blank, press Insert: `POOL` runs and asks only for the gaps. Picking a bottom type greys the boxes that bottom will never ask for - a Normal hopper draws no side view, so C, D and C2 grey out; a Sport asks a different plan chain (E2 F2 G F1 E1) so H, F and E grey out - and a greyed value is not sent. That table is read off POOL's own `pool:btmspec`, so it cannot drift. `NA` in a box means not measured and is passed through as such; a blank box just means ask. Drawn with `vector_image` from a table of lines, so there is no artwork file to ship. `LAZFORMCOVER` is the same form for a cover sheet: POOL runs with its pool-bottom gate already closed - `LAZTXT` is the same form drawn out of TILES instead of vectors - the pool is a real boxed cluster with the hopper nested inside it and the fields in the drawing, which buys retention (nothing in it is an image tile, so nothing in it can be wiped by a repaint) at the cost of the outline being a rectangle whatever the pool is. `LAZASCII` is a probe, not a tool: it asks whether this AutoCAD's dialog font is fixed-pitch, which decides whether the chart could be drawn in characters instead of vectors - worth knowing because DCL never retains an image tile but always retains a text one - see `lisp/lazform/README.md` |
-| `LAZPANEL`, `LAZBUTTON`, `LAZPIN`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 57 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Tabs come in two rows: the **jobs** (Pool / Cover / Spa / Rest), each laid out in columns that follow the work - shape, points, steps, dims and check - and the **categories** (Layout / Points / Dimensions / Checking, the same four group names as the VB palette) holding the whole roster filed by what each tool is. A tool that serves two jobs sits on both, so 57 commands make 128 buttons; `Rest` is computed as whatever the three named jobs leave over. A command not loaded in this session is greyed out. A click closes the panel, runs the command exactly as if typed, and the panel then REOPENS itself on the same page at the same position - Close is the way out. A **Pinned** row on every page carries the few tools you run all day, remembered between sessions in the registry; `Pin...` or `LAZPIN` edits it. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
+| `LAZPANEL`, `LAZBUTTON`, `LAZPIN`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 60 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Tabs come in two rows: the **jobs** (Pool / Cover / Spa / Rest), each laid out in columns that follow the work - shape, points, steps, dims and check - and the **categories** (Layout / Points / Dimensions / Checking, the same four group names as the VB palette) holding the whole roster filed by what each tool is. A tool that serves two jobs sits on both, so the 60 commands multiply into buttons across the pages; `Rest` is computed as whatever the three named jobs leave over. A command not loaded in this session is greyed out. A click closes the panel, runs the command exactly as if typed, and the panel then REOPENS itself on the same page at the same position - Close is the way out. A **Pinned** row on every page carries the few tools you run all day, remembered between sessions in the registry; `Pin...` or `LAZPIN` edits it. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
 
 ### Going back a step
 
@@ -231,7 +232,7 @@ this build and still loads on its own.
 
 Some tools distribute a dated, REV-numbered twin of their static file
 (`lisp/dimcheck/dimcheck.lsp` alongside
-`releases/dimcheck_081926_REV11.lsp`) so a loaded routine never
+its dated `releases/dimcheck_MMDDYY_REV##.lsp`) so a loaded routine never
 silently changes underfoot, and a version banner in the file, its
 filename, and what the command prints at startup can never disagree.
 Every tool's twins live flat in `releases/` - no per-tool subfolders,
@@ -252,7 +253,7 @@ file rather than one each:
 
 | Release | Holds |
 | --- | --- |
-| `releases/STEPS_081926_REV23-26-16.lsp` | `CORNERSTP.lsp` (REV23), `HEMISTEP.lsp` (REV26), `NORMIESTEP.lsp` (REV16) |
+| `releases/STEPS_MMDDYY_REV<cs>-<hs>-<ns>.lsp` | `CORNERSTP.lsp`, `HEMISTEP.lsp`, `NORMIESTEP.lsp` -- each member's own REV, in concatenation order |
 
 APPLOAD that single file and all six commands (`CORNERSTP`,
 `HEMISTEP`, `NORMIESTEP` and their three `TUTORIAL...` walkthroughs)
@@ -277,7 +278,7 @@ everything else releases one file per source.
 
 The palette needs its DLL `NETLOAD`ed on every machine. For a
 button panel with nothing to install, see `lisp/lazpanel/` above:
-`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 56
+`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 60
 headline drafting commands, and puts its own one-button toolbar on
 screen to open it; the VB palette remains the richer surface (docks,
 stays open while a tool runs, POOL/SPA forms).
@@ -339,6 +340,8 @@ python3 tests/test_xyplot.py          # XYPLOT, run in lispvm
 python3 tests/test_autodim.py         # AUTODIM styles, dedupe, overall/step/floor dims
 python3 tests/test_lisplab.py         # LISPLAB - the sorts against Python's
                                       # own sorted(), then the whole tour
+python3 tests/test_lincheck.py        # LINCHECK, run in lispvm
+python3 tests/test_ccprecheck.py      # CCPRECHECK branch walks and Back
 python3 tests/test_stockcover.py      # STOCKCOVER, run in lispvm
 python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
@@ -368,6 +371,13 @@ python3 tests/test_shared.py          # shared/ build - everything loads togethe
 Setting `CALOFIN_LISP_ROOT=shared` reruns any VM-driven test above
 against the `shared/` build instead of `lisp/`, as a behavioral-parity
 check.
+
+Or skip the prose list entirely: `python3 tools/run_tests.py` (or
+`make test` / `make parity`) globs every `tests/test_*.py`, runs them
+in parallel per tier, and is the authority on what is expected to
+fail (`EXPECTED_FAILURES`, currently empty).
+`tests/record_prompts.py` prints a command's live prompt script when a
+prompt change makes a scripted test stale.
 
 ## License
 

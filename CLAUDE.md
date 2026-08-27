@@ -156,9 +156,16 @@ build drew loose lines where the standalone one drew a bounded polyline.
 ## Checks
 
 ```
-python3 tools/check_standards.py # tiers in step, cal: clean, bundle current
-python3 tools/check_lisp.py <f>  # unbalanced parens, undefined funcs/globals
-python3 tools/check_scope.py <f> # locals used without being declared
+python3 tools/check_standards.py # tiers in step, cal: clean, AND every
+                                 # generated tier byte-identical to a fresh
+                                 # regeneration (the three --check modes)
+python3 tools/check_lisp.py [f]  # parens, arity, stray top-level atoms,
+                                 # undefined/quoted-undefined functions;
+                                 # no argument = every .lsp in both tiers
+python3 tools/check_scope.py [f] # locals used without being declared
+                                 # (tools/scope_baseline.txt holds the
+                                 # accepted module globals)
+make check                       # all of the above in one go
 ```
 
 `check_standards.py` covers what the other two cannot see, because they
