@@ -283,19 +283,16 @@ screen to open it; the VB palette remains the richer surface (docks,
 stays open while a tool runs, POOL/SPA forms).
 
 **Status:** `lisp/pool/POOL.LSP` and `lisp/spa/SPA.LSP` are the
-canonical, actively-developed versions of those tools. The receiving
-end a form needs - an answer store the ask helpers read before they
-prompt - now exists in POOL: `pool:*form*`, `pool:run-with-answers`,
-and the hooks described under `LAZFORM` above. `tests/test_pool_form.py`
-passes at both tiers because of it.
+canonical, actively-developed versions of those tools, and BOTH carry
+the receiving end a form needs - an answer store the ask helpers read
+before they prompt: `pool:*form*` / `spa:*form*`,
+`pool:run-with-answers` / `spa:run-with-answers`, and the hooks
+described under `LAZFORM` above. `tests/test_pool_form.py` and
+`tests/test_spa_form.py` pass at both tiers because of it, and each
+ends by checking the palette's field map sends no key its routine
+cannot read.
 
-SPA has no such store yet, so `tests/test_spa_form.py` still fails on a
-clean checkout - a known, open gap (the same work again on the smaller
-surface), not a bug in either side.
-
-`ui/PLAN.md` is the execution plan for closing it - what is built, what
-is missing, and the day-by-day for making the forms actually drive the
-routines.
+`ui/PLAN.md` records how the gap was closed and what remains palette-side.
 
 ## Tools (`tools/`)
 
@@ -364,7 +361,7 @@ python3 tests/test_mesh_layers.py     # Merlin layered export
 python3 tests/test_dewrangler.py      # mesh dewrangler
 python3 tests/test_pool_form.py       # a form drives POOL and draws what
                                       # the command line draws
-python3 tests/test_spa_form.py        # palette <-> SPA (currently failing, see above)
+python3 tests/test_spa_form.py        # a form drives SPA the same way
 python3 tests/test_shared.py          # shared/ build - everything loads together
 ```
 

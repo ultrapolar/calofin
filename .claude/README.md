@@ -82,10 +82,10 @@ nothing to download. Each session it:
 1. exports the variables above through `$CLAUDE_ENV_FILE`,
 2. prints the tier map with live file counts, the rules that bite, and
    the `make` targets for checking and testing,
-3. names the tests that fail on a clean checkout so nobody spends a
-   session "fixing" a known gap - the authoritative list is
-   `EXPECTED_FAILURES` in `tools/run_tests.py`, which fails the run the
-   day an entry starts passing,
+3. names the tests that fail on a clean checkout (none, at present) -
+   the authoritative list is `EXPECTED_FAILURES` in
+   `tools/run_tests.py`, which fails the run the day an entry starts
+   passing,
 4. runs `tools/check_standards.py` and, if the tiers have drifted,
    says so at the top of the session instead of in review.
 

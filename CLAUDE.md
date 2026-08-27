@@ -177,11 +177,12 @@ python3 tests/test_shared.py    # the whole grouped build in one session,
                                 # and the one-file bundle
 ```
 
-`tests/test_spa_form.py` fails on a clean checkout. That is a known open
-gap: a form can answer SPA's questions only once SPA has the answer store
-POOL now has (`spa:*form*`, the hooks in its ask helpers). Don't treat that
-failure as something your change caused, and don't "fix" it by editing the
-canonical routine to match the palette.
+Or run everything at once: `make test` (one tier), `make parity` (both) —
+`tools/run_tests.py` globs the whole directory, so no prose list to drift.
 
-`tests/test_pool_form.py` used to be listed here too and now passes at both
-tiers - if it starts failing, that IS your change.
+Nothing is expected to fail on a clean checkout. `test_spa_form.py` and
+`test_pool_form.py` used to be — both now pass at both tiers (SPA and POOL
+each carry the answer store the forms drive: `pool:*form*` / `spa:*form*`
+and the hooks in their ask helpers). If either starts failing, that IS your
+change. The authoritative known-red list is `EXPECTED_FAILURES` in
+`tools/run_tests.py`, currently empty.

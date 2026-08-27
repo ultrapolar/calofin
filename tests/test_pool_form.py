@@ -287,3 +287,41 @@ print("   typed POOL still asks it, and never sets the flag itself")
 
 
 print("\nALL POOL FORM SCENARIOS PASSED")
+
+
+# --------------------------------------------------------------------
+# The field-map pin (see test_spa_form.py scenario 8): every key the
+# Pool tab can send is one POOL.LSP reads -- as a keyed sequence item,
+# or as one of the letter-prefixed depth asks pool:fkeyof serves.
+# --------------------------------------------------------------------
+print("== field map: no key POOL cannot read ==")
+
+import json
+import re as _re
+
+FIELDMAP = os.path.join(os.path.dirname(__file__), '..', 'ui',
+                        'calofin_net', 'assets', 'bottoms', 'fieldmap.json')
+
+
+def _map_keys(node, out):
+    if isinstance(node, dict):
+        if isinstance(node.get('key'), str):
+            out.add(node['key'].lower())
+        for v in node.values():
+            _map_keys(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            _map_keys(v, out)
+    return out
+
+
+sent = _map_keys(json.load(open(FIELDMAP)), set())
+_src = open(LSP, encoding='utf-8', errors='replace').read()
+readable = set(m.group(1).lower() for m in
+               _re.finditer(r"\(list\s+'([a-z][a-z0-9]*)\s+'(?:REQ|NAX|ZER|SUG)",
+                            _src))
+readable |= {'c', 'c2', 'd'}     # served by pool:fkeyof off the prompt letter
+unread = sorted(sent - readable)
+assert not unread, \
+    "the pool field map sends keys POOL.LSP never reads: %s" % unread
+print("   %d field-map keys, every one readable" % len(sent))

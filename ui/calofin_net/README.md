@@ -114,10 +114,12 @@ letter prefix instead, which is why `pool:fkeyof` insists on the
 `"<letter> - "` shape: `pool:askh` also asks *"Total pool length (arc tip
 to arc tip)"*, and that must never become a form key.
 
-`pool:askdeep` and `pool:askc2` re-ask through `pool:askh-prompt` rather
-than `pool:askh`. A form value that fails their range check has to be
-corrected at the keyboard — re-reading the same form entry would spin
-forever.
+`pool:askdeep` and `pool:askc2` re-ask through plain `pool:askh` — there
+is no separate `pool:askh-prompt`, and none is needed: the store is
+consume-once, so a form value that fails their range check is already
+gone by the re-ask and the correction is typed at the keyboard.
+Re-reading the same form entry would spin forever, which is exactly why
+an answer is REMOVED as it is used rather than marked used.
 
 Chart letters `C1`, `C3`, `C4` and `F3` are collected nowhere: they
 appear only on bottoms POOL cannot draw. `B` is on every section but is

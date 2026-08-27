@@ -63,8 +63,8 @@ echo
 echo "Checks:  make check      (tiers in step + generated tiers current + lint)"
 echo "Tests:   make test       (full suite, lisp/ tier - tools/run_tests.py)"
 echo "         make parity     (both tiers - the standalone-vs-grouped drift check)"
-echo "Known failing on a clean checkout, not yours: test_spa_form.py"
-echo "  (the list lives in EXPECTED_FAILURES, tools/run_tests.py - trust that one)"
+echo "Known failing on a clean checkout: none - EXPECTED_FAILURES in"
+echo "  tools/run_tests.py is the authoritative (empty) list"
 echo
 
 # ---- the guardrail --------------------------------------------------

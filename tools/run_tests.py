@@ -39,10 +39,9 @@ TESTS = ROOT / "tests"
 
 #: Known-red on a clean checkout, and WHY.  Remove the entry in the same
 #: commit that closes the gap - a passing entry fails the run.
-EXPECTED_FAILURES = {
-    "test_spa_form.py": "SPA has no answer store yet (spa:*form*) - "
-                        "the open half of the palette-forms work",
-}
+#: (Empty since the SPA answer store landed - the last entry was
+#: test_spa_form.py, closed by spa:*form* and its hooks.)
+EXPECTED_FAILURES = {}
 
 #: Files that dominate the wall clock (over ~20s each); --fast skips
 #: them for the inner loop.  The full run still takes everything.
@@ -66,11 +65,17 @@ def run_one(name, tier):
     if tier == "shared":
         env["CALOFIN_LISP_ROOT"] = "shared"
     t0 = time.monotonic()
-    proc = subprocess.run(
-        [sys.executable, str(TESTS / name)],
-        cwd=str(ROOT), env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    return name, tier, proc.returncode, time.monotonic() - t0, proc.stdout
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(TESTS / name)],
+            cwd=str(ROOT), env=env, timeout=600,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        code, out = proc.returncode, proc.stdout
+    except subprocess.TimeoutExpired as e:
+        # a hang is a failure with a name, not a stuck runner
+        code = 124
+        out = (e.stdout or "") + "\n[run_tests] killed after 600s"
+    return name, tier, code, time.monotonic() - t0, out
 
 
 def run_tier(files, tier, jobs):

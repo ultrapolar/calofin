@@ -11,13 +11,9 @@ Also covers the half-filled form, which is the point of the feature: a
 key that is absent still gets prompted for, so a user can fill in the
 measurements they have and answer the rest at the command line.
 
-KNOWN FAILING as of the branch consolidation: this file was written
-against calofin_net's forked copy of SPA.LSP. lisp/spa/SPA.LSP is now
-the canonical, actively-developed version instead (see the repo
-README), and its prompt sequence has since diverged from what the
-palette's LispBridge expects. Expect this to fail until the palette is
-reconciled with the canonical SPA.LSP - that's tracked work, not a
-regression from the restructure.
+The receiving end lives in SPA.LSP itself: spa:*form*, the consume-once
+spa:ftake, and hooks in spa:askseqb / spa:askcorner / c:SPA -- POOL's
+store, held to exactly, on the smaller surface.
 """
 
 import os
@@ -223,5 +219,68 @@ i.eval(parse_all(NIL_WIRE)[0])
 same(a, i, "explicit nil")
 print("   an explicit nil is taken as NA, not as a missing key")
 
+
+
+# --------------------------------------------------------------------
+# 7.  Back onto a form-answered question must PROMPT, not self-answer.
+#     The store consumes an answer as it is used; if that ever becomes
+#     "mark used" the sequence below walks Back into an answer that
+#     re-feeds itself and the user can never get out.
+# --------------------------------------------------------------------
+print("== 7. Back over a consumed answer prompts at the keyboard ==")
+
+BACKFORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
+                (w . 84.0))"""
+j = by_form(BACKFORM, [None,      # skip the Spa Cover Details block
+                       "Back",    # at the length: back onto the width
+                       84.0,      # the width again - AT THE KEYBOARD
+                       72.0,      # the length
+                       "90", "90", "90", "90", "No", "No"])
+same(a, j, "back over a consumed answer")
+wasked = [p for p, _ in j.prompts if 'WIDTH' in p]
+assert len(wasked) == 1, \
+    "the width should be asked exactly once (the post-Back re-ask), " \
+    "got %d" % len(wasked)
+print("   width form-answered, backed onto, and re-asked at the keyboard")
+
+
+# --------------------------------------------------------------------
+# 8.  Every key the palette CAN send is one the routine reads.  The
+#     alignment audit in ui/PLAN.md was true the day it was written;
+#     this keeps it true: a key added to the field map that SPA never
+#     consumes fails here instead of vanishing silently.
+# --------------------------------------------------------------------
+print("== 8. the field map sends no key the routine cannot read ==")
+
+import json
+import re as _re
+
+FIELDMAP = os.path.join(os.path.dirname(__file__), '..', 'ui',
+                        'calofin_net', 'assets', 'shapes', 'fieldmap.json')
+
+
+def _map_keys(node, out):
+    if isinstance(node, dict):
+        if isinstance(node.get('key'), str):
+            out.add(node['key'].lower())
+        for v in node.values():
+            _map_keys(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            _map_keys(v, out)
+    return out
+
+
+_fm = json.load(open(FIELDMAP))
+sent = _map_keys({k: v for k, v in _fm.items()
+                  if k in ('shapes', '_secondOutline')}, set())
+_src = open(LSP, encoding='utf-8', errors='replace').read()
+readable = set(m.group(1).lower() for m in
+               _re.finditer(r"\(list\s+'([a-z][a-z0-9]*)\s+'(?:REQ|NAX|ZER|SUG)",
+                            _src))
+unread = sorted(sent - readable)
+assert not unread, \
+    "the spa field map sends keys SPA.LSP never reads: %s" % unread
+print("   %d field-map keys, every one a keyed item in SPA.LSP" % len(sent))
 
 print("\nALL SPA FORM SCENARIOS PASSED")
