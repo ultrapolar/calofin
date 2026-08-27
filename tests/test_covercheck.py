@@ -484,7 +484,9 @@ assert 'Cover Details: Overlap 15" - SUGGEST 12" (under 1200 sq ft)' in txt
 assert ("Replacement: not a replacement - 'Replacement Disclaimer' not"
         " needed") in txt, txt
 assert ('Dimensions checked: 2 (correct: 2, flagged to fix: 0,'
-        ' points adjusted: 0)') in txt, txt
+        ' points adjusted: 1)') in txt, txt
+# the move survives the Back that re-asked the question
+assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Dim %s [STANDARD] = 230.0000: OK' % ents['dbad'].handle in txt, txt
 assert 'Dim %s [STANDARD] = 240.0000: OK' % ents['dok'].handle in txt, txt
 print("   report: SUGGEST lines, the circled pad and the reviewed dims")

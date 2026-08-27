@@ -473,11 +473,13 @@ reports = report_texts(vm)
 assert len(reports) == 1, len(reports)
 txt = reports[0]
 assert 'DIMCHECK REPORT' in txt, txt[:120]
-# NOTE (real quirk, pinned): Back rolls the points-adjusted TALLY back
-# but not the move itself, so a moved point re-approved after a Back is
-# reported as 0 adjusted even though the XLINE marker proves the move.
+# A moved point STAYS moved: Back re-asks the question, it does not put
+# the point back.  So the move is carried into the re-review rather than
+# un-counted - the tally agrees with the XLINE marker that proves it,
+# and the rebuilt line still says the point moved.
 assert 'Dimensions checked: 3 (correct: 2, flagged to fix: 1,' \
-       ' points adjusted: 0)' in txt, txt
+       ' points adjusted: 1)' in txt, txt
+assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Arcs checked: 1 (OK: 0, with endpoints moved: 1,' \
        ' endpoints moved in total: 1)' in txt, txt
 assert 'Overlapping line pairs: 1 (merged: 1, flagged: 0,' \

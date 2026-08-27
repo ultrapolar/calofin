@@ -442,14 +442,13 @@ assert 'NEEDS WIPING' in txt, txt
 assert 'SCALED DOWN' in txt, txt
 assert "Date: Date = '%s' - OK" % today(vm) in txt, txt
 assert 'Dimension layer: all 2 on DIMENSION' in txt, txt
-# ...but NOTE (real gap, pinned): the lite scan nils the segment list
-# it shares with the dimension pass, so the STEP / side-view hunt - a
-# liner rule, not a DIMCHECK one - silently finds nothing, and the
-# wall-height comparison against the rise is lost with it.
-assert 'Steps: no step patterns detected' in txt, txt
-assert 'MISMATCH' not in txt, txt
-print("   liner block, border and date still audited (steps drop out -"
-      " a pinned gap)")
+# ...and so does the STEP / side-view hunt, which is a LINER rule, not
+# a DIMCHECK one: the lite scan used to nil the segment list it shares
+# with the dimension pass, which took the step rule out with the
+# overlaps and lost the wall-height comparison against the rise.
+assert 'Steps: no step patterns detected' not in txt, txt
+assert 'MISMATCH' in txt, txt
+print("   liner block, border, date AND the steps rule still audited")
 
 
 # ------------------------------------------------------------------
@@ -528,7 +527,9 @@ assert '1 pattern field(s) WIPED clean' in txt, txt
 assert 'Title block border: 704.0000 x 543.6250 - nominal size, OK' in txt
 assert 'Dimensions: 1 left UNREVIEWED (skipped by user)' in txt, txt
 assert ('Dimensions checked: 3 (correct: 2, flagged to fix: 0,'
-        ' points adjusted: 0)') in txt, txt
+        ' points adjusted: 1)') in txt, txt
+# the move survives the Back that re-asked the question
+assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Dim %s [STANDARD] = 110.0000: OK' % ents['d1'].handle in txt, txt
 assert 'Dim %s [STANDARD] = 120.0000: OK' % ents['d2'].handle in txt, txt
 print("   report: side view found, MATCHES, WIPED, WRONG ONE, Skip noted")

@@ -209,7 +209,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.0")
+(setq *cchk-version* "v1.1")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -631,7 +631,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -2766,7 +2766,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay units datev)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev carried cmv)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2913,8 +2913,21 @@
                      (if (cadr (car dlines))
                        (setq ndok (1- ndok))
                        (setq ndflag (1- ndflag)))
-                     (setq ndmoved (- ndmoved (caddr (car dlines)))
-                           dlines  (cdr dlines))))
+                     ;; A MOVED POINT STAYS MOVED.  Back re-asks the
+                     ;; question; it does not put the point back, and
+                     ;; its construction line is still standing.  So
+                     ;; the move is CARRIED to the re-review, not
+                     ;; un-counted -- subtracting it made the report
+                     ;; claim "points adjusted: 0" over a drawing
+                     ;; whose points really had been adjusted, and
+                     ;; the rebuilt line lost its "moved" note with
+                     ;; it (the second pass finds them attached and
+                     ;; has nothing to report).
+                     (if (> (caddr (car dlines)) 0)
+                       (setq carried (cons (cons e1 (caddr (car dlines)))
+                                           (vl-remove (assoc e1 carried)
+                                                      carried))))
+                     (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
                  (cchk:set-color e1 *cchk-grey-color*)
                  (princ "\n  Stepping back one dimension."))
@@ -2927,14 +2940,23 @@
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (cchk:dim-style e))
+             ;; moves this dim collected on an earlier pass, before a
+             ;; Back sent us round again -- they are real and belong
+             ;; in both the line and the tally
+             (setq cmv (cond ((cdr (assoc e carried))) (0)))
              (setq dlines (cons (list (strcat "Dim " (car res)
                                               (if (= sty "") "" (strcat " [" sty "]"))
                                               (if (nth 4 res)
                                                 (strcat " = " (nth 4 res))
                                                 "")
-                                              ": " (caddr res))
+                                              ": " (caddr res)
+                                              (if (> cmv 0)
+                                                (strcat " - " (itoa cmv)
+                                                        " point(s) moved before"
+                                                        " you stepped back")
+                                                ""))
                                       (cadr res)
-                                      (cadddr res))
+                                      (+ (cadddr res) cmv))
                                 dlines))))
           (setq n (1+ n)))
         (if skiprest

@@ -249,7 +249,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.8")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.9")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -731,7 +731,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -2353,7 +2353,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay units)
+                      minx miny maxx maxy bb m dhdr right dimlay units carried cmv)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -2502,8 +2502,21 @@
                      (if (cadr (car dlines))
                        (setq ndok (1- ndok))
                        (setq ndflag (1- ndflag)))
-                     (setq ndmoved (- ndmoved (caddr (car dlines)))
-                           dlines  (cdr dlines))))
+                     ;; A MOVED POINT STAYS MOVED.  Back re-asks the
+                     ;; question; it does not put the point back, and
+                     ;; its construction line is still standing.  So
+                     ;; the move is CARRIED to the re-review, not
+                     ;; un-counted -- subtracting it made the report
+                     ;; claim "points adjusted: 0" over a drawing
+                     ;; whose points really had been adjusted, and
+                     ;; the rebuilt line lost its "moved" note with
+                     ;; it (the second pass finds them attached and
+                     ;; has nothing to report).
+                     (if (> (caddr (car dlines)) 0)
+                       (setq carried (cons (cons e1 (caddr (car dlines)))
+                                           (vl-remove (assoc e1 carried)
+                                                      carried))))
+                     (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
                  (lfc:set-color e1 *lfc-grey-color*)
                  (princ "\n  Stepping back one dimension."))
@@ -2516,14 +2529,23 @@
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (lfc:dim-style e))
+             ;; moves this dim collected on an earlier pass, before a
+             ;; Back sent us round again -- they are real and belong
+             ;; in both the line and the tally
+             (setq cmv (cond ((cdr (assoc e carried))) (0)))
              (setq dlines (cons (list (strcat "Dim " (car res)
                                               (if (= sty "") "" (strcat " [" sty "]"))
                                               (if (nth 4 res)
                                                 (strcat " = " (nth 4 res))
                                                 "")
-                                              ": " (caddr res))
+                                              ": " (caddr res)
+                                              (if (> cmv 0)
+                                                (strcat " - " (itoa cmv)
+                                                        " point(s) moved before"
+                                                        " you stepped back")
+                                                ""))
                                       (cadr res)
-                                      (cadddr res))
+                                      (+ (cadddr res) cmv))
                                 dlines))))
           (setq n (1+ n)))
         (if skiprest
@@ -3271,9 +3293,16 @@
                miny (if miny (min miny (cadar bb)) (cadar bb))
                maxx (if maxx (max maxx (caadr bb)) (caadr bb))
                maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
+     ;; segs feeds TWO passes: the DIMCHECK-style overlap hunt, which a
+     ;; lite scan skips, and the steps / side-view rule, which is a
+     ;; LINER rule a lite scan keeps.  Nil'ing it for lite took the
+     ;; steps rule out with the overlaps, so a sheet with an obvious
+     ;; staircase reported "no step patterns detected" and its
+     ;; rise-vs-WallHt mismatch vanished.  Collect it either way; the
+     ;; overlap pass keeps its own lite guard below.
      (setq dims (reverse dims) arcs (reverse arcs)
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
-           segs (if lite nil (lfc:collect-segs plns)))
+           segs (lfc:collect-segs plns))
 
      ;; --- dimensions: report stray definition points, move nothing
      ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
