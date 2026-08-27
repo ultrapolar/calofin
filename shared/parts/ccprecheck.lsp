@@ -21,12 +21,14 @@
 ;;;     +- Pool Cover -> Freeform | Rectangle
 ;;;     +- Spa Cover  -> Safety Cover | Hard Cover | ThermoLight Cover
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *ccprecheck-version* "v1.0")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/

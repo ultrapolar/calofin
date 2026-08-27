@@ -2,6 +2,9 @@
 ;;;
 ;;; Command: TUTORIALCPERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Interactive tutorial for the CPERPPTS command (cperp_points.lsp),
 ;;; the curved companion to PERPPTS.  Offers three modes:
 ;;;
@@ -19,8 +22,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 

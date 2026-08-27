@@ -9,6 +9,9 @@
 ;;;                   exploded lines/arcs; the survey points sitting
 ;;;                   on it are found automatically)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
 ;;;                         closed polyline OR an exploded set of
@@ -153,8 +156,6 @@
 ;;; perimeter itself - ends up on *PF-POOL-LAYER* (the deep break
 ;;; stubs dashed).
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq pf:*version*      "082726 REV08") ; announced on load.  The
@@ -1352,8 +1353,6 @@
           (setq tj (cdr tj) j (1+ j)))
         (setq ti (cdr ti) i (1+ i)))
       found)))
-
-;; ---- output helpers --------------------------------------------------
 
 ;; How many fitted polylines are already on the output layer (counted
 ;; before the new one is drawn).

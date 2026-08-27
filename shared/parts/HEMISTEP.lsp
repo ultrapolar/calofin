@@ -151,11 +151,13 @@
 ;;;   - One U / UNDO reverses the whole command; a bead run added at
 ;;;     the end is its own group, so it takes a U of its own.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so this file and
 ;; CORNERSTP.lsp stay in sync no matter which one loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -611,7 +613,7 @@
 ;; across to it.  Points are WCS.
 (defun hs-dimv (style a b thru / oldl)
   (hs-setstyle style)
-  (if (and *cs-dim-layer* (hs-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)

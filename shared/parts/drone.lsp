@@ -3,6 +3,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: DRONE
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Drawing cleanup routine that applies five fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
@@ -44,8 +47,6 @@
 ;;; duration of the command and re-locked afterwards.  The whole run
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/

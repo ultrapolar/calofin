@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin shared build loaded - 107 commands in one session.
+LAZPASS: calofin shared build loaded - 121 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -52,13 +52,13 @@ python3 tools/build_shared_bundle.py
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
-`CALOFIN-LIB v1.0 loaded` -- but not one tool comes with it, so `POOL`,
+`CALOFIN-LIB v1.3 loaded` -- but not one tool comes with it, so `POOL`,
 `SPA` and the rest are all still undefined. It now says so when that
 happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 47 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 51 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog

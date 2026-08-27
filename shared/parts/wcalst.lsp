@@ -3,6 +3,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: WCALST
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select a band drawn as two long curved sides connected by rungs,
 ;;; click the side that must come out straight, and the command draws
 ;;; the developed (unrolled) band below the selection:
@@ -22,8 +25,6 @@
 ;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------ small math helpers ----------------------
 

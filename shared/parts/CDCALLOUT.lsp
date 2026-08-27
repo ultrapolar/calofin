@@ -6,6 +6,9 @@
 ;;;
 ;;; Command:  CDCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The dimensioning sister of BPCALLOUT.  Instead of clicking points,
 ;;; you name them: type the FROM point number and the TO point number,
 ;;; and an aligned dimension is drawn between those two survey points
@@ -42,8 +45,6 @@
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py

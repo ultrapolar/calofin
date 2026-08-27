@@ -5,6 +5,9 @@
 ;;;
 ;;; Command:  LHD - fit an outline (closed or open) through the points
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The laser-point sibling of ABHD.  ABHD fits a pool perimeter
 ;;; through ab_pt survey blocks; LHD fits the same kind of arcs-on-the-
 ;;; points outline through points that came off a laser scan of an
@@ -50,8 +53,6 @@
 ;;; when the automatic order goes wrong; the kept outline lands on the
 ;;; POOL layer like ABHD's, so the rest of the toolset can read it.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq *lh-version*      "v1.3")     ; announced on load; release_lisp.py

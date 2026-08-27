@@ -10,6 +10,9 @@
 ;;;   STOCKLIST       list every stock drawing in the stock folder
 ;;;   STOCKCOVER-CFG  point the routine at the stock folder
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; What STOCKCOVER does:
 ;;;   1. You highlight the perimeter that is to be replaced.
 ;;;   2. You type the short name of the stock drawing -- "5M" finds
@@ -39,8 +42,6 @@
 ;;; *stockcover-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -146,6 +147,8 @@
     (setq e (entnext e)))
   (if (> (sslength ss) 0) ss))
 
+;;; Combined bounding box of a selection set -> ((minx miny minz)
+;;; (maxx maxy maxz)), or nil if nothing in it could be measured.
 (defun stock:size (bb)                    ; (width height)
   (list (- (car (cadr bb)) (car (car bb)))
         (- (cadr (cadr bb)) (cadr (car bb)))))

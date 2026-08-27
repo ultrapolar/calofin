@@ -145,8 +145,10 @@
 ;;;    * Break points closer together than 0.0001 drawing units are
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
@@ -181,6 +183,8 @@
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
         (t 12.0)))                      ; inches / unitless
+
+;; ------------------------------------------------------------- asking
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set

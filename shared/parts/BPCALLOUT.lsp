@@ -5,6 +5,9 @@
 ;;;
 ;;; Command:  BPCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
 ;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
@@ -34,8 +37,6 @@
 ;;; Assumes drawing units are INCHES (architectural).  Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq *bpcallout-version* "v1.3")   ; announced on load; release_lisp.py

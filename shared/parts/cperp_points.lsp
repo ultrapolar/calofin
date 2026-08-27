@@ -2,6 +2,9 @@
 ;;;
 ;;; Command: CPERPPTS   ("C" for curved)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The curved-geometry companion to PERPPTS (perp_points.lsp).  Same
 ;;; workflow and same pipeline, but the offsets are taken perpendicular
 ;;; to the TANGENT of the curve rather than to a straight line, so arcs,
@@ -105,8 +108,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 

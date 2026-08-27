@@ -26,8 +26,10 @@
 ;;;      POOLDEMO.LSP                 the static name
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq pooldemo:*version* "082726 REV03")
 

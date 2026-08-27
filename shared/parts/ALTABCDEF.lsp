@@ -25,10 +25,11 @@
 ;;;
 ;;;  Command:  ALTABCDEF
 ;;;
-;;;  All geometry is created in inches (1 drawing unit = 1 inch).
-;;; ==========================================================================
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  All geometry is created in inches (1 drawing unit = 1 inch).
+;;; ==========================================================================
 
 (setq *altabcdef-version* "v1.0")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/

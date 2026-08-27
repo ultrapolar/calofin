@@ -2,6 +2,9 @@
 ;;;
 ;;; Command: TUTORIALPERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Interactive tutorial for the PERPPTS command (perp_points.lsp),
 ;;; aimed at first-time users.  Offers three modes:
 ;;;
@@ -21,8 +24,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated

@@ -2,10 +2,11 @@
 ;;; CABHD.LSP  --  Fit a pool perimeter through PART of a survey
 ;;; -------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; Command:  CABHD - fit the perimeter, and only the perimeter
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; CABHD is ABHD's perimeter half, with one rule added and one whole
 ;;; half left out.

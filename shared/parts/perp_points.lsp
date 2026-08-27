@@ -2,6 +2,9 @@
 ;;;
 ;;; Command: PERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Splits a selected line into N equally-spaced points (both endpoints
 ;;; included), then for each division point creates a new point offset
 ;;; perpendicular to the line by a user-supplied length.  The new points
@@ -109,8 +112,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 

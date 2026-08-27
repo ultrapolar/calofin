@@ -131,8 +131,10 @@
 ;;;  Altitude in the file is metres (DJI writes metres); everything is
 ;;;  reported and saved in FEET to match DroneDistortion.lsp.
 ;;; ============================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/

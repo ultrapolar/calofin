@@ -7942,8 +7942,10 @@
 ;;;      POOLDEMO.LSP                 the static name
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq pooldemo:*version* "082726 REV03")
 
@@ -8308,6 +8310,9 @@
 ;;;
 ;;;  Command:  TUTORIALPOOL
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  A paced, captioned tour of how POOL.LSP works: what it asks, why,
 ;;;  and what the drawing looks like at each stage.  Each topic prints
 ;;;  a short explanation (and, where it matters, a full checklist of
@@ -8328,8 +8333,6 @@
 ;;;      TUTORIALPOOL.LSP                 the static name
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq tutorial:*version* "082726 REV06")
 
@@ -12256,6 +12259,9 @@
 ;;;            OASISVER    print the loaded version
 ;;; ======================================================================
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The shape
 ;;; ---------
 ;;; An oasis pool is arcs and nothing else: no corners, and at most one
@@ -12437,8 +12443,6 @@
 ;;; it, and both are drawn anyway, so the problem is on the screen where
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq *oasis-version* "v7.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
@@ -12653,6 +12657,11 @@
 ;; trimmed away long before it reaches anything.
 (defun oasis:topfits-p (variant) (= variant "TopRight"))
 
+;;; -------------------- ask layer ---------------------------------------
+;;; Copies of the CALOFIN-LIB helpers under this file's own prefix, so
+;;; the standalone build loads alone (STANDARDS.md section 4).  The Back
+;;; sentinel is the symbol OASIS-BACK.
+
 ;;; -------------------- snaps and the dimension style --------------------
 
 ;; Make the cross-dimension style current for the dims about to be drawn.
@@ -12707,6 +12716,8 @@
 (defun oasis:dashlt (w h / d)
   (setq d (max 2.0 (/ (max w h) 40.0)))
   (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
+
+;;; -------------------- layers ------------------------------------------
 
 ;;; -------------------- geometry ----------------------------------------
 
@@ -14707,6 +14718,7 @@
 
 ;;; -------------------- the command -------------------------------------
 
+
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc off cbase arcs ents nests prev lt a
                    nchk gotbot)
@@ -16576,6 +16588,9 @@
 ;;;            ABFINDVER   print the loaded version
 ;;; ======================================================================
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; A pool is surveyed off two stakes, A and B: every point on the sheet
 ;;; is two tape readings, one from each stake, and the point is wherever
 ;;; those two distances cross.  These two commands work that way round.
@@ -16712,8 +16727,6 @@
 ;;; *abfind-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -16803,6 +16816,11 @@
   '(("1" "7") ("1" "4") ("3" "8")   ; each other, both ways round
     ("3" "5") ("5" "6") ("6" "8")
     ("0" "9") ("4" "9") ("7" "9")))
+
+;;; ---------------------- ask helpers -----------------------------------
+;;; Copied from CALOFIN-LIB.lsp (cal:askkw, cal:back-word-p) under this
+;;; file's own prefix, so the standalone file loads alone -- see
+;;; STANDARDS.md section 4.  Back sentinel: CAL-BACK.
 
 ;;; ---------------------- layers ----------------------------------------
 
@@ -17768,10 +17786,11 @@
 ;;;
 ;;;  Command:  ALTABCDEF
 ;;;
-;;;  All geometry is created in inches (1 drawing unit = 1 inch).
-;;; ==========================================================================
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  All geometry is created in inches (1 drawing unit = 1 inch).
+;;; ==========================================================================
 
 (setq *altabcdef-version* "v1.0")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
@@ -18525,6 +18544,9 @@
 ;;;                   exploded lines/arcs; the survey points sitting
 ;;;                   on it are found automatically)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
 ;;;                         closed polyline OR an exploded set of
@@ -18669,8 +18691,6 @@
 ;;; perimeter itself - ends up on *PF-POOL-LAYER* (the deep break
 ;;; stubs dashed).
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq pf:*version*      "082726 REV08") ; announced on load.  The
@@ -19868,8 +19888,6 @@
           (setq tj (cdr tj) j (1+ j)))
         (setq ti (cdr ti) i (1+ i)))
       found)))
-
-;; ---- output helpers --------------------------------------------------
 
 ;; How many fitted polylines are already on the output layer (counted
 ;; before the new one is drawn).
@@ -23822,10 +23840,11 @@
 ;;; CABHD.LSP  --  Fit a pool perimeter through PART of a survey
 ;;; -------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; Command:  CABHD - fit the perimeter, and only the perimeter
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; CABHD is ABHD's perimeter half, with one rule added and one whole
 ;;; half left out.
@@ -26831,6 +26850,9 @@
 ;;;   TUTORIALAUTOBEAD  - guided walkthrough (read it, or watch a live demo)
 ;;;   AUTOBEADVER       - report which version is loaded
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select POOL lines to "bead" (LINEs, ARCs, and polylines on any POOL*
 ;;; layer), then click the side to bead toward.  The selection is copied,
 ;;; joined into continuous chains, and each chain is offset 2" toward the
@@ -26869,8 +26891,6 @@
 ;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
 ;;;   will drift.
 ;;; ==========================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -27796,8 +27816,10 @@
 ;;;    * Break points closer together than 0.0001 drawing units are
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
@@ -27832,6 +27854,8 @@
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
         (t 12.0)))                      ; inches / unitless
+
+;; ------------------------------------------------------------- asking
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set
@@ -29075,6 +29099,9 @@
 ;;;
 ;;; Command:  BPCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
 ;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
@@ -29104,8 +29131,6 @@
 ;;; Assumes drawing units are INCHES (architectural).  Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq *bpcallout-version* "v1.3")   ; announced on load; release_lisp.py
@@ -29329,12 +29354,14 @@
 ;;;     +- Pool Cover -> Freeform | Rectangle
 ;;;     +- Spa Cover  -> Safety Cover | Hard Cover | ThermoLight Cover
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *ccprecheck-version* "v1.0")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
@@ -29893,6 +29920,9 @@
 ;;;
 ;;; Command:  CDCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The dimensioning sister of BPCALLOUT.  Instead of clicking points,
 ;;; you name them: type the FROM point number and the TO point number,
 ;;; and an aligned dimension is drawn between those two survey points
@@ -29929,8 +29959,6 @@
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py
@@ -30668,8 +30696,10 @@
 ;;;  Everything runs inside one UNDO group; a single U reverts every
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *checkdrawing-version* "v1.0")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
@@ -31122,11 +31152,13 @@
 ;;;   - One U / UNDO reverses the whole command; a bead run added at
 ;;;     the end is its own group, so it takes a U of its own.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so the two routines that
 ;; share them stay in sync no matter which file loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -31421,7 +31453,7 @@
 ;; across to it.  Points are WCS.
 (defun cs-dimv (style a b thru / oldl)
   (cs-setstyle style)
-  (if (and *cs-dim-layer* (cs-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -32604,11 +32636,13 @@
 ;;;   - One U / UNDO reverses the whole command; a bead run added at
 ;;;     the end is its own group, so it takes a U of its own.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so this file and
 ;; CORNERSTP.lsp stay in sync no matter which one loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -33064,7 +33098,7 @@
 ;; across to it.  Points are WCS.
 (defun hs-dimv (style a b thru / oldl)
   (hs-setstyle style)
-  (if (and *cs-dim-layer* (hs-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -34038,11 +34072,13 @@
 ;;;   - One U / UNDO reverses the whole command; a bead run added at
 ;;;     the end is its own group, so it takes a U of its own.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so this file, CORNERSTP
 ;; and HEMISTEP stay in sync no matter which one loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -34302,6 +34338,8 @@
           (list "A" t1 t2 o off a1 a2))
         (list "S" t1 t2)))))
 
+;;; -------------------------- ask helpers -------------------------------
+
 ;;; --------------------------- bead helpers -----------------------------
 
 ;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
@@ -34494,7 +34532,7 @@
 ;; across to it.  Points are WCS.
 (defun ns-dimv (style a b thru / oldl)
   (ns-setstyle style)
-  (if (and *cs-dim-layer* (ns-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -41024,6 +41062,9 @@
 ;;;      2. Highlight the drawing to dimension (window/crossing select).
 ;;;    The dimension chain is drawn automatically.
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Notes
 ;;;    * "Linear/aligned" means DXF dimension type 0 (rotated /
 ;;;      horizontal / vertical) or 1 (aligned).  Angular, radial,
@@ -41034,8 +41075,6 @@
 ;;;    * Requires Visual LISP (standard in full AutoCAD).  AutoCAD LT
 ;;;      has no LISP engine and cannot run this file.
 ;;; ==================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
 (setq *dimcontinue-version* "v1.0")   ; announced on load; release_lisp.py
@@ -41241,8 +41280,10 @@
 ;;;
 ;;;  H is stored in the drawing and survives save/close/reopen.
 ;;; ============================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *dronedistortion-version* "v1.0")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
@@ -41758,8 +41799,10 @@
 ;;;  Altitude in the file is metres (DJI writes metres); everything is
 ;;;  reported and saved in FEET to match DroneDistortion.lsp.
 ;;; ============================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
@@ -46840,6 +46883,9 @@
 ;;;
 ;;; Command:  LHD - fit an outline (closed or open) through the points
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The laser-point sibling of ABHD.  ABHD fits a pool perimeter
 ;;; through ab_pt survey blocks; LHD fits the same kind of arcs-on-the-
 ;;; points outline through points that came off a laser scan of an
@@ -46885,8 +46931,6 @@
 ;;; when the automatic order goes wrong; the kept outline lands on the
 ;;; POOL layer like ABHD's, so the rest of the toolset can read it.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
 (setq *lh-version*      "v1.3")     ; announced on load; release_lisp.py
@@ -49312,12 +49356,14 @@
 ;;; Load with APPLOAD (or (load "lincheck.lsp")) and run the
 ;;; LINCHECK command.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *lincheck-version* "v1.0")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
@@ -53491,8 +53537,10 @@
 ;;; Usage:  APPLOAD this file (or add it to your startup suite), then type
 ;;;         LINTXTCHK and pick the top-left point for the checklist.
 ;;; ==========================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (setq *lintxtchk-version* "v1.0")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
@@ -53621,6 +53669,9 @@
 ;;;   Select the perimeter geometry, or press Enter to auto-detect
 ;;;   the perimeter (the largest closed loop found in the drawing).
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;   Command: TUTORIALPADDLE
 ;;;   Guided tour for new users: lists everything PADDLE checks, then
 ;;;   optionally draws a labelled sample perimeter and pads it step by
@@ -53642,8 +53693,6 @@
 ;;; Assumes drawing units are INCHES (architectural). Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -53664,7 +53713,6 @@
                              ; arc whose total bend is 10 degrees or
                              ; less is semi-straight - no pad
 
-;; ------------------------ 2D vector helpers ------------------------
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
   (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))
@@ -54265,6 +54313,9 @@
 ;;;
 ;;; Command: PERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Splits a selected line into N equally-spaced points (both endpoints
 ;;; included), then for each division point creates a new point offset
 ;;; perpendicular to the line by a user-supplied length.  The new points
@@ -54372,8 +54423,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -55182,6 +55231,9 @@
 ;;;
 ;;; Command: CPERPPTS   ("C" for curved)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The curved-geometry companion to PERPPTS (perp_points.lsp).  Same
 ;;; workflow and same pipeline, but the offsets are taken perpendicular
 ;;; to the TANGENT of the curve rather than to a straight line, so arcs,
@@ -55285,8 +55337,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -55859,6 +55909,9 @@
 ;;;
 ;;; Command: TUTORIALPERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Interactive tutorial for the PERPPTS command (perp_points.lsp),
 ;;; aimed at first-time users.  Offers three modes:
 ;;;
@@ -55878,8 +55931,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
@@ -56230,6 +56281,9 @@
 ;;;
 ;;; Command: TUTORIALCPERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Interactive tutorial for the CPERPPTS command (cperp_points.lsp),
 ;;; the curved companion to PERPPTS.  Offers three modes:
 ;;;
@@ -56247,8 +56301,6 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -59269,6 +59321,9 @@
 ;;;   STOCKLIST       list every stock drawing in the stock folder
 ;;;   STOCKCOVER-CFG  point the routine at the stock folder
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; What STOCKCOVER does:
 ;;;   1. You highlight the perimeter that is to be replaced.
 ;;;   2. You type the short name of the stock drawing -- "5M" finds
@@ -59298,8 +59353,6 @@
 ;;; *stockcover-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -59405,6 +59458,8 @@
     (setq e (entnext e)))
   (if (> (sslength ss) 0) ss))
 
+;;; Combined bounding box of a selection set -> ((minx miny minz)
+;;; (maxx maxy maxz)), or nil if nothing in it could be measured.
 (defun stock:size (bb)                    ; (width height)
   (list (- (car (cadr bb)) (car (car bb)))
         (- (cadr (cadr bb)) (cadr (car bb)))))
@@ -59709,6 +59764,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: DRONE
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Drawing cleanup routine that applies five fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
@@ -59750,8 +59808,6 @@
 ;;; duration of the command and re-locked afterwards.  The whole run
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
@@ -60016,6 +60072,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: TYDRN
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Drawing cleanup routine that applies three fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
@@ -60047,8 +60106,6 @@
 ;;; the command and re-locked afterwards.  The whole run is wrapped in
 ;;; a single undo group.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
@@ -60280,6 +60337,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: WCALST
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select a band drawn as two long curved sides connected by rungs,
 ;;; click the side that must come out straight, and the command draws
 ;;; the developed (unrolled) band below the selection:
@@ -60299,8 +60359,6 @@
 ;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------ small math helpers ----------------------
 

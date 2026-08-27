@@ -30,6 +30,9 @@
 ;;;   Select the perimeter geometry, or press Enter to auto-detect
 ;;;   the perimeter (the largest closed loop found in the drawing).
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;   Command: TUTORIALPADDLE
 ;;;   Guided tour for new users: lists everything PADDLE checks, then
 ;;;   optionally draws a labelled sample perimeter and pads it step by
@@ -51,8 +54,6 @@
 ;;; Assumes drawing units are INCHES (architectural). Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -73,7 +74,6 @@
                              ; arc whose total bend is 10 degrees or
                              ; less is semi-straight - no pad
 
-;; ------------------------ 2D vector helpers ------------------------
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
   (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))

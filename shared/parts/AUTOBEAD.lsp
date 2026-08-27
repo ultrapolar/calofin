@@ -6,6 +6,9 @@
 ;;;   TUTORIALAUTOBEAD  - guided walkthrough (read it, or watch a live demo)
 ;;;   AUTOBEADVER       - report which version is loaded
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select POOL lines to "bead" (LINEs, ARCs, and polylines on any POOL*
 ;;; layer), then click the side to bead toward.  The selection is copied,
 ;;; joined into continuous chains, and each chain is offset 2" toward the
@@ -44,8 +47,6 @@
 ;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
 ;;;   will drift.
 ;;; ==========================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
