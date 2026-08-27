@@ -425,6 +425,11 @@ vm.run('c:DIMCHECK', [
     'Merge',        # the overlapping pair: merge into one line
 ])
 
+# the navigation prompt offers exactly the clickable bracket
+# (STANDARDS section 1: the bracket is the initget list)
+navs = [p for p, _a in vm.prompts if 'Is this dimension correct?' in str(p)]
+assert navs and all('[Yes/No/Back/Skip] <Yes>:' in p for p in navs), navs
+
 # D1's stray point was MOVED onto line B
 assert grp(vm, ents['d1'], 14)[:2] == [100.0, 80.0], \
     grp(vm, ents['d1'], 14)
