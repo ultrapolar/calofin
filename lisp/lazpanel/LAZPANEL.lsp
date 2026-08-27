@@ -172,6 +172,7 @@
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
+    ("LAZSPA"           "Spa from a filled-in chart")
     ("LHD"              "Laser outline fit")
     ("LINCHECK"         "Line checklist")
     ("LINFINCHECK"      "Liner finish review")
@@ -288,6 +289,7 @@
      ("Spa"
      (""
       "SPA"
+      "LAZSPA"
       "CUSTBLOCK"
       "AUTODIM"
       "SPACHECK"
@@ -327,6 +329,7 @@
       "LAZFORM"
       "LAZTXT"
       "LAZFORMCOVER"
+      "LAZSPA"
       "SPA"
       "POOL"
       "POOLCOVER"

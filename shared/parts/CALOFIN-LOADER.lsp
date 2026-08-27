@@ -115,6 +115,7 @@
                  "SMARTFILLET.lsp" "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
                  "xftconv.lsp" "XYPLOT.lsp"
+                 "LAZSPA.lsp"
                  "LAZFORM.lsp" "LAZPANEL.lsp")
       (cal--load m))
     (if (> cal:*missing* 0)
