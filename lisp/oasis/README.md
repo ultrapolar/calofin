@@ -10,7 +10,7 @@ is smooth: the outline changes direction without ever changing tangent,
 which is why the whole thing can be given as a handful of radii and two
 overall dimensions.
 
-Four families come out of that, and the first question is which:
+Five families come out of that, and the first question is which:
 
 | | Bulges | The top | The bottom |
 | --- | --- | --- | --- |
@@ -18,6 +18,7 @@ Four families come out of that, and the first question is which:
 | **TopRight** | left, right, top — in the corner | reverse arcs either side | reverse arc |
 | **Cloud** | left, right | one reverse arc | flat run or reverse arc |
 | **Kidney** | left, right, top-center | **seams** — see below | reverse arc |
+| **NXTcloud** | top-left, center, right — three lobes | reverse arcs | reverse arcs |
 
 The kidney brings the one joint the other families don't have: its two
 side circles sit **inside** the big top circle, touching it from within.
@@ -36,9 +37,22 @@ sides from outside them, its centre landing wherever those three contacts
 put it (leaning toward the bigger side). The pair of answers together
 names one of six rings.
 
+The **NXTcloud** brings the other thing the ring can do that no other
+family asks of it: it meets a bulge **twice**. Its three lobes are pinned
+by the envelope alone — the top-left one into the corner where the X-min
+and Y-max walls meet, the centre one on the Y-min wall halfway across,
+the right one on the X-max wall halfway up — and *four* fillets are hung
+between them, each externally tangent to two lobes. Two of those fillets
+join the top-left lobe to the centre one, above and below; two join the
+centre one to the right lobe the same way. So the outline runs under the
+centre lobe on its way out to the right one and back over it on the way
+home, and that lobe gives the drawing **two disjoint arcs of one
+circle**. Eight ring elements, seven circles.
+
 Nothing downstream of the solver knows which shape it is looking at — it
-reads the ring. The four differ only in how many bulges there are, where
-the last one is pinned, and whether the bottom joiner has a radius.
+reads the ring. The five differ only in how many bulges there are, where
+each is pinned, whether a bulge is met more than once, and whether the
+bottom joiner has a radius.
 
 ## Simple or complex
 
@@ -326,6 +340,9 @@ The X and Y are absolute, and that alone pins all three bulges:
 | top, **TopRight** | the Y-max **and** the X-max bounds | `(X - rT, Y - rT)` |
 | top-center, **True kidney** | the Y-max bound, centred | `(X/2, Y - rT)` |
 | top-center, **Asymmetric** | the Y-max bound **and** both sides, from inside | derived |
+| top-left, **NXTcloud** | the X-min **and** Y-max bounds | `(rA, Y - rA)` |
+| center, **NXTcloud** | the Y-min bound, centred across X | `(X/2, rC)` |
+| right, **NXTcloud** | the X-max bound, centred up Y | `(X - rG, Y/2)` |
 
 A cloud's left bulge is tangent to **three** bounds at once, and three
 tangencies leave nothing free: its radius *is* half the Y bound. So it
@@ -392,6 +409,24 @@ in place of `Top bulge radius` and `Right-side tangent radius` in place
 of `Top-right tangent radius`. A **CLoud** asks `Cloud bottom?
 [Straight/Rounded/Back] <Straight>:` second, and then drops the left and
 top bulges and the two extra joiners — see the table above.)
+
+A **NXTcloud** asks for its three lobes and then its four fillets, in
+the order the outline meets them:
+
+```
+Which shape is it? [Center/TopRight/CLoud/Kidney/NXTcloud] <Center>: NXT
+Simple or complex? [Simple/Complex/Back] <Simple>:
+Insertion base point <0,0> [Back]:
+X - overall left-to-right bounds [Back]:
+Y - overall front-to-back bounds [Back]:
+Top-left lobe radius [Back]:
+Center lobe radius [Back]:
+Right lobe radius [Back]:
+Left-bottom tangent radius [Back]:
+Right-bottom tangent radius [Back]:
+Right-top tangent radius [Back]:
+Left-top tangent radius [Back]:
+```
 
 Answer **Complex** and the three tangent questions read `[Line/Back]`
 instead, and a Center pool gains one more straight after the top bulge:
@@ -614,7 +649,7 @@ away.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 95 of them. The reference case is checked against the drawing OASIS was
+answers — 102 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -720,6 +755,19 @@ that cuts a dipping edge four times takes the break across the outermost
 pair; a shallow break past the deep one is refused as swapped; an offset
 wider than a bulge is re-asked; `Back` out of the first step adds nothing
 at all; and the whole flow sits inside the perimeter's own undo group.
+
+Seven cover the **NXTcloud**: its eight arcs land on the customer
+drawing to 1e-4, which is as close as a DXF's four-decimal angles can be
+read; its three lobes are pinned by the envelope alone and the outline
+fills that envelope exactly; the centre lobe really does give two
+DISJOINT arcs of one circle, and the eight elements close
+tangent-continuously round them; it asks for three lobes and then four
+fillets in ring order; a lobe nested inside another is named and the
+right one re-asked; the two overall dimensions hook whichever arc holds
+each bound, read off the arcs as drawn rather than the circles they are
+cut from (a bulge circle can dip well past a bound its own arc never
+reaches, which is why the reference oasis is unchanged by that); and the
+check drawing marks and ties the twice-met circle once, never to itself.
 
 The preview ones wrap `getdist` to photograph the drawing at the moment
 each question is put — it is erased before the next one, so there is no

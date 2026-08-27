@@ -192,7 +192,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v7.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -277,6 +277,11 @@
 (defun oasis:kidney-p (variant)
   (member variant '("TrueKidney" "AsymKidney")))
 
+;; T for the NXT cloud -- three lobes and four fillets, and the one
+;; shape whose ring meets a bulge twice.
+(defun oasis:nxt-p (variant)
+  (= variant "NXTcloud"))
+
 ;; T when the run is a COMPLEX one.  Complex is not a shape: it is a
 ;; second question asked straight after the shape, and what it changes is
 ;; how much of the outline the user is allowed to say.  A simple run is
@@ -325,6 +330,16 @@
       (list (- w rt) (- h rt))
       (list (+ (* w oasis:*topfrac*) (cond (off) (0.0))) (- h rt))))
 
+;; Where a NXT cloud's three lobes sit.  All three are pinned by the
+;; envelope alone, with nothing left to ask but their radii: the TOP-LEFT
+;; one into the corner where the X-min and Y-max walls meet, the CENTRE
+;; one on the Y-min wall halfway across, and the RIGHT one on the X-max
+;; wall halfway up.
+(defun oasis:nxtcen (w h r which)
+  (cond ((= which 0) (list r (- h r)))
+        ((= which 1) (list (* 0.5 w) r))
+        (t           (list (- w r) (* 0.5 h)))))
+
 ;; What the ring's elements are called, in the order they run round the
 ;; pool: bulges at the even positions, joiners at the odd ones.  A seam
 ;; -- the direct handover where a kidney's side circle touches the top
@@ -336,6 +351,12 @@
         ((oasis:kidney-p variant)
          '("left" "bottom-center" "right" "right-seam" "top-center"
            "left-seam"))
+        ;; eight, because the ring meets the centre lobe twice -- once
+        ;; under it on the way out to the right, once over it on the way
+        ;; back
+        ((oasis:nxt-p variant)
+         '("top-left" "left-bottom" "center-bottom" "right-bottom"
+           "right" "right-top" "center-top" "left-top"))
         ((= variant "TopRight")
          '("left" "bottom-center" "right" "right-side" "top-right"
            "top-left"))
@@ -351,6 +372,14 @@
       (cond ((= slot 6) "Right bulge radius")
             ((= slot 7) "Top tangent radius")
             ((= slot 9) "Bottom radius")))
+    ((oasis:nxt-p variant)
+      (cond ((= slot 4)  "Top-left lobe radius")
+            ((= slot 5)  "Center lobe radius")
+            ((= slot 6)  "Right lobe radius")
+            ((= slot 9)  "Left-bottom tangent radius")
+            ((= slot 13) "Right-bottom tangent radius")
+            ((= slot 8)  "Right-top tangent radius")
+            ((= slot 7)  "Left-top tangent radius")))
     ((oasis:kidney-p variant)
       (cond ((= slot 4) "Left bulge radius")
             ((= slot 5) "Top-center radius")
@@ -385,6 +414,9 @@
                   ((= fam "Kidney")
                    (if (= (nth 10 ans) "Asymmetric") '(1 2 3 4 6 9)
                        '(1 2 3 5 9)))
+                  ;; the three lobes, then the four fillets in the order
+                  ;; the outline meets them
+                  ((= fam "NXTcloud") '(1 2 3 4 5 6 9 13 8 7))
                   ((and (= fam "Center") (oasis:complex-p ans))
                    '(1 2 3 4 5 12 6 7 8 9))
                   (t '(1 2 3 4 5 6 7 8 9))))
@@ -395,6 +427,7 @@
   (cond ((= variant "TopRight")       "top-right-bulge")
         ((= variant "StraightBottom") "straight-bottom cloud")
         ((= variant "RoundedBottom")  "rounded-bottom cloud")
+        ((= variant "NXTcloud")       "NXT cloud")
         ((= variant "TrueKidney")     "true kidney")
         ((= variant "AsymKidney")     "asymmetric kidney")
         (t                            "center-bulge")))
@@ -675,7 +708,7 @@
 ;; the two-bulge clouds.  nil when a joiner does not exist -- c:OASIS
 ;; checks for that before it ever gets here, so a nil return means an
 ;; input slipped past the checks, not a user mistake.
-(defun oasis:solve (w h rl rt rr ftl ftr fbc off variant
+(defun oasis:solve (w h rl rt rr ftl ftr fbc fbr off variant
                     / nm bc br bs jr js kt n i j js2 jj ok jp jn jl jm out)
   (setq nm (oasis:names variant) ok T)
   (cond
@@ -705,6 +738,17 @@
                jr (list fbc "SEAM" "SEAM")
                js (list 9 nil nil))
          (setq ok nil br '())))
+    ;; the NXT cloud: three lobes, and the ring meets the centre one
+    ;; TWICE -- it is listed twice, so the solver walks under it out to
+    ;; the right lobe and back over it, and cuts two arcs from the one
+    ;; circle without knowing that is what it is doing
+    ((oasis:nxt-p variant)
+     (setq bc (list (oasis:nxtcen w h rl 0) (oasis:nxtcen w h rt 1)
+                    (oasis:nxtcen w h rr 2) (oasis:nxtcen w h rt 1))
+           br (list rl rt rr rt)
+           bs (list 4 5 6 5)
+           jr (list fbc fbr ftr ftl)
+           js (list 9 13 8 7)))
     (t
      (setq bc (list (list rl rl) (list (- w rr) rr)
                     (oasis:topcen w h rt variant off))
@@ -905,6 +949,34 @@
            (setq hit T)))))
   hit)
 
+;; The pairs of ring elements that are arcs of the SAME circle running
+;; over each other.  Only a shape whose ring meets a bulge twice can have
+;; any: a NXT cloud's centre lobe gives two arcs of one circle, and if
+;; the four fillets round it hand over in the wrong order one of those
+;; arcs sweeps most of the way round and swallows the other, so the
+;; outline covers part of that circle twice instead of once.
+;; oasis:crossings cannot see it -- two identical circles never intersect
+;; each other, they coincide -- so it is looked for on its own.
+(defun oasis:overlaps (arcs / n i j a b out)
+  (setq n (length arcs) i 0 out nil)
+  (while (< i n)
+    (setq j (1+ i))
+    (while (< j n)
+      (setq a (nth i arcs)
+            b (nth j arcs))
+      (if (and (not (oasis:line-p a))
+               (not (oasis:line-p b))
+               (< (distance (nth 1 a) (nth 1 b)) oasis:*fuzz*)
+               (< (abs (- (nth 2 a) (nth 2 b))) oasis:*fuzz*)
+               (or (< (cal:angnorm (- (nth 3 b) (nth 3 a)))
+                      (- (oasis:esweep a) oasis:*fuzz*))
+                   (< (cal:angnorm (- (nth 3 a) (nth 3 b)))
+                      (- (oasis:esweep b) oasis:*fuzz*))))
+          (setq out (cons (list (nth 0 a) (nth 0 b)) out)))
+      (setq j (1+ j)))
+    (setq i (1+ i)))
+  (reverse out))
+
 ;; The pairs of ring elements that run through each other.  Neighbours
 ;; are tangent by construction and touch only at the end they share, so
 ;; they are skipped; anything else that meets is the outline crossing
@@ -1007,42 +1079,60 @@
               m (polar c (cal:angnorm (+ s (/ w 2.0))) r))
         (cons m (if (nth 5 a) (angle c m) (angle m c))))))
 
+;; The point at which the OUTLINE reaches furthest towards one bound --
+;; over the arcs AS DRAWN, not the circles they are cut from, because a
+;; circle can dip well past a bound where its own arc never goes.  Every
+;; arc end and the compass point of every quadrant the sweep crosses is
+;; tested, the same roster oasis:overruns walks, so the answer is exact.
+;; which is 0 for X-min, 1 for X-max, 2 for Y-min and 3 for Y-max.
+(defun oasis:extreme (arcs which / best bd a c r s sw k ang p v)
+  (setq best nil bd nil)
+  (foreach a arcs
+    (setq c  (nth 1 a)
+          r  (nth 2 a)
+          s  (nth 3 a)
+          sw (if (oasis:line-p a) 0.0 (cal:angnorm (- (nth 4 a) s)))
+          k  -2)
+    (while (< k (if (oasis:line-p a) 0 4))
+      (setq ang (cond ((= k -2) s)
+                      ((= k -1) (nth 4 a))
+                      (t (* k (/ pi 2.0)))))
+      (if (or (minusp k) (<= (cal:angnorm (- ang s)) sw))
+          (progn
+            (setq p (if (oasis:line-p a)
+                        (nth (if (= k -2) 1 2) a)
+                        (polar c ang r))
+                  v (cond ((= which 0) (car p))
+                          ((= which 1) (- 0.0 (car p)))
+                          ((= which 2) (cadr p))
+                          (t           (- 0.0 (cadr p)))))
+            (if (or (null bd) (< v bd)) (setq bd v best p))))
+      (setq k (1+ k))))
+  best)
+
 ;; Overall X, overall Y, and a radius on each of the six arcs.  The two
 ;; overall dimensions are hooked to the points that actually touch the
 ;; envelope -- the left and right bulges' outermost points for X, the
 ;; top bulge's highest point and the left bulge's lowest for Y -- so
 ;; they measure the bounds the user was asked for, not a chord of them.
-(defun oasis:dimension (arcs ents base w h lay / doff i a e md bul yl yr top)
+(defun oasis:dimension (arcs ents base w h lay / doff i a e md)
   (setvar "CLAYER" lay)
   (oasis:dimstyle-on oasis:*dimstyle*)
-  (setq doff (oasis:dimoff w h)
-        ;; the left bulge is the first bulge round the ring and the right
-        ;; one the second, on every shape; each touches its own bound
-        ;; level with its centre, so those are the points the overall X
-        ;; hooks.  Read as BULGES rather than as ring positions 0 and 2,
-        ;; because a bulge pinched to a point by the runs either side of
-        ;; it is not in the ring at all
-        bul  nil)
-  (foreach a arcs
-    (if (and (not (oasis:line-p a)) (nth 5 a)) (setq bul (cons a bul))))
-  (setq bul (reverse bul)
-        yl  (cadr (nth 1 (nth 0 bul)))
-        yr  (cadr (nth 1 (nth 1 bul)))
-        ;; and the overall Y hooks the bulge that actually reaches the
-        ;; top bound -- the one whose centre plus radius lands on it
-        top (nth 0 bul))
-  (foreach a bul
-    (if (> (+ (cadr (nth 1 a)) (nth 2 a))
-           (+ (cadr (nth 1 top)) (nth 2 top)))
-        (setq top a)))
+  ;; the overall two hook the points at which the OUTLINE actually
+  ;; touches each bound, whichever arc holds it.  Which one that is is
+  ;; the shape's business, not a fixed position in the ring: an oasis
+  ;; hangs the left and the bottom on the same bulge, a NXT cloud hangs
+  ;; the left and the top on its top-left lobe and the bottom on its
+  ;; centre one.
+  (setq doff (oasis:dimoff w h))
   (command "_.DIMLINEAR"
-           (oasis:wp (list 0.0 yl) base)
-           (oasis:wp (list w yr) base)
+           (oasis:wp (oasis:extreme arcs 0) base)
+           (oasis:wp (oasis:extreme arcs 1) base)
            "_H"
            (oasis:wp (list (* 0.5 w) (+ h doff)) base))
   (command "_.DIMLINEAR"
-           (oasis:wp (list (car (nth 1 top)) h) base)
-           (oasis:wp (list yl 0.0) base)
+           (oasis:wp (oasis:extreme arcs 3) base)
+           (oasis:wp (oasis:extreme arcs 2) base)
            "_V"
            (oasis:wp (list (- 0.0 doff) (* 0.5 h)) base))
   ;; walked by index so each arc keeps the entity oasis:draw made for it
@@ -1091,11 +1181,19 @@
           ((or (null rd) (< d rd)) (setq rest c rd d))))
   (list best rest))
 
+;; T when P is already in LST, to the fuzz.
+(defun oasis:member-pt (p lst / hit q)
+  (setq hit nil)
+  (foreach q lst (if (< (distance p q) oasis:*fuzz*) (setq hit T)))
+  hit)
+
 ;; Add a tie between two centres unless it is already there.  A pair of
 ;; bulges that happen to be ring neighbours as well would otherwise be
 ;; dimensioned twice, one dim on top of the other.
 (defun oasis:addtie (ties p q / e hit)
-  (setq hit nil)
+  ;; a circle the ring meets twice -- a NXT cloud's centre lobe -- would
+  ;; otherwise be tied to itself, which is a dimension of nothing
+  (setq hit (< (distance p q) oasis:*fuzz*))
   (foreach e ties
     (if (or (and (equal (car e) p 1e-8) (equal (cadr e) q 1e-8))
             (and (equal (car e) q 1e-8) (equal (cadr e) p 1e-8)))
@@ -1114,7 +1212,8 @@
 
 ;; The whole check drawing, placed at CBASE.  Returns nothing; the caller
 ;; has already put the layers and the dim style in place.
-(defun oasis:checkdraw (arcs cbase w h lt / mark cens bul ties a e i n near)
+(defun oasis:checkdraw (arcs cbase w h lt
+                        / mark cens bul uniq ties a e i n near)
   (oasis:dimstyle-on oasis:*crossstyle*)
   (setvar "CLAYER" oasis:*guidelayer*)
   (oasis:pv-box w h cbase lt)
@@ -1124,8 +1223,10 @@
   (setvar "CLAYER" oasis:*guidelayer*)
   ;; every circle centre in ring order, and the BULGE centres again on
   ;; their own.  A straight run has no centre, so it drops out of both
-  ;; and the ring closes over it.
-  (setq cens nil bul nil)
+  ;; and the ring closes over it.  A circle the ring meets TWICE is in
+  ;; the ring order twice -- which is right for the ring ties, and wrong
+  ;; for the marks and the corner ties, so those walk a deduped copy.
+  (setq cens nil bul nil uniq nil)
   (foreach a arcs
     (if (not (oasis:line-p a))
         (progn
@@ -1135,17 +1236,16 @@
         bul  (reverse bul)
         n    (length cens)
         i    0)
-  (while (< i n)
-    (oasis:pv-circle (nth i cens) mark cbase "CONTINUOUS" nil)
-    (setq i (1+ i)))
+  (foreach a cens
+    (if (not (oasis:member-pt a uniq)) (setq uniq (cons a uniq))))
+  (setq uniq (reverse uniq))
+  (foreach a uniq (oasis:pv-circle a mark cbase "CONTINUOUS" nil))
   (setvar "CLAYER" oasis:*dimlayer*)
   ;; every centre back to the two corners nearest it
-  (setq i 0)
-  (while (< i n)
-    (setq near (oasis:near2 (nth i cens) w h))
-    (oasis:crossdim (nth i cens) (car near) cbase)
-    (oasis:crossdim (nth i cens) (cadr near) cbase)
-    (setq i (1+ i)))
+  (foreach a uniq
+    (setq near (oasis:near2 a w h))
+    (oasis:crossdim a (car near) cbase)
+    (oasis:crossdim a (cadr near) cbase))
   ;; then the ties between centres: each circle to the next one round the
   ;; ring, AND each bulge to the next bulge.  The ring ties check the
   ;; tangency -- neighbours are externally tangent, so each of those must
@@ -1161,7 +1261,7 @@
                              (nth (rem (1+ i) (length bul)) bul))
           i    (1+ i)))
   (foreach e ties (oasis:crossdim (car e) (cadr e) cbase))
-  (+ (* 2 n) (length ties)))
+  (+ (* 2 (length uniq)) (length ties)))
 
 ;; Where the check drawing goes: clear to the right of the pool and of
 ;; the radius dimensions on that side.
@@ -1214,11 +1314,34 @@
 ;; one until the offset is typed.
 ;;
 ;; Hands back (w h rl rt rr ftl ftr fbc off), ready for oasis:solve.
-(defun oasis:fillin (ans / var w h rl rt rr cl ct cr gl gr side off g big)
+(defun oasis:fillin (ans / var w h rl rt rr cl ct cr gl gr side off g big
+                         ca cd cg)
   (setq var  (oasis:variant ans)
         w    (nth 2 ans)
         h    (nth 3 ans)
         off  (cond ((nth 12 ans)) (0.0)))
+  (if (oasis:nxt-p var)
+      ;; three lobes sized like any other bulge, four fillets read off
+      ;; the smallest of them and lifted clear of their own minimums
+      (progn
+        (setq side (* 0.5 oasis:*startside* (min w h))
+              rl   (cond ((nth 4 ans)) (side))
+              rt   (cond ((nth 5 ans)) (side))
+              rr   (cond ((nth 6 ans)) (side))
+              g    (* 0.6 (min rl rt rr))
+              ca   (oasis:nxtcen w h rl 0)
+              cd   (oasis:nxtcen w h rt 1)
+              cg   (oasis:nxtcen w h rr 2))
+        (list w h rl rt rr
+              (cond ((nth 7 ans))  ((max g (* 1.25 (oasis:filmin cd rt
+                                                                 ca rl)))))
+              (cond ((nth 8 ans))  ((max g (* 1.25 (oasis:filmin cg rr
+                                                                 cd rt)))))
+              (cond ((nth 9 ans))  ((max g (* 1.25 (oasis:filmin ca rl
+                                                                 cd rt)))))
+              (cond ((nth 13 ans)) ((max g (* 1.25 (oasis:filmin cd rt
+                                                                 cg rr)))))
+              0.0))
   (if (oasis:kidney-p var)
       ;; the kidney: what was not asked for is derived by the solver, so
       ;; only the asked slots need filling -- the true one's top circle
@@ -1250,7 +1373,7 @@
               (cond ((nth 9 ans))
                     ((max (* 0.6 g)
                           (* 1.25 (oasis:filmin cl gl cr gr)))))
-              off))
+              nil off))
       (progn
   (setq side (* 0.5 oasis:*startside* (min w h))
         rl   (cond ((oasis:leftrad var h (nth 4 ans))) (side))
@@ -1283,7 +1406,7 @@
         (cond ((nth 9 ans))
               ((oasis:cloud-p var) (max big (* 1.25 (oasis:filmin cl rl cr rr))))
               ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))
-        off))))
+        nil off)))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
 ;; a stray U in the middle of the questions cannot break the next redraw.
@@ -1355,7 +1478,8 @@
               full (oasis:fillin ans)
               arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
                                 (nth 3 full) (nth 4 full) (nth 5 full)
-                                (nth 6 full) (nth 7 full) (nth 8 full) var)
+                                (nth 6 full) (nth 7 full) (nth 8 full)
+                                (nth 9 full) var)
               out  (oasis:pv-box w h base lt))
         (if arcs
             (progn
@@ -1590,7 +1714,8 @@
 ;;   2 X bound          5 top bulge                      10 a cloud's bottom
 ;;
 ;; A shape asks only the slots oasis:steps lists for it.
-(defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr off runs)
+(defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr ca cd cg off
+                          runs)
   (setq var  (oasis:variant ans)
         w    (nth 2 ans) h  (nth 3 ans)
         rl   (oasis:leftrad var h (nth 4 ans))
@@ -1607,15 +1732,21 @@
   (setq cl  (if (and w h rl) (list rl rl))
         ct  (if (and w h rt (not (oasis:kidney-p var)))
                 (oasis:topcen w h rt var off))
-        cr  (if (and w h rr) (list (- w rr) rr)))
+        cr  (if (and w h rr) (list (- w rr) rr))
+        ;; a NXT cloud's three lobes sit nowhere near the other shapes'
+        ;; left/right/top, so they get their own three
+        ca  (if (and w h rl (oasis:nxt-p var)) (oasis:nxtcen w h rl 0))
+        cd  (if (and w h rt (oasis:nxt-p var)) (oasis:nxtcen w h rt 1))
+        cg  (if (and w h rr (oasis:nxt-p var)) (oasis:nxtcen w h rr 2)))
   (cond
     ;; CLoud takes two capitals because Center already has the C.  The
     ;; keyword comes back spelled that way, so it is normalized here and
     ;; nothing downstream ever sees it.
     ((= k 0)
      (setq v (cal:askkw "Which shape is it?"
-                          "Center TopRight CLoud Kidney"
-                          "Center/TopRight/CLoud/Kidney" "Center" nil))
+                          "Center TopRight CLoud Kidney NXTcloud"
+                          "Center/TopRight/CLoud/Kidney/NXTcloud"
+                          "Center" nil))
      (if (= v "CLoud") "Cloud" v))
     ((= k 10)
      (if (= (nth 0 ans) "Kidney")
@@ -1632,19 +1763,48 @@
     ((= k 1) (oasis:askbase T))
     ((= k 2) (cal:askdist 'REQ "X - overall left-to-right bounds" nil T))
     ((= k 3) (oasis:ask-ybound "Y - overall front-to-back bounds" w var))
-    ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4) "left" w h))
-    ((= k 5) (if (oasis:kidney-p var)
-                 (oasis:ask-ktop (oasis:sprompt var 5) w h)
-                 (oasis:ask-top (oasis:sprompt var 5) w h rl var off)))
+    ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4)
+                              (if (oasis:nxt-p var) "top-left" "left") w h))
+    ((= k 5) (cond ((oasis:nxt-p var)
+                    (oasis:ask-bulge (oasis:sprompt var 5) "center" w h))
+                   ((oasis:kidney-p var)
+                    (oasis:ask-ktop (oasis:sprompt var 5) w h))
+                   ((oasis:ask-top (oasis:sprompt var 5) w h rl var off))))
     ((= k 6) (oasis:ask-bulge (oasis:sprompt var 6) "right" w h))
     ;; on a cloud the top joiner runs straight from the right bulge back
-    ;; to the left one; on an oasis it stops at the third bulge first
-    ((= k 7) (if (oasis:cloud-p var)
-                 (oasis:ask-tangent (oasis:sprompt var 7) cr rr cl rl runs)
-                 (oasis:ask-tangent (oasis:sprompt var 7) ct rt cl rl runs)))
-    ((= k 8) (oasis:ask-tangent (oasis:sprompt var 8) cr rr ct rt runs))
-    ((= k 9) (oasis:ask-tangent (oasis:sprompt var 9) cl rl cr rr runs))
-    ((= k 12) (oasis:ask-offset (oasis:sprompt var 12) w h rl rt))))
+    ;; to the left one; on an oasis it stops at the third bulge first;
+    ;; on a NXT cloud every joiner runs between two of the three lobes
+    ((= k 7) (cond ((oasis:nxt-p var)
+                    (oasis:ask-tangent (oasis:sprompt var 7) cd rt ca rl
+                                       runs))
+                   ((oasis:cloud-p var)
+                    (oasis:ask-tangent (oasis:sprompt var 7) cr rr cl rl
+                                       runs))
+                   ((oasis:ask-tangent (oasis:sprompt var 7) ct rt cl rl
+                                       runs))))
+    ((= k 8) (if (oasis:nxt-p var)
+                 (oasis:ask-tangent (oasis:sprompt var 8) cg rr cd rt runs)
+                 (oasis:ask-tangent (oasis:sprompt var 8) cr rr ct rt runs)))
+    ((= k 9) (if (oasis:nxt-p var)
+                 (oasis:ask-tangent (oasis:sprompt var 9) ca rl cd rt runs)
+                 (oasis:ask-tangent (oasis:sprompt var 9) cl rl cr rr runs)))
+    ((= k 12) (oasis:ask-offset (oasis:sprompt var 12) w h rl rt))
+    ((= k 13) (oasis:ask-tangent (oasis:sprompt var 13) cd rt cg rr runs))))
+
+;; The lobe a NXT cloud's right one lies inside, or swallows, or nil.
+;; Its three are pinned by the envelope, so two of them can end up nested
+;; with no tangent radius able to bridge them, exactly as on the oasis
+;; shapes -- and the right lobe is the last of the three asked, so it is
+;; where the pair shows up.  The other pair, the centre lobe inside the
+;; top-left one, needs the top-left lobe at exactly half of a square
+;; envelope, and there it swallows the right lobe as well, so this catches
+;; that too.
+(defun oasis:nxt-nests (w h rl rt rr / ca cd cg)
+  (setq ca (oasis:nxtcen w h rl 0)
+        cd (oasis:nxtcen w h rt 1)
+        cg (oasis:nxtcen w h rr 2))
+  (cond ((oasis:nested-p cg rr ca rl) "top-left")
+        ((oasis:nested-p cg rr cd rt) "center")))
 
 ;; The right bulge is the last of the three, so it is the one that has
 ;; to be checked against BOTH of the others before the tangent radii are
@@ -2443,6 +2603,17 @@
                          (cadr p) " arc")))
         (princ "\n       That is not a pool.  One U takes it away; try a")
         (princ "\n       smaller radius on either of the arcs named.")))
+  (setq bad (oasis:overlaps arcs))
+  (if bad
+      (progn
+        (princ "\nOASIS: the outline runs over the same circle twice --")
+        (foreach p bad
+          (princ (strcat "\n         the " (car p) " arc laps the "
+                         (cadr p) " arc")))
+        (princ "\n       The lobe they are both cut from is handed over in")
+        (princ "\n       the wrong order.  One U takes it away; the tangent")
+        (princ "\n       radii round that lobe are what decide it."))
+  )
   (princ))
 
 ;; Say how the finished outline compares with the envelope it was asked
@@ -2468,8 +2639,8 @@
 
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
-                   rl rt rr ftl ftr fbc off cbase arcs ents nests prev lt a
-                   nchk gotbot)
+                   rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
+                   lt a nchk gotbot)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:dimstyrestore)
@@ -2522,7 +2693,7 @@
      ;;    business -- so the step list is re-read every time round,
      ;;    and changing the shape at the first question changes every
      ;;    question after it.
-     (setq ans '(nil nil nil nil nil nil nil nil nil nil nil nil nil)
+     (setq ans '(nil nil nil nil nil nil nil nil nil nil nil nil nil nil)
            pos 0)
      (while (progn (setq steps (oasis:steps ans))
                    (< pos (length steps)))
@@ -2543,6 +2714,17 @@
              ;; top circle on the asymmetric kidney
              (if (= k 6)
                  (cond
+                   ((oasis:nxt-p (oasis:variant ans))
+                    (setq nests (oasis:nxt-nests (nth 2 ans) (nth 3 ans)
+                                                 (nth 4 ans) (nth 5 ans)
+                                                 (nth 6 ans)))
+                    (if nests
+                        (progn
+                          (princ (strcat "\nThat right lobe and the " nests
+                                         " lobe lie one inside the other, so"
+                                         " no tangent radius can join them."
+                                         "  Asking again."))
+                          (setq pos (1- pos)))))
                    ((= (oasis:variant ans) "AsymKidney")
                     (if (not (oasis:kidney-top (nth 2 ans) (nth 3 ans)
                                                (nth 4 ans) (nth 6 ans)))
@@ -2573,8 +2755,8 @@
            rl   (oasis:leftrad var (nth 3 ans) (nth 4 ans))
            rt   (nth 5 ans) rr (nth 6 ans)
            ftl  (nth 7 ans) ftr  (nth 8 ans) fbc (nth 9 ans)
-           off  (nth 12 ans)
-           arcs (oasis:solve w h rl rt rr ftl ftr fbc off var))
+           fbr  (nth 13 ans) off (nth 12 ans)
+           arcs (oasis:solve w h rl rt rr ftl ftr fbc fbr off var))
 
      (if (not arcs)
          (progn
@@ -2604,7 +2786,9 @@
                             (if (oasis:line-p a)
                                 (strcat "straight run, "
                                         (rtos (distance (nth 1 a) (nth 2 a))))
-                                (strcat (if (nth 5 a) "bulge  R" "reverse R")
+                                (strcat (cond ((not (nth 5 a)) "reverse R")
+                                              ((oasis:nxt-p var) "lobe   R")
+                                              ("bulge  R"))
                                         (rtos (nth 2 a))))
                             (cond ((nth 6 a) "")
                                   ((oasis:kidney-p var)
