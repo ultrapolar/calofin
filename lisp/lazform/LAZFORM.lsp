@@ -35,18 +35,27 @@
 ;;; box; DCL took that back -- see "why the picture is not clickable".)
 ;;;
 ;;; ADDING A SHAPE is adding data, not code -- one entry in
-;;; lzf:*charts* with an outline, a dimension list and its POOL keys.
-;;; Six charts so far: Rectangle, True Oval, Roman, both Grecians and
-;;; True L Left.  Watch the keys rather than the letters when you add
-;;; one: the same letter means different things on different sheets --
-;;; a rectangle's B is the side length, an oval's B is the tip-to-tip
+;;; lzf:*charts* with an outline, a dimension list and its POOL keys,
+;;; plus a row in whichever of lzf:*cuts*, lzf:*cross*, lzf:*picks*
+;;; and lzf:*corners* the sheet needs.  Eight charts so far:
+;;; Rectangle, True Oval, Roman, both Grecians, True L Left, Round and
+;;; Octagon.  Watch the keys rather than the letters when you add one:
+;;; the same letter means different things on different sheets -- a
+;;; rectangle's B is the side length, an oval's B is the tip-to-tip
 ;;; total and its SIDE is T -- so the mapping is per chart and is
 ;;; checked against POOL's own question lists by tests/test_lazform.py.
+;;;
+;;; WHAT IS LIVE ON A PAGE IS ONE FUNCTION'S DECISION.  lzf:dead reads
+;;; the whole state of the page -- the bottom type, the in-square
+;;; toggle and the mode dropdowns -- and names every key POOL will not
+;;; ask about.  lzf:btgrey greys exactly that set and lzf:form drops
+;;; exactly that set, so what is greyed and what is sent cannot say
+;;; different things.
 ;;; ======================================================================
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.4")
+(setq *lazform-version* "v2.5")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -130,6 +139,14 @@
 ;;;  A column-only field is (poolkey label): a real POOL answer with no
 ;;;  place on the plan -- the depths are read off a section, not this
 ;;;  view -- so it gets a box in the list and nothing on the picture.
+;;;
+;;;  THE SPORT CHAIN (E2 F2 G F1 E1) is column-only on every sheet
+;;;  that carries it.  A sport bottom asks a different plan chain from
+;;;  the one these charts are drawn with -- E2 F2 G F1 E1 M L K, not
+;;;  H G F E M L K -- and only G, M, L and K are shared, so its own
+;;;  letters have nowhere to sit on a drawing of a hopper.  They are
+;;;  listed here with POOL's own prompts, and lzf:dead greys them
+;;;  unless the bottom type actually is Sport.
 
 (setq lzf:*charts* '(
   ("Rectangle" "Rectangle" "Rectangle"
@@ -154,7 +171,11 @@
     ("ri" "overall up, right end (out-of-square only)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break")))
+    ("c2" "C2 - shallow floor at the break")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat")))
 
   ;; ---------------- True Oval ----------------
   ;;  Careful: B is NOT the key it is on the rectangle.  A rectangle's B
@@ -189,7 +210,15 @@
     ("ri" "end length RIGHT (out-of-square only)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break")))
+    ("c2" "C2 - shallow floor at the break")
+    ;; the Normal bottom re-asks the side as a CHECK, under a key of
+    ;; its own (pool:hopoval), so it is a second box and not the T on
+    ;; the drawing
+    ("tt" "T - straight side length (check)")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat")))
 
   ;; ---------------- Roman ----------------
   ;;  S / S1 / V / R are asked once per end when both ends are "perfect"
@@ -229,7 +258,11 @@
     ("vr"  "V - RIGHT end width (ends not perfect)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break")))
+    ("c2" "C2 - shallow floor at the break")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat")))
 
   ;; ---------------- Grecian, six-sided hopper ----------------
   ;;  These letters exist only on the Overall input path with a SIX
@@ -262,7 +295,11 @@
     ("s2" "S2 - corner cut face (check)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break"))
+    ("c2" "C2 - shallow floor at the break")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat"))
    (("imeth" . "Overall") ("htype" . "SIX") ("hmode" . "Letters")))
 
   ;; ---------------- Grecian, square hopper ----------------
@@ -290,7 +327,11 @@
    (("s2" "S2 - corner cut face (check)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break"))
+    ("c2" "C2 - shallow floor at the break")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat"))
    (("imeth" . "Overall") ("htype" . "Square")))
 
   ;; ---------------- True L Left ----------------
@@ -374,7 +415,14 @@
     ("K"  "k"  500 570 500 750 "v" "K - hopper to bottom of pool"))
    (("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break")))
+    ("c2" "C2 - shallow floor at the break")
+    ;; the round pool hands its bottom to the oval's routine, which
+    ;; re-asks the straight side as a check even on a circle
+    ("tt" "T - straight side length (check)")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat")))
 
   ;; ---------------- Octagon ----------------
   ;;  POOL reaches the octagon through the SAME flow as the grecian --
@@ -420,7 +468,11 @@
    (("s2" "S2 - corner cut face (check)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
-    ("c2" "C2 - shallow floor at the break"))
+    ("c2" "C2 - shallow floor at the break")
+    ("e2" "E2 - left end shallow flat")
+    ("f2" "F2 - left slope")
+    ("f1" "F1 - right slope")
+    ("e1" "E1 - right end shallow flat"))
    (("imeth" . "Overall") ("htype" . "Square")))
 ))
 
@@ -441,6 +493,126 @@
 ;; unread -- so the chart answers those gates itself.  A chart with
 ;; nothing to imply simply has none.
 (defun lzf:gates (c) (nth 6 c))
+
+;;; -------------------- cross dims and the mode dropdowns ----------------
+;;;  A cross dim is a tape run corner to corner, and it is the one
+;;;  measurement that has no place at all on a chart drawn square: it
+;;;  runs diagonally, and a dim here is "h" or "v" and nothing else.
+;;;  So every one of them is a column box.
+;;;
+;;;  HOW MANY OF THEM POOL ASKS FOR DEPENDS ON A QUESTION OF ITS OWN,
+;;;  and that question is a dropdown here:
+;;;
+;;;    Rectangle / Oval   cmode   Corner | Middle | Ends
+;;;                       Corner and Middle tape two diagonals, Ends
+;;;                       tapes four (pool:crosstemplate).
+;;;    the Grecians       gcross  Simple | Center | Complex
+;;;                       Simple tapes the two body diagonals; Center
+;;;                       and Complex tape 14 and 18, far more than a
+;;;                       sheet has boxes for, so the dropdown answers
+;;;                       the gate and the dims are typed at the
+;;;                       command line (pool:grecmode).
+;;;
+;;;  Left on "(ask)" the boxes are all dead and none of them travels:
+;;;  which box is which diagonal is undefined until the mode is, so a
+;;;  number typed into one would be attached to the wrong tape.
+;;;
+;;;  The L's nine diagonals need no such question -- POOL asks for the
+;;;  same nine every time -- so that chart carries the boxes and no
+;;;  mode dropdown.  Its "mirror" dropdown is a different sort of
+;;;  thing: a plain keyword question with a home on this page, which is
+;;;  why a pick declares the section it belongs to.
+
+(setq lzf:*cross*
+  '(("Rectangle" ("x0" "Cross dim 1") ("x1" "Cross dim 2")
+                 ("x2" "Cross dim 3") ("x3" "Cross dim 4"))
+    ("Oval"      ("x0" "Cross dim 1") ("x1" "Cross dim 2")
+                 ("x2" "Cross dim 3") ("x3" "Cross dim 4"))
+    ("ROman"     ("ac" "Cross dim body A-C") ("bd" "Cross dim body B-D"))
+    ("Grecian"   ("x0" "Cross dim 1") ("x1" "Cross dim 2"))
+    ("GRSquare"  ("x0" "Cross dim 1") ("x1" "Cross dim 2"))
+    ("OCtagon"   ("x0" "Cross dim 1") ("x1" "Cross dim 2"))
+    ("L"         ("ac" "Cross dim A-C") ("bd" "Cross dim B-D")
+                 ("ce" "Cross dim C-E") ("df" "Cross dim D-F")
+                 ("ae" "Cross dim A-E") ("bf" "Cross dim B-F")
+                 ("ad" "Cross dim A-D") ("be" "Cross dim B-E")
+                 ("cf" "Cross dim C-F"))))
+
+(defun lzf:cross (c) (cdr (assoc (car c) lzf:*cross*)))
+
+;; The keyword dropdowns a page carries beyond the bottom type:
+;;   (key label section (choice ...))
+;; section "cross" puts the dropdown at the head of the cross-dim box
+;; and ties its life to them -- in square there are no cross dims, so
+;; there is no mode to pick either; section "run" is a question in its
+;; own right and sits with the toggle and the bottom type.
+(setq lzf:*picks*
+  '(("Rectangle" ("cmode" "Cross dims measured from" "cross"
+                  ("(ask)" "Corner" "Middle" "Ends")))
+    ("Oval"      ("cmode" "Cross dims measured from" "cross"
+                  ("(ask)" "Corner" "Middle" "Ends")))
+    ("Grecian"   ("gcross" "Cross-dim detail" "cross"
+                  ("(ask)" "Simple" "Center" "Complex")))
+    ("GRSquare"  ("gcross" "Cross-dim detail" "cross"
+                  ("(ask)" "Simple" "Center" "Complex")))
+    ("OCtagon"   ("gcross" "Cross-dim detail" "cross"
+                  ("(ask)" "Simple" "Center" "Complex")))
+    ("L"         ("mirror" "Mirror the pool (wing swaps sides)" "run"
+                  ("(ask)" "Yes" "No")))))
+
+(defun lzf:picks (c) (cdr (assoc (car c) lzf:*picks*)))
+
+;; How many of a chart's cross boxes each mode leaves live.  A mode
+;; this table does not name -- "(ask)" above all -- leaves none.
+(setq lzf:*crosslive* '(("Corner" 2) ("Middle" 2) ("Ends" 4) ("Simple" 2)))
+
+;; The dropdown that decides how many cross boxes are live, or nil.
+(defun lzf:crossmode (c / d out)
+  (foreach d (lzf:picks c)
+    (if (and (not out) (= (caddr d) "cross")) (setq out (car d))))
+  out)
+
+;; the dropdown selections, by key: (("cmode" . 3) ...)
+(setq lzf:*pvals* nil)
+
+(defun lzf:pget (key / p)
+  (if (setq p (assoc key lzf:*pvals*)) (cdr p) 0))
+
+(defun lzf:pput (key i / out p)
+  (foreach p lzf:*pvals* (if (/= (car p) key) (setq out (cons p out))))
+  (setq lzf:*pvals* (reverse (cons (cons key i) out))))
+
+;; What a dropdown is set to, as the word POOL would read -- "" while
+;; it is still on "(ask)", which is the form's version of an empty box.
+(defun lzf:pickval (c key / d i)
+  (if (setq d (assoc key (lzf:picks c)))
+      (progn
+        (setq i (lzf:pget key))
+        (if (and (> i 0) (< i (length (cadddr d)))) (nth i (cadddr d)) ""))
+      ""))
+
+;; The cross boxes this page's mode leaves live, counted off the front
+;; of the chart's list -- the order the template asks them in.
+(defun lzf:crosslive (c / m p)
+  (if (setq m (lzf:crossmode c))
+      (if (setq p (assoc (lzf:pickval c m) lzf:*crosslive*)) (cadr p) 0)
+      (length (lzf:cross c))))
+
+;; The charts POOL never asks a bottom type on.  The L family takes
+;; the standard hopper and nothing else, so the popup is greyed, btype
+;; is not sent, and the page is greyed against "Normal" -- the bottom
+;; those flows really draw.
+(setq lzf:*nobtype* '("L" "LAzyl"))
+
+(defun lzf:btlive (c) (not (member (car c) lzf:*nobtype*)))
+
+;; The charts whose flow puts a yes/no gate in front of the corner
+;; questions ("Anything to record about the corners?").  Answer a
+;; corner row on one of these and the gate is answered Yes for you;
+;; leave every row on "(ask)" and the gate is left for POOL to ask.
+;; The rectangle and the oval have no such gate.
+(setq lzf:*crecharts*
+  '("L" "LAzyl" "Grecian" "GRSquare" "OCtagon" "ROman"))
 
 ;;; -------------------- where the chart is cut ---------------------------
 ;;;  The closest DCL comes to boxes ON the drawing: the chart is cut
@@ -475,26 +647,64 @@
 ;;;  until a sized treatment is picked.  The dropdown's first entry is
 ;;;  "(ask)": the form's version of leaving a box empty, and the only
 ;;;  honest default, since POOL offers no default on a first corner
-;;;  either.  Only the charts whose POOL flow asks in these terms carry
-;;;  corner rows; Roman and the Grecians spell their corners as letter
-;;;  dimensions that are already on the chart.
+;;;  either.
 ;;;
-;;;  In-square is the one wrinkle: an in-square rectangle asks ONE
-;;;  question for all four corners, under its own key -- so when the
-;;;  toggle is on, corner A's row speaks for all four and the other
-;;;  three are ignored (lzf:form does the mapping).
+;;;  IN SQUARE AND OUT OF SQUARE ARE DIFFERENT QUESTIONS, and that is
+;;;  the whole reason a row carries two lists of POOL stems rather than
+;;;  one name.  A row is
+;;;
+;;;      (stem  label  (in-square stem ...)  (out-of-square stem ...))
+;;;
+;;;  where stem is the row's own tile key and each list is the POOL
+;;;  corner questions that row answers in that state.  An EMPTY list
+;;;  means the row is not read at all there.  Three shapes of that:
+;;;
+;;;    Rectangle, Roman   four rows out of square, one question in
+;;;                       square -- so corner A's row maps to "corners"
+;;;                       and B, C and D map to nothing.
+;;;    the Grecians       two collective rows.  In square POOL asks
+;;;                       exactly those two (bodycorners, endcorners);
+;;;                       out of square it asks all eight individually,
+;;;                       so each row FANS OUT to its four, carrying
+;;;                       one treatment and one size to all of them.
+;;;    True L             two rows, the same two questions either way.
+;;;
+;;;  On the shapes that gate their corner questions behind a yes/no
+;;;  (lzf:*crecharts*), picking any row answers that gate too.
 
 (setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
 
 (setq lzf:*corners*
   '(("Rectangle"
-     ("cornera" "Corner A (bottom left)")
-     ("cornerb" "Corner B (bottom right)")
-     ("cornerc" "Corner C (top right)")
-     ("cornerd" "Corner D (top left)"))
+     ("cornera" "Corner A (bottom left)"  ("corners") ("cornera"))
+     ("cornerb" "Corner B (bottom right)" ()          ("cornerb"))
+     ("cornerc" "Corner C (top right)"    ()          ("cornerc"))
+     ("cornerd" "Corner D (top left)"     ()          ("cornerd")))
+    ("ROman"
+     ("cornera" "Corner A (bottom left)"  ("corners") ("cornera"))
+     ("cornerb" "Corner B (bottom right)" ()          ("cornerb"))
+     ("cornerc" "Corner C (top right)"    ()          ("cornerc"))
+     ("cornerd" "Corner D (top left)"     ()          ("cornerd")))
+    ("Grecian"
+     ("bodycorners" "Body corners (all four)" ("bodycorners")
+      ("cornera" "cornerb" "cornerc" "cornerd"))
+     ("endcorners" "End-tip corners (LT LB RT RB)" ("endcorners")
+      ("cornerlt" "cornerlb" "cornerrt" "cornerrb")))
+    ("GRSquare"
+     ("bodycorners" "Body corners (all four)" ("bodycorners")
+      ("cornera" "cornerb" "cornerc" "cornerd"))
+     ("endcorners" "End-tip corners (LT LB RT RB)" ("endcorners")
+      ("cornerlt" "cornerlb" "cornerrt" "cornerrb")))
+    ("OCtagon"
+     ("bodycorners" "Body corners (all four)" ("bodycorners")
+      ("cornera" "cornerb" "cornerc" "cornerd"))
+     ("endcorners" "End-tip corners (LT LB RT RB)" ("endcorners")
+      ("cornerlt" "cornerlb" "cornerrt" "cornerrb")))
     ("L"
-     ("outercorners" "Outer corners (all five)")
-     ("innercorner" "Reverse corner E"))))
+     ("outercorners" "Outer corners (all five)"
+      ("outercorners") ("outercorners"))
+     ("innercorner" "Reverse corner E"
+      ("innercorner") ("innercorner")))))
 
 (defun lzf:corners (c) (cdr (assoc (car c) lzf:*corners*)))
 
@@ -518,6 +728,16 @@
   (lzf:cput stem i)
   (mode_tile (strcat stem "-sz") (if (lzf:csized i) 0 1))
   (lzf:redraw)
+  (princ))
+
+;; A mode dropdown changed: remember it, repaint the chart the list
+;; unrolled across, and re-decide what is live -- a cross-dim mode is
+;; one of the things lzf:dead reads, so the boxes under it change
+;; state as the mode is picked.
+(defun lzf:pickpick (key v)
+  (lzf:pput key (atoi v))
+  (lzf:redraw)
+  (lzf:btgrey lzf:*chart*)
   (princ))
 
 ;; The horizontal dims whose line IS this cut.
@@ -544,11 +764,22 @@
           prev y))
   (reverse out))
 
-;; Every POOL key the chart can answer, drawn ones first, in order.
+;; Every POOL key the chart can answer with a BOX, drawn ones first,
+;; then the column-only fields, then the cross dims.
 (defun lzf:keys (c / d out)
   (foreach d (lzf:dims c) (setq out (cons (cadr d) out)))
   (foreach d (lzf:extra c) (setq out (cons (car d) out)))
+  (foreach d (lzf:cross c) (setq out (cons (car d) out)))
   (reverse out))
+
+;; Everything on the page that can be greyed and can be sent: the
+;; boxes, the dropdowns that carry a keyword answer, and the bottom
+;; type.  lzf:dead is measured against this, so a rule may name a key
+;; no chart carries without anything having to know.
+(defun lzf:pagekeys (c / out d)
+  (setq out (lzf:keys c))
+  (foreach d (lzf:picks c) (setq out (append out (list (car d)))))
+  (append out (list "btype")))
 
 ;;; -------------------- the answers -------------------------------------
 ;;;  What is typed is kept as the STRING the user typed, so the chart can
@@ -896,6 +1127,83 @@
 ;; character cells across for a per-mille x
 (defun lzf:cellx (v) (/ (* v lzf:*chart-w*) 1000.0))
 
+;;; -------------------- packing the column boxes ------------------------
+;;;  A DCL DIALOG TALLER THAN THE SCREEN DOES NOT OPEN, and nothing
+;;;  here can measure a screen: DCL reports a tile's size only while
+;;;  the dialog is already up, which is too late to lay it out.  So the
+;;;  column-only boxes are packed TWO TO A ROW wherever the pair still
+;;;  fits across.  Nine of them stacked -- which is what a Roman sheet
+;;;  with the Sport chain on it would be -- is nine rows for nine
+;;;  numbers; five rows carries the same nine.
+;;;
+;;;  A row wider than the screen does not open either, though, and both
+;;;  labels of a pair sit on one line.  So the pair is only made when
+;;;  the two labels and their boxes fit the budget below; a field whose
+;;;  label is a sentence keeps a row of its own, at its full width.
+;;;  That is why the pairing does not always fall on the group
+;;;  boundaries a reader might expect -- it follows the width, and
+;;;  every box is labelled for itself either way.
+
+(setq lzf:*rowbudget* 92)       ; cells a packed row may occupy
+
+;; One column-only box, at the given width and indent.
+(defun lzf:extbox (d w ind)
+  (strcat ind ": edit_box { key = \"" (car d) "\"; label = \"" (cadr d)
+          "\"; edit_width = " (itoa w) "; }"))
+
+;; (key label) fields as DCL lines, two to a row where they fit.
+(defun lzf:packrows (items ind / out a b)
+  (while items
+    (setq a (car items) b (cadr items))
+    (if (and b (<= (+ (strlen (cadr a)) (strlen (cadr b)) 20) lzf:*rowbudget*))
+      (setq out (append out
+                        (list (strcat ind ": row {")
+                              (lzf:extbox a 6 (strcat ind "  "))
+                              (lzf:extbox b 6 (strcat ind "  "))
+                              (strcat ind "}")))
+            items (cddr items))
+      (setq out (append out (list (lzf:extbox a 9 ind)))
+            items (cdr items))))
+  out)
+
+;; The Sport chain is packed on its own so it reads as the chain it is
+;; rather than being broken across a row boundary by whatever the
+;; depths happened to leave over.  It is a group in the greying rules
+;; too -- lzf:dead names it from here.
+(setq lzf:*sportchain* '("e2" "f2" "f1" "e1"))
+
+(defun lzf:sportof (items / d out)
+  (foreach d items
+    (if (member (car d) lzf:*sportchain*) (setq out (cons d out))))
+  (reverse out))
+
+(defun lzf:notsport (items / d out)
+  (foreach d items
+    (if (not (member (car d) lzf:*sportchain*)) (setq out (cons d out))))
+  (reverse out))
+
+;; A keyword dropdown as a DCL line.
+(defun lzf:pickline (d ind)
+  (strcat ind ": popup_list { key = \"" (car d) "\"; label = \"" (cadr d)
+          "\"; edit_width = 12; }"))
+
+;; A second line under the form, for what only this page has to
+;; explain.  The Grecians earn one: two of their three cross-dim modes
+;; ask for far more diagonals than a sheet has boxes, so the dropdown
+;; answers the gate and the tape numbers are typed at the command line
+;; -- which is worth saying on the page rather than in a README.
+(setq lzf:*grechint*
+  (strcat "Cross dims: Simple takes the two boxes here; Center and "
+          "Complex answer the gate and ask their 14 or 18 diagonals at "
+          "the command line."))
+
+(setq lzf:*hints*
+  (list (cons "Grecian" lzf:*grechint*)
+        (cons "GRSquare" lzf:*grechint*)
+        (cons "OCtagon" lzf:*grechint*)))
+
+(defun lzf:hint (c) (cdr (assoc (car c) lzf:*hints*)))
+
 ;; One wedge row: the cut's dims as real edit boxes, pushed to their
 ;; letters' positions by spacers.  Positions are in character cells and
 ;; a box has its own minimum size, so this is honest about being
@@ -994,11 +1302,22 @@
     (progn
       (setq out (cons "      : boxed_column {" out))
       (setq out (cons "        label = \"Not on this view\";" out))
-      (foreach d (lzf:extra c)
-        (setq out (cons (strcat "        : edit_box { key = \"" (car d)
-                                "\"; edit_width = 9; label = \"" (cadr d)
-                                "\"; }")
-                        out)))
+      (foreach l (append
+                   (lzf:packrows (lzf:notsport (lzf:extra c)) "        ")
+                   (lzf:packrows (lzf:sportof (lzf:extra c)) "        "))
+        (setq out (cons l out)))
+      (setq out (cons "      }" out))))
+  ;; the cross dims, with the question that decides how many of them
+  ;; POOL will ask for at the head of the box
+  (if (lzf:cross c)
+    (progn
+      (setq out (cons "      : boxed_column {" out))
+      (setq out (cons "        label = \"Cross dims (out-of-square only)\";" out))
+      (foreach d (lzf:picks c)
+        (if (= (caddr d) "cross")
+            (setq out (cons (lzf:pickline d "        ") out))))
+      (foreach l (lzf:packrows (lzf:cross c) "        ")
+        (setq out (cons l out)))
       (setq out (cons "      }" out))))
   (if (lzf:corners c)
     (progn
@@ -1024,6 +1343,11 @@
   (setq out (cons (strcat "        : popup_list { key = \"btype\"; "
                           "label = \"Bottom type\"; }")
                   out))
+  ;; the keyword questions that are not about cross dims live here,
+  ;; with the toggle and the bottom type
+  (foreach d (lzf:picks c)
+    (if (= (caddr d) "run")
+        (setq out (cons (lzf:pickline d "        ") out))))
   (setq out (cons "      }" out))
   (setq out (cons "    }" out))
   (setq out (cons "  }" out))
@@ -1033,6 +1357,10 @@
                           "Type NA where nothing was measured; leave a box "
                           "empty and POOL will ask.\"; }")
                   out))
+  (if (lzf:hint c)
+    (setq out (cons (strcat "  : text { key = \"hint2\"; width = 62; label = \""
+                            (lzf:hint c) "\"; }")
+                    out)))
   (setq out (cons "  : row {" out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
                           "is_default = true; fixed_width = true; }")
@@ -1337,7 +1665,7 @@
   (setq out (append out (list "    : boxed_column {"
                               "      label = \"And the rest\";")))
   (setq out (append out (lzf:txt-rest c)))
-  (foreach d (lzf:extra c)
+  (foreach d (append (lzf:extra c) (lzf:cross c))
     (setq out (append out (list (strcat "        : edit_box { key = \""
                                         (car d) "\"; label = \"" (cadr d)
                                         "\"; edit_width = 8; }")))))
@@ -1354,7 +1682,7 @@
 
 ;; Show it, collect it, and hand POOL the same alist LAZFORM would.
 (defun lzf:txt-show (c / f dcl rc k out)
-  (setq lzf:*vals* nil lzf:*chart* c)
+  (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c)
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))
@@ -1431,11 +1759,27 @@
   (if (> i n) "" (substr s i (1+ (- n i)))))
 
 ;; The alist POOL reads, built from what was typed.
-;;; -------------------- what this bottom actually asks -------------------
-;;;  A bottom type does not ask for every letter on the sheet, and the
-;;;  form offered all of them anyway: type a C against a Normal hopper
-;;;  and POOL never asks for it, so the number goes nowhere and nothing
-;;;  says so.  These grey the boxes the chosen bottom will not reach.
+;;; -------------------- what this page actually asks ---------------------
+;;;  A page does not ask for every box on it, and the form used to
+;;;  offer them all anyway: type a C against a Normal hopper and POOL
+;;;  never asks for it, so the number went nowhere and nothing said so.
+;;;  THREE things on the page decide, not one:
+;;;
+;;;    the bottom type    which of the plan and depth letters that
+;;;                       bottom's own routine will ask for;
+;;;    the in-square      whether there are cross dims at all, and
+;;;    toggle             whether the second overalls are asked;
+;;;    the mode dropdown  how many of the cross boxes map to a tape.
+;;;
+;;;  lzf:dead puts the three together and names the dead keys once.
+;;;  lzf:btgrey greys exactly that set and lzf:form drops exactly that
+;;;  set -- one function, two callers -- so the page cannot grey a box
+;;;  and then send what is in it, or send a box it has greyed.
+;;;
+;;;  The bottom-type half comes from POOL'S OWN pool:btmspec rather
+;;;  than a copy of it here -- (ask-G ask-E has-profile ask-C2 slack)
+;;;  -- so the two cannot drift.  LAZFORM already refuses to open
+;;;  without POOL loaded, so it is always there to ask.
 ;;;
 ;;;  The truth comes from POOL'S OWN pool:btmspec rather than a copy of
 ;;;  it here -- (ask-G ask-E has-profile ask-C2 slack) -- so the two
@@ -1447,9 +1791,12 @@
 ;;;  flag is only ever consulted inside pool:hopnormal, and a Sport
 ;;;  never goes near it.  Sport has its own path, which DOES ask C and
 ;;;  D, and which asks a different plan chain entirely: E2 F2 G F1 E1 M
-;;;  K, not H G F E.  So on a Sport the chart's H, F and E boxes are
+;;;  L K, not H G F E.  So on a Sport the chart's H, F and E boxes are
 ;;;  greyed: they are not what POOL will ask for, and a number typed
-;;;  into one would be read by nothing.
+;;;  into one would be read by nothing.  The other side of that trade
+;;;  is in lzf:dead: E2 F2 F1 E1 have boxes on every sheet whose flow
+;;;  can reach a Sport, and every bottom that is NOT a Sport greys
+;;;  them.
 (defun lzf:btskip (bt / sp out)
   (cond
     ((= bt "Sport") (list "h" "f" "e" "c2"))
@@ -1462,56 +1809,101 @@
      (if (not (cadddr sp)) (setq out (cons "c2" out)))
      out)))
 
-;; Grey every box this bottom will not ask about, un-grey the rest.
-;; Only keys the CURRENT chart carries are touched -- mode_tile on a key
-;; that is not on this page would error.
-(defun lzf:btgrey (c / skip k)
-  (setq skip (lzf:btskip (nth lzf:*btype* lzf:*btypes*)))
-  (foreach k (lzf:keys c)
-    (mode_tile k (if (member k skip) 1 0))))
+;; THE ONE AUTHORITY.  Every key on this page POOL will not ask about,
+;; given the bottom type, the in-square toggle and the mode dropdowns
+;; (which are read from their own store, the way the boxes are).  The
+;; answer is restricted to keys the page really carries, so a rule may
+;; name a key no chart has and the two callers can both trust the list
+;; -- mode_tile on a tile that is not there would error.
+(defun lzf:dead (c insq btype / out bt n i k have seen)
+  ;; the L family: POOL asks no bottom type there at all, so the popup
+  ;; is dead and the page is judged against the bottom those flows
+  ;; really draw
+  (setq bt (if (lzf:btlive c) btype "Normal")
+        out (if (lzf:btlive c) nil (list "btype")))
+  (setq out (append out (lzf:btskip bt)))
+  ;; the Sport chain is asked by a Sport bottom and by nothing else
+  (if (/= bt "Sport")
+      (setq out (append out lzf:*sportchain*)))
+  ;; in square there are no cross dims to measure, no mode to measure
+  ;; them from, and no second overall
+  (if insq
+      (setq out (append out (list "bo" "ri")
+                        (mapcar 'car (lzf:cross c))
+                        (if (lzf:crossmode c) (list (lzf:crossmode c))))))
+  ;; and out of square, only as many cross boxes as the mode maps: the
+  ;; rest stand for tapes this mode does not run
+  (setq n (lzf:crosslive c) i 0)
+  (foreach k (lzf:cross c)
+    (if (>= i n) (setq out (cons (car k) out)))
+    (setq i (1+ i)))
+  ;; keep what this page actually has, once each
+  (setq have (lzf:pagekeys c))
+  (foreach k out
+    (if (and (member k have) (not (member k seen)))
+        (setq seen (cons k seen))))
+  (reverse seen))
 
-(defun lzf:form (shape insq btype / out k v a noask)
+;; Grey every dead key on the page, un-grey the rest.
+(defun lzf:btgrey (c / dead k)
+  (setq dead (lzf:dead c lzf:*insq* (nth lzf:*btype* lzf:*btypes*)))
+  (foreach k (lzf:pagekeys c)
+    (mode_tile k (if (member k dead) 1 0))))
+
+(defun lzf:form (shape insq btype / out k v a dead d cp)
+  (setq dead (lzf:dead lzf:*chart* insq btype))
   (setq out (list (cons 'shape shape)
                   (cons 'insq (if insq "Insquare" "Outofsquare"))))
-  (if (and btype (/= btype "")) (setq out (cons (cons 'btype btype) out)))
-  ;; a key this bottom never asks about does not travel: it would sit in
+  ;; a key this page never asks about does not travel: it would sit in
   ;; the store unread, and a form that quietly carries dead answers is
   ;; harder to reason about than one that does not
-  (setq noask (lzf:btskip btype))
+  (if (and btype (/= btype "") (not (member "btype" dead)))
+      (setq out (cons (cons 'btype btype) out)))
   (foreach k (lzf:keys lzf:*chart*)
     (setq v (lzf:get k)
           a (lzf:answer v))
-    (if (and (not (eq a 'SKIP)) (not (member k noask)))
+    (if (and (not (eq a 'SKIP)) (not (member k dead)))
         (setq out (cons (cons (read k) a) out))))
+  ;; the mode dropdowns: a keyword answer in its own right, and one
+  ;; left on "(ask)" sends nothing, exactly as an empty box does
+  (foreach d (lzf:picks lzf:*chart*)
+    (setq v (lzf:pickval lzf:*chart* (car d)))
+    (if (and (/= v "") (not (member (car d) dead)))
+        (setq out (cons (cons (read (car d)) v) out))))
   ;; the corners: a dropdown left on (ask) sends nothing, a sized
-  ;; treatment carries its size when one parses.  In-square asks ONE
-  ;; question for all four rectangle corners, under its own key, so
-  ;; corner A's row speaks for all four there and B-D are ignored.
-  (foreach k (lzf:cornerpairs insq)
+  ;; treatment carries its size when one parses, and each row goes to
+  ;; whichever POOL questions it answers in this state
+  (setq cp (lzf:cornerpairs insq))
+  (foreach k cp
     (setq out (cons k out)))
+  ;; the corner gate.  On the shapes that put a yes/no in front of the
+  ;; corner questions, a row picked here answers that gate too -- the
+  ;; treatments would be read by nothing if it were left on No
+  (if (and cp (member (car lzf:*chart*) lzf:*crecharts*))
+      (setq out (cons (cons 'crec "Yes") out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
     (setq out (cons (cons (read (car k)) (cdr k)) out)))
   (reverse out))
 
-;; The (key . value) pairs the corner rows contribute.
-(defun lzf:cornerpairs (insq / out d stem use i ty a)
+;; The (key . value) pairs the corner rows contribute.  A row carries
+;; one treatment and one size to every POOL stem it answers in this
+;; state: one on a rectangle corner, four when a Grecian's collective
+;; row fans out to the corners POOL asks individually.
+(defun lzf:cornerpairs (insq / out d stem targets i ty sz u)
   (foreach d (lzf:corners lzf:*chart*)
     (setq stem (car d)
-          use stem)
-    (if (and insq (= (car lzf:*chart*) "Rectangle"))
-        (setq use (if (= stem "cornera") "corners" nil)))
-    (if (and use (> (setq i (lzf:cget stem)) 0))
+          targets (if insq (caddr d) (cadddr d)))
+    (if (and targets (> (setq i (lzf:cget stem)) 0))
         (progn
-          (setq ty (nth i lzf:*ctreat*))
-          (setq out (cons (cons (read (strcat use "-ty")) ty) out))
-          (if (lzf:csized i)
-              (progn
-                (setq a (lzf:answer (lzf:get (strcat stem "-sz"))))
-                (if (numberp a)
-                    (setq out (cons (cons (read (strcat use "-sz")) a)
-                                    out))))))))
+          (setq ty (nth i lzf:*ctreat*)
+                sz (if (lzf:csized i)
+                       (lzf:answer (lzf:get (strcat stem "-sz")))))
+          (foreach u targets
+            (setq out (cons (cons (read (strcat u "-ty")) ty) out))
+            (if (numberp sz)
+                (setq out (cons (cons (read (strcat u "-sz")) sz) out)))))))
   (reverse out))
 
 ;;; -------------------- the run -----------------------------------------
@@ -1532,6 +1924,7 @@
     (princ))
   (setq lzf:*vals* nil
         lzf:*cvals* nil                 ; corner dropdowns back to (ask)
+        lzf:*pvals* nil                 ; and the mode dropdowns with them
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
         lzf:*pos* nil                   ; where the user last had it
@@ -1579,6 +1972,16 @@
               (strcat "(lzf:cornerpick \"" (car d) "\" $value)"))
             (action_tile (strcat (car d) "-sz")
               (strcat "(lzf:put \"" (car d) "-sz\" $value)")))
+          ;; the mode dropdowns -- the cross-dim reference and the L's
+          ;; mirror -- filled and put back the same way, and each
+          ;; re-decides what is live as it changes
+          (foreach d (lzf:picks c)
+            (start_list (car d))
+            (foreach n (cadddr d) (add_list n))
+            (end_list)
+            (set_tile (car d) (itoa (lzf:pget (car d))))
+            (action_tile (car d)
+              (strcat "(lzf:pickpick \"" (car d) "\" $value)")))
           (if lzf:*insq* (set_tile "insq" "1"))
           ;; put back what was typed before this page was opened
           (foreach d (lzf:keys c) (set_tile d (lzf:get d)))
@@ -1610,7 +2013,11 @@
           (action_tile "btype"
             (strcat "(setq lzf:*btype* (atoi $value)) (lzf:redraw)"
                     " (lzf:btgrey lzf:*chart*)"))
-          (action_tile "insq" "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)")
+          ;; the toggle decides the cross dims and the second overalls,
+          ;; so it re-greys the page as well as repainting the chart
+          (action_tile "insq"
+            (strcat "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)"
+                    " (lzf:btgrey lzf:*chart*)"))
           (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)

@@ -27,23 +27,42 @@ feeding it a nil that means something else entirely.
 
 A **tab strip** across the top switches charts. Eight are drawn, on two rows -- eight keys on one line run about 94 character cells against a budget of 90, which is a dialog that does not open, so they wrap:
 
-| Chart | POOL shape | Letters on the picture |
-| --- | --- | --- |
-| `Rectangle` | Rectangle | B A H G F E M L K |
-| `Oval` | Oval | B T A H G F E W M L K |
-| `ROman` | ROman | B T A S S1 V H G F E W M L K |
-| `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E |
-| `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E |
-| `L` | L | B B1 B2 A A1 A2 H G F E M L K |
-| `ROUnd` | ROUnd | B A W (H G F E M L K in the list) |
-| `OCtagon` | OCtagon | B S T A S1 V H G F E M L K (S2 in the list) |
+| Chart | POOL shape | Letters on the picture | Also in the column |
+| --- | --- | --- | --- |
+| `Rectangle` | Rectangle | B A H G F E M L K | 4 corners, `cmode` + 4 cross dims, Sport chain |
+| `Oval` | Oval | B T A H G F E W M L K | `cmode` + 4 cross dims, Sport chain, T check |
+| `ROman` | ROman | B T A S S1 V H G F E W M L K | 4 corners, 2 cross dims, Sport chain |
+| `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
+| `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
+| `L` | L | B B1 B2 A A1 A2 H G F E M L K | 2 corner rows, 9 diagonals, `mirror` |
+| `ROUnd` | ROUnd | B A W (H G F E M L K in the list) | Sport chain, T check |
+| `OCtagon` | OCtagon | B S T A S1 V H G F E M L K (S2 in the list) | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
 
-**The bottom type decides which boxes are live.** A style does not ask
-for every letter on the sheet, and the form used to offer them all
-anyway -- type a `C` against a Normal hopper and POOL never asks for
-it, so the number went nowhere and nothing said so. Picking a bottom
-now greys what that bottom will never reach, and a greyed value is not
-sent to POOL either.
+Under the picture each sheet carries the boxes that have no place on a
+plan view -- the depths, the radii, the check dimensions, the **Sport
+chain**, the **cross dims** and the **corner** rows -- and the switches
+that decide which of them POOL will actually ask for.
+
+## What is live on the page
+
+**One decision, applied twice.** A page does not ask for every box on
+it, and the form used to offer them all anyway -- type a `C` against a
+Normal hopper and POOL never asks for it, so the number went nowhere
+and nothing said so. Three things on the page decide, not one:
+
+| Control | What it decides |
+| --- | --- |
+| **Bottom type** | which plan and depth letters that bottom's own routine asks for |
+| **In-square toggle** | whether there are cross dims at all, and whether the second overalls (`bo`, `ri`) are asked |
+| **Cross-dim mode** | how many of the `x0…x3` boxes map to a tape |
+
+`lzf:dead` puts the three together and names the dead keys once.
+`lzf:btgrey` greys exactly that set and `lzf:form` drops exactly that
+set -- one function, two callers -- so the page cannot grey a box and
+then send what is in it, or send a box it has greyed. The test suite
+asserts that identity directly, over a table of page states.
+
+### By bottom type
 
 | Bottom | Greyed |
 | --- | --- |
@@ -53,6 +72,9 @@ sent to POOL either.
 | `SLope` | G, C2 |
 | `MOdflat` | E, C2 |
 | `SHallow` | nothing -- it is the only style that asks C2 |
+
+and, on **every bottom that is not a Sport**, the Sport chain
+E2, F2, F1, E1.
 
 That table is not kept here in code: `lzf:btskip` reads POOL's own
 `pool:btmspec` -- `(ask-G ask-E has-profile ask-C2 slack)` -- so the
@@ -64,15 +86,34 @@ has-profile flag reads nil for Sport, which would say "no C or D" --
 but that flag is only ever consulted inside `pool:hopnormal`, and a
 Sport never goes near it. Sport has its own path, which *does* ask C
 and D, and which asks a different plan chain entirely: **E2 F2 G F1 E1
-M K**, not H G F E. So on a Sport the chart's H, F and E are greyed:
+M L K**, not H G F E. So on a Sport the chart's H, F and E are greyed:
 they are not what POOL will ask for, and a number typed into one would
-be read by nothing. Only G, M and K carry over from the drawn chain.
-Sport's own letters have no boxes yet -- that is the open gap on this
-sheet.
+be read by nothing. Only G, M, L and K carry over from the drawn chain.
+
+**Sport's own letters now have boxes.** `E2`, `F2`, `F1` and `E1` sit
+in the column on every sheet whose flow can reach a Sport bottom --
+Rectangle, Oval, Roman, both Grecians, Octagon and Round -- labelled
+with POOL's own prompts (`E2 - left end shallow flat`, and so on).
+They are column boxes because a sport bottom's chain runs along a pool
+these charts draw with a hopper in it: there is nowhere on the picture
+for them to sit. Pick any other bottom and they grey out again.
+
+### By the in-square toggle
+
+Tick **in-square** and every cross dim and diagonal on the page goes
+dead, along with the mode dropdown above them and the out-of-square
+second overalls `bo` and `ri`. POOL builds true to the side
+measurements there and never asks for a tape across the corners, so a
+number typed into one would be read by nothing.
 
 Every chart carries C, D and C2 rows. Four of the original six never had
 them, so on a Roman, an Oval or either Grecian the depths always fell
 through to the command line whatever you did.
+
+**The L family has no bottom type.** POOL draws the standard hopper on
+an L and offers no choice, so the popup is greyed on that page and
+`btype` is never sent from it -- and the page is greyed against
+`Normal`, which is the bottom those flows really draw.
 
 **Round** is the newest sheet, and the one that behaves differently.
 POOL's `ROUnd` flow asks two overalls -- `B` across and `A` up, both
@@ -98,27 +139,75 @@ Two things about it are worth knowing:
   dimension is still enterable; only the position of four boxes
   differs.
 
-**Corners** get their own section on the Rectangle and True L charts:
-a dropdown per corner -- `(ask)`, `Square`, `Radius`, `Cut`,
-`NotGiven` -- with a size box that stays greyed until a sized
-treatment is picked. `(ask)` is the dropdown's version of an empty
-box: POOL asks that corner at the command line as always. A sized
-treatment with the size left empty sends the treatment alone and POOL
-asks for just the number; a size its walls cannot fit is rejected by
-POOL's own cap check and retyped at the keyboard. In-square is the one
-wrinkle: an in-square rectangle asks ONE question for all four
-corners, so when that toggle is on, corner A's row speaks for all four
-and the other three are ignored. The True L's rows are its two real
-questions -- the outer corners as a set, and the reverse corner E,
-which until now could not be answered from a form at all. Roman and
-the Grecians spell their corners as letter dimensions (S, S1, S2, X)
-that are already on the chart.
+## Cross dims
+
+A cross dim is a tape run corner to corner, and it is the one
+measurement with no place at all on a chart drawn square: it runs
+diagonally, and a dimension here is horizontal or vertical and nothing
+else. So they are all column boxes, in a section of their own.
+
+**How many of them POOL asks for is a question in its own right**, and
+that question is the dropdown at the head of the section:
+
+| Chart | Dropdown | What each choice means |
+| --- | --- | --- |
+| `Rectangle`, `Oval` | `cmode` -- Corner / Middle / Ends | Corner and Middle tape two diagonals (`x0 x1`), Ends tapes four (`x0…x3`) |
+| `Grecian`, `GRSquare`, `OCtagon` | `gcross` -- Simple / Center / Complex | Simple tapes the two body diagonals (`x0 x1`); **Center and Complex tape 14 and 18**, far more than a sheet has boxes for, so the dropdown answers the gate and those diagonals are typed at the command line |
+| `ROman` | none | it always asks the same two, `A-C` and `B-D` |
+| `L` | none | it always asks the same nine: `A-C B-D C-E D-F A-E B-F A-D B-E C-F` |
+
+The `xN` boxes are labelled neutrally -- `Cross dim 1` … `Cross dim 4`
+-- on purpose: which diagonal each one is depends on the mode, and
+POOL's own prompt spells it out when it asks. Leave the dropdown on
+`(ask)` and every box under it is dead and none of them travels: the
+mapping from box to tape is undefined until the mode is, so a number
+typed into one would be attached to the wrong diagonal.
+
+The Grecian pages say the Center/Complex rule on the page itself, in a
+line under the form, because a form that silently drops 14 numbers
+would be worse than one that never offered the boxes.
+
+## Corners
+
+**Corners** get their own section on every chart whose POOL flow asks
+for treatments in these terms -- Rectangle, Roman, both Grecians,
+Octagon and True L. Each row is a dropdown -- `(ask)`, `Square`,
+`Radius`, `Cut`, `NotGiven` -- with a size box that stays greyed until
+a sized treatment is picked. `(ask)` is the dropdown's version of an
+empty box: POOL asks that corner at the command line as always. A
+sized treatment with the size left empty sends the treatment alone and
+POOL asks for just the number; a size its walls cannot fit is rejected
+by POOL's own cap check and retyped at the keyboard.
+
+**In square and out of square are different questions**, and that is
+why a row names the POOL stems it answers in each state rather than
+one fixed name:
+
+| Chart | Rows | In square | Out of square |
+| --- | --- | --- | --- |
+| `Rectangle`, `ROman` | Corner A … Corner D | POOL asks once, so corner A's row speaks for all four (`corners`) and B–D are ignored | one question each: `cornera` … `cornerd` |
+| `Grecian`, `GRSquare`, `OCtagon` | Body corners (all four), End-tip corners (LT LB RT RB) | POOL asks exactly those two: `bodycorners`, `endcorners` | POOL asks all eight individually, so each row **fans out** to its four -- body to `cornera…cornerd`, end-tip to `cornerlt cornerlb cornerrt cornerrb` -- carrying one treatment and one size to each |
+| `L` | Outer corners (all five), Reverse corner E | `outercorners`, `innercorner` | the same two |
+
+**The gate travels with them.** On the L, Lazy L, Grecian, GRSquare,
+Octagon and Roman flows POOL puts a yes/no in front of the corner
+questions -- *"Anything to record about the corners (radius / cut / not
+given)?"* -- and answers No by default. So picking any corner row on
+one of those sheets sends `(crec . "Yes")` automatically; the
+treatments would be read by nothing otherwise. Leave every row on
+`(ask)` and nothing is sent and POOL asks the gate as it always did.
+The rectangle and the oval have no such gate and never get one.
 
 Anything a sheet carries that has no place on the plan view gets a box
 and no letter: the depths `C` and `D` (read off a section), the radii
-`R1 R2 R3`, the check dimensions `S2` and `X`, the out-of-square second
-overalls, and Roman's right-hand `S`/`S1`/`V` for when the two ends are
-not identical. Below the boxes: an in-square toggle and the bottom type.
+`R1 R2 R3`, the check dimensions `S2`, `X` and the oval's `T`, the
+out-of-square second overalls, the Sport chain, and Roman's right-hand
+`S`/`S1`/`V` for when the two ends are not identical. Those boxes pack
+**two to a row** wherever the pair of labels still fits across -- a
+sheet with a dozen of them stacked one per row makes a dialog taller
+than the screen, and a DCL dialog taller than the screen does not open
+at all. Below them: the in-square toggle, the bottom type, and any
+keyword question the sheet carries (the L's `mirror`).
 
 **The same letter is not the same measurement on every sheet.** A
 rectangle's `B` is the side length (`tp`); an oval's `B` is the
@@ -204,6 +293,20 @@ The arrow, the letter and the typed value all come off the dimension's
 two endpoints, so there is no separate position table that could fall
 out of step with the drawing.
 
+Everything else the sheet needs is a row in a table beside it, keyed by
+the chart's name, so a new shape never means new code:
+
+| Table | What it carries |
+| --- | --- |
+| `lzf:*cuts*` | the heights where the drawing is cut for a wedge row |
+| `lzf:*cross*` | the cross dims / diagonals, as `(key label)` |
+| `lzf:*picks*` | the keyword dropdowns, as `(key label section (choice …))` -- section `"cross"` ties it to the cross dims, `"run"` puts it with the toggle |
+| `lzf:*corners*` | the corner rows, as `(stem label (in-square stem …) (out-of-square stem …))` |
+| `lzf:*crosslive*` | how many cross boxes each mode word maps |
+| `lzf:*crecharts*` | the shapes whose corner questions sit behind a yes/no gate |
+| `lzf:*nobtype*` | the shapes POOL asks no bottom type on |
+| `lzf:*hints*` | a second line under the form, when a page has something of its own to explain |
+
 ## Assumptions
 
 - POOL is loaded, and its answer store (`pool:*form*`,
@@ -230,7 +333,10 @@ out of step with the drawing.
   (`B B1 V V1 T T1 A A1`) where POOL asks for six side lengths, and
   four `Y` letters where POOL asks for eight named diagonals, so the
   mapping cannot be settled from the code alone -- see the note in
-  `lzf:*charts*`.
+  `lzf:*charts*`. The tables around it are ready for it: `LAzyl`
+  already sits in `lzf:*nobtype*` and `lzf:*crecharts*`, so a chart
+  added under that name inherits the greyed bottom popup and the
+  corner gate without a line of code.
 - The `Grecian` charts answer three questions on your behalf, because
   their letters only exist on one path through POOL: the perimeter
   input method (`Overall`), the hopper type, and -- on the six-sided
@@ -239,8 +345,18 @@ out of step with the drawing.
 - A chart's letters assume the bottom type it was drawn for. `W`, `R3`
   and `L1` exist only on a Normal bottom; pick another and POOL asks a
   different set, so those boxes go unread.
-- The "Reverse Corner" the True L sheet names is a corner treatment,
-  not a measurement, so it has no box -- POOL asks for it directly.
+- **Height is the failure mode to watch.** A DCL dialog taller than the
+  screen does not open, and nothing in this file can measure a screen:
+  DCL reports a tile's size only once the dialog is already up, which
+  is too late to lay it out. That is why the column boxes pack two to a
+  row (`lzf:*rowbudget*` caps how wide a pair may get before it takes
+  two rows instead) and why a new section is weighed against the
+  tallest page before it is added.
+- The Grecian `Center` and `Complex` cross-dim modes are answered here
+  and measured at the command line: 14 and 18 diagonals apiece is more
+  than any sheet has room for. The dropdown still earns its place --
+  answering the gate from the form is what keeps the rest of the sheet
+  from being re-asked.
 - The insertion base point is still picked at the command line.
 
 ## `LAZTXT` -- the pool drawn out of tiles, boxes inside it
@@ -374,6 +490,25 @@ CALOFIN_LISP_ROOT=shared python3 tests/test_lazform.py # grouped tier
 The drawing is captured and checked rather than assumed: every vector
 must land inside the tile in a colour the file declares, and the
 value-replaces-letter rule is checked by counting strokes before and
-after. The end-to-end case fills the chart in, presses Insert, and
-asserts the pool it draws is identical -- entity for entity -- to the
-one POOL draws when the same answers are typed at the prompts.
+after. The end-to-end cases fill the chart in, press Insert, and assert
+the pool it draws is identical -- entity for entity -- to the one POOL
+draws when the same answers are typed at the prompts: an out-of-square
+rectangle with its cross dims off the sheet, a Sport rectangle with its
+whole E2-F2-G-F1-E1-M-L-K chain off the sheet, and a Grecian's two
+collective corner rows both in square and fanned out to the eight
+corners POOL asks for out of it.
+
+Two audits keep the form honest about POOL rather than about itself:
+
+- **Every chart key is a key POOL asks for**, read off `POOL.LSP`'s own
+  item lists. The cross-dim keys are *built* at run time -- `(read
+  (strcat "x" (itoa k)))` walking `pool:crosstemplate` or
+  `pool:grecmode` -- so the audit extracts that construction and reads
+  the templates for how far `k` counts, rather than whitelisting the
+  strings. Corner rows are checked the same way, against
+  `pool:fckey`'s own roster.
+- **The greying and the sending are one decision.** For a table of page
+  states -- chart, in-square, bottom type, cross-dim mode -- the set
+  `lzf:dead` computes must equal the set `lzf:form` drops, exactly. A
+  box greyed on screen whose contents travel anyway, or a live box
+  quietly dropped, fails the suite.

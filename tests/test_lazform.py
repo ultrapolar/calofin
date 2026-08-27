@@ -211,6 +211,15 @@ print("== the chart's keys are keys POOL actually asks for ==")
 # the whole point of the form is that POOL reads these back; a key POOL
 # never asks for would be typed into and silently dropped
 pool_src = open(POOL).read()
+# pool:fckey is the whole roster of corner form-keys: the collective
+# questions are spelled out as strings, and the per-corner ones are
+# BUILT -- (strcat "corner" (substr s 8)) off the question's subject.
+# The corner-row audit further down reads this rather than repeating it.
+FCKEY = re.search(r'\(defun pool:fckey .*?\n\n', pool_src, re.S)
+assert FCKEY, "pool:fckey has moved or changed shape"
+FCKEY = FCKEY.group(0)
+assert '(strcat "corner" (substr s 8))' in FCKEY, \
+    "pool:fckey no longer builds the per-corner stems as corner<letters>"
 # POOL builds its ask items two ways: most flows write
 # (list 'key 'KIND "prompt" ...), while the L shapes write
 # (list 'key "prompt" 'guide ...) and map the kind on afterwards.  Both
@@ -218,6 +227,27 @@ pool_src = open(POOL).read()
 askseq_keys = set(re.findall(r"\(list '([a-z][a-z0-9]*)\s+'(?:REQ|NAX|ZER|SUG)",
                              pool_src))
 askseq_keys |= set(re.findall(r"\(list '([a-z][a-z0-9]*)\s+\"", pool_src))
+# The cross-dim keys are BUILT AT RUN TIME, so no literal 'x0 appears
+# anywhere in POOL.LSP and a plain scan calls them invented. Both
+# callers write the same construction --
+#   POOL.LSP:2185  (setq xitems (cons (list (read (strcat "x" (itoa k))) 'NAX
+#   POOL.LSP:5869        xitems (cons (list (read (strcat "x" (itoa k))) 'NAX
+# -- walking a template list, so how far k counts is the length of the
+# longest template either caller can be handed: pool:crosstemplate's
+# branches (POOL.LSP:3827) and pool:grecmode's three lists
+# (POOL.LSP:1657-1681). Read those rather than whitelisting "x0".
+assert re.search(r'\(read \(strcat "x" \(itoa k\)\)\)', pool_src), \
+    "POOL no longer builds its cross-dim keys as x<k> -- this audit is stale"
+_tmpl = re.search(r'\(defun pool:crosstemplate \(cmode\)(.*?)\n\n',
+                  pool_src, re.S)
+assert _tmpl, "pool:crosstemplate has moved or changed shape"
+_lens = [len(re.findall(r"\(list '[a-z][a-z0-9]* \"", branch))
+         for branch in re.split(r'\n    \(', _tmpl.group(1))]
+_lens += [len(re.findall(r"'\(\d+ \d+ \"", block))
+          for block in re.findall(r'\(setq pool:\*grec-[a-z]+\*(.*?)\n\n',
+                                  pool_src, re.S)]
+assert max(_lens) >= 4, "the cross-dim templates came back empty: %r" % _lens
+askseq_keys |= set('x%d' % i for i in range(max(_lens)))
 derived = {'c', 'd', 'c2'}          # the depth asks, keyed off their prompts
 wired = {'shape', 'insq', 'btype', 'base'}
 total = 0
@@ -302,6 +332,16 @@ def check_page(name):
     assert set(answer_keys) <= set(tilekeys), (
         "%s: answers with no box: %r"
         % (name, sorted(set(answer_keys) - set(tilekeys))))
+    # lzf:btgrey calls mode_tile on every page key, and mode_tile on a
+    # tile that is not there is an error, not a no-op -- so every one of
+    # them has to exist on this page
+    vm.loads('(setq t:*pk* (lzf:pagekeys lzf:*chart*))')
+    page_keys = [str(x) for x in vm.globals['t:*pk*']]
+    assert set(page_keys) <= set(tilekeys), (
+        "%s: greyable keys with no tile: %r"
+        % (name, sorted(set(page_keys) - set(tilekeys))))
+    assert len(page_keys) == len(set(page_keys)), \
+        "%s: lzf:pagekeys repeats a key: %r" % (name, page_keys)
     # one image band per stretch between cuts, a wedge row at each cut
     vm.loads('(setq t:*cuts* (lzf:cuts lzf:*chart*))'
              '(setq t:*wk* (lzf:wedge-keys lzf:*chart*))')
@@ -575,7 +615,9 @@ def pair(p):
     return (str(p.a), p.b) if isinstance(p, Dot) else (str(p[0]), None)
 
 
-# structure: Rectangle and L carry corner rows, the rest none
+# structure: every chart whose POOL flow asks for corner treatments in
+# these terms carries rows; the oval and the round pool have no corners
+# to treat at all
 for c in charts:
     name = str(c[0])
     d = page(name)
@@ -590,8 +632,24 @@ for c in charts:
     if not cors:
         assert 'Corners' not in text, \
             "%s: a Corners section with nothing in it" % name
-assert [str(x[0]) for x in vm.globals['lzf:*corners*']] == ['Rectangle', 'L']
-print("   Rectangle and L carry corner rows; the others none")
+    # a row names the POOL stems it answers in each state, and every
+    # one of those has to be a stem pool:fckey really produces -- a row
+    # pointed at a name POOL never builds would send treatments into
+    # the void exactly the way a wrong dimension key would
+    for row in (vm.globals.get('t:*cor*') or []):
+        assert len(row) == 4, "%s: corner row %r is not (stem label in out)" % (
+            name, [str(x) for x in row])
+        for state, targets in (('in-square', row[2]), ('out-of-square', row[3])):
+            for u in (targets or []):
+                assert re.search(r'"%s"' % str(u), FCKEY) or \
+                    re.match(r'^corner[a-z]{1,2}$', str(u)), (
+                        "%s: %s corner row %s points at %r, which "
+                        "pool:fckey never produces" % (name, state,
+                                                       str(row[0]), str(u)))
+assert [str(x[0]) for x in vm.globals['lzf:*corners*']] == \
+    ['Rectangle', 'ROman', 'Grecian', 'GRSquare', 'OCtagon', 'L'], \
+    [str(x[0]) for x in vm.globals['lzf:*corners*']]
+print("   6 charts carry corner rows, every stem one pool:fckey builds")
 
 # picking a sized treatment un-greys the size box; picking Square
 # greys it again -- driven through the REAL action expression
@@ -631,6 +689,90 @@ assert str(form2.get('corners-ty')) == 'Cut' and \
     abs(float(form2['corners-sz']) - 24.0) < 1e-9, form2
 assert 'cornera-ty' not in form2 and 'cornerc-ty' not in form2, form2
 print("   (ask)/Square/Radius/Cut all pack the way POOL reads them")
+
+# a collective row FANS OUT out of square: POOL asks the eight Grecian
+# corners individually there, so one row has to answer four of them,
+# carrying the same treatment and the same size to each
+vm.loads('(setq lzf:*chart* (lzf:chart "Grecian"))'
+         '(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)'
+         '(lzf:cput "bodycorners" 3) (lzf:put "bodycorners-sz" "12")'
+         '(lzf:cput "endcorners" 2) (lzf:put "endcorners-sz" "8")'
+         '(setq t:*fi* (lzf:form "Grecian" T "Normal"))'
+         '(setq t:*fo* (lzf:form "Grecian" nil "Normal"))')
+fi = dict(pair(p2) for p2 in vm.globals['t:*fi*'])
+fo = dict(pair(p2) for p2 in vm.globals['t:*fo*'])
+assert str(fi.get('bodycorners-ty')) == 'Cut' and \
+    abs(float(fi['bodycorners-sz']) - 12.0) < 1e-9, fi
+assert str(fi.get('endcorners-ty')) == 'Radius' and \
+    abs(float(fi['endcorners-sz']) - 8.0) < 1e-9, fi
+assert 'cornera-ty' not in fi, "in square the eight are not asked: %r" % fi
+for stem in ('cornera', 'cornerb', 'cornerc', 'cornerd'):
+    assert str(fo.get(stem + '-ty')) == 'Cut' and \
+        abs(float(fo[stem + '-sz']) - 12.0) < 1e-9, (stem, fo)
+for stem in ('cornerlt', 'cornerlb', 'cornerrt', 'cornerrb'):
+    assert str(fo.get(stem + '-ty')) == 'Radius' and \
+        abs(float(fo[stem + '-sz']) - 8.0) < 1e-9, (stem, fo)
+assert 'bodycorners-ty' not in fo and 'endcorners-ty' not in fo, fo
+# the gate in front of those questions travels with them, and only with
+# them: answer no corner row and POOL asks the gate as it always did
+assert str(fi.get('crec')) == 'Yes' and str(fo.get('crec')) == 'Yes', (fi, fo)
+vm.loads('(setq lzf:*cvals* nil)'
+         '(setq t:*fn* (lzf:form "Grecian" nil "Normal"))')
+fn = dict(pair(p2) for p2 in vm.globals['t:*fn*'])
+assert 'crec' not in fn, "the corner gate travelled with no corner picked: %r" % fn
+# and the rectangle has no such gate to answer
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+         '(setq lzf:*cvals* nil) (lzf:cput "cornera" 1)'
+         '(setq t:*fr* (lzf:form "Rectangle" nil "Normal"))')
+fr = dict(pair(p2) for p2 in vm.globals['t:*fr*'])
+assert 'crec' not in fr, \
+    "the rectangle flow asks no corner gate -- crec must not be sent: %r" % fr
+print("   a collective row answers one question in square and four out")
+print("   of it; the corner gate travels only when a row is picked")
+
+
+print("== cross dims and the mode dropdowns ==")
+# every cross box has a box on its page (check_page already proves that
+# for every answer key), every dropdown has a popup_list, and every
+# dropdown opens on "(ask)" -- the form's version of an empty box
+crossed = 0
+for c in charts:
+    name = str(c[0])
+    text = '\n'.join(page(name))
+    vm.loads('(setq t:*pi* (lzf:picks (lzf:chart "%s")))'
+             '(setq t:*cx* (lzf:cross (lzf:chart "%s")))'
+             '(setq t:*cm* (lzf:crossmode (lzf:chart "%s")))'
+             % (name, name, name))
+    picks = vm.globals.get('t:*pi*') or []
+    cross = [str(x[0]) for x in (vm.globals.get('t:*cx*') or [])]
+    for d in picks:
+        key, sect, choices = str(d[0]), str(d[2]), [str(x) for x in d[3]]
+        assert re.search(r': popup_list \{ key = "%s"' % key, text), \
+            "%s: no dropdown for %s" % (name, key)
+        assert choices[0] == '(ask)', \
+            "%s: %s does not open on (ask): %r" % (name, key, choices)
+        assert sect in ('cross', 'run'), \
+            "%s: %s claims section %r" % (name, key, sect)
+        assert len(set(choices)) == len(choices), \
+            "%s: %s repeats a choice: %r" % (name, key, choices)
+    if cross:
+        crossed += 1
+    else:
+        assert 'Cross dims' not in text, \
+            "%s: a Cross dims section with nothing in it" % name
+    # a chart with a mode must carry a box for every tape that mode can
+    # ask for, or an answer would have nowhere to be typed
+    mode = vm.globals.get('t:*cm*')
+    if mode:
+        d = [p for p in picks if str(p[0]) == str(mode)][0]
+        for word in [str(x) for x in d[3]]:
+            vm.loads('(setq t:*n* (cadr (assoc "%s" lzf:*crosslive*)))' % word)
+            n = vm.globals.get('t:*n*')
+            assert n is None or int(n) <= len(cross), (
+                "%s: %s = %s maps %d tapes but the chart has %d boxes"
+                % (name, str(mode), word, int(n), len(cross)))
+print("   %d charts carry cross boxes, every dropdown opening on (ask)"
+      % crossed)
 
 
 print("== the three-state answer contract ==")
@@ -764,6 +906,95 @@ print("   %d entities, identical from the chart and from the command line"
 print("   and the chart's answers -- corners included -- were not")
 print("   asked for again")
 
+# ...and the same pool AGAIN, with the cross dims coming off the chart
+# too.  The mode dropdown answers which four tapes x0..x3 are, so the
+# four boxes mean something; leave it on (ask) and they would not.
+print("== end to end: the cross dims off the chart as well ==")
+vmx = stubbed(with_pool=True)
+vmx.loads('(setq stub:*type* \'(%s))'
+          % ' '.join('("%s" "%s")' % (k, v)
+                     for k, v in TYPED + [('insq', '0'), ('btype', '2'),
+                                          # "Ends", 4th in the dropdown
+                                          ('cmode', '3'),
+                                          ('x0', '260'), ('x1', '260'),
+                                          ('x2', '260'), ('x3', '260')]))
+try:
+    vmx.run('c:LAZFORM', [(0.0, 0.0, 0.0), "Yes"] + REST)
+except LispError as e:
+    raise AssertionError("cross-dim form run: %s" % e) from None
+x = snapshot(vmx)
+assert x == b, (
+    "the chart's own cross dims drew a different pool: %d entities against "
+    "%d from the prompts" % (len(x), len(b)))
+xasked = [pr for pr, _ in vmx.prompts]
+for gone in ('\nRadius/Cut corners', '\nCross A-C', '\nCross B-D'):
+    assert not any(pr.startswith(gone) for pr in xasked), \
+        "%r was asked even though the chart answered it: %r" % (gone, xasked)
+assert len(xasked) == 5, (
+    "POOL asked %d questions, not the insertion point, the bottom gate and "
+    "M/L/K: %r" % (len(xasked), [q.strip() for q in xasked]))
+print("   %d entities, identical again; the mode and all four tapes came"
+      % len(x))
+print("   off the chart, leaving 5 questions")
+
+# --------------------------------------------------------------------
+# The Sport chain, end to end.
+# --------------------------------------------------------------------
+# A sport bottom asks a plan chain of its own -- E2 F2 G F1 E1 M L K --
+# and until now the chart had boxes for only three of those eight, so
+# five numbers off the sheet had to be retyped at the command line.
+print("== a sport bottom, its whole chain off the chart ==")
+SPORT = [('tp', '240'), ('le', '120'),
+         ('e2', '20'), ('f2', '40'), ('g', '60'), ('f1', '40'),
+         ('e1', '80'), ('m', '30'), ('l', '60'), ('k', '30'),
+         ('c', '40'), ('d', '60'),
+         ('cornera', '1')]              # Square, one answer in square
+vs = stubbed(with_pool=True)
+vs.loads('(setq stub:*type* \'(%s))'
+         % ' '.join('("%s" "%s")' % (k, v)
+                    for k, v in SPORT + [('insq', '1'), ('btype', '1')]))
+try:
+    vs.run('c:LAZFORM', [(0.0, 0.0, 0.0), "Yes"])
+except LispError as e:
+    raise AssertionError("sport form run: %s" % e) from None
+sa = snapshot(vs)
+assert sa, "the sport form run drew nothing"
+sasked = [pr for pr, _ in vs.prompts]
+for lead in ('\nE2 -', '\nF2 -', '\nG -', '\nF1 -', '\nE1 -', '\nM -',
+             '\nL -', '\nK -', '\nC -', '\nD -', '\nBottom type'):
+    assert not any(pr.startswith(lead) for pr in sasked), \
+        "%s was asked even though the chart answered it: %r" % (lead, sasked)
+assert len(sasked) == 2, (
+    "POOL asked %d questions, not just the insertion point and the bottom "
+    "gate: %r" % (len(sasked), [q.strip() for q in sasked]))
+vs2 = stubbed(with_pool=True)
+try:
+    vs2.run('c:POOL',
+            ["Insquare", "Rectangle", (0.0, 0.0, 0.0), 240.0, 120.0,
+             "Square", "Yes", "Sport",
+             20.0, 40.0, 60.0, 40.0, 80.0, 30.0, 60.0, 30.0, 40.0, 60.0])
+except LispError as e:
+    raise AssertionError("sport prompt run: %s" % e) from None
+sb = snapshot(vs2)
+assert sa == sb, (
+    "the sport chart drew a different pool: %d entities from the chart, %d "
+    "from the prompts" % (len(sa), len(sb)))
+# and the letters this bottom does NOT ask for stayed behind
+vs.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+         '(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)'
+         '(lzf:put "h" "30") (lzf:put "e2" "20") (lzf:put "c2" "50")'
+         '(setq t:*sf* (lzf:form "Rectangle" T "Sport"))')
+sf = dict(pair(p2) for p2 in vs.globals['t:*sf*'])
+assert 'e2' in sf and 'h' not in sf and 'c2' not in sf, (
+    "a Sport must carry E2 and drop H and C2: %r" % sf)
+vs.loads('(setq t:*nf* (lzf:form "Rectangle" T "SHallow"))')
+nf = dict(pair(p2) for p2 in vs.globals['t:*nf*'])
+assert 'h' in nf and 'e2' not in nf, (
+    "only a Sport asks the sport chain: %r" % nf)
+print("   %d entities, identical from the chart and from the command line;"
+      % len(sa))
+print("   E2 F2 G F1 E1 M L K C D all off the sheet, 2 questions left")
+
 # --------------------------------------------------------------------
 # What the chosen bottom actually asks for.
 # --------------------------------------------------------------------
@@ -850,6 +1081,253 @@ keys2 = [str(pr.a) for pr in bv.globals['test:*f2*']]
 assert 'c' in keys2 and 'd' in keys2, \
     "a Wedge DOES ask C and D -- they must travel: %r" % keys2
 print("   C and D travel on a Wedge and are dropped on a Normal")
+
+
+# --------------------------------------------------------------------
+# ONE authority: what is greyed and what is sent are the same set.
+# --------------------------------------------------------------------
+# The bottom type is only one of three things that decide -- the
+# in-square toggle and the cross-dim mode dropdown decide too -- and the
+# hazard is that the greying and the sending drift apart: a box greyed
+# on screen whose contents travel anyway, or a live box quietly dropped.
+# lzf:dead is the single answer both callers read, so the property worth
+# asserting directly is that identity, over the whole page.
+print("== the greying and the sending are one decision ==")
+av2 = stubbed(with_pool=True)
+
+# (chart, in-square, bottom type, mode word to pick where it is offered)
+STATES = [("Rectangle", False, "Normal",  "Corner"),
+          ("Rectangle", False, "Sport",   "Ends"),
+          ("Rectangle", True,  "Wedge",   "Ends"),
+          ("Rectangle", False, "Wedge",   "Middle"),
+          ("Rectangle", False, "SHallow", "Ends"),
+          ("Oval",      False, "Sport",   "Ends"),
+          ("Oval",      True,  "Normal",  "Corner"),
+          ("ROman",     False, "Sport",   None),
+          ("ROman",     True,  "MOdflat", None),
+          ("Grecian",   False, "Normal",  "Simple"),
+          ("Grecian",   False, "Wedge",   "Center"),
+          ("Grecian",   True,  "SLope",   "Simple"),
+          ("GRSquare",  False, "Sport",   "Complex"),
+          ("OCtagon",   True,  "SHallow", "Simple"),
+          ("L",         False, "Normal",  None),
+          ("L",         True,  "Sport",   None),
+          ("ROUnd",     False, "MOdflat", None),
+          ("ROUnd",     True,  "Sport",   None)]
+
+
+def state(name, insq, bt, mode):
+    """Fill every box and answer every dropdown, then read both sides."""
+    av2.loads('(setq lzf:*chart* (lzf:chart "%s"))' % name)
+    av2.loads('(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
+    av2.loads('(foreach k (lzf:keys lzf:*chart*) (lzf:put k "60"))')
+    av2.loads('(setq t:*pi* (lzf:picks lzf:*chart*))')
+    for d in (av2.globals.get('t:*pi*') or []):
+        choices = [str(x) for x in d[3]]
+        # every dropdown is answered: an unanswered one is dropped for
+        # being empty, which is a different rule and tested elsewhere
+        av2.loads('(lzf:pput "%s" %d)'
+                  % (str(d[0]),
+                     choices.index(mode) if mode in choices else 1))
+    av2.loads('(setq t:*pk* (lzf:pagekeys lzf:*chart*))'
+              '(setq t:*dead* (lzf:dead lzf:*chart* %s "%s"))'
+              '(setq t:*shp* (cadr lzf:*chart*))'
+              % ('T' if insq else 'nil', bt))
+    av2.loads('(setq t:*ff* (lzf:form t:*shp* %s "%s"))'
+              % ('T' if insq else 'nil', bt))
+    return (set(str(x) for x in av2.globals['t:*pk*']),
+            set(str(x) for x in (av2.globals['t:*dead*'] or [])),
+            set(str(p.a) if isinstance(p, Dot) else str(p[0])
+                for p in av2.globals['t:*ff*']))
+
+
+for name, insq, bt, mode in STATES:
+    pk, dead, sent = state(name, insq, bt, mode)
+    assert dead <= pk, (
+        "%s: lzf:dead named %r, which is not on the page -- mode_tile "
+        "would error on it" % (name, sorted(dead - pk)))
+    assert dead == pk - sent, (
+        "%s %s %s %s: greys %r but drops %r -- the two have drifted"
+        % (name, 'in-square' if insq else 'out-of-square', bt, mode,
+           sorted(dead), sorted(pk - sent)))
+    print("   %-9s %-13s %-8s %-8s %2d of %2d keys dead"
+          % (name, 'in-square' if insq else 'out-of-square', bt,
+             mode or "-", len(dead), len(pk)))
+
+# the rules the table above is there to protect, said outright
+pk, dead, sent = state("Rectangle", False, "Wedge", "Corner")
+assert {"x2", "x3"} <= dead and not ({"x0", "x1"} & dead), \
+    "Corner tapes two diagonals, so x2 and x3 are dead: %r" % sorted(dead)
+pk, dead, sent = state("Rectangle", False, "Wedge", "Ends")
+assert not ({"x0", "x1", "x2", "x3"} & dead), \
+    "Ends tapes four diagonals, so all four boxes are live: %r" % sorted(dead)
+pk, dead, sent = state("Rectangle", True, "Wedge", "Ends")
+assert {"x0", "x1", "x2", "x3", "cmode", "bo", "ri"} <= dead, \
+    "in square there are no cross dims and no second overall: %r" % sorted(dead)
+pk, dead, sent = state("Grecian", False, "Wedge", "Center")
+assert {"x0", "x1"} <= dead and "gcross" not in dead, (
+    "Center answers the gate and asks its 14 diagonals at the command "
+    "line, so the boxes are dead and the dropdown is not: %r" % sorted(dead))
+pk, dead, sent = state("L", False, "Normal", None)
+assert "btype" in dead and "mirror" not in dead, (
+    "POOL asks no bottom type on an L, and mirror is not a cross dim: %r"
+    % sorted(dead))
+assert not ({"ac", "bd", "cf"} & dead), \
+    "the L's nine diagonals need no mode -- they are always live"
+pk, dead, sent = state("L", True, "Normal", None)
+assert {"ac", "bd", "cf"} <= dead, "in square the L squares up to its sides"
+
+# "(ask)" is not a mode.  Which box is which diagonal is undefined until
+# one is picked, so every cross box is dead and the dropdown sends
+# nothing -- the dropdown's version of an empty box.
+av2.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+          '(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)'
+          '(foreach k (lzf:keys lzf:*chart*) (lzf:put k "60"))'
+          '(setq t:*dead* (lzf:dead lzf:*chart* nil "Wedge"))'
+          '(setq t:*ff* (lzf:form "Rectangle" nil "Wedge"))')
+dead = set(str(x) for x in (av2.globals['t:*dead*'] or []))
+sent = set(str(p.a) if isinstance(p, Dot) else str(p[0])
+           for p in av2.globals['t:*ff*'])
+assert {"x0", "x1", "x2", "x3"} <= dead, \
+    "(ask) leaves no cross box mapped: %r" % sorted(dead)
+assert not ({"x0", "x1", "x2", "x3", "cmode"} & sent), \
+    "(ask) sent a cross dim whose diagonal is not decided: %r" % sorted(sent)
+print("   (ask) maps no box, and none of them travels")
+
+
+# --------------------------------------------------------------------
+# The Grecian's collective corner rows, end to end, both ways.
+# --------------------------------------------------------------------
+# In square POOL asks two questions -- the four body corners, then the
+# four end tips -- and out of square it asks all eight individually.
+# The sheet has two rows either way, so out of square each one has to
+# fan out to the four corners it stands for, carrying one treatment and
+# one size to each.
+print("== the Grecian's two corner rows, in square and out ==")
+GREC = [('b', '360'), ('a', '200'), ('tt', '240'), ('ss', '60'),
+        ('s1', '50'), ('vv', '100'), ('s2', '78'),
+        ('bodycorners', '3'), ('bodycorners-sz', '12'),
+        ('endcorners', '3'), ('endcorners-sz', '8')]
+
+
+def grecrun(extra, prompts):
+    v = stubbed(with_pool=True)
+    v.loads('(setq stub:*rcs* \'(4 1))'
+            '(setq stub:*type* \'(("tab_Grecian" "") %s))'
+            % ' '.join('("%s" "%s")' % (k, val) for k, val in GREC + extra))
+    try:
+        v.run('c:LAZFORM', prompts)
+    except LispError as e:
+        raise AssertionError("grecian form run: %s" % e) from None
+    return v
+
+
+gi = grecrun([('insq', '1')], [(0.0, 0.0, 0.0), "No"])
+ga = snapshot(gi)
+assert ga, "the in-square grecian form run drew nothing"
+giasked = [pr for pr, _ in gi.prompts]
+for lead in ('\nAnything to record about the corners',
+             '\nHow should the body corners',
+             '\nHow should the end-tip corners'):
+    assert not any(pr.startswith(lead) for pr in giasked), \
+        "%s was asked even though the sheet answered it: %r" % (lead, giasked)
+gi2 = stubbed(with_pool=True)
+gi2.run('c:POOL',
+        ["Insquare", "Grecian", (0.0, 0.0, 0.0), "Overall",
+         360.0, 200.0, 240.0, 60.0, 50.0, 100.0, 78.0,
+         "Yes", "Cut", 12.0, "Cut", 8.0, "No"])
+gb = snapshot(gi2)
+assert ga == gb, (
+    "the in-square grecian sheet drew a different pool: %d entities from "
+    "the chart, %d from the prompts" % (len(ga), len(gb)))
+print("   in square: %d entities, two rows answering POOL's two questions"
+      % len(ga))
+
+go = grecrun([('insq', '0'), ('gcross', '1'),      # Simple
+              ('x0', '300'), ('x1', '300')],
+             [(0.0, 0.0, 0.0), "No"])
+gc = snapshot(go)
+goasked = [pr for pr, _ in go.prompts]
+for lead in ('\nAnything to record about the corners', '\nHow should Corner',
+             '\nGrecian cross-dim detail', '\nCross dim '):
+    assert not any(pr.startswith(lead) for pr in goasked), \
+        "%s was asked even though the sheet answered it: %r" % (lead, goasked)
+assert len(goasked) == 2, (
+    "POOL asked %d questions, not just the insertion point and the bottom "
+    "gate: %r" % (len(goasked), [q.strip() for q in goasked]))
+go2 = stubbed(with_pool=True)
+go2.run('c:POOL',
+        ["Outofsquare", "Grecian", (0.0, 0.0, 0.0), "Overall",
+         360.0, 200.0, 240.0, 60.0, 50.0, 100.0, 78.0,
+         "Simple", 300.0, 300.0, "Yes",
+         # A B RB RT C D LT LB -- body 12, tips 8, the order POOL asks
+         "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0,
+         "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0, "No"])
+gd = snapshot(go2)
+assert gc == gd, (
+    "the fanned-out grecian sheet drew a different pool: %d entities from "
+    "the chart, %d from the prompts" % (len(gc), len(gd)))
+print("   out of square: %d entities, each row fanned out to its four"
+      % len(gc))
+
+
+# --------------------------------------------------------------------
+# The True L: no bottom type, a mirror question, and its corner gate.
+# --------------------------------------------------------------------
+# POOL draws the standard hopper on an L and offers no choice, so the
+# bottom popup is greyed on that page and btype is never sent from it.
+# The mirror question is the other kind of dropdown -- a keyword answer
+# in its own right, asked after everything is drawn.
+print("== the True L: mirror off the sheet, no bottom type sent ==")
+vl = stubbed(with_pool=True)
+vl.loads('(setq stub:*rcs* \'(4 1))'
+         '(setq stub:*type* \'(("tab_L" "") %s))'
+         % ' '.join('("%s" "%s")' % (k, v) for k, v in
+                    [('ab', '480'), ('bc', '180'), ('cd', '240'),
+                     ('de', '120'), ('ef', '240'), ('fa', '300'),
+                     ('outercorners', '3'), ('outercorners-sz', '12'),
+                     ('innercorner', '1'),
+                     ('mirror', '2'),          # "No", third in the list
+                     ('insq', '1'), ('btype', '2')]))
+try:
+    vl.run('c:LAZFORM', [(0.0, 0.0, 0.0), "No"])
+except LispError as e:
+    raise AssertionError("L form run: %s" % e) from None
+la = snapshot(vl)
+lasked = [pr for pr, _ in vl.prompts]
+for lead in ('\nMirror the pool', '\nBottom type',
+             '\nAnything to record about the corners',
+             '\nHow should the outer corners',
+             '\nHow should the inner corner'):
+    assert not any(pr.startswith(lead) for pr in lasked), \
+        "%s was asked even though the sheet answered it: %r" % (lead, lasked)
+assert len(lasked) == 2, (
+    "POOL asked %d questions, not just the insertion point and the bottom "
+    "gate: %r" % (len(lasked), [q.strip() for q in lasked]))
+vl2 = stubbed(with_pool=True)
+vl2.run('c:POOL',
+        ["Insquare", "L", (0.0, 0.0, 0.0),
+         480.0, 180.0, 240.0, 120.0, 240.0, 300.0,
+         "Yes", "Cut", 12.0, "Square", "No", "No"])
+lb = snapshot(vl2)
+assert la == lb, (
+    "the L sheet drew a different pool: %d entities from the chart, %d from "
+    "the prompts" % (len(la), len(lb)))
+# and the bottom type really is withheld, whatever the popup is set to
+vl.loads('(setq lzf:*chart* (lzf:chart "L"))'
+         '(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)'
+         '(setq t:*lf* (lzf:form "L" nil "Wedge"))')
+lf = dict(pair(p2) for p2 in vl.globals['t:*lf*'])
+assert 'btype' not in lf, \
+    "POOL asks no bottom type on an L -- it must not be sent: %r" % lf
+vl.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))'
+         '(setq t:*rf* (lzf:form "Rectangle" nil "Wedge"))')
+rf = dict(pair(p2) for p2 in vl.globals['t:*rf*'])
+assert str(rf.get('btype')) == 'Wedge', \
+    "every other chart still sends its bottom type: %r" % rf
+print("   %d entities, identical from the chart and from the command line;"
+      % len(la))
+print("   mirror and both corner rows off the sheet, btype withheld")
 
 
 # --------------------------------------------------------------------
