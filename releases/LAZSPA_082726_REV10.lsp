@@ -60,10 +60,12 @@
 ;;; ADDING A SHAPE is adding data, not code -- one entry in lzs:*charts*
 ;;; with an outline, a dimension list and its SPA keys, plus a line in
 ;;; the tables under it.  Three charts, one per shape SPA draws:
-;;; Rectangle, OCtagon, ROund.  Watch the SPELLINGS: SPA's shape words
-;;; are "Rectangle", "OCtagon" and "ROund" -- ROund is NOT POOL's
-;;; "ROUnd", and the wrong one falls through SPA's dispatch into the
-;;; rectangle branch and draws the wrong spa without saying so.
+;;; Rectangle, OCtagon, ROund.  The chart sends the word the legend
+;;; prints; SPA's own keyword is "ROUnd" (one capitalisation repo-wide
+;;; -- POOL needs RO for ROman), and spa:fshape matches the shape word
+;;; WITHOUT case and returns the canonical spelling, so either reaches
+;;; the right branch.  A word that is not a shape at all still falls
+;;; through to the prompt rather than drawing the wrong spa silently.
 ;;; ======================================================================
 
 (vl-load-com)
@@ -283,13 +285,14 @@
 ;;;  the only honest default, since SPA offers no default on corner A
 ;;;  either.
 ;;;
-;;;  THE VOCABULARY IS SPA'S OWN -- 90 / Radius / Diagonal, the words on
-;;;  the order sheet's corner legend and in spa:askcorner's initget.  It
-;;;  is NOT POOL's Square / Radius / Cut / NotGiven: STANDARDS.md 8.1
-;;;  renames those, but that is separate, tracked work and SPA has not
-;;;  had it.  A form that spoke POOL's words here would have every
-;;;  corner answer consumed and thrown away by spa:askcorner's member
-;;;  check, and the corner asked at the keyboard as if the box had been
+;;;  THE DROPDOWN SPEAKS THE SHEET LEGEND -- 90 / Radius / Diagonal, the
+;;;  words printed on the order sheet a drafter copies from.  SPA itself
+;;;  now asks the canonical Treatment question (Square / Radius / Cut /
+;;;  NotGiven, STANDARDS.md section 2) and normalises the legend words
+;;;  on the way in, so the chart keeps the drafter's vocabulary and the
+;;;  routine keeps the standard's.  Send a word that is neither and
+;;;  spa:askcorner consumes it, throws it away, and asks the corner at
+;;;  the keyboard as if the box had been
 ;;;  left empty.  ("Square" SPA does accept, as a synonym it normalises
 ;;;  to 90; the dropdown offers 90 because that is what the sheet says.)
 ;;;

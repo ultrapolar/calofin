@@ -171,11 +171,13 @@
 ;;;     *CS-FORM*; see "form answers" below.  Selections and point
 ;;;     picks are always made by hand.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so the two routines that
 ;; share them stay in sync no matter which file loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -188,7 +190,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.1") ; printed on load and at command start so a
+(setq *cs-version* "v3.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -470,7 +472,7 @@
 ;; across to it.  Points are WCS.
 (defun cs-dimv (style a b thru / oldl)
   (cs-setstyle style)
-  (if (and *cs-dim-layer* (cs-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -655,7 +657,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nCORNERSTP: " msg)))
     (princ))
 
@@ -849,10 +851,13 @@
     (arcr (setq mid (cs-arcpt c r (* 0.5 (+ a1 a2))))))
 
   ;; ---- 5. draw direction ----------------------------------------------
+  ;; the form answers first; when it does not, the bracket is exactly
+  ;; the keyword list (STANDARDS section 1 rule 1) and the explanation
+  ;; lives in the question text
   (if (null (setq key (cs-fkw 'direction "Inside Outside" "Inside")))
     (progn
       (initget "Inside Outside")
-      (setq key (getkword "\nDraw steps [Inside out/Outside in] <Inside out>: "))))
+      (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))))
   (setq outflag (= key "Outside"))
 
   ;; ---- 5a. starting point (inside out only) ---------------------------
@@ -862,7 +867,7 @@
         (progn
           (initget "Middle True")
           (setq key (getkword
-            "\nMeasure step treads from [Middle of diagonal/True corner] <Middle>: "))))
+            "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True] <Middle>: "))))
       (setq start (if (= key "True") corner mid)))
     (setq start corner))
 
@@ -889,12 +894,12 @@
           (progn
             (initget "Parallel Equidistant")
             (setq key (getkword (strcat
-              "\nSteps [Parallel to diagonal"
-              "/Equidistant from true corner] <Parallel>: "))))
+              "\nSteps parallel to the diagonal, or equidistant"
+              " from the true corner? [Parallel/Equidistant] <Parallel>: "))))
           (progn
             (initget "Parallel True")
             (setq key (getkword
-              "\nTreads [Parallel to diagonal/True angle] <Parallel>: ")))))
+              "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True] <Parallel>: ")))))
       (if (not (member key '("True" "Equidistant")))
         (progn
           ;; treads parallel to the diagonal; step treads measured square to it

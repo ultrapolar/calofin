@@ -17,13 +17,9 @@ runtime.
 ## The one rule
 
 **This assembly contains no drawing logic.** It collects answers and
-formats them into a call on `spa:run-with-answers`
-(`pool:run-with-answers` for the Pool tab). Both receivers are real
-functions in the canonical routines — the consume-once answer store
-each carries is documented in `lisp/spa/README.md` and
-`lisp/pool/README.md`. Every geometry rule, default, corner treatment
-and dimension stays in `SPA.LSP`, unchanged and unaware a form was
-involved.
+formats them into a call on `spa:run-with-answers`. Every geometry rule,
+default, corner treatment and dimension stays in `SPA.LSP`, unchanged and
+unaware a form was involved.
 
 That is not tidiness for its own sake. It keeps a BricsCAD port a
 UI-shell rewrite against their source-compatible .NET API rather than a
@@ -71,17 +67,11 @@ so it autoloads, and add the folder to the trusted paths.
 **fraction** of the image, so boxes track their letters as the palette is
 resized — and which Lisp key it feeds.
 
-Four things the map has to translate rather than assume:
+Three things the map has to translate rather than assume:
 
 - **Chart letters are not always the Lisp keys.** Octagon and Round line
   up 1:1 (their prompts literally read `B - overall size ACROSS`), but
   the Rectangle flow calls the same two overalls `w` and `l`.
-- **The second outline's keys are named per shape too.** Taken from
-  Dims rather than an Offset, SPA asks the other outline's overalls
-  under separate keys — and the rectangle flow echoes its `w`/`l` as
-  `w2`/`l2` where octagon and round echo their `b`/`a` as `b2`/`a2`
-  (octagon adds `f2`, the cut face). A `b2` sent to the rectangle flow
-  would be silently dropped.
 - **`SPA.LSP` reuses A–D for corner positions** (A bottom-left, B
   bottom-right, C top-right, D top-left), which collides with the chart's
   A/B *dimension* letters. Corner fields are keyed `cornera-ty` /
@@ -90,39 +80,10 @@ Four things the map has to translate rather than assume:
   for — H, G, F, E, M, K, L are hopper, step and depth dimensions
   belonging to `POOL.LSP`. They are listed as `inactive`.
 
-Field rows follow SPA's own ask order. On the octagon that puts the cut
-FACE `S2` straight after the two overalls, ahead of the flats — the
-order the prompts run in, with `S2`'s full wording ("the tape across
-the cut") on the row.
-
 Positions are seeded estimates read off the crops, meant to be nudged
 against the real artwork. Nothing depends on them being exact.
 
 Nine of the twelve shapes are POOL shapes awaiting phase 3.
-
-## The cover questions
-
-Below the corners the Spa tab carries the questions that follow the
-outline: `second` (draw the other outline as well), `method` (an Offset
-of the first outline, or its own Dims), the `gap` the cover laps the
-water's edge, then `autohinge` and the Spa Cover Details `grade` and
-`taper`.
-
-The keyword ones are dropdowns whose first row is blank, and the blank
-row means **not answered**: nothing is sent, the key stays absent, and
-SPA asks at the command line. They cannot send an explicit nil —
-`(key . nil)` reads as an answered `NA`, which none of these keyword
-prompts accepts; SPA would consume it and ask anyway. A chosen answer
-goes out spelled exactly as the prompt would spell it (`"Yes"`,
-`"Offset"`, `"THERMOLIGHT"`, `"1-3/8"`), because `SPA.LSP` matches the
-canonical spelling. The `gap` and the by-dims overalls (`w2`/`l2`,
-`b2`/`a2`/`f2`) are ordinary numeric fields under the same
-filled-or-omitted rule as everything else.
-
-`grade` and `taper` are normally read off the Spa Cover Details block
-in the drawing; a form answer wins over the block's, and a form grade
-of `THERMOLIGHT` engages the Thermo-Light rules exactly as the block
-does.
 
 ## Pool bottoms
 
@@ -153,11 +114,12 @@ letter prefix instead, which is why `pool:fkeyof` insists on the
 `"<letter> - "` shape: `pool:askh` also asks *"Total pool length (arc tip
 to arc tip)"*, and that must never become a form key.
 
-`pool:askdeep` and `pool:askc2` re-ask through plain `pool:askh`, and
-consume-once is what keeps that from spinning: the stored answer was
-removed when the first pass read it, so the re-ask finds the store
-empty and takes the correction at the keyboard instead of being re-fed
-the same bad number forever.
+`pool:askdeep` and `pool:askc2` re-ask through plain `pool:askh` — there
+is no separate `pool:askh-prompt`, and none is needed: the store is
+consume-once, so a form value that fails their range check is already
+gone by the re-ask and the correction is typed at the keyboard.
+Re-reading the same form entry would spin forever, which is exactly why
+an answer is REMOVED as it is used rather than marked used.
 
 Chart letters `C1`, `C3`, `C4` and `F3` are collected nowhere: they
 appear only on bottoms POOL cannot draw. `B` is on every section but is

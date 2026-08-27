@@ -117,6 +117,22 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:SPAVER'):
     vm.run(cmd, [])
 print('  CALVER / POOLVER / SPAVER ok')
 
+print('shared -- the palette roster names only real commands')
+# ui/calofin_ui/calofin.lsp lists what the VB palette can show; the
+# list sat years behind the tree once, so it is pinned here: every
+# non-deprecated name must be a command the grouped build defines.
+GLUE = os.path.join(REPO, 'ui', 'calofin_ui', 'calofin.lsp')
+roster = re.findall(r'"([A-Z0-9-]+)"',
+                    re.search(r"calofin:\*commands\*\s*'\((.*?)\)\)",
+                              open(GLUE).read(), re.S).group(1))
+DEPRECATED = {'MATCHSTD', 'ACADY-SCAN'}     # acady matcher, lisp/-only
+ghost = sorted(n for n in roster
+               if n not in DEPRECATED and n.lower() not in shared_cmds)
+if ghost:
+    fail('calofin.lsp lists commands the build does not define: %s' % ghost)
+print('  %d roster names, every one real (%d deprecated allowed)'
+      % (len(roster), len(DEPRECATED)))
+
 print('shared -- the one-file bundle carries the whole build')
 BUNDLE = os.path.join(SHARED, 'LAZPASS.lsp')
 if not os.path.exists(BUNDLE):

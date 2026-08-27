@@ -12,9 +12,13 @@ So the swap is written down instead, once per tool, and applied here.
 
     python3 tools/mirror_shared.py            # every tool listed below
     python3 tools/mirror_shared.py SPA        # just one
+    python3 tools/mirror_shared.py --check    # write nothing; exit 1 if
+                                              # any generated twin on disk
+                                              # differs from a fresh run
 
-`tools/check_standards.py` compares the two version banners and fails
-when they part company, which is what sends you back here.
+`tools/check_standards.py` compares the two version banners, and runs
+the --check above, so a generated twin that is hand-edited or left
+behind fails the standards check rather than shipping.
 """
 
 import os
@@ -45,6 +49,16 @@ TOOLS = {
             'spa:askkw': 'cal:askkw',
         },
         'drop_globals': ['spa:*sysold*', 'spa:*odstyle*'],
+        # cal:syssave takes the sysvars as an argument where spa:syssave
+        # baked them in, and the library keeps the dimension-style
+        # save/restore in its OWN pair -- so the one call becomes two.
+        # Drop that second call and the grouped build quietly stops
+        # putting the drawing's dimension style back.
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (spa:sysvars))',
+                              '(cal:dimstysave)'],
+            '(cal:sysrestore)': ['(cal:sysrestore)', '(cal:dimstyrestore)'],
+        },
         # spa:askkw already takes the SHOWN bracket third, like the
         # library's -- so no bracket translation is needed here
         'askkw_hidden': False,
@@ -217,6 +231,10 @@ TOOLS = {
         # spachk:askkw takes a HIDDEN keyword list third and derives the
         # bracket itself, so its call sites need translating
         'askkw_hidden': True,
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+        },
     },
     # POOL is the largest file in the tree and its twin was hand-mirrored
     # until the form-answer work made that a second pass -- exactly the
@@ -237,8 +255,6 @@ TOOLS = {
         # pool:askkw already takes the SHOWN bracket third, like the
         # library's, so no bracket translation is needed
         'askkw_hidden': False,
-        # the Back sentinel travels with the ask helpers, and every
-        # caller tests for it by name
         # the Back sentinel travels with the ask helpers, and the sysvar
         # snapshot global travels with syssave/sysrestore: drop_globals
         # removes its declaration, so every remaining READ of it has to
@@ -247,6 +263,12 @@ TOOLS = {
         # feet-inch drawings.
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
+        # POOL also saves LUNITS -- it switches the drawing to
+        # architectural units for the run and must put the user's back
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+        },
     },
     # The chart form is like the panel: it draws its own picture and
     # asks nothing through the library, so its twin is the file plus the
@@ -281,30 +303,442 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
-}
 
-# Some call sites need more than a rename.  cal:syssave takes the
-# sysvars as an argument where the standalone helpers bake them in, and
-# the library keeps the dimension-style save/restore in its OWN pair of
-# helpers -- so a tool whose syssave also stashed the dim style expands
-# into two calls, not one.  Drop that second call and the grouped build
-# quietly stops putting the drawing's dimension style back.
-EXPAND = {
-    'SPA': {
-        '(cal:syssave)': ['(cal:syssave (spa:sysvars))', '(cal:dimstysave)'],
-        '(cal:sysrestore)': ['(cal:sysrestore)', '(cal:dimstyrestore)'],
+    # ---- adopted 2026-08-27 from the hand-mirrored set (the derivation
+    # verified each spec's generate() output against the twin then on
+    # disk; the remaining diffs were the legacy banner form and
+    # comment-only residues, normalised by the first regeneration).
+    # covercheck, dimcheck, linfincheck and LISPLAB stay hand-mirrored
+    # on purpose: their twins carry grouped-build adaptations (cal:mtext
+    # delegation, baked Enter-defaults on multi-line prompts, lesson
+    # prose naming the library) that a swap table cannot express.
+    # ABHD carries the whole 2D kit under pf: (sub/add/scl are the
+    # library's v-/v+/v*), the list and format helpers, the layer
+    # creator and the Back-word test.  cal:dedupe takes the epsilon as
+    # an argument where pf:dedupe read *PF-EXACT-EPS* itself, so that
+    # call grows the argument.  Regenerating also drops the
+    # ';; ---- output helpers' rule the hand twin kept (residue R1).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'abhd': {
+        'src': 'lisp/abhd/abhd.lsp',
+        'swap': {
+            'pf:2d': 'cal:2d', 'pf:dist': 'cal:dist', 'pf:sub': 'cal:v-',
+            'pf:add': 'cal:v+', 'pf:scl': 'cal:v*', 'pf:dot': 'cal:dot',
+            'pf:mid': 'cal:mid', 'pf:perp': 'cal:perp', 'pf:tan': 'cal:tan',
+            'pf:ceil': 'cal:ceil', 'pf:nthcdr': 'cal:nthcdr',
+            'pf:sublist': 'cal:sublist', 'pf:norm-ang': 'cal:angnorm',
+            'pf:signed-dang': 'cal:signed-dang', 'pf:dedupe': 'cal:dedupe',
+            'pf:ensure-layer': 'cal:ensure-layer', 'pf:pad': 'cal:pad',
+            'pf:back-word': 'cal:back-word-p', 'pf:unit': 'cal:unit',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:dedupe pts)':
+                ['(cal:dedupe pts *PF-EXACT-EPS*)'],
+        },
     },
-    'SPACHECK': {
-        '(cal:syssave)': ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+    # CABHD is ABHD's perimeter half and carries the same kit under
+    # cab:, minus the bottom-only pieces; same dedupe epsilon growth.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'CABHD': {
+        'src': 'lisp/cabhd/CABHD.lsp',
+        'swap': {
+            'cab:2d': 'cal:2d', 'cab:dist': 'cal:dist', 'cab:sub': 'cal:v-',
+            'cab:add': 'cal:v+', 'cab:scl': 'cal:v*', 'cab:dot': 'cal:dot',
+            'cab:mid': 'cal:mid', 'cab:perp': 'cal:perp',
+            'cab:tan': 'cal:tan', 'cab:ceil': 'cal:ceil',
+            'cab:nthcdr': 'cal:nthcdr', 'cab:sublist': 'cal:sublist',
+            'cab:norm-ang': 'cal:angnorm',
+            'cab:signed-dang': 'cal:signed-dang', 'cab:dedupe': 'cal:dedupe',
+            'cab:ensure-layer': 'cal:ensure-layer', 'cab:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:dedupe pts)':
+                ['(cal:dedupe pts *CAB-EXACT-EPS*)'],
+        },
     },
-    # POOL also saves LUNITS -- it switches the drawing to architectural
-    # units for the run and must put the user's back.
-    'POOL': {
-        '(cal:syssave)':
-            ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+    # ABHD's kit again under lh:, plus block-number -- the library's
+    # takes the attribute tag as an argument where lh: read *LH-PT-TAG*
+    # itself, so that call grows the argument like dedupe's epsilon.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'lhd': {
+        'src': 'lisp/lhd/lhd.lsp',
+        'swap': {
+            'lh:2d': 'cal:2d', 'lh:dist': 'cal:dist', 'lh:sub': 'cal:v-',
+            'lh:add': 'cal:v+', 'lh:scl': 'cal:v*', 'lh:dot': 'cal:dot',
+            'lh:mid': 'cal:mid', 'lh:perp': 'cal:perp', 'lh:tan': 'cal:tan',
+            'lh:ceil': 'cal:ceil', 'lh:nthcdr': 'cal:nthcdr',
+            'lh:sublist': 'cal:sublist', 'lh:norm-ang': 'cal:angnorm',
+            'lh:signed-dang': 'cal:signed-dang', 'lh:dedupe': 'cal:dedupe',
+            'lh:block-number': 'cal:block-number',
+            'lh:ensure-layer': 'cal:ensure-layer', 'lh:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:block-number en)':
+                ['(cal:block-number en *LH-PT-TAG*)'],
+            '(cal:dedupe pts)':
+                ['(cal:dedupe pts *LH-EXACT-EPS*)'],
+        },
+    },
+    # OASIS asks through askkw/askdist and swaps the sysvar, dimstyle,
+    # osnap and layer helpers.  Its Back sentinel rides the SWAP map,
+    # not symbols: the hand twin renamed only the quoted call sites and
+    # kept the prose that explains OASIS-BACK, which a symbols rename
+    # would rewrite.  The one comment pointing at oasis:askdist did
+    # move, hence the symbols entry.  cal:syssave takes the sysvars as
+    # an argument; unlike SPA nothing splits in two, because OASIS
+    # calls its own dimstyle pair explicitly.  Regenerating also keeps
+    # two ;;;-section headers the hand twin deleted (residue R2).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'OASIS': {
+        'src': 'lisp/oasis/OASIS.lsp',
+        'swap': {
+            'oasis:askkw': 'cal:askkw', 'oasis:askdist': 'cal:askdist',
+            'oasis:osup': 'cal:osup', 'oasis:osdown': 'cal:osdown',
+            'oasis:dimstysave': 'cal:dimstysave',
+            'oasis:dimstyrestore': 'cal:dimstyrestore',
+            'oasis:ensure-layer': 'cal:ensure-layer',
+            'oasis:angnorm': 'cal:angnorm', 'oasis:syssave': 'cal:syssave',
+            'oasis:sysrestore': 'cal:sysrestore', 'OASIS-BACK': 'CAL-BACK',
+        },
+        'drop_globals': ['oasis:*sysold*', 'oasis:*odstyle*'],
+        'symbols': {
+            'oasis:askdist': 'cal:askdist',
+        },
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+        },
+    },
+    # Ask pair, Back-word test, layer creator and the flat geometry
+    # set.  The sentinel moves via symbols like SPA's -- the hand twin
+    # renamed the ABF-BACK comment mentions too.  cal:block-number
+    # takes the tag as an argument; abf:*pt-tag* stays and is passed.
+    # Regenerating keeps a ;;;-block the hand twin deleted (R2).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'ABFIND': {
+        'src': 'lisp/abfind/ABFIND.lsp',
+        'swap': {
+            'abf:askkw': 'cal:askkw', 'abf:askyn': 'cal:askyn',
+            'abf:back-word-p': 'cal:back-word-p',
+            'abf:ensure-layer': 'cal:ensure-layer',
+            'abf:block-number': 'cal:block-number', 'abf:2d': 'cal:2d',
+            'abf:dist': 'cal:dist', 'abf:angnorm': 'cal:angnorm',
+            'abf:signed-dang': 'cal:signed-dang', 'abf:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+        'symbols': {
+            'ABF-BACK': 'CAL-BACK',
+        },
+        'expand': {
+            '(cal:block-number en)':
+                ['(cal:block-number en abf:*pt-tag*)'],
+        },
+    },
+    # The 2D vector kit under paddle--.  paddle--len is called only by
+    # paddle--unit, so once both are dropped nothing calls it; its
+    # library body is cal:vlen.  Regenerating drops the
+    # ';; --- 2D vector helpers' rule the hand twin kept (R1).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'PADDLE': {
+        'src': 'lisp/paddle/PADDLE.lsp',
+        'swap': {
+            'paddle--sub': 'cal:v-', 'paddle--add': 'cal:v+',
+            'paddle--scl': 'cal:v*', 'paddle--len': 'cal:vlen',
+            'paddle--unit': 'cal:unit', 'paddle--cross': 'cal:cross',
+            'paddle--dot': 'cal:dot', 'paddle--2d': 'cal:2d',
+        },
+        'drop_globals': [],
+    },
+    # CORNERSTP's one generic helper is the layer gate.  REAL DRIFT in
+    # the hand twin: it dropped cs-layerok but renamed only three of
+    # the four call sites -- cs-dimv still calls cs-layerok, which
+    # nothing in the grouped build defines, so dims onto *cs-dim-layer*
+    # die in LAZPASS today.  This entry renames all four: regenerating
+    # FIXES that bug (residue R3).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'CORNERSTP': {
+        'src': 'lisp/cornerstp/CORNERSTP.lsp',
+        'swap': {
+            'cs-layerok': 'cal:layer-usable-p',
+        },
+        'drop_globals': [],
+    },
+    # Same story as CORNERSTP: hs-layerok comes out, and the hand twin
+    # left the hs-dimv call site unrenamed -- an undefined function in
+    # the grouped build that regenerating fixes (R3).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'HEMISTEP': {
+        'src': 'lisp/cornerstp/HEMISTEP.lsp',
+        'swap': {
+            'hs-layerok': 'cal:layer-usable-p',
+        },
+        'drop_globals': [],
+    },
+    # The step family's third file also asks: askkw is already shaped
+    # like the library's, and cal:asktreat takes the Back sentinel
+    # third where ns-asktreat had no Back at all -- so that call gains
+    # an explicit nil.  Same layerok drift as its two siblings: the
+    # hand twin left ns-dimv calling the dropped ns-layerok (R3, fixed
+    # by regenerating), and it deleted the emptied ';;; ask helpers'
+    # header that regenerating keeps (R2).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'NORMIESTEP': {
+        'src': 'lisp/cornerstp/NORMIESTEP.lsp',
+        'swap': {
+            'ns-askkw': 'cal:askkw', 'ns-asktreat': 'cal:asktreat',
+            'ns-layerok': 'cal:layer-usable-p',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:asktreat rsubj "Square")':
+                ['(cal:asktreat rsubj "Square" nil)'],
+        },
+    },
+    # POOLDEMO defines no helpers of its own -- it drives POOL's,
+    # cross-file.  The swap renames those call sites (there is nothing
+    # to drop), and pool:syssave picks up POOL's sysvar list as the
+    # argument, exactly as in the POOL entry above.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'POOLDEMO': {
+        'src': 'lisp/pool/POOLDEMO.LSP',
+        'swap': {
+            'pool:syssave': 'cal:syssave', 'pool:v+': 'cal:v+',
+            'pool:mid': 'cal:mid', 'pool:v-': 'cal:v-',
+            'pool:sysrestore': 'cal:sysrestore', 'pool:v*': 'cal:v*',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+        },
+    },
+    # Like POOLDEMO: no helpers of its own, just POOL's called
+    # cross-file, renamed at the call sites; pool:syssave picks up the
+    # sysvar list.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'TUTORIALPOOL': {
+        'src': 'lisp/pool/TUTORIALPOOL.LSP',
+        'swap': {
+            'pool:syssave': 'cal:syssave', 'pool:v+': 'cal:v+',
+            'pool:v-': 'cal:v-', 'pool:mid': 'cal:mid',
+            'pool:sysrestore': 'cal:sysrestore', 'pool:v*': 'cal:v*',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+        },
+    },
+    # DRONE's only generic helper is the layer creator.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'drone': {
+        'src': 'lisp/drone/drone.lsp',
+        'swap': {
+            'drone:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
+    # TYDRN's only generic helper is the layer creator.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'tydrn': {
+        'src': 'lisp/tydrn/tydrn.lsp',
+        'swap': {
+            'tydrn:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
+    # Layer creator, angle normalizer, and the strict 3-point
+    # circumcenter -- the library form, not ABHD's looser 2-element one
+    # (which stays out; see shared/README.md).
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'check_drawing': {
+        'src': 'lisp/check/check_drawing.lsp',
+        'swap': {
+            'cfchk:ensure-layer': 'cal:ensure-layer',
+            'cfchk:angnorm': 'cal:angnorm',
+            'cfchk:circumcenter': 'cal:circumcenter',
+        },
+        'drop_globals': [],
+    },
+    # One helper: the Back-word test, under chk:back-word.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'ccprecheck': {
+        'src': 'lisp/ccprecheck/ccprecheck.lsp',
+        'swap': {
+            'chk:back-word': 'cal:back-word-p',
+        },
+        'drop_globals': [],
+    },
+    # One helper: the Back-word test, under lin:back-word.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'lincheck': {
+        'src': 'lisp/lincheck/lincheck.lsp',
+        'swap': {
+            'lin:back-word': 'cal:back-word-p',
+        },
+        'drop_globals': [],
+    },
+    # Uses no library helper -- the twin is the file plus the shared
+    # banner.  Listed so it can never drift.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'LINTXTCHK': {
+        'src': 'lisp/lintxtchk/LINTXTCHK.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
+    # The same feet-inch parser family as abcdef and XYPLOT, so the
+    # same two generic helpers come out.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'ALTABCDEF': {
+        'src': 'lisp/altabcdef/ALTABCDEF.lsp',
+        'swap': {
+            'altabcdef:trim': 'cal:trim', 'altabcdef:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+    },
+    # The library's n-dimensional pair IS AutoDim's -- CALOFIN-LIB
+    # still marks cal:dotn/cal:midn with 'ad:dot'/'ad:mid' -- plus the
+    # ask pair and both bounding boxes.  The sentinel moves via symbols:
+    # the hand twin renamed the AD-BACK comment mentions too.
+    # Regenerating keeps the emptied ';; --- asking' rule the hand twin
+    # deleted (R2).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'AutoDim': {
+        'src': 'lisp/autodim/AutoDim.lsp',
+        'swap': {
+            'ad:mid': 'cal:midn', 'ad:dot': 'cal:dotn',
+            'ad:askkw': 'cal:askkw', 'ad:askyn': 'cal:askyn',
+            'ad:ssbox': 'cal:bbox-ss', 'ad:entbox': 'cal:bbox-ent',
+        },
+        'drop_globals': [],
+        'symbols': {
+            'AD-BACK': 'CAL-BACK',
+        },
+    },
+    # Uses no library helper -- file plus banner.  Listed so it can
+    # never drift.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'dim_continue': {
+        'src': 'lisp/dim_continue/dim_continue.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
+    # One helper: the Back-word test, dash-named dd-back-word.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'DroneDistortion': {
+        'src': 'lisp/drone_height/DroneDistortion.lsp',
+        'swap': {
+            'dd-back-word': 'cal:back-word-p',
+        },
+        'drop_globals': [],
+    },
+    # Uses no library helper -- file plus banner.  Listed so it can
+    # never drift.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'DroneHeightGPS': {
+        'src': 'lisp/drone_height/DroneHeightGPS.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
+    # Distance-squared, the layer creator and the one-line TEXT writer.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'wcalst': {
+        'src': 'lisp/wcalst/wcalst.lsp',
+        'swap': {
+            'wc:d2': 'cal:d2', 'wc:ensure-layer': 'cal:ensure-layer',
+            'wc:text': 'cal:text',
+        },
+        'drop_globals': [],
+    },
+    # One helper: the selection-set bounding box.  Its ;;;-comment pair
+    # stays behind on regeneration -- top_span walks only ;; lines --
+    # where the hand twin deleted it (R2).
+    # [verified: matches except banner + listed residue vs the twin on disk]
+    'STOCKCOVER': {
+        'src': 'lisp/stockcover/STOCKCOVER.lsp',
+        'swap': {
+            'stock:bbox': 'cal:bbox-ss',
+        },
+        'drop_globals': [],
+    },
+    # block-number with its tag argument (*CDO-PT-TAG* stays and is
+    # passed), and the Back-word test under cdo:backp.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'CDCALLOUT': {
+        'src': 'lisp/cdcallout/CDCALLOUT.lsp',
+        'swap': {
+            'cdo:block-number': 'cal:block-number',
+            'cdo:backp': 'cal:back-word-p',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:block-number en)':
+                ['(cal:block-number en *CDO-PT-TAG*)'],
+        },
+    },
+    # One helper: the 2D dot product, dash-named autobead-dot.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'AUTOBEAD': {
+        'src': 'lisp/autobead/AUTOBEAD.lsp',
+        'swap': {
+            'autobead-dot': 'cal:dot',
+        },
+        'drop_globals': [],
+    },
+    # One helper: the layer creator, under cperp:layer.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'cperp_points': {
+        'src': 'lisp/perp_points/cperp_points.lsp',
+        'swap': {
+            'cperp:layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
+    # The layer creator and the strict 3-point circumcenter.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'perp_points': {
+        'src': 'lisp/perp_points/perp_points.lsp',
+        'swap': {
+            'perp:layer': 'cal:ensure-layer',
+            'perp:circumcenter': 'cal:circumcenter',
+        },
+        'drop_globals': [],
+    },
+    # Uses no library helper -- file plus banner.  Listed so it can
+    # never drift.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'tutorial_perp_points': {
+        'src': 'lisp/perp_points/tutorial_perp_points.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
+    # Uses no library helper -- file plus banner.  Listed so it can
+    # never drift.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'tutorial_cperp_points': {
+        'src': 'lisp/perp_points/tutorial_cperp_points.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
+    # Layer creator and block-number with *BP-PT-TAG* passed as the
+    # tag argument.
+    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    'BPCALLOUT': {
+        'src': 'lisp/bpcallout/BPCALLOUT.lsp',
+        'swap': {
+            'bp:ensure-layer': 'cal:ensure-layer',
+            'bp:block-number': 'cal:block-number',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:block-number en)':
+                ['(cal:block-number en *BP-PT-TAG*)'],
+        },
     },
 }
-
 
 def expand_calls(src, table):
     """Replace a bare (fn) call with one or more forms, each on its own
@@ -377,12 +811,16 @@ def top_span(src, opener, name):
     return i, j
 
 
-def fix_askkw(src):
+def fix_askkw(src, tool):
     """cal:askkw's third argument is the bracket text SHOWN in the
     prompt; the standalone helpers take a hidden-keyword list there and
     build the bracket themselves.  Renaming alone would pass nil where a
     string is wanted, so the bracket is written out -- the same
-    "A/B/C" the standalone one would have derived from the keywords."""
+    "A/B/C" the standalone one would have derived from the keywords.
+
+    A call site this cannot translate is a hard error: writing the twin
+    anyway would ship a truncated call that loads fine and dies at the
+    first keyword question."""
     out, n, i = [], 0, 0
     pair = re.compile(r'"(?P<kws>[A-Za-z][A-Za-z ]*)"(?P<gap>\s+)nil')
     while True:
@@ -393,11 +831,11 @@ def fix_askkw(src):
         out.append(src[i:j])
         m = pair.search(src, j, j + 400)
         if not m:
-            print("warning: could not translate askkw call at %r"
-                  % src[j:j + 60].splitlines()[0], file=sys.stderr)
-            out.append(src[j:j + 10])
-            i = j + 10
-            continue
+            raise SystemExit(
+                "mirror_shared: could not translate the askkw call at %r "
+                "in %s - the twin was NOT written; teach fix_askkw the "
+                "call shape first"
+                % (src[j:j + 60].splitlines()[0], tool))
         kws = m.group('kws')
         out.append(src[j:m.start()])
         out.append('"%s"%s"%s"' % (kws, m.group('gap'), kws.replace(' ', '/')))
@@ -406,15 +844,15 @@ def fix_askkw(src):
     return ''.join(out), n
 
 
-def mirror(tool, spec):
+def generate(tool, spec):
+    """(twin path, twin text) for one tool, written nowhere."""
     src_path = os.path.join(HERE, spec['src'])
     dst_path = os.path.join(HERE, 'shared', 'parts', tool + '.lsp')
     if not os.path.exists(src_path):
-        # a tool listed here but not in the tree yet (or one deleted
-        # from it) is skipped rather than crashing the whole sweep
-        print("skipped %s - no %s" % (tool, spec['src']), file=sys.stderr)
-        return
-    src = open(src_path).read()
+        raise SystemExit("mirror_shared: %s is in TOOLS but %s does not "
+                         "exist - fix the table" % (tool, spec['src']))
+    with open(src_path, encoding='utf-8') as f:
+        src = f.read()
 
     # the shared-build note goes under the Command: line of the header
     # the Commands: block may run to several lines; [ \t] not \s, or
@@ -423,6 +861,12 @@ def mirror(tool, spec):
                   src, re.M)
     if m and 'SHARED BUILD' not in src:
         src = src[:m.end()] + BANNER + src[m.end():]
+    if 'SHARED BUILD' not in src:
+        # no Commands: block to hang it under -- put the banner above
+        # the first top-level form so every twin still carries it
+        m = re.search(r'^\(', src, re.M)
+        if m:
+            src = src[:m.start()] + BANNER + '\n' + src[m.start():]
 
     src = src.replace(
         ';;;  A self-contained file: it carries its own helpers.',
@@ -449,7 +893,7 @@ def mirror(tool, spec):
         src = re.sub(r"([('])" + re.escape(old) + r"(?=[\s)])",
                      lambda m: m.group(1) + new, src)
 
-    src = expand_calls(src, EXPAND.get(tool, {}))
+    src = expand_calls(src, spec.get('expand', {}))
 
     for old, new in spec.get('symbols', {}).items():
         # \b only means anything next to a word character.  A global
@@ -463,16 +907,51 @@ def mirror(tool, spec):
 
     nkw = 0
     if spec.get('askkw_hidden'):
-        src, nkw = fix_askkw(src)
+        src, nkw = fix_askkw(src, tool)
+    return dst_path, src, len(dropped), nkw
 
-    open(dst_path, 'w').write(src)
+
+def mirror(tool, spec):
+    dst_path, src, ndropped, nkw = generate(tool, spec)
+    with open(dst_path, 'w', encoding='utf-8') as f:
+        f.write(src)
     print("wrote shared/parts/%s.lsp (%d lines, %d helpers from the "
           "library, %d askkw call sites translated)"
-          % (tool, len(src.splitlines()), len(dropped), nkw))
+          % (tool, len(src.splitlines()), ndropped, nkw))
+
+
+def check(tools=None):
+    """Tools whose twin on disk differs from a fresh generation."""
+    problems = []
+    for tool in sorted(tools or TOOLS):
+        dst_path, src, _, _ = generate(tool, TOOLS[tool])
+        try:
+            with open(dst_path, encoding='utf-8') as f:
+                have = f.read()
+        except OSError:
+            problems.append("shared/parts/%s.lsp is missing - run "
+                            "python3 tools/mirror_shared.py %s"
+                            % (tool, tool))
+            continue
+        if have != src:
+            problems.append(
+                "shared/parts/%s.lsp differs from what mirror_shared.py "
+                "generates - it is a GENERATED twin: edit %s and rerun "
+                "python3 tools/mirror_shared.py %s"
+                % (tool, TOOLS[tool]['src'], tool))
+    return problems
 
 
 def main():
-    want = sys.argv[1:] or sorted(TOOLS)
+    argv = sys.argv[1:]
+    if "--check" in argv:
+        problems = check([a for a in argv if a != "--check"] or None)
+        for line in problems:
+            print(line)
+        print("mirror_shared --check: %s"
+              % ("%d problem(s)" % len(problems) if problems else "current"))
+        return 1 if problems else 0
+    want = argv or sorted(TOOLS)
     for tool in want:
         if tool not in TOOLS:
             print("unknown tool %r - known: %s"

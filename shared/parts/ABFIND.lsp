@@ -14,6 +14,9 @@
 ;;;            ABFINDVER   print the loaded version
 ;;; ======================================================================
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; A pool is surveyed off two stakes, A and B: every point on the sheet
 ;;; is two tape readings, one from each stake, and the point is wherever
 ;;; those two distances cross.  These two commands work that way round.
@@ -150,8 +153,6 @@
 ;;; *abfind-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -241,6 +242,11 @@
   '(("1" "7") ("1" "4") ("3" "8")   ; each other, both ways round
     ("3" "5") ("5" "6") ("6" "8")
     ("0" "9") ("4" "9") ("7" "9")))
+
+;;; ---------------------- ask helpers -----------------------------------
+;;; Copied from CALOFIN-LIB.lsp (cal:askkw, cal:back-word-p) under this
+;;; file's own prefix, so the standalone file loads alone -- see
+;;; STANDARDS.md section 4.  Back sentinel: CAL-BACK.
 
 ;;; ---------------------- layers ----------------------------------------
 

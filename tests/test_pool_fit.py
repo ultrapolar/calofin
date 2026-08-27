@@ -1834,18 +1834,18 @@ def test_versioned_copy():
     releases/ so anyone can see which iteration is loaded in a
     colleague's stack."""
     twins = [f for f in os.listdir(RELEASES_DIR)
-             if re.match(r"ABHD_\d{6}_REV\d{2}\.lsp$", f)]
+             if re.match(r"abhd_\d{6}_REV\d{2}\.lsp$", f)]
     assert len(twins) == 1, \
-        "expected exactly one ABHD_MMDDYY_REV##.lsp, found %s" % twins
+        "expected exactly one abhd_MMDDYY_REV##.lsp, found %s" % twins
     twin = twins[0]
     src = open(LISP_FILE, "rb").read()
     assert open(os.path.join(RELEASES_DIR, twin), "rb").read() == src, \
         "%s has drifted from abhd.lsp - re-copy it" % twin
-    m = re.search(rb'\*PF-VERSION\*\s+"(\d{6}) REV(\d{2})"', src)
-    assert m, "abhd.lsp lost its *PF-VERSION* constant"
-    want = "ABHD_%s_REV%s.lsp" % (m.group(1).decode(), m.group(2).decode())
+    m = re.search(rb'pf:\*version\*\s+"(\d{6}) REV(\d{2})"', src)
+    assert m, "abhd.lsp lost its pf:*version* constant"
+    want = "abhd_%s_REV%s.lsp" % (m.group(1).decode(), m.group(2).decode())
     assert twin == want, \
-        "versioned file is %s but *PF-VERSION* says %s" % (twin, want)
+        "versioned file is %s but pf:*version* says %s" % (twin, want)
     print("  versioned twin %s matches abhd.lsp" % twin)
 
 

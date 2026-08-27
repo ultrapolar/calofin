@@ -26,10 +26,12 @@
 ;;;      POOLDEMO.LSP                 the static name
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
-(setq pooldemo:*version* "082126 REV02")
+(setq pooldemo:*version* "082726 REV03")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -326,7 +328,7 @@
 (defun c:POOLDEMO ( / *error* cells k org)
 
   (defun *error* (msg)
-    (if (and msg (/= (strcase msg t) "function cancelled"))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
     (pool:undoend)

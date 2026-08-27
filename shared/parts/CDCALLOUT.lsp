@@ -6,6 +6,9 @@
 ;;;
 ;;; Command:  CDCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The dimensioning sister of BPCALLOUT.  Instead of clicking points,
 ;;; you name them: type the FROM point number and the TO point number,
 ;;; and an aligned dimension is drawn between those two survey points
@@ -42,11 +45,9 @@
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -202,7 +203,7 @@
     (if oce (setvar "CMDECHO" oce))
     (if grouped (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 

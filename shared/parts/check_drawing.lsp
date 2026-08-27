@@ -26,8 +26,13 @@
 ;;;  Everything runs inside one UNDO group; a single U reverts every
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *checkdrawing-version* "v1.0")   ; announced on load; release_lisp.py
+                                          ; stamps the dated twin in releases/
 
 (vl-load-com)
 

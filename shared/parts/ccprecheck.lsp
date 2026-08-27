@@ -21,12 +21,17 @@
 ;;;     +- Pool Cover -> Freeform | Rectangle
 ;;;     +- Spa Cover  -> Safety Cover | Hard Cover | ThermoLight Cover
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *ccprecheck-version* "v1.1")   ; announced on load; release_lisp.py
+                                        ; stamps the dated twin in releases/
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
 
@@ -538,7 +543,16 @@
 ;;; Main command
 ;;; ------------------------------------------------------------------
 
-(defun c:CCPRECHECK (/ product v)
+(defun c:CCPRECHECK (/ *error* product v)
+  ;; a walker: it changes no setting and opens no undo group, so the
+  ;; handler's whole job is to keep a cancel from printing a raw
+  ;; AutoLISP message at the user (STANDARDS section 5)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nCCPRECHECK error: " msg)))
+    (princ))
+
   (setq *chk:log* nil product nil)
   (princ "\n--- Tech Flow Chart checklist ---")
   (princ "\n(after the first question, Back re-asks the previous one)")

@@ -3,6 +3,9 @@
 ;;;
 ;;;  Command:  TUTORIALPOOL
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  A paced, captioned tour of how POOL.LSP works: what it asks, why,
 ;;;  and what the drawing looks like at each stage.  Each topic prints
 ;;;  a short explanation (and, where it matters, a full checklist of
@@ -23,10 +26,8 @@
 ;;;      TUTORIALPOOL.LSP                 the static name
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "082526 REV05")
+(setq tutorial:*version* "082726 REV06")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -337,8 +338,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
     (cal:sysrestore)
     (pool:undoend)

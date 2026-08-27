@@ -145,8 +145,13 @@
 ;;;    * Break points closer together than 0.0001 drawing units are
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
+                                     ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -178,6 +183,8 @@
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
         (t 12.0)))                      ; inches / unitless
+
+;; ------------------------------------------------------------- asking
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set
@@ -1280,7 +1287,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -1315,7 +1322,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (setq oldcmd (getvar "CMDECHO")
@@ -1337,7 +1344,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (setq oldcmd (getvar "CMDECHO")
@@ -1368,7 +1375,7 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side view:"

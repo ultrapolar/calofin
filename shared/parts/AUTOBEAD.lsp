@@ -6,6 +6,9 @@
 ;;;   TUTORIALAUTOBEAD  - guided walkthrough (read it, or watch a live demo)
 ;;;   AUTOBEADVER       - report which version is loaded
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select POOL lines to "bead" (LINEs, ARCs, and polylines on any POOL*
 ;;; layer), then click the side to bead toward.  The selection is copied,
 ;;; joined into continuous chains, and each chain is offset 2" toward the
@@ -44,14 +47,12 @@
 ;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
 ;;;   will drift.
 ;;; ==========================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.4"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.7"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -283,7 +284,7 @@
 
 (defun autobead-build (ss dirpt sidewalls treadpts
                        / *error* beadoff layname fuzz
-                         oldcmd oldos oldpa temps
+                         oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
@@ -302,15 +303,20 @@
       (if (and e (entget e)) (entdel e)))
     (if oldpa (setvar "PEDITACCEPT" oldpa))
     (if oldos (setvar "OSMODE" oldos))
-    (command "._undo" "_end")
+    ;; only close a group that was actually opened -- an error thrown
+    ;; before the _Begin below (a cancelled selection, a failed getvar)
+    ;; used to run _End on nothing, which errors inside the handler
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*,*BREAK*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (princ))
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "._undo" "_begin")
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (setq oldos (getvar "OSMODE")
         oldpa (getvar "PEDITACCEPT")
         temps '()
@@ -488,7 +494,8 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "._undo" "_end")
+  (command "_.UNDO" "_End")
+  (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   beadcount)
 
@@ -799,12 +806,15 @@
 ;; ---- entry point -----------------------------------------------------------
 
 (defun c:TUTORIALAUTOBEAD ( / ans )
-  (initget "Read Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old Read stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both READ")
   (setq ans (getkword
-              (strcat "\nAUTOBEAD tutorial - read it, or watch a live demo?"
-                      "\n  [Read/Demo/Both] <Read>: ")))
-  (if (null ans) (setq ans "Read"))
-  (if (member ans '("Read" "Both")) (autobead-tutorial-read))
+              (strcat "\nAUTOBEAD tutorial - read the Checks, or watch a live Demo?"
+                      "\n  [Checks/Demo/Both] <Both>: ")))
+  (if (null ans) (setq ans "Both"))
+  (if (= ans "READ") (setq ans "Checks"))
+  (if (member ans '("Checks" "Both")) (autobead-tutorial-read))
   (if (member ans '("Demo" "Both")) (autobead-tutorial-demo))
   (princ))
 

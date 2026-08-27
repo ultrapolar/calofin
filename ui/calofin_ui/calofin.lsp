@@ -15,9 +15,18 @@
 ;; whatever a given machine has.  One group per palette group, in the
 ;; palette's own order, so the two rosters can be compared by eye --
 ;; CommandCatalog.Groups in CalofinPalette.vb is the other half.
+;;
+;; The names are LAZPANEL's roster (lisp/lazpanel/LAZPANEL.lsp, the
+;; rules in its header: headline commands only, no TUTORIAL*/VER/
+;; RESCUE/CFG satellites, no DD* photo toolset, no LISPLAB) plus the
+;; deprecated acady matcher pair the VB palette still carries buttons
+;; for.  tests/test_shared.py checks every non-deprecated name here is
+;; a real command in the grouped build, so this list can no longer sit
+;; years behind the tree the way it once did.
 (setq calofin:*commands*
   '(;; Layout
-    "LAZFORM" "LAZTXT" "LAZFORMCOVER" "SPA" "POOL" "POOLCOVER" "POOLDEMO"
+    "LAZFORM" "LAZTXT" "LAZFORMCOVER" "LAZSPA" "LAZSTEP" "SPA" "POOL"
+    "POOLCOVER" "POOLDEMO"
     "OASIS" "FITABHD" "FITABHDCOVER" "ABHD" "ABHDCOVER" "ADAB" "CABHD"
     "LHD" "PADDLE" "AUTOBEAD" "CORNERSTP" "HEMISTEP" "NORMIESTEP"
     "SMARTFILLET" "STOCKCOVER" "WCALST" "CUSTBLOCK"
@@ -32,7 +41,9 @@
     "CDCREATE" "CDCALLOUT" "BPCALLOUT"
     ;; Points
     "ABCDEF" "ALTABCDEF" "XYPLOT" "ABFIND" "ABMOVE" "PERPPTS" "CPERPPTS"
-    "XFTCONV" "DRONE" "TYDRN"))
+    "XFTCONV" "DRONE" "TYDRN"
+    ;; deprecated but still shipped standalone (lisp/standards_checker/)
+    "MATCHSTD" "ACADY-SCAN"))
 
 ;; Is C:<name> defined in this session?
 ;;

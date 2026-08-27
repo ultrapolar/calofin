@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin shared build loaded - 107 commands in one session.
+LAZPASS: calofin shared build loaded - 121 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -52,13 +52,13 @@ python3 tools/build_shared_bundle.py
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
-`CALOFIN-LIB v1.0 loaded` -- but not one tool comes with it, so `POOL`,
+`CALOFIN-LIB v1.3 loaded` -- but not one tool comes with it, so `POOL`,
 `SPA` and the rest are all still undefined. It now says so when that
 happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 47 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 51 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
@@ -115,7 +115,7 @@ helper's comment names the tool implementation it was lifted from.
 Deliberately NOT absorbed (divergent behavior the tools rely on):
 POOL/SPA's `unit` (returns `(0.0 0.0)` on a zero vector, not nil),
 abhd/lhd's 2-element `circumcenter` and flat `bbox`, abhd's
-`pf:block-number` (no numeric fallback), perp_points' consecutive-only
+`pf:block-number` and `cab:block-number` (no numeric fallback - reviewed 2026-08-27 and kept strict on purpose: the fitters consume every point handed to them, so a stray numbered block joining the survey would warp the whole fit, where a dropped untagged point is the visible failure), perp_points' consecutive-only
 `dedupe`, the cornerstp 3-element vector set, `xft:mid` (3-D), the
 tutorials' pauses (they can stop the tour, with opposite polarities),
 and every false friend (`report`, `say`, `log`, the non-string
@@ -128,6 +128,23 @@ Known, accepted behavior deltas vs the lisp/ builds:
   frozen report layer was silently invisible.
 * `cal:ensure-layer`'s repair announcement no longer carries a
   per-tool prefix.
+
+### One layering wart, known and left
+
+`parts/POOL.lsp` reads `cal:*sysold*` directly to work out whether the
+drawing is in feet-and-inches:
+
+```lisp
+pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
+```
+
+That is the library's own snapshot, and there is no accessor to ask it
+through -- the standalone file reads its own `pool:*sysold*` and the
+mirror renames the symbol, so the twin has no other option today. A
+`cal:sysget` would close it. Left alone on purpose for now: it is a
+tidiness fix that touches a generated twin and the swap table behind
+it, and it buys no behaviour. Do it with the next change that is
+already opening `mirror_shared.py`'s POOL entry.
 
 ## Tests
 

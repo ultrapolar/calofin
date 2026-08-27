@@ -28,6 +28,8 @@ AutoCAD and no Blender to install or license.
 The hook sets both of these too, via `$CLAUDE_ENV_FILE`, so a local
 session gets them without the web UI. Setting them in the panel as
 well is belt and braces - they then apply even if the hook is skipped.
+(The hook used to also export a `CALOFIN_ROOT` nothing read; it no
+longer does.)
 
 ### One variable to leave unset
 
@@ -57,7 +59,9 @@ set -euo pipefail
 
 python3 --version
 
-# The tree is in the shape STANDARDS.md describes...
+# The tree is in the shape STANDARDS.md describes, and every generated
+# tier (shared/parts twins, releases/, LAZPASS.lsp) matches a fresh
+# regeneration...
 python3 tools/check_standards.py
 
 # ...and the grouped build really does load as one session.
@@ -77,11 +81,11 @@ nothing to download. Each session it:
 
 1. exports the variables above through `$CLAUDE_ENV_FILE`,
 2. prints the tier map with live file counts, the rules that bite, and
-   the commands for checking and testing,
-3. names the tier map, the rules that bite, and the two tests that fail
-   on a clean checkout
-   (`test_pool_form.py`, `test_spa_form.py`) so nobody spends a session
-   "fixing" a known gap,
+   the `make` targets for checking and testing,
+3. names the tests that fail on a clean checkout (none, at present) -
+   the authoritative list is `EXPECTED_FAILURES` in
+   `tools/run_tests.py`, which fails the run the day an entry starts
+   passing,
 4. runs `tools/check_standards.py` and, if the tiers have drifted,
    says so at the top of the session instead of in review.
 
@@ -109,6 +113,11 @@ see, because they read one file at a time:
 - the one-file bundle `shared/LAZPASS.lsp` exists and is not behind
   its members (rebuild: `python3 tools/build_shared_bundle.py`),
 - a versioned file's dated twin in `releases/` is not stale,
+- **every generated artifact matches a fresh regeneration** - the
+  `--check` modes of `mirror_shared.py`, `release_lisp.py` and
+  `build_shared_bundle.py` run inside this check, so a hand-edited
+  generated twin, an orphaned release or a stale bundle body fails
+  here even when every banner and marker still lines up,
 - `wip/`, once it exists, holds drafts and no dated releases.
 
 Each failure prints the fix. Run it by hand any time:

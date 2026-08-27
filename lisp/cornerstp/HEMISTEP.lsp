@@ -756,7 +756,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nHEMISTEP: " msg)))
     (princ))
 

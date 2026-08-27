@@ -23,7 +23,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.2")
+(setq cal:*version* "v1.3")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -120,7 +120,10 @@
 ;; (covercheck.lsp:501; dchk:/lfc: byte-identical).
 (defun cal:ask-yn-nav (msg / ans)
   (initget "Yes No Back Skip Undo")   ; Undo = hidden synonym for Back
-  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
+  ;; the bracket is exactly the keyword list (STANDARDS section 1 rule
+  ;; 1): a click sends the bracket text, and "Skip rest" was a click
+  ;; the initget list could not accept
+  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -178,9 +181,31 @@
   (if (not cal:*odstyle*) (setq cal:*odstyle* (getvar "DIMSTYLE"))))
 
 (defun cal:dimstyrestore ()
+  ;; called from *error* handlers, where a bare (command ...) can itself
+  ;; fail -- so command-s under vl-catch-all-apply (STANDARDS section 5)
   (if (and cal:*odstyle* (tblsearch "DIMSTYLE" cal:*odstyle*))
-      (command "_.-DIMSTYLE" "_Restore" cal:*odstyle*))
+      (vl-catch-all-apply 'command-s
+        (list "_.-DIMSTYLE" "_Restore" cal:*odstyle*)))
   (setq cal:*odstyle* nil))
+
+;; T when MSG is the message of a plain cancel (Esc, quit) rather than
+;; a real error.  The canonical test of STANDARDS section 5 -- ten
+;; hand-copied variants of it existed, two with the same typo, which is
+;; why it is a helper now.
+(defun cal:error-cancel-p (msg)
+  (and msg (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+
+;; One undo group per command, in the one casing (STANDARDS section 5).
+;; Track the open group in a local and close it from *error* too:
+;;   (setq undo-open (cal:undobegin))
+;;   ... (if undo-open (cal:undoend)) ...
+(defun cal:undobegin ()
+  (command "_.UNDO" "_Begin")
+  T)
+
+(defun cal:undoend ()
+  (command "_.UNDO" "_End")
+  nil)
 
 ;; The user's own object snaps stay LIVE during every measurement
 ;; prompt; OSMODE is zeroed only while a routine feeds points to

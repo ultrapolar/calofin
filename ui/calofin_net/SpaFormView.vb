@@ -91,8 +91,11 @@ Public Class SpaCorner
     Public Property X As Double
     Public Property Y As Double
 
+    ' The canonical Treatment words (STANDARDS section 2).  SPA.LSP still
+    ' accepts the old wire values 90/Diagonal from an un-rebuilt DLL and
+    ' normalises them, so this rename is safe to ship either side first.
     Public ReadOnly Property Treatments As String() =
-        {"", "90", "Radius", "Diagonal"}
+        {"", "Square", "Radius", "Cut", "NotGiven"}
 
     Private _treatment As String = ""
     Private _size As String = ""
@@ -444,7 +447,7 @@ Public NotInheritable Class ShapeCatalog
 
         ' --- Round: a circle when the overalls match, an ellipse when not.
         Dim rnd As New SpaShape() With {
-            .Name = "Round", .LispShape = "ROund",
+            .Name = "Round", .LispShape = "ROUnd",
             .ImageFile = "round.png"}
         rnd.Fields.Add(F("b", "B", "B - overall size ACROSS", True, 0.5, 0.24))
         rnd.Fields.Add(F("a", "A", "A - overall size UP", False, 0.225, 0.6))

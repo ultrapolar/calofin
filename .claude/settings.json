@@ -17,11 +17,19 @@
       "Bash(python3 tools/check_scope.py:*)",
       "Bash(python3 tools/check_standards.py:*)",
       "Bash(python3 tools/release_lisp.py:*)",
+      "Bash(python3 tools/build_shared_bundle.py:*)",
+      "Bash(python3 tools/mirror_shared.py:*)",
+      "Bash(python3 tools/run_tests.py:*)",
       "Bash(python3 tests/:*)",
+      "Bash(CALOFIN_LISP_ROOT=shared python3 tests/:*)",
+      "Bash(CALOFIN_LISP_ROOT=shared python3 tools/run_tests.py:*)",
+      "Bash(make:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)"
     ]
   }
 }

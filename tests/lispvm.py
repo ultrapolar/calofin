@@ -801,8 +801,7 @@ BUILTINS[Sym('atan')] = lambda vm, a: (math.atan(num(a[0])) if len(a) == 1
 BUILTINS[Sym('rem')] = lambda vm, a: num(a[0]) % num(a[1])
 BUILTINS[Sym('float')] = lambda vm, a: float(num(a[0]))
 BUILTINS[Sym('fix')] = lambda vm, a: int(num(a[0]))
-BUILTINS[Sym('logand')] = lambda vm, a: (int(a[0]) & int(a[1])
-                                         if len(a) == 2 else 0)
+# logand lives with logior further down -- the n-argument _logop pair
 BUILTINS[Sym('gcd')] = lambda vm, a: math.gcd(int(a[0]), int(a[1]))
 BUILTINS[Sym('distance')] = lambda vm, a: math.dist(pt(a[0])[:2],
                                                     pt(a[1])[:2])
@@ -1583,8 +1582,8 @@ def _logop(vm, args, op, unit):
 
 
 BUILTINS[Sym('getreal')] = _getdist
-BUILTINS[Sym('getint')] = lambda vm, a: vm.pop_script(
-    a[0] if a else "", 'getint')
+# getint is the validated @bi('getint') above -- it honours initget
+# bits and keywords exactly as getdist does
 BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(
     LispError("exit called", vm))
 BUILTINS[Sym('atoms-family')] = lambda vm, a: []
@@ -1596,30 +1595,41 @@ BUILTINS[Sym('regapp')] = lambda vm, a: (
 BUILTINS[Sym('vl-load-com')] = lambda vm, a: NIL
 
 
+def _sort_lt(vm, fn, x, y):
+    return truthy(vm.call_value(fn, [x, y]))
+
+
 @bi('vl-sort')
 def _vl_sort(vm, a):
-    """(vl-sort lst less) -- sort by the given comparison function.
-
-    AutoLISP DROPS any element the function reports as equal to one
-    already in the result (neither before it nor after it), and routines
+    """(vl-sort lst less) -- sorted, with items that compare equal to
+    the one before them DROPPED, exactly as the real one does.  Routines
     here lean on that to dedupe as they sort - so the VM has to drop
     them too or a deduping sort would look like it kept everything.
-    An insertion sort: the comparison is a LISP call and the lists are
-    short."""
+    (LISPLAB's lesson 2 teaches exactly this trap, and its test drives
+    this implementation.)"""
     fn = a[1]
-
-    def less(x, y):
-        return vm.call_value(fn, [x, y]) is not NIL
-
+    ordered = sorted(list(a[0] or []), key=functools.cmp_to_key(
+        lambda x, y: -1 if _sort_lt(vm, fn, x, y)
+        else (1 if _sort_lt(vm, fn, y, x) else 0)))
     out = []
-    for item in (a[0] or []):
-        i = 0
-        while i < len(out) and less(out[i], item):
-            i += 1
-        if i < len(out) and not less(item, out[i]):
-            continue                            # equal to one already in
-        out.insert(i, item)
+    for v in ordered:
+        if out and not _sort_lt(vm, fn, out[-1], v) \
+               and not _sort_lt(vm, fn, v, out[-1]):
+            continue                      # equal to its predecessor
+        out.append(v)
     return out or NIL
+
+
+@bi('vl-sort-i')
+def _vl_sort_i(vm, a):
+    """(vl-sort-i lst less) -- the INDEXES in sorted order.  Nothing is
+    dropped; ties keep their original order."""
+    lst = list(a[0] or [])
+    fn = a[1]
+    idx = sorted(range(len(lst)), key=functools.cmp_to_key(
+        lambda i, j: -1 if _sort_lt(vm, fn, lst[i], lst[j])
+        else (1 if _sort_lt(vm, fn, lst[j], lst[i]) else i - j)))
+    return idx or NIL
 # (vl-string-translate source-chars dest-chars str)
 BUILTINS[Sym('vl-string-translate')] = lambda vm, a: str(a[2]).translate(
     str.maketrans(str(a[0]), str(a[1])))
@@ -1852,15 +1862,8 @@ def _vla_getboundingbox(vm, a):
     return NIL
 
 
-@bi('vl-sort')
-def _vl_sort(vm, a):
-    """(vl-sort lst pred) -- pred is "comes before".  AutoCAD's own
-    vl-sort drops duplicates; this one keeps them, because every caller
-    here sorts entity records that are never equal and a silent drop
-    would be the harder bug to find."""
-    lst = list(a[0] or [])
-    fn = a[1]
-    key = functools.cmp_to_key(
-        lambda x, y: -1 if truthy(vm.call_value(fn, [x, y]))
-        else (1 if truthy(vm.call_value(fn, [y, x])) else 0))
-    return sorted(lst, key=key) or NIL
+# vl-sort / vl-sort-i live with the other vl- builtins above.  A second
+# registration used to sit here that KEPT items comparing equal --
+# BUILTINS is a plain dict, so it silently won over the faithful one,
+# and the one test that cared had to patch the VM.  There is exactly one
+# vl-sort now, and it drops equal items like AutoCAD's.

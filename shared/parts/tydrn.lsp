@@ -3,6 +3,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: TYDRN
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Drawing cleanup routine that applies three fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
@@ -34,8 +37,9 @@
 ;;; the command and re-locked afterwards.  The whole run is wrapped in
 ;;; a single undo group.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
+
+(setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -139,7 +143,7 @@
   (if *tydrn-unlocked* (tydrn:relock-layers *tydrn-unlocked*))
   (setq *tydrn-unlocked* nil)
   (if *tydrn-doc* (vla-EndUndoMark *tydrn-doc*))
-  (if (and msg (/= (strcase msg t) "function cancelled"))
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
     (princ (strcat "\nTYDRN error: " msg)))
   (if *tydrn-old-error* (setq *error* *tydrn-old-error*))
   (princ))

@@ -138,7 +138,7 @@ what settles the direction of travel:
 Offsetting is a true parallel offset, so the corners move with it: a
 radius grows and shrinks with the offset, a diagonal cut face by
 `g × (2√2 − 2)`, and a treatment offset away to nothing falls back to a
-`90` corner. By dims, the corner sizes are *offered* at whatever the
+`Square` corner. By dims, the corner sizes are *offered* at whatever the
 implied lap works out to — Enter walks straight through when the second
 outline really is a parallel offset, and a corner measured differently
 can be typed over.
@@ -163,9 +163,14 @@ command finishes.
 
 ## Rectangle corners
 
-Every corner is asked for separately, using the order sheet's own corner
-legend — `Radius` (sized by its radius), `Diagonal` (a cut, sized by its
-face length) or `90`. (`Square` is accepted as a synonym for `90`.)
+Every corner is asked the repo's canonical **Treatment** question
+(STANDARDS.md section 2): `How should Corner A be treated?
+[Square/Radius/Cut/NotGiven]` — `Square` (a true 90), `Radius` (sized by
+its radius), `Cut` (a straight diagonal, sized by its face length) or
+`NotGiven` (nothing on the order sheet: drawn square and flagged). The
+pre-standard words still work typed in full — `90`, `ROUNDED`, `DIAG` /
+`DIAGONAL`, `NG` — and are normalised as they are read; the palette's
+old wire values are accepted the same way.
 
 **Corner A's answer autofills B, C and D** — press Enter at each of them
 to accept it, or type a different treatment for that corner, so a cover
@@ -175,9 +180,11 @@ treatment cuts inward from there, and a treatment too big for its walls
 is re‑asked.
 
 Callouts sit outside the corner on its 45° line: a radius dimension on a
-`Radius` corner (`R12"`), an aligned dimension across a `Diagonal` cut
-face (`21"`), and a circled corner point with a `90°` leader on a `90`
-corner.
+`Radius` corner (`R12"`), an aligned dimension across a `Cut` face
+(`21"`), a circled corner point with a `90°` leader on a `Square`
+corner, and the same circled point with a `?` leader plus a `Not Given`
+note on a `NotGiven` one — the sheet shows the treatment was never
+recorded rather than silently claiming a 90.
 
 ## Going back a step
 
@@ -302,16 +309,17 @@ The overall **across** goes on the **top** and the overall **up** on the
 
 **All four corners identical** — the two overalls plus **one** corner
 callout with a `Typ.` suffix, at the bottom-right. That is the whole
-drawing for an all-radius or all-diagonal cover, and for a true square
-octagon. A plain 90-corner rectangle gets no corner callout at all: the
-two overalls *are* the drawing.
+drawing for an all-radius or all-cut cover, and for a true square
+octagon — and, per the standard, an all-`Square` rectangle now gets its
+one `90° Typ.` mark too (it used to get no corner note at all).
 
-**Corners not identical** — each cut corner is called out on its own (no
-`Typ.`), the square ones among them share one `90°` mark, and every side
-a cut has **shortened** also gets its remaining **flat** dimensioned,
+**Corners not identical** — every corner is called out on its own (no
+`Typ.`): each cut with its dimension, each `Square` with its own `90°`
+mark, each `NotGiven` with its own `?` mark and note, and every side a
+cut has **shortened** also gets its remaining **flat** dimensioned,
 inboard of the overalls. So a cover with one cut at the top-right reads:
 overall across, overall up, the top flat, the right flat, the cut face,
-and `90° Typ.` on the square corners.
+and a `90°` mark on each square corner.
 
 The round spa takes one overall; only an out-of-round one gets the
 second. An octagon whose eight sides come out unequal picks up the bottom

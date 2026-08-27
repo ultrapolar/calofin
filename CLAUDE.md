@@ -156,9 +156,16 @@ build drew loose lines where the standalone one drew a bounded polyline.
 ## Checks
 
 ```
-python3 tools/check_standards.py # tiers in step, cal: clean, bundle current
-python3 tools/check_lisp.py <f>  # unbalanced parens, undefined funcs/globals
-python3 tools/check_scope.py <f> # locals used without being declared
+python3 tools/check_standards.py # tiers in step, cal: clean, AND every
+                                 # generated tier byte-identical to a fresh
+                                 # regeneration (the three --check modes)
+python3 tools/check_lisp.py [f]  # parens, arity, stray top-level atoms,
+                                 # undefined/quoted-undefined functions;
+                                 # no argument = every .lsp in both tiers
+python3 tools/check_scope.py [f] # locals used without being declared
+                                 # (tools/scope_baseline.txt holds the
+                                 # accepted module globals)
+make check                       # all of the above in one go
 ```
 
 `check_standards.py` covers what the other two cannot see, because they
@@ -177,11 +184,16 @@ python3 tests/test_shared.py    # the whole grouped build in one session,
                                 # and the one-file bundle
 ```
 
+Or run everything at once: `make test` (one tier), `make parity` (both) —
+`tools/run_tests.py` globs the whole directory, so no prose list to drift.
+
 **Nothing under `tests/` is expected to fail on a clean checkout.**
 `test_pool_form.py` and `test_spa_form.py` were both carved out here
 once, while the routines had no answer store to receive a form; POOL,
 SPA and the three step routines all have one now, so a failure in any
-of them IS your change.
+of them IS your change. The authoritative known-red list is
+`EXPECTED_FAILURES` in `tools/run_tests.py`, currently empty — a test
+that starts passing there fails the run until its entry is removed.
 
 The form tests are the ones that catch a prompt edit: `test_pool_form.py`,
 `test_spa_form.py`, `test_steps_form.py`, and the GUI suites

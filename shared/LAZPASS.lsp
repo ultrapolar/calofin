@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.0, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,29 +8,29 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 51 files, 124 commands:
+;;; 51 files, 125 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABMOVE  ADAB
 ;;;   ALTABCDEF  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV  BPCALLOUT
 ;;;   CABHD  CABHDVER  CALVER  CCPRECHECK  CDCALLOUT  CDCREATE
-;;;   CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVERSION
-;;;   COVERSCAN  CPERPPTS  CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT
-;;;   DDCAL  DDELEV  DDFIX  DDGPS  DDINFO  DDSET
-;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
-;;;   DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
-;;;   HEMISTEP  LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER
-;;;   LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER
-;;;   LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LINCHECK  LINFINCHECK
-;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN  LITELINFINSCAN
-;;;   LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE  PERPPTS
-;;;   POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET  SMARTFILLETVER
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
-;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB
-;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
-;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
-;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  WCALST
-;;;   XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
+;;;   CDCREATEVER  CHECK  CORNERSTP  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVER
+;;;   COVERCHECKVERSION  COVERSCAN  CPERPPTS  CUSTBLOCK  CUSTBLOCKVER  DCE
+;;;   DDALT  DDCAL  DDELEV  DDFIX  DDGPS  DDINFO
+;;;   DDSET  DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER
+;;;   DIMCONTEND  DIMSCAN  DRONE  FITABHD  FITABHDCOVER  FITABHDVER
+;;;   FLOORDIM  HEMISTEP  LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER
+;;;   LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LAZSPA
+;;;   LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LINCHECK
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINTXTCHK  LITECOVERSCAN
+;;;   LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE
+;;;   PERPPTS  POOL  POOLCOVER  POOLDEMO  POOLVER  SMARTFILLET
+;;;   SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD
+;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
+;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
+;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
+;;;   WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -73,7 +73,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.2")
+(setq cal:*version* "v1.3")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -170,7 +170,10 @@
 ;; (covercheck.lsp:501; dchk:/lfc: byte-identical).
 (defun cal:ask-yn-nav (msg / ans)
   (initget "Yes No Back Skip Undo")   ; Undo = hidden synonym for Back
-  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip rest] <Yes>: ")))
+  ;; the bracket is exactly the keyword list (STANDARDS section 1 rule
+  ;; 1): a click sends the bracket text, and "Skip rest" was a click
+  ;; the initget list could not accept
+  (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -228,9 +231,31 @@
   (if (not cal:*odstyle*) (setq cal:*odstyle* (getvar "DIMSTYLE"))))
 
 (defun cal:dimstyrestore ()
+  ;; called from *error* handlers, where a bare (command ...) can itself
+  ;; fail -- so command-s under vl-catch-all-apply (STANDARDS section 5)
   (if (and cal:*odstyle* (tblsearch "DIMSTYLE" cal:*odstyle*))
-      (command "_.-DIMSTYLE" "_Restore" cal:*odstyle*))
+      (vl-catch-all-apply 'command-s
+        (list "_.-DIMSTYLE" "_Restore" cal:*odstyle*)))
   (setq cal:*odstyle* nil))
+
+;; T when MSG is the message of a plain cancel (Esc, quit) rather than
+;; a real error.  The canonical test of STANDARDS section 5 -- ten
+;; hand-copied variants of it existed, two with the same typo, which is
+;; why it is a helper now.
+(defun cal:error-cancel-p (msg)
+  (and msg (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+
+;; One undo group per command, in the one casing (STANDARDS section 5).
+;; Track the open group in a local and close it from *error* too:
+;;   (setq undo-open (cal:undobegin))
+;;   ... (if undo-open (cal:undoend)) ...
+(defun cal:undobegin ()
+  (command "_.UNDO" "_Begin")
+  T)
+
+(defun cal:undoend ()
+  (command "_.UNDO" "_End")
+  nil)
 
 ;; The user's own object snaps stay LIVE during every measurement
 ;; prompt; OSMODE is zeroed only while a routine feeds points to
@@ -696,7 +721,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082726 REV15")
+(setq pool:*version* "082726 REV17")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -826,7 +851,11 @@
 
 ;;; -------------------- entity makers ----------------------------------
 
-(defun pool:layer (name color)
+;; Create the output layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked (STANDARDS section 5).  Without the repair
+;; a run onto a frozen or switched-off DIMENSION layer looks like the
+;; command drew nothing.
+(defun pool:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
       (entmake (list '(0 . "LAYER")
                      '(100 . "AcDbSymbolTableRecord")
@@ -834,7 +863,26 @@
                      (cons 2 name)
                      '(70 . 0)
                      (cons 62 color)
-                     '(6 . "Continuous"))))
+                     '(6 . "Continuous")))
+      (progn
+        (setq rec   (tblobjname "LAYER" name)
+              ed    (entget rec)
+              flags (cdr (assoc 70 ed))
+              col   (cdr (assoc 62 ed))
+              fixed nil)
+        (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+            (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                               (assoc 70 ed) ed)
+                  fixed T))
+        (if (< col 0)                        ; layer switched off
+            (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+                  fixed T))
+        (if fixed
+            (progn
+              (entmod ed)
+              (princ (strcat "\nPOOL: layer " name
+                             " was off, frozen or locked - restored so"
+                             " the result is visible."))))))
   name)
 
 (defun pool:line (p1 p2 lay)
@@ -5596,8 +5644,11 @@
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
-        (setq htype (pool:askkwf 'htype "Hopper type"
-                                 "Square SIX" "Square/SIX-sided"
+        ;; the bracket is exactly the keyword list (STANDARDS section
+        ;; 1 rule 1): a click on "SIX-sided" sent text initget could
+        ;; not accept, so the explanation moved into the question
+        (setq htype (pool:askkwf 'htype "Hopper type (SIX = six-sided)"
+                                 "Square SIX" "Square/SIX"
                                  "Square" nil)
               six (= htype "SIX"))
         ;; a six-sided deep end can be taped two ways: offsets shot
@@ -7749,8 +7800,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOL error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -7911,10 +7961,12 @@
 ;;;      POOLDEMO.LSP                 the static name
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
-(setq pooldemo:*version* "082126 REV02")
+(setq pooldemo:*version* "082726 REV03")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -8211,7 +8263,7 @@
 (defun c:POOLDEMO ( / *error* cells k org)
 
   (defun *error* (msg)
-    (if (and msg (/= (strcase msg t) "function cancelled"))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
     (pool:undoend)
@@ -8277,6 +8329,9 @@
 ;;;
 ;;;  Command:  TUTORIALPOOL
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  A paced, captioned tour of how POOL.LSP works: what it asks, why,
 ;;;  and what the drawing looks like at each stage.  Each topic prints
 ;;;  a short explanation (and, where it matters, a full checklist of
@@ -8297,10 +8352,8 @@
 ;;;      TUTORIALPOOL.LSP                 the static name
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq tutorial:*version* "082526 REV05")
+(setq tutorial:*version* "082726 REV06")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -8611,8 +8664,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
     (cal:sysrestore)
     (pool:undoend)
@@ -8854,7 +8906,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082726 REV06")
+(setq spa:*version* "082726 REV09")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -8995,7 +9047,11 @@
 
 ;;; -------------------- entity makers ----------------------------------
 
-(defun spa:layer (name color)
+;; Create the output layer, or - when it already exists - make sure it
+;; is on, thawed and unlocked (STANDARDS section 5).  Without the repair
+;; a run onto a frozen or switched-off DIMENSION layer looks like the
+;; command drew nothing.
+(defun spa:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
       (entmake (list '(0 . "LAYER")
                      '(100 . "AcDbSymbolTableRecord")
@@ -9003,7 +9059,26 @@
                      (cons 2 name)
                      '(70 . 0)
                      (cons 62 color)
-                     '(6 . "Continuous"))))
+                     '(6 . "Continuous")))
+      (progn
+        (setq rec   (tblobjname "LAYER" name)
+              ed    (entget rec)
+              flags (cdr (assoc 70 ed))
+              col   (cdr (assoc 62 ed))
+              fixed nil)
+        (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+            (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                               (assoc 70 ed) ed)
+                  fixed T))
+        (if (< col 0)                        ; layer switched off
+            (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+                  fixed T))
+        (if fixed
+            (progn
+              (entmod ed)
+              (princ (strcat "\nSPA: layer " name
+                             " was off, frozen or locked - restored so"
+                             " the result is visible."))))))
   name)
 
 ;; Build a linetype from an explicit pattern (positive = dash length,
@@ -9324,34 +9399,28 @@
     (if (and (not out) (spa:sq ans k)) (setq out (spa:sq ans k))))
   out)
 
+;; One prompt of a sequence.  Returns the value, nil for NA, or the
+;; symbol CAL-BACK.
 ;;; -------------------- form answers -----------------------------------
 ;;;
-;;;  A form -- the LAZFORM dialog, or the VB palette -- can answer some
-;;;  or all of SPA's questions before the run starts.  It leaves them in
-;;;  spa:*form* as (key . value) and the ask helpers below look there
+;;;  A form -- the VB palette's spa tab -- can answer some or all of
+;;;  SPA's questions before the run starts.  It leaves them in
+;;;  spa:*form* as (key . value) and the ask sites below look there
 ;;;  first, so a filled-in sheet drives the whole run and a half-filled
-;;;  one simply shortens it.  Only the Spa Cover Details pick (an entsel
-;;;  in the drawing) and the spillaway loop stay interactive.
-;;;
-;;;  Three states, and the difference between the last two IS the
-;;;  feature:
+;;;  one simply shortens it.  POOL.LSP grew this first; the contract
+;;;  and the reasons are its "form answers" section, held to exactly
+;;;  here so the two stores can never disagree:
 ;;;
 ;;;    key absent      the form did not answer it   -> ask, as usual
 ;;;    (key . nil)     the form answered NA         -> nil, no prompt
 ;;;    (key . 84.0)    the form answered it         -> 84.0, no prompt
 ;;;
-;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
-;;;  Get it backwards and a half-filled form is either impossible or
-;;;  silent, and the half-filled form is the whole point.
-;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
 ;;;  it answers itself instantly and walks forward again, and there is
-;;;  no key the user can press to get out.  Consuming also gives the
-;;;  range checks their way out: a corner size too large for its walls
-;;;  is re-asked, and the second pass finds the store empty and lets
-;;;  the user type the correction -- rather than being re-fed the same
-;;;  bad number for ever.
+;;;  no key the user can press to get out.  Consuming also lets a value
+;;;  a range check rejects be retyped at the keyboard instead of re-fed
+;;;  for ever.
 
 (setq spa:*form* nil)
 
@@ -9367,11 +9436,40 @@
 
 (defun spa:fclear () (setq spa:*form* nil))
 
+;; V as the question would spell it, or nil when the question does not
+;; accept it at all -- so a form answer the prompt would reject falls
+;; through to the prompt, and the canonical SPELLING comes back rather
+;; than the caller's (every test downstream compares exact strings).
+(defun spa:fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
+
+;; The keyword question a form can answer.  Deliberately a WRAPPER and
+;; not a sixth argument on spa:askkw: the grouped build swaps that
+;; helper out for cal:askkw, which takes five, so widening it here
+;; would have the twin call the library with an argument it does not
+;; accept -- a build that loads cleanly and dies at the first keyword
+;; question.  The mirror leaves this defun alone, while the spa:askkw
+;; call inside it is rewritten like any other call site.
+(defun spa:askkwf (key msg kws shown dflt back / v)
+  (if (and (spa:fhas key)
+           (setq v (spa:ftake key))
+           (= (type v) 'STR)
+           (setq v (spa:fkword v kws)))
+      v
+      (cal:askkw msg kws shown dflt back)))
+
 ;; The form-key stem for a corner question, from the label every flow
-;; already passes spa:askcorner -- "Corner A" is cornera, so the form
-;; keys are cornera-ty (the treatment) and cornera-sz (its size).  A
-;; label of any other shape comes back nil and the corner is asked as
-;; always.
+;; already passes spa:askcorner -- "Corner A" is cornera.  A label no
+;; form addresses comes back nil and the corner is asked as always.
 (defun spa:fckey (label / s)
   (setq s (strcase label t))
   (if (and (> (strlen s) 7) (= (substr s 1 7) "corner "))
@@ -9383,17 +9481,20 @@
 ;; rectangle branch and draw the wrong spa without saying so.
 (defun spa:fshape ( / v)
   (if (spa:fhas 'shape) (setq v (spa:ftake 'shape)))
-  (if (and v (= (type v) 'STR)
-           (member v '("Rectangle" "OCtagon" "ROund")))
+  ;; the shape word is matched WITHOUT case, and comes back in the
+  ;; canonical spelling.  A chart or a palette written against the old
+  ;; "ROund" keeps working (LAZSPA's dropdown still reads ROund), and
+  ;; the routine still stores the one spelling the dispatch tests for.
+  (if (and v (= (type v) 'STR))
+      (setq v (spa:fkword v "Rectangle OCtagon ROUnd")))
+  (if v
       v
       (progn
-        (initget 1 "Rectangle OCtagon ROund")
-        (getkword "\nSpa shape [Rectangle/OCtagon/ROund]: "))))
+        ;; ROUnd, not ROund: one capitalisation repo-wide (POOL's list
+        ;; needs RO for ROman, so the shared abbreviation is ROU)
+        (initget 1 "Rectangle OCtagon ROUnd")
+        (getkword "\nSpa shape [Rectangle/OCtagon/ROUnd]: "))))
 
-;; The form's GRADE and TAPER, consumed into the run globals exactly as
-;; spa:readblock would have set them off the block -- and consumed
-;; AFTER the block is read, so a form answer wins over the block's.
-;; c:SPA calls this before its Thermo-Light branch, so a form grade of
 ;; THERMOLIGHT closes the water's-edge question the same way the block
 ;; does; spa:askdetails calls it again so a store armed past c:SPA's
 ;; own read still lands.  An answer that is not a grade/taper string is
@@ -9411,17 +9512,15 @@
         (if (and (= (type v) 'STR) (spa:tapernorm v))
             (setq spa:*taper* (spa:tapernorm v))))))
 
-;; Run SPA with a form's answers already in hand.  Nothing happens here
-;; that the direct path misses: a caller may equally set spa:*form*
-;; itself and call c:SPA, which is what the tests do.
+;; Run SPA with a form's answers already in hand.  Nothing happens
+;; here that the direct path misses: a caller may equally set
+;; spa:*form* itself and call c:SPA, which is what the tests do.
 (defun spa:run-with-answers (answers)
   (setq spa:*form* answers)
   (c:SPA)
   (spa:fclear)
   (princ))
 
-;; One prompt of a sequence.  Returns the value, nil for NA, or the
-;; symbol CAL-BACK.
 (defun spa:asks (kind msg ents dflt back / v cols kw e out)
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
@@ -9454,42 +9553,6 @@
   (cal:osdown)
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
   (if (eq out 'SPA-NA) nil out))
-
-;; The keyword question a form can answer.  Deliberately a WRAPPER and
-;; not a sixth argument on spa:askkw: the grouped build swaps that
-;; helper out for cal:askkw, which takes five, so widening it here
-;; would have the twin call the library with an argument it does not
-;; accept -- a build that loads cleanly and dies at the first keyword
-;; question.  The mirror leaves this defun alone, while the spa:askkw
-;; call inside it is rewritten like any other call site.
-(defun spa:askkwf (key msg kws shown dflt back / v)
-  (if (and (spa:fhas key)
-           (setq v (spa:ftake key))
-           (= (type v) 'STR)
-           (setq v (spa:fkword v kws)))
-      v
-      (cal:askkw msg kws shown dflt back)))
-
-;; V as the question would spell it, or nil when the question does not
-;; accept it at all.  Two jobs in one walk of the keyword list:
-;;
-;;   - an answer the question does not offer falls through to the
-;;     prompt instead of being handed on to fail later;
-;;   - the canonical SPELLING comes back, not the caller's.  Every test
-;;     downstream is (= v "Watersedge"), so a form that said
-;;     "watersedge" would sail through a case-insensitive check and
-;;     then match nothing at all.
-(defun spa:fkword (v kws / i n c w out)
-  (setq i 1 n (strlen kws) w "" v (strcase v))
-  (while (<= i (1+ n))
-    (setq c (if (<= i n) (substr kws i 1) " "))
-    (if (= c " ")
-        (progn
-          (if (and (/= w "") (= (strcase w) v)) (setq out w))
-          (setq w ""))
-        (setq w (strcat w c)))
-    (setq i (1+ i)))
-  out)
 
 ;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
 ;; 1524.5mm.  The drawing is in inches, so the value is converted.
@@ -9590,10 +9653,8 @@
           dflt (nth 4 it))
     (if (and dflt (listp dflt))
         (setq dflt (spa:sqfirst ans dflt)))
-    ;; the form answers first, and its answer is consumed -- see "form
-    ;; answers" above for why removing beats marking.  Backing onto a
-    ;; question the form answered therefore finds the store empty and
-    ;; prompts, which is what makes Back usable at all
+    ;; the form answers first, and its answer is consumed -- see
+    ;; "form answers" above for why removing beats marking
     (setq v (if (spa:fhas (car it))
                 (spa:ftake (car it))
                 (spa:asks (cadr it) (caddr it) (cadddr it) dflt
@@ -9820,11 +9881,14 @@
 (defun spa:offcorners (corners g / out c sz)
   (foreach c corners
     (setq sz (cond ((= (car c) "Radius") (+ (cadr c) g))
-                   ((= (car c) "Diagonal") (+ (cadr c) (* g spa:*diagoff*)))
+                   ((= (car c) "Cut") (+ (cadr c) (* g spa:*diagoff*)))
                    (t 0.0)))
-    (setq out (cons (if (and (/= (car c) "90") (> sz 1.0e-6))
-                        (list (car c) sz)
-                        (list "90" 0.0))
+    ;; a treatment the offset erases collapses to Square -- except a
+    ;; NotGiven, which stays un-recorded on the derived outline too
+    (setq out (cons (cond ((and (spa:cutp c) (> sz 1.0e-6))
+                           (list (car c) sz))
+                          ((= (car c) "NotGiven") (list "NotGiven" 0.0))
+                          (t (list "Square" 0.0)))
                     out)))
   (reverse out))
 
@@ -9834,7 +9898,7 @@
 ;; and a corner that was measured differently can be typed over.
 (defun spa:askothercorners (corners lbls maxsb / out i cc any v)
   (setq any nil)
-  (foreach cc corners (if (/= (car cc) "90") (setq any t)))
+  (foreach cc corners (if (spa:cutp cc) (setq any t)))
   (if any
       (princ (strcat "\n" (spa:modeword (spa:othermode))
                      " corners -- Enter takes the size the overalls imply.")))
@@ -9842,7 +9906,7 @@
   (setq out nil i 0)
   (while (< i (length corners))
     (setq cc (nth i corners))
-    (if (= (car cc) "90")
+    (if (not (spa:cutp cc))
         (setq out (cons cc out) i (1+ i))
         (progn
           (setq v (spa:askcorner (strcat "Corner " (nth i lbls))
@@ -10044,10 +10108,19 @@
 
 ;;; ---------- geometry: the cover's north-south chord at x ----------
 
+;; Does this corner carry a treatment that cuts real geometry -- a
+;; Radius or a Cut with a size?  NotGiven does NOT: its corner is
+;; built square, so everything that asks "is there a cut here" (the
+;; setback caps, the second outline, the hinge ties) answers no; only
+;; the corner marks care that it is not a plain Square.  (pool:cutp is
+;; the donor.)
+(defun spa:cutp (cc)
+  (and (member (car cc) '("Radius" "Cut")) (> (cadr cc) 1.0e-6)))
+
 ;; How far a corner treatment sets back along its walls.
 (defun spa:cornsb (cc)
   (cond ((= (car cc) "Radius") (cadr cc))
-        ((= (car cc) "Diagonal") (* (cadr cc) 0.70711))
+        ((= (car cc) "Cut") (* (cadr cc) 0.70711))
         (t 0.0)))
 
 ;; Offset of a treated edge INTO the shape at rx along a wall of length
@@ -10547,7 +10620,7 @@
         dp (cal:dot uprev unext)
         ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
   (cond
-    ((= ctype "Diagonal")
+    ((= ctype "Cut")
      (setq sb (/ size (* 2.0 (sin (/ ang 2.0)))))           ; face -> edge setback
      (list (cal:v+ p (cal:v* uprev sb))
            (cal:v+ p (cal:v* unext sb)) nil))
@@ -10596,10 +10669,11 @@
   (foreach i (list 0 1 2 3)
     (setq tyi (car (nth i corners)))
     (cond
-      ((= tyi "90")
-       ;; a single sharp vertex, straight out to the next corner
+      ((member tyi '("Square" "NotGiven"))
+       ;; a single sharp vertex, straight out to the next corner -- a
+       ;; NotGiven corner is BUILT square and flagged by its ? mark
        (setq verts (cons (cons (nth i q) 0.0) verts)))
-      ((= tyi "Diagonal")
+      ((= tyi "Cut")
        (setq verts (cons (cons (cadr (nth i ce)) 0.0)
                          (cons (cons (car (nth i ce)) 0.0) verts))))
       (t                                ; Radius
@@ -10625,9 +10699,7 @@
 (defun spa:maxsetback (corners / m c)
   (setq m 0.0)
   (foreach c corners
-    (setq m (max m (cond ((= (car c) "Radius") (cadr c))
-                         ((= (car c) "Diagonal") (* (cadr c) 0.70711))
-                         (t 0.0)))))
+    (setq m (max m (spa:cornsb c))))
   m)
 
 ;; Do all four corners carry the same treatment?  Four identical corners
@@ -10642,7 +10714,7 @@
 
 ;; The order sheet's 90-degree corner mark: a small circle on the corner
 ;; point with a leader out of it.  Assumes CLAYER is already DIMENSION.
-(defun spa:dim90 (quad i cen doff sfx / p outd r)
+(defun spa:dim90 (quad i cen doff txt / p outd r)
   (setq p (nth i quad)
         outd (spa:unit (cal:v- p cen))
         r (* 0.18 doff))
@@ -10652,7 +10724,23 @@
                  (cons 40 r)))
   (command "_.LEADER" (spa:wp (cal:v+ p (cal:v* outd r)))
            (spa:wp (cal:v+ p (cal:v* outd (* 1.2 doff))))
-           "" (strcat "90%%d" sfx) ""))
+           "" txt ""))
+
+;; A NotGiven corner's mark: the circled corner with a ? leader, and a
+;; "Not Given" note past the leader tip -- the sheet must SHOW the
+;; treatment was never recorded, not silently claim a 90.  The note is
+;; pulled back by its own width on a left-pointing corner, so it cannot
+;; read back across its leader into the shape.  (pool:dimng is the
+;; donor; STANDARDS section 2.)
+(defun spa:dimng (quad i cen doff sfx / p outd h tp)
+  (setq p (nth i quad)
+        outd (spa:unit (cal:v- p cen)))
+  (spa:dim90 quad i cen doff (strcat "?" sfx))
+  (setq h (* 0.25 doff)
+        tp (cal:v+ p (cal:v* outd (* 1.45 doff))))
+  (if (< (car outd) 0.0)
+      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
+  (spa:text tp h "Not Given" "DIMENSION"))
 
 ;; Corner callouts, laid out the way the order sheet does them: the note
 ;; sits OUTSIDE the corner, on the 45-degree line out of it.
@@ -10682,28 +10770,27 @@
     ((= ty "Radius")
      (setq am (caddr ce))
      (spa:dimrad (nth i arcs) am outd doff sfx))
-    ((= ty "Diagonal")
+    ((= ty "Cut")
      (setq fm (cal:mid (car ce) (cadr ce)))
      (spa:dimalg (car ce) (cadr ce)
-                 (cal:v+ fm (cal:v* outd (* 0.6 doff))) sfx)))
+                 (cal:v+ fm (cal:v* outd (* 0.6 doff))) sfx))
+    ((= ty "NotGiven")
+     (spa:dimng quad i cen doff sfx))
+    (t                                  ; Square
+     (spa:dim90 quad i cen doff (strcat "90%%d" sfx))))
   (princ))
 
-(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist nsq sqi i)
+(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist i)
+  ;; STANDARDS section 2: four identical corners get ONE callout with a
+  ;; Typ. suffix at the reference corner -- all-Square included, which
+  ;; used to get no note at all.  Mixed corners are called out one by
+  ;; one, each Square with its own 90%%d mark and each NotGiven with
+  ;; its own ? mark and Not Given note.
   (setq allsame (spa:samecorners corners)
         sfx (if allsame " Typ." "")
         ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
   (foreach i ilist
     (spa:dimcorner1 quad corners arcs cen doff i sfx))
-  ;; the square corners of a MIXED set share one mark, scanned from the
-  ;; bottom-right the way the sheet places it
-  (if (not allsame)
-      (progn
-        (setq nsq 0 sqi nil)
-        (foreach i (list 1 0 2 3)
-          (if (= (car (nth i corners)) "90")
-              (progn (setq nsq (1+ nsq))
-                     (if (null sqi) (setq sqi i)))))
-        (if sqi (spa:dim90 quad sqi cen doff (if (> nsq 1) " Typ." "")))))
   (princ))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
@@ -10725,7 +10812,7 @@
   (setq i 0)
   (foreach cc corners
     (cond
-      ((= (car cc) "Diagonal")
+      ((= (car cc) "Cut")
        (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)))))
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
@@ -10734,9 +10821,10 @@
     (setq i (1+ i)))
   pv)
 
-;; What the corner's size prompt is called.
-(defun spa:cornersizemsg (ty)
-  (if (= ty "Radius") " corner radius" " diagonal cut face length"))
+;; The size question, worded the standard's way (STANDARDS section 2):
+;; "Radius for <subject>" / "Cut face length for <subject>".
+(defun spa:cornersizemsg (ty label)
+  (strcat (if (= ty "Radius") "Radius for " "Cut face length for ") label))
 
 ;; Prompt one corner's treatment, named the way the order sheet's corner
 ;; legend names them: Radius / Diagonal / 90.  ("Square" is accepted as
@@ -10746,24 +10834,27 @@
 ;; wall, so two treatments can never overlap and fold the perimeter;
 ;; too-large answers are re-asked.  Returns (type size) or CAL-BACK.
 (defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e
-                                                            dsz out fk fty
-                                                            fsz)
+                                                            dsz out fk fty fsz)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
-  ;; <stem>-sz the radius or cut-face length.  Both are consumed NOW,
+  ;; <stem>-sz the radius or diagonal face.  Both are consumed NOW,
   ;; valid or not -- consume-once is what keeps Back from deadlocking,
   ;; and what lets a rejected size be retyped at the keyboard instead
   ;; of re-fed.  An answer the question would not accept falls through
-  ;; to the prompt exactly as if the box had been left empty.  The form
-  ;; speaks the sheet legend's own words -- Radius / Diagonal / 90,
-  ;; with Square normalised to 90 just as the prompt does.
+  ;; to the prompt exactly as if the box had been left empty.
   (if (setq fk (spa:fckey label))
       (progn
         (if (spa:fhas (read (strcat fk "-ty")))
             (progn
               (setq fty (spa:ftake (read (strcat fk "-ty"))))
-              (if (not (member fty '("Radius" "Diagonal" "90" "Square")))
-                  (setq fty nil))
-              (if (equal fty "Square") (setq fty "90"))))
+              ;; the palette's OLD wire words stay accepted (an
+              ;; un-rebuilt DLL keeps working) and normalise exactly
+              ;; like typed legacy input
+              (setq fty (cond ((equal fty "90") "Square")
+                              ((equal fty "Diagonal") "Cut")
+                              ((equal fty "NG") "NotGiven")
+                              (t fty)))
+              (if (not (member fty '("Square" "Radius" "Cut" "NotGiven")))
+                  (setq fty nil))))
         (if (spa:fhas (read (strcat fk "-sz")))
             (progn
               (setq fsz (spa:ftake (read (strcat fk "-sz"))))
@@ -10773,33 +10864,38 @@
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (while (null out)
     (cal:osup)
-    (setq ty (if fty
-                 fty
-                 (cal:askkw label "Radius Diagonal 90 Square"
-                            "Radius/Diagonal/90" dflty back)))
-    ;; the form's treatment is good for ONE pass: a Back out of the
-    ;; size question below must re-ask the type at the keyboard, not
-    ;; have the loop re-feed what the form said
-    (setq fty nil)
+    ;; the form's treatment stands in for the question ONCE -- a Back
+    ;; from the size question re-asks at the keyboard.  The question is
+    ;; the canonical Treatment of STANDARDS section 2; the pre-standard
+    ;; words (90, ROUNDED, DIAG/DIAGONAL, NG) stay accepted typed in
+    ;; full, hidden from the bracket, and are normalised HERE.
+    (setq ty (if fty fty
+                 (cal:askkw (strcat "How should " label " be treated?")
+                            "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
+                            "Square/Radius/Cut/NotGiven" dflty back))
+          fty nil)
     (cal:osdown)
-    (if (equal ty "Square") (setq ty "90"))   ; sheet legend calls it 90
+    (setq ty (cond ((equal ty "NG") "NotGiven")
+                   ((equal ty "90") "Square")
+                   ((equal ty "ROUNDED") "Radius")
+                   ((member ty '("DIAG" "DIAGONAL")) "Cut")
+                   (t ty)))
     (cond
       ;; backed out of the type question -- out of the corner entirely
       ((eq ty 'CAL-BACK) (setq out 'CAL-BACK))
-      ((= ty "90") (setq out (list ty 0.0)))
+      ;; the two unsized answers: Square is a true 90, NotGiven is
+      ;; DRAWN square and flagged -- nothing was measured, so no size
+      ((member ty '("Square" "NotGiven")) (setq out (list ty 0.0)))
       (t
        ;; the autofill size only stands in when it came from the SAME
        ;; treatment -- a radius is not a cut face
        (setq dsz (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
-                     nil dfltsz))
-       (if fsz
-           ;; the form's size skips the prompt but NOT the cap check
-           ;; below: one that will not fit is rejected there and
-           ;; retyped at the keyboard, the store already being empty
-           (setq sz fsz
-                 fsz nil)
-           (setq sz (spa:askd (strcat label (spa:cornersizemsg ty))
-                              nil dsz t)))
+                     nil dfltsz)
+             ;; the form's size stands in the same way -- once; the
+             ;; too-large loop below re-asks at the keyboard
+             sz (if fsz fsz
+                    (spa:askd (spa:cornersizemsg ty label) nil dsz t))
+             fsz nil)
        ;; Back at the size re-asks the type, its previous question
        (if (not (eq sz 'CAL-BACK))
            (progn
@@ -10813,7 +10909,7 @@
                               (rtos (if (= ty "Radius") maxsb
                                         (/ maxsb 0.70711)))
                               ".  Re-enter."))
-               (setq sz (spa:askd (strcat label (spa:cornersizemsg ty))
+               (setq sz (spa:askd (spa:cornersizemsg ty label)
                                   nil nil t)))
              (if (not (eq sz 'CAL-BACK)) (setq out (list ty sz))))))))
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
@@ -10898,7 +10994,7 @@
         'CAL-BACK
         (progn
           (setq corners (reverse corners) anycut nil)
-          (foreach cc corners (if (/= (car cc) "90") (setq anycut t)))
+          (foreach cc corners (if (spa:cutp cc) (setq anycut t)))
           ;; show the chosen treatments on the guide, scaled from the
           ;; real spa onto the 240 x 200 nominal and capped so a big
           ;; treatment cannot swallow the guide
@@ -11022,8 +11118,8 @@
   (if (not allsame)
       (foreach i (list 0 1 2 3)
         (setq j (rem (+ i 1) 4))
-        (if (or (/= (car (nth i corners)) "90")
-                (/= (car (nth j corners)) "90"))
+        (if (or (spa:cutp (nth i corners))
+                (spa:cutp (nth j corners)))
             (spa:dimalg (spa:cornerpoint quad corners i 'next)
                         (spa:cornerpoint quad corners j 'prev)
                         (spa:outoff (nth i quad) (nth j quad) cen spa:*flatoff*)
@@ -11072,7 +11168,7 @@
     (setq rows (append rows
                        (list (list (strcat "CORNER " (nth i lbls) " "
                                            (strcase (car cc)))
-                                   (if (= (car cc) "90") nil (cadr cc))
+                                   (if (spa:cutp cc) (cadr cc) nil)
                                    (cadr cc))))
           i (1+ i)))
   (if meth
@@ -11085,7 +11181,7 @@
                              (list (list (strcat (strcase (spa:modeword spa:*mode*))
                                                  " COR " (nth i lbls) " "
                                                  (strcase (car cc)))
-                                         (if (= (car cc) "90") nil (cadr cc))
+                                         (if (spa:cutp cc) (cadr cc) nil)
                                          (cadr cc))))
                 i (1+ i)))
         (spa:setmode mode1)))
@@ -11624,17 +11720,16 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nSPA error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
     (cal:dimstyrestore)
-    (spa:pvkill)
-    ;; a form must never outlive the run it was given to: left behind,
-    ;; the next SPA typed at the command line would answer itself with
-    ;; last time's numbers and draw a wrong spa with no error at all
+    ;; a stale form surviving a cancelled run would silently answer the
+    ;; NEXT command-line SPA with last time's numbers -- cleared on
+    ;; both exits, this one included
     (spa:fclear)
+    (spa:pvkill)
     (spa:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -11688,14 +11783,11 @@
   (setq stype (spa:fshape))
 
   ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work.
-  ;; A form's base arrives as a plain point list, (base 0.0 0.0)
+  ;; only afterwards do snaps drop for the command-fed drawing work
   (setq base (if (spa:fhas 'base)
                  (spa:ftake 'base)
                  (getpoint "\nInsertion base point <0,0>: "))
-        spa:*base* (if (and base (listp base))
-                       (list (car base) (cadr base))
-                       (list 0.0 0.0)))
+        spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -11713,7 +11805,7 @@
 
   (cond
     ((= stype "OCtagon") (spa:octflow))
-    ((= stype "ROund")   (spa:roundflow))
+    ((= stype "ROUnd")   (spa:roundflow))
     (t                   (spa:rectflow)))
 
   ;; ------------------------------------------------ finish
@@ -11721,9 +11813,6 @@
   (spa:undoend)
   (cal:sysrestore)
   (cal:dimstyrestore)
-  ;; the store is dropped on BOTH exits (see *error* above): an answer
-  ;; nothing consumed -- a key for a branch the run never took -- must
-  ;; not lie in wait for the next command-line SPA
   (spa:fclear)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
@@ -11775,7 +11864,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082126 REV05")
+(setq tut:*version* "082726 REV07")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -11846,7 +11935,9 @@
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524 MM -- and is converted to inches."
-    "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
+    "6.  Rectangle corners, one at a time -- the Treatment question:"
+    "    Square / Radius / Cut / NotGiven (the old words still work"
+    "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Corner A's answer autofills B, C and D -- Enter accepts."
     "7.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
@@ -11989,8 +12080,8 @@
   (spa:setmode "Coversize")
 
   (setq w tut:*w* l tut:*l* cut tut:*cut* gap tut:*gap*
-        corners (list (list "90" 0.0) (list "90" 0.0)
-                      (list "Diagonal" cut) (list "90" 0.0))
+        corners (list (list "Square" 0.0) (list "Square" 0.0)
+                      (list "Cut" cut) (list "Square" 0.0))
         quad (spa:quadat (list 0.0 0.0) w l)
         cen (list (* 0.5 w) (* 0.5 l))
         doff (max 6.0 (/ (max w l) 12.0))
@@ -12008,8 +12099,8 @@
       (setq stop
         (eq 'TUT-STOP
           (tut:step "STEP 1 -- THE COVER OUTLINE"
-            (list "Corners A and B (bottom) and D (top-left) are 90."
-                  "Corner C (top-right) is a Diagonal with a 21\" cut FACE."
+            (list "Corners A and B (bottom) and D (top-left) are Square."
+                  "Corner C (top-right) is a Cut with a 21\" cut FACE."
                   ""
                   "The overalls are always measured to the TRUE, sharp"
                   "corner; the treatment then cuts inward from there.  So"
@@ -12190,8 +12281,7 @@
 
   (defun *error* (msg)
     (if (and msg
-             (/= (strcase msg t) "function cancelled")
-             (/= (strcase msg t) "quit / exit abort"))
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (spa:sysrestore)
     (spa:undoend)
@@ -12206,14 +12296,17 @@
       (progn
         (if *push-error-using-command* (*push-error-using-command*))
         (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
-        (initget "Checklist Demo Both")
-        (setq what (getkword "\nShow me [Checklist/Demo/Both] <Both>: "))
+        ;; the tutorial selector of STANDARDS section 3; the old
+        ;; Checklist stays accepted typed in full, hidden
+        (initget "Checks Demo Both CHECKLIST")
+        (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
+        (if (= what "CHECKLIST") (setq what "Checks"))
         (if (null what) (setq what "Both"))
         (spa:syssave)
         (setvar "CMDECHO" 0)
         (spa:undobegin)
         (setvar "LUNITS" 4)
-        (if (member what '("Checklist" "Both"))
+        (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
@@ -12239,6 +12332,9 @@
 ;;; Commands:  OASIS       draw a continuous-tangent pool
 ;;;            OASISVER    print the loaded version
 ;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; The shape
 ;;; ---------
@@ -12421,8 +12517,6 @@
 ;;; it, and both are drawn anyway, so the problem is on the screen where
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq *oasis-version* "v7.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
@@ -12637,6 +12731,11 @@
 ;; trimmed away long before it reaches anything.
 (defun oasis:topfits-p (variant) (= variant "TopRight"))
 
+;;; -------------------- ask layer ---------------------------------------
+;;; Copies of the CALOFIN-LIB helpers under this file's own prefix, so
+;;; the standalone build loads alone (STANDARDS.md section 4).  The Back
+;;; sentinel is the symbol OASIS-BACK.
+
 ;;; -------------------- snaps and the dimension style --------------------
 
 ;; Make the cross-dimension style current for the dims about to be drawn.
@@ -12691,6 +12790,8 @@
 (defun oasis:dashlt (w h / d)
   (setq d (max 2.0 (/ (max w h) 40.0)))
   (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
+
+;;; -------------------- layers ------------------------------------------
 
 ;;; -------------------- geometry ----------------------------------------
 
@@ -14691,6 +14792,7 @@
 
 ;;; -------------------- the command -------------------------------------
 
+
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc off cbase arcs ents nests prev lt a
                    nchk gotbot)
@@ -14966,7 +15068,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.1")
+(setq *abcdef-version* "v5.2")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -16174,7 +16276,7 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ABCDEF (/ file rows base bpx bpy W H method
+(defun c:ABCDEF (/ *error* undo-open file rows base bpx bpy W H method
                     Ax Ay Bx By Cx Cy Dx Dy th
                     good bad r nm din d k rr av loc x y rms used dropped
                     sp cut snap urms pct gr rect seed tags tg tx ty placed p
@@ -16183,6 +16285,18 @@
                     nlow path)
   (vl-load-com)
   (princ (strcat "\nABCDEF " *abcdef-version*))
+  ;; the plot is one undo group, so a cancelled run backs out with a
+  ;; single U instead of one per entity; the group is only closed if it
+  ;; was opened (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nABCDEF error: " msg)))
+    (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil method "Auto")
@@ -16517,6 +16631,8 @@
             (abcdef:to-abhd ss)
             (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
           (princ)))))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 ;; Print the loaded version.
@@ -16559,6 +16675,9 @@
 ;;;                        and the command is done
 ;;;            ABFINDVER   print the loaded version
 ;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; A pool is surveyed off two stakes, A and B: every point on the sheet
 ;;; is two tape readings, one from each stake, and the point is wherever
@@ -16696,8 +16815,6 @@
 ;;; *abfind-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -16787,6 +16904,11 @@
   '(("1" "7") ("1" "4") ("3" "8")   ; each other, both ways round
     ("3" "5") ("5" "6") ("6" "8")
     ("0" "9") ("4" "9") ("7" "9")))
+
+;;; ---------------------- ask helpers -----------------------------------
+;;; Copied from CALOFIN-LIB.lsp (cal:askkw, cal:back-word-p) under this
+;;; file's own prefix, so the standalone file loads alone -- see
+;;; STANDARDS.md section 4.  Back sentinel: CAL-BACK.
 
 ;;; ---------------------- layers ----------------------------------------
 
@@ -17752,10 +17874,14 @@
 ;;;
 ;;;  Command:  ALTABCDEF
 ;;;
-;;;  All geometry is created in inches (1 drawing unit = 1 inch).
-;;; ==========================================================================
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  All geometry is created in inches (1 drawing unit = 1 inch).
+;;; ==========================================================================
+
+(setq *altabcdef-version* "v1.1")   ; announced on load; release_lisp.py
+                                       ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -18343,11 +18469,23 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ALTABCDEF (/ file rows base bpx bpy W H
+(defun c:ALTABCDEF (/ *error* undo-open file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
                     sol x y rms i tags tg p placed stage done)
   (vl-load-com)
+  ;; the plot is one undo group, so a cancelled run backs out with a
+  ;; single U instead of one per entity; the group is only closed if it
+  ;; was opened (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nALTABCDEF error: " msg)))
+    (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil)
@@ -18479,6 +18617,8 @@
             '())
           (princ "\n  View reset to plan (top) so the rectangle shows square.")
           (princ)))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 ;; format a real to 3 decimals, left-padded into WIDTH
@@ -18505,6 +18645,9 @@
 ;;;                   perimeter (select the closed polyline or its
 ;;;                   exploded lines/arcs; the survey points sitting
 ;;;                   on it are found automatically)
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
@@ -18650,11 +18793,9 @@
 ;;; perimeter itself - ends up on *PF-POOL-LAYER* (the deep break
 ;;; stubs dashed).
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "082526 REV06") ; announced on load.  The
+(setq pf:*version*      "082726 REV08") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -19353,6 +19494,14 @@
 ;; The surveyed number carried by a point block, read from its
 ;; *PF-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
 ;; no such attribute.
+;;
+;; DELIBERATELY strict: no first-numeric-attribute fallback, unlike
+;; ABFIND/BPCALLOUT/LHD/FITABHD and cal:block-number.  The fitter
+;; consumes every point it is handed, so a stray numbered block (a
+;; detail bubble, a keynote) silently joining the survey would warp the
+;; whole fit - a dropped untagged point is the visible, recoverable
+;; failure.  Reviewed 2026-08-27 and kept on purpose; CABHD's copy
+;; holds the same line for the same reason.
 (defun pf:block-number (en / sub ed val)
   (setq sub (entnext en) val nil)
   (while (and sub
@@ -19841,8 +19990,6 @@
           (setq tj (cdr tj) j (1+ j)))
         (setq ti (cdr ti) i (1+ i)))
       found)))
-
-;; ---- output helpers --------------------------------------------------
 
 ;; How many fitted polylines are already on the output layer (counted
 ;; before the new one is drawn).
@@ -21730,10 +21877,8 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nABHD stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
@@ -22204,10 +22349,8 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nADAB stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
@@ -22345,7 +22488,7 @@
 ;; by stage, for lookers - then cleans up after itself.
 
 (defun pf:tut-pause ()
-  (getstring "\n\n  --- press Enter to continue ---")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 ;; The stage caption above the demo, replaced at each stage.
@@ -22465,7 +22608,7 @@
   (princ "\n  are picked up automatically (strays are set aside).  Scaffolding")
   (princ "\n  - markers, previews, labels - sweeps itself on any exit, ESC")
   (princ "\n  included, and a run interrupted mid-flight is tidied by the next.")
-  (princ (strcat "\n  This is ABHD " *PF-VERSION*
+  (princ (strcat "\n  This is ABHD " pf:*version*
                  " - the versioned twin file carries the same name."))
   (princ))
 
@@ -22589,22 +22732,22 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
             (princ)))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
-                 *PF-VERSION* ")."))
-  (initget "Checks Demo")
+                 pf:*version* ")."))
+  ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
+  ;; 1), and the standard tutorial selector with Both
+  (initget "Checks Demo Both")
   (setq mode (getkword
-               "\n  Read the [Checks] it applies, or watch a drawn [Demo]? <Demo>: "))
-  (if (= mode "Checks")
-    (pf:tut-checks)
-    (pf:tut-demo))
+               "\n  Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>: "))
+  (cond ((= mode "Checks") (pf:tut-checks))
+        ((= mode "Demo")   (pf:tut-demo))
+        (t (pf:tut-checks) (pf:tut-demo)))
   (pf:temp-clear)
   (setq *error* pf-old-err)
   (princ))
@@ -22613,7 +22756,7 @@
 ;; goes looking for it there.
 (defun c:TUTORIALADAB () (c:TUTORIALABHD))
 
-(princ (strcat "\nABHD " *PF-VERSION*
+(princ (strcat "\nABHD " pf:*version*
                " loaded.  ABHD fits the pool perimeter through its"
                " points;"))
 (princ "\nADAB draws the pool bottom over an existing perimeter;")
@@ -23799,10 +23942,11 @@
 ;;; CABHD.LSP  --  Fit a pool perimeter through PART of a survey
 ;;; -------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; Command:  CABHD - fit the perimeter, and only the perimeter
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; CABHD is ABHD's perimeter half, with one rule added and one whole
 ;;; half left out.
@@ -23995,7 +24139,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.1")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.2")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -24646,6 +24790,14 @@
 ;; The surveyed number carried by a point block, read from its
 ;; *CAB-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
 ;; no such attribute.
+;;
+;; DELIBERATELY strict: no first-numeric-attribute fallback, unlike
+;; ABFIND/BPCALLOUT/LHD/FITABHD and cal:block-number.  The fitter
+;; consumes every point it is handed, so a stray numbered block (a
+;; detail bubble, a keynote) silently joining the survey would warp the
+;; whole fit - a dropped untagged point is the visible, recoverable
+;; failure.  Reviewed 2026-08-27 and kept on purpose; this is ABHD's
+;; pf:block-number line, held here too.
 (defun cab:block-number (en / sub ed val)
   (setq sub (entnext en) val nil)
   (while (and sub
@@ -26295,10 +26447,8 @@
             ;; nobody can debug from the other end of a phone
             (princ (strcat "\nCABHD stopped while "
                            (if cab-phase cab-phase "starting up")
-                           (if (and m
-                                    (/= m "Function cancelled")
-                                    (/= m "quit / exit abort")
-                                    (/= m "console break"))
+                           (if (and m (not (wcmatch (strcase m)
+                                    "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
                              (strcat " -- " m)
                              " (cancelled).")))
             (cab:temp-clear)
@@ -26802,6 +26952,9 @@
 ;;;   TUTORIALAUTOBEAD  - guided walkthrough (read it, or watch a live demo)
 ;;;   AUTOBEADVER       - report which version is loaded
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select POOL lines to "bead" (LINEs, ARCs, and polylines on any POOL*
 ;;; layer), then click the side to bead toward.  The selection is copied,
 ;;; joined into continuous chains, and each chain is offset 2" toward the
@@ -26840,14 +26993,12 @@
 ;;;   python3 tools/release_lisp.py -- do not hand-copy, or the two
 ;;;   will drift.
 ;;; ==========================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.4"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.7"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -27079,7 +27230,7 @@
 
 (defun autobead-build (ss dirpt sidewalls treadpts
                        / *error* beadoff layname fuzz
-                         oldcmd oldos oldpa temps
+                         oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
@@ -27098,15 +27249,20 @@
       (if (and e (entget e)) (entdel e)))
     (if oldpa (setvar "PEDITACCEPT" oldpa))
     (if oldos (setvar "OSMODE" oldos))
-    (command "._undo" "_end")
+    ;; only close a group that was actually opened -- an error thrown
+    ;; before the _Begin below (a cancelled selection, a failed getvar)
+    ;; used to run _End on nothing, which errors inside the handler
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*,*BREAK*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (princ))
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "._undo" "_begin")
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (setq oldos (getvar "OSMODE")
         oldpa (getvar "PEDITACCEPT")
         temps '()
@@ -27284,7 +27440,8 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "._undo" "_end")
+  (command "_.UNDO" "_End")
+  (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   beadcount)
 
@@ -27595,12 +27752,15 @@
 ;; ---- entry point -----------------------------------------------------------
 
 (defun c:TUTORIALAUTOBEAD ( / ans )
-  (initget "Read Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old Read stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both READ")
   (setq ans (getkword
-              (strcat "\nAUTOBEAD tutorial - read it, or watch a live demo?"
-                      "\n  [Read/Demo/Both] <Read>: ")))
-  (if (null ans) (setq ans "Read"))
-  (if (member ans '("Read" "Both")) (autobead-tutorial-read))
+              (strcat "\nAUTOBEAD tutorial - read the Checks, or watch a live Demo?"
+                      "\n  [Checks/Demo/Both] <Both>: ")))
+  (if (null ans) (setq ans "Both"))
+  (if (= ans "READ") (setq ans "Checks"))
+  (if (member ans '("Checks" "Both")) (autobead-tutorial-read))
   (if (member ans '("Demo" "Both")) (autobead-tutorial-demo))
   (princ))
 
@@ -27764,8 +27924,13 @@
 ;;;    * Break points closer together than 0.0001 drawing units are
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
+                                     ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -27797,6 +27962,8 @@
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
         (t 12.0)))                      ; inches / unitless
+
+;; ------------------------------------------------------------- asking
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set
@@ -28899,7 +29066,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -28934,7 +29101,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (setq oldcmd (getvar "CMDECHO")
@@ -28956,7 +29123,7 @@
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (setq oldcmd (getvar "CMDECHO")
@@ -28987,7 +29154,7 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    (if (and msg (not (wcmatch (strcase msg t) "*break*,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side view:"
@@ -29040,6 +29207,9 @@
 ;;;
 ;;; Command:  BPCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
 ;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
@@ -29069,11 +29239,9 @@
 ;;; Assumes drawing units are INCHES (architectural).  Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -29203,12 +29371,19 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
-(defun c:BPCALLOUT (/ *error* cands pk hit ctr nm old picked names txtpt
-                      phrase lastpt)
+(defun c:BPCALLOUT (/ *error* undo-open cands pk hit ctr nm old picked names
+                      txtpt phrase lastpt)
+  ;; the rings and the callout are one undo group, so a run backed out
+  ;; halfway takes one U rather than one per circle; the group is only
+  ;; closed if it was opened (STANDARDS section 5)
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
     (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (setq cands (bp:collect-points))
@@ -29259,6 +29434,8 @@
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
                      " point(s) ringed on layer " *BP-LAYER*
                      ";  \"" phrase "\""))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 (princ (strcat "\nBPCALLOUT " *bpcallout-version*
@@ -29294,12 +29471,17 @@
 ;;;     +- Pool Cover -> Freeform | Rectangle
 ;;;     +- Spa Cover  -> Safety Cover | Hard Cover | ThermoLight Cover
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *ccprecheck-version* "v1.1")   ; announced on load; release_lisp.py
+                                        ; stamps the dated twin in releases/
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
 
@@ -29811,7 +29993,16 @@
 ;;; Main command
 ;;; ------------------------------------------------------------------
 
-(defun c:CCPRECHECK (/ product v)
+(defun c:CCPRECHECK (/ *error* product v)
+  ;; a walker: it changes no setting and opens no undo group, so the
+  ;; handler's whole job is to keep a cancel from printing a raw
+  ;; AutoLISP message at the user (STANDARDS section 5)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nCCPRECHECK error: " msg)))
+    (princ))
+
   (setq *chk:log* nil product nil)
   (princ "\n--- Tech Flow Chart checklist ---")
   (princ "\n(after the first question, Back re-asks the previous one)")
@@ -29855,6 +30046,9 @@
 ;;;
 ;;; Command:  CDCALLOUT
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The dimensioning sister of BPCALLOUT.  Instead of clicking points,
 ;;; you name them: type the FROM point number and the TO point number,
 ;;; and an aligned dimension is drawn between those two survey points
@@ -29891,11 +30085,9 @@
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -30051,7 +30243,7 @@
     (if oce (setvar "CMDECHO" oce))
     (if grouped (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 
@@ -30630,8 +30822,13 @@
 ;;;  Everything runs inside one UNDO group; a single U reverts every
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *checkdrawing-version* "v1.0")   ; announced on load; release_lisp.py
+                                          ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -31086,11 +31283,13 @@
 ;;;     *CS-FORM*; see "form answers" below.  Selections and point
 ;;;     picks are always made by hand.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so the two routines that
 ;; share them stay in sync no matter which file loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -31103,7 +31302,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.1") ; printed on load and at command start so a
+(setq *cs-version* "v3.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -31385,7 +31584,7 @@
 ;; across to it.  Points are WCS.
 (defun cs-dimv (style a b thru / oldl)
   (cs-setstyle style)
-  (if (and *cs-dim-layer* (cs-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -31570,7 +31769,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nCORNERSTP: " msg)))
     (princ))
 
@@ -31764,10 +31963,13 @@
     (arcr (setq mid (cs-arcpt c r (* 0.5 (+ a1 a2))))))
 
   ;; ---- 5. draw direction ----------------------------------------------
+  ;; the form answers first; when it does not, the bracket is exactly
+  ;; the keyword list (STANDARDS section 1 rule 1) and the explanation
+  ;; lives in the question text
   (if (null (setq key (cs-fkw 'direction "Inside Outside" "Inside")))
     (progn
       (initget "Inside Outside")
-      (setq key (getkword "\nDraw steps [Inside out/Outside in] <Inside out>: "))))
+      (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))))
   (setq outflag (= key "Outside"))
 
   ;; ---- 5a. starting point (inside out only) ---------------------------
@@ -31777,7 +31979,7 @@
         (progn
           (initget "Middle True")
           (setq key (getkword
-            "\nMeasure step treads from [Middle of diagonal/True corner] <Middle>: "))))
+            "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True] <Middle>: "))))
       (setq start (if (= key "True") corner mid)))
     (setq start corner))
 
@@ -31804,12 +32006,12 @@
           (progn
             (initget "Parallel Equidistant")
             (setq key (getkword (strcat
-              "\nSteps [Parallel to diagonal"
-              "/Equidistant from true corner] <Parallel>: "))))
+              "\nSteps parallel to the diagonal, or equidistant"
+              " from the true corner? [Parallel/Equidistant] <Parallel>: "))))
           (progn
             (initget "Parallel True")
             (setq key (getkword
-              "\nTreads [Parallel to diagonal/True angle] <Parallel>: ")))))
+              "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True] <Parallel>: ")))))
       (if (not (member key '("True" "Equidistant")))
         (progn
           ;; treads parallel to the diagonal; step treads measured square to it
@@ -32749,11 +32951,13 @@
 ;;;     *HS-FORM*; see "form answers" below.  Selections and point
 ;;;     picks are always made by hand.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so this file and
 ;; CORNERSTP.lsp stay in sync no matter which one loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -33209,7 +33413,7 @@
 ;; across to it.  Points are WCS.
 (defun hs-dimv (style a b thru / oldl)
   (hs-setstyle style)
-  (if (and *cs-dim-layer* (hs-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -33341,7 +33545,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nHEMISTEP: " msg)))
     (princ))
 
@@ -34336,11 +34540,13 @@
 ;;;     *NS-FORM*; see "form answers" below.  Selections and point
 ;;;     picks are always made by hand.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so this file, CORNERSTP
 ;; and HEMISTEP stay in sync no matter which one loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -34600,6 +34806,8 @@
           (list "A" t1 t2 o off a1 a2))
         (list "S" t1 t2)))))
 
+;;; -------------------------- ask helpers -------------------------------
+
 ;;; --------------------------- bead helpers -----------------------------
 
 ;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
@@ -34792,7 +35000,7 @@
 ;; across to it.  Points are WCS.
 (defun ns-dimv (style a b thru / oldl)
   (ns-setstyle style)
-  (if (and *cs-dim-layer* (ns-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -34907,7 +35115,7 @@
 ;; any other call site.
 (defun ns-ftreat (subject dflt / v)
   (cond
-    ((not (ns-fhas 'treat)) (cal:asktreat subject dflt nil))
+    ((not (ns-fhas 'treat)) (cal:asktreat subject dflt))
     ((null (setq v (ns-ftake 'treat))) dflt)
     ((and (= (type v) 'STR)
           (setq v (ns-fkword
@@ -34918,7 +35126,7 @@
            ((= v "ROUNDED") "Radius")
            ((member v '("DIAG" "DIAGONAL")) "Cut")
            (t v)))
-    (T (cal:asktreat subject dflt nil))))
+    (T (cal:asktreat subject dflt))))
 
 ;; Run NORMIESTEP with a form's answers already in hand.  Nothing
 ;; happens here that the direct path misses: a caller may equally set
@@ -34953,7 +35161,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nNORMIESTEP: " msg)))
     (princ))
 
@@ -37315,7 +37523,7 @@
 ;;;  history keeps the earlier dated copies).
 ;;;  *cchk-version* is also stamped into the load banner, into every
 ;;;  COVERCHECK/COVERSCAN report's title line, and is available on
-;;;  demand via the COVERCHECKVERSION command - so even a renamed or
+;;;  demand via the COVERCHECKVER command - so even a renamed or
 ;;;  copy-pasted file always tells you which revision produced it.
 ;;;
 ;;;  Type COVERCHECK, then:
@@ -37504,7 +37712,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.8")
+(setq *cchk-version* "v1.1")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -37521,7 +37729,8 @@
 ;; every dimension belongs on this layer; CDIM is the command that
 ;; moves the strays there, and is what the report tells you to run
 (setq *cchk-dim-layer*   "DIMENSION")
-(setq *cchk-dimfix-cmd*  "CDIM")
+;; the sheet's title block, and the attribute in it carrying the date;
+;; the date must read today, written MM/DD/YYYY
 (setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
 (setq *cchk-date-tag*    "Date")
 (setq *cchk-dimfix-cmd*  "CDIM")
@@ -37810,10 +38019,11 @@
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (cchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -37830,7 +38040,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -39910,7 +40120,7 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay units datev)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev carried cmv)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -40058,8 +40268,21 @@
                      (if (cadr (car dlines))
                        (setq ndok (1- ndok))
                        (setq ndflag (1- ndflag)))
-                     (setq ndmoved (- ndmoved (caddr (car dlines)))
-                           dlines  (cdr dlines))))
+                     ;; A MOVED POINT STAYS MOVED.  Back re-asks the
+                     ;; question; it does not put the point back, and
+                     ;; its construction line is still standing.  So
+                     ;; the move is CARRIED to the re-review, not
+                     ;; un-counted -- subtracting it made the report
+                     ;; claim "points adjusted: 0" over a drawing
+                     ;; whose points really had been adjusted, and
+                     ;; the rebuilt line lost its "moved" note with
+                     ;; it (the second pass finds them attached and
+                     ;; has nothing to report).
+                     (if (> (caddr (car dlines)) 0)
+                       (setq carried (cons (cons e1 (caddr (car dlines)))
+                                           (vl-remove (assoc e1 carried)
+                                                      carried))))
+                     (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
                  (cchk:set-color e1 *cchk-grey-color*)
                  (princ "\n  Stepping back one dimension."))
@@ -40072,14 +40295,23 @@
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (cchk:dim-style e))
+             ;; moves this dim collected on an earlier pass, before a
+             ;; Back sent us round again -- they are real and belong
+             ;; in both the line and the tally
+             (setq cmv (cond ((cdr (assoc e carried))) (0)))
              (setq dlines (cons (list (strcat "Dim " (car res)
                                               (if (= sty "") "" (strcat " [" sty "]"))
                                               (if (nth 4 res)
                                                 (strcat " = " (nth 4 res))
                                                 "")
-                                              ": " (caddr res))
+                                              ": " (caddr res)
+                                              (if (> cmv 0)
+                                                (strcat " - " (itoa cmv)
+                                                        " point(s) moved before"
+                                                        " you stepped back")
+                                                ""))
                                       (cadr res)
-                                      (cadddr res))
+                                      (+ (cadddr res) cmv))
                                 dlines))))
           (setq n (1+ n)))
         (if skiprest
@@ -40690,14 +40922,18 @@
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
   (princ))
 
-(defun c:COVERCHECKVERSION ()
+(defun c:COVERCHECKVER ()
   (princ (strcat "\nThis file's COVERCHECK / COVERSCAN: " *cchk-version*))
   (princ "\n(covercheck.lsp and its dated covercheck_MMDDYY_REV##.lsp twin should always match this.)")
   (princ))
 
+;; the pre-standard name, kept as an alias - STANDARDS section 5 names
+;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
+(defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
+
 (princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
 (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
-(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVERSION prints this file's version.")
+(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")
 (princ)
 
 
@@ -41152,7 +41388,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.1")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.4")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -41434,10 +41670,11 @@
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (dchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -41460,7 +41697,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*SKIPPED*,*MAGENTA*,*ASSOCIATIVE*"))
+    "*FLAGGED*,*SKIPPED*,*MAGENTA*,*ASSOCIATIVE*,*NOT ATTACHED*,*OVERLAP*"))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -42114,7 +42351,7 @@
                       nomerged noflag noleft
                       rowtol sty pair dlines skiprest
                       laylist locked relock lay
-                      minx miny maxx maxy bb h m ins txt nlin ref hdr l)
+                      minx miny maxx maxy bb h m ins txt nlin ref hdr l carried cmv)
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
@@ -42261,8 +42498,21 @@
                      (if (cadr (car dlines))
                        (setq ndok (1- ndok))
                        (setq ndflag (1- ndflag)))
-                     (setq ndmoved (- ndmoved (caddr (car dlines)))
-                           dlines  (cdr dlines))))
+                     ;; A MOVED POINT STAYS MOVED.  Back re-asks the
+                     ;; question; it does not put the point back, and
+                     ;; its construction line is still standing.  So
+                     ;; the move is CARRIED to the re-review, not
+                     ;; un-counted -- subtracting it made the report
+                     ;; claim "points adjusted: 0" over a drawing
+                     ;; whose points really had been adjusted, and
+                     ;; the rebuilt line lost its "moved" note with
+                     ;; it (the second pass finds them attached and
+                     ;; has nothing to report).
+                     (if (> (caddr (car dlines)) 0)
+                       (setq carried (cons (cons e1 (caddr (car dlines)))
+                                           (vl-remove (assoc e1 carried)
+                                                      carried))))
+                     (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
                  (dchk:set-color e1 *dchk-grey-color*)
                  (princ "\n  Stepping back one dimension."))
@@ -42275,14 +42525,23 @@
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (dchk:dim-style e))
+             ;; moves this dim collected on an earlier pass, before a
+             ;; Back sent us round again -- they are real and belong
+             ;; in both the line and the tally
+             (setq cmv (cond ((cdr (assoc e carried))) (0)))
              (setq dlines (cons (list (strcat "Dim " (car res)
                                               (if (= sty "") "" (strcat " [" sty "]"))
                                               (if (nth 4 res)
                                                 (strcat " = " (nth 4 res))
                                                 "")
-                                              ": " (caddr res))
+                                              ": " (caddr res)
+                                              (if (> cmv 0)
+                                                (strcat " - " (itoa cmv)
+                                                        " point(s) moved before"
+                                                        " you stepped back")
+                                                ""))
                                       (cadr res)
-                                      (cadddr res))
+                                      (+ (cadddr res) cmv))
                                 dlines))))
           (setq n (1+ n)))
         (if skiprest
@@ -42652,7 +42911,7 @@
 
 (defun dchk:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  -- press Enter to continue --")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 (defun dchk:tut-line (p1 p2 lay)
@@ -42776,16 +43035,19 @@
   (princ (strcat "\n=================================================="
                  "\n  DIMCHECK tutorial   [" *dchk-version* "]"
                  "\n=================================================="))
-  (initget "List Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old List stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both LIST")
   (setq ans (getkword
-              "\n  List the checks, Demo them on a practice drawing, or Both? [List/Demo/Both] <Both>: "))
+              "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
   (if (null ans) (setq ans "Both"))
+  (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
 
-  (if (member ans '("List" "Both"))
+  (if (member ans '("Checks" "Both"))
     (progn
       (foreach l (dchk:tut-checklist) (princ (strcat "\n" l)))
       (princ "\n")
@@ -42849,6 +43111,9 @@
 ;;;      2. Highlight the drawing to dimension (window/crossing select).
 ;;;    The dimension chain is drawn automatically.
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Notes
 ;;;    * "Linear/aligned" means DXF dimension type 0 (rotated /
 ;;;      horizontal / vertical) or 1 (aligned).  Angular, radial,
@@ -42859,10 +43124,11 @@
 ;;;    * Requires Visual LISP (standard in full AutoCAD).  AutoCAD LT
 ;;;      has no LISP engine and cannot run this file.
 ;;; ==================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
+(setq *dimcontinue-version* "v1.0")   ; announced on load; release_lisp.py
+                                         ; stamps the dated twin in releases/
+
 (defun dce:axis (ed)
   (if (and (member '(100 . "AcDbRotatedDimension") ed) (assoc 50 ed))
     (cdr (assoc 50 ed))                       ; rotated dim: explicit angle
@@ -42909,7 +43175,7 @@
     (if ocl (setvar "CLAYER"  ocl))
     (if oos (setvar "OSMODE"  oos))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 
@@ -43063,8 +43329,13 @@
 ;;;
 ;;;  H is stored in the drawing and survives save/close/reopen.
 ;;; ============================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *dronedistortion-version* "v1.0")   ; announced on load; release_lisp.py
+                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -43149,7 +43420,7 @@
   (setq cmd (getvar "CMDECHO"))
   (defun *error* (m)
     (setvar "CMDECHO" cmd)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
     (princ))
 
@@ -43577,8 +43848,13 @@
 ;;;  Altitude in the file is metres (DJI writes metres); everything is
 ;;;  reported and saved in FEET to match DroneDistortion.lsp.
 ;;; ============================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
+                                            ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -44293,7 +44569,7 @@
                    pt g gft gsrc absft hraw hsel ht lines placed ans
                    stage done manual mark)
   (defun *error* (m)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
     (princ))
 
@@ -48656,6 +48932,9 @@
 ;;;
 ;;; Command:  LHD - fit an outline (closed or open) through the points
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The laser-point sibling of ABHD.  ABHD fits a pool perimeter
 ;;; through ab_pt survey blocks; LHD fits the same kind of arcs-on-the-
 ;;; points outline through points that came off a laser scan of an
@@ -48701,11 +48980,9 @@
 ;;; when the automatic order goes wrong; the kept outline lands on the
 ;;; POOL layer like ABHD's, so the rest of the toolset can read it.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.1")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -50681,10 +50958,8 @@
         lh-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nLHD stopped while "
                              (if lh-phase lh-phase "starting up")
                              " -- " m)))
@@ -50748,7 +51023,7 @@
   (while go
     (initget "Stretch Corner Hold Done")
     (setq ans (getkword
-                "\n  Declare a [Stretch/Corner/Hold] or [Done]? <Done>: "))
+                "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done] <Done>: "))
     (cond
       ((= ans "Hold")
        (setq lh-phase "picking a held point"
@@ -51130,12 +51405,17 @@
 ;;; Load with APPLOAD (or (load "lincheck.lsp")) and run the
 ;;; LINCHECK command.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------------------------------------------------
 ;;; Helpers
 ;;; ------------------------------------------------------------------
+
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *lincheck-version* "v1.1")   ; announced on load; release_lisp.py
+                                      ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
 
@@ -51393,7 +51673,16 @@
 ;;; Checklist
 ;;; ------------------------------------------------------------------
 
-(defun c:LINCHECK (/ fib vin)
+(defun c:LINCHECK (/ *error* fib vin)
+  ;; a walker: it changes no setting and opens no undo group, so the
+  ;; handler's whole job is to keep a cancel from printing a raw
+  ;; AutoLISP message at the user (STANDARDS section 5)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nLINCHECK error: " msg)))
+    (princ))
+
   (setq *lin:log* nil fib nil vin nil)
   (princ "\n--- Liner Tech Drawing Checklist ---")
   (princ "\nWork down each item; the report prints at the end.")
@@ -51632,8 +51921,6 @@
 ;;;     out under an old date is the mistake that catches. Only
 ;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
 ;;;     Title in reach the report says the date was not checked.
-"02/30" is reported in red with what is wrong; a clean date
-;;;     ("05/01/2024") is a quiet OK.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -51738,7 +52025,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.6")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.9")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -52056,10 +52343,11 @@
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (lfc:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -52131,7 +52419,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -53706,7 +53994,7 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay units)
+                      minx miny maxx maxy bb m dhdr right dimlay units carried cmv)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -53856,8 +54144,21 @@
                      (if (cadr (car dlines))
                        (setq ndok (1- ndok))
                        (setq ndflag (1- ndflag)))
-                     (setq ndmoved (- ndmoved (caddr (car dlines)))
-                           dlines  (cdr dlines))))
+                     ;; A MOVED POINT STAYS MOVED.  Back re-asks the
+                     ;; question; it does not put the point back, and
+                     ;; its construction line is still standing.  So
+                     ;; the move is CARRIED to the re-review, not
+                     ;; un-counted -- subtracting it made the report
+                     ;; claim "points adjusted: 0" over a drawing
+                     ;; whose points really had been adjusted, and
+                     ;; the rebuilt line lost its "moved" note with
+                     ;; it (the second pass finds them attached and
+                     ;; has nothing to report).
+                     (if (> (caddr (car dlines)) 0)
+                       (setq carried (cons (cons e1 (caddr (car dlines)))
+                                           (vl-remove (assoc e1 carried)
+                                                      carried))))
+                     (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
                  (lfc:set-color e1 *lfc-grey-color*)
                  (princ "\n  Stepping back one dimension."))
@@ -53870,14 +54171,23 @@
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (lfc:dim-style e))
+             ;; moves this dim collected on an earlier pass, before a
+             ;; Back sent us round again -- they are real and belong
+             ;; in both the line and the tally
+             (setq cmv (cond ((cdr (assoc e carried))) (0)))
              (setq dlines (cons (list (strcat "Dim " (car res)
                                               (if (= sty "") "" (strcat " [" sty "]"))
                                               (if (nth 4 res)
                                                 (strcat " = " (nth 4 res))
                                                 "")
-                                              ": " (caddr res))
+                                              ": " (caddr res)
+                                              (if (> cmv 0)
+                                                (strcat " - " (itoa cmv)
+                                                        " point(s) moved before"
+                                                        " you stepped back")
+                                                ""))
                                       (cadr res)
-                                      (cadddr res))
+                                      (+ (cadddr res) cmv))
                                 dlines))))
           (setq n (1+ n)))
         (if skiprest
@@ -54626,9 +54936,16 @@
                miny (if miny (min miny (cadar bb)) (cadar bb))
                maxx (if maxx (max maxx (caadr bb)) (caadr bb))
                maxy (if maxy (max maxy (cadadr bb)) (cadadr bb)))))
+     ;; segs feeds TWO passes: the DIMCHECK-style overlap hunt, which a
+     ;; lite scan skips, and the steps / side-view rule, which is a
+     ;; LINER rule a lite scan keeps.  Nil'ing it for lite took the
+     ;; steps rule out with the overlaps, so a sheet with an obvious
+     ;; staircase reported "no step patterns detected" and its
+     ;; rise-vs-WallHt mismatch vanished.  Collect it either way; the
+     ;; overlap pass keeps its own lite guard below.
      (setq dims (reverse dims) arcs (reverse arcs)
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
-           segs (if lite nil (lfc:collect-segs plns)))
+           segs (lfc:collect-segs plns))
 
      ;; --- dimensions: report stray definition points, move nothing
      ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
@@ -55084,7 +55401,7 @@
 
 (defun lfc:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  -- press Enter to continue --")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 (defun lfc:tut-line (p1 p2 lay)
@@ -55240,16 +55557,19 @@
   (princ (strcat "\n=================================================="
                  "\n  LINFINCHECK tutorial   [" *lfc-version* "]"
                  "\n=================================================="))
-  (initget "List Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old List stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both LIST")
   (setq ans (getkword
-              "\n  List the checks, Demo them on a practice drawing, or Both? [List/Demo/Both] <Both>: "))
+              "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
   (if (null ans) (setq ans "Both"))
+  (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
 
-  (if (member ans '("List" "Both"))
+  (if (member ans '("Checks" "Both"))
     (progn
       (foreach l (lfc:tut-checklist) (princ (strcat "\n" l)))
       (princ "\n")
@@ -55304,8 +55624,13 @@
 ;;; Usage:  APPLOAD this file (or add it to your startup suite), then type
 ;;;         LINTXTCHK and pick the top-left point for the checklist.
 ;;; ==========================================================================
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
+(setq *lintxtchk-version* "v1.0")   ; announced on load; release_lisp.py
+                                       ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
                        startx y z x lvl txt )
@@ -55431,6 +55756,9 @@
 ;;;   Select the perimeter geometry, or press Enter to auto-detect
 ;;;   the perimeter (the largest closed loop found in the drawing).
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;   Command: TUTORIALPADDLE
 ;;;   Guided tour for new users: lists everything PADDLE checks, then
 ;;;   optionally draws a labelled sample perimeter and pads it step by
@@ -55452,13 +55780,11 @@
 ;;; Assumes drawing units are INCHES (architectural). Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.2") ; printed on load and at command start
+(setq *paddle-version* "v1.4") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -55474,7 +55800,6 @@
                              ; arc whose total bend is 10 degrees or
                              ; less is semi-straight - no pad
 
-;; ------------------------ 2D vector helpers ------------------------
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
   (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))
@@ -55792,8 +56117,14 @@
      (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
            tmpname "PADDLE-TEMP-IMPORT")
      (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
-     (command "_.-INSERT" (strcat tmpname "=" path))
-     (command) ; cancel the insert -- the definitions stay behind
+     ;; the restore below must run even if the insert throws: oldcmd
+     ;; and oldatt are locals of THIS helper, so c:PADDLE's *error*
+     ;; handler cannot put them back and the user would be left with
+     ;; no command echo and no attribute prompts
+     (vl-catch-all-apply
+       '(lambda ()
+          (command "_.-INSERT" (strcat tmpname "=" path))
+          (command)))   ; cancel the insert -- the definitions stay behind
      (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
      (vl-catch-all-apply ; drop the unused throwaway definition
        '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))))
@@ -55884,7 +56215,7 @@
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
     (if doc (vla-EndUndoMark doc))
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
 
@@ -56075,6 +56406,9 @@
 ;;;
 ;;; Command: PERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Splits a selected line into N equally-spaced points (both endpoints
 ;;; included), then for each division point creates a new point offset
 ;;; perpendicular to the line by a user-supplied length.  The new points
@@ -56182,14 +56516,12 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.4")
+(setq *perp-version* "v0.5")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -56598,7 +56930,7 @@
 
   (defun *error* (msg)
     (perp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))
@@ -56992,6 +57324,9 @@
 ;;;
 ;;; Command: CPERPPTS   ("C" for curved)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The curved-geometry companion to PERPPTS (perp_points.lsp).  Same
 ;;; workflow and same pipeline, but the offsets are taken perpendicular
 ;;; to the TANGENT of the curve rather than to a straight line, so arcs,
@@ -57095,14 +57430,12 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.3")
+(setq *cperp-version* "v0.4")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -57314,7 +57647,7 @@
 
   (defun *error* (msg)
     (cperp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))
@@ -57669,6 +58002,9 @@
 ;;;
 ;;; Command: TUTORIALPERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Interactive tutorial for the PERPPTS command (perp_points.lsp),
 ;;; aimed at first-time users.  Offers three modes:
 ;;;
@@ -57688,13 +58024,11 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.3")
+(setq *tutperp-version* "v0.4")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -57760,7 +58094,7 @@
 
   (defun *error* (msg)
     (tutp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
     (princ))
 
@@ -58040,6 +58374,9 @@
 ;;;
 ;;; Command: TUTORIALCPERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Interactive tutorial for the CPERPPTS command (cperp_points.lsp),
 ;;; the curved companion to PERPPTS.  Offers three modes:
 ;;;
@@ -58057,14 +58394,12 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.3")
+(setq *tutcperp-version* "v0.4")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -58153,7 +58488,7 @@
 
   (defun *error* (msg)
     (tutc:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
     (princ))
 
@@ -59169,7 +59504,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.5")
+(setq *spacheck-version* "v1.6")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -61049,7 +61384,7 @@
     (princ))
   (setq oldecho (getvar "CMDECHO") oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
-  (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Checks" nil))
+  (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Both" nil))
   (if (member ans '("Checks" "Both"))
     (foreach l (spachk:tut-checklist) (princ (strcat "\n" l))))
   (if (member ans '("Demo" "Both"))
@@ -61078,6 +61413,9 @@
 ;;;   STOCKCOVER      replace a highlighted perimeter with a stock DWG
 ;;;   STOCKLIST       list every stock drawing in the stock folder
 ;;;   STOCKCOVER-CFG  point the routine at the stock folder
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; What STOCKCOVER does:
 ;;;   1. You highlight the perimeter that is to be replaced.
@@ -61108,8 +61446,6 @@
 ;;; *stockcover-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
@@ -61119,7 +61455,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.2") ; printed on load and at command
+(setq *stockcover-version* "v1.3") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -61215,6 +61551,8 @@
     (setq e (entnext e)))
   (if (> (sslength ss) 0) ss))
 
+;;; Combined bounding box of a selection set -> ((minx miny minz)
+;;; (maxx maxy maxz)), or nil if nothing in it could be measured.
 (defun stock:size (bb)                    ; (width height)
   (list (- (car (cadr bb)) (car (car bb)))
         (- (cadr (cadr bb)) (cadr (car bb)))))
@@ -61343,7 +61681,7 @@
   ;; mode was pushed beforehand; command-s is the sanctioned
   ;; replacement and needs no setup, so the handler uses only that.
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSTOCKCOVER error: " msg)))
     (stock:restore)
     (if undone
@@ -61519,6 +61857,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: DRONE
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Drawing cleanup routine that applies five fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
@@ -61560,8 +61901,9 @@
 ;;; duration of the command and re-locked afterwards.  The whole run
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
+
+(setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -61676,7 +62018,7 @@
   (if *drone-unlocked* (drone:relock-layers *drone-unlocked*))
   (setq *drone-unlocked* nil)
   (if *drone-doc* (vla-EndUndoMark *drone-doc*))
-  (if (and msg (/= (strcase msg t) "function cancelled"))
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
     (princ (strcat "\nDRONE error: " msg)))
   (if *drone-old-error* (setq *error* *drone-old-error*))
   (princ))
@@ -61823,6 +62165,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: TYDRN
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Drawing cleanup routine that applies three fixes in one pass:
 ;;;
 ;;;   1. TEXT  - every highlighted (pre-selected) text entity is
@@ -61854,8 +62199,9 @@
 ;;; the command and re-locked afterwards.  The whole run is wrapped in
 ;;; a single undo group.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
+
+(setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; stamps the dated twin in releases/
 
 (vl-load-com)
 
@@ -61959,7 +62305,7 @@
   (if *tydrn-unlocked* (tydrn:relock-layers *tydrn-unlocked*))
   (setq *tydrn-unlocked* nil)
   (if *tydrn-doc* (vla-EndUndoMark *tydrn-doc*))
-  (if (and msg (/= (strcase msg t) "function cancelled"))
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
     (princ (strcat "\nTYDRN error: " msg)))
   (if *tydrn-old-error* (setq *error* *tydrn-old-error*))
   (princ))
@@ -62084,6 +62430,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: WCALST
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select a band drawn as two long curved sides connected by rungs,
 ;;; click the side that must come out straight, and the command draws
 ;;; the developed (unrolled) band below the selection:
@@ -62103,10 +62452,11 @@
 ;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------ small math helpers ----------------------
+
+(setq *wcalst-version* "v1.0")   ; announced on load; release_lisp.py
+                                    ; stamps the dated twin in releases/
 
 (defun wc:key (p)
   ;; fuzzy node key so touching endpoints share one node
@@ -62493,7 +62843,7 @@
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
     (if oldlay (setvar "CLAYER" oldlay))
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
     )
     (princ)
@@ -63246,7 +63596,7 @@
   (princ)
 )
 
-(princ "\nWCALST loaded — select the band, pick the side to straighten.")
+(princ "\nWCALST loaded -- select the band, pick the side to straighten.")
 (princ)
 
 
@@ -63287,7 +63637,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.2") ; printed on load and at command start so a
+(setq *xft-version* "v1.3") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -63532,7 +63882,7 @@
   )
 
   (defun *error* (msg)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
     (while (> (getvar "CMDACTIVE") 0) (command))   ; back out of SCALE etc.
     (xft:restore)
@@ -63784,7 +64134,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.1")
+(setq *xyplot-version* "v1.2")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -64481,10 +64831,20 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:XYPLOT (/ file base bpx bpy rows r nm x y pts skipped
+(defun c:XYPLOT (/ *error* undo-open
+                    file base bpx bpy rows r nm x y pts skipped
                     minx miny maxx maxy spanx spany th org2 gap
                     xstops ystops xline yline nxd nyd mark ss
                     rep p path stage done g1 g2 pad)
+  ;; an Esc mid-plot used to leave a half-drawn plot that took N undos
+  ;; to clear and printed a raw AutoLISP message (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nXYPLOT error: " msg)))
+    (princ))
   (vl-load-com)
   (princ (strcat "\nXYPLOT " *xyplot-version*))
   ;; ---- the questions: Back at the second re-opens the first -------------
@@ -64504,6 +64864,8 @@
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))
     (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
       (setq bpx (car base) bpy (cadr base))
       (princ "\nReading spreadsheet ... ")
@@ -64679,6 +65041,10 @@
                    (vl-cmdf "_.zoom" "_Extents"))
                 '())
               (princ "\n  View reset to plan (top).")
+              ;; close the group before any ABHD handoff - the whole plot
+              ;; is one U, and ABHD grouped separately is ABHD's own U
+              (command "_.UNDO" "_End")
+              (setq undo-open nil)
               ;; ---- on to the pool perimeter ------------------------------
               (if (= "Yes" (xyp:askkw
                              "Fit a pool perimeter through graph 1's points now?"
@@ -64767,10 +65133,12 @@
 ;;; ADDING A SHAPE is adding data, not code -- one entry in lzs:*charts*
 ;;; with an outline, a dimension list and its SPA keys, plus a line in
 ;;; the tables under it.  Three charts, one per shape SPA draws:
-;;; Rectangle, OCtagon, ROund.  Watch the SPELLINGS: SPA's shape words
-;;; are "Rectangle", "OCtagon" and "ROund" -- ROund is NOT POOL's
-;;; "ROUnd", and the wrong one falls through SPA's dispatch into the
-;;; rectangle branch and draws the wrong spa without saying so.
+;;; Rectangle, OCtagon, ROund.  The chart sends the word the legend
+;;; prints; SPA's own keyword is "ROUnd" (one capitalisation repo-wide
+;;; -- POOL needs RO for ROman), and spa:fshape matches the shape word
+;;; WITHOUT case and returns the canonical spelling, so either reaches
+;;; the right branch.  A word that is not a shape at all still falls
+;;; through to the prompt rather than drawing the wrong spa silently.
 ;;; ======================================================================
 
 (vl-load-com)
@@ -64990,13 +65358,14 @@
 ;;;  the only honest default, since SPA offers no default on corner A
 ;;;  either.
 ;;;
-;;;  THE VOCABULARY IS SPA'S OWN -- 90 / Radius / Diagonal, the words on
-;;;  the order sheet's corner legend and in spa:askcorner's initget.  It
-;;;  is NOT POOL's Square / Radius / Cut / NotGiven: STANDARDS.md 8.1
-;;;  renames those, but that is separate, tracked work and SPA has not
-;;;  had it.  A form that spoke POOL's words here would have every
-;;;  corner answer consumed and thrown away by spa:askcorner's member
-;;;  check, and the corner asked at the keyboard as if the box had been
+;;;  THE DROPDOWN SPEAKS THE SHEET LEGEND -- 90 / Radius / Diagonal, the
+;;;  words printed on the order sheet a drafter copies from.  SPA itself
+;;;  now asks the canonical Treatment question (Square / Radius / Cut /
+;;;  NotGiven, STANDARDS.md section 2) and normalises the legend words
+;;;  on the way in, so the chart keeps the drafter's vocabulary and the
+;;;  routine keeps the standard's.  Send a word that is neither and
+;;;  spa:askcorner consumes it, throws it away, and asks the corner at
+;;;  the keyboard as if the box had been
 ;;;  left empty.  ("Square" SPA does accept, as a synonym it normalises
 ;;;  to 90; the dropdown offers 90 because that is what the sheet says.)
 ;;;
@@ -69627,18 +69996,18 @@
   "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
   "CORNERSTP" "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP"
   "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN"
-  "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER"
-  "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND"
-  "DCE" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
-  "DDGPS" "DDELEV" "DDTEST" "FITABHDVER" "FITABHD" "FITABHDCOVER"
-  "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN"
-  "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE"
-  "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER"
-  "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK"
-  "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN" "WCALST"
-  "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZSPA" "LAZSPAVER"
-  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
-  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER"
+  "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN"
+  "DIMCONTEND" "DCE" "DDFIX" "DDSET" "DDCAL" "DDINFO"
+  "DDALT" "DDGPS" "DDELEV" "DDTEST" "FITABHDVER" "FITABHD"
+  "FITABHDCOVER" "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
+  "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE"
+  "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET"
+  "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
+  "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "DRONE" "TYDRN"
+  "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT" "XYPLOTVER" "LAZSPA"
+  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
+  "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -69655,7 +70024,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin shared build loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.0 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 (princ)

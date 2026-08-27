@@ -87,7 +87,7 @@
 
     "round": {
       "image": "round.png",
-      "lispShape": "ROund",
+      "lispShape": "ROUnd",
       "_note": "a circle when the two overalls match, an ellipse when they differ",
       "dimensions": [
         { "letter": "B", "key": "b", "x": 0.50,  "y": 0.24,

@@ -3,6 +3,9 @@
 ;;; -------------------------------------------------------------------
 ;;; Command: WCALST
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Select a band drawn as two long curved sides connected by rungs,
 ;;; click the side that must come out straight, and the command draws
 ;;; the developed (unrolled) band below the selection:
@@ -22,10 +25,11 @@
 ;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;;; ------------------------ small math helpers ----------------------
+
+(setq *wcalst-version* "v1.0")   ; announced on load; release_lisp.py
+                                    ; stamps the dated twin in releases/
 
 (defun wc:key (p)
   ;; fuzzy node key so touching endpoints share one node
@@ -412,7 +416,7 @@
   (defun *error* (msg)
     (if inundo (command "_.UNDO" "_End"))
     (if oldlay (setvar "CLAYER" oldlay))
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*EXIT*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
     )
     (princ)
@@ -1165,5 +1169,5 @@
   (princ)
 )
 
-(princ "\nWCALST loaded — select the band, pick the side to straighten.")
+(princ "\nWCALST loaded -- select the band, pick the side to straighten.")
 (princ)

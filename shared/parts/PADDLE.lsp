@@ -30,6 +30,9 @@
 ;;;   Select the perimeter geometry, or press Enter to auto-detect
 ;;;   the perimeter (the largest closed loop found in the drawing).
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;   Command: TUTORIALPADDLE
 ;;;   Guided tour for new users: lists everything PADDLE checks, then
 ;;;   optionally draws a labelled sample perimeter and pads it step by
@@ -51,13 +54,11 @@
 ;;; Assumes drawing units are INCHES (architectural). Adjust the
 ;;; constants below for other setups.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.2") ; printed on load and at command start
+(setq *paddle-version* "v1.4") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -73,7 +74,6 @@
                              ; arc whose total bend is 10 degrees or
                              ; less is semi-straight - no pad
 
-;; ------------------------ 2D vector helpers ------------------------
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
   (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))
@@ -391,8 +391,14 @@
      (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
            tmpname "PADDLE-TEMP-IMPORT")
      (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
-     (command "_.-INSERT" (strcat tmpname "=" path))
-     (command) ; cancel the insert -- the definitions stay behind
+     ;; the restore below must run even if the insert throws: oldcmd
+     ;; and oldatt are locals of THIS helper, so c:PADDLE's *error*
+     ;; handler cannot put them back and the user would be left with
+     ;; no command echo and no attribute prompts
+     (vl-catch-all-apply
+       '(lambda ()
+          (command "_.-INSERT" (strcat tmpname "=" path))
+          (command)))   ; cancel the insert -- the definitions stay behind
      (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
      (vl-catch-all-apply ; drop the unused throwaway definition
        '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))))
@@ -483,7 +489,7 @@
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
     (if doc (vla-EndUndoMark doc))
-    (if (and msg (not (wcmatch (strcase msg T) "*break,*cancel*,*exit*")))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
 

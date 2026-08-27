@@ -5,6 +5,9 @@
 ;;;
 ;;; Command:  LHD - fit an outline (closed or open) through the points
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The laser-point sibling of ABHD.  ABHD fits a pool perimeter
 ;;; through ab_pt survey blocks; LHD fits the same kind of arcs-on-the-
 ;;; points outline through points that came off a laser scan of an
@@ -50,11 +53,9 @@
 ;;; when the automatic order goes wrong; the kept outline lands on the
 ;;; POOL layer like ABHD's, so the rest of the toolset can read it.
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.1")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2030,10 +2031,8 @@
         lh-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nLHD stopped while "
                              (if lh-phase lh-phase "starting up")
                              " -- " m)))
@@ -2097,7 +2096,7 @@
   (while go
     (initget "Stretch Corner Hold Done")
     (setq ans (getkword
-                "\n  Declare a [Stretch/Corner/Hold] or [Done]? <Done>: "))
+                "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done] <Done>: "))
     (cond
       ((= ans "Hold")
        (setq lh-phase "picking a held point"

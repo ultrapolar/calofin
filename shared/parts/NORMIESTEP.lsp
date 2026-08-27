@@ -161,11 +161,13 @@
 ;;;     *NS-FORM*; see "form answers" below.  Selections and point
 ;;;     picks are always made by hand.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; Settings - only defined if not already set, so this file, CORNERSTP
 ;; and HEMISTEP stay in sync no matter which one loads first.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 (if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
 (if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
@@ -425,6 +427,8 @@
           (list "A" t1 t2 o off a1 a2))
         (list "S" t1 t2)))))
 
+;;; -------------------------- ask helpers -------------------------------
+
 ;;; --------------------------- bead helpers -----------------------------
 
 ;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
@@ -617,7 +621,7 @@
 ;; across to it.  Points are WCS.
 (defun ns-dimv (style a b thru / oldl)
   (ns-setstyle style)
-  (if (and *cs-dim-layer* (ns-layerok *cs-dim-layer*))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
   (command "_.DIMLINEAR" "_non" (trans a 0 1)
@@ -732,7 +736,7 @@
 ;; any other call site.
 (defun ns-ftreat (subject dflt / v)
   (cond
-    ((not (ns-fhas 'treat)) (cal:asktreat subject dflt nil))
+    ((not (ns-fhas 'treat)) (cal:asktreat subject dflt))
     ((null (setq v (ns-ftake 'treat))) dflt)
     ((and (= (type v) 'STR)
           (setq v (ns-fkword
@@ -743,7 +747,7 @@
            ((= v "ROUNDED") "Radius")
            ((member v '("DIAG" "DIAGONAL")) "Cut")
            (t v)))
-    (T (cal:asktreat subject dflt nil))))
+    (T (cal:asktreat subject dflt))))
 
 ;; Run NORMIESTEP with a form's answers already in hand.  Nothing
 ;; happens here that the direct path misses: a caller may equally set
@@ -778,7 +782,7 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
-    (if (not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
+    (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nNORMIESTEP: " msg)))
     (princ))
 

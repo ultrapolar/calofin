@@ -2,6 +2,9 @@
 ;;;
 ;;; Command: CPERPPTS   ("C" for curved)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The curved-geometry companion to PERPPTS (perp_points.lsp).  Same
 ;;; workflow and same pipeline, but the offsets are taken perpendicular
 ;;; to the TANGENT of the curve rather than to a straight line, so arcs,
@@ -105,14 +108,12 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.3")
+(setq *cperp-version* "v0.4")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -324,7 +325,7 @@
 
   (defun *error* (msg)
     (cperp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))

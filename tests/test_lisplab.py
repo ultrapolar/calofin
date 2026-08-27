@@ -44,9 +44,9 @@ def check(label, cond):
 # ---- builtins the shared VM does not carry yet ------------------------
 # entmakex / tblobjname: the canonical ensure-layer of STANDARDS.md
 # section 5 needs both (same additions test_oasis.py makes).
-# vl-sort / vl-sort-i: the built-in sorts LISPLAB teaches against --
-# including vl-sort's habit of dropping items that compare equal, which
-# is the single most important thing lesson 2 has to say.
+# vl-sort / vl-sort-i are the VM's own now -- this test used to patch in
+# faithful versions, and those bodies moved into lispvm.py, so lesson 2
+# teaches against exactly what every other test runs on.
 
 def _alist_dict(alist):
     d = {}
@@ -75,38 +75,6 @@ def _entmakex(vm, a):
 
 def _tblobjname(vm, a):
     return vm.layer_records.get(a[1].upper(), NIL)
-
-
-def _lt(vm, fn, x, y):
-    return truthy(vm.call_value(fn, [x, y]))
-
-
-def _sorted_by(vm, fn, items):
-    return sorted(items, key=functools.cmp_to_key(
-        lambda x, y: -1 if _lt(vm, fn, x, y) else (1 if _lt(vm, fn, y, x)
-                                                   else 0)))
-
-
-def _vl_sort(vm, a):
-    """(vl-sort lst less) -- sorted, with items that compare equal to
-    the one before them DROPPED, exactly as the real one does."""
-    out = []
-    for v in _sorted_by(vm, a[1], list(a[0] or [])):
-        if out and not _lt(vm, a[1], out[-1], v) and not _lt(vm, a[1],
-                                                             v, out[-1]):
-            continue                      # equal to its predecessor
-        out.append(v)
-    return out or NIL
-
-
-def _vl_sort_i(vm, a):
-    """(vl-sort-i lst less) -- the INDEXES in sorted order.  Nothing is
-    dropped; ties keep their original order."""
-    lst = list(a[0] or [])
-    idx = sorted(range(len(lst)), key=functools.cmp_to_key(
-        lambda i, j: -1 if _lt(vm, a[1], lst[i], lst[j])
-        else (1 if _lt(vm, a[1], lst[j], lst[i]) else i - j)))
-    return idx or NIL
 
 
 def _dxf(vm, e, code):
@@ -146,8 +114,6 @@ def _ssget(vm, a):
 
 BUILTINS[Sym('entmakex')] = _entmakex
 BUILTINS[Sym('tblobjname')] = _tblobjname
-BUILTINS[Sym('vl-sort')] = _vl_sort
-BUILTINS[Sym('vl-sort-i')] = _vl_sort_i
 BUILTINS[Sym('ssget')] = _ssget
 
 

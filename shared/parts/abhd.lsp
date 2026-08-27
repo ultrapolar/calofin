@@ -9,6 +9,9 @@
 ;;;                   exploded lines/arcs; the survey points sitting
 ;;;                   on it are found automatically)
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The user window-selects an area containing:
 ;;;   * On layer "POOL"   : (optional) a closed perimeter drawn as ONE
 ;;;                         closed polyline OR an exploded set of
@@ -153,11 +156,9 @@
 ;;; perimeter itself - ends up on *PF-POOL-LAYER* (the deep break
 ;;; stubs dashed).
 ;;; ===================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *PF-VERSION*      "082526 REV06") ; announced on load.  The
+(setq pf:*version*      "082726 REV08") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -856,6 +857,14 @@
 ;; The surveyed number carried by a point block, read from its
 ;; *PF-PT-TAG* attribute ("number" on ab_pt).  nil when the block has
 ;; no such attribute.
+;;
+;; DELIBERATELY strict: no first-numeric-attribute fallback, unlike
+;; ABFIND/BPCALLOUT/LHD/FITABHD and cal:block-number.  The fitter
+;; consumes every point it is handed, so a stray numbered block (a
+;; detail bubble, a keynote) silently joining the survey would warp the
+;; whole fit - a dropped untagged point is the visible, recoverable
+;; failure.  Reviewed 2026-08-27 and kept on purpose; CABHD's copy
+;; holds the same line for the same reason.
 (defun pf:block-number (en / sub ed val)
   (setq sub (entnext en) val nil)
   (while (and sub
@@ -1344,8 +1353,6 @@
           (setq tj (cdr tj) j (1+ j)))
         (setq ti (cdr ti) i (1+ i)))
       found)))
-
-;; ---- output helpers --------------------------------------------------
 
 ;; How many fitted polylines are already on the output layer (counted
 ;; before the new one is drawn).
@@ -3233,10 +3240,8 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nABHD stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
@@ -3707,10 +3712,8 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nADAB stopped while "
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
@@ -3848,7 +3851,7 @@
 ;; by stage, for lookers - then cleans up after itself.
 
 (defun pf:tut-pause ()
-  (getstring "\n\n  --- press Enter to continue ---")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 ;; The stage caption above the demo, replaced at each stage.
@@ -3968,7 +3971,7 @@
   (princ "\n  are picked up automatically (strays are set aside).  Scaffolding")
   (princ "\n  - markers, previews, labels - sweeps itself on any exit, ESC")
   (princ "\n  included, and a run interrupted mid-flight is tidied by the next.")
-  (princ (strcat "\n  This is ABHD " *PF-VERSION*
+  (princ (strcat "\n  This is ABHD " pf:*version*
                  " - the versioned twin file carries the same name."))
   (princ))
 
@@ -4092,22 +4095,22 @@
         pf-old-err *error*
         *error*
           (lambda (m)
-            (if (and m
-                     (/= m "Function cancelled")
-                     (/= m "quit / exit abort")
-                     (/= m "console break"))
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
             (princ)))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
-                 *PF-VERSION* ")."))
-  (initget "Checks Demo")
+                 pf:*version* ")."))
+  ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
+  ;; 1), and the standard tutorial selector with Both
+  (initget "Checks Demo Both")
   (setq mode (getkword
-               "\n  Read the [Checks] it applies, or watch a drawn [Demo]? <Demo>: "))
-  (if (= mode "Checks")
-    (pf:tut-checks)
-    (pf:tut-demo))
+               "\n  Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>: "))
+  (cond ((= mode "Checks") (pf:tut-checks))
+        ((= mode "Demo")   (pf:tut-demo))
+        (t (pf:tut-checks) (pf:tut-demo)))
   (pf:temp-clear)
   (setq *error* pf-old-err)
   (princ))
@@ -4116,7 +4119,7 @@
 ;; goes looking for it there.
 (defun c:TUTORIALADAB () (c:TUTORIALABHD))
 
-(princ (strcat "\nABHD " *PF-VERSION*
+(princ (strcat "\nABHD " pf:*version*
                " loaded.  ABHD fits the pool perimeter through its"
                " points;"))
 (princ "\nADAB draws the pool bottom over an existing perimeter;")

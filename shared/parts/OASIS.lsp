@@ -7,6 +7,9 @@
 ;;;            OASISVER    print the loaded version
 ;;; ======================================================================
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; The shape
 ;;; ---------
 ;;; An oasis pool is arcs and nothing else: no corners, and at most one
@@ -188,8 +191,6 @@
 ;;; it, and both are drawn anyway, so the problem is on the screen where
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (setq *oasis-version* "v7.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
@@ -404,6 +405,11 @@
 ;; trimmed away long before it reaches anything.
 (defun oasis:topfits-p (variant) (= variant "TopRight"))
 
+;;; -------------------- ask layer ---------------------------------------
+;;; Copies of the CALOFIN-LIB helpers under this file's own prefix, so
+;;; the standalone build loads alone (STANDARDS.md section 4).  The Back
+;;; sentinel is the symbol OASIS-BACK.
+
 ;;; -------------------- snaps and the dimension style --------------------
 
 ;; Make the cross-dimension style current for the dims about to be drawn.
@@ -458,6 +464,8 @@
 (defun oasis:dashlt (w h / d)
   (setq d (max 2.0 (/ (max w h) 40.0)))
   (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
+
+;;; -------------------- layers ------------------------------------------
 
 ;;; -------------------- geometry ----------------------------------------
 
@@ -2457,6 +2465,7 @@
   (princ))
 
 ;;; -------------------- the command -------------------------------------
+
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc off cbase arcs ents nests prev lt a

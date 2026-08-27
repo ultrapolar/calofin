@@ -18,6 +18,9 @@
 ;;;      2. Highlight the drawing to dimension (window/crossing select).
 ;;;    The dimension chain is drawn automatically.
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;;  Notes
 ;;;    * "Linear/aligned" means DXF dimension type 0 (rotated /
 ;;;      horizontal / vertical) or 1 (aligned).  Angular, radial,
@@ -28,10 +31,11 @@
 ;;;    * Requires Visual LISP (standard in full AutoCAD).  AutoCAD LT
 ;;;      has no LISP engine and cannot run this file.
 ;;; ==================================================================
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
+(setq *dimcontinue-version* "v1.0")   ; announced on load; release_lisp.py
+                                         ; stamps the dated twin in releases/
+
 (defun dce:axis (ed)
   (if (and (member '(100 . "AcDbRotatedDimension") ed) (assoc 50 ed))
     (cdr (assoc 50 ed))                       ; rotated dim: explicit angle
@@ -78,7 +82,7 @@
     (if ocl (setvar "CLAYER"  ocl))
     (if oos (setvar "OSMODE"  oos))
     (setq *error* olderr)
-    (if (and m (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*ABORT*")))
+    (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
     (princ))
 

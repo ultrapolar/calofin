@@ -119,8 +119,8 @@ How should <subject> be treated? [Square/Radius/Cut/NotGiven] <previous>:
 
 The mark for a square corner is a small circle on the corner point
 with a leader out along the corner's outward diagonal -- the
-`spa:dim90` idiom (`lisp/spa/SPA.LSP:1671`), which is the reference
-implementation. What the leader says depends on how many corners
+`spa:dim90` idiom (`lisp/spa/SPA.LSP`; `pool:dim90` is its port),
+which is the reference implementation. What the leader says depends on how many corners
 share the treatment (per the approved sample drawing
 `square_and_not_given.dxf`):
 
@@ -205,10 +205,27 @@ namespace prefix and `TOOL` / `TOOLNAME` for its command name. In the
 under the `cal:` prefix (Back sentinel `CAL-BACK`) and a shared-build
 tool calls `cal:` instead of embedding copies -- a NEW tool starts
 there. A standalone file in `lisp/` embeds them under its own prefix,
-copied from the library so the two never drift. Proven originals:
-`pool:askkw` / `pool:asks` (`lisp/pool/POOL.LSP:522-570`),
-`pf:ensure-layer` (`lisp/abhd/abhd.lsp:1402`),
-`pool:syssave` / `pool:sysrestore` (`lisp/pool/POOL.LSP:5514`).
+copied from the library so the two never drift. Proven originals (named, not line-numbered -- lines rot):
+`pool:askkw` / `pool:asks` in `lisp/pool/POOL.LSP`,
+`pf:ensure-layer` in `lisp/abhd/abhd.lsp`,
+`pool:syssave` / `pool:sysrestore` in `lisp/pool/POOL.LSP`.
+
+**One divergence to know about before you copy `askkw`.** The
+reference below takes `hidden` third and DERIVES the bracket from
+`kws`, so the two can never drift. Most of the tree -- and
+`cal:askkw` in the library -- instead takes the bracket text `shown`
+third and hand-writes it. That is the older shape, and it is why
+section 7.2's "bracket a click cannot send" row existed at all.
+
+It is not being changed in place, on purpose: `tools/mirror_shared.py`
+swaps `pool:askkw` / `spa:askkw` / `fit:askkw` and others onto
+`cal:askkw`, so the library's arity is pinned by every generated twin
+at once -- widening or narrowing it is a coordinated pass of its own,
+not a drive-by. Until then: NEW code follows the reference; code
+calling `cal:askkw` passes `shown` and must keep it equal to `kws`
+with the spaces turned into slashes. A form-aware question wraps the
+helper (`pool:askkwf` / `spa:askkwf`) rather than growing an argument,
+for the same reason.
 
 ```lisp
 ;; Keyword question.  kws is the canonical keyword string - it is BOTH
@@ -638,98 +655,100 @@ the commit this file landed on.
 
 ### 8.1 Corner treatment -> `Square / Radius / Cut / NotGiven`
 
-| File | Today | Change |
-| --- | --- | --- |
-| `lisp/spa/SPA.LSP:1778` | `"Radius Diagonal 90 Square"` shown `Radius/Diagonal/90`, stores `"90"`, `Square` hidden | canonical set + `NotGiven`; store `Square`; sheet still prints `90%%d` |
-| ~~`lisp/pool/POOL.LSP`~~ | **DONE** — was `"Square Rounded Diag"` storing `Rounded`/`Diag` | now `pool:asktreat`: canonical set + `NotGiven`, legacy words hidden, size asks "Radius for" / "Cut face length for" |
-| `lisp/cornerstp/NORMIESTEP.lsp:725` | `"Square Rounded Diagonal 90"`, `<Square = 90 degrees>` prose default | canonical set + `NotGiven`; default `<Square>` |
-| `lisp/spa/TUTORIALSPA.LSP:235` | hard-codes the old stored values / prose | follow its parent tool |
+| File | Status |
+| --- | --- |
+| ~~`lisp/spa/SPA.LSP`~~ | **DONE** — `spa:askcorner` asks the canonical Treatment, stores the canonical words (`spa:cutp` carries the is-there-a-cut question), grew the `NotGiven` branch (`spa:dimng`) and the all-same `Typ.` policy; old words and the palette's old wire values normalised at the ask site |
+| ~~`lisp/pool/POOL.LSP`~~ | **DONE** — `pool:asktreat`: canonical set + `NotGiven`, legacy words hidden, size asks "Radius for" / "Cut face length for" |
+| ~~`lisp/cornerstp/NORMIESTEP.lsp`~~ | **DONE** — `ns-asktreat`, canonical set, legacy hidden.  A step layout carries no corner callouts, so no `?`-mark branch applies |
+| ~~`lisp/spa/TUTORIALSPA.LSP`~~ | **DONE** — teaches the canonical question, demo corners speak the new words |
 | ~~`lisp/pool/TUTORIALPOOL.LSP`~~ | **DONE** — moved with POOL, and its topic-4 pane now demonstrates all four treatments |
-| `lisp/lincheck/lincheck.lsp:249` | `"Straight Radius"` -- a different axis (step face straight vs curved), not a corner treatment | review in migration; not auto-renamed |
+| `lisp/lincheck/lincheck.lsp` | reviewed and KEPT: `"Straight Radius"` is a different axis (step face straight vs curved), not a corner treatment |
 
 Square-corner depiction (section 2 "How square corners are drawn"):
-`spa:dim90` (`lisp/spa/SPA.LSP:1671`) already draws the circled corner
-+ `90%%d` leader and is the donor implementation. To migrate:
+**DONE everywhere it applies.**  `spa:dim90` was the donor; POOL's
+port is `pool:dim90` (mark drawn only where the corner really is 90,
+the L's reflex inner corner excluded), `pool:dimng` / `spa:dimng` draw
+the `NotGiven` mark, and `pool:cutp` / `spa:cutp` keep "is there a cut
+here" apart from "is there something to record here".  SPA's old
+no-notes-when-all-square policy is gone: all square now gets one
+`90%%d Typ.` mark, per the section-2 table.
 
-* ~~POOL's lone-square-corner `_.DIMANGULAR` branch and its bare
-  `LEADER "90%%d Typ."` branch~~ — **DONE**: both became `pool:dim90`,
-  a port of `spa:dim90`. POOL draws the mark only where the corner
-  really is 90 (within `pool:*sq90-tol*`), so a rectangle's and a
-  Roman's corners are marked and a Grecian's 135° bends are not; the
-  L's reflex inner corner is excluded outright, since `pool:wedge` is
-  unsigned and would report it as 90.
-* SPA's current policy of giving a plain all-square rectangle **no**
-  corner notes at all (comment above `spa:dimcorner1`,
-  `lisp/spa/SPA.LSP:1683-1697`) changes: all square now gets one
-  `90%%d Typ.` mark.
-* SPA and NORMIESTEP still grow the `NotGiven` branch: square
-  geometry, `?` leader, `Not Given` note. (POOL: **done** —
-  `pool:dimng`, plus `pool:cutp` / `pool:anytreat` to keep "is there
-  a cut here" apart from "is there something to record here".)
-
-Downstream of the rename (must move in the same commit as SPA):
-`ui/calofin_net/SpaFormView.vb` + `ui/calofin_net/assets/shapes/fieldmap.json`
-send corner values `90`/`Radius`/`Diagonal` over the wire and gain
-`NotGiven` alongside the rename; `tests/test_spa_form.py` scripts
-them; `lisp/spa/README.md:164` describes the old words. The POOL
-palette sends no corner values, so nothing in `ui/` moved with POOL.
+The downstream moved in the same commit as SPA:
+`ui/calofin_net/SpaFormView.vb` and the shapes field map offer
+`Square/Radius/Cut/NotGiven`, and SPA still accepts the palette's OLD
+wire values (`90`/`Diagonal`) from an un-rebuilt DLL, normalised at
+the ask site like typed legacy input.  `lisp/spa/README.md` describes
+the canonical words.
 
 ### 8.2 Bracket text that a click cannot send
 
-| Site | Bracket says | Keyword is |
-| --- | --- | --- |
-| `lisp/cornerstp/CORNERSTP.lsp:592` | `Inside out/Outside in` | `Inside Outside` |
-| `lisp/cornerstp/CORNERSTP.lsp:600` | `Middle of diagonal/True corner` | `Middle True` |
-| `lisp/cornerstp/CORNERSTP.lsp:621,626` | `Parallel to diagonal/...` | `Parallel Equidistant` / `Parallel True` |
-| `covercheck.lsp:506`, `dimcheck.lsp:415`, `linfincheck.lsp:563` | `Skip rest` | `Skip` |
-| `covercheck.lsp:533`, `dimcheck.lsp:442`, `linfincheck.lsp:593` | `Move to the green +/...` | `Move Keep Pick` |
-| `lisp/pool/POOL.LSP:3811` | `SIX-sided` | `SIX` |
-| `lisp/spa/SPA.LSP:1366` | `Wall(centred)` | `Wall` |
-| `lisp/lhd/lhd.lsp:2203` | `[Stretch/Corner/Hold] or [Done]` | one list |
-| `lisp/abhd/abhd.lsp:4174` | two bracket groups | `Checks Demo` |
-
-Fix: move the explanation into the question text, leave the bracket as
-the bare keywords (section 1 rule 1).
+**DONE — the table is empty.**  Every listed site (CORNERSTP's four,
+the check family's `Skip rest` and `Move to the green +` triples,
+POOL's `SIX-sided`, SPA's `Wall(centred)` — see 7.6 — lhd's
+`[...] or [Done]`, ABHD's two-group tutorial prompt) now moves its
+explanation into the question text and leaves the bracket as the bare
+keyword list, per section 1 rule 1.  `cal:ask-yn-nav` carries the
+fixed `[Yes/No/Back/Skip]` for the grouped build.
 
 ### 8.3 Keyword spelling conflicts
 
-* `ROUnd` (POOL, `POOL.LSP:5582`) vs `ROund` (SPA, `SPA.LSP:2642`) --
-  standardize on `ROUnd` (POOL needs `RO` for `ROman`).
-* `spa/SPA.LSP:1370` `BottomLeft BottomRight TopRight TopLeft` -- no
-  usable hotkeys (all collide until 7 letters in); re-keyword in
-  migration.
-* Tutorial selectors: `Checks/Demo/Both` (perp_points) vs
-  `List/Demo/Both` (dimcheck, linfincheck) vs `Read/Demo/Both`
-  (autobead) vs `Checklist/Demo/Both` (TUTORIALSPA) vs `Checks/Demo`
-  (abhd) -- all become `Checks Demo Both` per section 3.
-* Pause: 9 spellings (`--- press Enter to continue ---` with varying
-  dashes/brackets/case across cornerstp, perp_points, abhd, dimcheck,
-  linfincheck, paddle, autobead, acady-ui, TUTORIALPOOL/SPA) -- all
-  become section 3's one spelling.
+* ~~`ROUnd` vs `ROund`~~ **DONE** -- `ROUnd` everywhere (POOL needs
+  `RO` for `ROman`); SPA's shape list and the palette's field map
+  moved together.
+* `spa:askkw "BottomLeft BottomRight TopRight TopLeft"` (the spillaway
+  corner pick) -- no usable hotkeys (all collide until 7 letters in).
+  Reviewed 2026-08-27 and DEFERRED on purpose: it works clicked or
+  typed in full, and no replacement scheme was picked.
+* ~~Tutorial selectors~~ **DONE** -- `Checks Demo Both`, default
+  `<Both>`, everywhere (dimcheck, linfincheck, autobead, abhd,
+  TUTORIALSPA, spacheck); the old words stay accepted typed in full,
+  hidden.
+* ~~Pause~~ **DONE** -- one spelling everywhere (indent allowed).
 
 ### 8.4 Structure stragglers
 
-* Version banners that `release_lisp.py` cannot see:
-  `lisp/abhd/abhd.lsp:158` `*PF-VERSION*` (uppercase -- its
-  `releases/ABHD_*.lsp` twin is currently an orphan the tool neither
-  regenerates nor prunes) and `lisp/altabcdef/ALTABCDEF.lsp` (none at
-  all). `lisp/abcdef/abcdef.lsp` carried `abcdef:*version* "4"` until
-  v5.0 moved it to `*abcdef-version* "v5.0"`, which is why it now has a
-  `releases/` twin at all. The pool/spa `"MMDDYY REV##"` form stays
+* ~~Version banners the tooling cannot see~~ **DONE** -- abhd's is now
+  `pf:*version*` (its releases/ twin regenerates and prunes like any
+  other), and every living unversioned tool took a `v1.0` banner
+  (altabcdef, autodim, ccprecheck, check_drawing, dim_continue, drone,
+  both drone_height files, lincheck, lintxtchk, tydrn, wcalst), so the
+  banner-parity and stale-release checks cover the whole tree bar the
+  deprecated acady matcher.  The pool/spa `"MMDDYY REV##"` form stays
   supported but new tools use `vN.N`.
-* `COVERCHECKVERSION` -> `COVERCHECKVER` (the one `...VERSION` outlier).
+* ~~`COVERCHECKVERSION` -> `COVERCHECKVER`~~ **DONE** (old name kept
+  as an alias).
 * Prefix styles: 15 files use `prefix-`, `paddle--` uses a double
   hyphen; new work uses `tool:`. Existing prefixes migrate only if
   their file is otherwise being reworked -- a rename touches every
-  line.
-* 12 files have no `*error*` handler (`abcdef`, `altabcdef`,
-  `ccprecheck`, `lincheck`, 8 of 9 `acady-*`); 3 handlers restore
-  nothing (`bpcallout`, `DroneHeightGPS`, `paddle`);
-  `AUTOBEAD.lsp:270` closes an undo group unguarded;
-  `BPCALLOUT.lsp:218` has a wildcard typo (`*break,` missing its
-  closing `*`).
+  line.  (Still open, on purpose.)
+* ~~4 living files with no `*error*` handler~~ **DONE** -- `abcdef`
+  and `altabcdef` plot geometry, so they took a handler AND an undo
+  group (a cancelled plot is one U now, not one per entity);
+  `ccprecheck` and `lincheck` change no setting and open no group, so
+  theirs does the only job it has -- keeping a cancel from printing a
+  raw AutoLISP message.  The 8 `acady-*` stay as-is, deprecated.
+* ~~Handlers that restore nothing~~ **DONE** where there was anything
+  to restore.  `bpcallout` gained an undo group and closes it from the
+  handler.  `paddle`'s block import clobbered `CMDECHO`/`ATTREQ` and
+  restored them on the line after the command, so a throw inside
+  `-INSERT` left both clobbered -- and `c:PADDLE`'s handler could not
+  help, because those are the import helper's own locals; the command
+  is wrapped so the restore always runs.  `DroneHeightGPS` is left
+  alone on purpose: it changes no setting and opens no group, so its
+  handler already does all there is to do.
+* ~~`AUTOBEAD.lsp` closes an undo group unguarded~~ **DONE** -- it
+  tracks `undo-open` and closes only a group it opened, in the
+  canonical casing (an error before the `_Begin` used to run `_End` on
+  nothing, erroring inside the error handler).  ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and
+  the whole cancel test is now ONE canonical spelling repo-wide, with
+  `cal:error-cancel-p` / `cal:undobegin` / `cal:undoend` in the
+  library so new code has nothing to hand-copy.  ~~XYPLOT's missing
+  handler and undo group~~ (post-standard miss, not on the old list)
+  **DONE**.
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
-  rename to `.lsp` when those files are next touched.
+  reviewed 2026-08-27 and DEFERRED on purpose: zero functional gain
+  against churn in tests/tools/startup suites; rename only with a
+  coordinated pass of its own.
 
 ### 8.5 What breaks when a keyword or prompt changes
 
@@ -751,14 +770,46 @@ several assert prompt text:
   `pool:fkeyof` per `ui/calofin_net/README.md:110`),
   `test_cdcreate.py:141` (`"ssget _I"`), `test_lincheck.py` /
   `test_ccprecheck.py` (exact report lines).
-* Palette wire values: `PoolFormView.vb:354` +
+* Palette wire values: `PoolFormView.vb` +
   `assets/bottoms/fieldmap.json` (the six `pool:*btypes*` keywords),
-  `SpaFormView.vb` + `assets/shapes/fieldmap.json` (corner
-  `90`/`Radius`/`Diagonal`).
+  `SpaFormView.vb` + `assets/shapes/fieldmap.json` (corners, now the
+  canonical `Square/Radius/Cut/NotGiven`; SPA still accepts the old
+  `90`/`Diagonal` wire values from an un-rebuilt DLL).  Both form
+  tests end by asserting every field-map key is one the routine
+  reads.
 * Prose: root `README.md` POOL/SPA sections, `lisp/pool/README.md`,
   `lisp/spa/README.md`, `lisp/cdcallout/README.md` (Back),
   `ui/calofin_net/README.md`.
-* Tooling gap to close during migration: `tools/check_lisp.py` and
-  `tools/check_scope.py` hardcode the `spa:` prefix -- take the
-  prefix from the file (or an argument) so every tool gets the
-  undefined-function/global checks, not just SPA.
+
+### 7.6 Remaining, reviewed 2026-08-27
+
+The 2026-08-27 streamlining pass closed everything above not
+explicitly kept open.  What remains, each a deliberate deferral:
+
+* SPA's spillaway corner-pick keywords (7.3) -- no hotkey scheme
+  chosen yet.
+* The uppercase `.LSP` renames and the `prefix-` style migrations
+  (7.4) -- churn without behaviour.
+* `*error*` handlers for `abcdef`, `altabcdef`, `ccprecheck`,
+  `lincheck`; restore-nothing handlers in `bpcallout`,
+  `DroneHeightGPS`, `paddle`; AUTOBEAD's unguarded undo end (7.4).
+* NORMIESTEP's Treatment question offers no Back: `ns-askkw` has no
+  back parameter, and adding one is a refactor of the step question
+  chain, not a wording fix.
+* `cal:askkw`'s signature still takes a hand-written SHOWN bracket
+  where section 4's reference derives it from the keyword list.  The
+  mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the
+  signature is a coordinated pass of its own; until then the 7.2
+  class is closed by review, not by construction.
+* The VB palette's button catalog still lacks the newer tools --
+  additions are unverifiable without a machine that can build the
+  DLL, so `ui/calofin_ui/calofin.lsp`'s roster (test-pinned) carries
+  the full list and LAZPANEL remains the zero-install surface.
+* ~~Tooling gap~~ **DONE, and further**: both checkers take the
+  prefix from the file, exit non-zero on findings (with
+  `tools/scope_baseline.txt` holding the accepted module globals), and
+  the three generators grew `--check` modes that
+  `tools/check_standards.py` runs -- a hand-edited generated twin, a
+  stale release or a drifted bundle body fails the standards check.
+  `make check` / `make parity` (`tools/run_tests.py`) are the entry
+  points.

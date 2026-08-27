@@ -2,6 +2,9 @@
 ;;;
 ;;; Command: PERPPTS
 ;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 ;;; Splits a selected line into N equally-spaced points (both endpoints
 ;;; included), then for each division point creates a new point offset
 ;;; perpendicular to the line by a user-supplied length.  The new points
@@ -109,14 +112,12 @@
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 (vl-load-com)
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.4")
+(setq *perp-version* "v0.5")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -525,7 +526,7 @@
 
   (defun *error* (msg)
     (perp:finish)
-    (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
     (princ))

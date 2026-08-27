@@ -282,19 +282,26 @@ for c in charts:
     total += len(ks)
     print("   %-10s %2d keys, all of them SPA answer keys" % (name, len(ks)))
 print("   %d keys across %d charts" % (total, len(charts)))
-# and the corner vocabulary is SPA's, not POOL's: spa:askcorner accepts
-# Radius / Diagonal / 90 (Square as a synonym it normalises away) and
-# consumes-then-ignores anything else, so a form speaking POOL's Cut /
-# NotGiven would have every corner silently re-asked at the keyboard
+# The dropdown speaks the SHEET LEGEND -- 90 / Radius / Diagonal, the
+# words printed on the paper a drafter is copying from.  SPA itself now
+# asks the canonical Treatment question (Square / Radius / Cut /
+# NotGiven, STANDARDS section 2) and normalises the legend words on the
+# way in, so the chart keeps the drafter's vocabulary while the routine
+# keeps the standard's.  What this pins is that the bridge still
+# exists: every word the dropdown can send must be one spa:askcorner
+# accepts, or the corner would be silently re-asked at the keyboard.
 treat = [str(x) for x in vm.globals['lzs:*ctreat*']]
 assert treat[0] == '(ask)', treat
 assert set(treat[1:]) == {'90', 'Radius', 'Diagonal'}, \
     "the corner dropdown does not speak SPA's corner legend: %r" % treat
-assert '"Radius Diagonal 90 Square"' in spa_src, \
-    "spa:askcorner's initget no longer offers Radius/Diagonal/90"
-assert not ({'Cut', 'NotGiven', 'Square'} & set(treat)), \
-    "POOL's corner words leaked onto a SPA form: %r" % treat
-print("   corners speak SPA's legend: %s" % ', '.join(treat[1:]))
+assert '"Square Radius Cut NotGiven' in spa_src, \
+    "spa:askcorner no longer asks the canonical Treatment question"
+for word in treat[1:]:
+    assert '"%s"' % word in spa_src, \
+        ("the chart can send %r but SPA.LSP never names it -- the "
+         "legend-to-canonical normalisation has gone" % word)
+print("   chart sends the legend (%s); SPA normalises to the canonical set"
+      % ', '.join(treat[1:]))
 
 
 print("== the generated DCL is well formed, for every chart ==")
