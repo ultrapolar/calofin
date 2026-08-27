@@ -105,6 +105,7 @@
                  "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
+                 "LAZSTEP.lsp"
                  "covercheck.lsp" "CUSTBLOCK.lsp"
                  "dimcheck.lsp" "dim_continue.lsp"
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
