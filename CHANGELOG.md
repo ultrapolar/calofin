@@ -41,6 +41,39 @@ question the form already answered.
 - The VB palette caught up with what `SPA` actually asks, and its
   catalog with the tree.
 
+### FITABHD fits the oasis pools too
+
+- **`FITABHD v2.0`** -- the type list gains `OAsis`, and the survey of a
+  continuous-tangent pool is fitted with **`OASIS`'s own ring solver**,
+  carried into `FITABHD.lsp` under its own prefix so the two files
+  cannot draw different pools from the same numbers.
+  `test_oasis_ring_is_oasis_lsp_s_own` runs both through the VM and
+  compares them element by element.
+- Step 2, which has no corners to ask about on an oasis, asks which of
+  OASIS's five families it is instead -- in OASIS's own words
+  (`Center/TopRight/CLoud/Kidney/NXTcloud`). Steps 5 and 6 are skipped
+  the way they are for a Round pool: neither shape has a wall to swing
+  or to bow.
+- **Everything else about the shape is measured.** An oasis has no walls
+  for the edge vote to find a rotation from, so the frame is swept right
+  round the pool and the best few placements fitted properly; the
+  envelope then falls out of the bounding box, because every bulge is
+  tangent to a bound.
+- **A cloud's flat bottom is found, not declared.** Every joiner is
+  carried as `U = h / (h + R)` rather than as a radius, so the straight
+  run -- the reverse arc with an infinite radius -- is just `U = 0`,
+  with no special case at either end. The report names the shape
+  `straight-bottom cloud` or `rounded-bottom cloud` from what came out.
+  Which way a kidney was given is settled the same way: both
+  parameterisations are fitted and the points choose, with the freer one
+  held to the both-ends evidence margin.
+- The report prints every fitted radius under OASIS's own question
+  wording, and all of them snap under the *feature* rule -- a measured
+  radius, never a design dimension.
+- An oasis wants at least 12 survey points, and its hopper is square to
+  the envelope rather than to a wall, so all four bounds are offered as
+  ends.
+
 ### Fixed
 
 - **Output layers are repaired, not just created.** `POOL`, `SPA` and

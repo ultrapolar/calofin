@@ -3,9 +3,10 @@
 The typed sibling of [ABHD](../abhd/). ABHD traces whatever shape the
 survey points make; **FITABHD** is told what kind of typical pool was
 surveyed -- **Rectangle, Grecian, Roman, Oval, L, Lazy L or Round**
-(POOL's own shape vocabulary) -- and *fits that type* to the points.
-The name says it: it **fit**s the survey **to** the pool types ABHD
-would otherwise have to discover arc by arc.
+(POOL's own shape vocabulary), or an **Oasis** ([OASIS](../oasis/)'s) --
+and *fits that type* to the points. The name says it: it **fit**s the
+survey **to** the pool types ABHD would otherwise have to discover arc
+by arc.
 
 ```
 Command:  FITABHD      (FITABHDVER prints the loaded version)
@@ -205,15 +206,17 @@ The six questions, then the selection:
 1. the **pool type**;
 2. the **corner treatment** (for Rectangle / L / Lazy L, and for the
    Grecian's cut-corner vertices -- the arc-ended and round templates
-   keep theirs square);
+   keep theirs square). On an **Oasis** this step asks which of OASIS's
+   five families it is instead, because an oasis has no corners at all;
 3. the **max distance** a point may sit from the fitted outline
    (capped at 2", remembered per session);
 4. the **percent of points allowed beyond** that distance (standard
    15%) -- the slack that buys whole-foot dimensions;
 5. whether the pool is **in-square or out of square** (default
-   `Outofsquare`; not asked for a Round pool, which has no walls);
+   `Outofsquare`; not asked for a Round or Oasis pool, neither of which
+   has any walls);
 6. whether the **straight walls may be bowed** (default `Yes`; not
-   asked for a Round pool either);
+   asked for those two either, for the same reason);
 
 and then the **selection**.
 
@@ -222,6 +225,74 @@ inserts on any layer, or `POINT` entities (and other blocks) on the
 `POINTS` layer. Every prompt after the first offers `Back` (`Undo`
 works too), and each step back re-opens the previous question with
 what you already answered as its default.
+
+## The oasis pools
+
+An **oasis** is the one type here with no walls at all. It is a ring of
+**bulges** -- circles pinned tangent to the envelope the pool was drawn
+in -- with a **joiner** between each consecutive pair: a smaller reverse
+arc curving back in, or the straight run of a bound both bulges touch.
+[OASIS](../oasis/) draws one from a handful of radii and two overall
+dimensions; FITABHD fits one to a survey, using OASIS's own solver so
+the two cannot draw different pools from the same numbers (a test holds
+FITABHD's copy of the ring to `OASIS.lsp` element by element).
+
+Answer `OAsis` at step 1 and step 2 asks which of OASIS's five families
+it is, in OASIS's own words:
+
+```
+  Oasis shape [Center/TopRight/CLoud/Kidney/NXTcloud] <Center>:
+```
+
+**That is the only oasis question.** Everything else about the shape is
+measured:
+
+* **The frame is searched, not voted on.** Every other type finds its
+  rotation from a vote of the survey edges, because it has walls whose
+  directions the template knows. An oasis has none, so the rotation is
+  swept right round the pool, the best few placements are fitted
+  properly, and the one that hugs the points wins. A shape that cannot
+  say its own mirror image -- `TopRight`, a cloud, a `NXTcloud` -- is
+  tried both ways round as well.
+* **The envelope comes free.** Every bulge is tangent to a bound, so
+  once the frame is known the pool's bounding box *is* the `w x h` it
+  was drawn in. It is then let off the box a little, to answer the
+  points rather than the two shots that happened to stick out furthest.
+* **A cloud's flat bottom is found, not declared.** OASIS asks whether a
+  cloud's bottom is `Straight` or `Rounded`; FITABHD does not. Every
+  joiner is carried as `U = h / (h + R)`, which runs from 0 at an
+  infinite radius to 1 at none -- and a straight run **is** the reverse
+  arc with an infinite radius. So `U = 0` is that run, with no special
+  case at either end, and the fit lands on it when the points are
+  straight. The report then names the shape `straight-bottom cloud` or
+  `rounded-bottom cloud` from what came out. The same goes for every
+  other joiner: where OASIS's `Complex` run lets you *answer* one `Line`,
+  FITABHD simply measures it, and the report prints `straight run`
+  against any joiner the points went straight through.
+* **Which way a kidney was given is not asked either.** A `TrueKidney`
+  (the top-center radius given, the two equal sides derived from having
+  to touch it) and an `AsymKidney` (two unequal sides given, the top
+  circle derived) are both fitted and the points choose -- with the
+  freer one held to the same evidence margin a both-ends cap is held to,
+  because extra freedom is not evidence.
+* **A `Center` pool's hump answers to the points.** OASIS only moves it
+  off centre on a `Complex` run; here the offset is fitted like any
+  other parameter and reported only when the points put it more than an
+  inch off.
+
+The report names the shape, both bounds of the envelope (`X bound` and
+`Y bound`, OASIS's own words for them), and every radius the fitted ring
+actually has -- under OASIS's own question wording, so
+`Top-left tangent radius` means the same thing on both sheets. All of
+them snap to friendly increments under the *feature* rule (a tenth of an
+inch of worst deviation, no allowance), because every one of them is a
+measured radius rather than a design dimension.
+
+An oasis carries up to ten fitted parameters, so it wants more of a
+survey than a rectangle does: **at least 12 points**, and a shot every
+few feet round the shell is what it is really asking for. It is also the
+slowest fit here by a wide margin -- the frame is searched rather than
+measured -- so expect it to think for a few seconds.
 
 ## Redo -- when the fit came out wrong
 
@@ -328,7 +399,15 @@ be broken up
 points on the curve), how smooth its joints have to
 stay (`fit:*tang-tol*`, `fit:*tang-steps*` -- ABHD's own numbers) and
 the K/L/M offset
-(`fit:*dim-off*`). `tests/test_fitabhd.py` checks this file and the
+(`fit:*dim-off*`). The oasis fit has its own set, all prefixed
+`fit:*oas-`: how coarsely the frame is swept and how far each round
+hunts either side of it (`fit:*oas-astep*`, `fit:*oas-aspan*`,
+`fit:*oas-apart*`, `fit:*oas-tries*`), how deep each placement is fitted
+(`fit:*oas-rounds*`, `fit:*oas-grid*`, `fit:*oas-gold*`,
+`fit:*oas-narrow*`), how many points the search rounds work on
+(`fit:*oas-coarse*`, `fit:*oas-rough*`), where a joiner stops being an
+arc and becomes a straight run (`fit:*oas-line*`, `fit:*oas-rmin*`) and
+the kidney evidence margin (`fit:*oas-edge*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
 
 ## Notes & limitations
@@ -382,7 +461,25 @@ mirror agree on the ones that shape the fit.
 * Bows are reported, not snapped: a wall's radius is whatever the
   ground made it, so it is printed as measured rather than rounded to
   a friendly number.
-* At least 6 survey points are needed (3 for Round); corner radii can
+* An oasis is fitted by SEARCHING its frame, so it is the slow one: a
+  few seconds where every other type is instant. It is also the one
+  type whose answer is not guaranteed to be the global best -- the
+  radii are found by coordinate descent, which can settle a top bulge a
+  little large against two joiners a little tight. The outline still
+  sits within an inch or two of the survey, and the miss report says
+  when it does not; `Redo` with the strays left out is the lever.
+* An oasis is fitted, never traced: it comes out as the ring OASIS can
+  draw, which is why the report reads as radii OASIS would accept. A
+  shell that wandered off its own ring shows up as points beyond
+  tolerance rather than as extra arcs -- the arc-chain rule does not
+  run on an oasis, because every element of the ring is already an arc
+  whose neighbours are tangent to it, and breaking one up would break
+  the tangency the shape is made of. Trace that one with ABHD.
+* An oasis's hopper is square to its **envelope**, not to a wall --
+  there is no wall. All four bounds are offered as ends, so the point
+  you pick at the deep end chooses which way the hopper lies.
+* At least 6 survey points are needed (3 for Round, 12 for an Oasis);
+  corner radii can
   only be measured if the corner arcs were actually shot -- a corner
   with no points on the arc fits whatever the walls allow.
 * Bottom dimensions use the current dimension style (ABHD's

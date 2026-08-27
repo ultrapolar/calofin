@@ -45475,7 +45475,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v1.9")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.0")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -45599,11 +45599,66 @@
 (setq fit:*nice-dims* '(12.0 6.0 1.0 0.5)) ; snapping increments, tried
                                    ; in order: whole feet, half feet,
                                    ; inches, half inches
-(setq fit:*types* "Rectangle Grecian ROman Oval L LAzyl ROUnd")
+(setq fit:*oas-fuzz*    1.0e-6)    ; OASIS's own fuzz, for the ring
+(setq fit:*oas-huge*    1.0e18)    ; the score of a ring that will not build
+(setq fit:*oas-line*    20.0)      ; a joiner radius past this many
+                                   ; envelope-sides has flattened into the
+                                   ; straight run it is drawn as - the
+                                   ; reverse arc with an infinite radius,
+                                   ; which is what a cloud's flat bottom is
+(setq fit:*oas-rmin*    0.04)      ; and the smallest joiner radius worth
+                                   ; hunting, as a share of that side
+(setq fit:*oas-astep* (/ pi 12.0)) ; the coarse frame sweep's step (15
+                                   ; degrees).  An oasis has no walls to
+                                   ; vote on its rotation the way every
+                                   ; other type does, so the frame is
+                                   ; searched rather than measured
+(setq fit:*oas-aspan* (/ pi 9.0))  ; how far the angle hunts either way on
+                                   ; the first round (20 degrees), halving
+                                   ; on each one after it
+(setq fit:*oas-apart* (/ pi 7.2))  ; and how far apart two coarse
+                                   ; placements have to sit (25 degrees) to
+                                   ; count as different tries: three tries
+                                   ; a few degrees apart are one try
+(setq fit:*oas-tries*   3)         ; how many of them get a real fit
+(setq fit:*oas-coarse*  26)        ; points the coarse sweep works on, and
+(setq fit:*oas-rough*   40)        ; the early rounds of a real fit: where
+                                   ; a pool SITS is a question about the
+                                   ; shape of the survey, not about how
+                                   ; many times the crew shot each wall
+(setq fit:*oas-grid*    6)         ; grid samples per parameter per pass
+(setq fit:*oas-gold*    8)         ; golden-section rounds after the grid
+(setq fit:*oas-rounds*  5)         ; shape/envelope/angle rounds per fit
+(setq fit:*oas-narrow* '(nil nil 0.35 0.20)) ; the band each round hunts,
+                                   ; as a share of the full range.  TWO
+                                   ; rounds look over the whole range
+                                   ; before any narrowing: the first fits
+                                   ; each radius against joiners still at
+                                   ; their starting guess, which parks a
+                                   ; top bulge too big and its two joiners
+                                   ; too tight - a real optimum, and a
+                                   ; whole inch worse than the pool.  The
+                                   ; second, with the joiners now roughly
+                                   ; right, walks back out of it
+(setq fit:*oas-edge*    0.8)       ; a kidney fitted the freer way must
+                                   ; beat the tighter one by this, like a
+                                   ; both-ends cap: extra freedom is not
+                                   ; evidence
+
+(setq fit:*types* "Rectangle Grecian ROman Oval L LAzyl ROUnd OAsis")
                                    ; POOL's shape vocabulary, minus the
                                    ; shapes a template cannot say
                                    ; (Octagon rides Grecian, Mutt and
-                                   ; freeform are ABHD's job)
+                                   ; freeform are ABHD's job) - and OASIS's
+                                   ; on the end, which POOL has no word for
+                                   ; because it is not POOL that draws one
+(setq fit:*oas-fams* "Center TopRight CLoud Kidney NXTcloud")
+                                   ; OASIS's own first question, in OASIS's
+                                   ; own words.  The sub-type each of two
+                                   ; of them asks for is NOT here: which
+                                   ; way a cloud's bottom goes and which
+                                   ; way a kidney is given are found from
+                                   ; the points
 (setq fit:*dim-off*     12.0)      ; the K/L/M string sits this far off
                                    ; the deep break, on the shallow side
 (if (null fit:*tol*) (setq fit:*tol* 1.0))       ; remembered per session
@@ -45613,6 +45668,7 @@
 (setq fit:*ptype*  fit:*ptype*)
 (setq fit:*treat*  fit:*treat*)
 (setq fit:*gtreat* fit:*gtreat*)
+(setq fit:*oasfam* fit:*oasfam*)
 (if (null fit:*oos*) (setq fit:*oos* T))  ; as-builts are never true
 (if (null fit:*bowed*) (setq fit:*bowed* T))  ; nor are their walls
 (if (null fit:*brk-deep*) (setq fit:*brk-deep* (cons 96.0 T)))
@@ -47447,6 +47503,675 @@
       (list (list (list (+ (car c) r) (cadr c)) 1.0)
             (list (list (- (car c) r) (cadr c)) 1.0)))))
 
+;; ---- the oasis pools -------------------------------------------------
+;; An oasis is arcs and nothing else: a ring of BULGES, each pinned
+;; tangent to the envelope it was drawn in, with a JOINER between
+;; each consecutive pair - a smaller reverse arc curving back in, or the
+;; straight run of a bound the two share.  Every joint is smooth, which
+;; is why the whole shape can be given as a handful of radii and two
+;; overall dimensions.  OASIS draws one from those numbers; this fits
+;; one to a survey, and the geometry below is OASIS's own solver,
+;; transcribed under this file's prefix so the standalone build still
+;; loads alone.  See lisp/oasis/README.md for what the five families
+;; are and why a kidney hands over at a seam.
+
+;; Intersection of circle (c1 r1) with circle (c2 r2).  side 1.0 is the
+;; point left of the c1->c2 direction, -1.0 the one right of it.  nil
+;; when the two circles never meet.
+(defun fit:oas-circint (c1 r1 c2 r2 side / d ux uy a h2 h bx by)
+  (setq d (distance c1 c2))
+  (if (> d fit:*oas-fuzz*)
+    (progn
+      (setq ux (/ (- (car c2) (car c1)) d)
+            uy (/ (- (cadr c2) (cadr c1)) d)
+            a  (/ (+ (* d d) (* r1 r1) (- (* r2 r2))) (* 2.0 d))
+            h2 (- (* r1 r1) (* a a)))
+      (if (> h2 0.0)
+        (progn
+          (setq h  (sqrt h2)
+                bx (+ (car c1) (* a ux))
+                by (+ (cadr c1) (* a uy)))
+          (list (+ bx (* side h (- uy)))
+                (+ by (* side h ux))))))))
+
+;; The unit normal along which two circles share an external tangent
+;; line, on the RIGHT of c1->c2 - the outside of a counter-clockwise
+;; ring.  Both tangent points lie along it from their own centre, so a
+;; straight run between two bulges is entirely described by it.  nil
+;; when one circle contains the other.
+(defun fit:oas-extnorm (c1 r1 c2 r2 / d ux uy k q)
+  (setq d (distance c1 c2))
+  (if (> d fit:*oas-fuzz*)
+    (progn
+      (setq ux (/ (- (car c2) (car c1)) d)
+            uy (/ (- (cadr c2) (cadr c1)) d)
+            k  (/ (- r1 r2) d)
+            q  (- 1.0 (* k k)))
+      (if (> q 0.0)
+        (progn
+          (setq q (sqrt q))
+          (list (+ (* k ux) (* q uy))
+                (- (* k uy) (* q ux))))))))
+
+;; Centre of the circle of radius RF externally tangent to both bulges
+;; and lying OUTSIDE the pool, so its near side is the reverse curve.
+(defun fit:oas-fillet (c1 r1 c2 r2 rf)
+  (fit:oas-circint c1 (+ r1 rf) c2 (+ r2 rf) -1.0))
+
+;; The joiner between two consecutive bulges, as
+;;   (kind data angle-out angle-in)
+;; kind nil for a reverse arc - data its centre - or "LINE" for a
+;; straight run, data the outward normal along it.  RF says which: a
+;; number is the reverse arc's radius, "SEAM" the internal tangency a
+;; kidney hands over at, "LINE" (or nil) the straight run.  nil when the
+;; two cannot be joined at all.
+(defun fit:oas-joiner (c1 r1 c2 r2 rf / cf m a)
+  (cond
+    ((and (= (type rf) 'STR) (= rf "SEAM"))
+     (setq a (if (> r1 r2) (angle c1 c2) (angle c2 c1)))
+     (list "SEAM" nil a a))
+    ((or (null rf) (and (= (type rf) 'STR) (= rf "LINE")))
+     (setq m (fit:oas-extnorm c1 r1 c2 r2))
+     (if m (progn (setq a (atan (cadr m) (car m)))
+                  (list "LINE" m a a))))
+    (T
+     (setq cf (fit:oas-fillet c1 r1 c2 r2 rf))
+     (if cf (list nil cf (angle c1 cf) (angle c2 cf))))))
+
+;; T for the two-bulge cloud shapes, and for the kidneys.
+(defun fit:oas-cloud-p (v)
+  (member v '("StraightBottom" "RoundedBottom")))
+(defun fit:oas-kidney-p (v)
+  (member v '("TrueKidney" "AsymKidney")))
+
+;; The smallest top-center radius a true kidney can take, and the
+;; matching side radius it derives from one past that.
+(defun fit:oas-ktrue-min (w h)
+  (+ (/ h 2.0) (/ (* w w) (* 8.0 h))))
+(defun fit:oas-ktrue-side (w h rt / b c disc r)
+  (setq b    (+ w (* 2.0 h) (* -4.0 rt))
+        c    (+ (/ (* w w) 4.0) (* (- h rt) (- h rt)) (- (* rt rt)))
+        disc (- (* b b) (* 4.0 c)))
+  (if (>= disc 0.0)
+    (progn
+      (setq r (/ (+ b (sqrt disc)) 2.0))
+      (if (> r fit:*oas-fuzz*) r))))
+
+;; The asymmetric kidney's top circle: tangent to the Y-max bound and
+;; internally tangent to both given sides.  Returns (cx R) or nil.
+(defun fit:oas-kidney-top (w h rl rr / sl sr a1 a2 b1 b2 qa qb qc d sd
+                                       roots cx rt ty al ar sw best cin)
+  (setq sl (float rl)
+        sr (- w rr)
+        a1 (- h (* 2.0 rl))
+        a2 (- h (* 2.0 rr))
+        b1 (+ (* sl sl) (* (- h rl) (- h rl)) (- (* rl rl)))
+        b2 (+ (* sr sr) (* (- h rr) (- h rr)) (- (* rr rr)))
+        qa (- a2 a1)
+        qb (* -2.0 (- (* sl a2) (* sr a1)))
+        qc (- (* a2 b1) (* a1 b2))
+        roots nil)
+  (if (< (abs qa) fit:*oas-fuzz*)
+    (if (> (abs qb) fit:*oas-fuzz*)
+      (setq roots (list (/ (- qc) qb))))
+    (progn
+      (setq d (- (* qb qb) (* 4.0 qa qc)))
+      (if (>= d 0.0)
+        (setq sd    (sqrt d)
+              roots (list (/ (+ (- qb) sd) (* 2.0 qa))
+                          (/ (- (- qb) sd) (* 2.0 qa)))))))
+  (setq best nil)
+  (foreach cx roots
+    (setq rt (cond ((> (abs a1) fit:*oas-fuzz*)
+                    (/ (+ (* cx cx) (* -2.0 sl cx) b1) (* 2.0 a1)))
+                   ((> (abs a2) fit:*oas-fuzz*)
+                    (/ (+ (* cx cx) (* -2.0 sr cx) b2) (* 2.0 a2)))))
+    (if (and rt (> rt (+ (max rl rr) fit:*oas-fuzz*)))
+      (progn
+        (setq ty (- h rt)
+              al (angle (list cx ty) (list sl rl))
+              ar (angle (list cx ty) (list sr rr))
+              sw (cal:angnorm (- al ar)))
+        (if (<= (cal:angnorm (- (/ pi 2.0) ar)) sw)
+          (progn
+            (setq cin (and (<= sl cx) (<= cx sr)))
+            (if (or (null best)
+                    (and cin (not (caddr best)))
+                    (and (eq cin (caddr best))
+                         (< (abs (- cx (/ w 2.0)))
+                            (abs (- (car best) (/ w 2.0))))))
+              (setq best (list cx rt cin))))))))
+  (if best (list (car best) (cadr best))))
+
+;; What the ring's elements are called, in the order they run round the
+;; pool: bulges at the even positions, joiners at the odd ones.
+(defun fit:oas-names (variant)
+  (cond
+    ((fit:oas-cloud-p variant) '("left" "bottom" "right" "top"))
+    ((fit:oas-kidney-p variant)
+     '("left" "bottom-center" "right" "right-seam" "top-center"
+       "left-seam"))
+    ((= variant "NXTcloud")
+     '("top-left" "left-bottom" "center-bottom" "right-bottom"
+       "right" "right-top" "center-top" "left-top"))
+    ((= variant "TopRight")
+     '("left" "bottom-center" "right" "right-side" "top-right"
+       "top-left"))
+    (T '("left" "bottom-center" "right" "top-right" "top" "top-left"))))
+
+;; Where a NXT cloud's three lobes sit - all pinned by the envelope.
+(defun fit:oas-nxtcen (w h r which)
+  (cond ((= which 0) (list r (- h r)))
+        ((= which 1) (list (* 0.5 w) r))
+        (T           (list (- w r) (* 0.5 h)))))
+
+;; The outline, counter-clockwise, each element as
+;;     (name centre radius start end kind)
+;; with the angles in radians.  kind is T for a bulge, nil for a reverse
+;; arc, "LINE" for a straight run - on which centre and radius hold the
+;; run's two ends instead.  nil when a joiner does not exist.
+(defun fit:oas-solve (w h rl rt rr ftl ftr fbc fbr off variant
+                      / nm bc br jr kt n i j js2 jj ok jp jn jl jm out)
+  (setq nm (fit:oas-names variant) ok T)
+  (cond
+    ((fit:oas-cloud-p variant)
+     (setq rl (* 0.5 h)
+           bc (list (list rl rl) (list (- w rr) rr))
+           br (list rl rr)
+           jr (list (if (= variant "StraightBottom") nil fbc) ftl)))
+    ((fit:oas-kidney-p variant)
+     (if (= variant "TrueKidney")
+       (setq rl (fit:oas-ktrue-side w h rt)
+             rr rl
+             kt (if rl (list (* 0.5 w) rt)))
+       (setq kt (fit:oas-kidney-top w h rl rr)))
+     (if (and rl rr kt)
+       (setq bc (list (list rl rl) (list (- w rr) rr)
+                      (list (car kt) (- h (cadr kt))))
+             br (list rl rr (cadr kt))
+             jr (list fbc "SEAM" "SEAM"))
+       (setq ok nil br '())))
+    ((= variant "NXTcloud")
+     (setq bc (list (fit:oas-nxtcen w h rl 0) (fit:oas-nxtcen w h rt 1)
+                    (fit:oas-nxtcen w h rr 2) (fit:oas-nxtcen w h rt 1))
+           br (list rl rt rr rt)
+           jr (list fbc fbr ftr ftl)))
+    (T
+     (setq bc (list (list rl rl) (list (- w rr) rr)
+                    (if (= variant "TopRight")
+                      (list (- w rt) (- h rt))
+                      (list (+ (* w 0.5) (cond (off) (0.0))) (- h rt))))
+           br (list rl rr rt)
+           jr (list fbc ftr ftl))))
+  (setq n (length br) i 0 js2 nil)
+  (while (< i n)
+    (setq j  (rem (1+ i) n)
+          jj (fit:oas-joiner (nth i bc) (nth i br) (nth j bc) (nth j br)
+                             (nth i jr)))
+    (if jj (setq js2 (cons jj js2)) (setq ok nil))
+    (setq i (1+ i)))
+  (setq js2 (reverse js2))
+  (if ok
+    (progn
+      (setq i 0 out nil)
+      (while (< i n)
+        (setq j   (rem (1+ i) n)
+              jp  (nth (rem (+ i n -1) n) js2)
+              jn  (nth i js2)
+              ;; the bulge: from where the joiner before it hands over to
+              ;; where the joiner after it picks up.  Those two can be the
+              ;; SAME point, and then the bulge is a point on the outline
+              ;; rather than an arc of it, with nothing drawn for it
+              out (if (> (cal:angnorm (- (nth 2 jn) (nth 3 jp)))
+                         fit:*oas-fuzz*)
+                    (cons (list (nth (* 2 i) nm) (nth i bc) (nth i br)
+                                (nth 3 jp) (nth 2 jn) T)
+                          out)
+                    out)
+              out (cond
+                    ;; a seam draws nothing - the two arcs hand straight
+                    ;; over at the touch point
+                    ((and (= (type (nth 0 jn)) 'STR) (= (nth 0 jn) "SEAM"))
+                     out)
+                    ((and (= (type (nth 0 jn)) 'STR) (= (nth 0 jn) "LINE"))
+                     (setq jl (cal:v+ (nth i bc)
+                                      (cal:v* (nth 1 jn) (nth i br)))
+                           jm (cal:v+ (nth j bc)
+                                      (cal:v* (nth 1 jn) (nth j br))))
+                     (if (> (distance jl jm) fit:*oas-fuzz*)
+                       (cons (list (nth (1+ (* 2 i)) nm) jl jm
+                                   (nth 2 jn) nil "LINE")
+                             out)
+                       out))
+                    ((> (cal:angnorm (- (angle (nth 1 jn) (nth i bc))
+                                        (angle (nth 1 jn) (nth j bc))))
+                        fit:*oas-fuzz*)
+                     (cons (list (nth (1+ (* 2 i)) nm) (nth 1 jn) (nth i jr)
+                                 (angle (nth 1 jn) (nth j bc))
+                                 (angle (nth 1 jn) (nth i bc))
+                                 nil)
+                           out))
+                    (T out))
+              i   (1+ i)))
+      (reverse out))))
+
+;; The ring as FITABHD's own closed (point bulge) list, shifted to where
+;; the envelope sits in the frame.  A bulge runs with the angle and a
+;; reverse arc against it, so the two take opposite bulge signs; a
+;; straight run takes none.
+(defun fit:oas-ring-verts (arcs x0 y0 / out a sw p)
+  (setq out nil)
+  (foreach a arcs
+    (cond
+      ((and (= (type (nth 5 a)) 'STR) (= (nth 5 a) "LINE"))
+       (setq out (cons (list (cal:v+ (nth 1 a) (list x0 y0)) 0.0) out)))
+      ((nth 5 a)
+       (setq sw (cal:angnorm (- (nth 4 a) (nth 3 a)))
+             p  (polar (nth 1 a) (nth 3 a) (nth 2 a))
+             out (cons (list (cal:v+ p (list x0 y0)) (cal:tan (/ sw 4.0)))
+                       out)))
+      (T
+       (setq sw (cal:angnorm (- (nth 4 a) (nth 3 a)))
+             p  (polar (nth 1 a) (nth 4 a) (nth 2 a))
+             out (cons (list (cal:v+ p (list x0 y0))
+                             (- (cal:tan (/ sw 4.0))))
+                       out)))))
+  (reverse out))
+
+;; ---- fitting an oasis ------------------------------------------------
+;; An oasis has no walls, so nothing FITABHD uses to READ a survey - the
+;; edge vote, the nearest-wall ICP, the corner zones - has anything to
+;; work on.  What it has instead is an ENVELOPE: every bulge is tangent
+;; to a bound, so the pool's bounding box IS the w x h it was drawn in,
+;; and once the frame is known the envelope comes free.  So the search
+;; is over the frame, and the radii answer to the points inside it.
+;;
+;; Every joiner is carried not as a radius but as U = h / (h + R), which
+;; runs from 0 at an infinite radius to 1 at none.  Two things fall out
+;; of that.  A straight run IS the reverse arc with an infinite radius
+;; (OASIS's own words), so U = 0 is that run - one parameter, no special
+;; case at either end, and a cloud's flat bottom is FOUND rather than
+;; declared.  And an even grid in U spreads its samples over the radii a
+;; pool actually has: in the radius itself the useful range has no top,
+;; and in the curvature every radius past half the pool crowds into the
+;; first cell.
+
+;; the U a radius sits at, and the radius a U wants - or the straight
+;; run it has flattened into
+(defun fit:u-of (r h) (/ h (+ h r)))
+(defun fit:oas-rad (u h m)
+  (if (<= u (fit:u-of (* fit:*oas-line* m) h))
+    "LINE"
+    (/ (* h (- 1.0 u)) u)))
+
+;; The parameters this variant fits, in the order they are swept.  What
+;; is not here the envelope pins: a cloud's left bulge is tangent to
+;; three bounds at once, a kidney's top or its sides are derived from
+;; the other, and a NXT cloud's lobes have nowhere to go but their
+;; corners.
+(defun fit:oas-keys (variant)
+  (cond
+    ((fit:oas-cloud-p variant)  '(rr utl ubc))
+    ((= variant "TrueKidney")   '(rt ubc))
+    ((= variant "AsymKidney")   '(rl rr ubc))
+    ((= variant "NXTcloud")     '(rl rt rr utl utr ubc ubr))
+    ((= variant "TopRight")     '(rl rt rr utl utr ubc))
+    (T                          '(rl rt rr off utl utr ubc))))
+
+;; T when the shape cannot say its own mirror image, so the survey has
+;; to be tried both ways round.  A Center oasis mirrored is another
+;; Center oasis with its two sides swapped, and an asymmetric kidney the
+;; same, so those two never need it.
+(defun fit:oas-mirror-p (variant)
+  (member variant '("TopRight" "StraightBottom" "RoundedBottom"
+                    "NXTcloud")))
+
+;; The ring these parameters describe, and its segments.
+(defun fit:oas-ring (prm / w h m)
+  (setq w (fit:pget prm 'w)
+        h (fit:pget prm 'h))
+  (if (and w h (> w fit:*oas-fuzz*) (> h fit:*oas-fuzz*))
+    (progn
+      (setq m (min w h))
+      (fit:oas-solve w h (fit:pget prm 'rl) (fit:pget prm 'rt)
+                     (fit:pget prm 'rr)
+                     (fit:oas-rad (fit:pget prm 'utl) h m)
+                     (fit:oas-rad (fit:pget prm 'utr) h m)
+                     (fit:oas-rad (fit:pget prm 'ubc) h m)
+                     (fit:oas-rad (fit:pget prm 'ubr) h m)
+                     (fit:pget prm 'off)
+                     (fit:pget prm 'variant)))))
+
+(defun fit:oas-segs (prm / arcs)
+  (setq arcs (fit:oas-ring prm))
+  (if arcs
+    (fit:verts-to-segs (fit:oas-ring-verts arcs (fit:pget prm 'x0)
+                                           (fit:pget prm 'y0)))))
+
+;; How far the points sit off the ring these parameters make.  A ring
+;; that cannot be built at all scores worse than any that can.
+(defun fit:oas-score (fpts prm / segs)
+  (setq segs (fit:oas-segs prm))
+  (if (or (null segs) (< (length segs) 2))
+    fit:*oas-huge*
+    (cadr (fit:outline-dev fpts segs))))
+
+;; The envelope re-read off the bounding box - what every change of
+;; frame costs, and nothing more.
+(defun fit:oas-envelope (fpts prm / bb)
+  (setq bb  (fit:bbox fpts)
+        prm (fit:pput prm 'x0 (car bb))
+        prm (fit:pput prm 'y0 (cadr bb))
+        prm (fit:pput prm 'w  (- (caddr bb) (car bb)))
+        prm (fit:pput prm 'h  (- (cadddr bb) (cadr bb))))
+  prm)
+
+;; The legal range of one parameter, given the rest.
+(defun fit:oas-range (prm key / w h m v lo)
+  (setq w (fit:pget prm 'w)
+        h (fit:pget prm 'h)
+        m (min w h)
+        v (fit:pget prm key))
+  (cond
+    ((member key '(utl utr ubc ubr))
+     (list 0.0 (fit:u-of (* fit:*oas-rmin* m) h)))
+    ((eq key 'off) (list (* -0.45 w) (* 0.45 w)))
+    ((member key '(x0 y0))
+     (list (- v (* 0.06 m)) (+ v (* 0.06 m))))
+    ((member key '(w h))
+     (list (max fit:*oas-fuzz* (- v (* 0.06 m))) (+ v (* 0.06 m))))
+    ((and (= (fit:pget prm 'variant) "TrueKidney") (eq key 'rt))
+     (setq lo (fit:oas-ktrue-min w h))
+     (list (* lo 1.0001) (* lo 4.0)))
+    ((= (fit:pget prm 'variant) "NXTcloud") (list (* 0.04 m) (* 0.60 m)))
+    ((= (fit:pget prm 'variant) "AsymKidney") (list (* 0.04 h) (* 0.60 h)))
+    (T (list (* 0.04 h) (* 0.96 h)))))
+
+;; One parameter: a coarse grid over the bracket, then golden section
+;; inside it.  The grid is what finds the basin - these objectives are
+;; not unimodal, and a golden section alone walks into the nearest ditch.
+(defun fit:oas-sweep (fpts prm key lo hi grid gold / best bs step i v s gr
+                                                    x1 x2 f1 f2 k)
+  (setq best (fit:pget prm key)
+        bs   (fit:oas-score fpts prm)
+        step (/ (- hi lo) (float grid))
+        i    0)
+  (while (<= i grid)
+    (setq v (+ lo (* step i))
+          s (fit:oas-score fpts (fit:pput prm key v)))
+    (if (< s bs) (setq bs s best v))
+    (setq i (1+ i)))
+  (if (<= gold 0)
+    (list best bs)
+    (progn
+      (setq lo (max lo (- best step))
+            hi (min hi (+ best step))
+            gr 0.6180339887
+            x1 (- hi (* gr (- hi lo)))
+            x2 (+ lo (* gr (- hi lo)))
+            f1 (fit:oas-score fpts (fit:pput prm key x1))
+            f2 (fit:oas-score fpts (fit:pput prm key x2))
+            k  0)
+      (while (< k gold)
+        (if (<= f1 f2)
+          (setq hi x2 x2 x1 f2 f1                ; shrink from the top
+                x1 (- hi (* gr (- hi lo)))
+                f1 (fit:oas-score fpts (fit:pput prm key x1)))
+          (setq lo x1 x1 x2 f1 f2
+                x2 (+ lo (* gr (- hi lo)))
+                f2 (fit:oas-score fpts (fit:pput prm key x2))))
+        (setq k (1+ k)))
+      (setq v (/ (+ lo hi) 2.0)
+            s (fit:oas-score fpts (fit:pput prm key v)))
+      (if (< s bs) (list v s) (list best bs)))))
+
+;; One pass over a list of parameters.  NARROW nil looks over the whole
+;; legal range; a number hunts that share of it either side of where the
+;; parameter already sits.
+(defun fit:oas-pass (fpts prm keys grid gold narrow / key rg lo hi v span)
+  (foreach key keys
+    (setq rg (fit:oas-range prm key)
+          lo (car rg)
+          hi (cadr rg))
+    (if narrow
+      (setq v    (fit:pget prm key)
+            span (* narrow (- hi lo))
+            lo   (max lo (- v span))
+            hi   (min hi (+ v span))))
+    (if (> (- hi lo) 1.0e-9)
+      (setq prm (fit:pput prm key
+                          (car (fit:oas-sweep fpts prm key lo hi grid
+                                              gold))))))
+  prm)
+
+;; The envelope from the bounding box, the radii from typical
+;; proportions - a place to start, not an answer.
+(defun fit:oas-start (fpts variant / prm w h m u)
+  (setq prm (fit:oas-envelope fpts (list (cons 'variant variant)
+                                         (cons 'off 0.0)))
+        w   (fit:pget prm 'w)
+        h   (fit:pget prm 'h)
+        m   (min w h)
+        u   (fit:u-of (* 0.55 h) h)
+        prm (fit:pput prm 'rl  (* 0.42 h))
+        prm (fit:pput prm 'rt  (* 0.34 h))
+        prm (fit:pput prm 'rr  (* 0.42 h))
+        prm (fit:pput prm 'utl u)
+        prm (fit:pput prm 'utr u)
+        prm (fit:pput prm 'ubc u)
+        prm (fit:pput prm 'ubr u))
+  (cond
+    ((= variant "NXTcloud")
+     (setq prm (fit:pput prm 'rl (* 0.28 m))
+           prm (fit:pput prm 'rt (* 0.28 m))
+           prm (fit:pput prm 'rr (* 0.28 m))))
+    ((= variant "TrueKidney")
+     (setq prm (fit:pput prm 'rt (* 1.35 (fit:oas-ktrue-min w h)))))
+    ((= variant "AsymKidney")
+     (setq prm (fit:pput prm 'rl (* 0.30 h))
+           prm (fit:pput prm 'rr (* 0.30 h)))))
+  prm)
+
+;; Every K'th point, so a search pays for the SHAPE of the survey rather
+;; than for how many times the crew shot each wall.
+(defun fit:oas-thin (pts n / k i out p)
+  (if (<= (length pts) n)
+    pts
+    (progn
+      (setq k (cal:ceil (/ (float (length pts)) (float n))) i 0 out nil)
+      (foreach p pts
+        (if (= 0 (rem i k)) (setq out (cons p out)))
+        (setq i (1+ i)))
+      (reverse out))))
+
+;; Hunt the frame angle either side of A, re-reading the envelope off
+;; each trial's own bounding box.  The shape parameters ride along
+;; unchanged: a degree of rotation moves the frame, not the pool.
+;; Returns (angle prm framed-points rms).
+(defun fit:oas-at-angle (pts prm a mirror / fp p2)
+  (setq fp (fit:to-frame pts a mirror)
+        p2 (fit:oas-envelope fp prm))
+  (list (fit:oas-score fp p2) p2 fp))
+
+(defun fit:oas-angle-step (pts prm a mirror span grid gold
+                           / ba bs bp bf lo hi step i t2 got gr x1 x2
+                             f1 f2)
+  (setq got (fit:oas-at-angle pts prm a mirror)
+        ba  a
+        bs  (car got)
+        bp  (cadr got)
+        bf  (caddr got)
+        lo  (- a span)
+        hi  (+ a span)
+        step (/ (- hi lo) (float grid))
+        i   0)
+  (while (<= i grid)
+    (setq t2  (+ lo (* step i))
+          got (fit:oas-at-angle pts prm t2 mirror))
+    (if (< (car got) bs)
+      (setq bs (car got) ba t2 bp (cadr got) bf (caddr got)))
+    (setq i (1+ i)))
+  (setq lo (- ba step)
+        hi (+ ba step)
+        gr 0.6180339887
+        x1 (- hi (* gr (- hi lo)))
+        x2 (+ lo (* gr (- hi lo)))
+        f1 (fit:oas-at-angle pts prm x1 mirror)
+        f2 (fit:oas-at-angle pts prm x2 mirror)
+        i  0)
+  (while (< i gold)
+    (if (<= (car f1) (car f2))
+      (setq hi x2 x2 x1 f2 f1
+            x1 (- hi (* gr (- hi lo)))
+            f1 (fit:oas-at-angle pts prm x1 mirror))
+      (setq lo x1 x1 x2 f1 f2
+            x2 (+ lo (* gr (- hi lo)))
+            f2 (fit:oas-at-angle pts prm x2 mirror)))
+    (setq i (1+ i)))
+  (setq t2 (/ (+ lo hi) 2.0) got (fit:oas-at-angle pts prm t2 mirror))
+  (if (< (car got) bs)
+    (setq bs (car got) ba t2 bp (cadr got) bf (caddr got)))
+  (list ba bp bf bs))
+
+;; One placement, fitted properly: the shape, the envelope and the frame
+;; angle in turn.  The early rounds run on a thinned survey and the last
+;; one puts every point back.
+(defun fit:oas-fit-at (pts variant a mirror rounds grid gold
+                       / allp fpts prm keys r nw got)
+  (setq allp pts
+        pts  (fit:oas-thin pts fit:*oas-rough*)
+        fpts (fit:to-frame pts a mirror)
+        prm  (fit:oas-start fpts variant)
+        keys (fit:oas-keys variant)
+        r    0)
+  (while (< r rounds)
+    (if (= r (1- rounds))
+      (setq pts allp fpts (fit:to-frame pts a mirror)))
+    (setq nw  (nth (min r (1- (length fit:*oas-narrow*))) fit:*oas-narrow*)
+          prm (fit:oas-pass fpts prm keys grid gold nw)
+          prm (fit:oas-pass fpts prm '(x0 y0 w h) 4 gold nil)
+          got (fit:oas-angle-step pts prm a mirror
+                                  (/ fit:*oas-aspan* (float (1+ r))) 6 gold)
+          a    (car got)
+          prm  (cadr got)
+          fpts (caddr got)
+          r    (1+ r)))
+  (setq prm (fit:oas-pass fpts prm keys grid gold 0.12)
+        prm (fit:oas-pass fpts prm '(x0 y0 w h) 4 gold nil))
+  (list prm a (fit:oas-score fpts prm)))
+
+;; The best N coarse placements that sit in DIFFERENT basins.  Three
+;; tries all within a few degrees of each other are one try.
+(defun fit:oas-spread (cands n / out c hit o)
+  (setq out nil)
+  (foreach c cands
+    (if (< (length out) n)
+      (progn
+        (setq hit nil)
+        (foreach o out
+          (if (and (eq (caddr o) (caddr c))
+                   (< (abs (cal:signed-dang (cadr o) (cadr c)))
+                      fit:*oas-apart*))
+            (setq hit T)))
+        (if (not hit) (setq out (cons c out))))))
+  (reverse out))
+
+;; sort (score angle mirror) triples ascending by score (insertion sort)
+(defun fit:oas-sort (lst / out x)
+  (foreach x lst (setq out (fit:oas-ins x out)))
+  out)
+(defun fit:oas-ins (x lst)
+  (cond ((null lst) (list x))
+        ((< (car x) (car (car lst))) (cons x lst))
+        (T (cons (car lst) (fit:oas-ins x (cdr lst))))))
+
+;; Which rings a family can come out as.  A cloud's flat bottom is not
+;; one of them: it is the rounded bottom whose radius came out infinite,
+;; and the fit finds that on its own.
+(defun fit:oas-variants (family)
+  (cond ((= family "CLoud")  '("RoundedBottom"))
+        ((= family "Kidney") '("TrueKidney" "AsymKidney"))
+        (T (list family))))
+
+;; T when variant A has more freedom than variant B.
+(defun fit:oas-freer (a b)
+  (> (length (fit:oas-keys a)) (length (fit:oas-keys b))))
+
+;; Every placement the family allows; the one that hugs the points wins.
+;; Where a family comes two ways the two compete, and the freer one only
+;; wins by a clear margin - extra freedom is not evidence.
+(defun fit:fit-oasis (pts family / qs best variant cands k a mirror fq prm
+                                   got rms edge n mirrors c)
+  (setq qs   (fit:oas-thin pts fit:*oas-coarse*)
+        best nil)
+  (foreach variant (fit:oas-variants family)
+    (setq cands   nil
+          n       (cal:ceil (/ (* 2.0 pi) fit:*oas-astep*))
+          mirrors (if (fit:oas-mirror-p variant) '(nil T) '(nil))
+          k       0)
+    (while (< k n)
+      (setq a (* k fit:*oas-astep*))
+      (foreach mirror mirrors
+        ;; the JOINERS are in the coarse pass, not just the bulges: a
+        ;; placement ranked on its bulges alone puts the pool's own
+        ;; rotation outside the tries about as often as inside them
+        (setq fq    (fit:to-frame qs a mirror)
+              prm   (fit:oas-pass fq (fit:oas-start fq variant)
+                                  (fit:oas-keys variant) 3 0 nil)
+              cands (cons (list (fit:oas-score fq prm) a mirror) cands)))
+      (setq k (1+ k)))
+    (foreach c (fit:oas-spread (fit:oas-sort (reverse cands))
+                               fit:*oas-tries*)
+      (setq got  (fit:oas-fit-at pts variant (cadr c) (caddr c)
+                                 fit:*oas-rounds* fit:*oas-grid*
+                                 fit:*oas-gold*)
+            prm  (car got)
+            a    (cadr got)
+            rms  (caddr got)
+            edge (if (and best
+                          (fit:oas-freer variant
+                                         (fit:pget (car best) 'variant)))
+                   fit:*oas-edge*
+                   1.0))
+      (if (or (null best) (< rms (* (cadr best) edge)))
+        (setq best (list prm rms a (caddr c))))))
+  best)
+
+;; The whole result for an oasis survey, in FITABHD's own shape.
+(defun fit:oas-result (pts family / got prm)
+  (setq got (fit:fit-oasis pts family))
+  (if got
+    (progn
+      (setq prm (car got))
+      (list (cons 'kind 'oasis) (cons 'type "OAsis") (cons 'fam family)
+            (cons 'prm prm) (cons 'angle (caddr got))
+            (cons 'mirror (cadddr got)) (cons 'valid T) (cons 'bows nil)
+            (cons 'rms (cadr got))
+            (cons 'verts (fit:oas-ring-verts (fit:oas-ring prm)
+                                             (fit:pget prm 'x0)
+                                             (fit:pget prm 'y0)))))))
+
+;; T when a joiner came out flat enough to be drawn as a straight run.
+(defun fit:oas-line-p (prm key / h)
+  (setq h (fit:pget prm 'h))
+  (= (type (fit:oas-rad (fit:pget prm key) h
+                        (min (fit:pget prm 'w) h)))
+     'STR))
+
+;; How the fitted shape is named in the report - OASIS's own words, with
+;; the cloud's bottom read off the fit rather than declared.
+(defun fit:oas-label (prm / v)
+  (setq v (fit:pget prm 'variant))
+  (cond ((= v "TopRight")   "top-right-bulge")
+        ((= v "NXTcloud")   "NXT cloud")
+        ((= v "TrueKidney") "true kidney")
+        ((= v "AsymKidney") "asymmetric kidney")
+        ((fit:oas-cloud-p v)
+         (if (fit:oas-line-p prm 'ubc)
+           "straight-bottom cloud"
+           "rounded-bottom cloud"))
+        (T "center-bulge")))
+
 ;; ---- one result to rule them all -------------------------------------
 ;; A fit result is an assoc list keyed by symbols: kind (poly / cap /
 ;; round), type, angle, mirror, and the kind's own parameters.  The
@@ -47632,6 +48357,10 @@
 (defun fit:fit-type (pts ptype treat oos / dpts prm tour a0 best cfg a fpts
                                        res dev worst rms edge)
   (setq dpts (cal:dedupe pts fit:*exact-eps*))
+  (if (= ptype "OAsis")
+    ;; an oasis has no walls, so TREAT carries what step 2 asked for
+    ;; instead: which of OASIS's five families the survey is
+    (fit:oas-result dpts treat)
   (if (= ptype "ROUnd")
     (progn
       (setq prm (fit:fit-round dpts))
@@ -47685,7 +48414,7 @@
       ;; angle fitted as well, or the flat end comes out crooked
       (if (and oos best (eq (fit:rget best 'kind) 'cap))
         (setq best (fit:refine-cap-angle dpts ptype treat best)))
-      best)))
+      best))))
 
 ;; ---- nice dimensions -------------------------------------------------
 ;; After the free fit, each headline dimension is snapped to the first
@@ -47707,9 +48436,32 @@
     ((= t2 "ROman")     '(WID BLEN RAD))
     ((= t2 "Oval")      '(WID BLEN))
     ((= t2 "ROUnd")     '(RAD))
+    ((= t2 "OAsis")
+     (cons 'LEN (cons 'WID (fit:oas-dimkeys (fit:rget res 'prm)))))
     (T nil)))
 
-(defun fit:get-dim (res key / t2 offs prm)
+;; An oasis's headline dimensions are its envelope and then every radius
+;; the fitted shape actually has - which is the shape's own parameter
+;; list, read back.  A joiner that came out as a straight run has no
+;; radius to snap, and drops out here.
+(defun fit:oas-dimkeys (prm / out key)
+  (setq out nil)
+  (foreach key (fit:oas-keys (fit:pget prm 'variant))
+    (if (and (fit:oas-dimkey key)
+             (or (not (member key '(utl utr ubc ubr)))
+                 (not (fit:oas-line-p prm key))))
+      (setq out (cons (fit:oas-dimkey key) out))))
+  (reverse out))
+
+;; the dimension name of one oasis parameter, and back again
+(defun fit:oas-dimkey (key)
+  (cdr (assoc key '((rl . RL) (rt . RT) (rr . RR) (utl . FTL)
+                    (utr . FTR) (ubc . FBC) (ubr . FBR)))))
+(defun fit:oas-key (dim)
+  (cdr (assoc dim '((RL . rl) (RT . rt) (RR . rr) (FTL . utl)
+                    (FTR . utr) (FBC . ubc) (FBR . ubr)))))
+
+(defun fit:get-dim (res key / t2 offs prm d)
   (setq t2 (fit:rget res 'type))
   (cond
     ((eq (fit:rget res 'kind) 'poly)
@@ -47737,6 +48489,20 @@
                             (fit:pget prm 'Re2)
                             (fit:pget prm 'Lx))))
        ((eq key 'RAD) (fit:pget prm 'r))))
+    ((eq (fit:rget res 'kind) 'oasis)
+     (setq prm (fit:rget res 'prm))
+     (cond
+       ((eq key 'LEN) (fit:pget prm 'w))
+       ((eq key 'WID) (fit:pget prm 'h))
+       ((member (fit:oas-key key) '(utl utr ubc ubr))
+        ;; a joiner is carried as its U, and a straight run has no
+        ;; radius to offer at all
+        (setq d (fit:oas-rad (fit:pget prm (fit:oas-key key))
+                             (fit:pget prm 'h)
+                             (min (fit:pget prm 'w) (fit:pget prm 'h))))
+        (if (= (type d) 'REAL) d))
+       ((fit:oas-key key)                  ; a bulge radius is itself
+        (fit:pget prm (fit:oas-key key)))))
     ((eq key 'RAD) (fit:pget (fit:rget res 'prm) 'r))))
 
 ;; A copy of RES with the dimension forced to V and its outline
@@ -47824,6 +48590,29 @@
                (fit:endcap-verts prm t2 (fit:rget res 'both)
                                  (fit:rget res 'bows)
                                  (fit:rget res 'chains))))
+    ((eq (fit:rget res 'kind) 'oasis)
+     ;; the envelope keeps its centre, so a snapped length grows each
+     ;; way; a radius is just itself, carried back into the U the ring
+     ;; is parameterised on
+     (setq prm (fit:rget res 'prm))
+     (cond
+       ((eq key 'LEN)
+        (setq d   (- v (fit:pget prm 'w))
+              prm (fit:pput prm 'w v)
+              prm (fit:pput prm 'x0 (- (fit:pget prm 'x0) (/ d 2.0)))))
+       ((eq key 'WID)
+        (setq d   (- v (fit:pget prm 'h))
+              prm (fit:pput prm 'h v)
+              prm (fit:pput prm 'y0 (- (fit:pget prm 'y0) (/ d 2.0)))))
+       ((member (fit:oas-key key) '(utl utr ubc ubr))
+        (setq prm (fit:pput prm (fit:oas-key key)
+                            (fit:u-of v (fit:pget prm 'h)))))
+       ((fit:oas-key key)
+        (setq prm (fit:pput prm (fit:oas-key key) v))))
+     (setq res (fit:rput res 'prm prm))
+     (fit:rput res 'verts
+               (fit:oas-ring-verts (fit:oas-ring prm) (fit:pget prm 'x0)
+                                   (fit:pget prm 'y0))))
     (T
      (setq prm (fit:pput (fit:rget res 'prm) 'r v)
            res (fit:rput res 'prm prm))
@@ -47845,7 +48634,8 @@
     (setq v (fit:get-dim res key))
     (if (and v (> v 0.0))
       (progn
-        (setq feature (member key '(SIZE VSIZE CUT RAD))
+        (setq feature (member key '(SIZE VSIZE CUT RAD RL RT RR
+                                    FTL FTR FBC FBR))
               spend   (if feature 0 allow)
               before  (fit:outline-dists fpts (fit:res-fsegs res))
               done    nil)
@@ -47858,9 +48648,11 @@
                 (if (> v2 0.0)
                   (progn
                     (setq trial (fit:set-dim res key v2)
-                          after (fit:outline-dists
-                                  fpts (fit:res-fsegs trial)))
-                    (if (fit:snap-ok before after tol allow feature)
+                          after (if (fit:rget trial 'verts)
+                                  (fit:outline-dists
+                                    fpts (fit:res-fsegs trial))))
+                    (if (and after
+                             (fit:snap-ok before after tol allow feature))
                       (progn
                         (setq w (fit:held-worst after spend))
                         (if (or (null bw) (< w bw))
@@ -48412,11 +49204,87 @@
                                                    (fit:pget prm 'r))
                                                 (fit:pget prm 'Re))))
                              out)))))
+    ((eq (fit:rget res 'kind) 'oasis)
+     (setq out (fit:oas-lines res)))
     (T
      (setq out (list (cons "Diameter"
                            (fit:ftin (* 2.0 (fit:pget
                                               (fit:rget res 'prm) 'r))))))))
   (reverse out))
+
+;; The lines an oasis fit needs: which of the five families it came out
+;; as, the envelope it sits in, and then every radius the ring actually
+;; has - a joiner that flattened out named as the straight run it is,
+;; because that is what will be drawn.
+(defun fit:oas-lines (res / prm out key nm v)
+  (setq prm (fit:rget res 'prm)
+        ;; "X bound" and "Y bound" are what OASIS calls these, and an
+        ;; oasis has no length or width the way a rectangle does
+        out (list (cons "Y bound" (fit:ftin (fit:pget prm 'h)))
+                  (cons "X bound" (fit:ftin (fit:pget prm 'w)))
+                  (cons "Oasis shape" (fit:oas-label prm))))
+  (foreach key (fit:oas-keys (fit:pget prm 'variant))
+    (setq nm (fit:oas-name key (fit:pget prm 'variant)))
+    (cond
+      ((null nm))
+      ((eq key 'off)
+       ;; the hump is centred unless the points put it somewhere else
+       (setq v (fit:pget prm 'off))
+       (if (> (abs v) 1.0)
+         (setq out (cons (cons nm (strcat (fit:ftin (abs v))
+                                          (if (< v 0.0) " left of centre"
+                                            " right of centre")))
+                         out))))
+      ;; a JOINER is carried as its U, and may have flattened out
+      ((member key '(utl utr ubc ubr))
+       (setq out (cons (cons nm (if (fit:oas-line-p prm key)
+                                  "straight run"
+                                  (fit:ftin
+                                    (fit:oas-rad
+                                      (fit:pget prm key)
+                                      (fit:pget prm 'h)
+                                      (min (fit:pget prm 'w)
+                                           (fit:pget prm 'h))))))
+                       out)))
+      ;; a bulge radius is itself
+      (T (setq out (cons (cons nm (fit:ftin (fit:pget prm key))) out)))))
+  out)                                  ; fit:dims-lines reverses this
+
+;; What one oasis parameter is called on the sheet - OASIS's own
+;; question wording, which follows the shape because "top-right" is the
+;; joiner on one family and the bulge itself on another.
+(defun fit:oas-name (key variant)
+  (cond
+    ((fit:oas-cloud-p variant)
+     (cdr (assoc key '((rr . "Right bulge radius")
+                       (utl . "Top tangent radius")
+                       (ubc . "Bottom radius")))))
+    ((= variant "NXTcloud")
+     (cdr (assoc key '((rl . "Top-left lobe radius")
+                       (rt . "Center lobe radius")
+                       (rr . "Right lobe radius")
+                       (ubc . "Left-bottom tangent radius")
+                       (ubr . "Right-bottom tangent radius")
+                       (utr . "Right-top tangent radius")
+                       (utl . "Left-top tangent radius")))))
+    ((fit:oas-kidney-p variant)
+     (cdr (assoc key '((rl . "Left bulge radius")
+                       (rt . "Top-center radius")
+                       (rr . "Right bulge radius")
+                       (ubc . "Bottom-center tangent radius")))))
+    (T
+     (cdr (assoc key
+                 (list (cons 'rl "Left bulge radius")
+                       (cons 'rt (if (= variant "TopRight")
+                                   "Top-right bulge radius"
+                                   "Top bulge radius"))
+                       (cons 'rr "Right bulge radius")
+                       (cons 'utl "Top-left tangent radius")
+                       (cons 'utr (if (= variant "TopRight")
+                                    "Right-side tangent radius"
+                                    "Top-right tangent radius"))
+                       (cons 'ubc "Bottom-center tangent radius")
+                       (cons 'off "Top bulge off centre")))))))
 
 ;; "A-B", "B-C", ... for wall I of an N-wall ring.
 (defun fit:wall-name (i n)
@@ -48794,6 +49662,30 @@
         (setq out (cons (list (fit:from-frame o a m)
                               (fit:ffd u a m) (fit:ffd v a m) s1 s2)
                         out))))
+    (if (eq (fit:rget res 'kind) 'oasis)
+      ;; an oasis is all curve, so there is no wall to square a hopper
+      ;; to - the ENVELOPE is the pool's own frame, and all four of its
+      ;; bounds are offered, so the picked deep end chooses which way
+      ;; the hopper lies
+      (progn
+        (setq prm (fit:rget res 'prm)
+              o   (list (fit:pget prm 'x0) (fit:pget prm 'y0))
+              u   (fit:pget prm 'w)
+              v   (fit:pget prm 'h))
+        (setq out
+          (list
+            (list (fit:from-frame (cal:v+ o (list u (/ v 2.0))) a m)
+                  (fit:ffd '(-1.0 0.0) a m) (fit:ffd '(0.0 1.0) a m)
+                  (/ v -2.0) (/ v 2.0))
+            (list (fit:from-frame (cal:v+ o (list 0.0 (/ v 2.0))) a m)
+                  (fit:ffd '(1.0 0.0) a m) (fit:ffd '(0.0 1.0) a m)
+                  (/ v -2.0) (/ v 2.0))
+            (list (fit:from-frame (cal:v+ o (list (/ u 2.0) v)) a m)
+                  (fit:ffd '(0.0 -1.0) a m) (fit:ffd '(1.0 0.0) a m)
+                  (/ u -2.0) (/ u 2.0))
+            (list (fit:from-frame (cal:v+ o (list (/ u 2.0) 0.0)) a m)
+                  (fit:ffd '(0.0 1.0) a m) (fit:ffd '(1.0 0.0) a m)
+                  (/ u -2.0) (/ u 2.0)))))
     (progn                                ; cap types: end lines
       ;; each leg takes its cross extent from the walls AT ITS OWN END,
       ;; so a pool built wider at one end gets a hopper square to the
@@ -48825,7 +49717,7 @@
                               (fit:ffd '(0.0 1.0) a m)
                               (- (fit:cap-half prm (fit:pget prm 'Lx)))
                               (fit:cap-half prm (fit:pget prm 'Lx)))
-                        out)))))
+                        out))))))
   out)
 
 ;; leg point -> world
@@ -48999,6 +49891,20 @@
           (princ "\n  from the points (too small to believe stays sharp).")
           (setq v (cal:asktreat "the cut corners"
                                 (if fit:*gtreat* fit:*gtreat* "Radius") T)))
+         ((= ptype "OAsis")
+          ;; an oasis has no corners at all, so step 2 asks the one
+          ;; thing the points cannot be READ without: which of OASIS's
+          ;; five families was surveyed.  Everything a family comes two
+          ;; ways over - a cloud's bottom, which way a kidney is given -
+          ;; is found rather than asked.
+          (princ (strcat "\n\n  Step 2 of " n
+                         " - which oasis is it?  The shape says how to"))
+          (princ "\n  read the survey; the points put every radius where they")
+          (princ "\n  want it.  A cloud's flat bottom and which way a kidney is")
+          (princ "\n  given are measured, not asked.")
+          (setq v (cal:askkw "Oasis shape" fit:*oas-fams*
+                             "Center/TopRight/CLoud/Kidney/NXTcloud"
+                             (if fit:*oasfam* fit:*oasfam* "Center") T)))
          (T (setq v "Square")))
        (if (eq v 'CAL-BACK)
          (progn (princ "\nStepping back one step.")
@@ -49008,6 +49914,7 @@
            (if (member ptype '("Rectangle" "L" "LAzyl"))
              (setq fit:*treat* v))
            (if (= ptype "Grecian") (setq fit:*gtreat* v))
+           (if (= ptype "OAsis") (setq fit:*oasfam* v))
            (setq step 3))))
       ((= step 3)
        (princ (strcat "\n\n  Step 3 of " n
@@ -49057,8 +49964,8 @@
        ;; little to answer its own points - and a pool that really is
        ;; square still comes out square, because a swing is kept only
        ;; where the points prove it.
-       (if (= ptype "ROUnd")
-         (setq v nil)                      ; a circle has no walls
+       (if (member ptype '("ROUnd" "OAsis"))
+         (setq v nil)                      ; neither one has any walls
          (progn
            (princ (strcat "\n\n  Step 5 of " n
                           " - is the pool in-square, or out of square?"))
@@ -49077,9 +49984,9 @@
                 (setq step 4))
          (setq oos v step 6)))
       ((= step 6)
-       (if (= ptype "ROUnd")
-         (setq v nil)                      ; a round pool has no walls
-         (progn
+       (if (member ptype '("ROUnd" "OAsis"))
+         (setq v nil)                      ; nor has either one a wall
+         (progn                            ; that could be bowed
            (princ (strcat "\n\n  Step 6 of " n
                           " - may the straight walls be bowed?"))
            (princ "\n  A wall drawn dead straight is very often a very long")
@@ -49182,6 +50089,14 @@
   (princ (strcat "\nFITABHD " *fitabhd-version* " loaded."))
   (princ))
 
+;; How many survey points a type needs before its template means
+;; anything: three for a circle, and an oasis carries up to ten fitted
+;; parameters, so it wants a shot every few feet round the shell.
+(defun fit:min-points (ptype)
+  (cond ((= ptype "ROUnd") 3)
+        ((= ptype "OAsis") 12)
+        (T 6)))
+
 (defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
                     ss n res verts en swept ans again dpts
                     fit-pts fit-npt fit-ptnames fit-omit)
@@ -49220,10 +50135,10 @@
      (princ (strcat "\nNothing usable selected (POINT entities on layer "
                     fit:*point-layer* " or \"" fit:*point-block*
                     "\" block insertions).")))
-    ((< (setq n (fit:gather ss)) (if (= ptype "ROUnd") 3 6))
+    ((< (setq n (fit:gather ss)) (fit:min-points ptype))
      (princ (strcat "\nOnly " (itoa n) " survey point(s) found - a "
                     ptype " template needs at least "
-                    (itoa (if (= ptype "ROUnd") 3 6)) ".")))
+                    (itoa (fit:min-points ptype)) ".")))
     (T
      (if (> n 150)
        (princ (strcat "\nFITABHD: " (itoa n)
@@ -49235,20 +50150,33 @@
              ptype (nth 0 set) treat (nth 1 set) tol (nth 2 set)
              pct   (nth 3 set) oos   (nth 4 set) bowed (nth 5 set)
              dpts  (cal:dedupe (fit:active) fit:*exact-eps*))
-       (if (< (length dpts) (if (= ptype "ROUnd") 3 6))
+       (if (< (length dpts) (fit:min-points ptype))
          (princ (strcat "\nToo few points left in the fit ("
                         (itoa (length dpts))
                         ") - put some back on the next Redo."))
          (progn
-           (princ (strcat "\nFitting the " ptype
-                          " template every way it can sit, keeping the"
+           (princ (strcat "\nFitting the "
+                          (if (= ptype "OAsis")
+                            (strcat treat " oasis")
+                            (strcat ptype " template"))
+                          " every way it can sit, keeping the"
                           " best..."))
            (setq res   (fit:fit-and-snap dpts ptype treat tol pct oos
                                          bowed)
-                 verts (fit:res-world-verts res))
-           (cal:ensure-layer fit:*out-layer* 2)
-           (setq en (fit:tag-mine (fit:make-pline verts fit:*out-layer* 2)))
-           (fit:report res dpts tol (fit:rget res 'allow))))
+                 verts (if res (fit:res-world-verts res)))
+           (if (null verts)
+             ;; nothing the type can say passes through these points at
+             ;; all - an oasis family that is not this pool, most often
+             (progn
+               (princ (strcat "\nFITABHD: no " ptype
+                              " outline could be built from these points."))
+               (princ "\n  Try another shape, or leave the strays out and Redo.")
+               (setq res nil))
+             (progn
+               (cal:ensure-layer fit:*out-layer* 2)
+               (setq en (fit:tag-mine (fit:make-pline verts
+                                                      fit:*out-layer* 2)))
+               (fit:report res dpts tol (fit:rget res 'allow))))))
        (setq ans (cal:askkw "\nKeep this fit, or Redo it?"
                          "Keep Redo Erase" "Keep/Redo/Erase"
                          (if res "Keep" "Redo") nil))
