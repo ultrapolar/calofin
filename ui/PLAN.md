@@ -1,5 +1,24 @@
 # Making the palette real
 
+> **DONE, 2026-08-27.** Both halves shipped: `pool:*form*` /
+> `pool:run-with-answers` and `spa:*form*` / `spa:run-with-answers`
+> exist in the canonical routines, `tests/test_pool_form.py` and
+> `tests/test_spa_form.py` pass at both tiers, and the palette has
+> been reconciled with what SPA actually asks. The design below
+> (D1-D6) is what got built, including the wrapper that keeps
+> `askkw` at five arguments and the consume-once rule that stops
+> `Back` deadlocking - both of which earned their place. Kept as the
+> record of why the shape is what it is.
+>
+> Three things went further than this plan scoped. The store reaches
+> POOL's gate questions too (`crec`, `mirror`, `perfect`, `cmode`,
+> `gcross`, `dstyle`, `sstyle`), the three step routines have stores
+> of their own with a step **count**, and the zero-install DCL forms
+> - `LAZFORM`, `LAZSPA`, `LAZSTEP` - now drive all five routines
+> without a DLL. The "out of scope" list at the foot of this file is
+> still accurate about what was deliberately left alone, except that
+> palette catalog drift has since been fixed.
+
 An execution plan for the week of 2026-08-24. Scope: close the gap
 between `ui/calofin_net/` and the canonical `lisp/pool/POOL.LSP` /
 `lisp/spa/SPA.LSP`, so the two failing form tests go green and the
@@ -14,7 +33,7 @@ palette's forms actually drive the routines. No new palette surface.
 | Wire format — `LispBridge.vb` | **done.** Alist literal, invariant-culture numbers, three-state nil handling |
 | Shape art + field maps — `assets/` | **done.** 12 shapes, 12 bottoms, fractional field positions |
 | Form views — `SpaFormView.vb`, `PoolFormView.vb` | **done.** Collect answers, build the call |
-| **The receiving end in Lisp** | **does not exist** |
+| **The receiving end in Lisp** | ~~**does not exist**~~ — **built**, see the note at the top |
 
 ## The finding
 
@@ -363,9 +382,9 @@ Named so they do not creep in:
 - **The nine POOL shapes "awaiting phase 3".** Shape, corners and
   cross dims stay at the command line. The Pool tab is the bottom
   only, as its README says.
-- **`STANDARDS.md` §7 migration.** The corner-treatment rename to
+- **`STANDARDS.md` §8 migration.** The corner-treatment rename to
   `Square/Radius/Cut/NotGiven` touches `SpaFormView.vb` and the shape
-  field map, and §7.5 lists both form tests as things that break. It
+  field map, and §8.5 lists both form tests as things that break. It
   is a much larger job with its own sequencing. Do not start it inside
-  this week — but read §7.5 before renaming anything, because the wire
+  this week — but read §8.5 before renaming anything, because the wire
   values `90`/`Radius`/`Diagonal` are pinned in three places.

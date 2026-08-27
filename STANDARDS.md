@@ -11,7 +11,7 @@ the corner question alone shipped in four vocabularies.
 > LISP source and its prompts.
 
 Rules for **new work are mandatory**. Existing files are brought in
-line by the migration phase (section 7 is its worklist); until a file
+line by the migration phase (section 8 is its worklist); until a file
 is migrated, its old wording stands -- do not half-convert a file in
 passing.
 
@@ -502,12 +502,141 @@ suspected: `ensure-layer` had 12 copies in 4 behavioral families,
 1,200-1,400 identical lines pairwise, `abhd`/`lhd` share ~1,259 lines,
 POOL/SPA duplicated the whole ask layer.
 
-## 7. Migration appendix -- current divergences
+## 7. Forms: the answer store and the DCL that fills it
+
+A tool that asks a long chain of measurements can take them from a
+form instead. Five do now -- POOL, SPA, CORNERSTP, HEMISTEP,
+NORMIESTEP -- and four GUIs fill them in: `LAZFORM`, `LAZSPA`,
+`LAZSTEP` and the VB palette. The conventions below are what they all
+follow. Read them before adding a store or a form; they were arrived
+at by getting several of them wrong first.
+
+### 7.1 The three states, and why `assoc` is the test
+
+A store is one global alist per tool, set before the command runs and
+read by its ask helpers:
+
+| In the form | On the wire | The helper must |
+| --- | --- | --- |
+| left empty | the key is absent | fall through and prompt, as usual |
+| explicitly `NA` | `(key . nil)` | return nil without prompting |
+| filled in | `(key . 84.0)` | return the value without prompting |
+
+`(assoc key store)` separates absent from present-and-nil; `(cdr
+(assoc ...))` alone does not. Getting this backwards makes the
+half-filled form either impossible or silent, and the half-filled form
+is the whole point -- an operator fills in what the order sheet gives
+them and answers the rest at the keyboard.
+
+### 7.2 An answer is removed as it is used
+
+Consume-once, not mark-as-used. Two things depend on it:
+
+- **`Back` would otherwise deadlock.** Back up from question 5 to
+  question 4, find question 4 form-supplied, and the flow answers it
+  instantly and walks forward to 5 again, with no key to press to
+  escape.
+- **A range check would otherwise loop forever.** `pool:askdeep` and
+  `pool:askc2` re-ask through the same helper when a value fails their
+  check; on the second pass the store is empty, so the correction is
+  typed rather than re-fed.
+
+One rule, applied in the take, covering both.
+
+### 7.3 Clear it on **both** exits
+
+Normal exit and the `*error*` handler. A store that outlives its run
+means the next command typed at the keyboard silently answers itself
+with last time's numbers: a wrong drawing with no error message, which
+is the worst failure this feature has.
+
+### 7.4 Hook the helper, not the call site
+
+Ask helpers are the chokepoint -- hooking them covers every question
+at once. Where a helper has no key of its own, derive one, and be
+strict about it: `pool:fkeyof` reads the letter a prompt leads with,
+and insists on exactly `"<letter> - "` so that *"Total pool length
+(arc tip to arc tip)"* returns nil and prompts, rather than eating
+whatever sits under `t` in the store.
+
+**Never widen a helper the mirror swaps for a `cal:` one.**
+`cal:askkw` takes five arguments, so `spa:askkw` and `pool:askkw`
+cannot grow a sixth: the generated twin would call the library with an
+argument it does not accept and die at the first keyword question --
+loading cleanly, failing in the drawing. Wrap it instead
+(`pool:askkwf`, `spa:askkwf`); the wrapper is not in the swap table,
+while the call *inside* it is rewritten like any other, so it works at
+both tiers with no special casing.
+
+### 7.5 A form value is not trusted
+
+Validate at the take: a keyword against the live `initget` list (and
+return the canonical spelling), a distance with `numberp`, a treatment
+against the set that question offers. An invalid value falls through
+to the prompt. Two traps found the hard way:
+
+- `askseqb` stores what the form gives it **without validating**, so a
+  `nil` on a question that must have an answer reaches arithmetic. A
+  form must not send `NA` where NA is not a real answer.
+- A geometry cap outranks the form: a corner size the walls cannot fit
+  is re-asked at the keyboard even though the form supplied it.
+
+### 7.6 What a form may never answer
+
+Anything picked in the drawing: entity selections, insertion base
+points, the side to draw toward. The operator's own snaps are live
+there and a form has nothing to say about them. Say so on the page
+rather than letting it look like an omission.
+
+### 7.7 DCL, for the GUIs that have no DLL
+
+`LAZFORM`, `LAZSPA`, `LAZSTEP` and `LAZPANEL` write their `.dcl` to
+the temp folder at run time and delete it on the way out, so there is
+nothing to ship and nothing to `NETLOAD`. What DCL will and will not
+do, all of it learned in this repo:
+
+- **No absolute positioning, no overlap, no z-order.** A box cannot
+  sit on a picture. The nearest thing is cutting the drawing into
+  bands at the rows where its horizontal dimensions run and wedging
+  real edit boxes between them.
+- **An image tile is not retained.** Any repaint clears it and there
+  is no expose callback, so the drawing must be redrawn after
+  anything that paints over it -- a list unrolling, a toggle. Never
+  use an `image_button` for artwork: it repaints on mouse-enter and
+  the drawing vanishes the first time the cursor crosses it.
+- **No raster and no text primitive.** An image tile takes vectors or
+  a slide; letters are stroked from line segments.
+- **The dialog font is proportional** (answered on AutoCAD 2018+ by
+  `LAZASCII`), so character art shears. Alignment must come from tile
+  widths, never from counting glyphs.
+- **No tab tile.** A tab is a button that closes the page and reopens
+  the next; `done_dialog` reports where the dialog stood and
+  `new_dialog` takes it back, so it reopens where the user left it.
+- **A dialog larger than the screen does not open, and DCL will not
+  scroll.** Nothing in the repo can measure a screen, so width and
+  height are budgeted by hand and asserted in the tests. This is the
+  failure mode most likely to reach an operator.
+- `(ask)` is the dropdown's version of an empty box, and is its
+  default: it sends nothing and the routine asks.
+- A greyed box is a box whose value is **not sent**. Compute the dead
+  set once and let both the greying and the sending read it, so the
+  two cannot drift into a value that travels and is never read.
+
+### 7.8 Test it as equivalence
+
+The claim a form makes is that the same job in gives the same geometry
+out. So test it that way: run the routine twice, once through the
+prompts and once through the form, and compare every entity left in
+the drawing. `tests/test_pool_form.py` is the reference. Assert also
+that a supplied question was **not** asked -- geometry alone will not
+notice a form that answered nothing.
+
+## 8. Migration appendix -- current divergences
 
 The worklist for the modify-the-lisps phase. Line numbers are as of
 the commit this file landed on.
 
-### 7.1 Corner treatment -> `Square / Radius / Cut / NotGiven`
+### 8.1 Corner treatment -> `Square / Radius / Cut / NotGiven`
 
 | File | Today | Change |
 | --- | --- | --- |
@@ -545,7 +674,7 @@ send corner values `90`/`Radius`/`Diagonal` over the wire and gain
 them; `lisp/spa/README.md:164` describes the old words. The POOL
 palette sends no corner values, so nothing in `ui/` moved with POOL.
 
-### 7.2 Bracket text that a click cannot send
+### 8.2 Bracket text that a click cannot send
 
 | Site | Bracket says | Keyword is |
 | --- | --- | --- |
@@ -562,7 +691,7 @@ palette sends no corner values, so nothing in `ui/` moved with POOL.
 Fix: move the explanation into the question text, leave the bracket as
 the bare keywords (section 1 rule 1).
 
-### 7.3 Keyword spelling conflicts
+### 8.3 Keyword spelling conflicts
 
 * `ROUnd` (POOL, `POOL.LSP:5582`) vs `ROund` (SPA, `SPA.LSP:2642`) --
   standardize on `ROUnd` (POOL needs `RO` for `ROman`).
@@ -578,7 +707,7 @@ the bare keywords (section 1 rule 1).
   linfincheck, paddle, autobead, acady-ui, TUTORIALPOOL/SPA) -- all
   become section 3's one spelling.
 
-### 7.4 Structure stragglers
+### 8.4 Structure stragglers
 
 * Version banners that `release_lisp.py` cannot see:
   `lisp/abhd/abhd.lsp:158` `*PF-VERSION*` (uppercase -- its
@@ -602,7 +731,7 @@ the bare keywords (section 1 rule 1).
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
   rename to `.lsp` when those files are next touched.
 
-### 7.5 What breaks when a keyword or prompt changes
+### 8.5 What breaks when a keyword or prompt changes
 
 Check these before renaming anything -- the tests validate scripted
 answers against the live `initget` list

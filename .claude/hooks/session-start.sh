@@ -65,7 +65,9 @@ echo "Checks:  python3 tools/check_standards.py   (tiers in step)"
 echo "         python3 tools/check_lisp.py <f>    python3 tools/check_scope.py <f>"
 echo "Tests:   python3 tests/test_shared.py       (whole grouped build in one session)"
 echo "         CALOFIN_LISP_ROOT=shared python3 tests/<t>.py   (parity vs standalone)"
-echo "Known failing on a clean checkout, not yours: test_pool_form.py, test_spa_form.py"
+echo "         nothing is expected to fail on a clean checkout"
+echo "Forms:   POOL, SPA and the step routines all take an answer store;"
+echo "         a prompt edit shows up in test_*_form.py and the LAZ* suites"
 echo
 
 # ---- the guardrail --------------------------------------------------

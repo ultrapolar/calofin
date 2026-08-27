@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.7")
+(setq *lazpanel-version* "v2.8")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -172,6 +172,8 @@
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
+    ("LAZSPA"           "Spa from a filled-in chart")
+    ("LAZSTEP"          "Steps from a filled-in drawing")
     ("LHD"              "Laser outline fit")
     ("LINCHECK"         "Line checklist")
     ("LINFINCHECK"      "Liner finish review")
@@ -241,6 +243,7 @@
       "BPCALLOUT"
       )
      ("Steps"
+      "LAZSTEP"
       "CORNERSTP"
       "HEMISTEP"
       "NORMIESTEP"
@@ -288,6 +291,7 @@
      ("Spa"
      (""
       "SPA"
+      "LAZSPA"
       "CUSTBLOCK"
       "AUTODIM"
       "SPACHECK"
@@ -327,6 +331,7 @@
       "LAZFORM"
       "LAZTXT"
       "LAZFORMCOVER"
+      "LAZSPA"
       "SPA"
       "POOL"
       "POOLCOVER"
@@ -341,6 +346,7 @@
       "LHD"
       "PADDLE"
       "AUTOBEAD"
+      "LAZSTEP"
       "CORNERSTP"
       "HEMISTEP"
       "NORMIESTEP"

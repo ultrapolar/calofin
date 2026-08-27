@@ -129,8 +129,10 @@ changing a routine.
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
 | `LISPLAB`, `LISPLABVER` | `lisp/lisplab/` | Learn AutoLISP, not a drafting tool: two lessons - getting things out of the drawing databases (`entget`/`ssget`/the symbol tables/dictionaries/xdata), and putting a list in order (`vl-sort` and its duplicate trap, then bubble, selection, insertion, merge and quick sort written out). Each is an outline plus a worked example that draws a sample and sorts what it reads back |
-| `LAZFORM`, `LAZFORMCOVER`, `LAZTXT`, `LAZASCII`, `LAZFORMVER` | `lisp/lazform/` | Fill a dimension chart in and draw the pool from it. Eight charts - Rectangle, True Oval, Roman, both Grecians, True L Left, Round and Octagon - each the one off the paper: outline, hopper, dimension chain with its letters. The chart is the background: it is sliced into horizontal bands and each dimension's box is wedged into the band its letter sits on, so you type the number where the letter is on the paper. Corners get a dropdown each - `Square`, `Radius`, `Cut`, `NotGiven` - and the size box beside it un-greys only for `Radius` and `Cut`. Fill in what you know, leave the rest blank, press Insert: `POOL` runs and asks only for the gaps. Picking a bottom type greys the boxes that bottom will never ask for - a Normal hopper draws no side view, so C, D and C2 grey out; a Sport asks a different plan chain (E2 F2 G F1 E1) so H, F and E grey out - and a greyed value is not sent. That table is read off POOL's own `pool:btmspec`, so it cannot drift. `NA` in a box means not measured and is passed through as such; a blank box just means ask. Drawn with `vector_image` from a table of lines, so there is no artwork file to ship. `LAZFORMCOVER` is the same form for a cover sheet: POOL runs with its pool-bottom gate already closed - `LAZTXT` is the same form drawn out of TILES instead of vectors - the pool is a real boxed cluster with the hopper nested inside it and the fields in the drawing, which buys retention (nothing in it is an image tile, so nothing in it can be wiped by a repaint) at the cost of the outline being a rectangle whatever the pool is. `LAZASCII` is a probe, not a tool: it asks whether this AutoCAD's dialog font is fixed-pitch, which decides whether the chart could be drawn in characters instead of vectors - worth knowing because DCL never retains an image tile but always retains a text one - see `lisp/lazform/README.md` |
-| `LAZPANEL`, `LAZBUTTON`, `LAZPIN`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 57 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Tabs come in two rows: the **jobs** (Pool / Cover / Spa / Rest), each laid out in columns that follow the work - shape, points, steps, dims and check - and the **categories** (Layout / Points / Dimensions / Checking, the same four group names as the VB palette) holding the whole roster filed by what each tool is. A tool that serves two jobs sits on both, so 57 commands make 128 buttons; `Rest` is computed as whatever the three named jobs leave over. A command not loaded in this session is greyed out. A click closes the panel, runs the command exactly as if typed, and the panel then REOPENS itself on the same page at the same position - Close is the way out. A **Pinned** row on every page carries the few tools you run all day, remembered between sessions in the registry; `Pin...` or `LAZPIN` edits it. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
+| `LAZFORM`, `LAZFORMCOVER`, `LAZTXT`, `LAZASCII`, `LAZFORMVER` | `lisp/lazform/` | Fill a dimension chart in and draw the pool from it. Eight charts - Rectangle, True Oval, Roman, both Grecians, True L Left, Round and Octagon - each the one off the paper: outline, hopper, dimension chain with its letters. The chart is the background: it is sliced into horizontal bands and each dimension's box is wedged into the band its letter sits on, so you type the number where the letter is on the paper. Corners get a dropdown each - `Square`, `Radius`, `Cut`, `NotGiven` - and the size box beside it un-greys only for `Radius` and `Cut`; Roman carries four rows, the Grecians and the Octagon carry two collective ones (body corners, end-tip corners) that fan out to the eight individual questions when the pool is out of square, and picking any of them arms POOL's own corner-record gate. Cross dims have a mode dropdown and their boxes, out-of-square only. Fill in what you know, leave the rest blank, press Insert: `POOL` runs and asks only for the gaps. **One rule decides what is live**: the bottom type, the in-square toggle and the mode dropdowns together compute the dead set, `mode_tile` greys exactly it, and exactly it is withheld from POOL - so a greyed box cannot be a value that travels and is never read. The bottom half of that rule is read off POOL's own `pool:btmspec`, so it cannot drift: a Normal hopper draws no side view, so C, D and C2 grey out; a Sport asks a different plan chain, so H, F and E grey out and its own E2-F2-F1-E1 boxes come alive. `NA` in a box means not measured and is passed through as such; a blank box just means ask. Drawn with `vector_image` from a table of lines, so there is no artwork file to ship. `LAZFORMCOVER` is the same form for a cover sheet: POOL runs with its pool-bottom gate already closed - `LAZTXT` is the same form drawn out of TILES instead of vectors - the pool is a real boxed cluster with the hopper nested inside it and the fields in the drawing, which buys retention (nothing in it is an image tile, so nothing in it can be wiped by a repaint) at the cost of the outline being a rectangle whatever the pool is. `LAZASCII` is a probe, not a tool: it asks whether this AutoCAD's dialog font is fixed-pitch, which decides whether the chart could be drawn in characters instead of vectors - worth knowing because DCL never retains an image tile but always retains a text one - see `lisp/lazform/README.md` |
+| `LAZSPA`, `LAZSPAVER` | `lisp/lazspa/` | `LAZFORM`'s argument applied to `SPA`: fill a chart in, press Insert, and the spa is drawn. Three charts - Rectangle, Octagon, Round - drawn the same way, with the boxes wedged into the dimension rows. The Rectangle carries its four corner dropdowns, spelled the way SPA spells them (`90`, `Radius`, `Diagonal` - the `Square`/`Cut`/`NotGiven` rename has not reached SPA yet). Every page also carries the water's-edge/cover-size mode, the second outline (by offset or by dimensions, keyed per shape), the lap gap, auto-hinge, and the grade and taper the Spa Cover Details block would otherwise be read for. Two traps are handled rather than inherited: SPA stores a form's `nil` without validating it, so `NA` on a question that must have an answer is demoted to an empty box instead of reaching arithmetic; and the Round flow only *peeks* at `A`, so filling it is what asks for an out-of-round spa - which is what the label says. The block pick and the base point stay in the drawing - see `lisp/lazspa/README.md` |
+| `LAZSTEP`, `LAZSTEPVER` | `lisp/lazstep/` | **Say how many steps, then fill the drawing in.** Page one picks the step type (`CORNERSTP`, `HEMISTEP` or `NORMIESTEP`), takes the count, and asks that type's once-only questions - direction, bench, corner treatment, the width that is the same for every step. Page two is then *built for that count*: the plan with N treads and their widths, and the side profile with N risers and the N+1 drops, every dimension carrying its letter until you type a number over it. Change the count and the drawing is regenerated, keeping what still has a step to belong to. This is what the step routines could never be asked before - they had no count, only a tread prompt you stopped answering - so the stores take one now and the form supplies it. Eight steps is the ceiling, and past four the tread chain staggers onto two rows, because DCL will not scroll a dialog wider than the screen. The walls, the curve, the side to draw toward and the profile's pick all stay in the drawing - see `lisp/lazstep/README.md` |
+| `LAZPANEL`, `LAZBUTTON`, `LAZPIN`, `LAZICON`, `LAZPANELVER` | `lisp/lazpanel/` | A clickable button panel with the 62 headline drafting commands above - the zero-install GUI: the dialog is plain DCL that the file writes for itself at run time, so there is no DLL to `NETLOAD` and no second file to ship. Loading it also puts a one-button toolbar ("LazPanel", an orange hexagon it generates itself) on screen that you can drag anywhere or dock - click it to open the panel, or `LAZBUTTON` to re-summon it. Tabs come in two rows: the **jobs** (Pool / Cover / Spa / Rest), each laid out in columns that follow the work - shape, points, steps, dims and check - and the **categories** (Layout / Points / Dimensions / Checking, the same four group names as the VB palette) holding the whole roster filed by what each tool is. A tool that serves two jobs sits on both, so 62 commands make 138 buttons; `Rest` is computed as whatever the three named jobs leave over. A command not loaded in this session is greyed out. A click closes the panel, runs the command exactly as if typed, and the panel then REOPENS itself on the same page at the same position - Close is the way out. A **Pinned** row on every page carries the few tools you run all day, remembered between sessions in the registry; `Pin...` or `LAZPIN` edits it. Off the panel on purpose: the satellites (`TUTORIAL*`, `*VER`, `*RESCUE`, `-CFG`/`-SETUP`, `DCE`, `STOCKLIST`), the `DD*` drone-height toolset, `LISPLAB` and the deprecated matcher - see `lisp/lazpanel/README.md` |
 
 ### Going back a step
 
@@ -252,7 +254,7 @@ file rather than one each:
 
 | Release | Holds |
 | --- | --- |
-| `releases/STEPS_081926_REV23-26-16.lsp` | `CORNERSTP.lsp` (REV23), `HEMISTEP.lsp` (REV26), `NORMIESTEP.lsp` (REV16) |
+| `releases/STEPS_082726_REV31-33-26.lsp` | `CORNERSTP.lsp` (REV31), `HEMISTEP.lsp` (REV33), `NORMIESTEP.lsp` (REV26) |
 
 APPLOAD that single file and all six commands (`CORNERSTP`,
 `HEMISTEP`, `NORMIESTEP` and their three `TUTORIAL...` walkthroughs)
@@ -277,25 +279,31 @@ everything else releases one file per source.
 
 The palette needs its DLL `NETLOAD`ed on every machine. For a
 button panel with nothing to install, see `lisp/lazpanel/` above:
-`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 56
+`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 62
 headline drafting commands, and puts its own one-button toolbar on
 screen to open it; the VB palette remains the richer surface (docks,
-stays open while a tool runs, POOL/SPA forms).
+stays open while a tool runs, POOL/SPA forms). For forms with nothing
+to install, see `LAZFORM`, `LAZSPA` and `LAZSTEP` above.
 
 **Status:** `lisp/pool/POOL.LSP` and `lisp/spa/SPA.LSP` are the
 canonical, actively-developed versions of those tools. The receiving
 end a form needs - an answer store the ask helpers read before they
-prompt - now exists in POOL: `pool:*form*`, `pool:run-with-answers`,
-and the hooks described under `LAZFORM` above. `tests/test_pool_form.py`
-passes at both tiers because of it.
+prompt - now exists in **both**, and in the three step routines as
+well: `pool:*form*` / `pool:run-with-answers`, `spa:*form*` /
+`spa:run-with-answers`, and `*cs-form*` / `*hs-form*` / `*ns-form*`
+with their own `...-run-with-answers`. `tests/test_pool_form.py`,
+`tests/test_spa_form.py` and `tests/test_steps_form.py` all pass at
+both tiers because of it.
 
-SPA has no such store yet, so `tests/test_spa_form.py` still fails on a
-clean checkout - a known, open gap (the same work again on the smaller
-surface), not a bug in either side.
+Every store keeps the same three-state contract: a key that is absent
+is asked for as usual, `(key . nil)` answers NA without a prompt, and
+`(key . 84.0)` answers the measurement. An answer is **removed as it
+is used**, which is what stops `Back` deadlocking on a question the
+form already answered and lets a value failing a range check be
+retyped at the keyboard.
 
-`ui/PLAN.md` is the execution plan for closing it - what is built, what
-is missing, and the day-by-day for making the forms actually drive the
-routines.
+`ui/PLAN.md` was the execution plan for the POOL and SPA halves; the
+design it records (D1-D6) is what got built.
 
 ## Tools (`tools/`)
 
@@ -364,7 +372,14 @@ python3 tests/test_mesh_layers.py     # Merlin layered export
 python3 tests/test_dewrangler.py      # mesh dewrangler
 python3 tests/test_pool_form.py       # a form drives POOL and draws what
                                       # the command line draws
-python3 tests/test_spa_form.py        # palette <-> SPA (currently failing, see above)
+python3 tests/test_spa_form.py        # the same for SPA, palette wire format
+                                      # included
+python3 tests/test_steps_form.py      # the same for all three step routines,
+                                      # including the step count
+python3 tests/test_lazspa.py          # LAZSPA - the spa chart drawn and
+                                      # checked, and the spa it draws
+python3 tests/test_lazstep.py         # LAZSTEP - the drawing generated for
+                                      # every step count, and the steps it draws
 python3 tests/test_shared.py          # shared/ build - everything loads together
 ```
 

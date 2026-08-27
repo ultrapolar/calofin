@@ -266,6 +266,21 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
+    # The spa chart and the step form are LAZFORM's shape applied to
+    # SPA and to the three step routines: they draw their own pictures
+    # and ask nothing through the library, so each twin is the file
+    # plus the shared banner.  Listed for the same reason LAZFORM is --
+    # a twin nobody generates is a twin that drifts by hand.
+    'LAZSPA': {
+        'src': 'lisp/lazspa/LAZSPA.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
+    'LAZSTEP': {
+        'src': 'lisp/lazstep/LAZSTEP.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
 }
 
 # Some call sites need more than a rename.  cal:syssave takes the

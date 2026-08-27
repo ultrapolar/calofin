@@ -288,7 +288,7 @@
 ;;;
 ;;;  THE VOCABULARY IS SPA'S OWN -- 90 / Radius / Diagonal, the words on
 ;;;  the order sheet's corner legend and in spa:askcorner's initget.  It
-;;;  is NOT POOL's Square / Radius / Cut / NotGiven: STANDARDS.md 7.1
+;;;  is NOT POOL's Square / Radius / Cut / NotGiven: STANDARDS.md 8.1
 ;;;  renames those, but that is separate, tracked work and SPA has not
 ;;;  had it.  A form that spoke POOL's words here would have every
 ;;;  corner answer consumed and thrown away by spa:askcorner's member

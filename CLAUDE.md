@@ -177,11 +177,15 @@ python3 tests/test_shared.py    # the whole grouped build in one session,
                                 # and the one-file bundle
 ```
 
-`tests/test_spa_form.py` fails on a clean checkout. That is a known open
-gap: a form can answer SPA's questions only once SPA has the answer store
-POOL now has (`spa:*form*`, the hooks in its ask helpers). Don't treat that
-failure as something your change caused, and don't "fix" it by editing the
-canonical routine to match the palette.
+**Nothing under `tests/` is expected to fail on a clean checkout.**
+`test_pool_form.py` and `test_spa_form.py` were both carved out here
+once, while the routines had no answer store to receive a form; POOL,
+SPA and the three step routines all have one now, so a failure in any
+of them IS your change.
 
-`tests/test_pool_form.py` used to be listed here too and now passes at both
-tiers - if it starts failing, that IS your change.
+The form tests are the ones that catch a prompt edit: `test_pool_form.py`,
+`test_spa_form.py`, `test_steps_form.py`, and the GUI suites
+`test_lazform.py`, `test_lazspa.py` and `test_lazstep.py` on top of
+them. If you change a prompt's wording, its keyword set or its order,
+run those before anything else - and fix the form, never the canonical
+routine, if the two disagree.

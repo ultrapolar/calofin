@@ -107,7 +107,7 @@ the keyboard, because the store has already been consumed.
 
 > **The vocabulary is SPA's, not POOL's.** `90` / `Radius` / `Diagonal`
 > are the words on the order sheet's corner legend and in
-> `spa:askcorner`'s `initget`. STANDARDS.md 7.1 renames POOL's set to
+> `spa:askcorner`'s `initget`. STANDARDS.md 8.1 renames POOL's set to
 > `Square / Radius / Cut / NotGiven`, but that is separate, tracked work
 > and **SPA has not had it**. A form speaking POOL's words here would
 > have every corner answer consumed and thrown away by `spa:askcorner`'s
