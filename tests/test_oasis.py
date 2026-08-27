@@ -234,26 +234,26 @@ def close(a, b, tol=TOL):
 
 def solved(vm, w, h, rl, rt, rr, ftl, ftr, fbc, off=0.0):
     """Call oasis:solve inside the VM and hand back what it built."""
-    return vm.loads('(oasis:solve %s "Center")'
-                    % " ".join("%.10f" % v
-                               for v in (w, h, rl, rt, rr, ftl, ftr, fbc,
-                                         off)))
+    return vm.loads('(oasis:solve %s nil %.10f "Center")'
+                    % (" ".join("%.10f" % v
+                                for v in (w, h, rl, rt, rr, ftl, ftr, fbc)),
+                       off))
 
 
 def crossing_pairs(vm, *dims, **kw):
     """The pairs of arcs oasis:crossings says run through each other."""
-    r = vm.loads('(oasis:crossings (oasis:solve %s "Center"))'
-                 % " ".join("%.10f" % v
-                            for v in tuple(dims) + (kw.get('off', 0.0),)))
+    r = vm.loads('(oasis:crossings (oasis:solve %s nil %.10f "Center"))'
+                 % (" ".join("%.10f" % v for v in dims),
+                    kw.get('off', 0.0)))
     return set() if r is None else {tuple(sorted(p)) for p in r}
 
 
 def overruns(vm, w, h, *radii, **kw):
     """What oasis:overruns says reaches past the envelope."""
-    r = vm.loads('(oasis:overruns (oasis:solve %s "Center") %.6f %.6f)'
-                 % (" ".join("%.6f" % v
-                             for v in (w, h) + radii + (kw.get('off', 0.0),)),
-                    w, h))
+    r = vm.loads('(oasis:overruns (oasis:solve %s nil %.6f "Center")'
+                 ' %.6f %.6f)'
+                 % (" ".join("%.6f" % v for v in (w, h) + radii),
+                    kw.get('off', 0.0), w, h))
     return [] if r is None else [(x[0], x[2], x[1]) for x in r]
 
 
@@ -983,7 +983,8 @@ def test_the_shape_is_the_first_question():
     vm = newvm()
     run(vm, script(), 'shape question')
     first = vm.prompts[0][0]
-    assert first == ('\nWhich shape is it? [Center/TopRight/CLoud/Kidney] '
+    assert first == ('\nWhich shape is it?'
+                     ' [Center/TopRight/CLoud/Kidney/NXTcloud] '
                      '<Center>: '), repr(first)
     assert vm.prompts[1][0] == ('\nSimple or complex? [Simple/Complex/Back]'
                                 ' <Simple>: '), repr(vm.prompts[1][0])
@@ -1049,7 +1050,7 @@ def test_top_right_outline_is_still_tangent_continuous_and_simple():
         v2 = (nc[0] - joint[0], nc[1] - joint[1])
         worst = max(worst, abs(v1[0] * v2[1] - v1[1] * v2[0]) / (r * nr))
     assert worst <= 1.0e-9, worst
-    r = vm.loads('(oasis:crossings (oasis:solve %s 0.0 "TopRight"))'
+    r = vm.loads('(oasis:crossings (oasis:solve %s nil 0.0 "TopRight"))'
                  % " ".join("%.10f" % v for v in TR_MEASURE))
     assert r is None, r
     print("ok  tr tangency -> closed, tangent-continuous and simple")
@@ -1167,7 +1168,7 @@ def test_both_clouds_fill_their_envelope():
         vm = newvm()
         run(vm, script(measure=measure, variant=variant), variant)
         over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f %.4f 0.0 %.4f'
-                        ' %.4f 0.0 %.4f 0.0 "%s") %.4f %.4f)'
+                        ' %.4f 0.0 %.4f nil 0.0 "%s") %.4f %.4f)'
                         % (CL_X, CL_Y, CL_RLEFT, measure[2], measure[3],
                            measure[4] if len(measure) > 4 else 0.0, variant,
                            CL_X, CL_Y))
@@ -1184,7 +1185,7 @@ def test_the_flat_bottom_is_the_bound_itself():
     m = vm.loads('(oasis:extnorm (list 120.0 120.0) 120.0'
                  ' (list 276.0 84.0) 84.0)')
     assert close(m[0], 0.0, 1.0e-12) and close(m[1], -1.0, 1.0e-12), m
-    ring = vm.loads('(oasis:solve %.1f %.1f %.1f 0.0 84.0 72.0 0.0 0.0 0.0'
+    ring = vm.loads('(oasis:solve %.1f %.1f %.1f 0.0 84.0 72.0 0.0 0.0 nil 0.0'
                     ' "StraightBottom")' % (CL_X, CL_Y, CL_RLEFT))
     flat = ring[1]
     assert flat[0] == 'bottom' and flat[5] == 'LINE', flat
@@ -1349,11 +1350,11 @@ def test_true_kidney_fills_its_envelope():
     vm = newvm()
     run(vm, script(measure=KD_TRUE, variant='TrueKidney'), 'kidney bounds')
     over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f nil %.4f nil nil'
-                    ' nil %.4f 0.0 "TrueKidney") %.4f %.4f)'
+                    ' nil %.4f nil 0.0 "TrueKidney") %.4f %.4f)'
                     % (KD_X, KD_Y, KD_TOP, KD_BOT, KD_X, KD_Y))
     assert over is None, over
     cross = vm.loads('(oasis:crossings (oasis:solve %.4f %.4f nil %.4f nil'
-                     ' nil nil %.4f 0.0 "TrueKidney"))'
+                     ' nil nil %.4f nil 0.0 "TrueKidney"))'
                      % (KD_X, KD_Y, KD_TOP, KD_BOT))
     assert cross is None, cross
     print("ok  kd envelope -> fills 0,0 - %g,%g, simple, no crossings"
@@ -1378,7 +1379,7 @@ def test_asym_kidney_derives_its_top_circle():
         assert close(math.dist(side[0], top[0]), top[1] - side[1], 1e-6), side
     # and the whole thing still fills the envelope exactly
     over = vm.loads('(oasis:overruns (oasis:solve %.4f %.4f 96.0 nil 72.0'
-                    ' nil nil %.4f 0.0 "AsymKidney") %.4f %.4f)'
+                    ' nil nil %.4f nil 0.0 "AsymKidney") %.4f %.4f)'
                     % (KD_X, KD_Y, KD_BOT, KD_X, KD_Y))
     assert over is None, over
     print("ok  asym kidney -> top circle derived at cx=%.3f R=%.3f,"
@@ -1526,7 +1527,8 @@ def test_the_first_kidney_preview_is_never_blank():
             '             $f (oasis:fillin $a))'
             ' (oasis:solve (nth 0 $f) (nth 1 $f) (nth 2 $f) (nth 3 $f)'
             '              (nth 4 $f) (nth 5 $f) (nth 6 $f) (nth 7 $f)'
-            '              (nth 8 $f) (oasis:variant $a)))' % (w, h, tail))
+            '              (nth 8 $f) (nth 9 $f) (oasis:variant $a)))'
+            % (w, h, tail))
 
     blank, n = [], 0
     for wf in range(8, 68, 2):
@@ -1691,7 +1693,8 @@ def test_the_hump_moves_off_centre():
         assert close(top[0][1], REF_Y - 132.0), (off, top)
         # the envelope is still absolute
         assert vm.loads('(oasis:overruns (oasis:solve %.1f %.1f 96.0 132.0'
-                        ' 108.0 72.0 36.0 60.0 %.1f "Center") %.1f %.1f)'
+                        ' 108.0 72.0 36.0 60.0 nil %.1f "Center")'
+                        ' %.1f %.1f)'
                         % (REF_X, REF_Y, off, REF_X, REF_Y)) is None, off
     print("ok  hump offset -> the top bulge moves by exactly the offset,"
           " left negative")
@@ -1762,7 +1765,7 @@ def test_a_pinched_bulge_is_left_out_of_the_drawing():
     # place both of them touch, and both lie along the Y-max bound
     assert all(close(p[1], REF_Y) for e in ring[3:] for p in e[1:]), ring
     assert vm.loads('(oasis:pinched (oasis:solve %.1f %.1f 120.0 200.0 120.0'
-                    ' "LINE" "LINE" "LINE" 72.0 "Center") "Center")'
+                    ' "LINE" "LINE" "LINE" nil 72.0 "Center") "Center")'
                     % (REF_X, REF_Y)) == ['top']
     print("ok  pinched     -> a bulge touched at one point is left out, and"
           " named")
@@ -1803,7 +1806,7 @@ def test_a_straight_run_is_crossed_like_any_arc():
         vm.loads('(oasis:crossings %s)' % ring)
     # and the reference pool, complex or not, is still simple
     assert vm.loads('(oasis:crossings (oasis:solve %.1f %.1f 96.0 132.0 108.0'
-                    ' "LINE" "LINE" "LINE" 0.0 "Center"))'
+                    ' "LINE" "LINE" "LINE" nil 0.0 "Center"))'
                     % (REF_X, REF_Y)) is None
     print("ok  run crossed -> segment-against-circle and segment-against-"
           "segment, exact")
@@ -1848,6 +1851,56 @@ def test_backing_up_through_the_complex_questions():
           " too")
 
 
+#: the drawing the NXTCLOUD was read off: a 40'-0" x 20'-0" envelope with
+#: three 8' lobes and four 5' fillets.  Each lobe is pinned by the
+#: envelope alone -- the top-left one into the corner where the X-min and
+#: Y-max walls meet, the centre one on the Y-min wall halfway across, the
+#: right one on the X-max wall halfway up -- and each fillet is
+#: externally tangent to two of them.  The ring is EIGHT elements,
+#: because it meets the centre lobe twice: once under it on the way out
+#: to the right lobe and once over it on the way back.
+#: Centres are relative to the envelope's bottom-left corner and angles
+#: are degrees, as the DXF stores them.
+NX_X, NX_Y = 480.0, 240.0
+NX_LOBES = (96.0, 96.0, 96.0)          # top-left, centre, right
+NX_FILLETS = (60.0, 60.0, 60.0, 60.0)  # left-bottom, right-bottom,
+                                       # right-top, left-top
+NX_MEASURE = [NX_X, NX_Y] + list(NX_LOBES) + list(NX_FILLETS)
+NX_ARCS = [
+    ('top-left',      ( 96.0000000000, 144.0000000000),  96.0,
+      42.4540, 280.6761),
+    ('left-bottom',   (124.9001100000,  -9.2996500000),  60.0,
+      42.4540, 100.6761),
+    ('center-bottom', (240.0000000000,  96.0000000000),  96.0,
+     222.4540, 307.3607),
+    ('right-bottom',  (334.6656100000, -27.9936400000),  60.0,
+      71.5639, 127.3607),
+    ('right',         (384.0000000000, 120.0000000000),  96.0,
+     251.5639, 127.3607),
+    ('right-top',     (289.3343900000, 243.9936400000),  60.0,
+     251.5639, 307.3607),
+    ('center-top',    (240.0000000000,  96.0000000000),  96.0,
+      71.5639, 100.6761),
+    ('left-top',      (211.0998800000, 249.2996500000),  60.0,
+     222.4540, 280.6761),
+]
+#: the DXF carries five decimals on a centre and four on an angle, so
+#: that is as close as the drawing can be read
+NX_TOL = 1.0e-4
+
+
+def nx_ring(w=NX_X, h=NX_Y, lobes=NX_LOBES, fil=NX_FILLETS):
+    """oasis:solve for a NXT cloud.  Its four fillets land in the ftl /
+    ftr / fbc / fbr arguments in that order, so the ring order they are
+    given in here -- left-bottom, right-bottom, right-top, left-top --
+    has to be turned round on the way in."""
+    fbc, fbr, ftr, ftl = fil
+    return ('(oasis:solve %s 0.0 "NXTcloud")'
+            % ' '.join('%.6f' % v
+                       for v in (w, h) + tuple(lobes) + (ftl, ftr, fbc,
+                                                         fbr)))
+
+
 #: the pool bottom, on the reference pool: shallow and deep breaks both
 #: given as an offset in from the left bound, the standard 18" hopper
 #: and two straight slope lines.
@@ -1856,7 +1909,7 @@ BOT_OFFSET = [None, 'Left', 120.0, None, 'Left', 300.0, None, None, None]
 
 def pool_ring(vm, *dims, **kw):
     """oasis:solve on the reference pool, as the bottom code sees it."""
-    return ('(oasis:solve %s %.4f "%s")'
+    return ('(oasis:solve %s nil %.4f "%s")'
             % (" ".join("%.6f" % v for v in (dims or (REF_X, REF_Y)
                                              + REF_BULGES + REF_TANGENTS)),
                kw.get('off', 0.0), kw.get('variant', 'Center')))
@@ -2261,7 +2314,7 @@ def test_the_bottom_of_a_pool_with_straight_runs():
     vm = newvm()
     call = pool_ring(vm, REF_X, REF_Y, 96.0, 132.0, 108.0)
     call = ('(oasis:solve %.1f %.1f 96.0 132.0 108.0 "LINE" "LINE" "LINE"'
-            ' 0.0 "Center")' % (REF_X, REF_Y))
+            ' nil 0.0 "Center")' % (REF_X, REF_Y))
     sh, sd = cut_at(vm, 120.0, call), cut_at(vm, 300.0, call)
     bot = bottom_of(vm, sh[0], sh[1], sd[0], sd[1], 18.0, call=call)
     assert not isinstance(bot, str), bot
@@ -2343,6 +2396,281 @@ def test_the_bottom_shares_the_pools_undo_group():
     # the last thing drawn is inside it: no _End before the bottom's lines
     assert on_pool(vm, 'LINE'), 'nothing was drawn'
     print("ok  bottom undo -> one group round the pool and its bottom")
+
+
+def test_nxtcloud_matches_its_reference_drawing():
+    """Three lobes and four fillets, on the drawing arc for arc."""
+    vm = newvm()
+    run(vm, script(measure=NX_MEASURE, variant='NXTcloud'), 'nxtcloud')
+    got = arcs_of(vm, 8)
+    assert len(got) == 8, got
+    for (name, c, r, a0, a1), (gc, gr, ga0, ga1) in zip(NX_ARCS, got):
+        assert close(gc[0], c[0], NX_TOL) and close(gc[1], c[1], NX_TOL), \
+            (name, gc, c)
+        assert close(gr, r, NX_TOL), (name, gr, r)
+        for got_a, want_a in ((ga0, a0), (ga1, a1)):
+            d = abs((got_a - want_a + 180.0) % 360.0 - 180.0)
+            assert d <= NX_TOL, (name, got_a, want_a)
+    print("ok  nxtcloud    -> eight arcs on the customer drawing, to %g"
+          % NX_TOL)
+
+
+def test_the_nxtcloud_lobes_are_pinned_by_the_envelope():
+    """Nothing but their radii is asked for: the top-left lobe sits in the
+    corner of the X-min and Y-max walls, the centre one on the Y-min wall
+    halfway across, the right one on the X-max wall halfway up."""
+    vm = newvm()
+    for rl, rt, rr in ((96.0, 96.0, 96.0), (84.0, 108.0, 72.0),
+                       (60.0, 72.0, 108.0)):
+        for w, h in ((480.0, 240.0), (360.0, 300.0)):
+            a = vm.loads('(oasis:nxtcen %.1f %.1f %.1f 0)' % (w, h, rl))
+            d = vm.loads('(oasis:nxtcen %.1f %.1f %.1f 1)' % (w, h, rt))
+            g = vm.loads('(oasis:nxtcen %.1f %.1f %.1f 2)' % (w, h, rr))
+            assert close(a[0] - rl, 0.0) and close(a[1] + rl, h), a
+            assert close(d[1] - rt, 0.0) and close(d[0], w / 2.0), d
+            assert close(g[0] + rr, w) and close(g[1], h / 2.0), g
+    # and the outline really does fill the envelope, touching all four
+    run(vm, script(measure=NX_MEASURE, variant='NXTcloud'), 'nx envelope')
+    assert vm.loads('(oasis:overruns %s %.1f %.1f)'
+                    % (nx_ring(), NX_X, NX_Y)) is None
+    xs, ys = [], []
+    for c, r, a0, a1 in arcs_of(vm, 8):
+        sweep = (a1 - a0) % 360.0
+        angs = [a0, a1] + [k for k in (0.0, 90.0, 180.0, 270.0)
+                           if (k - a0) % 360.0 <= sweep]
+        for a in angs:
+            p = pt_on(c, r, a)
+            xs.append(p[0]); ys.append(p[1])
+    assert close(min(xs), 0.0) and close(max(xs), NX_X), (min(xs), max(xs))
+    assert close(min(ys), 0.0) and close(max(ys), NX_Y), (min(ys), max(ys))
+    print("ok  nx lobes    -> all three pinned by the envelope, and it is"
+          " filled exactly")
+
+
+def test_the_nxtcloud_meets_its_centre_lobe_twice():
+    """The one shape whose ring visits a circle twice: under the centre
+    lobe on the way out to the right one, over it on the way back.  Two
+    arcs, one circle, and they must not overlap."""
+    vm = newvm()
+    ring = vm.loads(nx_ring())
+    assert len(ring) == 8, len(ring)
+    low = [e for e in ring if e[0] == 'center-bottom'][0]
+    high = [e for e in ring if e[0] == 'center-top'][0]
+    assert math.dist(low[1], high[1]) <= 1e-9, (low[1], high[1])
+    assert close(low[2], high[2]), (low[2], high[2])
+    # disjoint sweeps: the outline does not run over the same stretch of
+    # that circle twice
+    for a, b in ((low, high), (high, low)):
+        sw = (a[4] - a[3]) % (2 * math.pi)
+        for th in (b[3], b[4]):
+            assert (th - a[3]) % (2 * math.pi) > sw - 1e-9, (a[0], b[0], th)
+    # and the two of them together with the six others close the ring
+    for i in range(8):
+        assert close(math.dist(el_at(ring[i], 1.0),
+                               el_at(ring[(i + 1) % 8], 0.0)), 0.0, 1e-8), i
+        d = abs((el_tan(ring[i], 1.0) - el_tan(ring[(i + 1) % 8], 0.0)
+                 + math.pi) % (2 * math.pi) - math.pi)
+        assert d <= 1.0e-9, (i, d)
+    assert vm.loads('(oasis:crossings %s)' % nx_ring()) is None
+    print("ok  nx twice    -> the centre lobe gives two disjoint arcs, and"
+          " the eight close tangent-continuously")
+
+
+def test_nxtcloud_asks_its_own_questions():
+    """Three lobes and four fillets, the fillets in the order the outline
+    meets them."""
+    vm = newvm()
+    run(vm, script(measure=NX_MEASURE, variant='NXTcloud'), 'nx asks')
+    asked = [q.lstrip('\n').split(' [')[0].split(' <')[0].rstrip(': ')
+             for q, _ in vm.prompts]
+    assert asked == ['Which shape is it?', 'Simple or complex?',
+                     'Insertion base point',
+                     'X - overall left-to-right bounds',
+                     'Y - overall front-to-back bounds',
+                     'Top-left lobe radius', 'Center lobe radius',
+                     'Right lobe radius',
+                     'Left-bottom tangent radius',
+                     'Right-bottom tangent radius',
+                     'Right-top tangent radius',
+                     'Left-top tangent radius', BOTQ], asked
+    assert vm.loads('(oasis:steps (list "NXTcloud" nil nil nil nil nil nil'
+                    ' nil nil nil nil nil nil nil))') == [0, 11, 1, 2, 3, 4,
+                                                          5, 6, 9, 13, 8, 7]
+    print("ok  nx asks     -> three lobes, then four fillets in ring order")
+
+
+def test_the_first_nxtcloud_preview_is_never_blank():
+    """Its four fillet provisionals have to clear their own minimums, the
+    same way every other shape's do -- below one there is no fillet,
+    oasis:solve gives back nil, and the first radius question is put with
+    an empty box on screen."""
+    vm = newvm()
+
+    def first_preview(w, h):
+        return vm.loads(
+            '(progn (setq $a (list "NXTcloud" (list 0.0 0.0) %.6f %.6f'
+            '                      nil nil nil nil nil nil nil nil nil nil)'
+            '             $f (oasis:fillin $a))'
+            ' (oasis:solve (nth 0 $f) (nth 1 $f) (nth 2 $f) (nth 3 $f)'
+            '              (nth 4 $f) (nth 5 $f) (nth 6 $f) (nth 7 $f)'
+            '              (nth 8 $f) (nth 9 $f) "NXTcloud"))' % (w, h))
+
+    blank, n = [], 0
+    for wf in range(8, 68, 3):
+        for hf in range(6, 46, 3):
+            n += 1
+            if not first_preview(wf * 12.0, hf * 12.0):
+                blank.append((wf, hf))
+    assert not blank, f"{len(blank)} of {n} blank, e.g. {blank[:5]}"
+    print("ok  nx preview  -> all %d starting NXT clouds draw a ring" % n)
+
+
+def test_the_nxtcloud_fillets_go_where_they_are_asked():
+    """Four fillets and four slots: answered in the order the outline
+    meets them -- left-bottom, right-bottom, right-top, left-top -- and
+    each has to come out on the arc of that name.  The drawing they were
+    read off has all four the same, which hides a swap, so this one gives
+    each a radius of its own."""
+    vm = newvm()
+    lobes, fil = (84.0, 108.0, 72.0), (48.0, 66.0, 54.0, 72.0)
+    run(vm, script(measure=[NX_X, NX_Y] + list(lobes) + list(fil),
+                   variant='NXTcloud'), 'nx fillets')
+    got = arcs_of(vm, 8)
+    want = [('top-left', lobes[0]), ('left-bottom', fil[0]),
+            ('center-bottom', lobes[1]), ('right-bottom', fil[1]),
+            ('right', lobes[2]), ('right-top', fil[2]),
+            ('center-top', lobes[1]), ('left-top', fil[3])]
+    for (name, r), (gc, gr, ga0, ga1) in zip(want, got):
+        assert close(gr, r), (name, gr, r)
+    # and each fillet really is tangent to the two lobes it was asked
+    # between, which is what makes the slot order matter
+    ring = vm.loads(nx_ring(NX_X, NX_Y, lobes, fil))
+    by = {e[0]: e for e in ring}
+    for fillet, a, b in (('left-bottom', 'top-left', 'center-bottom'),
+                         ('right-bottom', 'center-bottom', 'right'),
+                         ('right-top', 'right', 'center-top'),
+                         ('left-top', 'center-top', 'top-left')):
+        f = by[fillet]
+        for lobe in (a, b):
+            e = by[lobe]
+            assert close(math.dist(f[1], e[1]), f[2] + e[2], 1e-8), \
+                (fillet, lobe, math.dist(f[1], e[1]), f[2] + e[2])
+    print("ok  nx fillets  -> each of the four lands on the arc it was"
+          " asked for, tangent to its own two lobes")
+
+
+def test_nested_nxtcloud_lobes_are_reasked():
+    """Its three lobes are pinned by the envelope, so any two of them can
+    end up one inside the other -- which no tangent radius can bridge.
+    The right lobe is the last of the three asked, so it is where the
+    pair shows up and it is named."""
+    vm = newvm()
+    assert vm.loads('(oasis:nxt-nests %s)'
+                    % ' '.join('%.1f' % v for v in
+                               (NX_X, NX_Y) + NX_LOBES)) is None
+    # on a 20' square a 10' right lobe reaches right across and swallows
+    # a 6' centre one
+    assert vm.loads('(oasis:nxt-nests 240.0 240.0 72.0 72.0 120.0)') \
+        == 'center', vm.loads('(oasis:nxt-nests 240.0 240.0 72.0 72.0 120.0)')
+    assert vm.loads('(oasis:nxt-nests 240.0 240.0 72.0 72.0 96.0)') is None
+    # a top-left lobe at exactly half a square envelope is the inscribed
+    # circle, so it swallows the right one too and is caught the same way
+    assert vm.loads('(oasis:nxt-nests 240.0 240.0 120.0 72.0 96.0)') \
+        == 'top-left', vm.loads('(oasis:nxt-nests 240.0 240.0 120.0 72.0'
+                                ' 96.0)')
+    run(vm, script(measure=[240.0, 240.0, 72.0, 72.0, 120.0, 96.0,
+                            36.0, 36.0, 36.0, 36.0], variant='NXTcloud'),
+        'nx nested')
+    asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
+    assert asked.count('Right lobe radius') == 2, asked
+    assert close(arcs_of(vm, 8)[4][1], 96.0), arcs_of(vm, 8)[4]
+    print("ok  nx nesting  -> a lobe nested with another is named and the"
+          " right lobe re-asked")
+
+
+def test_a_lobe_lapped_by_its_own_other_arc_is_named():
+    """A circle the ring meets twice can be handed over in the wrong
+    order: one of its two arcs then sweeps most of the way round and laps
+    the other, so the outline covers that stretch twice.  Two identical
+    circles never intersect -- they coincide -- so the self-crossing test
+    cannot see it and it is looked for on its own."""
+    vm = newvm()
+    bad = nx_ring(480.0, 240.0, (108.0, 60.0, 108.0), (36.0,) * 4)
+    lap = vm.loads('(oasis:overlaps %s)' % bad)
+    assert lap == [['center-bottom', 'center-top']], lap
+    ring = vm.loads(bad)
+    low = [e for e in ring if e[0] == 'center-bottom'][0]
+    high = [e for e in ring if e[0] == 'center-top'][0]
+    assert (high[4] - high[3]) % (2 * math.pi) > math.radians(300), high
+    # the shape the drawing was read off is clean, and so is a run of
+    # ordinary proportions
+    assert vm.loads('(oasis:overlaps %s)' % nx_ring()) is None
+    assert vm.loads('(oasis:overlaps %s)'
+                    % nx_ring(480.0, 240.0, (84.0, 108.0, 72.0),
+                              (48.0, 66.0, 54.0, 72.0))) is None
+    # nothing else in the file can lap: no other shape meets a bulge twice
+    assert vm.loads('(oasis:overlaps (oasis:solve %s nil 0.0 "Center"))'
+                    % ' '.join('%.4f' % v for v in (REF_X, REF_Y)
+                               + REF_BULGES + REF_TANGENTS)) is None
+    print("ok  nx lapping  -> a lobe swept over twice is caught and named")
+
+
+def test_the_overall_dims_hook_whichever_arc_holds_each_bound():
+    """Which lobe holds which bound is the shape's business: an oasis
+    hangs the left and the bottom on one bulge, a NXT cloud hangs the
+    left and the top on its top-left lobe and the bottom on its centre
+    one.  So the two overall dimensions hook the touch points themselves,
+    read off the arcs AS DRAWN -- a circle can dip well past a bound
+    where its own arc never goes."""
+    vm = newvm()
+    ring = nx_ring()
+    for which, want in ((0, (0.0, 144.0)), (1, (480.0, 120.0)),
+                        (2, (240.0, 0.0)), (3, (96.0, 240.0))):
+        p = vm.loads('(oasis:extreme %s %d)' % (ring, which))
+        assert close(p[0], want[0]) and close(p[1], want[1]), (which, p, want)
+    run(vm, script(measure=NX_MEASURE, variant='NXTcloud'), 'nx dims')
+    dims = [d for d in made(vm, 'DIMENSION')][:2]
+    # they are horizontal and vertical dims, so each measures one axis of
+    # the pair of touch points it hooks
+    assert close(abs(dims[0][13][0] - dims[0][14][0]), NX_X), dims[0]
+    assert close(abs(dims[1][13][1] - dims[1][14][1]), NX_Y), dims[1]
+    assert close(dims[0][13][0], 0.0) and close(dims[0][13][1], 144.0), dims[0]
+    assert close(dims[1][13][0], 96.0) and close(dims[1][13][1], NX_Y), dims[1]
+    # the reference oasis is unchanged by that generalisation: its own
+    # bulge circles dip past the bottom, its arcs do not
+    vm = newvm()
+    ref = ('(oasis:solve %s nil 0.0 "Center")'
+           % ' '.join('%.4f' % v for v in (REF_X, REF_Y) + REF_BULGES
+                      + REF_TANGENTS))
+    assert close(vm.loads('(oasis:extreme %s 2)' % ref)[1], 0.0)
+    assert close(vm.loads('(oasis:extreme %s 3)' % ref)[1], REF_Y)
+    print("ok  bound dims  -> hooked to the arc that really holds each"
+          " bound, on both shapes")
+
+
+def test_the_check_drawing_counts_a_repeated_circle_once():
+    """The centre lobe is in the ring twice, so it would otherwise be
+    marked twice, tied to the corners twice, and tied to ITSELF -- a
+    dimension of nothing."""
+    vm = newvm()
+    run(vm, script(measure=NX_MEASURE, variant='NXTcloud'), 'nx check')
+    chk = check_arcs_of(vm, 8)
+    cens = []
+    for c, r in chk:
+        if not any(close(math.dist(c, q), 0.0, 1e-8) for q in cens):
+            cens.append(c)
+    assert len(cens) == 7, len(cens)          # seven circles, not eight
+    # one mark per circle, so the twice-met one is not marked on top of
+    # itself
+    marks = [d for d in made(vm, 'CIRCLE') if d.get(8) == 'POOL-GUIDE']
+    assert len(marks) == 7, len(marks)
+    aligned = cmds(vm, '_.DIMALIGNED')
+    for a in aligned:
+        assert math.dist(a[1][:2], a[2][:2]) > 1e-6, a
+    # 7 circles: 14 corner ties, 8 ring ties of which the centre lobe's
+    # self-tie drops, and the lobe-to-lobe ties
+    assert len(aligned) == 24, len(aligned)
+    print("ok  nx check    -> the twice-met circle is marked and tied once")
 
 
 def test_version_command():
@@ -2510,6 +2838,16 @@ if __name__ == '__main__':
     test_a_hopper_offset_with_no_room_is_reasked()
     test_backing_out_of_the_bottom_leaves_the_pool_alone()
     test_the_bottom_shares_the_pools_undo_group()
+    test_nxtcloud_matches_its_reference_drawing()
+    test_the_nxtcloud_lobes_are_pinned_by_the_envelope()
+    test_the_nxtcloud_meets_its_centre_lobe_twice()
+    test_nxtcloud_asks_its_own_questions()
+    test_the_first_nxtcloud_preview_is_never_blank()
+    test_the_nxtcloud_fillets_go_where_they_are_asked()
+    test_nested_nxtcloud_lobes_are_reasked()
+    test_a_lobe_lapped_by_its_own_other_arc_is_named()
+    test_the_overall_dims_hook_whichever_arc_holds_each_bound()
+    test_the_check_drawing_counts_a_repeated_circle_once()
     test_version_command()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")
