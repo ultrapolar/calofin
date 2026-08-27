@@ -14,8 +14,8 @@ Every lisp here ships **twice, byte-identical, under two names**:
 | | |
 | --- | --- |
 | `SPA.LSP` | the static name — the one in your `APPLOAD` stack |
-| `SPA_082026_REV04.LSP` | the same file, named `MMDDYY_REV##` for its revision |
-| `TUTORIALSPA.LSP` / `TUTORIALSPA_082026_REV04.LSP` | likewise |
+| `SPA_082726_REV06.LSP` | the same file, named `MMDDYY_REV##` for its revision |
+| `TUTORIALSPA.LSP` / `TUTORIALSPA_082126_REV05.LSP` | likewise |
 
 The static name never changes, so an existing autoload keeps working. The
 versioned name tells you at a glance which revision is sitting in someone
@@ -25,7 +25,7 @@ still tell you what it is:
 
 ```
 Command: SPAVER
-SPA 082126 REV05
+SPA 082726 REV06
 Tutorial: 082126 REV05
 ```
 
@@ -200,6 +200,62 @@ Two places worth knowing:
 Back cannot cross a point where geometry was committed: once an outline
 is drawn, the offer to add the other one is a fresh first question. That
 is the same boundary `POOL` has.
+
+## Form answers
+
+A form — the LAZFORM dialog, or the VB palette — can answer some or all
+of SPA's questions before the run starts. It leaves them in `spa:*form*`
+as an alist of `(key . value)` and the ask helpers look there first, so
+a filled-in sheet drives the whole run and a half-filled one simply
+shortens it. `(spa:run-with-answers answers)` sets the store, runs
+`SPA`, and clears it; setting `spa:*form*` and calling `SPA` directly
+does the same. This is the store `POOL` carries, under the same rules.
+
+Three states, and the difference between the last two is the feature:
+
+| In the form | In the store | SPA does |
+| --- | --- | --- |
+| left empty | key absent | asks, as usual |
+| explicitly cleared | `(key . nil)` | takes `NA` without prompting |
+| filled | `(key . 84.0)` | takes the value without prompting |
+
+**An answer is removed from the store as it is used** — consume-once.
+That is what keeps `Back` working (stepping back onto a form-answered
+question prompts at the keyboard instead of the store instantly
+re-answering it and walking forward again) and what stops a rejected
+value — a corner size too big for its walls — being re-fed forever: the
+re-ask finds the store empty and takes the correction from the
+keyboard. An answer a question would not accept is consumed and then
+ignored, so the run falls back to asking exactly as if the box had been
+left empty. The store is cleared on **both** exits of `SPA`, the error
+handler included, so a form can never leak into the next command-line
+run.
+
+The key roster:
+
+| Key(s) | Question |
+| --- | --- |
+| `mode` | `Watersedge` / `Coversize` |
+| `shape` | `Rectangle` / `OCtagon` / `ROund` — exact spelling |
+| `base` | insertion base point, as a plain list: `(base 0.0 0.0)` |
+| `w`, `l` | rectangle overall width / length |
+| `cornera-ty` … `cornerd-ty` | corner treatment: `Radius` / `Diagonal` / `90` (`Square` accepted as the synonym for `90`, exactly as at the prompt) |
+| `cornera-sz` … `cornerd-sz` | the radius or cut face length for a sized treatment; `90` needs none |
+| `b`, `a` | octagon / round overalls. Round: a stored numeric `b` alone **is the diameter**; storing `a` as well takes the out-of-round path, exactly as typing `O` would |
+| `s2`, `tt`, `ss`, `s1`, `vv` | the octagon's cut face and flat letters (any may be an explicit nil = `NA`) |
+| `second` | `Yes` / `No` — draw the other outline as well |
+| `method` | `Offset` / `Dims` — where the other outline comes from |
+| `gap` | how far the cover laps the water's edge |
+| `w2`, `l2` | the second outline by dims, rectangle |
+| `b2`, `a2`, `f2` | the second outline by dims, octagon (`f2` the cut face); the round one takes `b2`, `a2` |
+| `autohinge` | `Yes` / `No` — auto-hinge the cover |
+| `grade`, `taper` | the Spa Cover Details values, normalised exactly as the block's tags are — a form grade of Thermo-Light engages the Thermo-Light rules just like the block, and a form answer wins over a block picked in the drawing |
+
+Two prompts stay interactive by design: the **Spa Cover Details block
+pick** (an `entsel` — the block is in the drawing, there is nothing for
+a form to type) and the **spillaway loop**. `tests/test_spa_form.py`
+proves the equivalence — the same spa from the prompts and from a form
+— at both tiers.
 
 ## Orientation
 

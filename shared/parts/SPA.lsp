@@ -175,7 +175,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082126 REV05")
+(setq spa:*version* "082726 REV06")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -645,6 +645,102 @@
     (if (and (not out) (spa:sq ans k)) (setq out (spa:sq ans k))))
   out)
 
+;;; -------------------- form answers -----------------------------------
+;;;
+;;;  A form -- the LAZFORM dialog, or the VB palette -- can answer some
+;;;  or all of SPA's questions before the run starts.  It leaves them in
+;;;  spa:*form* as (key . value) and the ask helpers below look there
+;;;  first, so a filled-in sheet drives the whole run and a half-filled
+;;;  one simply shortens it.  Only the Spa Cover Details pick (an entsel
+;;;  in the drawing) and the spillaway loop stay interactive.
+;;;
+;;;  Three states, and the difference between the last two IS the
+;;;  feature:
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . nil)     the form answered NA         -> nil, no prompt
+;;;    (key . 84.0)    the form answered it         -> 84.0, no prompt
+;;;
+;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
+;;;  Get it backwards and a half-filled form is either impossible or
+;;;  silent, and the half-filled form is the whole point.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Otherwise Back deadlocks: step back onto a form-answered question,
+;;;  it answers itself instantly and walks forward again, and there is
+;;;  no key the user can press to get out.  Consuming also gives the
+;;;  range checks their way out: a corner size too large for its walls
+;;;  is re-asked, and the second pass finds the store empty and lets
+;;;  the user type the correction -- rather than being re-fed the same
+;;;  bad number for ever.
+
+(setq spa:*form* nil)
+
+;; Did the form answer KEY at all?  This is the absent/nil distinction
+;; that (cdr (assoc ...)) throws away.
+(defun spa:fhas (key) (if (assoc key spa:*form*) t nil))
+
+;; The form's answer for KEY, removed from the store as it is read.
+(defun spa:ftake (key / p)
+  (setq p (assoc key spa:*form*))
+  (setq spa:*form* (vl-remove p spa:*form*))
+  (cdr p))
+
+(defun spa:fclear () (setq spa:*form* nil))
+
+;; The form-key stem for a corner question, from the label every flow
+;; already passes spa:askcorner -- "Corner A" is cornera, so the form
+;; keys are cornera-ty (the treatment) and cornera-sz (its size).  A
+;; label of any other shape comes back nil and the corner is asked as
+;; always.
+(defun spa:fckey (label / s)
+  (setq s (strcase label t))
+  (if (and (> (strlen s) 7) (= (substr s 1 7) "corner "))
+      (strcat "corner" (substr s 8))))
+
+;; The shape, from the form when it named one the dispatch knows, else
+;; asked.  Checked against the same list the prompt offers: an unknown
+;; shape would fall through the cond at the foot of c:SPA into the
+;; rectangle branch and draw the wrong spa without saying so.
+(defun spa:fshape ( / v)
+  (if (spa:fhas 'shape) (setq v (spa:ftake 'shape)))
+  (if (and v (= (type v) 'STR)
+           (member v '("Rectangle" "OCtagon" "ROund")))
+      v
+      (progn
+        (initget 1 "Rectangle OCtagon ROund")
+        (getkword "\nSpa shape [Rectangle/OCtagon/ROund]: "))))
+
+;; The form's GRADE and TAPER, consumed into the run globals exactly as
+;; spa:readblock would have set them off the block -- and consumed
+;; AFTER the block is read, so a form answer wins over the block's.
+;; c:SPA calls this before its Thermo-Light branch, so a form grade of
+;; THERMOLIGHT closes the water's-edge question the same way the block
+;; does; spa:askdetails calls it again so a store armed past c:SPA's
+;; own read still lands.  An answer that is not a grade/taper string is
+;; consumed all the same -- and then ignored, so the run falls back to
+;; asking exactly as if the box had been left empty.
+(defun spa:formdetails ( / v)
+  (if (spa:fhas 'grade)
+      (progn
+        (setq v (spa:ftake 'grade))
+        (if (= (type v) 'STR)
+            (setq spa:*grade* (spa:gradenorm v)))))
+  (if (spa:fhas 'taper)
+      (progn
+        (setq v (spa:ftake 'taper))
+        (if (and (= (type v) 'STR) (spa:tapernorm v))
+            (setq spa:*taper* (spa:tapernorm v))))))
+
+;; Run SPA with a form's answers already in hand.  Nothing happens here
+;; that the direct path misses: a caller may equally set spa:*form*
+;; itself and call c:SPA, which is what the tests do.
+(defun spa:run-with-answers (answers)
+  (setq spa:*form* answers)
+  (c:SPA)
+  (spa:fclear)
+  (princ))
+
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol CAL-BACK.
 (defun spa:asks (kind msg ents dflt back / v cols kw e out)
@@ -679,6 +775,42 @@
   (cal:osdown)
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
   (if (eq out 'SPA-NA) nil out))
+
+;; The keyword question a form can answer.  Deliberately a WRAPPER and
+;; not a sixth argument on spa:askkw: the grouped build swaps that
+;; helper out for cal:askkw, which takes five, so widening it here
+;; would have the twin call the library with an argument it does not
+;; accept -- a build that loads cleanly and dies at the first keyword
+;; question.  The mirror leaves this defun alone, while the spa:askkw
+;; call inside it is rewritten like any other call site.
+(defun spa:askkwf (key msg kws shown dflt back / v)
+  (if (and (spa:fhas key)
+           (setq v (spa:ftake key))
+           (= (type v) 'STR)
+           (setq v (spa:fkword v kws)))
+      v
+      (cal:askkw msg kws shown dflt back)))
+
+;; V as the question would spell it, or nil when the question does not
+;; accept it at all.  Two jobs in one walk of the keyword list:
+;;
+;;   - an answer the question does not offer falls through to the
+;;     prompt instead of being handed on to fail later;
+;;   - the canonical SPELLING comes back, not the caller's.  Every test
+;;     downstream is (= v "Watersedge"), so a form that said
+;;     "watersedge" would sail through a case-insensitive check and
+;;     then match nothing at all.
+(defun spa:fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
 
 ;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
 ;; 1524.5mm.  The drawing is in inches, so the value is converted.
@@ -736,6 +868,20 @@
   (cal:osdown)
   out)
 
+;; The typed-distance question a form can answer, for the keyed
+;; distances asked OUTSIDE the measurement sequences (the cover lap).
+;; Same consume-once contract as the keyword wrapper above: only a
+;; measurement the prompt itself would accept -- a positive number --
+;; is taken, and anything else (an NA, a keyword, a wrong type) is
+;; consumed and the question is asked as always.
+(defun spa:askdf (key msg xkw dflt back / v)
+  (if (and (spa:fhas key)
+           (setq v (spa:ftake key))
+           (numberp v)
+           (> v 0.0))
+      v
+      (spa:askd msg xkw dflt back)))
+
 ;; Back typed like a value, for the one prompt that cannot take
 ;; keywords (getstring).  Any case, per the shared convention.
 (defun spa:backstr (v)
@@ -765,8 +911,14 @@
           dflt (nth 4 it))
     (if (and dflt (listp dflt))
         (setq dflt (spa:sqfirst ans dflt)))
-    (setq v (spa:asks (cadr it) (caddr it) (cadddr it) dflt
-                      (if (or asked bk) t nil)))
+    ;; the form answers first, and its answer is consumed -- see "form
+    ;; answers" above for why removing beats marking.  Backing onto a
+    ;; question the form answered therefore finds the store empty and
+    ;; prompts, which is what makes Back usable at all
+    (setq v (if (spa:fhas (car it))
+                (spa:ftake (car it))
+                (spa:asks (cadr it) (caddr it) (cadddr it) dflt
+                          (if (or asked bk) t nil))))
     (if (eq v 'CAL-BACK)
         (if asked
             (setq i (car asked) asked (cdr asked))
@@ -965,12 +1117,13 @@
   ;; the Yes/No is this phase's first question -- the outline is already
   ;; drawn behind it, so there is nothing to go back to; the method
   ;; question after it backs up to the Yes/No like any second question
-  (if (= "Yes" (cal:askkw (strcat "Draw the " (spa:modeword (spa:othermode))
-                                  " as well")
-                          "Yes No" "Yes/No" "Yes" nil))
+  (if (= "Yes" (spa:askkwf 'second
+                           (strcat "Draw the " (spa:modeword (spa:othermode))
+                                   " as well")
+                           "Yes No" "Yes/No" "Yes" nil))
       (if (eq 'CAL-BACK
-              (setq v (cal:askkw "Take it from" "Offset Dims"
-                                 "Offset/Dims" "Offset" t)))
+              (setq v (spa:askkwf 'method "Take it from" "Offset Dims"
+                                  "Offset/Dims" "Offset" t)))
           (spa:askother2)
           v)))
 
@@ -980,8 +1133,8 @@
   ;; Back here re-asks the question that chose Offset in the first
   ;; place, which spa:askother2 owns -- so it is returned as CAL-BACK
   ;; and the caller re-enters the offer.
-  (setq g (spa:askd "How far does the cover lap the water's edge"
-                    nil spa:*gapdflt* t))
+  (setq g (spa:askdf 'gap "How far does the cover lap the water's edge"
+                     nil spa:*gapdflt* t))
   (if (eq g 'CAL-BACK) g (* g (spa:offsign))))
 
 ;; Offset every corner treatment by g (positive = outward).
@@ -1533,6 +1686,10 @@
 ;; stands; anything still missing is asked for now.  No grade at all
 ;; means Standard.  Returns (grade taper).
 (defun spa:askdetails ( / v)
+  ;; a form's grade/taper may still be waiting when this pass is
+  ;; reached without going through c:SPA's own consume -- same rules,
+  ;; same code, and a no-op when the store was already drained
+  (spa:formdetails)
   (if (and (null spa:*grade*) (null spa:*taper*))
       (spa:readblock))                  ; not offered earlier -- offer now
   (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
@@ -1560,7 +1717,8 @@
                          mc lenok pcok sc hw h nm vd allvel htys hty
                          k x ch maxch maxpc prev lbl)
   (setq spa:*hingerows* nil)
-  (if (/= "Yes" (cal:askkw "Auto-hinge the cover" "Yes No" "Yes/No" "Yes" nil))
+  (if (/= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
+                            "Yes No" "Yes/No" "Yes" nil))
       nil
       (progn
         (if (not coverp)
@@ -1909,13 +2067,41 @@
 ;; wall, so two treatments can never overlap and fold the perimeter;
 ;; too-large answers are re-asked.  Returns (type size) or CAL-BACK.
 (defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e
-                                                            dsz out)
+                                                            dsz out fk fty
+                                                            fsz)
+  ;; A form can answer this corner: <stem>-ty carries the treatment,
+  ;; <stem>-sz the radius or cut-face length.  Both are consumed NOW,
+  ;; valid or not -- consume-once is what keeps Back from deadlocking,
+  ;; and what lets a rejected size be retyped at the keyboard instead
+  ;; of re-fed.  An answer the question would not accept falls through
+  ;; to the prompt exactly as if the box had been left empty.  The form
+  ;; speaks the sheet legend's own words -- Radius / Diagonal / 90,
+  ;; with Square normalised to 90 just as the prompt does.
+  (if (setq fk (spa:fckey label))
+      (progn
+        (if (spa:fhas (read (strcat fk "-ty")))
+            (progn
+              (setq fty (spa:ftake (read (strcat fk "-ty"))))
+              (if (not (member fty '("Radius" "Diagonal" "90" "Square")))
+                  (setq fty nil))
+              (if (equal fty "Square") (setq fty "90"))))
+        (if (spa:fhas (read (strcat fk "-sz")))
+            (progn
+              (setq fsz (spa:ftake (read (strcat fk "-sz"))))
+              (if (not (and (numberp fsz) (> fsz 0.0)))
+                  (setq fsz nil))))))
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
   (while (null out)
     (cal:osup)
-    (setq ty (cal:askkw label "Radius Diagonal 90 Square" "Radius/Diagonal/90"
-                        dflty back))
+    (setq ty (if fty
+                 fty
+                 (cal:askkw label "Radius Diagonal 90 Square"
+                            "Radius/Diagonal/90" dflty back)))
+    ;; the form's treatment is good for ONE pass: a Back out of the
+    ;; size question below must re-ask the type at the keyboard, not
+    ;; have the loop re-feed what the form said
+    (setq fty nil)
     (cal:osdown)
     (if (equal ty "Square") (setq ty "90"))   ; sheet legend calls it 90
     (cond
@@ -1926,8 +2112,15 @@
        ;; the autofill size only stands in when it came from the SAME
        ;; treatment -- a radius is not a cut face
        (setq dsz (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
-                     nil dfltsz)
-             sz (spa:askd (strcat label (spa:cornersizemsg ty)) nil dsz t))
+                     nil dfltsz))
+       (if fsz
+           ;; the form's size skips the prompt but NOT the cap check
+           ;; below: one that will not fit is rejected there and
+           ;; retyped at the keyboard, the store already being empty
+           (setq sz fsz
+                 fsz nil)
+           (setq sz (spa:askd (strcat label (spa:cornersizemsg ty))
+                              nil dsz t)))
        ;; Back at the size re-asks the type, its previous question
        (if (not (eq sz 'CAL-BACK))
            (progn
@@ -2572,7 +2765,17 @@
   ;; type O and the two axes are asked for instead.
   (princ "\nRound spa -- the diameter, measured through the middle.")
   (princ "\n(measured out of round?  type O for the two axes instead)")
-  (setq bov (spa:askd "Overall diameter" "Outofround" nil nil))
+  ;; A form can settle this up front.  A stored A means the two axes
+  ;; were measured -- the Outofround branch -- and is only PEEKED at
+  ;; here: the sequence below is what consumes it.  A stored numeric B
+  ;; alone is the diameter itself, consumed now.  A (b . nil) is an NA:
+  ;; consumed, and the diameter is prompted for as always.
+  (setq bov (cond ((spa:fhas 'a) "Outofround")
+                  ((and (spa:fhas 'b)
+                        (numberp (setq bov (spa:ftake 'b)))
+                        (> bov 0.0))
+                   bov)
+                  (t (spa:askd "Overall diameter" "Outofround" nil nil))))
   (if (= (type bov) 'STR)
       (progn
         (setq ans (spa:askseqb
@@ -2749,6 +2952,10 @@
     (cal:sysrestore)
     (cal:dimstyrestore)
     (spa:pvkill)
+    ;; a form must never outlive the run it was given to: left behind,
+    ;; the next SPA typed at the command line would answer itself with
+    ;; last time's numbers and draw a wrong spa with no error at all
+    (spa:fclear)
     (spa:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
@@ -2781,6 +2988,9 @@
   ;; the hinge pass.
   (princ "\nThe Spa Cover Details block sets the grade and taper.")
   (spa:readblock)
+  ;; the form's grade/taper land HERE, before the Thermo-Light branch,
+  ;; so a form grade of THERMOLIGHT behaves exactly like the block's
+  (spa:formdetails)
   (if (spa:thermop)
       (progn
         (spa:setmode "Coversize")
@@ -2788,20 +2998,25 @@
         (princ "\nThermo-Light: the water's edge and the cover size are the same.")
         (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
       (spa:setmode
-        (cal:askkw "Is this drawing at the water's edge or the cover size"
-                   "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+        (spa:askkwf 'mode
+                    "Is this drawing at the water's edge or the cover size"
+                    "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
   (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
                  (if spa:*perdash* " (dashed)" "")
                  "; overalls read <measurement> over \"" spa:*sfx* "\"."))
 
   ;; ------------------------------------------------ shape
-  (initget 1 "Rectangle OCtagon ROund")
-  (setq stype (getkword "\nSpa shape [Rectangle/OCtagon/ROund]: "))
+  (setq stype (spa:fshape))
 
   ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (getpoint "\nInsertion base point <0,0>: ")
-        spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  ;; only afterwards do snaps drop for the command-fed drawing work.
+  ;; A form's base arrives as a plain point list, (base 0.0 0.0)
+  (setq base (if (spa:fhas 'base)
+                 (spa:ftake 'base)
+                 (getpoint "\nInsertion base point <0,0>: "))
+        spa:*base* (if (and base (listp base))
+                       (list (car base) (cadr base))
+                       (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -2827,6 +3042,10 @@
   (spa:undoend)
   (cal:sysrestore)
   (cal:dimstyrestore)
+  ;; the store is dropped on BOTH exits (see *error* above): an answer
+  ;; nothing consumed -- a key for a branch the run never took -- must
+  ;; not lie in wait for the next command-line SPA
+  (spa:fclear)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
