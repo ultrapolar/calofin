@@ -49,7 +49,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.6"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.7"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -285,7 +285,7 @@
 
 (defun autobead-build (ss dirpt sidewalls treadpts
                        / *error* beadoff layname fuzz
-                         oldcmd oldos oldpa temps
+                         oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
@@ -304,7 +304,11 @@
       (if (and e (entget e)) (entdel e)))
     (if oldpa (setvar "PEDITACCEPT" oldpa))
     (if oldos (setvar "OSMODE" oldos))
-    (command "._undo" "_end")
+    ;; only close a group that was actually opened -- an error thrown
+    ;; before the _Begin below (a cancelled selection, a failed getvar)
+    ;; used to run _End on nothing, which errors inside the handler
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nAUTOBEAD error: " msg)))
@@ -312,7 +316,8 @@
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "._undo" "_begin")
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (setq oldos (getvar "OSMODE")
         oldpa (getvar "PEDITACCEPT")
         temps '()
@@ -490,7 +495,8 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "._undo" "_end")
+  (command "_.UNDO" "_End")
+  (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   beadcount)
 

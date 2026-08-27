@@ -55,7 +55,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.3") ; printed on load and at command start
+(setq *paddle-version* "v1.4") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -397,8 +397,14 @@
      (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
            tmpname "PADDLE-TEMP-IMPORT")
      (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
-     (command "_.-INSERT" (strcat tmpname "=" path))
-     (command) ; cancel the insert -- the definitions stay behind
+     ;; the restore below must run even if the insert throws: oldcmd
+     ;; and oldatt are locals of THIS helper, so c:PADDLE's *error*
+     ;; handler cannot put them back and the user would be left with
+     ;; no command echo and no attribute prompts
+     (vl-catch-all-apply
+       '(lambda ()
+          (command "_.-INSERT" (strcat tmpname "=" path))
+          (command)))   ; cancel the insert -- the definitions stay behind
      (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
      (vl-catch-all-apply ; drop the unused throwaway definition
        '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))))

@@ -347,6 +347,14 @@ python3 tests/test_covercheck_pads.py # COVERCHECK's pad hunt vs PADDLE's,
                                       # both real .lsp files in one lispvm
 python3 tests/test_spacheck.py        # SPACHECK over a drawing the real SPA
                                       # just made, in the same lispvm
+python3 tests/test_dimcheck.py        # DIMSCAN read-only, then the guided
+                                      # review: Move/Keep/Back/No, merge,
+                                      # DIMCHECKRESCUE
+python3 tests/test_linfincheck.py     # the liner rules over a real staircase
+                                      # side view, LITELINFINSCAN, the
+                                      # guided review incl. Skip
+python3 tests/test_covercheck.py      # the cover rules over an L-pool, the
+                                      # pad suggestion, LITECOVERSCAN
 python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
                                       # and the pool it draws vs the prompts
 python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,

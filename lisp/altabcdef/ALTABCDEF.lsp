@@ -28,7 +28,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.1")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -629,11 +629,23 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ALTABCDEF (/ file rows base bpx bpy W H
+(defun c:ALTABCDEF (/ *error* undo-open file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
                     sol x y rms i tags tg p placed stage done)
   (vl-load-com)
+  ;; the plot is one undo group, so a cancelled run backs out with a
+  ;; single U instead of one per entity; the group is only closed if it
+  ;; was opened (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nALTABCDEF error: " msg)))
+    (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil)
@@ -765,6 +777,8 @@
             '())
           (princ "\n  View reset to plan (top) so the rectangle shows square.")
           (princ)))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 ;; right-pad a string to WIDTH

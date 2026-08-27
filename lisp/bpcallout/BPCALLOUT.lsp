@@ -36,7 +36,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -212,12 +212,19 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
-(defun c:BPCALLOUT (/ *error* cands pk hit ctr nm old picked names txtpt
-                      phrase lastpt)
+(defun c:BPCALLOUT (/ *error* undo-open cands pk hit ctr nm old picked names
+                      txtpt phrase lastpt)
+  ;; the rings and the callout are one undo group, so a run backed out
+  ;; halfway takes one U rather than one per circle; the group is only
+  ;; closed if it was opened (STANDARDS section 5)
   (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
     (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (setq cands (bp:collect-points))
@@ -268,6 +275,8 @@
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
                      " point(s) ringed on layer " *BP-LAYER*
                      ";  \"" phrase "\""))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 (princ (strcat "\nBPCALLOUT " *bpcallout-version*

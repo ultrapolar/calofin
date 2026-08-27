@@ -14994,7 +14994,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.1")
+(setq *abcdef-version* "v5.2")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -16202,7 +16202,7 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ABCDEF (/ file rows base bpx bpy W H method
+(defun c:ABCDEF (/ *error* undo-open file rows base bpx bpy W H method
                     Ax Ay Bx By Cx Cy Dx Dy th
                     good bad r nm din d k rr av loc x y rms used dropped
                     sp cut snap urms pct gr rect seed tags tg tx ty placed p
@@ -16211,6 +16211,18 @@
                     nlow path)
   (vl-load-com)
   (princ (strcat "\nABCDEF " *abcdef-version*))
+  ;; the plot is one undo group, so a cancelled run backs out with a
+  ;; single U instead of one per entity; the group is only closed if it
+  ;; was opened (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nABCDEF error: " msg)))
+    (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil method "Auto")
@@ -16545,6 +16557,8 @@
             (abcdef:to-abhd ss)
             (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
           (princ)))))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 ;; Print the loaded version.
@@ -17792,7 +17806,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.1")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -18381,11 +18395,23 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ALTABCDEF (/ file rows base bpx bpy W H
+(defun c:ALTABCDEF (/ *error* undo-open file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
                     sol x y rms i tags tg p placed stage done)
   (vl-load-com)
+  ;; the plot is one undo group, so a cancelled run backs out with a
+  ;; single U instead of one per entity; the group is only closed if it
+  ;; was opened (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nALTABCDEF error: " msg)))
+    (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil)
@@ -18517,6 +18543,8 @@
             '())
           (princ "\n  View reset to plan (top) so the rectangle shows square.")
           (princ)))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 ;; format a real to 3 decimals, left-padded into WIDTH
@@ -26896,7 +26924,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.6"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.7"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -27128,7 +27156,7 @@
 
 (defun autobead-build (ss dirpt sidewalls treadpts
                        / *error* beadoff layname fuzz
-                         oldcmd oldos oldpa temps
+                         oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
@@ -27147,7 +27175,11 @@
       (if (and e (entget e)) (entdel e)))
     (if oldpa (setvar "PEDITACCEPT" oldpa))
     (if oldos (setvar "OSMODE" oldos))
-    (command "._undo" "_end")
+    ;; only close a group that was actually opened -- an error thrown
+    ;; before the _Begin below (a cancelled selection, a failed getvar)
+    ;; used to run _End on nothing, which errors inside the handler
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nAUTOBEAD error: " msg)))
@@ -27155,7 +27187,8 @@
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "._undo" "_begin")
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (setq oldos (getvar "OSMODE")
         oldpa (getvar "PEDITACCEPT")
         temps '()
@@ -27333,7 +27366,8 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "._undo" "_end")
+  (command "_.UNDO" "_End")
+  (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   beadcount)
 
@@ -29133,7 +29167,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -29263,12 +29297,19 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
-(defun c:BPCALLOUT (/ *error* cands pk hit ctr nm old picked names txtpt
-                      phrase lastpt)
+(defun c:BPCALLOUT (/ *error* undo-open cands pk hit ctr nm old picked names
+                      txtpt phrase lastpt)
+  ;; the rings and the callout are one undo group, so a run backed out
+  ;; halfway takes one U rather than one per circle; the group is only
+  ;; closed if it was opened (STANDARDS section 5)
   (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
     (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (setq cands (bp:collect-points))
@@ -29319,6 +29360,8 @@
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
                      " point(s) ringed on layer " *BP-LAYER*
                      ";  \"" phrase "\""))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 (princ (strcat "\nBPCALLOUT " *bpcallout-version*
@@ -29363,7 +29406,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.1")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
@@ -29876,7 +29919,16 @@
 ;;; Main command
 ;;; ------------------------------------------------------------------
 
-(defun c:CCPRECHECK (/ product v)
+(defun c:CCPRECHECK (/ *error* product v)
+  ;; a walker: it changes no setting and opens no undo group, so the
+  ;; handler's whole job is to keep a cancel from printing a raw
+  ;; AutoLISP message at the user (STANDARDS section 5)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nCCPRECHECK error: " msg)))
+    (princ))
+
   (setq *chk:log* nil product nil)
   (princ "\n--- Tech Flow Chart checklist ---")
   (princ "\n(after the first question, Back re-asks the previous one)")
@@ -49409,7 +49461,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.1")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
@@ -49668,7 +49720,16 @@
 ;;; Checklist
 ;;; ------------------------------------------------------------------
 
-(defun c:LINCHECK (/ fib vin)
+(defun c:LINCHECK (/ *error* fib vin)
+  ;; a walker: it changes no setting and opens no undo group, so the
+  ;; handler's whole job is to keep a cancel from printing a raw
+  ;; AutoLISP message at the user (STANDARDS section 5)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nLINCHECK error: " msg)))
+    (princ))
+
   (setq *lin:log* nil fib nil vin nil)
   (princ "\n--- Liner Tech Drawing Checklist ---")
   (princ "\nWork down each item; the report prints at the end.")
@@ -53770,7 +53831,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.3") ; printed on load and at command start
+(setq *paddle-version* "v1.4") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -54103,8 +54164,14 @@
      (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
            tmpname "PADDLE-TEMP-IMPORT")
      (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
-     (command "_.-INSERT" (strcat tmpname "=" path))
-     (command) ; cancel the insert -- the definitions stay behind
+     ;; the restore below must run even if the insert throws: oldcmd
+     ;; and oldatt are locals of THIS helper, so c:PADDLE's *error*
+     ;; handler cannot put them back and the user would be left with
+     ;; no command echo and no attribute prompts
+     (vl-catch-all-apply
+       '(lambda ()
+          (command "_.-INSERT" (strcat tmpname "=" path))
+          (command)))   ; cancel the insert -- the definitions stay behind
      (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
      (vl-catch-all-apply ; drop the unused throwaway definition
        '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))))

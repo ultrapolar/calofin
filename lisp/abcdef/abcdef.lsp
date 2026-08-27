@@ -82,7 +82,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.1")
+(setq *abcdef-version* "v5.2")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -1302,7 +1302,7 @@
 ;;;  Main command
 ;;; --------------------------------------------------------------------------
 
-(defun c:ABCDEF (/ file rows base bpx bpy W H method
+(defun c:ABCDEF (/ *error* undo-open file rows base bpx bpy W H method
                     Ax Ay Bx By Cx Cy Dx Dy th
                     good bad r nm din d k rr av loc x y rms used dropped
                     sp cut snap urms pct gr rect seed tags tg tx ty placed p
@@ -1311,6 +1311,18 @@
                     nlow path)
   (vl-load-com)
   (princ (strcat "\nABCDEF " *abcdef-version*))
+  ;; the plot is one undo group, so a cancelled run backs out with a
+  ;; single U instead of one per entity; the group is only closed if it
+  ;; was opened (STANDARDS section 5)
+  (defun *error* (msg)
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nABCDEF error: " msg)))
+    (princ))
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil method "Auto")
@@ -1645,6 +1657,8 @@
             (abcdef:to-abhd ss)
             (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
           (princ)))))))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (princ))
 
 ;; Print the loaded version.

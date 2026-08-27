@@ -575,11 +575,25 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   hyphen; new work uses `tool:`. Existing prefixes migrate only if
   their file is otherwise being reworked -- a rename touches every
   line.  (Still open, on purpose.)
-* Still open: 4 living files have no `*error*` handler (`abcdef`,
-  `altabcdef`, `ccprecheck`, `lincheck`; the 8 `acady-*` stay as-is,
-  deprecated); 3 handlers restore nothing (`bpcallout`,
-  `DroneHeightGPS`, `paddle`); `AUTOBEAD.lsp` closes an undo group
-  unguarded.  ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and
+* ~~4 living files with no `*error*` handler~~ **DONE** -- `abcdef`
+  and `altabcdef` plot geometry, so they took a handler AND an undo
+  group (a cancelled plot is one U now, not one per entity);
+  `ccprecheck` and `lincheck` change no setting and open no group, so
+  theirs does the only job it has -- keeping a cancel from printing a
+  raw AutoLISP message.  The 8 `acady-*` stay as-is, deprecated.
+* ~~Handlers that restore nothing~~ **DONE** where there was anything
+  to restore.  `bpcallout` gained an undo group and closes it from the
+  handler.  `paddle`'s block import clobbered `CMDECHO`/`ATTREQ` and
+  restored them on the line after the command, so a throw inside
+  `-INSERT` left both clobbered -- and `c:PADDLE`'s handler could not
+  help, because those are the import helper's own locals; the command
+  is wrapped so the restore always runs.  `DroneHeightGPS` is left
+  alone on purpose: it changes no setting and opens no group, so its
+  handler already does all there is to do.
+* ~~`AUTOBEAD.lsp` closes an undo group unguarded~~ **DONE** -- it
+  tracks `undo-open` and closes only a group it opened, in the
+  canonical casing (an error before the `_Begin` used to run `_End` on
+  nothing, erroring inside the error handler).  ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and
   the whole cancel test is now ONE canonical spelling repo-wide, with
   `cal:error-cancel-p` / `cal:undobegin` / `cal:undoend` in the
   library so new code has nothing to hand-copy.  ~~XYPLOT's missing

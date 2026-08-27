@@ -24,7 +24,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.1")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
@@ -283,7 +283,16 @@
 ;;; Checklist
 ;;; ------------------------------------------------------------------
 
-(defun c:LINCHECK (/ fib vin)
+(defun c:LINCHECK (/ *error* fib vin)
+  ;; a walker: it changes no setting and opens no undo group, so the
+  ;; handler's whole job is to keep a cancel from printing a raw
+  ;; AutoLISP message at the user (STANDARDS section 5)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nLINCHECK error: " msg)))
+    (princ))
+
   (setq *lin:log* nil fib nil vin nil)
   (princ "\n--- Liner Tech Drawing Checklist ---")
   (princ "\nWork down each item; the report prints at the end.")
