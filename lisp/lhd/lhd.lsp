@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.2")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2198,7 +2198,7 @@
   (while go
     (initget "Stretch Corner Hold Done")
     (setq ans (getkword
-                "\n  Declare a [Stretch/Corner/Hold] or [Done]? <Done>: "))
+                "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done] <Done>: "))
     (cond
       ((= ans "Hold")
        (setq lh-phase "picking a held point"

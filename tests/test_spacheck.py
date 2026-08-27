@@ -448,7 +448,9 @@ def test_version_and_tutorial_run():
     vm = VM()
     vm.load(CHK)
     vm.run('c:SPACHECKVER', [])
-    vm.run('c:TUTORIALSPACHECK', [None])
+    # 'Checks' typed: Enter now means Both (the STANDARDS section 3
+    # default), and the demo half is driven by the two tests below
+    vm.run('c:TUTORIALSPACHECK', ['Checks'])
 
 
 def test_the_demo_reports_its_three_planted_faults_and_nothing_else():

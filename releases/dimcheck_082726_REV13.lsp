@@ -104,7 +104,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.2")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.3")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -463,10 +463,11 @@
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (dchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -1738,7 +1739,7 @@
 
 (defun dchk:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  -- press Enter to continue --")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 (defun dchk:tut-line (p1 p2 lay)
@@ -1862,16 +1863,19 @@
   (princ (strcat "\n=================================================="
                  "\n  DIMCHECK tutorial   [" *dchk-version* "]"
                  "\n=================================================="))
-  (initget "List Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old List stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both LIST")
   (setq ans (getkword
-              "\n  List the checks, Demo them on a practice drawing, or Both? [List/Demo/Both] <Both>: "))
+              "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
   (if (null ans) (setq ans "Both"))
+  (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
 
-  (if (member ans '("List" "Both"))
+  (if (member ans '("Checks" "Both"))
     (progn
       (foreach l (dchk:tut-checklist) (princ (strcat "\n" l)))
       (princ "\n")

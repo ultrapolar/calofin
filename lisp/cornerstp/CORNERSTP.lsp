@@ -181,7 +181,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.1") ; printed on load and at command start so a
+(setq *cs-version* "v3.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -749,8 +749,10 @@
     (arcr (setq mid (cs-arcpt c r (* 0.5 (+ a1 a2))))))
 
   ;; ---- 5. draw direction ----------------------------------------------
+  ;; the brackets here are exactly the keyword lists (STANDARDS
+  ;; section 1 rule 1) - the explanations live in the question text
   (initget "Inside Outside")
-  (setq key     (getkword "\nDraw steps [Inside out/Outside in] <Inside out>: ")
+  (setq key     (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: ")
         outflag (= key "Outside"))
 
   ;; ---- 5a. starting point (inside out only) ---------------------------
@@ -758,7 +760,7 @@
     (progn
       (initget "Middle True")
       (setq key (getkword
-        "\nMeasure step treads from [Middle of diagonal/True corner] <Middle>: "))
+        "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True] <Middle>: "))
       (setq start (if (= key "True") corner mid)))
     (setq start corner))
 
@@ -779,12 +781,12 @@
         (progn
           (initget "Parallel Equidistant")
           (setq key (getkword (strcat
-            "\nSteps [Parallel to diagonal"
-            "/Equidistant from true corner] <Parallel>: "))))
+            "\nSteps parallel to the diagonal, or equidistant"
+            " from the true corner? [Parallel/Equidistant] <Parallel>: "))))
         (progn
           (initget "Parallel True")
           (setq key (getkword
-            "\nTreads [Parallel to diagonal/True angle] <Parallel>: "))))
+            "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True] <Parallel>: "))))
       (if (not (member key '("True" "Equidistant")))
         (progn
           ;; treads parallel to the diagonal; step treads measured square to it

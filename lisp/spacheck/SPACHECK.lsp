@@ -106,7 +106,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.5")
+(setq *spacheck-version* "v1.6")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -2077,7 +2077,7 @@
     (princ))
   (setq oldecho (getvar "CMDECHO") oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
-  (setq ans (spachk:askkw "Show me" "Checks Demo Both" nil "Checks" nil))
+  (setq ans (spachk:askkw "Show me" "Checks Demo Both" nil "Both" nil))
   (if (member ans '("Checks" "Both"))
     (foreach l (spachk:tut-checklist) (princ (strcat "\n" l))))
   (if (member ans '("Demo" "Both"))

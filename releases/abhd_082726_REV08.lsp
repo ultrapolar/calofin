@@ -155,7 +155,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "082726 REV07") ; announced on load.  The
+(setq pf:*version*      "082726 REV08") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -3951,7 +3951,7 @@
 ;; by stage, for lookers - then cleans up after itself.
 
 (defun pf:tut-pause ()
-  (getstring "\n\n  --- press Enter to continue ---")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 ;; The stage caption above the demo, replaced at each stage.
@@ -4203,12 +4203,14 @@
             (princ)))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
                  pf:*version* ")."))
-  (initget "Checks Demo")
+  ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
+  ;; 1), and the standard tutorial selector with Both
+  (initget "Checks Demo Both")
   (setq mode (getkword
-               "\n  Read the [Checks] it applies, or watch a drawn [Demo]? <Demo>: "))
-  (if (= mode "Checks")
-    (pf:tut-checks)
-    (pf:tut-demo))
+               "\n  Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>: "))
+  (cond ((= mode "Checks") (pf:tut-checks))
+        ((= mode "Demo")   (pf:tut-demo))
+        (t (pf:tut-checks) (pf:tut-demo)))
   (pf:temp-clear)
   (setq *error* pf-old-err)
   (princ))

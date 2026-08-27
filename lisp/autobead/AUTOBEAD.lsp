@@ -49,7 +49,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.5"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.6"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -801,12 +801,15 @@
 ;; ---- entry point -----------------------------------------------------------
 
 (defun c:TUTORIALAUTOBEAD ( / ans )
-  (initget "Read Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old Read stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both READ")
   (setq ans (getkword
-              (strcat "\nAUTOBEAD tutorial - read it, or watch a live demo?"
-                      "\n  [Read/Demo/Both] <Read>: ")))
-  (if (null ans) (setq ans "Read"))
-  (if (member ans '("Read" "Both")) (autobead-tutorial-read))
+              (strcat "\nAUTOBEAD tutorial - read the Checks, or watch a live Demo?"
+                      "\n  [Checks/Demo/Both] <Both>: ")))
+  (if (null ans) (setq ans "Both"))
+  (if (= ans "READ") (setq ans "Checks"))
+  (if (member ans '("Checks" "Both")) (autobead-tutorial-read))
   (if (member ans '("Demo" "Both")) (autobead-tutorial-demo))
   (princ))
 

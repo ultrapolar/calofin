@@ -209,7 +209,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.9")
+(setq *cchk-version* "v1.0")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -599,10 +599,11 @@
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (cchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)

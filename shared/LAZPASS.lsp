@@ -18673,7 +18673,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "082726 REV07") ; announced on load.  The
+(setq pf:*version*      "082726 REV08") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -22368,7 +22368,7 @@
 ;; by stage, for lookers - then cleans up after itself.
 
 (defun pf:tut-pause ()
-  (getstring "\n\n  --- press Enter to continue ---")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 ;; The stage caption above the demo, replaced at each stage.
@@ -22620,12 +22620,14 @@
             (princ)))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
                  pf:*version* ")."))
-  (initget "Checks Demo")
+  ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
+  ;; 1), and the standard tutorial selector with Both
+  (initget "Checks Demo Both")
   (setq mode (getkword
-               "\n  Read the [Checks] it applies, or watch a drawn [Demo]? <Demo>: "))
-  (if (= mode "Checks")
-    (pf:tut-checks)
-    (pf:tut-demo))
+               "\n  Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>: "))
+  (cond ((= mode "Checks") (pf:tut-checks))
+        ((= mode "Demo")   (pf:tut-demo))
+        (t (pf:tut-checks) (pf:tut-demo)))
   (pf:temp-clear)
   (setq *error* pf-old-err)
   (princ))
@@ -26874,7 +26876,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.5"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.6"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -27622,12 +27624,15 @@
 ;; ---- entry point -----------------------------------------------------------
 
 (defun c:TUTORIALAUTOBEAD ( / ans )
-  (initget "Read Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old Read stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both READ")
   (setq ans (getkword
-              (strcat "\nAUTOBEAD tutorial - read it, or watch a live demo?"
-                      "\n  [Read/Demo/Both] <Read>: ")))
-  (if (null ans) (setq ans "Read"))
-  (if (member ans '("Read" "Both")) (autobead-tutorial-read))
+              (strcat "\nAUTOBEAD tutorial - read the Checks, or watch a live Demo?"
+                      "\n  [Checks/Demo/Both] <Both>: ")))
+  (if (null ans) (setq ans "Both"))
+  (if (= ans "READ") (setq ans "Checks"))
+  (if (member ans '("Checks" "Both")) (autobead-tutorial-read))
   (if (member ans '("Demo" "Both")) (autobead-tutorial-demo))
   (princ))
 
@@ -31134,7 +31139,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.1") ; printed on load and at command start so a
+(setq *cs-version* "v3.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -31692,8 +31697,10 @@
     (arcr (setq mid (cs-arcpt c r (* 0.5 (+ a1 a2))))))
 
   ;; ---- 5. draw direction ----------------------------------------------
+  ;; the brackets here are exactly the keyword lists (STANDARDS
+  ;; section 1 rule 1) - the explanations live in the question text
   (initget "Inside Outside")
-  (setq key     (getkword "\nDraw steps [Inside out/Outside in] <Inside out>: ")
+  (setq key     (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: ")
         outflag (= key "Outside"))
 
   ;; ---- 5a. starting point (inside out only) ---------------------------
@@ -31701,7 +31708,7 @@
     (progn
       (initget "Middle True")
       (setq key (getkword
-        "\nMeasure step treads from [Middle of diagonal/True corner] <Middle>: "))
+        "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True] <Middle>: "))
       (setq start (if (= key "True") corner mid)))
     (setq start corner))
 
@@ -31722,12 +31729,12 @@
         (progn
           (initget "Parallel Equidistant")
           (setq key (getkword (strcat
-            "\nSteps [Parallel to diagonal"
-            "/Equidistant from true corner] <Parallel>: "))))
+            "\nSteps parallel to the diagonal, or equidistant"
+            " from the true corner? [Parallel/Equidistant] <Parallel>: "))))
         (progn
           (initget "Parallel True")
           (setq key (getkword
-            "\nTreads [Parallel to diagonal/True angle] <Parallel>: "))))
+            "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True] <Parallel>: "))))
       (if (not (member key '("True" "Equidistant")))
         (progn
           ;; treads parallel to the diagonal; step treads measured square to it
@@ -35662,7 +35669,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v0.9")
+(setq *cchk-version* "v1.0")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -35969,10 +35976,11 @@
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (cchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -39315,7 +39323,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.2")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.3")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -39597,10 +39605,11 @@
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (dchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -40815,7 +40824,7 @@
 
 (defun dchk:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  -- press Enter to continue --")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 (defun dchk:tut-line (p1 p2 lay)
@@ -40939,16 +40948,19 @@
   (princ (strcat "\n=================================================="
                  "\n  DIMCHECK tutorial   [" *dchk-version* "]"
                  "\n=================================================="))
-  (initget "List Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old List stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both LIST")
   (setq ans (getkword
-              "\n  List the checks, Demo them on a practice drawing, or Both? [List/Demo/Both] <Both>: "))
+              "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
   (if (null ans) (setq ans "Both"))
+  (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
 
-  (if (member ans '("List" "Both"))
+  (if (member ans '("Checks" "Both"))
     (progn
       (foreach l (dchk:tut-checklist) (princ (strcat "\n" l)))
       (princ "\n")
@@ -46877,7 +46889,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.2")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -48918,7 +48930,7 @@
   (while go
     (initget "Stretch Corner Hold Done")
     (setq ans (getkword
-                "\n  Declare a [Stretch/Corner/Hold] or [Done]? <Done>: "))
+                "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done] <Done>: "))
     (cond
       ((= ans "Hold")
        (setq lh-phase "picking a held point"
@@ -49909,7 +49921,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v1.7")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v1.8")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -50227,10 +50239,11 @@
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
                  "  (red X)"
                  "\n    Move = onto nearest object " (lfc:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"))
+                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
-              "\n  [Move to the green +/Keep at the red X/Pick a spot] <Move>: "))
+              "\n  [Move/Keep/Pick] <Move>: "))
   (cond
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
@@ -53255,7 +53268,7 @@
 
 (defun lfc:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  -- press Enter to continue --")
+  (getstring "\n  --- press Enter to continue ---")
   (princ))
 
 (defun lfc:tut-line (p1 p2 lay)
@@ -53411,16 +53424,19 @@
   (princ (strcat "\n=================================================="
                  "\n  LINFINCHECK tutorial   [" *lfc-version* "]"
                  "\n=================================================="))
-  (initget "List Demo Both")
+  ;; the tutorial selector of STANDARDS section 3; the old List stays
+  ;; accepted typed in full, hidden
+  (initget "Checks Demo Both LIST")
   (setq ans (getkword
-              "\n  List the checks, Demo them on a practice drawing, or Both? [List/Demo/Both] <Both>: "))
+              "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
   (if (null ans) (setq ans "Both"))
+  (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
 
-  (if (member ans '("List" "Both"))
+  (if (member ans '("Checks" "Both"))
     (progn
       (foreach l (lfc:tut-checklist) (princ (strcat "\n" l)))
       (princ "\n")
@@ -57343,7 +57359,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.5")
+(setq *spacheck-version* "v1.6")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -59223,7 +59239,7 @@
     (princ))
   (setq oldecho (getvar "CMDECHO") oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
-  (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Checks" nil))
+  (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Both" nil))
   (if (member ans '("Checks" "Both"))
     (foreach l (spachk:tut-checklist) (princ (strcat "\n" l))))
   (if (member ans '("Demo" "Both"))
