@@ -1,48 +1,42 @@
 #!/usr/bin/env python3
 """Concatenate the shared build into one APPLOAD-able file.
 
-shared/parts/CALOFIN-LOADER.lsp has to find its 36 siblings on disk, and
-AutoCAD only lets it look along the support file search path -- which
-is not where APPLOAD's file dialog just sent you.  A single file has
-nothing to find, so this is the build to hand someone:
+shared/parts/CALOFIN-LOADER.lsp has to find its several dozen siblings
+on disk, and AutoCAD only lets it look along the support file search
+path -- which is not where APPLOAD's file dialog just sent you.  A
+single file has nothing to find, so this is the build to hand someone:
 
-    python3 tools/build_shared_bundle.py   ->  shared/LAZPASS.lsp
+    python3 tools/build_shared_bundle.py            ->  shared/LAZPASS.lsp
+    python3 tools/build_shared_bundle.py --check    #  write nothing;
+                                                    #  exit 1 if stale
 
 Same idea as the STEPS bundle in release_lisp.py: members are included
 verbatim, in the loader's own order, library first.
 """
 
 import pathlib
-import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-SHARED = ROOT / "shared"
-PARTS = SHARED / "parts"
-LOADER = PARTS / "CALOFIN-LOADER.lsp"
-BUNDLE = SHARED / "LAZPASS.lsp"
-
-RULE = ";;; " + "=" * 70
-COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
-HELD = re.compile(r'\("([^"]+)"\s*\.\s*"(WIP|OMITTED)"\)')
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from callib import (BUNDLE, COMMAND, HELD, LOADER, PARTS_DIR as PARTS, ROOT,
+                    RULE, loader_members, read)
 
 
 def held_back():
     """(file, reason) pairs the loader deliberately leaves out of the build."""
-    return HELD.findall(LOADER.read_text(encoding="utf-8"))
+    return HELD.findall(read(LOADER))
 
 
 def members():
     """The loader's own list, so the two can never disagree."""
-    body = LOADER.read_text(encoding="utf-8")
-    block = re.search(r"\(foreach m '\((.*?)\)\s*\n\s*\(cal--load m\)",
-                      body, re.S)
-    if not block:
+    names = loader_members(LOADER)
+    if names is None:
         sys.exit("could not read the module list out of CALOFIN-LOADER.lsp")
-    return re.findall(r'"([^"]+)"', block.group(1))
+    return names
 
 
-def main():
+def build():
+    """The bundle's full text, or an error message via sys.exit."""
     names = members()
     missing = [n for n in names if not (PARTS / n).is_file()]
     if missing:
@@ -50,8 +44,12 @@ def main():
 
     commands = []
     for n in names:
-        commands.extend(COMMAND.findall((PARTS / n).read_text(
-            encoding="utf-8", errors="replace")))
+        cmds = COMMAND.findall(read(PARTS / n))
+        for c in cmds:
+            if c.upper() in {x.upper() for x in commands}:
+                sys.exit("command %s is defined by more than one member - "
+                         "the bundle would claim it twice" % c.upper())
+        commands.extend(cmds)
 
     out = [
         RULE,
@@ -67,8 +65,9 @@ def main():
         ";;; %d files, %d commands:" % (len(names), len(commands)),
         ";;;",
     ]
-    for i in range(0, len(sorted(commands)), 6):
-        out.append(";;;   " + "  ".join(sorted(commands)[i:i + 6]))
+    ordered = sorted(commands)
+    for i in range(0, len(ordered), 6):
+        out.append(";;;   " + "  ".join(ordered[i:i + 6]))
     out += [
         ";;;",
         ";;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.",
@@ -85,7 +84,7 @@ def main():
 
     for n in names:
         out += ["", RULE, ";;; >>> %s" % n, RULE, ""]
-        out.append((PARTS / n).read_text(encoding="utf-8", errors="replace"))
+        out.append(read(PARTS / n))
 
     out += [
         "",
@@ -122,13 +121,39 @@ def main():
         "(princ)",
         "",
     ]
-    BUNDLE.write_text("\n".join(out), encoding="utf-8")
+    return "\n".join(out), names, commands
+
+
+def check():
+    """Problems with shared/LAZPASS.lsp, without writing anything."""
+    text, _, _ = build()
+    if not BUNDLE.is_file():
+        return ["shared/LAZPASS.lsp is missing - run "
+                "python3 tools/build_shared_bundle.py"]
+    if BUNDLE.read_text(encoding="utf-8") != text:
+        return ["shared/LAZPASS.lsp differs from what today's members "
+                "build - run python3 tools/build_shared_bundle.py"]
+    return []
+
+
+def main(argv):
+    if "--check" in argv:
+        problems = check()
+        for line in problems:
+            print(line)
+        print("build_shared_bundle --check: %s"
+              % ("%d problem(s)" % len(problems) if problems else "current"))
+        return 1 if problems else 0
+
+    text, names, commands = build()
+    BUNDLE.write_text(text, encoding="utf-8")
     print("wrote %s (%d files, %d commands, %.0f KB)" %
           (BUNDLE.relative_to(ROOT), len(names), len(commands),
            BUNDLE.stat().st_size / 1024))
     for name, why in held_back():
         print("  held back (%s): %s" % (why, name))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))

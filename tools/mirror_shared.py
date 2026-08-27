@@ -12,9 +12,13 @@ So the swap is written down instead, once per tool, and applied here.
 
     python3 tools/mirror_shared.py            # every tool listed below
     python3 tools/mirror_shared.py SPA        # just one
+    python3 tools/mirror_shared.py --check    # write nothing; exit 1 if
+                                              # any generated twin on disk
+                                              # differs from a fresh run
 
-`tools/check_standards.py` compares the two version banners and fails
-when they part company, which is what sends you back here.
+`tools/check_standards.py` compares the two version banners, and runs
+the --check above, so a generated twin that is hand-edited or left
+behind fails the standards check rather than shipping.
 """
 
 import os
@@ -45,6 +49,16 @@ TOOLS = {
             'spa:askkw': 'cal:askkw',
         },
         'drop_globals': ['spa:*sysold*', 'spa:*odstyle*'],
+        # cal:syssave takes the sysvars as an argument where spa:syssave
+        # baked them in, and the library keeps the dimension-style
+        # save/restore in its OWN pair -- so the one call becomes two.
+        # Drop that second call and the grouped build quietly stops
+        # putting the drawing's dimension style back.
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (spa:sysvars))',
+                              '(cal:dimstysave)'],
+            '(cal:sysrestore)': ['(cal:sysrestore)', '(cal:dimstyrestore)'],
+        },
         # spa:askkw already takes the SHOWN bracket third, like the
         # library's -- so no bracket translation is needed here
         'askkw_hidden': False,
@@ -217,6 +231,10 @@ TOOLS = {
         # spachk:askkw takes a HIDDEN keyword list third and derives the
         # bracket itself, so its call sites need translating
         'askkw_hidden': True,
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+        },
     },
     # POOL is the largest file in the tree and its twin was hand-mirrored
     # until the form-answer work made that a second pass -- exactly the
@@ -237,8 +255,6 @@ TOOLS = {
         # pool:askkw already takes the SHOWN bracket third, like the
         # library's, so no bracket translation is needed
         'askkw_hidden': False,
-        # the Back sentinel travels with the ask helpers, and every
-        # caller tests for it by name
         # the Back sentinel travels with the ask helpers, and the sysvar
         # snapshot global travels with syssave/sysrestore: drop_globals
         # removes its declaration, so every remaining READ of it has to
@@ -247,6 +263,12 @@ TOOLS = {
         # feet-inch drawings.
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
+        # POOL also saves LUNITS -- it switches the drawing to
+        # architectural units for the run and must put the user's back
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+        },
     },
     # The chart form is like the panel: it draws its own picture and
     # asks nothing through the library, so its twin is the file plus the
@@ -267,29 +289,6 @@ TOOLS = {
         'drop_globals': [],
     },
 }
-
-# Some call sites need more than a rename.  cal:syssave takes the
-# sysvars as an argument where the standalone helpers bake them in, and
-# the library keeps the dimension-style save/restore in its OWN pair of
-# helpers -- so a tool whose syssave also stashed the dim style expands
-# into two calls, not one.  Drop that second call and the grouped build
-# quietly stops putting the drawing's dimension style back.
-EXPAND = {
-    'SPA': {
-        '(cal:syssave)': ['(cal:syssave (spa:sysvars))', '(cal:dimstysave)'],
-        '(cal:sysrestore)': ['(cal:sysrestore)', '(cal:dimstyrestore)'],
-    },
-    'SPACHECK': {
-        '(cal:syssave)': ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
-    },
-    # POOL also saves LUNITS -- it switches the drawing to architectural
-    # units for the run and must put the user's back.
-    'POOL': {
-        '(cal:syssave)':
-            ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
-    },
-}
-
 
 def expand_calls(src, table):
     """Replace a bare (fn) call with one or more forms, each on its own
@@ -362,12 +361,16 @@ def top_span(src, opener, name):
     return i, j
 
 
-def fix_askkw(src):
+def fix_askkw(src, tool):
     """cal:askkw's third argument is the bracket text SHOWN in the
     prompt; the standalone helpers take a hidden-keyword list there and
     build the bracket themselves.  Renaming alone would pass nil where a
     string is wanted, so the bracket is written out -- the same
-    "A/B/C" the standalone one would have derived from the keywords."""
+    "A/B/C" the standalone one would have derived from the keywords.
+
+    A call site this cannot translate is a hard error: writing the twin
+    anyway would ship a truncated call that loads fine and dies at the
+    first keyword question."""
     out, n, i = [], 0, 0
     pair = re.compile(r'"(?P<kws>[A-Za-z][A-Za-z ]*)"(?P<gap>\s+)nil')
     while True:
@@ -378,11 +381,11 @@ def fix_askkw(src):
         out.append(src[i:j])
         m = pair.search(src, j, j + 400)
         if not m:
-            print("warning: could not translate askkw call at %r"
-                  % src[j:j + 60].splitlines()[0], file=sys.stderr)
-            out.append(src[j:j + 10])
-            i = j + 10
-            continue
+            raise SystemExit(
+                "mirror_shared: could not translate the askkw call at %r "
+                "in %s - the twin was NOT written; teach fix_askkw the "
+                "call shape first"
+                % (src[j:j + 60].splitlines()[0], tool))
         kws = m.group('kws')
         out.append(src[j:m.start()])
         out.append('"%s"%s"%s"' % (kws, m.group('gap'), kws.replace(' ', '/')))
@@ -391,15 +394,15 @@ def fix_askkw(src):
     return ''.join(out), n
 
 
-def mirror(tool, spec):
+def generate(tool, spec):
+    """(twin path, twin text) for one tool, written nowhere."""
     src_path = os.path.join(HERE, spec['src'])
     dst_path = os.path.join(HERE, 'shared', 'parts', tool + '.lsp')
     if not os.path.exists(src_path):
-        # a tool listed here but not in the tree yet (or one deleted
-        # from it) is skipped rather than crashing the whole sweep
-        print("skipped %s - no %s" % (tool, spec['src']), file=sys.stderr)
-        return
-    src = open(src_path).read()
+        raise SystemExit("mirror_shared: %s is in TOOLS but %s does not "
+                         "exist - fix the table" % (tool, spec['src']))
+    with open(src_path, encoding='utf-8') as f:
+        src = f.read()
 
     # the shared-build note goes under the Command: line of the header
     # the Commands: block may run to several lines; [ \t] not \s, or
@@ -434,7 +437,7 @@ def mirror(tool, spec):
         src = re.sub(r"([('])" + re.escape(old) + r"(?=[\s)])",
                      lambda m: m.group(1) + new, src)
 
-    src = expand_calls(src, EXPAND.get(tool, {}))
+    src = expand_calls(src, spec.get('expand', {}))
 
     for old, new in spec.get('symbols', {}).items():
         # \b only means anything next to a word character.  A global
@@ -448,16 +451,51 @@ def mirror(tool, spec):
 
     nkw = 0
     if spec.get('askkw_hidden'):
-        src, nkw = fix_askkw(src)
+        src, nkw = fix_askkw(src, tool)
+    return dst_path, src, len(dropped), nkw
 
-    open(dst_path, 'w').write(src)
+
+def mirror(tool, spec):
+    dst_path, src, ndropped, nkw = generate(tool, spec)
+    with open(dst_path, 'w', encoding='utf-8') as f:
+        f.write(src)
     print("wrote shared/parts/%s.lsp (%d lines, %d helpers from the "
           "library, %d askkw call sites translated)"
-          % (tool, len(src.splitlines()), len(dropped), nkw))
+          % (tool, len(src.splitlines()), ndropped, nkw))
+
+
+def check(tools=None):
+    """Tools whose twin on disk differs from a fresh generation."""
+    problems = []
+    for tool in sorted(tools or TOOLS):
+        dst_path, src, _, _ = generate(tool, TOOLS[tool])
+        try:
+            with open(dst_path, encoding='utf-8') as f:
+                have = f.read()
+        except OSError:
+            problems.append("shared/parts/%s.lsp is missing - run "
+                            "python3 tools/mirror_shared.py %s"
+                            % (tool, tool))
+            continue
+        if have != src:
+            problems.append(
+                "shared/parts/%s.lsp differs from what mirror_shared.py "
+                "generates - it is a GENERATED twin: edit %s and rerun "
+                "python3 tools/mirror_shared.py %s"
+                % (tool, TOOLS[tool]['src'], tool))
+    return problems
 
 
 def main():
-    want = sys.argv[1:] or sorted(TOOLS)
+    argv = sys.argv[1:]
+    if "--check" in argv:
+        problems = check([a for a in argv if a != "--check"] or None)
+        for line in problems:
+            print(line)
+        print("mirror_shared --check: %s"
+              % ("%d problem(s)" % len(problems) if problems else "current"))
+        return 1 if problems else 0
+    want = argv or sorted(TOOLS)
     for tool in want:
         if tool not in TOOLS:
             print("unknown tool %r - known: %s"

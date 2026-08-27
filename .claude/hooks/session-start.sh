@@ -27,7 +27,6 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   {
     echo "export PYTHONDONTWRITEBYTECODE=1"
     echo "export PYTHONUNBUFFERED=1"
-    echo "export CALOFIN_ROOT=$(pwd)"
   } >> "$CLAUDE_ENV_FILE"
 fi
 
@@ -46,7 +45,7 @@ echo "Tiers, in the order a tool moves through them:"
 echo "  wip/       drafts, no version banner            $([ -d wip ] && echo "$(find wip -iname '*.lsp' | wc -l) files" || echo '(not created yet)')"
 echo "  lisp/      standalone, one self-contained file  $(find lisp -iname '*.lsp' | wc -l) files"
 echo "  releases/  dated REV twins, generated           $(find releases -iname '*.lsp' | wc -l) files"
-echo "  shared/    grouped: LAZPASS.lsp + parts/      $(find shared/parts -iname '*.lsp' | wc -l) parts"
+echo "  shared/    grouped: LAZPASS.lsp + parts/       $(find shared/parts -iname '*.lsp' | wc -l) parts"
 echo
 echo "Rules that bite (STANDARDS.md is the full text):"
 echo "  - tool logic lives in lisp/; shared/ is its twin, never where a change starts"
@@ -61,11 +60,11 @@ if [ "$BRANCH" != "$TRUNK" ]; then
   echo "  - branch is '$BRANCH'; CLAUDE.md pins work to $TRUNK"
 fi
 echo
-echo "Checks:  python3 tools/check_standards.py   (tiers in step)"
-echo "         python3 tools/check_lisp.py <f>    python3 tools/check_scope.py <f>"
-echo "Tests:   python3 tests/test_shared.py       (whole grouped build in one session)"
-echo "         CALOFIN_LISP_ROOT=shared python3 tests/<t>.py   (parity vs standalone)"
-echo "Known failing on a clean checkout, not yours: test_pool_form.py, test_spa_form.py"
+echo "Checks:  make check      (tiers in step + generated tiers current + lint)"
+echo "Tests:   make test       (full suite, lisp/ tier - tools/run_tests.py)"
+echo "         make parity     (both tiers - the standalone-vs-grouped drift check)"
+echo "Known failing on a clean checkout, not yours: test_spa_form.py"
+echo "  (the list lives in EXPECTED_FAILURES, tools/run_tests.py - trust that one)"
 echo
 
 # ---- the guardrail --------------------------------------------------

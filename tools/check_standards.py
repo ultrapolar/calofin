@@ -25,7 +25,11 @@ import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import build_shared_bundle
+import mirror_shared
+import release_lisp
+from callib import ROOT
 
 #: The tiers, in the order a tool moves through them.  wip/ is the
 #: bench: files being drafted, no version banner, nothing generated
@@ -57,14 +61,12 @@ GENERATED = {"LAZPASS.lsp"}
 LIBRARY_FILES = {"CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"}
 
 #: Released as one concatenated file, so they have no twin of their own.
-BUNDLED = {"CORNERSTP.lsp", "HEMISTEP.lsp", "NORMIESTEP.lsp"}
+#: Derived from the same BUNDLES table release_lisp.py stamps from, so
+#: adding a second bundle there cannot leave this list behind.
+from callib import bundled_members
+BUNDLED = bundled_members()
 
-VERSION = re.compile(r'\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"')
-VERSION2 = re.compile(r'\*version\*\s+"(\d{6}) REV(\d{2})"')
-DEFUN = re.compile(r"^\(defun\s+([^\s()]+)", re.MULTILINE)
-COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.MULTILINE)
-CAL_SYM = re.compile(r"^\((?:defun|setq)\s+(cal:[^\s()]+)", re.MULTILINE)
-HELD = re.compile(r'\("([^"]+)"\s*\.\s*"(WIP|OMITTED)"\)')
+from callib import CAL_SYM, COMMAND, DEFUN, HELD, VERSION, VERSION2, rev_of
 
 
 def held_back():
@@ -94,17 +96,6 @@ def shared_members():
 
 def read(p):
     return p.read_text(encoding="utf-8", errors="replace")
-
-
-def rev_of(text):
-    """The REV a file's own version banner asks to be stamped with."""
-    m = VERSION.search(text)
-    if m:
-        return "REV%s%s" % (m.group(1), m.group(2))
-    m = VERSION2.search(text)
-    if m:
-        return "REV%s" % m.group(2)
-    return None
 
 
 def check_twins(problems):
@@ -143,6 +134,16 @@ def check_twins_current(problems):
                 "shared/parts/%s is at %s but %s is at %s - mirror the "
                 "change into the twin, per CLAUDE.md"
                 % (twin.name, b, p.relative_to(ROOT), a))
+        elif a and not b:
+            problems.append(
+                "shared/parts/%s has no version banner but %s carries %s - "
+                "the twin lost its banner, so nothing would catch it "
+                "falling behind" % (twin.name, p.relative_to(ROOT), a))
+        elif b and not a:
+            problems.append(
+                "%s has no version banner but shared/parts/%s carries %s - "
+                "one side lost its banner" % (p.relative_to(ROOT),
+                                              twin.name, b))
 
 
 def check_library_owns_cal(problems):
@@ -246,6 +247,16 @@ def check_bundle_current(problems):
                 "python3 tools/build_shared_bundle.py" % p.name)
 
 
+def check_generated(problems):
+    """The three generated tiers, checked by REGENERATION rather than by
+    proxy: a hand-edited generated twin, a stale dated release, or a
+    bundle whose markers survive while its bodies drift all fail here
+    and nowhere else."""
+    problems.extend(mirror_shared.check())
+    problems.extend(release_lisp.check())
+    problems.extend(build_shared_bundle.check())
+
+
 def check_wip(problems):
     """The bench tier, when it exists: drafts only, nothing stamped."""
     for p in lsp_files(WIP_DIR):
@@ -264,6 +275,7 @@ def main():
     check_loader_lists_everything(problems)
     check_release_twins(problems)
     check_bundle_current(problems)
+    check_generated(problems)
     check_wip(problems)
 
     tiers = ["lisp/ %d" % len(lsp_files(LISP_DIR)),
@@ -285,7 +297,8 @@ def main():
         for line in problems:
             print("  - " + line)
         return 1
-    print("standards: tiers in step, cal: namespace clean, no collisions")
+    print("standards: tiers in step, cal: namespace clean, no collisions,"
+          " generated tiers current")
     return 0
 
 
