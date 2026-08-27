@@ -210,6 +210,23 @@ copied from the library so the two never drift. Proven originals (named, not lin
 `pf:ensure-layer` in `lisp/abhd/abhd.lsp`,
 `pool:syssave` / `pool:sysrestore` in `lisp/pool/POOL.LSP`.
 
+**One divergence to know about before you copy `askkw`.** The
+reference below takes `hidden` third and DERIVES the bracket from
+`kws`, so the two can never drift. Most of the tree -- and
+`cal:askkw` in the library -- instead takes the bracket text `shown`
+third and hand-writes it. That is the older shape, and it is why
+section 7.2's "bracket a click cannot send" row existed at all.
+
+It is not being changed in place, on purpose: `tools/mirror_shared.py`
+swaps `pool:askkw` / `spa:askkw` / `fit:askkw` and others onto
+`cal:askkw`, so the library's arity is pinned by every generated twin
+at once -- widening or narrowing it is a coordinated pass of its own,
+not a drive-by. Until then: NEW code follows the reference; code
+calling `cal:askkw` passes `shown` and must keep it equal to `kws`
+with the spaces turned into slashes. A form-aware question wraps the
+helper (`pool:askkwf` / `spa:askkwf`) rather than growing an argument,
+for the same reason.
+
 ```lisp
 ;; Keyword question.  kws is the canonical keyword string - it is BOTH
 ;; the initget list and the bracket text, so the two can never drift.

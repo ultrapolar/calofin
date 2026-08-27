@@ -129,6 +129,23 @@ Known, accepted behavior deltas vs the lisp/ builds:
 * `cal:ensure-layer`'s repair announcement no longer carries a
   per-tool prefix.
 
+### One layering wart, known and left
+
+`parts/POOL.lsp` reads `cal:*sysold*` directly to work out whether the
+drawing is in feet-and-inches:
+
+```lisp
+pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
+```
+
+That is the library's own snapshot, and there is no accessor to ask it
+through -- the standalone file reads its own `pool:*sysold*` and the
+mirror renames the symbol, so the twin has no other option today. A
+`cal:sysget` would close it. Left alone on purpose for now: it is a
+tidiness fix that touches a generated twin and the swap table behind
+it, and it buys no behaviour. Do it with the next change that is
+already opening `mirror_shared.py`'s POOL entry.
+
 ## Tests
 
 ```
