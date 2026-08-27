@@ -429,6 +429,34 @@
 
 ;;; -------------------------- ask helpers -------------------------------
 
+;; Keyword question of STANDARDS.md section 1.  KWS is the initget list
+;; (hidden aliases included, spelled ALL-CAPS so they must be typed in
+;; full and cannot steal a canonical hotkey); SHOWN is the bracket text,
+;; which carries only the options a click may send.  DFLT nil = an
+;; answer is required.
+(defun ns-askkw (msg kws shown dflt / v)
+  (initget (if dflt 0 1) kws)
+  (setq v (getkword (strcat "\n" msg " [" shown "]"
+                            (if dflt (strcat " <" dflt ">") "") ": ")))
+  (cond ((null v) (if dflt dflt (ns-askkw msg kws shown dflt)))
+        (t v)))
+
+;; The Treatment question of STANDARDS.md section 2: "How should
+;; <subject> be treated?"  SUBJECT reads like prose ("the back
+;; corners").  Returns "Square", "Radius", "Cut" or "NotGiven" - the
+;; old words this tool used to store, and NG, are still accepted typed
+;; in full and are normalized HERE, never downstream.
+(defun ns-asktreat (subject dflt / v)
+  (setq v (ns-askkw (strcat "How should " subject " be treated?")
+                    "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
+                    "Square/Radius/Cut/NotGiven"
+                    dflt))
+  (cond ((= v "NG") "NotGiven")
+        ((= v "90") "Square")
+        ((= v "ROUNDED") "Radius")
+        ((member v '("DIAG" "DIAGONAL")) "Cut")
+        (t v)))
+
 ;;; --------------------------- bead helpers -----------------------------
 
 ;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
@@ -736,7 +764,7 @@
 ;; any other call site.
 (defun ns-ftreat (subject dflt / v)
   (cond
-    ((not (ns-fhas 'treat)) (cal:asktreat subject dflt))
+    ((not (ns-fhas 'treat)) (ns-asktreat subject dflt))
     ((null (setq v (ns-ftake 'treat))) dflt)
     ((and (= (type v) 'STR)
           (setq v (ns-fkword
@@ -747,7 +775,7 @@
            ((= v "ROUNDED") "Radius")
            ((member v '("DIAG" "DIAGONAL")) "Cut")
            (t v)))
-    (T (cal:asktreat subject dflt))))
+    (T (ns-asktreat subject dflt))))
 
 ;; Run NORMIESTEP with a form's answers already in hand.  Nothing
 ;; happens here that the direct path misses: a caller may equally set

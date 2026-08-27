@@ -485,17 +485,23 @@ TOOLS = {
     # by regenerating), and it deleted the emptied ';;; ask helpers'
     # header that regenerating keeps (R2).
     # [verified: matches except banner + listed residue vs the twin on disk]
+    # ns-askkw and ns-asktreat are NOT swapped, though the library
+    # carries both shapes: NORMIESTEP's take no `back` argument (4 and
+    # 2 args against cal:'s 5 and 3), so swapping them rewrites every
+    # call site into one the library rejects.  That is the rule at the
+    # top of this table -- only helpers the library reproduces EXACTLY
+    # belong in a swap map -- and it was learned the hard way here: the
+    # swap used to sit in this entry with an `expand` patching the one
+    # call site that existed, and the day a second appeared (ns-ftreat,
+    # the form-aware wrapper) the grouped build loaded fine and died at
+    # the first corner question.  Both wrappers stay local in the twin,
+    # as CORNERSTP's and HEMISTEP's already do.
     'NORMIESTEP': {
         'src': 'lisp/cornerstp/NORMIESTEP.lsp',
         'swap': {
-            'ns-askkw': 'cal:askkw', 'ns-asktreat': 'cal:asktreat',
             'ns-layerok': 'cal:layer-usable-p',
         },
         'drop_globals': [],
-        'expand': {
-            '(cal:asktreat rsubj "Square")':
-                ['(cal:asktreat rsubj "Square" nil)'],
-        },
     },
     # POOLDEMO defines no helpers of its own -- it drives POOL's,
     # cross-file.  The swap renames those call sites (there is nothing
