@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082726 REV06")
+(setq tut:*version* "082726 REV07")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -95,7 +95,9 @@
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524 MM -- and is converted to inches."
-    "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
+    "6.  Rectangle corners, one at a time -- the Treatment question:"
+    "    Square / Radius / Cut / NotGiven (the old words still work"
+    "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Corner A's answer autofills B, C and D -- Enter accepts."
     "7.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
@@ -238,8 +240,8 @@
   (spa:setmode "Coversize")
 
   (setq w tut:*w* l tut:*l* cut tut:*cut* gap tut:*gap*
-        corners (list (list "90" 0.0) (list "90" 0.0)
-                      (list "Diagonal" cut) (list "90" 0.0))
+        corners (list (list "Square" 0.0) (list "Square" 0.0)
+                      (list "Cut" cut) (list "Square" 0.0))
         quad (spa:quadat (list 0.0 0.0) w l)
         cen (list (* 0.5 w) (* 0.5 l))
         doff (max 6.0 (/ (max w l) 12.0))
@@ -257,8 +259,8 @@
       (setq stop
         (eq 'TUT-STOP
           (tut:step "STEP 1 -- THE COVER OUTLINE"
-            (list "Corners A and B (bottom) and D (top-left) are 90."
-                  "Corner C (top-right) is a Diagonal with a 21\" cut FACE."
+            (list "Corners A and B (bottom) and D (top-left) are Square."
+                  "Corner C (top-right) is a Cut with a 21\" cut FACE."
                   ""
                   "The overalls are always measured to the TRUE, sharp"
                   "corner; the treatment then cuts inward from there.  So"
@@ -454,14 +456,17 @@
       (progn
         (if *push-error-using-command* (*push-error-using-command*))
         (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
-        (initget "Checklist Demo Both")
-        (setq what (getkword "\nShow me [Checklist/Demo/Both] <Both>: "))
+        ;; the tutorial selector of STANDARDS section 3; the old
+        ;; Checklist stays accepted typed in full, hidden
+        (initget "Checks Demo Both CHECKLIST")
+        (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
+        (if (= what "CHECKLIST") (setq what "Checks"))
         (if (null what) (setq what "Both"))
         (spa:syssave)
         (setvar "CMDECHO" 0)
         (spa:undobegin)
         (setvar "LUNITS" 4)
-        (if (member what '("Checklist" "Both"))
+        (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))

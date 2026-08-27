@@ -120,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082726 REV15")
+(setq pool:*version* "082726 REV16")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -5109,8 +5109,11 @@
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
-        (setq htype (pool:askkwf 'htype "Hopper type"
-                                 "Square SIX" "Square/SIX-sided"
+        ;; the bracket is exactly the keyword list (STANDARDS section
+        ;; 1 rule 1): a click on "SIX-sided" sent text initget could
+        ;; not accept, so the explanation moved into the question
+        (setq htype (pool:askkwf 'htype "Hopper type (SIX = six-sided)"
+                                 "Square SIX" "Square/SIX"
                                  "Square" nil)
               six (= htype "SIX"))
         ;; a six-sided deep end can be taped two ways: offsets shot

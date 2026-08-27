@@ -13,12 +13,28 @@
 ;; Every command the palette can show.  A name here that is not loaded
 ;; is simply reported as missing, so the list is safe to keep ahead of
 ;; whatever a given machine has.
+;;
+;; The roster is LAZPANEL's (lisp/lazpanel/LAZPANEL.lsp, the rules in
+;; its header: headline commands only, no TUTORIAL*/VER/RESCUE/CFG
+;; satellites, no DD* photo toolset, no LISPLAB) plus the deprecated
+;; acady matcher pair the VB palette still carries buttons for.
+;; tests/test_shared.py checks every non-deprecated name below is a
+;; real command in the grouped build, so this list can no longer sit
+;; years behind the tree the way it once did.
 (setq calofin:*commands*
-  '("SPA" "POOL" "POOLDEMO" "ABHD" "LHD" "ABCDEF" "PADDLE" "AUTOBEAD"
-    "CHECK" "LINCHECK" "DIMCHECK" "DIMSCAN" "COVERCHECK" "COVERSCAN"
-    "LINTXTCHK" "MATCHSTD" "ACADY-SCAN"
-    "AUTODIM" "STAIRDIM" "FLOORDIM" "DIMCONTEND" "DIMARCCHECK"
-    "PERPPTS" "DRONE" "CORNERSTP" "HEMISTEP" "WCALST" "ADAB" "XYPLOT"))
+  '("ABCDEF" "ABCURCHECK" "ABCURCHECKSCAN" "ABFIND" "ABHD" "ABHDCOVER"
+    "ABMOVE" "ADAB" "ALTABCDEF" "AUTOBEAD" "AUTODIM" "AUTODIMSIDEPOV"
+    "BPCALLOUT" "CABHD" "CCPRECHECK" "CDCALLOUT" "CDCREATE" "CHECK"
+    "CORNERSTP" "COVERCHECK" "COVERSCAN" "CPERPPTS" "CUSTBLOCK"
+    "DIMARCCHECK" "DIMCHECK" "DIMCONTEND" "DIMSCAN" "DRONE" "FITABHD"
+    "FITABHDCOVER" "FLOORDIM" "HEMISTEP" "LAZFORM" "LAZFORMCOVER"
+    "LAZTXT" "LHD" "LINCHECK" "LINFINCHECK" "LINFINSCAN" "LINTXTCHK"
+    "LITECOVERSCAN" "LITELINFINSCAN" "LITESPACHECKSCAN" "NORMIESTEP"
+    "OASIS" "PADDLE" "PERPPTS" "POOL" "POOLCOVER" "POOLDEMO"
+    "SMARTFILLET" "SPA" "SPACHECK" "SPACHECKSCAN" "STAIRDIM"
+    "STOCKCOVER" "TYDRN" "WCALST" "XFTCONV" "XYPLOT"
+    ;; deprecated but still shipped standalone (lisp/standards_checker/)
+    "MATCHSTD" "ACADY-SCAN"))
 
 ;; Is C:<name> defined in this session?
 ;;

@@ -721,7 +721,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082726 REV15")
+(setq pool:*version* "082726 REV16")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -5628,8 +5628,11 @@
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
-        (setq htype (pool:askkwf 'htype "Hopper type"
-                                 "Square SIX" "Square/SIX-sided"
+        ;; the bracket is exactly the keyword list (STANDARDS section
+        ;; 1 rule 1): a click on "SIX-sided" sent text initget could
+        ;; not accept, so the explanation moved into the question
+        (setq htype (pool:askkwf 'htype "Hopper type (SIX = six-sided)"
+                                 "Square SIX" "Square/SIX"
                                  "Square" nil)
               six (= htype "SIX"))
         ;; a six-sided deep end can be taped two ways: offsets shot
@@ -8881,7 +8884,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082726 REV07")
+(setq spa:*version* "082726 REV08")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -9457,11 +9460,13 @@
 (defun spa:fshape ( / v)
   (if (spa:fhas 'shape) (setq v (spa:ftake 'shape)))
   (if (and v (= (type v) 'STR)
-           (member v '("Rectangle" "OCtagon" "ROund")))
+           (member v '("Rectangle" "OCtagon" "ROUnd")))
       v
       (progn
-        (initget 1 "Rectangle OCtagon ROund")
-        (getkword "\nSpa shape [Rectangle/OCtagon/ROund]: "))))
+        ;; ROUnd, not ROund: one capitalisation repo-wide (POOL's list
+        ;; needs RO for ROman, so the shared abbreviation is ROU)
+        (initget 1 "Rectangle OCtagon ROUnd")
+        (getkword "\nSpa shape [Rectangle/OCtagon/ROUnd]: "))))
 
 ;; Run SPA with a form's answers already in hand.  Nothing happens
 ;; here that the direct path misses: a caller may equally set
@@ -9817,11 +9822,14 @@
 (defun spa:offcorners (corners g / out c sz)
   (foreach c corners
     (setq sz (cond ((= (car c) "Radius") (+ (cadr c) g))
-                   ((= (car c) "Diagonal") (+ (cadr c) (* g spa:*diagoff*)))
+                   ((= (car c) "Cut") (+ (cadr c) (* g spa:*diagoff*)))
                    (t 0.0)))
-    (setq out (cons (if (and (/= (car c) "90") (> sz 1.0e-6))
-                        (list (car c) sz)
-                        (list "90" 0.0))
+    ;; a treatment the offset erases collapses to Square -- except a
+    ;; NotGiven, which stays un-recorded on the derived outline too
+    (setq out (cons (cond ((and (spa:cutp c) (> sz 1.0e-6))
+                           (list (car c) sz))
+                          ((= (car c) "NotGiven") (list "NotGiven" 0.0))
+                          (t (list "Square" 0.0)))
                     out)))
   (reverse out))
 
@@ -9831,7 +9839,7 @@
 ;; and a corner that was measured differently can be typed over.
 (defun spa:askothercorners (corners lbls maxsb / out i cc any v)
   (setq any nil)
-  (foreach cc corners (if (/= (car cc) "90") (setq any t)))
+  (foreach cc corners (if (spa:cutp cc) (setq any t)))
   (if any
       (princ (strcat "\n" (spa:modeword (spa:othermode))
                      " corners -- Enter takes the size the overalls imply.")))
@@ -9839,7 +9847,7 @@
   (setq out nil i 0)
   (while (< i (length corners))
     (setq cc (nth i corners))
-    (if (= (car cc) "90")
+    (if (not (spa:cutp cc))
         (setq out (cons cc out) i (1+ i))
         (progn
           (setq v (spa:askcorner (strcat "Corner " (nth i lbls))
@@ -10041,10 +10049,19 @@
 
 ;;; ---------- geometry: the cover's north-south chord at x ----------
 
+;; Does this corner carry a treatment that cuts real geometry -- a
+;; Radius or a Cut with a size?  NotGiven does NOT: its corner is
+;; built square, so everything that asks "is there a cut here" (the
+;; setback caps, the second outline, the hinge ties) answers no; only
+;; the corner marks care that it is not a plain Square.  (pool:cutp is
+;; the donor.)
+(defun spa:cutp (cc)
+  (and (member (car cc) '("Radius" "Cut")) (> (cadr cc) 1.0e-6)))
+
 ;; How far a corner treatment sets back along its walls.
 (defun spa:cornsb (cc)
   (cond ((= (car cc) "Radius") (cadr cc))
-        ((= (car cc) "Diagonal") (* (cadr cc) 0.70711))
+        ((= (car cc) "Cut") (* (cadr cc) 0.70711))
         (t 0.0)))
 
 ;; Offset of a treated edge INTO the shape at rx along a wall of length
@@ -10539,7 +10556,7 @@
         dp (cal:dot uprev unext)
         ang (atan (sqrt (max 0.0 (- 1.0 (* dp dp)))) dp))   ; interior angle
   (cond
-    ((= ctype "Diagonal")
+    ((= ctype "Cut")
      (setq sb (/ size (* 2.0 (sin (/ ang 2.0)))))           ; face -> edge setback
      (list (cal:v+ p (cal:v* uprev sb))
            (cal:v+ p (cal:v* unext sb)) nil))
@@ -10588,10 +10605,11 @@
   (foreach i (list 0 1 2 3)
     (setq tyi (car (nth i corners)))
     (cond
-      ((= tyi "90")
-       ;; a single sharp vertex, straight out to the next corner
+      ((member tyi '("Square" "NotGiven"))
+       ;; a single sharp vertex, straight out to the next corner -- a
+       ;; NotGiven corner is BUILT square and flagged by its ? mark
        (setq verts (cons (cons (nth i q) 0.0) verts)))
-      ((= tyi "Diagonal")
+      ((= tyi "Cut")
        (setq verts (cons (cons (cadr (nth i ce)) 0.0)
                          (cons (cons (car (nth i ce)) 0.0) verts))))
       (t                                ; Radius
@@ -10617,9 +10635,7 @@
 (defun spa:maxsetback (corners / m c)
   (setq m 0.0)
   (foreach c corners
-    (setq m (max m (cond ((= (car c) "Radius") (cadr c))
-                         ((= (car c) "Diagonal") (* (cadr c) 0.70711))
-                         (t 0.0)))))
+    (setq m (max m (spa:cornsb c))))
   m)
 
 ;; Do all four corners carry the same treatment?  Four identical corners
@@ -10634,7 +10650,7 @@
 
 ;; The order sheet's 90-degree corner mark: a small circle on the corner
 ;; point with a leader out of it.  Assumes CLAYER is already DIMENSION.
-(defun spa:dim90 (quad i cen doff sfx / p outd r)
+(defun spa:dim90 (quad i cen doff txt / p outd r)
   (setq p (nth i quad)
         outd (spa:unit (cal:v- p cen))
         r (* 0.18 doff))
@@ -10644,7 +10660,23 @@
                  (cons 40 r)))
   (command "_.LEADER" (spa:wp (cal:v+ p (cal:v* outd r)))
            (spa:wp (cal:v+ p (cal:v* outd (* 1.2 doff))))
-           "" (strcat "90%%d" sfx) ""))
+           "" txt ""))
+
+;; A NotGiven corner's mark: the circled corner with a ? leader, and a
+;; "Not Given" note past the leader tip -- the sheet must SHOW the
+;; treatment was never recorded, not silently claim a 90.  The note is
+;; pulled back by its own width on a left-pointing corner, so it cannot
+;; read back across its leader into the shape.  (pool:dimng is the
+;; donor; STANDARDS section 2.)
+(defun spa:dimng (quad i cen doff sfx / p outd h tp)
+  (setq p (nth i quad)
+        outd (spa:unit (cal:v- p cen)))
+  (spa:dim90 quad i cen doff (strcat "?" sfx))
+  (setq h (* 0.25 doff)
+        tp (cal:v+ p (cal:v* outd (* 1.45 doff))))
+  (if (< (car outd) 0.0)
+      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
+  (spa:text tp h "Not Given" "DIMENSION"))
 
 ;; Corner callouts, laid out the way the order sheet does them: the note
 ;; sits OUTSIDE the corner, on the 45-degree line out of it.
@@ -10674,28 +10706,27 @@
     ((= ty "Radius")
      (setq am (caddr ce))
      (spa:dimrad (nth i arcs) am outd doff sfx))
-    ((= ty "Diagonal")
+    ((= ty "Cut")
      (setq fm (cal:mid (car ce) (cadr ce)))
      (spa:dimalg (car ce) (cadr ce)
-                 (cal:v+ fm (cal:v* outd (* 0.6 doff))) sfx)))
+                 (cal:v+ fm (cal:v* outd (* 0.6 doff))) sfx))
+    ((= ty "NotGiven")
+     (spa:dimng quad i cen doff sfx))
+    (t                                  ; Square
+     (spa:dim90 quad i cen doff (strcat "90%%d" sfx))))
   (princ))
 
-(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist nsq sqi i)
+(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist i)
+  ;; STANDARDS section 2: four identical corners get ONE callout with a
+  ;; Typ. suffix at the reference corner -- all-Square included, which
+  ;; used to get no note at all.  Mixed corners are called out one by
+  ;; one, each Square with its own 90%%d mark and each NotGiven with
+  ;; its own ? mark and Not Given note.
   (setq allsame (spa:samecorners corners)
         sfx (if allsame " Typ." "")
         ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
   (foreach i ilist
     (spa:dimcorner1 quad corners arcs cen doff i sfx))
-  ;; the square corners of a MIXED set share one mark, scanned from the
-  ;; bottom-right the way the sheet places it
-  (if (not allsame)
-      (progn
-        (setq nsq 0 sqi nil)
-        (foreach i (list 1 0 2 3)
-          (if (= (car (nth i corners)) "90")
-              (progn (setq nsq (1+ nsq))
-                     (if (null sqi) (setq sqi i)))))
-        (if sqi (spa:dim90 quad sqi cen doff (if (> nsq 1) " Typ." "")))))
   (princ))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
@@ -10717,7 +10748,7 @@
   (setq i 0)
   (foreach cc corners
     (cond
-      ((= (car cc) "Diagonal")
+      ((= (car cc) "Cut")
        (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)))))
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
@@ -10726,9 +10757,10 @@
     (setq i (1+ i)))
   pv)
 
-;; What the corner's size prompt is called.
-(defun spa:cornersizemsg (ty)
-  (if (= ty "Radius") " corner radius" " diagonal cut face length"))
+;; The size question, worded the standard's way (STANDARDS section 2):
+;; "Radius for <subject>" / "Cut face length for <subject>".
+(defun spa:cornersizemsg (ty label)
+  (strcat (if (= ty "Radius") "Radius for " "Cut face length for ") label))
 
 ;; Prompt one corner's treatment, named the way the order sheet's corner
 ;; legend names them: Radius / Diagonal / 90.  ("Square" is accepted as
@@ -10750,8 +10782,14 @@
         (if (spa:fhas (read (strcat fk "-ty")))
             (progn
               (setq fty (spa:ftake (read (strcat fk "-ty"))))
-              (if (equal fty "Square") (setq fty "90"))
-              (if (not (member fty '("90" "Radius" "Diagonal")))
+              ;; the palette's OLD wire words stay accepted (an
+              ;; un-rebuilt DLL keeps working) and normalise exactly
+              ;; like typed legacy input
+              (setq fty (cond ((equal fty "90") "Square")
+                              ((equal fty "Diagonal") "Cut")
+                              ((equal fty "NG") "NotGiven")
+                              (t fty)))
+              (if (not (member fty '("Square" "Radius" "Cut" "NotGiven")))
                   (setq fty nil))))
         (if (spa:fhas (read (strcat fk "-sz")))
             (progn
@@ -10763,17 +10801,27 @@
   (while (null out)
     (cal:osup)
     ;; the form's treatment stands in for the question ONCE -- a Back
-    ;; from the size question re-asks at the keyboard
+    ;; from the size question re-asks at the keyboard.  The question is
+    ;; the canonical Treatment of STANDARDS section 2; the pre-standard
+    ;; words (90, ROUNDED, DIAG/DIAGONAL, NG) stay accepted typed in
+    ;; full, hidden from the bracket, and are normalised HERE.
     (setq ty (if fty fty
-                 (cal:askkw label "Radius Diagonal 90 Square"
-                            "Radius/Diagonal/90" dflty back))
+                 (cal:askkw (strcat "How should " label " be treated?")
+                            "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
+                            "Square/Radius/Cut/NotGiven" dflty back))
           fty nil)
     (cal:osdown)
-    (if (equal ty "Square") (setq ty "90"))   ; sheet legend calls it 90
+    (setq ty (cond ((equal ty "NG") "NotGiven")
+                   ((equal ty "90") "Square")
+                   ((equal ty "ROUNDED") "Radius")
+                   ((member ty '("DIAG" "DIAGONAL")) "Cut")
+                   (t ty)))
     (cond
       ;; backed out of the type question -- out of the corner entirely
       ((eq ty 'CAL-BACK) (setq out 'CAL-BACK))
-      ((= ty "90") (setq out (list ty 0.0)))
+      ;; the two unsized answers: Square is a true 90, NotGiven is
+      ;; DRAWN square and flagged -- nothing was measured, so no size
+      ((member ty '("Square" "NotGiven")) (setq out (list ty 0.0)))
       (t
        ;; the autofill size only stands in when it came from the SAME
        ;; treatment -- a radius is not a cut face
@@ -10782,8 +10830,7 @@
              ;; the form's size stands in the same way -- once; the
              ;; too-large loop below re-asks at the keyboard
              sz (if fsz fsz
-                    (spa:askd (strcat label (spa:cornersizemsg ty))
-                              nil dsz t))
+                    (spa:askd (spa:cornersizemsg ty label) nil dsz t))
              fsz nil)
        ;; Back at the size re-asks the type, its previous question
        (if (not (eq sz 'CAL-BACK))
@@ -10798,7 +10845,7 @@
                               (rtos (if (= ty "Radius") maxsb
                                         (/ maxsb 0.70711)))
                               ".  Re-enter."))
-               (setq sz (spa:askd (strcat label (spa:cornersizemsg ty))
+               (setq sz (spa:askd (spa:cornersizemsg ty label)
                                   nil nil t)))
              (if (not (eq sz 'CAL-BACK)) (setq out (list ty sz))))))))
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
@@ -10883,7 +10930,7 @@
         'CAL-BACK
         (progn
           (setq corners (reverse corners) anycut nil)
-          (foreach cc corners (if (/= (car cc) "90") (setq anycut t)))
+          (foreach cc corners (if (spa:cutp cc) (setq anycut t)))
           ;; show the chosen treatments on the guide, scaled from the
           ;; real spa onto the 240 x 200 nominal and capped so a big
           ;; treatment cannot swallow the guide
@@ -11007,8 +11054,8 @@
   (if (not allsame)
       (foreach i (list 0 1 2 3)
         (setq j (rem (+ i 1) 4))
-        (if (or (/= (car (nth i corners)) "90")
-                (/= (car (nth j corners)) "90"))
+        (if (or (spa:cutp (nth i corners))
+                (spa:cutp (nth j corners)))
             (spa:dimalg (spa:cornerpoint quad corners i 'next)
                         (spa:cornerpoint quad corners j 'prev)
                         (spa:outoff (nth i quad) (nth j quad) cen spa:*flatoff*)
@@ -11057,7 +11104,7 @@
     (setq rows (append rows
                        (list (list (strcat "CORNER " (nth i lbls) " "
                                            (strcase (car cc)))
-                                   (if (= (car cc) "90") nil (cadr cc))
+                                   (if (spa:cutp cc) (cadr cc) nil)
                                    (cadr cc))))
           i (1+ i)))
   (if meth
@@ -11070,7 +11117,7 @@
                              (list (list (strcat (strcase (spa:modeword spa:*mode*))
                                                  " COR " (nth i lbls) " "
                                                  (strcase (car cc)))
-                                         (if (= (car cc) "90") nil (cadr cc))
+                                         (if (spa:cutp cc) (cadr cc) nil)
                                          (cadr cc))))
                 i (1+ i)))
         (spa:setmode mode1)))
@@ -11681,7 +11728,7 @@
 
   (cond
     ((= stype "OCtagon") (spa:octflow))
-    ((= stype "ROund")   (spa:roundflow))
+    ((= stype "ROUnd")   (spa:roundflow))
     (t                   (spa:rectflow)))
 
   ;; ------------------------------------------------ finish
@@ -11740,7 +11787,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082726 REV06")
+(setq tut:*version* "082726 REV07")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -11811,7 +11858,9 @@
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524 MM -- and is converted to inches."
-    "6.  Rectangle corners, one at a time: Radius / Diagonal / 90."
+    "6.  Rectangle corners, one at a time -- the Treatment question:"
+    "    Square / Radius / Cut / NotGiven (the old words still work"
+    "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Corner A's answer autofills B, C and D -- Enter accepts."
     "7.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
@@ -11954,8 +12003,8 @@
   (spa:setmode "Coversize")
 
   (setq w tut:*w* l tut:*l* cut tut:*cut* gap tut:*gap*
-        corners (list (list "90" 0.0) (list "90" 0.0)
-                      (list "Diagonal" cut) (list "90" 0.0))
+        corners (list (list "Square" 0.0) (list "Square" 0.0)
+                      (list "Cut" cut) (list "Square" 0.0))
         quad (spa:quadat (list 0.0 0.0) w l)
         cen (list (* 0.5 w) (* 0.5 l))
         doff (max 6.0 (/ (max w l) 12.0))
@@ -11973,8 +12022,8 @@
       (setq stop
         (eq 'TUT-STOP
           (tut:step "STEP 1 -- THE COVER OUTLINE"
-            (list "Corners A and B (bottom) and D (top-left) are 90."
-                  "Corner C (top-right) is a Diagonal with a 21\" cut FACE."
+            (list "Corners A and B (bottom) and D (top-left) are Square."
+                  "Corner C (top-right) is a Cut with a 21\" cut FACE."
                   ""
                   "The overalls are always measured to the TRUE, sharp"
                   "corner; the treatment then cuts inward from there.  So"
@@ -12170,14 +12219,17 @@
       (progn
         (if *push-error-using-command* (*push-error-using-command*))
         (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
-        (initget "Checklist Demo Both")
-        (setq what (getkword "\nShow me [Checklist/Demo/Both] <Both>: "))
+        ;; the tutorial selector of STANDARDS section 3; the old
+        ;; Checklist stays accepted typed in full, hidden
+        (initget "Checks Demo Both CHECKLIST")
+        (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
+        (if (= what "CHECKLIST") (setq what "Checks"))
         (if (null what) (setq what "Both"))
         (spa:syssave)
         (setvar "CMDECHO" 0)
         (spa:undobegin)
         (setvar "LUNITS" 4)
-        (if (member what '("Checklist" "Both"))
+        (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
