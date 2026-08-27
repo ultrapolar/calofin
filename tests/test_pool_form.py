@@ -286,4 +286,81 @@ assert not pl.globals.get('pool:*nobottom*'), \
 print("   typed POOL still asks it, and never sets the flag itself")
 
 
+# --------------------------------------------------------------------
+# 9.  Grecian collective corners fully from the form: the crec gate and
+#     both family treatments (body Cut + size, tips Square) are supplied,
+#     so no corner question of any kind appears -- and the pool drawn is
+#     the one the same answers typed at the prompts produce.
+# --------------------------------------------------------------------
+print("== 9. grecian corners entirely from the form ==")
+
+GREC_LEAD = (["Insquare", "Grecian"] + BASE +
+             ["Overall", 480.0, 200.0,
+              "NA", "NA", "NA", "NA", "NA"])
+
+h = by_prompts(GREC_LEAD + ["Yes",             # anything to record?
+                            "Cut", 24.0,       # BODY corners A/B/C/D
+                            "Square",          # END TIPS LT/LB/RT/RB
+                            "No"])             # no pool bottom
+
+GREC_CORNERS = """'((crec . "Yes")
+                   (bodycorners-ty . "Cut") (bodycorners-sz . 24.0)
+                   (endcorners-ty . "Square"))"""
+
+i = by_form(GREC_CORNERS, GREC_LEAD + ["No"])
+same(h, i, "grecian form corners")
+assert not any('Anything to record' in p for p, _ in i.prompts), \
+    "the corner-record gate was asked despite (crec . \"Yes\")"
+assert not any('body corners' in p for p, _ in i.prompts), \
+    "the body-corner family was asked despite the form answering it"
+assert not any('end-tip corners' in p for p, _ in i.prompts), \
+    "the end-tip family was asked despite the form answering it"
+assert len(h.prompts) - len(i.prompts) == 4, \
+    "the form should have answered exactly the gate, two treatments " \
+    "and one size (got %d)" % (len(h.prompts) - len(i.prompts))
+print("   gate, both family treatments and the cut size all from the "
+      "form; %d prompts saved" % (len(h.prompts) - len(i.prompts)))
+
+
+# --------------------------------------------------------------------
+# 10. An askkwf gate pair: the mutt's two end-style questions answered
+#     by the form, geometry identical to the typed run.
+# --------------------------------------------------------------------
+print("== 10. mutt end styles from the form ==")
+
+MUTT_TAIL = [480.0, 240.0, "No"]         # B, A, no pool bottom
+
+j = by_prompts(["Insquare", "MU"] + BASE + ["Square", "Square"] + MUTT_TAIL)
+k = by_form("""'((dstyle . "Square") (sstyle . "Square"))""",
+            ["Insquare", "MU"] + BASE + MUTT_TAIL)
+same(j, k, "mutt end styles")
+assert not any('end (left) style' in p or 'end (right) style' in p
+               for p, _ in k.prompts), \
+    "an end style was asked despite the form supplying both"
+print("   DEEP and SHALLOW styles from the form; no style prompt appeared")
+
+
+# --------------------------------------------------------------------
+# 11. The two grecian collective subjects key like the other corner
+#     subjects do: case-blind, exact wording only.
+# --------------------------------------------------------------------
+print("== 11. fckey knows the grecian corner families ==")
+
+vm = VM()
+vm.load(LSP)
+for subject, expect in [
+        ("the body corners A, B, C and D", "bodycorners"),
+        ("the end-tip corners LT, LB, RT and RB", "endcorners"),
+        ("THE BODY CORNERS A, B, C AND D", "bodycorners"),
+        ("all four corners", "corners"),          # the old subjects hold
+        ("Corner A", "cornera"),
+        ("the body corners", None),               # partial wording: prompt
+        ("the arc springs", None)]:
+    got = vm.eval(parse_all('(pool:fckey "%s")' % subject)[0])
+    got = None if got is None else str(got)
+    assert got == expect, \
+        "fckey(%r) gave %r, expected %r" % (subject, got, expect)
+print("   body/tip families key; partial or unknown subjects still prompt")
+
+
 print("\nALL POOL FORM SCENARIOS PASSED")

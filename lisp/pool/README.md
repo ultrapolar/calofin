@@ -878,6 +878,51 @@ The one limit: `Back` covers the **input phase**. Once the last
 measurement is in and the pool is drawn, the answers are committed —
 use `U` to undo the whole command.
 
+### Form answers (LAZFORM / the palette)
+
+A form — the `LAZFORM` chart dialog, or the VB palette — can answer
+any subset of the questions before the run starts by leaving
+`(key . value)` pairs in `pool:*form*` (`pool:run-with-answers` is the
+entry point). Whatever the form answered is skipped, whatever it left
+empty is prompted as usual, and **every answer is consumed as it is
+read** — so `Back` cannot deadlock on a form-answered question, and a
+value a range check rejects is retyped at the keyboard rather than
+re-fed. An answer the question would not accept falls through to the
+prompt as if the box had been left empty.
+
+The measurement letters key themselves: the sequence letters under
+their own symbols (`h`, `g`, `f`, `e`, `m`, `l`, `k`, `s`, `s1`, …)
+and the depth prompts by their letter prefix (`c`, `d`, `c2`). The
+keyword questions have named keys:
+
+| Key | Question |
+| --- | --- |
+| `shape` | the pool shape, in the full canonical spelling (`Rectangle`, `LAzyl`, `MUtt`, …) |
+| `insq` | `Is the pool in-square or out-of-square` |
+| `imeth` | Grecian/Octagon `perimeter input` (`Measured`/`Overall`) |
+| `gcross` | Grecian/Octagon `cross-dim detail` (`Simple`/`Center`/`Complex`) |
+| `crec` | the `Anything to record about the corners (radius / cut / not given)?` gate (`Yes`/`No`) — one key, whichever shape asks it |
+| `cmode` | `Radius/Cut corners -- cross dims measured from` (`Corner`/`Middle`/`Ends`) |
+| `mirror` | the L pools' `Mirror the pool (flips the wing; deep end stays left)` (`Yes`/`No`) |
+| `perfect` | the Roman's out-of-square `Are both ends perfect (identical)` (`Yes`/`No`) |
+| `dstyle`, `sstyle` | the mutt's `DEEP end (left)` / `SHALLOW end (right)` styles (`Square`/`Grecian`/`ROman`/`Oval`) |
+| `btype` | `Bottom type` |
+| `htype` | Grecian `Hopper type` (`Square`/`SIX-sided`) |
+| `hmode` | `SIX-sided corners measured by` (`Offsets`/`Letters`) |
+
+Keyword values are strings spelling one of the words the bracket
+shows (case-blind, but a word the question does not offer — or a
+sized treatment where the walls leave no room — falls through to the
+prompt).
+
+Corner treatments key off the question's subject as `<stem>-ty` (the
+treatment word) and `<stem>-sz` (the radius or cut-face length):
+`cornera` … `cornerd` (and `cornerlt` etc.) for the per-corner
+questions, `corners` for `all four corners`, `outercorners` and
+`innercorner` for the L's two questions, and `bodycorners` and
+`endcorners` for the in-square Grecian/Octagon families (`the body
+corners A, B, C and D`, `the end-tip corners LT, LB, RT and RB`).
+
 ### Object snaps stay live while you measure
 
 Your own object snaps are **live during every prompt**, including the

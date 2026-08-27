@@ -120,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082526 REV14")
+(setq pool:*version* "082726 REV15")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -678,6 +678,8 @@
     ((= s "all four corners") "corners")
     ((= s "the outer corners") "outercorners")
     ((= s "the inner corner e") "innercorner")
+    ((= s "the body corners a, b, c and d") "bodycorners")
+    ((= s "the end-tip corners lt, lb, rt and rb") "endcorners")
     ((and (> (strlen s) 7) (= (substr s 1 7) "corner "))
      (strcat "corner" (substr s 8)))))
 
@@ -794,6 +796,17 @@
 ;; Yes/No that can be backed out of.  Returns T, nil or POOL-BACK.
 (defun pool:askyn (msg dflt back / v)
   (setq v (pool:askkw msg "Yes No" "Yes/No" dflt back))
+  (if (eq v 'POOL-BACK) v (= v "Yes")))
+
+;; The Yes/No question a form can answer.  A wrapper over pool:askkwf
+;; for pool:askkwf's own reason: pool:askyn is swapped for the library's
+;; in the grouped build, so neither may grow an argument.  The form
+;; answers "Yes" or "No" -- the same words a click on the bracket would
+;; send -- and pool:fkword holds it to exactly those, so anything else
+;; in the box falls through to the prompt.  Returns T, nil or
+;; POOL-BACK, like pool:askyn.
+(defun pool:askynf (key msg dflt back / v)
+  (setq v (pool:askkwf key msg "Yes No" "Yes/No" dflt back))
   (if (eq v 'POOL-BACK) v (= v "Yes")))
 
 ;; THE POOL-BOTTOM GATE.  The same question in five places, one per
@@ -2151,9 +2164,9 @@
    (setq crosses nil xg nil)
    (if (not pool:*insq*)
       (progn
-        (setq v (pool:askkw (strcat nm2 " cross-dim detail")
-                            "Simple Center Complex" "Simple/Center/Complex"
-                            nil t))
+        (setq v (pool:askkwf 'gcross (strcat nm2 " cross-dim detail")
+                             "Simple Center Complex" "Simple/Center/Complex"
+                             nil t))
         (if (eq v 'POOL-BACK) (setq grback t)
             (setq mode v
                   crosses (pool:grecmode mode)
@@ -2264,8 +2277,9 @@
     (setq gcs (list (list "Square" 0.0) (list "Square" 0.0) (list "Square" 0.0)
                     (list "Square" 0.0) (list "Square" 0.0) (list "Square" 0.0)
                     (list "Square" 0.0) (list "Square" 0.0)))
-    (setq v (pool:askyn "Anything to record about the corners (radius / cut / not given)?"
-                        "No" t))
+    (setq v (pool:askynf 'crec
+                         "Anything to record about the corners (radius / cut / not given)?"
+                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
       ((not v) nil)
@@ -2891,8 +2905,9 @@
           pts (car res)
           failed (cadr res)
           octy "Square" ocsz 0.0 icty "Square" icsz 0.0)
-    (setq v (pool:askyn "Anything to record about the corners (radius / cut / not given)?"
-                        "No" t))
+    (setq v (pool:askynf 'crec
+                         "Anything to record about the corners (radius / cut / not given)?"
+                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
       ((not v) nil)
@@ -3130,8 +3145,9 @@
   ;; -------- all dimensions are in: offer to mirror the pool.
   ;; Top-to-bottom, so the wing swaps sides but the deep end (and its
   ;; hopper) stays on the left -- see pool:mirrory.
-  (if (pool:askyn "Mirror the pool (flips the wing; deep end stays left)"
-                  "No" nil)
+  (if (pool:askynf 'mirror
+                   "Mirror the pool (flips the wing; deep end stays left)"
+                   "No" nil)
       (progn
         (pool:mirrory elast (cadr (pool:wp (list 0.0 (* 0.5 (+ ymin ymax))))))
         ;; the mini-model must show the pool as BUILT, so its points
@@ -5822,8 +5838,9 @@
           ;; a bare "Cut corners" would now read as the Cut keyword, and
           ;; this gate covers Radius corners too -- but NOT NotGiven,
           ;; which has no treatment ends to tape between
-          (setq v (pool:askkw "Radius/Cut corners -- cross dims measured from"
-                              "Corner Middle Ends" "Corner/Middle/Ends" nil t))
+          (setq v (pool:askkwf 'cmode
+                               "Radius/Cut corners -- cross dims measured from"
+                               "Corner Middle Ends" "Corner/Middle/Ends" nil t))
           (if (eq v 'POOL-BACK) v (progn (setq cmode v) nil)))
         nil))
 
@@ -6269,8 +6286,9 @@
   (defun rm:perfect ( / v)
     (if pool:*insq*
         (progn (setq perfect t) nil)
-        (progn (setq perfect (pool:askyn "Are both ends perfect (identical)"
-                                         nil nil))
+        (progn (setq perfect (pool:askynf 'perfect
+                                          "Are both ends perfect (identical)"
+                                          nil nil))
                nil)))
   ;; one end's tip setback for the live guide, from whatever the sheet
   ;; has so far: the taped S, else what T leaves of B, else the arc
@@ -6487,8 +6505,9 @@
     (rm:resolve)
     (setq rcs (list (list "Square" 0.0) (list "Square" 0.0)
                     (list "Square" 0.0) (list "Square" 0.0)))
-    (setq v (pool:askyn "Anything to record about the corners (radius / cut / not given)?"
-                        "No" t))
+    (setq v (pool:askynf 'crec
+                         "Anything to record about the corners (radius / cut / not given)?"
+                         "No" t))
     (cond
       ((eq v 'POOL-BACK) 'POOL-BACK)
       ((not v) nil)
@@ -6779,16 +6798,16 @@
   (setq oldclay (getvar "CLAYER"))
 
   (defun mu:ends ( / v)
-    (setq v (pool:askkw "DEEP end (left) style"
-                        "Square Grecian ROman Oval"
-                        "Square/Grecian/ROman/Oval" nil t))
+    (setq v (pool:askkwf 'dstyle "DEEP end (left) style"
+                         "Square Grecian ROman Oval"
+                         "Square/Grecian/ROman/Oval" nil t))
     (if (eq v 'POOL-BACK)
         v
         (progn
           (setq dstyle v
-                v (pool:askkw "SHALLOW end (right) style"
-                              "Square Grecian ROman Oval"
-                              "Square/Grecian/ROman/Oval" nil t))
+                v (pool:askkwf 'sstyle "SHALLOW end (right) style"
+                               "Square Grecian ROman Oval"
+                               "Square/Grecian/ROman/Oval" nil t))
           (if (eq v 'POOL-BACK)
               v
               (progn (setq sstyle v) nil)))))
