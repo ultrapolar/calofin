@@ -236,6 +236,28 @@ how `lisp/` changes get mirrored here). The standalone files in
 deprecated acady matcher (`lisp/standards_checker/`) is not part of
 this build and still loads on its own.
 
+## Editions (`editions/`)
+
+One file for one job, for handing to someone who wants that job and not
+the toolkit. GENERATED - edit the files under `lisp/` and rebuild.
+
+| File | Carries | Built by |
+| --- | --- | --- |
+| `TYLERDRONE.lsp` | `AutoDim.lsp`, `PADDLE.lsp`, `tydrn.lsp`, `LAZPANEL.lsp` | `python3 tools/build_drone_edition.py` |
+
+`TYLERDRONE.lsp` is the drone trace in one APPLOAD: `TYDRN`,
+`TYLERDRONESUITE`, and the orange triangle button that runs the suite.
+It exists because no single file in the tree could do that job -
+`TYLERDRONESUITE` is three commands out of three different files and its
+button is drawn by a fourth, so `tydrn.lsp` on its own has no button and
+refuses to run (correctly - two of its three stages are missing), while
+`LAZPASS.lsp` is the opposite problem. `LAZPANEL` comes along because it
+owns the bitmap and toolbar machinery; the edition sets
+`lzp:*panelbutton*` nil so the ONLY thing on the toolbar strip is the
+drone button, and `LAZPANEL` still types the same as ever. It does not
+raise `cal:*build-loading*`, which is exactly what would suppress the
+button it is built around.
+
 ## Releases (`releases/`)
 
 Some tools distribute a dated, REV-numbered twin of their static file
@@ -382,6 +404,8 @@ python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
 python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
                                       # DCL well-formed, run with stubs,
                                       # toolbar + generated icon bytes
+python3 tests/test_drone_edition.py   # editions/TYLERDRONE.lsp - one
+                                      # button, and the suite runs
 python3 tests/test_tydrn_suite.py     # TYLERDRONESUITE - the order,
                                       # and that a missing stage
                                       # stops it before it starts

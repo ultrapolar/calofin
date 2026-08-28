@@ -529,6 +529,10 @@ STUB = '''
       stub:*allargs* nil stub:*allbmps* nil stub:*allfloat* nil
       stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
       stub:*nosupport* nil)
+(setq :vlax-true "ON" :vlax-false "OFF")   ; the VM has no vlax
+                                          ; constants, and a stub that
+                                          ; cannot tell them apart
+                                          ; cannot test a switch
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
@@ -597,7 +601,7 @@ STUB = '''
         stub:*allbmps* (append stub:*allbmps* (list (list small large))))
   (stub:ev "setbitmaps") t)
 (defun vla-put-largebuttons (tb v)
-  (setq stub:*big* t) (stub:ev "largebuttons") t)
+  (setq stub:*big* v) (stub:ev "largebuttons") t)
 (defun vla-put-visible (tb v)
   (setq stub:*visible* v) (stub:ev "visible") t)
 (defun vla-float (tb top left rows)
@@ -1131,7 +1135,7 @@ print("   reused, icons re-applied, made visible, and NOT re-floated")
 print("== the button is asked for at 32 pixels, and says that is global ==")
 vm5 = stubbed()
 vm5.loads('(setq t:*tb* (lzp:button-init (lzp:panel-spec)))')
-assert vm5.globals.get('stub:*big*') is not None, (
+assert str(vm5.globals.get('stub:*big*')) == 'ON', (
     "large buttons were never asked for, so AutoCAD keeps showing the 16px "
     "picture and the button stays easy to miss")
 # stub:ev conses, so the log is newest first -- reverse it to read the
@@ -1150,9 +1154,14 @@ assert "every toolbar" in said, (
 vm6 = stubbed()
 vm6.loads('(setq lzp:*bigbutton* nil)'
           '(setq t:*tb* (lzp:button-init (lzp:panel-spec)))')
-assert vm6.globals.get('stub:*big*') is None, (
-    "lzp:*bigbutton* nil must leave AutoCAD's global setting alone")
-print("   32px asked for, the global effect said out loud, and nil declines")
+# nil does not merely SKIP the call -- it puts the setting back.  The
+# advice is "setq it nil and run LAZBUTTON", and skipping would make
+# that advice do nothing in a session already switched over.
+assert str(vm6.globals.get('stub:*big*')) == 'OFF', (
+    "lzp:*bigbutton* nil must put AutoCAD's setting BACK, not just decline "
+    "to set it -- otherwise there is no way back to small buttons")
+print("   32px asked for, the global effect said out loud, and nil")
+print("   puts it back rather than merely declining")
 
 
 print("== TYLERDRONESUITE gets a button of its own ==")

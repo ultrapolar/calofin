@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.1")
+(setq *lazpanel-version* "v3.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -440,6 +440,14 @@
 ;; ONE external button, and that button is the panel's.
 (setq lzp:*suitebutton* 'AUTO)
 
+;; And whether the PANEL gets one.  Almost always yes -- being on screen
+;; is the panel's whole reason for being.  The exception is a build put
+;; together around ONE tool, where the panel is along for the ride and
+;; its button would be the odd one out: editions/TYLERDRONE.lsp sets
+;; this nil so the only thing on the strip is the drone button.
+;; LAZPANEL still types the same as ever; it is just not on the strip.
+(setq lzp:*panelbutton* T)
+
 ;; Draw the button at 32 pixels rather than 16.  The small one is easy
 ;; to miss on a crowded screen, and both pictures are already written
 ;; -- AutoCAD simply picks the 16 unless it is told otherwise.
@@ -448,8 +456,8 @@
 ;; per toolbar.  Asking for it here turns it on for EVERY toolbar in
 ;; the session, which is the same switch as Options > Display > "Use
 ;; large buttons for Toolbars".  That is why it is a tunable and why
-;; the load announcement says what it did: setq it nil in a startup
-;; file to leave the setting alone and keep the small button.
+;; LAZBUTTON says what it did: setq it nil and run LAZBUTTON to put the
+;; setting back and return every toolbar to small buttons.
 (setq lzp:*bigbutton* T)
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
@@ -1363,7 +1371,8 @@
 ;; the LAZPASS build, which puts up one external button and that one is
 ;; the panel's.
 (defun lzp:tb-specs ( / out)
-  (setq out (list (lzp:panel-spec)))
+  (setq out nil)
+  (if lzp:*panelbutton* (setq out (list (lzp:panel-spec))))
   (if (lzp:suite-wanted-p)
     (setq out (append out (list (lzp:suite-spec)))))
   out)
@@ -1435,10 +1444,14 @@
         ;; one line, not a stack trace: the panel still works without a
         ;; picture, but a blank button should not be a mystery
         (princ "\n[lazpanel] button picture not applied - LAZICON says why."))
-      ;; big buttons before visible: the toolbar resizes to fit its
-      ;; button, and doing it the other way round makes it visibly jump
-      (if lzp:*bigbutton*
-        (vl-catch-all-apply 'vla-put-largebuttons (list tb :vlax-true)))
+      ;; Big buttons before visible: the toolbar resizes to fit its
+      ;; button, and doing it the other way round makes it visibly jump.
+      ;; nil does not merely SKIP this -- it puts the setting back, or
+      ;; "setq it nil and run LAZBUTTON" would be advice that does
+      ;; nothing once a session has already been switched over.
+      (vl-catch-all-apply 'vla-put-largebuttons
+                          (list tb (if lzp:*bigbutton*
+                                     :vlax-true :vlax-false)))
       (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
       ;; a new one is floated where it can be seen; the second lands
       ;; below the first rather than on top of it

@@ -83,6 +83,14 @@ TYLERDRONESUITE needs PADDLE and AUTODIM, which are not loaded here.
 the command line, so the stages after it never start. What ran before it
 stays run, which is the other reason the check happens first.
 
+**There is a one-file edition for handing to someone.**
+`editions/TYLERDRONE.lsp` carries `AutoDim.lsp`, `PADDLE.lsp`, this file
+and `LAZPANEL.lsp` in one APPLOAD, and puts up exactly one button — the
+orange triangle that runs the suite. That is what to send: this file on
+its own has no button and refuses to run, correctly, because two of its
+three stages are missing. Rebuild it with
+`python3 tools/build_drone_edition.py`.
+
 **It gets a screen button of its own — but only when this file is
 loaded on its own.** An orange triangle, point north, on its own
 one-button toolbar, drawn by `LAZPANEL.lsp` (which owns the icon
