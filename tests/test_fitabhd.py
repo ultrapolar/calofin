@@ -80,12 +80,32 @@ TANG_STEPS = (1.0, 1.25, 1.5)      # fit:*tang-steps*  (stretch the
 OOS_MIN = 1.0                      # fit:*oos-min*  (the drift from one
                                    # end of a wall to the other, below
                                    # which the wall reads as true)
-FEATURE_KEYS = ("SIZE", "VSIZE", "CUT", "RAD")
+FEATURE_KEYS = ("SIZE", "VSIZE", "CUT", "RAD",
+                "RL", "RT", "RR", "FTL", "FTR", "FBC", "FBR")
 RAD_TURN_MIN = math.pi / 3.0       # fit:*rad-turn-min* (gentler corners
                                    # cannot be measured for a radius)
 NICE_DIMS = (12.0, 6.0, 1.0, 0.5)  # fit:*nice-dims*
 NICE_RADII = (12.0, 6.0, 1.0)      # fit:*nice-radii*
-TYPES = ("Rectangle", "Grecian", "ROman", "Oval", "L", "LAzyl", "ROUnd")
+TYPES = ("Rectangle", "Grecian", "ROman", "Oval", "L", "LAzyl",
+         "ROUnd", "OAsis")
+OAS_FAMS = ("Center", "TopRight", "CLoud", "Kidney", "NXTcloud")
+
+# the oasis fit, mirrored from FITABHD.lsp
+OAS_FUZZ = 1.0e-6                  # fit:*oas-fuzz*
+OAS_HUGE = 1.0e18                  # fit:*oas-huge*
+OAS_LINE = 20.0                    # fit:*oas-line*
+OAS_RMIN = 0.04                    # fit:*oas-rmin*
+OAS_ASTEP = math.pi / 12.0         # fit:*oas-astep*
+OAS_ASPAN = math.pi / 9.0          # fit:*oas-aspan*
+OAS_APART = math.pi / 7.2          # fit:*oas-apart*
+OAS_TRIES = 3                      # fit:*oas-tries*
+OAS_COARSE = 26                    # fit:*oas-coarse*
+OAS_ROUGH = 40                     # fit:*oas-rough*
+OAS_GRID = 6                       # fit:*oas-grid*
+OAS_GOLD = 8                       # fit:*oas-gold*
+OAS_ROUNDS = 5                     # fit:*oas-rounds*
+OAS_NARROW = (None, None, 0.35, 0.20)   # fit:*oas-narrow*
+OAS_EDGE = 0.8                     # fit:*oas-edge*
 
 # ---- small 2D helpers ------------------------------------------------
 
@@ -1439,6 +1459,622 @@ def round_segs(prm, chain=None):
     return [(a, b, 1.0), (b, a, 1.0)]
 
 
+# ---- the oasis pools -------------------------------------------------
+#
+# An oasis is arcs and nothing else: a ring of BULGES, each pinned
+# tangent to the envelope it was drawn in, with a JOINER between each
+# consecutive pair - a smaller reverse arc curving back in, or the
+# straight run of a bound the two share.  The geometry below is OASIS's
+# own solver (lisp/oasis/OASIS.lsp), which FITABHD carries a copy of;
+# tests/test_oasis.py holds that one to the same shapes.
+
+
+def oas_circint(c1, r1, c2, r2, side):
+    """Intersection of two circles; side -1.0 is the point right of the
+    c1->c2 direction.  None when they never meet."""
+    d = dist(c1, c2)
+    if d <= OAS_FUZZ:
+        return None
+    ux, uy = (c2[0] - c1[0]) / d, (c2[1] - c1[1]) / d
+    a = (d * d + r1 * r1 - r2 * r2) / (2.0 * d)
+    h2 = r1 * r1 - a * a
+    if h2 <= 0.0:
+        return None
+    h = math.sqrt(h2)
+    bx, by = c1[0] + a * ux, c1[1] + a * uy
+    return (bx + side * h * (-uy), by + side * h * ux)
+
+
+def oas_extnorm(c1, r1, c2, r2):
+    """The unit normal along which two circles share an external tangent
+    line, on the right of c1->c2 - the outside of a CCW ring."""
+    d = dist(c1, c2)
+    if d <= OAS_FUZZ:
+        return None
+    ux, uy = (c2[0] - c1[0]) / d, (c2[1] - c1[1]) / d
+    k = (r1 - r2) / d
+    q = 1.0 - k * k
+    if q <= 0.0:
+        return None
+    q = math.sqrt(q)
+    return (k * ux + q * uy, k * uy - q * ux)
+
+
+def oas_fillet(c1, r1, c2, r2, rf):
+    return oas_circint(c1, r1 + rf, c2, r2 + rf, -1.0)
+
+
+def oas_joiner(c1, r1, c2, r2, rf):
+    """(kind, data, angle-out, angle-in); kind None for a reverse arc
+    (data its centre), "LINE" for a straight run (data its normal),
+    "SEAM" for the internal tangency a kidney hands over at."""
+    if rf == "SEAM":
+        a = ang(c1, c2) if r1 > r2 else ang(c2, c1)
+        return ("SEAM", None, a, a)
+    if rf is None or rf == "LINE":
+        m = oas_extnorm(c1, r1, c2, r2)
+        if m is None:
+            return None
+        a = math.atan2(m[1], m[0])
+        return ("LINE", m, a, a)
+    cf = oas_fillet(c1, r1, c2, r2, rf)
+    if cf is None:
+        return None
+    return (None, cf, ang(c1, cf), ang(c2, cf))
+
+
+def oas_cloud_p(v):
+    return v in ("StraightBottom", "RoundedBottom")
+
+
+def oas_kidney_p(v):
+    return v in ("TrueKidney", "AsymKidney")
+
+
+def oas_ktrue_min(w, h):
+    """The smallest top-center radius a true kidney can take."""
+    return h / 2.0 + w * w / (8.0 * h)
+
+
+def oas_ktrue_side(w, h, rt):
+    """The matching side radius a true kidney derives from its top."""
+    b = w + 2.0 * h - 4.0 * rt
+    c = w * w / 4.0 + (h - rt) ** 2 - rt * rt
+    disc = b * b - 4.0 * c
+    if disc < 0.0:
+        return None
+    r = (b + math.sqrt(disc)) / 2.0
+    return r if r > OAS_FUZZ else None
+
+
+def oas_kidney_top(w, h, rl, rr):
+    """The asymmetric kidney's top circle: tangent to the Y-max bound and
+    internally tangent to both given sides.  (cx, R) or None."""
+    sl, sr = float(rl), w - rr
+    a1, a2 = h - 2.0 * rl, h - 2.0 * rr
+    b1 = sl * sl + (h - rl) ** 2 - rl * rl
+    b2 = sr * sr + (h - rr) ** 2 - rr * rr
+    qa, qb, qc = a2 - a1, -2.0 * (sl * a2 - sr * a1), a2 * b1 - a1 * b2
+    roots = []
+    if abs(qa) < OAS_FUZZ:
+        if abs(qb) > OAS_FUZZ:
+            roots = [-qc / qb]
+    else:
+        d = qb * qb - 4.0 * qa * qc
+        if d >= 0.0:
+            sd = math.sqrt(d)
+            roots = [(-qb + sd) / (2.0 * qa), (-qb - sd) / (2.0 * qa)]
+    best = None
+    for cx in roots:
+        if abs(a1) > OAS_FUZZ:
+            rt = (cx * cx - 2.0 * sl * cx + b1) / (2.0 * a1)
+        elif abs(a2) > OAS_FUZZ:
+            rt = (cx * cx - 2.0 * sr * cx + b2) / (2.0 * a2)
+        else:
+            continue
+        if rt <= max(rl, rr) + OAS_FUZZ:
+            continue
+        ty = h - rt
+        al, ar = ang((cx, ty), (sl, rl)), ang((cx, ty), (sr, rr))
+        sw = norm_ang(al - ar)
+        # the point where the top circle touches the Y-max bound has to
+        # lie ON the drawn arc between the two seams
+        if norm_ang(math.pi / 2.0 - ar) > sw:
+            continue
+        cin = sl <= cx <= sr
+        if (best is None or (cin and not best[2])
+                or (cin == best[2]
+                    and abs(cx - w / 2.0) < abs(best[0] - w / 2.0))):
+            best = (cx, rt, cin)
+    return (best[0], best[1]) if best else None
+
+
+def oas_names(variant):
+    """What the ring's elements are called, in the order they run round
+    the pool: bulges at the even positions, joiners at the odd ones."""
+    if oas_cloud_p(variant):
+        return ["left", "bottom", "right", "top"]
+    if oas_kidney_p(variant):
+        return ["left", "bottom-center", "right", "right-seam",
+                "top-center", "left-seam"]
+    if variant == "NXTcloud":
+        return ["top-left", "left-bottom", "center-bottom",
+                "right-bottom", "right", "right-top", "center-top",
+                "left-top"]
+    if variant == "TopRight":
+        return ["left", "bottom-center", "right", "right-side",
+                "top-right", "top-left"]
+    return ["left", "bottom-center", "right", "top-right", "top",
+            "top-left"]
+
+
+def oas_nxtcen(w, h, r, which):
+    """Where a NXT cloud's three lobes sit - the envelope pins them all."""
+    if which == 0:
+        return (r, h - r)
+    if which == 1:
+        return (0.5 * w, r)
+    return (w - r, 0.5 * h)
+
+
+def oas_solve(w, h, rl, rt, rr, ftl, ftr, fbc, fbr, off, variant):
+    """The outline, counter-clockwise, each element as
+    (name, centre, radius, start, end, kind) - kind True for a bulge,
+    False for a reverse arc, "LINE" for a straight run, on which centre
+    and radius hold the run's two ends instead."""
+    nm = oas_names(variant)
+    if oas_cloud_p(variant):
+        rl = 0.5 * h
+        bc = [(rl, rl), (w - rr, rr)]
+        br = [rl, rr]
+        jr = [None if variant == "StraightBottom" else fbc, ftl]
+    elif oas_kidney_p(variant):
+        if variant == "TrueKidney":
+            rl = oas_ktrue_side(w, h, rt)
+            rr = rl
+            kt = (0.5 * w, rt) if rl else None
+        else:
+            kt = oas_kidney_top(w, h, rl, rr)
+        if not (rl and rr and kt):
+            return None
+        bc = [(rl, rl), (w - rr, rr), (kt[0], h - kt[1])]
+        br = [rl, rr, kt[1]]
+        jr = [fbc, "SEAM", "SEAM"]
+    elif variant == "NXTcloud":
+        bc = [oas_nxtcen(w, h, rl, 0), oas_nxtcen(w, h, rt, 1),
+              oas_nxtcen(w, h, rr, 2), oas_nxtcen(w, h, rt, 1)]
+        br = [rl, rt, rr, rt]
+        jr = [fbc, fbr, ftr, ftl]
+    else:
+        top = ((w - rt, h - rt) if variant == "TopRight"
+               else (w * 0.5 + (off or 0.0), h - rt))
+        bc = [(rl, rl), (w - rr, rr), top]
+        br = [rl, rr, rt]
+        jr = [fbc, ftr, ftl]
+    n = len(br)
+    js = []
+    for i in range(n):
+        j = (i + 1) % n
+        jj = oas_joiner(bc[i], br[i], bc[j], br[j], jr[i])
+        if jj is None:
+            return None
+        js.append(jj)
+    out = []
+    for i in range(n):
+        j = (i + 1) % n
+        jp, jn = js[(i + n - 1) % n], js[i]
+        # the bulge: from where the joiner before it hands over to where
+        # the one after it picks up.  Those two can be the SAME point,
+        # and then the bulge is a point on the outline, not an arc of it
+        if norm_ang(jn[2] - jp[3]) > OAS_FUZZ:
+            out.append((nm[2 * i], bc[i], br[i], jp[3], jn[2], True))
+        if jn[0] == "SEAM":
+            continue            # a seam draws nothing
+        if jn[0] == "LINE":
+            jl = (bc[i][0] + jn[1][0] * br[i], bc[i][1] + jn[1][1] * br[i])
+            jm = (bc[j][0] + jn[1][0] * br[j], bc[j][1] + jn[1][1] * br[j])
+            if dist(jl, jm) > OAS_FUZZ:
+                out.append((nm[2 * i + 1], jl, jm, jn[2], None, "LINE"))
+        elif norm_ang(ang(jn[1], bc[i]) - ang(jn[1], bc[j])) > OAS_FUZZ:
+            out.append((nm[2 * i + 1], jn[1], jr[i],
+                        ang(jn[1], bc[j]), ang(jn[1], bc[i]), False))
+    return out
+
+
+def oas_ring_verts(arcs, x0, y0):
+    """The ring as FITABHD's own closed (point, bulge) list, shifted to
+    where the envelope sits in the frame.  A bulge runs with the angle
+    and a reverse arc against it, so the two take opposite signs."""
+    out = []
+    for a in arcs:
+        if a[5] == "LINE":
+            out.append(((a[1][0] + x0, a[1][1] + y0), 0.0))
+            continue
+        sw = norm_ang(a[4] - a[3])
+        th = a[3] if a[5] else a[4]
+        p = (a[1][0] + a[2] * math.cos(th), a[1][1] + a[2] * math.sin(th))
+        b = fit_tan(sw / 4.0)
+        out.append(((p[0] + x0, p[1] + y0), b if a[5] else -b))
+    return out
+
+
+# ---- fitting an oasis ------------------------------------------------
+#
+# An oasis has no walls, so nothing FITABHD uses to READ a survey - the
+# edge vote, the nearest-wall ICP, the corner zones - has anything to
+# work on.  What it has instead is an ENVELOPE: every bulge is tangent
+# to a bound, so the pool's bounding box IS the w x h it was drawn in,
+# and once the frame is known the envelope comes free.  So the search is
+# over the frame, and the radii answer to the points inside it.
+#
+# Every joiner is carried not as a radius but as U = h / (h + R), which
+# runs from 0 at an infinite radius to 1 at none.  A straight run IS the
+# reverse arc with an infinite radius, so U = 0 is that run - one
+# parameter, no special case at either end, and a cloud's flat bottom is
+# FOUND rather than declared.  An even grid in U also spreads its
+# samples over the radii a pool actually has: in the radius itself the
+# useful range has no top, and in the curvature every radius past half
+# the pool crowds into the first cell.
+
+
+def u_of(r, h):
+    return h / (h + r)
+
+
+def oas_rad(u, h, m):
+    """A joiner's U as the radius the ring wants, or the straight run it
+    has flattened into."""
+    if u <= u_of(OAS_LINE * m, h):
+        return "LINE"
+    return h * (1.0 - u) / u
+
+
+def oas_keys(variant):
+    """The parameters this variant fits, in the order they are swept.
+    What is not here the envelope pins."""
+    if oas_cloud_p(variant):
+        return ["rr", "utl", "ubc"]
+    if variant == "TrueKidney":
+        return ["rt", "ubc"]
+    if variant == "AsymKidney":
+        return ["rl", "rr", "ubc"]
+    if variant == "NXTcloud":
+        return ["rl", "rt", "rr", "utl", "utr", "ubc", "ubr"]
+    if variant == "TopRight":
+        return ["rl", "rt", "rr", "utl", "utr", "ubc"]
+    return ["rl", "rt", "rr", "off", "utl", "utr", "ubc"]
+
+
+OAS_BOUNDS = ["x0", "y0", "w", "h"]
+
+
+def oas_mirror_p(variant):
+    """T when the shape cannot say its own mirror image, so the survey
+    has to be tried both ways round.  A Center oasis mirrored is another
+    Center oasis with its two sides swapped, and an asymmetric kidney
+    the same, so those two never need it."""
+    return variant in ("TopRight", "StraightBottom", "RoundedBottom",
+                       "NXTcloud")
+
+
+def oas_ring(prm):
+    w, h = prm["w"], prm["h"]
+    if not (w > OAS_FUZZ and h > OAS_FUZZ):
+        return None
+    m = min(w, h)
+    return oas_solve(w, h, prm.get("rl"), prm.get("rt"), prm.get("rr"),
+                     oas_rad(prm["utl"], h, m), oas_rad(prm["utr"], h, m),
+                     oas_rad(prm["ubc"], h, m), oas_rad(prm["ubr"], h, m),
+                     prm.get("off"), prm["variant"])
+
+
+def oas_segs(prm):
+    arcs = oas_ring(prm)
+    if not arcs:
+        return None
+    return verts_to_segs(oas_ring_verts(arcs, prm["x0"], prm["y0"]))
+
+
+def oas_score(fpts, prm):
+    """How far the points sit off the ring these parameters make.  A ring
+    that cannot be built scores worse than any that can."""
+    segs = oas_segs(prm)
+    if segs is None or len(segs) < 2:
+        return OAS_HUGE
+    return outline_dev(fpts, segs)[1]
+
+
+def oas_envelope(fpts, prm):
+    """The envelope re-read off the bounding box - what every change of
+    frame costs, and nothing more."""
+    x0, y0, x1, y1 = bbox(fpts)
+    prm = dict(prm)
+    prm["x0"], prm["y0"] = x0, y0
+    prm["w"], prm["h"] = x1 - x0, y1 - y0
+    return prm
+
+
+def oas_range(prm, key):
+    """The legal range of one parameter, given the rest."""
+    w, h = prm["w"], prm["h"]
+    m = min(w, h)
+    if key in ("utl", "utr", "ubc", "ubr"):
+        return (0.0, u_of(OAS_RMIN * m, h))
+    if key == "off":
+        return (-0.45 * w, 0.45 * w)
+    if key in ("x0", "y0"):
+        return (prm[key] - 0.06 * m, prm[key] + 0.06 * m)
+    if key in ("w", "h"):
+        return (max(OAS_FUZZ, prm[key] - 0.06 * m), prm[key] + 0.06 * m)
+    if prm["variant"] == "TrueKidney" and key == "rt":
+        lo = oas_ktrue_min(w, h)
+        return (lo * 1.0001, lo * 4.0)
+    if prm["variant"] == "NXTcloud":
+        return (0.04 * m, 0.60 * m)
+    if prm["variant"] == "AsymKidney":
+        return (0.04 * h, 0.60 * h)
+    return (0.04 * h, 0.96 * h)
+
+
+def oas_sweep(fpts, prm, key, lo, hi, grid, gold):
+    """One parameter: a coarse grid over the bracket, then golden section
+    inside it.  The grid is what finds the basin - these objectives are
+    not unimodal, and a golden section alone walks into the nearest
+    ditch."""
+    best, bs = prm[key], oas_score(fpts, prm)
+    step = (hi - lo) / float(grid)
+    for i in range(grid + 1):
+        v = lo + step * i
+        t = dict(prm)
+        t[key] = v
+        s = oas_score(fpts, t)
+        if s < bs:
+            bs, best = s, v
+    if gold <= 0:
+        return best, bs
+    lo, hi = max(lo, best - step), min(hi, best + step)
+    gr = 0.6180339887
+    x1, x2 = hi - gr * (hi - lo), lo + gr * (hi - lo)
+    t = dict(prm)
+    t[key] = x1
+    f1 = oas_score(fpts, t)
+    t = dict(prm)
+    t[key] = x2
+    f2 = oas_score(fpts, t)
+    for _ in range(gold):
+        if f1 <= f2:
+            hi, x2, f2 = x2, x1, f1        # shrink from the top
+            x1 = hi - gr * (hi - lo)
+            t = dict(prm)
+            t[key] = x1
+            f1 = oas_score(fpts, t)
+        else:
+            lo, x1, f1 = x1, x2, f2
+            x2 = lo + gr * (hi - lo)
+            t = dict(prm)
+            t[key] = x2
+            f2 = oas_score(fpts, t)
+    v = (lo + hi) / 2.0
+    t = dict(prm)
+    t[key] = v
+    s = oas_score(fpts, t)
+    return (v, s) if s < bs else (best, bs)
+
+
+def oas_pass(fpts, prm, keys, grid, gold, narrow=None):
+    """One pass over a list of parameters.  NARROW None looks over the
+    whole legal range; a number hunts that share of it either side of
+    where the parameter already sits."""
+    for key in keys:
+        lo, hi = oas_range(prm, key)
+        if narrow is not None:
+            v = prm[key]
+            span = narrow * (hi - lo)
+            lo, hi = max(lo, v - span), min(hi, v + span)
+        if hi - lo > 1.0e-9:
+            prm = dict(prm)
+            prm[key] = oas_sweep(fpts, prm, key, lo, hi, grid, gold)[0]
+    return prm
+
+
+def oas_start(fpts, variant):
+    """The envelope from the bounding box, the radii from typical
+    proportions - a place to start, not an answer."""
+    prm = oas_envelope(fpts, {"variant": variant, "off": 0.0})
+    w, h = prm["w"], prm["h"]
+    m = min(w, h)
+    u = u_of(0.55 * h, h)
+    prm.update({"rl": 0.42 * h, "rt": 0.34 * h, "rr": 0.42 * h,
+                "utl": u, "utr": u, "ubc": u, "ubr": u})
+    if variant == "NXTcloud":
+        prm["rl"] = prm["rt"] = prm["rr"] = 0.28 * m
+    elif variant == "TrueKidney":
+        prm["rt"] = 1.35 * oas_ktrue_min(w, h)
+    elif variant == "AsymKidney":
+        prm["rl"] = prm["rr"] = 0.30 * h
+    return prm
+
+
+def oas_thin(pts, n):
+    """Every k'th point, so a search pays for the SHAPE of the survey
+    rather than for how many times the crew shot each wall."""
+    if len(pts) <= n:
+        return pts
+    k = fit_ceil(len(pts) / float(n))
+    return [p for i, p in enumerate(pts) if i % k == 0]
+
+
+def oas_at_angle(pts, prm, a, mirror):
+    fp = to_frame(pts, a, mirror)
+    p2 = oas_envelope(fp, prm)
+    return (oas_score(fp, p2), p2, fp)
+
+
+def oas_angle_step(pts, prm, a, mirror, span, grid, gold):
+    """Hunt the frame angle either side of A, re-reading the envelope off
+    each trial's own bounding box.  The shape parameters ride along
+    unchanged: a degree of rotation moves the frame, not the pool."""
+    bs, bp, bf = oas_at_angle(pts, prm, a, mirror)
+    ba = a
+    lo, hi = a - span, a + span
+    step = (hi - lo) / float(grid)
+    for i in range(grid + 1):
+        t = lo + step * i
+        got = oas_at_angle(pts, prm, t, mirror)
+        if got[0] < bs:
+            bs, bp, bf, ba = got[0], got[1], got[2], t
+    lo, hi = ba - step, ba + step
+    gr = 0.6180339887
+    x1, x2 = hi - gr * (hi - lo), lo + gr * (hi - lo)
+    f1 = oas_at_angle(pts, prm, x1, mirror)
+    f2 = oas_at_angle(pts, prm, x2, mirror)
+    for _ in range(gold):
+        if f1[0] <= f2[0]:
+            hi, x2, f2 = x2, x1, f1
+            x1 = hi - gr * (hi - lo)
+            f1 = oas_at_angle(pts, prm, x1, mirror)
+        else:
+            lo, x1, f1 = x1, x2, f2
+            x2 = lo + gr * (hi - lo)
+            f2 = oas_at_angle(pts, prm, x2, mirror)
+    t = (lo + hi) / 2.0
+    got = oas_at_angle(pts, prm, t, mirror)
+    if got[0] < bs:
+        bs, bp, bf, ba = got[0], got[1], got[2], t
+    return (ba, bp, bf, bs)
+
+
+def oas_fit_at(pts, variant, a, mirror, rounds=OAS_ROUNDS, grid=OAS_GRID,
+               gold=OAS_GOLD):
+    """One placement, fitted properly: the shape, the envelope and the
+    frame angle in turn.  The early rounds run on a thinned survey and
+    the last one puts every point back."""
+    allp = pts
+    pts = oas_thin(pts, OAS_ROUGH)
+    fpts = to_frame(pts, a, mirror)
+    prm = oas_start(fpts, variant)
+    keys = oas_keys(variant)
+    for r in range(rounds):
+        if r == rounds - 1:
+            pts = allp
+            fpts = to_frame(pts, a, mirror)
+        prm = oas_pass(fpts, prm, keys, grid, gold,
+                       OAS_NARROW[min(r, len(OAS_NARROW) - 1)])
+        prm = oas_pass(fpts, prm, OAS_BOUNDS, 4, gold)
+        a, prm, fpts, _ = oas_angle_step(pts, prm, a, mirror,
+                                         OAS_ASPAN / (r + 1.0), 6, gold)
+    prm = oas_pass(fpts, prm, keys, grid, gold, 0.12)
+    prm = oas_pass(fpts, prm, OAS_BOUNDS, 4, gold)
+    return (prm, a, oas_score(fpts, prm))
+
+
+def oas_spread(cands, n):
+    """The best N coarse placements that sit in DIFFERENT basins.  Three
+    tries all within a few degrees of each other are one try."""
+    out = []
+    for c in cands:
+        if len(out) >= n:
+            break
+        if not any(o[2] == c[2] and abs(signed_dang(o[1], c[1])) < OAS_APART
+                   for o in out):
+            out.append(c)
+    return out
+
+
+def oas_variants(family):
+    """Which rings a family can come out as.  A cloud's flat bottom is
+    not one of them: it is the rounded bottom whose radius came out
+    infinite, and the fit finds that on its own."""
+    if family == "CLoud":
+        return ["RoundedBottom"]
+    if family == "Kidney":
+        return ["TrueKidney", "AsymKidney"]
+    return [family]
+
+
+def oas_freer(a, b):
+    return len(oas_keys(a)) > len(oas_keys(b))
+
+
+def fit_oasis(pts, family):
+    """Every placement the family allows; the one that hugs the points
+    wins.  Where a family comes two ways the two compete, and the freer
+    one only wins by a clear margin - extra freedom is not evidence."""
+    qs = oas_thin(pts, OAS_COARSE)
+    best = None
+    for variant in oas_variants(family):
+        cands = []
+        n = fit_ceil(2.0 * math.pi / OAS_ASTEP)
+        mirrors = (False, True) if oas_mirror_p(variant) else (False,)
+        for k in range(n):
+            a = k * OAS_ASTEP
+            for mirror in mirrors:
+                # the JOINERS are in the coarse pass, not just the
+                # bulges: a placement ranked on its bulges alone puts the
+                # pool's own rotation outside the tries about as often as
+                # inside them
+                fq = to_frame(qs, a, mirror)
+                prm = oas_pass(fq, oas_start(fq, variant),
+                               oas_keys(variant), 3, 0)
+                cands.append((oas_score(fq, prm), a, mirror))
+        cands.sort(key=lambda c: c[0])
+        for c in oas_spread(cands, OAS_TRIES):
+            prm, a, rms = oas_fit_at(pts, variant, c[1], c[2])
+            edge = (OAS_EDGE if best is not None
+                    and oas_freer(variant, best[0]["variant"]) else 1.0)
+            if best is None or rms < best[1] * edge:
+                best = (prm, rms, a, c[2])
+    return best
+
+
+def oasis_result(pts, family):
+    """The whole result for an oasis survey, in FITABHD's own shape."""
+    got = fit_oasis(pts, family)
+    if got is None:
+        return None
+    prm, rms, a, mirror = got
+    return {"kind": "oasis", "type": "OAsis", "fam": family, "prm": prm,
+            "angle": a, "mirror": mirror, "bows": None, "rms": rms,
+            "segs": oas_segs(prm)}
+
+
+def oas_line_p(prm, key):
+    """T when a joiner came out flat enough to be drawn as a run."""
+    return oas_rad(prm[key], prm["h"], min(prm["w"], prm["h"])) == "LINE"
+
+
+def oas_label(prm):
+    """How the fitted shape is named in the report - OASIS's own words,
+    with the cloud's bottom read off the fit rather than declared."""
+    v = prm["variant"]
+    if v == "TopRight":
+        return "top-right-bulge"
+    if v == "NXTcloud":
+        return "NXT cloud"
+    if v == "TrueKidney":
+        return "true kidney"
+    if v == "AsymKidney":
+        return "asymmetric kidney"
+    if oas_cloud_p(v):
+        return ("straight-bottom cloud" if oas_line_p(prm, "ubc")
+                else "rounded-bottom cloud")
+    return "center-bulge"
+
+
+OAS_DIMKEY = {"rl": "RL", "rt": "RT", "rr": "RR", "utl": "FTL",
+              "utr": "FTR", "ubc": "FBC", "ubr": "FBR"}
+OAS_KEY = dict((v, k) for k, v in OAS_DIMKEY.items())
+
+
+def oas_dimkeys(prm):
+    """An oasis's snappable radii: the shape's own parameters, less any
+    joiner that came out as a straight run and has none."""
+    return [OAS_DIMKEY[k] for k in oas_keys(prm["variant"])
+            if k in OAS_DIMKEY
+            and not (k in ("utl", "utr", "ubc", "ubr")
+                     and oas_line_p(prm, k))]
+
+
 # ---- putting a whole type together -----------------------------------
 
 
@@ -1575,6 +2211,10 @@ def fit_type(pts, ptype, treat, oos=False):
     lowest-RMS one wins.  Returns the winning result dict with its
     frame (angle, mirror) and its outline in WORLD coordinates."""
     dpts = dedupe(pts)
+    if ptype == "OAsis":
+        # an oasis has no walls, so TREAT carries what step 2 asked for
+        # instead: which of OASIS's five families the survey is
+        return oasis_result(dpts, treat)
     if ptype == "ROUnd":
         prm = fit_round(dpts)
         segs = round_segs(prm)
@@ -1634,6 +2274,8 @@ def frame_segs(res):
     if res["kind"] == "cap":
         return endcap_segs(res["prm"], res["type"], res["both"],
                            res.get("bows"), res.get("chains"))
+    if res["kind"] == "oasis":
+        return oas_segs(res["prm"])
     return round_segs(res["prm"], res.get("chain"))
 
 
@@ -1766,11 +2408,28 @@ def dim_keys(res):
         return ["WID", "BLEN"]
     if ptype == "ROUnd":
         return ["RAD"]
+    if ptype == "OAsis":
+        return ["LEN", "WID"] + oas_dimkeys(res["prm"])
     return []
 
 
 def get_dim(res, key):
     t = res["type"]
+    if res["kind"] == "oasis":
+        prm = res["prm"]
+        if key == "LEN":
+            return prm["w"]
+        if key == "WID":
+            return prm["h"]
+        if OAS_KEY.get(key) in ("utl", "utr", "ubc", "ubr"):
+            # a joiner is carried as its U, and a straight run has no
+            # radius to offer at all
+            d = oas_rad(prm[OAS_KEY[key]], prm["h"],
+                        min(prm["w"], prm["h"]))
+            return None if d == "LINE" else d
+        if key in OAS_KEY:
+            return prm[OAS_KEY[key]]        # a bulge radius is itself
+        return None
     if res["kind"] == "poly":
         offs = res["offs"]
         if len(offs) == 8:
@@ -1881,6 +2540,23 @@ def set_dim(res, key, v):
         res["segs"] = endcap_segs(prm, t, res["both"], res.get("bows"),
                                   res.get("chains"))
         return res
+    if res["kind"] == "oasis":
+        # the envelope keeps its centre, so a snapped length grows each
+        # way; a radius is just itself, carried back into the U the ring
+        # is parameterised on
+        prm = res["prm"]
+        if key == "LEN":
+            prm["x0"] -= (v - prm["w"]) / 2.0
+            prm["w"] = v
+        elif key == "WID":
+            prm["y0"] -= (v - prm["h"]) / 2.0
+            prm["h"] = v
+        elif OAS_KEY.get(key) in ("utl", "utr", "ubc", "ubr"):
+            prm[OAS_KEY[key]] = u_of(v, prm["h"])
+        elif key in OAS_KEY:
+            prm[OAS_KEY[key]] = v
+        res["segs"] = oas_segs(prm)
+        return res
     if res["kind"] == "round" and key == "RAD":
         res["prm"]["r"] = v
         res["segs"] = round_segs(res["prm"], res.get("chain"))
@@ -1945,6 +2621,8 @@ def snap_result(res, fpts, tol, allow):
                 if v2 <= 0.0:
                     continue
                 trial = set_dim(res, key, v2)
+                if trial["segs"] is None:
+                    continue
                 after = outline_dists(fpts, trial["segs"])
                 if not snap_ok(before, after, tol, allow, feature):
                     continue
@@ -3072,6 +3750,299 @@ def test_a_caved_round_pool():
           % (one["worst"], len(run["chain"]), run["worst"]))
 
 
+# ---- the oasis surveys -----------------------------------------------
+
+
+def oasis_true(variant, w, h, **kw):
+    """The outline OASIS itself would draw, as (p1, p2, bulge) segments
+    in the envelope's own coordinates."""
+    for k in ("rl", "rt", "rr", "ftl", "ftr", "fbc", "fbr", "off"):
+        kw.setdefault(k, None)
+    arcs = oas_solve(w, h, kw["rl"], kw["rt"], kw["rr"], kw["ftl"],
+                     kw["ftr"], kw["fbc"], kw["fbr"], kw["off"], variant)
+    assert arcs, variant
+    return verts_to_segs(oas_ring_verts(arcs, 0.0, 0.0))
+
+
+def oasis_survey(variant, w, h, adeg, spacing=20.0, noise=0.25, seed=7,
+                 **kw):
+    return survey(place(oasis_true(variant, w, h, **kw), adeg, 500.0,
+                        300.0), spacing, noise, seed)
+
+
+# the family each ring belongs to - what step 2 is answered with
+OAS_FAM_OF = {"Center": "Center", "TopRight": "TopRight",
+              "RoundedBottom": "CLoud", "StraightBottom": "CLoud",
+              "TrueKidney": "Kidney", "AsymKidney": "Kidney",
+              "NXTcloud": "NXTcloud"}
+
+# one production-shaped pool per ring, with the rotation it was surveyed at
+OASIS_CASES = [
+    ("Center", 360.0, 240.0, 23.0,
+     dict(rl=96.0, rt=84.0, rr=108.0, ftl=180.0, ftr=200.0, fbc=240.0)),
+    ("TopRight", 360.0, 240.0, -41.0,
+     dict(rl=96.0, rt=84.0, rr=108.0, ftl=180.0, ftr=200.0, fbc=240.0)),
+    ("RoundedBottom", 384.0, 216.0, 12.0,
+     dict(rr=96.0, ftl=200.0, fbc=300.0)),
+    ("StraightBottom", 384.0, 216.0, 66.0, dict(rr=96.0, ftl=200.0)),
+    ("TrueKidney", 360.0, 240.0, 5.0, dict(rt=260.0, fbc=300.0)),
+    ("AsymKidney", 360.0, 240.0, -77.0,
+     dict(rl=80.0, rr=100.0, fbc=300.0)),
+    ("NXTcloud", 360.0, 240.0, 33.0,
+     dict(rl=70.0, rt=60.0, rr=80.0, ftl=150.0, ftr=160.0, fbc=170.0,
+          fbr=180.0)),
+]
+
+
+def test_oasis_ring_is_oasis_lsp_s_own():
+    """FITABHD carries a copy of OASIS's ring solver, and the copy has
+    to stay a copy: every family, element for element and number for
+    number, out of both files through the VM."""
+    from lispvm import VM
+    fit = VM()
+    fit.load(LISP_FILE)
+    oas = VM()
+    oas.load(os.path.join(REPO_DIR, "lisp", "oasis", "OASIS.lsp"))
+
+    def lit(v):
+        if v is None:
+            return "nil"
+        if isinstance(v, str):
+            return '"%s"' % v
+        return repr(float(v))
+
+    worst = 0.0
+    for variant, w, h, _adeg, kw in OASIS_CASES + [
+            ("Center", 360.0, 240.0, 0.0,
+             dict(rl=96.0, rt=84.0, rr=108.0, ftl="LINE", ftr=200.0,
+                  fbc=240.0, off=20.0))]:
+        args = " ".join(lit(kw.get(k)) for k in
+                        ("rl", "rt", "rr", "ftl", "ftr", "fbc", "fbr",
+                         "off"))
+        args = "%r %r %s" % (float(w), float(h), args)
+        mine = fit.loads('(fit:oas-solve %s "%s")' % (args, variant))
+        theirs = oas.loads('(oasis:solve %s "%s")' % (args, variant))
+        assert mine and theirs, variant
+        assert len(mine) == len(theirs), (variant, len(mine), len(theirs))
+        for a, b in zip(mine, theirs):
+            assert a[0] == b[0], (variant, a[0], b[0])   # same name
+            assert bool(a[5]) == bool(b[5]) and (a[5] == "LINE") == \
+                (b[5] == "LINE"), (variant, a[0])
+            for x, y in zip(a[1:5], b[1:5]):
+                if isinstance(x, list):
+                    worst = max(worst, abs(x[0] - y[0]), abs(x[1] - y[1]))
+                elif x is not None and y is not None:
+                    worst = max(worst, abs(float(x) - float(y)))
+        # and the ring the mirror below builds is the same ring again
+        py = oas_solve(w, h, kw.get("rl"), kw.get("rt"), kw.get("rr"),
+                       kw.get("ftl"), kw.get("ftr"), kw.get("fbc"),
+                       kw.get("fbr"), kw.get("off"), variant)
+        assert len(py) == len(mine), (variant, len(py), len(mine))
+    assert worst < 1.0e-9, worst
+    print("  the oasis ring is OASIS.lsp's own, on all seven shapes")
+
+
+def test_the_ring_becomes_the_arcs_it_says_it_is():
+    """The ring is handed to the rest of FITABHD as a bulged polyline,
+    and everything downstream - the preview, the hit report, the scoring
+    the fit itself runs on - reads only that.  So the conversion is
+    checked against the ring it came from rather than against itself:
+    every drawn segment must be an arc of the very circle the solver
+    named, swept the way the outline runs, and must start where the one
+    before it ended."""
+    for variant, w, h, _adeg, kw in OASIS_CASES:
+        arcs = oas_solve(w, h, kw.get("rl"), kw.get("rt"), kw.get("rr"),
+                         kw.get("ftl"), kw.get("ftr"), kw.get("fbc"),
+                         kw.get("fbr"), kw.get("off"), variant)
+        verts = oas_ring_verts(arcs, 0.0, 0.0)
+        segs = verts_to_segs(verts)
+        assert len(segs) == len(arcs), (variant, len(segs), len(arcs))
+        for a, seg in zip(arcs, segs):
+            p1, p2, b = seg
+            if a[5] == "LINE":
+                assert abs(b) < 1.0e-12, (variant, a[0], b)
+                assert dist(p1, a[1]) < 1.0e-9 and dist(p2, a[2]) < 1.0e-9
+                continue
+            got = arc_geom(p1, p2, b)
+            assert got is not None, (variant, a[0])
+            centre, radius = got[0], got[1]
+            assert dist(centre, a[1]) < 1.0e-6, \
+                (variant, a[0], centre, a[1])
+            assert abs(radius - a[2]) < 1.0e-6, (variant, a[0], radius)
+            # a bulge runs with the angle round its own circle and a
+            # reverse arc against it, so the two take opposite signs
+            assert (b > 0.0) == bool(a[5]), (variant, a[0], b)
+            # and the sweep is the one the solver asked for, not its
+            # explement - a bulge drawn the long way round is a
+            # different pool
+            want = norm_ang(a[4] - a[3])
+            assert abs(4.0 * math.atan(abs(b)) - want) < 1.0e-6, \
+                (variant, a[0], 4.0 * math.atan(abs(b)), want)
+        # the outline closes: each segment ends where the next begins
+        for i, seg in enumerate(segs):
+            nxt = segs[(i + 1) % len(segs)]
+            assert dist(seg[1], nxt[0]) < 1.0e-9, (variant, i)
+    print("  the ring is drawn as the arcs the solver named")
+
+
+def test_every_oasis_family_is_recovered():
+    """A survey shot round each of the seven rings comes back as that
+    ring: the right shape, the right envelope, and an outline the points
+    sit on."""
+    for variant, w, h, adeg, kw in OASIS_CASES:
+        pts = oasis_survey(variant, w, h, adeg, **kw)
+        res = fit_and_snap(pts, "OAsis", OAS_FAM_OF[variant], 1.0,
+                           MISS_PCT, False, False)
+        prm = res["prm"]
+        assert prm["variant"] == variant or (
+            oas_cloud_p(variant) and oas_cloud_p(prm["variant"])), \
+            (variant, prm["variant"])
+        assert close(get_dim(res, "LEN"), w, 1.5), (variant, prm["w"])
+        assert close(get_dim(res, "WID"), h, 1.5), (variant, prm["h"])
+        assert res["worst"] < 2.0, (variant, res["worst"])
+        # every bulge radius the shape has, back within an inch and a half
+        for key, want in (("RL", kw.get("rl")), ("RT", kw.get("rt")),
+                          ("RR", kw.get("rr"))):
+            if want is not None and key in dim_keys(res):
+                assert close(get_dim(res, key), want, 13.0), \
+                    (variant, key, get_dim(res, key), want)
+    print("  all seven oasis rings are recovered from their surveys")
+
+
+def test_a_cloud_finds_its_own_flat_bottom():
+    """A cloud's bottom is never asked for.  Every joiner is carried as
+    a curvature, so the flat bottom is the one whose radius came out
+    infinite - and a rounded one still comes out rounded."""
+    flat = oasis_survey("StraightBottom", 384.0, 216.0, 66.0, rr=96.0,
+                        ftl=200.0)
+    res = fit_and_snap(flat, "OAsis", "CLoud", 1.0, MISS_PCT, False,
+                       False)
+    assert oas_line_p(res["prm"], "ubc"), \
+        "the flat bottom was fitted as an arc"
+    assert oas_label(res["prm"]) == "straight-bottom cloud"
+    assert "FBC" not in dim_keys(res), \
+        "a straight run has no radius to snap"
+
+    round_ = oasis_survey("RoundedBottom", 384.0, 216.0, 12.0, rr=96.0,
+                          ftl=200.0, fbc=300.0)
+    res = fit_and_snap(round_, "OAsis", "CLoud", 1.0, MISS_PCT, False,
+                       False)
+    assert not oas_line_p(res["prm"], "ubc"), \
+        "a rounded bottom was flattened into a run"
+    assert oas_label(res["prm"]) == "rounded-bottom cloud"
+    assert close(get_dim(res, "FBC"), 300.0, 24.0), get_dim(res, "FBC")
+    print("  a cloud's bottom is found, not declared")
+
+
+def test_a_kidney_is_given_the_way_the_points_say():
+    """Which way a kidney is given - the top radius with the two sides
+    derived from it, or two unequal sides with the top derived - is not
+    asked either.  Both are fitted and the points choose, with the freer
+    one held to a margin."""
+    true = oasis_survey("TrueKidney", 360.0, 240.0, 5.0, rt=260.0,
+                        fbc=300.0)
+    res = fit_and_snap(true, "OAsis", "Kidney", 1.0, MISS_PCT, False,
+                       False)
+    assert res["prm"]["variant"] == "TrueKidney", res["prm"]["variant"]
+    assert oas_label(res["prm"]) == "true kidney"
+
+    asym = oasis_survey("AsymKidney", 360.0, 240.0, -77.0, rl=80.0,
+                        rr=100.0, fbc=300.0)
+    res = fit_and_snap(asym, "OAsis", "Kidney", 1.0, MISS_PCT, False,
+                       False)
+    assert res["prm"]["variant"] == "AsymKidney", res["prm"]["variant"]
+    assert close(get_dim(res, "RL"), 80.0, 6.0), get_dim(res, "RL")
+    assert close(get_dim(res, "RR"), 100.0, 6.0), get_dim(res, "RR")
+    print("  a kidney is given the way the points say it was")
+
+
+def test_an_oasis_gets_nice_dimensions():
+    """The envelope and every fitted radius snap to friendly increments,
+    and only while the points can live with them."""
+    pts = oasis_survey("RoundedBottom", 384.0, 216.0, 12.0, rr=96.0,
+                       ftl=200.0, fbc=300.0)
+    res = fit_and_snap(pts, "OAsis", "CLoud", 1.0, MISS_PCT, False,
+                       False)
+    for key in ("LEN", "WID"):
+        v = get_dim(res, key)
+        assert min(abs(v - round(v / inc) * inc)
+                   for inc in NICE_DIMS) < 1.0e-6, (key, v)
+    assert close(get_dim(res, "LEN"), 384.0, 0.001)
+    assert close(get_dim(res, "WID"), 216.0, 0.001)
+    # ... and a pool that is NOT on a nice number is not dragged onto one
+    odd = oasis_survey("RoundedBottom", 379.25, 214.75, 12.0, rr=96.0,
+                       ftl=200.0, fbc=300.0, noise=0.15)
+    res = fit_and_snap(odd, "OAsis", "CLoud", 0.4, 0.0, False, False)
+    assert close(get_dim(res, "LEN"), 379.25, 2.0), get_dim(res, "LEN")
+    print("  an oasis takes nice dimensions the points can live with")
+
+
+def test_a_survey_that_is_not_that_oasis_says_so():
+    """Fitting the wrong family does not quietly succeed: the points end
+    up well off the ring, which is what the miss report is for."""
+    pts = oasis_survey("NXTcloud", 360.0, 240.0, 33.0, rl=70.0, rt=60.0,
+                       rr=80.0, ftl=150.0, ftr=160.0, fbc=170.0,
+                       fbr=180.0)
+    right = fit_and_snap(pts, "OAsis", "NXTcloud", 1.0, MISS_PCT, False,
+                         False)
+    wrong = fit_and_snap(pts, "OAsis", "Kidney", 1.0, MISS_PCT, False,
+                         False)
+    assert wrong["worst"] > 4.0 * right["worst"], \
+        (right["worst"], wrong["worst"])
+    print("  the wrong oasis family shows up as points off the fit")
+
+
+def test_the_oasis_report_reads_in_order():
+    """The report is LISP-only - there is no geometry here to mirror - so
+    it is driven straight out of the .lsp: the shape first, then the
+    envelope, then every radius the ring has, under OASIS's own wording.
+    A joiner that came out flat is named as the run it will be drawn as
+    rather than given a radius."""
+    from lispvm import VM
+    vm = VM()
+    vm.load(LISP_FILE)
+
+    def report(ubc):
+        vm.loads("""(setq P (list (cons 'variant "RoundedBottom")
+                                  (cons 'x0 0.0) (cons 'y0 0.0)
+                                  (cons 'w 384.0) (cons 'h 216.0)
+                                  (cons 'rl nil) (cons 'rt nil)
+                                  (cons 'rr 96.0) (cons 'off 0.0)
+                                  (cons 'utl (fit:u-of 200.0 216.0))
+                                  (cons 'utr 0.0) (cons 'ubr 0.0)
+                                  (cons 'ubc %s))
+                          R (list (cons 'kind 'oasis) (cons 'type "OAsis")
+                                  (cons 'prm P) (cons 'angle 0.0)
+                                  (cons 'mirror nil)))""" % ubc)
+        return [(d.a, d.b) for d in vm.loads("(fit:dims-lines R)")]
+
+    got = report("(fit:u-of 300.0 216.0)")
+    assert [a for a, _ in got] == [
+        "Oasis shape", "X bound", "Y bound",
+        "Right bulge radius", "Top tangent radius", "Bottom radius"], got
+    assert dict(got)["Oasis shape"] == "rounded-bottom cloud", got
+    # each radius is reported as itself - a bulge as the radius it is,
+    # a joiner as the radius its U stands for
+    assert dict(got)["Right bulge radius"].startswith("8'"), got
+    assert dict(got)["Top tangent radius"].startswith("16'-8"), got
+    assert dict(got)["Bottom radius"].startswith("25'"), got
+    assert dict(got)["X bound"].startswith("32'"), got
+    assert dict(got)["Y bound"].startswith("18'"), got
+
+    flat = dict(report("0.0"))
+    assert flat["Oasis shape"] == "straight-bottom cloud", flat
+    assert flat["Bottom radius"] == "straight run", flat
+
+    # and an oasis offers all four bounds of its envelope as hopper ends
+    vm.loads("(setq R (fit:rput R 'prm P))")
+    legs = vm.loads("(fit:legs R)")
+    assert len(legs) == 4, legs
+    mids = sorted((round(l[0][0], 3), round(l[0][1], 3)) for l in legs)
+    assert mids == [(0.0, 108.0), (192.0, 0.0), (192.0, 216.0),
+                    (384.0, 108.0)], mids
+    print("  the oasis report reads in order, and offers four hopper ends")
+
+
 def test_hopper_layout():
     pts, lines = hopper_layout(96.0, 240.0, 0.0, 192.0, 18.0, 24.0)
     # the deep break is three collinear pieces spanning wall to wall
@@ -3187,6 +4158,48 @@ def test_lisp_engine_matches_mirror():
         lv = vm.loads("(fit:get-dim fit-test-res 'LEN)")
         assert abs(lv - get_dim(py, "LEN")) < 1.0e-6, (pct, lv)
         assert vm.loads("(fit:rget fit-test-res 'allow)") == py["allow"]
+
+    # an oasis, piece by piece.  A whole oasis fit is thousands of
+    # scored rings and the VM is a Python interpreter, so the engine is
+    # checked in its parts and then run end to end at settings small
+    # enough to finish - which pins the transcription just as tightly.
+    pts = oasis_survey("RoundedBottom", 384.0, 216.0, 12.0, rr=96.0,
+                       ftl=200.0, fbc=300.0, spacing=76.0)
+    fp = to_frame(pts, math.radians(12.0), False)
+    vm = VM()
+    vm.load(LISP_FILE)
+    lst = "(list " + " ".join("(list %r %r)" % (p[0], p[1])
+                              for p in fp) + ")"
+    vm.loads("(setq oq %s)" % lst)
+    vm.loads('(setq op (fit:oas-start oq "RoundedBottom"))')
+    py = oas_start(fp, "RoundedBottom")
+    for key in ("x0", "y0", "w", "h", "rr", "utl", "ubc"):
+        lv = vm.loads("(fit:pget op '%s)" % key)
+        assert abs(lv - py[key]) < 1.0e-9, (key, lv, py[key])
+    lv = vm.loads("(fit:oas-score oq op)")
+    assert abs(lv - oas_score(fp, py)) < 1.0e-9, lv
+    lv = vm.loads("(fit:oas-sweep oq op 'rr (* 0.04 (fit:pget op 'h))"
+                  " (* 0.96 (fit:pget op 'h)) 4 3)")
+    pv = oas_sweep(fp, py, "rr", 0.04 * py["h"], 0.96 * py["h"], 4, 3)
+    assert abs(lv[0] - pv[0]) < 1.0e-9 and abs(lv[1] - pv[1]) < 1.0e-9, \
+        (lv, pv)
+    vm.loads("(setq op2 (fit:oas-pass oq op '(rr utl ubc) 3 2 nil))")
+    py2 = oas_pass(fp, py, ["rr", "utl", "ubc"], 3, 2)
+    for key in ("rr", "utl", "ubc"):
+        lv = vm.loads("(fit:pget op2 '%s)" % key)
+        assert abs(lv - py2[key]) < 1.0e-9, (key, lv, py2[key])
+    # ...and the whole placement, frame angle and all
+    wpts = "(list " + " ".join("(list %r %r)" % (p[0], p[1])
+                               for p in pts) + ")"
+    vm.loads('(setq og (fit:oas-fit-at %s "RoundedBottom" %r nil 1 2 2))'
+             % (wpts, math.radians(15.0)))
+    pg, pa, prms = oas_fit_at(pts, "RoundedBottom", math.radians(15.0),
+                              False, rounds=1, grid=2, gold=2)
+    assert abs(vm.loads("(cadr og)") - pa) < 1.0e-9, "oasis frame angle"
+    assert abs(vm.loads("(caddr og)") - prms) < 1.0e-9, "oasis rms"
+    for key in ("x0", "y0", "w", "h", "rr", "utl", "ubc"):
+        lv = vm.loads("(fit:pget (car og) '%s)" % key)
+        assert abs(lv - pg[key]) < 1.0e-9, (key, lv, pg[key])
 
     # out of square - the whole wall-swing refinement through the .lsp
     dirs = list(RECT_DIRS)
@@ -3339,6 +4352,19 @@ def test_the_questions_run_and_step_back():
                    ' nil nil) 6)')
     assert got[4] is None and got[5] is None and not vm.script
     assert not any("bowed" in p or "square" in p for p, _ in vm.prompts)
+    # nor is an oasis, which has no walls either - but it IS asked which
+    # of OASIS's five families it is, in OASIS's own words
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.script = ["OAsis", "CLoud", 1.0, None]
+    vm.prompts = []
+    got = vm.loads('(fit:ask-settings (list "Rectangle" "Square" 1.0'
+                   ' 0.15 nil nil) 6)')
+    assert got[0] == "OAsis" and got[1] == "CLoud", got
+    assert got[4] is None and got[5] is None and not vm.script, got
+    asked = " ".join(p for p, _ in vm.prompts)
+    assert "Center/TopRight/CLoud/Kidney/NXTcloud" in asked, asked
+    assert "bowed" not in asked and "Outofsquare" not in asked, asked
     print("  the questions run, and Back re-opens the last one")
 
 
@@ -3527,8 +4553,34 @@ def test_constants_match_lisp():
     assert tuple(float(x) for x in m.group(1).split()) == NICE_DIMS
     # the type keywords stay POOL's vocabulary, and the Treatment
     # question keeps the canonical set (STANDARDS.md section 2)
-    assert '"Rectangle Grecian ROman Oval L LAzyl ROUnd"' in src, \
+    assert '"Rectangle Grecian ROman Oval L LAzyl ROUnd OAsis"' in src, \
         "the pool-type keyword set moved or was renamed"
+    # the oasis family question stays OASIS's own vocabulary
+    assert '"Center TopRight CLoud Kidney NXTcloud"' in src, \
+        "the oasis family keyword set is no longer OASIS's own"
+    assert '"Center TopRight CLoud Kidney NXTcloud"' in \
+        open(os.path.join(REPO_DIR, "lisp", "oasis", "OASIS.lsp")).read(), \
+        "OASIS.lsp's own family keywords moved - FITABHD's copy is stale"
+    for name, want in (("oas-fuzz", OAS_FUZZ), ("oas-huge", OAS_HUGE),
+                       ("oas-line", OAS_LINE), ("oas-rmin", OAS_RMIN),
+                       ("oas-edge", OAS_EDGE)):
+        assert float(setq_value(name)) == want, name
+    for name, want in (("oas-tries", OAS_TRIES),
+                       ("oas-coarse", OAS_COARSE),
+                       ("oas-rough", OAS_ROUGH), ("oas-grid", OAS_GRID),
+                       ("oas-gold", OAS_GOLD),
+                       ("oas-rounds", OAS_ROUNDS)):
+        assert int(setq_value(name)) == want, name
+    for name, want in (("oas-astep", OAS_ASTEP), ("oas-aspan", OAS_ASPAN),
+                       ("oas-apart", OAS_APART)):
+        m = re.search(r"\(setq\s+fit:\*%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
+                      % name, src)
+        assert m and abs(math.pi / float(m.group(1)) - want) < 1e-12, name
+    m = re.search(r"\(setq\s+fit:\*oas-narrow\*\s+'\(([^)]*)\)", src)
+    assert m, "could not read fit:*oas-narrow*"
+    got = tuple(None if x == "nil" else float(x)
+                for x in m.group(1).split())
+    assert got == OAS_NARROW, got
     assert '"Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"' \
         in src, "the Treatment keyword set is no longer canonical"
     print("  constants match FITABHD.lsp")
@@ -3575,6 +4627,14 @@ def main():
     test_a_true_corner_stays_one_arc()
     test_a_run_may_reach_a_third_of_the_points()
     test_a_caved_round_pool()
+    test_oasis_ring_is_oasis_lsp_s_own()
+    test_the_ring_becomes_the_arcs_it_says_it_is()
+    test_every_oasis_family_is_recovered()
+    test_a_cloud_finds_its_own_flat_bottom()
+    test_a_kidney_is_given_the_way_the_points_say()
+    test_an_oasis_gets_nice_dimensions()
+    test_a_survey_that_is_not_that_oasis_says_so()
+    test_the_oasis_report_reads_in_order()
     test_hopper_layout()
     test_lisp_engine_matches_mirror()
     test_the_questions_run_and_step_back()
