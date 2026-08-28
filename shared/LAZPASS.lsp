@@ -19154,7 +19154,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "082726 REV08") ; announced on load.  The
+(setq pf:*version*      "082826 REV09") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -19317,6 +19317,38 @@
                                     ; the last step small: dropping the
                                     ; window outright allowed joints to
                                     ; kink three times the limit.
+(setq *PF-ARC-SLACK* (/ pi 3.0))    ; how much further than its own
+                                    ; points actually turn one arc may
+                                    ; sweep (60 degrees).  An arc is
+                                    ; allowed to curve about as much as
+                                    ; the run of points it covers
+                                    ; curves, and no more - which is
+                                    ; what stops a shaky survey coming
+                                    ; back as a chain of loops.  A span
+                                    ; between two neighbouring points
+                                    ; covers no turn at all, so it gets
+                                    ; the slack alone: room for a
+                                    ; quarter turn sampled only two
+                                    ; points to the corner, nowhere
+                                    ; near the semicircles this fitter
+                                    ; used to draw when a tangent got
+                                    ; away from it.
+(setq *PF-DROP-PCT*     0.10)       ; share of the points (rounded UP)
+                                    ; the fit may give up on entirely:
+                                    ; left further off than the max
+                                    ; distance, counted as "not held"
+                                    ; and ringed in the drawing.  It is
+                                    ; spent only where the walk would
+                                    ; otherwise shatter into one-point
+                                    ; stubs, and only when each point
+                                    ; given up buys at least two more
+                                    ; points of span - a stray shot is
+                                    ; worth less than the shape, but
+                                    ; the points at large outrank both.
+                                    ; Declared corners, wall points and
+                                    ; held points are never given up.
+                                    ; The "tight" candidate is granted
+                                    ; none of this at all.
 (setq *PF-SNAP-EPS*     0.02)       ; a nice-radius snap may move the
                                     ; covered points at most this far
                                     ; beyond where they already sat, and
@@ -19709,10 +19741,18 @@
 ;;   * one free arc keeps every point within TOL and the allowance
 ;;     covers it              -> that single arc; fewer curves beats
 ;;                               exactness, by design
-;;   * otherwise              -> a tangent-continuous chain of arcs
-;;                               passing exactly through every point
-(defun pf:cap-bulge (b)
-  (cond ((> b 5.0) 5.0) ((< b -5.0) -5.0) (T b)))
+;;   * otherwise              -> a chain of arcs passing exactly
+;;                               through every point, each carrying
+;;                               the last one's tangent on as far as
+;;                               it can without looping (pf:tame-bulge)
+;; The bulge that carries tangent TANG on from PREV to Q, tamed: the
+;; drawn arc's own bulge B is the shape being trusted here, so a
+;; sub-arc may curve that far, or as far as two neighbouring points
+;; justify, whichever is more - but no further.  Carrying a tangent on
+;; unchecked is what let this subdivision spiral into loops of its own.
+(defun pf:tame-bulge (prev tang q b)
+  (pf:cap-b (pf:tangent-bulge prev tang q)
+            (max (abs b) (pf:max-bulge prev q nil))))
 
 (defun pf:fit-arc-seg (p1 p2 b cands tol / ar bavg maxres mis nb q segs
                                             prev tang sn)
@@ -19748,11 +19788,11 @@
                tang (pf:end-tangent p1 (cadr cands) nb)
                prev (cadr cands))
          (foreach q (cddr cands)
-           (setq nb   (pf:cap-bulge (pf:tangent-bulge prev tang q))
+           (setq nb   (pf:tame-bulge prev tang q b)
                  segs (cons (list prev q nb) segs)
                  tang (pf:end-tangent prev q nb)
                  prev q))
-         (setq nb (pf:cap-bulge (pf:tangent-bulge prev tang p2)))
+         (setq nb (pf:tame-bulge prev tang p2 b))
          (reverse (cons (list prev p2 nb) segs)))))))
 
 ;; ---- points-only / ordering-sketch mode -------------------------------
@@ -20002,30 +20042,99 @@
     (if (or (null mn) (< d mn)) (setq mn d)))
   mn)
 
+;; ---- how far an arc is allowed to curve ------------------------------
+;; The fitter used to accept any bulge the tangent window let through,
+;; and the window opens all the way to a near-full circle once the
+;; incoming tangent has swung round.  On a survey with real scatter
+;; that let one bad joint spiral: every arc came back a semicircle,
+;; each one flinging the tangent further round, until the perimeter
+;; read as a string of loops.  So an arc now has to justify its
+;; curvature with the points it covers.
+
+;; Total turning of the polyline A -> QS... -> B, in radians - how far
+;; round the run of points this span sits on actually swings.
+(defun pf:span-turn (a b qs / chain tot)
+  (setq chain (cons a (append qs (list b)))
+        tot   0.0)
+  (while (cddr chain)
+    (setq tot   (+ tot (abs (cal:signed-dang
+                              (angle (car chain) (cadr chain))
+                              (angle (cadr chain) (caddr chain)))))
+          chain (cdr chain)))
+  tot)
+
+;; The steepest bulge this span's own points justify: it may sweep as
+;; far as they turn, plus *PF-ARC-SLACK*.  A span between two
+;; neighbours covers no turn, so it gets the slack alone.
+(defun pf:max-bulge (a b qs)
+  (cal:tan (min (/ (+ (pf:span-turn a b qs) *PF-ARC-SLACK*) 4.0) 1.373)))
+
+;; Clamp bulge B to +/- MX.
+(defun pf:cap-b (b mx)
+  (cond ((> b mx) mx) ((< b (- mx)) (- mx)) (T b)))
+
+;; How the arc (A B BUL) treats the points QS, in one pass:
+;;   (written-off  worst deviation of the rest  misses among the rest)
+;; A point further than TOL from the arc is not held at all - written
+;; off rather than allowed to shatter the span into stubs.  The caller
+;; rations how many may go; the rest still answer to TOL.
+(defun pf:span-score (a b bul qs tol / seg drop dev mis lim d q)
+  (setq seg (list a b bul) drop 0 dev 0.0 mis 0 lim (pf:oneps))
+  (foreach q qs
+    (setq d (pf:seg-dist q seg))
+    (if (> d tol)
+      (setq drop (1+ drop))
+      (progn
+        (if (> d dev) (setq dev d))
+        (if (> d lim) (setq mis (1+ mis))))))
+  (list drop dev mis))
+
+;; The points of QS this arc actually holds (within TOL) - the ones it
+;; wrote off must not go on to steer the nice-radius snap.
+(defun pf:span-kept (a b bul qs tol / seg out q)
+  (setq seg (list a b bul))
+  (foreach q qs
+    (if (<= (pf:seg-dist q seg) tol) (setq out (cons q out))))
+  (reverse out))
+
+;; T when score SC beats KEY: fewer points written off, or as few and
+;; a closer fit.
+(defun pf:better (sc key)
+  (or (< (car sc) (car key))
+      (and (= (car sc) (car key)) (< (cadr sc) (cadr key)))))
+
 ;; Best bulge for the span A->B over interior points QS, restricted to
-;; the tangent window WIN (nil = free).  EXACT 3-POINT ARCS COME
-;; FIRST: an unclamped 3-point bulge through one of the actual
-;; interior points - so the arc's middle lands ON a survey point - is
-;; preferred whenever one holds the span within TOL and LEFT misses.
-;; Compromise bulges (average / window-clamped / window edges), which
-;; float between the points, are used only when no exact arc works.
-;; Returns (bulge dev misses exactflag).
-(defun pf:span-fit (a b qs win tol left / bls m sum bl cands best d mis)
+;; the tangent window WIN (nil = free) and to what the span's own
+;; points justify (pf:max-bulge - no arc may come back as a loop).
+;; EXACT 3-POINT ARCS COME FIRST: an unclamped 3-point bulge through
+;; one of the actual interior points - so the arc's middle lands ON a
+;; survey point - is preferred whenever one holds the span within TOL
+;; and LEFT misses.  Compromise bulges (average / window-clamped /
+;; window edges), which float between the points, are used only when
+;; no exact arc works.  DLIM points may be written off - left further
+;; than TOL - instead of holding the span back; the fewer written off
+;; the better, and a tie goes to the closer fit.
+;; Returns (bulge dev misses exactflag written-off).
+(defun pf:span-fit (a b qs win tol left dlim / bls m sum bl cands best
+                                               bkey mx sc)
   (setq bls  (mapcar '(lambda (q) (pf:bulge-3pt a q b)) qs)
         m    (length qs)
-        best nil)
-  ;; exact candidates: through an interior point AND inside the window
+        mx   (pf:max-bulge a b qs)
+        best nil
+        bkey nil)
+  ;; exact candidates: through an interior point, inside the window,
+  ;; and no steeper than the points themselves justify
   (foreach bl bls
-    (if (or (null win)
-            (and (>= bl (car win)) (<= bl (cdr win))))
+    (if (and (<= (abs bl) mx)
+             (or (null win)
+                 (and (>= bl (car win)) (<= bl (cdr win)))))
       (progn
-        (setq d (pf:span-dev a b bl qs))
-        (if (and (<= d tol)
-                 (or (null best) (< d (cadr best))))
-          (progn
-            (setq mis (pf:span-misses a b bl qs))
-            (if (<= mis left)
-              (setq best (list bl d mis T))))))))
+        (setq sc (pf:span-score a b bl qs tol))
+        (if (and (<= (car sc) dlim)
+                 (<= (caddr sc) left)
+                 (or (null bkey) (pf:better sc bkey)))
+          (setq best (list bl (cadr sc) (caddr sc) T (car sc))
+                bkey sc)))))
   ;; compromise candidates, only when no exact arc holds the span
   (if (null best)
     (progn
@@ -20040,10 +20149,64 @@
                                     cands)
                             (list (car win) (cdr win)
                                   (/ (+ (car win) (cdr win)) 2.0)))))
+      (setq cands (mapcar '(lambda (bl) (pf:cap-b bl mx)) cands))
       (foreach bl cands
-        (setq d (pf:span-dev a b bl qs))
-        (if (or (null best) (< d (cadr best)))
-          (setq best (list bl d (pf:span-misses a b bl qs) nil))))))
+        (setq sc (pf:span-score a b bl qs tol))
+        (if (or (null bkey) (pf:better sc bkey))
+          (setq best (list bl (cadr sc) (caddr sc) nil (car sc))
+                bkey sc)))))
+  best)
+
+;; The longest feasible span from POS, allowing DLIM of the points it
+;; covers to be written off (0 = it must hold every one of them).  The
+;; tangent window is stretched by degrees rather than abandoned; only
+;; when even the widest step finds nothing does this return nil and
+;; the stub in pf:span-loop take over.  Returns
+;; (length bulge misses window written-off) or nil.
+(defun pf:grow-span (tour pos te ts0 sharp nogrow lim tol left dlim pro
+                     / n a best bstx steps wf len go bnd win qs lm dm
+                       fr)
+  (setq n     (length tour)
+        a     (nth pos tour)
+        best  nil
+        bstx  nil
+        steps *PF-TANG-STEPS*)
+  (while (and (null best) steps)
+    (setq wf    (car steps)
+          steps (cdr steps)
+          len   2
+          go    T)
+    (while (and go (<= len lim))
+      (if (nth (rem (+ pos len -1) n) nogrow)
+        (setq go nil)             ; never bury a corner or a wall point
+        (progn
+          (setq bnd (nth (rem (+ pos len) n) tour)
+                win (if te (pf:tang-window te a bnd wf)))
+          ;; the span that closes the loop must also end within the
+          ;; tangent window of the loop's start
+          (if (and (= (+ pos len) n) (not (car sharp)) ts0)
+            (setq win (pf:merge-windows win
+                                        (pf:end-window ts0 a bnd wf))))
+          (setq qs (cal:sublist tour (1+ pos) (1- len))
+                lm (if pro
+                     (min left (cal:ceil (* (pf:misspct) len)))
+                     left)
+                dm (if (> dlim 0)
+                     (min dlim (cal:ceil (* *PF-DROP-PCT* len)))
+                     0)
+                fr (pf:span-fit a bnd qs win tol lm dm))
+          (if (and (<= (cadr fr) tol) (<= (caddr fr) lm)
+                   (<= (nth 4 fr) dm))
+            (progn
+              (setq best (list len (car fr) (caddr fr) win (nth 4 fr)))
+              (if (cadddr fr) (setq bstx best))
+              (setq len (1+ len)))
+            (setq go nil))))))
+  ;; an arc that floats between the points has to earn its keep:
+  ;; only take it when it covers at least 2 more points than the
+  ;; longest arc that passes exactly through a point
+  (if (and bstx best (< (car best) (+ (car bstx) 2)))
+    (setq best bstx))
   best)
 
 ;; Cover the rotated closed TOUR with arcs whose endpoints sit ON the
@@ -20057,13 +20220,14 @@
 ;; Straight walls the user declared (pf-walls, bound by the command as
 ;; snapped point pairs) are emitted verbatim as LINE spans; ordinary
 ;; spans may neither swallow nor cross them.  Returns the segment list.
-(defun pf:span-loop (tour tol left te0 pro / n sharp i prev cur next
-                                             turn strtshp segs pos te
-                                             ts0 lim a best bstx len go
-                                             bnd win qs fr bl mis sn
-                                             dev0 anch steps wf lm
-                                             walls w i1 i2 fwd nogrow f
-                                             wrec)
+(defun pf:span-loop (tour tol left drop te0 pro / n sharp i prev cur
+                                                  next turn strtshp
+                                                  segs pos te ts0 lim a
+                                                  best alt len bnd win
+                                                  qs bl mis sn dev0
+                                                  anch phi gv walls w
+                                                  i1 i2 fwd nogrow f
+                                                  wrec)
   (setq n (length tour))
   ;; flag the sharp corners (intentional kinks, window resets): turns
   ;; sharper than *PF-CORNER-ANG*, plus every point the user declared
@@ -20134,90 +20298,86 @@
     ;; one point short so the result always has at least two real
     ;; segments instead of a single zero-length one
     (setq lim  (if (= pos 0) (1- (- n pos)) (- n pos))
-          best nil                   ; longest feasible span of any kind
-          bstx nil                   ; longest span through an interior point
-          steps *PF-TANG-STEPS*)
-    ;; Smoothness is worth more than one extra arc, so the tangent
-    ;; window is stretched by degrees rather than thrown away.  Only
-    ;; when even the widest step finds nothing does the stub below take
-    ;; over, and that continues the previous tangent exactly - so the
-    ;; tangency rule is never simply abandoned.
-    (while (and (null best) steps)
-      (setq wf    (car steps)
-            steps (cdr steps)
-            len   2
-            go    T)
-      (while (and go (<= len lim))
-        (if (nth (rem (+ pos len -1) n) nogrow)
-          (setq go nil)         ; never bury a corner or a wall point
-          (progn
-            (setq bnd (nth (rem (+ pos len) n) tour)
-                  win (if te (pf:tang-window te a bnd wf)))
-            ;; the span that closes the loop must also end within the
-            ;; tangent window of the loop's start
-            (if (and (= (+ pos len) n) (not strtshp) ts0)
-              (setq win (pf:merge-windows win
-                                          (pf:end-window ts0 a bnd wf))))
-            (setq qs (cal:sublist tour (1+ pos) (1- len))
-                  lm (if pro
-                       (min left (cal:ceil (* (pf:misspct) len)))
-                       left)
-                  fr (pf:span-fit a bnd qs win tol lm))
-            (if (and (<= (cadr fr) tol) (<= (caddr fr) lm))
-              (progn
-                (setq best (list len (car fr) (caddr fr) win))
-                (if (cadddr fr) (setq bstx best))
-                (setq len (1+ len)))
-              (setq go nil))))))
-    ;; an arc that floats between the points has to earn its keep:
-    ;; only take it when it covers at least 2 more points than the
-    ;; longest arc that passes exactly through a point
-    (if (and bstx best (< (car best) (+ (car bstx) 2)))
-      (setq best bstx))
+          best (pf:grow-span tour pos te ts0 sharp nogrow lim tol
+                             left 0 pro))
+    ;; Writing a point off is a last resort, for where the walk is
+    ;; about to shatter into stubs: it is offered only where the span
+    ;; could not reach past two points anyway, and kept only when
+    ;; every point given up bought at least two more points of span.
+    ;; A span that found nothing at all is worth one point (the stub
+    ;; below), so the comparison always has a floor to beat - and a
+    ;; span can never give up every point it covers.
+    (if (and (> drop 0) (or (null best) (<= (car best) 2)))
+      (progn
+        (setq alt (pf:grow-span tour pos te ts0 sharp nogrow lim tol
+                                left drop pro))
+        (if (and alt
+                 (> (nth 4 alt) 0)
+                 (>= (car alt) (+ (if best (car best) 1)
+                                  (* 2 (nth 4 alt)))))
+          (setq best alt))))
     (if (null best)
-      ;; stub to the very next point: continue the incoming tangent
-      ;; (clamped to a semicircle); with no tangent it stays straight
+      ;; Stub to the very next point.  It does not continue the
+      ;; incoming tangent exactly any more: it gives up as much of the
+      ;; mismatch as the widest stretched window would have allowed
+      ;; (never more than half of it) and absorbs the rest.
+      ;; Continuing exactly turned the arc twice as far as the chord,
+      ;; so a mismatch DOUBLED at every stub until the arcs saturated
+      ;; as semicircles - the spiral that made a shaky survey come out
+      ;; as spaghetti.  Giving a little at the joint makes it decay.
       (progn
         (setq bnd (nth (rem (1+ pos) n) tour))
         (if te
           (progn
-            (setq bl (pf:tangent-bulge a te bnd))
+            (setq phi (cal:signed-dang te (angle a bnd))
+                  gv  (min (/ (abs phi) 2.0)
+                           (* *PF-TANG-TOL* (last *PF-TANG-STEPS*)))
+                  bl  (cal:tan (/ (- phi (if (< phi 0.0) (- gv) gv))
+                                 2.0)))
             (if (and (= (1+ pos) n) (not strtshp) ts0)
               ;; closing stub: split the kink between both joints
               (setq bl (/ (+ bl (cal:tan (/ (cal:signed-dang (angle a bnd)
                                                            ts0)
                                            2.0)))
                           2.0)))
-            (if (> bl 1.0) (setq bl 1.0))
-            (if (< bl -1.0) (setq bl -1.0)))
+            (setq bl (pf:cap-b bl (pf:max-bulge a bnd nil))))
           (setq bl 0.0))
-        (setq best (list 1 bl 0 nil)))
-      ;; nice-radius snap inside the same tangent window.  A snap may
-      ;; never pull the arc off its points: covered points may only
-      ;; move a hair (*PF-SNAP-EPS*) beyond where they already sat,
-      ;; and an arc that passed through an interior point must still
-      ;; pass through one after snapping.
+        (setq best (list 1 bl 0 nil 0)))
+      ;; nice-radius snap inside the same tangent window, over the
+      ;; points the arc actually holds - the ones it wrote off must
+      ;; not drag the snap around.  A snap may never pull the arc off
+      ;; its points: covered points may only move a hair
+      ;; (*PF-SNAP-EPS*) beyond where they already sat, an arc that
+      ;; passed through an interior point must still pass through one
+      ;; after snapping, and it may not curve past what the points
+      ;; justify.
       (progn
         (setq len  (car best)
               bl   (cadr best)
               win  (cadddr best)
               bnd  (nth (rem (+ pos len) n) tour)
-              qs   (cal:sublist tour (1+ pos) (1- len))
+              qs   (pf:span-kept a bnd bl
+                                 (cal:sublist tour (1+ pos) (1- len))
+                                 tol)
               dev0 (pf:span-dev a bnd bl qs)
-              anch (<= (pf:span-min a bnd bl qs) (* 2.0 *PF-FIT-EPS*))
+              anch (and qs
+                        (<= (pf:span-min a bnd bl qs)
+                            (* 2.0 *PF-FIT-EPS*)))
               sn   (pf:snap-arc a bnd bl qs
                                 (max dev0 *PF-SNAP-EPS*) left win))
         (if (and sn
+                 (<= (abs (car sn)) (pf:max-bulge a bnd qs))
                  (or (not anch)
                      (<= (pf:span-min a bnd (car sn) qs)
                          (* 2.0 *PF-FIT-EPS*))))
-          (setq best (list len (car sn) (cdr sn) win)))))
+          (setq best (list len (car sn) (cdr sn) win (nth 4 best))))))
     (setq len  (car best)
           bl   (cadr best)
           mis  (caddr best)
           bnd  (nth (rem (+ pos len) n) tour)
           segs (cons (list a bnd bl) segs)
-          left (- left mis))
+          left (- left mis)
+          drop (- drop (nth 4 best)))
     (if (and (null ts0) (not strtshp))
       (setq ts0 (- (angle a bnd) (* 2.0 (atan bl)))))
     (setq pos (+ pos len)
@@ -20238,16 +20398,17 @@
 ;; kink, refit once seeding the first span's window with the arrival
 ;; tangent, and keep whichever seam is straighter.  The on-the-shape
 ;; threshold is bound here so it tracks this pass's tolerance.
-(defun pf:fit-pass (tour tol left pro / segs k1 sl te0 segs2 pf-on-eps)
+(defun pf:fit-pass (tour tol left drop pro / segs k1 sl te0 segs2
+                                             pf-on-eps)
   (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol))
-        segs      (pf:span-loop tour tol left nil pro)
+        segs      (pf:span-loop tour tol left drop nil pro)
         k1        (pf:seam-kink segs))
   (if (> k1 (+ *PF-TANG-TOL* 0.001))
     (progn
       (setq sl    (last segs)
             te0   (+ (angle (car sl) (cadr sl))
                      (* 2.0 (atan (caddr sl))))
-            segs2 (pf:span-loop tour tol left te0 pro))
+            segs2 (pf:span-loop tour tol left drop te0 pro))
       (if (< (pf:seam-kink segs2) k1) (setq segs segs2))))
   segs)
 
@@ -20262,14 +20423,15 @@
 ;; intact.  The fewest-curves result seen is kept, so an unreachably
 ;; small cap still returns the smallest fit possible - never the
 ;; biggest.
-(defun pf:coarse-loop (tour tol maxarcs left pro / segs segs2 tol2 tries)
+(defun pf:coarse-loop (tour tol maxarcs left drop pro / segs segs2 tol2
+                                                        tries)
   ;; start the walk at a declared wall or corner when there is one, so
   ;; neither straddles the walk's origin; otherwise at the sharpest turn
   (setq tour (cond
                (pf-walls   (pf:rotate-to-point tour (car (car pf-walls))))
                (pf-corners (pf:rotate-to-point tour (car pf-corners)))
                (T          (pf:rotate-to-corner tour)))
-        segs (pf:fit-pass tour tol left pro))
+        segs (pf:fit-pass tour tol left drop pro))
   ;; the cap deliberately buys few curves with accuracy, so the refits
   ;; drop both the miss allowance and the per-span fair share
   (if maxarcs
@@ -20278,7 +20440,7 @@
       (while (and (> (pf:arc-count segs) maxarcs) (< tries 40))
         (setq tol2  (* tol2 1.4)
               tries (1+ tries)
-              segs2 (pf:fit-pass tour tol2 1000000 nil))
+              segs2 (pf:fit-pass tour tol2 1000000 drop nil))
         (if (< (pf:arc-count segs2) (pf:arc-count segs))
           (setq segs segs2)))))
   segs)
@@ -20728,7 +20890,9 @@
                        " reachable: a closed loop needs at least 2"
                        " segments)")))
       (if (> miss 0)
-        (princ "\n  (points beyond tolerance: the curve cap and/or the drawn shape overruled them)"))
+        (princ (strcat "\n  (points beyond tolerance: given up to keep"
+                       " the shape, or overruled by the curve cap"
+                       " and/or the drawn shape)")))
       (if (pf:self-crosses newsegs)
         (princ (strcat "\n  WARNING: the result crosses itself - the"
                        " automatic point order is probably wrong."
@@ -20755,7 +20919,7 @@
 ;; candidate varies.  If the result needs more curves than MAXARCS, the
 ;; fit falls back to the points-driven builder - the drawn loop still
 ;; supplies the point order.
-(defun pf:guided-fit (loop pts dpts tol ftol allow maxarcs
+(defun pf:guided-fit (loop pts dpts tol ftol allow drop maxarcs
                       / verts used n s p1 p2 b cands clean ns newsegs
                         q d)
   ;; -- 1. snap each vertex to its nearest point within tol ----------
@@ -20813,7 +20977,7 @@
                      " - refitting from the points instead)"))
       (setq pf-miss-left allow
             newsegs (pf:coarse-loop (pf:loop-order loop dpts)
-                                    ftol maxarcs allow T))))
+                                    ftol maxarcs allow drop T))))
   newsegs)
 
 ;; Build one candidate fit in MODE - "tight", "asked" or "few", the
@@ -20839,17 +21003,21 @@
 ;;
 ;; Each call gets its own miss allowance and on-the-shape threshold.
 (defun pf:build (tour loop pts dpts tol allow mode
-                 / pf-miss-left pf-on-eps ftol left cap)
+                 / pf-miss-left pf-on-eps ftol left cap drop)
   (setq ftol (if (= mode "tight") (min tol *PF-TIGHT-TOL*) tol)
         left (cond ((= mode "tight") 0)
                    ((= mode "few")   1000000)
                    (T                allow))
         cap  (if (= mode "asked") *PF-MAX-ARCS*)
+        drop (if (= mode "tight")
+               0
+               (cal:ceil (* *PF-DROP-PCT*
+                           (length (if tour tour pts)))))
         pf-miss-left left
         pf-on-eps    (max *PF-ON-EPS* (* 0.25 ftol)))
   (if tour
-    (pf:coarse-loop tour ftol cap left (not (= mode "few")))
-    (pf:guided-fit loop pts dpts tol ftol left cap)))
+    (pf:coarse-loop tour ftol cap left drop (not (= mode "few")))
+    (pf:guided-fit loop pts dpts tol ftol left drop cap)))
 
 ;; Deviation summary for SEGS against PTS: (worst avg avg-off).
 ;;   worst   - furthest any point sits from the line
@@ -20958,7 +21126,10 @@
                        (cadddr ce)))
         (setq i (1+ i)))
       (princ (strcat "\n\n  \"not held\" = points further than "
-                     (rtos tol 2 3) " from that fit."
+                     (rtos tol 2 3) " from that fit - some of them"
+                     " given up on purpose,"
+                     "\n  to keep the shape whole where holding them"
+                     " would break it into stubs."
                      "\n  \"avg all\" averages every point; \"avg off\""
                      " averages only the points that are off the line"
                      "\n  (further than " (rtos onv 2 3) " from it)."))
@@ -20969,9 +21140,15 @@
                      " towards nothing (it"
                      "\n  ignores that distance"
                      (if *PF-MAX-ARCS* " and the curve cap" "")
-                     "), the middle one is your settings exactly,"
-                     "\n  and the few fit holds the same distance with"
-                     " as few curves as it can."))
+                     " and gives up no point at all), the middle one is"
+                     "\n  your settings exactly, and the few fit holds"
+                     " the same distance with as few"
+                     "\n  curves as it can - those two may write off up"
+                     " to " (itoa (cal:ceil (* *PF-DROP-PCT*
+                                              (length (if tour
+                                                        tour
+                                                        pts)))))
+                     " stray point(s) between them."))
       (if allbad
         (princ (strcat "\n  NOTE: " (itoa (length allbad))
                        " point(s) could not be held by ANY fit built to"
@@ -22911,7 +23088,21 @@
   (princ "\n    point too (3-point arcs) whenever such an arc holds the span;")
   (princ "\n    floating arcs are a rare last resort.")
   (princ "\n  * Joints meet within 8 degrees of tangent; when nothing fits the")
-  (princ "\n    window it stretches 1.25x then 1.5x rather than being dropped.")
+  (princ "\n    window it stretches 1.25x then 1.5x rather than being dropped,")
+  (princ "\n    and a one-point stub then gives up what is left of the mismatch")
+  (princ "\n    a little at a time, so it dies away instead of building up.")
+  (princ "\n  * No arc may sweep further than the points it covers actually")
+  (princ (strcat "\n    turn, plus "
+                 (rtos (* 180.0 (/ *PF-ARC-SLACK* pi)) 2 0)
+                 " degrees - so a shaky survey comes out as a"))
+  (princ "\n    shape, not as a string of loops.")
+  (princ "\n  * A stray shot can be given up rather than fought over: up to")
+  (princ (strcat "\n    " (rtos (* 100.0 *PF-DROP-PCT*) 2 0)
+                 " percent of the points may end further off than your"
+                 " distance"))
+  (princ "\n    (they are counted \"not held\" and ringed), but only where")
+  (princ "\n    holding one would break the run into stubs, and never a held")
+  (princ "\n    point, a corner or a wall point.  The red fit gives up none.")
   (princ "\n  * Radii snap to whole feet, half feet, then inches - only when")
   (princ "\n    the points allow it; the points always outrank pretty radii.")
   (princ "\n  * Turns over 45 degrees are corners and are never buried inside")

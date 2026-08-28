@@ -7,9 +7,12 @@ alone — using as **few curves as possible**, each with a **friendly
 radius** (whole feet, half feet, or whole inches) whenever one fits.
 Every arc runs **from survey point to survey point** and meets its
 neighbour **within 8° of tangent**, so the outline reads as smooth
-while the points stay in charge. Up to 15% of the points (rounded up)
-are allowed to sit about an inch off the result, and you can cap the
-number of curves outright.
+while the points stay in charge. No arc may curve much further than
+the points it covers actually do, so a shaky survey comes out as a
+shape rather than a string of loops. Up to 15% of the points (rounded
+up) are allowed to sit about an inch off the result, a tenth of them
+may be **given up on entirely** where holding them would break the
+shape, and you can cap the number of curves outright.
 
 Three commands ship in the one file: **`ABHD`** runs the whole fit
 (and offers the pool bottom at the end), **`ADAB`** runs just the
@@ -85,6 +88,32 @@ than its own fair share of the allowance either, so one greedy arc
 cannot use up the whole budget and leave the rest of the loop with
 none.
 
+### Points it can give up on entirely
+
+The miss allowance still holds every point to the max distance. A
+survey has shots that no sane arc can hold — a rod held crooked, a
+shot taken on the coping — and fighting for one of those shatters the
+run around it into stubs and drags the outline into a spike. So the
+fit may **give up on** a few points outright: up to `*PF-DROP-PCT*`
+(**10%**, rounded up) of them may end further off than the distance
+you typed. They are counted in the **not held** column, ringed in the
+drawing and listed by point number like any other unheld point — the
+fit never hides one.
+
+Giving up is a last resort, not a shortcut:
+
+* it is only offered where the span could not reach past two points
+  anyway — a fit running long arcs never spends it;
+* every point given up must buy at least **two more points of span**,
+  or it is held after all;
+* **held points, declared corners and wall points are never given
+  up** — they end spans, so they are never inside one to begin with;
+* the **tight** candidate (fit 1) is granted none of it at all, which
+  is what keeps it the reference the other two are read against.
+
+On a 70-point survey with three bad shots in it, giving up two points
+took the fit from 24 segments to 14.
+
 In the ordering-sketch and points-only modes the loop is covered by
 long, overarching arcs that sit **on the points** and meet each other
 **near-tangent** — no straight lines:
@@ -106,9 +135,27 @@ long, overarching arcs that sit **on the points** and meet each other
   inside the window, the window is stretched by small steps
   (`*PF-TANG-STEPS*`, 1× → 1.25× → 1.5×) rather than abandoned, and
   if even the widest step finds nothing the fit falls back to a
-  one-point stub that continues the previous tangent exactly. Dropping
-  the window outright — what an earlier version did — let a joint kink
-  **23.8°**, three times the limit; it is now capped near 12°.
+  one-point stub. Dropping the window outright — what an earlier
+  version did — let a joint kink **23.8°**, three times the limit; it
+  is now capped near 12°.
+* **A stub gives ground instead of passing the problem on.** It used
+  to continue the previous tangent *exactly*, which turns the arc
+  twice as far as the chord ran — so any mismatch **doubled** at every
+  stub until the bulges saturated as semicircles and the perimeter
+  came out as a string of loops. The stub now gives up as much of the
+  mismatch as the widest stretched window would have allowed (never
+  more than half of it) and absorbs the rest, so a mismatch **decays**
+  along the loop. On a 70-point survey with half an inch of scatter
+  that is the difference between 70 hairpins of 3-inch radius and 39
+  arcs no tighter than 19 inches.
+* **An arc may only curve as much as its own points do.** No span
+  sweeps further than the run of points it covers actually turns, plus
+  `*PF-ARC-SLACK*` (**60°**) — enough for a quarter turn sampled only
+  two points to the corner, nowhere near the loops a runaway tangent
+  used to draw. A one-point stub covers no turn at all, so it gets the
+  slack alone. The rule costs an honest fit nothing: a 3-point arc
+  sweeps twice the turn at its middle point, and a turn past 45° is a
+  corner already.
 * Each arc is grown point by point for as long as one in-window arc
   can hold every covered point within the tolerance (and the miss
   allowance) — the longest arc that fits the most points wins.
@@ -163,7 +210,8 @@ then overruling the answer. See
 
 All thresholds are constants at the top of `abhd.lsp`
 (`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-SNAP-EPS*`, `*PF-CORNER-ANG*`,
-`*PF-NICE-RADII*`, `*PF-TANG-TOL*`), as are the layer names
+`*PF-NICE-RADII*`, `*PF-TANG-TOL*`, `*PF-ARC-SLACK*`,
+`*PF-DROP-PCT*`), as are the layer names
 (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`). The
 defaults were calibrated against a real hand-drawn as-built trace
 (55 `ab_pt` points, 37×16 ft pool, ~20″ point spacing). On that
@@ -285,9 +333,13 @@ they are the **two ends of that trade and the middle**:
 
 | # | Colour | Aim |
 | --- | --- | --- |
-| 1 | red | **Most curves, least error.** Fits to `*PF-TIGHT-TOL*` (0.01) and writes off no point at all, so the error goes to nothing — it ignores both the distance you typed and the curve cap |
+| 1 | red | **Most curves, least error.** Fits to `*PF-TIGHT-TOL*` (0.01), writes off no point and gives up on none, so the error goes to nothing — it ignores both the distance you typed and the curve cap |
 | 2 | yellow | **As asked.** Your settings exactly, curve cap included |
 | 3 | cyan | **Fewest curves that still hold the distance.** The same distance you typed, but with the miss allowance no longer rationed span by span, so the arcs run as long as that distance allows |
+
+Fits 2 and 3 may also **give up on** a stray point or two rather than
+break the shape around it (see above); fit 1 never does, which is why
+its column is the one to read the other two against.
 
 All three are then **measured against the distance you typed**, so the
 columns compare like for like even though only fit 2 was built to it:
@@ -302,13 +354,15 @@ each numbered on screen in its own colour:
    2  12    12      0.60       0.12     0.38     0         as asked
    3  9     9       0.90       0.32     0.53     0         fewest curves - still within the distance
 
-  "not held" = points further than 1.000 from that fit.
+  "not held" = points further than 1.000 from that fit - some of them given up on purpose,
+  to keep the shape whole where holding them would break it into stubs.
   "avg all" averages every point; "avg off" averages only the points
   that are off the line (further than 0.250 from it).
   All three are measured against the 1.000 you typed, but only one is built to it:
   the tight fit spends curves to drive the error towards nothing (it
-  ignores that distance), the middle one is your settings exactly,
-  and the few fit holds the same distance with as few curves as it can.
+  ignores that distance and gives up no point at all), the middle one is
+  your settings exactly, and the few fit holds the same distance with as few
+  curves as it can - those two may write off up to 6 stray point(s) between them.
 
   Click the outline you want to keep, or type its number.
   Redo refits with new settings, and lets you omit points first.
@@ -403,6 +457,11 @@ So you can work down the list instead of hunting for circles, and
 decide per point whether it is a bad shot, a duplicate, or a real
 feature that needs a tighter distance. The same list prints at the
 command line.
+
+A few of those rings may be there **on purpose**: the ones the fit
+gave up on to keep the shape whole (above). They are reported exactly
+like the rest — nothing is quietly dropped — so the list is still the
+place to check the fit against the survey.
 
 The numbers come from the `number` attribute on each point block
 (`*PF-PT-TAG*`); points without one are numbered in selection order.

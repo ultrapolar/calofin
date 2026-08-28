@@ -341,6 +341,8 @@ python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
 python3 tests/test_tutorialpool.py    # TUTORIALPOOL, run in lispvm
 python3 tests/test_oasis.py           # OASIS loaded and run in lispvm
 python3 tests/test_pool_fit.py        # ABHD
+python3 tests/test_abhd_runtime.py    # ABHD's fitter run in lispvm,
+                                      #   against the mirror above
 python3 tests/test_abcurcheck.py      # ABCURCHECK, run in lispvm
 python3 tests/test_cabhd.py           # CABHD, run in lispvm
 python3 tests/test_laser_fit.py       # LHD

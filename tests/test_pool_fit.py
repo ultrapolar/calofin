@@ -45,6 +45,8 @@ PICKUP_EPS = 3.0                   # *PF-PICKUP-EPS*
 DIM_OFF = 12.0                     # *PF-DIM-OFF*
 BOTTOM_FIT = 0.25                  # *PF-BOTTOM-FIT*
 TIGHT_TOL = 0.01                   # *PF-TIGHT-TOL*
+ARC_SLACK = math.pi / 3.0          # *PF-ARC-SLACK*
+DROP_PCT = 0.10                    # *PF-DROP-PCT*
 COMPARE_MODES = ("tight", "asked", "few")   # *PF-COMPARE*
 
 # ---- small 2D helpers ------------------------------------------------
@@ -204,6 +206,52 @@ def span_min(a, b, bul, qs):
     return min((seg_dist(q, (a, b, bul)) for q in qs), default=None)
 
 
+def span_turn(a, b, qs):
+    """Total turning of the polyline A -> QS... -> B, in radians."""
+    chain = [a] + list(qs) + [b]
+    return sum(abs(signed_dang(ang(chain[i - 1], chain[i]),
+                               ang(chain[i], chain[i + 1])))
+               for i in range(1, len(chain) - 1))
+
+
+def max_bulge(a, b, qs):
+    """The steepest bulge this span's own points justify.
+
+    An arc may sweep about as far as the points it covers actually
+    turn, plus ARC_SLACK - so a span over gently turning points cannot
+    come back as a loop.  A one-point stub, which covers no interior
+    point at all, gets the slack alone."""
+    return pf_tan(min((span_turn(a, b, qs) + ARC_SLACK) / 4.0, ANG_CAP))
+
+
+def cap_b(bl, mx):
+    return max(-mx, min(mx, bl))
+
+
+def span_score(a, b, bul, qs, tol):
+    """(written off, worst dev of the rest, misses among the rest).
+
+    A point further than TOL from the arc is not held at all.  Writing
+    one off is what keeps a single bad shot from shattering the span
+    into stubs; the caller rations how many may go."""
+    seg = (a, b, bul)
+    drop, dev, mis = 0, 0.0, 0
+    for q in qs:
+        d = seg_dist(q, seg)
+        if d > tol:
+            drop += 1
+        else:
+            dev = max(dev, d)
+            if d > _ON_EPS:
+                mis += 1
+    return drop, dev, mis
+
+
+def span_kept(a, b, bul, qs, tol):
+    """The points of QS this arc actually holds (within TOL)."""
+    return [q for q in qs if seg_dist(q, (a, b, bul)) <= tol]
+
+
 def snap_arc(a, b, bl, qs, tol, left, win):
     """Snap the radius to feet / half feet / inches inside WIN."""
     r0 = bulge_radius(a, b, bl)
@@ -276,24 +324,30 @@ def clamp_b(b, win):
     return win[0] if b < win[0] else (win[1] if b > win[1] else b)
 
 
-def span_fit(a, b, qs, win, tol, left):
+def span_fit(a, b, qs, win, tol, left, dlim=0):
     """Best bulge for A->B over QS inside WIN.
 
     Exact 3-point arcs - ones whose middle passes through one of the
     actual interior points - come first; compromise bulges that float
-    between the points are the fallback.  Returns
-    (bulge, dev, misses, exact).
+    between the points are the fallback.  No candidate may bulge
+    further than the span's own points justify (max_bulge), so a span
+    can never come back as a loop.  DLIM points may be written off
+    (left further than TOL) instead of holding the span back; the
+    fewer written off the better, and a tie goes to the closer fit.
+    Returns (bulge, dev, misses, exact, dropped).
     """
     bls = [bulge_3pt(a, q, b) for q in qs]
-    best = None
+    mx = max_bulge(a, b, qs)
+    best, bkey = None, None
     for bl in bls:
+        if abs(bl) > mx:
+            continue
         if win and not (win[0] <= bl <= win[1]):
             continue
-        d = span_dev(a, b, bl, qs)
-        if d <= tol and (best is None or d < best[1]):
-            mis = span_misses(a, b, bl, qs)
-            if mis <= left:
-                best = (bl, d, mis, True)
+        drop, d, mis = span_score(a, b, bl, qs, tol)
+        if drop <= dlim and mis <= left and (bkey is None
+                                             or (drop, d) < bkey):
+            best, bkey = (bl, d, mis, True, drop), (drop, d)
     if best:
         return best
     m = len(qs)
@@ -303,10 +357,10 @@ def span_fit(a, b, qs, win, tol, left):
     if win:
         cands = [clamp_b(c, win) for c in cands]
         cands += [win[0], win[1], (win[0] + win[1]) / 2.0]
-    for bl in cands:
-        d = span_dev(a, b, bl, qs)
-        if best is None or d < best[1]:
-            best = (bl, d, span_misses(a, b, bl, qs), False)
+    for bl in [cap_b(c, mx) for c in cands]:
+        drop, d, mis = span_score(a, b, bl, qs, tol)
+        if bkey is None or (drop, d) < bkey:
+            best, bkey = (bl, d, mis, False, drop), (drop, d)
     return best
 
 
@@ -352,15 +406,65 @@ def arc_count(segs):
     return sum(1 for s in segs if abs(s[2]) >= 1.0e-9)
 
 
+def grow_span(tour, pos, te, ts0, sharp, nogrow, lim, tol, left, dlim,
+              prorate):
+    """The longest feasible span from POS, written-off points allowed.
+
+    DLIM is how many of the covered points this span may give up on
+    (see span_score); 0 means it must hold every one of them.  Returns
+    (length, bulge, misses, window, dropped) or None."""
+    n = len(tour)
+    a = tour[pos]
+    best = best_exact = None
+    # keep the tangency rule if there is any way to: the window is
+    # widened by degrees, and only if even the widest finds nothing
+    # do we fall through to the stub in span_loop
+    for wf in TANG_STEPS:
+        length = 2
+        while length <= lim:
+            if nogrow[(pos + length - 1) % n]:
+                break
+            b_end = tour[(pos + length) % n]
+            win = (tang_window(te, a, b_end, wf)
+                   if te is not None else None)
+            if (pos + length == n and not sharp[0]
+                    and ts0 is not None):
+                win = merge_windows(win, end_window(ts0, a, b_end, wf))
+            qs = tour[pos + 1:pos + length]
+            lm = (min(left, pf_ceil(MISS_PCT * length)) if prorate
+                  else left)
+            dm = min(dlim, pf_ceil(DROP_PCT * length)) if dlim else 0
+            bl, dev, mis, exact, drop = span_fit(a, b_end, qs, win, tol,
+                                                 lm, dm)
+            if dev <= tol and mis <= lm and drop <= dm:
+                best = (length, bl, mis, win, drop)
+                if exact:
+                    best_exact = best
+                length += 1
+            else:
+                break
+        if best:
+            break
+    # a floating arc must cover at least 2 more points than the
+    # longest arc that passes through one
+    if best_exact and best and best[0] < best_exact[0] + 2:
+        best = best_exact
+    return best
+
+
 def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
-              corners=None, holds=None):
+              corners=None, holds=None, drops=0):
     """Cover the closed TOUR with arcs anchored on its points.
 
     When PRORATE is set each span may spend only its own fair share of
     the miss allowance, so one greedy span cannot exhaust the budget
-    and starve the rest of the loop into single-point stubs.  The
-    curve cap turns it off: there the whole point is to trade accuracy
-    for few curves.
+    and starve the rest of the loop into stubs.  The curve cap turns
+    it off: there the whole point is to trade accuracy for few curves.
+
+    DROPS is how many points the whole walk may leave unheld.  It is
+    spent only where a span has stopped growing and giving a point up
+    buys at least two more points of span - the shape is worth more
+    than a stray shot, but not more than the points at large.
 
     WALLS is the list of user-declared straight walls, as pairs of
     tour points: each is emitted verbatim as a straight LINE span, and
@@ -389,7 +493,10 @@ def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
         if w[1] == n:
             nogrow[0] = True
     # HELD points may end a span (landing on it exactly) but are
-    # never buried inside one - mirror of the pf-holds check
+    # never buried inside one - mirror of the pf-holds check.  That
+    # also puts them, the declared corners and the wall points out of
+    # reach of the write-off budget: only interior points are ever
+    # given up
     for h in (holds or []):
         hi = tour_index(h, tour)
         if hi is not None:
@@ -417,66 +524,63 @@ def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
         # one span may never swallow the whole loop, or the result
         # would be a single zero-length segment
         lim = n - pos - (1 if pos == 0 else 0)
-        best = best_exact = None
-        # keep the tangency rule if there is any way to: the window is
-        # widened by degrees, and only if even the widest finds nothing
-        # do we fall through to a stub, which continues the previous
-        # tangent exactly
-        for wf in TANG_STEPS:
-            length = 2
-            while length <= lim:
-                if nogrow[(pos + length - 1) % n]:
-                    break
-                b_end = tour[(pos + length) % n]
-                win = (tang_window(te, a, b_end, wf)
-                       if te is not None and wf else None)
-                if (pos + length == n and not start_sharp
-                        and ts0 is not None and wf):
-                    win = merge_windows(win,
-                                        end_window(ts0, a, b_end, wf))
-                qs = tour[pos + 1:pos + length]
-                lm = (min(left, pf_ceil(MISS_PCT * length)) if prorate
-                      else left)
-                bl, dev, mis, exact = span_fit(a, b_end, qs, win, tol, lm)
-                if dev <= tol and mis <= lm:
-                    best = (length, bl, mis, win)
-                    if exact:
-                        best_exact = best
-                    length += 1
-                else:
-                    break
-            if best:
-                break
-        # a floating arc must cover at least 2 more points than the
-        # longest arc that passes through one
-        if best_exact and best and best[0] < best_exact[0] + 2:
-            best = best_exact
+        best = grow_span(tour, pos, te, ts0, sharp, nogrow, lim, tol,
+                         left, 0, prorate)
+        # Writing a point off is a last resort, for where the walk is
+        # about to shatter into stubs: it is offered only where the
+        # span could not reach past two points anyway, and kept only
+        # when every point given up bought at least two more points of
+        # span.  A fit that is running long arcs never spends it.
+        if drops > 0 and (best is None or best[0] <= 2):
+            alt = grow_span(tour, pos, te, ts0, sharp, nogrow, lim, tol,
+                            left, drops, prorate)
+            # a span that found nothing is worth one point (the stub
+            # below), so the comparison always has a floor to beat and
+            # a span can never give up every point it covers
+            if (alt and alt[4] > 0
+                    and alt[0] >= (best[0] if best else 1) + 2 * alt[4]):
+                best = alt
         if best is None:
+            # Stub to the very next point.  It does not continue the
+            # incoming tangent exactly any more: it gives up as much
+            # of the mismatch as the widest stretched window would
+            # have allowed (never more than half), and absorbs the
+            # rest.  Continuing exactly made the arc turn twice as far
+            # as the chord did, so a mismatch DOUBLED at every stub
+            # until the arcs came back as semicircles - the spiral
+            # that turned a noisy survey into spaghetti.  Giving a
+            # little at the joint makes it decay instead.
             b_end = tour[(pos + 1) % n]
             if te is not None:
-                bl = tangent_bulge(a, te, b_end)
+                phi = signed_dang(te, ang(a, b_end))
+                give = min(abs(phi) / 2.0, TANG_TOL * TANG_STEPS[-1])
+                bl = pf_tan((phi - math.copysign(give, phi)) / 2.0)
                 if pos + 1 == n and not start_sharp and ts0 is not None:
                     bl = (bl + pf_tan(
                         signed_dang(ang(a, b_end), ts0) / 2.0)) / 2.0
-                bl = max(-1.0, min(1.0, bl))
+                bl = cap_b(bl, max_bulge(a, b_end, []))
             else:
                 bl = 0.0
-            best = (1, bl, 0, None)
+            best = (1, bl, 0, None, 0)
         else:
-            length, bl, mis, win = best
+            length, bl, mis, win, drop = best
             b_end = tour[(pos + length) % n]
-            qs = tour[pos + 1:pos + length]
+            # the points this arc gave up on are out of the picture
+            # now: they must not drag the nice-radius snap around
+            qs = span_kept(a, b_end, bl, tour[pos + 1:pos + length], tol)
             dev0 = span_dev(a, b_end, bl, qs)
-            anchored = span_min(a, b_end, bl, qs) <= 2.0 * FIT_EPS
+            anchored = bool(qs) and span_min(a, b_end, bl, qs) <= 2.0 * FIT_EPS
             sn = snap_arc(a, b_end, bl, qs,
                           max(dev0, SNAP_EPS), left, win)
-            if sn and (not anchored
-                       or span_min(a, b_end, sn[0], qs) <= 2.0 * FIT_EPS):
-                best = (length, sn[0], sn[1], win)
-        length, bl, mis, win = best
+            if (sn and abs(sn[0]) <= max_bulge(a, b_end, qs)
+                    and (not anchored
+                         or span_min(a, b_end, sn[0], qs) <= 2.0 * FIT_EPS)):
+                best = (length, sn[0], sn[1], win, drop)
+        length, bl, mis, win, drop = best
         b_end = tour[(pos + length) % n]
         segs.append((a, b_end, bl))
         left -= mis
+        drops -= drop
         if ts0 is None and not start_sharp:
             ts0 = ang(a, b_end) - 2.0 * math.atan(bl)
         pos += length
@@ -493,19 +597,19 @@ def seam_kink(segs):
 
 
 def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None,
-             holds=None):
+             holds=None, drops=0):
     """One full fit; the on-the-shape threshold tracks this tolerance."""
     global _ON_EPS
     saved, _ON_EPS = _ON_EPS, on_eps_for(tol)
     try:
         segs, l1 = span_loop(tour, tol, left, None, prorate, walls,
-                             corners, holds)
+                             corners, holds, drops)
         k1 = seam_kink(segs)
         if k1 > TANG_TOL + 0.001:
             s_last = segs[-1]
             te0 = ang(s_last[0], s_last[1]) + 2.0 * math.atan(s_last[2])
             segs2, l2 = span_loop(tour, tol, left, te0, prorate, walls,
-                                  corners, holds)
+                                  corners, holds, drops)
             if seam_kink(segs2) < k1:
                 return segs2, l2
         return segs, l1
@@ -514,12 +618,18 @@ def fit_pass(tour, tol, left, prorate=True, walls=None, corners=None,
 
 
 def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
-                corners=None, prorate=True, holds=None):
+                corners=None, prorate=True, holds=None, droppct=None):
     """Full fit; the curve cap relaxes the tolerance and refits.
 
     ALLOWANCE and PRORATE are the walk's miss budget and whether each
     span is held to its own fair share of it - lifting both is how the
-    "few" candidate buys long arcs without touching the tolerance."""
+    "few" candidate buys long arcs without touching the tolerance.
+    DROPPCT is the share of the points the walk may leave unheld
+    rather than break the shape over (DROP_PCT unless given; the
+    "tight" candidate passes 0, because writing off no point at all is
+    the whole of its aim)."""
+    drops = pf_ceil((DROP_PCT if droppct is None else droppct)
+                    * len(tour))
     # start the walk at a declared wall when there is one, so no wall
     # straddles the walk's origin; otherwise at the sharpest turn
     if walls:
@@ -529,7 +639,7 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
     else:
         tour = rotate_to_corner(tour)
     segs, left = fit_pass(tour, tol, allowance, prorate, walls, corners,
-                          holds)
+                          holds, drops)
     # the cap buys few curves with accuracy, so its refits drop both
     # the miss allowance and the per-span fair share
     if maxarcs is not None:
@@ -539,7 +649,7 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
             tol2 *= 1.4
             tries += 1
             segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls, corners,
-                                holds)
+                                holds, drops)
             if arc_count(segs2) < arc_count(segs):
                 segs = segs2
     return segs, left
@@ -943,7 +1053,8 @@ def build(tour, tol, allowance, mode, maxarcs=None, walls=None,
     left = {"tight": 0, "few": 10 ** 9}.get(mode, allowance)
     cap = maxarcs if mode == "asked" else None
     return coarse_loop(tour, ftol, cap, left, walls, corners,
-                       mode != "few")
+                       mode != "few", None,
+                       0.0 if mode == "tight" else None)
 
 
 def closed(segs):
@@ -1005,6 +1116,37 @@ def blob_pts(n=56, noise=0.0, seed=3):
         out.append((r * math.cos(t) * 1.15 + rnd.uniform(-noise, noise),
                     r * math.sin(t) * 0.8 + rnd.uniform(-noise, noise)))
     return out
+
+
+def spiky_blob_pts(n=70, noise=0.3, seed=7, spikes=3, off=3.0):
+    """A survey with a handful of genuinely bad shots.
+
+    Every spike is pushed OFF radially by more than any tolerance the
+    command accepts, which is what a mis-held rod or a shot on the
+    coping looks like in real data."""
+    pts = blob_pts(n, noise, seed)
+    for k in range(spikes):
+        i = (k + 1) * n // (spikes + 1)
+        x, y = pts[i]
+        d = math.hypot(x, y)
+        pts[i] = (x * (1.0 + off / d), y * (1.0 + off / d))
+    return pts
+
+
+def arc_sweeps(segs):
+    """Each arc's included angle, in degrees."""
+    return [math.degrees(4.0 * math.atan(abs(s[2]))) for s in segs
+            if abs(s[2]) > 1.0e-9]
+
+
+def spacing(pts):
+    tour = order_points(list(pts))
+    n = len(tour)
+    return sum(dist(tour[i], tour[(i + 1) % n]) for i in range(n)) / n
+
+
+def not_held(segs, pts, tol):
+    return [p for p in pts if min(seg_dist(p, s) for s in segs) > tol]
 
 
 def rounded_rect_pts(w=240.0, h=120.0, r=24.0, step=14.0):
@@ -1712,6 +1854,101 @@ def test_held_points_are_hit_exactly():
     print("  held points end a span and are hit exactly, in every aim")
 
 
+def test_shaky_survey_stays_smooth():
+    """A survey with real scatter must not come back as spaghetti.
+
+    The complaint this guards, from a real run: on a 70-point survey
+    with about half an inch of scatter every candidate came back as a
+    chain of one-point semicircles - 57 and 67 curves, radii of three
+    inches, loops crossing the shape - because a stub continued the
+    incoming tangent exactly, which turned the arc twice as far as the
+    chord.  Any mismatch therefore DOUBLED at every stub until the
+    bulges saturated, and nothing capped how far one arc could curve.
+    Now an arc may only sweep as far as its own points turn (plus
+    ARC_SLACK) and a stub gives ground at the joint, so a mismatch
+    decays instead.
+    """
+    for label, pts in (("scatter 0.6", blob_pts(70, 0.6, 7)),
+                       ("scatter 1.0", blob_pts(70, 1.0, 5))):
+        step = spacing(pts)
+        tour = order_points(list(pts))
+        allowance = pf_ceil(MISS_PCT * len(pts))
+        for mode in COMPARE_MODES:
+            segs, _ = build(tour, 1.0, allowance, mode)
+            tag = "%s, %s" % (label, mode)
+            assert closed(segs), tag
+            assert not self_crosses(segs), tag
+            # no arc may curve further than its own points do
+            for i, sg in enumerate(segs):
+                qs = [q for q in pts
+                      if seg_dist(q, sg) <= 1.0
+                      and dist(q, sg[0]) > 1.0e-9 and dist(q, sg[1]) > 1.0e-9]
+                sweep = math.degrees(4.0 * math.atan(abs(sg[2])))
+                assert sweep <= math.degrees(span_turn(sg[0], sg[1], qs)
+                                             + ARC_SLACK) + 1.0e-6, (
+                    "%s: arc %d sweeps %.1f deg over points that turn %.1f"
+                    % (tag, i, sweep, math.degrees(
+                        span_turn(sg[0], sg[1], qs))))
+            # no loops, and no radius tighter than the points are spaced
+            assert max(arc_sweeps(segs)) < 150.0, (tag, arc_sweeps(segs))
+            radii = [bulge_radius(*sg) for sg in segs if abs(sg[2]) > 1.0e-9]
+            assert min(radii) >= 0.75 * step, (
+                "%s: an arc of radius %.1f on points %.1f apart"
+                % (tag, min(radii), step))
+            # and the shape does not need a curve for every point
+            share = 0.75 if mode == "tight" else 0.5
+            assert len(segs) <= share * len(pts), (tag, len(segs))
+        print("  %s: %d/%d/%d segments, worst sweep %.0f deg"
+              % (label,
+                 *[len(build(tour, 1.0, allowance, m)[0])
+                   for m in COMPARE_MODES],
+                 max(arc_sweeps(build(tour, 1.0, allowance, "tight")[0]))))
+
+
+def test_bad_shots_are_written_off():
+    """The fit may give up on a stray shot to keep the shape.
+
+    Up to DROP_PCT of the points may end further off than the distance
+    typed - reported as "not held" and ringed in the drawing - but
+    only where holding them would shatter the walk into stubs, and
+    only when each one given up buys at least two more points of span.
+    """
+    pts = spiky_blob_pts()
+    tour = order_points(list(pts))
+    allowance = pf_ceil(MISS_PCT * len(pts))
+    budget = pf_ceil(DROP_PCT * len(pts))
+    kept, _ = coarse_loop(tour, 1.0, None, allowance, droppct=0.0)
+    given, _ = coarse_loop(tour, 1.0, None, allowance)
+    assert len(not_held(kept, pts, 1.0)) == 0, "the no-drop fit holds all"
+    assert 0 < len(not_held(given, pts, 1.0)) <= budget
+    assert len(given) < len(kept), (len(given), len(kept))
+    # and the arcs stay as sane as they were: giving a point up buys
+    # span, never curvature
+    assert max(arc_sweeps(given)) <= max(arc_sweeps(kept)) + 1.0e-9
+    # a clean survey gets no free lunch: nothing is given up when the
+    # walk is running long arcs anyway
+    clean = blob_pts(56)
+    assert not not_held(fit(clean)[0], clean, 1.0)
+    # the tight candidate writes off nothing at all - that is its aim
+    for label, shape in (("spiky", pts), ("clean", clean)):
+        tight, _ = build(order_points(list(shape)), 1.0,
+                         pf_ceil(MISS_PCT * len(shape)), "tight")
+        assert not not_held(tight, shape, 1.0), label
+    # a spike the user HELD is hit exactly, budget or no budget
+    spike = max(pts, key=lambda q: min(seg_dist(q, s) for s in given))
+    held, _ = coarse_loop(tour, 1.0, None, allowance, holds=[spike])
+    assert min(seg_dist(spike, s) for s in held) < 1.0e-9, \
+        "a held point may never be written off"
+    print("  bad shots: %d of %d given up (budget %d), %d segments"
+          " against %d holding them all"
+          % (len(not_held(given, pts, 1.0)), len(pts), budget,
+             len(given), len(kept)))
+    print("  (the joint at a stray shot still kinks: %.0f deg here,"
+          " against %.0f holding it - a survey that turns 40 degrees"
+          " in one shot is drawn turning 40 degrees)"
+          % (math.degrees(max_kink(given)), math.degrees(max_kink(kept))))
+
+
 def test_constants_match_lisp():
     """The LISP and this mirror must stay in step."""
     src = open(LISP_FILE).read()
@@ -1732,6 +1969,7 @@ def test_constants_match_lisp():
     assert float(setq_value("DIM-OFF")) == DIM_OFF
     assert float(setq_value("BOTTOM-FIT")) == BOTTOM_FIT
     assert float(setq_value("TIGHT-TOL")) == TIGHT_TOL
+    assert float(setq_value("DROP-PCT")) == DROP_PCT
     # the three candidate aims, in the order they are drawn and numbered
     m = re.search(r"\(setq \*PF-COMPARE\*[^']*'\((.*?)\)\)\)", src,
                   re.S)
@@ -1751,7 +1989,8 @@ def test_constants_match_lisp():
     assert m.group(1) == "<", \
         "abhd.lsp offsets the deep-end dims away from the shallow end"
     # angles are written as (/ pi N)
-    for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL)):
+    for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL),
+                       ("ARC-SLACK", ARC_SLACK)):
         m = re.search(r"\(setq\s+\*PF-%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
                       % name, src)
         assert m, "could not read *PF-%s* from abhd.lsp" % name
@@ -1859,6 +2098,8 @@ def main():
     test_circle_becomes_two_arcs()
     test_polygon_keeps_its_corners()
     test_organic_blob()
+    test_shaky_survey_stays_smooth()
+    test_bad_shots_are_written_off()
     test_arcs_sit_on_the_points()
     test_nice_radii_are_preferred()
     test_curve_cap()
