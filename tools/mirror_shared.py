@@ -115,8 +115,14 @@ TOOLS = {
         'swap': {
             'abcdef:trim': 'cal:trim',
             'abcdef:pad': 'cal:pad',
+            'abcdef:askkw': 'cal:askkw',
         },
         'drop_globals': [],
+        # abcdef:askkw is cal:askkw to the character bar the sentinel it
+        # returns, and it already takes the SHOWN bracket third, so the
+        # call sites need no translating -- only the sentinel travels.
+        'askkw_hidden': False,
+        'symbols': {'AB-BACK': 'CAL-BACK'},
     },
     'XYPLOT': {
         'src': 'lisp/xyplot/XYPLOT.lsp',
@@ -125,8 +131,12 @@ TOOLS = {
             'xyp:pad': 'cal:pad',
             'xyp:layer': 'cal:ensure-layer',
             'xyp:text': 'cal:text',
+            'xyp:askkw': 'cal:askkw',
         },
         'drop_globals': [],
+        # as in abcdef above: identical body, its own Back sentinel
+        'askkw_hidden': False,
+        'symbols': {'XY-BACK': 'CAL-BACK'},
     },
     'xftconv': {
         'src': 'lisp/xftconv/xftconv.lsp',
@@ -142,6 +152,10 @@ TOOLS = {
         'swap': {
             'fit:askkw': 'cal:askkw', 'fit:askyn': 'cal:askyn',
             'fit:asktreat': 'cal:asktreat',
+            'fit:back-word': 'cal:back-word-p',
+            # fit:sublist inlines cal:nthcdr's while-loop instead of
+            # calling it; same walk, same result
+            'fit:sublist': 'cal:sublist',
             'fit:syssave': 'cal:syssave',
             'fit:sysrestore': 'cal:sysrestore',
             'fit:ensure-layer': 'cal:ensure-layer',
@@ -489,6 +503,8 @@ TOOLS = {
     'OASIS': {
         'src': 'lisp/oasis/OASIS.lsp',
         'swap': {
+            'oasis:v+': 'cal:v+', 'oasis:v*': 'cal:v*',
+            'oasis:pad': 'cal:pad',
             'oasis:osup': 'cal:osup', 'oasis:osdown': 'cal:osdown',
             'oasis:dimstysave': 'cal:dimstysave',
             'oasis:dimstyrestore': 'cal:dimstyrestore',
@@ -554,6 +570,7 @@ TOOLS = {
         'src': 'lisp/cornerstp/CORNERSTP.lsp',
         'swap': {
             'cs-layerok': 'cal:layer-usable-p',
+            'cs-dot': 'cal:dot',
         },
         'drop_globals': [],
     },
@@ -565,6 +582,8 @@ TOOLS = {
         'src': 'lisp/cornerstp/HEMISTEP.lsp',
         'swap': {
             'hs-layerok': 'cal:layer-usable-p',
+            'hs-dot': 'cal:dot',
+            'hs-cross': 'cal:cross',
         },
         'drop_globals': [],
     },
@@ -591,6 +610,7 @@ TOOLS = {
         'src': 'lisp/cornerstp/NORMIESTEP.lsp',
         'swap': {
             'ns-layerok': 'cal:layer-usable-p',
+            'ns-dot': 'cal:dot',
         },
         'drop_globals': [],
     },
@@ -828,6 +848,9 @@ TOOLS = {
         'swap': {
             'bp:ensure-layer': 'cal:ensure-layer',
             'bp:block-number': 'cal:block-number',
+            # (distance (list (car a) (cadr a)) ...) is cal:dist spelled
+            # out: cal:2d IS (list (car p) (cadr p))
+            'bp:dist': 'cal:dist',
         },
         'drop_globals': [],
         'expand': {

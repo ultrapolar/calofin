@@ -1139,23 +1139,10 @@
 ;;; --------------------------------------------------------------------------
 
 ;; With BACK non-nil, typing B (Back; Undo works too) returns the
-;; symbol AB-BACK so the caller can re-open its previous question.
+;; symbol CAL-BACK so the caller can re-open its previous question.
 ;;; --------------------------------------------------------------------------
 ;;;  Asking
 ;;; --------------------------------------------------------------------------
-
-;; Keyword question in the house format (STANDARDS.md section 1): the
-;; bracket text is built from the keyword list so the two cannot drift, and
-;; Back / Undo come back as the symbol AB-BACK.
-(defun abcdef:askkw (msg kws shown dflt back / v)
-  (initget (if dflt 0 (if back 0 1))
-           (if back (strcat kws " Back Undo") kws))
-  (setq v (getkword (strcat "\n" msg " [" shown
-                            (if back "/Back" "") "]"
-                            (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((member v '("Back" "Undo")) 'AB-BACK)
-        ((null v) (if dflt dflt (abcdef:askkw msg kws shown dflt back)))
-        (T v)))
 
 (defun abcdef:getdim (prompt back / s v)
   (setq v nil)
@@ -1164,7 +1151,7 @@
                                  (if back ", B = back" "") "): ")))
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
-       (setq v 'AB-BACK))
+       (setq v 'CAL-BACK))
       (T
        (setq v (abcdef:ftin->in s nil))
        (if (or (null v) (<= v 0.0))
@@ -1330,16 +1317,16 @@
            (setq stage 2))))
       ((= stage 2)
        (setq W (abcdef:getdim "Dimension A-B (width across the top)" T))
-       (if (eq W 'AB-BACK) (setq stage 1) (setq stage 3)))
+       (if (eq W 'CAL-BACK) (setq stage 1) (setq stage 3)))
       ((= stage 3)
        (setq H (abcdef:getdim "Dimension A-C (height down the side)" T))
-       (if (eq H 'AB-BACK) (setq stage 2) (setq stage 4)))
+       (if (eq H 'CAL-BACK) (setq stage 2) (setq stage 4)))
       ;; ---- how much of each row gets a say -------------------------------
       ((= stage 4)
-       (setq method (abcdef:askkw "How should each point be placed?"
+       (setq method (cal:askkw "How should each point be placed?"
                                   "Auto Furthest Mean Least"
                                   "Auto/Furthest/Mean/Least" "Auto" T))
-       (if (eq method 'AB-BACK) (setq stage 3) (setq stage 5)))
+       (if (eq method 'CAL-BACK) (setq stage 3) (setq stage 5)))
       ;; ---- where does corner A land? -------------------------------------
       ;; take the pick in WCS so the rectangle is built square to the world
       ;; axes even when the current UCS is rotated (entmake writes WCS).
@@ -1642,7 +1629,7 @@
                          " point(s) are ab_pt blocks on layer "
                          abcdef:*point-layer* ", numbered from the sheet."))
           (if (and (> good 0)
-                   (= "Yes" (abcdef:askkw
+                   (= "Yes" (cal:askkw
                               "Fit a pool perimeter through these points now?"
                               "Yes No" "Yes/No" "Yes" nil)))
             (abcdef:to-abhd ss)

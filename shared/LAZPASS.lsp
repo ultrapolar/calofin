@@ -13916,10 +13916,6 @@
               (list (+ bx (* side h (- uy)))
                     (+ by (* side h ux))))))))
 
-;; 2-D vector sum and scale.
-(defun oasis:v+ (a b) (list (+ (car a) (car b)) (+ (cadr a) (cadr b))))
-(defun oasis:v* (v s) (list (* (car v) s) (* (cadr v) s)))
-
 ;; The unit normal along which two circles share an external tangent
 ;; line, on the RIGHT of c1->c2 -- the outside of a counter-clockwise
 ;; ring.  Both tangent points lie along it from their own centre, so a
@@ -14189,10 +14185,10 @@
                       ((oasis:seam-p jn) out)
                       ((and (= (type (nth 0 jn)) 'STR)
                             (= (nth 0 jn) "LINE"))
-                       (setq jl (oasis:v+ (nth i bc)
-                                          (oasis:v* (nth 1 jn) (nth i br)))
-                             jm (oasis:v+ (nth j bc)
-                                          (oasis:v* (nth 1 jn) (nth j br))))
+                       (setq jl (cal:v+ (nth i bc)
+                                          (cal:v* (nth 1 jn) (nth i br)))
+                             jm (cal:v+ (nth j bc)
+                                          (cal:v* (nth 1 jn) (nth j br))))
                        ;; two bulges already tangent to each other leave
                        ;; no run between them, only the point they touch
                        (if (> (distance jl jm) oasis:*fuzz*)
@@ -15267,8 +15263,8 @@
 ;; (point . inward-angle) -- inward being the way an offset is measured.
 (defun oasis:eat (a u / th)
   (if (oasis:line-p a)
-      (cons (oasis:v+ (nth 1 a)
-                      (oasis:v* (mapcar '- (nth 2 a) (nth 1 a)) u))
+      (cons (cal:v+ (nth 1 a)
+                      (cal:v* (mapcar '- (nth 2 a) (nth 1 a)) u))
             (cal:angnorm (+ (nth 3 a) pi)))
       (progn
         ;; a bulge runs with the angle, a reverse arc against it
@@ -15561,11 +15557,11 @@
 ;; shallow break -- the direction the hopper lies in.
 (defun oasis:deepdir (p1 p2 q / u)
   (setq u (list (- (cadr p2) (cadr p1)) (- (car p1) (car p2))))
-  (setq u (oasis:v* u (/ 1.0 (max oasis:*fuzz* (distance '(0.0 0.0) u)))))
+  (setq u (cal:v* u (/ 1.0 (max oasis:*fuzz* (distance '(0.0 0.0) u)))))
   (if (> (+ (* (- (car q) (car p1)) (car u))
             (* (- (cadr q) (cadr p1)) (cadr u)))
          0.0)
-      (oasis:v* u -1.0)
+      (cal:v* u -1.0)
       u))
 
 ;; Where the hopper starts and stops on the OFFSET ring: the two places
@@ -15883,7 +15879,7 @@
   ;; over the deep end it measures
   (setvar "CLAYER" oasis:*dimlayer*)
   (oasis:dimstyle-on oasis:*dimstyle*)
-  (setq sh (oasis:v* (oasis:deepdir pda pdb
+  (setq sh (cal:v* (oasis:deepdir pda pdb
                                     (list (* 0.5 (+ (car qsa) (car qsb)))
                                           (* 0.5 (+ (cadr qsa) (cadr qsb)))))
                      -1.0))
@@ -15979,11 +15975,6 @@
                   (rtos (distance (nth 2 bot) (nth 4 bot))) ".")))))
 
 ;;; -------------------- reporting ---------------------------------------
-
-;; s padded out to w characters, so the report's rows line up.
-(defun oasis:pad (s w)
-  (while (< (strlen s) w) (setq s (strcat s " ")))
-  s)
 
 ;; The bulges the ring left out.  A bulge whose two joiners hand over at
 ;; the same point is a point on the outline rather than an arc of it, and
@@ -16203,7 +16194,7 @@
                (princ (strcat "\n  hump " (rtos (abs off)) " off centre to the "
                               (if (< off 0.0) "left" "right") ".")))
            (foreach a arcs
-             (princ (strcat "\n  " (oasis:pad (nth 0 a) 14)
+             (princ (strcat "\n  " (cal:pad (nth 0 a) 14)
                             (if (oasis:line-p a)
                                 (strcat "straight run, "
                                         (rtos (distance (nth 1 a) (nth 2 a))))
@@ -17405,23 +17396,10 @@
 ;;; --------------------------------------------------------------------------
 
 ;; With BACK non-nil, typing B (Back; Undo works too) returns the
-;; symbol AB-BACK so the caller can re-open its previous question.
+;; symbol CAL-BACK so the caller can re-open its previous question.
 ;;; --------------------------------------------------------------------------
 ;;;  Asking
 ;;; --------------------------------------------------------------------------
-
-;; Keyword question in the house format (STANDARDS.md section 1): the
-;; bracket text is built from the keyword list so the two cannot drift, and
-;; Back / Undo come back as the symbol AB-BACK.
-(defun abcdef:askkw (msg kws shown dflt back / v)
-  (initget (if dflt 0 (if back 0 1))
-           (if back (strcat kws " Back Undo") kws))
-  (setq v (getkword (strcat "\n" msg " [" shown
-                            (if back "/Back" "") "]"
-                            (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((member v '("Back" "Undo")) 'AB-BACK)
-        ((null v) (if dflt dflt (abcdef:askkw msg kws shown dflt back)))
-        (T v)))
 
 (defun abcdef:getdim (prompt back / s v)
   (setq v nil)
@@ -17430,7 +17408,7 @@
                                  (if back ", B = back" "") "): ")))
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
-       (setq v 'AB-BACK))
+       (setq v 'CAL-BACK))
       (T
        (setq v (abcdef:ftin->in s nil))
        (if (or (null v) (<= v 0.0))
@@ -17596,16 +17574,16 @@
            (setq stage 2))))
       ((= stage 2)
        (setq W (abcdef:getdim "Dimension A-B (width across the top)" T))
-       (if (eq W 'AB-BACK) (setq stage 1) (setq stage 3)))
+       (if (eq W 'CAL-BACK) (setq stage 1) (setq stage 3)))
       ((= stage 3)
        (setq H (abcdef:getdim "Dimension A-C (height down the side)" T))
-       (if (eq H 'AB-BACK) (setq stage 2) (setq stage 4)))
+       (if (eq H 'CAL-BACK) (setq stage 2) (setq stage 4)))
       ;; ---- how much of each row gets a say -------------------------------
       ((= stage 4)
-       (setq method (abcdef:askkw "How should each point be placed?"
+       (setq method (cal:askkw "How should each point be placed?"
                                   "Auto Furthest Mean Least"
                                   "Auto/Furthest/Mean/Least" "Auto" T))
-       (if (eq method 'AB-BACK) (setq stage 3) (setq stage 5)))
+       (if (eq method 'CAL-BACK) (setq stage 3) (setq stage 5)))
       ;; ---- where does corner A land? -------------------------------------
       ;; take the pick in WCS so the rectangle is built square to the world
       ;; axes even when the current UCS is rotated (entmake writes WCS).
@@ -17908,7 +17886,7 @@
                          " point(s) are ab_pt blocks on layer "
                          abcdef:*point-layer* ", numbered from the sheet."))
           (if (and (> good 0)
-                   (= "Yes" (abcdef:askkw
+                   (= "Yes" (cal:askkw
                               "Fit a pool perimeter through these points now?"
                               "Yes No" "Yes/No" "Yes" nil)))
             (abcdef:to-abhd ss)
@@ -31846,10 +31824,6 @@
 
 ;; ---- helpers -------------------------------------------------------
 
-;; Flat XY distance, whatever Z the inputs carry.
-(defun bp:dist (a b)
-  (distance (list (car a) (cadr a)) (list (car b) (cadr b))))
-
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
 ;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
 ;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
@@ -31889,7 +31863,7 @@
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
-    (setq d (bp:dist pk (car c)))
+    (setq d (cal:dist pk (car c)))
     (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
@@ -31902,12 +31876,12 @@
 (defun bp:ringed-at (pk ctr picked / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (bp:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
+    (if (< (cal:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
   (if (null hit)
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
-        (setq d (bp:dist pk (car q)))
+        (setq d (cal:dist pk (car q)))
         (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)
@@ -33888,15 +33862,13 @@
 
 ;;; ------------------------- vector helpers ----------------------------
 
-(defun cs-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-
 (defun cs-vec (a b) (list (- (car b) (car a)) (- (cadr b) (cadr a)) 0.0))
 
 (defun cs-add (p v) (list (+ (car p) (car v)) (+ (cadr p) (cadr v)) 0.0))
 
 (defun cs-scl (v s) (list (* (car v) s) (* (cadr v) s) 0.0))
 
-(defun cs-len (v) (sqrt (cs-dot v v)))
+(defun cs-len (v) (sqrt (cal:dot v v)))
 
 (defun cs-unit (v / l)
   (if (> (setq l (cs-len v)) 1e-10) (cs-scl v (/ 1.0 l))))
@@ -33918,11 +33890,11 @@
 ;; distance from point P to the SEGMENT A-B
 (defun cs-ptseg (p a b / d l2 t2)
   (setq d  (cs-vec a b)
-        l2 (cs-dot d d))
+        l2 (cal:dot d d))
   (if (< l2 1e-20)
     (distance p a)
     (progn
-      (setq t2 (/ (cs-dot (cs-vec a p) d) l2))
+      (setq t2 (/ (cal:dot (cs-vec a p) d) l2))
       (cond ((< t2 0.0) (distance p a))
             ((> t2 1.0) (distance p b))
             (T (distance p (cs-add a (cs-scl d t2))))))))
@@ -33934,7 +33906,7 @@
   (if (< l 1e-10)
     (distance p a)
     (progn
-      (setq t2 (/ (cs-dot (cs-vec a p) d) (* l l)))
+      (setq t2 (/ (cal:dot (cs-vec a p) d) (* l l)))
       (cond ((< t2 0.0) (* (- t2) l))
             ((> t2 1.0) (* (- t2 1.0) l))
             (T 0.0)))))
@@ -34573,7 +34545,7 @@
   (if (null bis)
     (progn (princ "\nThe walls are collinear - cannot find a step direction.")
            (exit)))
-  (if (and mid (< (cs-dot bis (cs-vec corner mid)) 0.0))
+  (if (and mid (< (cal:dot bis (cs-vec corner mid)) 0.0))
     (setq bis (cs-scl bis -1.0)))
   (if diag
     (progn
@@ -34598,7 +34570,7 @@
           ;; treads parallel to the diagonal; step treads measured square to it
           (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
                 bis  (cs-perp90 perp))
-          (if (< (cs-dot bis (cs-vec corner mid)) 0.0)
+          (if (< (cal:dot bis (cs-vec corner mid)) 0.0)
             (setq bis (cs-scl bis -1.0)))))))
   (if (null perp)
     ;; treads perpendicular to the true-angle (equal-angle) bisector
@@ -34631,8 +34603,8 @@
         (diag (setq prevL (car diag) prevR (cadr diag)))
         (arcr (setq prevL (cs-arcpt c r a1) prevR (cs-arcpt c r a2)))
         (T    (setq prevL corner prevR corner)))
-      (if (> (cs-dot (cs-vec start prevL) perp)
-             (cs-dot (cs-vec start prevR) perp))
+      (if (> (cal:dot (cs-vec start prevL) perp)
+             (cal:dot (cs-vec start prevR) perp))
         (setq tmp prevL prevL prevR prevR tmp))))
 
   ;; ---- 7. dimension the steps? ---------------------------------------
@@ -34693,12 +34665,12 @@
                                             " to (it ends on that tread): ")))))
               ;; the front edge: the bench's wall shifted into the pool
               (setq bnrm (cs-unit (cs-perp90 (cs-vec (car bnw) (cadr bnw)))))
-              (if (< (cs-dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
+              (if (< (cal:dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
               (setq bnf  (list (cs-add (car bnw) (cs-scl bnrm bno))
                                (cs-add (cadr bnw) (cs-scl bnrm bno)))
                     ;; which end of a normalized step that wall bounds
                     ;; (1 = the E1 end, 2 = the E2 end)
-                    bnpe (if (> (cs-dot (if (= bnsd 1) d1 d2) perp) 0.0)
+                    bnpe (if (> (cal:dot (if (= bnsd 1) d1 d2) perp) 0.0)
                            2 1))
               (princ (strcat "\n  Bench: " (rtos bno) " off that wall;"
                              " steps past step " (itoa bnk)
@@ -34752,17 +34724,17 @@
                 (if (> bey 1e-6)
                   (princ (strcat "\n    (note: the wall had to be extended "
                                  (rtos bey) " to meet this step)")))
-                (if (and mid (< (cs-dot (cs-vec corner p)
+                (if (and mid (< (cal:dot (cs-vec corner p)
                                         (cs-vec corner mid))
-                                (cs-dot (cs-vec corner mid)
+                                (cal:dot (cs-vec corner mid)
                                         (cs-vec corner mid))))
                   (princ (strcat "\n    (note: this step is inside the"
                                  " diagonal/fillet region)")))
                 (if (and e1 e2)
                   (progn
                     ;; keep a consistent left/right orientation
-                    (if (> (cs-dot (cs-vec corner e1) perp)
-                           (cs-dot (cs-vec corner e2) perp))
+                    (if (> (cal:dot (cs-vec corner e1) perp)
+                           (cal:dot (cs-vec corner e2) perp))
                       (setq tmp e1 e1 e2 e2 tmp))
                     (cs-mkline e1 e2)          ; the step (tread) edge
                     (cs-conn prevL e1 w1 w2)   ; side lines where the walls
@@ -34901,8 +34873,8 @@
       (if (and e1 e2)
         (progn
           ;; keep a consistent left/right orientation for the side lines
-          (if (> (cs-dot (cs-vec start e1) perp)
-                 (cs-dot (cs-vec start e2) perp))
+          (if (> (cal:dot (cs-vec start e1) perp)
+                 (cal:dot (cs-vec start e2) perp))
             (setq tmp e1 e1 e2 e2 tmp))
           (cs-mkline e1 e2)          ; the step (tread) edge
           ;; side lines where the walls do not already close the step;
@@ -35324,7 +35296,7 @@
           tmp  (cs-resolve wid nat h1 h2 p perp n (cs-tolerance))
           e1   (car tmp)
           e2   (cadr tmp))
-    (if (> (cs-dot (cs-vec org e1) perp) (cs-dot (cs-vec org e2) perp))
+    (if (> (cal:dot (cs-vec org e1) perp) (cal:dot (cs-vec org e2) perp))
       (setq tmp e1 e1 e2 e2 tmp))
     (cs-mkline e1 e2)
     (cs-conn prevL e1 w1 w2)
@@ -35562,10 +35534,8 @@
 
 (defun hs-scl (v s) (list (* (car v) s) (* (cadr v) s) 0.0))
 
-(defun hs-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-
 (defun hs-unit (v / l)
-  (if (> (setq l (sqrt (hs-dot v v))) 1e-10) (hs-scl v (/ 1.0 l))))
+  (if (> (setq l (sqrt (cal:dot v v))) 1e-10) (hs-scl v (/ 1.0 l))))
 
 (defun hs-perp (v) (list (- (cadr v)) (car v) 0.0))
 
@@ -35573,16 +35543,14 @@
                            (* 0.5 (+ (cadr a) (cadr b)))
                            0.0))
 
-(defun hs-cross (a b) (- (* (car a) (cadr b)) (* (cadr a) (car b))))
-
 ;; distance from point P to the segment A-B
 (defun hs-ptseg (p a b / d l2 t2)
   (setq d  (hs-vec a b)
-        l2 (hs-dot d d))
+        l2 (cal:dot d d))
   (if (< l2 1e-20)
     (distance p a)
     (progn
-      (setq t2 (/ (hs-dot (hs-vec a p) d) l2))
+      (setq t2 (/ (cal:dot (hs-vec a p) d) l2))
       (cond ((< t2 0.0) (distance p a))
             ((> t2 1.0) (distance p b))
             (T (distance p (hs-add a (hs-scl d t2))))))))
@@ -35590,11 +35558,11 @@
 ;; how far point P lies beyond the ends of segment A-B (0.0 when on it)
 (defun hs-beyond (p a b / d l t2)
   (setq d (hs-vec a b)
-        l (sqrt (hs-dot d d)))
+        l (sqrt (cal:dot d d)))
   (if (< l 1e-10)
     (distance p a)
     (progn
-      (setq t2 (/ (hs-dot (hs-vec a p) d) (* l l)))
+      (setq t2 (/ (cal:dot (hs-vec a p) d) (* l l)))
       (cond ((< t2 0.0) (* (- t2) l))
             ((> t2 1.0) (* (- t2 1.0) l))
             (T 0.0)))))
@@ -35621,8 +35589,8 @@
 ;; along the UNIT direction D; a list of 0 or 2 points
 (defun hs-linecirc (a d c r / f g disc)
   (setq f    (hs-vec c a)
-        g    (hs-dot d f)
-        disc (+ (* r r) (- (* g g) (hs-dot f f))))
+        g    (cal:dot d f)
+        disc (+ (* r r) (- (* g g) (cal:dot f f))))
   (if (>= disc 0.0)
     (progn
       (setq disc (sqrt disc))
@@ -35713,7 +35681,7 @@
 ;; side of P, as (h1 h2 width).  nil when the curve does not bracket P.
 (defun hs-open (p u pieces / s sp sn h1 h2 hp)
   (foreach hp (hs-hits p u pieces)
-    (setq s (hs-dot (hs-vec p (car hp)) u))
+    (setq s (cal:dot (hs-vec p (car hp)) u))
     (cond
       ((> s 1e-9)  (if (or (null sp) (< s sp)) (setq sp s h1 (car hp))))
       ((< s -1e-9) (if (or (null sn) (> s sn)) (setq sn s h2 (car hp))))))
@@ -35790,7 +35758,7 @@
         b (nth (1+ i) pts)
         c (nth (+ i 2) pts)
         o (hs-circum a b c))
-  (if o (cons o (> (hs-cross (hs-vec a b) (hs-vec a c)) 0.0))))
+  (if o (cons o (> (cal:cross (hs-vec a b) (hs-vec a c)) 0.0))))
 
 ;; Bulges for a polyline through PTS, one per segment, by fitting a
 ;; circle through consecutive triples (a chain of 3-point arcs).
@@ -36253,11 +36221,11 @@
          (setq inref (if (= "A" (car spc)) (cadr spc)))
          (if inref
            (progn
-             (if (< (abs (hs-dot dir (hs-vec sp inref))) 1e-9)
+             (if (< (abs (cal:dot dir (hs-vec sp inref))) 1e-9)
                (progn (princ (strcat "\nThe line is tangent to the curve"
                                      " - cannot tell which way is into it."))
                       (exit)))
-             (if (< (hs-dot dir (hs-vec sp inref)) 0.0)
+             (if (< (cal:dot dir (hs-vec sp inref)) 0.0)
                (setq dir (hs-scl dir -1.0))))
            ;; the line lands on a straight part - ask which way to go
            (progn
@@ -36268,7 +36236,7 @@
                (if (null pt)
                  (progn (princ "\nNo direction picked - nothing drawn.")
                         (exit)))
-               (setq side (hs-dot (hs-vec sp (trans pt 1 0)) dir))
+               (setq side (cal:dot (hs-vec sp (trans pt 1 0)) dir))
                (if (< (abs side) 1e-10)
                  (progn (princ "\nThat point is square to the line - pick again.")
                         (setq side nil))))
@@ -36312,7 +36280,7 @@
                           "\nPick a point on the side the steps go: "))
        (if (null pt)
          (progn (princ "\nNo direction picked - nothing drawn.") (exit)))
-       (setq side (hs-dot (hs-vec sp (trans pt 1 0)) (hs-perp u)))
+       (setq side (cal:dot (hs-vec sp (trans pt 1 0)) (hs-perp u)))
        (if (< (abs side) 1e-10)
          (princ "\nThat point is on the line - pick a point to one side.")
          (setq dir (hs-unit (hs-scl (hs-perp u)
@@ -37151,10 +37119,8 @@
 
 (defun ns-scl (v s) (list (* (car v) s) (* (cadr v) s) 0.0))
 
-(defun ns-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-
 (defun ns-unit (v / l)
-  (if (> (setq l (sqrt (ns-dot v v))) 1e-10) (ns-scl v (/ 1.0 l))))
+  (if (> (setq l (sqrt (cal:dot v v))) 1e-10) (ns-scl v (/ 1.0 l))))
 
 (defun ns-perp (v) (list (- (cadr v)) (car v) 0.0))
 
@@ -37165,11 +37131,11 @@
 ;; distance from point P to the segment A-B
 (defun ns-ptseg (p a b / d l2 t2)
   (setq d  (ns-vec a b)
-        l2 (ns-dot d d))
+        l2 (cal:dot d d))
   (if (< l2 1e-20)
     (distance p a)
     (progn
-      (setq t2 (/ (ns-dot (ns-vec a p) d) l2))
+      (setq t2 (/ (cal:dot (ns-vec a p) d) l2))
       (cond ((< t2 0.0) (distance p a))
             ((> t2 1.0) (distance p b))
             (T (distance p (ns-add a (ns-scl d t2))))))))
@@ -37177,11 +37143,11 @@
 ;; how far point P lies beyond the ends of segment A-B (0.0 when on it)
 (defun ns-beyond (p a b / d l t2)
   (setq d (ns-vec a b)
-        l (sqrt (ns-dot d d)))
+        l (sqrt (cal:dot d d)))
   (if (< l 1e-10)
     (distance p a)
     (progn
-      (setq t2 (/ (ns-dot (ns-vec a p) d) (* l l)))
+      (setq t2 (/ (cal:dot (ns-vec a p) d) (* l l)))
       (cond ((< t2 0.0) (* (- t2) l))
             ((> t2 1.0) (* (- t2 1.0) l))
             (T 0.0)))))
@@ -37247,8 +37213,8 @@
 ;; along the UNIT direction D; a list of 0 or 2 points
 (defun ns-linecirc (a d c r / f g disc)
   (setq f    (ns-vec c a)
-        g    (ns-dot d f)
-        disc (+ (* r r) (- (* g g) (ns-dot f f))))
+        g    (cal:dot d f)
+        disc (+ (* r r) (- (* g g) (cal:dot f f))))
   (if (>= disc 0.0)
     (progn
       (setq disc (sqrt disc))
@@ -37877,7 +37843,7 @@
                           "\nPick a point on the side the steps go: "))
        (if (null pt)
          (progn (princ "\nNo direction picked - nothing drawn.") (exit)))
-       (setq d1 (ns-dot (ns-vec sp (trans pt 1 0)) (ns-perp u)))
+       (setq d1 (cal:dot (ns-vec sp (trans pt 1 0)) (ns-perp u)))
        (if (< (abs d1) 1e-10)
          (princ "\nThat point is on the line - pick a point to one side.")
          (setq dir (ns-unit (ns-scl (ns-perp u) (if (< d1 0.0) -1.0 1.0))))))
@@ -37905,7 +37871,7 @@
        (progn (princ "\nA selected line has zero length.") (exit)))
      ;; keep DIR square to the treads so step treads measure true
      (setq dir (ns-unit (ns-scl (ns-perp u)
-                                (if (< (ns-dot (ns-perp u) dir) 0.0)
+                                (if (< (cal:dot (ns-perp u) dir) 0.0)
                                   -1.0 1.0)))
            sp  corner)
      (princ (strcat "\nSteps against the corner, running OUTWARD from it"
@@ -37984,7 +37950,7 @@
        (princ "\nU with its back corners drawn: treads trim to them."))
      ;; DIR runs from the base out toward the open end, square to the treads
      (setq dir (ns-unit (ns-scl (ns-perp u)
-                                (if (< (ns-dot (ns-perp u)
+                                (if (< (cal:dot (ns-perp u)
                                                (ns-vec sp mouth))
                                        0.0)
                                   -1.0 1.0))))
@@ -38194,8 +38160,8 @@
                                                 (cadr arm2)))))))
        (cond
          ;; out past the open end of the U: the run is full
-         ((and (< (ns-dot (ns-vec p f1) dir) 0.0)
-               (< (ns-dot (ns-vec p f2) dir) 0.0))
+         ((and (< (cal:dot (ns-vec p f1) dir) 0.0)
+               (< (cal:dot (ns-vec p f2) dir) 0.0))
           (princ (strcat "\n  Step " (itoa n) " would fall past the open"
                          " end of the U - stopping."))
           (setq e1 nil e2 nil stopf T))
@@ -48004,16 +47970,6 @@
     (setq ssum (+ ssum (* d d))))
   (list worst (sqrt (/ ssum (length ds)))))
 
-;; COUNT elements of LST starting at index K.
-(defun fit:sublist (lst k count / out)
-  (while (> k 0) (setq lst (cdr lst) k (1- k)))
-  (setq out nil)
-  (while (> count 0)
-    (setq out   (cons (car lst) out)
-          lst   (cdr lst)
-          count (1- count)))
-  (reverse out))
-
 ;; LST without ONE element equal to V.
 (defun fit:drop-one (v lst / out done x)
   (setq out nil done nil)
@@ -49600,7 +49556,7 @@
           hi    (nth (1+ s) bounds)
           start (if (= s 0) a (nth lo qs))
           end   (if (= s (1- k)) z (nth hi qs))
-          sub   (fit:sublist qs lo (- hi lo))
+          sub   (cal:sublist qs lo (- hi lo))
           bl    (if te
                   (fit:smooth-bulge te start end sub tol nil)
                   (fit:best-bulge start end sub))
@@ -50977,7 +50933,7 @@
           hi  (if (= i (1- k)) n (/ (* (1+ i) n) k))
           a   (car (nth i trial))
           nxt (car (nth (rem (1+ i) k) trial))
-          sub (fit:sublist qs lo (- hi lo)))
+          sub (cal:sublist qs lo (- hi lo)))
     (if (null te)
       (setq bl  (fit:best-bulge a nxt sub)
             ts0 (fit:start-tangent a nxt bl))
@@ -51019,8 +50975,8 @@
             ;; so try the aligned run and one shifted half a span
             (foreach off (list 0 (/ n (* 2 k)))
               (setq trial (fit:round-chain-of
-                            (append (fit:sublist qs off (- n off))
-                                    (fit:sublist qs 0 off))
+                            (append (cal:sublist qs off (- n off))
+                                    (cal:sublist qs 0 off))
                             n k tol)
                     w     (fit:chain-worst trial (car (car trial)) qs))
               (if (or (null tw) (< w tw)) (setq tw w tc trial)))
@@ -51801,10 +51757,6 @@
 ;; hopper is the offset rectangle every standard order sheet means, and
 ;; the slopes are straight lines.  Anything fancier is ABHD/ADAB's job.
 
-;; T when a typed string means "go back a step"
-(defun fit:back-word (s)
-  (member (strcase s) '("B" "BACK" "U" "UNDO")))
-
 ;; Show an offset the way it was typed: architectural when it came in
 ;; as feet-and-inches, plain inches otherwise.  DEF is (value . ftin).
 (defun fit:fmt-off (def)
@@ -51821,7 +51773,7 @@
                                  (if back " [Back]" "") ": ")))
     (cond
       ((= s "") (setq res def))
-      ((and back (fit:back-word s)) (setq res 'CAL-BACK))
+      ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
       (T
        (setq v (distof s 4))
        (cond
@@ -69594,18 +69546,6 @@
 ;;;  Asking, reporting, handing on
 ;;; --------------------------------------------------------------------------
 
-;; Keyword question in the house format (STANDARDS.md section 1).  Back and
-;; Undo come back as the symbol XY-BACK.
-(defun xyp:askkw (msg kws shown dflt back / v)
-  (initget (if dflt 0 (if back 0 1))
-           (if back (strcat kws " Back Undo") kws))
-  (setq v (getkword (strcat "\n" msg " [" shown
-                            (if back "/Back" "") "]"
-                            (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((member v '("Back" "Undo")) 'XY-BACK)
-        ((null v) (if dflt dflt (xyp:askkw msg kws shown dflt back)))
-        (T v)))
-
 ;; Push one report line onto the accumulating list (newest first).
 (defun xyp:say (rep line)
   (cons line rep))
@@ -69871,7 +69811,7 @@
               (command "_.UNDO" "_End")
               (setq undo-open nil)
               ;; ---- on to the pool perimeter ------------------------------
-              (if (= "Yes" (xyp:askkw
+              (if (= "Yes" (cal:askkw
                              "Fit a pool perimeter through graph 1's points now?"
                              "Yes No" "Yes/No" "Yes" nil))
                 (xyp:to-abhd ss)

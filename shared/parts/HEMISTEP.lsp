@@ -186,10 +186,8 @@
 
 (defun hs-scl (v s) (list (* (car v) s) (* (cadr v) s) 0.0))
 
-(defun hs-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-
 (defun hs-unit (v / l)
-  (if (> (setq l (sqrt (hs-dot v v))) 1e-10) (hs-scl v (/ 1.0 l))))
+  (if (> (setq l (sqrt (cal:dot v v))) 1e-10) (hs-scl v (/ 1.0 l))))
 
 (defun hs-perp (v) (list (- (cadr v)) (car v) 0.0))
 
@@ -197,16 +195,14 @@
                            (* 0.5 (+ (cadr a) (cadr b)))
                            0.0))
 
-(defun hs-cross (a b) (- (* (car a) (cadr b)) (* (cadr a) (car b))))
-
 ;; distance from point P to the segment A-B
 (defun hs-ptseg (p a b / d l2 t2)
   (setq d  (hs-vec a b)
-        l2 (hs-dot d d))
+        l2 (cal:dot d d))
   (if (< l2 1e-20)
     (distance p a)
     (progn
-      (setq t2 (/ (hs-dot (hs-vec a p) d) l2))
+      (setq t2 (/ (cal:dot (hs-vec a p) d) l2))
       (cond ((< t2 0.0) (distance p a))
             ((> t2 1.0) (distance p b))
             (T (distance p (hs-add a (hs-scl d t2))))))))
@@ -214,11 +210,11 @@
 ;; how far point P lies beyond the ends of segment A-B (0.0 when on it)
 (defun hs-beyond (p a b / d l t2)
   (setq d (hs-vec a b)
-        l (sqrt (hs-dot d d)))
+        l (sqrt (cal:dot d d)))
   (if (< l 1e-10)
     (distance p a)
     (progn
-      (setq t2 (/ (hs-dot (hs-vec a p) d) (* l l)))
+      (setq t2 (/ (cal:dot (hs-vec a p) d) (* l l)))
       (cond ((< t2 0.0) (* (- t2) l))
             ((> t2 1.0) (* (- t2 1.0) l))
             (T 0.0)))))
@@ -245,8 +241,8 @@
 ;; along the UNIT direction D; a list of 0 or 2 points
 (defun hs-linecirc (a d c r / f g disc)
   (setq f    (hs-vec c a)
-        g    (hs-dot d f)
-        disc (+ (* r r) (- (* g g) (hs-dot f f))))
+        g    (cal:dot d f)
+        disc (+ (* r r) (- (* g g) (cal:dot f f))))
   (if (>= disc 0.0)
     (progn
       (setq disc (sqrt disc))
@@ -337,7 +333,7 @@
 ;; side of P, as (h1 h2 width).  nil when the curve does not bracket P.
 (defun hs-open (p u pieces / s sp sn h1 h2 hp)
   (foreach hp (hs-hits p u pieces)
-    (setq s (hs-dot (hs-vec p (car hp)) u))
+    (setq s (cal:dot (hs-vec p (car hp)) u))
     (cond
       ((> s 1e-9)  (if (or (null sp) (< s sp)) (setq sp s h1 (car hp))))
       ((< s -1e-9) (if (or (null sn) (> s sn)) (setq sn s h2 (car hp))))))
@@ -414,7 +410,7 @@
         b (nth (1+ i) pts)
         c (nth (+ i 2) pts)
         o (hs-circum a b c))
-  (if o (cons o (> (hs-cross (hs-vec a b) (hs-vec a c)) 0.0))))
+  (if o (cons o (> (cal:cross (hs-vec a b) (hs-vec a c)) 0.0))))
 
 ;; Bulges for a polyline through PTS, one per segment, by fitting a
 ;; circle through consecutive triples (a chain of 3-point arcs).
@@ -877,11 +873,11 @@
          (setq inref (if (= "A" (car spc)) (cadr spc)))
          (if inref
            (progn
-             (if (< (abs (hs-dot dir (hs-vec sp inref))) 1e-9)
+             (if (< (abs (cal:dot dir (hs-vec sp inref))) 1e-9)
                (progn (princ (strcat "\nThe line is tangent to the curve"
                                      " - cannot tell which way is into it."))
                       (exit)))
-             (if (< (hs-dot dir (hs-vec sp inref)) 0.0)
+             (if (< (cal:dot dir (hs-vec sp inref)) 0.0)
                (setq dir (hs-scl dir -1.0))))
            ;; the line lands on a straight part - ask which way to go
            (progn
@@ -892,7 +888,7 @@
                (if (null pt)
                  (progn (princ "\nNo direction picked - nothing drawn.")
                         (exit)))
-               (setq side (hs-dot (hs-vec sp (trans pt 1 0)) dir))
+               (setq side (cal:dot (hs-vec sp (trans pt 1 0)) dir))
                (if (< (abs side) 1e-10)
                  (progn (princ "\nThat point is square to the line - pick again.")
                         (setq side nil))))
@@ -936,7 +932,7 @@
                           "\nPick a point on the side the steps go: "))
        (if (null pt)
          (progn (princ "\nNo direction picked - nothing drawn.") (exit)))
-       (setq side (hs-dot (hs-vec sp (trans pt 1 0)) (hs-perp u)))
+       (setq side (cal:dot (hs-vec sp (trans pt 1 0)) (hs-perp u)))
        (if (< (abs side) 1e-10)
          (princ "\nThat point is on the line - pick a point to one side.")
          (setq dir (hs-unit (hs-scl (hs-perp u)

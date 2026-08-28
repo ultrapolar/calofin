@@ -418,16 +418,6 @@
     (setq ssum (+ ssum (* d d))))
   (list worst (sqrt (/ ssum (length ds)))))
 
-;; COUNT elements of LST starting at index K.
-(defun fit:sublist (lst k count / out)
-  (while (> k 0) (setq lst (cdr lst) k (1- k)))
-  (setq out nil)
-  (while (> count 0)
-    (setq out   (cons (car lst) out)
-          lst   (cdr lst)
-          count (1- count)))
-  (reverse out))
-
 ;; LST without ONE element equal to V.
 (defun fit:drop-one (v lst / out done x)
   (setq out nil done nil)
@@ -2014,7 +2004,7 @@
           hi    (nth (1+ s) bounds)
           start (if (= s 0) a (nth lo qs))
           end   (if (= s (1- k)) z (nth hi qs))
-          sub   (fit:sublist qs lo (- hi lo))
+          sub   (cal:sublist qs lo (- hi lo))
           bl    (if te
                   (fit:smooth-bulge te start end sub tol nil)
                   (fit:best-bulge start end sub))
@@ -3391,7 +3381,7 @@
           hi  (if (= i (1- k)) n (/ (* (1+ i) n) k))
           a   (car (nth i trial))
           nxt (car (nth (rem (1+ i) k) trial))
-          sub (fit:sublist qs lo (- hi lo)))
+          sub (cal:sublist qs lo (- hi lo)))
     (if (null te)
       (setq bl  (fit:best-bulge a nxt sub)
             ts0 (fit:start-tangent a nxt bl))
@@ -3433,8 +3423,8 @@
             ;; so try the aligned run and one shifted half a span
             (foreach off (list 0 (/ n (* 2 k)))
               (setq trial (fit:round-chain-of
-                            (append (fit:sublist qs off (- n off))
-                                    (fit:sublist qs 0 off))
+                            (append (cal:sublist qs off (- n off))
+                                    (cal:sublist qs 0 off))
                             n k tol)
                     w     (fit:chain-worst trial (car (car trial)) qs))
               (if (or (null tw) (< w tw)) (setq tw w tc trial)))
@@ -4215,10 +4205,6 @@
 ;; hopper is the offset rectangle every standard order sheet means, and
 ;; the slopes are straight lines.  Anything fancier is ABHD/ADAB's job.
 
-;; T when a typed string means "go back a step"
-(defun fit:back-word (s)
-  (member (strcase s) '("B" "BACK" "U" "UNDO")))
-
 ;; Show an offset the way it was typed: architectural when it came in
 ;; as feet-and-inches, plain inches otherwise.  DEF is (value . ftin).
 (defun fit:fmt-off (def)
@@ -4235,7 +4221,7 @@
                                  (if back " [Back]" "") ": ")))
     (cond
       ((= s "") (setq res def))
-      ((and back (fit:back-word s)) (setq res 'CAL-BACK))
+      ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
       (T
        (setq v (distof s 4))
        (cond

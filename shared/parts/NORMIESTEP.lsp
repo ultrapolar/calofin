@@ -191,10 +191,8 @@
 
 (defun ns-scl (v s) (list (* (car v) s) (* (cadr v) s) 0.0))
 
-(defun ns-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-
 (defun ns-unit (v / l)
-  (if (> (setq l (sqrt (ns-dot v v))) 1e-10) (ns-scl v (/ 1.0 l))))
+  (if (> (setq l (sqrt (cal:dot v v))) 1e-10) (ns-scl v (/ 1.0 l))))
 
 (defun ns-perp (v) (list (- (cadr v)) (car v) 0.0))
 
@@ -205,11 +203,11 @@
 ;; distance from point P to the segment A-B
 (defun ns-ptseg (p a b / d l2 t2)
   (setq d  (ns-vec a b)
-        l2 (ns-dot d d))
+        l2 (cal:dot d d))
   (if (< l2 1e-20)
     (distance p a)
     (progn
-      (setq t2 (/ (ns-dot (ns-vec a p) d) l2))
+      (setq t2 (/ (cal:dot (ns-vec a p) d) l2))
       (cond ((< t2 0.0) (distance p a))
             ((> t2 1.0) (distance p b))
             (T (distance p (ns-add a (ns-scl d t2))))))))
@@ -217,11 +215,11 @@
 ;; how far point P lies beyond the ends of segment A-B (0.0 when on it)
 (defun ns-beyond (p a b / d l t2)
   (setq d (ns-vec a b)
-        l (sqrt (ns-dot d d)))
+        l (sqrt (cal:dot d d)))
   (if (< l 1e-10)
     (distance p a)
     (progn
-      (setq t2 (/ (ns-dot (ns-vec a p) d) (* l l)))
+      (setq t2 (/ (cal:dot (ns-vec a p) d) (* l l)))
       (cond ((< t2 0.0) (* (- t2) l))
             ((> t2 1.0) (* (- t2 1.0) l))
             (T 0.0)))))
@@ -287,8 +285,8 @@
 ;; along the UNIT direction D; a list of 0 or 2 points
 (defun ns-linecirc (a d c r / f g disc)
   (setq f    (ns-vec c a)
-        g    (ns-dot d f)
-        disc (+ (* r r) (- (* g g) (ns-dot f f))))
+        g    (cal:dot d f)
+        disc (+ (* r r) (- (* g g) (cal:dot f f))))
   (if (>= disc 0.0)
     (progn
       (setq disc (sqrt disc))
@@ -917,7 +915,7 @@
                           "\nPick a point on the side the steps go: "))
        (if (null pt)
          (progn (princ "\nNo direction picked - nothing drawn.") (exit)))
-       (setq d1 (ns-dot (ns-vec sp (trans pt 1 0)) (ns-perp u)))
+       (setq d1 (cal:dot (ns-vec sp (trans pt 1 0)) (ns-perp u)))
        (if (< (abs d1) 1e-10)
          (princ "\nThat point is on the line - pick a point to one side.")
          (setq dir (ns-unit (ns-scl (ns-perp u) (if (< d1 0.0) -1.0 1.0))))))
@@ -945,7 +943,7 @@
        (progn (princ "\nA selected line has zero length.") (exit)))
      ;; keep DIR square to the treads so step treads measure true
      (setq dir (ns-unit (ns-scl (ns-perp u)
-                                (if (< (ns-dot (ns-perp u) dir) 0.0)
+                                (if (< (cal:dot (ns-perp u) dir) 0.0)
                                   -1.0 1.0)))
            sp  corner)
      (princ (strcat "\nSteps against the corner, running OUTWARD from it"
@@ -1024,7 +1022,7 @@
        (princ "\nU with its back corners drawn: treads trim to them."))
      ;; DIR runs from the base out toward the open end, square to the treads
      (setq dir (ns-unit (ns-scl (ns-perp u)
-                                (if (< (ns-dot (ns-perp u)
+                                (if (< (cal:dot (ns-perp u)
                                                (ns-vec sp mouth))
                                        0.0)
                                   -1.0 1.0))))
@@ -1234,8 +1232,8 @@
                                                 (cadr arm2)))))))
        (cond
          ;; out past the open end of the U: the run is full
-         ((and (< (ns-dot (ns-vec p f1) dir) 0.0)
-               (< (ns-dot (ns-vec p f2) dir) 0.0))
+         ((and (< (cal:dot (ns-vec p f1) dir) 0.0)
+               (< (cal:dot (ns-vec p f2) dir) 0.0))
           (princ (strcat "\n  Step " (itoa n) " would fall past the open"
                          " end of the U - stopping."))
           (setq e1 nil e2 nil stopf T))

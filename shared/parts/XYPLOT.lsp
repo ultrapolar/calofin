@@ -693,18 +693,6 @@
 ;;;  Asking, reporting, handing on
 ;;; --------------------------------------------------------------------------
 
-;; Keyword question in the house format (STANDARDS.md section 1).  Back and
-;; Undo come back as the symbol XY-BACK.
-(defun xyp:askkw (msg kws shown dflt back / v)
-  (initget (if dflt 0 (if back 0 1))
-           (if back (strcat kws " Back Undo") kws))
-  (setq v (getkword (strcat "\n" msg " [" shown
-                            (if back "/Back" "") "]"
-                            (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((member v '("Back" "Undo")) 'XY-BACK)
-        ((null v) (if dflt dflt (xyp:askkw msg kws shown dflt back)))
-        (T v)))
-
 ;; Push one report line onto the accumulating list (newest first).
 (defun xyp:say (rep line)
   (cons line rep))
@@ -970,7 +958,7 @@
               (command "_.UNDO" "_End")
               (setq undo-open nil)
               ;; ---- on to the pool perimeter ------------------------------
-              (if (= "Yes" (xyp:askkw
+              (if (= "Yes" (cal:askkw
                              "Fit a pool perimeter through graph 1's points now?"
                              "Yes No" "Yes/No" "Yes" nil))
                 (xyp:to-abhd ss)

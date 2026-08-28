@@ -63,10 +63,6 @@
 
 ;; ---- helpers -------------------------------------------------------
 
-;; Flat XY distance, whatever Z the inputs carry.
-(defun bp:dist (a b)
-  (distance (list (car a) (cadr a)) (list (car b) (cadr b))))
-
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
 ;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
 ;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
@@ -106,7 +102,7 @@
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
-    (setq d (bp:dist pk (car c)))
+    (setq d (cal:dist pk (car c)))
     (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
@@ -119,12 +115,12 @@
 (defun bp:ringed-at (pk ctr picked / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (bp:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
+    (if (< (cal:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
   (if (null hit)
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
-        (setq d (bp:dist pk (car q)))
+        (setq d (cal:dist pk (car q)))
         (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)

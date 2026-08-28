@@ -195,15 +195,13 @@
 
 ;;; ------------------------- vector helpers ----------------------------
 
-(defun cs-dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-
 (defun cs-vec (a b) (list (- (car b) (car a)) (- (cadr b) (cadr a)) 0.0))
 
 (defun cs-add (p v) (list (+ (car p) (car v)) (+ (cadr p) (cadr v)) 0.0))
 
 (defun cs-scl (v s) (list (* (car v) s) (* (cadr v) s) 0.0))
 
-(defun cs-len (v) (sqrt (cs-dot v v)))
+(defun cs-len (v) (sqrt (cal:dot v v)))
 
 (defun cs-unit (v / l)
   (if (> (setq l (cs-len v)) 1e-10) (cs-scl v (/ 1.0 l))))
@@ -225,11 +223,11 @@
 ;; distance from point P to the SEGMENT A-B
 (defun cs-ptseg (p a b / d l2 t2)
   (setq d  (cs-vec a b)
-        l2 (cs-dot d d))
+        l2 (cal:dot d d))
   (if (< l2 1e-20)
     (distance p a)
     (progn
-      (setq t2 (/ (cs-dot (cs-vec a p) d) l2))
+      (setq t2 (/ (cal:dot (cs-vec a p) d) l2))
       (cond ((< t2 0.0) (distance p a))
             ((> t2 1.0) (distance p b))
             (T (distance p (cs-add a (cs-scl d t2))))))))
@@ -241,7 +239,7 @@
   (if (< l 1e-10)
     (distance p a)
     (progn
-      (setq t2 (/ (cs-dot (cs-vec a p) d) (* l l)))
+      (setq t2 (/ (cal:dot (cs-vec a p) d) (* l l)))
       (cond ((< t2 0.0) (* (- t2) l))
             ((> t2 1.0) (* (- t2 1.0) l))
             (T 0.0)))))
@@ -880,7 +878,7 @@
   (if (null bis)
     (progn (princ "\nThe walls are collinear - cannot find a step direction.")
            (exit)))
-  (if (and mid (< (cs-dot bis (cs-vec corner mid)) 0.0))
+  (if (and mid (< (cal:dot bis (cs-vec corner mid)) 0.0))
     (setq bis (cs-scl bis -1.0)))
   (if diag
     (progn
@@ -905,7 +903,7 @@
           ;; treads parallel to the diagonal; step treads measured square to it
           (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
                 bis  (cs-perp90 perp))
-          (if (< (cs-dot bis (cs-vec corner mid)) 0.0)
+          (if (< (cal:dot bis (cs-vec corner mid)) 0.0)
             (setq bis (cs-scl bis -1.0)))))))
   (if (null perp)
     ;; treads perpendicular to the true-angle (equal-angle) bisector
@@ -938,8 +936,8 @@
         (diag (setq prevL (car diag) prevR (cadr diag)))
         (arcr (setq prevL (cs-arcpt c r a1) prevR (cs-arcpt c r a2)))
         (T    (setq prevL corner prevR corner)))
-      (if (> (cs-dot (cs-vec start prevL) perp)
-             (cs-dot (cs-vec start prevR) perp))
+      (if (> (cal:dot (cs-vec start prevL) perp)
+             (cal:dot (cs-vec start prevR) perp))
         (setq tmp prevL prevL prevR prevR tmp))))
 
   ;; ---- 7. dimension the steps? ---------------------------------------
@@ -1000,12 +998,12 @@
                                             " to (it ends on that tread): ")))))
               ;; the front edge: the bench's wall shifted into the pool
               (setq bnrm (cs-unit (cs-perp90 (cs-vec (car bnw) (cadr bnw)))))
-              (if (< (cs-dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
+              (if (< (cal:dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
               (setq bnf  (list (cs-add (car bnw) (cs-scl bnrm bno))
                                (cs-add (cadr bnw) (cs-scl bnrm bno)))
                     ;; which end of a normalized step that wall bounds
                     ;; (1 = the E1 end, 2 = the E2 end)
-                    bnpe (if (> (cs-dot (if (= bnsd 1) d1 d2) perp) 0.0)
+                    bnpe (if (> (cal:dot (if (= bnsd 1) d1 d2) perp) 0.0)
                            2 1))
               (princ (strcat "\n  Bench: " (rtos bno) " off that wall;"
                              " steps past step " (itoa bnk)
@@ -1059,17 +1057,17 @@
                 (if (> bey 1e-6)
                   (princ (strcat "\n    (note: the wall had to be extended "
                                  (rtos bey) " to meet this step)")))
-                (if (and mid (< (cs-dot (cs-vec corner p)
+                (if (and mid (< (cal:dot (cs-vec corner p)
                                         (cs-vec corner mid))
-                                (cs-dot (cs-vec corner mid)
+                                (cal:dot (cs-vec corner mid)
                                         (cs-vec corner mid))))
                   (princ (strcat "\n    (note: this step is inside the"
                                  " diagonal/fillet region)")))
                 (if (and e1 e2)
                   (progn
                     ;; keep a consistent left/right orientation
-                    (if (> (cs-dot (cs-vec corner e1) perp)
-                           (cs-dot (cs-vec corner e2) perp))
+                    (if (> (cal:dot (cs-vec corner e1) perp)
+                           (cal:dot (cs-vec corner e2) perp))
                       (setq tmp e1 e1 e2 e2 tmp))
                     (cs-mkline e1 e2)          ; the step (tread) edge
                     (cs-conn prevL e1 w1 w2)   ; side lines where the walls
@@ -1208,8 +1206,8 @@
       (if (and e1 e2)
         (progn
           ;; keep a consistent left/right orientation for the side lines
-          (if (> (cs-dot (cs-vec start e1) perp)
-                 (cs-dot (cs-vec start e2) perp))
+          (if (> (cal:dot (cs-vec start e1) perp)
+                 (cal:dot (cs-vec start e2) perp))
             (setq tmp e1 e1 e2 e2 tmp))
           (cs-mkline e1 e2)          ; the step (tread) edge
           ;; side lines where the walls do not already close the step;
@@ -1631,7 +1629,7 @@
           tmp  (cs-resolve wid nat h1 h2 p perp n (cs-tolerance))
           e1   (car tmp)
           e2   (cadr tmp))
-    (if (> (cs-dot (cs-vec org e1) perp) (cs-dot (cs-vec org e2) perp))
+    (if (> (cal:dot (cs-vec org e1) perp) (cal:dot (cs-vec org e2) perp))
       (setq tmp e1 e1 e2 e2 tmp))
     (cs-mkline e1 e2)
     (cs-conn prevL e1 w1 w2)

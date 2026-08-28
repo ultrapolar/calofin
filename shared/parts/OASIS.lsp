@@ -680,10 +680,6 @@
               (list (+ bx (* side h (- uy)))
                     (+ by (* side h ux))))))))
 
-;; 2-D vector sum and scale.
-(defun oasis:v+ (a b) (list (+ (car a) (car b)) (+ (cadr a) (cadr b))))
-(defun oasis:v* (v s) (list (* (car v) s) (* (cadr v) s)))
-
 ;; The unit normal along which two circles share an external tangent
 ;; line, on the RIGHT of c1->c2 -- the outside of a counter-clockwise
 ;; ring.  Both tangent points lie along it from their own centre, so a
@@ -953,10 +949,10 @@
                       ((oasis:seam-p jn) out)
                       ((and (= (type (nth 0 jn)) 'STR)
                             (= (nth 0 jn) "LINE"))
-                       (setq jl (oasis:v+ (nth i bc)
-                                          (oasis:v* (nth 1 jn) (nth i br)))
-                             jm (oasis:v+ (nth j bc)
-                                          (oasis:v* (nth 1 jn) (nth j br))))
+                       (setq jl (cal:v+ (nth i bc)
+                                          (cal:v* (nth 1 jn) (nth i br)))
+                             jm (cal:v+ (nth j bc)
+                                          (cal:v* (nth 1 jn) (nth j br))))
                        ;; two bulges already tangent to each other leave
                        ;; no run between them, only the point they touch
                        (if (> (distance jl jm) oasis:*fuzz*)
@@ -2031,8 +2027,8 @@
 ;; (point . inward-angle) -- inward being the way an offset is measured.
 (defun oasis:eat (a u / th)
   (if (oasis:line-p a)
-      (cons (oasis:v+ (nth 1 a)
-                      (oasis:v* (mapcar '- (nth 2 a) (nth 1 a)) u))
+      (cons (cal:v+ (nth 1 a)
+                      (cal:v* (mapcar '- (nth 2 a) (nth 1 a)) u))
             (cal:angnorm (+ (nth 3 a) pi)))
       (progn
         ;; a bulge runs with the angle, a reverse arc against it
@@ -2325,11 +2321,11 @@
 ;; shallow break -- the direction the hopper lies in.
 (defun oasis:deepdir (p1 p2 q / u)
   (setq u (list (- (cadr p2) (cadr p1)) (- (car p1) (car p2))))
-  (setq u (oasis:v* u (/ 1.0 (max oasis:*fuzz* (distance '(0.0 0.0) u)))))
+  (setq u (cal:v* u (/ 1.0 (max oasis:*fuzz* (distance '(0.0 0.0) u)))))
   (if (> (+ (* (- (car q) (car p1)) (car u))
             (* (- (cadr q) (cadr p1)) (cadr u)))
          0.0)
-      (oasis:v* u -1.0)
+      (cal:v* u -1.0)
       u))
 
 ;; Where the hopper starts and stops on the OFFSET ring: the two places
@@ -2647,7 +2643,7 @@
   ;; over the deep end it measures
   (setvar "CLAYER" oasis:*dimlayer*)
   (oasis:dimstyle-on oasis:*dimstyle*)
-  (setq sh (oasis:v* (oasis:deepdir pda pdb
+  (setq sh (cal:v* (oasis:deepdir pda pdb
                                     (list (* 0.5 (+ (car qsa) (car qsb)))
                                           (* 0.5 (+ (cadr qsa) (cadr qsb)))))
                      -1.0))
@@ -2743,11 +2739,6 @@
                   (rtos (distance (nth 2 bot) (nth 4 bot))) ".")))))
 
 ;;; -------------------- reporting ---------------------------------------
-
-;; s padded out to w characters, so the report's rows line up.
-(defun oasis:pad (s w)
-  (while (< (strlen s) w) (setq s (strcat s " ")))
-  s)
 
 ;; The bulges the ring left out.  A bulge whose two joiners hand over at
 ;; the same point is a point on the outline rather than an arc of it, and
@@ -2967,7 +2958,7 @@
                (princ (strcat "\n  hump " (rtos (abs off)) " off centre to the "
                               (if (< off 0.0) "left" "right") ".")))
            (foreach a arcs
-             (princ (strcat "\n  " (oasis:pad (nth 0 a) 14)
+             (princ (strcat "\n  " (cal:pad (nth 0 a) 14)
                             (if (oasis:line-p a)
                                 (strcat "straight run, "
                                         (rtos (distance (nth 1 a) (nth 2 a))))
