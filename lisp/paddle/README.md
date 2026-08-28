@@ -35,6 +35,8 @@ bulges or ARC entities.
 3. Select the perimeter geometry (polylines, lines, arcs — any mix)
    — or just press **Enter** and PADDLE auto-detects the perimeter
    as the largest closed loop it can find in the current tab.
+   Highlighting the perimeter *before* step 2 skips this prompt: a
+   pickfirst selection is taken as-is.
 
 ## New users: TUTORIALPADDLE
 
@@ -52,8 +54,8 @@ watch each rule fire. At the end it offers to erase the demo again.
 ## Revisions
 
 `PADDLE.lsp` carries the auto-stamped banner `(setq *paddle-version*
-"v1.2")` that `tools/release_lisp.py` reads; run it after any change
-and the dated twin `releases/PADDLE_MMDDYY_REV12.lsp` regenerates
+"v1.5")` that `tools/release_lisp.py` reads; run it after any change
+and the dated twin `releases/PADDLE_MMDDYY_REV15.lsp` regenerates
 itself. Bump the banner with every revision.
 
 PADDLE reports what it found, e.g.:
@@ -94,6 +96,12 @@ Everything inserted in one run is a single undo step.
   segmented walls, slight drafting kinks, shallow sweeping curves,
   the tangent joints of a fillet — is passed over without a pad.
 
+A **pickfirst** selection is taken as-is: highlight the perimeter
+before typing `PADDLE` and it never asks. `LINGUTTER` hands its
+freshly drawn perimeter over that way, which matters because
+auto-detect reads the *whole* drawing for its largest closed loop and
+would otherwise be as happy with a title block border.
+
 ## Loose-geometry chaining
 
 Segment ends are considered connected when they are within
@@ -103,6 +111,17 @@ close back on themselves are skipped with a warning — if that
 happens, check the perimeter for gaps (or bump `*paddle-fuzz*`).
 When several closed loops are selected, each one is processed;
 auto-detect (Enter) uses only the largest loop.
+
+`LINGUTTER` (`lisp/lingutter/`) does not chain at all. It walks the
+**outer face** of the highlighted geometry — hardest right turn at every
+node — so interior geometry is never stepped onto and an outline with a
+gap in it fails loudly rather than being replaced by whatever else
+happened to close. It redraws that exterior as one polyline on `POOL`,
+erases everything else it was shown bar the dimensions worth keeping,
+and hands the polyline to PADDLE as a pickfirst selection. It does share
+this file's segment readers (`paddle--ent-segs` and friends), ported
+under `lg:`, and `tests/test_lingutter.py` runs both on the same
+geometry so those cannot drift.
 
 ## The pad block
 

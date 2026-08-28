@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin shared build loaded - 121 commands in one session.
+LAZPASS: calofin shared build loaded - 133 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -58,7 +58,7 @@ happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 51 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 54 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog

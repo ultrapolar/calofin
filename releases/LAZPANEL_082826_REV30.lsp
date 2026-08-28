@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.9")
+(setq *lazpanel-version* "v3.0")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -185,6 +185,8 @@
     ("LITESPACHECKSCAN" "Spa scan, no dims")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
+    ("LINGUTTER"        "Gut to perimeter, then pads")
+    ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("PADDLE"           "Paddle pads")
     ("PERPPTS"          "Perpendicular points")
     ("POOL"             "Pool layout")
@@ -282,6 +284,8 @@
       "BPCALLOUT"
       )
      ("Pads, dims & check"
+      "LINGUTTER"
+      "LINGUTTERSCAN"
       "PADDLE"
       "AUTODIM"
       "COVERCHECK"
@@ -349,6 +353,8 @@
       "ADAB"
       "CABHD"
       "LHD"
+      "LINGUTTER"
+      "LINGUTTERSCAN"
       "PADDLE"
       "AUTOBEAD"
       "LAZSTEP"

@@ -205,6 +205,8 @@ class VM:
         self.entities = []       # Ent -> alist, in creation order
         self.entdata = {}
         self.deleted = set()
+        self.pickfirst = None    # the implied selection sssetfirst
+                                 # left for the next command's "_I"
         self.initget_kws = ""
         self.initget_bits = 0
         self.sysvars = {
@@ -1190,7 +1192,12 @@ def _ssget(vm, a):
     (ssget "_X") when the user picked nothing must not stall here."""
     mode = ' '.join(x for x in a if isinstance(x, str))
     pairs = _filt_pairs(a)
-    if mode.upper().lstrip('_') in ('X', 'A'):
+    if mode.upper().lstrip('_') == 'I' and vm.pickfirst is not None:
+        # a routine handed this selection over with sssetfirst; it is
+        # consumed once, exactly as AutoCAD's pickfirst set is
+        ents = [e for e in vm.pickfirst[1:] if e not in vm.deleted]
+        vm.pickfirst = None
+    elif mode.upper().lstrip('_') in ('X', 'A'):
         ents = [e for e in vm.entities if e not in vm.deleted]
     else:
         v = vm.pop_script(('ssget ' + mode).strip(), 'ssget')
@@ -1221,6 +1228,17 @@ def _ssdel(vm, a):
     if a[1] and a[0] in a[1][1:]:
         a[1].remove(a[0])
         return a[1]
+    return NIL
+
+
+@bi('sssetfirst')
+def _sssetfirst(vm, a):
+    """(sssetfirst grip pick) -- highlight a selection and leave it as the
+    pickfirst set the NEXT command sees.  The VM has no grips to draw,
+    but it does model the handover: a routine that hands its work to
+    another command this way has to have that command's (ssget "_I")
+    find it."""
+    vm.pickfirst = a[1] if len(a) > 1 and a[1] is not NIL else None
     return NIL
 
 

@@ -27,8 +27,11 @@
 ;;;
 ;;; Usage:
 ;;;   Command: PADDLE
-;;;   Select the perimeter geometry, or press Enter to auto-detect
-;;;   the perimeter (the largest closed loop found in the drawing).
+;;;   Highlight the perimeter geometry BEFORE typing the command and it
+;;;   is taken as-is; otherwise select it at the prompt, or press Enter
+;;;   to auto-detect the perimeter (the largest closed loop found in
+;;;   the drawing).  LINGUTTER hands its freshly drawn perimeter over
+;;;   that way.
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
@@ -58,7 +61,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.4") ; printed on load and at command start
+(setq *paddle-version* "v1.5") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -503,8 +506,17 @@
   (setq padsize *paddle-padsize*
         blkname *paddle-blkname*)
 
-  (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  ;; A pickfirst selection is taken as-is.  LINGUTTER hands its freshly
+  ;; drawn perimeter over that way, and a user who highlighted the
+  ;; outline before typing PADDLE meant the same thing.  It matters
+  ;; because auto-detect reads the WHOLE drawing for its largest closed
+  ;; loop -- being handed the loop beats guessing at it beside a title
+  ;; block border.
+  (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  (if (null ss)
+      (progn
+        (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
