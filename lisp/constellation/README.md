@@ -108,18 +108,54 @@ long; a corner is measured to the coping instead of the wall. So there
 is usually **no** layout that satisfies all of them, and the honest
 answer is the one that misses by as little as possible.
 
-That is what is computed, by **weighted stress majorization** (the
-Guttman transform). One sweep moves every point to the average of where
-each dim touching it wants it to be — dim `A-C` of 168 wants `A` to sit
-168 from wherever `C` currently is, along the line the two currently
-make. Averaging is what makes the sweep safe: the total error can never
-rise, so the loop simply runs until nothing moves.
+It is found in two stages, because the two halves of the job want
+different tools.
+
+**Stage 1, sweeps — finding the right answer.** Weighted stress
+majorization (the Guttman transform). One sweep moves every point to the
+average of where each dim touching it wants it to be — dim `A-C` of 168
+wants `A` to sit 168 from wherever `C` currently is, along the line the
+two currently make. Averaging is what makes a sweep safe: the total
+error can never rise, so a sweep can be trusted from any start at all.
 
 `POOL`'s `pool:relaxn` sweeps its constraints one at a time instead,
 each pulling its two points a share of the way. That is right for a quad
 with six constraints on four points. It is wrong here: a 26-point job
 carries up to 325 dims and a point can be in 25 of them, so a sequential
 sweep spends its time undoing what the previous constraint just did.
+
+**Stage 2, Levenberg–Marquardt — finding it exactly.** What sweeps are
+bad at is the last few decimal places. They converge linearly, at a rate
+set by how loosely the chart ties the points together, and a chart that
+is only just rigid — a ring with a couple of diagonals, which is a very
+ordinary field sheet — can need many thousands of them.
+
+Stopping at a fixed sweep count looks like it works. Every dim comes
+back close, and the report blames the tape whose dim came back least
+close. **That is the worst failure this command could have**, because it
+sends someone out to re-measure a tape that was right. Measured, on
+ring-plus-two-diagonals charts: 400 sweeps left a given dim `0.19"` out
+on data that has an exact answer, and getting it to a thousandth took
+**14,440**.
+
+So the same problem is then written as what it is — least squares over
+the residuals `(distance drawn) − (distance given)` — and finished by
+damped Gauss–Newton. Each residual touches only the four numbers that
+are its two points' x and y, and its slope in each is just the unit
+vector along the line, so the normal equations are cheap to build and
+the step is a linear solve. Near the answer that doubles the number of
+correct digits every iteration where a sweep adds a fixed small fraction
+of one: those fourteen thousand sweeps become **seven iterations**.
+
+The damping is not optional. A constellation is free to slide and to
+spin, so three directions change nothing at all and the undamped normal
+equations are singular no matter how good the dims are. It also keeps
+the step honest far from the answer — a step that does not reduce the
+total miss is thrown away and retried with more damping — so stage 2 can
+never leave the fit worse than the sweeps did.
+
+`test_a_barely_rigid_chart_still_holds_every_dim` is the regression: the
+exact chart that used to come back `0.19"` out now comes back exact.
 
 The report then prints, per dim, what was given, what the drawing came
 out at, and the difference — and **stars** any that missed by more than
@@ -195,9 +231,12 @@ at a different size:
 | --- | --- | --- |
 | `cst:*minpts*` / `cst:*maxpts*` | `3` / `26` | Points allowed. Three is the floor — two points share one dim and neither then has the two a placement needs. Twenty-six is the ceiling because the labels are single letters |
 | `cst:*defcount*` | `4` | What Enter takes at the count prompt |
-| `cst:*sweeps*` | `400` | Cap on solver sweeps. The loop stops early the moment nothing moves further than `cst:*tol*`, which is what it normally does long before the cap |
-| `cst:*tol*` | `1.0e-6` | Movement per sweep, in drawing units, below which the solve is settled |
-| `cst:*squash*` / `cst:*shake*` | `0.35` / `0.30` | The second and third starting layouts — the oval flattened, and the oval scattered. A stress minimum is *local*, and a constellation that starts folded can stay folded, so the oval is not the only thing tried; the best of the three is kept |
+| `cst:*sweeps*` | `120` | Cap on stage-1 sweeps. They only have to reach the right *basin* now, which takes a few dozen; stage 2 finishes the fit |
+| `cst:*tol*` | `1.0e-6` | Movement per sweep, in drawing units, below which stage 1 stops early |
+| `cst:*lm-iters*` / `cst:*lm-tries*` | `40` / `8` | Stage-2 iterations, and the damping retries inside one of them |
+| `cst:*lm-lam*` / `cst:*lm-lammin*` | `1.0e-3` / `1.0e-12` | Starting damping, and the floor it may fall to |
+| `cst:*lm-done*` | `1.0e-14` | Sum of squared misses below which there is nothing left to gain (about a ten-millionth of an inch, RMS) |
+| `cst:*squash*` / `cst:*shake*` | `0.35` / `0.30` | The second and third starting layouts — the oval flattened, and the oval scattered. A stress minimum is *local*, and a constellation that starts folded can stay folded, so the oval is not the only thing tried. With arcs declared each start is run twice more, once with the arcs in from the beginning and once with the dims settled alone first, because neither order wins every job; the closest of all of them is kept |
 | `cst:*rot-coarse*` | `360` | Steps in the whole-circle turn-to-fit sweep |
 | `cst:*rot-fine*` / `cst:*rot-passes*` | `40` / `3` | The refining passes after it, each sampling one grid spacing either side of the last winner |
 | `cst:*flag*` | `0.25` | A dim missing by more than this is starred. At a sixteenth of an inch nobody re-measures; at a quarter something is wrong with the sheet |
@@ -223,6 +262,17 @@ at a different size:
   satisfied exactly, so a mis-read comes back with a clean report — and
   a wrong drawing. It takes redundant dims to notice, which is why
   every pair is on offer even though none is required.
+* **A fit can still land on the wrong layout, and it says so rather
+  than guessing.** Stage 1 finds *an* answer and stage 2 makes it
+  exact, but "an answer" is a local one: a sparse chart with arcs on it
+  can have a second layout that satisfies almost everything. Six
+  starting layouts are tried and the closest kept, which in a
+  192-shape random sweep left about 2% of arc jobs on a wrong local
+  answer — none of them dim-only jobs. The symptom is a large worst
+  miss that no single dim explains, and the report says exactly that
+  rather than blaming a tape. More cross dims are the remedy, and they
+  are the remedy for genuinely disagreeing readings too, which is why
+  one sentence covers both.
 * **Two dims per point is the minimum, not a guarantee of rigidity.**
   Two dims fix a point against two others up to a reflection; a shape
   whose dims are that sparse can have more than one solution and this

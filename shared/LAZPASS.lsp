@@ -31539,10 +31539,13 @@
 ;;; -- a tape reads a sixteenth long, a corner is measured to the
 ;;; coping instead of the wall -- so there is usually NO layout that
 ;;; satisfies all of them.  What is computed is the layout that misses
-;;; by as little as possible, by weighted stress majorization, and the
-;;; report says how far each dim ended up from what was given.  A dim
-;;; that will not come into line is a dim to go back and re-measure,
-;;; which is the most useful thing this command can tell anyone.
+;;; by as little as possible, and the report says how far each dim
+;;; ended up from what was given.  A dim that will not come into line
+;;; is a dim to go back and re-measure, which is the most useful thing
+;;; this command can tell anyone -- and it is only worth saying if the
+;;; fit is exact when the dims ARE consistent, which is why the solve
+;;; runs in two stages: sweeps to find the right answer, then damped
+;;; Gauss-Newton to land on it exactly.  See both stages below.
 ;;;
 ;;; TWO THINGS THE DISTANCES CANNOT SETTLE, and how they are settled:
 ;;;
@@ -31561,7 +31564,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.1")
+(setq *constellation-version* "v1.2")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -31586,11 +31589,21 @@
 (setq cst:*maxpts*   26)
 (setq cst:*defcount* 4)
 
-;; The solve.  A sweep costs one pass over the dims given, and the loop
-;; stops early the moment nothing moves further than cst:*tol*, which
-;; is what it normally does long before the cap.
-(setq cst:*sweeps* 400)
+;; The solve runs in two stages (see "The solve" below).  Sweeps only
+;; have to get the layout into the right BASIN now, which they do in a
+;; few dozen; the fit itself is finished by Levenberg-Marquardt.
+(setq cst:*sweeps* 120)
 (setq cst:*tol*    1.0e-6)      ; drawing units of movement, per sweep
+
+;; The fit.  Iterations are the outer Levenberg-Marquardt steps and
+;; tries the damping retries inside one of them; *lm-done* is the sum
+;; of squared misses below which there is nothing left to gain (about a
+;; ten-millionth of an inch, RMS).
+(setq cst:*lm-iters*  40)
+(setq cst:*lm-tries*   8)
+(setq cst:*lm-lam*  1.0e-3)     ; starting damping
+(setq cst:*lm-lammin* 1.0e-12)
+(setq cst:*lm-done* 1.0e-14)
 
 ;; Starts tried, best kept.  A stress minimum is LOCAL, and a
 ;; constellation that starts folded can stay folded, so the oval is not
@@ -31954,24 +31967,66 @@
     (setq out (cons (cst:arcstart pts c) out)))
   (append pts (reverse out)))
 
+;; Put every arc centre back where the SETTLED points say it belongs.
+;;
+;; cst:arcstart has to guess from the starting oval, which is not the
+;; shape -- so the side it picks can be the wrong one, and a centre that
+;; starts on the wrong side of its chord stays there: the fit converges
+;; happily to a centre that is R from the two ends and nowhere near the
+;; middle.  Every failure a random-shape sweep of this solver turned up
+;; was that, and only that.
+;;
+;; Once the sweeps have settled the LABELLED points, the guess is not
+;; needed: three points on a circle have exactly one centre, so it is
+;; computed rather than chosen.  A two-point arc has no third point and
+;; no unique centre, so it keeps the operator's bow answer -- but taken
+;; against the settled shape now, not against the oval.
+(defun cst:reseed (pts n arcs / out a idx c k)
+  (setq out (cal:sublist pts 0 n))
+  (foreach a (cst:arcrows n arcs)
+    (setq idx (caddr a)
+          k   (length idx)
+          c   (if (>= k 3)
+                (cal:circumcenter (nth (car idx) out)
+                                  (nth (nth (/ k 2) idx) out)
+                                  (nth (last idx) out))))
+    (if (null c) (setq c (cst:arcstart out (cdr a))))
+    (setq out (append out (list (cal:2d c)))))
+  out)
+
 ;;; ----------------------------------------------------------------------
-;;;  The solve
+;;;  The solve, stage 1: sweeps, to find the right answer
 ;;;
 ;;;  WEIGHTED STRESS MAJORIZATION -- the Guttman transform.  One sweep
 ;;;  moves every point to the AVERAGE of where each dim touching it
 ;;;  wants it to be: dim A-C of 168 wants A to sit 168 from wherever C
 ;;;  currently is, along the line the two currently make.  Averaging is
 ;;;  what makes the sweep safe -- the total error can never rise -- so
-;;;  the loop simply runs until nothing moves.
+;;;  a sweep can be trusted from any start at all.
 ;;;
 ;;;  POOL's pool:relaxn sweeps its constraints ONE AT A TIME instead,
 ;;;  each pulling its two points a share of the way.  That is right for
 ;;;  a quad with six constraints on four points.  It is wrong here: a
 ;;;  26-point job carries up to 325 dims and a point can be in 25 of
 ;;;  them, so a sequential sweep spends its time undoing what the
-;;;  previous constraint just did.  The averaging form settles the same
-;;;  answer in a fraction of the sweeps, which is why this file has its
-;;;  own solver rather than calling POOL's.
+;;;  previous constraint just did.
+;;;
+;;;  What sweeps are BAD at is the last few decimal places.  They
+;;;  converge linearly, at a rate set by how loosely the chart ties the
+;;;  points together, and a chart that is only just rigid -- a ring with
+;;;  a couple of diagonals, which is a very ordinary field sheet -- can
+;;;  need many thousands of them.  Stopping at a fixed cap looks like it
+;;;  works: every dim comes back close, and the report blames the tape
+;;;  whose dim came back least close.  That is the worst failure this
+;;;  command could have, because it sends someone out to re-measure a
+;;;  tape that was right.  Measured, on ring-plus-two-diagonals charts:
+;;;  400 sweeps left a given dim 0.19in out on data that has an exact
+;;;  answer, and getting it to a thousandth took 14,440.
+;;;
+;;;  So sweeps are no longer asked to finish the job.  They are asked
+;;;  only to get into the right basin -- which they do in a few dozen,
+;;;  and which is the thing they are uniquely good at -- and stage 2
+;;;  finishes it.
 ;;;
 ;;;  Dims are weighted equally.  A tape reading is a tape reading; there
 ;;;  is nothing on a field sheet that says one of them is better than
@@ -32013,7 +32068,8 @@
           i (1+ i)))
   m)
 
-;; Sweep until nothing moves, or until the cap.
+;; Sweep until nothing moves, or until the cap.  Either way this is
+;; only the first stage: cst:lm finishes from wherever it stops.
 (defun cst:settle (pts adj / k moved new)
   (setq k 0 moved nil)
   (while (and (< k cst:*sweeps*) (or (null moved) (> moved cst:*tol*)))
@@ -32042,25 +32098,242 @@
             c (1+ c))))
   (if (> c 0) (sqrt (/ s c)) 0.0))
 
-;; The layout that misses by least, out of the three starts.  The oval
-;; alone is a good start and usually the only one that matters; the
-;; other two are here because a stress minimum is local and a folded
-;; start stays folded.  Returns n labelled points followed by one
-;; centre per arc.
-(defun cst:solve (n w h chart arcs / adj starts best bestr p r)
+;;; ----------------------------------------------------------------------
+;;;  The solve, stage 2: Levenberg-Marquardt, to find it EXACTLY
+;;;
+;;;  The same problem, written as what it is: least squares over the
+;;;  residuals r = (distance drawn) - (distance given).  Each residual
+;;;  touches only the four numbers that are its two points' x and y, and
+;;;  its slope in each is just the unit vector along the line -- so the
+;;;  normal equations are cheap to build and the step is a linear solve.
+;;;  Near the answer this doubles the number of correct digits every
+;;;  iteration, where a sweep adds a fixed small fraction of one; the
+;;;  fourteen thousand sweeps above become seven iterations.
+;;;
+;;;  It is DAMPED (that is the Marquardt half) and could not work
+;;;  otherwise: a constellation is free to slide and to spin, so three
+;;;  directions change nothing at all and the undamped normal equations
+;;;  are singular no matter how good the dims are.  The damping also
+;;;  keeps the step honest far from the answer -- a step that does not
+;;;  reduce the total miss is thrown away and retried with more damping,
+;;;  so this stage can never make the fit worse than the sweeps left it.
+;;;
+;;;  Arcs need nothing of their own here.  An arc centre is a point like
+;;;  any other and its radius is a distance like any other, so it lands
+;;;  in the residual list beside the cross dims and is fitted with them.
+;;; ----------------------------------------------------------------------
+
+;; Every distance the layout is held to, as (i j d): one per cross dim,
+;; and one per point on an arc holding it R from that arc's centre.
+(defun cst:constraints (n chart arcs / out e a i)
+  (setq out nil)
+  (foreach e chart
+    (setq out (cons (list (cadr e) (caddr e) (cadddr e)) out)))
+  (foreach a (cst:arcrows n arcs)
+    (foreach i (caddr a)
+      (setq out (cons (list i (car a) (cadddr a)) out))))
+  (reverse out))
+
+;; Sum of squared misses -- the number the fit is minimizing.  (The
+;; report leads with the RMS, which is this over the count, rooted.)
+(defun cst:sqstress (pts cl / s e d)
+  (setq s 0.0)
+  (foreach e cl
+    (setq d (- (distance (nth (car e) pts) (nth (cadr e) pts)) (caddr e))
+          s (+ s (* d d))))
+  s)
+
+;; Add V to column K of the sparse row AL.
+(defun cst:acc (al k v / p)
+  (if (setq p (assoc k al))
+    (subst (cons k (+ (cdr p) v)) p al)
+    (cons (cons k v) al)))
+
+;; The row of the damped normal equations for one unknown -- the C-th
+;; coordinate (0 = x, 1 = y) of point I -- with its right-hand side
+;; appended, so a row is (a0 a1 ... a<m-1> rhs).
+;;
+;; It is built as an (column . value) alist and flattened once at the
+;; end.  The row is nearly all zeros: the only unknowns it touches are
+;; point I's own two and, for each dim on point I, that neighbour's
+;; two.  Accumulating straight into a 52-wide list of zeros would walk
+;; it once per entry, which is what would make this too slow to use.
+(defun cst:normrow (i c pts adjrow lam m / al rhs e j d p q vx vy len
+                                           ux uy g col out hit)
+  (setq al nil rhs 0.0 p (nth i pts))
+  (foreach e adjrow
+    (setq j   (car e)
+          d   (cadr e)
+          q   (nth j pts)
+          vx  (- (car p) (car q))
+          vy  (- (cadr p) (cadr q))
+          len (sqrt (+ (* vx vx) (* vy vy))))
+    ;; two points on top of each other have no direction to differ in;
+    ;; the sweeps push them apart, so there is nothing to do here
+    (if (> len 1.0e-12)
+      (progn
+        (setq ux  (/ vx len)
+              uy  (/ vy len)
+              g   (if (= c 0) ux uy)          ; slope of r in this coord
+              rhs (- rhs (* g (- len d))))
+        (setq al (cst:acc al (* 2 i)          (* g ux))
+              al (cst:acc al (1+ (* 2 i))     (* g uy))
+              al (cst:acc al (* 2 j)          (- (* g ux)))
+              al (cst:acc al (1+ (* 2 j))     (- (* g uy)))))))
+  ;; Marquardt damping, on the diagonal
+  (setq col (+ (* 2 i) c)
+        hit (assoc col al)
+        al  (cst:acc al col (* lam (+ 1.0 (if hit (cdr hit) 0.0)))))
+  (setq out nil col (1- m))
+  (while (>= col 0)
+    (setq hit (assoc col al)
+          out (cons (if hit (cdr hit) 0.0) out)
+          col (1- col)))
+  (append out (list rhs)))
+
+(defun cst:normeq (pts adj lam / rows i m p)
+  (setq m (* 2 (length pts)) rows nil i 0)
+  (foreach p pts
+    (setq rows (cons (cst:normrow i 0 pts (nth i adj) lam m) rows)
+          rows (cons (cst:normrow i 1 pts (nth i adj) lam m) rows)
+          i    (1+ i)))
+  (reverse rows))
+
+(defun cst:butlast (lst) (reverse (cdr (reverse lst))))
+
+(defun cst:dotlists (a b / s)
+  (setq s 0.0)
+  (while (and a b)
+    (setq s (+ s (* (car a) (car b)))
+          a (cdr a)
+          b (cdr b)))
+  s)
+
+;; Solve the system whose augmented rows are ROWS, by Gaussian
+;; elimination with partial pivoting.  Returns the solution as a list,
+;; or nil when the system is singular (the caller answers that with
+;; more damping).
+;;
+;; Every step walks whole rows with mapcar and drops the column it has
+;; just eliminated, so nothing ever indexes into a row: AutoLISP has no
+;; arrays, and an nth into a 52-wide row inside a triple loop is the
+;; difference between this being usable and not.
+(defun cst:linsolve (rows / m k left best bestv rest row f out xs co cs sum)
+  (setq m (length rows) k 0 left rows out nil)
+  (while (< k m)
+    (setq best nil bestv -1.0)
+    (foreach row left
+      (if (> (abs (car row)) bestv)
+        (setq bestv (abs (car row)) best row)))
+    (if (< bestv 1.0e-12)
+      (setq k m out nil left nil)              ; singular
+      (progn
+        (setq rest nil)
+        (foreach row left
+          (if (not (eq row best))
+            (progn
+              (setq f    (/ (car row) (car best))
+                    rest (cons (cdr (mapcar '(lambda (a b) (- a (* f b)))
+                                            row best))
+                               rest)))))
+        (setq out  (cons best out)
+              left (reverse rest)
+              k    (1+ k)))))
+  ;; OUT holds the pivot rows shortest first, which is the LAST unknown
+  ;; first; XS then grows in increasing index order, so the leftover
+  ;; coefficients of a row pair off with it directly.
+  (if out
+    (progn
+      (setq xs nil)
+      (foreach row out
+        (setq co  (cdr row)
+              cs  (cst:butlast co)
+              sum (cst:dotlists cs xs)
+              xs  (cons (/ (- (last co) sum) (car row)) xs)))
+      xs)))
+
+(defun cst:addstep (pts step / out i p)
+  (setq out nil i 0)
+  (foreach p pts
+    (setq out (cons (list (+ (car p) (nth (* 2 i) step))
+                          (+ (cadr p) (nth (1+ (* 2 i)) step)))
+                    out)
+          i   (1+ i)))
+  (reverse out))
+
+;; Polish PTS until the misses stop shrinking.  A step is only kept when
+;; it really does reduce the total miss, so this can never hand back a
+;; worse layout than it was given.
+(defun cst:lm (pts adj cl / lam it s taken pass rows step trial s2)
+  (setq lam cst:*lm-lam*
+        s   (cst:sqstress pts cl)
+        it  0)
+  (while (and (< it cst:*lm-iters*) (> s cst:*lm-done*))
+    (setq taken nil pass 0)
+    (while (and (not taken) (< pass cst:*lm-tries*))
+      (setq rows (cst:normeq pts adj lam)
+            step (cst:linsolve rows))
+      (if step
+        (progn
+          (setq trial (cst:addstep pts step)
+                s2    (cst:sqstress trial cl))
+          (if (< s2 s)
+            (setq pts   trial
+                  s     s2
+                  lam   (max (* lam 0.1) cst:*lm-lammin*)
+                  taken T)
+            (setq lam (* lam 10.0))))
+        (setq lam (* lam 10.0)))
+      (setq pass (1+ pass)))
+    ;; nothing left to win: more damping is only shrinking the step
+    (setq it (if taken (1+ it) cst:*lm-iters*)))
+  pts)
+
+;; One start taken all the way through.  DIMSFIRST picks between the two
+;; orders the stages can run in, and they are BOTH tried because
+;; neither wins every job:
+;;
+;;   nil  arcs in from the off - the centres are seeded off the starting
+;;        oval and settle with everything else.
+;;   T    the dims settle ALONE first, and the arcs join a shape that
+;;        already exists.  An arc centre is only a guess until there is
+;;        a shape for it to be the centre of, and a guess that starts on
+;;        the wrong side of its chord drags real points after it.
+;;
+;; Returns n labelled points followed by one centre per arc.
+(defun cst:polish (start adj adj0 arcs n cl dimsfirst / p)
+  (if dimsfirst
+    (setq p (cst:withcentres (cst:settle start adj0) arcs))
+    (setq p (cst:settle (cst:withcentres start arcs) adj)))
+  (setq p (cst:reseed p n arcs)         ; put the centres where they go
+        p (cst:settle p adj))           ; let that settle
+  (cst:lm p adj cl))                    ; then land on it exactly
+
+;; The layout that misses by least, over every start and both stagings.
+;; The oval alone is a good start and usually the only one that matters;
+;; the other two are here because a stress minimum is local and a folded
+;; start stays folded.  With no arc declared the two stagings are the
+;; same run, so only one of them is made.
+(defun cst:solve (n w h chart arcs / adj adj0 cl starts best bestr p r q)
   (setq adj    (cst:adjacency n chart arcs)
-        starts (mapcar '(lambda (q) (cst:withcentres q arcs))
-                       (list (cst:oval n w h)
-                             (cst:squash (cst:oval n w h) cst:*squash*)
-                             (cst:shake (cst:oval n w h)
-                                        (* cst:*shake* (min w h)))))
+        adj0   (if arcs (cst:adjacency n chart nil) adj)
+        cl     (cst:constraints n chart arcs)
+        starts (list (cst:oval n w h)
+                     (cst:squash (cst:oval n w h) cst:*squash*)
+                     (cst:shake (cst:oval n w h)
+                                (* cst:*shake* (min w h))))
         best   nil
         bestr  nil)
-  (foreach p starts
-    (setq p (cst:settle p adj)
+  (foreach q starts
+    (setq p (cst:polish q adj adj0 arcs n cl nil)
           r (cst:rms p chart arcs n))
     (if (or (null bestr) (< r bestr))
-      (setq best p bestr r)))
+      (setq best p bestr r))
+    (if arcs
+      (progn
+        (setq p (cst:polish q adj adj0 arcs n cl T)
+              r (cst:rms p chart arcs n))
+        (if (< r bestr) (setq best p bestr r)))))
   best)
 
 ;;; ----------------------------------------------------------------------
@@ -32919,8 +33192,7 @@
                      ".")))
     (if (> worst cst:*flag*)
       (progn
-        (princ "\n  ** The starred lines cannot all be true at once.  The")
-        (princ "\n  ** layout misses them by as little as anything can.")
+        (princ "\n  ** The starred lines cannot all be true at once.")
         (if blame
           (progn
             (princ (strcat "\n  ** Leave " (car (car wd)) " out and every"
@@ -32931,7 +33203,16 @@
             (princ "\n  ** because the fit shared its error out among them.")
             (princ (strcat "\n  ** Nothing was dropped: the layout drawn"
                            " still honours every dim given.")))
-          (princ "\n  ** Re-measure them before trusting it.")))
+          ;; no ONE reading accounts for the others, and there are two
+          ;; ways that happens.  Saying only "re-measure them" would be
+          ;; picking one of them without evidence - and the remedy is
+          ;; the same either way, so say both and name it.
+          (progn
+            (princ "\n  ** No single one of them explains the rest, so")
+            (princ "\n  ** either more than one reading is out, or the")
+            (princ "\n  ** chart does not pin the shape down tightly")
+            (princ "\n  ** enough for the fit to be sure which layout the")
+            (princ "\n  ** dims meant.  More cross dims settle either."))))
       (princ (strcat "\n  Nothing missed by more than " (rtos cst:*flag*)
                      " - nothing here needs re-measuring.")))
     (if (> over 1.0e-6)

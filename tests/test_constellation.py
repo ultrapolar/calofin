@@ -472,6 +472,38 @@ def test_an_arc_pins_what_dims_alone_leave_loose():
               if (i, j) in BOWL_DIMS) < 0.01)
 
 
+#: the shape that caught the solver out.  Six points, and a chart of the
+#: ring plus two diagonals -- just rigid, and a very ordinary field
+#: sheet.  The dims are exactly consistent, so a zero-miss layout exists;
+#: the old solver stopped at a fixed sweep count and left a given dim
+#: 0.19in out, then blamed a tape for it.
+JUSTRIGID = [(130.5351, 219.4649), (235.8919, 283.9503), (281.8186, 171.9232),
+             (313.2685, 36.7315), (155.5482, -15.8963), (56.3059, 111.4973)]
+JUSTRIGID_DIMS = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 5),
+                  (0, 2), (1, 3)]
+
+
+def test_a_barely_rigid_chart_still_holds_every_dim():
+    print("\na chart that is only just rigid is still held to the inch")
+    only = {k: v for k, v in truth(JUSTRIGID).items() if k in JUSTRIGID_DIMS}
+    vm = run(shape=JUSTRIGID, w=600.0, h=500.0, given=only, outline="No")
+    ring = as_ring(vm, 6)
+    worst = max(abs(math.dist(ring[i], ring[j]) - d)
+                for (i, j), d in only.items())
+    # 0.19 was what the fixed-sweep solver left here.  A thousandth of
+    # an inch is far below anything a drawing can show, and is the
+    # difference between a report that can be trusted and one that
+    # cannot.
+    check("every given dim comes back within 0.001 (worst %.6f)" % worst,
+          worst < 0.001)
+    check("so nothing is starred and no tape is blamed",
+          "**" not in said(vm)
+          and "is the one to re-measure" not in said(vm))
+    # what is NOT asserted: the two diagonals never given.  A chart that
+    # is only just rigid can have more than one realization, so a
+    # distance nobody measured is not something this command promises.
+
+
 def test_a_run_is_read_clockwise():
     print("\nA-C, ABC and the wrap D-B all name the run they should")
     vm = VM()
@@ -614,8 +646,9 @@ def test_dims_that_cannot_all_be_true_are_starred():
     vm = run(shape=[(0, 0)] * 3, given=bad, outline="No")
     out = said(vm)
     check("the impossible dims are starred", "**" in out)
-    check("and named as the thing to re-measure",
-          "Re-measure them before trusting it" in out)
+    check("and the report does not pretend to know which one is wrong",
+          "No single one of them explains the rest" in out
+          and "More cross dims settle either" in out)
     check("the worst miss is reported, not hidden",
           "Worst miss" in out
           and "nothing here needs re-measuring" not in out)
@@ -788,6 +821,7 @@ def main():
                test_one_aligned_dim_per_dim_given,
                test_a_dim_measures_the_points_it_belongs_to,
                test_cross_dims_lie_on_the_chord_and_perimeter_dims_stand_off,
+               test_a_barely_rigid_chart_still_holds_every_dim,
                test_an_arc_pins_what_dims_alone_leave_loose,
                test_a_run_is_read_clockwise,
                test_an_arc_that_disagrees_with_the_dims_is_starred,

@@ -134,6 +134,7 @@ TOOLS = {
             'cst:signed-dang': 'cal:signed-dang',
             'cst:tan': 'cal:tan',
             'cst:nthcdr': 'cal:nthcdr', 'cst:sublist': 'cal:sublist',
+            'cst:circumcenter': 'cal:circumcenter',
         },
         'drop_globals': ['cst:*sysold*'],
         # cst:askkw already takes the SHOWN bracket third, like the
