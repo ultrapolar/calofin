@@ -203,8 +203,10 @@
 ;;;    restores every stashed colour and clears COVERCHECK's report
 ;;;    and markers (flag colours included — it is the full reset).
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (vl-load-com)
 

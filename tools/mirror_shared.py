@@ -410,10 +410,146 @@ TOOLS = {
     # verified each spec's generate() output against the twin then on
     # disk; the remaining diffs were the legacy banner form and
     # comment-only residues, normalised by the first regeneration).
-    # covercheck, dimcheck, linfincheck and LISPLAB stay hand-mirrored
-    # on purpose: their twins carry grouped-build adaptations (cal:mtext
-    # delegation, baked Enter-defaults on multi-line prompts, lesson
-    # prose naming the library) that a swap table cannot express.
+    # ---- adopted from the hand-mirrored set.  The check family's three
+    # twins were kept by hand because their grouped-build adaptations --
+    # the cal:mtext delegating wrapper and the ask-yn default moving
+    # from the prompt into an argument -- are a body rewrite and an
+    # arity change, neither of which a swap map can say.  They are
+    # `rewrite` and `collapse` now, and the twins are generated.
+    # (Derivation: generate() reproduced each hand twin to the character
+    # except the legacy banner placement, which the first regeneration
+    # normalises.  ensure-layer keeps its accepted delta -- entmake vs
+    # entmakex and the per-tool message prefix, see shared/README.md --
+    # exactly as the hand twins already had it.)
+    #
+    # LISPLAB stays hand-mirrored, and NOT because a transform is
+    # missing: its twin's only non-swap content is lesson prose naming
+    # the library instead of itself.  Expressing that needs a third key
+    # whose only user in the tree would be a file with one commit in
+    # its history, held OMITTED out of the bundle, whose twin
+    # test_lisplab.py already runs at both tiers -- so a drift there
+    # fails make parity today.
+    'covercheck': {
+        'src': 'lisp/covercheck/covercheck.lsp',
+        'swap': {
+            'cchk:ensure-layer': 'cal:ensure-layer',
+            'cchk:bbox': 'cal:bbox-ent',
+            'cchk:pad2': 'cal:zeropad2',
+            'cchk:datestr': 'cal:datestr',
+            'cchk:ask-yn-nav': 'cal:ask-yn-nav',
+            'cchk:angnorm': 'cal:angnorm',
+            'cchk:ang-diff': 'cal:ang-diff',
+            'cchk:circumcenter': 'cal:circumcenter',
+            'cchk:unit': 'cal:unitn',
+            'cchk:proj-param': 'cal:proj-param',
+            'cchk:axis-pt': 'cal:axis-pt',
+            'cchk:pt-line-dist': 'cal:pt-line-dist',
+            # the flat 2-D kit.  NOTE the two different unit
+            # vectors: cchk:unit is the length-preserving one over all
+            # components (cal:unitn), cchk:pv-unit is the flat 2-D one
+            # (cal:unit).  Swapping these the wrong way round loads
+            # fine and draws wrong.
+            'cchk:pv-sub': 'cal:v-',
+            'cchk:pv-add': 'cal:v+',
+            'cchk:pv-scl': 'cal:v*',
+            'cchk:pv-len': 'cal:vlen',
+            'cchk:pv-unit': 'cal:unit',
+            'cchk:pv-cross': 'cal:cross',
+            'cchk:pv-dot': 'cal:dot',
+            'cchk:pv-2d': 'cal:2d',
+        },
+        'drop_globals': [],
+        # cchk:ask-yn and cchk:ask-ny are one library helper with the
+        # default baked into the prompt instead of passed.  `expand`
+        # cannot reach these: it matches literal call text and every
+        # site carries a different multi-line (strcat ...) prompt.
+        'collapse': {
+            'cchk:ask-yn': ('cal:ask-yn', '"Yes"'),
+            'cchk:ask-ny': ('cal:ask-yn', '"No"'),
+        },
+        # the one thing no swap can say: the grouped build wants a
+        # DIFFERENT BODY, a thin wrapper that delegates to the library
+        # and then tags what came back as this tool's report line
+        'rewrite': {
+            'cchk:mtext':
+                '(defun cchk:mtext (ins height width text layer / e)\n'
+                '  ;; entmake an MTEXT, splitting text into 250-char '
+                'DXF chunks\n'
+                '  (if (setq e (cal:mtext ins height width text layer))\n'
+                '    (cchk:tag e "REPORT")))\n',
+        },
+    },
+    'dimcheck': {
+        'src': 'lisp/dimcheck/dimcheck.lsp',
+        'swap': {
+            'dchk:ensure-layer': 'cal:ensure-layer',
+            'dchk:bbox': 'cal:bbox-ent',
+            'dchk:pad2': 'cal:zeropad2',
+            'dchk:datestr': 'cal:datestr',
+            'dchk:ask-yn-nav': 'cal:ask-yn-nav',
+            'dchk:angnorm': 'cal:angnorm',
+            'dchk:ang-diff': 'cal:ang-diff',
+            'dchk:circumcenter': 'cal:circumcenter',
+            'dchk:unit': 'cal:unitn',
+            'dchk:proj-param': 'cal:proj-param',
+            'dchk:axis-pt': 'cal:axis-pt',
+            'dchk:pt-line-dist': 'cal:pt-line-dist',
+        },
+        'drop_globals': [],
+        # dchk:ask-yn is cal:ask-yn with the default baked in rather
+        # than passed; the collapse passes it.  There is no dchk:ask-ny
+        # here -- covercheck is the only one of the three with both.
+        'collapse': {
+            'dchk:ask-yn': ('cal:ask-yn', '"Yes"'),
+        },
+        # the one thing no swap can say: the grouped build wants a
+        # DIFFERENT BODY, a thin wrapper that delegates to the library
+        # and then tags what came back as this tool's report line
+        'rewrite': {
+            'dchk:mtext':
+                '(defun dchk:mtext (ins height width text layer / e)\n'
+                '  ;; entmake an MTEXT, splitting text into 250-char '
+                'DXF chunks\n'
+                '  (if (setq e (cal:mtext ins height width text layer))\n'
+                '    (dchk:tag e "REPORT")))\n',
+        },
+    },
+    'linfincheck': {
+        'src': 'lisp/linfincheck/linfincheck.lsp',
+        'swap': {
+            'lfc:ensure-layer': 'cal:ensure-layer',
+            'lfc:bbox': 'cal:bbox-ent',
+            'lfc:pad2': 'cal:zeropad2',
+            'lfc:datestr': 'cal:datestr',
+            'lfc:ask-yn-nav': 'cal:ask-yn-nav',
+            'lfc:angnorm': 'cal:angnorm',
+            'lfc:ang-diff': 'cal:ang-diff',
+            'lfc:circumcenter': 'cal:circumcenter',
+            'lfc:unit': 'cal:unitn',
+            'lfc:proj-param': 'cal:proj-param',
+            'lfc:axis-pt': 'cal:axis-pt',
+            'lfc:pt-line-dist': 'cal:pt-line-dist',
+        },
+        'drop_globals': [],
+        # lfc:ask-yn is cal:ask-yn with the default baked in rather
+        # than passed; the collapse passes it.  There is no lfc:ask-ny
+        # here -- covercheck is the only one of the three with both.
+        'collapse': {
+            'lfc:ask-yn': ('cal:ask-yn', '"Yes"'),
+        },
+        # the one thing no swap can say: the grouped build wants a
+        # DIFFERENT BODY, a thin wrapper that delegates to the library
+        # and then tags what came back as this tool's report line
+        'rewrite': {
+            'lfc:mtext':
+                '(defun lfc:mtext (ins height width text layer / e)\n'
+                '  ;; entmake an MTEXT, splitting text into 250-char '
+                'DXF chunks\n'
+                '  (if (setq e (cal:mtext ins height width text layer))\n'
+                '    (lfc:tag e "REPORT")))\n',
+        },
+    },
+
     # ABHD carries the whole 2D kit under pf: (sub/add/scl are the
     # library's v-/v+/v*), the list and format helpers, the layer
     # creator and the Back-word test.  cal:dedupe takes the epsilon as
@@ -880,6 +1016,117 @@ def expand_calls(src, table):
     return src
 
 
+def find_close(src, i):
+    """Index just past the ')' closing the '(' at SRC[i].
+
+    String- and comment-aware, like top_span's own walk: a ';' inside a
+    prompt is text, and a '(' inside one is not a paren.
+    """
+    depth, instr, j = 0, False, i
+    while j < len(src):
+        c = src[j]
+        if instr:
+            if c == '\\':
+                j += 2
+                continue
+            if c == '"':
+                instr = False
+        elif c == '"':
+            instr = True
+        elif c == ';':
+            while j < len(src) and src[j] != '\n':
+                j += 1
+            continue
+        elif c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                return j + 1
+        j += 1
+    return None
+
+
+def collapse_calls(src, table):
+    """Rename a helper to a library one that takes ONE MORE argument.
+
+    `expand` cannot do this: it matches literal call text, and these
+    calls carry multi-line (strcat ...) prompts whose text differs at
+    every site.  So the call is found structurally and the argument
+    appended.
+
+    The formatting rule is read off the hand twins this replaces: a
+    call that fits on one line takes the new argument inline; one that
+    spans lines takes it on its own line, indented to the column of the
+    call's FIRST argument -- which is where a reader looking down the
+    argument list expects it, whether that first argument sits beside
+    the call or under it.
+    """
+    for old, (new, extra) in table.items():
+        # the local definition goes, like a swapped one
+        span = top_span(src, 'defun', old)
+        if span:
+            src = src[:span[0]] + src[span[1]:]
+        while True:
+            m = re.search(r'\(' + re.escape(old) + r'(?=[\s)])', src)
+            if not m:
+                break
+            i = m.start()
+            end = find_close(src, i)
+            if end is None:
+                raise SystemExit(
+                    "mirror_shared: (%s ... is never closed - the twin "
+                    "was NOT written" % old)
+            call = src[i:end]
+            after = call[1 + len(old):]          # everything after (name
+            if '\n' not in call:
+                out = '(' + new + after[:-1] + ' ' + extra + ')'
+            else:
+                bol = src.rfind('\n', 0, i) + 1
+                lead = re.match(r'[ \t]*', after).group(0)
+                if after[len(lead):len(lead) + 1] == '\n':
+                    # the first argument is on the NEXT line: take its
+                    # own indentation
+                    rest = after[len(lead) + 1:]
+                    col = len(rest) - len(rest.lstrip(' '))
+                else:
+                    # the first argument sits beside the call.  The
+                    # column is measured against the NEW name: it is
+                    # the one that ends up on the line being aligned to
+                    col = (i - bol) + 1 + len(new) + len(lead)
+                out = ('(' + new + after[:-1].rstrip('\n')
+                       + '\n' + ' ' * col + extra + ')')
+            src = src[:i] + out + src[end:]
+    return src
+
+
+def rewrite_defuns(src, table):
+    """Replace a whole top-level defun with given text.
+
+    The one transform a swap map genuinely cannot express: the grouped
+    build wants a DIFFERENT BODY, not a different name -- a thin
+    wrapper that delegates to the library and then does the one
+    tool-specific thing the library knows nothing about.  Only the new
+    text lives in the table, so the lisp/ body is not duplicated here.
+    """
+    for name, replacement in table.items():
+        span = top_span(src, 'defun', name)
+        if span is None:
+            raise SystemExit(
+                "mirror_shared: rewrite names %s but no such defun - the "
+                "twin was NOT written" % name)
+        # top_span takes the ;;-comment block above the defun with it;
+        # the replacement carries its own, so keep the split explicit
+        head = src[span[0]:span[1]]
+        lead = head[:len(head) - len(head.lstrip('\n'))]
+        # the replaced body ended its paragraph with a blank line; the
+        # replacement is shorter but the paragraph break still belongs
+        tail = head[len(head.rstrip('\n')):]
+        src = (src[:span[0]] + lead + replacement.rstrip('\n') + tail
+               + src[span[1]:])
+    return src
+
+
 def top_span(src, opener, name):
     """(start, end) of a top-level (OPENER NAME ...), by paren balance,
     taking any ;;-comment block immediately above it with it."""
@@ -1014,6 +1261,8 @@ def generate(tool, spec):
                      lambda m: m.group(1) + new, src)
 
     src = expand_calls(src, spec.get('expand', {}))
+    src = collapse_calls(src, spec.get('collapse', {}))
+    src = rewrite_defuns(src, spec.get('rewrite', {}))
 
     for old, new in spec.get('symbols', {}).items():
         # \b only means anything next to a word character.  A global

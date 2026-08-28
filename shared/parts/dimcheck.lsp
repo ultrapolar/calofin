@@ -100,8 +100,10 @@
 ;;;    *dchk-/*lfc- globals, layer names and xdata tags mean neither
 ;;;    tool's rescue command touches the other's markers.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (vl-load-com)
 

@@ -40279,8 +40279,10 @@
 ;;;    restores every stashed colour and clears COVERCHECK's report
 ;;;    and markers (flag colours included — it is the full reset).
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (vl-load-com)
 
@@ -43957,8 +43959,10 @@
 ;;;    *dchk-/*lfc- globals, layer names and xdata tags mean neither
 ;;;    tool's rescue command touches the other's markers.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (vl-load-com)
 
@@ -55731,8 +55735,10 @@
 ;;;    the checked area is used; titles disagreeing on WallHt are
 ;;;    called out in red.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (vl-load-com)
 

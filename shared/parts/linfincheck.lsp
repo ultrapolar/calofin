@@ -245,8 +245,10 @@
 ;;;    the checked area is used; titles disagreeing on WallHt are
 ;;;    called out in red.
 ;;; ------------------------------------------------------------------
+
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
 
 (vl-load-com)
 
