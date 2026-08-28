@@ -42,8 +42,26 @@
 ;;;      point with one dim sits anywhere on a circle and a point with
 ;;;      none sits anywhere at all.
 ;;;
-;;;   5. THE SOLVE, then the drawing: an ab_pt survey point per letter,
-;;;      an aligned dimension per dim given, and the space itself.
+;;;   5. THE ARCS.  A run of points that lies on ONE radius, named
+;;;      CLOCKWISE -- A-C, or ABC spelled out, or the wrap Z-B meaning
+;;;      Z A B.  Cross dims say how far apart things are and nothing
+;;;      about how the wall between them curves, so a radius end can be
+;;;      measured perfectly and still come out as a flat chord.  To the
+;;;      solver an arc is simply one more point, its centre, a dim of R
+;;;      away from every point on it -- and it pins what the dims leave
+;;;      loose.
+;;;
+;;;   6. THE SOLVE, then the drawing: an ab_pt survey point per letter,
+;;;      an aligned dimension per dim given, the space itself, and an
+;;;      outline that bends round any arc declared.
+;;;
+;;;   7. DOES IT LOOK RIGHT?  A number typed wrong is the ordinary case,
+;;;      not an exception: nobody can tell 24'-6" was meant to be 24'-9"
+;;;      from the chart, and anybody can tell from the drawing.  So the
+;;;      drawing is the check.  A No asks whether the dims, the arcs or
+;;;      both need changing, takes the corrected value, takes the wrong
+;;;      drawing away and puts the right one down, round as many times
+;;;      as it takes.
 ;;;
 ;;; WHAT THE SOLVER DOES.  The dims are almost never exactly consistent
 ;;; -- a tape reads a sixteenth long, a corner is measured to the
@@ -71,7 +89,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.0")
+(setq *constellation-version* "v1.1")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -162,6 +180,11 @@
 ;; must not leave the legend sitting in the drawing waiting for a U.
 (setq cst:*preview* nil)
 
+;; And everything drawn as the RESULT, for the same reason and for one
+;; more: the run ends by asking whether the drawing looks right, and a
+;; No has to take it away again before the corrected one goes down.
+(setq cst:*drawn* nil)
+
 (defun cst:sysvars () '("CMDECHO"))
 
 ;;; ----------------------------------------------------------------------
@@ -236,14 +259,29 @@
 ;; For each point, the dims leading away from it as (other distance).
 ;; Built once and handed to the solver, which would otherwise search
 ;; the whole chart for every point on every sweep.
-(defun cst:adjacency (n chart / rows e)
+;;
+;; Every arc adds ONE MORE POINT to the layout -- its centre, index n
+;; for the first arc stored, n+1 for the next -- with a dim of R to
+;; each point on the arc.  That is all an arc IS to the solver: another
+;; point whose distances happen to be equal, which is exactly the shape
+;; the sweep already knows how to settle.  The centres carry no letter
+;; and are never drawn as points.
+(defun cst:adjacency (n chart arcs / rows e k c i)
   (setq rows nil)
-  (repeat n (setq rows (cons nil rows)))
+  (repeat (+ n (length arcs)) (setq rows (cons nil rows)))
   (foreach e chart
     (setq rows (cst:setnth rows (cadr e)
                  (cons (list (caddr e) (cadddr e)) (nth (cadr e) rows))))
     (setq rows (cst:setnth rows (caddr e)
                  (cons (list (cadr e) (cadddr e)) (nth (caddr e) rows)))))
+  (setq k n)
+  (foreach c arcs
+    (foreach i (cadr c)
+      (setq rows (cst:setnth rows i
+                   (cons (list k (caddr c)) (nth i rows))))
+      (setq rows (cst:setnth rows k
+                   (cons (list i (caddr c)) (nth k rows)))))
+    (setq k (1+ k)))
   rows)
 
 (defun cst:setnth (lst i val / k out x)
@@ -252,6 +290,67 @@
     (setq out (cons (if (= k i) val x) out)
           k   (1+ k)))
   (reverse out))
+
+;;; ----------------------------------------------------------------------
+;;;  Arcs
+;;;
+;;;  A run of points that lies on ONE radius.  Cross dims say how far
+;;;  apart things are and nothing about how the wall between them
+;;;  curves, so a pool with a radius end can have its points measured
+;;;  perfectly and still come out as a straight-sided polygon.  An arc
+;;;  says the wall is a radius, pins the points that sit on it, and is
+;;;  drawn as a real arc rather than a chord.
+;;;
+;;;  Named CLOCKWISE, the way the letters were handed out, so a run
+;;;  that crosses the end of the alphabet is unambiguous: on a
+;;;  twenty-six point job Z-B is Z A B, never B all the way back round
+;;;  to Z.  Two letters are a FROM and a TO with the run between them
+;;;  filled in; three or more are taken as named.
+;;;
+;;;  Stored newest first, like the chart, so Back undoes the last one
+;;;  given: (name indices radius bows-out).
+;;; ----------------------------------------------------------------------
+
+;; "A-B-C-D" -- the name a run is known by.
+(defun cst:runname (idx / out k)
+  (setq out "")
+  (foreach k idx
+    (setq out (strcat out (if (= out "") "" "-") (cst:letter k))))
+  out)
+
+;; The points S names.  Two letters are filled in clockwise between
+;; them; three or more are taken as typed.  nil for anything that is
+;; not at least two of this job's points.
+(defun cst:parserun (s n / ls out i)
+  (setq ls (cst:letters-in s n))
+  (cond ((null ls) nil)
+        ((< (length ls) 2) nil)
+        ((> (length ls) 2) ls)
+        (t (setq out (list (car ls)) i (car ls))
+           (while (/= i (cadr ls))
+             (setq i   (rem (1+ i) n)
+                   out (cons i out)))
+           (reverse out))))
+
+(defun cst:delarc (k arcs)
+  (vl-remove-if '(lambda (a) (= (car a) k)) arcs))
+
+(defun cst:putarc (idx r bow arcs / k)
+  (setq k    (cst:runname idx)
+        arcs (cst:delarc k arcs))
+  (cons (list k idx r bow) arcs))
+
+;; The arcs paired with the index their centre takes in the layout --
+;; n for the first arc stored, n+1 for the next -- and turned back into
+;; the order they were given in, which is the order to report them in.
+;; cst:adjacency hands the centres out walking the SAME stored list, so
+;; the two cannot disagree about which centre belongs to which arc.
+(defun cst:arcrows (n arcs / k out a)
+  (setq k n out nil)
+  (foreach a arcs
+    (setq out (cons (cons k a) out)
+          k   (1+ k)))
+  out)
 
 ;;; ----------------------------------------------------------------------
 ;;;  Is there enough to go on?
@@ -347,6 +446,42 @@
           i   (1+ i)))
   (reverse out))
 
+;; Where an arc's centre starts.  A run of THREE or more points has
+;; only one centre that can be R from all of them, so the solver finds
+;; it wherever it starts.  A run of TWO has two, mirror images across
+;; the chord, and nothing in the distances chooses between them -- so
+;; the answer to the bow question does.  Clockwise labelling puts the
+;; inside of the shape to the RIGHT of the direction of travel, so an
+;; arc that bows OUT of the shape has its centre to the right of
+;; first-to-last.
+(defun cst:arcstart (pts arc / p q r m c half h v side)
+  (setq p    (nth (car (cadr arc)) pts)
+        q    (nth (last (cadr arc)) pts)
+        r    (caddr arc)
+        m    (cal:mid p q)
+        c    (distance p q)
+        half (* 0.5 c)
+        ;; a chord longer than the diameter has no such arc at all; the
+        ;; centre starts on the chord and the report shows the radius it
+        ;; had to settle for
+        h    (if (> r half) (sqrt (- (* r r) (* half half))) 0.0)
+        v    (cal:unit (cal:v- q p)))
+  (if v
+    (progn
+      (setq side (if (cadddr arc)
+                   (list (cadr v) (- (car v)))      ; right of travel
+                   (list (- (cadr v)) (car v))))    ; left of travel
+      (cal:v+ m (cal:v* side h)))
+    (cal:v+ m (list 0.0 r))))
+
+;; A starting layout plus one starting centre per arc, in the order the
+;; arcs are stored -- the order cst:adjacency hands the indices out in.
+(defun cst:withcentres (pts arcs / out c)
+  (setq out nil)
+  (foreach c arcs
+    (setq out (cons (cst:arcstart pts c) out)))
+  (append pts (reverse out)))
+
 ;;; ----------------------------------------------------------------------
 ;;;  The solve
 ;;;
@@ -417,32 +552,41 @@
   pts)
 
 ;; Root-mean-square miss, in drawing units: how far the layout's own
-;; distances sit from the ones the operator gave, averaged over the
-;; dims given.  This is the number the whole solve is minimizing and
-;; the one the report leads with.
-(defun cst:rms (pts chart / s c e d)
+;; distances sit from the ones the operator gave, averaged over
+;; everything given -- every cross dim, and every arc radius, since a
+;; radius is a distance to the centre and is measured the same way.
+;; This is the number the whole solve is minimizing and the one the
+;; report leads with.
+(defun cst:rms (pts chart arcs n / s c e d a i)
   (setq s 0.0 c 0)
   (foreach e chart
     (setq d (- (distance (nth (cadr e) pts) (nth (caddr e) pts)) (cadddr e))
           s (+ s (* d d))
           c (1+ c)))
+  (foreach a (cst:arcrows n arcs)
+    (foreach i (caddr a)
+      (setq d (- (distance (nth i pts) (nth (car a) pts)) (cadddr a))
+            s (+ s (* d d))
+            c (1+ c))))
   (if (> c 0) (sqrt (/ s c)) 0.0))
 
 ;; The layout that misses by least, out of the three starts.  The oval
 ;; alone is a good start and usually the only one that matters; the
 ;; other two are here because a stress minimum is local and a folded
-;; start stays folded.
-(defun cst:solve (n w h chart / adj starts best bestr p r)
-  (setq adj    (cst:adjacency n chart)
-        starts (list (cst:oval n w h)
-                     (cst:squash (cst:oval n w h) cst:*squash*)
-                     (cst:shake (cst:oval n w h)
-                                (* cst:*shake* (min w h))))
+;; start stays folded.  Returns n labelled points followed by one
+;; centre per arc.
+(defun cst:solve (n w h chart arcs / adj starts best bestr p r)
+  (setq adj    (cst:adjacency n chart arcs)
+        starts (mapcar '(lambda (q) (cst:withcentres q arcs))
+                       (list (cst:oval n w h)
+                             (cst:squash (cst:oval n w h) cst:*squash*)
+                             (cst:shake (cst:oval n w h)
+                                        (* cst:*shake* (min w h)))))
         best   nil
         bestr  nil)
   (foreach p starts
     (setq p (cst:settle p adj)
-          r (cst:rms p chart))
+          r (cst:rms p chart arcs n))
     (if (or (null bestr) (< r bestr))
       (setq best p bestr r)))
   best)
@@ -452,6 +596,15 @@
 ;;;
 ;;;  Distances say nothing about either, so both are settled against
 ;;;  what the operator was actually shown.
+;;;
+;;;  N is the LABELLED point count throughout here, and the layout
+;;;  handed in is longer than that -- the arc centres ride along on the
+;;;  end.  Every decision below is taken from the first N and then
+;;;  applied to all of them: an arc centre can legitimately sit a long
+;;;  way outside the space (a shallow radius puts it further out than
+;;;  the pool is long), and letting it into the bounding box or the
+;;;  chirality test would drag the fit around for a point that is never
+;;;  drawn.
 ;;; ----------------------------------------------------------------------
 
 (defun cst:centroid (pts / sx sy n p)
@@ -459,8 +612,8 @@
   (foreach p pts (setq sx (+ sx (car p)) sy (+ sy (cadr p))))
   (list (/ sx n) (/ sy n)))
 
-(defun cst:centred (pts / c)
-  (setq c (cst:centroid pts))
+(defun cst:centred (pts n / c)
+  (setq c (cst:centroid (cal:sublist pts 0 n)))
   (mapcar '(lambda (p) (cal:v- p c)) pts))
 
 ;; Twice the signed area of the ring A-B-C-...-A.  Positive is
@@ -479,8 +632,8 @@
 ;; A, B, C running clockwise; the one that reads clockwise is drawn.
 ;; (Points that came out collinear have no handedness to fix, and the
 ;; strict > leaves them alone.)
-(defun cst:unmirror (pts)
-  (if (> (cst:area2 pts) 0.0)
+(defun cst:unmirror (pts n)
+  (if (> (cst:area2 (cal:sublist pts 0 n)) 0.0)
     (mapcar '(lambda (p) (list (- (car p)) (cadr p))) pts)
     pts))
 
@@ -520,13 +673,15 @@
 ;; equally well at that, it must land as near as it can to the oval
 ;; that was previewed, so the letters stay roughly where the operator
 ;; last saw them.  Returns (angle overflow deviation).
-(defun cst:scanrot (pts ref w h lo hi steps / k a rot ov dev best bov bdev)
+(defun cst:scanrot (pts ref w h n lo hi steps
+                    / k a rot lab ov dev best bov bdev)
   (setq k 0 best lo bov nil bdev nil)
   (repeat (1+ steps)
     (setq a   (+ lo (/ (* (- hi lo) k) steps))
           rot (cst:spin pts a)
-          ov  (cst:overflow rot w h)
-          dev (cst:sqdev rot ref))
+          lab (cal:sublist rot 0 n)
+          ov  (cst:overflow lab w h)
+          dev (cst:sqdev lab ref))
     (if (or (null bov)
             (< ov (- bov 1.0e-9))
             (and (< ov (+ bov 1.0e-9)) (< dev bdev)))
@@ -538,8 +693,9 @@
 ;; then a fine pass one coarse step either side of the winner, because
 ;; a long thin constellation in a tight space can have a window of
 ;; angles that fit only a fraction of a degree wide.
-(defun cst:bestrot (pts ref w h / best span)
-  (setq best (car (cst:scanrot pts ref w h 0.0 (* 2.0 pi) cst:*rot-coarse*))
+(defun cst:bestrot (pts ref w h n / best span)
+  (setq best (car (cst:scanrot pts ref w h n
+                               0.0 (* 2.0 pi) cst:*rot-coarse*))
         span (/ (* 2.0 pi) cst:*rot-coarse*))
   ;; each pass samples one grid spacing either side of the last winner,
   ;; which is where the true best has to be, and its own spacing becomes
@@ -547,7 +703,7 @@
   ;; and the points land on their solved distances rather than a
   ;; degree-grid approximation of them
   (repeat cst:*rot-passes*
-    (setq best (car (cst:scanrot pts ref w h (- best span) (+ best span)
+    (setq best (car (cst:scanrot pts ref w h n (- best span) (+ best span)
                                  cst:*rot-fine*))
           span (/ (* 2.0 span) cst:*rot-fine*)))
   best)
@@ -555,8 +711,8 @@
 ;; Drop the finished layout into the space, its bounding box centred in
 ;; the rectangle.  Centring the BOX rather than the centroid is what
 ;; keeps a lopsided constellation off the edges.
-(defun cst:place (pts base w h / bb dx dy)
-  (setq bb (cst:bbox pts)
+(defun cst:place (pts base w h n / bb dx dy)
+  (setq bb (cst:bbox (cal:sublist pts 0 n))
         dx (- (+ (car base) (* 0.5 (- w (- (caddr bb) (car bb)))))
               (car bb))
         dy (- (+ (cadr base) (* 0.5 (- h (- (cadddr bb) (cadr bb)))))
@@ -581,12 +737,19 @@
                   '(100 . "AcDbCircle")
                   (list 10 (car p) (cadr p) 0.0) (cons 40 r))))
 
-;; Closed polyline through the points given, in order.
-(defun cst:poly (pts lay / dxf p)
+;; Closed polyline through the points given, in order.  BULGES is one
+;; number per vertex or nil for a straight run; a bulge bends the
+;; segment LEAVING that vertex, which is where AutoCAD keeps it.
+(defun cst:poly (pts bulges lay / dxf i p)
   (setq dxf (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
-                  '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1)))
+                  '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
+        i   0)
   (foreach p pts
-    (setq dxf (append dxf (list (cons 10 (cal:2d p))))))
+    (setq dxf (append dxf (list (cons 10 (cal:2d p))))
+          dxf (if (and bulges (/= 0.0 (nth i bulges)))
+                (append dxf (list (cons 42 (nth i bulges))))
+                dxf)
+          i   (1+ i)))
   (entmakex dxf))
 
 (defun cst:box (base w h lay)
@@ -594,7 +757,36 @@
                   (cal:v+ base (list w 0.0))
                   (cal:v+ base (list w h))
                   (cal:v+ base (list 0.0 h)))
-            lay))
+            nil lay))
+
+;; The bulge that carries one outline segment round an arc: the tangent
+;; of a quarter of the angle the segment subtends at the centre, signed
+;; the way the segment travels.  A clockwise ring gives a negative
+;; angle and so a negative bulge, which is AutoCAD's own convention --
+;; the sign falls out of the geometry rather than being asserted.
+(defun cst:bulge (p q c)
+  (cal:tan (* 0.25 (cal:signed-dang (angle c p) (angle c q)))))
+
+;; One bulge per outline vertex: zero everywhere, except where a
+;; declared arc covers a segment between two points that really are
+;; NEIGHBOURS in the ring.  A run named out of ring order still
+;; constrains the solve -- it is the same circle -- but there is no
+;; outline segment for it to bend, so it bends none.
+(defun cst:bulges (pts n arcs / out a idx c i j nx)
+  (setq out nil)
+  (repeat n (setq out (cons 0.0 out)))
+  (foreach a (cst:arcrows n arcs)
+    (setq c   (nth (car a) pts)
+          idx (caddr a)
+          i   0)
+    (while (< (1+ i) (length idx))
+      (setq j  (nth i idx)
+            nx (nth (1+ i) idx))
+      (if (= nx (rem (1+ j) n))
+        (setq out (cst:setnth out j
+                    (cst:bulge (nth j pts) (nth nx pts) c))))
+      (setq i (1+ i))))
+  out)
 
 ;; An ALIGNED dimension between P1 and P2, its dimension line through
 ;; LOC.  Built by entmake, like XYPLOT's, so the layer on it is the
@@ -696,10 +888,29 @@
   (princ))
 
 ;; Safe to call at any time, including twice: an ename already gone has
-;; no entget, and the list is emptied as it is swept.
+;; no entget, and the list is emptied as it is swept.  The guard is not
+;; decoration -- entdel TOGGLES, so a second sweep without it would put
+;; everything back.
 (defun cst:unpreview ( / e)
   (foreach e cst:*preview* (if (and e (entget e)) (entdel e)))
   (setq cst:*preview* nil))
+
+;; Everything made since MARK, in creation order.  Walking forward from
+;; a mark rather than collecting enames as they are made is what catches
+;; the attribute and the SEQEND of an ab_pt block: those are buffered
+;; until the sequence closes and do not reliably hand a name back, and a
+;; redraw that missed them would leave the old labels behind.  (XYPLOT's
+;; xyp:new-points walks the same way, for the same reason.)
+(defun cst:since (mark / e out)
+  (setq e (if mark (entnext mark) (entnext)) out nil)
+  (while e
+    (setq out (cons e out)
+          e   (entnext e)))
+  (reverse out))
+
+(defun cst:undraw ( / e)
+  (foreach e cst:*drawn* (if (and e (entget e)) (entdel e)))
+  (setq cst:*drawn* nil))
 
 ;;; ----------------------------------------------------------------------
 ;;;  The questions
@@ -735,21 +946,28 @@
         ((null v) '(0.0 0.0))
         (t (cal:2d v))))
 
-;; The two point letters in S, in any of the spellings an operator
-;; types: "AC", "A-C", "a c", "A,C".  nil unless exactly two letters
-;; land inside the run A..<n-1> and they differ.
-(defun cst:parsepair (s n / i c ls k)
-  (setq ls nil i 1)
+;; Every point letter in S, in the order typed.  Anything that is not
+;; a letter is a separator and ignored, so "AC", "A-C", "a c" and
+;; "A,C" all read the same.  nil when a letter names a point this job
+;; does not have, or names one twice -- a wrong letter is a typo to be
+;; told about, not a character to be quietly dropped.
+(defun cst:letters-in (s n / i c k out bad)
+  (setq out nil bad nil i 1)
   (repeat (strlen s)
     (setq c (substr s i 1)
           k (cst:index c))
-    (if (not (null k)) (setq ls (cons k ls)))
+    (if (not (null k))
+      (if (or (>= k n) (member k out))
+        (setq bad T)
+        (setq out (cons k out))))
     (setq i (1+ i)))
-  (setq ls (reverse ls))
-  (if (and (= 2 (length ls))
-           (/= (car ls) (cadr ls))
-           (< (car ls) n)
-           (< (cadr ls) n))
+  (if (not bad) (reverse out)))
+
+;; The pair S names, low letter first.  nil unless exactly two points
+;; are named.
+(defun cst:parsepair (s n / ls)
+  (setq ls (cst:letters-in s n))
+  (if (= 2 (length ls))
     (list (min (car ls) (cadr ls)) (max (car ls) (cadr ls)))))
 
 ;; The first pair still blank, as its name; nil when the chart is full.
@@ -777,14 +995,18 @@
                           ", like " (cst:key 0 1) "."))
            (cst:askpair n dflt))))
 
-(defun cst:charthelp (n order)
-  (princ (strcat "\n\n  Cross dims.  " (itoa n) " points make "
-                 (itoa (length order)) " possible pairs and not one of"))
-  (princ "\n  them is compulsory - give the ones the sheet carries, in")
-  (princ "\n  whatever order they are written down.")
+(defun cst:charthelp (n order top)
+  (if top
+    (progn
+      (princ (strcat "\n\n  Cross dims.  " (itoa n) " points make "
+                     (itoa (length order)) " possible pairs and not one of"))
+      (princ "\n  them is compulsory - give the ones the sheet carries, in")
+      (princ "\n  whatever order they are written down."))
+    (princ "\n\n  Cross dims - name the pair whose number was wrong:"))
   (princ "\n    Enter    takes the pair shown, so Enter over and over")
   (princ "\n             walks the whole chart in order")
-  (princ "\n    A-C      jumps straight to that pair (AC and a c read too)")
+  (princ "\n    A-C      jumps straight to that pair (AC and a c read too),")
+  (princ "\n             and a pair given twice keeps the second answer")
   (princ "\n    D        done, no more dims")
   (princ "\n    B        undo the dim just given")
   (princ (strcat "\n  Every point needs at least two dims before the chart"
@@ -807,29 +1029,118 @@
   (princ "\n    floats free of A's.  One dim across the gap ties them")
   (princ "\n    together."))
 
+;;; ----------------------------------------------------------------------
+;;;  The arc list
+;;; ----------------------------------------------------------------------
+
+(defun cst:archelp (n top)
+  (if top
+    (progn
+      (princ "\n\n  Arcs.  If a run of points lies on ONE radius, say so.")
+      (princ "\n  Cross dims say how far apart things are and nothing about")
+      (princ "\n  how the wall between them curves, so a radius end can be")
+      (princ "\n  measured perfectly and still come out as a flat chord.")
+      (princ "\n  An arc pins those points and is drawn as a real arc."))
+    (princ "\n\n  Arcs - name the run whose radius was wrong:"))
+  (princ "\n  Name the run CLOCKWISE, the way the letters were handed out:")
+  (princ "\n    A-C      from A clockwise to C, so A B C")
+  (princ "\n    ABC      the same run, spelled out")
+  (princ (strcat "\n    " (cst:letter (1- n)) "-B      wraps round the end: "
+                 (cst:letter (1- n)) " A B, not B all the way back to "
+                 (cst:letter (1- n))))
+  (princ "\n    Enter    done, no arcs (or no more)")
+  (princ "\n    B        undo the arc just given"))
+
+;; Which points the arc runs through.  Typed, like the pair prompt and
+;; for the same reason, so Back and Done are typed words too.
+(defun cst:askrun (n / str ls)
+  (setq str (cal:trim
+              (getstring (strcat "\n  Points on the arc <Enter = done>"
+                                 " (B = back): "))))
+  (cond ((= str "") 'CST-DONE)
+        ((cal:back-word-p str) 'CAL-BACK)
+        ((member (strcase str) '("D" "DONE")) 'CST-DONE)
+        ((cst:parserun str n))
+        (t (princ (strcat "\n    \"" str "\" is not a run of these points"
+                          " - two or more different"))
+           (princ (strcat "\n    letters between A and "
+                          (cst:letter (1- n)) ", like "
+                          (cst:letter 0) "-" (cst:letter 2) "."))
+           (cst:askrun n))))
+
+;; The arcs.  Returns the list, or CAL-BACK when Back is pressed with
+;; nothing in it yet and there is a question behind to go back to.
+(defun cst:askarcs (n arcs top / done ls r bow k nm)
+  (cst:archelp n top)
+  (setq done nil)
+  (while (not done)
+    (setq ls (cst:askrun n))
+    (cond
+      ((eq ls 'CAL-BACK)
+       (cond
+         (arcs
+          (setq k    (car (car arcs))
+                arcs (cdr arcs))
+          (princ (strcat "\n    Stepping back one arc - " k
+                         " is off the list again.")))
+         (top (setq done T arcs 'CAL-BACK))
+         (t (princ "\n    Already at the first arc."))))
+      ((eq ls 'CST-DONE) (setq done T))
+      (t
+       (setq nm (cst:runname ls)
+             r  (cal:askdist 'REQ (strcat "  Radius for " nm) nil T))
+       (if (not (eq r 'CAL-BACK))
+         (progn
+           ;; three points on a circle of known R fix its centre
+           ;; outright; two leave two centres, mirror images across the
+           ;; chord, and only the operator knows which wall this is
+           (setq bow (if (= 2 (length ls))
+                       (cal:askyn (strcat "  Does " nm
+                                          " bow out from the shape?")
+                                  "Yes" T)
+                       T))
+           (if (not (eq bow 'CAL-BACK))
+             (progn
+               (setq arcs (cst:putarc ls r bow arcs))
+               (princ (strcat "\n    " nm " on R" (rtos r)
+                              (if bow "" ", bowing in") "   ("
+                              (itoa (length arcs))
+                              (if (= 1 (length arcs)) " arc)"
+                                  " arcs)"))))))))))
+  arcs)
+
 ;; The cross-dim chart.  Returns the chart, or CAL-BACK when Back is
 ;; pressed with nothing in it yet.
-(defun cst:askchart (n chart / order done nxt pr v k short cut)
+;;
+;; TOP is T on the way through the questions, where Back out of an empty
+;; chart means going back a QUESTION, and where a chart that fills up
+;; closes itself so the walk needs no final D.  It is nil on a FIX pass,
+;; re-entered from "does it look right": there is no earlier question to
+;; reach, and a full chart must NOT close itself or there would be no
+;; way in to change the number that was wrong.
+(defun cst:askchart (n chart arcs top / order done nxt pr v k short cut)
   (setq order (cst:pairs n) done nil)
-  (cst:charthelp n order)
+  (cst:charthelp n order top)
   (while (not done)
     (setq nxt (cst:nextpair order chart))
-    (if (null nxt)
+    (if (and (null nxt) top)
       (progn (princ "\n  Every pair is given.")
              (setq pr 'CST-DONE))
-      (setq pr (cst:askpair n nxt)))
+      (setq pr (cst:askpair n (if nxt nxt (cst:key 0 1)))))
     (cond
       ((eq pr 'CAL-BACK)
-       (if chart
-         (progn
-           (setq k     (car (car chart))
-                 chart (cdr chart))
-           (princ (strcat "\n    Stepping back one dimension - " k
-                          " is blank again.")))
-         (setq done T chart 'CAL-BACK)))
+       (cond
+         (chart
+          (setq k     (car (car chart))
+                chart (cdr chart))
+          (princ (strcat "\n    Stepping back one dimension - " k
+                         " is blank again.")))
+         (top (setq done T chart 'CAL-BACK))
+         (t (princ "\n    Already at the first dimension."))))
       ((eq pr 'CST-DONE)
        (setq short (cst:thin n chart)
-             cut   (if short nil (cst:cutoff n (cst:adjacency n chart))))
+             cut   (if short nil
+                     (cst:cutoff n (cst:adjacency n chart arcs))))
        (cond (short (cst:saythin short chart))
              (cut   (cst:saycut cut))
              (t     (setq done T))))
@@ -844,14 +1155,14 @@
                           (itoa (length order)) " given)")))))))
   chart)
 
-;; The whole chain, with Back.  Returns (w h n base chart outline).
+;; The whole chain, with Back.  Returns (w h n base chart arcs outline).
 ;; The first question offers no Back (STANDARDS section 3), so there is
 ;; no way out of here but forward or Esc -- and Esc lands in the
 ;; command's *error* handler, which sweeps the preview and closes the
 ;; undo group.
-(defun cst:ask ( / step w h n base chart outline v)
-  (setq step 1 chart nil outline T)
-  (while (< step 7)
+(defun cst:ask ( / step w h n base chart arcs outline v)
+  (setq step 1 chart nil arcs nil outline T)
+  (while (< step 8)
     (cond
       ((= step 1)
        (setq w (cal:askdist 'REQ "Space width (X)" nil nil)
@@ -867,15 +1178,18 @@
        (if (eq v 'CAL-BACK) (setq step 3) (setq base v step 5)))
       ((= step 5)
        (cst:preview n w h base)
-       (setq v (cst:askchart n chart))
+       (setq v (cst:askchart n chart arcs T))
        (if (eq v 'CAL-BACK)
          (progn (cst:unpreview) (setq step 4))
          (setq chart v step 6)))
       ((= step 6)
+       (setq v (cst:askarcs n arcs T))
+       (if (eq v 'CAL-BACK) (setq step 5) (setq arcs v step 7)))
+      ((= step 7)
        (setq v (cal:askyn "Draw the outline through the points in order?"
                           "Yes" T))
-       (if (eq v 'CAL-BACK) (setq step 5) (setq outline v step 7)))))
-  (list w h n base chart outline))
+       (if (eq v 'CAL-BACK) (setq step 6) (setq outline v step 8)))))
+  (list w h n base chart arcs outline))
 
 ;;; ----------------------------------------------------------------------
 ;;;  Placing the dims, and the ring
@@ -904,6 +1218,30 @@
                   (if v (cal:v+ m (cal:v* v off)) m))
                 m))
     (cst:dim p q loc cst:*dim-layer*)))
+
+;; Everything the run puts in the drawing, in one place so that a No to
+;; "does it look right" can take it all away again and put the corrected
+;; version down.  The layers and the block are made BEFORE the mark:
+;; they are not part of the drawing to be swept and a redraw must not
+;; keep re-announcing them.
+(defun cst:draw (pts n w h base chart arcs outline / mark th i p)
+  (cal:ensure-layer cst:*space-layer* 8)
+  (cal:ensure-layer cst:*point-layer* 2)
+  (cal:ensure-layer cst:*dim-layer* 2)
+  (if outline (cal:ensure-layer cst:*outline-layer* 3))
+  (cst:ensure-block)
+  (setq mark (entlast)
+        th   (cst:texth w h)
+        i    0)
+  (cst:box base w h cst:*space-layer*)
+  (foreach p (cal:sublist pts 0 n)
+    (cst:insert-pt p (cst:letter i) th)
+    (setq i (1+ i)))
+  (cst:drawdims pts n chart w h)
+  (if outline
+    (cst:poly (cal:sublist pts 0 n) (cst:bulges pts n arcs)
+              cst:*outline-layer*))
+  (setq cst:*drawn* (cst:since mark)))
 
 ;; Does the ring A-B-C-...-A cross itself?  Worth saying if it does:
 ;; the letters were handed out clockwise, so a crossing means the dims
@@ -959,13 +1297,15 @@
 
 ;; How well the rest of the chart settles without BAD -- nil when it
 ;; does not settle, or when the chart cannot spare the dim.
-(defun cst:culprit (n w h chart bad / rest r)
+(defun cst:culprit (n w h chart arcs bad / rest pts r)
   (setq rest (cst:deldim (car bad) chart))
   (if (and rest
            (null (cst:thin n rest))
-           (null (cst:cutoff n (cst:adjacency n rest))))
+           (null (cst:cutoff n (cst:adjacency n rest arcs))))
     (progn
-      (setq r (cadr (cst:worstdim (cst:solve n w h rest) rest)))
+      (setq pts (cst:solve n w h rest arcs)
+            r   (max (cadr (cst:worstdim pts rest))
+                     (cst:worstarc pts n arcs)))
       (if (< r cst:*flag*) r))))
 
 ;;; ----------------------------------------------------------------------
@@ -981,7 +1321,7 @@
 ;; the difference.  A line starred here is a line to go back and
 ;; re-measure - which of them, when several are starred, is the
 ;; leave-one-out test's job above.
-(defun cst:report (pts n w h base chart / order p k drawn off)
+(defun cst:report (pts n w h base chart arcs / order p k drawn off)
   (princ (strcat "\n\nCONSTELLATION " *constellation-version*))
   (princ (strcat "\n  Space   " (rtos w) " x " (rtos h)
                  ", base point " (rtos (car base)) "," (rtos (cadr base))))
@@ -989,6 +1329,8 @@
   (setq order (cst:pairs n))
   (princ (strcat "\n  Dims    " (itoa (length chart)) " given of "
                  (itoa (length order)) " possible"))
+  (if arcs
+    (princ (strcat "\n  Arcs    " (itoa (length arcs)) " given")))
   (princ (strcat "\n\n  " (cal:pad "pair" 8) (cal:pad "given" 15)
                  (cal:pad "drawn" 15) "off by"))
   (foreach p order
@@ -1004,13 +1346,46 @@
                        (if (> off cst:*flag*) "   **" ""))))))
   (princ))
 
+;; The radius an arc actually came out at (the mean of its members'
+;; distances to the fitted centre) and how far the worst of them sits
+;; from the R given, as (drawn miss).
+(defun cst:arcmeas (pts a / i d s c worst)
+  (setq s 0.0 c 0 worst 0.0)
+  (foreach i (caddr a)
+    (setq d     (distance (nth i pts) (nth (car a) pts))
+          s     (+ s d)
+          c     (1+ c)
+          worst (max worst (abs (- d (cadddr a))))))
+  (list (if (> c 0) (/ s c) 0.0) worst))
+
+;; The worst any arc radius came out.
+(defun cst:worstarc (pts n arcs / a worst)
+  (setq worst 0.0)
+  (foreach a (cst:arcrows n arcs)
+    (setq worst (max worst (cadr (cst:arcmeas pts a)))))
+  worst)
+
+(defun cst:arcreport (pts n arcs / a m)
+  (if arcs
+    (progn
+      (princ (strcat "\n\n  " (cal:pad "arc" 16) (cal:pad "R given" 15)
+                     (cal:pad "R drawn" 15) "off by"))
+      (foreach a (cst:arcrows n arcs)
+        (setq m (cst:arcmeas pts a))
+        (princ (strcat "\n  " (cal:pad (cadr a) 16)
+                       (cal:pad (rtos (cadddr a)) 15)
+                       (cal:pad (rtos (car m)) 15)
+                       (rtos (cadr m))
+                       (if (> (cadr m) cst:*flag*) "   **" ""))))))
+  (princ))
+
 ;;; ----------------------------------------------------------------------
 ;;;  The command
 ;;; ----------------------------------------------------------------------
 
-(defun c:CONSTELLATION ( / *error* undo-open q w h n base chart
-                           outline sol ref ang pts th i p wd worst
-                           blame rms over cross)
+(defun c:CONSTELLATION ( / *error* undo-open q w h n base chart arcs
+                           outline sol ref ang pts wd worst blame rms
+                           over cross happy fix v)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -1031,78 +1406,94 @@
         n       (nth 2 q)
         base    (nth 3 q)
         chart   (nth 4 q)
-        outline (nth 5 q))
+        arcs    (nth 5 q)
+        outline (nth 6 q))
   ;; the legend has done its job now that the real positions are coming
   (cst:unpreview)
-  (princ "\n\n  Working the positions out...")
-  ;; the shape the dims want, then the two things distances cannot say:
-  ;; which way round (clockwise, as previewed) and which way up (turned
-  ;; to sit in the space, and among the angles that do, nearest the oval)
-  (setq sol (cst:unmirror (cst:centred (cst:solve n w h chart)))
-        ref (cst:centred (cst:oval n w h))
-        ang (cst:bestrot sol ref w h)
-        pts (cst:place (cst:spin sol ang) base w h)
-        th  (cst:texth w h))
-  ;; ---- the drawing -----------------------------------------------------
-  ;; colours only take on a layer this run has to CREATE; POINTS yellow
-  ;; as XYPLOT and ABCDEF make it, DIMENSION yellow as POOL and SPA do
-  (cal:ensure-layer cst:*space-layer* 8)
-  (cal:ensure-layer cst:*point-layer* 2)
-  (cal:ensure-layer cst:*dim-layer* 2)
-  (cst:box base w h cst:*space-layer*)
-  (cst:ensure-block)
-  (setq i 0)
-  (foreach p pts
-    (cst:insert-pt p (cst:letter i) th)
-    (setq i (1+ i)))
-  (cst:drawdims pts n chart w h)
-  (setq cross nil)
-  (if outline
-    (progn
-      (cal:ensure-layer cst:*outline-layer* 3)
-      (cst:poly pts cst:*outline-layer*)
-      (setq cross (cst:crossing-p pts))))
-  ;; ---- what it came out at ---------------------------------------------
-  (cst:report pts n w h base chart)
-  (setq wd    (cst:worstdim pts chart)
-        worst (cadr wd)
-        rms   (cst:rms pts chart)
-        over  (cst:overflow pts w h)
-        blame (if (> worst cst:*flag*) (cst:culprit n w h chart (car wd))))
-  (princ (strcat "\n\n  Worst miss " (rtos worst) ", RMS " (rtos rms)
-                 " over " (itoa (length chart))
-                 (if (= 1 (length chart)) " dim." " dims.")))
-  (if (> worst cst:*flag*)
-    (progn
-      (princ "\n  ** The starred dims cannot all be true at once.  The")
-      (princ "\n  ** layout misses them by as little as anything can.")
-      (if blame
-        (progn
-          (princ (strcat "\n  ** Leave " (car (car wd)) " out and every"
-                         " other dim settles to within " (rtos blame)
-                         ","))
-          (princ (strcat "\n  ** so " (car (car wd)) " is the one to"
-                         " re-measure - the rest are only wrong"))
-          (princ "\n  ** because the fit shared its error out among them.")
-          (princ (strcat "\n  ** Nothing was dropped: the layout drawn"
-                         " still honours every dim given.")))
-        (princ "\n  ** Re-measure them before trusting it.")))
-    (princ (strcat "\n  No dim missed by more than " (rtos cst:*flag*)
-                   " - nothing here needs re-measuring.")))
-  (if (> over 1.0e-6)
-    (progn
-      (princ (strcat "\n  ** The constellation runs " (rtos over)
-                     " past the space across its two axes."))
-      (princ "\n  ** It is drawn centred in the space and overhanging it."))
-    (princ "\n  Every point landed inside the space."))
-  (if cross
-    (progn
-      (princ "\n  ** The outline crosses itself, so A, B, C ... is not the")
-      (princ "\n  ** order the dims put the points in - two letters are")
-      (princ "\n  ** most likely swapped on the sheet.")))
-  (princ (strcat "\n  " (itoa n) " points on layer " cst:*point-layer*
-                 " as \"" cst:*point-block* "\" blocks, so ABHD and"))
-  (princ "\n  CABHD will fit a perimeter through them as they stand.")
+  ;; ---- solve, draw, and ask whether it is right -------------------------
+  ;; Round the loop again on a No.  A number typed wrong is the ordinary
+  ;; case, not an exception: the operator cannot tell 24'-6" was meant to
+  ;; be 24'-9" from the chart, but they can tell at a glance from the
+  ;; drawing.  So the drawing IS the check, and it comes away again
+  ;; before the corrected one goes down.
+  (setq happy nil)
+  (while (not happy)
+    (princ "\n\n  Working the positions out...")
+    ;; the shape the dims and arcs want, then the two things distances
+    ;; cannot say: which way round (clockwise, as previewed) and which
+    ;; way up (turned to sit in the space, and among the angles that do,
+    ;; nearest the oval)
+    (setq sol (cst:unmirror
+                (cst:centred (cst:solve n w h chart arcs) n) n)
+          ref (cst:centred (cst:oval n w h) n)
+          ang (cst:bestrot sol ref w h n)
+          pts (cst:place (cst:spin sol ang) base w h n))
+    (cst:draw pts n w h base chart arcs outline)
+    (setq cross (if outline (cst:crossing-p (cal:sublist pts 0 n))))
+    (cst:report pts n w h base chart arcs)
+    (cst:arcreport pts n arcs)
+    (setq wd    (cst:worstdim pts chart)
+          worst (max (cadr wd) (cst:worstarc pts n arcs))
+          rms   (cst:rms pts chart arcs n)
+          over  (cst:overflow (cal:sublist pts 0 n) w h)
+          blame (if (> worst cst:*flag*)
+                  (cst:culprit n w h chart arcs (car wd))))
+    (princ (strcat "\n\n  Worst miss " (rtos worst) ", RMS " (rtos rms)
+                   " over " (itoa (length chart))
+                   (if (= 1 (length chart)) " dim" " dims")
+                   (if arcs
+                     (strcat " and " (itoa (length arcs))
+                             (if (= 1 (length arcs)) " arc." " arcs."))
+                     ".")))
+    (if (> worst cst:*flag*)
+      (progn
+        (princ "\n  ** The starred lines cannot all be true at once.  The")
+        (princ "\n  ** layout misses them by as little as anything can.")
+        (if blame
+          (progn
+            (princ (strcat "\n  ** Leave " (car (car wd)) " out and every"
+                           " other dim settles to within " (rtos blame)
+                           ","))
+            (princ (strcat "\n  ** so " (car (car wd)) " is the one to"
+                           " re-measure - the rest are only wrong"))
+            (princ "\n  ** because the fit shared its error out among them.")
+            (princ (strcat "\n  ** Nothing was dropped: the layout drawn"
+                           " still honours every dim given.")))
+          (princ "\n  ** Re-measure them before trusting it.")))
+      (princ (strcat "\n  Nothing missed by more than " (rtos cst:*flag*)
+                     " - nothing here needs re-measuring.")))
+    (if (> over 1.0e-6)
+      (progn
+        (princ (strcat "\n  ** The constellation runs " (rtos over)
+                       " past the space across its two axes."))
+        (princ "\n  ** It is drawn centred in the space and overhanging it."))
+      (princ "\n  Every point landed inside the space."))
+    (if cross
+      (progn
+        (princ "\n  ** The outline crosses itself, so A, B, C ... is not the")
+        (princ "\n  ** order the dims put the points in - two letters are")
+        (princ "\n  ** most likely swapped on the sheet.")))
+    (princ (strcat "\n  " (itoa n) " points on layer " cst:*point-layer*
+                   " as \"" cst:*point-block* "\" blocks, so ABHD and"))
+    (princ "\n  CABHD will fit a perimeter through them as they stand.")
+    ;; ---- does it look right? -------------------------------------------
+    ;; No default that Enter takes by accident would be safe here: the
+    ;; whole point of the question is that it be looked at.  Yes is the
+    ;; shown default because a run that went well is the common one.
+    (if (cal:askyn "\nDoes the drawing look right?" "Yes" nil)
+      (setq happy T)
+      (progn
+        (cst:undraw)
+        (setq fix (cal:askkw "What needs changing?" "Dims Arcs Both"
+                             "Dims/Arcs/Both" "Dims" nil))
+        (if (member fix '("Dims" "Both"))
+          (progn
+            (setq v (cst:askchart n chart arcs nil))
+            (if (not (eq v 'CAL-BACK)) (setq chart v))))
+        (if (member fix '("Arcs" "Both"))
+          (progn
+            (setq v (cst:askarcs n arcs nil))
+            (if (not (eq v 'CAL-BACK)) (setq arcs v)))))))
   (setq undo-open (cal:undoend))
   (cal:sysrestore)
   (princ))

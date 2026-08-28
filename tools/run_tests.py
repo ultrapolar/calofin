@@ -72,9 +72,17 @@ def run_one(name, tier):
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         code, out = proc.returncode, proc.stdout
     except subprocess.TimeoutExpired as e:
-        # a hang is a failure with a name, not a stuck runner
+        # a hang is a failure with a name, not a stuck runner -- but
+        # TimeoutExpired.stdout comes back as BYTES even under text=True
+        # (the timeout path never decodes it), so concatenating it
+        # straight used to take the whole runner down with a TypeError
+        # and report nothing at all, which is the one thing this branch
+        # exists to prevent
         code = 124
-        out = (e.stdout or "") + "\n[run_tests] killed after 600s"
+        out = e.stdout or b""
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        out += "\n[run_tests] killed after 600s"
     return name, tier, code, time.monotonic() - t0, out
 
 

@@ -130,6 +130,10 @@ TOOLS = {
             'cst:v*': 'cal:v*', 'cst:dot': 'cal:dot',
             'cst:mid': 'cal:mid', 'cst:vlen': 'cal:vlen',
             'cst:d2': 'cal:d2', 'cst:unit': 'cal:unit',
+            'cst:angnorm': 'cal:angnorm',
+            'cst:signed-dang': 'cal:signed-dang',
+            'cst:tan': 'cal:tan',
+            'cst:nthcdr': 'cal:nthcdr', 'cst:sublist': 'cal:sublist',
         },
         'drop_globals': ['cst:*sysold*'],
         # cst:askkw already takes the SHOWN bracket third, like the

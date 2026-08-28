@@ -38,10 +38,64 @@ has to work the positions out.
    What **is** required is two dims on every point, and a chain of dims
    that reaches all of them. Answering `D` short of that is refused by
    name, not solved into a plausible-looking wrong answer.
-5. **Solves, then draws**: an `ab_pt` survey point per letter on
+5. **Takes the arcs.** If a run of points lies on one radius, say so.
+   Cross dims say how far apart things are and nothing about how the
+   wall between them curves, so a radius end can be measured perfectly
+   and still come out as a flat chord. See **Arcs** below.
+6. **Solves, then draws**: an `ab_pt` survey point per letter on
    `POINTS`, one aligned dimension per dim given on `DIMENSION`, the
    space rectangle, and — if you say yes — the outline through the
-   points in label order.
+   points in label order, bending round any arc you declared.
+7. **Asks whether it looks right.** A number typed wrong is the
+   ordinary case, not an exception: you cannot tell 24'-6" was meant to
+   be 24'-9" from the chart, but you can tell at a glance from the
+   drawing. So the drawing *is* the check. Answer `No` and it asks
+   whether the **Dims**, the **Arcs** or **Both** need changing,
+   reopens them, takes the corrected value — a pair or a run given
+   again keeps the second answer — takes the wrong drawing away and
+   puts the right one down. Round again as many times as it takes.
+
+## Arcs
+
+A run of points that lies on one radius. Name it **clockwise**, the way
+the letters were handed out:
+
+| Typed | Reads as |
+| --- | --- |
+| `A-C` | from A clockwise to C, so A, B, C |
+| `ABC` | the same run, spelled out |
+| `AC` | the same again — separators are ignored |
+| `Z-B` | wraps round the end: Z, A, B, **not** B all the way back to Z |
+
+Two letters are a *from* and a *to* with the run between them filled in;
+three or more are taken as named. That is the whole reason the order is
+asked for clockwise — `B-D` and `D-B` are different runs, and the
+letters say which.
+
+**To the solver an arc is just another point.** Its centre joins the
+layout as an extra, unlabelled point with a dim of `R` to every point on
+the arc — which is exactly the shape the sweep already knows how to
+settle, so nothing special had to be built for it. The centre is never
+drawn and never steers the fit: it is left out of the bounding box and
+the clockwise test, because a shallow radius puts its centre further out
+than the pool is long.
+
+**It really does constrain.** Six dims on five points is one short of
+pinning them down, and the three points on the radius end settle at
+R139.6 — wrong, with every dim given still exact. Declare the arc and
+they land on R150.0000. That case is `test_an_arc_pins_what_dims_alone_leave_loose`.
+
+**Three points or more settle their own centre.** A circle of known R
+through three points has exactly one centre, so the solver finds it
+wherever it starts. Two points leave *two* centres, mirror images across
+the chord, and nothing in the distances chooses between them — so a
+two-point run is asked `Does A-B bow out from the shape?` and nothing
+else is.
+
+The arc also **shapes the outline**: the segments it covers are drawn as
+real arcs (polyline bulges), not chords. A run named out of ring order
+still constrains the solve — it is the same circle — but there is no
+outline segment for it to bend, so it bends none.
 
 The whole run is one undo group, and nothing permanent is drawn until it
 finishes: a run backed out of or cancelled leaves the drawing exactly as
@@ -173,7 +227,19 @@ at a different size:
   Two dims fix a point against two others up to a reflection; a shape
   whose dims are that sparse can have more than one solution and this
   command draws one of them. The more cross dims the sheet carries, the
-  less that matters — which is why every pair is on offer.
+  less that matters — which is why every pair is on offer. An arc is
+  another way to buy the same rigidity.
+* **An arc on a chart with slack in it is met, not tested.** Ask for a
+  radius the shape has room to bend to and it bends to it, reporting no
+  miss — the same redundancy argument as a bad tape on a bare-minimum
+  chart. An arc is starred only when the dims leave no room to satisfy
+  it.
+* **Arcs count toward connectivity but not toward the two-dim rule.**
+  Points on one arc really are tied together, through the shared
+  centre, so the arc bridges them for the cut-off check. But an arc
+  alone never pins a point — it slides along the radius — so it does
+  not count as one of the two dims a point needs, and the chart is
+  asked before the arcs are.
 * **A dim of zero is refused.** Two points at the same place are one
   point; `REQ` entry rejects zero and negatives outright.
 * **Dims are weighted equally.** A tape reading is a tape reading;
@@ -205,4 +271,7 @@ down, that handedness comes out clockwise and the fit lands inside the
 space, that a point with one dim and a group dimensioned only to itself
 are both refused **by name**, that dims which cannot all be true are
 starred rather than absorbed and the one bad tape among them is named
-rather than smeared, and that the preview leaves nothing behind.
+rather than smeared, that an arc pins what the dims leave loose and
+bends the outline where it should, that `No` at the end reopens the
+questions and redraws over nothing, and that the preview leaves nothing
+behind.

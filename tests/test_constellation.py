@@ -95,11 +95,29 @@ def feed(have, n):
     return out
 
 
+def arcfeed(arcs):
+    """The arc half of a script.  Each arc is (run-spec, R) or
+    (run-spec, R, bows-out) -- the bow question is only asked of a
+    two-point run, where the two possible centres are mirror images and
+    nothing in the distances chooses between them."""
+    out = []
+    for a in arcs:
+        out.append(a[0])
+        out.append(a[1])
+        if len(a) > 2:
+            out.append("Yes" if a[2] else "No")
+    out.append("")                       # Enter closes the arc list
+    return out
+
+
 def run(shape=RECT, w=360.0, h=240.0, base=(0.0, 0.0), drop=(),
-        given=None, outline="Yes", extra=None):
+        given=None, arcs=(), outline="Yes", confirm="Yes", extra=None,
+        after=None):
     """Drive one whole run.  GIVEN overrides the distances outright;
-    otherwise they are the true distances of SHAPE less DROP.  EXTRA is
-    appended to the script, for the paths that answer more than once."""
+    otherwise they are the true distances of SHAPE less DROP.  EXTRA
+    goes in before the arc list, AFTER goes in after the "does it look
+    right" answer -- CONFIRM "No" reopens the questions, so a run that
+    answers No must say what it does next."""
     n = len(shape)
     have = dict(given) if given else truth(shape)
     for k in drop:
@@ -108,7 +126,10 @@ def run(shape=RECT, w=360.0, h=240.0, base=(0.0, 0.0), drop=(),
     vm.load(LSP)
     script = [w, h, n, [base[0], base[1], 0.0]] + feed(have, n)
     script.extend(extra or [])
+    script += arcfeed(arcs)
     script.append(outline)
+    script.append(confirm)
+    script.extend(after or [])
     vm.run('c:CONSTELLATION', script)
     return vm
 
@@ -148,6 +169,13 @@ def placed(vm):
 
 def said(vm):
     return "".join(str(x) for x in vm.printed)
+
+
+def asked(vm):
+    """Every prompt the run put up.  Kept apart from said(): a getkword
+    prompt never reaches princ, so a question can only be asserted on
+    here and an answer only there."""
+    return "\n".join(str(q) for q, _ in vm.prompts)
 
 
 def shoelace(pts):
@@ -254,7 +282,9 @@ def test_a_point_with_one_dim_will_not_close_the_chart():
     script = [360.0, 240.0, 4, [0.0, 0.0, 0.0]] + feed(thin, 4)
     script += ["C-D", have[(2, 3)],      # give D a second dim
                "D",                      # now accepted
-               "Yes"]
+               "",                       # no arcs
+               "Yes",                    # draw the outline
+               "Yes"]                    # and it looks right
     vm.run('c:CONSTELLATION', script)
     out = said(vm)
     check("the refusal names the point that is short",
@@ -278,7 +308,7 @@ def test_two_groups_that_never_touch_are_refused():
     script = ([600.0, 300.0, 6, [0.0, 0.0, 0.0]]
               + feed({k: all_d[k] for k in keep}, 6))
     script += ["C-D", all_d[(2, 3)],         # bridge the two islands
-               "D", "No"]
+               "D", "", "No", "Yes"]
     vm.run('c:CONSTELLATION', script)
     out = said(vm)
     check("the cut-off group is named", "D, E, and F are only dimensioned"
@@ -393,6 +423,148 @@ def test_cross_dims_lie_on_the_chord_and_perimeter_dims_stand_off():
     check("all four perimeter dims stand off it", off_chord == 4)
 
 
+#: five points with B, C and D sitting on one 150 circle.  Six dims are
+#: given, which is one short of pinning five points down -- so the arc
+#: is what makes the difference, and the difference is measurable.
+ARC_C, ARC_R = (180.0, 120.0), 150.0
+
+
+def on_circle(deg):
+    return (ARC_C[0] + ARC_R * math.cos(math.radians(deg)),
+            ARC_C[1] + ARC_R * math.sin(math.radians(deg)))
+
+
+BOWL = [(30.0, 240.0), on_circle(60), on_circle(0), on_circle(-60),
+        (30.0, 0.0)]
+BOWL_DIMS = [(0, 1), (0, 4), (1, 2), (2, 3), (3, 4), (1, 4)]
+
+
+def circumradius(p, q, r):
+    (ax, ay), (bx, by), (cx, cy) = p, q, r
+    d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay)
+          + (cx * cx + cy * cy) * (ay - by)) / d
+    uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx)
+          + (cx * cx + cy * cy) * (bx - ax)) / d
+    return math.dist((ux, uy), p)
+
+
+def bowl(arcs=(), **kw):
+    only = {k: v for k, v in truth(BOWL).items() if k in BOWL_DIMS}
+    return run(shape=BOWL, w=500.0, h=400.0, given=only, arcs=arcs, **kw)
+
+
+def test_an_arc_pins_what_dims_alone_leave_loose():
+    print("\nan arc constrains the shape where cross dims run out")
+    loose = as_ring(bowl(), 5)
+    tight = as_ring(bowl(arcs=[("B-D", ARC_R)]), 5)
+    r_loose = circumradius(loose[1], loose[2], loose[3])
+    r_tight = circumradius(tight[1], tight[2], tight[3])
+    # six dims on five points is one short of rigid, so B C D are free to
+    # settle on the wrong radius -- and do
+    check("without the arc B C D land off the radius (R %.2f)" % r_loose,
+          abs(r_loose - ARC_R) > 1.0)
+    check("with it declared they land on it exactly (R %.4f)" % r_tight,
+          abs(r_tight - ARC_R) < 0.01)
+    check("and the dims that were given still come back",
+          max(abs(math.dist(tight[i], tight[j]) - d)
+              for (i, j), d in truth(BOWL).items()
+              if (i, j) in BOWL_DIMS) < 0.01)
+
+
+def test_a_run_is_read_clockwise():
+    print("\nA-C, ABC and the wrap D-B all name the run they should")
+    vm = VM()
+    vm.load(LSP)
+    for typed, want in (("A-C", [0, 1, 2]),     # from A clockwise to C
+                        ("ABC", [0, 1, 2]),     # spelled out, same run
+                        ("AC", [0, 1, 2]),      # no separator, same run
+                        ("D-B", [3, 0, 1]),     # wraps: D A B
+                        ("a c", [0, 1, 2])):
+        vm.loads('(setq got (cst:parserun "%s" 4))' % typed)
+        got = [int(x) for x in (vm.get('got') or [])]
+        check('"%s" reads as %s' % (typed, "".join("ABCD"[i] for i in want)),
+              got == want)
+    for bad in ("A", "AA", "AX", "", "12"):
+        vm.loads('(setq got (cst:parserun "%s" 4))' % bad)
+        check('"%s" is refused' % bad, vm.get('got') is None)
+    # the wrap is the whole reason the order is asked for clockwise: B-D
+    # and D-B are DIFFERENT runs, and the letters say which
+    vm.loads('(setq got (cst:parserun "B-D" 4))')
+    check('"B-D" is B C D, not D A B',
+          [int(x) for x in vm.get('got')] == [1, 2, 3])
+
+
+def test_an_arc_that_disagrees_with_the_dims_is_starred():
+    print("\na radius the dims cannot support is reported, not absorbed")
+    # the FULL chart, so the shape is rigid and the arc has nothing to
+    # flex into.  (On the six-dim chart above there is a degree of
+    # freedom left, and the shape obligingly bends to whatever radius is
+    # asked for -- correct, and the same redundancy argument as a bad
+    # tape on a bare-minimum chart.)
+    rigid = run(shape=BOWL, w=500.0, h=400.0,
+                arcs=[("B-D", 260.0)])     # the shape is a 150 radius
+    out = said(rigid)
+    check("the arc gets its own line in the report", "R given" in out
+          and "B-C-D" in out)
+    check("and it is starred", "260.0000" in out and out.count("**") > 0)
+    check("the headline counts the arc alongside the dims",
+          "over 10 dims and 1 arc." in out)
+    check("an arc that fits is not starred at all",
+          "**" not in said(run(shape=BOWL, w=500.0, h=400.0,
+                               arcs=[("B-D", ARC_R)])))
+    check("and a chart with room to flex simply meets the arc instead",
+          "**" not in said(bowl(arcs=[("B-D", 260.0)])))
+
+
+def test_the_outline_bends_round_a_declared_arc():
+    print("\nthe outline runs as an arc where an arc was declared")
+    vm = bowl(arcs=[("B-D", ARC_R)])
+    ring = [e for e in live(vm, 'LWPOLYLINE')
+            if vm.layer_of(e) == 'CONSTELLATION'][0]
+    # group 42 is a bulge on the segment LEAVING that vertex; B and C
+    # each lead into the arc, nothing else does
+    bulged = [g.b for g in vm.entdata[ring]
+              if isinstance(g, Dot) and g.a == 42]
+    check("two segments carry a bulge, B-C and C-D", len(bulged) == 2)
+    check("both bend the same way, and clockwise (negative)",
+          all(b < 0 for b in bulged))
+    # a 60 degree segment of a circle bulges tan(15 deg)
+    want = -math.tan(math.radians(15.0))
+    check("each bulge is the 60-degree one the radius implies",
+          all(abs(b - want) < 0.01 for b in bulged))
+    plain = bowl()
+    flat = [e for e in live(plain, 'LWPOLYLINE')
+            if plain.layer_of(e) == 'CONSTELLATION'][0]
+    check("no arc declared, no bulge anywhere",
+          not [g for g in plain.entdata[flat]
+               if isinstance(g, Dot) and g.a == 42])
+
+
+def test_a_two_point_arc_is_asked_which_way_it_bows():
+    print("\ntwo points and a radius leave two centres - the operator picks")
+    # A-B is one wall of the rectangle; bowing out and bowing in put the
+    # outline's bulge opposite ways round
+    out = run(arcs=[("A-B", 200.0, True)])
+    inn = run(arcs=[("A-B", 200.0, False)])
+
+    def bulge_of(vm):
+        ring = [e for e in live(vm, 'LWPOLYLINE')
+                if vm.layer_of(e) == 'CONSTELLATION'][0]
+        b = [g.b for g in vm.entdata[ring]
+             if isinstance(g, Dot) and g.a == 42]
+        return b[0] if b else 0.0
+    check("bowing out and bowing in are opposite bulges",
+          bulge_of(out) * bulge_of(inn) < 0)
+    check("both are the same size", abs(abs(bulge_of(out))
+                                        - abs(bulge_of(inn))) < 1e-6)
+    check("the question was asked", "bow out from the shape"
+          in asked(out))
+    check("and it is NOT asked of a three-point run",
+          "bow out from the shape"
+          not in asked(bowl(arcs=[("B-D", ARC_R)])))
+
+
 def test_a_pair_can_be_typed_any_way_round():
     print("\nAC, a c, A-C and C-A all name the same pair")
     have = truth(RECT)
@@ -405,7 +577,7 @@ def test_a_pair_can_be_typed_any_way_round():
             script += [text, have[pr]]
         for pr in ((0, 3), (1, 2), (1, 3), (2, 3)):
             script += ["", have[pr]]
-        script += ["No"]
+        script += ["", "No", "Yes"]
         vm.run('c:CONSTELLATION', script)
         check('"%s" reached A-C' % typed,
               "A-C = " in said(vm) and len(placed(vm)) == 4)
@@ -423,7 +595,7 @@ def test_back_blanks_the_last_dim():
               "", have[(0, 2)]]            # the prompt offers A-C again
     for pr in ((0, 3), (1, 2), (1, 3), (2, 3)):
         script += ["", have[pr]]
-    script += ["No"]
+    script += ["", "No", "Yes"]
     vm.run('c:CONSTELLATION', script)
     out = said(vm)
     check("it says what it blanked",
@@ -518,6 +690,63 @@ def test_an_outline_that_crosses_itself_is_reported():
           "The outline crosses itself" not in said(run(shape=BLOB)))
 
 
+def test_a_wrong_number_can_be_put_right_after_seeing_the_drawing():
+    print("\nNo at the end reopens the questions and redraws")
+    have = dict(truth(RECT))
+    have[(0, 1)] = 300.0                  # A-B typed 300 instead of 240
+    vm = run(given=have, confirm="No",
+             after=["Dims",               # the dims are what is wrong
+                    "A-B", 240.0,         # put it right
+                    "D",                  # done
+                    "Yes"])               # now it looks right
+    out = said(vm)
+    check("it asked whether the drawing looked right",
+          "Does the drawing look right? [Yes/No] <Yes>: " in asked(vm))
+    check("and what needed changing",
+          "What needs changing? [Dims/Arcs/Both] <Dims>: " in asked(vm))
+    check("the corrected value is what got drawn",
+          abs(math.dist(as_ring(vm, 4)[0], as_ring(vm, 4)[1]) - 240.0)
+          < 0.01)
+    check("the report ran twice, once per attempt",
+          out.count("Worst miss") == 2)
+    check("the wrong drawing was taken away, not left underneath",
+          len(live(vm, 'INSERT')) == 4
+          and len([e for e in live(vm, 'LWPOLYLINE')]) == 2)
+    check("every entity of the first attempt is deleted",
+          len([e for e in vm.entities if e in vm.deleted
+               and dxf(vm, e, 0) == 'INSERT']) == 4)
+
+
+def test_an_arc_can_be_put_right_the_same_way():
+    print("\nand so can a radius typed wrong")
+    vm = bowl(arcs=[("B-D", 260.0)], confirm="No",
+              after=["Arcs", "B-D", ARC_R, "", "Yes"])
+    ring = as_ring(vm, 5)
+    check("the corrected radius is the one drawn",
+          abs(circumradius(ring[1], ring[2], ring[3]) - ARC_R) < 0.01)
+    check("only the arcs were reopened, not the dims",
+          said(vm).count("Cross dims - name the pair") == 0)
+    check("the arc list was reopened", "Arcs - name the run" in said(vm))
+
+
+def test_the_fix_pass_can_be_backed_out_of_without_emptying_the_chart():
+    print("\nBack at the first dim of a fix pass stops, it does not escape")
+    # on the way through, Back out of an empty chart means going back a
+    # question; on a fix pass there is no question behind it, so it has
+    # to stop rather than hand back a Back nobody can act on
+    vm = run(confirm="No",
+             after=["Dims"] + ["B"] * 6 + ["B", "D"]
+                   + ["", "Yes"] * 0 + ["A-B", 240.0, "A-C", 268.32825,
+                                        "A-D", 120.0, "B-C", 120.0,
+                                        "B-D", 268.32825, "C-D", 240.0,
+                                        "D", "Yes"])
+    out = said(vm)
+    check("it says it is already at the first dimension",
+          "Already at the first dimension." in out)
+    check("and the run still finishes", out.count("Worst miss") == 2
+          and len(placed(vm)) == 4)
+
+
 def test_the_space_rectangle_is_drawn_where_it_was_asked_for():
     print("\nthe space is drawn at the base point, at the size given")
     vm = run(w=300.0, h=200.0, base=(50.0, 25.0))
@@ -559,11 +788,19 @@ def main():
                test_one_aligned_dim_per_dim_given,
                test_a_dim_measures_the_points_it_belongs_to,
                test_cross_dims_lie_on_the_chord_and_perimeter_dims_stand_off,
+               test_an_arc_pins_what_dims_alone_leave_loose,
+               test_a_run_is_read_clockwise,
+               test_an_arc_that_disagrees_with_the_dims_is_starred,
+               test_the_outline_bends_round_a_declared_arc,
+               test_a_two_point_arc_is_asked_which_way_it_bows,
                test_a_pair_can_be_typed_any_way_round,
                test_back_blanks_the_last_dim,
                test_dims_that_cannot_all_be_true_are_starred,
                test_one_bad_tape_is_named_not_smeared,
                test_a_constellation_too_big_for_its_space_is_said_so,
+               test_a_wrong_number_can_be_put_right_after_seeing_the_drawing,
+               test_an_arc_can_be_put_right_the_same_way,
+               test_the_fix_pass_can_be_backed_out_of_without_emptying_the_chart,
                test_the_outline_is_optional,
                test_an_outline_that_crosses_itself_is_reported,
                test_the_space_rectangle_is_drawn_where_it_was_asked_for,
