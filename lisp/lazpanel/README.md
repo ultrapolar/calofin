@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 57 of them across 128 buttons, because the pages come in two kinds
+-- 64 of them across 142 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both.
 
 **The job pages** are what you are actually doing this hour, and each

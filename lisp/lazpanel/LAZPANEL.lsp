@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.8")
+(setq *lazpanel-version* "v2.9")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -140,6 +140,7 @@
     ("ABCDEF"           "Rectangle plot")
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
+    ("ABPCHECK"         "Survey point offsets")
     ("ABFIND"           "A/B stake ties")
     ("ABHD"             "Survey perimeter + bottom")
     ("ABHDCOVER"        "Survey perimeter, no bottom")
@@ -189,6 +190,7 @@
     ("POOL"             "Pool layout")
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
+    ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
@@ -227,6 +229,7 @@
   '(("Pool"
      ("Shape"
       "POOL"
+      "POOLSIDE"
       "LAZFORM"
       "LAZTXT"
       "OASIS"
@@ -321,6 +324,7 @@
       "DIMARCCHECK"
       "ABCURCHECK"
       "ABCURCHECKSCAN"
+      "ABPCHECK"
       "LINCHECK"
       "LINTXTCHK"
       "CCPRECHECK"
@@ -335,6 +339,7 @@
       "SPA"
       "POOL"
       "POOLCOVER"
+      "POOLSIDE"
       "POOLDEMO"
       "OASIS"
       "FITABHD"
@@ -390,6 +395,7 @@
       "DIMSCAN"
       "ABCURCHECK"
       "ABCURCHECKSCAN"
+      "ABPCHECK"
       "LINCHECK"
       "LINFINCHECK"
       "LINFINSCAN"

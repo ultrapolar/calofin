@@ -298,6 +298,37 @@ TOOLS = {
                 ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
         },
     },
+    # POOLSIDE was written against the library from the start: the whole
+    # of its ask layer, its vector helpers and its ensure-layer are
+    # CALOFIN-LIB bodies carried under psd:, so they all come back out
+    # here.  What stays local is the section itself -- the three bottom
+    # tables, the chain resolver and the drawing.
+    'POOLSIDE': {
+        'src': 'lisp/poolside/POOLSIDE.lsp',
+        'swap': {
+            'psd:2d': 'cal:2d', 'psd:v+': 'cal:v+', 'psd:v*': 'cal:v*',
+            'psd:mid': 'cal:mid',
+            'psd:askkw': 'cal:askkw', 'psd:askyn': 'cal:askyn',
+            'psd:osup': 'cal:osup', 'psd:osdown': 'cal:osdown',
+            'psd:syssave': 'cal:syssave',
+            'psd:sysrestore': 'cal:sysrestore',
+            'psd:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': ['psd:*sysold*'],
+        # psd:askkw already takes the SHOWN bracket third, like the
+        # library's, so no bracket translation is needed
+        'askkw_hidden': False,
+        # the Back sentinel travels with the ask helpers, and the sysvar
+        # snapshot global travels with syssave/sysrestore
+        'symbols': {'PSD-BACK': 'CAL-BACK',
+                    'psd:*sysold*': 'cal:*sysold*'},
+        # POOLSIDE reads architectural units for the run, like POOL, and
+        # must put the user's back
+        'expand': {
+            '(cal:syssave)':
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+        },
+    },
     # The chart form is like the panel: it draws its own picture and
     # asks nothing through the library, so its twin is the file plus the
     # shared banner.  Listed so it can never drift.
