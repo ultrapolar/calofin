@@ -288,7 +288,7 @@ everything else releases one file per source.
 
 The palette needs its DLL `NETLOAD`ed on every machine. For a
 button panel with nothing to install, see `lisp/lazpanel/` above:
-`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 62
+`LAZPANEL` is pure AutoLISP, ships inside `LAZPASS.lsp`, covers the 66
 headline drafting commands, and puts its own one-button toolbar on
 screen to open it; the VB palette remains the richer surface (docks,
 stays open while a tool runs, POOL/SPA forms). For forms with nothing

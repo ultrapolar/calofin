@@ -94,6 +94,80 @@ def loader_members(loader=LOADER):
     return re.findall(r'"([^"]+)"', block.group(1))
 
 
+#: The deprecated acady matcher is not part of the toolset -- it matches
+#: drawing geometry, ships no commands anyone types, and is not carried
+#: into shared/.  Every roster reader skips it.
+NOT_A_TOOL = "standards_checker"
+
+#: Satellites: real commands that deliberately carry no panel button.
+#: The first four are name-shaped rules (a tutorial, the drone-height
+#: toolset, a config/setup entry point, or a VER/VERSION/RESCUE sibling
+#: of a command that IS on the panel); the set below is named one by one
+#: because no rule describes them.  DCE is DIMCONTEND's short alias and
+#: STOCKLIST is STOCKCOVER's listing companion -- both reachable without
+#: a button.  LAZPANEL is the panel itself, LAZBUTTON summons its
+#: toolbar, LAZICON reports where the button's picture came from and
+#: LAZPIN edits the pinned row: machinery, not drafting tools.  LAZASCII
+#: is LAZFORM's font probe -- it draws nothing and answers nothing.
+NAMED_SATELLITES = frozenset({
+    "DCE", "STOCKLIST", "LAZPANEL", "LAZBUTTON", "LAZICON", "LAZPIN",
+    "LAZASCII",
+})
+
+
+def census(lisp_dir=LISP_DIR):
+    """Every C: command defined under lisp/, the matcher excluded."""
+    out = set()
+    for p in lsp_files(lisp_dir):
+        if NOT_A_TOOL in p.parts:
+            continue
+        out |= {m.upper() for m in COMMAND.findall(read(p))}
+    return out
+
+
+def held_commands(loader=LOADER, parts=PARTS_DIR):
+    """Commands of every held-back file, read off the loader's list."""
+    out = set()
+    for name in held_back(loader):
+        p = pathlib.Path(parts) / name
+        if p.is_file():
+            out |= {m.upper() for m in COMMAND.findall(read(p))}
+    return out
+
+
+def satellites(all_commands):
+    """Of ALL_COMMANDS, the ones that deliberately carry no button."""
+    out = set(NAMED_SATELLITES) & set(all_commands)
+    for c in all_commands:
+        base = None
+        if c.startswith("TUTORIAL") or c.startswith("DD"):
+            out.add(c)
+        elif c.endswith("-CFG") or c.endswith("-SETUP"):
+            out.add(c)
+        elif c.endswith("VERSION"):
+            base = c[:-len("VERSION")]
+        elif c.endswith("VER"):
+            base = c[:-len("VER")]
+        elif c.endswith("RESCUE"):
+            base = c[:-len("RESCUE")]
+        if base and base in all_commands:
+            out.add(c)
+    return out
+
+
+def headline_commands(lisp_dir=LISP_DIR, loader=LOADER, parts=PARTS_DIR):
+    """The commands that must each carry exactly one panel button.
+
+    Every C: command under lisp/, less the satellites that deliberately
+    have none and less whatever the loader holds back.  This is the one
+    definition of the panel roster: tests/test_lazpanel.py pins the
+    panel against it and tools/check_registry.py repairs against it, so
+    the two cannot disagree about what belongs on the panel.
+    """
+    allc = census(lisp_dir)
+    return allc - satellites(allc) - held_commands(loader, parts)
+
+
 def rev_of(text):
     """The REV a file's own version banner asks to be stamped with."""
     m = VERSION.search(text)

@@ -27,6 +27,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
+import check_registry
 import mirror_shared
 import release_lisp
 from callib import ROOT
@@ -257,6 +258,17 @@ def check_generated(problems):
     problems.extend(build_shared_bundle.check())
 
 
+def check_registrations(problems):
+    """Every place a tool has to be registered, against the tree.
+
+    The panel roster, the job/category placement LAZPANEL's own header
+    promises, and the counts the prose states.  Those counts are the
+    part nothing else can see: they are sentences, and README.md sat on
+    "62 headline drafting commands" against a real 66 because the
+    sentence wraps mid-number and a hand sweep walked past it."""
+    problems.extend(check_registry.check())
+
+
 def check_wip(problems):
     """The bench tier, when it exists: drafts only, nothing stamped."""
     for p in lsp_files(WIP_DIR):
@@ -276,6 +288,7 @@ def main():
     check_release_twins(problems)
     check_bundle_current(problems)
     check_generated(problems)
+    check_registrations(problems)
     check_wip(problems)
 
     tiers = ["lisp/ %d" % len(lsp_files(LISP_DIR)),

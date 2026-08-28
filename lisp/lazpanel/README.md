@@ -4,7 +4,9 @@
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
 -- 66 of them across 146 buttons, because the pages come in two kinds
-and a tool that serves two jobs sits on both.
+and a tool that serves two jobs sits on both. (Both numbers are
+*checked*, not counted by hand: `tools/check_registry.py` computes them
+off the tree and `make check` fails when the prose disagrees.)
 
 **The job pages** are what you are actually doing this hour, and each
 is laid out in **columns that follow the work**: lay the shape out, tie

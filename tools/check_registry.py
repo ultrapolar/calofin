@@ -1,0 +1,394 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Every place a tool has to be registered, checked against the tree.
+
+Adding a tool means writing the tool -- and then remembering four other
+files: a caption and a placement in lisp/lazpanel/LAZPANEL.lsp, a slot
+in shared/parts/CALOFIN-LOADER.lsp, and a row plus two hand-counted
+numbers in README.md.  Forget one and nothing complains until a reader
+notices, because those numbers are prose.
+
+They rot.  README.md said the panel covered 62 headline commands while
+the panel carried 66 -- the sentence wraps mid-number, so a hand sweep
+of the other two occurrences walked straight past it.
+
+So the numbers stop being typed.  This module computes each one from
+the tree and compares; --fix rewrites the digits, inserts a missing
+caption row and a missing Rest-page placement, and then names the
+decisions it will not make for you.
+
+What it deliberately does NOT do:
+
+  * write caption TEXT.  "Pool side view" is editorial.  --fix inserts
+    an empty caption and test_lazpanel.py's `assert all(CAPTIONS...)`
+    refuses to go green until a human fills it in.
+  * choose a category page.  Layout/Points/Dimensions/Checking is a
+    judgement about what a tool IS.  A plausible-but-wrong placement
+    nobody reviews is worse than a loud gap.
+  * choose a job page other than Rest.  Rest is *defined* as the
+    complement of Pool/Cover/Spa, so appending there is arithmetic, not
+    judgement; moving a tool off Rest is judgement.
+
+LAZPANEL.lsp stays a hand-edited lisp/ file: --fix is a codemod over
+it, the way `sed` would be, not a build step.  It has no generated
+region and no marker comments, and nothing here writes to a generated
+tier -- --fix prints the regeneration commands instead of running them.
+"""
+
+import argparse
+import pathlib
+import re
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from callib import (  # noqa: E402
+    LISP_DIR, PARTS_DIR, ROOT, headline_commands, held_back, loader_members,
+    read,
+)
+
+PANEL = LISP_DIR / "lazpanel" / "LAZPANEL.lsp"
+
+#: Captions are one per line, the text aligned to a fixed column so the
+#: table reads as two columns rather than a ragged list.
+CAPTION_COL = 24
+CAPTION_ROW = re.compile(r'^    \("([A-Z0-9_-]+)"\s+"([^"]*)"\)$', re.M)
+
+#: The four job pages.  Rest is the complement of the other three, which
+#: is what lets --fix append to it without making a judgement.
+JOBS = ("Pool", "Cover", "Spa", "Rest")
+CATEGORIES = ("Layout", "Points", "Dimensions", "Checking")
+
+
+# ---------------------------------------------------------------- parsing
+
+def _table_span(src, name):
+    """(start, end) of the body of a top-level (setq lzp:*NAME* '(...))."""
+    m = re.search(r"\(setq lzp:\*" + name + r"\*\s*\n?\s*'\(", src)
+    if not m:
+        return None
+    i = src.index("'(", m.start()) + 1
+    depth, j = 0, i
+    while j < len(src):
+        if src[j] == "(":
+            depth += 1
+        elif src[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return (i, j + 1)
+        j += 1
+    return None
+
+
+def captions(src):
+    """The caption table as {COMMAND: text}, in file order."""
+    span = _table_span(src, "captions")
+    if span is None:
+        return None
+    return dict(CAPTION_ROW.findall(src[span[0]:span[1]]))
+
+
+def _sexp(body):
+    """BODY, an AutoLISP list, as nested Python lists of strings.
+
+    Pages and columns are indistinguishable by indentation -- the first
+    page sits behind the table's own two parens and every later one is
+    flush with the columns -- so the structure has to come from paren
+    depth, not from a line pattern.
+    """
+    stack, cur, i, n = [], [], 0, len(body)
+    while i < n:
+        ch = body[i]
+        if ch == "(":
+            stack.append(cur)
+            cur = []
+        elif ch == ")":
+            if not stack:
+                break
+            done, cur = cur, stack.pop()
+            cur.append(done)
+        elif ch == '"':
+            j = body.index('"', i + 1)
+            cur.append(body[i + 1:j])
+            i = j
+        i += 1
+    return cur[0] if len(cur) == 1 and isinstance(cur[0], list) else cur
+
+
+def pages(src):
+    """{page: {column: [command, ...]}} out of lzp:*groups*."""
+    span = _table_span(src, "groups")
+    if span is None:
+        return None
+    out = {}
+    for page in _sexp(src[span[0]:span[1]]):
+        if not page or not isinstance(page[0], str):
+            continue
+        cols = {}
+        for col in page[1:]:
+            if isinstance(col, list) and col and isinstance(col[0], str):
+                cols[col[0]] = [c for c in col[1:] if isinstance(c, str)]
+        out[page[0]] = cols
+    return out
+
+
+def buttons(src):
+    """Every placement on the panel, repeats and all."""
+    pg = pages(src)
+    if pg is None:
+        return []
+    return [c for cols in pg.values() for names in cols.values()
+            for c in names]
+
+
+def bundle_counts():
+    """(files, commands) the bundle will hold, from the loader's list."""
+    members = loader_members() or []
+    held = set(held_back())
+    files = [m for m in members if m not in held]
+    cmds = set()
+    for name in files:
+        p = PARTS_DIR / name
+        if p.is_file():
+            cmds |= {m.upper() for m in
+                     re.findall(r"^\(defun\s+[cC]:([^\s()]+)", read(p), re.M)}
+    return len(files), len(cmds)
+
+
+# ----------------------------------------------------------------- counts
+
+def derived_counts():
+    """Every number the prose states, computed from the tree."""
+    src = read(PANEL)
+    files, cmds = bundle_counts()
+    return {
+        "headline": len(headline_commands()),
+        "buttons": len(buttons(src)),
+        "bundle_files": files,
+        "bundle_commands": cmds,
+    }
+
+
+def count_rules(n):
+    """(path, regex, expected) for every hand-typed number in the prose.
+
+    Each regex has exactly one group, and it is the digits to compare.
+    A regex that stops matching is a hard error, not a skip: a reworded
+    sentence must not be able to silently drop out of the check.
+    """
+    return [
+        (ROOT / "README.md",
+         r"with the (\d+) headline drafting commands above", n["headline"]),
+        (ROOT / "README.md",
+         r"so (\d+) commands make \d+ buttons", n["headline"]),
+        (ROOT / "README.md",
+         r"so \d+ commands make (\d+) buttons", n["buttons"]),
+        # this one wraps mid-sentence, which is how it rotted unnoticed
+        (ROOT / "README.md",
+         r"covers the (\d+)\s+headline drafting commands", n["headline"]),
+        (LISP_DIR / "lazpanel" / "README.md",
+         r"-- (\d+) of them across \d+ buttons", n["headline"]),
+        (LISP_DIR / "lazpanel" / "README.md",
+         r"-- \d+ of them across (\d+) buttons", n["buttons"]),
+        (ROOT / "shared" / "README.md",
+         r"shared build loaded - (\d+) commands in one session",
+         n["bundle_commands"]),
+        (ROOT / "shared" / "README.md",
+         r"the build as (\d+) separate files", n["bundle_files"]),
+    ]
+
+
+# ----------------------------------------------------------------- checks
+
+def check():
+    """Problems as a list of strings, empty when the tree is in step."""
+    problems = []
+    src = read(PANEL)
+
+    caps = captions(src)
+    pg = pages(src)
+    if caps is None or pg is None:
+        problems.append(
+            "check_registry: cannot read LAZPANEL's roster tables - has "
+            "lzp:*captions* or lzp:*groups* been renamed?")
+        return problems
+
+    placed = set(buttons(src))
+    want = headline_commands()
+
+    for c in sorted(want - placed):
+        problems.append(
+            "%s is a headline command with no panel button - run "
+            "python3 tools/check_registry.py --fix" % c)
+    for c in sorted(placed - want):
+        problems.append(
+            "%s has a panel button but is not a headline command "
+            "(renamed, removed, or newly held back?)" % c)
+    for c in sorted(placed - set(caps)):
+        problems.append("%s has a button but no caption row" % c)
+    for c in sorted(set(caps) - placed):
+        problems.append("%s has a caption row but no button" % c)
+    for c in sorted(c for c, t in caps.items() if not t.strip()):
+        problems.append(
+            "%s has an empty caption - write the words the button shows"
+            % c)
+
+    # LAZPANEL's own header claims every command appears at least twice,
+    # once under a job and once under a category.  Nothing tested it.
+    on_job = {c for p in JOBS for names in pg.get(p, {}).values()
+              for c in names}
+    on_cat = {c for p in CATEGORIES for names in pg.get(p, {}).values()
+              for c in names}
+    for c in sorted(placed - on_job):
+        problems.append("%s is on no job page (%s)" % (c, "/".join(JOBS)))
+    for c in sorted(placed - on_cat):
+        problems.append(
+            "%s is on no category page - pick one of %s; --fix will not "
+            "guess which" % (c, "/".join(CATEGORIES)))
+
+    n = derived_counts()
+    for path, rx, expected in count_rules(n):
+        body = read(path)
+        m = re.search(rx, body)
+        rel = path.relative_to(ROOT)
+        if not m:
+            problems.append(
+                "%s: the sentence matching /%s/ is gone - the count it "
+                "carried is no longer checked; restore it or update "
+                "tools/check_registry.py" % (rel, rx))
+        elif int(m.group(1)) != expected:
+            problems.append(
+                "%s says %s where the tree gives %d (/%s/) - run "
+                "python3 tools/check_registry.py --fix"
+                % (rel, m.group(1), expected, rx))
+    return problems
+
+
+# -------------------------------------------------------------------- fix
+
+def _insert_caption(src, cmd):
+    """A blank caption row for CMD, alphabetically placed."""
+    span = _table_span(src, "captions")
+    rows = [(m.group(1), m.start(), m.end())
+            for m in CAPTION_ROW.finditer(src[span[0]:span[1]])]
+    pad = " " * max(1, CAPTION_COL - (5 + len(cmd) + 2))
+    line = '    ("%s"%s"")\n' % (cmd, pad)
+    at = None
+    for name, start, _end in rows:
+        if name > cmd:
+            at = span[0] + start
+            break
+    if at is None and rows:
+        at = span[0] + rows[-1][2] + 1
+    return src[:at] + line + src[at:]
+
+
+def _append_to_rest(src, cmd):
+    """Put CMD at the end of the Rest page's single column."""
+    span = _table_span(src, "groups")
+    body = src[span[0]:span[1]]
+    m = re.search(r'^\s{5}\("Rest"\n\s{5}\(""\n', body, re.M)
+    if not m:
+        return src
+    i = m.end()
+    last = i
+    for line in body[i:].split("\n"):
+        if re.match(r'^\s{6}"[A-Z0-9_-]+"\s*$', line):
+            last += len(line) + 1
+        else:
+            break
+    return (src[:span[0] + last] + '      "%s"\n' % cmd
+            + src[span[0] + last:])
+
+
+def _bump_minor(src):
+    m = re.search(r'\(setq \*lazpanel-version\* "v(\d+)\.(\d+)"\)', src)
+    if not m:
+        return src, None
+    new = "v%s.%d" % (m.group(1), int(m.group(2)) + 1)
+    return (src[:m.start()] + '(setq *lazpanel-version* "%s")' % new
+            + src[m.end():], new)
+
+
+def fix():
+    """Repair what is deterministic; report what is not.  Returns 0/1."""
+    src = read(PANEL)
+    original = src
+    caps = captions(src) or {}
+    placed = set(buttons(src))
+    want = headline_commands()
+
+    added = []
+    for cmd in sorted(want - placed):
+        if cmd not in caps:
+            src = _insert_caption(src, cmd)
+        src = _append_to_rest(src, cmd)
+        added.append(cmd)
+
+    touched_panel = src != original
+    if touched_panel:
+        src, newver = _bump_minor(src)
+        PANEL.write_text(src, encoding="utf-8")
+        print("LAZPANEL.lsp: added %d command(s): %s"
+              % (len(added), ", ".join(added)))
+        if newver:
+            print("LAZPANEL.lsp: version bumped to %s" % newver)
+
+    # the counts, rewritten in place
+    n = derived_counts()
+    if touched_panel:
+        n = derived_counts()
+    fixed = 0
+    for path, rx, expected in count_rules(n):
+        body = read(path)
+        m = re.search(rx, body)
+        if not m or int(m.group(1)) == expected:
+            continue
+        s, e = m.span(1)
+        path.write_text(body[:s] + str(expected) + body[e:], encoding="utf-8")
+        print("%s: %s -> %d" % (path.relative_to(ROOT), m.group(1), expected))
+        fixed += 1
+
+    left = check()
+    if added:
+        print("\nDecisions --fix will not make for you:")
+        for cmd in added:
+            print("  %s: write its caption, and put it on a category page "
+                  "(%s); move it off Rest if it belongs to a job."
+                  % (cmd, "/".join(CATEGORIES)))
+    if touched_panel:
+        print("\nNow regenerate:")
+        print("  python3 tools/mirror_shared.py LAZPANEL")
+        print("  python3 tools/release_lisp.py")
+        print("  python3 tools/build_shared_bundle.py")
+    if not added and not fixed:
+        print("check_registry: nothing to fix")
+    if left:
+        print("\nStill outstanding:")
+        for p in left:
+            print("  - %s" % p)
+        return 1
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--fix", action="store_true",
+                    help="repair what is deterministic, report the rest")
+    args = ap.parse_args()
+    if args.fix:
+        return fix()
+    problems = check()
+    if problems:
+        print("check_registry: %d problem(s):" % len(problems))
+        for p in problems:
+            print("  - %s" % p)
+        return 1
+    n = derived_counts()
+    print("check_registry: %d headline commands over %d buttons, "
+          "%d counts in step"
+          % (n["headline"], n["buttons"], len(count_rules(n))))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

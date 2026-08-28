@@ -43,16 +43,14 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 from lispvm import VM, LispError  # noqa: E402
+import callib  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
 LSP = os.path.join(REPO, 'lisp', 'lazpanel', 'LAZPANEL.lsp')
 LOADER = os.path.join(REPO, 'shared', 'parts', 'CALOFIN-LOADER.lsp')
-PARTS = os.path.join(REPO, 'shared', 'parts')
-
-CMD_RE = re.compile(r'^\(defun\s+[cC]:([^\s()]+)', re.M)
-HELD_RE = re.compile(r'\("([^"]+)"\s*\.\s*"(?:WIP|OMITTED)"\)')
 
 
 def fresh():
@@ -78,30 +76,11 @@ def roster(vm):
     return out
 
 
-def census():
-    """Every C: command defined under lisp/, standards_checker excluded
-    (the deprecated acady matcher is not part of the toolset)."""
-    out = set()
-    lisp_dir = os.path.join(REPO, 'lisp')
-    for dirpath, _dirnames, filenames in os.walk(lisp_dir):
-        if 'standards_checker' in dirpath.split(os.sep):
-            continue
-        for fn in filenames:
-            if fn.lower().endswith('.lsp'):
-                with open(os.path.join(dirpath, fn)) as fh:
-                    out |= {m.upper() for m in CMD_RE.findall(fh.read())}
-    return out
-
-
-def held_commands():
-    """Commands of every held-back file, read off the loader's list."""
-    with open(LOADER) as fh:
-        held_files = HELD_RE.findall(fh.read())
-    out = set()
-    for name in held_files:
-        with open(os.path.join(PARTS, name)) as fh:
-            out |= {m.upper() for m in CMD_RE.findall(fh.read())}
-    return out
+# The roster rule -- what a command is, which ones are satellites, what
+# the loader holds back -- lives in tools/callib.py so that this test and
+# tools/check_registry.py cannot disagree about what belongs on the panel.
+census = callib.census
+held_commands = callib.held_commands
 
 
 print("== the file loads and announces itself ==")
@@ -153,31 +132,7 @@ missing_from_tree = [c for c in PANEL if c not in ALL]
 assert not missing_from_tree, (
     "buttons for commands that do not exist: %r" % missing_from_tree)
 
-satellites = set()
-for c in ALL:
-    base = None
-    if c.startswith('TUTORIAL') or c.startswith('DD'):
-        satellites.add(c)
-    elif c.endswith('-CFG') or c.endswith('-SETUP'):
-        satellites.add(c)
-    elif c.endswith('VERSION'):
-        base = c[:-len('VERSION')]
-    elif c.endswith('VER'):
-        base = c[:-len('VER')]
-    elif c.endswith('RESCUE'):
-        base = c[:-len('RESCUE')]
-    if base and base in ALL:
-        satellites.add(c)
-# DCE is DIMCONTEND's short alias; STOCKLIST is STOCKCOVER's listing
-# companion -- both reachable, neither needs its own button.  LAZPANEL
-# is the panel itself, LAZBUTTON its toolbar summoner, LAZICON the
-# diagnostic that reports where the button's picture came from, and
-# LAZPIN the pin editor the Pin... button already opens: none of the
-# four is a drafting tool, so none belongs on the panel.
-# LAZASCII is LAZFORM's font probe -- it draws nothing and answers
-# nothing, it exists to be looked at once -- so it is machinery too.
-satellites |= {'DCE', 'STOCKLIST', 'LAZPANEL', 'LAZBUTTON', 'LAZICON',
-               'LAZPIN', 'LAZASCII'}
+satellites = callib.satellites(ALL)
 
 headline = ALL - satellites - HELD
 assert headline == set(PANEL), (

@@ -147,6 +147,30 @@ In order, in one commit:
 Never hand-edit `releases/` or `shared/LAZPASS.lsp` — both are
 regenerated and your edit will vanish.
 
+### Adding or removing a command
+
+A tool is not finished when it draws. It has to be *registered*: a
+caption and a placement in `lisp/lazpanel/LAZPANEL.lsp`, a slot in
+`shared/parts/CALOFIN-LOADER.lsp`, a row in `README.md`, and four
+numbers in prose that all change when the roster does.
+
+Do not do that by hand. Run:
+
+```
+python3 tools/check_registry.py --fix
+```
+
+It inserts the caption row and a `Rest`-page placement, rewrites every
+derived count, bumps LAZPANEL's banner, and then **names the two things
+it will not decide for you**: the caption text, and which category page
+(`Layout`/`Points`/`Dimensions`/`Checking`) the tool belongs on. Write
+those two and re-run it. `make check` runs the same check, so a
+half-registered tool cannot pass.
+
+`LAZPANEL.lsp` stays a hand-edited `lisp/` file — `--fix` is a codemod
+over it, not a build step, and it prints the regeneration commands
+rather than running them so it never writes to a generated tier.
+
 `check_standards.py` compares the two version banners, so a twin left
 behind while `lisp/` moved on now fails the check instead of passing it
 quietly. That drift is not theoretical: `shared/parts/SPA.lsp` sat two
@@ -165,6 +189,10 @@ python3 tools/check_lisp.py [f]  # parens, arity, stray top-level atoms,
 python3 tools/check_scope.py [f] # locals used without being declared
                                  # (tools/scope_baseline.txt holds the
                                  # accepted module globals)
+python3 tools/check_registry.py  # every tool registered everywhere it has
+                    [--fix]      # to be, and every count in the prose
+                                 # computed rather than typed; --fix
+                                 # repairs what is not editorial
 make check                       # all of the above in one go
 ```
 
