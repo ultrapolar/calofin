@@ -905,7 +905,23 @@ def _rtos(vm, a):
     return f"{v:.{prec}f}"
 
 
-BUILTINS[Sym('angtos')] = lambda vm, a: f"{num(a[0]):.6f}"
+def _angtos(vm, a):
+    """(angtos ang [mode [prec]]) -- an angle in radians as a string.
+    Mode 0 is AutoLISP's default and the only one anything here asks
+    for: decimal DEGREES, which is also what the commands that read an
+    angle back -- DIMLINEAR's Rotated option, say -- expect.  Mode 3 is
+    radians; the surveyor / grad / deg-min-sec spellings are not
+    modelled, and come out as decimal degrees too.
+    """
+    mode = int(num(a[1])) if len(a) > 1 else 0
+    prec = int(num(a[2])) if len(a) > 2 else 4
+    v = num(a[0])
+    if mode == 3:                       # radians, spelled as such
+        return f"{v:.{prec}f}r"
+    return f"{math.degrees(v) % 360.0:.{prec}f}"
+
+
+BUILTINS[Sym('angtos')] = _angtos
 
 # io
 def _princ(vm, a):
@@ -1257,6 +1273,19 @@ def _trans(vm, a):
     return list(pt(a[0]))
 
 
+def _dimrot_angle(a):
+    """The angle, in radians, of a DIMLINEAR "_R" (Rotated) call --
+    None when the call is not a rotated one.  The angle follows the
+    keyword as a string, in degrees, exactly as angtos writes it."""
+    for i, x in enumerate(a[:-1]):
+        if isinstance(x, str) and x.upper().lstrip('_') in ('R', 'ROTATED'):
+            try:
+                return math.radians(float(a[i + 1]))
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 # command + input
 @bi('command')
 def _command(vm, a):
@@ -1313,8 +1342,16 @@ def _command(vm, a):
                           if isinstance(x, str)} & {'V', 'H',
                                                     'VERTICAL',
                                                     'HORIZONTAL'}
+                rot = _dimrot_angle(a)
                 if forced:
                     meas = dy if forced & {'V', 'VERTICAL'} else dx
+                elif rot is not None:
+                    # "_R <angle>" turns the dimension line to that
+                    # angle; a rotated dim measures the span PROJECTED
+                    # onto it, which is how a dim hooked to two points
+                    # off the wall still reads the wall's full run
+                    meas = abs((p2[0] - p1[0]) * math.cos(rot) +
+                               (p2[1] - p1[1]) * math.sin(rot))
                 else:
                     # the dim line stands off along whichever axis
                     # separates it from the points; it measures across

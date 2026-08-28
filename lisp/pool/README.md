@@ -188,12 +188,41 @@ question is asked.
 
 **Perimeter dims** (per the reference drawing): a rectangle gets
 just **two** perimeter dimensions — the **northern** dim (overall
-length) and the **western** dim (overall width) — drawn as rotated
-linear dims whose extension lines hook to **points on the object**:
-the top endpoints of the two side walls and the left endpoints of the
-top/bottom walls (the arc-tangent / cut-face ends when corners are
-cut). No floating true-corner extension lines. All four sides still
+length) and the **western** dim (overall width). All four sides still
 appear in the report table.
+
+<a id="wall-dims-attach"></a>
+**Wall dims attach to the pool.** A treated corner is no longer *on*
+the pool: round `B` off and the true corner sits out in space past the
+fillet, so a side dim taken to it hangs its extension line on that
+hypothetical point instead of on the drawing. Every dim that measures
+a **drawn wall** — the rectangle's two, every L / Lazy L side, the
+Grecian's edges, the Roman's top and bottom — slides its extension
+line origin down to where it meets the pool: the arc tangent at a
+square corner, a point part-way round the arc at a `135°` bend, the
+cut face where the corner is chamfered.
+
+The **number does not change**. It is still the true corner-to-corner
+run — what was taped, what the report lists, what the builder sets out
+to — because a dim measures along its own direction and every point on
+an extension line reads the same. Where a treatment has moved an
+origin the dim comes out as a **rotated** linear dim along the wall, to
+say so; a wall with two square corners is drawn exactly as before.
+
+A corner **under 90°** pokes out past its own treatment, so the drawn
+edge near it does not start until a little way up the wall. Both ends
+move up there together, and the dim still reads the full run — except
+that the blunter corner opposite cannot always reach quite as far, so
+the two split what is left between them. `pool:*hookslack*` caps what
+that costs at **1/16"**, under what a tape can read: a pool built a
+quarter-degree off square (an in-square L dumping its closure error
+into one bend) pays a thousandth of an inch. A **genuinely sharp**
+corner misses by inches, blows the budget, and keeps the true corners —
+the rule is *whenever possible*, not always.
+
+It applies to **walls only**: overalls, tip-to-tip dims, the dashed end
+chords and the cross dims still read the true corners, since those are
+references across the pool rather than along an edge.
 
 **In-square exterior dims follow the field sheets** for the other
 shapes too — each letter is dimensioned exactly where (and exactly as
@@ -519,7 +548,9 @@ The `S1` stubs then spring from the **treatment ends** rather than the
 sharp corners behind them, so a rounded corner shortens its stub
 instead of hanging off it. Sizes are capped at half the side **and at
 the `S1` corner drop**, so a treatment can never run past the arc
-spring below it. Side dims still read to the TRUE corners; the drawing
+spring below it. Side dims still measure to the TRUE corners, hanging
+off the drawn wall to do it
+([Wall dims attach to the pool](#wall-dims-attach)); the drawing
 gets one `Typ.` callout in square (and out of square too, when Enter
 reused one answer all the way round), otherwise a radius or face dim
 per treated corner. The report lists the sizes.
@@ -663,8 +694,10 @@ angles — the same reason the L fits first (see below).
 Perimeter walls are drawn between the treatment ends with an arc or
 cut face closing each corner; the two dashed **internal end
 chords** `A-D` and `B-C` stay on the true corners, since they are
-construction lines rather than walls. Edge dims still read to the TRUE
-corners. The drawing gets one `Typ.` callout per family in square
+construction lines rather than walls. Edge dims still *measure* to the
+TRUE corners, hanging off the drawn wall to do it (see
+[Wall dims attach to the pool](#wall-dims-attach)).
+The drawing gets one `Typ.` callout per family in square
 (and one for the whole ring when every answer came back the same),
 otherwise a radius or face dim per treated corner; the report lists
 `BODY CORNER` / `END TIP` sizes in square and per-corner sizes out.
@@ -706,7 +739,9 @@ separately, since it is typically different — Enter reuses the outer
 answer. Sizes are capped so treatments can never overlap and fold a
 wall, the cuts are drawn exactly like the rectangle's (fillet arcs /
 cut faces, correct at the 45° bend corners and at the reflex
-inner corner), side dims still read to the TRUE corners, and the
+inner corner), side dims still measure to the TRUE corners while
+hanging off the drawn wall rather than the hypothetical point behind a
+rounded bend ([Wall dims attach to the pool](#wall-dims-attach)), and the
 drawing gets one `Typ.` callout on an outer corner plus the inner
 corner's own radius/face dim. The report lists both sizes.
 
