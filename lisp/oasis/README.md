@@ -388,10 +388,14 @@ computed closed and drawn closed.
    | `OASIS` | Draw a continuous-tangent pool |
    | `OASISVER` | Print the version |
 
+Or fill the shape's chart in instead: `LAZFORM` carries a sheet for
+every one of the five families, and Insert runs `OASIS` with what you
+typed. See **Answers from a form** below.
+
 ### The questions
 
 ```
-Which shape is it? [Center/TopRight/CLoud/Kidney] <Center>:
+Which shape is it? [Center/TopRight/CLoud/Kidney/NXTcloud] <Center>:
 Simple or complex? [Simple/Complex/Back] <Simple>:
 Insertion base point <0,0> [Back]:
 X - overall left-to-right bounds [Back]:
@@ -520,6 +524,57 @@ Top-center radius [Back]: 27'
 Bottom-center tangent radius [Back]: 4'
 ```
 
+## Answers from a form
+
+A form — `LAZFORM`'s oasis sheets, or anything else that can build the
+alist — can answer some or all of these questions before the run
+starts. It leaves them in `oasis:*form*` as `(key . value)` and the ask
+helpers look there first, so a filled-in sheet drives the whole run and
+a half-filled one simply shortens it. Same contract POOL and SPA carry:
+
+| In the store | What OASIS does |
+| --- | --- |
+| the key is absent | asks the question as usual |
+| `(rl . 96.0)` | takes the measurement, no prompt |
+
+One slot per question, named after the answer it fills:
+
+| Key | The question |
+| --- | --- |
+| `shape` | which family — `Center`, `TopRight`, `Cloud`, `Kidney`, `NXTcloud` |
+| `sub` | a cloud's bottom (`Straight`/`Rounded`), a kidney's type (`True`/`Asymmetric`) |
+| `detail` | `Simple` or `Complex` |
+| `x`, `y` | the envelope |
+| `rl`, `rt`, `rr` | the three bulges — the three lobes on a NXT cloud |
+| `ftl`, `ftr`, `fbc`, `fbr` | the joiners; a joiner may also be answered `"Line"` on a complex run |
+| `off` | how far a Center pool's hump is off centre, signed |
+
+The base point is not among them, and neither is the pool-bottom gate
+at the end: both are picked in the drawing, which is where a form has
+nothing to say.
+
+**An answer is removed as it is used** — not marked used, removed. Two
+things depend on it. `Back` would otherwise deadlock: step back onto a
+form-answered question, it answers itself instantly and walks forward
+again, and there is no key you could press to get out. And every check
+in the ask layer re-asks on a value it refuses — a bulge that breaks
+out of the envelope, a tangent radius too short to span its two bulges
+— so the second pass has to find the store empty and let you type the
+correction, rather than being re-fed the same bad number for ever.
+
+**Nothing gets in that could not have been typed.** A distance goes
+through the same rules `initget` puts on the prompt (no negative
+anywhere, no zero except where zero is an answer) and a keyword through
+the very list the prompt offers. That is also what keeps `NA` off a
+question that must have an answer: OASIS asks for every measurement as
+*required*, so a form's `nil` is demoted to an unanswered box and asked
+for rather than handed to arithmetic.
+
+`oasis:run-with-answers` is the entry point; a caller may equally set
+`oasis:*form*` and call `c:OASIS`, which is what the tests do. Either
+way the store is cleared on the way out — including out through `Esc`,
+so a run cut short leaves nothing behind for the next one.
+
 ## Tunables
 
 `setq` these after loading (in a startup file, say) when a drawing
@@ -646,6 +701,14 @@ away.
   **AutoCAD LT has no LISP engine and cannot run this file.**
 
 ## Tests
+
+`tests/test_oasis_form.py` covers the form contract: all six rings
+drawn off a filled-in sheet and matched entity for entity against the
+typed run, a half-filled sheet asking only for the gaps, `Back` not
+deadlocking on a form-answered question, and what a sheet may not
+smuggle past a check — an over-size bulge, an `NA` on a required
+measurement, a zero, a negative, and a keyword the question never
+offered, each refused and asked for instead.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted

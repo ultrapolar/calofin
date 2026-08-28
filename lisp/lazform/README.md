@@ -2,18 +2,24 @@
 
 ## What it does
 
-`LAZFORM` puts the chart on screen the way it looks on paper -- and the
-horizontal dimension rows of that chart **are rows of real textboxes**:
-the drawing is cut into bands at the heights where B, T, S, W and the
-H-G-F-E chain run, and those rows carry edit boxes pushed to their
-letters' positions. You type where the chart says the measurement
-lives. The vertical dimensions (A, M, L, K, S1, V) cannot stand in a
-row, so they keep boxes in the side column, labelled with their
-letters, and what you type there is drawn onto the chart in the
-letter's place.
+`LAZFORM` puts the chart on screen the way it looks on paper, and
+**every dimension on it has a labelled box in the column beside it**,
+with its letter as a button in front of the box. The picture is read;
+the column is typed into; the letter is what ties the two together.
+Type a number and the letter it answers is replaced on the drawing by
+what you typed -- which is what the letter was standing in for all
+along.
 
-Fill in what you know, leave the rest blank, press **Insert**: `POOL`
-runs and asks only for the gaps.
+Fill in what you know, leave the rest blank, press **Insert**: the
+routine runs and asks only for the gaps.
+
+**Two routines are fed from here.** Which one is a property of the
+page, so a tab is all there is to it:
+
+| Sheets | Routine |
+| --- | --- |
+| Rectangle, True Oval, Roman, both Grecians, True L Left, Round, Octagon | `POOL` |
+| Oasis Center, Top-Right, Cloud, Kidney, NXT Cloud | `OASIS` |
 
 | In a box | On the wire | What POOL does |
 | --- | --- | --- |
@@ -25,7 +31,7 @@ A typo counts as an empty box on purpose: something that is neither `NA`
 nor a distance AutoCAD can read leaves POOL asking, rather than quietly
 feeding it a nil that means something else entirely.
 
-A **tab strip** across the top switches charts. Eight are drawn, on two rows -- eight keys on one line run about 94 character cells against a budget of 90, which is a dialog that does not open, so they wrap:
+A **tab strip** across the top switches charts. Thirteen are drawn, wrapped onto rows no wider than the budget -- eight keys on one line already ran about 94 character cells against a budget of 90, which is a dialog that does not open:
 
 | Chart | POOL shape | Letters on the picture | Also in the column |
 | --- | --- | --- | --- |
@@ -37,6 +43,11 @@ A **tab strip** across the top switches charts. Eight are drawn, on two rows -- 
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K | 2 corner rows, 9 diagonals, `mirror` |
 | `ROUnd` | ROUnd | B A W (H G F E M L K in the list) | Sport chain, T check |
 | `OCtagon` | OCtagon | B S T A S1 V H G F E M L K (S2 in the list) | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
+| `OACenter` | OASIS Center | X Y L T R TL TR BC | `detail`, and `off` in the column |
+| `OATopRight` | OASIS TopRight | X Y L T R TL RS BC | `detail` |
+| `OACloud` | OASIS Cloud | X Y R T B | `sub` (Straight/Rounded), `detail` |
+| `OAKidney` | OASIS Kidney | X Y L R TC BC | `sub` (True/Asymmetric), `detail` |
+| `OANXT` | OASIS NXTcloud | X Y TL CE RI LB RB RT LT | `detail` |
 
 Under the picture each sheet carries the boxes that have no place on a
 plan view -- the depths, the radii, the check dimensions, the **Sport
@@ -61,6 +72,15 @@ and nothing said so. Three things on the page decide, not one:
 set -- one function, two callers -- so the page cannot grey a box and
 then send what is in it, or send a box it has greyed. The test suite
 asserts that identity directly, over a table of page states.
+
+**The oasis sheets read the same way off their own dropdowns.** There
+the rule is written the other way round -- `lzf:*oaslive*` names what
+each shape *does* ask for in each state, and everything else on the
+sheet is dead -- but it goes through the same `lzf:dead`, so a cloud's
+pinned left bulge, the kidney radius the other kidney derives and a
+hump offset on a simple run are all greyed and withheld for the reason
+a Normal hopper's `C` is: OASIS will never ask, so a number typed into
+one would be read by nothing.
 
 ### By bottom type
 
@@ -131,13 +151,11 @@ Two things about it are worth knowing:
   through the middle. The first draft measured them at the hopper's
   own x and the chain-closure test caught it: 460 against an `A` of
   500.
-- **`H G F E` are answered in the list, not on the drawing.** A wedge
-  box is its letter plus ten cells, so four of them need 44 of the
-  chart's 52 -- and a round pool spans about 31. On the rectangle that
-  chain runs the full width and just fits; on a circle it cannot, and
-  forcing it puts boxes nowhere near the letters they belong to. Every
-  dimension is still enterable; only the position of four boxes
-  differs.
+- **`H G F E` are in the column with everything else**, and the letters
+  sit on the drawing where the chain runs. This is the sheet the old
+  wedge-row layout fitted worst: a wedge box was its letter plus ten
+  character cells, so four of them needed 44 of the chart's 52 while a
+  round pool spans about 31.
 
 ## Cross dims
 
@@ -230,9 +248,16 @@ screen.
 ## Install & run
 
 APPLOAD `LAZFORM.lsp` **and** `lisp/pool/POOL.LSP`, or load
-`shared/LAZPASS.lsp`, which carries both. `LAZFORM` says so plainly if
-POOL is not in the session rather than opening a form whose Insert
-button could only fail. `LAZFORMVER` prints the loaded version.
+`shared/LAZPASS.lsp`, which carries the lot. `LAZFORM` says so plainly
+if POOL is not in the session rather than opening a form whose Insert
+button could only fail -- POOL and not OASIS, because POOL is what the
+greying rules are read out of (`pool:btmspec`), so without it not even
+a rectangle sheet greys honestly.
+
+The oasis sheets need `lisp/oasis/OASIS.lsp` as well, and say so on
+Insert if it is missing rather than at the door: the POOL sheets are
+perfectly usable without it. `LAZFORMVER` prints the loaded version and
+how many of the charts are oasis ones.
 
 ## Why the boxes are beside the picture and not on it
 
@@ -248,14 +273,22 @@ the numbers appear on it as they are typed -- which recovers most of
 what a box sitting on the artwork would have given, with nothing to
 install.
 
-Why bands and not the drawing as one background with boxes floated on
-it: DCL has no z-order at all -- no tile may overlap any other tile, so
-there is no "behind" to put a drawing in. Cutting the chart where its
-dimension rows run is the closest the language comes, and it is honest
-about two costs: the bands are separated by strips of dialog
-background, and box positions are in character cells, so a box lands
-within a cell or so of its letter and chains pack shoulder to
-shoulder.
+There is no z-order in DCL either -- no tile may overlap any other, so
+there is no "behind" to put a drawing in.
+
+**v1.6 to v2.5 tried the nearest thing the language allows** and it is
+worth writing down why it was undone. The chart was cut into
+horizontal bands at the heights where its dimension rows ran, and
+those rows were rows of real edit boxes wedged between the bands: B
+typed on the B line, the H-G-F-E chain four boxes running across the
+pool. It cost more than it bought. The picture came apart into strips
+separated by dialog background. Box positions are in character cells,
+so a box only ever landed *within a cell or so* of its letter, and
+chains packed shoulder to shoulder. And a sheet read as two different
+kinds of thing at once: some letters answered on the drawing, the rest
+in a list. One picture and one column is the plainer arrangement, and
+it is the one that scales to a sheet whose measurements are radii
+rather than a chain.
 
 An earlier version also let you click the picture to jump to a box, via
 an `image_button`. That had to go, and the reason is worth writing down
@@ -293,12 +326,23 @@ The arrow, the letter and the typed value all come off the dimension's
 two endpoints, so there is no separate position table that could fall
 out of step with the drawing.
 
+A dimension's **side** says which way it runs and so where its text
+sits:
+
+| Side | What it is |
+| --- | --- |
+| `"h"` | runs across; an arrowhead at each end, the letter above the line |
+| `"v"` | runs up; an arrowhead at each end, the letter at the top of the span |
+| `"p"` | a **leader**: `(x1 y1)` is the point on the outline it names, `(x2 y2)` is where the letter goes, and the line between them is all of it |
+
+`"p"` exists for the oasis sheets, where a joiner's radius runs at
+whatever angle the tangency puts it and has no square run to lie along.
+
 Everything else the sheet needs is a row in a table beside it, keyed by
 the chart's name, so a new shape never means new code:
 
 | Table | What it carries |
 | --- | --- |
-| `lzf:*cuts*` | the heights where the drawing is cut for a wedge row |
 | `lzf:*cross*` | the cross dims / diagonals, as `(key label)` |
 | `lzf:*picks*` | the keyword dropdowns, as `(key label section (choice …))` -- section `"cross"` ties it to the cross dims, `"run"` puts it with the toggle |
 | `lzf:*corners*` | the corner rows, as `(stem label (in-square stem …) (out-of-square stem …))` |
@@ -306,15 +350,20 @@ the chart's name, so a new shape never means new code:
 | `lzf:*crecharts*` | the shapes whose corner questions sit behind a yes/no gate |
 | `lzf:*nobtype*` | the shapes POOL asks no bottom type on |
 | `lzf:*hints*` | a second line under the form, when a page has something of its own to explain |
+| `lzf:*oaslive*` | for an oasis sheet: which routine it feeds, and which keys that shape asks for in each state of its dropdowns |
+| `lzf:*oasart*` | for an oasis sheet: the `oasis:solve` arguments its picture was built from, and the box it was scaled into |
 
 ## Assumptions
 
 - POOL is loaded, and its answer store (`pool:*form*`,
   `pool:run-with-answers`) is the receiving end -- see `lisp/pool/`.
+  The oasis sheets need OASIS and its own store (`oasis:*form*`,
+  `oasis:run-with-answers`) the same way -- see `lisp/oasis/`.
 - The system temp folder is writable; the dialog is written there at run
   time and deleted when it closes.
-- The chart's keys are POOL's keys. `tests/test_lazform.py` checks every
-  one of them against the item lists in `POOL.LSP`, so a key POOL does
+- The chart's keys are the routine's keys. `tests/test_lazform.py`
+  checks every one of them against the item lists in `POOL.LSP`, and
+  every oasis key against `oasis:*fkeys*`, so a key the routine does
   not ask for fails the suite instead of being typed into and dropped.
 
 ## Notes & limitations
@@ -359,6 +408,53 @@ the chart's name, so a new shape never means new code:
   from being re-asked.
 - The insertion base point is still picked at the command line.
 
+## The oasis sheets
+
+An oasis pool is arcs and nothing else -- no corners, at most one
+straight run -- so there is no chain to draw and no hopper. The whole
+sheet is the **envelope**, `X` across and `Y` up, and a radius against
+every arc. Which is exactly what `OASIS` asks for, and in the order it
+asks: the shape first (the tab *is* that answer), then the box, then
+the bulges, then the joiners between them.
+
+| Chart | What it is | Asked for |
+| --- | --- | --- |
+| `OACenter` | three bulges, the third across the top, centred | `X Y` + `L T R` + `TL TR BC` |
+| `OATopRight` | the same, third bulge tucked into the top-right corner | `X Y` + `L T R` + `TL RS BC` |
+| `OACloud` | two bulges joined over the top | `X Y` + `R` + `T`, and `B` on a rounded bottom |
+| `OAKidney` | three bulges and one reverse arc, side circles inside the top one | `X Y` + `BC`, plus `TC` (true) **or** `L R` (asymmetric) |
+| `OANXT` | three lobes and four fillets, the ring meeting one lobe twice | `X Y` + `TL CE RI` + `LB RB RT LT` |
+
+Two dropdowns carry the questions the radii hang off. **`sub`** is the
+second question the two families that come two ways are asked straight
+after the shape -- a cloud's bottom (`Straight` / `Rounded`), a
+kidney's type (`True` / `Asymmetric`) -- and it decides which radii the
+sheet is even asked for, so nothing under it comes alive until it is
+answered. **`detail`** is simple-or-complex, which every oasis run is
+asked; `Complex` is what brings `off` -- how far a Center pool's hump
+is off centre, left negative -- to life, on the one sheet that has it.
+
+**A bulge's radius is drawn where it runs.** Every bulge is pinned to
+the envelope, so the line from its centre to the bound it touches *is*
+the radius and is square to the page. A joiner's centre sits off the
+pool and its radius runs at whatever angle the tangency puts it, so
+those get a **leader** out to the letter instead.
+
+**The outlines are not drawn by hand.** Each is the ring `oasis:solve`
+builds for that shape's own reference drawing -- the same drawings
+`tests/test_oasis.py` reads its numbers off -- scaled into the picture
+and flipped for the y-down convention, and nothing else. The arguments
+are written down in `lzf:*oasart*` rather than lost in a comment, and
+`tests/test_lazform.py` re-derives every arc of every chart from OASIS
+and compares. So a shape OASIS changes shows up as a failing chart
+rather than as a picture that has quietly stopped being true.
+
+There is no in-square toggle and no bottom type on these pages: an
+oasis has no corner to run a tape across, and its floor is asked about
+*after* the outline is drawn, on the finished perimeter. The base point
+and that pool-bottom gate are the two things the sheet never sends --
+the same two POOL's sheets leave alone.
+
 ## `LAZTXT` -- the pool drawn out of tiles, boxes inside it
 
 The probe below killed *character* art, but it showed the half that
@@ -374,9 +470,11 @@ the drawing rather than beside it.
 The Rectangle reads down the page the way the sheet does: `B` across
 the top, then the pool body with `Overall` (`A`) on the left and the
 `Hopper` (`M L K`) nested inside it, then the `H G F E` chain, then
-the column-only fields. Insert hands POOL the same alist `LAZFORM`
-sends -- it is the same form wearing different clothes, not a second
-contract.
+the column-only fields. The rows come off the chart's own dimension
+list, grouped by the line each measurement runs on, so there is no
+second layout table to keep in step with the first. Insert hands POOL
+the same alist `LAZFORM` sends -- it is the same form wearing
+different clothes, not a second contract.
 
 **What it buys:** every tile in it is *retained*. DCL does not retain
 an `image` tile -- a repaint clears it and there is no expose callback
@@ -410,12 +508,12 @@ Two useful things came out of it anyway:
   proportional font, because the alignment comes from tile widths
   rather than glyphs. `B` and `A` sat exactly above one another.
 
-That last point is the important one, and it is **what the wedge rows
-already do**: the boxes on this form are positioned by spacer widths,
-not by counting characters. So the answer to "could we draw the pool in
-ASCII and put the boxes in it" is that the boxes-in-the-line half
-already works and the ASCII half never will. Switching would have cost
-the outline drawing and bought nothing.
+That last point is the important one, and it is what `LAZTXT` is built
+on: a row of tiles with declared widths lines up perfectly because the
+alignment comes from the tiles and not from the glyphs. So the answer
+to "could we draw the pool in ASCII and put the boxes in it" is that
+the boxes-in-a-line half works and the ASCII half never will.
+Switching would have cost the outline drawing and bought nothing.
 
 The retention worry that motivated the question stands -- DCL does not
 retain an `image` tile, and a `text` tile it does -- but the passive
@@ -498,7 +596,16 @@ whole E2-F2-G-F1-E1-M-L-K chain off the sheet, and a Grecian's two
 collective corner rows both in square and fanned out to the eight
 corners POOL asks for out of it.
 
-Two audits keep the form honest about POOL rather than about itself:
+The oasis end is the same test with the other routine on the far side:
+a Center pool filled in on its sheet, and a true kidney filled in on
+its own with the sub-type dropdown answering the question that decides
+what the sheet even asks for, both drawing what `OASIS` draws when the
+same answers are typed. `tests/test_oasis_form.py` covers the store
+itself -- every one of the six rings, a half-filled sheet, and what a
+sheet may not smuggle past a check.
+
+Three audits keep the form honest about the routines rather than about
+itself:
 
 - **Every chart key is a key POOL asks for**, read off `POOL.LSP`'s own
   item lists. The cross-dim keys are *built* at run time -- `(read
@@ -507,8 +614,16 @@ Two audits keep the form honest about POOL rather than about itself:
   the templates for how far `k` counts, rather than whitelisting the
   strings. Corner rows are checked the same way, against
   `pool:fckey`'s own roster.
+- **Every oasis chart key is a slot OASIS asks for**, read off
+  `oasis:*fkeys*` the same way.
 - **The greying and the sending are one decision.** For a table of page
-  states -- chart, in-square, bottom type, cross-dim mode -- the set
-  `lzf:dead` computes must equal the set `lzf:form` drops, exactly. A
-  box greyed on screen whose contents travel anyway, or a live box
-  quietly dropped, fails the suite.
+  states -- chart, in-square, bottom type, cross-dim mode, and the
+  oasis sheets' own dropdowns -- the set `lzf:dead` computes must equal
+  the set `lzf:form` drops, exactly. A box greyed on screen whose
+  contents travel anyway, or a live box quietly dropped, fails the
+  suite.
+
+And one keeps the pictures honest: **every arc of every oasis chart is
+re-derived from `oasis:solve`** on the reference numbers
+`lzf:*oasart*` records, and has to come back the same to within a
+per-mille.
