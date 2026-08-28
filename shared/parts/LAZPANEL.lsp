@@ -429,6 +429,20 @@
 (setq lzp:*tbname* "LazPanel")    ; the panel's screen-button toolbar
 (setq lzp:*tbsuite* "TylerDroneSuite")  ; and the suite's own
 
+;; Whether TYLERDRONESUITE gets a screen button of its own.
+;;
+;;   AUTO  (the default) yes when the drone lisp was loaded ON ITS OWN,
+;;         no when it arrived inside LAZPASS
+;;   T     always      nil  never
+;;
+;; The distinction is the point.  A drawer who was handed tydrn.lsp by
+;; itself has no panel to reach the suite through, so the button IS the
+;; surface.  Inside LAZPASS the panel is already on screen and carries
+;; the suite like every other tool, so a second toolbar is one more
+;; thing on the strip earning nothing -- the whole build should put up
+;; ONE external button, and that button is the panel's.
+(setq lzp:*suitebutton* 'AUTO)
+
 ;; Draw the button at 32 pixels rather than 16.  The small one is easy
 ;; to miss on a crowded screen, and both pictures are already written
 ;; -- AutoCAD simply picks the 16 unless it is told otherwise.
@@ -1332,13 +1346,28 @@
         "TYLERDRONESUITE"
         lzp:*tri16* lzp:*tri32*))
 
-;; The buttons to put up.  The suite's is offered only when its command
-;; is actually loaded: LAZPANEL.lsp APPLOADed on its own has no
-;; tydrn.lsp beside it, and a button that answers a click with "Unknown
-;; command" is worse than no button.
+;; Is this session the LAZPASS build?  Both LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp raise cal:*build-loading* before they load a
+;; thing, and neither lowers it -- so it answers for the session, which
+;; is what is being asked.  Standalone the symbol is simply unbound,
+;; and an unbound symbol is nil.
+(defun lzp:in-build-p () (if cal:*build-loading* T nil))
+
+;; Does the suite want a button of its own here?
+(defun lzp:suite-wanted-p ()
+  (and (lzp:has "TYLERDRONESUITE")
+       (cond ((eq lzp:*suitebutton* 'AUTO) (not (lzp:in-build-p)))
+             (lzp:*suitebutton* T))))
+
+;; The buttons to put up.  Two things have to be true for the suite's:
+;; its command has to be loaded -- LAZPANEL.lsp APPLOADed on its own has
+;; no tydrn.lsp beside it, and a button that answers a click with
+;; "Unknown command" is worse than no button -- and this has to not be
+;; the LAZPASS build, which puts up one external button and that one is
+;; the panel's.
 (defun lzp:tb-specs ( / out)
   (setq out (list (lzp:panel-spec)))
-  (if (lzp:has "TYLERDRONESUITE")
+  (if (lzp:suite-wanted-p)
     (setq out (append out (list (lzp:suite-spec)))))
   out)
 
@@ -1606,11 +1635,20 @@
                       " toolbar together, so the rest grew"
                       "\n  with it; (setq lzp:*bigbutton* nil) before"
                       " loading leaves them alone.")))
-     (if (not (lzp:has "TYLERDRONESUITE"))
-       (princ (strcat "\n  TYLERDRONESUITE is not loaded, so it has no"
-                      " button of its own -"
-                      "\n  APPLOAD tydrn.lsp (or LAZPASS.lsp) and run"
-                      " LAZBUTTON again."))))
+     (cond
+       ((lzp:suite-wanted-p))
+       ((not (lzp:has "TYLERDRONESUITE"))
+        (princ (strcat "\n  TYLERDRONESUITE is not loaded, so it has no"
+                       " button of its own -"
+                       "\n  APPLOAD tydrn.lsp (or LAZPASS.lsp) and run"
+                       " LAZBUTTON again.")))
+       (t
+        (princ (strcat "\n  TYLERDRONESUITE is on the panel rather than"
+                       " on a button of its own:"
+                       "\n  this is the whole build, and the build puts"
+                       " up one external button."
+                       "\n  (setq lzp:*suitebutton* T) before loading"
+                       " gives it one anyway.")))))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
@@ -1629,9 +1667,10 @@
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
   (foreach spec (lzp:tb-specs) (lzp:icon-report spec))
-  (if (not (lzp:has "TYLERDRONESUITE"))
-    (princ (strcat "\n\n  TYLERDRONESUITE is not loaded, so it has no"
-                   " button and no picture.")))
+  (if (not (lzp:suite-wanted-p))
+    (princ (strcat "\n\n  TYLERDRONESUITE has no button here, so no"
+                   " picture is drawn for it."
+                   "\n  LAZBUTTON says which of the two reasons it is.")))
   (princ))
 
 ;; One button's picture, start to finish.

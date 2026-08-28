@@ -83,6 +83,14 @@ TYLERDRONESUITE needs PADDLE and AUTODIM, which are not loaded here.
 the command line, so the stages after it never start. What ran before it
 stays run, which is the other reason the check happens first.
 
+**It gets a screen button of its own — but only when this file is
+loaded on its own.** An orange triangle, point north, on its own
+one-button toolbar, drawn by `LAZPANEL.lsp` (which owns the icon
+machinery). Inside the `LAZPASS` build it does not get one: the LazPanel
+button is already on screen and carries the suite like every other tool,
+so the whole build puts up a single external button. See
+`lisp/lazpanel/README.md` for the switch, `lzp:*suitebutton*`.
+
 The order lives in `*tydrn-suite*`, a list of three command names; the
 `1 of 3` counting in the messages comes off it rather than being written
 out again.

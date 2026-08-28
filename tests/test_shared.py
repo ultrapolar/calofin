@@ -171,6 +171,53 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:ABFINDVER'):
 print('  %d commands from one APPLOAD, %d file(s) held back'
       % (len(bundle_cmds), len(HELD)))
 
+# ONE external button from the whole build.  LAZPASS carries both
+# LAZPANEL and tydrn.lsp, so TYLERDRONESUITE is right there -- and it
+# rides the panel like every other tool rather than taking a second
+# toolbar.  A drawer handed tydrn.lsp BY ITSELF has no panel to reach
+# it through and does get the button; that half is test_lazpanel's.
+COM = """
+(setq stub:*tbs* nil stub:*btns* nil)
+(defun vlax-get-acad-object () "ACAD")
+(defun vla-get-menugroups (app) "MGS")
+(defun vla-get-toolbars (mg) "TBS")
+(defun vla-get-preferences (app) "PREFS")
+(defun vla-get-files (prefs) "FILES")
+(defun vla-get-supportpath (files) "/stub/support")
+(defun vla-get-count (obj) (if (= obj "MGS") 1 (length stub:*tbs*)))
+(defun vla-get-name (tb) tb)
+(defun vla-item (obj i)
+  (cond ((= obj "MGS") "MG0")
+        ((= obj "TBS") (nth i stub:*tbs*))
+        (t (nth i stub:*btns*))))
+(defun vla-add (tbs name)
+  (setq stub:*tbs* (append stub:*tbs* (list name))) name)
+(defun vla-addtoolbarbutton (tb idx name help macro)
+  (setq stub:*btns* (append stub:*btns* (list "BTN"))) "BTN")
+(defun vla-delete (tb) (setq stub:*tbs* (vl-remove tb stub:*tbs*)) t)
+(defun vla-setbitmaps (btn s l) t)
+(defun vla-put-largebuttons (tb v) t)
+(defun vla-put-visible (tb v) t)
+(defun vla-float (tb a b c) t)
+(defun vlax-create-object (id) (exit))
+"""
+tvm = VM()
+tvm.loads(COM)                              # the COM surface, then the build
+tvm.load(BUNDLE)
+raised = [str(x) for x in (tvm.get(Sym('stub:*tbs*')) or [])]
+if raised != ['LazPanel']:
+    fail('LAZPASS put up %r -- the whole build should raise ONE external '
+         'button, the panel\'s; TYLERDRONESUITE is on the panel here'
+         % raised)
+if tvm.get(Sym('c:tylerdronesuite')) is None:
+    fail('TYLERDRONESUITE is not in the bundle at all, so the one-button '
+         'check above proved nothing')
+if tvm.get(Sym('cal:*build-loading*')) is None:
+    fail('LAZPASS did not raise cal:*build-loading* -- that flag is what '
+         'tells a tool it arrived inside the build')
+print('  one external button from the build, with TYLERDRONESUITE on the '
+      'panel')
+
 # The bundle checks its own claim.  The count used to be baked in at
 # build time, so a build that half loaded still announced every command
 # it was BUILT with -- and a command that never arrived is exactly what

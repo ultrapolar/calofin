@@ -1157,6 +1157,8 @@ print("   32px asked for, the global effect said out loud, and nil declines")
 
 print("== TYLERDRONESUITE gets a button of its own ==")
 vm7 = stubbed()
+# tydrn.lsp loaded on its own: no build flag, so the button IS the
+# surface -- there is no panel already on screen to reach it through
 vm7.loads('(defun c:TYLERDRONESUITE () (princ))')
 vm7.loads('(setq t:*tbs* (lzp:buttons-init))')
 tbs7 = [str(x) for x in vm7.globals.get('stub:*tbs*') or []]
@@ -1200,6 +1202,41 @@ assert hexart != triart, "the two marks are the same shape"
 print("   both sizes widen from a point to a full base, and differ")
 print("   from the hexagon -- the two buttons are told apart by SHAPE,")
 print("   which is the only thing that can tell them apart in one colour")
+
+print("== inside LAZPASS the suite rides the panel, not its own button ==")
+# cal:*build-loading* is what LAZPASS.lsp and CALOFIN-LOADER.lsp both
+# raise before they load anything.  The whole build should put up ONE
+# external button, and that one is the panel's.
+vm9 = stubbed()
+vm9.loads('(defun c:TYLERDRONESUITE () (princ))'
+          '(setq cal:*build-loading* T)'
+          '(setq t:*tbs* (lzp:buttons-init))')
+tbs9 = [str(x) for x in vm9.globals.get('stub:*tbs*') or []]
+assert tbs9 == ['LazPanel'], (
+    "the build put up a second external button: %r -- inside LAZPASS the "
+    "suite is on the panel like every other tool" % tbs9)
+vm9.loads('(c:LAZBUTTON)')
+said9 = "".join(str(x) for x in vm9.printed)
+assert "on the panel rather than on a button of its own" in said9, (
+    "LAZBUTTON must distinguish 'in the build' from 'not loaded' -- they "
+    "are different absences with different answers")
+assert "not loaded" not in said9, (
+    "the build said the command was missing; it is not, it is on the panel")
+# and the operator can overrule it either way
+vm10 = stubbed()
+vm10.loads('(defun c:TYLERDRONESUITE () (princ))'
+           '(setq cal:*build-loading* T lzp:*suitebutton* T)'
+           '(setq t:*tbs* (lzp:buttons-init))')
+assert len([str(x) for x in vm10.globals.get('stub:*tbs*') or []]) == 2, (
+    "lzp:*suitebutton* T must give it a button even inside the build")
+vm11 = stubbed()
+vm11.loads('(defun c:TYLERDRONESUITE () (princ))'
+           '(setq lzp:*suitebutton* nil)'
+           '(setq t:*tbs* (lzp:buttons-init))')
+assert len([str(x) for x in vm11.globals.get('stub:*tbs*') or []]) == 1, (
+    "lzp:*suitebutton* nil must decline the button even standalone")
+print("   one button in the build, and the tunable overrules either way")
+
 
 print("== no TYLERDRONESUITE, no second button, and it says so ==")
 vm8 = stubbed()

@@ -208,15 +208,38 @@ Everything a button needs is one spec —
 purpose: one shared name and the second write would quietly clobber the
 first, leaving both buttons wearing whichever shape was written last.
 
-The suite's button is offered **only when its command is loaded**.
-`LAZPANEL.lsp` APPLOADed on its own has no `tydrn.lsp` beside it, and a
-button that answers a click with "Unknown command" is worse than no
-button — so `LAZBUTTON` makes one button and says why there is not a
-second:
+**The suite's button belongs to the standalone drone lisp, not to the
+build.** Two things have to be true for it, and they are different
+things:
+
+1. **`TYLERDRONESUITE` has to be loaded.** `LAZPANEL.lsp` APPLOADed on
+   its own has no `tydrn.lsp` beside it, and a button that answers a
+   click with "Unknown command" is worse than no button.
+2. **This must not be the LAZPASS build.** Someone handed `tydrn.lsp`
+   by itself has no panel to reach the suite through, so there the
+   button *is* the surface. Inside LAZPASS the panel is already on
+   screen and carries the suite like every other tool, so a second
+   toolbar is one more thing on the strip earning nothing — **the whole
+   build puts up one external button, and that one is the panel's.**
+
+The test is `cal:*build-loading*`, which both `LAZPASS.lsp` and
+`CALOFIN-LOADER.lsp` raise before they load a thing and neither lowers,
+so it answers for the session. Standalone the symbol is simply unbound,
+and an unbound symbol is nil.
+
+`lzp:*suitebutton*` overrules it: `AUTO` (the default) is the rule
+above, `T` gives it a button anywhere, `nil` never does. `LAZBUTTON`
+tells the two absences apart, because they have different answers:
 
 ```
   TYLERDRONESUITE is not loaded, so it has no button of its own -
   APPLOAD tydrn.lsp (or LAZPASS.lsp) and run LAZBUTTON again.
+```
+
+```
+  TYLERDRONESUITE is on the panel rather than on a button of its own:
+  this is the whole build, and the build puts up one external button.
+  (setq lzp:*suitebutton* T) before loading gives it one anyway.
 ```
 
 Two details worth knowing, because both were wrong first time round:
