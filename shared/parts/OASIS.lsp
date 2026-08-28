@@ -545,6 +545,63 @@
 ;;; the standalone build loads alone (STANDARDS.md section 4).  The Back
 ;;; sentinel is the symbol OASIS-BACK.
 
+;; Keyword question.  kws is the initget string, shown the bracketed
+;; list, dflt the Enter answer (nil = an answer is required).  Returns
+;; the keyword, or OASIS-BACK for Back/Undo.
+(defun oasis:askkw (msg kws shown dflt back / v f)
+  ;; the form first, and only a word this question actually offers --
+  ;; spelled the way the prompt spells it, so nothing downstream can
+  ;; tell a filled-in sheet from a typed answer
+  (if (setq f (oasis:fkw (oasis:fpull) kws))
+    f
+    (progn
+      (initget (if dflt 0 (if back 0 1))
+               (if back (strcat kws " Back Undo") kws))
+      (setq v (getkword (strcat "\n" msg " [" shown
+                                (if back "/Back" "") "]"
+                                (if dflt (strcat " <" dflt ">") "") ": ")))
+      (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
+            ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
+            (t v)))))
+
+;; Distance entry with the kind system of STANDARDS.md section 3:
+;; REQ required, NAX/ZER accept NA, SUG offers a default.  Returns the
+;; number, nil for NA, or OASIS-BACK.
+(defun oasis:askdist (kind msg dflt back / v kw)
+  ;; the form first.  A number this kind of question could have been
+  ;; given is taken; anything else -- an NA on a REQUIRED measurement
+  ;; above all -- is treated as an unanswered box and asked for, since
+  ;; a nil where a distance belongs reaches arithmetic and not a check
+  (setq v (oasis:fpull))
+  (if (oasis:fdist-p kind v)
+    v
+    (progn
+  ;; Undo is accepted everywhere Back is, as a hidden synonym
+  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+                 (back "NA Back Undo")
+                 (t "NA")))
+  ;; REQ always rejects zero -- offering Back must not loosen what
+  ;; counts as a valid measurement; ZER alone admits 0
+  (if kw
+      (initget (cond ((eq kind 'ZER) 5)
+                     ((and (eq kind 'SUG) dflt) 6)
+                     (t 7))
+               kw)
+      (initget 7))
+  (setq v (getdist
+            (strcat "\n" msg
+                    (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUG)
+                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                               " (or NA)"))
+                          (t " (or NA if not measured)"))
+                    (if back " [Back]" "")
+                    ": ")))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
+        ((= (type v) 'STR) nil)               ; NA
+        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        (t v)))))
+
 ;;; -------------------- snaps and the dimension style --------------------
 
 ;; Make the cross-dimension style current for the dims about to be drawn.
@@ -1641,7 +1698,7 @@
   (if back (initget "Back Undo"))
   (setq v (getpoint (strcat "\nInsertion base point <0,0>"
                             (if back " [Back]" "") ": ")))
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
 
@@ -1649,8 +1706,8 @@
 ;; A bulge is tangent to the bottom edge, so its top sits at twice its
 ;; radius: any more than half the Y bound and it breaks out of the top.
 (defun oasis:ask-bulge (msg side w h / v)
-  (setq v (cal:askdist 'REQ msg nil T))
-  (while (and (not (eq v 'CAL-BACK))
+  (setq v (oasis:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'OASIS-BACK))
               (or (> (* 2.0 v) (+ h oasis:*fuzz*))
                   (> (* 2.0 v) (+ w oasis:*fuzz*))))
     (if (> (* 2.0 v) (+ h oasis:*fuzz*))
@@ -1662,7 +1719,7 @@
                        (rtos (* 2.0 v)) " across and breaks out through the"
                        " far side of a " (rtos w) " envelope.  "
                        (rtos (/ w 2.0)) " or less.")))
-    (setq v (cal:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T)))
   v)
 
 ;; The top bulge's radius, re-asked while it swallows a side bulge (or
@@ -1670,8 +1727,8 @@
 ;; later, so it has to be caught here.
 (defun oasis:ask-top (msg w h rl variant off / v cl ct big)
   (setq cl (list rl rl)
-        v  (cal:askdist 'REQ msg nil T))
-  (while (and (not (eq v 'CAL-BACK))
+        v  (oasis:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'OASIS-BACK))
               (progn
                 (setq ct  (oasis:topcen w h v variant off)
                       big (and (oasis:topfits-p variant)
@@ -1689,7 +1746,7 @@
                        " -- raising one raises the other's reach by just as"
                        " much.  Try a top radius nearer the left bulge's "
                        (rtos rl) ".")))
-    (setq v (cal:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T)))
   v)
 
 ;; The Y bound.  It is asked the same way for every shape but one: a
@@ -1702,8 +1759,8 @@
 ;; where the user can still change the number that caused it, rather
 ;; than at a radius question that would refuse every answer.
 (defun oasis:ask-ybound (msg w var / v)
-  (setq v (cal:askdist 'REQ msg nil T))
-  (while (and (not (eq v 'CAL-BACK))
+  (setq v (oasis:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'OASIS-BACK))
               (= var "TrueKidney")
               (> (+ v oasis:*fuzz*) w))
     (princ (strcat "\nA true kidney " (rtos v) " deep in a " (rtos w)
@@ -1712,7 +1769,7 @@
     (princ (strcat "\nbefore they reach the sides of the box.  Y has to"
                    " be less than X here; an asymmetric kidney takes any"
                    " envelope."))
-    (setq v (cal:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T)))
   v)
 
 ;; A true kidney's top-center radius, re-asked until a kidney can be
@@ -1723,21 +1780,21 @@
 ;; oasis:ask-ybound has already turned away any Y that is not less
 ;; than X.
 (defun oasis:ask-ktop (msg w h / v r)
-  (setq v (cal:askdist 'REQ msg nil T))
-  (while (and (not (eq v 'CAL-BACK))
+  (setq v (oasis:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'OASIS-BACK))
               (null (setq r (if (> v (+ (oasis:ktrue-min w h) oasis:*fuzz*))
                                 (oasis:ktrue-side w h v)))))
     (princ (strcat "\nA " (rtos v) " top circle cannot reach both"
                    " sides of a " (rtos w) " x " (rtos h)
                    " envelope -- it has to be more than "
                    (rtos (oasis:ktrue-min w h)) "."))
-    (setq v (cal:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T)))
   v)
 
 ;; A joiner answer on a COMPLEX run: a radius as usual, or the keyword
 ;; Line for the straight run between the two bulges' tangent points.
 ;; Returns the number, the string "LINE", or OASIS-BACK.  Its own
-;; getdist rather than cal:askdist because that one folds every
+;; getdist rather than oasis:askdist because that one folds every
 ;; keyword but Back into nil, which is the answer a cloud's implied flat
 ;; bottom already means.
 (defun oasis:askrun (msg / v)
@@ -1751,7 +1808,7 @@
     (t
      (initget 7 "Line Back Undo")
      (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
-     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
            ((= (type v) 'STR) "LINE")
            (t v)))))
 
@@ -1767,7 +1824,7 @@
     (progn
       (initget 0 "Back Undo")
       (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
-      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((null v) 0.0)
             (t v)))))
 
@@ -1779,8 +1836,8 @@
 ;; straight run has no radius to be too small.
 (defun oasis:ask-tangent (msg c1 r1 c2 r2 runs / v mn bad)
   (setq mn (oasis:filmin c1 r1 c2 r2)
-        v  (if runs (oasis:askrun msg) (cal:askdist 'REQ msg nil T)))
-  (while (and (not (eq v 'CAL-BACK))
+        v  (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T)))
+  (while (and (not (eq v 'OASIS-BACK))
               (setq bad
                     (if (= (type v) 'STR)
                         (if (null (oasis:extnorm c1 r1 c2 r2)) "nested")
@@ -1791,7 +1848,7 @@
                        (rtos mn) "."))
         (princ (strcat "\nOne of those two bulges lies inside the other,"
                        " so there is no straight run between them.")))
-    (setq v (if runs (oasis:askrun msg) (cal:askdist 'REQ msg nil T))))
+    (setq v (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T))))
   v)
 
 ;; How far a complex Center pool's hump is off centre, re-asked while it
@@ -1803,7 +1860,7 @@
 ;; that is an ordinary trimmed hump, and oasis:report-extents names it.
 (defun oasis:ask-offset (msg w h rl rt / v ct bad)
   (setq v (oasis:askoff msg))
-  (while (and (not (eq v 'CAL-BACK))
+  (while (and (not (eq v 'OASIS-BACK))
               (progn
                 (setq ct  (oasis:topcen w h rt "Center" v)
                       bad (cond ((or (< (car ct) 0.0) (> (car ct) w)) "out")
@@ -1864,25 +1921,25 @@
     ;; keyword comes back spelled that way, so it is normalized here and
     ;; nothing downstream ever sees it.
     ((= k 0)
-     (setq v (cal:askkw "Which shape is it?"
+     (setq v (oasis:askkw "Which shape is it?"
                           "Center TopRight CLoud Kidney NXTcloud"
                           "Center/TopRight/CLoud/Kidney/NXTcloud"
                           "Center" nil))
      (if (= v "CLoud") "Cloud" v))
     ((= k 10)
      (if (= (nth 0 ans) "Kidney")
-         (cal:askkw "Kidney type?" "True Asymmetric"
+         (oasis:askkw "Kidney type?" "True Asymmetric"
                       "True/Asymmetric" "True" T)
-         (cal:askkw "Cloud bottom?" "Straight Rounded"
+         (oasis:askkw "Cloud bottom?" "Straight Rounded"
                       "Straight/Rounded" "Straight" T)))
     ;; simple is the shape as it has always been; complex opens the two
     ;; things a drawing sometimes has and the plain flow cannot say --
     ;; a straight run in place of any joiner, and a hump off centre
     ((= k 11)
-     (cal:askkw "Simple or complex?" "Simple Complex"
+     (oasis:askkw "Simple or complex?" "Simple Complex"
                   "Simple/Complex" "Simple" T))
     ((= k 1) (oasis:askbase T))
-    ((= k 2) (cal:askdist 'REQ "X - overall left-to-right bounds" nil T))
+    ((= k 2) (oasis:askdist 'REQ "X - overall left-to-right bounds" nil T))
     ((= k 3) (oasis:ask-ybound "Y - overall front-to-back bounds" w var))
     ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4)
                               (if (oasis:nxt-p var) "top-left" "left") w h))
@@ -2332,12 +2389,12 @@
     (setq v (getint (strcat "\n" msg " -- tangency change 1-" (itoa n)
                             " [Back]: ")))
     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo")))
-           (setq v 'CAL-BACK))
+           (setq v 'OASIS-BACK))
           ((and (= (type v) 'INT) (<= v n)))
           (t (princ (strcat "\nThere are " (itoa n) " changes of tangency"
                             " round this pool; that is not one of them."))
              (setq v nil))))
-  (if (eq v 'CAL-BACK) v (nth (1- v) js)))
+  (if (eq v 'OASIS-BACK) v (nth (1- v) js)))
 
 ;; A point picked anywhere, dropped onto the outline at the nearest point
 ;; of it.  Returns its arc length, or OASIS-BACK.
@@ -2345,7 +2402,7 @@
   (initget 1 "Back Undo")
   (setq v (getpoint (strcat "\n" msg " [Back]: ")))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo")))
-      'CAL-BACK
+      'OASIS-BACK
       (oasis:ringnear arcs (list (- (car v) (car base))
                                  (- (cadr v) (cadr base))))))
 
@@ -2353,16 +2410,16 @@
 ;; it.  Returns (point normal), or OASIS-BACK.
 (defun oasis:askbound (msg w h / side d)
   ;; BOttom takes two capitals because Back already has the B
-  (setq side (cal:askkw (strcat msg " -- in from which bound?")
+  (setq side (oasis:askkw (strcat msg " -- in from which bound?")
                           "Left Right BOttom Top"
                           "Left/Right/BOttom/Top" "BOttom" T))
-  (if (eq side 'CAL-BACK)
+  (if (eq side 'OASIS-BACK)
       side
       (progn
-        (setq d (cal:askdist 'REQ (strcat "How far in from the "
+        (setq d (oasis:askdist 'REQ (strcat "How far in from the "
                                             (strcase side T) " bound")
                                nil T))
-        (if (eq d 'CAL-BACK)
+        (if (eq d 'OASIS-BACK)
             d
             (cond ((= side "Left")    (list (list d 0.0) '(1.0 0.0)))
                   ((= side "Right")   (list (list (- w d) 0.0) '(1.0 0.0)))
@@ -2375,17 +2432,17 @@
 (defun oasis:askbreak (what arcs w h base / how ln cuts a b)
   (setq a nil)
   (while (null a)
-    (setq how (cal:askkw (strcat what " break, located how?")
+    (setq how (oasis:askkw (strcat what " break, located how?")
                            "Offset Tangency Nearest"
                            "Offset/Tangency/Nearest" "Offset" T))
     (cond
-      ((eq how 'CAL-BACK) (setq a how))
+      ((eq how 'OASIS-BACK) (setq a how))
       ;; one answer gives both ends: the break is the chord that line cuts
       ((= how "Offset")
        (setq ln (oasis:askbound (strcat "The " (strcase what T) " break")
                                 w h))
        (cond
-         ((eq ln 'CAL-BACK) (setq a ln))
+         ((eq ln 'OASIS-BACK) (setq a ln))
          (t (setq cuts (oasis:ringcut arcs (car ln) (cadr ln)))
             ;; a pool whose edge dips can be crossed more than twice by
             ;; one line -- the break is the full width of it, so the two
@@ -2404,22 +2461,22 @@
       ((= how "Tangency")
        (setq a (oasis:asktang (strcat "The " (strcase what T)
                                       " break, first end") arcs))
-       (if (not (eq a 'CAL-BACK))
+       (if (not (eq a 'OASIS-BACK))
            (progn
              (setq b (oasis:asktang (strcat "The " (strcase what T)
                                             " break, second end") arcs))
-             (if (eq b 'CAL-BACK)
+             (if (eq b 'OASIS-BACK)
                  (setq a nil)
                  (setq a (list a b))))))
       (t
        (setq a (oasis:asknear (strcat "The " (strcase what T)
                                       " break, first end") arcs base))
-       (if (not (eq a 'CAL-BACK))
+       (if (not (eq a 'OASIS-BACK))
            (progn
              (setq b (oasis:asknear (strcat "The " (strcase what T)
                                             " break, second end")
                                     arcs base))
-             (if (eq b 'CAL-BACK)
+             (if (eq b 'OASIS-BACK)
                  (setq a nil)
                  (setq a (list a b)))))))
     ;; two ends in the same place are not a break
@@ -2619,7 +2676,7 @@
                                (rtos oasis:*hopoff*) ">: ")))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
-       (setq bot 'CAL-BACK))
+       (setq bot 'OASIS-BACK))
       (t
        (if (null off) (setq off oasis:*hopoff*))
        (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
@@ -2637,9 +2694,9 @@
 (defun oasis:askslope (arcs bot which / da nm v)
   (setq da (if (= which 0) (nth 8 bot) (nth 10 bot))
         nm (nth 0 (nth (nth 2 (oasis:ringat arcs da)) arcs))
-        v  (cal:askkw (strcat "Slope line on the " nm " side")
+        v  (oasis:askkw (strcat "Slope line on the " nm " side")
                         "Straight Guided" "Straight/Guided" "Straight" T))
-  (if (eq v 'CAL-BACK) v (= v "Guided")))
+  (if (eq v 'OASIS-BACK) v (= v "Guided")))
 
 ;; The whole bottom flow, with Back between its steps the way the pool's
 ;; own questions have it.  Back out of the first step and nothing is
@@ -2656,7 +2713,7 @@
                   ((= k 2) (oasis:askhopoff arcs (nth 0 ans) (nth 1 ans)))
                   (t       (oasis:askslope arcs (cadr (nth 2 ans))
                                            (- k 3)))))
-    (if (eq v 'CAL-BACK)
+    (if (eq v 'OASIS-BACK)
         (if (> pos 0)
             (progn (princ "\nStepping back one step.")
                    (setq pos (1- pos)))
@@ -2825,7 +2882,7 @@
        (setq k    (nth pos steps)
              prev (oasis:preview prev ans k)
              v    (oasis:askstep k ans))
-       (if (eq v 'CAL-BACK)
+       (if (eq v 'OASIS-BACK)
            (if (> pos 0)
                (progn (princ "\nStepping back one step.")
                       (setq pos (1- pos)))
@@ -2941,7 +2998,7 @@
            ;; be said exactly instead of picked at.  Still inside the
            ;; undo group: one U takes the pool and its bottom together.
            (cal:osup)
-           (if (= "Yes" (cal:askkw
+           (if (= "Yes" (oasis:askkw
                           "Add the bottom of the pool (breaks and hopper)?"
                           "Yes No" "Yes/No" "No" nil))
                (setq gotbot (oasis:askbottom arcs w h base lt)))

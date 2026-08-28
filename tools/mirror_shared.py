@@ -480,21 +480,24 @@ TOOLS = {
     # calls its own dimstyle pair explicitly.  Regenerating also keeps
     # two ;;;-section headers the hand twin deleted (residue R2).
     # [verified: matches except banner + listed residue vs the twin on disk]
+    # oasis:askkw and oasis:askdist are NOT library bodies any more: at
+    # v8.1 each consults the answer store (oasis:fpull / oasis:fkw /
+    # oasis:fdist-p) before it asks, so a filled-in oasis sheet is read.
+    # Swapping them for the library's plain pair drops that lookup and
+    # the grouped build silently ignores the sheet -- the stored answer
+    # then reaches getkword raw.  They stay local; the rest still goes.
     'OASIS': {
         'src': 'lisp/oasis/OASIS.lsp',
         'swap': {
-            'oasis:askkw': 'cal:askkw', 'oasis:askdist': 'cal:askdist',
             'oasis:osup': 'cal:osup', 'oasis:osdown': 'cal:osdown',
             'oasis:dimstysave': 'cal:dimstysave',
             'oasis:dimstyrestore': 'cal:dimstyrestore',
             'oasis:ensure-layer': 'cal:ensure-layer',
             'oasis:angnorm': 'cal:angnorm', 'oasis:syssave': 'cal:syssave',
-            'oasis:sysrestore': 'cal:sysrestore', 'OASIS-BACK': 'CAL-BACK',
+            'oasis:sysrestore': 'cal:sysrestore',
         },
         'drop_globals': ['oasis:*sysold*', 'oasis:*odstyle*'],
-        'symbols': {
-            'oasis:askdist': 'cal:askdist',
-        },
+        'symbols': {},
         'expand': {
             '(cal:syssave)':
                 ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
