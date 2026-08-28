@@ -105,6 +105,7 @@ changing a routine.
 | `ABCDEF`, `ABCDEFVER` | `lisp/abcdef/` | Locates Excel-measured points inside rectangle corners A/B/C/D, "Z" reading order (A/B top, C/D bottom).  Two tapes place a point, three fix it, four cross-check it; a fourth tape is dropped only when leaving it out settles the other three **and** the runner-up triple is clearly worse, so a point near a diagonal keeps all four rather than discarding a good tape.  Reports per point how many tapes placed it, which, and a measured 1-99% confidence, to the command line and to a text file beside the sheet.  Plots as `ab_pt` blocks on `POINTS` and offers `ABHD` the set |
 | `ALTABCDEF` | `lisp/altabcdef/` | Same idea, clockwise A→B→C→D corner order instead - kept separate from `ABCDEF` because the two conventions aren't interchangeable |
 | `XYPLOT`, `XYPLOTVER` | `lisp/xyplot/` | `ABCDEF`'s sister for a survey that arrives already reduced: a sheet of X/Y offsets, one picked origin, drawn twice - graph 1 the points as given (`ab_pt` on `POINTS`, ready for `ABHD`), graph 2 the same points with the X and Y offsets dimensioned as two continuous linear chains |
+| `ABPCHECK`, `ABPCHECKRESCUE`, `ABPCHECKVER` | `lisp/abpcheck/` | `ABHD`'s measuring half, forked as a checker: highlight the whole drawing, say how far off the line is too far, and every survey point is reported with the distance to the nearest line -- `Pt. 17   closest line is 0'-1 7/8" away` -- worst first, the ones over the limit in red and ringed in the drawing. Measures to the run itself, arcs included, not to its endpoints. `ABPCHECKRESCUE` takes the report and the rings away again |
 | `CHECK`, `DIMARCCHECK` | `lisp/check/` | Audits dimension def-points and arc endpoints against real geometry, fixing strays |
 | `DIMCHECK`, `DIMSCAN`, `DIMCHECKVER`, ... | `lisp/dimcheck/` | Guided, one-at-a-time review of dimension placement, arc-end attachment and overlapping lines, grouped by dimension style |
 | `LINFINCHECK`, `LINFINSCAN`, `LITELINFINSCAN`, ... | `lisp/linfincheck/` | `DIMCHECK`'s checks plus steps & side views, wall height, the liner pattern and the title block border - the full liner-finish drawing QA. The report leads with the liner checks; the `DIMCHECK`-style findings sit in a DIMENSION AUDIT column beside it, and `LITELINFINSCAN` skips them entirely for a drawing `DIMCHECK` already went over |
@@ -346,6 +347,8 @@ python3 tests/test_abhd_runtime.py    # ABHD's fitter run in lispvm,
                                       #   against the mirror above
 python3 tests/test_abcurcheck.py      # ABCURCHECK, run in lispvm
 python3 tests/test_cabhd.py           # CABHD, run in lispvm
+python3 tests/test_abpcheck.py        # ABPCHECK over drawings with known
+                                      #   point-to-line distances
 python3 tests/test_laser_fit.py       # LHD
 python3 tests/test_fitabhd.py         # FITABHD (engine also run in lispvm)
 python3 tests/test_perp_points.py     # PERPPTS / CPERPPTS
