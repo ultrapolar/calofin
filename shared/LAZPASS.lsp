@@ -12518,7 +12518,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -12763,6 +12763,108 @@
 ;; its radius both ways and can break out of either; the centred one is
 ;; trimmed away long before it reaches anything.
 (defun oasis:topfits-p (variant) (= variant "TopRight"))
+
+;;; -------------------- form answers -------------------------------------
+;;;
+;;;  A form -- the LAZFORM oasis sheets, or anything else that can build
+;;;  the alist -- can answer some or all of OASIS's questions before the
+;;;  run starts.  It leaves them in oasis:*form* as (key . value) and the
+;;;  ask helpers below look there first, so a filled-in sheet drives the
+;;;  whole run and a half-filled one simply shortens it.  Same contract
+;;;  POOL and SPA carry:
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . 480.0)   the form answered it         -> 480.0, no prompt
+;;;
+;;;  ONE SLOT PER QUESTION, named after the answer it fills:
+;;;
+;;;    shape   which family        rl / rt / rr   the three bulges
+;;;    sub     a cloud's bottom,   ftl / ftr      the top joiners
+;;;            a kidney's type     fbc / fbr      the bottom joiners
+;;;    detail  simple or complex   off            a hump off centre
+;;;    x / y   the envelope
+;;;
+;;;  The base point is not among them, and neither is the pool-bottom
+;;;  gate at the end: both are picked in the drawing, which is where a
+;;;  form has nothing to say.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Two things depend on it.  Back would otherwise deadlock: step back
+;;;  onto a form-answered question, it answers itself instantly and walks
+;;;  forward again, and there is no key the user can press to get out.
+;;;  And every check in the ask layer re-asks on a value it refuses -- a
+;;;  bulge that breaks out of the envelope, a tangent radius too short to
+;;;  span its two bulges -- so the second pass has to find the store
+;;;  empty and let the user type the correction, rather than being
+;;;  re-fed the same bad number for ever.
+;;;
+;;;  NOTHING GETS IN THAT COULD NOT HAVE BEEN TYPED.  A distance is
+;;;  checked against the same rules initget puts on the prompt (no
+;;;  negative anywhere, no zero except where zero is an answer), and a
+;;;  keyword against the very list the prompt offers.  That is what
+;;;  keeps NA off a question that must have an answer: OASIS asks for
+;;;  every measurement as REQUIRED, so a form's nil is demoted to an
+;;;  unanswered box and asked for rather than handed to arithmetic.
+
+(setq oasis:*form* nil)
+
+;; The question being asked, as a form key -- set by oasis:askstep for
+;; each slot it asks, and nil everywhere else, which is what keeps the
+;; pool-bottom flow at the end of the run out of the store.
+(setq oasis:*fkey* nil)
+
+(defun oasis:fclear () (setq oasis:*form* nil))
+
+;; The form's answer to the question now being asked, taken OUT of the
+;; store as it is read, or the symbol OASIS-NONE when the form has
+;; nothing to say about it.
+(defun oasis:fpull ( / p)
+  (cond
+    ((null oasis:*fkey*) 'OASIS-NONE)
+    ((setq p (assoc oasis:*fkey* oasis:*form*))
+     (setq oasis:*form* (vl-remove p oasis:*form*))
+     (cdr p))
+    (t 'OASIS-NONE)))
+
+;; Which slot each answer belongs to.  Slot 1 -- the base point -- has
+;; no key: it is picked in the drawing.
+(setq oasis:*fkeys*
+  '((0 . shape) (2 . x)   (3 . y)   (4 . rl)  (5 . rt)  (6 . rr)
+    (7 . ftl)   (8 . ftr) (9 . fbc) (10 . sub) (11 . detail)
+    (12 . off)  (13 . fbr)))
+
+(defun oasis:fkeyof (k) (cdr (assoc k oasis:*fkeys*)))
+
+;; Could V have been typed at a distance prompt of this kind?  The same
+;; rules initget puts on the prompt: never negative, and never zero
+;; except where ZER admits it.
+(defun oasis:fdist-p (kind v)
+  (and (numberp v) (or (> v 0.0) (and (eq kind 'ZER) (= v 0.0)))))
+
+;; The word in KWS that S names, spelled the way the prompt spells it,
+;; or nil.  Checked against the very list the question offers, so a
+;; keyword this question never had cannot get in through the store.
+(defun oasis:fkw (s kws / i n w out)
+  (if (= (type s) 'STR)
+      (progn
+        (setq i 1 n (strlen kws) w "")
+        (while (<= i (1+ n))
+          (cond
+            ((or (> i n) (= (substr kws i 1) " "))
+             (if (and (/= w "") (= (strcase w) (strcase s))) (setq out w))
+             (setq w ""))
+            (t (setq w (strcat w (substr kws i 1)))))
+          (setq i (1+ i)))))
+  out)
+
+;; Run OASIS with a form's answers already in hand.  Nothing happens
+;; here that the direct path misses: a caller may equally set
+;; oasis:*form* itself and call c:OASIS, which is what the tests do.
+(defun oasis:run-with-answers (answers)
+  (setq oasis:*form* answers)
+  (c:OASIS)
+  (oasis:fclear)
+  (princ))
 
 ;;; -------------------- ask layer ---------------------------------------
 ;;; Copies of the CALOFIN-LIB helpers under this file's own prefix, so
@@ -13965,21 +14067,35 @@
 ;; keyword but Back into nil, which is the answer a cloud's implied flat
 ;; bottom already means.
 (defun oasis:askrun (msg / v)
-  (initget 7 "Line Back Undo")
-  (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
-        ((= (type v) 'STR) "LINE")
-        (t v)))
+  ;; the form answers this one two ways -- a radius, or the word Line
+  ;; for the straight run -- and neither reaches here as anything the
+  ;; typed path would not also produce
+  (setq v (oasis:fpull))
+  (cond
+    ((oasis:fdist-p 'REQ v) v)
+    ((oasis:fkw v "Line") "LINE")
+    (t
+     (initget 7 "Line Back Undo")
+     (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
+     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+           ((= (type v) 'STR) "LINE")
+           (t v)))))
 
 ;; A signed distance, defaulting to none: zero and negative are both
 ;; ordinary answers here, where every other measurement in the file
 ;; refuses them.  Returns the number or OASIS-BACK.
 (defun oasis:askoff (msg / v)
-  (initget 0 "Back Undo")
-  (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
-        ((null v) 0.0)
-        (t v)))
+  ;; the one measurement in the file where a negative and a zero are
+  ;; both ordinary answers, so a form's number is taken as it stands
+  (setq v (oasis:fpull))
+  (if (numberp v)
+    v
+    (progn
+      (initget 0 "Back Undo")
+      (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
+      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+            ((null v) 0.0)
+            (t v)))))
 
 ;; A tangent radius, re-asked until it is big enough to span its two
 ;; bulges.  Below the minimum the two circles it would have to touch
@@ -14042,6 +14158,11 @@
 ;; A shape asks only the slots oasis:steps lists for it.
 (defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr ca cd cg off
                           runs)
+  ;; which answer the question about to be asked fills, so the ask
+  ;; helpers under it can look it up in the form.  Set for every slot,
+  ;; including the ones no form answers, so a stale key cannot survive
+  ;; into the next question.
+  (setq oasis:*fkey* (oasis:fkeyof k))
   (setq var  (oasis:variant ans)
         w    (nth 2 ans) h  (nth 3 ans)
         rl   (oasis:leftrad var h (nth 4 ans))
@@ -14971,6 +15092,10 @@
     ;; user settings come back FIRST so nothing below can skip them
     (cal:dimstyrestore)
     (cal:sysrestore)
+    ;; a form's leftovers go with the run that was reading them: an Esc
+    ;; part-way through must not leave answers behind for the next one
+    (oasis:fclear)
+    (setq oasis:*fkey* nil)
     ;; an Esc part-way through a dimension leaves that command pending,
     ;; and the UNDO below would be swallowed as an answer to it
     (setq guard 0)
@@ -15075,6 +15200,9 @@
                                          " again."))
                           (setq pos (1- pos))))))))))
 
+     ;; the questions are over: nothing after this point is a form's to
+     ;; answer, the pool-bottom flow at the end least of all
+     (setq oasis:*fkey* nil)
      (setq prev (oasis:pv-clear prev)
            var  (oasis:variant ans) base (nth 1 ans)
            w    (nth 2 ans) h    (nth 3 ans)
@@ -15150,6 +15278,10 @@
            (setq undo-open nil)
            (cal:sysrestore)
            (foreach a gotbot (princ a))))))
+  ;; whatever route the run took out, the store goes with it -- an
+  ;; answer nothing asked for must not be waiting for the next run
+  (oasis:fclear)
+  (setq oasis:*fkey* nil)
   (princ))
 
 (defun c:OASISVER ()
@@ -66740,7 +66872,8 @@
 ;;; ----------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
-;;; Commands:  LAZFORM        fill in a shape chart and run POOL from it
+;;; Commands:  LAZFORM        fill in a shape chart and draw the pool
+;;;            LAZFORMCOVER   the same, for a cover sheet
 ;;;            LAZASCII       probe: could the chart be drawn in text?
 ;;;            LAZTXT         the same form, drawn out of tiles
 ;;;            LAZFORMVER     print the loaded version
@@ -66754,7 +66887,13 @@
 ;;; which is what the letter was standing in for all along.  Every box
 ;;; is labelled with its own letter, so the list and the picture read
 ;;; as one thing.  Fill in what you know, leave the rest blank, press
-;;; Insert: POOL runs and asks only for the gaps.
+;;; Insert: the routine runs and asks only for the gaps.
+;;;
+;;; TWO ROUTINES ARE FED FROM HERE.  The eight POOL sheets -- Rectangle,
+;;; True Oval, Roman, both Grecians, True L Left, Round and Octagon --
+;;; hand their answers to POOL; the five OASIS sheets -- Center,
+;;; TopRight, Cloud, Kidney and NXT cloud -- hand theirs to OASIS.  The
+;;; page decides which, so a tab is all there is to it.
 ;;;
 ;;; NA in a box means "not measured" and is passed through as such --
 ;;; different from leaving it blank, which just means POOL should ask.
@@ -66767,23 +66906,34 @@
 ;;; into rows and columns: no absolute positioning, no overlapping, so
 ;;; an edit box cannot sit on an image tile.  DCL also cannot display a
 ;;; raster at all -- an image tile takes vectors or an AutoCAD slide,
-;;; nothing else.  Hence the chart is drawn rather than loaded, the
-;;; numbers appear ON it as they are typed, and clicking it moves the
-;;; caret: between them those two recover most of what a text box
-;;; sitting on the artwork would have given, without a DLL to install.
-;;; (An earlier version also let you click the picture to jump to a
-;;; box; DCL took that back -- see "why the picture is not clickable".)
+;;; nothing else.  Hence the chart is drawn rather than loaded and the
+;;; numbers appear ON it as they are typed, which recovers most of what
+;;; a text box sitting on the artwork would have given, without a DLL
+;;; to install.  (An earlier version also let you click the picture to
+;;; jump to a box; DCL took that back -- see "why the picture is not
+;;; clickable".)
+;;;
+;;; ONE PICTURE, AND EVERY BOX IN THE COLUMN BESIDE IT.  v1.6 to v2.5
+;;; sliced the chart into horizontal bands and wedged the across-chains
+;;; between them, so B was typed on the B line.  It cost more than it
+;;; bought: the picture came apart into strips, the wedged boxes were
+;;; placed by spacer arithmetic that could only ever be approximate,
+;;; and a sheet read as two different kinds of thing at once -- some
+;;; letters answered on the drawing, the rest in a list.  So the boxes
+;;; are all back in the column, each labelled with its letter and each
+;;; with that letter as a button beside it, and the chart is one whole
+;;; passive image again.
 ;;;
 ;;; ADDING A SHAPE is adding data, not code -- one entry in
-;;; lzf:*charts* with an outline, a dimension list and its POOL keys,
-;;; plus a row in whichever of lzf:*cuts*, lzf:*cross*, lzf:*picks*
-;;; and lzf:*corners* the sheet needs.  Eight charts so far:
-;;; Rectangle, True Oval, Roman, both Grecians, True L Left, Round and
-;;; Octagon.  Watch the keys rather than the letters when you add one:
-;;; the same letter means different things on different sheets -- a
-;;; rectangle's B is the side length, an oval's B is the tip-to-tip
-;;; total and its SIDE is T -- so the mapping is per chart and is
-;;; checked against POOL's own question lists by tests/test_lazform.py.
+;;; lzf:*charts* with an outline, a dimension list and its answer keys,
+;;; plus a row in whichever of lzf:*cross*, lzf:*picks*, lzf:*corners*
+;;; and lzf:*oaslive* the sheet needs.  Thirteen charts so far, eight
+;;; POOL and five OASIS.  Watch the keys rather than the letters when
+;;; you add one: the same letter means different things on different
+;;; sheets -- a rectangle's B is the side length, an oval's B is the
+;;; tip-to-tip total and its SIDE is T -- so the mapping is per chart
+;;; and is checked against the routines' own question lists by
+;;; tests/test_lazform.py.
 ;;;
 ;;; WHAT IS LIVE ON A PAGE IS ONE FUNCTION'S DECISION.  lzf:dead reads
 ;;; the whole state of the page -- the bottom type, the in-square
@@ -66795,7 +66945,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.5")
+(setq *lazform-version* "v2.6")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -67214,6 +67364,155 @@
     ("f1" "F1 - right slope")
     ("e1" "E1 - right end shallow flat"))
    (("imeth" . "Overall") ("htype" . "Square")))
+
+  ;;; ============== the OASIS sheets ==============
+  ;;  An oasis pool is arcs and nothing else, so there is no chain to
+  ;;  draw and no hopper: the whole sheet is the ENVELOPE, X across and
+  ;;  Y up, and a radius against every arc.  Which is exactly what
+  ;;  OASIS asks for, in the order it asks -- the shape first (the tab
+  ;;  is that answer), then the box, then the bulges, then the joiners
+  ;;  between them.
+  ;;
+  ;;  THE OUTLINES ARE NOT DRAWN BY HAND.  Each is the ring
+  ;;  oasis:solve builds for that shape's own reference drawing --
+  ;;  scaled into the picture and flipped for the y-down convention,
+  ;;  and nothing else.  So the chart is the pool OASIS draws rather
+  ;;  than an artist's impression of it, and tests/test_lazform.py
+  ;;  re-derives every arc from OASIS and compares, which is why the
+  ;;  reference dimensions are written down in lzf:*oasart* rather
+  ;;  than lost in a comment.  Arc angles carry a decimal here (the
+  ;;  coordinates are still integers): rounded to whole degrees a
+  ;;  200-unit arc misses its neighbour by enough to show as a kink.
+  ;;
+  ;;  A BULGE'S RADIUS IS DRAWN WHERE IT RUNS.  Every bulge is pinned
+  ;;  to the envelope, so the line from its centre to the bound it
+  ;;  touches is the radius itself and is square to the page -- L, T
+  ;;  and R below are real "h" and "v" dimensions.  A JOINER's centre
+  ;;  is off the pool and its radius runs at whatever angle the
+  ;;  tangency puts it, so those are "p": a LEADER out to the letter,
+  ;;  drawn from the point on the outline it names.
+
+  ;; ---------------- Center ----------------
+  ;;  Three bulges -- left, right and one across the top, centred --
+  ;;  joined by three reverse arcs.  The one shape whose hump can be
+  ;;  moved off centre, which is why OFF is in the column here and on
+  ;;  no other sheet: it is a Complex-only question, greyed until the
+  ;;  detail dropdown says so.
+  ("OACenter" "Center" "Oasis - Center Bulge"
+   (("A" 260 658 160 222 85.9 329.7)
+    ("A" 484 840 100 139 32.7 149.7)
+    ("A" 720 630 180 250 212.7 465.2)
+    ("A" 657 308 60 83 235.8 285.2)
+    ("A" 500 630 220 306 55.8 130.3)
+    ("A" 280 270 120 167 265.9 310.3))
+   (("X"  "x"  100 204 900 204 "h" "X - overall left-to-right bounds")
+    ("Y"  "y"   45 324  45 880 "v" "Y - overall front-to-back bounds")
+    ("L"  "rl" 100 658 260 658 "h" "L - left bulge radius")
+    ("T"  "rt" 500 630 500 324 "v" "T - top bulge radius")
+    ("R"  "rr" 720 630 900 630 "h" "R - right bulge radius")
+    ("TL" "ftl" 317 428 256 380 "p" "TL - top-left tangent radius")
+    ("TR" "ftr" 647 390 696 333 "p" "TR - top-right tangent radius")
+    ("BC" "fbc" 482 701 467 770 "p" "BC - bottom-center tangent radius"))
+   (("off" "Top bulge off center, left negative (complex only)")))
+
+  ;; ---------------- Top Right ----------------
+  ;;  The same three bulges, with the third tucked into the top-right
+  ;;  corner instead of sitting across the top -- so it is tangent to
+  ;;  the Y-max AND the X-max bound, and the joiner that was the
+  ;;  top-right tangent is now the right-SIDE one, running down the far
+  ;;  wall between the corner bulge and the right bulge.
+  ("OATopRight" "TopRight" "Oasis - Top-Right Bulge"
+   (("A" 348 679 145 201 74.2 299.9)
+    ("A" 500 1047 161 223 60.1 119.9)
+    ("A" 652 679 145 201 240.1 380.4)
+    ("A" 908 547 129 179 159.0 200.4)
+    ("A" 668 419 129 179 339.0 522.9)
+    ("A" 422 314 129 179 254.2 342.9))
+   (("X"  "x"  203 120 797 120 "h" "X - overall left-to-right bounds")
+    ("Y"  "y"  148 240 148 880 "v" "Y - overall front-to-back bounds")
+    ("L"  "rl" 203 679 348 679 "h" "L - left bulge radius")
+    ("T"  "rt" 668 419 668 240 "v" "T - top-right bulge radius")
+    ("R"  "rr" 652 679 797 679 "h" "R - right bulge radius")
+    ("TL" "ftl" 484 471 469 402 "p" "TL - top-left tangent radius")
+    ("RS" "ftr" 780 546 864 542 "p" "RS - right-side tangent radius")
+    ("BC" "fbc" 500 824 500 894 "p" "BC - bottom-center tangent radius"))
+   ())
+
+  ;; ---------------- Cloud ----------------
+  ;;  Two bulges, joined over the top by a reverse arc.  The LEFT one
+  ;;  is tangent to three bounds at once -- X-min, Y-min and Y-max --
+  ;;  which pins its radius at half of Y and takes it out of the
+  ;;  questions altogether, so this sheet has no L box at all.  The
+  ;;  bottom comes two ways, and the dropdown is that question: a
+  ;;  Straight bottom is the flat run of the Y-min bound between the
+  ;;  two bulges and has no radius, so B only comes alive on Rounded.
+  ;;  The picture is the rounded one, which is the one with something
+  ;;  to show.
+  ("OACloud" "Cloud" "Oasis - Cloud"
+   (("A" 385 560 230 320 38.6 287.9)
+    ("A" 540 1230 276 384 70.8 107.9)
+    ("A" 684 656 161 224 250.8 452.2)
+    ("A" 673 240 138 192 218.6 272.2))
+   (("X" "x"  154 120 846 120 "h" "X - overall left-to-right bounds")
+    ("Y" "y"   99 240  99 880 "v" "Y - overall front-to-back bounds")
+    ("R" "rr" 684 656 846 656 "h" "R - right bulge radius")
+    ("T" "ftl" 615 415 668 360 "p" "T - top tangent radius")
+    ("B" "fbc" 543 846 556 915 "p" "B - bottom radius (rounded only)"))
+   ())
+
+  ;; ---------------- Kidney ----------------
+  ;;  Three bulges and ONE reverse arc: the two side circles sit INSIDE
+  ;;  the big top circle, touching it from within, and the outline
+  ;;  hands straight over at each touch.  Which of the three is given
+  ;;  and which is derived is the dropdown: a TRUE kidney gives the
+  ;;  top-center radius and derives two equal sides, an ASYMMETRIC one
+  ;;  gives two unequal sides and derives the top.  So TC and the L/R
+  ;;  pair are never live together, and until the dropdown is answered
+  ;;  neither is.  The picture is a true kidney.
+  ;;
+  ;;  TC is a LEADER and not a "v" dimension like the other top
+  ;;  bulges: a kidney's top circle is far bigger than the envelope and
+  ;;  its centre is a long way below the bottom of it, so the radius
+  ;;  line would run right off the sheet.
+  ("OAKidney" "Kidney" "Oasis - Kidney"
+   (("A" 298 605 198 275 115.5 313.0)
+    ("A" 500 907  99 137  47.0 133.0)
+    ("A" 702 605 198 275 227.0 424.5)
+    ("A" 500 1195 668 928 64.5 115.5))
+   (("X"  "x"  100 147 900 147 "h" "X - overall left-to-right bounds")
+    ("Y"  "y"   45 267  45 880 "v" "Y - overall front-to-back bounds")
+    ("L"  "rl" 100 605 298 605 "h" "L - left bulge radius (asymmetric)")
+    ("R"  "rr" 702 605 900 605 "h" "R - right bulge radius (asymmetric)")
+    ("TC" "rt" 500 267 500 197 "p" "TC - top-center radius (true kidney)")
+    ("BC" "fbc" 500 769 500 839 "p" "BC - bottom-center tangent radius"))
+   ())
+
+  ;; ---------------- NXT cloud ----------------
+  ;;  Three lobes and FOUR fillets, and the one ring that meets a bulge
+  ;;  twice: the outline runs under the centre lobe on its way out to
+  ;;  the right one and back over it on the way home, so that lobe
+  ;;  gives the drawing two disjoint arcs of one circle.  Eight
+  ;;  elements from seven circles, and all three lobes are pinned by
+  ;;  the envelope alone -- nothing to ask but the radii.
+  ("OANXT" "NXTcloud" "Oasis - NXT Cloud"
+   (("A" 260 547 160 222  42.5 280.7)
+    ("A" 308 902 100 139  42.5 100.7)
+    ("A" 500 658 160 222 222.5 307.4)
+    ("A" 658 945 100 139  71.6 127.4)
+    ("A" 740 602 160 222 251.6 487.4)
+    ("A" 582 315 100 139 251.6 307.4)
+    ("A" 500 658 160 222  71.6 100.7)
+    ("A" 452 303 100 139 222.5 280.7))
+   (("X"  "x"  100 204 900 204 "h" "X - overall left-to-right bounds")
+    ("Y"  "y"   45 324  45 880 "v" "Y - overall front-to-back bounds")
+    ("TL" "rl" 100 547 260 547 "h" "TL - top-left lobe radius")
+    ("CE" "rt" 500 880 500 658 "v" "CE - center lobe radius")
+    ("RI" "rr" 740 602 900 602 "h" "RI - right lobe radius")
+    ("LB" "fbc" 340 770 281 820 "p" "LB - left-bottom tangent radius")
+    ("RB" "fbr" 641 808 689 865 "p" "RB - right-bottom tangent radius")
+    ("RT" "ftr" 599 452 645 394 "p" "RT - right-top tangent radius")
+    ("LT" "ftl" 420 435 384 371 "p" "LT - left-top tangent radius"))
+   ())
 ))
 
 ;;; -------------------- chart access ------------------------------------
@@ -67298,9 +67597,103 @@
     ("OCtagon"   ("gcross" "Cross-dim detail" "cross"
                   ("(ask)" "Simple" "Center" "Complex")))
     ("L"         ("mirror" "Mirror the pool (wing swaps sides)" "run"
-                  ("(ask)" "Yes" "No")))))
+                  ("(ask)" "Yes" "No")))
+    ;; the OASIS pages.  "sub" is the second question the two families
+    ;; that come two ways are asked straight after the shape, and it
+    ;; decides which radii this sheet is even asked for; "detail" is
+    ;; simple-or-complex, which every oasis run is asked.
+    ("OACenter"   ("detail" "Simple or complex" "run"
+                   ("(ask)" "Simple" "Complex")))
+    ("OATopRight" ("detail" "Simple or complex" "run"
+                   ("(ask)" "Simple" "Complex")))
+    ("OACloud"    ("sub" "Cloud bottom" "run"
+                   ("(ask)" "Straight" "Rounded"))
+                  ("detail" "Simple or complex" "run"
+                   ("(ask)" "Simple" "Complex")))
+    ("OAKidney"   ("sub" "Kidney type" "run"
+                   ("(ask)" "True" "Asymmetric"))
+                  ("detail" "Simple or complex" "run"
+                   ("(ask)" "Simple" "Complex")))
+    ("OANXT"      ("detail" "Simple or complex" "run"
+                   ("(ask)" "Simple" "Complex")))))
 
 (defun lzf:picks (c) (cdr (assoc (car c) lzf:*picks*)))
+
+;;; -------------------- the OASIS sheets ---------------------------------
+;;;  A page feeds one routine or the other, and which is a property of
+;;;  the chart rather than of anything the user does: the tab IS the
+;;;  choice.  lzf:*oaslive* names the OASIS pages and, for each, the
+;;;  keys that page really asks for -- which is how the greying and the
+;;;  sending stay one decision on these sheets as on the POOL ones.
+;;;
+;;;      (chart  always-live  ((sub-answer also-live ...) ...))
+;;;
+;;;  The second list is read against the "sub" dropdown -- a cloud's
+;;;  bottom, a kidney's type -- and NOTHING in it is live until that
+;;;  dropdown is answered.  That is not caution, it is the form
+;;;  contract: a straight-bottomed cloud is never asked for a bottom
+;;;  radius and an asymmetric kidney is never asked for a top-center
+;;;  one, so a number typed into either before the question is settled
+;;;  would be read by nothing.
+;;;
+;;;  OFF -- how far a hump is off centre -- is the one key outside that
+;;;  table, because it hangs off the OTHER dropdown: OASIS asks it on a
+;;;  Center pool and only on a Complex run.
+
+;;  What each oasis picture was drawn from: the arguments oasis:solve
+;;  was handed, and the box the answer was scaled into.
+;;
+;;      (chart variant w h rl rt rr ftl ftr fbc fbr
+;;             x-left x-right y-top y-bottom)
+;;
+;;  A nil is a radius that shape does not take -- a cloud's left bulge
+;;  is pinned by three bounds, a true kidney's sides are derived.  The
+;;  scale is uniform in world terms and then stretched by 1/0.72 up the
+;;  page, which is the image tile's own aspect: per-mille y is squashed
+;;  by exactly that on the way to pixels, so pre-dividing it here is
+;;  what makes the picture come out true rather than flat.
+;;
+;;  This is not documentation.  tests/test_lazform.py runs oasis:solve
+;;  on these numbers and checks every arc of every chart against what
+;;  comes back, so the artwork cannot drift from the routine it draws
+;;  for -- and a shape OASIS changes shows up as a failing chart rather
+;;  than as a picture that quietly stopped being true.
+(setq lzf:*oasart*
+  '(("OACenter"   "Center"        480.0 240.0 96.0 132.0 108.0
+                                  72.0 36.0 60.0 nil     100 900 324 880)
+    ("OATopRight" "TopRight"      443.0 344.0 108.0 96.0 108.0
+                                  96.0 96.0 120.0 nil    203 797 240 880)
+    ("OACloud"    "RoundedBottom" 360.0 240.0 nil nil 84.0
+                                  72.0 nil 144.0 nil     154 846 240 880)
+    ("OAKidney"   "TrueKidney"    388.0 214.0 nil 324.0 nil
+                                  nil nil 48.0 nil       100 900 267 880)
+    ("OANXT"      "NXTcloud"      480.0 240.0 96.0 96.0 96.0
+                                  60.0 60.0 60.0 60.0    100 900 324 880)))
+
+(setq lzf:*oaslive*
+  '(("OACenter"   ("x" "y" "rl" "rt" "rr" "ftl" "ftr" "fbc") ())
+    ("OATopRight" ("x" "y" "rl" "rt" "rr" "ftl" "ftr" "fbc") ())
+    ("OACloud"    ("x" "y" "rr" "ftl")
+                  (("Rounded" "fbc")))
+    ("OAKidney"   ("x" "y" "fbc")
+                  (("True" "rt") ("Asymmetric" "rl" "rr")))
+    ("OANXT"      ("x" "y" "rl" "rt" "rr" "ftl" "ftr" "fbc" "fbr") ())))
+
+;; T when this page hands its answers to OASIS rather than to POOL.
+(defun lzf:oasis-p (c) (if (assoc (car c) lzf:*oaslive*) t nil))
+
+;; Every key this OASIS page will actually be asked for, in the state
+;; its two dropdowns are in.
+(defun lzf:oaslive (c / r out sub)
+  (setq r   (cdr (assoc (car c) lzf:*oaslive*))
+        out (car r)
+        sub (lzf:pickval c "sub"))
+  (if (assoc sub (cadr r))
+      (setq out (append out (cdr (assoc sub (cadr r))))))
+  ;; a hump off centre is a Center pool's question and a complex run's
+  (if (and (= (cadr c) "Center") (= (lzf:pickval c "detail") "Complex"))
+      (setq out (cons "off" out)))
+  out)
 
 ;; How many of a chart's cross boxes each mode leaves live.  A mode
 ;; this table does not name -- "(ask)" above all -- leaves none.
@@ -67354,32 +67747,32 @@
 (setq lzf:*crecharts*
   '("L" "LAzyl" "Grecian" "GRSquare" "OCtagon" "ROman"))
 
-;;; -------------------- where the chart is cut ---------------------------
-;;;  The closest DCL comes to boxes ON the drawing: the chart is cut
-;;;  into horizontal bands at the heights where its horizontal
-;;;  dimension rows run, and those rows are REAL edit boxes wedged
-;;;  between the bands, pushed to their letters' positions by spacers.
-;;;  The vertical dimensions cannot be wedged -- a box cannot stand
-;;;  sideways in a row -- so they keep their boxes in the side column
-;;;  with their values drawn on the chart as before.
-;;;
-;;;  A cut is a per-mille y that must land EXACTLY on a horizontal
-;;;  dimension's line; every "h" dimension at that y becomes a wedge
-;;;  box and loses its drawn arrow, since the row of boxes IS that row
-;;;  of the drawing now.  tests/test_lazform.py checks both ways: no
-;;;  cut without dims on it, and the wedge boxes sitting where the
-;;;  letters were, within the tolerance spacer widths allow.
+;;; -------------------- the across-chains --------------------------------
+;;;  Not a layout table -- the CHART's own dimension list, read
+;;;  sideways.  Every horizontal dimension sits on a line of the
+;;;  drawing, and the ones sharing a line are a chain: B alone across
+;;;  the top, H G F E together down the middle.  LAZTXT lays its rows
+;;;  out along those chains, so the schematic reads the way the sheet
+;;;  does without a second table to keep in step with the first.
 
-(setq lzf:*cuts* '(("Rectangle" 175 580)
-                   ("Oval" 130 205 345 580)
-                   ("ROman" 130 205 345 580)
-                   ("Grecian" 120 205 330 580)
-                   ("GRSquare" 120 205 580)
-                   ("L" 90 340 625 920)
-                   ("ROUnd" 150 405)
-                   ("OCtagon" 120 205 580)))
+;; The horizontal dims of one line, left to right.
+(defun lzf:hline (c y / d out)
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "h") (= (nth 3 d) y) (= (nth 5 d) y))
+        (setq out (cons d out))))
+  (vl-sort (reverse out)
+           '(lambda (p q) (< (+ (nth 2 p) (nth 4 p))
+                             (+ (nth 2 q) (nth 4 q))))))
 
-(defun lzf:cuts (c) (cdr (assoc (car c) lzf:*cuts*)))
+;; Every across-chain the chart has, top of the drawing downwards, as a
+;; list of dimension lists.
+(defun lzf:hrows (c / d ys out y)
+  (foreach d (lzf:dims c)
+    (if (and (= (nth 6 d) "h") (= (nth 3 d) (nth 5 d))
+             (not (member (nth 3 d) ys)))
+        (setq ys (cons (nth 3 d) ys))))
+  (foreach y (vl-sort ys '<) (setq out (cons (lzf:hline c y) out)))
+  (reverse out))
 
 ;;; -------------------- corners -----------------------------------------
 ;;;  A corner is a treatment plus, when the treatment is Radius or Cut,
@@ -67481,29 +67874,6 @@
   (princ))
 
 ;; The horizontal dims whose line IS this cut.
-(defun lzf:cutdims (c y / d out)
-  (foreach d (lzf:dims c)
-    (if (and (= (nth 6 d) "h") (= (nth 3 d) y) (= (nth 5 d) y))
-        (setq out (cons d out))))
-  (reverse out))
-
-;; Keys of every dim that lives in a wedge row rather than the column.
-(defun lzf:wedge-keys (c / y d out)
-  (foreach y (lzf:cuts c)
-    (foreach d (lzf:cutdims c y)
-      (setq out (cons (cadr d) out))))
-  (reverse out))
-
-;; The bands between the cuts: ((y0 . y1) ...), whole chart when a
-;; chart declares no cuts.
-(defun lzf:bands (c / ys prev out y)
-  (setq ys (append (list 0) (lzf:cuts c) (list 1000))
-        prev (car ys))
-  (foreach y (cdr ys)
-    (setq out (cons (cons prev y) out)
-          prev y))
-  (reverse out))
-
 ;; Every POOL key the chart can answer with a BOX, drawn ones first,
 ;; then the column-only fields, then the cross dims.
 (defun lzf:keys (c / d out)
@@ -67519,7 +67889,9 @@
 (defun lzf:pagekeys (c / out d)
   (setq out (lzf:keys c))
   (foreach d (lzf:picks c) (setq out (append out (list (car d)))))
-  (append out (list "btype")))
+  ;; the bottom type is POOL's question and an OASIS page carries no
+  ;; such tile, so naming it there would grey a box that is not there
+  (if (lzf:oasis-p c) out (append out (list "btype"))))
 
 ;;; -------------------- the answers -------------------------------------
 ;;;  What is typed is kept as the STRING the user typed, so the chart can
@@ -67533,6 +67905,7 @@
 (setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
 (setq lzf:*pos* nil)            ; where the dialog was last standing
 (setq lzf:*go* nil)             ; the chart a tab click asked for
+(setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
 
 (defun lzf:get (key / p)
   (if (setq p (assoc key lzf:*vals*)) (cdr p) ""))
@@ -67550,8 +67923,6 @@
 
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
-(setq lzf:*y0* 0)               ; the band being drawn, in per-mille --
-(setq lzf:*y1* 1000)            ; the whole chart when nothing is cut
 
 (setq lzf:*col-line* -16)       ; dialog foreground: the outline
 (setq lzf:*col-back* -15)       ; dialog background: the clear
@@ -67561,26 +67932,7 @@
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
-(defun lzf:py (v)
-  (fix (/ (* (- v lzf:*y0*) lzf:*dy*) (float (- lzf:*y1* lzf:*y0*)))))
-
-(defun lzf:iny (v) (and (<= lzf:*y0* v) (<= v lzf:*y1*)))
-
-;; The segment, clipped to the band, or nil when none of it is inside.
-;; Everything the bands draw goes through this, so a cut is one rule
-;; applied everywhere rather than per-shape case work.
-(defun lzf:clipseg (x1 y1 x2 y2 / ta tb lo hi)
-  (cond
-    ((= y1 y2)
-     (if (lzf:iny y1) (list x1 y1 x2 y2)))
-    (t
-     (setq ta (/ (- lzf:*y0* y1) (float (- y2 y1)))
-           tb (/ (- lzf:*y1* y1) (float (- y2 y1)))
-           lo (max 0.0 (min ta tb))
-           hi (min 1.0 (max ta tb)))
-     (if (< lo hi)
-         (list (+ x1 (* (- x2 x1) lo)) (+ y1 (* (- y2 y1) lo))
-               (+ x1 (* (- x2 x1) hi)) (+ y1 (* (- y2 y1) hi)))))))
+(defun lzf:py (v) (fix (/ (* v lzf:*dy*) 1000.0)))
 
 ;;  An outline element is either a POLYLINE -- a flat list of per-mille
 ;;  numbers, x y x y ... -- or an ARC, written
@@ -67616,13 +67968,12 @@
 (defun lzf:flatten (e)
   (if (= (type (car e)) 'STR) (lzf:arcpts e) e))
 
-;; A polyline given as a flat per-mille list, clipped to the band.
-(defun lzf:pline (flat col / s)
+;; A polyline given as a flat per-mille list, in pixels.
+(defun lzf:pline (flat col / a b)
   (while (and flat (cddr flat))
-    (if (setq s (lzf:clipseg (car flat) (cadr flat)
-                             (caddr flat) (cadddr flat)))
-        (vector_image (lzf:px (car s)) (lzf:py (cadr s))
-                      (lzf:px (caddr s)) (lzf:py (cadddr s)) col))
+    (setq a (list (lzf:px (car flat)) (lzf:py (cadr flat)))
+          b (list (lzf:px (caddr flat)) (lzf:py (cadddr flat))))
+    (vector_image (car a) (cadr a) (car b) (cadr b) col)
     (setq flat (cddr flat))))
 
 ;; A polyline already in pixels, given as (x y x y ...).
@@ -67670,36 +68021,33 @@
           i (1+ i)))
   pen)
 
-;; The dimension line with an arrowhead at each end, in per-mille,
-;; clipped to the band.  A head is drawn only when its own end is
-;; inside the band -- the shaft of a vertical dimension can run
-;; through several bands, and each draws just its stretch.
-(defun lzf:arrow (x1 y1 x2 y2 col / s a b p q)
-  (if (setq s (lzf:clipseg x1 y1 x2 y2))
-      (vector_image (lzf:px (car s)) (lzf:py (cadr s))
-                    (lzf:px (caddr s)) (lzf:py (cadddr s)) col))
+;; The dimension line, in per-mille.  A measurement that runs along the
+;; drawing -- "h" or "v" -- gets an arrowhead at each end; a radius
+;; with no square run to lie along -- "p" -- gets a LEADER instead,
+;; drawn from the point on the outline it names out to where its
+;; letter sits.  The head shapes are the whole of the first two cases
+;; because these charts have no diagonal dimension: the one
+;; measurement that genuinely runs corner to corner, the cross dim, is
+;; a column box on every sheet that has one.
+(defun lzf:arrow (x1 y1 x2 y2 side col / a b p q)
+  (vector_image (lzf:px x1) (lzf:py y1) (lzf:px x2) (lzf:py y2) col)
   (setq a 6 b 3)
   (cond
+    ((= side "p") nil)                  ; a leader: the line is all of it
     ((= y1 y2)                          ; horizontal: heads point in
-     (if (lzf:iny y1)
-         (progn
-           (setq p (list (lzf:px (min x1 x2)) (lzf:py y1))
-                 q (list (lzf:px (max x1 x2)) (lzf:py y1)))
-           (vector_image (car p) (cadr p) (+ (car p) a) (- (cadr p) b) col)
-           (vector_image (car p) (cadr p) (+ (car p) a) (+ (cadr p) b) col)
-           (vector_image (car q) (cadr q) (- (car q) a) (- (cadr q) b) col)
-           (vector_image (car q) (cadr q) (- (car q) a) (+ (cadr q) b) col))))
+     (setq p (list (lzf:px (min x1 x2)) (lzf:py y1))
+           q (list (lzf:px (max x1 x2)) (lzf:py y1)))
+     (vector_image (car p) (cadr p) (+ (car p) a) (- (cadr p) b) col)
+     (vector_image (car p) (cadr p) (+ (car p) a) (+ (cadr p) b) col)
+     (vector_image (car q) (cadr q) (- (car q) a) (- (cadr q) b) col)
+     (vector_image (car q) (cadr q) (- (car q) a) (+ (cadr q) b) col))
     (t                                  ; vertical
-     (if (lzf:iny (min y1 y2))
-         (progn
-           (setq p (list (lzf:px x1) (lzf:py (min y1 y2))))
-           (vector_image (car p) (cadr p) (- (car p) b) (+ (cadr p) a) col)
-           (vector_image (car p) (cadr p) (+ (car p) b) (+ (cadr p) a) col)))
-     (if (lzf:iny (max y1 y2))
-         (progn
-           (setq q (list (lzf:px x1) (lzf:py (max y1 y2))))
-           (vector_image (car q) (cadr q) (- (car q) b) (- (cadr q) a) col)
-           (vector_image (car q) (cadr q) (+ (car q) b) (- (cadr q) a) col))))))
+     (setq p (list (lzf:px x1) (lzf:py (min y1 y2)))
+           q (list (lzf:px x1) (lzf:py (max y1 y2))))
+     (vector_image (car p) (cadr p) (- (car p) b) (+ (cadr p) a) col)
+     (vector_image (car p) (cadr p) (+ (car p) b) (+ (cadr p) a) col)
+     (vector_image (car q) (cadr q) (- (car q) b) (- (cadr q) a) col)
+     (vector_image (car q) (cadr q) (+ (car q) b) (- (cadr q) a) col))))
 
 ;; Where one dimension's text belongs, and what it says: the LETTER
 ;; until a value is typed, then the value in the letter's place.  A
@@ -67728,17 +68076,21 @@
                   (setq sc (/ (* (lzf:basesc) 55) 100)))
               (setq w (lzf:textw txt sc))))))
   (setq h (lzf:texth sc))
-  (if (= side "h")
-      (setq lx (- mx (/ w 2)) ly (- y1 h 4))
-      ;; a vertical dimension labels at the TOP of its span: the middle
-      ;; row already carries the H/G/F/E chain across the pool.  It is
-      ;; centred on its own line, EXCEPT when that would run off the
-      ;; left edge -- an overall like A sits hard against the boundary
-      ;; with no room on its outside, so its label goes on the inside
-      ;; rather than being clipped down to a stub
-      (progn
-        (setq ly (+ (min y1 y2) 5))
-        (setq lx (if (< (- mx (/ w 2)) 2) (+ mx 4) (- mx (/ w 2))))))
+  (cond
+    ;; a leader ends where its letter goes, and the letter is centred
+    ;; on that spot -- the line runs up to it and the blanked strip
+    ;; behind the text stops it there
+    ((= side "p") (setq lx (- x2 (/ w 2)) ly (- y2 (/ h 2))))
+    ((= side "h") (setq lx (- mx (/ w 2)) ly (- y1 h 4)))
+    ;; a vertical dimension labels at the TOP of its span: the middle
+    ;; row already carries the H/G/F/E chain across the pool.  It is
+    ;; centred on its own line, EXCEPT when that would run off the
+    ;; left edge -- an overall like A sits hard against the boundary
+    ;; with no room on its outside, so its label goes on the inside
+    ;; rather than being clipped down to a stub
+    (t
+     (setq ly (+ (min y1 y2) 5))
+     (setq lx (if (< (- mx (/ w 2)) 2) (+ mx 4) (- mx (/ w 2))))))
   ;; and nothing is allowed off the edge of the picture
   (if (< lx 2) (setq lx 2))
   (if (> (+ lx w) (- lzf:*dx* 2)) (setq lx (- lzf:*dx* w 2)))
@@ -67755,47 +68107,24 @@
   (lzf:text txt lx ly sc
             (if (= (lzf:get key) "") lzf:*col-line* lzf:*col-val*)))
 
-;; The band a dimension's TEXT belongs to: a horizontal dim sits on
-;; its own line, a vertical one labels at the top of its span.
-(defun lzf:anchor (d)
-  (if (= (nth 6 d) "h")
-      (nth 3 d)
-      (min (nth 3 d) (nth 5 d))))
-
-(defun lzf:inband (v) (and (<= lzf:*y0* v) (< v lzf:*y1*)))
-
-;; The whole picture: every band painted once, each between its own
-;; start_image and end_image.  Wedge dims draw nothing at all -- their
-;; row of the drawing IS a row of real boxes now -- while every other
-;; dim draws its clipped arrow in every band it crosses and its text
-;; in the band its anchor falls in.
-(defun lzf:redraw ( / c wk bands b i key poly d)
+;; The whole picture, start to end.  Every vector goes between one
+;; start_image and one end_image so the tile is painted once: the
+;; outline first, then every dimension's line, then every dimension's
+;; text over the top of it -- the text blanks the strip behind itself,
+;; so a letter never has a dimension line running through it.
+(defun lzf:redraw ( / c poly d)
   (setq c lzf:*chart*
-        wk (lzf:wedge-keys c)
-        bands (lzf:bands c)
-        i 0)
-  (foreach b bands
-    (setq key (strcat "chart" (itoa i))
-          lzf:*y0* (car b)
-          lzf:*y1* (cdr b)
-          lzf:*dx* (dimx_tile key)
-          lzf:*dy* (dimy_tile key))
-    (start_image key)
-    (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
-    (foreach poly (lzf:outline c)
-      (lzf:pline (lzf:flatten poly) lzf:*col-line*))
-    (foreach d (lzf:dims c)
-      (if (not (member (cadr d) wk))
-          (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     lzf:*col-dim*)))
-    (foreach d (lzf:dims c)
-      (if (and (not (member (cadr d) wk))
-               (lzf:inband (lzf:anchor d)))
-          (lzf:label d)))
-    (end_image)
-    (setq i (1+ i)))
-  (setq lzf:*y0* 0
-        lzf:*y1* 1000)
+        lzf:*dx* (dimx_tile "chart")
+        lzf:*dy* (dimy_tile "chart"))
+  (start_image "chart")
+  (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
+  (foreach poly (lzf:outline c)
+    (lzf:pline (lzf:flatten poly) lzf:*col-line*))
+  (foreach d (lzf:dims c)
+    (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d)
+               lzf:*col-dim*))
+  (foreach d (lzf:dims c) (lzf:label d))
+  (end_image)
   (princ))
 
 ;;; -------------------- why the picture is not clickable ----------------
@@ -67862,10 +68191,7 @@
   (reverse out))
 
 (setq lzf:*chart-w* 52)         ; the chart column, in character cells
-(setq lzf:*chart-h* 19)         ; its total height, spread over the bands
-
-;; character cells across for a per-mille x
-(defun lzf:cellx (v) (/ (* v lzf:*chart-w*) 1000.0))
+(setq lzf:*chart-a* "0.72")     ; and its height, as a share of that
 
 ;;; -------------------- packing the column boxes ------------------------
 ;;;  A DCL DIALOG TALLER THAN THE SCREEN DOES NOT OPEN, and nothing
@@ -67944,60 +68270,10 @@
 
 (defun lzf:hint (c) (cdr (assoc (car c) lzf:*hints*)))
 
-;; One wedge row: the cut's dims as real edit boxes, pushed to their
-;; letters' positions by spacers.  Positions are in character cells and
-;; a box has its own minimum size, so this is honest about being
-;; approximate: a box lands within a cell or so of its letter, and two
-;; that would collide get pushed apart rather than overlapped.
-(defun lzf:wedgerow (c y / out d lbl w want pos)
-  (setq out (list "      : row {")
-        pos 0.0)
-  ;; LEFT TO RIGHT, whatever order the chart lists them in: the row is
-  ;; built by walking a cursor across it, and a dim listed before its
-  ;; left-hand neighbour would shove that neighbour to the wrong side
-  ;; of the chart
-  (foreach d (vl-sort (lzf:cutdims c y)
-                      '(lambda (p q)
-                         (< (+ (nth 2 p) (nth 4 p))
-                            (+ (nth 2 q) (nth 4 q)))))
-    (setq lbl (car d)
-          w (+ (strlen lbl) 10.0)       ; label + borders + 6-char box
-          want (- (lzf:cellx (/ (+ (nth 2 d) (nth 4 d)) 2)) (/ w 2)))
-    (if (< want (+ pos 0.5)) (setq want (+ pos 0.5)))
-    (setq out (cons (strcat "        : spacer { width = "
-                            (rtos (- want pos) 2 1) "; }")
-                    out))
-    (setq out (cons (strcat "        : edit_box { key = \"" (cadr d)
-                            "\"; label = \"" lbl
-                            "\"; edit_width = 6; fixed_width = true; }")
-                    out))
-    (setq pos (+ want w)))
-  (setq out (cons "        spacer;" out))
-  (reverse (cons "      }" out)))
-
-;; The chart as a stack: an image tile per band, a wedge row at every
-;; cut, heights split in proportion to the bands they show.
-(defun lzf:bandtiles (c / out bands b i h)
-  (setq i 0
-        bands (lzf:bands c))
-  (foreach b bands
-    (setq h (/ (* (- (cdr b) (car b)) lzf:*chart-h*) 1000.0))
-    (if (< h 0.8) (setq h 0.8))
-    (setq out (append out
-                      (list (strcat "      : image { key = \"chart" (itoa i)
-                                    "\"; width = " (itoa lzf:*chart-w*)
-                                    "; height = " (rtos h 2 1)
-                                    "; fixed_width = true; "
-                                    "fixed_height = true; color = -15; }"))))
-    (if (< (1+ i) (length bands))
-        (setq out (append out (lzf:wedgerow c (cdr b)))))
-    (setq i (1+ i)))
-  out)
-
 ;; One dialog per chart.  They all live in one generated file so the
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
-(defun lzf:dcl-one (c / out d wk l)
+(defun lzf:dcl-one (c / out d l)
   ;; out is consed newest-first and reversed once at the end, so this
   ;; seed list reads BACKWARDS: the label second here puts it second in
   ;; the file, after the line that opens the dialog.  The other way
@@ -68006,13 +68282,13 @@
                   (strcat (lzf:dlgname (car c)) " : dialog {")))
   (setq out (append (reverse (lzf:tabstrip (car c))) out))
   (setq out (cons "  : row {" out))
-  ;; PASSIVE image tiles, deliberately -- see "why the picture is not
-  ;; clickable" above -- stacked with the wedge rows between them.
-  (setq wk (lzf:wedge-keys c))
-  (setq out (cons "    : column {" out))
-  (foreach l (lzf:bandtiles c)
-    (setq out (cons l out)))
-  (setq out (cons "    }" out))
+  ;; A PASSIVE image tile, deliberately -- see "why the picture is not
+  ;; clickable" above -- and ONE of them: the whole chart, whole.
+  (setq out (cons (strcat "    : image { key = \"chart\"; width = "
+                          (itoa lzf:*chart-w*) "; aspect_ratio = "
+                          lzf:*chart-a* "; fixed_width = true; "
+                          "fixed_height = true; color = -15; }")
+                  out))
   (setq out (cons "    : column {" out))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"Dimensions\";" out))
@@ -68020,23 +68296,20 @@
   ;; Clicking the letter puts the caret in that box and rings the
   ;; dimension on the chart -- which is as close to clicking the
   ;; drawing itself as DCL allows, and the button sits against the box
-  ;; it fills rather than off in a separate list.
-  ;; only the dims that could NOT be wedged into the drawing -- the
-  ;; vertical ones -- keep a row here; the horizontal chains live on
-  ;; the chart itself now
+  ;; it fills rather than off in a separate list.  EVERY dimension the
+  ;; chart draws has a row here: the picture is read, the column is
+  ;; typed into, and the letter is what ties the two together.
   (foreach d (lzf:dims c)
-    (if (not (member (cadr d) wk))
-        (progn
-          (setq out (cons "        : row {" out))
-          (setq out (cons (strcat "          : button { key = \"pick_"
-                                  (cadr d) "\"; label = \"" (car d)
-                                  "\"; fixed_width = true; }")
-                          out))
-          (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
-                                  "\"; edit_width = 9; label = \"" (nth 7 d)
-                                  "\"; }")
-                          out))
-          (setq out (cons "        }" out)))))
+    (setq out (cons "        : row {" out))
+    (setq out (cons (strcat "          : button { key = \"pick_"
+                            (cadr d) "\"; label = \"" (car d)
+                            "\"; fixed_width = true; }")
+                    out))
+    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                            "\"; edit_width = 9; label = \"" (nth 7 d)
+                            "\"; }")
+                    out))
+    (setq out (cons "        }" out)))
   (setq out (cons "      }" out))
   (if (lzf:extra c)
     (progn
@@ -68077,12 +68350,19 @@
       (setq out (cons "      }" out))))
   (setq out (cons "      : boxed_column {" out))
   (setq out (cons "        label = \"The rest of the run\";" out))
-  (setq out (cons (strcat "        : toggle { key = \"insq\"; "
-                          "label = \"Pool is in-square (no cross dims)\"; }")
-                  out))
-  (setq out (cons (strcat "        : popup_list { key = \"btype\"; "
-                          "label = \"Bottom type\"; }")
-                  out))
+  ;; the in-square toggle and the bottom type are POOL's questions and
+  ;; nothing on an oasis answers to either: it is arcs all round, so
+  ;; there is no corner to run a tape across, and its floor is asked
+  ;; about after the outline is drawn
+  (if (not (lzf:oasis-p c))
+    (progn
+      (setq out (cons (strcat "        : toggle { key = \"insq\"; "
+                              "label = \"Pool is in-square "
+                              "(no cross dims)\"; }")
+                      out))
+      (setq out (cons (strcat "        : popup_list { key = \"btype\"; "
+                              "label = \"Bottom type\"; }")
+                      out))))
   ;; the keyword questions that are not about cross dims live here,
   ;; with the toggle and the bottom type
   (foreach d (lzf:picks c)
@@ -68093,9 +68373,11 @@
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
-                          "label = \"The chain boxes sit on the drawing itself.  "
-                          "Type NA where nothing was measured; leave a box "
-                          "empty and POOL will ask.\"; }")
+                          "label = \"Read the letters off the chart and type "
+                          "the numbers in the column beside it.  Type NA where "
+                          "nothing was measured; leave a box empty and "
+                          (if (lzf:oasis-p c) "OASIS" "POOL")
+                          " will ask.\"; }")
                   out))
   (if (lzf:hint c)
     (setq out (cons (strcat "  : text { key = \"hint2\"; width = 62; label = \""
@@ -68320,49 +68602,28 @@
   (strcat "        : edit_box { key = \"" (cadr d) "\"; label = \""
           (car d) "\"; edit_width = " (itoa w) "; }"))
 
-;; One row per cut, in drawing order: the across-chain the way it reads
-;; on the sheet.
-(defun lzf:txt-rows (c / out y ds d)
-  (foreach y (lzf:cuts c)
-    (setq ds (lzf:cutdims c y))
-    (if ds
-      (progn
-        (setq out (cons "      : row {" out))
-        (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
-        (setq out (cons "      }" out)))))
+;; One row per across-chain, top of the drawing downwards: the chain
+;; the way it reads on the sheet.
+(defun lzf:txt-rows (c / out ds d)
+  (foreach ds (lzf:hrows c)
+    (setq out (cons "      : row {" out))
+    (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+    (setq out (cons "      }" out)))
   (reverse out))
 
-;; Every h dim the cuts did not claim, plus the column-only fields.
-(defun lzf:txt-rest (c / out d wk)
-  (setq wk (lzf:wedge-keys c))
-  (foreach d (lzf:dims c)
-    (if (and (= (nth 6 d) "h") (not (member (cadr d) wk)))
-      (setq out (cons (lzf:txt-box d 8) out))))
-  (reverse out))
+;; The first chain on its own -- the overall length, above the pool the
+;; way the sheet has it.
+(defun lzf:txt-firstrow (c / out d)
+  (setq out (list "    : row {"))
+  (foreach d (car (lzf:hrows c)) (setq out (cons (lzf:txt-box d 6) out)))
+  (reverse (cons "    }" out)))
 
-;; The first cut's row on its own -- the overall length, above the pool
-;; the way the sheet has it.
-(defun lzf:txt-firstrow (c / out ds d)
-  (setq ds (lzf:cutdims c (car (lzf:cuts c))))
-  (if ds
-    (progn
-      (setq out (list "    : row {"))
-      (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
-      (reverse (cons "    }" out)))))
-
-;; Every cut row after the first.
-(defun lzf:txt-restrows (c / out y ds d first)
-  (setq first t)
-  (foreach y (lzf:cuts c)
-    (cond
-      (first (setq first nil))
-      (t
-       (setq ds (lzf:cutdims c y))
-       (if ds
-         (progn
-           (setq out (cons "      : row {" out))
-           (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
-           (setq out (cons "      }" out)))))))
+;; Every chain after the first.
+(defun lzf:txt-restrows (c / out ds d)
+  (foreach ds (cdr (lzf:hrows c))
+    (setq out (cons "      : row {" out))
+    (foreach d ds (setq out (cons (lzf:txt-box d 6) out)))
+    (setq out (cons "      }" out)))
   (reverse out))
 
 (defun lzf:dcl-txt (c / out tall d rows)
@@ -68401,10 +68662,10 @@
                                 "      label = \"Across\";")
                       rows
                       (list "    }"))))
-  ;; anything the cuts did not claim, and the column-only fields
+  ;; and the boxes with no place in the schematic at all: the
+  ;; column-only fields and the cross dims
   (setq out (append out (list "    : boxed_column {"
                               "      label = \"And the rest\";")))
-  (setq out (append out (lzf:txt-rest c)))
   (foreach d (append (lzf:extra c) (lzf:cross c))
     (setq out (append out (list (strcat "        : edit_box { key = \""
                                         (car d) "\"; label = \"" (cadr d)
@@ -68555,7 +68816,9 @@
 ;; answer is restricted to keys the page really carries, so a rule may
 ;; name a key no chart has and the two callers can both trust the list
 ;; -- mode_tile on a tile that is not there would error.
-(defun lzf:dead (c insq btype / out bt n i k have seen)
+;; A POOL page's dead keys: the bottom type, the in-square toggle and
+;; the mode dropdown, put together.
+(defun lzf:pooldead (c insq btype / out bt n i k)
   ;; the L family: POOL asks no bottom type there at all, so the popup
   ;; is dead and the page is judged against the bottom those flows
   ;; really draw
@@ -68577,6 +68840,27 @@
   (foreach k (lzf:cross c)
     (if (>= i n) (setq out (cons (car k) out)))
     (setq i (1+ i)))
+  out)
+
+;; An OASIS page's, which is the same idea read the other way round:
+;; lzf:*oaslive* names what the shape DOES ask for in this state, and
+;; everything else on the sheet is dead.  A cloud's pinned left bulge,
+;; the kidney radius the other kidney derives, a hump offset on a
+;; simple run -- each is dead here for the reason a Normal hopper's C
+;; is dead on a POOL page: OASIS will never ask, so a number typed
+;; into it would be read by nothing.  The dropdowns themselves are
+;; always live; they are the questions the rest hangs off.
+(defun lzf:oasdead (c / live out k)
+  (setq live (lzf:oaslive c))
+  (foreach k (lzf:picks c) (setq live (cons (car k) live)))
+  (foreach k (lzf:pagekeys c)
+    (if (not (member k live)) (setq out (cons k out))))
+  (reverse out))
+
+(defun lzf:dead (c insq btype / out k have seen)
+  (setq out (if (lzf:oasis-p c)
+                (lzf:oasdead c)
+                (lzf:pooldead c insq btype)))
   ;; keep what this page actually has, once each
   (setq have (lzf:pagekeys c))
   (foreach k out
@@ -68590,7 +68874,34 @@
   (foreach k (lzf:pagekeys c)
     (mode_tile k (if (member k dead) 1 0))))
 
-(defun lzf:form (shape insq btype / out k v a dead d cp)
+(defun lzf:form (shape insq btype)
+  (if (lzf:oasis-p lzf:*chart*)
+      (lzf:oasform shape)
+      (lzf:poolform shape insq btype)))
+
+;; What OASIS is handed.  Shorter than POOL's by everything POOL has
+;; that an oasis has not: no corners on a shape with none, no cross
+;; dims on one with no straight side to run a tape across, no bottom
+;; type -- OASIS asks about the floor after the outline is drawn and
+;; not before.  The shape itself is the page, so it always travels.
+(defun lzf:oasform (shape / out k v a dead d)
+  (setq dead (lzf:dead lzf:*chart* nil nil)
+        out  (list (cons 'shape shape)))
+  (foreach k (lzf:keys lzf:*chart*)
+    (setq v (lzf:get k)
+          a (lzf:answer v))
+    (if (and (not (eq a 'SKIP)) (not (member k dead)))
+        (setq out (cons (cons (read k) a) out))))
+  ;; the cloud's bottom, the kidney's type and simple-or-complex: a
+  ;; keyword answer in its own right, and one left on "(ask)" sends
+  ;; nothing, exactly as an empty box does
+  (foreach d (lzf:picks lzf:*chart*)
+    (setq v (lzf:pickval lzf:*chart* (car d)))
+    (if (and (/= v "") (not (member (car d) dead)))
+        (setq out (cons (cons (read (car d)) v) out))))
+  (reverse out))
+
+(defun lzf:poolform (shape insq btype / out k v a dead d cp)
   (setq dead (lzf:dead lzf:*chart* insq btype))
   (setq out (list (cons 'shape shape)
                   (cons 'insq (if insq "Insquare" "Outofsquare"))))
@@ -68668,6 +68979,7 @@
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
         lzf:*pos* nil                   ; where the user last had it
+        lzf:*ranchart* nil              ; no page has been accepted yet
         go chartkey)
   (cond
     ((not (lzf:chart go))
@@ -68692,10 +69004,15 @@
           (princ "\nLAZFORM error: could not open the form.")
           (setq done t))
          (t
-          (start_list "btype")
-          (foreach d lzf:*btypes* (add_list d))
-          (end_list)
-          (set_tile "btype" (itoa lzf:*btype*))
+          ;; the bottom type and the in-square toggle are POOL's, and
+          ;; an OASIS page carries neither tile -- so neither is
+          ;; filled in, set or bound there
+          (if (not (lzf:oasis-p c))
+            (progn
+              (start_list "btype")
+              (foreach d lzf:*btypes* (add_list d))
+              (end_list)
+              (set_tile "btype" (itoa lzf:*btype*))))
           ;; the corner dropdowns: filled, put back to their remembered
           ;; pick, size boxes greyed unless that pick takes a size --
           ;; and each harvests into its own store the moment it changes
@@ -68722,7 +69039,7 @@
             (set_tile (car d) (itoa (lzf:pget (car d))))
             (action_tile (car d)
               (strcat "(lzf:pickpick \"" (car d) "\" $value)")))
-          (if lzf:*insq* (set_tile "insq" "1"))
+          (if (and lzf:*insq* (not (lzf:oasis-p c))) (set_tile "insq" "1"))
           ;; put back what was typed before this page was opened
           (foreach d (lzf:keys c) (set_tile d (lzf:get d)))
           (foreach d (lzf:keys c)
@@ -68733,14 +69050,11 @@
           ;; the box's contents selected so the first keystroke
           ;; replaces rather than appends, and the dimension ringed on
           ;; the chart
-          ;; wedge dims have no pick button -- their box already sits
-          ;; on the drawing where the letter was
           (foreach d (lzf:dims c)
-            (if (not (member (cadr d) (lzf:wedge-keys c)))
-                (action_tile (strcat "pick_" (cadr d))
-                  (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
-                          " (mode_tile \"" (cadr d) "\" 2)"
-                          " (mode_tile \"" (cadr d) "\" 3)"))))
+            (action_tile (strcat "pick_" (cadr d))
+              (strcat "(setq lzf:*focus* \"" (cadr d) "\") (lzf:redraw)"
+                      " (mode_tile \"" (cadr d) "\" 2)"
+                      " (mode_tile \"" (cadr d) "\" 3)")))
           ;; the tabs -- each closes this page and names the next
           (foreach d lzf:*charts*
             (action_tile (strcat "tab_" (car d))
@@ -68750,14 +69064,17 @@
           ;; These two capture their value as it changes: get_tile
           ;; answers about a LIVE dialog, and by the time the answers
           ;; are assembled this one is closed and unloaded.
-          (action_tile "btype"
-            (strcat "(setq lzf:*btype* (atoi $value)) (lzf:redraw)"
-                    " (lzf:btgrey lzf:*chart*)"))
-          ;; the toggle decides the cross dims and the second overalls,
-          ;; so it re-greys the page as well as repainting the chart
-          (action_tile "insq"
-            (strcat "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)"
-                    " (lzf:btgrey lzf:*chart*)"))
+          (if (not (lzf:oasis-p c))
+            (progn
+              (action_tile "btype"
+                (strcat "(setq lzf:*btype* (atoi $value)) (lzf:redraw)"
+                        " (lzf:btgrey lzf:*chart*)"))
+              ;; the toggle decides the cross dims and the second
+              ;; overalls, so it re-greys the page as well as
+              ;; repainting the chart
+              (action_tile "insq"
+                (strcat "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)"
+                        " (lzf:btgrey lzf:*chart*)"))))
           (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
@@ -68766,6 +69083,7 @@
           (cond
             ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again
             (t (setq done t
+                     lzf:*ranchart* (if (= rc 1) (car c))
                      out (if (= rc 1)
                              (lzf:form (cadr c) lzf:*insq*
                                        (nth lzf:*btype* lzf:*btypes*)))))))))))
@@ -68789,21 +69107,28 @@
 
 ;;; -------------------- commands ----------------------------------------
 
-;; The form, then POOL with what it collected.  COVER closes POOL's
-;; pool-bottom gate first: a cover sheet has no floor work on it, so
-;; the depth chain behind that gate is neither asked for nor drawn.
-;; The flag goes on at the last moment -- after the form comes back --
-;; so a cancelled form leaves the session exactly as it found it, and
-;; c:POOL clears it again on the way out either way.
-(defun lzf:run (cover / form)
+;; The form, then the routine the page it was filled in on feeds.
+;; COVER closes POOL's pool-bottom gate first: a cover sheet has no
+;; floor work on it, so the depth chain behind that gate is neither
+;; asked for nor drawn.  The flag goes on at the last moment -- after
+;; the form comes back -- so a cancelled form leaves the session
+;; exactly as it found it, and c:POOL clears it again on the way out
+;; either way.  It is a POOL flag and the OASIS pages never set it: an
+;; oasis is asked about its floor after the outline exists, so there
+;; is no gate in front of the question to close.
+(defun lzf:run (cover / form c)
   (cond
     ;; the chart fills POOL's answers in, so POOL has to be here to
     ;; receive them -- say so plainly rather than opening a form whose
-    ;; Insert button could only fail
+    ;; Insert button could only fail.  POOL and not OASIS, because
+    ;; POOL is what lzf:btskip reads the bottom-type rules out of, so
+    ;; without it not even the greying on a rectangle sheet is honest
     ((not pool:run-with-answers)
      (princ "\nLAZFORM: POOL is not loaded in this session -- APPLOAD")
      (princ "\n         lisp/pool/POOL.LSP, or LAZPASS.lsp which has both."))
-    ((setq form (lzf:show (car (car lzf:*charts*))))
+    ((not (setq form (lzf:show (car (car lzf:*charts*)))))
+     (princ "\nLAZFORM: cancelled, nothing drawn."))
+    ((not (lzf:oasis-p (setq c (lzf:chart lzf:*ranchart*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to POOL; it will ask for whatever is left."))
      (if cover
@@ -68811,16 +69136,27 @@
          (setq pool:*nobottom* t)
          (princ "\n         Cover sheet - no pool bottom will be asked for.")))
      (pool:run-with-answers form))
-    (t (princ "\nLAZFORM: cancelled, nothing drawn.")))
+    ;; an oasis sheet, and OASIS is the one that has to be here for it
+    ((not oasis:run-with-answers)
+     (princ "\nLAZFORM: that is an OASIS sheet and OASIS is not loaded in")
+     (princ "\n         this session -- APPLOAD lisp/oasis/OASIS.lsp, or")
+     (princ "\n         LAZPASS.lsp which has the lot.  Nothing drawn."))
+    (t
+     (princ (strcat "\nLAZFORM: " (itoa (length form))
+                    " answers to OASIS; it will ask for whatever is left."))
+     (oasis:run-with-answers form)))
   (princ))
 
 (defun c:LAZFORM () (lzf:run nil))
 
 (defun c:LAZFORMCOVER () (lzf:run t))
 
-(defun c:LAZFORMVER ()
+(defun c:LAZFORMVER ( / c n)
+  (setq n 0)
+  (foreach c lzf:*charts* (if (lzf:oasis-p c) (setq n (1+ n))))
   (princ (strcat "\nLAZFORM " *lazform-version* " (LAZFORM.lsp) - "
-                 (itoa (length lzf:*charts*)) " chart(s)."))
+                 (itoa (length lzf:*charts*)) " chart(s), "
+                 (itoa n) " of them OASIS."))
   (princ))
 
 (princ (strcat "\nLAZFORM " *lazform-version*

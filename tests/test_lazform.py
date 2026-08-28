@@ -19,6 +19,7 @@ Runs at either tier: standalone by default, grouped with
 CALOFIN_LISP_ROOT=shared.
 """
 
+import math
 import os
 import re
 import sys
@@ -31,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
 LSP = os.path.join(REPO, 'lisp', 'lazform', 'LAZFORM.lsp')
 POOL = os.path.join(REPO, 'lisp', 'pool', 'POOL.LSP')
+OASIS = os.path.join(REPO, 'lisp', 'oasis', 'OASIS.lsp')
 
 DX, DY = 520, 376          # a plausible tile size, in pixels
 DRAW = {'vec': [], 'fill': [], 'tiles': {}, 'list': [], 'focus': []}
@@ -117,23 +119,36 @@ STUB = '''
 '''
 
 
-def fresh(with_pool=False):
+def fresh(with_pool=False, with_oasis=False):
     _reset()
     vm = VM()
     if with_pool:
         vm.load(POOL)
+    if with_oasis:
+        vm.load(OASIS)
     vm.load(LSP)
     return vm
 
 
-def stubbed(with_pool=False):
-    vm = fresh(with_pool)
+def stubbed(with_pool=False, with_oasis=False):
+    vm = fresh(with_pool, with_oasis)
     vm.loads(STUB)
     return vm
 
 
 def lisp_str(s):
     return s.replace('\\', '\\\\').replace('"', '\\"')
+
+
+def arc_pts(poly):
+    """A chart arc as the points lzf:arcpts polygonises it into."""
+    cx, cy, rx, ry = (float(poly[1]), float(poly[2]),
+                      float(poly[3]), float(poly[4]))
+    f, to = float(poly[5]), float(poly[6])
+    n = max(4, int(abs(to - f) / 6.0))
+    return [(cx + rx * math.cos(math.radians(f + (to - f) * i / n)),
+             cy - ry * math.sin(math.radians(f + (to - f) * i / n)))
+            for i in range(n + 1)]
 
 
 print("== the file loads and the chart data is coherent ==")
@@ -154,10 +169,15 @@ for c in charts:
             cx, cy, rx, ry = (int(poly[1]), int(poly[2]),
                               int(poly[3]), int(poly[4]))
             assert rx > 0 and ry > 0, "arc with no radius in %s: %r" % (key, poly)
-            assert 0 <= cx - rx and cx + rx <= 1000, \
-                "arc of %s leaves the picture sideways: %r" % (key, poly)
-            assert 0 <= cy - ry and cy + ry <= 1000, \
-                "arc of %s leaves the picture vertically: %r" % (key, poly)
+            # what has to fit the picture is the SWEEP, not the circle
+            # it is cut from: a reverse arc is centred outside the pool
+            # by construction, so its whole circle never fits and the
+            # stretch actually drawn always does.  Walked the way
+            # lzf:arcpts walks it.
+            for x, y in arc_pts(poly):
+                assert 0 <= x <= 1000 and 0 <= y <= 1000, (
+                    "arc of %s leaves the picture at (%.1f, %.1f): %r"
+                    % (key, x, y, poly))
             continue
         pts = [int(v) for v in poly]
         assert len(pts) % 2 == 0 and len(pts) >= 4, poly
@@ -165,14 +185,27 @@ for c in charts:
             "outline of %s leaves the picture: %r" % (key, poly)
     for d in dims:
         x1, y1, x2, y2 = (int(d[2]), int(d[3]), int(d[4]), int(d[5]))
+        side = str(d[6])
         assert all(0 <= v <= 1000 for v in (x1, y1, x2, y2)), d
-        assert str(d[6]) in ('h', 'v'), d
-        assert (y1 == y2) if str(d[6]) == 'h' else (x1 == x2), \
-            "%s: a %r dimension must run that way: %r" % (key, str(d[6]), d)
+        # "h" and "v" run along the drawing and get an arrowhead at each
+        # end; "p" is a LEADER, from the point on the outline it names
+        # out to where the letter sits, and runs at whatever angle that
+        # puts it
+        assert side in ('h', 'v', 'p'), d
+        if side == 'h':
+            assert y1 == y2, "%s: an h dimension must run across: %r" % (key, d)
+        elif side == 'v':
+            assert x1 == x2, "%s: a v dimension must run up: %r" % (key, d)
         assert (x1, y1) != (x2, y2), "zero-length dimension: %r" % (d,)
         assert str(d[7]).strip(), "dimension %r has no label" % (d,)
-print("   %s, %d chart(s), every dimension keyed, labelled and in bounds"
-      % (ver, len(charts)))
+vm.loads('(setq t:*oas* (mapcar \'(lambda (c) (if (lzf:oasis-p c) (car c)))'
+         '                       lzf:*charts*))')
+OASIS_CHARTS = [str(x) for x in vm.globals['t:*oas*'] if x]
+POOL_CHARTS = [str(c[0]) for c in charts if str(c[0]) not in OASIS_CHARTS]
+assert OASIS_CHARTS and POOL_CHARTS
+print("   %s, %d chart(s) -- %d POOL, %d OASIS -- every dimension keyed, "
+      "labelled and in bounds"
+      % (ver, len(charts), len(POOL_CHARTS), len(OASIS_CHARTS)))
 
 
 print("== the dimension chains close ==")
@@ -182,6 +215,8 @@ print("== the dimension chains close ==")
 # operator reading it off would be misled before POOL ever saw a number.
 for c in charts:
     name = str(c[0])
+    if name in OASIS_CHARTS:
+        continue                # an oasis has no chain: it is arcs all round
     dims = {str(d[1]): (int(d[2]), int(d[3]), int(d[4]), int(d[5]))
             for d in c[4]}
     letters = {str(d[0]): str(d[1]) for d in c[4]}
@@ -251,8 +286,7 @@ askseq_keys |= set('x%d' % i for i in range(max(_lens)))
 derived = {'c', 'd', 'c2'}          # the depth asks, keyed off their prompts
 wired = {'shape', 'insq', 'btype', 'base'}
 total = 0
-for c in charts:
-    name = str(c[0])
+for name in POOL_CHARTS:
     vm.loads('(setq t:*keys* (lzf:keys (lzf:chart "%s")))' % name)
     ks = [str(x) for x in vm.globals['t:*keys*']]
     for k in ks:
@@ -261,7 +295,145 @@ for c in charts:
             "would be typed into and dropped on the floor" % (name, k))
     total += len(ks)
     print("   %-10s %2d keys, all of them POOL answer keys" % (name, len(ks)))
-print("   %d keys across %d charts" % (total, len(charts)))
+print("   %d keys across %d POOL charts" % (total, len(POOL_CHARTS)))
+
+
+print("== and the oasis charts' are keys OASIS actually asks for ==")
+# the same audit, against the other routine.  oasis:*fkeys* is the whole
+# roster: one entry per answer slot the run fills, named after the slot.
+# A chart key outside it would be typed into and dropped on the floor
+# exactly as a bad POOL key would.
+ovm = fresh(with_oasis=True)
+ovm.loads("(setq t:*fk* (mapcar 'cdr oasis:*fkeys*))")
+OAS_KEYS = set(str(x) for x in ovm.globals['t:*fk*'])
+assert 'shape' in OAS_KEYS and 'rl' in OAS_KEYS, sorted(OAS_KEYS)
+# what a page SENDS rather than what it merely has a box for: the shape
+# rides on the chart itself, and the base point is picked in the drawing
+sendable = OAS_KEYS - {'shape'}
+total = 0
+for name in OASIS_CHARTS:
+    ovm.loads('(setq t:*keys* (lzf:pagekeys (lzf:chart "%s")))' % name)
+    ks = [str(x) for x in ovm.globals['t:*keys*']]
+    for k in ks:
+        assert k in sendable, (
+            "%s: chart key %r is not an OASIS answer slot -- it would be "
+            "typed into and dropped on the floor" % (name, k))
+    # and every one of them is a slot that shape really reaches: OASIS
+    # asks the slots oasis:steps lists and no others
+    total += len(ks)
+    print("   %-11s %d keys, all of them OASIS answer slots" % (name, len(ks)))
+print("   %d keys across %d OASIS charts" % (total, len(OASIS_CHARTS)))
+
+
+print("== the oasis charts are the outline OASIS itself draws ==")
+# The picture on an oasis sheet is not artwork: it is the ring
+# oasis:solve builds for that shape's reference drawing, scaled into
+# the box.  So it can be re-derived rather than trusted -- run the
+# solver on the numbers lzf:*oasart* records and every arc of the chart
+# has to come back out of it.  A shape OASIS changes then shows up as a
+# failing chart instead of a picture that has quietly stopped being
+# true.
+ovm.loads("(setq t:*art* lzf:*oasart*)")
+ART = {str(r[0]): r for r in ovm.globals['t:*art*']}
+assert set(ART) == set(OASIS_CHARTS), (
+    "lzf:*oasart* covers %r, the oasis charts are %r"
+    % (sorted(ART), sorted(OASIS_CHARTS)))
+
+
+def ring_of(row):
+    """oasis:solve on one chart's reference numbers."""
+    def n(v):
+        return 'nil' if v is None or v == [] else '%.10f' % float(v)
+    args = ' '.join(n(v) for v in row[2:11])
+    ring = ovm.loads('(oasis:solve %s 0.0 "%s")' % (args, str(row[1])))
+    assert ring, "%s: oasis:solve built nothing from its own numbers" % row[0]
+    return ring
+
+
+def solved_ring(row):
+    """That ring, mapped into the picture the way the chart data is."""
+    ring = ring_of(row)
+    w, h = float(row[2]), float(row[3])
+    xl, xr, yt, yb = (float(row[11]), float(row[12]),
+                      float(row[13]), float(row[14]))
+    sx, sy = (xr - xl) / w, (yb - yt) / h
+    out = []
+    for e in ring:
+        if isinstance(e[5], str) and str(e[5]) == 'LINE':
+            out.append(('L', [round(xl + float(e[1][0]) * sx),
+                              round(yb - float(e[1][1]) * sy),
+                              round(xl + float(e[2][0]) * sx),
+                              round(yb - float(e[2][1]) * sy)]))
+            continue
+        a, b = math.degrees(float(e[3])), math.degrees(float(e[4]))
+        if b <= a:
+            b += 360.0
+        out.append(('A', [round(xl + float(e[1][0]) * sx),
+                          round(yb - float(e[1][1]) * sy),
+                          round(float(e[2]) * sx), round(float(e[2]) * sy),
+                          round(a, 1), round(b, 1)]))
+    return out
+
+
+for ck in OASIS_CHARTS:
+    want = solved_ring(ART[ck])
+    ovm.loads('(setq t:*ol* (lzf:outline (lzf:chart "%s")))' % ck)
+    got = []
+    for poly in ovm.globals['t:*ol*']:
+        if str(poly[0]) == 'A':
+            got.append(('A', [int(poly[1]), int(poly[2]), int(poly[3]),
+                              int(poly[4]), round(float(poly[5]), 1),
+                              round(float(poly[6]), 1)]))
+        else:
+            got.append(('L', [int(v) for v in poly]))
+    assert len(got) == len(want), (
+        "%s: the chart draws %d elements, OASIS builds %d"
+        % (ck, len(got), len(want)))
+    for i, (g, wnt) in enumerate(zip(got, want)):
+        assert g[0] == wnt[0], "%s element %d: %r vs %r" % (ck, i, g, wnt)
+        for a, b in zip(g[1], wnt[1]):
+            assert abs(a - b) <= 1.0, (
+                "%s element %d has drifted from what OASIS draws:\n"
+                "     chart %r\n     OASIS %r" % (ck, i, g[1], wnt[1]))
+    print("   %-11s %d elements, every one of them off oasis:solve"
+          % (ck, len(got)))
+
+# and a bulge's drawn dimension really is that bulge's radius: the line
+# from its centre out to the bound it touches, which is the whole
+# reason it can be square to the page at all.  Which ring element each
+# key names is per shape -- OASIS calls the same slot "top bulge" on
+# one and "center lobe" on another.
+BULGE_OF = {
+    'OACenter':   {'rl': 'left', 'rt': 'top', 'rr': 'right'},
+    'OATopRight': {'rl': 'left', 'rt': 'top-right', 'rr': 'right'},
+    'OACloud':    {'rr': 'right'},
+    'OAKidney':   {'rl': 'left', 'rr': 'right'},
+    'OANXT':      {'rl': 'top-left', 'rt': 'center-bottom', 'rr': 'right'},
+}
+for ck in OASIS_CHARTS:
+    row = ART[ck]
+    xl, xr = float(row[11]), float(row[12])
+    yt, yb = float(row[13]), float(row[14])
+    sx, sy = (xr - xl) / float(row[2]), (yb - yt) / float(row[3])
+    radii = {str(e[0]): float(e[2]) for e in ring_of(row)
+             if not (isinstance(e[5], str) and str(e[5]) == 'LINE')}
+    ovm.loads('(setq t:*d* (lzf:dims (lzf:chart "%s")))' % ck)
+    seen = 0
+    for d in ovm.globals['t:*d*']:
+        side, key = str(d[6]), str(d[1])
+        if side == 'p' or key not in BULGE_OF[ck]:
+            continue
+        want = radii[BULGE_OF[ck][key]]
+        got = (abs(int(d[4]) - int(d[2])) / sx if side == 'h'
+               else abs(int(d[5]) - int(d[3])) / sy)
+        assert abs(got - want) <= 1.0, (
+            "%s: the %s dimension measures %.1f, but the %s bulge's radius "
+            "is %.1f" % (ck, str(d[0]), got, BULGE_OF[ck][key], want))
+        seen += 1
+    assert seen == len(BULGE_OF[ck]), (
+        "%s: %d bulge dimensions drawn, %d expected"
+        % (ck, seen, len(BULGE_OF[ck])))
+print("   and every drawn bulge dimension is that bulge's own radius")
 
 
 print("== the generated DCL is well formed, for every chart ==")
@@ -342,86 +514,48 @@ def check_page(name):
         % (name, sorted(set(page_keys) - set(tilekeys))))
     assert len(page_keys) == len(set(page_keys)), \
         "%s: lzf:pagekeys repeats a key: %r" % (name, page_keys)
-    # one image band per stretch between cuts, a wedge row at each cut
-    vm.loads('(setq t:*cuts* (lzf:cuts lzf:*chart*))'
-             '(setq t:*wk* (lzf:wedge-keys lzf:*chart*))')
-    cuts = [int(x) for x in (vm.globals.get('t:*cuts*') or [])]
-    wk = [str(x) for x in (vm.globals.get('t:*wk*') or [])]
-    for b in range(len(cuts) + 1):
-        assert 'chart%d' % b in tilekeys, "%s: no band tile chart%d" % (name, b)
-    assert 'chart%d' % (len(cuts) + 1) not in tilekeys, \
-        "%s: more band tiles than bands" % name
-    # every cut carries at least one wedge box -- a grey strip with
-    # nothing in it would cut the drawing for no reason at all
-    assert cuts, "%s: no cuts declared" % name
-    vm.loads('(setq t:*cd* (mapcar \'(lambda (y) (length (lzf:cutdims '
-             'lzf:*chart* y))) (lzf:cuts lzf:*chart*)))')
-    for y, n in zip(cuts, [int(x) for x in vm.globals['t:*cd*']]):
-        assert n > 0, "%s: cut at %d has no dimension on it" % (name, y)
-    # a wedge dim's box is on the chart, so it has NO pick button and
-    # NO row in the side column; a column dim has both
-    for k in wk:
-        assert 'pick_%s' % k not in tilekeys, \
-            "%s: wedge dim %s also has a pick button" % (name, k)
-    for extra in ('insq', 'btype', 'accept', 'cancel'):
+    # ONE chart tile, whole, and no strips: the picture is read as a
+    # picture and every box is in the column beside it
+    assert 'chart' in tilekeys, "%s: no chart image tile" % name
+    assert 'chart0' not in tilekeys, (
+        "%s: the chart is sliced into bands again -- the picture comes "
+        "apart into strips and the boxes go back to being placed by "
+        "spacer arithmetic" % name)
+    assert not [k for k in tilekeys if re.fullmatch(r'chart\d+', k)], \
+        "%s: a band tile survived: %r" % (name, tilekeys)
+    # the POOL-only furniture is on the POOL pages and nowhere else:
+    # mode_tile on a tile that is not there is an error, and an oasis
+    # answers to neither question
+    oasis_page = name in OASIS_CHARTS
+    for extra in ('insq', 'btype'):
+        if oasis_page:
+            assert extra not in tilekeys, (
+                "%s: an oasis page carries a %r tile -- nothing on an "
+                "oasis answers to it" % (name, extra))
+        else:
+            assert extra in tilekeys, "%s: no %r tile" % (name, extra)
+    for extra in ('accept', 'cancel'):
         assert extra in tilekeys, "%s: no %r tile" % (name, extra)
     # a tab for every chart, on every page -- including this one, so the
     # strip does not change width as you move along it
     for c2 in charts:
         assert 'tab_%s' % str(c2[0]) in tilekeys, \
             "%s: no tab for %s" % (name, str(c2[0]))
-    # and a letter button for every dimension, keyed off its answer
+    # and a letter button and a box for EVERY dimension, keyed off its
+    # answer: the whole point of the column is that nothing is missing
+    # from it
     for dim in vm.globals['t:*dims*']:
-        if str(dim[1]) in wk:
-            continue
         assert 'pick_%s' % str(dim[1]) in tilekeys, \
             "%s: dimension %s has no letter button" % (name, str(dim[0]))
+        assert str(dim[1]) in tilekeys, \
+            "%s: dimension %s has no box" % (name, str(dim[0]))
     assert text.count('is_cancel = true') == 1
     assert text.count('is_default = true') == 1
     assert ': image_button' not in text, (
         "%s: the chart is an image_button again -- it will be wiped the "
         "first time the mouse crosses it" % name)
-    assert re.search(r': image \{ key = "chart0"', text), \
+    assert re.search(r': image \{ key = "chart";', text), \
         "%s: no passive chart image tile" % name
-    # and the wedge boxes land near their letters: replay the spacer
-    # arithmetic and compare each box's centre with its dimension's,
-    # in character cells.  Chains pack shoulder to shoulder, so the
-    # tolerance is real -- but a box a quarter of the chart away from
-    # its letter means the layout maths broke
-    vm.loads('(setq t:*alldims* (lzf:dims lzf:*chart*))')
-    centers = {str(d[1]): (int(d[2]) + int(d[4])) / 2.0 * 52 / 1000.0
-               for d in vm.globals['t:*alldims*']}
-    body_lines = d
-    pos = None
-    expect = False          # a wedge row IMMEDIATELY follows its band
-    for line in body_lines:
-        t2 = line.strip()
-        if re.match(r': image \{ key = "chart\d+"', t2):
-            expect = True
-            pos = None
-        elif expect and t2 == ': row {':
-            pos = 0.0
-            expect = False
-        elif expect:
-            expect = False
-        elif pos is not None:
-            m = re.match(r': spacer \{ width = ([0-9.]+); \}', t2)
-            if m:
-                pos += float(m.group(1))
-                continue
-            if t2 == '}':
-                pos = None
-                continue
-            m = re.match(r': edit_box \{ key = "([^"]+)"; label = "([^"]+)"; '
-                         r'edit_width = 6', t2)
-            if m:
-                k, lbl = m.group(1), m.group(2)
-                w = len(lbl) + 10.0
-                got = pos + w / 2.0
-                assert abs(got - centers[k]) <= 6.5, (
-                    "%s: wedge box %s centred at %.1f cells, its letter at "
-                    "%.1f" % (name, k, got, centers[k]))
-                pos += w
     for line in d[1:]:
         t = line.strip()
         if t in ('}', 'spacer;'):
@@ -497,38 +631,43 @@ blank = len(DRAW['vec'])
 print("== a typed value replaces its letter on the chart ==")
 assert not [v for v in DRAW['vec'] if v[4] == COLS['val']], \
     "nothing has been typed, yet something is drawn as a value"
-# the WEDGE dims draw nothing at all -- their row of the drawing is a
-# row of real boxes -- so the value-replaces-letter rule is checked on
-# the vertical dims, which still live in the side column and on the
-# chart: A ('le') and M ('m')
+# EVERY dimension is on the picture now, across and up alike, so the
+# rule is checked on one of each: B ('tp') runs across, A ('le') up
 _reset()
-vm.loads('(lzf:put "le" "16\'0\\"") (lzf:put "m" "5\'0\\"") (lzf:redraw)')
+vm.loads('(lzf:put "tp" "40\'0\\"") (lzf:put "le" "16\'0\\"")'
+         ' (lzf:put "m" "5\'0\\"") (lzf:redraw)')
 vals = [v for v in DRAW['vec'] if v[4] == COLS['val']]
 assert vals, "a typed value was not drawn"
-# B and H are gone from the picture, replaced by what was typed, so the
-# glyph strokes drawn in the outline colour must have gone DOWN even as
-# the value strokes appeared
+# B, A and M are gone from the picture, replaced by what was typed, so
+# the glyph strokes drawn in the outline colour must have gone DOWN even
+# as the value strokes appeared
 line_now = len([v for v in DRAW['vec'] if v[4] == COLS['line']])
 _reset()
 vm.loads('(setq lzf:*vals* nil) (lzf:redraw)')
 line_blank = len([v for v in DRAW['vec'] if v[4] == COLS['line']])
 assert line_now < line_blank, (
-    "the letters A and M are still being drawn after being answered "
+    "the letters B, A and M are still being drawn after being answered "
     "(%d outline strokes vs %d blank)" % (line_now, line_blank))
 print("   %d value strokes appear; outline strokes fall %d -> %d"
       % (len(vals), line_blank, line_now))
 
-# and typing into a WEDGE key changes nothing on the chart: its box is
-# a real tile sitting on the drawing, not strokes to redraw
+# a LEADER's letter is replaced the same way -- it is the one dimension
+# whose line does not run square to the page, and it must not be a
+# special case in the drawing either
 _reset()
-vm.loads('(setq lzf:*vals* nil) (lzf:redraw)')
-base = len(DRAW['vec'])
+vm.loads('(setq lzf:*chart* (lzf:chart "OACenter")) (setq lzf:*vals* nil)'
+         ' (lzf:redraw)')
+lead_blank = len([v for v in DRAW['vec'] if v[4] == COLS['line']])
 _reset()
-vm.loads('(lzf:put "tp" "240") (lzf:put "h" "48") (lzf:redraw)')
-assert len(DRAW['vec']) == base, (
-    "typing into a wedge box changed the drawing: %d -> %d strokes"
-    % (base, len(DRAW['vec'])))
-print("   wedge keys draw nothing -- their boxes are real tiles")
+vm.loads('(lzf:put "ftl" "6\'0\\"") (lzf:redraw)')
+assert [v for v in DRAW['vec'] if v[4] == COLS['val']], \
+    "a leader's value was not drawn"
+assert len([v for v in DRAW['vec'] if v[4] == COLS['line']]) < lead_blank, \
+    "the leader TL is still lettered after being answered"
+print("   and a leader's letter goes the same way when it is answered")
+_reset()
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle")) (setq lzf:*vals* nil)'
+         ' (lzf:redraw)')
 
 
 print("== the page loop: tabs, letter buttons, nothing on the chart ==")
@@ -546,20 +685,11 @@ assert not [k for k in wired if k.startswith('chart')], (
     "an action is wired to a chart tile: it would be repainted on hover")
 for k in ('btype', 'insq', 'accept', 'cancel'):
     assert k in wired, "%r has no callback" % k
-vm2.loads('(setq t:*dims* (lzf:dims (lzf:chart "Rectangle")))'
-          '(setq t:*wk* (lzf:wedge-keys (lzf:chart "Rectangle")))')
-wk2 = {str(x) for x in vm2.globals['t:*wk*']}
+vm2.loads('(setq t:*dims* (lzf:dims (lzf:chart "Rectangle")))')
 for dim in vm2.globals['t:*dims*']:
     k = str(dim[1])
-    if k in wk2:
-        # a wedge dim's box IS on the drawing -- no pick button at all
-        assert 'pick_%s' % k not in wired, \
-            "wedge dim %s has a pick callback for a button that " \
-            "does not exist" % str(dim[0])
-    else:
-        assert 'pick_%s' % k in wired, \
-            "dimension %s has no letter-button callback" % str(dim[0])
-    # but EVERY dim's edit box, wedged or not, harvests what is typed
+    assert 'pick_%s' % k in wired, \
+        "dimension %s has no letter-button callback" % str(dim[0])
     assert k in wired, "dimension %s's box has no callback" % str(dim[0])
 for c in charts:
     assert 'tab_%s' % str(c[0]) in wired, "no tab callback for %s" % str(c[0])
@@ -568,8 +698,6 @@ print("   %d callbacks bound, none on the chart, %d vectors drawn"
 
 # clicking a letter must put the caret in that box AND select what is
 # there, so the first keystroke replaces rather than appends
-# M is a side-column dim (vertical dims cannot be wedged), so it still
-# has a letter button to click
 vm3 = stubbed()
 vm3.loads('(setq stub:*type* \'(("pick_m" "")))'
           '(setq t:*f* (lzf:show "Rectangle"))')
@@ -1050,10 +1178,12 @@ assert skip_of("SHallow") == set(), \
 assert "c2" in skip_of("Wedge") and "c2" not in skip_of("SHallow"), \
     "C2 is a SHallow-only question"
 
-# every chart carries the depth rows, or a bottom that asks for them
-# would have nowhere to put them -- and the Grecians' gate lists, which
-# sit in the same s-expression, must be untouched by that
-for ck in [str(c[0]) for c in bv.globals['lzf:*charts*']]:
+# every POOL chart carries the depth rows, or a bottom that asks for
+# them would have nowhere to put them -- and the Grecians' gate lists,
+# which sit in the same s-expression, must be untouched by that.  An
+# oasis has no bottom type and no depth chain: it is asked about its
+# floor after the outline is drawn, at the command line.
+for ck in POOL_CHARTS:
     bv.loads('(setq test:*e* (lzf:extra (lzf:chart "%s")))' % ck)
     ex = [str(x[0]) for x in bv.globals['test:*e*']]
     for need in ('c', 'd', 'c2'):
@@ -1063,8 +1193,8 @@ for ck in [str(c[0]) for c in bv.globals['lzf:*charts*']]:
     gk = [str(x.a) for x in g] if g else []
     assert not ({'c', 'd', 'c2'} & set(gk)), \
         "%s: a depth leaked into the gates list: %r" % (ck, gk)
-print("   all %d charts carry C, D and C2; no gate list disturbed"
-      % len(bv.globals['lzf:*charts*']))
+print("   all %d POOL charts carry C, D and C2; no gate list disturbed"
+      % len(POOL_CHARTS))
 
 # and a value the bottom will not ask for does not travel to POOL
 bv.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
@@ -1113,7 +1243,18 @@ STATES = [("Rectangle", False, "Normal",  "Corner"),
           ("L",         False, "Normal",  None),
           ("L",         True,  "Sport",   None),
           ("ROUnd",     False, "MOdflat", None),
-          ("ROUnd",     True,  "Sport",   None)]
+          ("ROUnd",     True,  "Sport",   None),
+          # the oasis pages read the same way, off their own dropdowns:
+          # the bottom type and the toggle mean nothing there, so they
+          # are passed and ignored
+          ("OACenter",   False, "Normal", "Simple"),
+          ("OACenter",   False, "Normal", "Complex"),
+          ("OATopRight", False, "Normal", "Complex"),
+          ("OACloud",    False, "Normal", "Straight"),
+          ("OACloud",    False, "Normal", "Rounded"),
+          ("OAKidney",   False, "Normal", "True"),
+          ("OAKidney",   False, "Normal", "Asymmetric"),
+          ("OANXT",      False, "Normal", "Complex")]
 
 
 def state(name, insq, bt, mode):
@@ -1417,6 +1558,84 @@ print("   corners and the bottom gate -- no dimension asked twice")
 # widths line up because the alignment comes from the tiles, not the
 # glyphs. A boxed cluster goes one better and draws a REAL etched
 # border, so the outline is straight by construction.
+print("== end to end: an oasis sheet draws what OASIS's questions draw ==")
+# The same reference pool -- 40'-0" x 20'-0", 8'/11'/9' bulges and
+# 6'/3'/5' tangent radii, the drawing OASIS itself was written from --
+# once through the chart and once through the prompts.  A tab takes the
+# form to the oasis page, the boxes are typed the way a user types
+# them, and Insert has to reach OASIS rather than POOL.
+OAS_TYPE = [('tab_OACenter', ''), ('detail', '1'),
+            ('x', '480'), ('y', '240'), ('rl', '96'), ('rt', '132'),
+            ('rr', '108'), ('ftl', '72'), ('ftr', '36'), ('fbc', '60')]
+OAS_TYPED = [480.0, 240.0, 96.0, 132.0, 108.0, 72.0, 36.0, 60.0]
+
+ov = stubbed(with_pool=True, with_oasis=True)
+ov.loads("(setq stub:*rcs* '(4 1))")
+ov.loads('(setq stub:*type* \'(%s))'
+         % ' '.join('("%s" "%s")' % (k, v) for k, v in OAS_TYPE))
+try:
+    ov.run('c:LAZFORM', [(0.0, 0.0, 0.0), None])
+except LispError as e:
+    raise AssertionError("oasis form run: %s" % e) from None
+a = snapshot(ov)
+assert a, "the oasis form run drew nothing"
+assert not ov.globals.get('oasis:*form*'), "oasis:*form* survived the run"
+assert not ov.globals.get('oasis:*fkey*'), "oasis:*fkey* survived the run"
+asked = [pr for pr, _ in ov.prompts]
+assert len(asked) == 2, (
+    "an oasis sheet should leave only the base point and the pool-bottom "
+    "gate, and %d question(s) were asked: %r" % (len(asked), asked))
+assert not ov.globals.get('pool:*form*'), \
+    "an oasis sheet handed its answers to POOL"
+
+ov2 = stubbed(with_pool=True, with_oasis=True)
+try:
+    ov2.run('c:OASIS',
+            ['Center', 'Simple', (0.0, 0.0, 0.0)] + OAS_TYPED + [None])
+except LispError as e:
+    raise AssertionError("oasis prompt run: %s" % e) from None
+b = snapshot(ov2)
+assert a == b, (
+    "the oasis sheet drew a different pool: %d entities from the chart, "
+    "%d from the prompts" % (len(a), len(b)))
+print("   %d entities, identical from the chart and from the command line;"
+      % len(a))
+print("   only the base point and the bottom gate were asked")
+
+# a dead box does not travel here either: a Simple run is never asked
+# how far its hump is off centre, so a number typed into OFF is greyed
+# and withheld rather than quietly reaching the solver
+ov3 = stubbed(with_pool=True, with_oasis=True)
+ov3.loads("(setq stub:*rcs* '(4 1))")
+ov3.loads('(setq stub:*type* \'(%s))'
+          % ' '.join('("%s" "%s")' % (k, v)
+                     for k, v in OAS_TYPE + [('off', '36')]))
+ov3.run('c:LAZFORM', [(0.0, 0.0, 0.0), None])
+assert snapshot(ov3) == a, \
+    "OFF travelled on a Simple run and moved the hump"
+print("   and a box the run never asks about is withheld, not sent")
+
+# the routing itself: a POOL page reaches POOL and an oasis page OASIS,
+# and neither can reach the other
+ov4 = stubbed(with_pool=True, with_oasis=True)
+ov4.loads("(setq stub:*rcs* '(4 1))")
+ov4.loads('(setq stub:*type* \'(("tab_OAKidney" "") ("sub" "1")'
+          ' ("detail" "1") ("x" "388") ("y" "214") ("rt" "324")'
+          ' ("fbc" "48")))')
+ov4.run('c:LAZFORM', [(0.0, 0.0, 0.0), None])
+ov4.loads('(setq t:*ran* lzf:*ranchart*)')
+assert str(ov4.globals['t:*ran*']) == 'OAKidney', \
+    "the accepted page was not recorded: %r" % ov4.globals['t:*ran*']
+kid = [e for e in snapshot(ov4)]
+assert kid, "the kidney sheet drew nothing"
+ov5 = stubbed(with_pool=True, with_oasis=True)
+ov5.run('c:OASIS', ['Kidney', 'True', 'Simple', (0.0, 0.0, 0.0),
+                    388.0, 214.0, 324.0, 48.0, None])
+assert kid == snapshot(ov5), "the kidney sheet drew a different pool"
+print("   a kidney off its own sheet, sub-type and all, %d entities"
+      % len(kid))
+
+
 print("== LAZTXT: a pool made of nested boxes, fields inside it ==")
 tv = fresh()
 tv.loads('(setq test:*tx* (lzf:dcl-txt (lzf:chart "Rectangle")))')

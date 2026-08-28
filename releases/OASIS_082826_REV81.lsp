@@ -189,7 +189,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -435,6 +435,108 @@
 ;; trimmed away long before it reaches anything.
 (defun oasis:topfits-p (variant) (= variant "TopRight"))
 
+;;; -------------------- form answers -------------------------------------
+;;;
+;;;  A form -- the LAZFORM oasis sheets, or anything else that can build
+;;;  the alist -- can answer some or all of OASIS's questions before the
+;;;  run starts.  It leaves them in oasis:*form* as (key . value) and the
+;;;  ask helpers below look there first, so a filled-in sheet drives the
+;;;  whole run and a half-filled one simply shortens it.  Same contract
+;;;  POOL and SPA carry:
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . 480.0)   the form answered it         -> 480.0, no prompt
+;;;
+;;;  ONE SLOT PER QUESTION, named after the answer it fills:
+;;;
+;;;    shape   which family        rl / rt / rr   the three bulges
+;;;    sub     a cloud's bottom,   ftl / ftr      the top joiners
+;;;            a kidney's type     fbc / fbr      the bottom joiners
+;;;    detail  simple or complex   off            a hump off centre
+;;;    x / y   the envelope
+;;;
+;;;  The base point is not among them, and neither is the pool-bottom
+;;;  gate at the end: both are picked in the drawing, which is where a
+;;;  form has nothing to say.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Two things depend on it.  Back would otherwise deadlock: step back
+;;;  onto a form-answered question, it answers itself instantly and walks
+;;;  forward again, and there is no key the user can press to get out.
+;;;  And every check in the ask layer re-asks on a value it refuses -- a
+;;;  bulge that breaks out of the envelope, a tangent radius too short to
+;;;  span its two bulges -- so the second pass has to find the store
+;;;  empty and let the user type the correction, rather than being
+;;;  re-fed the same bad number for ever.
+;;;
+;;;  NOTHING GETS IN THAT COULD NOT HAVE BEEN TYPED.  A distance is
+;;;  checked against the same rules initget puts on the prompt (no
+;;;  negative anywhere, no zero except where zero is an answer), and a
+;;;  keyword against the very list the prompt offers.  That is what
+;;;  keeps NA off a question that must have an answer: OASIS asks for
+;;;  every measurement as REQUIRED, so a form's nil is demoted to an
+;;;  unanswered box and asked for rather than handed to arithmetic.
+
+(setq oasis:*form* nil)
+
+;; The question being asked, as a form key -- set by oasis:askstep for
+;; each slot it asks, and nil everywhere else, which is what keeps the
+;; pool-bottom flow at the end of the run out of the store.
+(setq oasis:*fkey* nil)
+
+(defun oasis:fclear () (setq oasis:*form* nil))
+
+;; The form's answer to the question now being asked, taken OUT of the
+;; store as it is read, or the symbol OASIS-NONE when the form has
+;; nothing to say about it.
+(defun oasis:fpull ( / p)
+  (cond
+    ((null oasis:*fkey*) 'OASIS-NONE)
+    ((setq p (assoc oasis:*fkey* oasis:*form*))
+     (setq oasis:*form* (vl-remove p oasis:*form*))
+     (cdr p))
+    (t 'OASIS-NONE)))
+
+;; Which slot each answer belongs to.  Slot 1 -- the base point -- has
+;; no key: it is picked in the drawing.
+(setq oasis:*fkeys*
+  '((0 . shape) (2 . x)   (3 . y)   (4 . rl)  (5 . rt)  (6 . rr)
+    (7 . ftl)   (8 . ftr) (9 . fbc) (10 . sub) (11 . detail)
+    (12 . off)  (13 . fbr)))
+
+(defun oasis:fkeyof (k) (cdr (assoc k oasis:*fkeys*)))
+
+;; Could V have been typed at a distance prompt of this kind?  The same
+;; rules initget puts on the prompt: never negative, and never zero
+;; except where ZER admits it.
+(defun oasis:fdist-p (kind v)
+  (and (numberp v) (or (> v 0.0) (and (eq kind 'ZER) (= v 0.0)))))
+
+;; The word in KWS that S names, spelled the way the prompt spells it,
+;; or nil.  Checked against the very list the question offers, so a
+;; keyword this question never had cannot get in through the store.
+(defun oasis:fkw (s kws / i n w out)
+  (if (= (type s) 'STR)
+      (progn
+        (setq i 1 n (strlen kws) w "")
+        (while (<= i (1+ n))
+          (cond
+            ((or (> i n) (= (substr kws i 1) " "))
+             (if (and (/= w "") (= (strcase w) (strcase s))) (setq out w))
+             (setq w ""))
+            (t (setq w (strcat w (substr kws i 1)))))
+          (setq i (1+ i)))))
+  out)
+
+;; Run OASIS with a form's answers already in hand.  Nothing happens
+;; here that the direct path misses: a caller may equally set
+;; oasis:*form* itself and call c:OASIS, which is what the tests do.
+(defun oasis:run-with-answers (answers)
+  (setq oasis:*form* answers)
+  (c:OASIS)
+  (oasis:fclear)
+  (princ))
+
 ;;; -------------------- ask layer ---------------------------------------
 ;;; Copies of the CALOFIN-LIB helpers under this file's own prefix, so
 ;;; the standalone build loads alone (STANDARDS.md section 4).  The Back
@@ -443,20 +545,34 @@
 ;; Keyword question.  kws is the initget string, shown the bracketed
 ;; list, dflt the Enter answer (nil = an answer is required).  Returns
 ;; the keyword, or OASIS-BACK for Back/Undo.
-(defun oasis:askkw (msg kws shown dflt back / v)
-  (initget (if dflt 0 (if back 0 1))
-           (if back (strcat kws " Back Undo") kws))
-  (setq v (getkword (strcat "\n" msg " [" shown
-                            (if back "/Back" "") "]"
-                            (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
-        ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
-        (t v)))
+(defun oasis:askkw (msg kws shown dflt back / v f)
+  ;; the form first, and only a word this question actually offers --
+  ;; spelled the way the prompt spells it, so nothing downstream can
+  ;; tell a filled-in sheet from a typed answer
+  (if (setq f (oasis:fkw (oasis:fpull) kws))
+    f
+    (progn
+      (initget (if dflt 0 (if back 0 1))
+               (if back (strcat kws " Back Undo") kws))
+      (setq v (getkword (strcat "\n" msg " [" shown
+                                (if back "/Back" "") "]"
+                                (if dflt (strcat " <" dflt ">") "") ": ")))
+      (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
+            ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
+            (t v)))))
 
 ;; Distance entry with the kind system of STANDARDS.md section 3:
 ;; REQ required, NAX/ZER accept NA, SUG offers a default.  Returns the
 ;; number, nil for NA, or OASIS-BACK.
 (defun oasis:askdist (kind msg dflt back / v kw)
+  ;; the form first.  A number this kind of question could have been
+  ;; given is taken; anything else -- an NA on a REQUIRED measurement
+  ;; above all -- is treated as an unanswered box and asked for, since
+  ;; a nil where a distance belongs reaches arithmetic and not a check
+  (setq v (oasis:fpull))
+  (if (oasis:fdist-p kind v)
+    v
+    (progn
   ;; Undo is accepted everywhere Back is, as a hidden synonym
   (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
                  (back "NA Back Undo")
@@ -481,7 +597,7 @@
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
-        (t v)))
+        (t v)))))
 
 ;;; -------------------- snaps and the dimension style --------------------
 
@@ -1735,21 +1851,35 @@
 ;; keyword but Back into nil, which is the answer a cloud's implied flat
 ;; bottom already means.
 (defun oasis:askrun (msg / v)
-  (initget 7 "Line Back Undo")
-  (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
-        ((= (type v) 'STR) "LINE")
-        (t v)))
+  ;; the form answers this one two ways -- a radius, or the word Line
+  ;; for the straight run -- and neither reaches here as anything the
+  ;; typed path would not also produce
+  (setq v (oasis:fpull))
+  (cond
+    ((oasis:fdist-p 'REQ v) v)
+    ((oasis:fkw v "Line") "LINE")
+    (t
+     (initget 7 "Line Back Undo")
+     (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
+     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
+           ((= (type v) 'STR) "LINE")
+           (t v)))))
 
 ;; A signed distance, defaulting to none: zero and negative are both
 ;; ordinary answers here, where every other measurement in the file
 ;; refuses them.  Returns the number or OASIS-BACK.
 (defun oasis:askoff (msg / v)
-  (initget 0 "Back Undo")
-  (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
-        ((null v) 0.0)
-        (t v)))
+  ;; the one measurement in the file where a negative and a zero are
+  ;; both ordinary answers, so a form's number is taken as it stands
+  (setq v (oasis:fpull))
+  (if (numberp v)
+    v
+    (progn
+      (initget 0 "Back Undo")
+      (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
+      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
+            ((null v) 0.0)
+            (t v)))))
 
 ;; A tangent radius, re-asked until it is big enough to span its two
 ;; bulges.  Below the minimum the two circles it would have to touch
@@ -1812,6 +1942,11 @@
 ;; A shape asks only the slots oasis:steps lists for it.
 (defun oasis:askstep (k ans / var v w h rl rt rr cl ct cr ca cd cg off
                           runs)
+  ;; which answer the question about to be asked fills, so the ask
+  ;; helpers under it can look it up in the form.  Set for every slot,
+  ;; including the ones no form answers, so a stale key cannot survive
+  ;; into the next question.
+  (setq oasis:*fkey* (oasis:fkeyof k))
   (setq var  (oasis:variant ans)
         w    (nth 2 ans) h  (nth 3 ans)
         rl   (oasis:leftrad var h (nth 4 ans))
@@ -2757,6 +2892,10 @@
     ;; user settings come back FIRST so nothing below can skip them
     (oasis:dimstyrestore)
     (oasis:sysrestore)
+    ;; a form's leftovers go with the run that was reading them: an Esc
+    ;; part-way through must not leave answers behind for the next one
+    (oasis:fclear)
+    (setq oasis:*fkey* nil)
     ;; an Esc part-way through a dimension leaves that command pending,
     ;; and the UNDO below would be swallowed as an answer to it
     (setq guard 0)
@@ -2861,6 +3000,9 @@
                                          " again."))
                           (setq pos (1- pos))))))))))
 
+     ;; the questions are over: nothing after this point is a form's to
+     ;; answer, the pool-bottom flow at the end least of all
+     (setq oasis:*fkey* nil)
      (setq prev (oasis:pv-clear prev)
            var  (oasis:variant ans) base (nth 1 ans)
            w    (nth 2 ans) h    (nth 3 ans)
@@ -2936,6 +3078,10 @@
            (setq undo-open nil)
            (oasis:sysrestore)
            (foreach a gotbot (princ a))))))
+  ;; whatever route the run took out, the store goes with it -- an
+  ;; answer nothing asked for must not be waiting for the next run
+  (oasis:fclear)
+  (setq oasis:*fkey* nil)
   (princ))
 
 (defun c:OASISVER ()
