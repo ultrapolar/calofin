@@ -39,6 +39,10 @@ CORNER_ANG = math.pi / 4.0         # *LH-CORNER-ANG*
 TANG_TOL = math.pi / 22.5          # *LH-TANG-TOL*
 NICE_RADII = (12.0, 6.0, 1.0)      # *LH-NICE-RADII*
 TANG_STEPS = (1.0, 1.25, 1.5)      # *LH-TANG-STEPS*
+ARC_SLACK = math.pi / 3.0          # *LH-ARC-SLACK*
+DROP_PCT = 0.10                    # *LH-DROP-PCT*
+DROP_MULT = 2.0                    # *LH-DROP-MULT*
+ANG_CAP = 1.373                    # window-edge clamp, atan(5)
 TIGHT_TOL = 0.01                   # *LH-TIGHT-TOL*
 TEXT_EPS = 6.0                     # *LH-TEXT-EPS*
 ANG_CAP = 1.373                    # window-edge clamp, atan-space
@@ -193,6 +197,52 @@ def span_min(a, b, bul, qs):
     return min((seg_dist(q, (a, b, bul)) for q in qs), default=None)
 
 
+def span_turn(a, b, qs):
+    """Total turning of the polyline A -> QS... -> B, in radians."""
+    chain = [a] + list(qs) + [b]
+    return sum(abs(signed_dang(ang(chain[i - 1], chain[i]),
+                               ang(chain[i], chain[i + 1])))
+               for i in range(1, len(chain) - 1))
+
+
+def max_bulge(a, b, qs):
+    """The steepest bulge this span's own points justify: it may sweep
+    as far as they turn, plus ARC_SLACK.  A span between two
+    neighbours covers no turn, so it gets the slack alone - which is
+    what stops a shaky scan coming back as a chain of loops."""
+    return lh_tan(min((span_turn(a, b, qs) + ARC_SLACK) / 4.0, ANG_CAP))
+
+
+def cap_b(bl, mx):
+    return max(-mx, min(mx, bl))
+
+
+def span_score(a, b, bul, qs, tol):
+    """(written off, worst dev of the rest, misses among the rest).
+
+    Only a point PLAINLY off - further than DROP_MULT times the
+    tolerance - may be written off; that is what separates a bad shot
+    from a feature.  A point that misses by merely a little still
+    counts against the fit, so the span stops at it as it always
+    did."""
+    seg = (a, b, bul)
+    drop, dev, mis = 0, 0.0, 0
+    for q in qs:
+        d = seg_dist(q, seg)
+        if d > DROP_MULT * tol:
+            drop += 1
+        else:
+            dev = max(dev, d)
+            if d > _ON_EPS:
+                mis += 1
+    return drop, dev, mis
+
+
+def span_kept(a, b, bul, qs, tol):
+    """The points of QS this arc actually holds (within TOL)."""
+    return [q for q in qs if seg_dist(q, (a, b, bul)) <= tol]
+
+
 def snap_arc(a, b, bl, qs, tol, left, win):
     """Snap the radius to feet / half feet / inches inside WIN."""
     r0 = bulge_radius(a, b, bl)
@@ -232,22 +282,33 @@ def clamp_b(b, win):
     return win[0] if b < win[0] else (win[1] if b > win[1] else b)
 
 
-def span_fit(a, b, qs, win, tol, left):
+def span_fit(a, b, qs, win, tol, left, dlim=0):
     """Best bulge for A->B over QS inside WIN.
 
-    Exact 3-point arcs come first; compromise bulges that float
-    between the points are the fallback.  Returns
-    (bulge, dev, misses, exact)."""
+    Exact 3-point arcs - ones whose middle passes through one of the
+    actual interior points - come first; compromise bulges that float
+    between the points are the fallback.  No candidate may bulge
+    further than the span's own points justify (max_bulge), so a span
+    can never come back as a loop.  DLIM points may be written off
+    (left plainly off - see span_score) instead of holding the span
+    back; the fewer written off the better, and a tie goes to the
+    closer fit.  Returns (bulge, dev, misses, exact, dropped).
+    """
     bls = [bulge_3pt(a, q, b) for q in qs]
-    best = None
+    mx = max_bulge(a, b, qs)
+    best, bkey = None, None
     for bl in bls:
+        if abs(bl) > mx:
+            continue
         if win and not (win[0] <= bl <= win[1]):
             continue
-        d = span_dev(a, b, bl, qs)
-        if d <= tol and (best is None or d < best[1]):
-            mis = span_misses(a, b, bl, qs)
-            if mis <= left:
-                best = (bl, d, mis, True)
+        drop, d, mis = span_score(a, b, bl, qs, tol)
+        # an exact arc still has to HOLD the span - the points it did
+        # not write off must all be inside TOL - or the compromise
+        # bulges below never get their turn
+        if (d <= tol and drop <= dlim and mis <= left
+                and (bkey is None or (drop, d) < bkey)):
+            best, bkey = (bl, d, mis, True, drop), (drop, d)
     if best:
         return best
     m = len(qs)
@@ -257,10 +318,10 @@ def span_fit(a, b, qs, win, tol, left):
     if win:
         cands = [clamp_b(c, win) for c in cands]
         cands += [win[0], win[1], (win[0] + win[1]) / 2.0]
-    for bl in cands:
-        d = span_dev(a, b, bl, qs)
-        if best is None or d < best[1]:
-            best = (bl, d, span_misses(a, b, bl, qs), False)
+    for bl in [cap_b(c, mx) for c in cands]:
+        drop, d, mis = span_score(a, b, bl, qs, tol)
+        if bkey is None or (drop, d) < bkey:
+            best, bkey = (bl, d, mis, False, drop), (drop, d)
     return best
 
 
@@ -343,13 +404,58 @@ def sharp_flags_open(tour, corners=None):
     return out
 
 
+def grow_span(tour, pos, te, sharp, nogrow, lim, tol, left, dlim,
+              prorate):
+    """The longest feasible span from POS, written-off points allowed.
+
+    The open twin of ABHD's grow_span: no wrap, no end window, because
+    an open run has no seam to arrive at.  DLIM is how many of the
+    covered points this span may give up on (see span_score); 0 means
+    it must hold every one of them.  Returns
+    (length, bulge, misses, window, dropped) or None."""
+    a = tour[pos]
+    best = best_exact = None
+    for wf in TANG_STEPS:
+        length = 2
+        while length <= lim:
+            if nogrow[pos + length - 1]:
+                break
+            b_end = tour[pos + length]
+            win = (tang_window(te, a, b_end, wf)
+                   if te is not None else None)
+            qs = tour[pos + 1:pos + length]
+            lm = (min(left, lh_ceil(MISS_PCT * length)) if prorate
+                  else left)
+            dm = min(dlim, lh_ceil(DROP_PCT * length)) if dlim else 0
+            bl, dev, mis, exact, drop = span_fit(a, b_end, qs, win, tol,
+                                                 lm, dm)
+            if dev <= tol and mis <= lm and drop <= dm:
+                best = (length, bl, mis, win, drop)
+                if exact:
+                    best_exact = best
+                length += 1
+            else:
+                break
+        if best:
+            break
+    # a floating arc must cover at least 2 more points than the
+    # longest arc that passes through one
+    if best_exact and best and best[0] < best_exact[0] + 2:
+        best = best_exact
+    return best
+
+
 def span_path(tour, tol, left, prorate=True, walls=None, corners=None,
-              holds=None):
+              holds=None, drops=0):
     """Cover the OPEN tour with arcs anchored on its points - the
     linear-index rewrite of span_loop.  No seam, no closing span, no
     start-tangent seeding: the first span starts free and the last
     simply ends at the final point.  A span may reach index n-1 and
-    no further, so there is nothing to wrap around."""
+    no further, so there is nothing to wrap around.
+
+    DROPS is how many points the whole walk may leave unheld; it is
+    spent only where a span has stopped growing and giving a point up
+    buys at least two more points of span."""
     n = len(tour)
     sharp = sharp_flags_open(tour, corners)
     # declared straight stretches map straight onto linear indices
@@ -367,7 +473,9 @@ def span_path(tour, tol, left, prorate=True, walls=None, corners=None,
             if w[0] <= i <= w[1]:
                 nogrow[i] = True
     # HELD points may end a span (landing on it exactly) but are
-    # never buried inside one - mirror of the lh-holds check
+    # never buried inside one - mirror of the lh-holds check.  That
+    # also puts them, the declared corners and the stretch points out
+    # of reach of the write-off budget
     for h in (holds or []):
         hi = tour_index(h, tour)
         if hi is not None:
@@ -375,6 +483,7 @@ def span_path(tour, tol, left, prorate=True, walls=None, corners=None,
     segs = []
     pos = 0
     te = None
+    stub = False           # was the span just emitted a one-point stub?
     while pos < n - 1:
         a = tour[pos]
         wrec = next((w for w in wlist if w[0] == pos), None)
@@ -391,54 +500,53 @@ def span_path(tour, tol, left, prorate=True, walls=None, corners=None,
             continue
         # one arc over the whole open run is legitimate: no stop-short
         lim = n - 1 - pos
-        best = best_exact = None
-        for wf in TANG_STEPS:
-            length = 2
-            while length <= lim:
-                if nogrow[pos + length - 1]:
-                    break
-                b_end = tour[pos + length]
-                win = (tang_window(te, a, b_end, wf)
-                       if te is not None else None)
-                qs = tour[pos + 1:pos + length]
-                lm = (min(left, lh_ceil(MISS_PCT * length)) if prorate
-                      else left)
-                bl, dev, mis, exact = span_fit(a, b_end, qs, win, tol, lm)
-                if dev <= tol and mis <= lm:
-                    best = (length, bl, mis, win)
-                    if exact:
-                        best_exact = best
-                    length += 1
-                else:
-                    break
-            if best:
-                break
-        # a floating arc must cover at least 2 more points than the
-        # longest arc that passes through one
-        if best_exact and best and best[0] < best_exact[0] + 2:
-            best = best_exact
+        best = grow_span(tour, pos, te, sharp, nogrow, lim, tol, left, 0,
+                         prorate)
+        # writing a point off is a last resort: offered only where the
+        # span stopped growing, and kept only when every point given
+        # up bought at least two more points of span
+        if drops > 0 and (best is None or best[0] < lim):
+            alt = grow_span(tour, pos, te, sharp, nogrow, lim, tol, left,
+                            drops, prorate)
+            if (alt and alt[4] > 0
+                    and alt[0] >= (best[0] if best else 1) + 2 * alt[4]):
+                best = alt
         if best is None:
+            # stub to the very next point.  One stub carries the
+            # incoming tangent on exactly; a second straight after it
+            # keeps only what the tangent window allows, so a mismatch
+            # decays instead of doubling at every stub until the arcs
+            # come back as semicircles
             b_end = tour[pos + 1]
             if te is not None:
-                bl = max(-1.0, min(1.0, tangent_bulge(a, te, b_end)))
+                phi = signed_dang(te, ang(a, b_end))
+                if stub:
+                    phi = max(-TANG_TOL, min(TANG_TOL, phi))
+                bl = cap_b(lh_tan(phi / 2.0), max_bulge(a, b_end, []))
             else:
                 bl = 0.0
-            best = (1, bl, 0, None)
+            best = (1, bl, 0, None, 0)
+            stub = True
         else:
-            length, bl, mis, win = best
+            length, bl, mis, win, drop = best
             b_end = tour[pos + length]
-            qs = tour[pos + 1:pos + length]
+            # the points this arc gave up on are out of the picture
+            # now: they must not drag the nice-radius snap around
+            qs = span_kept(a, b_end, bl, tour[pos + 1:pos + length], tol)
             dev0 = span_dev(a, b_end, bl, qs)
-            anchored = span_min(a, b_end, bl, qs) <= 2.0 * FIT_EPS
+            anchored = bool(qs) and span_min(a, b_end, bl, qs) <= 2.0 * FIT_EPS
             sn = snap_arc(a, b_end, bl, qs,
                           max(dev0, SNAP_EPS), left, win)
-            if sn and (not anchored
-                       or span_min(a, b_end, sn[0], qs) <= 2.0 * FIT_EPS):
-                best = (length, sn[0], sn[1], win)
-        length, bl, mis, win = best
+            if (sn and abs(sn[0]) <= max_bulge(a, b_end, qs)
+                    and (not anchored
+                         or span_min(a, b_end, sn[0], qs) <= 2.0 * FIT_EPS)):
+                best = (length, sn[0], sn[1], win, drop)
+            stub = False
+        length, bl, mis, win, drop = best
         b_end = tour[pos + length]
         segs.append((a, b_end, bl))
         left -= mis
+        drops -= drop
         pos += length
         te = (None if pos < n - 1 and sharp[pos]
               else ang(a, b_end) + 2.0 * math.atan(bl))
@@ -446,23 +554,27 @@ def span_path(tour, tol, left, prorate=True, walls=None, corners=None,
 
 
 def fit_pass_open(tour, tol, left, prorate=True, walls=None,
-                  corners=None, holds=None):
+                  corners=None, holds=None, drops=0):
     """One full open fit; no seam, so no seam-kink re-run exists."""
     global _ON_EPS
     saved, _ON_EPS = _ON_EPS, on_eps_for(tol)
     try:
         return span_path(tour, tol, left, prorate, walls, corners,
-                         holds)
+                         holds, drops)
     finally:
         _ON_EPS = saved
 
 
 def coarse_path(tour, tol, maxarcs, allowance, walls=None,
-                corners=None, prorate=True, holds=None):
+                corners=None, prorate=True, holds=None, droppct=None):
     """Open fit with the curve cap.  Unlike coarse_loop the tour is
-    NOT rotated: an open run's start and end are its endpoints."""
+    NOT rotated: an open run's start and end are its endpoints.
+    DROPPCT is the share of the points the walk may leave unheld
+    (DROP_PCT unless given; the "tight" candidate passes 0)."""
+    drops = lh_ceil((DROP_PCT if droppct is None else droppct)
+                    * len(tour))
     segs, left = fit_pass_open(tour, tol, allowance, prorate, walls,
-                               corners, holds)
+                               corners, holds, drops)
     if maxarcs is not None:
         tol2 = tol
         tries = 0
@@ -470,7 +582,7 @@ def coarse_path(tour, tol, maxarcs, allowance, walls=None,
             tol2 *= 1.4
             tries += 1
             segs2, _ = fit_pass_open(tour, tol2, 10 ** 9, False, walls,
-                                     corners, holds)
+                                     corners, holds, drops)
             if arc_count(segs2) < arc_count(segs):
                 segs = segs2
     return segs, left
@@ -581,7 +693,53 @@ def s_curve(n_per_arc=9):
     return out
 
 
+def shaky_run(n=60, noise=0.6, seed=5):
+    """An open run with real scan scatter on it."""
+    import random
+    rnd = random.Random(seed)
+    out = []
+    for i in range(n):
+        t = math.pi * i / (n - 1)
+        r = 120.0 + 20.0 * math.sin(3.0 * t)
+        out.append((r * math.cos(t) + rnd.uniform(-noise, noise),
+                    r * math.sin(t) * 0.8 + rnd.uniform(-noise, noise)))
+    return out
+
+
 # ---- tests -----------------------------------------------------------
+
+
+def test_shaky_scan_does_not_spaghetti():
+    """A scan with scatter on it must not come back as loops.
+
+    The open walk carries ABHD's stub, and had ABHD's bug with it:
+    a stub continued the previous tangent exactly, which turns the arc
+    twice as far as the chord ran, so a mismatch doubled at every stub
+    until the arcs saturated as semicircles.  This run used to come
+    back as 49 hairpins of 2.5 inch radius.
+    """
+    pts = shaky_run()
+    tour = order_points_open(pts)
+    step = (sum(dist(tour[i], tour[i + 1]) for i in range(len(tour) - 1))
+            / (len(tour) - 1))
+    for mode, ftol, left, dp in (("tight", TIGHT_TOL, 0, 0.0),
+                                 ("asked", 1.0, lh_ceil(MISS_PCT * len(pts)),
+                                  None),
+                                 ("few", 1.0, 10 ** 9, None)):
+        segs, _ = coarse_path(tour, ftol, None, left,
+                              prorate=(mode != "few"), droppct=dp)
+        arcs = [s for s in segs if abs(s[2]) > 1.0e-9]
+        sweeps = [math.degrees(4.0 * math.atan(abs(s[2]))) for s in arcs]
+        radii = [bulge_radius(*s) for s in arcs]
+        assert max(sweeps) < 150.0, (mode, max(sweeps))
+        assert min(radii) >= 0.5 * step, (
+            "%s: an arc of radius %.1f on points %.1f apart"
+            % (mode, min(radii), step))
+        assert len(segs) <= 0.75 * len(pts), (mode, len(segs))
+        # the ends of an open run are exactly the ends of the fit
+        assert dist(segs[0][0], tour[0]) < 1.0e-9
+        assert dist(segs[-1][1], tour[-1]) < 1.0e-9
+    print("  a shaky scan comes back as a shape, not as loops")
 
 
 def test_open_ordering_recovers_the_run():
@@ -873,13 +1031,16 @@ def test_constants_match_lisp():
     assert float(setq_value("TOL-MAX")) == TOL_MAX
     assert float(setq_value("TIGHT-TOL")) == TIGHT_TOL
     assert float(setq_value("TEXT-EPS")) == TEXT_EPS
+    assert float(setq_value("DROP-PCT")) == DROP_PCT
+    assert float(setq_value("DROP-MULT")) == DROP_MULT
     # the three candidate aims, in the order they are drawn
     m = re.search(r"\(setq \*LH-COMPARE\*[^']*'\((.*?)\)\)\)", src, re.S)
     assert m, "could not read *LH-COMPARE* from lhd.lsp"
     assert tuple(re.findall(r'\(\s*"([a-z]+)"', m.group(1))) \
         == COMPARE_MODES, "the candidate modes moved or were renamed"
     # angles are written as (/ pi N)
-    for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL)):
+    for name, want in (("CORNER-ANG", CORNER_ANG), ("TANG-TOL", TANG_TOL),
+                       ("ARC-SLACK", ARC_SLACK)):
         m = re.search(r"\(setq\s+\*LH-%s\*\s+\(/\s+pi\s+([0-9.]+)\)"
                       % name, src)
         assert m, "could not read *LH-%s* from lhd.lsp" % name
@@ -892,11 +1053,79 @@ def test_constants_match_lisp():
     print("  constants match lhd.lsp")
 
 
+# ---- the fitter is ABHD's, and has to stay ABHD's --------------------
+
+ABHD_FILE = os.path.join(REPO_DIR, "lisp", "abhd", "abhd.lsp")
+
+# the span fitter LHD carries over from ABHD.  Copied code drifts
+# the moment one side is fixed and the other is forgotten - which is
+# exactly what happened when ABHD's runaway-tangent fix landed - so
+# every one of these is compared, code for code, against abhd.lsp.
+SHARED_FITTER = ("span-dev", "span-misses", "span-min", "span-turn",
+    "max-bulge", "cap-b", "span-score", "span-kept", "better",
+    "snap-arc", "span-fit", "grow-span", "span-loop", "fit-pass",
+    "coarse-loop", "tang-window", "end-window", "merge-windows",
+    "clamp-b",)
+
+
+def code_defuns(src, prefix):
+    """Every defun under PREFIX as bare code: comments and blank lines
+    stripped, so a difference in wording is not a difference in
+    behaviour."""
+    out, lines, i = {}, src.split("\n"), 0
+    while i < len(lines):
+        m = re.match(r"\(defun\s+%s([a-z0-9-]+)\s" % re.escape(prefix),
+                     lines[i])
+        if m:
+            name, depth, body = m.group(1), 0, []
+            while i < len(lines):
+                raw = lines[i]
+                masked = re.sub(r'"(\\.|[^"\\])*"',
+                                lambda x: "S" * len(x.group()), raw)
+                cut = masked.find(";")
+                code = raw[:cut] if cut >= 0 else raw
+                counted = masked[:cut] if cut >= 0 else masked
+                if code.strip():
+                    body.append(code.rstrip())
+                depth += counted.count("(") - counted.count(")")
+                i += 1
+                if depth <= 0:
+                    break
+            out[name] = "\n".join(body)
+        else:
+            i += 1
+    return out
+
+
+def one_namespace(text, prefix):
+    """Rewrite a tool's prefix to a neutral one, so two copies of the
+    same function compare equal."""
+    return (text.replace(prefix, "X:")
+                .replace("*%s-" % prefix[:-1].upper(), "*X-")
+                .replace("%s-" % prefix[:-1], "X-"))
+
+
+def test_fitter_is_still_abhds():
+    theirs = code_defuns(open(ABHD_FILE).read(), "pf:")
+    ours = code_defuns(open(LISP_FILE).read(), "lh:")
+    for name in SHARED_FITTER:
+        assert name in ours, "LHD no longer defines lh:%s" % name
+        assert name in theirs, "abhd.lsp no longer defines pf:%s" % name
+        assert one_namespace(ours[name], "lh:") == \
+            one_namespace(theirs[name], "pf:"), (
+                "lh:%s has drifted from pf:%s - the two must be the"
+                " same fitter" % (name, name))
+    print("  the %d shared fitter helpers still match abhd.lsp"
+          % len(SHARED_FITTER))
+
+
 def main():
     print("LHD fitter tests")
     test_lisp_file_is_well_formed()
     test_versioned_copy()
     test_constants_match_lisp()
+    test_fitter_is_still_abhds()
+    test_shaky_scan_does_not_spaghetti()
     test_open_ordering_recovers_the_run()
     test_open_ordering_honours_forced_ends()
     test_open_2opt_unscrambles_the_interior()

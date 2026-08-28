@@ -350,6 +350,18 @@
                                     ; held points are never given up.
                                     ; The "tight" candidate is granted
                                     ; none of this at all.
+(setq *PF-DROP-MULT*    2.0)        ; how far past the max distance a
+                                    ; point has to be before the fit
+                                    ; may give up on it at all.  This
+                                    ; is what separates a bad shot from
+                                    ; a feature: a point that misses by
+                                    ; a little is still fought for - it
+                                    ; stops the span exactly as it
+                                    ; always did - and only one plainly
+                                    ; off can be written off.  Without
+                                    ; it the fit would give up the tip
+                                    ; of a sparsely shot pool to save
+                                    ; one segment.
 (setq *PF-SNAP-EPS*     0.02)       ; a nice-radius snap may move the
                                     ; covered points at most this far
                                     ; beyond where they already sat, and
@@ -1134,14 +1146,17 @@
 
 ;; How the arc (A B BUL) treats the points QS, in one pass:
 ;;   (written-off  worst deviation of the rest  misses among the rest)
-;; A point further than TOL from the arc is not held at all - written
-;; off rather than allowed to shatter the span into stubs.  The caller
-;; rations how many may go; the rest still answer to TOL.
+;; Only a point PLAINLY off - further than *PF-DROP-MULT* times TOL -
+;; may be written off; that is what separates a bad shot from a
+;; feature, and writing one off is what keeps a bad shot from
+;; shattering the span into stubs.  A point that misses by merely a
+;; little still counts against the fit, so the span stops at it as it
+;; always did.  The caller rations how many may go.
 (defun pf:span-score (a b bul qs tol / seg drop dev mis lim d q)
   (setq seg (list a b bul) drop 0 dev 0.0 mis 0 lim (pf:oneps))
   (foreach q qs
     (setq d (pf:seg-dist q seg))
-    (if (> d tol)
+    (if (> d (* *PF-DROP-MULT* tol))
       (setq drop (1+ drop))
       (progn
         (if (> d dev) (setq dev d))
@@ -1170,9 +1185,9 @@
 ;; survey point - is preferred whenever one holds the span within TOL
 ;; and LEFT misses.  Compromise bulges (average / window-clamped /
 ;; window edges), which float between the points, are used only when
-;; no exact arc works.  DLIM points may be written off - left further
-;; than TOL - instead of holding the span back; the fewer written off
-;; the better, and a tie goes to the closer fit.
+;; no exact arc works.  DLIM points may be written off - left plainly
+;; off, see pf:span-score - instead of holding the span back; the
+;; fewer written off the better, and a tie goes to the closer fit.
 ;; Returns (bulge dev misses exactflag written-off).
 (defun pf:span-fit (a b qs win tol left dlim / bls m sum bl cands best
                                                bkey mx sc)
@@ -1189,7 +1204,11 @@
                  (and (>= bl (car win)) (<= bl (cdr win)))))
       (progn
         (setq sc (pf:span-score a b bl qs tol))
-        (if (and (<= (car sc) dlim)
+        ;; an exact arc still has to HOLD the span - the points it did
+        ;; not write off must all be inside TOL - or the compromise
+        ;; bulges below never get their turn
+        (if (and (<= (cadr sc) tol)
+                 (<= (car sc) dlim)
                  (<= (caddr sc) left)
                  (or (null bkey) (pf:better sc bkey)))
           (setq best (list bl (cadr sc) (caddr sc) T (car sc))
@@ -1284,7 +1303,7 @@
                                                   segs pos te ts0 lim a
                                                   best alt len bnd win
                                                   qs bl mis sn dev0
-                                                  anch phi gv walls w
+                                                  anch phi stub walls w
                                                   i1 i2 fwd nogrow f
                                                   wrec)
   (setq n (length tour))
@@ -1332,7 +1351,8 @@
         segs    nil
         pos     0
         te      (if strtshp nil te0)
-        ts0     nil)
+        ts0     nil
+        stub    nil)                ; was the span just emitted a stub?
   (while (< pos n)
     (setq a    (nth pos tour)
           wrec (assoc pos walls))
@@ -1359,14 +1379,15 @@
     (setq lim  (if (= pos 0) (1- (- n pos)) (- n pos))
           best (pf:grow-span tour pos te ts0 sharp nogrow lim tol
                              left 0 pro))
-    ;; Writing a point off is a last resort, for where the walk is
-    ;; about to shatter into stubs: it is offered only where the span
-    ;; could not reach past two points anyway, and kept only when
-    ;; every point given up bought at least two more points of span.
-    ;; A span that found nothing at all is worth one point (the stub
-    ;; below), so the comparison always has a floor to beat - and a
-    ;; span can never give up every point it covers.
-    (if (and (> drop 0) (or (null best) (<= (car best) 2)))
+    ;; Writing a point off is a last resort: it is offered only where
+    ;; the span stopped growing - something is in the way - and kept
+    ;; only when every point given up bought at least two more points
+    ;; of span.  What may be given up at all is the narrow thing: a
+    ;; point plainly off (pf:span-score), never one that merely costs
+    ;; a segment.  A span that found nothing is worth one point (the
+    ;; stub below), so the comparison always has a floor to beat - and
+    ;; a span can never give up every point it covers.
+    (if (and (> drop 0) (or (null best) (< (car best) lim)))
       (progn
         (setq alt (pf:grow-span tour pos te ts0 sharp nogrow lim tol
                                 left drop pro))
@@ -1376,23 +1397,24 @@
                                   (* 2 (nth 4 alt)))))
           (setq best alt))))
     (if (null best)
-      ;; Stub to the very next point.  It does not continue the
-      ;; incoming tangent exactly any more: it gives up as much of the
-      ;; mismatch as the widest stretched window would have allowed
-      ;; (never more than half of it) and absorbs the rest.
-      ;; Continuing exactly turned the arc twice as far as the chord,
-      ;; so a mismatch DOUBLED at every stub until the arcs saturated
-      ;; as semicircles - the spiral that made a shaky survey come out
-      ;; as spaghetti.  Giving a little at the joint makes it decay.
+      ;; Stub to the very next point.  One stub carries the incoming
+      ;; tangent on exactly, as it always has - but a stub turns its
+      ;; arc twice as far as the chord ran, so a SECOND stub straight
+      ;; after it doubles the mismatch, a third doubles it again, and
+      ;; the bulges saturate as semicircles: that runaway is what
+      ;; turned a shaky survey into spaghetti.  So once the walk is
+      ;; stubbing along, a stub keeps only what the tangent window
+      ;; allows and gives the rest up as a kink at the joint - and the
+      ;; mismatch decays instead of running away.
       (progn
         (setq bnd (nth (rem (1+ pos) n) tour))
         (if te
           (progn
-            (setq phi (pf:signed-dang te (angle a bnd))
-                  gv  (min (/ (abs phi) 2.0)
-                           (* *PF-TANG-TOL* (last *PF-TANG-STEPS*)))
-                  bl  (pf:tan (/ (- phi (if (< phi 0.0) (- gv) gv))
-                                 2.0)))
+            (setq phi (pf:signed-dang te (angle a bnd)))
+            (if stub
+              (setq phi (max (- *PF-TANG-TOL*)
+                             (min *PF-TANG-TOL* phi))))
+            (setq bl (pf:tan (/ phi 2.0)))
             (if (and (= (1+ pos) n) (not strtshp) ts0)
               ;; closing stub: split the kink between both joints
               (setq bl (/ (+ bl (pf:tan (/ (pf:signed-dang (angle a bnd)
@@ -1401,7 +1423,8 @@
                           2.0)))
             (setq bl (pf:cap-b bl (pf:max-bulge a bnd nil))))
           (setq bl 0.0))
-        (setq best (list 1 bl 0 nil 0)))
+        (setq best (list 1 bl 0 nil 0)
+              stub T))
       ;; nice-radius snap inside the same tangent window, over the
       ;; points the arc actually holds - the ones it wrote off must
       ;; not drag the snap around.  A snap may never pull the arc off
@@ -1429,7 +1452,8 @@
                  (or (not anch)
                      (<= (pf:span-min a bnd (car sn) qs)
                          (* 2.0 *PF-FIT-EPS*))))
-          (setq best (list len (car sn) (cdr sn) win (nth 4 best))))))
+          (setq best (list len (car sn) (cdr sn) win (nth 4 best))))
+        (setq stub nil)))
     (setq len  (car best)
           bl   (cadr best)
           mis  (caddr best)
@@ -4193,8 +4217,9 @@
   (princ "\n    floating arcs are a rare last resort.")
   (princ "\n  * Joints meet within 8 degrees of tangent; when nothing fits the")
   (princ "\n    window it stretches 1.25x then 1.5x rather than being dropped,")
-  (princ "\n    and a one-point stub then gives up what is left of the mismatch")
-  (princ "\n    a little at a time, so it dies away instead of building up.")
+  (princ "\n    and then a one-point stub carries the tangent on.  A SECOND")
+  (princ "\n    stub straight after it keeps only what the window allows, so a")
+  (princ "\n    mismatch dies away instead of doubling at every stub.")
   (princ "\n  * No arc may sweep further than the points it covers actually")
   (princ (strcat "\n    turn, plus "
                  (rtos (* 180.0 (/ *PF-ARC-SLACK* pi)) 2 0)
@@ -4204,9 +4229,13 @@
   (princ (strcat "\n    " (rtos (* 100.0 *PF-DROP-PCT*) 2 0)
                  " percent of the points may end further off than your"
                  " distance"))
-  (princ "\n    (they are counted \"not held\" and ringed), but only where")
-  (princ "\n    holding one would break the run into stubs, and never a held")
-  (princ "\n    point, a corner or a wall point.  The red fit gives up none.")
+  (princ "\n    (counted \"not held\" and ringed).  Only a point plainly off -")
+  (princ (strcat "\n    past " (rtos *PF-DROP-MULT* 2 0)
+                 "x that distance - can go, only where holding it would"))
+  (princ "\n    break the run, and never a held point, a corner or a wall")
+  (princ "\n    point.  The red fit gives up none.  A shot thrown far enough")
+  (princ "\n    sideways to read as a corner ENDS a span, so the line still")
+  (princ "\n    runs through it - omit it at a Redo if it is wrong.")
   (princ "\n  * Radii snap to whole feet, half feet, then inches - only when")
   (princ "\n    the points allow it; the points always outrank pretty radii.")
   (princ "\n  * Turns over 45 degrees are corners and are never buried inside")

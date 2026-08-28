@@ -229,6 +229,66 @@ def run(cut, extra=None, pts=None, keep="2"):
     return vm
 
 
+# ---- the fitter is ABHD's, and has to stay ABHD's --------------------
+# CABHD carries ABHD's span fitter over word for word.  Copied code
+# drifts the moment one side is fixed and the other is forgotten -
+# which is exactly what happened when ABHD's runaway-tangent fix
+# landed - so every shared helper is compared, code for code, with
+# abhd.lsp.  Comments and blank lines are stripped first: a difference
+# in wording is not a difference in behaviour.
+ABHD = os.path.join(REPO, 'lisp', 'abhd', 'abhd.lsp')
+
+SHARED_FITTER = ("span-dev", "span-misses", "span-min", "span-turn",
+                 "max-bulge", "cap-b", "span-score", "span-kept",
+                 "better", "snap-arc", "span-fit", "grow-span",
+                 "span-loop", "fit-pass", "coarse-loop", "tame-bulge",
+                 "fit-arc-seg", "tang-window", "end-window",
+                 "merge-windows", "clamp-b")
+
+
+def code_defuns(src, prefix):
+    """Every defun under PREFIX as bare code, comments stripped."""
+    out, lines, i = {}, src.split('\n'), 0
+    while i < len(lines):
+        m = re.match(r'\(defun\s+%s([a-z0-9-]+)\s' % re.escape(prefix),
+                     lines[i])
+        if m:
+            name, depth, body = m.group(1), 0, []
+            while i < len(lines):
+                raw = lines[i]
+                masked = re.sub(r'"(\\.|[^"\\])*"',
+                                lambda x: 'S' * len(x.group()), raw)
+                cut = masked.find(';')
+                code = raw[:cut] if cut >= 0 else raw
+                counted = masked[:cut] if cut >= 0 else masked
+                if code.strip():
+                    body.append(code.rstrip())
+                depth += counted.count('(') - counted.count(')')
+                i += 1
+                if depth <= 0:
+                    break
+            out[name] = '\n'.join(body)
+        else:
+            i += 1
+    return out
+
+
+def one_namespace(text, prefix):
+    return (text.replace(prefix, 'X:')
+                .replace('*%s-' % prefix[:-1].upper(), '*X-')
+                .replace('%s-' % prefix[:-1], 'X-'))
+
+
+def fitter_drift():
+    """The shared helpers that no longer match abhd.lsp."""
+    theirs = code_defuns(open(ABHD).read(), 'pf:')
+    ours = code_defuns(open(LSP).read(), 'cab:')
+    return [n for n in SHARED_FITTER
+            if n not in ours or n not in theirs
+            or one_namespace(ours[n], 'cab:')
+            != one_namespace(theirs[n], 'pf:')]
+
+
 print('CABHD -- the file itself')
 src = open(LSP).read()
 check('the commands are CABHD and its version banner',
@@ -244,6 +304,8 @@ check('the version banner is the one release_lisp.py stamps',
       bool(re.search(r'\*cabhd-version\*\s+"v\d+\.\d+"', src)))
 check('no exit is silent: the error handler always names the step',
       '" (cancelled)."' in src and 'CABHD done (last step: ' in src)
+check('the span fitter is still ABHD\'s, helper for helper',
+      not fitter_drift())
 check('every helper is under one prefix (cab:)',
       all(n.startswith('cab:') or n.startswith('c:')
           for n in re.findall(r'^\(defun\s+(\S+)', src, re.M)))

@@ -30,9 +30,13 @@ percent of points allowed off, curve cap, declared straight walls,
 sharp corners, held points, the selection, then the cutoff), two modes
 picked from the selection (guided when POOL geometry is included,
 points-only otherwise), arcs from survey point to survey point meeting
-within 8 degrees of tangent, nice radii (whole feet, half feet, whole
-inches), and **three candidate fits** drawn at once -- most curves /
-as asked / fewest curves -- chosen with
+within 8 degrees of tangent, no arc curving further than the points it
+covers actually turn (plus `*CAB-ARC-SLACK*`, 60 degrees), up to
+`*CAB-DROP-PCT*` (10%) of the points given up on where one is plainly
+off -- past `*CAB-DROP-MULT*` (2x) the distance you typed -- and
+holding it would break the shape, nice radii (whole feet, half feet,
+whole inches), and **three candidate fits** drawn at once -- most
+curves / as asked / fewest curves -- chosen with
 `[1/2/3/All/None/Redo]` or by clicking an outline. `Redo` refits
 without leaving the command: omit points by clicking them, move the
 cutoff either way, and edit walls, corners and holds with

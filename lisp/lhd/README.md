@@ -62,6 +62,25 @@ indices. A point's own Z outranks a nearby elevation text.
 2-opt, arcs grown span by span inside the 8-degree tangent window,
 the closing seam held smooth, nice radii preferred.
 
+Both modes carry ABHD's two guards against a shaky scan coming back
+as a string of loops: **no arc sweeps further than the run of points
+it covers actually turns** (plus `*LH-ARC-SLACK*`, 60 degrees), and a
+**run of one-point stubs no longer feeds itself** - one stub carries
+the previous tangent on exactly, but a second straight after it keeps
+only what the tangent window allows and gives the rest up as a kink,
+so a mismatch decays instead of doubling at every stub. On a
+60-point scan with half an inch of scatter that is the difference
+between 60 hairpins of 4-inch radius and 38 arcs no tighter than
+18 inches.
+
+The fit may also **give up on** up to `*LH-DROP-PCT*` (10%) of the
+points - left further off than the distance you typed, counted "not
+held" and ringed - but only where one is plainly off (past
+`*LH-DROP-MULT*`, 2x that distance), only where the span stopped
+growing, and only when each point given up buys at least two more
+points of span. Held points, declared corners and stretch points are
+never given up, and the tight candidate gives up none at all.
+
 **Open** drops the loop. The two ends of the run are the
 farthest-apart pair of points (or two points you pick on a Redo -
 "Pick the two END points"), the 2-opt keeps both ends fixed, and the

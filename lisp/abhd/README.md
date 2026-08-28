@@ -11,8 +11,9 @@ while the points stay in charge. No arc may curve much further than
 the points it covers actually do, so a shaky survey comes out as a
 shape rather than a string of loops. Up to 15% of the points (rounded
 up) are allowed to sit about an inch off the result, a tenth of them
-may be **given up on entirely** where holding them would break the
-shape, and you can cap the number of curves outright.
+may be **given up on entirely** where one is plainly off and holding
+it would break the shape, and you can cap the number of curves
+outright.
 
 Three commands ship in the one file: **`ABHD`** runs the whole fit
 (and offers the pool bottom at the end), **`ADAB`** runs just the
@@ -102,8 +103,13 @@ fit never hides one.
 
 Giving up is a last resort, not a shortcut:
 
-* it is only offered where the span could not reach past two points
-  anyway — a fit running long arcs never spends it;
+* only a point **plainly** off may go — past `*PF-DROP-MULT*` (**2×**)
+  the distance you typed. A point that misses by a little is still
+  fought for and still stops the span, exactly as before. This is what
+  separates a bad shot from a feature: without it the fit would give
+  up the tip of a sparsely shot pool to save one segment;
+* it is only offered where the span stopped growing — something is in
+  the way — never to shorten a fit that is running fine;
 * every point given up must buy at least **two more points of span**,
   or it is held after all;
 * **held points, declared corners and wall points are never given
@@ -111,8 +117,12 @@ Giving up is a last resort, not a shortcut:
 * the **tight** candidate (fit 1) is granted none of it at all, which
   is what keeps it the reference the other two are read against.
 
-On a 70-point survey with three bad shots in it, giving up two points
-took the fit from 24 segments to 14.
+**Only what a span covers can be given up.** A shot thrown far enough
+sideways turns the survey past the 45° corner test, or simply stops
+the span growing — either way it becomes a span *endpoint*, and the
+line runs through it exactly, like the corner it looks like. Those
+are for the **omit** step of a `Redo` (click the point) to take out,
+not for the fitter to decide about on its own.
 
 In the ordering-sketch and points-only modes the loop is covered by
 long, overarching arcs that sit **on the points** and meet each other
@@ -138,16 +148,18 @@ long, overarching arcs that sit **on the points** and meet each other
   one-point stub. Dropping the window outright — what an earlier
   version did — let a joint kink **23.8°**, three times the limit; it
   is now capped near 12°.
-* **A stub gives ground instead of passing the problem on.** It used
-  to continue the previous tangent *exactly*, which turns the arc
-  twice as far as the chord ran — so any mismatch **doubled** at every
-  stub until the bulges saturated as semicircles and the perimeter
-  came out as a string of loops. The stub now gives up as much of the
-  mismatch as the widest stretched window would have allowed (never
-  more than half of it) and absorbs the rest, so a mismatch **decays**
-  along the loop. On a 70-point survey with half an inch of scatter
-  that is the difference between 70 hairpins of 3-inch radius and 39
-  arcs no tighter than 19 inches.
+* **A run of stubs no longer feeds itself.** One stub continues the
+  previous tangent exactly, as it always has — but a stub turns its
+  arc **twice** as far as the chord ran, so a second stub straight
+  after it doubles the mismatch, a third doubles it again, and the
+  bulges saturate as semicircles: that runaway is what turned a shaky
+  survey into a string of loops. So once the walk is stubbing along, a
+  stub keeps only what the tangent window (8°) allows and gives the
+  rest up as a kink at the joint — the mismatch **decays** instead. A
+  single stub between real spans behaves exactly as it used to. On a
+  70-point survey with half an inch of scatter this is the difference
+  between 70 hairpins of 3-inch radius and 40 arcs no tighter than
+  9 inches.
 * **An arc may only curve as much as its own points do.** No span
   sweeps further than the run of points it covers actually turns, plus
   `*PF-ARC-SLACK*` (**60°**) — enough for a quarter turn sampled only
@@ -210,8 +222,8 @@ then overruling the answer. See
 
 All thresholds are constants at the top of `abhd.lsp`
 (`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-SNAP-EPS*`, `*PF-CORNER-ANG*`,
-`*PF-NICE-RADII*`, `*PF-TANG-TOL*`, `*PF-ARC-SLACK*`,
-`*PF-DROP-PCT*`), as are the layer names
+`*PF-NICE-RADII*`, `*PF-TANG-TOL*`, `*PF-ARC-SLACK*`, `*PF-DROP-PCT*`,
+`*PF-DROP-MULT*`), as are the layer names
 (`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`). The
 defaults were calibrated against a real hand-drawn as-built trace
 (55 `ab_pt` points, 37×16 ft pool, ~20″ point spacing). On that
