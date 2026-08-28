@@ -45,6 +45,47 @@ and a done-line reports the counts.
 | Command | What it does |
 | --- | --- |
 | `TYDRN` | Run the fixes in one pass |
+| `TYLERDRONESUITE` | `TYDRN`, then `PADDLE`, then `AUTODIM` |
+
+## TYLERDRONESUITE — the whole drone trace in one
+
+`TYDRN`, then `PADDLE`, then `AUTODIM`, in that order because that is the
+order the work has to happen in: the points have to be on the right
+layer before `PADDLE` can find the perimeter features to pad, and the
+pads have to be in before `AUTODIM` dimensions what is there.
+
+**Nothing is skipped or reworded.** Each stage is the command itself,
+asking its own questions — so `TYDRN` still offers *"Select text to
+update <Enter = all text in drawing>"*, and `PADDLE` and `AUTODIM` still
+ask for what they need. The suite only supplies the order. Anything you
+know about the three commands stays true here.
+
+**Each stage keeps its own undo group.** Three `U`s back the suite out,
+one per stage — deliberately, and for `XYPLOT`'s reason about its `ABHD`
+handoff: a stage that went well should not have to be undone to get at
+one that did not.
+
+**All three are checked before any of them runs.** `PADDLE` and
+`AUTODIM` live in other files, so on a one-file `APPLOAD` of `tydrn.lsp`
+they may not be there. Half a suite is worse than none: `TYDRN` would
+have moved the points and `PADDLE` dropped the pads, and you would find
+out only at the end that the dimensioning you ran it for was never going
+to happen. So a missing stage is named and nothing runs at all:
+
+```
+TYLERDRONESUITE needs PADDLE and AUTODIM, which are not loaded here.
+  APPLOAD the missing file - or LAZPASS.lsp, which is the
+  whole build in one - and run it again.  Nothing has been
+  changed.
+```
+
+`Esc` in any stage stops the suite there — an AutoLISP error unwinds to
+the command line, so the stages after it never start. What ran before it
+stays run, which is the other reason the check happens first.
+
+The order lives in `*tydrn-suite*`, a list of three command names; the
+`1 of 3` counting in the messages comes off it rather than being written
+out again.
 
 ## Tunables
 
@@ -76,6 +117,16 @@ At the top of `tydrn.lsp`:
   ships with full AutoCAD. AutoCAD LT cannot run this file.
 
 ## Tests
+
+```
+python3 tests/test_tydrn_suite.py
+```
+
+covers `TYLERDRONESUITE`: the order, that each stage goes through the
+command line rather than being called directly, that a missing stage is
+named and stops it before anything runs, and that the suite opens no
+undo group of its own.
+
 
 No dedicated test drives TYDRN yet. `python3 tests/test_shared.py`
 loads it (with everything else) into the repo's AutoLISP VM, so a

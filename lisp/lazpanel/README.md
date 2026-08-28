@@ -174,6 +174,25 @@ toolbar gets closed or lost, `LAZBUTTON` brings it back; a toolbar
 that is merely hidden is re-shown rather than duplicated, and one that
 you have docked or moved is left where you put it.
 
+**The button is drawn at 32 pixels**, not 16 — the small one is easy to
+miss on a crowded screen, and both pictures were already being written,
+so AutoCAD simply had to be told which to use. One thing to know before
+turning it off again: **AutoCAD's large-button setting is not per
+toolbar.** Asking for it here turns it on for every toolbar in the
+session — it is the same switch as `Options ▸ Display ▸ "Use large
+buttons for Toolbars"`. That is why it is a tunable, and why `LAZBUTTON`
+says out loud what it did rather than letting you wonder why the rest of
+your toolbars changed:
+
+```
+LazPanel button is on screen - drag it anywhere, dock it, click it to open the panel.
+  Drawn at 32 pixels.  AutoCAD sizes every toolbar together, so the rest grew
+  with it; (setq lzp:*bigbutton* nil) before loading leaves them alone.
+```
+
+Thirty-two is the ceiling, not a choice: a toolbar bitmap is 16 or 32,
+and `SetBitmaps` takes one of each.
+
 Two details worth knowing, because both were wrong first time round:
 
 - **The bytes travel as base64.** `ADODB.Stream`'s `Write` wants a

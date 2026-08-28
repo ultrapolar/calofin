@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 52 files, 127 commands:
+;;; 52 files, 128 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABMOVE  ADAB
@@ -30,8 +30,8 @@
 ;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
 ;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
 ;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT
-;;;   XYPLOTVER
+;;;   TUTORIALSPACHECK  TYDRN  TYLERDRONESUITE  WCALST  XFTCONV  XFTCONV-SETUP
+;;;   XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -64348,7 +64348,8 @@
 ;;; ===================================================================
 ;;; TYDRN.LSP                                          AutoCAD 2018
 ;;; -------------------------------------------------------------------
-;;; Command: TYDRN
+;;; Commands: TYDRN             the cleanup below
+;;;           TYLERDRONESUITE  TYDRN, then PADDLE, then AUTODIM
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
@@ -64385,7 +64386,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -64602,7 +64603,83 @@
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
   (princ))
 
-(princ "\nTYDRN.LSP loaded.  Type TYDRN to run.")
+;;; ===================================================================
+;;; TYLERDRONESUITE - the drone trace, start to finish
+;;; -------------------------------------------------------------------
+;;; TYDRN, then PADDLE, then AUTODIM, in that order because that is the
+;;; order the work has to happen in: the points have to be on the right
+;;; layer before PADDLE can find the perimeter features to pad, and the
+;;; pads have to be in before AUTODIM dimensions what is there.
+;;;
+;;; Nothing is skipped or reworded - each stage is the command itself,
+;;; asking its own questions, so anything learned about TYDRN, PADDLE
+;;; or AUTODIM stays true here.  The suite only supplies the order.
+;;;
+;;; EACH STAGE KEEPS ITS OWN UNDO GROUP, so three U's back the suite
+;;; out, one per stage.  That is deliberate, and it is XYPLOT's
+;;; reasoning about its ABHD handoff: a stage that went well should not
+;;; have to be undone to get at one that did not.
+;;;
+;;; Esc in any stage stops the suite there - an AutoLISP error unwinds
+;;; to the command line, so the stages after it never start.  What ran
+;;; before it stays run, which is why the check below happens first.
+;;; ===================================================================
+
+(setq *tydrn-suite* '("TYDRN" "PADDLE" "AUTODIM"))
+
+;; Is C:<name> defined in this session?  (XYPLOT's boundp test, with
+;; the name computed rather than quoted.)
+(defun tydrn:has (name)
+  (boundp (read (strcat "c:" name))))
+
+;; "PADDLE and AUTODIM" -- the way the refusal names what is missing.
+(defun tydrn:namelist (names / out n i nm)
+  (setq out "" n (length names) i 0)
+  (foreach nm names
+    (setq out (strcat out
+                      (cond ((= i 0) "")
+                            ((= i (1- n)) (if (= n 2) " and " ", and "))
+                            (t ", "))
+                      nm)
+          i   (1+ i)))
+  out)
+
+(defun c:TYLERDRONESUITE ( / missing nm step)
+  ;; Every stage is checked BEFORE any of them runs.  Half a suite is
+  ;; worse than none: TYDRN would have moved the points and PADDLE
+  ;; dropped the pads, and the operator would find out only at the end
+  ;; that the dimensioning they ran this for was never going to happen.
+  (setq missing nil)
+  (foreach nm *tydrn-suite*
+    (if (not (tydrn:has nm)) (setq missing (cons nm missing))))
+  (setq missing (reverse missing))
+  (if missing
+    (progn
+      (princ (strcat "\nTYLERDRONESUITE needs " (tydrn:namelist missing)
+                     ", which " (if (= 1 (length missing)) "is" "are")
+                     " not loaded here."))
+      (princ "\n  APPLOAD the missing file - or LAZPASS.lsp, which is the")
+      (princ "\n  whole build in one - and run it again.  Nothing has been")
+      (princ "\n  changed."))
+    (progn
+      (princ "\nTYLERDRONESUITE: TYDRN, then PADDLE, then AUTODIM.")
+      (princ "\n  Each stage is its own undo group, so a stage that went")
+      (princ "\n  well is not undone to get at one that did not.  Esc in")
+      (princ "\n  any stage stops the suite there.")
+      (setq step 0)
+      (foreach nm *tydrn-suite*
+        (setq step (1+ step))
+        (princ (strcat "\n\n--- " (itoa step) " of "
+                       (itoa (length *tydrn-suite*)) ": " nm " ---"))
+        ;; through the command line, not as a direct call, so each stage
+        ;; prompts and errors exactly as it does when it is typed
+        (vl-cmdf (strcat "_." nm)))
+      (princ "\n\nTYLERDRONESUITE done - all three stages ran.")))
+  (princ))
+
+(princ (strcat "\nTYDRN.LSP " *tydrn-version*
+               " loaded.  Type TYDRN to run, or TYLERDRONESUITE"
+               " for TYDRN + PADDLE + AUTODIM."))
 (princ)
 
 
@@ -70711,7 +70788,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.9")
+(setq *lazpanel-version* "v3.0")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -70832,6 +70909,7 @@
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
+    ("TYLERDRONESUITE"  "Drone suite: tidy, pad, dim")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Leica import cleanup")
     ("XYPLOT"           "X/Y offset plot")
@@ -70950,6 +71028,7 @@
       "CONSTELLATION"
       "DRONE"
       "TYDRN"
+      "TYLERDRONESUITE"
       "AUTODIMSIDEPOV"
       "STAIRDIM"
       "FLOORDIM"
@@ -71006,6 +71085,7 @@
       "XFTCONV"
       "DRONE"
       "TYDRN"
+      "TYLERDRONESUITE"
       )
     )
      ("Dimensions"
@@ -71056,6 +71136,18 @@
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
+
+;; Draw the button at 32 pixels rather than 16.  The small one is easy
+;; to miss on a crowded screen, and both pictures are already written
+;; -- AutoCAD simply picks the 16 unless it is told otherwise.
+;;
+;; Read this before changing it: AutoCAD's large-button setting is not
+;; per toolbar.  Asking for it here turns it on for EVERY toolbar in
+;; the session, which is the same switch as Options > Display > "Use
+;; large buttons for Toolbars".  That is why it is a tunable and why
+;; the load announcement says what it did: setq it nil in a startup
+;; file to leave the setting alone and keep the small button.
+(setq lzp:*bigbutton* T)
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
 (setq lzp:*go* nil)               ; the group a tab click asked for
@@ -71923,6 +72015,10 @@
         ;; one line, not a stack trace: the panel still works without a
         ;; picture, but a blank button should not be a mystery
         (princ "\n[lazpanel] button picture not applied - LAZICON says why."))
+      ;; big buttons before visible: the toolbar resizes to fit its
+      ;; button, and doing it the other way round makes it visibly jump
+      (if lzp:*bigbutton*
+        (vl-catch-all-apply 'vla-put-largebuttons (list tb :vlax-true)))
       (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
       (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
   tb)
@@ -72078,7 +72174,15 @@
     (tb
      (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
      (princ (strcat "\nLazPanel button is on screen - drag it anywhere,"
-                    " dock it, click it to open the panel.")))
+                    " dock it, click it to open the panel."))
+     ;; said out loud because it is not a change to THIS toolbar: the
+     ;; operator's other toolbars grew too, and they should hear it
+     ;; from the command that did it rather than wonder
+     (if lzp:*bigbutton*
+       (princ (strcat "\n  Drawn at 32 pixels.  AutoCAD sizes every"
+                      " toolbar together, so the rest grew"
+                      "\n  with it; (setq lzp:*bigbutton* nil) before"
+                      " loading leaves them alone."))))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
@@ -72193,10 +72297,10 @@
   "LINTXTCHK" "PADDLE" "TUTORIALPADDLE" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS"
   "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
   "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
-  "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT"
-  "XYPLOTVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
-  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON"
-  "LAZPANELVER"
+  "DRONE" "TYDRN" "TYLERDRONESUITE" "WCALST" "XFTCONV" "XFTCONV-SETUP"
+  "XYPLOT" "XYPLOTVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT"
+  "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON"
+  "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

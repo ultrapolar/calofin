@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v2.9")
+(setq *lazpanel-version* "v3.0")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -197,6 +197,7 @@
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
+    ("TYLERDRONESUITE"  "Drone suite: tidy, pad, dim")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Leica import cleanup")
     ("XYPLOT"           "X/Y offset plot")
@@ -315,6 +316,7 @@
       "CONSTELLATION"
       "DRONE"
       "TYDRN"
+      "TYLERDRONESUITE"
       "AUTODIMSIDEPOV"
       "STAIRDIM"
       "FLOORDIM"
@@ -371,6 +373,7 @@
       "XFTCONV"
       "DRONE"
       "TYDRN"
+      "TYLERDRONESUITE"
       )
     )
      ("Dimensions"
@@ -421,6 +424,18 @@
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
+
+;; Draw the button at 32 pixels rather than 16.  The small one is easy
+;; to miss on a crowded screen, and both pictures are already written
+;; -- AutoCAD simply picks the 16 unless it is told otherwise.
+;;
+;; Read this before changing it: AutoCAD's large-button setting is not
+;; per toolbar.  Asking for it here turns it on for EVERY toolbar in
+;; the session, which is the same switch as Options > Display > "Use
+;; large buttons for Toolbars".  That is why it is a tunable and why
+;; the load announcement says what it did: setq it nil in a startup
+;; file to leave the setting alone and keep the small button.
+(setq lzp:*bigbutton* T)
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
 (setq lzp:*go* nil)               ; the group a tab click asked for
@@ -1288,6 +1303,10 @@
         ;; one line, not a stack trace: the panel still works without a
         ;; picture, but a blank button should not be a mystery
         (princ "\n[lazpanel] button picture not applied - LAZICON says why."))
+      ;; big buttons before visible: the toolbar resizes to fit its
+      ;; button, and doing it the other way round makes it visibly jump
+      (if lzp:*bigbutton*
+        (vl-catch-all-apply 'vla-put-largebuttons (list tb :vlax-true)))
       (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
       (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
   tb)
@@ -1443,7 +1462,15 @@
     (tb
      (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
      (princ (strcat "\nLazPanel button is on screen - drag it anywhere,"
-                    " dock it, click it to open the panel.")))
+                    " dock it, click it to open the panel."))
+     ;; said out loud because it is not a change to THIS toolbar: the
+     ;; operator's other toolbars grew too, and they should hear it
+     ;; from the command that did it rather than wonder
+     (if lzp:*bigbutton*
+       (princ (strcat "\n  Drawn at 32 pixels.  AutoCAD sizes every"
+                      " toolbar together, so the rest grew"
+                      "\n  with it; (setq lzp:*bigbutton* nil) before"
+                      " loading leaves them alone."))))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))

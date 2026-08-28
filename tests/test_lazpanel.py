@@ -525,6 +525,7 @@ STUB = '''
       stub:*ran* nil stub:*dlgname* nil stub:*done* nil
       stub:*tbs* nil stub:*btns* nil stub:*addargs* nil
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
+      stub:*big* nil
       stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
       stub:*nosupport* nil)
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
@@ -590,6 +591,8 @@ STUB = '''
   (stub:ev "deletetoolbar") t)
 (defun vla-setbitmaps (btn small large)
   (setq stub:*bitmaps* (list small large)) (stub:ev "setbitmaps") t)
+(defun vla-put-largebuttons (tb v)
+  (setq stub:*big* t) (stub:ev "largebuttons") t)
 (defun vla-put-visible (tb v)
   (setq stub:*visible* v) (stub:ev "visible") t)
 (defun vla-float (tb top left rows)
@@ -1116,6 +1119,32 @@ assert 'visible' in ev, "a toolbar the user had closed is never re-shown"
 assert not vm3.globals.get('stub:*float*'), \
     "a toolbar the user has placed must not be floated out from under them"
 print("   reused, icons re-applied, made visible, and NOT re-floated")
+
+
+print("== the button is asked for at 32 pixels, and says that is global ==")
+vm5 = stubbed()
+vm5.loads('(setq t:*tb* (lzp:button-init))')
+assert vm5.globals.get('stub:*big*') is not None, (
+    "large buttons were never asked for, so AutoCAD keeps showing the 16px "
+    "picture and the button stays easy to miss")
+# stub:ev conses, so the log is newest first -- reverse it to read the
+# run in the order it happened
+ev5 = list(reversed([str(e) for e in vm5.globals.get('stub:*events*') or []]))
+assert ev5.index('largebuttons') < ev5.index('visible'), (
+    "the size must be set before the toolbar is shown, or it resizes in "
+    "front of the operator")
+vm5.loads('(c:LAZBUTTON)')
+said = "".join(str(x) for x in vm5.printed)
+assert "32 pixels" in said, "LAZBUTTON does not say what size it drew"
+assert "every toolbar" in said, (
+    "LAZBUTTON must say the size is not per-toolbar -- the operator's OTHER "
+    "toolbars grew too, and they should hear it from the command that did it")
+# and it has to be possible to decline
+vm6 = stubbed()
+vm6.loads('(setq lzp:*bigbutton* nil) (setq t:*tb* (lzp:button-init))')
+assert vm6.globals.get('stub:*big*') is None, (
+    "lzp:*bigbutton* nil must leave AutoCAD's global setting alone")
+print("   32px asked for, the global effect said out loud, and nil declines")
 
 
 print("== a toolbar that cannot get its button does not survive ==")
