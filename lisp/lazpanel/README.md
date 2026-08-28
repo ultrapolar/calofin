@@ -193,6 +193,32 @@ LazPanel button is on screen - drag it anywhere, dock it, click it to open the p
 Thirty-two is the ceiling, not a choice: a toolbar bitmap is 16 or 32,
 and `SetBitmaps` takes one of each.
 
+**`TYLERDRONESUITE` has a button of its own**, on its own one-button
+toolbar, because it is one job someone runs all day and it should not
+cost two clicks through a dialog to reach. Its mark is a **triangle**,
+point north, against the panel's hexagon: the two sit on the same strip
+and `lzp:bmp-bytes` paints every pixel the one orange, so shape is the
+only thing that can tell them apart — and being the same orange is what
+makes the pair read as one toolkit rather than two.
+
+Everything a button needs is one spec —
+`(toolbar-name icon-stem tooltip command art16 art32)` — and
+`lzp:tb-specs` is the list of them, so the load, `LAZBUTTON` and
+`LAZICON` all walk the same roster. The icon stem is per button on
+purpose: one shared name and the second write would quietly clobber the
+first, leaving both buttons wearing whichever shape was written last.
+
+The suite's button is offered **only when its command is loaded**.
+`LAZPANEL.lsp` APPLOADed on its own has no `tydrn.lsp` beside it, and a
+button that answers a click with "Unknown command" is worse than no
+button — so `LAZBUTTON` makes one button and says why there is not a
+second:
+
+```
+  TYLERDRONESUITE is not loaded, so it has no button of its own -
+  APPLOAD tydrn.lsp (or LAZPASS.lsp) and run LAZBUTTON again.
+```
+
 Two details worth knowing, because both were wrong first time round:
 
 - **The bytes travel as base64.** `ADODB.Stream`'s `Write` wants a
