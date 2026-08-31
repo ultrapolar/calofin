@@ -1605,13 +1605,25 @@ def _entsel(vm, a):
 
 def _wc_re(pat):
     """AutoCAD wcmatch pattern -> regex. Covers the constructs SPA.LSP
-    uses (* ? , ~ # @ .) plus ` escaping; enough for the taper/grade
-    string sniffing, not a full DWG-name matcher."""
+    uses (* ? , ~ # @ .) plus ` escaping and [...] character classes
+    (with ~ negation and - ranges, XFTCONV's MTEXT-code sniff); enough
+    for the taper/grade string sniffing, not a full DWG-name matcher."""
     out, i = [], 0
     while i < len(pat):
         c = pat[i]
         if c == '`' and i + 1 < len(pat):
             out.append(re.escape(pat[i + 1])); i += 2; continue
+        if c == '[':
+            j = pat.find(']', i + 1)
+            if j > i + 1:                   # a real class; [] and a
+                body = pat[i + 1:j]         # stray [ stay literal
+                neg = body.startswith('~')
+                if neg:
+                    body = body[1:]
+                cls = re.sub(r'([\\^\]])', r'\\\1', body)
+                out.append('[' + ('^' if neg else '') + cls + ']')
+                i = j + 1
+                continue
         if c == '*':
             out.append('.*')
         elif c == '?':
