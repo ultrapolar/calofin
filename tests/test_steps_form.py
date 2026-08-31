@@ -464,4 +464,28 @@ for name, path, cmd, pair, prompts_of, full, form_script in TOOLS:
 print("   the probe took it; the Select prompt was never asked")
 
 
+# --------------------------------------------------------------------
+# 6.  NORMIESTEP: Back at the corner treatment re-opens the width, and
+#     the re-answered width is the one that draws.  (In a U no width
+#     comes first, so Back is not offered there - back=nil.)
+# --------------------------------------------------------------------
+print("== 6. NORMIESTEP: Back at the treatment re-opens the width ==")
+
+a = drive(NORMIESTEP, 'c:NORMIESTEP', False,
+          ['WALLS', (100.0, 50.0), 60.0, "Back", 45.0, "Square", "No",
+           24.0, 24.0, 24.0, None, "Yes"] + DEPTHS + [PICK],
+          label="NORMIESTEP treat-Back")
+b = drive(NORMIESTEP, 'c:NORMIESTEP', False,
+          ['WALLS', (100.0, 50.0), 45.0, "Square", "No",
+           24.0, 24.0, 24.0, None, "Yes"] + DEPTHS + [PICK],
+          label="NORMIESTEP straight 45")
+same(a, b, "Back-then-45 == straight 45")
+width_asks = [p for p, _ in a.prompts if 'Step width' in p]
+assert len(width_asks) == 2, a.prompts
+treat_asks = [p for p, _ in a.prompts if 'be treated?' in p]
+assert len(treat_asks) == 2 and all('/Back]' in p for p in treat_asks), \
+    treat_asks
+print("   Back re-asked the width; 45-after-Back drew the straight-45 run")
+
+
 print("\nALL STEPS FORM SCENARIOS PASSED")

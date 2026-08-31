@@ -815,9 +815,11 @@ explicitly kept open.  What remains, each a deliberate deferral:
 * `*error*` handlers for `abcdef`, `altabcdef`, `ccprecheck`,
   `lincheck`; restore-nothing handlers in `bpcallout`,
   `DroneHeightGPS`, `paddle`; AUTOBEAD's unguarded undo end (8.4).
-* NORMIESTEP's Treatment question offers no Back: `ns-askkw` has no
-  back parameter, and adding one is a refactor of the step question
-  chain, not a wording fix.
+* ~~NORMIESTEP's Treatment question offers no Back~~ **DONE** --
+  `ns-askkw`/`ns-asktreat` take the Back sentinel exactly as the
+  library pair do (the last 4-arg `askkw` holdout), Back at the
+  corner treatment re-opens the step-width question, and both helpers
+  joined the mirror swap map.
 * `cal:askkw`'s signature still takes a hand-written SHOWN bracket
   where section 4's reference derives it from the keyword list.  The
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the

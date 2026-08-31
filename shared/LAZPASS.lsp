@@ -38202,7 +38202,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.0") ; printed on load and at command start so a
+(setq *ns-version* "v3.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38448,34 +38448,6 @@
         (list "S" t1 t2)))))
 
 ;;; -------------------------- ask helpers -------------------------------
-
-;; Keyword question of STANDARDS.md section 1.  KWS is the initget list
-;; (hidden aliases included, spelled ALL-CAPS so they must be typed in
-;; full and cannot steal a canonical hotkey); SHOWN is the bracket text,
-;; which carries only the options a click may send.  DFLT nil = an
-;; answer is required.
-(defun ns-askkw (msg kws shown dflt / v)
-  (initget (if dflt 0 1) kws)
-  (setq v (getkword (strcat "\n" msg " [" shown "]"
-                            (if dflt (strcat " <" dflt ">") "") ": ")))
-  (cond ((null v) (if dflt dflt (ns-askkw msg kws shown dflt)))
-        (t v)))
-
-;; The Treatment question of STANDARDS.md section 2: "How should
-;; <subject> be treated?"  SUBJECT reads like prose ("the back
-;; corners").  Returns "Square", "Radius", "Cut" or "NotGiven" - the
-;; old words this tool used to store, and NG, are still accepted typed
-;; in full and are normalized HERE, never downstream.
-(defun ns-asktreat (subject dflt / v)
-  (setq v (ns-askkw (strcat "How should " subject " be treated?")
-                    "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
-                    "Square/Radius/Cut/NotGiven"
-                    dflt))
-  (cond ((= v "NG") "NotGiven")
-        ((= v "90") "Square")
-        ((= v "ROUNDED") "Radius")
-        ((member v '("DIAG" "DIAGONAL")) "Cut")
-        (t v)))
 
 ;;; --------------------------- bead helpers -----------------------------
 
@@ -38782,9 +38754,9 @@
 ;; swaps that helper for the library's, so this defun is what the
 ;; mirror leaves alone while the ask call inside it is rewritten like
 ;; any other call site.
-(defun ns-ftreat (subject dflt / v)
+(defun ns-ftreat (subject dflt back / v)
   (cond
-    ((not (ns-fhas 'treat)) (ns-asktreat subject dflt))
+    ((not (ns-fhas 'treat)) (cal:asktreat subject dflt back))
     ((null (setq v (ns-ftake 'treat))) dflt)
     ((and (= (type v) 'STR)
           (setq v (ns-fkword
@@ -38795,7 +38767,7 @@
            ((= v "ROUNDED") "Radius")
            ((member v '("DIAG" "DIAGONAL")) "Cut")
            (t v)))
-    (T (ns-asktreat subject dflt))))
+    (T (cal:asktreat subject dflt back))))
 
 ;; Run NORMIESTEP with a form's answers already in hand.  Nothing
 ;; happens here that the direct path misses: a caller may equally set
@@ -38812,7 +38784,7 @@
                         segs mode base side arm1 arm2 corner fuzz
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
-                        first1 first2 lastdep dimflag dimoff offd
+                        first1 first2 lastdep dimflag dimoff offd treatback
                         pprev oldce oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
@@ -39064,15 +39036,38 @@
           (trans (ns-add sp (ns-scl u (* -0.4 reflen))) 0 1) 2 0)
 
   ;; ---- 3. the one width every step gets --------------------------------
-  (if (/= mode "U")
-    (progn
-      ;; the width can come off the form; the prompt refuses Enter, so
-      ;; nil (or anything not a number) falls back to the keyboard
-      (if (ns-fhas 'width) (setq wid (ns-fnum 'width)))
-      (if (not (numberp wid))
-        (progn
-          (initget 7)                          ; required, no zero/negative
-          (setq wid (getdist "\nStep width (the same for every step): "))))))
+  ;; Asked in one loop with the corner-treatment keyword below: Back at
+  ;; the treatment re-opens this width.  A form-answered width is spent
+  ;; on the first pass, so the re-ask falls to the keyboard - the
+  ;; go-back the user asked for.
+  (setq treatback T)
+  (while treatback
+    (setq treatback nil)
+    (if (/= mode "U")
+      (progn
+        ;; the width can come off the form; the prompt refuses Enter, so
+        ;; nil (or anything not a number) falls back to the keyboard
+        (if (ns-fhas 'width) (setq wid (ns-fnum 'width)))
+        (if (not (numberp wid))
+          (progn
+            (initget 7)                        ; required, no zero/negative
+            (setq wid (getdist
+                        "\nStep width (the same for every step): "))))))
+    ;; the treatment KEYWORD is asked inside the loop so its Back can
+    ;; re-open the width; the size follow-ups wait below until the
+    ;; answer stands.  In a U no width came first, so Back is not
+    ;; offered there (and a U with corners already drawn skips the
+    ;; question entirely).
+    (if (and (= mode "U") (not usquare))
+      (setq rtype nil)
+      (progn
+        ;; the subject reads like prose, as STANDARDS.md section 2 has it
+        (setq rsubj (if (= mode "LINE")
+                      "the corners of the last step"
+                      "the back corners")
+              rtype (ns-ftreat rsubj "Square" (/= mode "U")))
+        (if (eq rtype 'CAL-BACK)
+          (setq wid nil rtype nil treatback T)))))
 
   ;; ---- 3b. the corner treatment ----------------------------------------
   ;; The corners are square (90 degrees), radiused, or cut at 45
@@ -39089,11 +39084,6 @@
     (princ (strcat "\nBack corners: already drawn on the U - using them"
                    " as they are."))
     (progn
-      ;; the subject reads like prose, as STANDARDS.md section 2 has it
-      (setq rsubj (if (= mode "LINE")
-                    "the corners of the last step"
-                    "the back corners")
-            rtype (ns-ftreat rsubj "Square"))
       (cond
         ((= rtype "Radius")
          ;; treat-sz is its radius; the prompt refuses Enter, so nil
