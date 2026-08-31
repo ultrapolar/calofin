@@ -259,6 +259,38 @@ TOOLS = {
         # with it, and only the two dropped helpers ever read it
         'drop_globals': ['abp:*sysold*'],
     },
+    # POINTRENAMER was written against the library from the start
+    # (STANDARDS section 6): its ask pair, sysvar pair, vector set and
+    # point-block reader are CALOFIN-LIB bodies under ptr:, so they all
+    # come back out here.  What stays local is the walking-order math
+    # the tool IS -- station-along-a-segment, the winding test, the
+    # order-preserving sort -- plus its 2-element ptr:circumcenter,
+    # which the library's 3-element form would break, and the
+    # write-side ptr:attr-target, whose 66-flag guard the read-side
+    # library helper deliberately does not carry.
+    'POINTRENAMER': {
+        'src': 'lisp/pointrenamer/POINTRENAMER.lsp',
+        'swap': {
+            'ptr:askkw': 'cal:askkw', 'ptr:askyn': 'cal:askyn',
+            'ptr:syssave': 'cal:syssave',
+            'ptr:sysrestore': 'cal:sysrestore',
+            'ptr:2d': 'cal:2d', 'ptr:dist': 'cal:dist',
+            'ptr:v-': 'cal:v-', 'ptr:v+': 'cal:v+', 'ptr:v*': 'cal:v*',
+            'ptr:dot': 'cal:dot', 'ptr:mid': 'cal:mid',
+            'ptr:perp': 'cal:perp', 'ptr:angnorm': 'cal:angnorm',
+            'ptr:tan': 'cal:tan', 'ptr:pad': 'cal:pad',
+            'ptr:block-number': 'cal:block-number',
+        },
+        # the snapshot global travels with syssave/sysrestore, and only
+        # the two dropped helpers ever read it
+        'drop_globals': ['ptr:*sysold*'],
+        # ptr:askkw already takes the SHOWN bracket third, like the
+        # library's, and ptr:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helpers, and
+        # every question in the chain tests for it by name
+        'symbols': {'PTR-BACK': 'CAL-BACK'},
+    },
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
