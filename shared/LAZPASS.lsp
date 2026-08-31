@@ -13428,7 +13428,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.2")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -16086,8 +16086,12 @@
     (t
 
      (setvar "CMDECHO" 0)
-     (command "_.UNDO" "_Begin")
-     (setq undo-open T)
+     ;; only when undo is recording - _Begin in a drawing with UNDO
+     ;; off (bit 1 of UNDOCTL clear) errors out of the command
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
      (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
@@ -16174,7 +16178,7 @@
          (progn
            (princ (strcat "\nOASIS: those radii do not make a closed outline"
                           " -- nothing drawn."))
-           (command "_.UNDO" "_End")
+           (if undo-open (command "_.UNDO" "_End"))
            (setq undo-open nil)
            (cal:sysrestore))
          (progn
@@ -16232,7 +16236,7 @@
            (cal:osdown)
            (cal:dimstyrestore)
 
-           (command "_.UNDO" "_End")
+           (if undo-open (command "_.UNDO" "_End"))
            (setq undo-open nil)
            (cal:sysrestore)
            (foreach a gotbot (princ a))))))
