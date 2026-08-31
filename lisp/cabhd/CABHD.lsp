@@ -196,7 +196,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.4")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.5")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -2805,7 +2805,7 @@
             (cab:temp-clear)
             ;; close the group after the sweep so one U takes back the
             ;; whole run, previews included; only if it ever opened
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* cab-old-err)
             (princ)))

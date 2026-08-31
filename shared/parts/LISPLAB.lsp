@@ -37,7 +37,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *lisplab-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.1")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -862,7 +862,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLISPLAB error: " msg)))

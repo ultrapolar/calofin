@@ -16350,7 +16350,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.3")
+(setq *abcdef-version* "v5.4")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -17558,7 +17558,7 @@
   ;; single U instead of one per entity; the group is only closed if it
   ;; was opened (STANDARDS section 5)
   (defun *error* (msg)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -19324,7 +19324,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.4")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -19922,7 +19922,7 @@
   ;; single U instead of one per entity; the group is only closed if it
   ;; was opened (STANDARDS section 5)
   (defun *error* (msg)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -20244,7 +20244,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "083126 REV10") ; announced on load.  The
+(setq pf:*version*      "083126 REV11") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -23536,7 +23536,7 @@
             (pf:temp-clear)
             ;; close the group after the sweep so one U takes back the
             ;; whole run, previews included; only if it ever opened
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
             ;; cover mode must not outlive the run that asked for it,
@@ -24018,7 +24018,7 @@
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
             (pf:temp-clear)
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
             (princ)))
@@ -24558,7 +24558,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.2")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -25555,7 +25555,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECK error: " msg)))
@@ -25573,7 +25573,7 @@
 (defun c:ABCURCHECKSCAN ( / *error* undo-open)
   (defun *error* (msg)
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKSCAN error: " msg)))
@@ -25595,7 +25595,7 @@
 (defun c:ABCURCHECKRESCUE ( / *error* undo-open ans n)
   (defun *error* (msg)
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKRESCUE error: " msg)))
@@ -25699,7 +25699,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.1")
+(setq *abpcheck-version* "v1.2")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -26229,7 +26229,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECK error: " msg)))
@@ -26304,7 +26304,7 @@
 (defun c:ABPCHECKRESCUE ( / *error* undo-open n)
   (defun *error* (msg)
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECKRESCUE error: " msg)))
@@ -26538,7 +26538,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.4")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.5")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -29054,7 +29054,7 @@
             (cab:temp-clear)
             ;; close the group after the sweep so one U takes back the
             ;; whole run, previews included; only if it ever opened
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* cab-old-err)
             (princ)))
@@ -29614,7 +29614,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.0")
+(setq *pointrenamer-version* "v1.1")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -30122,7 +30122,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nPOINTRENAMER error: " msg)))
@@ -32657,7 +32657,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.6")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -32789,7 +32789,7 @@
   ;; halfway takes one U rather than one per circle; the group is only
   ;; closed if it was opened (STANDARDS section 5)
   (defun *error* (msg)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
@@ -34296,7 +34296,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.3")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -34502,7 +34502,7 @@
                    ndf ndo nds naf nao nas)
   (defun *error* (msg)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCHECK error: " msg)))
@@ -41227,7 +41227,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.4")
+(setq *cchk-version* "v1.5")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -43646,7 +43646,7 @@
     (foreach l relock (cchk:set-layer-lock l T))
     (redraw)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECK error: " msg)))
@@ -44397,7 +44397,7 @@
 
 (defun c:TUTORIALCOVERCHECK ( / *error* oldecho undo-open bp)
   (defun *error* (msg)
-    (if undo-open (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+    (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
@@ -44957,7 +44957,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.7")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.8")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -45930,7 +45930,7 @@
     (foreach l relock (dchk:set-layer-lock l T))
     (redraw)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECK error: " msg)))
@@ -46608,7 +46608,7 @@
 
 (defun c:TUTORIALDIMCHECK ( / *error* oldecho undo-open ans l ins h)
   (defun *error* (msg)
-    (if undo-open (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+    (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALDIMCHECK error: " msg)))
@@ -48718,7 +48718,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.0")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.1")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -53332,7 +53332,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nFITABHD error: " msg)))
@@ -53526,7 +53526,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.6")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.7")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -55733,7 +55733,7 @@
             (lh:temp-clear)
             ;; close the group after the sweep so one U takes back the
             ;; whole run, previews included; only if it ever opened
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* lh-old-err)
             (princ)))
@@ -56830,7 +56830,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.2")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.3")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -58810,7 +58810,7 @@
     (foreach l relock (lfc:set-layer-lock l T))
     (redraw)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINFINCHECK error: " msg)))
@@ -60366,7 +60366,7 @@
 
 (defun c:TUTORIALLINFINCHECK ( / *error* oldecho undo-open ans l ins h)
   (defun *error* (msg)
-    (if undo-open (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+    (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALLINFINCHECK error: " msg)))
@@ -60448,7 +60448,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.3")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
@@ -60456,7 +60456,7 @@
 
   (defun *error* (msg)
     (if osm (setvar "OSMODE" osm))
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -65419,7 +65419,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.7")
+(setq *spacheck-version* "v1.8")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -66928,7 +66928,7 @@
                       e k tot ans marked)
   (defun *error* (msg)
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECK error: " msg)))
@@ -68386,7 +68386,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.2")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -68772,7 +68772,7 @@
                  stdy dfeats run stairrng stage)
 
   (defun *error* (msg)
-    (if inundo (command "_.UNDO" "_End"))
+    (if inundo (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldlay (setvar "CLAYER" oldlay))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
@@ -70074,7 +70074,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.3")
+(setq *xyplot-version* "v1.4")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -70767,7 +70767,7 @@
   ;; an Esc mid-plot used to leave a half-drawn plot that took N undos
   ;; to clear and printed a raw AutoLISP message (STANDARDS section 5)
   (defun *error* (msg)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))

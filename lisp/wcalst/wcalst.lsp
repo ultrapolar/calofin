@@ -25,7 +25,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.2")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -438,7 +438,7 @@
                  stdy dfeats run stairrng stage)
 
   (defun *error* (msg)
-    (if inundo (command "_.UNDO" "_End"))
+    (if inundo (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldlay (setvar "CLAYER" oldlay))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))

@@ -85,7 +85,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.3")
+(setq *abcdef-version* "v5.4")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -1293,7 +1293,7 @@
   ;; single U instead of one per entity; the group is only closed if it
   ;; was opened (STANDARDS section 5)
   (defun *error* (msg)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))

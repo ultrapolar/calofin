@@ -158,7 +158,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "083126 REV10") ; announced on load.  The
+(setq pf:*version*      "083126 REV11") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -3450,7 +3450,7 @@
             (pf:temp-clear)
             ;; close the group after the sweep so one U takes back the
             ;; whole run, previews included; only if it ever opened
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
             ;; cover mode must not outlive the run that asked for it,
@@ -3932,7 +3932,7 @@
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
             (pf:temp-clear)
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
             (princ)))

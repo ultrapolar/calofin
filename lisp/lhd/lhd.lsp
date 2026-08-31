@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.6")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.7")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2364,7 +2364,7 @@
             (lh:temp-clear)
             ;; close the group after the sweep so one U takes back the
             ;; whole run, previews included; only if it ever opened
-            (if undo-open (command "_.UNDO" "_End"))
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* lh-old-err)
             (princ)))

@@ -111,7 +111,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.0")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.1")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -4725,7 +4725,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nFITABHD error: " msg)))

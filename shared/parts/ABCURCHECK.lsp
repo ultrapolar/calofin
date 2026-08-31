@@ -99,7 +99,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.2")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1096,7 +1096,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECK error: " msg)))
@@ -1114,7 +1114,7 @@
 (defun c:ABCURCHECKSCAN ( / *error* undo-open)
   (defun *error* (msg)
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKSCAN error: " msg)))
@@ -1136,7 +1136,7 @@
 (defun c:ABCURCHECKRESCUE ( / *error* undo-open ans n)
   (defun *error* (msg)
     (cal:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKRESCUE error: " msg)))

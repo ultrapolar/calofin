@@ -10,7 +10,7 @@
 ;;;         LINTXTCHK and pick the top-left point for the checklist.
 ;;; ==========================================================================
 
-(setq *lintxtchk-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.3")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
@@ -18,7 +18,7 @@
 
   (defun *error* (msg)
     (if osm (setvar "OSMODE" osm))
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))

@@ -253,7 +253,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.2")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.3")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2233,7 +2233,7 @@
     (foreach l relock (lfc:set-layer-lock l T))
     (redraw)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINFINCHECK error: " msg)))
@@ -3789,7 +3789,7 @@
 
 (defun c:TUTORIALLINFINCHECK ( / *error* oldecho undo-open ans l ins h)
   (defun *error* (msg)
-    (if undo-open (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+    (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALLINFINCHECK error: " msg)))

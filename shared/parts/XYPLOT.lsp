@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.3")
+(setq *xyplot-version* "v1.4")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -751,7 +751,7 @@
   ;; an Esc mid-plot used to leave a half-drawn plot that took N undos
   ;; to clear and printed a raw AutoLISP message (STANDARDS section 5)
   (defun *error* (msg)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))

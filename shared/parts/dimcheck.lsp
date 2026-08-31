@@ -108,7 +108,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.7")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.8")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1081,7 +1081,7 @@
     (foreach l relock (dchk:set-layer-lock l T))
     (redraw)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECK error: " msg)))
@@ -1759,7 +1759,7 @@
 
 (defun c:TUTORIALDIMCHECK ( / *error* oldecho undo-open ans l ins h)
   (defun *error* (msg)
-    (if undo-open (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+    (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALDIMCHECK error: " msg)))

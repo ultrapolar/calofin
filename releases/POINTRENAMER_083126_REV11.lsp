@@ -53,7 +53,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.0")
+(setq *pointrenamer-version* "v1.1")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -642,7 +642,7 @@
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (ptr:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nPOINTRENAMER error: " msg)))

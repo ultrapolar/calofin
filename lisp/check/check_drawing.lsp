@@ -27,7 +27,7 @@
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
 
-(setq *checkdrawing-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.3")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -289,7 +289,7 @@
                    ndf ndo nds naf nao nas)
   (defun *error* (msg)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCHECK error: " msg)))

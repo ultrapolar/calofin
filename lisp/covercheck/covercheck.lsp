@@ -209,7 +209,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.4")
+(setq *cchk-version* "v1.5")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -2777,7 +2777,7 @@
     (foreach l relock (cchk:set-layer-lock l T))
     (redraw)
     (if undo-open
-      (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+      (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECK error: " msg)))
@@ -3527,7 +3527,7 @@
 
 (defun c:TUTORIALCOVERCHECK ( / *error* oldecho undo-open bp)
   (defun *error* (msg)
-    (if undo-open (progn (setvar "CMDECHO" 0) (command "_.UNDO" "_End")))
+    (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
