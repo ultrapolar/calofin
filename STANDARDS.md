@@ -220,7 +220,7 @@ reference below takes `hidden` third and DERIVES the bracket from
 `kws`, so the two can never drift. Most of the tree -- and
 `cal:askkw` in the library -- instead takes the bracket text `shown`
 third and hand-writes it. That is the older shape, and it is why
-section 7.2's "bracket a click cannot send" row existed at all.
+section 8.2's "bracket a click cannot send" row existed at all.
 
 It is not being changed in place, on purpose: `tools/mirror_shared.py`
 swaps `pool:askkw` / `spa:askkw` / `fit:askkw` and others onto
@@ -701,7 +701,7 @@ the canonical words.
 
 **DONE — the table is empty.**  Every listed site (CORNERSTP's four,
 the check family's `Skip rest` and `Move to the green +` triples,
-POOL's `SIX-sided`, SPA's `Wall(centred)` — see 7.6 — lhd's
+POOL's `SIX-sided`, SPA's `Wall(centred)` — see 8.6 — lhd's
 `[...] or [Done]`, ABHD's two-group tutorial prompt) now moves its
 explanation into the question text and leaves the bracket as the bare
 keyword list, per section 1 rule 1.  `cal:ask-yn-nav` carries the
@@ -756,16 +756,17 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
 * ~~`AUTOBEAD.lsp` closes an undo group unguarded~~ **DONE** -- it
   tracks `undo-open` and closes only a group it opened, in the
   canonical casing (an error before the `_Begin` used to run `_End` on
-  nothing, erroring inside the error handler).  ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and
-  the whole cancel test is now ONE canonical spelling repo-wide, with
+  nothing, erroring inside the error handler).
+* ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and the whole
+  cancel test is now ONE canonical spelling repo-wide, with
   `cal:error-cancel-p` / `cal:undobegin` / `cal:undoend` in the
   library so new code has nothing to hand-copy.  (The trio has no
   callers yet -- every migrated file still carries the canonical
   forms inline, and swapping those onto the helpers is a coordinated
   mirror-table pass of its own; the library copies are there for the
-  first tool written against `cal:` from scratch.)  ~~XYPLOT's missing
-  handler and undo group~~ (post-standard miss, not on the old list)
-  **DONE**.
+  first tool written against `cal:` from scratch.)
+* ~~XYPLOT's missing handler and undo group~~ (post-standard miss, not
+  on the old list) **DONE**.
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
   reviewed 2026-08-27 and DEFERRED on purpose: zero functional gain
   against churn in tests/tools/startup suites; rename only with a
@@ -802,25 +803,25 @@ several assert prompt text:
   `lisp/spa/README.md`, `lisp/cdcallout/README.md` (Back),
   `ui/calofin_net/README.md`.
 
-### 7.6 Remaining, reviewed 2026-08-27
+### 8.6 Remaining, reviewed 2026-08-27
 
 The 2026-08-27 streamlining pass closed everything above not
 explicitly kept open.  What remains, each a deliberate deferral:
 
-* SPA's spillaway corner-pick keywords (7.3) -- no hotkey scheme
+* SPA's spillaway corner-pick keywords (8.3) -- no hotkey scheme
   chosen yet.
 * The uppercase `.LSP` renames and the `prefix-` style migrations
-  (7.4) -- churn without behaviour.
+  (8.4) -- churn without behaviour.
 * `*error*` handlers for `abcdef`, `altabcdef`, `ccprecheck`,
   `lincheck`; restore-nothing handlers in `bpcallout`,
-  `DroneHeightGPS`, `paddle`; AUTOBEAD's unguarded undo end (7.4).
+  `DroneHeightGPS`, `paddle`; AUTOBEAD's unguarded undo end (8.4).
 * NORMIESTEP's Treatment question offers no Back: `ns-askkw` has no
   back parameter, and adding one is a refactor of the step question
   chain, not a wording fix.
 * `cal:askkw`'s signature still takes a hand-written SHOWN bracket
   where section 4's reference derives it from the keyword list.  The
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the
-  signature is a coordinated pass of its own; until then the 7.2
+  signature is a coordinated pass of its own; until then the 8.2
   class is closed by review, not by construction.
 * The VB palette's button catalog still lacks the newer tools --
   additions are unverifiable without a machine that can build the
