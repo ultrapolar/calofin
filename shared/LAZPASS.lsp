@@ -30521,7 +30521,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.1")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -31577,7 +31577,7 @@
 
 ;; AUTODIM's plan flow, steps 2 to 5: the perimeter, then the stairs,
 ;; then the two floor dims lines, then the two overall dims.
-(defun ad:runplan (plan / nper nstair nover stage mark3 mark4 v)
+(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v)
   (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
                   "\nDimensioning the straight lines about the"
                   " perimeter - no input needed..."))
@@ -31619,15 +31619,20 @@
          (progn
            (prompt "\nStepping back to the floor dims question.")
            (setq stage 4))
-         (setq stage 6)))
+         (progn
+           (setq nf1 (if (numberp v) v 0))    ; 'skip counts as none
+           (setq stage 6))))
       (T
        (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
        (if (eq v 'CAL-BACK)
          (progn
            (ad:eraseafter mark4)
            (prompt "\nStepping back one floor line.")
+           (setq nf1 0)                       ; its dims were just erased
            (setq stage 5))
-         (setq stage 7)))))
+         (progn
+           (setq nf2 (if (numberp v) v 0))
+           (setq stage 7))))))
   (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
                   "\nPlacing the overall width about 2ft above the"
                   " topmost dim and the overall height about 2ft to"
@@ -31635,7 +31640,8 @@
                   " needed..."))
   (setq nover (ad:overall plan))
   (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
-  (princ))
+  ;; the run's total, for AUTODIM's sign-off line
+  (+ nper nstair (if nf1 nf1 0) (if nf2 nf2 0) nover))
 
 ;; AUTODIM's side-view flow, for when step 1's selection turned out to
 ;; be a flight of steps drawn in side view: the depth of every step
@@ -31650,11 +31656,15 @@
                   " needed..."))
   (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-short*))
   (prompt (strcat "\n" (itoa n) " step dimension(s) placed."))
-  (princ))
+  ;; the run's total, for AUTODIM's sign-off line
+  n)
 
-(defun c:AUTODIM (/ *error* oldcmd olddim plan risers)
+(defun c:AUTODIM (/ *error* oldcmd olddim plan risers n undo-open)
   (defun *error* (msg)
-    (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    ;; only close a group that was actually opened - the handler is
+    ;; live before _Begin runs (AUTODIM's is during its selection)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
@@ -31677,19 +31687,26 @@
       (setvar "CMDECHO" 0)
       (ad:begin)
       (command "_.UNDO" "_Begin")
-      (if (setq risers (ad:stepprofile-p plan))
-        (ad:runsteps risers)
-        (ad:runplan plan))
+      (setq undo-open T)
+      (setq n (if (setq risers (ad:stepprofile-p plan))
+                (ad:runsteps risers)
+                (ad:runplan plan)))
       (ad:skipreport)
       (ad:usestyle olddim)
       (command "_.UNDO" "_End")
+      (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)
-      (prompt "\nAUTODIM finished.")))
+      (prompt (strcat "\nAUTODIM finished - "
+                      (if (numberp n) (itoa n) "0")
+                      " dimension(s) placed."))))
   (princ))
 
-(defun c:STAIRDIM (/ *error* oldcmd olddim n)
+(defun c:STAIRDIM (/ *error* oldcmd olddim n undo-open)
   (defun *error* (msg)
-    (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    ;; only close a group that was actually opened - the handler is
+    ;; live before _Begin runs (AUTODIM's is during its selection)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
@@ -31701,17 +31718,22 @@
   (setvar "CMDECHO" 0)
   (ad:begin)
   (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (setq n (ad:dimstairs))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
   (command "_.UNDO" "_End")
+  (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   (princ))
 
-(defun c:FLOORDIM (/ *error* oldcmd olddim)
+(defun c:FLOORDIM (/ *error* oldcmd olddim n undo-open)
   (defun *error* (msg)
-    (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    ;; only close a group that was actually opened - the handler is
+    ;; live before _Begin runs (AUTODIM's is during its selection)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldcmd (setvar "CMDECHO" oldcmd))
@@ -31723,10 +31745,14 @@
   (setvar "CMDECHO" 0)
   (ad:begin)
   (command "_.UNDO" "_Begin")
-  (ad:getfloor "Floor dims" nil nil)
+  (setq undo-open T)
+  (setq n (ad:getfloor "Floor dims" nil nil))
+  (prompt (strcat "\n" (if (numberp n) (itoa n) "0")
+                  " floor dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
   (command "_.UNDO" "_End")
+  (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   (princ))
 
@@ -31739,9 +31765,12 @@
 ;; that is the style the length rule asks for too.  A riser that is
 ;; dimensioned already is left alone, as everywhere else.
 (defun c:AUTODIMSIDEPOV (/ *error* oldcmd olddim oldlay ss risers chain
-                            sx cnt)
+                            sx cnt undo-open)
   (defun *error* (msg)
-    (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+    ;; only close a group that was actually opened - the handler is
+    ;; live before _Begin runs (AUTODIM's is during its selection)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
@@ -31764,6 +31793,7 @@
       (setvar "CMDECHO" 0)
       (ad:begin)
       (command "_.UNDO" "_Begin")
+      (setq undo-open T)
       (ad:setlayer "DIMENSION")
       ;; told these are steps, so every vertical is taken as a riser -
       ;; no staircase test here, unlike AUTODIM's own side-view branch
@@ -31781,6 +31811,7 @@
       (ad:usestyle olddim)
       (setvar "CLAYER" oldlay)
       (command "_.UNDO" "_End")
+      (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)))
   (princ))
 
