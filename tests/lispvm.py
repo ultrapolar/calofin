@@ -1829,6 +1829,207 @@ def _closed_p(vm, e):
     return False
 
 
+# The rest of the vlax-curve surface: closest point, ends, params and
+# lengths for LINE / ARC / CIRCLE / LWPOLYLINE, read straight off the
+# DXF store.  Angles are RADIANS - entget's unit, which is what the
+# routines' math is written against.  Entities the real functions
+# reject (SPLINEs, ELLIPSEs, closed polylines asked for their ends)
+# raise here too, so a vl-catch-all-apply wrapper in a tool behaves
+# exactly as it does in AutoCAD - and a routine calling one of these
+# bare fails loudly instead of silently skipping its audit.  The check
+# suites that predate this surface carry the same semantics as
+# in-process shims (test_dimcheck.py and siblings); those override
+# harmlessly in their own processes.
+
+def _curve_ent(vm, a):
+    e = a[0]
+    if not isinstance(e, Ent) or e in vm.deleted:
+        raise LispError('vlax-curve: not an entity', vm)
+    return e
+
+
+def _curve_arc_geo(vm, e):
+    """(centre, radius, start angle, CCW sweep) of an ARC entity."""
+    c = pt(_dxf(vm, e, 10))
+    r = num(_dxf(vm, e, 40))
+    a0 = num(_dxf(vm, e, 50) or 0.0)
+    a1 = num(_dxf(vm, e, 51) or 0.0)
+    sweep = (a1 - a0) % (2 * math.pi)
+    if sweep <= 1e-12:
+        sweep = 2 * math.pi
+    return (c[0], c[1]), r, a0, sweep
+
+
+def _curve_arc_pt(c, r, ang):
+    return [c[0] + r * math.cos(ang), c[1] + r * math.sin(ang), 0.0]
+
+
+def _curve_seg_closest(p, a, b):
+    ax, ay, bx, by = float(a[0]), float(a[1]), float(b[0]), float(b[1])
+    dx, dy = bx - ax, by - ay
+    l2 = dx * dx + dy * dy
+    if l2 < 1e-24:
+        return [ax, ay, 0.0]
+    t = ((p[0] - ax) * dx + (p[1] - ay) * dy) / l2
+    t = max(0.0, min(1.0, t))
+    return [ax + t * dx, ay + t * dy, 0.0]
+
+
+def _curve_arc_closest(c, r, a0, sweep, p):
+    """Closest point on the CCW arc from a0 over sweep: radially when
+    the direction lands inside the sweep, else the nearer endpoint."""
+    dx, dy = p[0] - c[0], p[1] - c[1]
+    if dx * dx + dy * dy < 1e-24:
+        return _curve_arc_pt(c, r, a0)
+    ang = math.atan2(dy, dx)
+    if (ang - a0) % (2 * math.pi) <= sweep:
+        return _curve_arc_pt(c, r, ang)
+    p1, p2 = _curve_arc_pt(c, r, a0), _curve_arc_pt(c, r, a0 + sweep)
+    return p1 if math.dist(p[:2], p1[:2]) <= math.dist(p[:2], p2[:2]) \
+        else p2
+
+
+def _curve_bulge_circle(p1, p2, bulge):
+    """Centre, radius and CCW angular interval of one bulged polyline
+    segment, either bulge sign; None for a straight (or degenerate)
+    segment.  Same construction as _bulge_arc_pts, kept separate
+    because this one needs the interval, not the extreme points."""
+    inc = 4 * math.atan(bulge)
+    ch = math.dist(p1[:2], p2[:2])
+    if ch == 0 or abs(math.sin(inc / 2)) < 1e-12:
+        return None
+    r = abs(ch / (2 * math.sin(inc / 2)))
+    mid = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
+    th = math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+    d = (ch / 2.0) / math.tan(inc / 2)
+    cx = mid[0] + d * math.cos(th + math.pi / 2)
+    cy = mid[1] + d * math.sin(th + math.pi / 2)
+    a0 = math.atan2(p1[1] - cy, p1[0] - cx)
+    a1 = math.atan2(p2[1] - cy, p2[0] - cx)
+    if bulge < 0:
+        # drawn clockwise: the point set is the CCW interval a1 -> a0
+        a0, a1 = a1, a0
+    return (cx, cy), r, a0, (a1 - a0) % (2 * math.pi)
+
+
+def _curve_poly_segs(vm, e):
+    """(p1, p2, bulge) per segment of an LWPOLYLINE, closing edge
+    included when the closed bit is set."""
+    vs = [pt(v) for v in _all_dxf(vm, e, 10)]
+    bs = [num(b) for b in _all_dxf(vm, e, 42)]
+    if not vs:
+        return []
+    n = len(vs)
+    last = n if (_closed_p(vm, e) and n > 2) else n - 1
+    return [(vs[i], vs[(i + 1) % n], bs[i] if i < len(bs) else 0.0)
+            for i in range(last)]
+
+
+def _curve_closest_on(vm, e, p):
+    t = _dxf(vm, e, 0)
+    if t == 'LINE':
+        return _curve_seg_closest(p, _dxf(vm, e, 10), _dxf(vm, e, 11))
+    if t == 'ARC':
+        c, r, a0, sw = _curve_arc_geo(vm, e)
+        return _curve_arc_closest(c, r, a0, sw, p)
+    if t == 'CIRCLE':
+        c, r = pt(_dxf(vm, e, 10)), num(_dxf(vm, e, 40))
+        dx, dy = p[0] - c[0], p[1] - c[1]
+        ln = math.hypot(dx, dy)
+        if ln < 1e-12:
+            return [c[0] + r, c[1], 0.0]
+        return [c[0] + dx / ln * r, c[1] + dy / ln * r, 0.0]
+    if t == 'LWPOLYLINE':
+        best = None
+        for p1, p2, b in _curve_poly_segs(vm, e):
+            circ = _curve_bulge_circle(p1, p2, b) if b else None
+            q = (_curve_arc_closest(circ[0], circ[1], circ[2], circ[3], p)
+                 if circ else _curve_seg_closest(p, p1, p2))
+            if best is None or math.dist(p[:2], q[:2]) < \
+                    math.dist(p[:2], best[:2]):
+                best = q
+        if best is None:
+            raise LispError('vlax-curve: empty polyline', vm)
+        return best
+    raise LispError(f'vlax-curve: no curve for {t}', vm)
+
+
+def _curve_ends(vm, e):
+    t = _dxf(vm, e, 0)
+    if t == 'LINE':
+        p1, p2 = pt(_dxf(vm, e, 10)), pt(_dxf(vm, e, 11))
+        return ([p1[0], p1[1], 0.0], [p2[0], p2[1], 0.0])
+    if t == 'ARC':
+        c, r, a0, sw = _curve_arc_geo(vm, e)
+        return _curve_arc_pt(c, r, a0), _curve_arc_pt(c, r, a0 + sw)
+    if t == 'LWPOLYLINE' and not _closed_p(vm, e):
+        vs = [pt(v) for v in _all_dxf(vm, e, 10)]
+        if vs:
+            return ([vs[0][0], vs[0][1], 0.0],
+                    [vs[-1][0], vs[-1][1], 0.0])
+    raise LispError(f'vlax-curve: no ends on {t}', vm)
+
+
+def _curve_length(vm, e):
+    t = _dxf(vm, e, 0)
+    if t == 'LINE':
+        p1, p2 = pt(_dxf(vm, e, 10)), pt(_dxf(vm, e, 11))
+        return math.dist(p1[:2], p2[:2])
+    if t == 'ARC':
+        _c, r, _a0, sw = _curve_arc_geo(vm, e)
+        return r * sw
+    if t == 'LWPOLYLINE':
+        total = 0.0
+        for p1, p2, b in _curve_poly_segs(vm, e):
+            circ = _curve_bulge_circle(p1, p2, b) if b else None
+            total += circ[1] * circ[3] if circ \
+                else math.dist(p1[:2], p2[:2])
+        return total
+    raise LispError(f'vlax-curve: no length on {t}', vm)
+
+
+BUILTINS[Sym('vlax-curve-getclosestpointto')] = lambda vm, a: (
+    _curve_closest_on(vm, _curve_ent(vm, a), pt(a[1])))
+BUILTINS[Sym('vlax-curve-getstartpoint')] = lambda vm, a: (
+    _curve_ends(vm, _curve_ent(vm, a))[0])
+BUILTINS[Sym('vlax-curve-getendpoint')] = lambda vm, a: (
+    _curve_ends(vm, _curve_ent(vm, a))[1])
+
+
+@bi('vlax-curve-getendparam')
+def _curve_end_param(vm, a):
+    """An ARC's parameter is its swept angle; everything else here is
+    parameterized by distance, exactly as the audit tools assume."""
+    e = _curve_ent(vm, a)
+    if _dxf(vm, e, 0) == 'ARC':
+        return _curve_arc_geo(vm, e)[3]
+    return _curve_length(vm, e)
+
+
+@bi('vlax-curve-getdistatparam')
+def _curve_dist_at_param(vm, a):
+    e = _curve_ent(vm, a)
+    if _dxf(vm, e, 0) == 'ARC':
+        return _curve_arc_geo(vm, e)[1] * num(a[1])
+    return num(a[1])
+
+
+@bi('vlax-curve-getpointatdist')
+def _curve_point_at_dist(vm, a):
+    e, d = _curve_ent(vm, a), num(a[1])
+    t = _dxf(vm, e, 0)
+    if t == 'ARC':
+        c, r, a0, _sw = _curve_arc_geo(vm, e)
+        return _curve_arc_pt(c, r, a0 + d / r)
+    if t == 'LINE':
+        p1, p2 = pt(_dxf(vm, e, 10)), pt(_dxf(vm, e, 11))
+        ln = math.dist(p1[:2], p2[:2])
+        t01 = 0.0 if ln < 1e-12 else max(0.0, min(1.0, d / ln))
+        return [p1[0] + (p2[0] - p1[0]) * t01,
+                p1[1] + (p2[1] - p1[1]) * t01, 0.0]
+    raise LispError(f'vlax-curve: pointAtDist on {t}', vm)
+
+
 def _all_dxf(vm, e, code):
     """Every value at one group code, in order -- LWPOLYLINE vertices
     and bulges repeat, and reading only the first would collapse a
