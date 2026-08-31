@@ -36,6 +36,12 @@ bulges or ARC entities.
    — or just press **Enter** and PADDLE auto-detects the perimeter
    as the largest closed loop it can find in the current tab.
 
+Geometry already highlighted when you type `PADDLE` is used as it
+stands, with no prompt — the way a native AutoCAD command behaves, and
+what lets `TYLERDRONESUITE` hand every stage the same one pick. It says
+how many it took. Nothing highlighted and step 3 is the prompt it has
+always been, `Enter` and all.
+
 ## New users: TUTORIALPADDLE
 
 Type `TUTORIALPADDLE` for a guided tour. It first lists everything

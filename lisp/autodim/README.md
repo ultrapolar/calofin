@@ -13,7 +13,11 @@ and dimensions the depth of every step.
 
 1. **Highlight the plan.** Everything else in the drawing is ignored
    from then on -- only the highlighted geometry is dimensioned and
-   used to find the perimeter. If the selection turns out to be a
+   used to find the perimeter. Highlight it before typing the command
+   and that selection is taken as it stands, with no prompt (the way a
+   native AutoCAD command behaves, and what lets `TYLERDRONESUITE` hand
+   this stage the same pick the earlier ones got, pads included);
+   otherwise you are asked for it, exactly as before. If the selection turns out to be a
    flight of steps drawn in side view (nothing curved, most segments
    square, two or more risers forming a connected staircase), steps 2
    to 5 are skipped and the side-view flow runs instead: the depth of

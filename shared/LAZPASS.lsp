@@ -28289,7 +28289,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.1")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -29436,7 +29436,15 @@
                   "\nHighlight a flight of steps drawn in side view"
                   " instead and it is recognised as one: the depth of"
                   " every step gets dimensioned rather than a plan."))
-  (setq plan (ssget (ad:geomfilter)))
+  ;; Highlighted first, prompt second: what is already picked when the
+  ;; command starts is what gets dimensioned, the way a native command
+  ;; behaves.  It is also how TYLERDRONESUITE hands this stage the same
+  ;; pick the earlier ones got, grown by the pads PADDLE just dropped --
+  ;; the INSERTs in the filter above are there for exactly those.
+  (if (null (setq plan (ssget "_I" (ad:geomfilter))))
+    (setq plan (ssget (ad:geomfilter)))
+    (prompt (strcat "\nUsing the " (itoa (sslength plan))
+                    " highlighted object(s).")))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -57969,7 +57977,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.4") ; printed on load and at command start
+(setq *paddle-version* "v1.5") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -58414,8 +58422,17 @@
   (setq padsize *paddle-padsize*
         blkname *paddle-blkname*)
 
-  (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  ;; Something highlighted before the command started is what to use,
+  ;; the way a native command behaves -- and what lets TYLERDRONESUITE
+  ;; hand the same one pick to each of its stages instead of asking for
+  ;; the trace three times over.  Nothing highlighted, and this is the
+  ;; prompt it has always been, Enter and all.
+  (if (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+      (princ (strcat "\nPADDLE - using the " (itoa (sslength ss))
+                     " highlighted object(s)."))
+      (progn
+        (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
@@ -64349,7 +64366,8 @@
 ;;; TYDRN.LSP                                          AutoCAD 2018
 ;;; -------------------------------------------------------------------
 ;;; Commands: TYDRN             the cleanup below
-;;;           TYLERDRONESUITE  TYDRN, then PADDLE, then AUTODIM
+;;;           TYLERDRONESUITE  TYDRN, PADDLE, AUTODIM, then CDIM,
+;;;                            each handed the same one highlight
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
@@ -64386,7 +64404,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -64624,7 +64642,35 @@
 ;;;
 ;;; Nothing is skipped or reworded - each stage is the command itself,
 ;;; asking its own questions, so anything learned about TYDRN, PADDLE
-;;; or AUTODIM stays true here.  The suite only supplies the order.
+;;; or AUTODIM stays true here.  The suite supplies the order, and the
+;;; highlight.
+;;;
+;;; THE HIGHLIGHT IS MADE ONCE AND CARRIED THROUGH EVERY STAGE.  All
+;;; three calofin stages want the same thing selected - TYDRN the text
+;;; in it, PADDLE the perimeter, AUTODIM the plan - and AutoCAD clears
+;;; the pickfirst set the moment a command consumes it, so run by hand
+;;; the trace has to be highlighted three times.  Here it is highlighted
+;;; once: the set is read at the start and put back with sssetfirst
+;;; before each stage, so every stage opens with exactly what the
+;;; operator picked and takes from it whatever its own filter takes.
+;;; Highlight nothing and the suite asks once, up front; press Enter
+;;; there and each stage asks on its own, exactly as it does alone.
+;;;
+;;; THE CARRIED SET GROWS BY WHAT EACH STAGE DRAWS, because a later
+;;; stage is meant to see the earlier ones' work - that is the entire
+;;; reason for the order.  AUTODIM's filter takes INSERTs precisely so
+;;; it dimensions the pads PADDLE just dropped; handing it the operator's
+;;; original highlight and nothing else would hide every one of them.
+;;;
+;;; CDIM IS HANDED A CLEARED SELECTION.  It tidies the dimensions
+;;; AUTODIM has just made, and those are in nobody's original highlight;
+;;; typed by hand after AUTODIM it starts with nothing selected too, so
+;;; clearing is what keeps it behaving the way its operator knows it.
+;;;
+;;; PICKFIRST is forced to 1 for the run and put back afterwards.  With
+;;; it at 0 sssetfirst still highlights but ssget "_I" reads nothing, and
+;;; the handoff would go quietly missing - the one failure mode worth
+;;; spending a sysvar to rule out.
 ;;;
 ;;; EACH STAGE KEEPS ITS OWN UNDO GROUP, so three U's back the suite
 ;;; out, one per stage.  That is deliberate, and it is XYPLOT's
@@ -64676,7 +64722,56 @@
           i   (1+ i)))
   out)
 
-(defun c:TYLERDRONESUITE ( / missing nm step)
+;; ---------------------------------------------------------------
+;; Carrying one highlight through the stages
+;; ---------------------------------------------------------------
+
+;; The entity names in a selection set, as a plain list.  The set
+;; itself is no good to keep: it has to be rebuilt before each stage
+;; anyway, because by then some of what is in it may be gone.
+(defun tydrn:ss->list (ss / out i)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq out (cons (ssname ss i) out)
+            i   (1+ i))))
+  (reverse out))
+
+;; Everything drawn after ENT, which is the entlast taken before a
+;; stage ran.  nil for ENT means the drawing was empty then, so the
+;; walk starts at the first entity.
+(defun tydrn:since (ent / e out)
+  (setq e (if ent (entnext ent) (entnext)))
+  (while e
+    (setq out (cons e out)
+          e   (entnext e)))
+  (reverse out))
+
+;; A selection set of the members of LST that are still in the drawing.
+;; A stage is free to erase what it replaces, and an erased ename in a
+;; set is not something AutoCAD will hand to the next command -- so the
+;; set is rebuilt from what survives, every time, rather than kept.
+;; nil when nothing survives, which is what sssetfirst wants for
+;; "clear it".
+(defun tydrn:live-ss (lst / ss e)
+  (setq ss (ssadd))
+  (foreach e lst
+    (if (and e (entget e)) (ssadd e ss)))
+  (if (< 0 (sslength ss)) ss))
+
+;; Put PICKFIRST back if Esc gets out before the run does.  Named and
+;; paired with a global, the way tydrn:error already is in this file --
+;; an *error* that closes over a local is a different thing to reason
+;; about, and this file has one pattern for this already.
+(defun tydrn:suite-error (msg)
+  (if *tydrn-suite-pick* (setvar "PICKFIRST" *tydrn-suite-pick*))
+  (setq *tydrn-suite-pick* nil)
+  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+    (princ (strcat "\nTYLERDRONESUITE error: " msg)))
+  (if *tydrn-suite-old-error* (setq *error* *tydrn-suite-old-error*))
+  (princ))
+
+(defun c:TYLERDRONESUITE ( / missing nm step carry mark stages)
   ;; Every stage is checked BEFORE any of them runs.  Half a suite is
   ;; worse than none: TYDRN would have moved the points and PADDLE
   ;; dropped the pads, and the operator would find out only at the end
@@ -64694,16 +64789,43 @@
       (princ "\n  whole build in one - and run it again.  Nothing has been")
       (princ "\n  changed."))
     (progn
-      (princ (strcat "\nTYLERDRONESUITE: "
-                     (tydrn:namelist (tydrn:stages)) "."))
+      (setq stages (tydrn:stages))
+      (princ (strcat "\nTYLERDRONESUITE: " (tydrn:namelist stages) "."))
+      (princ "\n  One highlight is carried through every stage, so the")
+      (princ "\n  trace is picked once rather than once per command.")
       (princ "\n  Each stage is its own undo group, so a stage that went")
       (princ "\n  well is not undone to get at one that did not.  Esc in")
       (princ "\n  any stage stops the suite there.")
+
+      ;; PICKFIRST at 0 would let sssetfirst highlight while ssget "_I"
+      ;; read nothing, and the handoff would go quietly missing.  Put
+      ;; back below, and by the error handler if Esc gets here first.
+      (setq *tydrn-suite-pick*      (getvar "PICKFIRST")
+            *tydrn-suite-old-error* *error*
+            *error*                 tydrn:suite-error)
+      (setvar "PICKFIRST" 1)
+
+      ;; What the operator highlighted before typing the command.  If
+      ;; that is nothing, ask once here rather than three times over.
+      (setq carry (tydrn:ss->list (cadr (ssgetfirst))))
+      (if (null carry)
+        (progn
+          (princ "\n\nHighlight the trace once and every stage gets it.")
+          (princ "\nSelect the trace <Enter = let each stage ask on its own>: ")
+          (setq carry (tydrn:ss->list (ssget)))))
+
       (setq step 0)
-      (foreach nm (tydrn:stages)
+      (foreach nm stages
         (setq step (1+ step))
-        (princ (strcat "\n\n--- " (itoa step) " of "
-                       (itoa (length (tydrn:stages))) ": " nm " ---"))
+        (princ (strcat "\n\n--- " (itoa step) " of " (itoa (length stages))
+                       ": " nm " ---"))
+        ;; Hand this stage the highlight -- or, for the finisher,
+        ;; clear it: CDIM works on the dimensions AUTODIM has just
+        ;; made, which are in nobody's original pick.
+        (sssetfirst nil (if (member nm *tydrn-suite*)
+                          (tydrn:live-ss carry)
+                          nil))
+        (setq mark (entlast))
         ;; Through the command line, not as a direct call, so each
         ;; stage prompts and errors exactly as it does when it is typed.
         ;;
@@ -64712,9 +64834,18 @@
         ;; dot: the dot means "the built-in command of this name,
         ;; whatever anyone has redefined" -- and a shop command is
         ;; exactly the redefinition we are trying to reach.
-        (vl-cmdf (strcat (if (member nm *tydrn-suite*) "_." "_") nm)))
+        (vl-cmdf (strcat (if (member nm *tydrn-suite*) "_." "_") nm))
+        ;; Grow the carried set by what this stage drew, so the next
+        ;; one sees it.  Only worth doing while a calofin stage is
+        ;; still to come -- the finisher gets a cleared selection.
+        (if (member nm *tydrn-suite*)
+          (setq carry (append carry (tydrn:since mark)))))
+
+      (setvar "PICKFIRST" *tydrn-suite-pick*)
+      (setq *tydrn-suite-pick* nil
+            *error*            *tydrn-suite-old-error*)
       (princ (strcat "\n\nTYLERDRONESUITE done - all "
-                     (itoa (length (tydrn:stages))) " stages ran."))))
+                     (itoa (length stages)) " stages ran."))))
   (princ))
 
 (princ (strcat "\nTYDRN.LSP " *tydrn-version*

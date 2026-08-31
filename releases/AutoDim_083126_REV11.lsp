@@ -146,7 +146,7 @@
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
 
-(setq *autodim-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.1")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1341,7 +1341,15 @@
                   "\nHighlight a flight of steps drawn in side view"
                   " instead and it is recognised as one: the depth of"
                   " every step gets dimensioned rather than a plan."))
-  (setq plan (ssget (ad:geomfilter)))
+  ;; Highlighted first, prompt second: what is already picked when the
+  ;; command starts is what gets dimensioned, the way a native command
+  ;; behaves.  It is also how TYLERDRONESUITE hands this stage the same
+  ;; pick the earlier ones got, grown by the pads PADDLE just dropped --
+  ;; the INSERTs in the filter above are there for exactly those.
+  (if (null (setq plan (ssget "_I" (ad:geomfilter))))
+    (setq plan (ssget (ad:geomfilter)))
+    (prompt (strcat "\nUsing the " (itoa (sslength plan))
+                    " highlighted object(s).")))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn

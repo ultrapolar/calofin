@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.4") ; printed on load and at command start
+(setq *paddle-version* "v1.5") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -503,8 +503,17 @@
   (setq padsize *paddle-padsize*
         blkname *paddle-blkname*)
 
-  (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  ;; Something highlighted before the command started is what to use,
+  ;; the way a native command behaves -- and what lets TYLERDRONESUITE
+  ;; hand the same one pick to each of its stages instead of asking for
+  ;; the trace three times over.  Nothing highlighted, and this is the
+  ;; prompt it has always been, Enter and all.
+  (if (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+      (princ (strcat "\nPADDLE - using the " (itoa (sslength ss))
+                     " highlighted object(s)."))
+      (progn
+        (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
