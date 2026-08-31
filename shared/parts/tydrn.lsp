@@ -39,7 +39,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -259,10 +259,21 @@
 ;;; ===================================================================
 ;;; TYLERDRONESUITE - the drone trace, start to finish
 ;;; -------------------------------------------------------------------
-;;; TYDRN, then PADDLE, then AUTODIM, in that order because that is the
-;;; order the work has to happen in: the points have to be on the right
-;;; layer before PADDLE can find the perimeter features to pad, and the
-;;; pads have to be in before AUTODIM dimensions what is there.
+;;; TYDRN, then PADDLE, then AUTODIM, then CDIM, in that order because
+;;; that is the order the work has to happen in: the points have to be
+;;; on the right layer before PADDLE can find the perimeter features to
+;;; pad, the pads have to be in before AUTODIM dimensions what is
+;;; there, and CDIM tidies the dimensions AUTODIM just made onto the
+;;; dimension layer.
+;;;
+;;; CDIM IS NOT ONE OF OURS.  It is the in-house command this shop has
+;;; on every machine; calofin has named it for a long time without ever
+;;; running it -- covercheck, linfincheck and spacheck all end their
+;;; reports by telling you to run CDIM over the strays they found, and
+;;; each carries it in a tunable (*cchk-dimfix-cmd* and friends).  This
+;;; is the first place that actually calls it, and it is *tydrn-finish-
+;;; cmd* here for the same reason: a shop that calls it something else
+;;; retunes it, and one that has no such command sets it nil.
 ;;;
 ;;; Nothing is skipped or reworded - each stage is the command itself,
 ;;; asking its own questions, so anything learned about TYDRN, PADDLE
@@ -276,9 +287,30 @@
 ;;; Esc in any stage stops the suite there - an AutoLISP error unwinds
 ;;; to the command line, so the stages after it never start.  What ran
 ;;; before it stays run, which is why the check below happens first.
+;;;
+;;; THE CHECK COVERS THE THREE CALOFIN STAGES AND NOT CDIM, on purpose.
+;;; boundp can only see commands AutoLISP defined; an in-house command
+;;; is as likely to be .NET, ARX or a PGP alias, and none of those
+;;; answer to it.  Refusing to run because a check cannot see something
+;;; that is plainly there would be worse than the failure it guards
+;;; against -- and by the time CDIM is reached the three stages that
+;;; needed guarding have already run.  A CDIM that really is absent
+;;; costs one "Unknown command" line after the work is done.
 ;;; ===================================================================
 
 (setq *tydrn-suite* '("TYDRN" "PADDLE" "AUTODIM"))
+
+;; Run last, after the three above.  Not calofin's -- see the header.
+;; nil runs nothing and the suite stops after AUTODIM.
+(setq *tydrn-finish-cmd* "CDIM")
+
+;; Every stage the run will go through, the finisher included.  The
+;; "1 of 4" counting comes off this, so it can never disagree with what
+;; actually runs.
+(defun tydrn:stages ()
+  (if *tydrn-finish-cmd*
+    (append *tydrn-suite* (list *tydrn-finish-cmd*))
+    *tydrn-suite*))
 
 ;; Is C:<name> defined in this session?  (XYPLOT's boundp test, with
 ;; the name computed rather than quoted.)
@@ -315,22 +347,30 @@
       (princ "\n  whole build in one - and run it again.  Nothing has been")
       (princ "\n  changed."))
     (progn
-      (princ "\nTYLERDRONESUITE: TYDRN, then PADDLE, then AUTODIM.")
+      (princ (strcat "\nTYLERDRONESUITE: "
+                     (tydrn:namelist (tydrn:stages)) "."))
       (princ "\n  Each stage is its own undo group, so a stage that went")
       (princ "\n  well is not undone to get at one that did not.  Esc in")
       (princ "\n  any stage stops the suite there.")
       (setq step 0)
-      (foreach nm *tydrn-suite*
+      (foreach nm (tydrn:stages)
         (setq step (1+ step))
         (princ (strcat "\n\n--- " (itoa step) " of "
-                       (itoa (length *tydrn-suite*)) ": " nm " ---"))
-        ;; through the command line, not as a direct call, so each stage
-        ;; prompts and errors exactly as it does when it is typed
-        (vl-cmdf (strcat "_." nm)))
-      (princ "\n\nTYLERDRONESUITE done - all three stages ran.")))
+                       (itoa (length (tydrn:stages))) ": " nm " ---"))
+        ;; Through the command line, not as a direct call, so each
+        ;; stage prompts and errors exactly as it does when it is typed.
+        ;;
+        ;; Calofin's own go through "_." like every other handoff in
+        ;; the tree.  The finisher goes through "_" alone, WITHOUT the
+        ;; dot: the dot means "the built-in command of this name,
+        ;; whatever anyone has redefined" -- and a shop command is
+        ;; exactly the redefinition we are trying to reach.
+        (vl-cmdf (strcat (if (member nm *tydrn-suite*) "_." "_") nm)))
+      (princ (strcat "\n\nTYLERDRONESUITE done - all "
+                     (itoa (length (tydrn:stages))) " stages ran."))))
   (princ))
 
 (princ (strcat "\nTYDRN.LSP " *tydrn-version*
                " loaded.  Type TYDRN to run, or TYLERDRONESUITE"
-               " for TYDRN + PADDLE + AUTODIM."))
+               " for the whole trace."))
 (princ)

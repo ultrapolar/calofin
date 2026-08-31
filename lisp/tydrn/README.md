@@ -45,27 +45,50 @@ and a done-line reports the counts.
 | Command | What it does |
 | --- | --- |
 | `TYDRN` | Run the fixes in one pass |
-| `TYLERDRONESUITE` | `TYDRN`, then `PADDLE`, then `AUTODIM` |
+| `TYLERDRONESUITE` | `TYDRN`, then `PADDLE`, then `AUTODIM`, then `CDIM` |
 
 ## TYLERDRONESUITE — the whole drone trace in one
 
-`TYDRN`, then `PADDLE`, then `AUTODIM`, in that order because that is the
-order the work has to happen in: the points have to be on the right
-layer before `PADDLE` can find the perimeter features to pad, and the
-pads have to be in before `AUTODIM` dimensions what is there.
+`TYDRN`, then `PADDLE`, then `AUTODIM`, then `CDIM`, in that order
+because that is the order the work has to happen in: the points have to
+be on the right layer before `PADDLE` can find the perimeter features to
+pad, the pads have to be in before `AUTODIM` dimensions what is there,
+and the dimensions have to exist before `CDIM` cleans them up.
 
 **Nothing is skipped or reworded.** Each stage is the command itself,
 asking its own questions — so `TYDRN` still offers *"Select text to
 update <Enter = all text in drawing>"*, and `PADDLE` and `AUTODIM` still
 ask for what they need. The suite only supplies the order. Anything you
-know about the three commands stays true here.
+know about the four commands stays true here.
+
+**`CDIM` is not calofin's.** It is the dimension-cleanup command the
+shop has on its own machines, and calofin has always known its name
+without ever running it: `COVERCHECK`, `LINFINCHECK` and `SPACHECK` each
+name it in a tunable (`*cchk-dimfix-cmd*` and friends) to *suggest* it
+after a check. The suite is the first thing here that actually calls it.
+Two consequences, both deliberate:
+
+* It is reached as `_CDIM`, without the dot. Calofin's own stages go
+  through `_.` like every other handoff in the tree, because the dot
+  means *the built-in command of this name, whatever anyone has
+  redefined* — and a shop command is exactly the redefinition we are
+  trying to reach.
+* It is **not** in the pre-flight check below. `boundp` only sees
+  commands AutoLISP defined; `CDIM` may be .NET, ARX or a PGP alias, so
+  asking whether it is loaded would report it missing on a machine where
+  it works perfectly. It runs last, after everything calofin can do is
+  already done, so a shop without it loses only the cleanup.
+
+If your shop calls it something else, or does not have it, one line in
+the tunables below retunes or turns it off.
 
 **Each stage keeps its own undo group.** Three `U`s back the suite out,
 one per stage — deliberately, and for `XYPLOT`'s reason about its `ABHD`
 handoff: a stage that went well should not have to be undone to get at
 one that did not.
 
-**All three are checked before any of them runs.** `PADDLE` and
+**The three calofin stages are checked before any of them runs.**
+(`CDIM` is not, for the reason above.) `PADDLE` and
 `AUTODIM` live in other files, so on a one-file `APPLOAD` of `tydrn.lsp`
 they may not be there. Half a suite is worse than none: `TYDRN` would
 have moved the points and `PADDLE` dropped the pads, and you would find
@@ -89,9 +112,10 @@ the whole job is one click from the panel, and there is nothing to type.
 That is what it is for: `LAZPASS.lsp`, open the panel, click it, answer
 the three stages' own prompts as they come.
 
-The order lives in `*tydrn-suite*`, a list of three command names; the
-`1 of 3` counting in the messages comes off it rather than being written
-out again.
+The order lives in `*tydrn-suite*` (the three calofin stages) plus
+`*tydrn-finish-cmd*` (the finisher); the `1 of 4` counting in the
+messages comes off both together, so it can never disagree with what
+actually runs.
 
 ## Tunables
 
@@ -107,6 +131,8 @@ At the top of `tydrn.lsp`:
 | `*tydrn-anch-layer*` | `"ANCHORS"` | Layer of the anchor POINTs |
 | `*tydrn-pink*` | `6` (magenta) | Color for anchors and the POINTS layer |
 | `*tydrn-orient-angle*` | `0.0` | Absolute text angle in degrees; set to `nil` to only flip upside-down text instead ("Most readable") |
+| `*tydrn-suite*` | `("TYDRN" "PADDLE" "AUTODIM")` | The calofin stages `TYLERDRONESUITE` runs, in order — also the list the pre-flight check reads |
+| `*tydrn-finish-cmd*` | `"CDIM"` | Shop command run last, after the stages above. Set to another name for a shop that calls it something else, or to `nil` to stop after `AUTODIM` |
 
 ## Notes & limitations
 
@@ -130,8 +156,9 @@ python3 tests/test_tydrn_suite.py
 
 covers `TYLERDRONESUITE`: the order, that each stage goes through the
 command line rather than being called directly, that a missing stage is
-named and stops it before anything runs, and that the suite opens no
-undo group of its own.
+named and stops it before anything runs, that the suite opens no undo
+group of its own, and that `CDIM` is reached without the dot while
+calofin's own keep it — plus retuning and turning off the finisher.
 
 
 No dedicated test drives TYDRN yet. `python3 tests/test_shared.py`

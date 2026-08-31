@@ -126,7 +126,7 @@ changing a routine.
 | `CDCREATE`, `CDCREATEVER` | `lisp/cdcreate/` | Turns every highlighted line into a cross dimension - `CROSS DIMENSIONS` style, `DIMENSION` layer, dim line on the line, text 80% toward the right/bottom end, source line erased. A tie that is dimensioned already is left alone |
 | `CUSTBLOCK`, `CUSTBLOCKVER` | `lisp/custblock/` | Draws a custom block in pictorial view from three typed sizes - length (the long axis, receding back-right at 45 degrees and at true length), width across the front face, height up it - based at its front bottom left corner. Nine lines on `COVER`: the front, top and right-hand faces, with the three hidden edges left out so it reads as a solid rather than a wire cage. Dimensioned three times on `DIMENSION` in `STANDARD INCHES` - the length aligned along the top-left receding edge, the height and width linear with their axes forced |
 | `DRONE` | `lisp/drone/` | Drawing cleanup: text style/height, pool/spa points onto `POINTS`, spa perimeter onto `POOL`, and more in one pass |
-| `TYDRN`, `TYLERDRONESUITE` | `lisp/tydrn/` | `DRONE`'s pool-only sibling for a drone trace with no spa: the same text and point cleanup with no SPA-point sweep and the `SPA` layer never touched (see `lisp/tydrn/README.md` for the exact split). `TYLERDRONESUITE` is the whole drone trace in one: `TYDRN`, then `PADDLE`, then `AUTODIM`, in the order the work has to happen in - the points have to be on the right layer before `PADDLE` can find the features to pad, and the pads have to be in before `AUTODIM` dimensions what is there. Nothing is reworded: each stage is the command itself, asking its own questions, and each keeps its OWN undo group, so three U's back the suite out and a stage that went well is not undone to get at one that did not. All three are checked before any of them runs - half a suite is worse than none |
+| `TYDRN`, `TYLERDRONESUITE` | `lisp/tydrn/` | `DRONE`'s pool-only sibling for a drone trace with no spa: the same text and point cleanup with no SPA-point sweep and the `SPA` layer never touched (see `lisp/tydrn/README.md` for the exact split). `TYLERDRONESUITE` is the whole drone trace in one: `TYDRN`, then `PADDLE`, then `AUTODIM`, then the shop's own `CDIM`, in the order the work has to happen in - the points have to be on the right layer before `PADDLE` can find the features to pad, the pads have to be in before `AUTODIM` dimensions what is there, and the dimensions have to exist before `CDIM` cleans them up. Nothing is reworded: each stage is the command itself, asking its own questions, and each keeps its OWN undo group, so four U's back the suite out and a stage that went well is not undone to get at one that did not. The three calofin stages are checked before any of them runs - half a suite is worse than none; `CDIM` is not (`boundp` cannot see a .NET or PGP command), runs last through `_` without the dot so a shop redefinition is what answers, and `*tydrn-finish-cmd*` renames it or turns it off |
 | `WCALST` | `lisp/wcalst/` | Unrolls a curved constant-width band flat, with darts/inserts |
 | `XFTCONV`, `XFTCONV-SETUP` | `lisp/xftconv/` | Cleans up Leica XFT/DXF survey imports |
 | `DDGPS`, `DDALT`, `DDELEV`, ... | `lisp/drone_height/` | Computes drone height above grade and lens distortion from photo GPS/EXIF |
@@ -382,9 +382,9 @@ python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
 python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
                                       # DCL well-formed, run with stubs,
                                       # toolbar + generated icon bytes
-python3 tests/test_tydrn_suite.py     # TYLERDRONESUITE - the order,
-                                      # and that a missing stage
-                                      # stops it before it starts
+python3 tests/test_tydrn_suite.py     # TYLERDRONESUITE - the order, the
+                                      # CDIM finisher, and that a missing
+                                      # stage stops it before it starts
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
 python3 tests/test_cornerstp_profile.py # the side profile all three draw

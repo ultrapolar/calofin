@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Runtime tests for TYLERDRONESUITE -- TYDRN, then PADDLE, then AUTODIM.
+"""Runtime tests for TYLERDRONESUITE -- TYDRN, PADDLE, AUTODIM, CDIM.
 
 The suite adds no drawing logic of its own: every stage is the command
 itself, asking its own questions.  So what is worth testing is the
@@ -8,7 +8,14 @@ ordering and the refusals, which is all it contributes:
 
   * THE ORDER, and that it is the order the work needs.  The points have
     to be on the right layer before PADDLE looks for features to pad,
-    and the pads have to be in before AUTODIM dimensions what is there.
+    the pads have to be in before AUTODIM dimensions what is there, and
+    CDIM tidies the dimensions AUTODIM just made.
+
+  * CDIM IS NOT OURS, and is treated accordingly: it is not pre-checked
+    (boundp sees only what AutoLISP defined, and an in-house command is
+    as likely to be .NET, ARX or a PGP alias) and it is called WITHOUT
+    the "." prefix, which would mean "the built-in of this name" and
+    reach past the very redefinition we want.
 
   * THAT IT CHECKS BEFORE IT STARTS.  Half a suite is worse than none:
     TYDRN would have moved the points and PADDLE dropped the pads, and
@@ -16,9 +23,9 @@ ordering and the refusals, which is all it contributes:
     ran it for was never going to happen.  A missing stage is named, and
     nothing runs.
 
-  * THAT IT DOES NOT WRAP THE STAGES IN ONE UNDO GROUP.  Three U's back
-    the suite out, one per stage, so a stage that went well is not
-    undone to get at one that did not.
+  * THAT IT DOES NOT WRAP THE STAGES IN ONE UNDO GROUP.  One U per
+    stage backs the suite out, so a stage that went well is not undone
+    to get at one that did not.
 
 Usage:  python3 tests/test_tydrn_suite.py
         CALOFIN_LISP_ROOT=shared python3 tests/test_tydrn_suite.py
@@ -63,7 +70,7 @@ STAGES = r'''
 '''
 
 
-def run(stages=STAGES):
+def run(stages=STAGES, extra_setup=None):
     vm = VM()
     # vl-cmdf is how the suite invokes each stage -- XYPLOT's idiom for
     # handing off to another tool, so a stage prompts and errors exactly
@@ -72,6 +79,8 @@ def run(stages=STAGES):
     vm.loads(STUBS)
     vm.load(LSP)
     vm.loads(stages)          # after the file, so c:TYDRN is the stub
+    if extra_setup:
+        vm.loads(extra_setup)
     vm.run('c:TYLERDRONESUITE', [])
     return vm
 
@@ -85,19 +94,54 @@ def ran(vm):
     return [str(c[0]).lstrip("_.") for c in vm.commands if c]
 
 
-def test_the_three_stages_run_in_the_order_the_work_needs():
-    print("\nTYDRN, then PADDLE, then AUTODIM -- in that order")
+def test_the_stages_run_in_the_order_the_work_needs():
+    print("\nTYDRN, PADDLE, AUTODIM, then CDIM -- in that order")
     vm = run()
-    check("all three ran", ran(vm) == ["TYDRN", "PADDLE", "AUTODIM"])
+    check("all four ran",
+          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"])
     check("each went through the command line, not a direct call",
           ["_.TYDRN"] in vm.commands and ["_.PADDLE"] in vm.commands
           and ["_.AUTODIM"] in vm.commands)
     check("it says which stage is which as it goes",
-          "1 of 3: TYDRN" in said(vm)
-          and "2 of 3: PADDLE" in said(vm)
-          and "3 of 3: AUTODIM" in said(vm))
-    check("and says so when it is through", "all three stages ran"
+          "1 of 4: TYDRN" in said(vm)
+          and "3 of 4: AUTODIM" in said(vm)
+          and "4 of 4: CDIM" in said(vm))
+    check("and says so when it is through", "all 4 stages ran"
           in said(vm))
+
+
+def test_cdim_is_reached_the_way_a_shop_command_has_to_be():
+    print("\nCDIM is not ours, and is called as though it is not")
+    vm = run()
+    # "_." means the BUILT-IN command of this name, whatever anyone has
+    # redefined.  A shop command is exactly that redefinition, so the
+    # dot would reach straight past it.
+    check("CDIM goes through _ without the dot", ["_CDIM"] in vm.commands)
+    check("and calofin's own still go through _.",
+          ["_.TYDRN"] in vm.commands and ["_.CDIM"] not in vm.commands)
+    # it is NOT pre-checked: boundp sees only what AutoLISP defined, and
+    # an in-house command is as likely to be .NET, ARX or a PGP alias.
+    # Refusing to run over a check that cannot see it would be worse
+    # than the failure it guards against.
+    check("it is not in the pre-flight list",
+          "CDIM" not in [str(x) for x in (vm.get(Sym('*tydrn-suite*')) or [])])
+    check("but it IS in the stages that run",
+          "CDIM" in [str(x) for x in (vm.get(Sym('*tydrn-finish-cmd*'))
+                                      and vm.get(Sym('*tydrn-suite*')) or [])]
+          or ran(vm)[-1] == "CDIM")
+
+
+def test_the_finisher_can_be_retuned_or_turned_off():
+    print("\na shop without CDIM, or with another name for it")
+    vm = run(extra_setup='(setq *tydrn-finish-cmd* nil)')
+    check("nil runs the three and stops",
+          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM"])
+    check("and the counting follows it", "1 of 3: TYDRN" in said(vm)
+          and "all 3 stages ran" in said(vm))
+    vm = run(extra_setup='(setq *tydrn-finish-cmd* "DIMFIX")')
+    check("another name is run instead",
+          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "DIMFIX"])
+    check("still without the dot", ["_DIMFIX"] in vm.commands)
 
 
 def test_a_missing_stage_is_named_and_nothing_runs():
@@ -149,14 +193,16 @@ def test_the_stage_list_is_what_drives_it():
     stages = [str(x) for x in (vm.get(Sym('*tydrn-suite*')) or [])]
     check("*tydrn-suite* names the three stages in order",
           stages == ["TYDRN", "PADDLE", "AUTODIM"])
-    check("and the count in the messages comes off it",
-          ("of " + str(len(stages)) + ": TYDRN") in said(vm))
+    check("and the count in the messages comes off it, finisher included",
+          ("of " + str(len(stages) + 1) + ": TYDRN") in said(vm))
 
 
 def main():
     tier = os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'
     print("TYLERDRONESUITE runtime tests -- tier: %s" % tier)
-    for fn in (test_the_three_stages_run_in_the_order_the_work_needs,
+    for fn in (test_the_stages_run_in_the_order_the_work_needs,
+               test_cdim_is_reached_the_way_a_shop_command_has_to_be,
+               test_the_finisher_can_be_retuned_or_turned_off,
                test_a_missing_stage_is_named_and_nothing_runs,
                test_two_missing_stages_read_as_a_sentence,
                test_the_suite_opens_no_undo_group_of_its_own,
