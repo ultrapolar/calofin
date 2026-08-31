@@ -527,6 +527,7 @@ STUB = '''
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
       stub:*big* nil
       stub:*allargs* nil stub:*allbmps* nil stub:*allfloat* nil
+      stub:*allvis* nil
       stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
       stub:*nosupport* nil)
 (setq :vlax-true "ON" :vlax-false "OFF")   ; the VM has no vlax
@@ -603,7 +604,9 @@ STUB = '''
 (defun vla-put-largebuttons (tb v)
   (setq stub:*big* v) (stub:ev "largebuttons") t)
 (defun vla-put-visible (tb v)
-  (setq stub:*visible* v) (stub:ev "visible") t)
+  (setq stub:*visible* v
+        stub:*allvis* (append stub:*allvis* (list (list tb v))))
+  (stub:ev "visible") t)
 (defun vla-float (tb top left rows)
   (setq stub:*float* (list top left rows)
         stub:*allfloat* (append stub:*allfloat* (list (list tb top left))))
@@ -1245,6 +1248,48 @@ vm11.loads('(defun c:TYLERDRONESUITE () (princ))'
 assert len([str(x) for x in vm11.globals.get('stub:*tbs*') or []]) == 1, (
     "lzp:*suitebutton* nil must decline the button even standalone")
 print("   one button in the build, and the tunable overrules either way")
+
+
+print("== a button another build left on screen is taken down ==")
+# AutoCAD keeps toolbars in the CUI, so one put up by another build is
+# still there next time.  "One button" has to mean one button on the
+# machine it lands on, not on a clean one.
+vm12 = stubbed()
+vm12.loads('(defun c:TYLERDRONESUITE () (princ))'
+           '(setq stub:*tbs* (list "LazPanel"))'   # left by an earlier load
+           '(setq lzp:*panelbutton* nil)'          # this build wants only ours
+           '(setq t:*tbs* (lzp:buttons-init))')
+def vis(vm):
+    """Toolbar -> the last visibility it was set to."""
+    out = {}
+    for pair in vm.globals.get('stub:*allvis*') or []:
+        out[str(pair[0])] = str(pair[1])
+    return out
+
+
+assert vis(vm12).get('LazPanel') == 'OFF', (
+    "the panel's leftover button was not taken down, so the drone edition "
+    "shows two buttons on any machine that has ever seen LAZPASS: %r"
+    % vis(vm12))
+assert vis(vm12).get('TylerDroneSuite') == 'ON', (
+    "our own button is not on screen: %r" % vis(vm12))
+tbs12 = [str(x) for x in vm12.globals.get('stub:*tbs*') or []]
+assert 'LazPanel' in tbs12, (
+    "the leftover toolbar was DELETED rather than hidden -- that throws away "
+    "wherever the operator had docked it")
+assert 'TylerDroneSuite' in tbs12, "our own button never went up"
+# and it works the other way round: the build takes the drone's down
+vm13 = stubbed()
+vm13.loads('(defun c:TYLERDRONESUITE () (princ))'
+           '(setq stub:*tbs* (list "TylerDroneSuite"))'
+           '(setq cal:*build-loading* T)'          # this is LAZPASS
+           '(setq t:*tbs* (lzp:buttons-init))')
+assert vis(vm13).get('TylerDroneSuite') == 'OFF', (
+    "LAZPASS left the drone edition's button on screen beside its own: %r"
+    % vis(vm13))
+assert vis(vm13).get('LazPanel') == 'ON', (
+    "LAZPASS did not put its own button up: %r" % vis(vm13))
+print("   hidden, not deleted, and it works whichever build loads last")
 
 
 print("== no TYLERDRONESUITE, no second button, and it says so ==")

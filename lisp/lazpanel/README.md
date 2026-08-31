@@ -228,7 +228,17 @@ so it answers for the session. Standalone the symbol is simply unbound,
 and an unbound symbol is nil.
 
 `lzp:*suitebutton*` overrules it: `AUTO` (the default) is the rule
-above, `T` gives it a button anywhere, `nil` never does. `LAZBUTTON`
+above, `T` gives it a button anywhere, `nil` never does.
+
+**A button the current build does not want is taken off the strip, not
+just skipped.** AutoCAD keeps toolbars in the CUI, so one put up by
+another build is still on screen next time AutoCAD opens — load the
+drone edition on a machine that has ever seen LAZPASS and the panel's
+button would otherwise still be sitting there beside the drone's. It
+works both ways: load LAZPASS after the edition and the drone button
+goes away again, so **whichever build was loaded last is the one whose
+buttons are showing**. The toolbar is hidden rather than deleted, so it
+keeps wherever you docked or dragged it and comes back exactly there. `LAZBUTTON`
 tells the two absences apart, because they have different answers:
 
 ```

@@ -1,14 +1,14 @@
 ;;; ======================================================================
 ;;; TYLERDRONE.lsp  --  the drone trace in one file
 ;;; ----------------------------------------------------------------------
-;;; Built 2026-08-28 by tools/build_drone_edition.py -- DO NOT EDIT.
+;;; Built 2026-08-31 by tools/build_drone_edition.py -- DO NOT EDIT.
 ;;; Edit the files under lisp/ and rebuild.
 ;;;
 ;;; APPLOAD this one file.  It carries:
 ;;;     AutoDim.lsp        v1.0
 ;;;     PADDLE.lsp         v1.4
 ;;;     tydrn.lsp          v1.1
-;;;     LAZPANEL.lsp       v3.2
+;;;     LAZPANEL.lsp       v3.3
 ;;;
 ;;; Then type TYLERDRONESUITE, or click the orange triangle
 ;;; on screen.  That button is the only one this build puts
@@ -2601,7 +2601,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.2")
+(setq *lazpanel-version* "v3.3")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -3902,6 +3902,18 @@
     (setq out (append out (list (lzp:suite-spec)))))
   out)
 
+;; Every button this file knows how to draw, wanted here or not.  What
+;; is NOT wanted still matters: AutoCAD keeps toolbars in the CUI
+;; between sessions, so one put up by another build is still on screen
+;; when this one loads.
+(defun lzp:tb-all ()
+  (list (lzp:panel-spec) (lzp:suite-spec)))
+
+(defun lzp:wanted-name-p (name / spec found)
+  (foreach spec (lzp:tb-specs)
+    (if (= (lzp:tb-name spec) name) (setq found T)))
+  found)
+
 (defun lzp:toolbar-find (name / mgs n i tbs m j tb found)
   (setq mgs (vla-get-menugroups (vlax-get-acad-object)))
   (setq n (vla-get-count mgs)
@@ -3990,17 +4002,37 @@
 ;; the same pixel.
 (defun lzp:tb-index (spec / i n found)
   (setq i 0 found 0)
-  (foreach n (lzp:tb-specs)
+  (foreach n (lzp:tb-all)
     (if (= (lzp:tb-name n) (lzp:tb-name spec)) (setq found i))
     (setq i (1+ i)))
   found)
 
-;; Put every button this session should have on screen.  Returns the
-;; toolbars it managed, newest last.
+;; Take a button off the strip without destroying it: the toolbar keeps
+;; wherever the operator docked or dragged it, and turning the tunable
+;; back on and running LAZBUTTON brings it back exactly there.
+(defun lzp:button-hide (spec / tb)
+  (if (setq tb (lzp:toolbar-find (lzp:tb-name spec)))
+    (vl-catch-all-apply 'vla-put-visible (list tb :vlax-false))))
+
+;; Put up the buttons this session should have -- AND take down the ones
+;; it should not.
+;;
+;; The second half is not tidiness.  AutoCAD keeps toolbars in the CUI,
+;; so one put up by another build is still on screen the next time
+;; AutoCAD opens: load the drone edition on a machine that has ever seen
+;; LAZPASS and, without this, the panel's button would still be sitting
+;; there beside the drone's.  "One button" has to mean one button on the
+;; machine it actually lands on.  It works both ways round -- load
+;; LAZPASS after the edition and the drone button goes away again -- so
+;; whichever build was loaded last is the one whose buttons are showing.
+;;
+;; Returns the toolbars it put up, newest last.
 (defun lzp:buttons-init ( / out spec tb)
-  (foreach spec (lzp:tb-specs)
-    (if (setq tb (lzp:button-init spec))
-      (setq out (append out (list tb)))))
+  (foreach spec (lzp:tb-all)
+    (if (lzp:wanted-name-p (lzp:tb-name spec))
+      (if (setq tb (lzp:button-init spec))
+        (setq out (append out (list tb))))
+      (lzp:button-hide spec)))
   out)
 
 ;;; -------------------- the dialog run ----------------------------------
