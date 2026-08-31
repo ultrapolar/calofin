@@ -113,7 +113,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.6")
+(setq *cperp-version* "v0.7")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -336,7 +336,12 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
+  ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older
+  ;; releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   ;; --- save state and open one undo group for the whole run -----------
   (setq os    (getvar "OSMODE")

@@ -114,7 +114,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.7")
+(setq *perp-version* "v0.8")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -571,7 +571,12 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
+  ;; CMDACTIVE drain in perp:finish; harmless no-op guard on older
+  ;; releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   ;; --- save state and open one undo group for the whole run -----------
   (setq os    (getvar "OSMODE")
