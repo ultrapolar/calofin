@@ -49,7 +49,7 @@ def run(sideend, treatment=("Square",), treads=(12.0, 12.0), extra=()):
              ' (list 11 %r %r 0.0)))' % BASE_END)
     vm.loads('(entmake (list (cons 0 "LINE") (list 10 0.0 0.0 0.0)'
              ' (list 11 %r %r 0.0)))' % sideend)
-    script = ([list(vm.entities), (100.0, 0.0), WID] + list(treatment)
+    script = ([None, list(vm.entities), (100.0, 0.0), WID] + list(treatment)
               + ["No"] + list(treads) + list(extra) + [None, "No"])
     try:
         vm.run('c:NORMIESTEP', script)

@@ -52,7 +52,7 @@ def fresh():
 
 def run(vm, script, label):
     try:
-        vm.run('c:CORNERSTP', script)
+        vm.run('c:CORNERSTP', [None] + list(script))
     except LispError as e:
         raise AssertionError(f"[{label}] {e}") from None
 

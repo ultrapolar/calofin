@@ -933,7 +933,7 @@ for tool, pair_of_walls, p1, p2, picks, prompts in CASES:
     fv.loads('(setq lzt:*type* "%s")' % tool)
     ws = walls(fv, pair_of_walls)
     try:
-        fv.run('c:LAZSTEP', [ws] + picks)
+        fv.run('c:LAZSTEP', [None, ws] + picks)
     except LispError as e:
         raise AssertionError("[%s form] %s" % (tool, e)) from None
     a = snapshot(fv)
@@ -956,7 +956,7 @@ for tool, pair_of_walls, p1, p2, picks, prompts in CASES:
     pv = stubbed(tool)
     ws = walls(pv, pair_of_walls)
     try:
-        pv.run('c:%s' % tool, [ws] + prompts)
+        pv.run('c:%s' % tool, [None, ws] + prompts)
     except LispError as e:
         raise AssertionError("[%s prompts] %s" % (tool, e)) from None
     b = snapshot(pv)
@@ -978,10 +978,10 @@ fv.loads(typed([('steps', '3'), ('direction', '1'), ('dims', '1'),
                + DEPTH_BOXES + [('accept', 'b')]))
 fv.loads('(setq lzt:*type* "CORNERSTP")')
 ws = walls(fv, True)
-fv.run('c:LAZSTEP', [ws, PICK])
+fv.run('c:LAZSTEP', [None, ws, PICK])
 pv = stubbed('CORNERSTP')
 ws = walls(pv, True)
-pv.run('c:CORNERSTP', [ws, None, "Yes", "No"] + [24.0, None] * 3
+pv.run('c:CORNERSTP', [None, ws, None, "Yes", "No"] + [24.0, None] * 3
        + [None, "Yes"] + [float(d) for d in DEPTHS] + [PICK])
 assert snapshot(fv) == snapshot(pv), \
     "CORNERSTP with dims on: the form drew a different run"

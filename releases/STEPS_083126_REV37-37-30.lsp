@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_083126_REV36-36-29.lsp
+;;; STEPS_083126_REV37-37-30.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v3.6 -> REV36   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.6 -> REV36   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v2.9 -> REV29   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v3.7 -> REV37   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.7 -> REV37   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.0 -> REV30   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v3.6) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v3.7) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -212,7 +212,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.6") ; printed on load and at command start so a
+(setq *cs-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -747,9 +747,13 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ---------------------------------------------------
-  (princ "\nSelect the two walls forming the corner ")
-  (princ "(a corner diagonal or fillet arc may be included):")
-  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ "\nSelect the two walls forming the corner ")
+      (princ "(a corner diagonal or fillet arc may be included):")
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 
@@ -1714,7 +1718,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.6) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.7) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1889,7 +1893,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.6") ; printed on load and at command start so a
+(setq *hs-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2526,9 +2530,13 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  (princ (strcat "\nSelect the base line, the base curve (arc, circle or"
-                 " polyline), or the curve plus its axis line:"))
-  (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ (strcat "\nSelect the base line, the base curve (arc, circle"
+                     " or polyline), or the curve plus its axis line:"))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -3307,7 +3315,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v2.9) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.0) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3487,7 +3495,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.9") ; printed on load and at command start so a
+(setq *ns-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4174,9 +4182,13 @@
                    " appear.")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  (princ (strcat "\nSelect the base line, the two lines of a corner,"
-                 " or a U-shaped step perimeter:"))
-  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ (strcat "\nSelect the base line, the two lines of a corner,"
+                     " or a U-shaped step perimeter:"))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)

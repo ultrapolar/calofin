@@ -34889,7 +34889,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.6") ; printed on load and at command start so a
+(setq *cs-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -35412,9 +35412,13 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ---------------------------------------------------
-  (princ "\nSelect the two walls forming the corner ")
-  (princ "(a corner diagonal or fillet arc may be included):")
-  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ "\nSelect the two walls forming the corner ")
+      (princ "(a corner diagonal or fillet arc may be included):")
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 
@@ -36560,7 +36564,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.6") ; printed on load and at command start so a
+(setq *hs-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -37183,9 +37187,13 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  (princ (strcat "\nSelect the base line, the base curve (arc, circle or"
-                 " polyline), or the curve plus its axis line:"))
-  (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ (strcat "\nSelect the base line, the base curve (arc, circle"
+                     " or polyline), or the curve plus its axis line:"))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -38150,7 +38158,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.9") ; printed on load and at command start so a
+(setq *ns-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38825,9 +38833,13 @@
                    " appear.")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  (princ (strcat "\nSelect the base line, the two lines of a corner,"
-                 " or a U-shaped step perimeter:"))
-  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ (strcat "\nSelect the base line, the two lines of a corner,"
+                     " or a U-shaped step perimeter:"))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)

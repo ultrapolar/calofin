@@ -186,7 +186,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.6") ; printed on load and at command start so a
+(setq *cs-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -721,9 +721,13 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ---------------------------------------------------
-  (princ "\nSelect the two walls forming the corner ")
-  (princ "(a corner diagonal or fillet arc may be included):")
-  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ "\nSelect the two walls forming the corner ")
+      (princ "(a corner diagonal or fillet arc may be included):")
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 

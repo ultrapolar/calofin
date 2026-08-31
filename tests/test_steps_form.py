@@ -82,7 +82,7 @@ def drive(path, cmd, pair, script, form=None, label=""):
     else:
         walls(vm, pair)                # fixture drawn even when reused
     try:
-        vm.run(cmd, script)
+        vm.run(cmd, [None] + script)
     except LispError as e:
         raise AssertionError("[%s] %s" % (label, e)) from None
     return vm
@@ -332,12 +332,12 @@ for name, path, cmd, pair, prompts_of, full, form_script in TOOLS:
     vm = fresh(path)
     ws = walls(vm, pair)
     vm.eval(parse_all("(setq %s %s)" % (STORE[cmd], full))[0])
-    vm.run(cmd, [ws] + form_script[1:])
+    vm.run(cmd, [None, ws] + form_script[1:])
     leaked = vm.globals.get(STORE[cmd])
     assert not leaked, \
         "%s: %s still armed after the run: %r" % (name, STORE[cmd], leaked)
     # a second, plain run in the same session prompts everything
-    vm.run(cmd, [ws] + prompts_of()[1:])
+    vm.run(cmd, [None, ws] + prompts_of()[1:])
     assert tread_asked(vm), "%s: the second run never asked a tread" % name
     assert depth_asked(vm), "%s: the second run never asked a depth" % name
     assert any('Dimension the steps?' in p for p, _ in vm.prompts), \
@@ -380,7 +380,7 @@ def ns_corner(script, form=None, label=""):
     if form:
         vm.eval(parse_all("(setq *ns-form* %s)" % form)[0])
     try:
-        vm.run('c:NORMIESTEP', [list(vm.entities)] + script)
+        vm.run('c:NORMIESTEP', [None, list(vm.entities)] + script)
     except LispError as e:
         raise AssertionError("[%s] %s" % (label, e)) from None
     return vm
@@ -448,6 +448,20 @@ same(h, g, "unknown treat word")
 assert any('How should' in p for p, _ in g.prompts), \
     "an unknown treatment should have fallen through to the prompt"
 print("   'Fancy' ignored, the treatment asked as usual")
+
+
+print("== pickfirst: a selection made before each command is used as-is ==")
+for name, path, cmd, pair, prompts_of, full, form_script in TOOLS:
+    vm = fresh(path)
+    ws = walls(vm, pair)
+    script = list(prompts_of())
+    assert script[0] == 'WALLS'
+    script[0] = ws                     # the "_I" probe takes the selection
+    vm.run(cmd, script)
+    assert vm.prompts[0][0] == 'ssget _I', (name, vm.prompts[0])
+    assert not any(p[0] == 'ssget' for p in vm.prompts), (name, vm.prompts)
+    assert snapshot(vm), name + ": nothing was drawn"
+print("   the probe took it; the Select prompt was never asked")
 
 
 print("\nALL STEPS FORM SCENARIOS PASSED")

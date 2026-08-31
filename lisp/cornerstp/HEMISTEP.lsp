@@ -171,7 +171,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.6") ; printed on load and at command start so a
+(setq *hs-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -808,9 +808,13 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  (princ (strcat "\nSelect the base line, the base curve (arc, circle or"
-                 " polyline), or the curve plus its axis line:"))
-  (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ (strcat "\nSelect the base line, the base curve (arc, circle"
+                     " or polyline), or the curve plus its axis line:"))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)

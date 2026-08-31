@@ -68,7 +68,7 @@ def run(path, cmd, script, label, styles=('STANDARD INCHES', 'SIDE STANDARD'),
     if script[0] == 'WALLS':
         script[0] = walls(vm, pair=(cmd == 'c:CORNERSTP'))
     try:
-        vm.run(cmd, script)
+        vm.run(cmd, [None] + script)
     except LispError as e:
         raise AssertionError(f"[{label}] {e}") from None
     return vm

@@ -180,7 +180,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.9") ; printed on load and at command start so a
+(setq *ns-version* "v3.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -855,9 +855,13 @@
                    " appear.")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  (princ (strcat "\nSelect the base line, the two lines of a corner,"
-                 " or a U-shaped step perimeter:"))
-  (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if (null ss)
+    (progn
+      (princ (strcat "\nSelect the base line, the two lines of a corner,"
+                     " or a U-shaped step perimeter:"))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
