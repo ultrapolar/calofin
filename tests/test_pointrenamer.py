@@ -82,13 +82,13 @@ LINE = '''
                  '(10 0.0 0.0 0.0) '(11 100.0 0.0 0.0)))'''
 
 
-def ab_pt(x, y, number):
+def ab_pt(x, y, number, tab='Model'):
     """An ab_pt block with its surveyed number in the number attribute.
     Carries its tab (410) like a real database entity, so the
     current-tab filter in ptr:clash-count can see it."""
     return f'''
   (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
-                 '(8 . "POINTS") '(410 . "Model")
+                 '(8 . "POINTS") '(410 . "{tab}")
                  '(100 . "AcDbBlockReference")
                  '(2 . "ab_pt") (list 10 {x} {y} 0.0) '(66 . 1)))
   (entmake (list '(0 . "ATTRIB") '(8 . "POINTS")
@@ -404,6 +404,81 @@ txt = run(vm, [None, None, (100.0, 60.0, 0.0), 'Clockwise', 6.0, 1,
                'Yes'], 'far-pick')
 check("a start pick well inside the pool is noted",
       'Note: the pick sits' in txt, txt[-800:])
+
+# ----------------------------------------------------------------------
+# 11. pickfirst, and the undo bracket around the run
+# ----------------------------------------------------------------------
+print("pickfirst and the undo group")
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+sel = list(vm.entities)
+vm.run('c:POINTRENAMER',            # bypass run(): the probe gets fed
+       [sel, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'])
+check("the probe is asked before anything else",
+      vm.prompts[0][0] == 'ssget _I', repr(vm.prompts[0]))
+check("the highlight is never asked",
+      not any(p[0] == 'ssget' for p in vm.prompts), repr(vm.prompts[:3]))
+got = numbers(vm)
+check("the probe selection was renumbered",
+      got[(0.0, 60.0)] == '1' and got[(60.0, 0.0)] == '2', repr(got))
+undo = [c for c in vm.commands if c and c[0] == '_.UNDO']
+check("one undo group brackets the run",
+      undo == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']], repr(undo))
+
+# ----------------------------------------------------------------------
+# 12. the direction and band are remembered within the session
+# ----------------------------------------------------------------------
+print("session memory")
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+run(vm, [None, None, (0.0, 0.0, 0.0), 'COunterclockwise', 12.0, 1,
+         'Yes'], 'memory-first')
+# Enter at the direction now means COunterclockwise, not the built-in
+# Clockwise start value: the bottom-run point gets 1 again
+run(vm, [None, None, (0.0, 0.0, 0.0), None, None, 1, 'Yes'],
+    'memory-second')
+asked = '|'.join(p for p, _ in vm.prompts)
+check("the second run offers the last direction",
+      '<COunterclockwise>' in asked, asked[-700:])
+want = vm.loads('(rtos 12.0 4 4)')
+check("the second run offers the last band",
+      f'<{want}>' in asked, f"wanted <{want}> in {asked[-700:]}")
+got = numbers(vm)
+check("Enter took the remembered direction",
+      got[(60.0, 0.0)] == '1' and got[(0.0, 60.0)] == '2', repr(got))
+
+# ----------------------------------------------------------------------
+# 13. the confirm is destructive, so Enter means No
+# ----------------------------------------------------------------------
+print("the confirm defaults to No")
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, None],
+          'default-no')
+check("Enter at the confirm renames nothing",
+      'Nothing renamed' in txt, txt[-400:])
+got = numbers(vm)
+check("the numbers are untouched",
+      got[(60.0, 0.0)] == '17' and got[(0.0, 60.0)] == '9', repr(got))
+
+# ----------------------------------------------------------------------
+# 14. a number reused on another tab is not a clash
+# ----------------------------------------------------------------------
+print("the clash sweep is current-tab only")
+
+vm = VM()
+vm.load(LSP)
+vm.loads(LAYER_POOL)
+vm.sysvars['CTAB'] = 'Model'
+rect = made(vm, RECT_CCW)
+ins = []
+for f in (ab_pt(60, 0, 17), ab_pt(0, 60, 9)):
+    ins += made(vm, f)
+made(vm, ab_pt(900, 900, 11, tab='Layout1'))    # a detail-sheet reuse
+txt = run(vm, [rect + ins, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 10,
+               'Yes'], 'clash-other-tab')
+check("a Layout1 block already on 11 is not warned about",
+      'Warning:' not in txt, txt[-400:])
 
 # ----------------------------------------------------------------------
 print()
