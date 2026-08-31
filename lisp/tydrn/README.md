@@ -84,11 +84,11 @@ the command line, so the stages after it never start. What ran before it
 stays run, which is the other reason the check happens first.
 
 **There is a one-file edition for handing to someone.**
-`editions/TYLERDRONE.lsp` carries `AutoDim.lsp`, `PADDLE.lsp`, this file
-and `LAZPANEL.lsp` in one APPLOAD, and puts up exactly one button — the
-orange triangle that runs the suite. That is what to send: this file on
-its own has no button and refuses to run, correctly, because two of its
-three stages are missing. Rebuild it with
+`editions/TYLERDRONE.lsp` is the whole `LAZPASS` build plus one button:
+the orange hexagon opens the panel as ever, and an orange triangle
+beside it runs the suite on one click. That is what to send — this file
+on its own has no button and refuses to run, correctly, because two of
+its three stages live elsewhere. Rebuild it with
 `python3 tools/build_drone_edition.py`.
 
 **It gets a screen button of its own — but only when this file is

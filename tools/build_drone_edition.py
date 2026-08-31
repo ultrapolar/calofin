@@ -5,24 +5,33 @@
     python3 tools/build_drone_edition.py --check  #  write nothing;
                                                   #  exit 1 if stale
 
-WHY THIS EXISTS.  TYLERDRONESUITE is TYDRN, then PADDLE, then AUTODIM --
-three commands out of three different files -- and its screen button is
-drawn by a fourth.  So there is no single file in the tree that can be
-handed to someone who wants only the drone job: tydrn.lsp on its own has
-no button and refuses to run, correctly, because two of its three stages
-are missing.  LAZPASS.lsp has everything, which is the opposite problem.
+WHAT IT IS.  The whole calofin build, plus a button of its own for
+TYLERDRONESUITE.  Two things on the toolbar strip: the panel's hexagon,
+which opens the full roster the way it always has, and an orange
+triangle that runs the drone suite on one click.
 
-This is the middle: the four files it really takes, in one download, put
-together so that the ONLY thing on the toolbar strip is the drone
-button.  LAZPANEL comes along because it owns the bitmap and toolbar
-machinery, and its panel still types the same as ever -- it is simply
-not on the strip, which is what lzp:*panelbutton* nil says.
+WHY IT IS NOT SMALLER.  It was, once: the four files the suite really
+takes (AutoDim, PADDLE, tydrn, LAZPANEL).  But a hexagon in front of a
+panel where ten buttons of a hundred and forty-two do anything is a
+panel that looks broken.  Someone who wants the hexagon wants the tools
+behind it, so the edition carries them.
 
-It is a build of the STANDALONE tier, not the shared one: those files
-carry their own helper copies, so nothing here needs CALOFIN-LIB.  And
-it must NOT raise cal:*build-loading*, because that flag is exactly what
-tells the suite it arrived inside LAZPASS and should not have a button
-of its own -- here it should.
+WHY IT IS NOT JUST LAZPASS.  LAZPASS deliberately puts up ONE external
+button, the panel's -- inside the build the suite rides the panel like
+every other tool.  That rule is right and stays; this is one person's
+build, where the suite has earned a button of its own.
+
+The bundle is taken from build_shared_bundle.build() rather than read
+off disk, so an edition can never be built from a stale LAZPASS.lsp and
+then agree with itself at --check time.
+
+BOTH tunables are stated outright in the footer, and that is the whole
+lesson of the bug this file once shipped.  lzp:*suitebutton* AUTO works
+out whether to give the suite a button by reading cal:*build-loading*,
+which LAZPASS raises and nothing lowers -- so an edition that left the
+question to AUTO read a flag from the bundle it had just embedded,
+decided it was inside the build, and put up no button at all.  An
+edition knows which buttons it wants.  It says so.
 """
 
 import datetime
@@ -32,144 +41,100 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
+sys.path.insert(0, str(HERE))
+import build_shared_bundle  # noqa: E402
+
 OUT = ROOT / "editions" / "TYLERDRONE.lsp"
-
-#: The edition, in load order.  LAZPANEL is last for the reason the
-#: shared loader puts it last: its load-time button init asks which
-#: commands exist, and a command loaded after it would be missed.
-MEMBERS = [
-    "lisp/autodim/AutoDim.lsp",
-    "lisp/paddle/PADDLE.lsp",
-    "lisp/tydrn/tydrn.lsp",
-    "lisp/lazpanel/LAZPANEL.lsp",
-]
-
-#: LAZPANEL puts its buttons up as it loads.  That is too early here --
-#: the edition has not said which buttons it wants yet -- so the call is
-#: taken out and made again in the footer, after the tunables are set.
-#:
-#: Anchored to a line of its OWN, because the same call also appears
-#: indented inside c:LAZBUTTON, and replacing that one instead cuts the
-#: command in half.  A rename in LAZPANEL must not silently stop
-#: mattering either, so both the spelling and the count are checked and
-#: a surprise is a build failure rather than a shrug.
-INIT_CALL = "\n(vl-catch-all-apply 'lzp:buttons-init nil)\n"
 
 RULE = ";;; " + "=" * 70
 
-VERSION_RE = re.compile(r'\*([a-z]+)-version\*\s+"(v\d+\.\d+)"')
-
-
-def read(path):
-    return (ROOT / path).read_text(encoding="utf-8")
-
-
-def version_of(text):
-    m = VERSION_RE.search(text)
-    return m.group(2) if m else "(unversioned)"
+#: The command the extra button runs, and the tool file that defines it.
+#: Named here so a rename cannot leave the edition pointing at nothing.
+COMMAND = "TYLERDRONESUITE"
+DEFINED_BY = "shared/parts/tydrn.lsp"
 
 
 def build():
     """The edition's full text, or an error message via sys.exit."""
-    parts, stamp = [], datetime.date.today().strftime("%Y-%m-%d")
-    versions = []
-    bodies = []
-    for rel in MEMBERS:
-        path = ROOT / rel
-        if not path.is_file():
-            sys.exit("build_drone_edition: %s is missing" % rel)
-        body = read(rel)
-        versions.append((pathlib.Path(rel).name, version_of(body)))
-        if rel.endswith("LAZPANEL.lsp"):
-            found = body.count(INIT_CALL)
-            if found != 1:
-                sys.exit(
-                    "build_drone_edition: expected exactly one top-level\n"
-                    "  %s\n"
-                    "in LAZPANEL.lsp, found %d.  This build has to defer that\n"
-                    "call until after it has set lzp:*panelbutton*.  Find what\n"
-                    "changed and teach INIT_CALL the new spelling -- do not\n"
-                    "just drop this."
-                    % (INIT_CALL.strip(), found))
-            body = body.replace(
-                INIT_CALL,
-                "\n;; The load-time call is TAKEN OUT here and made again in\n"
-                ";; the edition's footer, once it has said which buttons it\n"
-                ";; wants.  (tools/build_drone_edition.py)\n")
-        bodies.append((rel, body))
+    src = ROOT / DEFINED_BY
+    if not src.is_file():
+        sys.exit("build_drone_edition: %s is missing" % DEFINED_BY)
+    if ("c:" + COMMAND) not in src.read_text(encoding="utf-8"):
+        sys.exit("build_drone_edition: %s no longer defines c:%s, so this\n"
+                 "edition would put up a button that answers a click with\n"
+                 "\"Unknown command\".  Find what it is called now."
+                 % (DEFINED_BY, COMMAND))
 
-    parts.append(RULE)
-    parts.append(";;; TYLERDRONE.lsp  --  the drone trace in one file")
-    parts.append(";;; " + "-" * 70)
-    parts.append(";;; Built %s by tools/build_drone_edition.py -- DO NOT EDIT."
-                 % stamp)
-    parts.append(";;; Edit the files under lisp/ and rebuild.")
-    parts.append(";;;")
-    parts.append(";;; APPLOAD this one file.  It carries:")
-    for name, ver in versions:
-        parts.append(";;;     %-18s %s" % (name, ver))
-    parts.append(";;;")
-    parts.append(";;; Then type TYLERDRONESUITE, or click the orange triangle")
-    parts.append(";;; on screen.  That button is the only one this build puts")
-    parts.append(";;; up: LAZPANEL is here for the machinery that draws it and")
-    parts.append(";;; still types the same as ever, it is just not on the")
-    parts.append(";;; strip.  For the whole calofin toolkit, use LAZPASS.lsp")
-    parts.append(";;; instead -- there the suite rides the panel like every")
-    parts.append(";;; other tool and does not take a button of its own.")
-    parts.append(RULE)
-    parts.append("")
-
-    for rel, body in bodies:
-        parts.append(RULE)
-        parts.append(";;; >>> %s" % rel)
-        parts.append(RULE)
-        parts.append("")
-        parts.append(body.rstrip("\n"))
-        parts.append("")
-
-    parts.append(RULE)
-    parts.append(";;; >>> the edition's own footer")
-    parts.append(RULE)
-    parts.append("")
-    parts.append(";; One button on the strip, and it is the drone's.  The")
-    parts.append(";; panel is along for the ride here -- it owns the bitmap")
-    parts.append(";; and toolbar machinery -- so it does not take a button of")
-    parts.append(";; its own; LAZPANEL still opens it if you type it.")
-    parts.append(";;")
-    parts.append(";; BOTH are stated outright, and the second one is the")
-    parts.append(";; lesson.  lzp:*suitebutton* AUTO works out whether to")
-    parts.append(";; give the suite a button by reading cal:*build-loading*,")
-    parts.append(";; which LAZPASS raises and nothing ever lowers -- so on a")
-    parts.append(";; machine that had loaded LAZPASS earlier in the session")
-    parts.append(";; (a startup suite will do it every drawing) this edition")
-    parts.append(";; read a flag left by somebody else, decided it was inside")
-    parts.append(";; the build, and put up no button at all -- having already")
-    parts.append(";; taken the panel's away.  An edition knows exactly which")
-    parts.append(";; button it wants.  It should say so, not deduce it.")
-    parts.append("(setq lzp:*panelbutton* nil)")
-    parts.append("(setq lzp:*suitebutton* T)")
-    parts.append("(vl-catch-all-apply 'lzp:buttons-init nil)")
-    parts.append("")
-    parts.append(";; And say so if it did not work.  A load that silently")
-    parts.append(";; leaves nothing on screen is the failure that brought")
-    parts.append(";; that bug back.")
-    parts.append("(if (vl-catch-all-apply 'lzp:toolbar-find"
-                 " (list lzp:*tbsuite*))")
-    parts.append('  (princ "\nTYLERDRONE: the orange triangle is on screen -'
-                 ' click it to run the suite.")')
-    parts.append("  (progn")
-    parts.append('    (princ "\nTYLERDRONE: the button could not be put up -'
-                 ' the AutoCAD menu API")')
-    parts.append('    (princ "\nis unavailable here.  Type TYLERDRONESUITE'
-                 ' instead, or LAZBUTTON to retry.")))')
-    parts.append("")
-    parts.append('(princ "\\nTYLERDRONE edition loaded.  Type TYLERDRONESUITE'
-                 ' (or click the orange")')
-    parts.append('(princ "\\ntriangle) to run TYDRN, then PADDLE, then'
-                 ' AUTODIM.")')
-    parts.append("(princ)")
-    parts.append("")
-    return "\n".join(parts)
+    # build() hands back (text, member names, command names)
+    bundle, _names, commands = build_shared_bundle.build()
+    if COMMAND.upper() not in {c.upper() for c in commands}:
+        sys.exit("build_drone_edition: %s is not in the bundle, so\n"
+                 "this edition would put up a button for a command\n"
+                 "that is not there." % COMMAND)
+    stamp = datetime.date.today().strftime("%Y-%m-%d")
+    head = [
+        RULE,
+        ";;; TYLERDRONE.lsp  --  the whole calofin build, plus one button",
+        ";;; " + "-" * 70,
+        ";;; Built %s by tools/build_drone_edition.py -- DO NOT EDIT." % stamp,
+        ";;; Edit the files under lisp/ and rebuild.",
+        ";;;",
+        ";;; APPLOAD this one file.  Two things land on the toolbar strip:",
+        ";;;",
+        ";;;   the orange HEXAGON   opens the LazPanel roster, as ever",
+        ";;;   the orange TRIANGLE  runs %s on one click" % COMMAND,
+        ";;;",
+        ";;; The triangle is the only thing this build adds to LAZPASS.lsp,",
+        ";;; which is otherwise carried here whole.  LAZPASS itself puts up",
+        ";;; one external button on purpose -- there the suite rides the",
+        ";;; panel like every other tool -- and that is unchanged; this is",
+        ";;; the build for someone who runs the drone job all day and wants",
+        ";;; it under the cursor.",
+        RULE,
+        "",
+    ]
+    foot = [
+        "",
+        RULE,
+        ";;; >>> the edition's own footer",
+        RULE,
+        "",
+        ";; BOTH buttons, and both said outright rather than deduced.",
+        ";;",
+        ";; lzp:*suitebutton* AUTO would work the second one out by reading",
+        ";; cal:*build-loading*, which the bundle above has just raised and",
+        ";; nothing ever lowers -- so AUTO would conclude it is inside",
+        ";; LAZPASS and decline the very button this file exists for.  That",
+        ";; is not a bug in AUTO: AUTO is right for a plain build.  It is",
+        ";; the wrong question to ask here, because this edition already",
+        ";; knows the answer.",
+        "(setq lzp:*panelbutton* T)",
+        "(setq lzp:*suitebutton* T)",
+        "(vl-catch-all-apply 'lzp:buttons-init nil)",
+        "",
+        ";; And say how it went.  A load that quietly leaves nothing on",
+        ";; screen is what made the last one of these take a bug report.",
+        "(if (and (vl-catch-all-apply 'lzp:toolbar-find"
+        " (list lzp:*tbname*))",
+        "         (vl-catch-all-apply 'lzp:toolbar-find"
+        " (list lzp:*tbsuite*)))",
+        '  (princ "\\nTYLERDRONE: both buttons are on screen - the hexagon'
+        ' opens the panel,")',
+        '  (princ "\\nTYLERDRONE: the buttons could not be put up - the'
+        ' AutoCAD menu API is")',
+        ")",
+        "(if (and (vl-catch-all-apply 'lzp:toolbar-find"
+        " (list lzp:*tbname*))",
+        "         (vl-catch-all-apply 'lzp:toolbar-find"
+        " (list lzp:*tbsuite*)))",
+        '  (princ "\\nthe triangle runs %s.")' % COMMAND,
+        '  (princ "\\nunavailable here.  Type %s instead, or LAZBUTTON'
+        ' to retry.")' % COMMAND,
+        ")",
+        "(princ)",
+        "",
+    ]
+    return "\n".join(head) + bundle.rstrip("\n") + "\n" + "\n".join(foot)
 
 
 def _undated(text):
@@ -205,8 +170,9 @@ def main(argv):
     text = build()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8")
-    print("wrote editions/TYLERDRONE.lsp (%d lines, %d KB, %d files)"
-          % (len(text.splitlines()), len(text) // 1024, len(MEMBERS)))
+    print("wrote editions/TYLERDRONE.lsp (%d lines, %d KB) - LAZPASS plus "
+          "the %s button" % (len(text.splitlines()), len(text) // 1024,
+                             COMMAND))
     return 0
 
 

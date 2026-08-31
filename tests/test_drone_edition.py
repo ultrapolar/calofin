@@ -1,29 +1,24 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""editions/TYLERDRONE.lsp -- the drone trace as one download.
+"""editions/TYLERDRONE.lsp -- the whole build, plus one button.
 
-TYLERDRONESUITE is three commands out of three different files, and its
-screen button is drawn by a fourth.  So there is no single file in the
-tree that can be handed to someone who wants only the drone job:
-tydrn.lsp on its own has no button and refuses to run, correctly,
-because two of its three stages are missing.  This edition is the four
-files it really takes, in one APPLOAD.
+LAZPASS carried whole, with an orange triangle added beside the panel's
+hexagon: the hexagon opens the roster as ever, the triangle runs
+TYLERDRONESUITE on one click.
 
-What is worth testing is the two claims it makes that its members do
-not:
+What is worth testing is the two claims it makes that LAZPASS does not:
 
-  * IT IS COMPLETE.  All three stages are here, so the suite runs
-    instead of refusing -- which is the whole reason the file exists.
+  * BOTH BUTTONS, wherever it lands.  LAZPASS deliberately puts up ONE
+    external button -- inside the build the suite rides the panel like
+    every other tool -- and that rule is right and unchanged.  This
+    edition overrules it for one machine, and has to do so however the
+    session got there.
 
-  * IT PUTS UP ONE BUTTON, AND IT IS THE DRONE'S.  The panel comes
-    along because it owns the bitmap and toolbar machinery, but this
-    build is not about the panel, so the panel does not take a button.
-    LAZPANEL still types the same as ever.
-
-  * IT IS NOT THE LAZPASS BUILD.  cal:*build-loading* is what tells the
-    suite it arrived inside the whole toolkit and should NOT have a
-    button of its own.  This edition must not raise it, or it would
-    suppress the very button it is built around.
+  * IT STATES WHAT IT WANTS.  lzp:*suitebutton* AUTO decides by reading
+    cal:*build-loading*, which the bundle this file embeds has just
+    raised and nothing ever lowers.  Left to AUTO, this edition would
+    conclude it was inside LAZPASS and decline the very button it
+    exists for -- which is exactly what an earlier one did.
 
 Usage:  python3 tests/test_drone_edition.py
 """
@@ -38,6 +33,7 @@ from lispvm import VM, LispError, Sym  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 EDITION = os.path.join(REPO, 'editions', 'TYLERDRONE.lsp')
+BUNDLE = os.path.join(REPO, 'shared', 'LAZPASS.lsp')
 
 failures = []
 
@@ -62,11 +58,22 @@ EXTRA = r'''
 '''
 
 
-def load():
+def fresh():
     vm = VM()
     vm.loads(STUB)
     lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
     vm.loads(EXTRA)
+    return vm
+
+
+def load(before=None, setup=None):
+    """The edition, optionally onto a session that has already seen
+    something else."""
+    vm = fresh()
+    if before:
+        vm.load(before)
+    if setup:
+        vm.loads(setup)
     vm.load(EDITION)
     return vm
 
@@ -75,114 +82,87 @@ def said(vm):
     return "".join(str(x) for x in vm.printed)
 
 
-def test_the_edition_exists_and_loads():
-    print("\nthe edition is one file and it loads on its own")
-    check("editions/TYLERDRONE.lsp is there", os.path.exists(EDITION))
+def vis(vm):
+    """Toolbar -> the last visibility it was set to."""
+    return {str(p[0]): str(p[1])
+            for p in (vm.get(Sym('stub:*allvis*')) or [])}
+
+
+def commands(vm):
+    return {str(k)[2:].upper() for k in vm.globals if str(k).startswith('c:')}
+
+
+def test_both_buttons_go_up():
+    print("\nthe hexagon and the triangle, both on the strip")
     vm = load()
-    check("it says what it is on the way in",
-          "TYLERDRONE edition loaded" in said(vm))
+    check("both toolbars are shown",
+          vis(vm) == {'LazPanel': 'ON', 'TylerDroneSuite': 'ON'})
+    check("and it says so on the way in",
+          "both buttons are on screen" in said(vm))
+    macros = [str(a[-1]) for a in (vm.get(Sym('stub:*allargs*')) or [])]
+    check("one runs LAZPANEL", any('_LAZPANEL' in m for m in macros))
+    check("the other runs TYLERDRONESUITE",
+          any('_TYLERDRONESUITE' in m for m in macros))
 
 
-def test_every_stage_is_in_it():
-    print("\nall three stages are here, so the suite can actually run")
+def test_the_panel_behind_the_hexagon_actually_works():
+    print("\nthe hexagon opens a panel whose tools are really loaded")
     vm = load()
-    for cmd in ('c:tydrn', 'c:paddle', 'c:autodim', 'c:tylerdronesuite'):
-        check("%s is defined" % cmd.upper(), vm.get(Sym(cmd)) is not None)
-    check("LAZPANEL came too, for the machinery that draws the button",
-          vm.get(Sym('c:lazpanel')) is not None)
-    vm.printed = []
-    vm.run('c:TYLERDRONESUITE', [])
-    out = said(vm)
-    check("the suite runs rather than refusing",
-          "all three stages ran" in out and "not loaded here" not in out)
-    check("and it issues the three commands in order",
-          [[str(y) for y in c] for c in vm.commands if c]
-          == [['_.TYDRN'], ['_.PADDLE'], ['_.AUTODIM']])
+    cmds = commands(vm)
+    # the whole point of carrying LAZPASS rather than four files: a
+    # hexagon in front of a panel where ten buttons of a hundred and
+    # forty-two do anything is a panel that looks broken
+    check("the whole roster is here, not a handful (%d commands)"
+          % len(cmds), len(cmds) > 100)
+    for c in ('TYLERDRONESUITE', 'TYDRN', 'PADDLE', 'AUTODIM',
+              'POOL', 'SPA', 'LAZPANEL'):
+        check("%s is loaded" % c, c in cmds)
+    # lzp:loaded is the roster filtered to what this session really has,
+    # so roster == loaded means not one button on the panel is greyed
+    vm.loads('(setq t:*all* (lzp:commands)) (setq t:*live* (lzp:loaded))')
+    roster = {str(x).upper() for x in (vm.get(Sym('t:*all*')) or [])}
+    live = {str(x).upper() for x in (vm.get(Sym('t:*live*')) or [])}
+    check("and not one button on the panel is greyed out (%d of %d live)"
+          % (len(live), len(roster)), roster and roster == live)
 
 
-def test_one_button_and_it_is_the_drone_s():
-    print("\none thing on the strip, and it is the triangle")
+def test_it_states_what_it_wants_rather_than_deducing():
+    print("\nAUTO would read the flag its own bundle just raised")
     vm = load()
-    tbs = [str(x) for x in (vm.get(Sym('stub:*tbs*')) or [])]
-    check("exactly one toolbar", len(tbs) == 1)
-    check("and it is the suite's, not the panel's",
-          tbs == ['TylerDroneSuite'])
-    macro = str((vm.get(Sym('stub:*addargs*')) or ['', '', '', ''])[-1])
-    check("its button runs TYLERDRONESUITE", "_TYLERDRONESUITE" in macro)
-    check("the panel is off the strip on purpose, not by accident",
-          vm.get(Sym('lzp:*panelbutton*')) is None)
-    check("and LAZPANEL still types the same as ever",
-          vm.get(Sym('c:lazpanel')) is not None)
-
-
-def test_it_is_not_the_lazpass_build():
-    print("\nit must not raise the flag that suppresses its own button")
-    vm = load()
-    check("cal:*build-loading* is not raised",
-          vm.get(Sym('cal:*build-loading*')) is None)
-    # which is what leaves the suite wanting a button here
-    vm.loads('(setq t:*w* (lzp:suite-wanted-p))')
-    check("so the suite wants its button", vm.get(Sym('t:*w*')) is not None)
-
-
-def test_the_deferred_button_call_really_moved():
-    print("\nthe load-time button call is deferred, not duplicated")
-    src = open(EDITION).read()
-    # LAZPANEL puts its buttons up as it loads, which is too early here:
-    # the edition has not said which buttons it wants yet.  The build
-    # takes that call out and makes it again in the footer -- and the
-    # same call appears INDENTED inside c:LAZBUTTON, which must be left
-    # exactly as it was or the command is cut in half.
-    top = re.findall(r"^\(vl-catch-all-apply 'lzp:buttons-init nil\)$",
-                     src, re.M)
-    check("exactly one top-level call, the footer's", len(top) == 1)
-    check("it comes after the tunable is set",
-          src.index("(setq lzp:*panelbutton* nil)")
-          < src.rindex("(vl-catch-all-apply 'lzp:buttons-init nil)"))
-    check("c:LAZBUTTON's own call is untouched",
-          "(setq tbs (vl-catch-all-apply 'lzp:buttons-init nil))" in src)
-    check("and the build says where the moved one went",
-          "TAKEN OUT here" in src)
-
-
-def test_it_works_on_a_machine_that_has_already_loaded_lazpass():
-    print("\nthe reported bug: LAZPASS loaded earlier in the same session")
-    # cal:*build-loading* is raised by LAZPASS and never lowered, so it
-    # is still standing when anything loads after it -- and a startup
-    # suite raises it in every drawing.  The edition used to read that
-    # flag through lzp:*suitebutton* AUTO, decide it was inside the
-    # build, and put up NO button at all, having already taken the
-    # panel's away.  Both symptoms, exactly as reported.
-    bundle = os.path.join(REPO, 'shared', 'LAZPASS.lsp')
-    vm = VM()
-    vm.loads(STUB)
-    lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
-    vm.loads(EXTRA)
-    vm.load(bundle)
-    check("LAZPASS leaves its flag standing (this is the trap)",
+    check("the bundle did raise it (this is the trap)",
           vm.get(Sym('cal:*build-loading*')) is not None)
-    vm.load(EDITION)
-    shown = {}
-    for pair in (vm.get(Sym('stub:*allvis*')) or []):
-        shown[str(pair[0])] = str(pair[1])
-    check("the drone button IS on screen (it was not, before the fix)",
-          shown.get('TylerDroneSuite') == 'ON')
-    check("and the panel's is off, as this edition intends",
-          shown.get('LazPanel') == 'OFF')
-    check("because the edition STATES what it wants rather than deducing",
-          vm.get(Sym('lzp:*suitebutton*')) is not None
-          and vm.get(Sym('lzp:*panelbutton*')) is None)
+    check("but the suite button is stated, not deduced",
+          str(vm.get(Sym('lzp:*suitebutton*'))).lower() in ('t', 'true'))
+    check("and so is the panel's",
+          str(vm.get(Sym('lzp:*panelbutton*'))).lower() in ('t', 'true'))
+    # the proof: had it been left to AUTO, there would be no triangle
+    vm.loads("(setq lzp:*suitebutton* 'AUTO) (setq t:*w* (lzp:suite-wanted-p))")
+    check("AUTO really would have declined it here",
+          vm.get(Sym('t:*w*')) is None)
 
 
-def test_the_load_says_whether_the_button_went_up():
-    print("\na load that leaves nothing on screen must not do it quietly")
-    vm = load()
-    check("it confirms the button when it is there",
-          "the orange triangle is on screen" in said(vm))
-    # and names the fallback when the menu API is not there at all
-    src = open(EDITION).read()
-    check("and points at the typed command when it is not",
-          "Type TYLERDRONESUITE instead" in src)
+def test_it_lands_right_however_the_session_got_there():
+    print("\nboth buttons whatever was loaded before it")
+    cases = (("clean machine", None, None),
+             ("LAZPASS already loaded", BUNDLE, None),
+             ("an older edition left the panel hidden", None,
+              '(setq stub:*tbs* (list "LazPanel"))'
+              '(setq lzp:*panelbutton* nil)'))
+    for label, before, setup in cases:
+        got = vis(load(before, setup))
+        check("%s: both on screen" % label,
+              got.get('LazPanel') == 'ON'
+              and got.get('TylerDroneSuite') == 'ON')
+
+
+def test_lazpass_itself_is_left_alone():
+    print("\nLAZPASS still puts up ONE button - this changed nothing there")
+    vm = fresh()
+    vm.load(BUNDLE)
+    check("the bundle raises only the panel's",
+          vis(vm) == {'LazPanel': 'ON'})
+    check("its suite button is still left to AUTO",
+          str(vm.get(Sym('lzp:*suitebutton*'))).upper() == 'AUTO')
 
 
 def test_it_says_it_is_generated():
@@ -190,21 +170,22 @@ def test_it_says_it_is_generated():
     src = open(EDITION).read()
     check("DO NOT EDIT, and what to edit instead",
           "DO NOT EDIT" in src and "Edit the files under lisp/" in src)
-    check("it lists what it carries, with versions",
-          "tydrn.lsp" in src and "LAZPANEL.lsp" in src)
-    check("and points at LAZPASS for the whole toolkit",
-          "LAZPASS.lsp" in src)
+    check("it says what the two buttons do",
+          "HEXAGON" in src and "TRIANGLE" in src)
+    check("and that LAZPASS's own one-button rule is unchanged",
+          "LAZPASS itself puts up" in src)
+    check("the footer states both tunables",
+          "(setq lzp:*panelbutton* T)" in src
+          and "(setq lzp:*suitebutton* T)" in src)
 
 
 def main():
     print("TYLERDRONE edition tests")
-    for fn in (test_the_edition_exists_and_loads,
-               test_every_stage_is_in_it,
-               test_one_button_and_it_is_the_drone_s,
-               test_it_is_not_the_lazpass_build,
-               test_it_works_on_a_machine_that_has_already_loaded_lazpass,
-               test_the_load_says_whether_the_button_went_up,
-               test_the_deferred_button_call_really_moved,
+    for fn in (test_both_buttons_go_up,
+               test_the_panel_behind_the_hexagon_actually_works,
+               test_it_states_what_it_wants_rather_than_deducing,
+               test_it_lands_right_however_the_session_got_there,
+               test_lazpass_itself_is_left_alone,
                test_it_says_it_is_generated):
         try:
             fn()

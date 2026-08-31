@@ -243,20 +243,27 @@ the toolkit. GENERATED - edit the files under `lisp/` and rebuild.
 
 | File | Carries | Built by |
 | --- | --- | --- |
-| `TYLERDRONE.lsp` | `AutoDim.lsp`, `PADDLE.lsp`, `tydrn.lsp`, `LAZPANEL.lsp` | `python3 tools/build_drone_edition.py` |
+| `TYLERDRONE.lsp` | the whole `LAZPASS.lsp` build, plus a `TYLERDRONESUITE` button | `python3 tools/build_drone_edition.py` |
 
-`TYLERDRONE.lsp` is the drone trace in one APPLOAD: `TYDRN`,
-`TYLERDRONESUITE`, and the orange triangle button that runs the suite.
-It exists because no single file in the tree could do that job -
-`TYLERDRONESUITE` is three commands out of three different files and its
-button is drawn by a fourth, so `tydrn.lsp` on its own has no button and
-refuses to run (correctly - two of its three stages are missing), while
-`LAZPASS.lsp` is the opposite problem. `LAZPANEL` comes along because it
-owns the bitmap and toolbar machinery; the edition sets
-`lzp:*panelbutton*` nil so the ONLY thing on the toolbar strip is the
-drone button, and `LAZPANEL` still types the same as ever. It does not
-raise `cal:*build-loading*`, which is exactly what would suppress the
-button it is built around.
+`TYLERDRONE.lsp` is the whole build with one button added: the orange
+HEXAGON opens the LazPanel roster as ever, and an orange TRIANGLE beside
+it runs `TYLERDRONESUITE` on one click. It is for someone who runs the
+drone job all day and wants it under the cursor rather than two clicks
+into a dialog.
+
+`LAZPASS.lsp` itself is unchanged and still puts up ONE external button:
+inside the build the suite rides the panel like every other tool. This
+edition overrules that for one machine, and **states both tunables
+outright rather than leaving either to `AUTO`** - `AUTO` decides by
+reading `cal:*build-loading*`, which the bundle this file embeds has
+just raised and nothing ever lowers, so it would conclude it was inside
+LAZPASS and decline the very button the file exists for. An earlier
+edition did exactly that, and put up no button at all.
+
+It carries the whole build rather than the four files the suite strictly
+needs, because a hexagon in front of a panel where ten buttons of a
+hundred and forty-two do anything is a panel that looks broken: someone
+who wants the hexagon wants the tools behind it.
 
 ## Releases (`releases/`)
 
