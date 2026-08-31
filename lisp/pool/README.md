@@ -590,7 +590,8 @@ style** and the **SHALLOW end (right) style**, each one of:
 
 * **`Square`** — a plain wall (the rectangle end);
 * **`Grecian`** — corner cuts: `S` setback along the sides, `S1`
-  drop down the end, `S2` cut face (check);
+  drop down the end, `S2` cut face (a check, and what an `NA` `S` /
+  `S1` is filled in from — see [the cut face](#the-cut-face-s2));
 * **`ROman`** — `S1` corner stubs with an arc bulging `S` past the
   end line (`V` between the springs, `R` as a check, either derivable
   from the other);
@@ -662,8 +663,8 @@ just answer:
   then `T` top side, `S` corner-cut run along the side, `S1`
   corner-cut drop down the end, `V` end width, `S2` cut face — each
   `NA`-able. The letters close against the overalls (`S+T+S = B`,
-  `S1+V+S1 = A`), and an `NA` is derived from its partners. `S2` is a
-  check against √(S²+S1²). The derived edge set
+  `S1+V+S1 = A`), and an `NA` is derived from its partners — including
+  from `S2`, see [the cut face](#the-cut-face-s2). The derived edge set
   feeds the normal pipeline, so cross dims, fitting, hoppers and the
   report all work as usual, with `OV` report rows showing each sheet
   letter against the fitted shape. The guide shows the sheet's ties
@@ -683,6 +684,31 @@ The taped `S`/`S1` still appear in the report against what was drawn,
 and the routine says at the command line when holding a wall moved
 one of them. This usually makes the `S2` check pass too, since a cut
 face is itself a wall the crew could tape.
+
+### The cut face (S2)
+
+Which is the other half of the same point: `S2` runs **along the cut**,
+so a tape lies flat on it, while `S` and `S1` run out to a corner that
+isn't there. A crew that measures one number at a corner measures that
+one — so an `NA` `S`/`S1` is filled in **from the face** before any
+nominal proportion is reached for:
+
+| taped | `S` and `S1` come out |
+| --- | --- |
+| `S2`, neither leg | the 45 the cut is drawn as: `S = S1 = S2/√2` |
+| `S2` and one leg (or the wall that pins it) | the other closes the right triangle: `√(S2² − leg²)` |
+| both legs | unchanged — `S2` is a check again |
+| neither | the nominal split (`S = B/8`, `S1 = A/6`) |
+
+So **`B` 40', `A` 18', a 6'-0 face and `NA` for everything else** draws
+`S = S1 = 4'-3`, `T = 31'-6` and `V = 9'-6`. A derived leg is rounded
+to the nearest ¼" — the granularity a tape is read to, so the report
+quotes a number a crew can pull, and the `S2` row shows what that
+rounding cost (⅛" at worst). A face too short to hold a leg already
+pinned is ignored rather than square-rooted into nothing: the nominal
+split takes over and the `S2` report row shows how far out the sheet
+was. The same rule runs a **`MUtt`** pool's Grecian end, which is the
+same cut with the same letters.
 
 ### Grecian cross-dim detail (Simple / Center / Complex)
 
