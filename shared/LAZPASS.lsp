@@ -16350,7 +16350,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.2")
+(setq *abcdef-version* "v5.3")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -17197,7 +17197,7 @@
                    (vlax-get-property
                      (vlax-get-property
                        (vlax-get-property sheet "Cells") "Item" r c)
-                     "Text")))))
+                     "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (abcdef:cellstr res)))
 
 ;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
@@ -17339,8 +17339,8 @@
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)))
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)))
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
@@ -17350,16 +17350,16 @@
                      ;; widen columns so "Text" is never truncated to ####
                      (vl-catch-all-apply
                        '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")))
+                                     (vlax-get-property used "Columns") "AutoFit")) '())
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
-                                   (vlax-get-property used "Columns") "Count")))))
+                                   (vlax-get-property used "Columns") "Count"))) '()))
       (if (vl-catch-all-error-p err)
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
           ;; --- locate columns from the header row ------------------------
@@ -17392,11 +17392,11 @@
             (setq r (1+ r)))
           (abcdef:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wb)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object xl)))
+          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
+          (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object xl)) '())
           (reverse rows))))))
 
 ;;; --------------------------------------------------------------------------
@@ -19324,7 +19324,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.3")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -19686,7 +19686,7 @@
                    (vlax-get-property
                      (vlax-get-property
                        (vlax-get-property sheet "Cells") "Item" r c)
-                     "Text")))))
+                     "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (altabcdef:cellstr res)))
 
 ;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
@@ -19828,8 +19828,8 @@
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)))
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)))
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
@@ -19839,16 +19839,16 @@
                      ;; widen columns so "Text" is never truncated to ####
                      (vl-catch-all-apply
                        '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")))
+                                     (vlax-get-property used "Columns") "AutoFit")) '())
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
-                                   (vlax-get-property used "Columns") "Count")))))
+                                   (vlax-get-property used "Columns") "Count"))) '()))
       (if (vl-catch-all-error-p err)
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
           ;; --- locate columns from the header row ------------------------
@@ -19881,11 +19881,11 @@
             (setq r (1+ r)))
           (altabcdef:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wb)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object xl)))
+          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
+          (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object xl)) '())
           (reverse rows))))))
 
 ;;; --------------------------------------------------------------------------
@@ -41227,7 +41227,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.3")
+(setq *cchk-version* "v1.4")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -44297,7 +44297,7 @@
   (setq pre (entlast))
   (vl-catch-all-apply
     '(lambda ()
-       (command "_.-INSERT" *cchk-details-block* pt "1" "1" "0" ovval spval "")))
+       (command "_.-INSERT" *cchk-details-block* pt "1" "1" "0" ovval spval "")) '())
   (setvar "ATTDIA" oldattdia) (setvar "ATTREQ" oldattreq) (setvar "FILEDIA" oldfiledia)
   (setq new (if pre (entnext pre) (entnext)))
   (if (and new (entget new) (= "INSERT" (cdr (assoc 0 (entget new)))))
@@ -44325,7 +44325,7 @@
   ;; has something to find (skips cleanly if DASHED can't be loaded)
   (setq oldfiledia (getvar "FILEDIA"))
   (setvar "FILEDIA" 0)
-  (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")))
+  (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")) '())
   (setvar "FILEDIA" oldfiledia)
   (if (tblsearch "LTYPE" "DASHED")
     (progn
@@ -60619,7 +60619,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.6") ; printed on load and at command start
+(setq *paddle-version* "v1.7") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -60959,10 +60959,10 @@
      (vl-catch-all-apply
        '(lambda ()
           (command "_.-INSERT" (strcat tmpname "=" path))
-          (command)))   ; cancel the insert -- the definitions stay behind
+          (command)) '())   ; cancel the insert -- the definitions stay behind
      (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
      (vl-catch-all-apply ; drop the unused throwaway definition
-       '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))))
+       '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))) '())
      (if (tblsearch "BLOCK" name)
          T
          (paddle--make-fallback-block name size)))
@@ -69573,7 +69573,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.4") ; printed on load and at command start so a
+(setq *xft-version* "v1.5") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -69675,7 +69675,7 @@
     (if (not (vl-catch-all-error-p
                (vl-catch-all-apply
                  '(lambda ()
-                    (vla-getboundingbox (vlax-ename->vla-object en) 'mn 'mx)))))
+                    (vla-getboundingbox (vlax-ename->vla-object en) 'mn 'mx)) '())))
       (setq lo (if lo (mapcar 'min lo (vlax-safearray->list mn)) (vlax-safearray->list mn))
             hi (if hi (mapcar 'max hi (vlax-safearray->list mx)) (vlax-safearray->list mx)))
       ;; fallback - whatever points the entity carries itself
@@ -70074,7 +70074,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.2")
+(setq *xyplot-version* "v1.3")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -70329,7 +70329,7 @@
                    (vlax-get-property
                      (vlax-get-property
                        (vlax-get-property sheet "Cells") "Item" r c)
-                     "Text")))))
+                     "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (xyp:cellstr res)))
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
@@ -70476,8 +70476,8 @@
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)))
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)))
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
@@ -70487,16 +70487,16 @@
                      ;; widen columns so "Text" is never truncated to ####
                      (vl-catch-all-apply
                        '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")))
+                                     (vlax-get-property used "Columns") "AutoFit")) '())
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
-                                   (vlax-get-property used "Columns") "Count")))))
+                                   (vlax-get-property used "Columns") "Count"))) '()))
       (if (vl-catch-all-error-p err)
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
           ;; --- locate columns from the header row ------------------------
@@ -70527,11 +70527,11 @@
             (setq r (1+ r)))
           (xyp:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wb)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object xl)))
+          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
+          (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object xl)) '())
           (reverse rows))))))
 
 ;; Pick the reader for .csv, else Excel COM automation.

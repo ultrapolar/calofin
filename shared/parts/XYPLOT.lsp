@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.2")
+(setq *xyplot-version* "v1.3")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -313,7 +313,7 @@
                    (vlax-get-property
                      (vlax-get-property
                        (vlax-get-property sheet "Cells") "Item" r c)
-                     "Text")))))
+                     "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (xyp:cellstr res)))
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
@@ -460,8 +460,8 @@
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)))
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)))
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
@@ -471,16 +471,16 @@
                      ;; widen columns so "Text" is never truncated to ####
                      (vl-catch-all-apply
                        '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")))
+                                     (vlax-get-property used "Columns") "AutoFit")) '())
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
-                                   (vlax-get-property used "Columns") "Count")))))
+                                   (vlax-get-property used "Columns") "Count"))) '()))
       (if (vl-catch-all-error-p err)
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
           ;; --- locate columns from the header row ------------------------
@@ -511,11 +511,11 @@
             (setq r (1+ r)))
           (xyp:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)))
-          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit"))))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wb)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)))
-          (vl-catch-all-apply '(lambda () (vlax-release-object xl)))
+          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
+          (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
+          (vl-catch-all-apply '(lambda () (vlax-release-object xl)) '())
           (reverse rows))))))
 
 ;; Pick the reader for .csv, else Excel COM automation.

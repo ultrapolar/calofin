@@ -28,7 +28,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.4") ; printed on load and at command start so a
+(setq *xft-version* "v1.5") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -143,7 +143,7 @@
     (if (not (vl-catch-all-error-p
                (vl-catch-all-apply
                  '(lambda ()
-                    (vla-getboundingbox (vlax-ename->vla-object en) 'mn 'mx)))))
+                    (vla-getboundingbox (vlax-ename->vla-object en) 'mn 'mx)) '())))
       (setq lo (if lo (mapcar 'min lo (vlax-safearray->list mn)) (vlax-safearray->list mn))
             hi (if hi (mapcar 'max hi (vlax-safearray->list mx)) (vlax-safearray->list mx)))
       ;; fallback - whatever points the entity carries itself

@@ -213,7 +213,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.3")
+(setq *cchk-version* "v1.4")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -3283,7 +3283,7 @@
   (setq pre (entlast))
   (vl-catch-all-apply
     '(lambda ()
-       (command "_.-INSERT" *cchk-details-block* pt "1" "1" "0" ovval spval "")))
+       (command "_.-INSERT" *cchk-details-block* pt "1" "1" "0" ovval spval "")) '())
   (setvar "ATTDIA" oldattdia) (setvar "ATTREQ" oldattreq) (setvar "FILEDIA" oldfiledia)
   (setq new (if pre (entnext pre) (entnext)))
   (if (and new (entget new) (= "INSERT" (cdr (assoc 0 (entget new)))))
@@ -3311,7 +3311,7 @@
   ;; has something to find (skips cleanly if DASHED can't be loaded)
   (setq oldfiledia (getvar "FILEDIA"))
   (setvar "FILEDIA" 0)
-  (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")))
+  (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")) '())
   (setvar "FILEDIA" oldfiledia)
   (if (tblsearch "LTYPE" "DASHED")
     (progn
