@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.0")
+(setq *lazpanel-version* "v3.1")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -189,6 +189,7 @@
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("PADDLE"           "Paddle pads")
     ("PERPPTS"          "Perpendicular points")
+    ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
@@ -332,6 +333,7 @@
       "LINCHECK"
       "LINTXTCHK"
       "CCPRECHECK"
+      "POINTRENAMER"
       )
     )
      ("Layout"
@@ -374,6 +376,7 @@
       "XYPLOT"
       "ABFIND"
       "ABMOVE"
+      "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
