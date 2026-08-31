@@ -298,8 +298,8 @@ vm = fresh()
 vm.sysvars['DIMTXT'] = 0.125
 vm.sysvars['DIMSCALE'] = 48                      # 2 x 0.125 x 48 = 12" < 2ft
 ents = draw(vm, FLIGHT)
-# the plan pick, then ad:begin's read of the drawing's dims
-vm.run('c:AUTODIM', [ents])
+# no pickfirst, the plan pick, then ad:begin's read of the drawing's dims
+vm.run('c:AUTODIM', [None, ents])
 placed = dims(vm)
 assert len(placed) == 4, placed
 assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
@@ -326,7 +326,7 @@ assert not [c for c in vm.commands if c[0] == '_.DIMALIGNED']
 print('   the plan steps were skipped, as they are about a plan')
 
 # and it is idempotent, like everything else the tool places
-vm.run('c:AUTODIM', [ents])
+vm.run('c:AUTODIM', [None, ents])
 assert len(dims(vm)) == 4
 print('   a second run over the same flight adds nothing')
 
@@ -347,7 +347,7 @@ def route(segs, answers=('Yes',)):
     vm = fresh()
     ents = draw(vm, segs)
     vm.loads(TRACE)
-    vm.run('c:AUTODIM', [ents] + list(answers))
+    vm.run('c:AUTODIM', [None, ents] + list(answers))
     return [str(x) for x in reversed(vm.globals['ran'])]
 
 
@@ -646,7 +646,7 @@ vm = fresh()
 vm.sysvars['DIMTXT'] = 0.125
 vm.sysvars['DIMSCALE'] = 48
 ents = draw(vm, FLIGHT)
-vm.run('c:AUTODIMSIDEPOV', [ents])
+vm.run('c:AUTODIMSIDEPOV', [None, ents])
 placed = dims(vm)
 assert len(placed) == 4, placed
 assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
@@ -655,6 +655,18 @@ assert all(d[0] == 'STANDARD INCHES' for d in placed), placed
 assert [d[3][0] for d in placed] == [-24.0, -24.0, -12.0, -48.0], placed
 assert vm.layer_of(vm.entities[-1]) == 'DIMENSION'
 print('   dims on the high side, one per step, overall furthest out')
+
+
+print('== pickfirst: a selection made before AUTODIM is used as-is ==')
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIM', [ents])                # only the "_I" probe answered
+assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+assert len(dims(vm)) == 4, dims(vm)
+print('   the probe took it; the step-1 highlight was never asked')
 
 
 print('ALL AUTODIM CHECKS PASSED')

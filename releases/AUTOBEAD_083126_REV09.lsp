@@ -49,7 +49,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -505,8 +505,13 @@
 
 (defun c:AUTOBEAD ( / ss dirpt stage done ans sidewalls treadpts p )
   (autobead-ensure-layer *autobead-layer*)
+  ;; a pickfirst selection skips straight to the direction question;
+  ;; the probe sits OUTSIDE the stage loop so Back at that question
+  ;; still lands on the interactive selection, never a re-probe
+  (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
+                             (cons 8 *autobead-filter*))))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
-  (setq stage 1 done nil)
+  (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
       ((= stage 1)

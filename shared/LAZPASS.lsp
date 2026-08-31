@@ -29609,7 +29609,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v0.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -30061,8 +30061,13 @@
 
 (defun c:AUTOBEAD ( / ss dirpt stage done ans sidewalls treadpts p )
   (autobead-ensure-layer *autobead-layer*)
+  ;; a pickfirst selection skips straight to the direction question;
+  ;; the probe sits OUTSIDE the stage loop so Back at that question
+  ;; still lands on the interactive selection, never a re-probe
+  (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
+                             (cons 8 *autobead-filter*))))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
-  (setq stage 1 done nil)
+  (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
       ((= stage 1)
@@ -30541,7 +30546,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.3")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -31691,14 +31696,18 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
-                  "\nHighlight everything that makes up the plan (walls"
-                  " etc.), then press Enter.  Only what you highlight is"
-                  " dimensioned and used to find the perimeter."
-                  "\nHighlight a flight of steps drawn in side view"
-                  " instead and it is recognised as one: the depth of"
-                  " every step gets dimensioned rather than a plan."))
-  (setq plan (ssget (ad:geomfilter)))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq plan (ssget "_I" (ad:geomfilter)))
+  (if (null plan)
+    (progn
+      (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
+                      "\nHighlight everything that makes up the plan (walls"
+                      " etc.), then press Enter.  Only what you highlight is"
+                      " dimensioned and used to find the perimeter."
+                      "\nHighlight a flight of steps drawn in side view"
+                      " instead and it is recognised as one: the depth of"
+                      " every step gets dimensioned rather than a plan."))
+      (setq plan (ssget (ad:geomfilter)))))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -31798,12 +31807,16 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side view:"
-                  " every riser gets a vertical dim beside its step, plus"
-                  " the overall height."
-                  "\nHighlight the side view of the steps, then press"
-                  " Enter."))
-  (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
+                      " view: every riser gets a vertical dim beside its"
+                      " step, plus the overall height."
+                      "\nHighlight the side view of the steps, then press"
+                      " Enter."))
+      (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn

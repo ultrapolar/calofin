@@ -150,7 +150,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.3")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1300,14 +1300,18 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
-                  "\nHighlight everything that makes up the plan (walls"
-                  " etc.), then press Enter.  Only what you highlight is"
-                  " dimensioned and used to find the perimeter."
-                  "\nHighlight a flight of steps drawn in side view"
-                  " instead and it is recognised as one: the depth of"
-                  " every step gets dimensioned rather than a plan."))
-  (setq plan (ssget (ad:geomfilter)))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq plan (ssget "_I" (ad:geomfilter)))
+  (if (null plan)
+    (progn
+      (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
+                      "\nHighlight everything that makes up the plan (walls"
+                      " etc.), then press Enter.  Only what you highlight is"
+                      " dimensioned and used to find the perimeter."
+                      "\nHighlight a flight of steps drawn in side view"
+                      " instead and it is recognised as one: the depth of"
+                      " every step gets dimensioned rather than a plan."))
+      (setq plan (ssget (ad:geomfilter)))))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -1407,12 +1411,16 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
-  (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side view:"
-                  " every riser gets a vertical dim beside its step, plus"
-                  " the overall height."
-                  "\nHighlight the side view of the steps, then press"
-                  " Enter."))
-  (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
+                      " view: every riser gets a vertical dim beside its"
+                      " step, plus the overall height."
+                      "\nHighlight the side view of the steps, then press"
+                      " Enter."))
+      (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn
