@@ -97,6 +97,8 @@ TOOLS = {
         'src': 'lisp/custblock/CUSTBLOCK.lsp',
         'swap': {
             'cbk:askdist': 'cal:askdist',
+            'cbk:askkw': 'cal:askkw',
+            'cbk:askyn': 'cal:askyn',
             'cbk:syssave': 'cal:syssave',
             'cbk:sysrestore': 'cal:sysrestore',
             'cbk:ensure-layer': 'cal:ensure-layer',

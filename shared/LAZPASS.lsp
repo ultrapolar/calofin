@@ -43708,6 +43708,10 @@
 ;;;    * Back (or Undo, or B) at any question after the first re-asks
 ;;;      the one before it.  Nothing is drawn until all four answers
 ;;;      are in, so backing out costs nothing.
+;;;    * A drawn block's three sizes are remembered for the session:
+;;;      the next block - same run via "Place another block?", or a
+;;;      later CUSTBLOCK - offers them as <defaults> that Enter
+;;;      accepts.  Only ever defaults: nothing is answered unasked.
 ;;;    * Length, width and height are all required and all must be
 ;;;      positive -- a zero-thickness block has no pictorial to draw.
 ;;;      Either type the number or pick the distance in the drawing;
@@ -43726,7 +43730,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.1")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -43736,8 +43740,29 @@
 (setq cbk:*dimcolor* 141)
 (setq cbk:*style*    "STANDARD INCHES")
 (setq cbk:*dimoff*   12.0)              ; dim line stand-off, units
+(setq cbk:*last-len* nil)               ; the previous block's sizes -
+(setq cbk:*last-wid* nil)               ; session memory, offered as
+(setq cbk:*last-hgt* nil)               ; <defaults> that Enter accepts
 
 ;;; -------------------- helpers -----------------------------------------
+
+;; A size question with a session-remembered default: asked cold (Enter
+;; rejected) until a block has been drawn, then later runs offer last
+;; time's answer.  A wrapper around cbk:askdist rather than a change to
+;; it - the mirror swaps that helper for the library's, so it must not
+;; grow a behavior of its own (STANDARDS section 7.4).
+(defun cbk:asksize (msg last back / v)
+  (if (null last)
+    (cal:askdist 'REQ msg nil back)
+    (progn
+      ;; initget 6: Enter allowed (it takes the default), zero and
+      ;; negative still refused - a default never loosens validity
+      (if back (initget 6 "Back Undo") (initget 6))
+      (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
+                               " <" (rtos last) ">: ")))
+      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+            ((null v) last)
+            (t v)))))
 
 ;; Where the block goes -- its front bottom left corner.  Picked with
 ;; the user's own object snaps still live, and backed out of like any
@@ -43845,7 +43870,7 @@
 (defun c:CUSTBLOCK ( / *error* olderr odim
                        step len wid hgt base v d
                        pa pb pc pd qb qc qd
-                       havestyle undo-open off made )
+                       havestyle undo-open off made go )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -43864,113 +43889,129 @@
       (princ (strcat "\nCUSTBLOCK error: " m)))
     (princ))
 
-  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
-  (setq odim (getvar "DIMSTYLE"))
+  (setq go T)
+  (while go
+    ;; saved each pass on purpose: sysrestore clears the snapshot, so
+    ;; the next block around the loop re-snapshots the same settings
+    (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+    (setq odim (getvar "DIMSTYLE"))
 
-  ;; -- 1. the four answers.  Back re-asks the question before; the
-  ;;       first question never offers it, and nothing is drawn until
-  ;;       all four are in, so a run can be walked backwards for free
-  (setq step 1)
-  (while (< step 5)
-    (cond
-      ((= step 1)
-         (setq len  (cal:askdist 'REQ "Block length" nil nil)
-               step 2))
-      ((= step 2)
-         (setq v (cal:askdist 'REQ "Block width" nil T))
-         (if (eq v 'CAL-BACK)
-           (progn (princ "\nStepping back one dimension.")
-                  (setq step 1))
-           (setq wid v step 3)))
-      ((= step 3)
-         (setq v (cal:askdist 'REQ "Block height" nil T))
-         (if (eq v 'CAL-BACK)
-           (progn (princ "\nStepping back one dimension.")
-                  (setq step 2))
-           (setq hgt v step 4)))
-      ((= step 4)
-         (setq v (cbk:askbase T))
-         (if (eq v 'CAL-BACK)
-           (progn (princ "\nStepping back one dimension.")
-                  (setq step 3))
-           (setq base v step 5)))))
+    ;; -- 1. the four answers.  Back re-asks the question before; the
+    ;;       first question never offers it, and nothing is drawn until
+    ;;       all four are in, so a run can be walked backwards for free.
+    ;;       Sizes remembered from an earlier block come back as
+    ;;       <defaults> that Enter accepts
+    (setq step 1)
+    (while (< step 5)
+      (cond
+        ((= step 1)
+           (setq len  (cbk:asksize "Block length" cbk:*last-len* nil)
+                 step 2))
+        ((= step 2)
+           (setq v (cbk:asksize "Block width" cbk:*last-wid* T))
+           (if (eq v 'CAL-BACK)
+             (progn (princ "\nStepping back one dimension.")
+                    (setq step 1))
+             (setq wid v step 3)))
+        ((= step 3)
+           (setq v (cbk:asksize "Block height" cbk:*last-hgt* T))
+           (if (eq v 'CAL-BACK)
+             (progn (princ "\nStepping back one dimension.")
+                    (setq step 2))
+             (setq hgt v step 4)))
+        ((= step 4)
+           (setq v (cbk:askbase T))
+           (if (eq v 'CAL-BACK)
+             (progn (princ "\nStepping back one dimension.")
+                    (setq step 3))
+             (setq base v step 5)))))
 
-  ;; -- 2. the eight corners.  The block is a pictorial: the back face
-  ;;       is the front face slid up-right at 45 degrees, and it is slid
-  ;;       by the TRUE length over root 2 on each axis, so the receding
-  ;;       edge measures the length that was typed
-  (setq d  (/ len (sqrt 2.0))
-        pa (cbk:pt base 0.0 0.0)              ; front face, anticlockwise
-        pb (cbk:pt base wid 0.0)              ; from the base point
-        pc (cbk:pt base wid hgt)
-        pd (cbk:pt base 0.0 hgt)
-        qb (cbk:pt base (+ wid d) d)          ; back face, three of the
-        qc (cbk:pt base (+ wid d) (+ hgt d))  ; four -- its bottom left
-        qd (cbk:pt base d (+ hgt d)))         ; corner is never reached
+    ;; -- 2. the eight corners.  The block is a pictorial: the back face
+    ;;       is the front face slid up-right at 45 degrees, and it is slid
+    ;;       by the TRUE length over root 2 on each axis, so the receding
+    ;;       edge measures the length that was typed
+    (setq d  (/ len (sqrt 2.0))
+          pa (cbk:pt base 0.0 0.0)              ; front face, anticlockwise
+          pb (cbk:pt base wid 0.0)              ; from the base point
+          pc (cbk:pt base wid hgt)
+          pd (cbk:pt base 0.0 hgt)
+          qb (cbk:pt base (+ wid d) d)          ; back face, three of the
+          qc (cbk:pt base (+ wid d) (+ hgt d))  ; four -- its bottom left
+          qd (cbk:pt base d (+ hgt d)))         ; corner is never reached
 
-  ;; -- 3. draw it, all of it inside one undo group
-  (setvar "CMDECHO" 0)
-  (setvar "OSMODE"  0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open t)
+    ;; -- 3. draw it, all of it inside one undo group
+    (setvar "CMDECHO" 0)
+    (setvar "OSMODE"  0)
+    (command "_.UNDO" "_Begin")
+    (setq undo-open t)
 
-  (cal:ensure-layer cbk:*layer* cbk:*laycolor*)
-  ;; the front face, then the two faces the viewpoint shows.  The back
-  ;; bottom left corner is a corner of the block, but all three edges
-  ;; that meet there are hidden behind it -- so it is not even computed
-  ;; above, and no line below reaches it.  Drawing those three is what
-  ;; would turn a solid into a wire cage
-  (cbk:line pd pc)                            ; front face
-  (cbk:line pc pb)
-  (cbk:line pb pa)
-  (cbk:line pa pd)
-  (cbk:line pd qd)                            ; top face, back edge and
-  (cbk:line qd qc)                            ; the two receding edges
-  (cbk:line pc qc)
-  (cbk:line qc qb)                            ; right face, back edge
-  (cbk:line pb qb)                            ; and its receding edge
+    (cal:ensure-layer cbk:*layer* cbk:*laycolor*)
+    ;; the front face, then the two faces the viewpoint shows.  The back
+    ;; bottom left corner is a corner of the block, but all three edges
+    ;; that meet there are hidden behind it -- so it is not even computed
+    ;; above, and no line below reaches it.  Drawing those three is what
+    ;; would turn a solid into a wire cage
+    (cbk:line pd pc)                            ; front face
+    (cbk:line pc pb)
+    (cbk:line pb pa)
+    (cbk:line pa pd)
+    (cbk:line pd qd)                            ; top face, back edge and
+    (cbk:line qd qc)                            ; the two receding edges
+    (cbk:line pc qc)
+    (cbk:line qc qb)                            ; right face, back edge
+    (cbk:line pb qb)                            ; and its receding edge
 
-  ;; -- 4. the three dimensions, in their own layer and style
-  (setvar "CLAYER" (cal:ensure-layer cbk:*dimlayer* cbk:*dimcolor*))
-  (setq havestyle (cbk:setstyle cbk:*style*))
-  (if (not havestyle)
-    (princ (strcat "\n** This drawing has no \"" cbk:*style*
-                   "\" dimension style -- dims drawn in \""
-                   (getvar "DIMSTYLE")
-                   "\" instead.  Create the style (or start from the"
-                   " standard template) and re-run.")))
+    ;; -- 4. the three dimensions, in their own layer and style
+    (setvar "CLAYER" (cal:ensure-layer cbk:*dimlayer* cbk:*dimcolor*))
+    (setq havestyle (cbk:setstyle cbk:*style*))
+    (if (not havestyle)
+      (princ (strcat "\n** This drawing has no \"" cbk:*style*
+                     "\" dimension style -- dims drawn in \""
+                     (getvar "DIMSTYLE")
+                     "\" instead.  Create the style (or start from the"
+                     " standard template) and re-run.")))
 
-  (setq off  cbk:*dimoff*
-        made 0)
-  ;; the length, aligned along the top-left receding edge and pushed
-  ;; out on the far side of it, away from the top face
-  (if (cbk:dim 'ALIGNED pd qd
-               (cbk:pt base (- (/ d 2.0) (/ off (sqrt 2.0)))
-                            (+ hgt (/ d 2.0) (/ off (sqrt 2.0))))
-               havestyle)
-    (setq made (1+ made)))
-  ;; the height, up the left of the front face
-  (if (cbk:dim 'VERT pa pd (cbk:pt base (- off) (/ hgt 2.0)) havestyle)
-    (setq made (1+ made)))
-  ;; the width, along under it
-  (if (cbk:dim 'HORIZ pb pa (cbk:pt base (/ wid 2.0) (- off)) havestyle)
-    (setq made (1+ made)))
+    (setq off  cbk:*dimoff*
+          made 0)
+    ;; the length, aligned along the top-left receding edge and pushed
+    ;; out on the far side of it, away from the top face
+    (if (cbk:dim 'ALIGNED pd qd
+                 (cbk:pt base (- (/ d 2.0) (/ off (sqrt 2.0)))
+                              (+ hgt (/ d 2.0) (/ off (sqrt 2.0))))
+                 havestyle)
+      (setq made (1+ made)))
+    ;; the height, up the left of the front face
+    (if (cbk:dim 'VERT pa pd (cbk:pt base (- off) (/ hgt 2.0)) havestyle)
+      (setq made (1+ made)))
+    ;; the width, along under it
+    (if (cbk:dim 'HORIZ pb pa (cbk:pt base (/ wid 2.0) (- off)) havestyle)
+      (setq made (1+ made)))
 
-  ;; -- 5. put the drawing back the way it was
-  (cbk:restyle odim)
-  (command "_.UNDO" "_End")
-  (setq undo-open nil)
-  (cal:sysrestore)
+    ;; -- 5. put the drawing back the way it was
+    (cbk:restyle odim)
+    (command "_.UNDO" "_End")
+    (setq undo-open nil)
+    (cal:sysrestore)
+
+    (princ (strcat "\nCUSTBLOCK: " (cbk:num len) " x " (cbk:num wid)
+                   " x " (cbk:num hgt) " block drawn on layer "
+                   cbk:*layer* " -- 9 lines and " (itoa made)
+                   " dimension" (if (= made 1) "" "s") " on layer "
+                   cbk:*dimlayer*
+                   (if havestyle
+                     (strcat " in style " cbk:*style* ".")
+                     " (current style).")))
+
+    ;; the sizes survive as the next block's <defaults> - only ever
+    ;; defaults the user Enters through, never answers by themselves,
+    ;; so the section-7 store rules stay out of play
+    (setq cbk:*last-len* len
+          cbk:*last-wid* wid
+          cbk:*last-hgt* hgt)
+    (setq v  (cal:askyn "Place another block?" "No" nil)
+          go (eq v T)))
+
   (setq *error* olderr)
-
-  (princ (strcat "\nCUSTBLOCK: " (cbk:num len) " x " (cbk:num wid)
-                 " x " (cbk:num hgt) " block drawn on layer "
-                 cbk:*layer* " -- 9 lines and " (itoa made)
-                 " dimension" (if (= made 1) "" "s") " on layer "
-                 cbk:*dimlayer*
-                 (if havestyle
-                   (strcat " in style " cbk:*style* ".")
-                   " (current style).")))
   (princ))
 
 (defun c:CUSTBLOCKVER ()

@@ -104,7 +104,7 @@ SAMPLE = [(PD, PC), (PC, PB), (PB, PA), (PA, PD),      # front face
 
 print("== B1. 84 x 36 x 4 at the origin is the sample sheet's block ==")
 vm = newvm()
-run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0]], "B1")
+run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B1")
 
 lines = ents(vm, 'LINE')
 assert len(lines) == 9, len(lines)
@@ -179,7 +179,7 @@ print("   a single U takes the block and its dims away together")
 
 print("== B7. the base point is the front bottom left corner ==")
 vm = newvm()
-run(vm, [84.0, 36.0, 4.0, [100.0, 250.0, 0.0]], "B7")
+run(vm, [84.0, 36.0, 4.0, [100.0, 250.0, 0.0], None], "B7")
 moved = want([((a[0] + 100, a[1] + 250), (b[0] + 100, b[1] + 250))
               for a, b in SAMPLE])
 assert edges(vm) == moved, sorted(edges(vm) ^ moved)
@@ -188,14 +188,14 @@ print("   the whole block moves with it, dims and all")
 
 print("== B8. Enter at the base point takes the origin ==")
 vm = newvm()
-run(vm, [84.0, 36.0, 4.0, None], "B8")
+run(vm, [84.0, 36.0, 4.0, None, None], "B8")
 assert edges(vm) == want(SAMPLE), "Enter drew it at 0,0"
 print("   Enter = 0,0, as the prompt says")
 
 
 print("== B9. an elevated UCS point carries its elevation ==")
 vm = newvm()
-run(vm, [10.0, 5.0, 2.0, [0.0, 0.0, 7.5]], "B9")
+run(vm, [10.0, 5.0, 2.0, [0.0, 0.0, 7.5], None], "B9")
 assert all(d[10][2] == 7.5 and d[11][2] == 7.5 for d in ents(vm, 'LINE')), \
     "the block is drawn at the elevation it was based at"
 print("   every corner sits at the base point's Z")
@@ -203,19 +203,20 @@ print("   every corner sits at the base point's Z")
 
 print("== B10. Back re-asks the question before ==")
 vm = newvm()
-run(vm, [84.0, "Back", 60.0, 36.0, 4.0, [0.0, 0.0, 0.0]], "B10-width")
+run(vm, [84.0, "Back", 60.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B10-width")
 assert round(ents(vm, 'DIMENSION')[0][42], 6) == 60.0, "the length was re-asked"
 prompts = [p[0] for p in vm.prompts]
 assert prompts[:3] == ["\nBlock length: ", "\nBlock width [Back]: ",
                        "\nBlock length: "], prompts
-assert prompts[-1] == "\nInsertion base point [Back] <0,0>: ", prompts[-1]
+assert prompts[-2] == "\nInsertion base point [Back] <0,0>: ", prompts[-2]
+assert prompts[-1] == "\nPlace another block? [Yes/No] <No>: ", prompts[-1]
 print("   Back at the width goes back to the length")
 
 vm = newvm()
-run(vm, [84.0, 36.0, "Back", 30.0, 4.0, [0.0, 0.0, 0.0]], "B10-height")
+run(vm, [84.0, 36.0, "Back", 30.0, 4.0, [0.0, 0.0, 0.0], None], "B10-height")
 assert round(ents(vm, 'DIMENSION')[2][42], 6) == 30.0, "the width was re-asked"
 vm = newvm()
-run(vm, [84.0, 36.0, 4.0, "Back", 9.0, [0.0, 0.0, 0.0]], "B10-base")
+run(vm, [84.0, 36.0, 4.0, "Back", 9.0, [0.0, 0.0, 0.0], None], "B10-base")
 assert round(ents(vm, 'DIMENSION')[1][42], 6) == 9.0, "the height was re-asked"
 print("   and at the height, and at the base point")
 
@@ -233,7 +234,7 @@ print("   nothing to go back to, so it is not offered")
 
 print("== B12. Undo is accepted wherever Back is, unlisted ==")
 vm = newvm()
-run(vm, [84.0, "Undo", 60.0, 36.0, 4.0, [0.0, 0.0, 0.0]], "B12")
+run(vm, [84.0, "Undo", 60.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B12")
 assert round(ents(vm, 'DIMENSION')[0][42], 6) == 60.0
 assert "Undo" not in vm.prompts[1][0], vm.prompts[1]
 print("   Undo backs out; the bracket still says [Back]")
@@ -241,7 +242,7 @@ print("   Undo backs out; the bracket still says [Back]")
 
 print("== B13. a missing dimension style is reported, not invented ==")
 vm = newvm(styles=())
-run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0]], "B13")
+run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B13")
 assert "STANDARD INCHES" not in vm.tables['DIMSTYLE'], "no style was created"
 assert all(d[3] == "STANDARD" for d in ents(vm, 'DIMENSION')), \
     "drawn in whatever style was current"
@@ -258,7 +259,7 @@ vm.recdata[e] = [Dot(0, 'LAYER'), Dot(2, 'COVER'), Dot(70, 1), Dot(62, -7),
                  Dot(6, 'Continuous')]
 vm.tables['LAYER'].add('COVER')
 vm.tablerecs.setdefault('LAYER', {})['COVER'] = e
-run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0]], "B14")
+run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B14")
 rec = {g.a: g.b for g in vm.recdata[e] if isinstance(g, Dot)}
 assert rec[70] == 0 and rec[62] == 7, rec
 assert len(ents(vm, 'LINE')) == 9
@@ -268,7 +269,7 @@ print("   thawed, switched back on, and the user is told")
 
 print("== B15. a block that is not the sample still closes on itself ==")
 vm = newvm()
-run(vm, [12.0, 12.0, 12.0, [0.0, 0.0, 0.0]], "B15")
+run(vm, [12.0, 12.0, 12.0, [0.0, 0.0, 0.0], None], "B15")
 assert len(ents(vm, 'LINE')) == 9
 assert [round(d[42], 6) for d in ents(vm, 'DIMENSION')] == [12.0, 12.0, 12.0]
 d12 = 12.0 / math.sqrt(2.0)
@@ -297,7 +298,7 @@ print("   a block has to have all three sizes")
 
 print("== B17. the report names the block and where it went ==")
 vm = newvm()
-run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0]], "B17")
+run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B17")
 said = "".join(vm.printed)
 assert "84" in said and "36" in said and "4" in said, said
 assert "COVER" in said and "DIMENSION" in said, said
@@ -310,6 +311,34 @@ vm = newvm()
 vm.run('c:CUSTBLOCKVER', [])
 assert any("CUSTBLOCK v" in s for s in vm.printed), vm.printed
 print("   ok")
+
+print("== B19. a later run offers the last block's sizes as defaults ==")
+vm = newvm()
+run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0], None], "B19-first")
+run(vm, [None, None, None, None, None], "B19-rerun")
+dims = ents(vm, 'DIMENSION')
+assert [round(d[42], 6) for d in dims[3:]] == [84.0, 4.0, 36.0], \
+    [d[42] for d in dims]
+prompts = [p[0] for p in vm.prompts]
+assert prompts[0].startswith("\nBlock length <84") \
+    and prompts[0].endswith(">: "), prompts[0]
+assert prompts[1].startswith("\nBlock width [Back] <36"), prompts[1]
+assert prompts[2].startswith("\nBlock height [Back] <4"), prompts[2]
+print("   Enter-Enter-Enter reproduces the block; defaults in the prompts")
+
+
+print("== B20. Yes places another block without retyping the command ==")
+vm = newvm()
+run(vm, [84.0, 36.0, 4.0, [0.0, 0.0, 0.0],
+         "Yes", None, None, None, [200.0, 0.0, 0.0], None], "B20")
+assert len(ents(vm, 'LINE')) == 18, len(ents(vm, 'LINE'))
+assert len(ents(vm, 'DIMENSION')) == 6, len(ents(vm, 'DIMENSION'))
+undo = [c[1] for c in vm.commands if c and c[0] == '_.UNDO']
+assert undo == ["_Begin", "_End", "_Begin", "_End"], undo
+assert vm.sysvars['CLAYER'] == "POOL", vm.sysvars['CLAYER']
+assert vm.sysvars['DIMSTYLE'] == "STANDARD", vm.sysvars['DIMSTYLE']
+print("   two blocks, an undo group each, state restored")
+
 
 tier = os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'
 print(f"\nALL CUSTBLOCK RUNTIME TESTS PASSED  [{tier}]")
