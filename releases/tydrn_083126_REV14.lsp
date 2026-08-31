@@ -37,7 +37,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -323,9 +323,35 @@
 ;;; reasoning about its ABHD handoff: a stage that went well should not
 ;;; have to be undone to get at one that did not.
 ;;;
+;;; HOW A STAGE IS REACHED, and why it is not (command)/(vl-cmdf).
+;;; The command processor DOES NOT KNOW AUTOLISP COMMANDS.  Typing
+;;; TYDRN works only because the command line, failing to recognise the
+;;; name, falls back to trying c:TYDRN -- and (command)/(vl-cmdf) skip
+;;; that fallback, so through them every stage came back "Unknown
+;;; command" and the suite "ran" in seconds while running nothing.
+;;; (PGP aliases are invisible to them the same way.)  So:
+;;;
+;;;   * The three calofin stages are their c: functions, CALLED
+;;;     DIRECTLY.  Nothing is lost by it: the prompts live in the
+;;;     functions, so each stage still asks its own questions exactly
+;;;     as it does when it is typed.
+;;;   * The finisher is called directly too when this session's
+;;;     AutoLISP defines it.  When it does not -- .NET, ARX or a PGP
+;;;     alias -- it goes through vla-SendCommand, the one door that is
+;;;     literally "as typed": the text is queued on the command line
+;;;     itself, so whatever answers to the operator's typing answers to
+;;;     this.  Queued input runs when this routine ends; the finisher
+;;;     is last, so last is exactly where it lands, just after the
+;;;     done message.  A CDIM that really is absent costs one "Unknown
+;;;     command" line there, after all the work is done.
+;;;
 ;;; Esc in any stage stops the suite there - an AutoLISP error unwinds
 ;;; to the command line, so the stages after it never start.  What ran
 ;;; before it stays run, which is why the check below happens first.
+;;; (On that path the stage's own *error* handler is the one that runs,
+;;; so the suite's PICKFIRST restore does not; it is left at 1, the
+;;; factory default, which is the cost of letting each stage keep its
+;;; own cleanup.)
 ;;;
 ;;; THE CHECK COVERS THE THREE CALOFIN STAGES AND NOT CDIM, on purpose.
 ;;; boundp can only see commands AutoLISP defined; an in-house command
@@ -333,8 +359,7 @@
 ;;; answer to it.  Refusing to run because a check cannot see something
 ;;; that is plainly there would be worse than the failure it guards
 ;;; against -- and by the time CDIM is reached the three stages that
-;;; needed guarding have already run.  A CDIM that really is absent
-;;; costs one "Unknown command" line after the work is done.
+;;; needed guarding have already run.
 ;;; ===================================================================
 
 (setq *tydrn-suite* '("TYDRN" "PADDLE" "AUTODIM"))
@@ -472,15 +497,24 @@
                           (tydrn:live-ss carry)
                           nil))
         (setq mark (entlast))
-        ;; Through the command line, not as a direct call, so each
-        ;; stage prompts and errors exactly as it does when it is typed.
-        ;;
-        ;; Calofin's own go through "_." like every other handoff in
-        ;; the tree.  The finisher goes through "_" alone, WITHOUT the
-        ;; dot: the dot means "the built-in command of this name,
-        ;; whatever anyone has redefined" -- and a shop command is
-        ;; exactly the redefinition we are trying to reach.
-        (vl-cmdf (strcat (if (member nm *tydrn-suite*) "_." "_") nm))
+        ;; NOT (command)/(vl-cmdf): the command processor does not know
+        ;; AutoLISP commands (typing works only through the command
+        ;; line's own c: fallback, which those skip), so through them
+        ;; every stage came back "Unknown command".  See the header.
+        (cond
+          ((or (member nm *tydrn-suite*) (tydrn:has nm))
+           ;; An AutoLISP command, here, now: the c: function itself.
+           ;; Its prompts live in it, so it asks its own questions
+           ;; exactly as it does when it is typed.
+           (apply (read (strcat "c:" nm)) nil))
+          (t
+           ;; .NET, ARX or a PGP alias: queue it on the command line
+           ;; itself, literally as typed -- the one door all three
+           ;; answer to.  Queued input runs when this routine ends,
+           ;; which for the last stage is exactly where it belongs.
+           (princ "\n  (queued on the command line - it runs as the suite closes)")
+           (vla-SendCommand (vla-get-ActiveDocument (vlax-get-acad-object))
+                            (strcat nm " "))))
         ;; Grow the carried set by what this stage drew, so the next
         ;; one sees it.  Only worth doing while a calofin stage is
         ;; still to come -- the finisher gets a cleared selection.

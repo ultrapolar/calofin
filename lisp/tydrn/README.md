@@ -95,19 +95,35 @@ name it in a tunable (`*cchk-dimfix-cmd*` and friends) to *suggest* it
 after a check. The suite is the first thing here that actually calls it.
 Two consequences, both deliberate:
 
-* It is reached as `_CDIM`, without the dot. Calofin's own stages go
-  through `_.` like every other handoff in the tree, because the dot
-  means *the built-in command of this name, whatever anyone has
-  redefined* — and a shop command is exactly the redefinition we are
-  trying to reach.
+* When this session's AutoLISP defines a `c:CDIM`, it is called
+  directly like the calofin stages. When it does not — `CDIM` may be
+  .NET, ARX or a PGP alias — the name is **queued on the command line
+  itself** with `SendCommand`, literally as typed, because that is the
+  one door all three answer to. (`command`/`vl-cmdf` reach none of
+  them: the command processor knows nothing of AutoLISP commands or PGP
+  aliases.) Queued input runs as the suite closes, which for the last
+  stage is exactly where it belongs — the command prompt says so when
+  it happens.
 * It is **not** in the pre-flight check below. `boundp` only sees
-  commands AutoLISP defined; `CDIM` may be .NET, ARX or a PGP alias, so
-  asking whether it is loaded would report it missing on a machine where
-  it works perfectly. It runs last, after everything calofin can do is
-  already done, so a shop without it loses only the cleanup.
+  commands AutoLISP defined, so asking whether `CDIM` is loaded would
+  report it missing on a machine where it works perfectly. It runs
+  last, after everything calofin can do is already done, so a shop
+  without it loses only the cleanup — one "Unknown command" line after
+  the work is done.
 
 If your shop calls it something else, or does not have it, one line in
 the tunables below retunes or turns it off.
+
+**How a stage is reached** (and why not `command`/`vl-cmdf`): the
+command processor does not know AutoLISP commands. Typing `TYDRN` works
+only because the command line, failing to recognise the name, falls
+back to trying `c:TYDRN` — and `command`/`vl-cmdf` skip that fallback,
+so pushed through them every stage came back `Unknown command "TYDRN"`
+while the suite reported success. (That shipped once; the test suite
+now trips on any use of the command processor here.) Each calofin
+stage is therefore its **`c:` function called directly** — nothing is
+lost by it, since the prompts live in the functions — and the finisher
+goes the `SendCommand` route above.
 
 **Each stage keeps its own undo group.** Three `U`s back the suite out,
 one per stage — deliberately, and for `XYPLOT`'s reason about its `ABHD`
@@ -187,11 +203,13 @@ pick. With nothing highlighted they prompt exactly as they always did,
 python3 tests/test_tydrn_suite.py
 ```
 
-covers `TYLERDRONESUITE`: the order, that each stage goes through the
-command line rather than being called directly, that a missing stage is
-named and stops it before anything runs, that the suite opens no undo
-group of its own, and that `CDIM` is reached without the dot while
-calofin's own keep it — plus retuning and turning off the finisher, and
+covers `TYLERDRONESUITE`: the order, that each stage is its `c:`
+function called directly and nothing goes near the command processor
+(which does not know AutoLISP commands — the "Unknown command" bug),
+that a missing stage is named and stops it before anything runs, that
+the suite opens no undo group of its own, and that `CDIM` is queued on
+the command line verbatim unless AutoLISP defines it here — plus
+retuning and turning off the finisher, and
 the handoff itself: that one highlight reaches all three calofin stages,
 that it grows to include the pads `PADDLE` drew, that an erased entity
 is not passed on, that `CDIM` gets a cleared selection, and that

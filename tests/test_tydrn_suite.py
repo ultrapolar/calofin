@@ -11,11 +11,21 @@ ordering and the refusals, which is all it contributes:
     the pads have to be in before AUTODIM dimensions what is there, and
     CDIM tidies the dimensions AUTODIM just made.
 
+  * HOW A STAGE IS REACHED.  The command processor does not know
+    AutoLISP commands -- typing TYDRN works only through the command
+    line's own c: fallback, which (command)/(vl-cmdf) skip -- so pushed
+    through those, every stage came back "Unknown command" while the
+    suite reported success.  That shipped once.  The three calofin
+    stages must be their c: functions called directly, and none of the
+    stages may go anywhere near the command processor.
+
   * CDIM IS NOT OURS, and is treated accordingly: it is not pre-checked
     (boundp sees only what AutoLISP defined, and an in-house command is
-    as likely to be .NET, ARX or a PGP alias) and it is called WITHOUT
-    the "." prefix, which would mean "the built-in of this name" and
-    reach past the very redefinition we want.
+    as likely to be .NET, ARX or a PGP alias), and when AutoLISP does
+    not define it here it is QUEUED ON THE COMMAND LINE via
+    vla-SendCommand, literally as typed -- the one door .NET, ARX and
+    PGP aliases all answer to.  A shop whose CDIM is AutoLISP gets the
+    same direct call as everything else.
 
   * THAT IT CHECKS BEFORE IT STARTS.  Half a suite is worse than none:
     TYDRN would have moved the points and PADDLE dropped the pads, and
@@ -79,6 +89,9 @@ STUBS = r'''
 
 (defun ssgetfirst () (list nil *pre*))
 (defun sssetfirst (a b) (setq *handed* (cons b *handed*)) t)
+
+;; what the suite queues on the command line, verbatim
+(defun vla-sendcommand (d s) (setq *sent* (cons s *sent*)) t)
 '''
 
 #: PADDLE and AUTODIM live in other files, so the suite has to find
@@ -86,31 +99,35 @@ STUBS = r'''
 #: (command ...) RECORDS a command rather than dispatching to a c:
 #: function, so what the run leaves behind to assert on is the command
 #: log, and these only have to exist for the boundp check to pass.
+#: Loaded AFTER the file, so c:TYDRN here shadows the real one: each
+#: stub records that it was CALLED, which is the mechanism itself now --
+#: a direct call is the only thing that reaches an AutoLISP command.
 STAGES = r'''
-(defun c:PADDLE () (princ))
-(defun c:AUTODIM () (princ))
+(defun c:TYDRN   () (setq *ran* (cons "TYDRN" *ran*)) (princ))
+(defun c:PADDLE  () (setq *ran* (cons "PADDLE" *ran*)) (princ))
+(defun c:AUTODIM () (setq *ran* (cons "AUTODIM" *ran*)) (princ))
 '''
 
-#: The VM's (command ...) records rather than dispatching, which is what
-#: the ordering tests read.  This replaces it with one that records AND
-#: lets PADDLE draw -- a user defun shadows a builtin here -- because the
-#: pad it drops is the whole point of the carried set growing: AUTODIM's
-#: filter takes INSERTs so that it dimensions those pads, and handing it
-#: the operator's original pick alone would hide every one of them.
+#: A PADDLE that draws: the pad it drops is the whole point of the
+#: carried set growing -- AUTODIM's filter takes INSERTs so that it
+#: dimensions those pads, and handing it the operator's original pick
+#: alone would hide every one of them.
 DRAWING_STAGES = r'''
-(defun vl-cmdf (nm)
-  (setq *ran* (cons nm *ran*))
-  (if (= nm "_.PADDLE")
-    (setq *pad* (entmakex '((0 . "INSERT") (2 . "Pad36x36") (10 5.0 4.0)))))
-  t)
+(defun c:PADDLE ()
+  (setq *ran* (cons "PADDLE" *ran*)
+        *pad* (entmakex '((0 . "INSERT") (2 . "Pad36x36") (10 5.0 4.0))))
+  (princ))
 '''
 
 
 def run(stages=STAGES, extra_setup=None):
     vm = VM()
-    # vl-cmdf is how the suite invokes each stage -- XYPLOT's idiom for
-    # handing off to another tool, so a stage prompts and errors exactly
-    # as it does when it is typed
+    # A TRIPWIRE, not a mechanism: the suite must not go anywhere near
+    # the command processor (it does not know AutoLISP commands, so a
+    # stage pushed through it comes back "Unknown command" in real
+    # AutoCAD while this VM, which just records, stays green -- that
+    # shipped once).  Binding vl-cmdf to the recorder means any
+    # regression lands in vm.commands, where the tests assert on empty.
     lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
     vm.loads(STUBS)
     vm.load(LSP)
@@ -126,8 +143,12 @@ def said(vm):
 
 
 def ran(vm):
-    """The stages the suite actually issued, in order."""
-    return [str(c[0]).lstrip("_.") for c in vm.commands if c]
+    """Every stage that actually ran, in order: the direct calls the
+    stubs recorded, then what was queued on the command line (queued
+    input executes after the routine ends, so it is last by nature)."""
+    called = [str(x) for x in reversed(vm.get(Sym('*ran*')) or [])]
+    queued = [str(x).strip() for x in reversed(vm.get(Sym('*sent*')) or [])]
+    return called + queued
 
 
 def test_the_stages_run_in_the_order_the_work_needs():
@@ -135,9 +156,10 @@ def test_the_stages_run_in_the_order_the_work_needs():
     vm = run()
     check("all four ran",
           ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"])
-    check("each went through the command line, not a direct call",
-          ["_.TYDRN"] in vm.commands and ["_.PADDLE"] in vm.commands
-          and ["_.AUTODIM"] in vm.commands)
+    # the command processor does not know AutoLISP commands, so ANY use
+    # of (command)/(vl-cmdf) here is the "Unknown command" bug back again
+    check("and nothing went through the command processor",
+          vm.commands == [])
     check("it says which stage is which as it goes",
           "1 of 4: TYDRN" in said(vm)
           and "3 of 4: AUTODIM" in said(vm)
@@ -147,24 +169,31 @@ def test_the_stages_run_in_the_order_the_work_needs():
 
 
 def test_cdim_is_reached_the_way_a_shop_command_has_to_be():
-    print("\nCDIM is not ours, and is called as though it is not")
+    print("\nCDIM is not ours, and is reached as though it is not")
     vm = run()
-    # "_." means the BUILT-IN command of this name, whatever anyone has
-    # redefined.  A shop command is exactly that redefinition, so the
-    # dot would reach straight past it.
-    check("CDIM goes through _ without the dot", ["_CDIM"] in vm.commands)
-    check("and calofin's own still go through _.",
-          ["_.TYDRN"] in vm.commands and ["_.CDIM"] not in vm.commands)
-    # it is NOT pre-checked: boundp sees only what AutoLISP defined, and
-    # an in-house command is as likely to be .NET, ARX or a PGP alias.
+    # AutoLISP does not define c:CDIM here, so it may be .NET, ARX or a
+    # PGP alias -- and (command)/(vl-cmdf) reach none of those.  The one
+    # door they all answer to is the command line itself: SendCommand,
+    # the name verbatim plus the space that is Enter.  No "_." (the
+    # built-in of this name), no "_", no dot: literally as typed.
+    check("CDIM is queued on the command line, verbatim",
+          ["CDIM "] == [str(x) for x in (vm.get(Sym('*sent*')) or [])])
+    check("and not pushed through the command processor",
+          vm.commands == [])
+    # it is NOT pre-checked: boundp sees only what AutoLISP defined.
     # Refusing to run over a check that cannot see it would be worse
     # than the failure it guards against.
     check("it is not in the pre-flight list",
           "CDIM" not in [str(x) for x in (vm.get(Sym('*tydrn-suite*')) or [])])
-    check("but it IS in the stages that run",
-          "CDIM" in [str(x) for x in (vm.get(Sym('*tydrn-finish-cmd*'))
-                                      and vm.get(Sym('*tydrn-suite*')) or [])]
-          or ran(vm)[-1] == "CDIM")
+    check("but it IS the last stage that runs", ran(vm)[-1] == "CDIM")
+    check("and the operator is told it runs as the suite closes",
+          "runs as the suite closes" in said(vm))
+    # a shop whose CDIM IS AutoLISP gets the direct call like the rest
+    vm = run(extra_setup=
+             '(defun c:CDIM () (setq *ran* (cons "CDIM" *ran*)) (princ))')
+    check("an AutoLISP CDIM is called directly instead",
+          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"]
+          and not vm.get(Sym('*sent*')))
 
 
 def test_the_finisher_can_be_retuned_or_turned_off():
@@ -172,12 +201,14 @@ def test_the_finisher_can_be_retuned_or_turned_off():
     vm = run(extra_setup='(setq *tydrn-finish-cmd* nil)')
     check("nil runs the three and stops",
           ran(vm) == ["TYDRN", "PADDLE", "AUTODIM"])
+    check("and queues nothing", not vm.get(Sym('*sent*')))
     check("and the counting follows it", "1 of 3: TYDRN" in said(vm)
           and "all 3 stages ran" in said(vm))
     vm = run(extra_setup='(setq *tydrn-finish-cmd* "DIMFIX")')
     check("another name is run instead",
           ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "DIMFIX"])
-    check("still without the dot", ["_DIMFIX"] in vm.commands)
+    check("queued verbatim, as the operator would type it",
+          ["DIMFIX "] == [str(x) for x in (vm.get(Sym('*sent*')) or [])])
 
 
 def test_a_missing_stage_is_named_and_nothing_runs():
@@ -281,8 +312,7 @@ def test_the_carried_set_grows_by_what_a_stage_draws():
     check("and still with the trace", all(e in h[2]
                                           for e in vm.get(Sym('*trace*'))))
     check("the stages still ran in order",
-          [str(x).lstrip("_.") for x in reversed(vm.get(Sym('*ran*')))]
-          == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"])
+          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"])
 
 
 def test_an_erased_entity_is_not_handed_on():
@@ -291,10 +321,10 @@ def test_an_erased_entity_is_not_handed_on():
     # next command, so the set is rebuilt from what survives each time
     # rather than kept.
     vm = run(stages=STAGES + r'''
-(defun vl-cmdf (nm)
-  (setq *ran* (cons nm *ran*))
-  (if (= nm "_.TYDRN") (entdel (car *trace*)))
-  t)
+(defun c:TYDRN ()
+  (setq *ran* (cons "TYDRN" *ran*))
+  (entdel (car *trace*))
+  (princ))
 ''')
     h = handed(vm)
     gone = vm.get(Sym('*trace*'))[0]
@@ -336,14 +366,14 @@ def test_pickfirst_is_forced_on_and_put_back():
     # sssetfirst still highlights with PICKFIRST at 0, but ssget "_I"
     # reads nothing - the failure would be silent, which is the one
     # worth spending a sysvar to rule out.
-    vm = run(stages=STAGES + r'''
-(defun vl-cmdf (nm)
-  (setq *ran* (cons nm *ran*)
-        *seen* (cons (getvar "PICKFIRST") *seen*))
-  t)
+    vm = run(stages=r'''
+(defun tydrn-spy () (setq *seen* (cons (getvar "PICKFIRST") *seen*)))
+(defun c:TYDRN   () (tydrn-spy) (princ))
+(defun c:PADDLE  () (tydrn-spy) (princ))
+(defun c:AUTODIM () (tydrn-spy) (princ))
 ''')
-    check("every stage ran with it on",
-          [x for x in (vm.get(Sym('*seen*')) or [])] == [1, 1, 1, 1])
+    check("every direct-call stage ran with it on",
+          [x for x in (vm.get(Sym('*seen*')) or [])] == [1, 1, 1])
     check("and it is back to what it was afterwards",
           vm.sysvars.get('PICKFIRST') == 0)
 
