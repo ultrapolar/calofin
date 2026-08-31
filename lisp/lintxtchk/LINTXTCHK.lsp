@@ -10,7 +10,7 @@
 ;;;         LINTXTCHK and pick the top-left point for the checklist.
 ;;; ==========================================================================
 
-(setq *lintxtchk-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.2")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
@@ -105,5 +105,10 @@
   (princ)
 )
 
-(princ "\nLINTXTCHK loaded.  Type LINTXTCHK to place the liner checklist.")
+(defun c:LINTXTCHKVER ()
+  (princ (strcat "\nLINTXTCHK " *lintxtchk-version*))
+  (princ))
+
+(princ (strcat "\nLINTXTCHK " *lintxtchk-version*
+               " loaded.  Type LINTXTCHK to place the liner checklist."))
 (princ)

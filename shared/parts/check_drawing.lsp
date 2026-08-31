@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.1")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -306,5 +306,10 @@
 
 (defun c:DIMARCCHECK () (c:CHECK))
 
-(princ "\ncheck_drawing.lsp loaded - type CHECK to audit dimension & arc attachment.")
+(defun c:CHECKVER ()
+  (princ (strcat "\nCHECK " *checkdrawing-version*))
+  (princ))
+
+(princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
+               " loaded - type CHECK to audit dimension & arc attachment."))
 (princ)

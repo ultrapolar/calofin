@@ -63,7 +63,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.1")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -435,6 +435,11 @@
            (setq done T))))))
   (princ))
 
-(princ "\nDrone Distortion tool v3.4 loaded  (DDALT accepts PNG / JPG / TIF and fails loud).")
+(defun c:DDFIXVER ()
+  (princ (strcat "\nDDFIX " *dronedistortion-version*))
+  (princ))
+
+(princ (strcat "\nDrone Distortion tool " *dronedistortion-version*
+               " loaded  (DDALT accepts PNG / JPG / TIF and fails loud)."))
 (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
 (princ)

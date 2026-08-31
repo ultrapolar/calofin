@@ -176,7 +176,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.7") ; printed on load and at command start so a
+(setq *ns-version* "v2.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1780,6 +1780,10 @@
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
   (princ "\n    rounded or diagonal back corners) - NORMIESTEP fills it in.")
+  (princ))
+
+(defun c:NORMIESTEPVER ()
+  (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
 (princ (strcat "\nNORMIESTEP.lsp " *ns-version*

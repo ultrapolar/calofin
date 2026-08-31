@@ -175,7 +175,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.4") ; printed on load and at command start so a
+(setq *hs-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1567,6 +1567,10 @@
   (princ "\n    an arc and run HEMISTEP selecting it (plus an axis line if")
   (princ "\n    you have one) - Enter at any width fits that step to the")
   (princ "\n    curve exactly.")
+  (princ))
+
+(defun c:HEMISTEPVER ()
+  (princ (strcat "\nHEMISTEP " *hs-version*))
   (princ))
 
 (princ (strcat "\nHEMISTEP.lsp " *hs-version*

@@ -44,7 +44,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -336,6 +336,10 @@
                        " (current style).")))))
 
   (setq *error* olderr)
+  (princ))
+
+(defun c:CDCALLOUTVER ()
+  (princ (strcat "\nCDCALLOUT " *cdcallout-version*))
   (princ))
 
 (princ (strcat "\nCDCALLOUT " *cdcallout-version*

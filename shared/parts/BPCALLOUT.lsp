@@ -39,7 +39,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.5")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -230,6 +230,10 @@
                      ";  \"" phrase "\""))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (princ))
+
+(defun c:BPCALLOUTVER ()
+  (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (princ))
 
 (princ (strcat "\nBPCALLOUT " *bpcallout-version*

@@ -34,7 +34,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.2")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -200,5 +200,10 @@
 ;; short alias
 (defun c:DCE () (c:DIMCONTEND))
 
-(princ "\nDIMCONTEND / DCE loaded -- continue a dimension to the end of the drawing.")
+(defun c:DIMCONTENDVER ()
+  (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
+  (princ))
+
+(princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
+               " loaded -- continue a dimension to the end of the drawing."))
 (princ)

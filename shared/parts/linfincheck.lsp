@@ -253,7 +253,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.0")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.1")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -3835,7 +3835,8 @@
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
 
-(princ "\nlinfincheck.lsp loaded - LINFINCHECK reviews the whole title block one item at a")
+(princ (strcat "\nlinfincheck.lsp " *lfc-version*
+               " loaded - LINFINCHECK reviews the whole title block one item at a"))
 (princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
 (princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
 (princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")

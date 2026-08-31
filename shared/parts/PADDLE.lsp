@@ -61,7 +61,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.5") ; printed on load and at command start
+(setq *paddle-version* "v1.6") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -677,6 +677,10 @@
         (if (= (getkword "\nErase the demonstration? [Yes/No] <No>: ") "Yes")
             (foreach e ents (entdel e)))))
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
+  (princ))
+
+(defun c:PADDLEVER ()
+  (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
 
 (princ (strcat "\nPADDLE " *paddle-version*

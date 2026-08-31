@@ -8,31 +8,34 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 54 files, 133 commands:
+;;; 54 files, 155 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABMOVE  ABPCHECK
-;;;   ABPCHECKRESCUE  ABPCHECKVER  ADAB  ALTABCDEF  AUTOBEAD  AUTOBEADVER
-;;;   AUTODIM  AUTODIMSIDEPOV  BPCALLOUT  CABHD  CABHDVER  CALVER
-;;;   CCPRECHECK  CDCALLOUT  CDCREATE  CDCREATEVER  CHECK  CORNERSTP
-;;;   COVERCHECK  COVERCHECKRESCUE  COVERCHECKVER  COVERCHECKVERSION  COVERSCAN  CPERPPTS
-;;;   CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT  DDCAL  DDELEV
-;;;   DDFIX  DDGPS  DDINFO  DDSET  DDTEST  DIMARCCHECK
-;;;   DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMSCAN  DRONE
-;;;   FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  HEMISTEP  LAZASCII
-;;;   LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL
-;;;   LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
-;;;   LAZTXT  LHD  LINCHECK  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER
-;;;   LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LITECOVERSCAN
-;;;   LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  OASIS  OASISVER  PADDLE
-;;;   PERPPTS  POOL  POOLCOVER  POOLDEMO  POOLSIDE  POOLSIDEVER
-;;;   POOLVER  SMARTFILLET  SMARTFILLETVER  SPA  SPACHECK  SPACHECKRESCUE
-;;;   SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
-;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
-;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
-;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  WCALST  XFTCONV  XFTCONV-SETUP  XYPLOT
-;;;   XYPLOTVER
+;;;   ABPCHECKRESCUE  ABPCHECKVER  ADAB  ALTABCDEF  ALTABCDEFVER  AUTOBEAD
+;;;   AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV  AUTODIMVER  BPCALLOUT  BPCALLOUTVER
+;;;   CABHD  CABHDVER  CALVER  CCPRECHECK  CCPRECHECKVER  CDCALLOUT
+;;;   CDCALLOUTVER  CDCREATE  CDCREATEVER  CHECK  CHECKVER  CORNERSTP
+;;;   CORNERSTPVER  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVER  COVERCHECKVERSION  COVERSCAN
+;;;   CPERPPTS  CPERPPTSVER  CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT
+;;;   DDCAL  DDELEV  DDFIX  DDFIXVER  DDGPS  DDGPSVER
+;;;   DDINFO  DDSET  DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE
+;;;   DIMCHECKVER  DIMCONTEND  DIMCONTENDVER  DIMSCAN  DRONE  DRONEVER
+;;;   FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  HEMISTEP  HEMISTEPVER
+;;;   LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON
+;;;   LAZPANEL  LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP
+;;;   LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN
+;;;   LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
+;;;   NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE  PADDLEVER
+;;;   PERPPTS  PERPPTSVER  POOL  POOLCOVER  POOLDEMO  POOLSIDE
+;;;   POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER  SPA  SPACHECK
+;;;   SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER
+;;;   STOCKCOVER-CFG  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
+;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
+;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
+;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -19320,7 +19323,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.2")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -20067,7 +20070,12 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ "\nALTABCDEF.lsp loaded.  Type ALTABCDEF to plot points from a spreadsheet.")
+(defun c:ALTABCDEFVER ()
+  (princ (strcat "\nALTABCDEF " *altabcdef-version*))
+  (princ))
+
+(princ (strcat "\nALTABCDEF " *altabcdef-version*
+               " loaded.  Type ALTABCDEF to plot points from a spreadsheet."))
 (princ)
 
 
@@ -30525,7 +30533,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.2")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -31819,7 +31827,11 @@
       (setvar "CMDECHO" oldcmd)))
   (princ))
 
-(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")
+(defun c:AUTODIMVER ()
+  (princ (strcat "\nAUTODIM " *autodim-version*))
+  (princ))
+
+(princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view)."))
 (princ)
 
 
@@ -31868,7 +31880,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.5")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -32061,6 +32073,10 @@
   (setq undo-open nil)
   (princ))
 
+(defun c:BPCALLOUTVER ()
+  (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
+  (princ))
+
 (princ (strcat "\nBPCALLOUT " *bpcallout-version*
                " loaded. Command: BPCALLOUT (ring bad points and write"
                " the callout)."))
@@ -32103,7 +32119,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.2")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
@@ -32653,7 +32669,12 @@
   (princ)
 )
 
-(princ "\nCCPRECHECK.LSP loaded. Type CCPRECHECK to run the tech flow chart checklist.")
+(defun c:CCPRECHECKVER ()
+  (princ (strcat "\nCCPRECHECK " *ccprecheck-version*))
+  (princ))
+
+(princ (strcat "\nCCPRECHECK " *ccprecheck-version*
+               " loaded. Type CCPRECHECK to run the tech flow chart checklist."))
 (princ)
 
 
@@ -32710,7 +32731,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -32977,6 +32998,10 @@
                        " (current style).")))))
 
   (setq *error* olderr)
+  (princ))
+
+(defun c:CDCALLOUTVER ()
+  (princ (strcat "\nCDCALLOUT " *cdcallout-version*))
   (princ))
 
 (princ (strcat "\nCDCALLOUT " *cdcallout-version*
@@ -33450,7 +33475,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.1")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -33725,7 +33750,12 @@
 
 (defun c:DIMARCCHECK () (c:CHECK))
 
-(princ "\ncheck_drawing.lsp loaded - type CHECK to audit dimension & arc attachment.")
+(defun c:CHECKVER ()
+  (princ (strcat "\nCHECK " *checkdrawing-version*))
+  (princ))
+
+(princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
+               " loaded - type CHECK to audit dimension & arc attachment."))
 (princ)
 
 
@@ -33925,7 +33955,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.4") ; printed on load and at command start so a
+(setq *cs-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -35405,6 +35435,10 @@
   (princ "\n    and follow the same prompts you just watched.")
   (princ))
 
+(defun c:CORNERSTPVER ()
+  (princ (strcat "\nCORNERSTP " *cs-version*))
+  (princ))
+
 (princ (strcat "\nCORNERSTP.lsp " *cs-version*
                " loaded - CORNERSTP to draw corner steps,"
                " TUTORIALCORNERSTP to learn it."))
@@ -35592,7 +35626,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.4") ; printed on load and at command start so a
+(setq *hs-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -36986,6 +37020,10 @@
   (princ "\n    curve exactly.")
   (princ))
 
+(defun c:HEMISTEPVER ()
+  (princ (strcat "\nHEMISTEP " *hs-version*))
+  (princ))
+
 (princ (strcat "\nHEMISTEP.lsp " *hs-version*
                " loaded - HEMISTEP to draw hemisphere steps,"
                " TUTORIALHEMISTEP to learn it."))
@@ -37178,7 +37216,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.7") ; printed on load and at command start so a
+(setq *ns-version* "v2.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38770,6 +38808,10 @@
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
   (princ "\n    rounded or diagonal back corners) - NORMIESTEP fills it in.")
+  (princ))
+
+(defun c:NORMIESTEPVER ()
+  (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
 (princ (strcat "\nNORMIESTEP.lsp " *ns-version*
@@ -44041,7 +44083,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.5")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -45738,7 +45780,8 @@
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
 
-(princ "\ndimcheck.lsp loaded - DIMCHECK reviews dimensions, arcs & overlapping")
+(princ (strcat "\ndimcheck.lsp " *dchk-version*
+               " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
 (princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
 (princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
 (princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")
@@ -45785,7 +45828,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.2")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -45951,7 +45994,12 @@
 ;; short alias
 (defun c:DCE () (c:DIMCONTEND))
 
-(princ "\nDIMCONTEND / DCE loaded -- continue a dimension to the end of the drawing.")
+(defun c:DIMCONTENDVER ()
+  (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
+  (princ))
+
+(princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
+               " loaded -- continue a dimension to the end of the drawing."))
 (princ)
 
 
@@ -46024,7 +46072,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.1")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -46396,7 +46444,12 @@
            (setq done T))))))
   (princ))
 
-(princ "\nDrone Distortion tool v3.4 loaded  (DDALT accepts PNG / JPG / TIF and fails loud).")
+(defun c:DDFIXVER ()
+  (princ (strcat "\nDDFIX " *dronedistortion-version*))
+  (princ))
+
+(princ (strcat "\nDrone Distortion tool " *dronedistortion-version*
+               " loaded  (DDALT accepts PNG / JPG / TIF and fails loud)."))
 (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
 (princ)
 
@@ -46543,7 +46596,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.1")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -47656,7 +47709,12 @@
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.6 loaded  (pick a photo, click a point, place the height report).")
+(defun c:DDGPSVER ()
+  (princ (strcat "\nDDGPS " *droneheightgps-version*))
+  (princ))
+
+(princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
+               " loaded  (pick a photo, click a point, place the height report)."))
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)
 
@@ -52586,7 +52644,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.5")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.6")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -55217,6 +55275,10 @@
   (setq *error* lh-old-err)   ; restore the previous error handler
   (princ))
 
+(defun c:LHDVER ()
+  (princ (strcat "\nLHD " *lh-version*))
+  (princ))
+
 (princ (strcat "\nLHD " *lh-version*
                " loaded.  LHD fits a top-down outline (closed or open)"
                " through laser-scanned points."))
@@ -55253,7 +55315,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.2")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
@@ -55603,7 +55665,12 @@
   (princ)
 )
 
-(princ "\nLINCHECK.LSP loaded. Type LINCHECK to run the liner checklist.")
+(defun c:LINCHECKVER ()
+  (princ (strcat "\nLINCHECK " *lincheck-version*))
+  (princ))
+
+(princ (strcat "\nLINCHECK " *lincheck-version*
+               " loaded. Type LINCHECK to run the liner checklist."))
 (princ)
 
 
@@ -55866,7 +55933,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.0")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.1")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -59448,7 +59515,8 @@
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
 
-(princ "\nlinfincheck.lsp loaded - LINFINCHECK reviews the whole title block one item at a")
+(princ (strcat "\nlinfincheck.lsp " *lfc-version*
+               " loaded - LINFINCHECK reviews the whole title block one item at a"))
 (princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
 (princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
 (princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")
@@ -59475,7 +59543,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.2")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
@@ -59570,7 +59638,12 @@
   (princ)
 )
 
-(princ "\nLINTXTCHK loaded.  Type LINTXTCHK to place the liner checklist.")
+(defun c:LINTXTCHKVER ()
+  (princ (strcat "\nLINTXTCHK " *lintxtchk-version*))
+  (princ))
+
+(princ (strcat "\nLINTXTCHK " *lintxtchk-version*
+               " loaded.  Type LINTXTCHK to place the liner checklist."))
 (princ)
 
 
@@ -59641,7 +59714,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.5") ; printed on load and at command start
+(setq *paddle-version* "v1.6") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -60257,6 +60330,10 @@
         (if (= (getkword "\nErase the demonstration? [Yes/No] <No>: ") "Yes")
             (foreach e ents (entdel e)))))
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
+  (princ))
+
+(defun c:PADDLEVER ()
+  (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
 
 (princ (strcat "\nPADDLE " *paddle-version*
@@ -61440,7 +61517,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.5")
+(setq *perp-version* "v0.6")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -61803,6 +61880,13 @@
   (reverse out))
 
 ;; --- command ---------------------------------------------------------
+
+;; ahead of the command on purpose: the structural tests scan from
+;; c:PERPPTS to end-of-file for leaked variables, and a defun name
+;; there would read as one
+(defun c:PERPPTSVER ()
+  (princ (strcat "\nPERPPTS " *perp-version*))
+  (princ))
 
 (defun c:PERPPTS (/ *error* perp:kill perp:finish
                     os ce pd plt clay cec celt celw celts cdim undoOpen
@@ -62354,7 +62438,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.4")
+(setq *cperp-version* "v0.5")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -62522,6 +62606,13 @@
   (not (vl-catch-all-error-p r)))
 
 ;; --- command ---------------------------------------------------------
+
+;; ahead of the command on purpose: the structural tests scan from
+;; c:CPERPPTS to end-of-file for leaked variables, and a defun name
+;; there would read as one
+(defun c:CPERPPTSVER ()
+  (princ (strcat "\nCPERPPTS " *cperp-version*))
+  (princ))
 
 (defun c:CPERPPTS (/ *error* cperp:kill cperp:finish
                      os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
@@ -66821,7 +66912,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -67071,7 +67162,11 @@
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
   (princ))
 
-(princ "\nDRONE.LSP loaded.  Type DRONE to run.")
+(defun c:DRONEVER ()
+  (princ (strcat "\nDRONE " *drone-version*))
+  (princ))
+
+(princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run."))
 (princ)
 
 
@@ -67119,7 +67214,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -67336,7 +67431,11 @@
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
   (princ))
 
-(princ "\nTYDRN.LSP loaded.  Type TYDRN to run.")
+(defun c:TYDRNVER ()
+  (princ (strcat "\nTYDRN " *tydrn-version*))
+  (princ))
+
+(princ (strcat "\nTYDRN " *tydrn-version* " loaded.  Type TYDRN to run."))
 (princ)
 
 
@@ -67374,7 +67473,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.1")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -68515,7 +68614,12 @@
   (princ)
 )
 
-(princ "\nWCALST loaded -- select the band, pick the side to straighten.")
+(defun c:WCALSTVER ()
+  (princ (strcat "\nWCALST " *wcalst-version*))
+  (princ))
+
+(princ (strcat "\nWCALST " *wcalst-version*
+               " loaded -- select the band, pick the side to straighten."))
 (princ)
 
 
@@ -68556,7 +68660,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.3") ; printed on load and at command start so a
+(setq *xft-version* "v1.4") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -68983,6 +69087,10 @@
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
   (princ)
 )
+
+(defun c:XFTCONVVER ()
+  (princ (strcat "\nXFTCONV " *xft-version*))
+  (princ))
 
 (princ (strcat "\nXFTCONV.lsp " *xft-version*
                " loaded.  Type XFTCONV to scale a survey import and swap its points."))
@@ -75125,26 +75233,29 @@
   "CALVER" "POOL" "POOLCOVER" "POOLVER" "POOLDEMO" "TUTORIALPOOL"
   "POOLSIDE" "POOLSIDEVER" "SPA" "SPAVER" "TUTORIALSPA" "OASIS"
   "OASISVER" "ABCDEF" "ABCDEFVER" "ABFIND" "ABMOVE" "ABFINDVER"
-  "ALTABCDEF" "ABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD" "TUTORIALADAB"
-  "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK" "ABPCHECKRESCUE"
-  "ABPCHECKVER" "CABHDVER" "CABHD" "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD"
-  "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "BPCALLOUT" "CCPRECHECK"
-  "CDCALLOUT" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK" "CORNERSTP"
-  "TUTORIALCORNERSTP" "HEMISTEP" "TUTORIALHEMISTEP" "NORMIESTEP" "TUTORIALNORMIESTEP" "LAZSTEP"
-  "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK"
-  "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER"
-  "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND"
-  "DCE" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
-  "DDGPS" "DDELEV" "DDTEST" "FITABHDVER" "FITABHD" "FITABHDCOVER"
-  "LHD" "LINCHECK" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN"
-  "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "PADDLE" "TUTORIALPADDLE"
-  "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTS" "CPERPPTS" "TUTORIALPERPPTS"
+  "ALTABCDEF" "ALTABCDEFVER" "ABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD"
+  "TUTORIALADAB" "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK"
+  "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER" "CABHD" "AUTOBEAD" "AUTOBEADVER"
+  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER"
+  "BPCALLOUT" "BPCALLOUTVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER"
+  "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER" "CORNERSTP"
+  "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP"
+  "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK"
+  "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION"
+  "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN"
+  "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX"
+  "DDSET" "DDCAL" "DDINFO" "DDALT" "DDFIXVER" "DDGPS"
+  "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER"
+  "LHD" "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE"
+  "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK"
+  "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "LINGUTTER" "LINGUTTERSCAN"
+  "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS"
   "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
   "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
-  "DRONE" "TYDRN" "WCALST" "XFTCONV" "XFTCONV-SETUP" "XYPLOT"
-  "XYPLOTVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
-  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON"
-  "LAZPANELVER"
+  "DRONE" "DRONEVER" "TYDRN" "TYDRNVER" "WCALST" "WCALSTVER"
+  "XFTCONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "LAZSPA"
+  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
+  "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

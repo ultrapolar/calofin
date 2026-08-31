@@ -20,7 +20,7 @@
 ;;; Helpers
 ;;; ------------------------------------------------------------------
 
-(setq *lincheck-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.2")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
@@ -376,5 +376,10 @@
   (princ)
 )
 
-(princ "\nLINCHECK.LSP loaded. Type LINCHECK to run the liner checklist.")
+(defun c:LINCHECKVER ()
+  (princ (strcat "\nLINCHECK " *lincheck-version*))
+  (princ))
+
+(princ (strcat "\nLINCHECK " *lincheck-version*
+               " loaded. Type LINCHECK to run the liner checklist."))
 (princ)

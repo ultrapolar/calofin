@@ -30,7 +30,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.2")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
@@ -580,5 +580,10 @@
   (princ)
 )
 
-(princ "\nCCPRECHECK.LSP loaded. Type CCPRECHECK to run the tech flow chart checklist.")
+(defun c:CCPRECHECKVER ()
+  (princ (strcat "\nCCPRECHECK " *ccprecheck-version*))
+  (princ))
+
+(princ (strcat "\nCCPRECHECK " *ccprecheck-version*
+               " loaded. Type CCPRECHECK to run the tech flow chart checklist."))
 (princ)

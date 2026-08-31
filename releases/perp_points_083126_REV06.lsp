@@ -114,7 +114,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.5")
+(setq *perp-version* "v0.6")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -514,6 +514,13 @@
   (reverse out))
 
 ;; --- command ---------------------------------------------------------
+
+;; ahead of the command on purpose: the structural tests scan from
+;; c:PERPPTS to end-of-file for leaked variables, and a defun name
+;; there would read as one
+(defun c:PERPPTSVER ()
+  (princ (strcat "\nPERPPTS " *perp-version*))
+  (princ))
 
 (defun c:PERPPTS (/ *error* perp:kill perp:finish
                     os ce pd plt clay cec celt celw celts cdim undoOpen

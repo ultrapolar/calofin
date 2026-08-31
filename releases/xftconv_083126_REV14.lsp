@@ -28,7 +28,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.3") ; printed on load and at command start so a
+(setq *xft-version* "v1.4") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -481,6 +481,10 @@
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
   (princ)
 )
+
+(defun c:XFTCONVVER ()
+  (princ (strcat "\nXFTCONV " *xft-version*))
+  (princ))
 
 (princ (strcat "\nXFTCONV.lsp " *xft-version*
                " loaded.  Type XFTCONV to scale a survey import and swap its points."))

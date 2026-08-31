@@ -28,7 +28,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.1")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -1169,5 +1169,10 @@
   (princ)
 )
 
-(princ "\nWCALST loaded -- select the band, pick the side to straighten.")
+(defun c:WCALSTVER ()
+  (princ (strcat "\nWCALST " *wcalst-version*))
+  (princ))
+
+(princ (strcat "\nWCALST " *wcalst-version*
+               " loaded -- select the band, pick the side to straighten."))
 (princ)

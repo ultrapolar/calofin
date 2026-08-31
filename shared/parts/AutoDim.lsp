@@ -150,7 +150,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.2")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1444,5 +1444,9 @@
       (setvar "CMDECHO" oldcmd)))
   (princ))
 
-(princ "\nAutoDim.lsp loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")
+(defun c:AUTODIMVER ()
+  (princ (strcat "\nAUTODIM " *autodim-version*))
+  (princ))
+
+(princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view)."))
 (princ)

@@ -186,7 +186,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.4") ; printed on load and at command start so a
+(setq *cs-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1676,6 +1676,10 @@
   (princ "\n[5] Done.  One U removes this whole demo.  Now try it for")
   (princ "\n    real: type CORNERSTP, select two wall lines of a corner,")
   (princ "\n    and follow the same prompts you just watched.")
+  (princ))
+
+(defun c:CORNERSTPVER ()
+  (princ (strcat "\nCORNERSTP " *cs-version*))
   (princ))
 
 (princ (strcat "\nCORNERSTP.lsp " *cs-version*

@@ -136,7 +136,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.1")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1249,6 +1249,11 @@
      (ddg-report "DDGPS READ TEST" out)))
   (princ))
 
-(princ "\nDrone Height from GPS v2.6 loaded  (pick a photo, click a point, place the height report).")
+(defun c:DDGPSVER ()
+  (princ (strcat "\nDDGPS " *droneheightgps-version*))
+  (princ))
+
+(princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
+               " loaded  (pick a photo, click a point, place the height report)."))
 (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
 (princ)

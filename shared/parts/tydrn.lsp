@@ -38,7 +38,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -255,5 +255,9 @@
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
   (princ))
 
-(princ "\nTYDRN.LSP loaded.  Type TYDRN to run.")
+(defun c:TYDRNVER ()
+  (princ (strcat "\nTYDRN " *tydrn-version*))
+  (princ))
+
+(princ (strcat "\nTYDRN " *tydrn-version* " loaded.  Type TYDRN to run."))
 (princ)

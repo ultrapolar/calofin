@@ -104,7 +104,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.5")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1935,7 +1935,8 @@
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
 
-(princ "\ndimcheck.lsp loaded - DIMCHECK reviews dimensions, arcs & overlapping")
+(princ (strcat "\ndimcheck.lsp " *dchk-version*
+               " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
 (princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
 (princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
 (princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")

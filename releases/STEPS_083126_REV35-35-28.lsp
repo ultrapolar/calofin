@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_083126_REV34-34-27.lsp
+;;; STEPS_083126_REV35-35-28.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v3.4 -> REV34   CORNERSTP, TUTORIALCORNERSTP
-;;;     HEMISTEP.lsp    v3.4 -> REV34   HEMISTEP, TUTORIALHEMISTEP
-;;;     NORMIESTEP.lsp  v2.7 -> REV27   NORMIESTEP, TUTORIALNORMIESTEP
+;;;     CORNERSTP.lsp   v3.5 -> REV35   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.5 -> REV35   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v2.8 -> REV28   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v3.4) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v3.5) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -212,7 +212,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.4") ; printed on load and at command start so a
+(setq *cs-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1704,13 +1704,17 @@
   (princ "\n    and follow the same prompts you just watched.")
   (princ))
 
+(defun c:CORNERSTPVER ()
+  (princ (strcat "\nCORNERSTP " *cs-version*))
+  (princ))
+
 (princ (strcat "\nCORNERSTP.lsp " *cs-version*
                " loaded - CORNERSTP to draw corner steps,"
                " TUTORIALCORNERSTP to learn it."))
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.4) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.5) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1885,7 +1889,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.4") ; printed on load and at command start so a
+(setq *hs-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -3293,13 +3297,17 @@
   (princ "\n    curve exactly.")
   (princ))
 
+(defun c:HEMISTEPVER ()
+  (princ (strcat "\nHEMISTEP " *hs-version*))
+  (princ))
+
 (princ (strcat "\nHEMISTEP.lsp " *hs-version*
                " loaded - HEMISTEP to draw hemisphere steps,"
                " TUTORIALHEMISTEP to learn it."))
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v2.7) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v2.8) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3479,7 +3487,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.7") ; printed on load and at command start so a
+(setq *ns-version* "v2.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -5083,6 +5091,10 @@
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
   (princ "\n    rounded or diagonal back corners) - NORMIESTEP fills it in.")
+  (princ))
+
+(defun c:NORMIESTEPVER ()
+  (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
 (princ (strcat "\nNORMIESTEP.lsp " *ns-version*

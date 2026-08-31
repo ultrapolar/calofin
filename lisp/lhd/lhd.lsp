@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.5")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.6")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2786,6 +2786,10 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* lh-old-err)   ; restore the previous error handler
+  (princ))
+
+(defun c:LHDVER ()
+  (princ (strcat "\nLHD " *lh-version*))
   (princ))
 
 (princ (strcat "\nLHD " *lh-version*

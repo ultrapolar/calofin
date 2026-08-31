@@ -31,7 +31,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.2")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -778,5 +778,10 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ "\nALTABCDEF.lsp loaded.  Type ALTABCDEF to plot points from a spreadsheet.")
+(defun c:ALTABCDEFVER ()
+  (princ (strcat "\nALTABCDEF " *altabcdef-version*))
+  (princ))
+
+(princ (strcat "\nALTABCDEF " *altabcdef-version*
+               " loaded.  Type ALTABCDEF to plot points from a spreadsheet."))
 (princ)

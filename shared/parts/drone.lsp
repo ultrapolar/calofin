@@ -48,7 +48,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -298,5 +298,9 @@
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
   (princ))
 
-(princ "\nDRONE.LSP loaded.  Type DRONE to run.")
+(defun c:DRONEVER ()
+  (princ (strcat "\nDRONE " *drone-version*))
+  (princ))
+
+(princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run."))
 (princ)
