@@ -106,7 +106,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.6")
+(setq *spacheck-version* "v1.7")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1667,10 +1667,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
     (princ))
-  (prompt (strcat "\nHighlight the spa drawing and its "
-                  spachk:*details-block*
-                  " block to " name " (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the spa drawing and its "
+                      spachk:*details-block*
+                      " block to " name " (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -1707,10 +1711,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECK error: " msg)))
     (princ))
-  (prompt (strcat "\nHighlight the spa drawing and its "
-                  spachk:*details-block*
-                  " block to SPACHECK (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the spa drawing and its "
+                      spachk:*details-block*
+                      " block to SPACHECK (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")

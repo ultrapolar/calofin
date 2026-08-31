@@ -91,7 +91,8 @@ def report_of(vm, cmd='c:SPACHECKSCAN', script=None):
     """Load SPACHECK into the same VM and run it; return the report text."""
     vm.load(CHK)
     try:
-        vm.run(cmd, script if script is not None else [None])
+        # two Enters: no pickfirst selection, then take the whole drawing
+        vm.run(cmd, script if script is not None else [None, None])
     except LispError as e:
         raise AssertionError(f"SPACHECK failed: {e}") from None
     txt = report_text(vm)
@@ -405,6 +406,19 @@ def test_round_audits_clean():
     assert problems(report_of(vm)) == []
 
 
+def test_pickfirst_selection_is_honored():
+    """A selection made before the command answers the pickfirst probe:
+    only "ssget _I" fires and the Highlight prompt is never asked."""
+    vm = build([None, 'Coversize', 'ROund', None, 84.0,
+                'No', 'Yes', 'No', None, '4-3'])
+    add_block(vm, 'STANDARD', '4-3')
+    border(vm, 422.4, 326.175)
+    sel = [e for e in vm.entities if e not in vm.deleted]
+    assert problems(report_of(vm, script=[sel])) == []
+    assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+    assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+
+
 # ------------------------------------------------------- the other commands
 
 def test_the_guided_walk_marks_and_rescue_puts_it_back():
@@ -428,7 +442,7 @@ def test_the_guided_walk_marks_and_rescue_puts_it_back():
         return out
 
     before = colours()
-    vm.run('c:SPACHECK', [None, 'Yes', 'Yes'])     # mark both flagged items
+    vm.run('c:SPACHECK', [None, None, 'Yes', 'Yes'])  # no pickfirst; whole dwg
     marked = colours()
     changed = [e for e in marked if before.get(e) != marked[e]]
     assert changed, "the walk marked nothing"
@@ -462,7 +476,7 @@ def test_the_demo_reports_its_three_planted_faults_and_nothing_else():
     vm.run('c:TUTORIALSPACHECK',
            ['Demo', [0.0, 0.0, 0.0],   # show me / where to draw it
             '', '', '',                # Enter through the three faults
-            'Yes', None,               # scan it, taking the whole drawing
+            'Yes', None, None,         # scan it, taking the whole drawing
             'No'])                     # keep the drawing so we can read it
     txt = report_text(vm)
     assert txt is not None, "the demo's scan wrote no report"
@@ -478,7 +492,7 @@ def test_the_demo_cleans_up_after_itself():
     vm = VM()
     vm.load(CHK)
     vm.run('c:TUTORIALSPACHECK',
-           ['Demo', [0.0, 0.0, 0.0], '', '', '', 'Yes', None, 'Yes'])
+           ['Demo', [0.0, 0.0, 0.0], '', '', '', 'Yes', None, None, 'Yes'])
     left = [e for e in vm.entities if e not in vm.deleted]
     assert left == [], [vm.entdata[e] for e in left]
 

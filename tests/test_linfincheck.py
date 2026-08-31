@@ -367,7 +367,7 @@ print("== LINFINSCAN: liner checks lead, dimension audit alongside ==")
 vm, ents = build_scan_vm()
 before = freeze(vm)
 pre = list(vm.entities)
-vm.run('c:LINFINSCAN', [None])              # Enter = whole drawing
+vm.run('c:LINFINSCAN', [None, None])        # no pickfirst; Enter = whole drawing
 
 reports = report_texts(vm)
 assert len(reports) == 2, [r[:60] for r in reports]   # main + audit column
@@ -426,7 +426,7 @@ print("   read-only: the bad pattern field survives, only the report is new")
 # ------------------------------------------------------------------
 print("== LITELINFINSCAN: liner rules without the dimension pass ==")
 vm, ents = build_scan_vm()
-vm.run('c:LITELINFINSCAN', [None])
+vm.run('c:LITELINFINSCAN', [None, None])
 reports = report_texts(vm)
 assert len(reports) == 1, [r[:60] for r in reports]   # main sheet only
 txt = reports[0]
@@ -476,6 +476,7 @@ sel = selectable(vm)
 
 # review order is d1 (top row), d2, d3
 vm.run('c:LINFINCHECK', [
+    None,           # no pickfirst selection
     sel,            # highlight the drawing
     'Move', 'Yes',  # d1: move the stray point onto l1, correct
     'Back',         # d2: mis-press - go back one
@@ -533,6 +534,16 @@ assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Dim %s [STANDARD] = 110.0000: OK' % ents['d1'].handle in txt, txt
 assert 'Dim %s [STANDARD] = 120.0000: OK' % ents['d2'].handle in txt, txt
 print("   report: side view found, MATCHES, WIPED, WRONG ONE, Skip noted")
+
+
+# ------------------------------------------------------------------
+print("== pickfirst: a selection made before LINFINSCAN is used as-is ==")
+vm, ents = build_scan_vm()
+vm.run('c:LINFINSCAN', [selectable(vm)])    # only the "_I" probe answered
+assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+assert len(report_texts(vm)) >= 1
+print("   the probe took it; the Highlight prompt was never asked")
 
 
 print("\nALL LINFINCHECK SCENARIOS PASSED")

@@ -364,7 +364,7 @@ vm = build_vm()
 ents = seed_faults(vm)
 before = freeze(vm)
 pre = list(vm.entities)
-vm.run('c:DIMSCAN', [None])                 # Enter = whole drawing
+vm.run('c:DIMSCAN', [None, None])           # no pickfirst; Enter = whole drawing
 
 reports = report_texts(vm)
 assert len(reports) == 1, [r[:60] for r in reports]
@@ -414,6 +414,7 @@ sel = selectable(vm)
 
 # review order is D1 (top row), D2, D3, then the arc, then the overlap
 vm.run('c:DIMCHECK', [
+    None,           # no pickfirst selection
     sel,            # highlight the drawing
     'Move', 'Yes',  # D1: take the suggested point, dimension correct
     'Back',         # D2: mis-press - go back one
@@ -512,6 +513,17 @@ vm = build_vm()
 vm.run('c:DIMCHECKVER', [])
 assert any('DIMCHECK v' in s for s in vm.printed), vm.printed[-3:]
 print("   DIMCHECKVER prints the loaded build")
+
+
+# ------------------------------------------------------------------
+print("== pickfirst: a selection made before DIMSCAN is used as-is ==")
+vm = build_vm()
+ents = seed_faults(vm)
+vm.run('c:DIMSCAN', [selectable(vm)])       # only the "_I" probe answered
+assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+assert len(report_texts(vm)) == 1
+print("   the probe took it; the Highlight prompt was never asked")
 
 
 print("\nALL DIMCHECK SCENARIOS PASSED")

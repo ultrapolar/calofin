@@ -27,7 +27,7 @@
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
 
-(setq *checkdrawing-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.2")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -295,8 +295,12 @@
       (princ (strcat "\nCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to CHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to CHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - CHECK cancelled."))

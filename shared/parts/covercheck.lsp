@@ -213,7 +213,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.2")
+(setq *cchk-version* "v1.3")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -2638,8 +2638,12 @@
       (princ (strcat "\nCOVERCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to COVERCHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to COVERCHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - COVERCHECK cancelled."))
@@ -2990,9 +2994,13 @@
       (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt (strcat "\nHighlight the drawing to " name
-                  " (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the drawing to " name
+                      " (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))

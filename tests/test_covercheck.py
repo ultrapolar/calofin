@@ -362,7 +362,7 @@ print("== COVERSCAN: read-only, suggests what the pool really needs ==")
 vm, ents = build_vm()
 before = freeze(vm)
 pre = list(vm.entities)
-vm.run('c:COVERSCAN', [selectable(vm)])
+vm.run('c:COVERSCAN', [None, selectable(vm)])   # no pickfirst, then highlight
 
 reports = report_texts(vm)
 assert len(reports) == 2, [r[:60] for r in reports]   # main + audit column
@@ -422,7 +422,7 @@ print("   read-only: the block still reads 15'', only the report is new")
 # ------------------------------------------------------------------
 print("== LITECOVERSCAN: cover rules without the dimension pass ==")
 vm, ents = build_vm()
-vm.run('c:LITECOVERSCAN', [selectable(vm)])
+vm.run('c:LITECOVERSCAN', [None, selectable(vm)])
 reports = report_texts(vm)
 assert len(reports) == 1, [r[:60] for r in reports]   # main sheet only
 txt = reports[0]
@@ -446,6 +446,7 @@ sel = selectable(vm)
 
 # review order is dbad (top row), then dok
 vm.run('c:COVERCHECK', [
+    None,           # no pickfirst selection
     sel,            # highlight the drawing
     'Move', 'Yes',  # dbad: take the suggested point, correct
     'Back',         # dok: mis-press - go back one
@@ -490,6 +491,16 @@ assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Dim %s [STANDARD] = 230.0000: OK' % ents['dbad'].handle in txt, txt
 assert 'Dim %s [STANDARD] = 240.0000: OK' % ents['dok'].handle in txt, txt
 print("   report: SUGGEST lines, the circled pad and the reviewed dims")
+
+
+# ------------------------------------------------------------------
+print("== pickfirst: a selection made before COVERSCAN is used as-is ==")
+vm, ents = build_vm()
+vm.run('c:COVERSCAN', [selectable(vm)])     # only the "_I" probe answered
+assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+assert len(report_texts(vm)) == 2
+print("   the probe took it; the Highlight prompt was never asked")
 
 
 print("\nALL COVERCHECK SCENARIOS PASSED")

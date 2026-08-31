@@ -108,7 +108,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.6")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.7")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1087,8 +1087,12 @@
       (princ (strcat "\nDIMCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to DIMCHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to DIMCHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
@@ -1442,8 +1446,12 @@
       (princ (strcat "\nDIMSCAN error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))

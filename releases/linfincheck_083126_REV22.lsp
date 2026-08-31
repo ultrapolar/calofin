@@ -249,7 +249,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.1")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.2")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2370,8 +2370,12 @@
       (princ (strcat "\nLINFINCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to LINFINCHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to LINFINCHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -3268,9 +3272,13 @@
       (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt (strcat "\nHighlight the drawing to " name
-                  " (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the drawing to " name
+                      " (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))

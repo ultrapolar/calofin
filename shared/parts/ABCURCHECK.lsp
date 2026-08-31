@@ -99,7 +99,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.1")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1038,9 +1038,13 @@
     (acc:chain all)))
 
 (defun acc:select ( / ss)
-  (princ "\n\nSelect the closed perimeter - one polyline, or the same")
-  (princ "\nshape exploded into lines and arcs.")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if (null ss)
+    (progn
+      (princ "\n\nSelect the closed perimeter - one polyline, or the same")
+      (princ "\nshape exploded into lines and arcs.")
+      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))

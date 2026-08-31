@@ -24557,7 +24557,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.1")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -25496,9 +25496,13 @@
     (acc:chain all)))
 
 (defun acc:select ( / ss)
-  (princ "\n\nSelect the closed perimeter - one polyline, or the same")
-  (princ "\nshape exploded into lines and arcs.")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if (null ss)
+    (progn
+      (princ "\n\nSelect the closed perimeter - one polyline, or the same")
+      (princ "\nshape exploded into lines and arcs.")
+      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))
@@ -25694,7 +25698,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.0")
+(setq *abpcheck-version* "v1.1")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -26234,8 +26238,12 @@
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nABPCHECK - how far every point sits off the nearest line.")
-  (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
-  (setq ss (ssget abp:*filter*))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" abp:*filter*))
+  (if (null ss)
+    (progn
+      (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
+      (setq ss (ssget abp:*filter*))))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")
@@ -33519,7 +33527,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.2")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -33731,8 +33739,12 @@
       (princ (strcat "\nCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to CHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to CHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - CHECK cancelled."))
@@ -40446,7 +40458,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.2")
+(setq *cchk-version* "v1.3")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -42871,8 +42883,12 @@
       (princ (strcat "\nCOVERCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to COVERCHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to COVERCHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - COVERCHECK cancelled."))
@@ -43223,9 +43239,13 @@
       (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt (strcat "\nHighlight the drawing to " name
-                  " (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the drawing to " name
+                      " (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -44168,7 +44188,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.6")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.7")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -45147,8 +45167,12 @@
       (princ (strcat "\nDIMCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to DIMCHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to DIMCHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
@@ -45502,8 +45526,12 @@
       (princ (strcat "\nDIMSCAN error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -56033,7 +56061,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.1")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.2")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -58019,8 +58047,12 @@
       (princ (strcat "\nLINFINCHECK error: " msg)))
     (princ))
 
-  (prompt "\nHighlight the drawing to LINFINCHECK: ")
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nHighlight the drawing to LINFINCHECK: ")
+      (setq ss (ssget))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -58919,9 +58951,13 @@
       (princ (strcat "\n" name " error: " msg)))
     (princ))
 
-  (prompt (strcat "\nHighlight the drawing to " name
-                  " (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the drawing to " name
+                      " (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -64614,7 +64650,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.6")
+(setq *spacheck-version* "v1.7")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -66084,10 +66120,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
     (princ))
-  (prompt (strcat "\nHighlight the spa drawing and its "
-                  spachk:*details-block*
-                  " block to " name " (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the spa drawing and its "
+                      spachk:*details-block*
+                      " block to " name " (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -66124,10 +66164,14 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECK error: " msg)))
     (princ))
-  (prompt (strcat "\nHighlight the spa drawing and its "
-                  spachk:*details-block*
-                  " block to SPACHECK (Enter = whole drawing): "))
-  (setq ss (ssget))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt (strcat "\nHighlight the spa drawing and its "
+                      spachk:*details-block*
+                      " block to SPACHECK (Enter = whole drawing): "))
+      (setq ss (ssget))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")

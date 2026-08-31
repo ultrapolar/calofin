@@ -168,6 +168,11 @@ def live(vm, etype, layer=None):
 
 
 def run(vm, cmd, script, label):
+    # ABCURCHECK and its SCAN go through acc:select, which probes
+    # pickfirst first: the leading None answers it (no pre-selection),
+    # so the command asks for the perimeter as every scenario expects
+    if cmd in ('c:ABCURCHECK', 'c:ABCURCHECKSCAN'):
+        script = [None] + list(script)
     try:
         vm.run(cmd, list(script))
     except LispError as e:
@@ -407,6 +412,19 @@ def test_turning_excess_grows_with_wander():
 
 
 # ---- the commands -----------------------------------------------------
+
+def test_pickfirst_selection_is_honored():
+    """A perimeter selected before the command answers acc:select's
+    probe: only "ssget _I" fires, the Select prompt never asks."""
+    vm = newvm()
+    ent = split_circle(vm, 20.0)
+    try:
+        vm.run('c:ABCURCHECKSCAN', [[ent]])   # only the probe answered
+    except LispError as e:
+        raise AssertionError(f"[pickfirst] {e}") from None
+    assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+    assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+
 
 def test_command_marks_and_combs():
     """The whole flow: select, keep the declarations, report, ring the

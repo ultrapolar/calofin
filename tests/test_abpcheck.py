@@ -130,8 +130,10 @@ def rows(txt):
 
 
 def run(vm, script):
+    # the leading None answers the pickfirst probe: no pre-selection,
+    # so the command asks for one, as every scenario here expects
     try:
-        vm.run('c:ABPCHECK', script)
+        vm.run('c:ABPCHECK', [None] + list(script))
     except LispError as e:
         raise AssertionError(f"ABPCHECK failed: {e}") from None
     txt = report_text(vm)
@@ -297,7 +299,7 @@ check("a spline in the selection is reported, not swallowed",
 print("nothing to measure")
 
 vm7 = vm_with()                  # the rectangle, no points
-vm7.run('c:ABPCHECK', [None])    # no limit is asked for -- it stops first
+vm7.run('c:ABPCHECK', [None, None])  # no limit is asked for -- it stops first
 check("no points: it says so and asks nothing",
       any('No survey points' in p for p in vm7.printed),
       repr(vm7.printed[-3:]))
@@ -306,12 +308,24 @@ check("no points: no report is written", report_text(vm7) is None)
 vm8 = VM()
 vm8.load(CHK)
 vm8.loads(point(10, 10) + point(20, 20))
-vm8.run('c:ABPCHECK', [None])    # points, but nothing to measure against
+vm8.run('c:ABPCHECK', [None, None])  # points, but nothing to measure against
 check("no lines: it says so and asks nothing",
       any('no' in p and 'lines, arcs or polylines' in p
           for p in vm8.printed),
       repr(vm8.printed[-3:]))
 check("no lines: no report is written", report_text(vm8) is None)
+
+# ----------------------------------------------------------------------
+print("pickfirst")
+
+vm9 = vm_with(point(120, 2))
+sel9 = [e for e in vm9.entities if e not in vm9.deleted]
+vm9.run('c:ABPCHECK', [sel9, 1.0])   # only the "_I" probe and the limit
+check("a selection made before the command answers the probe",
+      vm9.prompts[0][0] == 'ssget _I', repr(vm9.prompts[0]))
+check("the Highlight prompt is never asked",
+      not any(p[0] == 'ssget' for p in vm9.prompts), repr(vm9.prompts))
+check("and the report still lands", report_text(vm9) is not None)
 
 # ----------------------------------------------------------------------
 print()

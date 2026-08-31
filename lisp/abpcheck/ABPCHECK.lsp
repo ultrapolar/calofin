@@ -63,7 +63,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.0")
+(setq *abpcheck-version* "v1.1")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -742,8 +742,12 @@
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nABPCHECK - how far every point sits off the nearest line.")
-  (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
-  (setq ss (ssget abp:*filter*))
+  ;; a pickfirst selection if there is one, otherwise ask for it
+  (setq ss (ssget "_I" abp:*filter*))
+  (if (null ss)
+    (progn
+      (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
+      (setq ss (ssget abp:*filter*))))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")
