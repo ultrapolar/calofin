@@ -8,7 +8,7 @@
 ;;;     AutoDim.lsp        v1.0
 ;;;     PADDLE.lsp         v1.4
 ;;;     tydrn.lsp          v1.1
-;;;     LAZPANEL.lsp       v3.3
+;;;     LAZPANEL.lsp       v3.4
 ;;;
 ;;; Then type TYLERDRONESUITE, or click the orange triangle
 ;;; on screen.  That button is the only one this build puts
@@ -2601,7 +2601,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.3")
+(setq *lazpanel-version* "v3.4")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -2956,6 +2956,14 @@
 ;;   AUTO  (the default) yes when the drone lisp was loaded ON ITS OWN,
 ;;         no when it arrived inside LAZPASS
 ;;   T     always      nil  never
+;;
+;; Set these AFTER the file has loaded and run LAZBUTTON -- not before.
+;; The load sets each of them itself, so a value put in place first is
+;; overwritten before it is ever read.  (editions/TYLERDRONE.lsp sets
+;; them in its footer, which is after, and states BOTH outright rather
+;; than leaving one to AUTO: AUTO reads a flag another build may have
+;; left standing, which is exactly how that edition once put up no
+;; button at all.)
 ;;
 ;; The distinction is the point.  A drawer who was handed tydrn.lsp by
 ;; itself has no panel to reach the suite through, so the button IS the
@@ -4200,8 +4208,8 @@
      (if (and any lzp:*bigbutton*)
        (princ (strcat "\n  Drawn at 32 pixels.  AutoCAD sizes every"
                       " toolbar together, so the rest grew"
-                      "\n  with it; (setq lzp:*bigbutton* nil) before"
-                      " loading leaves them alone.")))
+                      "\n  with it; (setq lzp:*bigbutton* nil) then"
+                      " LAZBUTTON puts them all back.")))
      (cond
        ((lzp:suite-wanted-p))
        ((not (lzp:has "TYLERDRONESUITE"))
@@ -4214,7 +4222,7 @@
                        " on a button of its own:"
                        "\n  this is the whole build, and the build puts"
                        " up one external button."
-                       "\n  (setq lzp:*suitebutton* T) before loading"
+                       "\n  (setq lzp:*suitebutton* T) then LAZBUTTON"
                        " gives it one anyway.")))))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
@@ -4331,8 +4339,32 @@
 ;; panel is along for the ride here -- it owns the bitmap
 ;; and toolbar machinery -- so it does not take a button of
 ;; its own; LAZPANEL still opens it if you type it.
+;;
+;; BOTH are stated outright, and the second one is the
+;; lesson.  lzp:*suitebutton* AUTO works out whether to
+;; give the suite a button by reading cal:*build-loading*,
+;; which LAZPASS raises and nothing ever lowers -- so on a
+;; machine that had loaded LAZPASS earlier in the session
+;; (a startup suite will do it every drawing) this edition
+;; read a flag left by somebody else, decided it was inside
+;; the build, and put up no button at all -- having already
+;; taken the panel's away.  An edition knows exactly which
+;; button it wants.  It should say so, not deduce it.
 (setq lzp:*panelbutton* nil)
+(setq lzp:*suitebutton* T)
 (vl-catch-all-apply 'lzp:buttons-init nil)
+
+;; And say so if it did not work.  A load that silently
+;; leaves nothing on screen is the failure that brought
+;; that bug back.
+(if (vl-catch-all-apply 'lzp:toolbar-find (list lzp:*tbsuite*))
+  (princ "
+TYLERDRONE: the orange triangle is on screen - click it to run the suite.")
+  (progn
+    (princ "
+TYLERDRONE: the button could not be put up - the AutoCAD menu API")
+    (princ "
+is unavailable here.  Type TYLERDRONESUITE instead, or LAZBUTTON to retry.")))
 
 (princ "\nTYLERDRONE edition loaded.  Type TYLERDRONESUITE (or click the orange")
 (princ "\ntriangle) to run TYDRN, then PADDLE, then AUTODIM.")

@@ -145,6 +145,46 @@ def test_the_deferred_button_call_really_moved():
           "TAKEN OUT here" in src)
 
 
+def test_it_works_on_a_machine_that_has_already_loaded_lazpass():
+    print("\nthe reported bug: LAZPASS loaded earlier in the same session")
+    # cal:*build-loading* is raised by LAZPASS and never lowered, so it
+    # is still standing when anything loads after it -- and a startup
+    # suite raises it in every drawing.  The edition used to read that
+    # flag through lzp:*suitebutton* AUTO, decide it was inside the
+    # build, and put up NO button at all, having already taken the
+    # panel's away.  Both symptoms, exactly as reported.
+    bundle = os.path.join(REPO, 'shared', 'LAZPASS.lsp')
+    vm = VM()
+    vm.loads(STUB)
+    lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
+    vm.loads(EXTRA)
+    vm.load(bundle)
+    check("LAZPASS leaves its flag standing (this is the trap)",
+          vm.get(Sym('cal:*build-loading*')) is not None)
+    vm.load(EDITION)
+    shown = {}
+    for pair in (vm.get(Sym('stub:*allvis*')) or []):
+        shown[str(pair[0])] = str(pair[1])
+    check("the drone button IS on screen (it was not, before the fix)",
+          shown.get('TylerDroneSuite') == 'ON')
+    check("and the panel's is off, as this edition intends",
+          shown.get('LazPanel') == 'OFF')
+    check("because the edition STATES what it wants rather than deducing",
+          vm.get(Sym('lzp:*suitebutton*')) is not None
+          and vm.get(Sym('lzp:*panelbutton*')) is None)
+
+
+def test_the_load_says_whether_the_button_went_up():
+    print("\na load that leaves nothing on screen must not do it quietly")
+    vm = load()
+    check("it confirms the button when it is there",
+          "the orange triangle is on screen" in said(vm))
+    # and names the fallback when the menu API is not there at all
+    src = open(EDITION).read()
+    check("and points at the typed command when it is not",
+          "Type TYLERDRONESUITE instead" in src)
+
+
 def test_it_says_it_is_generated():
     print("\nit is a build, and says so where someone would edit it")
     src = open(EDITION).read()
@@ -162,6 +202,8 @@ def main():
                test_every_stage_is_in_it,
                test_one_button_and_it_is_the_drone_s,
                test_it_is_not_the_lazpass_build,
+               test_it_works_on_a_machine_that_has_already_loaded_lazpass,
+               test_the_load_says_whether_the_button_went_up,
                test_the_deferred_button_call_really_moved,
                test_it_says_it_is_generated):
         try:

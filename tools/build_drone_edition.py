@@ -135,8 +135,33 @@ def build():
     parts.append(";; panel is along for the ride here -- it owns the bitmap")
     parts.append(";; and toolbar machinery -- so it does not take a button of")
     parts.append(";; its own; LAZPANEL still opens it if you type it.")
+    parts.append(";;")
+    parts.append(";; BOTH are stated outright, and the second one is the")
+    parts.append(";; lesson.  lzp:*suitebutton* AUTO works out whether to")
+    parts.append(";; give the suite a button by reading cal:*build-loading*,")
+    parts.append(";; which LAZPASS raises and nothing ever lowers -- so on a")
+    parts.append(";; machine that had loaded LAZPASS earlier in the session")
+    parts.append(";; (a startup suite will do it every drawing) this edition")
+    parts.append(";; read a flag left by somebody else, decided it was inside")
+    parts.append(";; the build, and put up no button at all -- having already")
+    parts.append(";; taken the panel's away.  An edition knows exactly which")
+    parts.append(";; button it wants.  It should say so, not deduce it.")
     parts.append("(setq lzp:*panelbutton* nil)")
+    parts.append("(setq lzp:*suitebutton* T)")
     parts.append("(vl-catch-all-apply 'lzp:buttons-init nil)")
+    parts.append("")
+    parts.append(";; And say so if it did not work.  A load that silently")
+    parts.append(";; leaves nothing on screen is the failure that brought")
+    parts.append(";; that bug back.")
+    parts.append("(if (vl-catch-all-apply 'lzp:toolbar-find"
+                 " (list lzp:*tbsuite*))")
+    parts.append('  (princ "\nTYLERDRONE: the orange triangle is on screen -'
+                 ' click it to run the suite.")')
+    parts.append("  (progn")
+    parts.append('    (princ "\nTYLERDRONE: the button could not be put up -'
+                 ' the AutoCAD menu API")')
+    parts.append('    (princ "\nis unavailable here.  Type TYLERDRONESUITE'
+                 ' instead, or LAZBUTTON to retry.")))')
     parts.append("")
     parts.append('(princ "\\nTYLERDRONE edition loaded.  Type TYLERDRONESUITE'
                  ' (or click the orange")')

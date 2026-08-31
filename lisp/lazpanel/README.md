@@ -187,7 +187,7 @@ your toolbars changed:
 ```
 LazPanel button is on screen - drag it anywhere, dock it, click it to open the panel.
   Drawn at 32 pixels.  AutoCAD sizes every toolbar together, so the rest grew
-  with it; (setq lzp:*bigbutton* nil) before loading leaves them alone.
+  with it; (setq lzp:*bigbutton* nil) then LAZBUTTON puts them all back.
 ```
 
 Thirty-two is the ceiling, not a choice: a toolbar bitmap is 16 or 32,
@@ -230,6 +230,20 @@ and an unbound symbol is nil.
 `lzp:*suitebutton*` overrules it: `AUTO` (the default) is the rule
 above, `T` gives it a button anywhere, `nil` never does.
 
+**Set these after the file has loaded, then run `LAZBUTTON`** — not
+before. The load sets each of them itself, so a value put in place first
+is overwritten before it is ever read.
+
+**`AUTO` reads a flag another build may have left standing**, and that
+is a real trap rather than a theoretical one. `cal:*build-loading*` is
+raised by `LAZPASS.lsp` and never lowered, so on a machine where LAZPASS
+had already loaded — a startup suite does it in every drawing — the
+drone edition read somebody else's flag, decided it was inside the
+build, and put up no button at all, having already taken the panel's
+away. An edition knows which button it wants; `editions/TYLERDRONE.lsp`
+now states **both** tunables outright in its footer instead of leaving
+one to be deduced.
+
 **A button the current build does not want is taken off the strip, not
 just skipped.** AutoCAD keeps toolbars in the CUI, so one put up by
 another build is still on screen next time AutoCAD opens — load the
@@ -249,7 +263,7 @@ tells the two absences apart, because they have different answers:
 ```
   TYLERDRONESUITE is on the panel rather than on a button of its own:
   this is the whole build, and the build puts up one external button.
-  (setq lzp:*suitebutton* T) before loading gives it one anyway.
+  (setq lzp:*suitebutton* T) then LAZBUTTON gives it one anyway.
 ```
 
 Two details worth knowing, because both were wrong first time round:

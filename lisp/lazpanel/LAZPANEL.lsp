@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.3")
+(setq *lazpanel-version* "v3.4")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -431,6 +431,14 @@
 ;;   AUTO  (the default) yes when the drone lisp was loaded ON ITS OWN,
 ;;         no when it arrived inside LAZPASS
 ;;   T     always      nil  never
+;;
+;; Set these AFTER the file has loaded and run LAZBUTTON -- not before.
+;; The load sets each of them itself, so a value put in place first is
+;; overwritten before it is ever read.  (editions/TYLERDRONE.lsp sets
+;; them in its footer, which is after, and states BOTH outright rather
+;; than leaving one to AUTO: AUTO reads a flag another build may have
+;; left standing, which is exactly how that edition once put up no
+;; button at all.)
 ;;
 ;; The distinction is the point.  A drawer who was handed tydrn.lsp by
 ;; itself has no panel to reach the suite through, so the button IS the
@@ -1675,8 +1683,8 @@
      (if (and any lzp:*bigbutton*)
        (princ (strcat "\n  Drawn at 32 pixels.  AutoCAD sizes every"
                       " toolbar together, so the rest grew"
-                      "\n  with it; (setq lzp:*bigbutton* nil) before"
-                      " loading leaves them alone.")))
+                      "\n  with it; (setq lzp:*bigbutton* nil) then"
+                      " LAZBUTTON puts them all back.")))
      (cond
        ((lzp:suite-wanted-p))
        ((not (lzp:has "TYLERDRONESUITE"))
@@ -1689,7 +1697,7 @@
                        " on a button of its own:"
                        "\n  this is the whole build, and the build puts"
                        " up one external button."
-                       "\n  (setq lzp:*suitebutton* T) before loading"
+                       "\n  (setq lzp:*suitebutton* T) then LAZBUTTON"
                        " gives it one anyway.")))))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
