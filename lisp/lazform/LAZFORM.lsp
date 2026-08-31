@@ -73,7 +73,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.6")
+(setq *lazform-version* "v2.7")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -310,7 +310,7 @@
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
    (("x"  "X - hopper cut face length (check)")
-    ("s2" "S2 - corner cut face (check)")
+    ("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -342,7 +342,7 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)")
+   (("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -483,7 +483,7 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)")
+   (("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")

@@ -979,16 +979,35 @@ print("   chain at centre-12 (or centre-L/6); M/L/K attached to the hopper edge"
 
 
 print("== 43. Grecian overall-sheet input (A/B/T/S/S1/V/S2) ==")
-def grecov(aov,bov,s,t,s1,v):
+def q4(x):
+    """Mirror of pool:q4: the nearest quarter inch."""
+    return int(4.0 * x + 0.5) * 0.25
+def greccut(s2,s,s1):
+    # Mirror of pool:greccut.  The tape a crew can actually pull across
+    # a cut is its FACE, so a measured S2 fills in whichever leg the
+    # sheet left blank -- as the 45 the cut is drawn as when BOTH are
+    # blank, and by closing the right triangle when one is pinned.
+    if s2 is None: return s,s1
+    if s is None and s1 is None:
+        c = q4(s2/1.41421356237); return c,c
+    if s is None and s1 < s2: return q4(math.sqrt(s2*s2-s1*s1)),s1
+    if s1 is None and s < s2: return s,q4(math.sqrt(s2*s2-s*s))
+    return s,s1
+def grecov(aov,bov,s,t,s1,v,s2=None):
     # WALLS BEAT CORNERS: T and V are taped along a wall, S and S1 only
     # locate the virtual sharp corner, so a measured wall wins and its
-    # corner partner is re-derived from the overall.
+    # corner partner is re-derived from the overall.  S2 sits between
+    # the two -- it fills a leg in, it never overrides one.
+    S = T = S1 = V = None
     if t is not None: S,T = (bov-t)/2.0, t
     elif s is not None: S,T = s, bov-2*s
-    else: S,T = bov/8.0, 0.75*bov
     if v is not None: S1,V = (aov-v)/2.0, v
     elif s1 is not None: S1,V = s1, aov-2*s1
-    else: S1,V = aov/6.0, aov*2.0/3.0
+    S,S1 = greccut(s2,S,S1)
+    if S is None: S = bov/8.0
+    if S1 is None: S1 = aov/6.0
+    if T is None: T = bov-2*S
+    if V is None: V = aov-2*S1
     return S,T,S1,V
 # consistent sheet: B=500 A=200 T=400 S=50 S1=55 V=90
 S,T,S1,V = grecov(200,500,50,400,55,90)
@@ -1008,6 +1027,27 @@ assert (S,T,S1,V)==(50,400,55,90)
 # NA derivations
 S,T,S1,V = grecov(200,500,None,400,None,90)
 assert (S,T,S1,V)==(50.0,400,55.0,90)
+# the taped cut FACE fills in what the sheet left blank: a 6'-0 face is
+# the 45 the cut is drawn as, so both legs come back 4'-3
+S,T,S1,V = grecov(216.0,480.0,None,None,None,None,72.0)
+assert (S,S1)==(51.0,51.0), (S,S1)
+assert (T,V)==(480.0-102.0,216.0-102.0), (T,V)
+assert abs(math.hypot(S,S1)-72.0) < 0.13         # and the face closes
+# one leg pinned by its wall -> the face gives the other, not a 45 guess
+S,T,S1,V = grecov(216.0,480.0,None,378.0,None,None,72.0)
+assert (S,S1)==(51.0,50.75), (S,S1)              # sqrt(72^2-51^2)=50.82
+# a taped leg wins over the face the same way a wall does
+S,T,S1,V = grecov(216.0,480.0,60.0,None,None,None,72.0)
+assert (S,S1)==(60.0,39.75), (S,S1)              # sqrt(72^2-60^2)=39.80
+# both legs taped: the face is a check again, and changes nothing
+assert grecov(200,500,50,None,55,None,84.0)==grecov(200,500,50,None,55,None)
+# a face too short to hold the pinned leg is ignored, not square-rooted
+# into nothing -- the nominal split takes over and the S2 row shows it
+S,T,S1,V = grecov(216.0,480.0,None,300.0,None,None,72.0)
+assert S==90.0 and abs(S1-216.0/6.0)<1e-9, (S,S1)
+# nothing taped at all is the long-pool nominal split, unchanged
+assert grecov(200,500,None,None,None,None)==(62.5,375.0,200/6.0,200-200/3.0)
+
 # derived edges feed the existing pipeline and reproduce the sheet
 hyp=math.hypot(50,55)
 q,failed=fitquad(400,400,200,200,None,None)
@@ -1595,15 +1635,20 @@ assert abs(_sides[0]-124.26) < 0.01
 print("   A+B alone give a regular octagon; measured letters still win")
 
 # the GRECIAN keeps its own defaults -- the octagon rule must not leak
-def grecov(a,b,s=None,t=None,s1=None,v=None):
+def grecov(a,b,s=None,t=None,s1=None,v=None,s2=None):
     """Mirror of pool:grecov: the long-pool defaults, unchanged.
-    Wall letters (T, V) win over corner letters (S, S1)."""
+    Wall letters (T, V) win over corner letters (S, S1), and a taped
+    cut face (S2) only fills in a leg neither of them pinned."""
+    S=T=S1=V=None
     if   t is not None: S,T = (b-t)/2.0,t
     elif s is not None: S,T = s,b-2*s
-    else:               S,T = b/8.0,0.75*b
     if   v is not None:  S1,V = (a-v)/2.0,v
     elif s1 is not None: S1,V = s1,a-2*s1
-    else:                S1,V = a/6.0,a*(2.0/3.0)
+    S,S1 = greccut(s2,S,S1)
+    if S is None:  S  = b/8.0
+    if S1 is None: S1 = a/6.0
+    if T is None:  T  = b-2*S
+    if V is None:  V  = a-2*S1
     return S,T,S1,V
 _g = grecov(200.0,480.0)
 assert all(abs(x-y) < 1e-9 for x, y in
@@ -1817,12 +1862,15 @@ def romres(aov, s1raw, vraw):
         return (aov - vraw) / 2.0, vraw
     return aov / 6.0, aov * 2.0 / 3.0
 
-def muttres(style, sraw, s1raw, vraw, rraw, aov, bov):
+def muttres(style, sraw, s1raw, vraw, rraw, s2raw, aov, bov):
     # mirrors pool:muttres -- returns (ext, inset, s1, v, bad)
     bad = False
     if style == "Grecian":
-        s = sraw if sraw is not None else bov / 8.0
-        s1 = s1raw if s1raw is not None else aov / 6.0
+        # a grecian END is the grecian sheet's corner cut, so its taped
+        # face fills in a blank leg the same way (see greccut above)
+        cs, cs1 = greccut(s2raw, sraw, s1raw)
+        s = cs if cs is not None else bov / 8.0
+        s1 = cs1 if cs1 is not None else aov / 6.0
         v = aov - 2.0 * s1
         if v <= 1e-6:
             s1 = min(12.0, 0.125 * aov); v = aov - 2.0 * s1; bad = True
@@ -1854,24 +1902,33 @@ def muttres(style, sraw, s1raw, vraw, rraw, aov, bov):
     return 0.0, 0.0, None, None, False
 
 # roman deep end: S measured; ext = S, no side inset
-ext, ins, s1, v, bad = muttres("ROman", 40.0, 40.0, None, None, 240.0, 480.0)
+ext, ins, s1, v, bad = muttres("ROman", 40.0, 40.0, None, None, None, 240.0, 480.0)
 assert (ext, ins, s1, v, bad) == (40.0, 0.0, 40.0, 160.0, False)
 # grecian shallow end: no bulge, S insets the sides
-ext, ins, s1, v, bad = muttres("Grecian", 50.0, 40.0, None, None, 240.0, 480.0)
+ext, ins, s1, v, bad = muttres("Grecian", 50.0, 40.0, None, None, None, 240.0, 480.0)
 assert (ext, ins, s1, v, bad) == (0.0, 50.0, 40.0, 160.0, False)
 # the body is what's left of B: 480 - 40 - 0 = 440, sides inset to 390
 assert 480.0 - 40.0 - 0.0 == 440.0 and 440.0 - 50.0 == 390.0
 # oval end, R = NA -> half round; R given -> minor-arc bulge
-assert muttres("Oval", None, None, None, None, 240.0, 480.0)[0] == 120.0
-assert abs(muttres("Oval", None, None, None, 130.0, 240.0, 480.0)[0] - 80.0) < 1e-9
+assert muttres("Oval", None, None, None, None, None, 240.0, 480.0)[0] == 120.0
+assert abs(muttres("Oval", None, None, None, 130.0, None, 240.0, 480.0)[0] - 80.0) < 1e-9
 # an R smaller than A/2 can't reach the walls: half round + flagged
-ext, _, _, _, bad = muttres("Oval", None, None, None, 100.0, 240.0, 480.0)
+ext, _, _, _, bad = muttres("Oval", None, None, None, 100.0, None, 240.0, 480.0)
 assert ext == 120.0 and bad
 # roman S derived from the radius check when S itself is NA
-ext, _, s1, v, _ = muttres("ROman", None, 40.0, None, 100.0, 240.0, 480.0)
+ext, _, s1, v, _ = muttres("ROman", None, 40.0, None, 100.0, None, 240.0, 480.0)
 assert abs(ext - (100.0 - math.sqrt(100.0**2 - 80.0**2))) < 1e-9
+# a grecian end taped only across its FACE: both legs come off the 45
+ext, ins, s1, v, bad = muttres("Grecian", None, None, None, None, 72.0,
+                               240.0, 480.0)
+assert (ext, ins, s1) == (0.0, 51.0, 51.0) and not bad, (ext, ins, s1, bad)
+assert v == 240.0 - 102.0, v
+# with one leg taped the face gives the other, and a taped leg still wins
+ext, ins, s1, _, _ = muttres("Grecian", 60.0, None, None, None, 72.0,
+                             240.0, 480.0)
+assert (ins, s1) == (60.0, 39.75), (ins, s1)
 # a grecian S1 that swallows A is floored and flagged
-ext, ins, s1, v, bad = muttres("Grecian", 50.0, 130.0, None, None, 240.0, 480.0)
+ext, ins, s1, v, bad = muttres("Grecian", 50.0, 130.0, None, None, None, 240.0, 480.0)
 assert bad and s1 == 12.0 and v == 216.0
 print("   roman/grecian/oval ends resolve like their home sheets")
 

@@ -560,6 +560,21 @@ assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 60.0) < 0.5 and
            for c in dimcalls(vm)), "H must anchor at the deep tip"
 print("   roman + grecian ends on one body; H taped from the tip")
 
+print("== R13c. MUTT grecian end taped across its FACE only ==")
+# The same cut, the same tape: S and S1 NA with a 6'-0 face gives 4'-3
+# legs, so the shallow end's cut runs from (429,0) to (480,51).
+vm = run(["Insquare", "MU"] + BASE +
+         ["Square", "Grecian",     # deep / shallow end styles
+          480.0, 240.0,            # B tip-to-tip, A
+          "NA", "NA", 72.0,        # shallow grecian S, S1 NA; S2 = 6'-0
+          "No"],                   # no bottom
+         "R13c")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((429.0, 0.0), (480.0, 51.0)), segs      # the cut, a 45
+assert hasseg((480.0, 51.0), (480.0, 189.0)), segs    # V = 240 - 2(51)
+assert hasseg((0.0, 0.0), (429.0, 0.0)), segs         # side stops at it
+print("   S and S1 NA: the face set both legs, and the end closed on them")
+
 print("== R13b. MUTT out-of-square: OVAL deep end, half round (R = NA) ==")
 vm = run(["Outofsquare", "MU"] + BASE +
          ["Oval", "Square",
@@ -949,6 +964,58 @@ assert sum(1 for x in _lens if abs(x - 84.0) <= 0.05) == 4, _lens    # S2 faces
 assert not any(abs(x - 319.50) < 0.6 for x in _lens), _lens
 assert not any(abs(x - 85.56) < 0.05 for x in _lens), _lens
 print("   T/V/S2 walls held true; S and S1 absorbed the error")
+
+print("== R16b. grecian Overall: the taped cut FACE fills in S and S1 ==")
+# S and S1 run out to a VIRTUAL sharp corner past the cut -- there is
+# nothing out there to hook a tape on -- so the number a crew actually
+# brings back is the face S2 across the cut.  With both legs NA the cut
+# is the 45 it is drawn as: a 6'-0 face gives 4'-3 legs (51", the
+# quarter inch a tape is read to), so T = B - 2(51) and V = A - 2(51).
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall",
+          480.0, 216.0,                   # B, A overalls
+          "NA", "NA", "NA", "NA",         # T, S, S1, V -- none taped
+          72.0,                           # S2 -- the cut face, 6'-0
+          None,                           # anything to record? Enter = No
+          "No"],                          # no bottom: every POOL line
+         "R16b")                          # is a perimeter edge
+_seg = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert len(_seg) == 8, len(_seg)
+_lens = sorted(round(_m.dist(*s), 2) for s in _seg)
+assert sum(1 for x in _lens if abs(x - 378.00) <= 0.05) == 2, _lens  # T = 480-102
+assert sum(1 for x in _lens if abs(x - 114.00) <= 0.05) == 2, _lens  # V = 216-102
+# the four cut faces are the 45 the taped 6'-0 asked for: sqrt(2)*51
+assert sum(1 for x in _lens if abs(x - 72.12) <= 0.05) == 4, _lens
+# and the report says so in the crew's own letters: S and S1 both 4'-3
+# (the ACTUAL is read off the fitted shape, so it carries the fit's own
+# hair of slack -- 1/16" is what the end solver accepts)
+assert abs(float(reportrow(vm, "OV S")[2]) - 51.0) < 0.0625, \
+    reportrow(vm, "OV S")
+assert abs(float(reportrow(vm, "OV S1")[2]) - 51.0) < 0.0625, \
+    reportrow(vm, "OV S1")
+assert reportrow(vm, "OV S2")[1] == "72.00", reportrow(vm, "OV S2")
+print("   a 6'-0 face with S/S1 NA drew 51\" legs; T and V closed on them")
+
+print("== R16c. one leg pinned by its wall: the face closes the triangle ==")
+# T taped, S1 not: S = (B - T)/2 is a hard number, so the face is worth
+# more than a 45 guess -- S1 = sqrt(S2^2 - S^2), again to the 1/4".
+#   S = (480 - 378)/2 = 51,  S1 = sqrt(72^2 - 51^2) = 50.82 -> 50.75
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall",
+          480.0, 216.0,
+          378.0, "NA", "NA", "NA",        # T taped; S, S1, V not
+          72.0,                           # S2 -- the cut face
+          None, "No"],
+         "R16c")
+_lens = sorted(round(_m.dist(tuple(d[10][:2]), tuple(d[11][:2])), 2)
+               for d in drawn(vm, 'LINE', 'POOL'))
+assert sum(1 for x in _lens if abs(x - 378.00) <= 0.05) == 2, _lens  # T held
+assert sum(1 for x in _lens if abs(x - 114.50) <= 0.05) == 2, _lens  # V = 216-2(50.75)
+# the face lands back on the tape, within the quarter inch it was rounded to
+assert sum(1 for x in _lens if abs(x - 72.0) <= 0.25) == 4, _lens
+assert abs(float(reportrow(vm, "OV S1")[2]) - 50.75) < 0.0625, \
+    reportrow(vm, "OV S1")
+print("   a pinned leg and the face give the other leg, not a 45 guess")
 
 print("== R17. SIX-sided grecian hopper, sheet-letter input (W X L L1 G M K) ==")
 # the demonstrated-dims figure from 6sidedgrecianexample.dxf: W is the

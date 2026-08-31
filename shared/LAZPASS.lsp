@@ -723,7 +723,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082826 REV18")
+(setq pool:*version* "083126 REV19")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -2339,12 +2339,45 @@
           pv (cons (cons (caddr c) (list ent)) pv)))
   pv)
 
+;; Round to the nearest quarter inch -- the granularity a tape is read
+;; to in the field, and the one a DERIVED letter is worth quoting at.
+(defun pool:q4 (v) (* 0.25 (fix (+ (* 4.0 v) 0.5))))
+
+;; The grecian corner cut, filled in from its FACE.  A crew tapes
+;; ACROSS the cut (S2) far more readily than it locates the virtual
+;; sharp corner the legs S / S1 run out to -- the face is a wall, the
+;; legs are not -- so a taped face fills in whichever leg the sheet
+;; left blank:
+;;   both legs blank -- the cut is the 45 it is drawn as, so
+;;                      S = S1 = S2 / sqrt 2  (a 6'-0 face gives
+;;                      4'-3 legs)
+;;   one leg pinned  -- the other closes the right triangle, i.e.
+;;                      sqrt(S2^2 - leg^2)
+;; A derived leg comes back to the nearest 1/4", so the number the
+;; report quotes is one a crew can actually pull.  A face too short to
+;; hold the pinned leg is ignored rather than square-rooted into
+;; nothing: the caller's nominal split takes over and the S2 report row
+;; shows how far out the sheet was.
+;; Returns (S . S1), either member still nil when nothing filled it.
+(defun pool:greccut (s2raw s s1 / c)
+  (cond
+    ((null s2raw) (cons s s1))
+    ((and (null s) (null s1))
+     (setq c (pool:q4 (/ s2raw 1.41421356237)))
+     (cons c c))
+    ((and (null s) (< s1 s2raw))
+     (cons (pool:q4 (sqrt (- (* s2raw s2raw) (* s1 s1)))) s1))
+    ((and (null s1) (< s s2raw))
+     (cons s (pool:q4 (sqrt (- (* s2raw s2raw) (* s s))))))
+    (t (cons s s1))))
+
 ;; Full guided flow for a Grecian pool (all three cross-dim modes).
 ;; Caller handles sysvars / undo / zoom-extents.
 ;; Resolve the overall-sheet letters against the overalls: S/T close
-;; against B (T absorbs any difference), S1/V against A (V absorbs);
-;; NA entries are derived, and with a whole pair NA a nominal split is
-;; used.  Returns (S T S1 V).
+;; against B (T absorbs any difference), S1/V against A (V absorbs).
+;; An NA letter is derived -- from the taped cut face S2 where there
+;; is one, and only with no face either from a nominal split.
+;; Returns (S T S1 V).
 ;; WALLS BEAT CORNERS.  T and V run along a wall, so a tape can be
 ;; held flat against them and they come back reliable.  S and S1 only
 ;; locate the VIRTUAL sharp corner out past the cut -- on a real pool
@@ -2353,15 +2386,24 @@
 ;; re-derived from the overall (S = (B - T)/2, S1 = (A - V)/2); the
 ;; taped S / S1 still show in the report against what was drawn.
 ;; Only when the wall was NOT measured does S / S1 drive the shape.
-(defun pool:grecov (aov bov sraw traw s1raw vraw / s tv s1 v)
+;; S2 is softer still than a wall but harder than nothing, so it sits
+;; between the two: it fills a leg in, it never overrides one.
+(defun pool:grecov (aov bov sraw traw s1raw vraw s2raw / s tv s1 v cut)
+  ;; what the sheet pins outright, the wall ahead of its corner
   (cond
     (traw (setq s (/ (- bov traw) 2.0) tv traw))
-    (sraw (setq s sraw tv (- bov (* 2.0 sraw))))
-    (t (setq s (/ bov 8.0) tv (* 0.75 bov))))
+    (sraw (setq s sraw tv (- bov (* 2.0 sraw)))))
   (cond
     (vraw (setq s1 (/ (- aov vraw) 2.0) v vraw))
-    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw))))
-    (t (setq s1 (/ aov 6.0) v (* aov (/ 2.0 3.0)))))
+    (s1raw (setq s1 s1raw v (- aov (* 2.0 s1raw)))))
+  ;; then the cut face, for whichever leg nothing pinned
+  (setq cut (pool:greccut s2raw s s1)
+        s (car cut) s1 (cdr cut))
+  ;; and the long-pool nominal split for whatever is still open
+  (if (null s) (setq s (/ bov 8.0)))
+  (if (null s1) (setq s1 (/ aov 6.0)))
+  (if (null tv) (setq tv (- bov (* 2.0 s))))
+  (if (null v) (setq v (- aov (* 2.0 s1))))
   (list s tv s1 v))
 
 ;; Octagon overall sheet.  With the letters unmeasured the shape is
@@ -2436,7 +2478,8 @@
                         (pool:octov aov bov (pool:pvdim 'ss) (pool:pvdim 'tt)
                                     (pool:pvdim 's1) (pool:pvdim 'vv))
                         (pool:grecov aov bov (pool:pvdim 'ss) (pool:pvdim 'tt)
-                                     (pool:pvdim 's1) (pool:pvdim 'vv)))
+                                     (pool:pvdim 's1) (pool:pvdim 'vv)
+                                     (pool:pvdim 's2)))
                 sv (max 1.0 (car ovr)) tvv (max 1.0 (cadr ovr))
                 s1v (max 1.0 (caddr ovr)) vov (max 1.0 (cadddr ovr)))
           ;; the two frames the two nominal guides always used: the
@@ -2589,7 +2632,8 @@
         (princ (strcat "\nOverall sheet -- symmetric " (strcase nm2 t)
                        "; the RED tie is being asked for."))
         (if oct
-            (princ "\nThe cut letters may all be NA: A and B alone draw the octagon."))
+            (princ "\nThe cut letters may all be NA: A and B alone draw the octagon.")
+            (princ "\nS and S1 may be NA: a taped cut FACE S2 sets them both (a 45)."))
         (princ "\n(after the first answer, Back re-asks the previous one)")
         ;; An in-square OCTAGON is square, so its two overalls are one
         ;; measurement, asked once.  A GRECIAN is a long pool -- its A
@@ -2607,7 +2651,7 @@
                             (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
                             (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
                             (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
-                            (list 's2 'NAX "S2 - corner cut face (check)" (cdr (assoc "S2" pvo)))))
+                            (list 's2 'NAX "S2 - corner cut face (check, sets NA S/S1)" (cdr (assoc "S2" pvo)))))
                     t))
         (if (eq ans 'CAL-BACK)
             (setq grback t braw 1.0 araw 1.0 ans nil))
@@ -2620,7 +2664,7 @@
                         (list 1.0 1.0 1.0 1.0)
                         (if oct
                             (pool:octov araw braw sraw traw s1raw vraw)
-                            (pool:grecov araw braw sraw traw s1raw vraw)))
+                            (pool:grecov araw braw sraw traw s1raw vraw s2raw)))
               sv (car ovres) tv (cadr ovres)
               s1v (caddr ovres) vov (cadddr ovres))
         ;; walls beat corners (see pool:grecov): say so when holding a
@@ -7423,7 +7467,8 @@
 ;;;  grecian shallow end, a grecian deep end with an oval shallow end,
 ;;;  and so on.  End styles:
 ;;;    Square  -- plain wall (the rectangle end)
-;;;    Grecian -- corner cuts: S setback / S1 drop / S2 face (check)
+;;;    Grecian -- corner cuts: S setback / S1 drop / S2 face (a
+;;;               check, and what an NA S / S1 is filled in from)
 ;;;    ROman   -- S1 stubs + arc bulging S past the end line (V, R)
 ;;;    Oval    -- full-width arc (R, NA = half round)
 ;;;  B is the tip-to-tip overall, A the overall width; each end's
@@ -7436,12 +7481,15 @@
 ;; ext = how far the end sticks out past the body end line, inset =
 ;; how far a grecian cut eats into the sides.  Emits valnotes on the
 ;; way out of anything that doesn't close.
-(defun pool:muttres (style sraw s1raw vraw rraw aov bov nm / s s1 v ext
-                                                            bad half res)
+(defun pool:muttres (style sraw s1raw vraw rraw s2raw aov bov nm / s s1 v ext
+                                                                  bad half res)
   (cond
     ((= style "Grecian")
-     (setq s (if sraw sraw (/ bov 8.0))
-           s1 (if s1raw s1raw (/ aov 6.0))
+     ;; a grecian END is the grecian sheet's corner cut, so its taped
+     ;; face fills in a blank leg the same way (see pool:greccut)
+     (setq res (pool:greccut s2raw sraw s1raw)
+           s (cond ((car res)) ((/ bov 8.0)))
+           s1 (cond ((cdr res)) ((/ aov 6.0)))
            v (- aov s1 s1))
      (if (<= v 1.0e-6)
          (progn
@@ -7545,11 +7593,13 @@
 
   ;; one end's live values (ext ins s1 v) from its answer keys, filled
   ;; with the same derivations pool:muttres will apply at the end
-  (defun mu:geoval (style ks ks1 kv kr / s s1 v ext r res half)
+  (defun mu:geoval (style ks ks1 kv ks2 kr / s s1 v ext r res half)
     (cond
       ((= style "Grecian")
-       (setq s (cond ((pool:pvdim ks)) ((/ bov 8.0)))
-             s1 (cond ((pool:pvdim ks1)) ((/ aov 6.0)))
+       (setq res (pool:greccut (pool:pvdim ks2)
+                               (pool:pvdim ks) (pool:pvdim ks1))
+             s (cond ((car res)) ((/ bov 8.0)))
+             s1 (cond ((cdr res)) ((/ aov 6.0)))
              v (- aov s1 s1))
        (if (<= v 1.0) (setq s1 (/ aov 6.0) v (- aov s1 s1)))
        (if (<= s 1.0) (setq s (/ bov 8.0)))
@@ -7629,8 +7679,8 @@
           aov (cond ((pool:pvdim 'a)) (300.0))
           sc (/ (max bov aov) 400.0)
           th (* 10.0 sc)
-          el (mu:geoval dstyle 'dsl 'ds1 'dv 'dr)
-          er (mu:geoval sstyle 'ssl 'ss1 'sv 'sr)
+          el (mu:geoval dstyle 'dsl 'ds1 'dv 'ds2 'dr)
+          er (mu:geoval sstyle 'ssl 'ss1 'sv 'ss2 'sr)
           tvv (- bov (car el) (car er)))
     (if (<= (- tvv (cadr el) (cadr er)) 1.0)
         (setq tvv (+ (cadr el) (cadr er) (* 0.5 bov))))
@@ -7661,7 +7711,7 @@
                    (cdr (assoc (strcat "S" sfx) pv)))
              (list ks1 'NAX (strcat nm " end S1 - corner drop")
                    (cdr (assoc (strcat "S1" sfx) pv)))
-             (list ks2 'NAX (strcat nm " end S2 - corner face (check)")
+             (list ks2 'NAX (strcat nm " end S2 - corner face (check, sets NA S/S1)")
                    (cdr (assoc (strcat "S2" sfx) pv)))))
       ((= style "ROman")
        (list (list ks 'NAX (strcat nm " end S - tip setback")
@@ -7723,8 +7773,10 @@
   (pool:pvkill)
 
   ;; -------- resolve the ends, then the body against B
-  (setq dres (pool:muttres dstyle dsraw ds1raw dvraw drraw araw braw "DEEP")
-        sres (pool:muttres sstyle ssraw ss1raw svraw srraw araw braw "SHALLOW")
+  (setq dres (pool:muttres dstyle dsraw ds1raw dvraw drraw ds2raw
+                           araw braw "DEEP")
+        sres (pool:muttres sstyle ssraw ss1raw svraw srraw ss2raw
+                           araw braw "SHALLOW")
         extl (car dres) insl (cadr dres)
         extr (car sres) insr (cadr sres)
         muttbad (or (nth 5 dres) (nth 5 sres))
@@ -71952,7 +72004,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.6")
+(setq *lazform-version* "v2.7")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -72189,7 +72241,7 @@
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
    (("x"  "X - hopper cut face length (check)")
-    ("s2" "S2 - corner cut face (check)")
+    ("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -72221,7 +72273,7 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)")
+   (("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -72362,7 +72414,7 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)")
+   (("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
