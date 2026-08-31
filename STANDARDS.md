@@ -392,7 +392,9 @@ save/restore, one undo group, `(princ)` exit:
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (tool:sysrestore)
-    (if undo-open (command "_.UNDO" "_End"))
+    ;; command-s, never plain command: 2015+ engines reject (command)
+    ;; inside *error* unless the error mode was pushed beforehand
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTOOLNAME error: " msg)))
@@ -412,8 +414,18 @@ The canonical cancel test is exactly
 `(wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")` -- ten
 variants of it exist today; new code uses this one. Undo grouping is
 `(command "_.UNDO" "_Begin")` / `"_End"` in that casing, tracked in a
-local `undo-open`. `DIMSTYLE` cannot be `setvar`'d back -- restore it
-with `(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
+local `undo-open` -- opened and closed with plain `command` on the
+success path, but closed through
+`(vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))` inside the
+handler: AutoCAD 2015+ rejects a plain `(command)` from `*error*`
+unless the error mode was pushed first. A handler that genuinely must
+drive `(command)` itself -- POOL's, which drains a pending command --
+instead declares `(if *push-error-using-command*
+(*push-error-using-command*))` after the handler and pops the mode
+with `(if *pop-error-mode* (*pop-error-mode*))` as the handler's last
+act (see `lisp/pool/POOL.LSP`). `DIMSTYLE` cannot be `setvar`'d back
+-- restore it with
+`(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
 
 **Locals.** Every variable a defun sets is a parameter or declared
 after ` / ` (space each side) in the arglist -- `check_scope.py` is
