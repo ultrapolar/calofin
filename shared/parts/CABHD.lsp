@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.5")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.6")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -2683,7 +2683,7 @@
 ;; Which build is loaded - the first thing to check when a run does
 ;; something the notes above say it should not.
 (defun c:CABHDVER ()
-  (princ (strcat "\nCABHD " *cabhd-version* " loaded."))
+  (princ (strcat "\nCABHD " *cabhd-version*))
   (princ))
 
 ;; ---- CABHD: the perimeter, and nothing but ---------------------------
@@ -2693,7 +2693,7 @@
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
                     cab-omitted cab-miss-pct cab-walls cab-corners
                     cab-holds cab-temp cab-ptnames
-                    *error* cab-old-err cab-phase undo-open)
+                    *error* cab-old-err cab-phase undo-open cab-pick)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -2727,6 +2727,10 @@
     (princ (strcat "\nCABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *CAB-WALL-LAYER*
                    ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 7, probed
+  ;; before the undo group opens, which would clear the set
+  (setq cab-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
 
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
@@ -2871,16 +2875,19 @@
   ;; Select the WHOLE survey - the cutoff at step 8 is what decides how
   ;; much of it the perimeter uses, and it can be moved at a Redo, so
   ;; there is nothing to gain by window-selecting carefully here.
-  (princ "\n\n  Step 7 of 8 - select the survey points (POINTS layer or ab_pt")
-  (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
-  (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
-  (princ "\n  Select objects: ")
-  (setq cab-phase "waiting for the selection")
   ;; only entity types this command can actually read, so a sloppy
   ;; crossing window over dimensions, hatches or text is harmless.
   ;; SPLINE and ELLIPSE are let in ON PURPOSE - not to fit them, but
   ;; so the classifier below can name them in a useful message.
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (setq cab-phase "waiting for the selection")
+  (if cab-pick
+    (setq ss cab-pick)
+    (progn
+      (princ "\n\n  Step 7 of 8 - select the survey points (POINTS layer or ab_pt")
+      (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
+      (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn

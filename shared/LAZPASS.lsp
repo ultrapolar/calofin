@@ -20292,7 +20292,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "083126 REV11") ; announced on load.  The
+(setq pf:*version*      "083126 REV12") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -23567,7 +23567,7 @@
                     pf-miss-pct pf-walls pf-corners pf-holds
                     pf-temp pf-ptnames
                     pf-dim-warned *error* pf-old-err pf-phase
-                    undo-open)
+                    undo-open pf-pick)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -23599,6 +23599,12 @@
     (princ (strcat "\nABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 7, so the
+  ;; survey can be highlighted before the command is typed.  Probed
+  ;; here, before the undo group opens: the typed prompts between here
+  ;; and step 7 leave a pickfirst set alone, a command call would not
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
 
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
@@ -23737,15 +23743,18 @@
                        " themselves when the command finishes.")))))
 
   ;; -- step 7: the selection ----------------------------------------
-  (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
-  (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
-  (princ "\n  Select objects: ")
-  (setq pf-phase "waiting for the selection")
   ;; only entity types this command can actually read, so a sloppy
   ;; crossing window over dimensions, hatches or text is harmless.
   ;; SPLINE and ELLIPSE are let in ON PURPOSE - not to fit them, but
   ;; so the classifier below can name them in a useful message.
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (setq pf-phase "waiting for the selection")
+  (if pf-pick
+    (setq ss pf-pick)
+    (progn
+      (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
+      (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -24055,7 +24064,7 @@
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
                     nall npt stale pf-temp pf-ptnames pf-dim-warned
-                    *error* pf-old-err pf-phase undo-open)
+                    *error* pf-old-err pf-phase undo-open pf-pick)
   (setq pf-temp   nil
         pf-old-err *error*
         *error*
@@ -24076,16 +24085,22 @@
     (princ (strcat "\nADAB: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+  ;; a pickfirst selection if there is one, otherwise ask for it -
+  ;; probed before the undo group opens, which would clear the set
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
-  (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
-  (princ "\n  lines/arcs.  The survey points sitting on it are found by")
-  (princ "\n  themselves; select them too only if they live somewhere unusual.")
-  (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if pf-pick
+    (setq ss pf-pick)
+    (progn
+      (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
+      (princ "\n  lines/arcs.  The survey points sitting on it are found by")
+      (princ "\n  themselves; select them too only if they live somewhere unusual.")
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn
@@ -26586,7 +26601,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.5")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.6")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -29070,7 +29085,7 @@
 ;; Which build is loaded - the first thing to check when a run does
 ;; something the notes above say it should not.
 (defun c:CABHDVER ()
-  (princ (strcat "\nCABHD " *cabhd-version* " loaded."))
+  (princ (strcat "\nCABHD " *cabhd-version*))
   (princ))
 
 ;; ---- CABHD: the perimeter, and nothing but ---------------------------
@@ -29080,7 +29095,7 @@
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
                     cab-omitted cab-miss-pct cab-walls cab-corners
                     cab-holds cab-temp cab-ptnames
-                    *error* cab-old-err cab-phase undo-open)
+                    *error* cab-old-err cab-phase undo-open cab-pick)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -29114,6 +29129,10 @@
     (princ (strcat "\nCABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *CAB-WALL-LAYER*
                    ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 7, probed
+  ;; before the undo group opens, which would clear the set
+  (setq cab-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
 
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
@@ -29258,16 +29277,19 @@
   ;; Select the WHOLE survey - the cutoff at step 8 is what decides how
   ;; much of it the perimeter uses, and it can be moved at a Redo, so
   ;; there is nothing to gain by window-selecting carefully here.
-  (princ "\n\n  Step 7 of 8 - select the survey points (POINTS layer or ab_pt")
-  (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
-  (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
-  (princ "\n  Select objects: ")
-  (setq cab-phase "waiting for the selection")
   ;; only entity types this command can actually read, so a sloppy
   ;; crossing window over dimensions, hatches or text is harmless.
   ;; SPLINE and ELLIPSE are let in ON PURPOSE - not to fit them, but
   ;; so the classifier below can name them in a useful message.
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (setq cab-phase "waiting for the selection")
+  (if cab-pick
+    (setq ss cab-pick)
+    (progn
+      (princ "\n\n  Step 7 of 8 - select the survey points (POINTS layer or ab_pt")
+      (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
+      (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -48839,7 +48861,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.1")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.2")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -53449,7 +53471,7 @@
 
 (defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
                     ss n res verts en swept ans again dpts
-                    fit-pts fit-npt fit-ptnames fit-omit)
+                    fit-pts fit-npt fit-ptnames fit-omit fit-pick)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -53463,6 +53485,9 @@
     (princ))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
+  ;; a pickfirst selection if there is one - kept for step 7, probed
+  ;; before the undo group opens, which would clear the set
+  (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   ;; a preview a dead run left behind describes nothing - sweep it
@@ -53476,10 +53501,13 @@
                                     fit:*miss-pct* fit:*oos* fit:*bowed*)
                               7)
         ptype (nth 0 set))
-  (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
-                 "\n  " fit:*point-block* " blocks)."))
-  (princ "\n  Select objects: ")
-  (setq ss (ssget '((0 . "POINT,INSERT"))))
+  (if fit-pick
+    (setq ss fit-pick)
+    (progn
+      (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
+                     "\n  " fit:*point-block* " blocks)."))
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT"))))))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "
@@ -53647,7 +53675,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.7")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.8")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -55839,7 +55867,8 @@
                    again omits pts2 ent ring lh-omitted
                    lh-miss-pct lh-walls lh-corners lh-holds
                    lh-temp lh-ptnames
-                   lh-zvals *error* lh-old-err lh-phase undo-open)
+                   lh-zvals *error* lh-old-err lh-phase undo-open
+                   lh-pick)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler
   (setq lh-temp   nil
@@ -55866,6 +55895,10 @@
     (princ (strcat "\nLHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *LH-WALL-LAYER*
                    ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 6, probed
+  ;; before the undo group opens, which would clear the set
+  (setq lh-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
 
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -55961,15 +55994,18 @@
                    " clear themselves when the command finishes.")))
 
   ;; -- step 6: the selection ----------------------------------------
-  (princ "\n\n  Step 6 of 6 - select the laser points (POINT entities on any layer,")
-  (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
-  (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
-  (princ "\n  Select objects: ")
-  (setq lh-phase "waiting for the selection")
   ;; SPLINE and ELLIPSE are let in on purpose - not to fit them, but
   ;; so the classifier can name them in a useful message; TEXT is let
   ;; in so elevation labels can ride along with their points.
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
+  (setq lh-phase "waiting for the selection")
+  (if lh-pick
+    (setq ss lh-pick)
+    (progn
+      (princ "\n\n  Step 6 of 6 - select the laser points (POINT entities on any layer,")
+      (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
+      (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
     (progn

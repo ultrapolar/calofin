@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.7")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.8")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2349,7 +2349,8 @@
                    again omits pts2 ent ring lh-omitted
                    lh-miss-pct lh-walls lh-corners lh-holds
                    lh-temp lh-ptnames
-                   lh-zvals *error* lh-old-err lh-phase undo-open)
+                   lh-zvals *error* lh-old-err lh-phase undo-open
+                   lh-pick)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler
   (setq lh-temp   nil
@@ -2376,6 +2377,10 @@
     (princ (strcat "\nLHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *LH-WALL-LAYER*
                    ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 6, probed
+  ;; before the undo group opens, which would clear the set
+  (setq lh-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
 
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -2471,15 +2476,18 @@
                    " clear themselves when the command finishes.")))
 
   ;; -- step 6: the selection ----------------------------------------
-  (princ "\n\n  Step 6 of 6 - select the laser points (POINT entities on any layer,")
-  (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
-  (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
-  (princ "\n  Select objects: ")
-  (setq lh-phase "waiting for the selection")
   ;; SPLINE and ELLIPSE are let in on purpose - not to fit them, but
   ;; so the classifier can name them in a useful message; TEXT is let
   ;; in so elevation labels can ride along with their points.
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
+  (setq lh-phase "waiting for the selection")
+  (if lh-pick
+    (setq ss lh-pick)
+    (progn
+      (princ "\n\n  Step 6 of 6 - select the laser points (POINT entities on any layer,")
+      (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
+      (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
     (progn

@@ -155,7 +155,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "083126 REV11") ; announced on load.  The
+(setq pf:*version*      "083126 REV12") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -3533,7 +3533,7 @@
                     pf-miss-pct pf-walls pf-corners pf-holds
                     pf-temp pf-ptnames
                     pf-dim-warned *error* pf-old-err pf-phase
-                    undo-open)
+                    undo-open pf-pick)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -3565,6 +3565,12 @@
     (princ (strcat "\nABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 7, so the
+  ;; survey can be highlighted before the command is typed.  Probed
+  ;; here, before the undo group opens: the typed prompts between here
+  ;; and step 7 leave a pickfirst set alone, a command call would not
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
 
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
@@ -3703,15 +3709,18 @@
                        " themselves when the command finishes.")))))
 
   ;; -- step 7: the selection ----------------------------------------
-  (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
-  (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
-  (princ "\n  Select objects: ")
-  (setq pf-phase "waiting for the selection")
   ;; only entity types this command can actually read, so a sloppy
   ;; crossing window over dimensions, hatches or text is harmless.
   ;; SPLINE and ELLIPSE are let in ON PURPOSE - not to fit them, but
   ;; so the classifier below can name them in a useful message.
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (setq pf-phase "waiting for the selection")
+  (if pf-pick
+    (setq ss pf-pick)
+    (progn
+      (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
+      (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -4021,7 +4030,7 @@
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
                     nall npt stale pf-temp pf-ptnames pf-dim-warned
-                    *error* pf-old-err pf-phase undo-open)
+                    *error* pf-old-err pf-phase undo-open pf-pick)
   (setq pf-temp   nil
         pf-old-err *error*
         *error*
@@ -4042,16 +4051,22 @@
     (princ (strcat "\nADAB: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+  ;; a pickfirst selection if there is one, otherwise ask for it -
+  ;; probed before the undo group opens, which would clear the set
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
-  (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
-  (princ "\n  lines/arcs.  The survey points sitting on it are found by")
-  (princ "\n  themselves; select them too only if they live somewhere unusual.")
-  (princ "\n  Select objects: ")
   (setq pf-phase "waiting for the selection")
-  (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if pf-pick
+    (setq ss pf-pick)
+    (progn
+      (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
+      (princ "\n  lines/arcs.  The survey points sitting on it are found by")
+      (princ "\n  themselves; select them too only if they live somewhere unusual.")
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn

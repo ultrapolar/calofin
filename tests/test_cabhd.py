@@ -214,9 +214,10 @@ def answers(vm, kind):
     return [p for p, _v in vm.prompts if kind.lower() in p.lower()]
 
 
-# The six questions ahead of the selection, answered plainly: 1 inch,
-# the standard miss share, no curve cap, no walls, no corners, no holds.
-SETTINGS = [None, None, None, "No", "No", "No"]
+# The pickfirst probe (no pre-selection), then the six questions ahead
+# of the selection, answered plainly: 1 inch, the standard miss share,
+# no curve cap, no walls, no corners, no holds.
+SETTINGS = [None, None, None, None, "No", "No", "No"]
 
 
 def run(cut, extra=None, pts=None, keep="2"):
@@ -491,6 +492,15 @@ for label, want in (("17", 17), ("P17", 17), ("17A", 17), ("PT-8", 8),
                     ("100", 100), ("", -1), ("edge", -1)):
     got = vm.loads('(t:num "%s")' % label)
     check('"%s" reads as %s' % (label, want), got == want)
+
+print('CABHD -- pickfirst: a selection made before the command is used as-is')
+vm, ents = survey_vm()
+vm.run('c:CABHD', [ents, None, None, None, "No", "No", "No", 18, "2"])
+check('the probe took the selection, the Select prompt was never asked',
+      vm.prompts[0][0] == 'ssget _I'
+      and not any(p == 'ssget' for p, _v in vm.prompts))
+check('and the fit still ran to a kept polyline',
+      kept_polyline(vm) is not None)
 
 print()
 if failures:

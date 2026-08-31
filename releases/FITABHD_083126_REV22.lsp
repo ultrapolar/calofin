@@ -108,7 +108,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.1")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.2")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -4869,7 +4869,7 @@
 
 (defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
                     ss n res verts en swept ans again dpts
-                    fit-pts fit-npt fit-ptnames fit-omit)
+                    fit-pts fit-npt fit-ptnames fit-omit fit-pick)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (fit:sysrestore)
@@ -4883,6 +4883,9 @@
     (princ))
   (fit:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
+  ;; a pickfirst selection if there is one - kept for step 7, probed
+  ;; before the undo group opens, which would clear the set
+  (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   ;; a preview a dead run left behind describes nothing - sweep it
@@ -4896,10 +4899,13 @@
                                     fit:*miss-pct* fit:*oos* fit:*bowed*)
                               7)
         ptype (nth 0 set))
-  (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
-                 "\n  " fit:*point-block* " blocks)."))
-  (princ "\n  Select objects: ")
-  (setq ss (ssget '((0 . "POINT,INSERT"))))
+  (if fit-pick
+    (setq ss fit-pick)
+    (progn
+      (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
+                     "\n  " fit:*point-block* " blocks)."))
+      (princ "\n  Select objects: ")
+      (setq ss (ssget '((0 . "POINT,INSERT"))))))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "
