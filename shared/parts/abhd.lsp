@@ -158,7 +158,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "082826 REV09") ; announced on load.  The
+(setq pf:*version*      "083126 REV10") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -3432,7 +3432,8 @@
                     again omits pts2 ent ring pf-omitted
                     pf-miss-pct pf-walls pf-corners pf-holds
                     pf-temp pf-ptnames
-                    pf-dim-warned *error* pf-old-err pf-phase)
+                    pf-dim-warned *error* pf-old-err pf-phase
+                    undo-open)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -3447,6 +3448,10 @@
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
             (pf:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* pf-old-err)
             ;; cover mode must not outlive the run that asked for it,
             ;; or the next ABHD would skip its bottom without a word
@@ -3460,6 +3465,12 @@
     (princ (strcat "\nABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+
+  ;; one undo group around the whole fit - a U after ABHD takes back
+  ;; the perimeter, the bottom and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
 
@@ -3877,6 +3888,8 @@
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
   (princ))
@@ -3908,7 +3921,7 @@
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
                     nall npt stale pf-temp pf-ptnames pf-dim-warned
-                    *error* pf-old-err pf-phase)
+                    *error* pf-old-err pf-phase undo-open)
   (setq pf-temp   nil
         pf-old-err *error*
         *error*
@@ -3919,6 +3932,8 @@
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
             (pf:temp-clear)
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* pf-old-err)
             (princ)))
   ;; sweep leftovers from a run interrupted before it could tidy up
@@ -3927,6 +3942,9 @@
     (princ (strcat "\nADAB: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+  ;; one undo group around the whole bottom, same reasoning as c:ABHD
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
   (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
   (princ "\n  lines/arcs.  The survey points sitting on it are found by")
@@ -4042,6 +4060,8 @@
                           " live elsewhere."))
            (pf:bottom loop dpts nil))))))
   (pf:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (setq *error* pf-old-err)
   (princ))
 

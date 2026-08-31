@@ -20231,7 +20231,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "082826 REV09") ; announced on load.  The
+(setq pf:*version*      "083126 REV10") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -23505,7 +23505,8 @@
                     again omits pts2 ent ring pf-omitted
                     pf-miss-pct pf-walls pf-corners pf-holds
                     pf-temp pf-ptnames
-                    pf-dim-warned *error* pf-old-err pf-phase)
+                    pf-dim-warned *error* pf-old-err pf-phase
+                    undo-open)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -23520,6 +23521,10 @@
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
             (pf:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* pf-old-err)
             ;; cover mode must not outlive the run that asked for it,
             ;; or the next ABHD would skip its bottom without a word
@@ -23533,6 +23538,12 @@
     (princ (strcat "\nABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+
+  ;; one undo group around the whole fit - a U after ABHD takes back
+  ;; the perimeter, the bottom and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
 
@@ -23950,6 +23961,8 @@
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
   (princ))
@@ -23981,7 +23994,7 @@
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
                     nall npt stale pf-temp pf-ptnames pf-dim-warned
-                    *error* pf-old-err pf-phase)
+                    *error* pf-old-err pf-phase undo-open)
   (setq pf-temp   nil
         pf-old-err *error*
         *error*
@@ -23992,6 +24005,8 @@
                              (if pf-phase pf-phase "starting up")
                              " -- " m)))
             (pf:temp-clear)
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* pf-old-err)
             (princ)))
   ;; sweep leftovers from a run interrupted before it could tidy up
@@ -24000,6 +24015,9 @@
     (princ (strcat "\nADAB: cleared " (itoa stale)
                    " leftover marker(s) from layer " *PF-WALL-LAYER*
                    ".")))
+  ;; one undo group around the whole bottom, same reasoning as c:ABHD
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
   (princ "\n\n  Select the pool perimeter - one closed polyline, or its exploded")
   (princ "\n  lines/arcs.  The survey points sitting on it are found by")
@@ -24115,6 +24133,8 @@
                           " live elsewhere."))
            (pf:bottom loop dpts nil))))))
   (pf:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (setq *error* pf-old-err)
   (princ))
 
@@ -26497,7 +26517,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.3")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.4")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -28991,7 +29011,7 @@
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
                     cab-omitted cab-miss-pct cab-walls cab-corners
                     cab-holds cab-temp cab-ptnames
-                    *error* cab-old-err cab-phase)
+                    *error* cab-old-err cab-phase undo-open)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -29011,6 +29031,10 @@
                              (strcat " -- " m)
                              " (cancelled).")))
             (cab:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* cab-old-err)
             (princ)))
 
@@ -29021,6 +29045,12 @@
     (princ (strcat "\nCABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *CAB-WALL-LAYER*
                    ".")))
+
+  ;; one undo group around the whole fit - a U after CABHD takes back
+  ;; the edge, the markers and the previews in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ "\n\nCABHD - fit a pool perimeter through the surveyed points,")
   (princ "\n        up to the point number where the edge stops.")
@@ -29483,6 +29513,8 @@
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (cab:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   ;; and sign off, naming the last step reached: a run that ends with
   ;; nothing on screen still has to say that it ended on purpose
   (princ (strcat "\nCABHD done (last step: "
@@ -52479,7 +52511,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.4")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.5")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -54671,7 +54703,7 @@
                    again omits pts2 ent ring lh-omitted
                    lh-miss-pct lh-walls lh-corners lh-holds
                    lh-temp lh-ptnames
-                   lh-zvals *error* lh-old-err lh-phase)
+                   lh-zvals *error* lh-old-err lh-phase undo-open)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler
   (setq lh-temp   nil
@@ -54684,6 +54716,10 @@
                              (if lh-phase lh-phase "starting up")
                              " -- " m)))
             (lh:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* lh-old-err)
             (princ)))
 
@@ -54694,6 +54730,12 @@
     (princ (strcat "\nLHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *LH-WALL-LAYER*
                    ".")))
+
+  ;; one undo group around the whole fit - a U after LHD takes back
+  ;; the outline, the labels and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ "\n\nLHD - fit a top-down outline through laser-scanned points.")
 
@@ -55095,6 +55137,8 @@
                        (setq again T))))))))))))
   ;; sweep the dashed markers and any candidate the user did not keep
   (lh:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (setq *error* lh-old-err)   ; restore the previous error handler
   (princ))
 
@@ -59351,16 +59395,18 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.1")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
-                       startx y z x lvl txt )
+                       startx y z x lvl txt undo-open )
 
   (defun *error* (msg)
     (if osm (setvar "OSMODE" osm))
-    (if (and msg
-             (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINTXTCHK error: " msg)))
     (princ))
 
@@ -59409,6 +59455,10 @@
   (if pt
     (progn
       (setvar "OSMODE" 0)                 ; drop osnaps while placing text
+      ;; one undo group around the column - a U after LINTXTCHK takes
+      ;; back all 26 lines at once instead of one entity per U
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)
       (setq startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
@@ -59430,6 +59480,8 @@
         (setq y (- y spacing))            ; step down to the next line
       )
       (setvar "OSMODE" osm)
+      (if undo-open (command "_.UNDO" "_End"))
+      (setq undo-open nil)
       (princ (strcat "\n" (itoa (length items))
                      " checklist lines placed at 12\" text."))
     )

@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.3")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.4")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -2693,7 +2693,7 @@
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
                     cab-omitted cab-miss-pct cab-walls cab-corners
                     cab-holds cab-temp cab-ptnames
-                    *error* cab-old-err cab-phase)
+                    *error* cab-old-err cab-phase undo-open)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler - a
   ;; cancelled run must not leave dashed markers or candidate outlines
@@ -2713,6 +2713,10 @@
                              (strcat " -- " m)
                              " (cancelled).")))
             (cab:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* cab-old-err)
             (princ)))
 
@@ -2723,6 +2727,12 @@
     (princ (strcat "\nCABHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *CAB-WALL-LAYER*
                    ".")))
+
+  ;; one undo group around the whole fit - a U after CABHD takes back
+  ;; the edge, the markers and the previews in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ "\n\nCABHD - fit a pool perimeter through the surveyed points,")
   (princ "\n        up to the point number where the edge stops.")
@@ -3185,6 +3195,8 @@
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (cab:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   ;; and sign off, naming the last step reached: a run that ends with
   ;; nothing on screen still has to say that it ended on purpose
   (princ (strcat "\nCABHD done (last step: "

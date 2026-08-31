@@ -10,16 +10,18 @@
 ;;;         LINTXTCHK and pick the top-left point for the checklist.
 ;;; ==========================================================================
 
-(setq *lintxtchk-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.1")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
-                       startx y z x lvl txt )
+                       startx y z x lvl txt undo-open )
 
   (defun *error* (msg)
     (if osm (setvar "OSMODE" osm))
-    (if (and msg
-             (not (member msg '("Function cancelled" "quit / exit abort"))))
+    (if undo-open (command "_.UNDO" "_End"))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINTXTCHK error: " msg)))
     (princ))
 
@@ -68,6 +70,10 @@
   (if pt
     (progn
       (setvar "OSMODE" 0)                 ; drop osnaps while placing text
+      ;; one undo group around the column - a U after LINTXTCHK takes
+      ;; back all 26 lines at once instead of one entity per U
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)
       (setq startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
@@ -89,6 +95,8 @@
         (setq y (- y spacing))            ; step down to the next line
       )
       (setvar "OSMODE" osm)
+      (if undo-open (command "_.UNDO" "_End"))
+      (setq undo-open nil)
       (princ (strcat "\n" (itoa (length items))
                      " checklist lines placed at 12\" text."))
     )

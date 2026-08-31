@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.4")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.5")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2349,7 +2349,7 @@
                    again omits pts2 ent ring lh-omitted
                    lh-miss-pct lh-walls lh-corners lh-holds
                    lh-temp lh-ptnames
-                   lh-zvals *error* lh-old-err lh-phase)
+                   lh-zvals *error* lh-old-err lh-phase undo-open)
   ;; report which step failed if anything goes wrong, sweep away any
   ;; preview geometry drawn so far, then restore the old handler
   (setq lh-temp   nil
@@ -2362,6 +2362,10 @@
                              (if lh-phase lh-phase "starting up")
                              " -- " m)))
             (lh:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (command "_.UNDO" "_End"))
+            (setq undo-open nil)
             (setq *error* lh-old-err)
             (princ)))
 
@@ -2372,6 +2376,12 @@
     (princ (strcat "\nLHD: cleared " (itoa stale)
                    " leftover marker(s) from layer " *LH-WALL-LAYER*
                    ".")))
+
+  ;; one undo group around the whole fit - a U after LHD takes back
+  ;; the outline, the labels and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  (command "_.UNDO" "_Begin")
+  (setq undo-open T)
 
   (princ "\n\nLHD - fit a top-down outline through laser-scanned points.")
 
@@ -2773,6 +2783,8 @@
                        (setq again T))))))))))))
   ;; sweep the dashed markers and any candidate the user did not keep
   (lh:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
   (setq *error* lh-old-err)   ; restore the previous error handler
   (princ))
 
