@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_083126_REV35-35-28.lsp
+;;; STEPS_083126_REV36-36-29.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v3.5 -> REV35   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.5 -> REV35   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v2.8 -> REV28   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v3.6 -> REV36   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.6 -> REV36   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v2.9 -> REV29   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v3.5) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v3.6) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -212,7 +212,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.5") ; printed on load and at command start so a
+(setq *cs-version* "v3.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -684,7 +684,7 @@
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -1557,7 +1557,7 @@
                                bis perp txth dist p h1 h2 nat tmp e1 e2
                                prevL prevR w offd n pt lst dep wid)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))
@@ -1714,7 +1714,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.5) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.6) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1889,7 +1889,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.5") ; printed on load and at command start so a
+(setq *hs-version* "v3.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2469,7 +2469,7 @@
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -3161,7 +3161,7 @@
                               txth pt wallw wallA wallB ea eb pprev p cum
                               e1 e2 offd n lst wid dep crown pts kx)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))
@@ -3307,7 +3307,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v2.8) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v2.9) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3487,7 +3487,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.8") ; printed on load and at command start so a
+(setq *ns-version* "v2.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4122,7 +4122,7 @@
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -4944,7 +4944,7 @@
                                 txth pt wid off n lst dep cum pprev p e1 e2
                                 offd first1 first2 hw)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))

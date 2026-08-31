@@ -176,7 +176,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.8") ; printed on load and at command start so a
+(setq *ns-version* "v2.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -811,7 +811,7 @@
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -1633,7 +1633,7 @@
                                 txth pt wid off n lst dep cum pprev p e1 e2
                                 offd first1 first2 hw)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))

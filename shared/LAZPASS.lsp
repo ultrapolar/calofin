@@ -34792,7 +34792,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.5") ; printed on load and at command start so a
+(setq *cs-version* "v3.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -35252,7 +35252,7 @@
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -36125,7 +36125,7 @@
                                bis perp txth dist p h1 h2 nat tmp e1 e2
                                prevL prevR w offd n pt lst dep wid)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))
@@ -36463,7 +36463,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.5") ; printed on load and at command start so a
+(setq *hs-version* "v3.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -37029,7 +37029,7 @@
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -37721,7 +37721,7 @@
                               txth pt wallw wallA wallB ea eb pprev p cum
                               e1 e2 offd n lst wid dep crown pts kx)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))
@@ -38053,7 +38053,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v2.8") ; printed on load and at command start so a
+(setq *ns-version* "v2.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38676,7 +38676,7 @@
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlu (setvar "LUNITS" oldlu))
@@ -39498,7 +39498,7 @@
                                 txth pt wid off n lst dep cum pprev p e1 e2
                                 offd first1 first2 hw)
   (defun *error* (msg)
-    (if undoflag (command-s "_.UNDO" "_End"))
+    (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (princ))
