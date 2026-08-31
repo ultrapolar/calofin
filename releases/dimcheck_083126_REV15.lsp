@@ -104,7 +104,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.4")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.5")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1771,12 +1771,17 @@
 
 (defun dchk:tut-dim (p1 p2 dimpt rot / old res)
   ;; a linear dimension, made with the command so it is valid in any
-  ;; release; osnap is muted so the picks land exactly where told
+  ;; release; osnap is muted so the picks land exactly where told,
+  ;; and the command is caught so a failure cannot skip the restore -
+  ;; the tutorial's handler has no way to put OSMODE back
   (setq old (getvar "OSMODE"))
   (setvar "OSMODE" 0)
-  (if (zerop rot)
-    (command "_.DIMLINEAR" p1 p2 "_H" dimpt)
-    (command "_.DIMLINEAR" p1 p2 "_V" dimpt))
+  (setq res (vl-catch-all-apply
+              '(lambda ()
+                 (if (zerop rot)
+                   (command "_.DIMLINEAR" p1 p2 "_H" dimpt)
+                   (command "_.DIMLINEAR" p1 p2 "_V" dimpt)))
+              nil))
   (setvar "OSMODE" old)
   (entlast))
 

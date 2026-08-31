@@ -213,7 +213,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.1")
+(setq *cchk-version* "v1.2")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -3336,12 +3336,15 @@
   (setq oldosmode (getvar "OSMODE"))
   (setvar "OSMODE" 0)
   (setq pre (entlast))
+  ;; the args list is required - without it vl-catch-all-apply itself
+  ;; errors instead of catching, killing the tutorial at this line
   (vl-catch-all-apply
     '(lambda ()
        (command "_.DIMLINEAR"
                 (list bx (- by 4.0) 0.0)
                 (list (+ bx 180.0) by 0.0)
-                (list (+ bx 90.0) (- by 40.0) 0.0))))
+                (list (+ bx 90.0) (- by 40.0) 0.0)))
+    nil)
   (setvar "OSMODE" oldosmode)
   (setq newdim (if pre (entnext pre) (entnext)))
   (if (and newdim (entget newdim) (= "DIMENSION" (cdr (assoc 0 (entget newdim)))))
