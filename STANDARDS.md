@@ -151,6 +151,7 @@ One question, one vocabulary, repo-wide:
 | Tutorial selector          | `Checks Demo Both`          | `<Both>`                              |
 | Demo cleanup               | `Keep Erase`                | `<Keep>`                              |
 | Multi-fit pick             | `1 2 3 All None Redo`       | `<2>`                                 |
+| Direction                  | `Clockwise COunterclockwise` | Previous answer (session-remembered, `<Clockwise>` to start); `CW` and `CCW` accepted as hidden synonyms |
 
 Tool-specific vocabularies (POOL's shape list, SPA's spillaway walls)
 are fine -- they just obey section 1, and reuse this table's word
@@ -196,6 +197,10 @@ When Enter means "everything", the prompt says so in parentheses.
 
 Offering Back never loosens what counts as a valid measurement -- a
 `REQ` prompt with Back still rejects null/zero/negative numbers.
+POINTRENAMER's band ask is the sanctioned no-NA variant of `SUG`: the
+measurement is always needed, so there is no `NA` keyword -- Enter
+takes the remembered default (shown feet-and-inches, `rtos` mode 4)
+and `initget 6` still rejects zero and negatives.
 
 ## 4. Reference ask helpers
 

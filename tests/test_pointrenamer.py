@@ -83,10 +83,13 @@ LINE = '''
 
 
 def ab_pt(x, y, number):
-    """An ab_pt block with its surveyed number in the number attribute."""
+    """An ab_pt block with its surveyed number in the number attribute.
+    Carries its tab (410) like a real database entity, so the
+    current-tab filter in ptr:clash-count can see it."""
     return f'''
   (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
-                 '(8 . "POINTS") '(100 . "AcDbBlockReference")
+                 '(8 . "POINTS") '(410 . "Model")
+                 '(100 . "AcDbBlockReference")
                  '(2 . "ab_pt") (list 10 {x} {y} 0.0) '(66 . 1)))
   (entmake (list '(0 . "ATTRIB") '(8 . "POINTS")
                  '(2 . "number") '(1 . "{number}")))
@@ -355,6 +358,7 @@ print("first number and the outside-the-highlight clash")
 vm = VM()
 vm.load(LSP)
 vm.loads(LAYER_POOL)
+vm.sysvars['CTAB'] = 'Model'    # the clash sweep is current-tab only
 rect = made(vm, RECT_CCW)
 ins = []
 for f in (ab_pt(60, 0, 17), ab_pt(0, 60, 9)):

@@ -29647,12 +29647,12 @@
 ;;;  Highlight the whole area.  The perimeter inside it is found (or
 ;;;  picked), you click where the count starts and say which way round
 ;;;  it goes, and every point sitting ON the perimeter -- or within the
-;;;  band you allow off it, asked in inches -- is renumbered 1, 2, 3...
-;;;  sweeping from that spot in that direction.  Whatever the band does
-;;;  not catch (a spa shot, the equipment pad, a stray) continues the
-;;;  count after the loop is closed, swept in the same direction by
-;;;  where each sits against the perimeter, so the leftovers read round
-;;;  the sheet too instead of jumping about.
+;;;  band you allow off it, asked in feet-and-inches -- is renumbered
+;;;  1, 2, 3... sweeping from that spot in that direction.  Whatever
+;;;  the band does not catch (a spa shot, the equipment pad, a stray)
+;;;  continues the count after the loop is closed, swept in the same
+;;;  direction by where each sits against the perimeter, so the
+;;;  leftovers read round the sheet too instead of jumping about.
 ;;;
 ;;;  WHAT COUNTS AS A POINT.  ABPCHECK's definition, unchanged: every
 ;;;  "ab_pt" block wherever it sits, and any other block on the POINTS
@@ -29684,7 +29684,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.2")
+(setq *pointrenamer-version* "v1.3")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -30116,10 +30116,11 @@
 
 ;; How many point blocks OUTSIDE the renamed set already carry a number
 ;; in [first, last] -- the collision the renumber cannot see, said out
-;; loud instead of found at the next callout.
-(defun ptr:clash-count (renamed first last / ss i en ed lay att nm v n)
+;; loud instead of found at the next callout.  Only the current tab is
+;; swept: a Layout1 detail reusing the numbers is not a clash.
+(defun ptr:clash-count (renamed first lastn / ss i en ed lay att nm v n)
   (setq n 0
-        ss (ssget "_X" '((0 . "INSERT"))))
+        ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB")))))
   (if ss
     (progn
       (setq i 0)
@@ -30139,7 +30140,7 @@
                 (if (and v
                          (equal v (float (fix v)) 1.0e-9)
                          (>= v (float first))
-                         (<= v (float last)))
+                         (<= v (float lastn)))
                   (setq n (1+ n))))))))))
   n)
 
@@ -30204,8 +30205,12 @@
   ;; before the undo group's command clears it - step 1 takes it once,
   ;; so coming Back re-asks interactively
   (setq pick1 (ssget "_I" ptr:*filter*))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (princ "\n\nPOINTRENAMER - hand the point numbers back out in the")
   (princ "\norder the perimeter runs.")
   (setq step 1 quit nil go nil)
@@ -30329,7 +30334,7 @@
                         " attribute - and are left alone.)")))
        (setq res (cal:askyn (strcat "Renumber them " (itoa first)
                                     " to " (itoa lastn) "?")
-                            "Yes" T))
+                            "No" T))
        (cond
          ((eq res 'CAL-BACK) (setq step 6))
          ((null res)
@@ -30371,13 +30376,13 @@
                        (itoa first) " and " (itoa lastn)
                        " - two points can now share a number.")))
       (princ "\nThe whole renumber is one U.")))
-  (command "_.UNDO" "_End")
-  (setq undo-open nil)
+  (if undo-open
+    (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (cal:sysrestore)
   (princ))
 
 (defun c:POINTRENAMERVER ()
-  (princ (strcat "\nPOINTRENAMER " *pointrenamer-version* " loaded."))
+  (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*))
   (princ))
 
 (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*

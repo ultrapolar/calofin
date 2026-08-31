@@ -20,7 +20,7 @@ the numbers so they run round the pool instead:
    meaning on the sheet: the polyline's own winding is measured (bulges
    included) and the sweep runs against its drawn order when it has to.
 5. **Say how far off the perimeter still counts as on it** -- the band,
-   in inches, remembered for the session (6" to start with).
+   in feet-and-inches, remembered for the session (6" to start with).
 6. **Say what number to start at** (Enter = 1), then confirm the split
    it shows.
 
