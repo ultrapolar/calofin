@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.6")
+(setq *lazform-version* "v2.7")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -1664,7 +1664,19 @@
 
 ;; The probe, on its own loaded handle.  It draws nothing and answers
 ;; nothing -- it exists to be looked at.
-(defun c:LAZASCII ( / f dcl l)
+(defun c:LAZASCII ( / *error* f dcl l)
+  ;; Esc inside the dialog must not leak the loaded handle or the
+  ;; temp DCL file - the same tidy-up lzf:show's handler does
+  (defun *error* (msg)
+    (term_dialog)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (setq dcl nil)
+    (if f (vl-file-delete f))
+    (setq f nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZASCII error: " msg)))
+    (princ))
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
