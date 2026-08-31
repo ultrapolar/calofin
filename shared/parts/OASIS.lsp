@@ -192,7 +192,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.2")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.3")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -2831,7 +2831,13 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
+  ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on
+  ;; older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (cal:dimstysave)

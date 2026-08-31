@@ -31,7 +31,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.5") ; printed on load and at command start so a
+(setq *xft-version* "v1.6") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -282,8 +282,13 @@
     (xft:restore)
     (if undone (command "_.UNDO" "_End"))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ)
   )
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command);
+  ;; harmless no-op guard on older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -320,7 +325,7 @@
 
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_BEgin")
+          (command "_.UNDO" "_Begin")
           (setq undone t)
 
           ;; ---- 0. the layer and the block have to be there --------

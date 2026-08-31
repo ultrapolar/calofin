@@ -49,7 +49,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.9"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.0"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -313,7 +313,13 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
+  ;; autobead-flush drain and the UNDO close above; harmless no-op
+  ;; guard on older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)

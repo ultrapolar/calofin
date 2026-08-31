@@ -13432,7 +13432,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.2")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.3")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -16071,7 +16071,13 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
+  ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on
+  ;; older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (cal:dimstysave)
@@ -30365,7 +30371,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v0.9"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.0"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -30625,7 +30631,13 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
+  ;; autobead-flush drain and the UNDO close above; harmless no-op
+  ;; guard on older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
@@ -69573,7 +69585,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.5") ; printed on load and at command start so a
+(setq *xft-version* "v1.6") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -69824,8 +69836,13 @@
     (xft:restore)
     (if undone (command "_.UNDO" "_End"))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if *pop-error-mode* (*pop-error-mode*))
     (princ)
   )
+
+  ;; AutoCAD 2012+ requires this so *error* may call (command);
+  ;; harmless no-op guard on older releases where it doesn't exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -69862,7 +69879,7 @@
 
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_BEgin")
+          (command "_.UNDO" "_Begin")
           (setq undone t)
 
           ;; ---- 0. the layer and the block have to be there --------
