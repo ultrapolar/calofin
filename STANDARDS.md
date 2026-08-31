@@ -742,7 +742,11 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   nothing, erroring inside the error handler).  ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and
   the whole cancel test is now ONE canonical spelling repo-wide, with
   `cal:error-cancel-p` / `cal:undobegin` / `cal:undoend` in the
-  library so new code has nothing to hand-copy.  ~~XYPLOT's missing
+  library so new code has nothing to hand-copy.  (The trio has no
+  callers yet -- every migrated file still carries the canonical
+  forms inline, and swapping those onto the helpers is a coordinated
+  mirror-table pass of its own; the library copies are there for the
+  first tool written against `cal:` from scratch.)  ~~XYPLOT's missing
   handler and undo group~~ (post-standard miss, not on the old list)
   **DONE**.
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --

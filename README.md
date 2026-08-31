@@ -142,7 +142,7 @@ changing a routine.
 
 Interactive tools share one convention for backing out of a mis-typed
 answer: the keyword is **Back** (type `B`), it is always shown in the
-prompt's bracketed options (`[Back]`, `[Yes/No/Back/Skip rest]`, ...),
+prompt's bracketed options (`[Back]`, `[Yes/No/Back/Skip]`, ...),
 and it re-asks the previous question - re-running whatever lookup or
 computation sits in between, and backing out of a sub-block (a `POOL`
 measurement block, a `CCPRECHECK` branch) into the question that
