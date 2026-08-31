@@ -24,10 +24,17 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.3")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 (setq *lin:log* nil)   ; collected report lines
+
+(setq *lin:prev* nil)  ; each question's previous answer, keyed by its
+                       ; exact prompt text.  Session memory on purpose:
+                       ; it only ever supplies a <default> the user must
+                       ; still Enter through, never an answer by itself,
+                       ; so a re-run over the same job is Enter-Enter
+                       ; down the unchanged questions
 
 ;; Record a line for the report.
 (defun lin:log (msg)
@@ -71,16 +78,24 @@
 ;; Ask the user to pick one keyword out of a list.  With back non-nil
 ;; the choices also take Back (Undo accepted as a hidden synonym),
 ;; returning the symbol LIN-BACK.
-(defun lin:ask (prompt kwlist back / ans)
+;; The first time a question is ever asked Enter is rejected - the
+;; checklist stays deliberate - but its answer is remembered in
+;; *lin:prev*, so every later ask offers it as the <default>.
+(defun lin:ask (prompt kwlist back / ans dflt)
+  (setq dflt (cdr (assoc prompt *lin:prev*)))
   (while (not ans)
-    (initget 1 (if back (strcat kwlist " Back Undo") kwlist))
+    (initget (if dflt 0 1)
+             (if back (strcat kwlist " Back Undo") kwlist))
     (setq ans (getkword (strcat "\n" prompt " ["
                                 (vl-string-translate " " "/" kwlist)
-                                (if back "/Back" "") "]: ")))
+                                (if back "/Back" "") "]"
+                                (if dflt (strcat " <" dflt ">") "") ": ")))
+    (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
     'LIN-BACK
-    (progn (lin:log (strcat "[x] " prompt " -> " ans)) ans)
+    (progn (setq *lin:prev* (cons (cons prompt ans) *lin:prev*))
+           (lin:log (strcat "[x] " prompt " -> " ans)) ans)
   )
 )
 

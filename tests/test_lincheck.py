@@ -118,4 +118,21 @@ assert orient == ["[x] Verify orientation: Shallow end to the RIGHT"
 assert "    A-C=3" in lines, lines
 print("   backed out to orientation, then re-entered the cross dims")
 
+print("== a re-run offers last time's answers as defaults ==")
+# Same VM, run twice: the second run Enters through every keyword
+# question and retypes only the free-text items (getstring prompts
+# take no defaults).  The two reports must come out identical.
+vm = VM()
+vm.load(LSP)
+vm.run('c:LINCHECK', list(FULL))
+first = log(vm)
+FULL2 = list(FULL)
+for i in (1, 12, 13, 14, 15, 16, 18, 19):   # the keyword answers
+    FULL2[i] = None
+vm.run('c:LINCHECK', FULL2)
+assert log(vm) == first, (first, log(vm))
+assert any(" <Yes>: " in p or " <No>: " in p for p, _ in vm.prompts), \
+    [p for p, _ in vm.prompts]
+print("   Enter repeated every keyword answer; reports identical")
+
 print("\nALL LINCHECK SCENARIOS PASSED")

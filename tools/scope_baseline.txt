@@ -63,6 +63,7 @@ lisp/cabhd/CABHD.lsp|cab:temp-clear|setq|cab-temp
 lisp/cabhd/CABHD.lsp|cab:temp-drop|setq|cab-temp
 lisp/ccprecheck/ccprecheck.lsp|c:ccprecheck|foreach|line
 lisp/ccprecheck/ccprecheck.lsp|c:ccprecheck|setq-global|*chk:log*
+lisp/ccprecheck/ccprecheck.lsp|chk:ask|setq-global|*chk:prev*
 lisp/ccprecheck/ccprecheck.lsp|chk:log|setq-global|*chk:log*
 lisp/ccprecheck/ccprecheck.lsp|chk:trim|foreach|l
 lisp/ccprecheck/ccprecheck.lsp|chk:trim|setq-global|*chk:log*
@@ -136,6 +137,7 @@ lisp/lhd/lhd.lsp|lh:temp-add|setq|lh-temp
 lisp/lhd/lhd.lsp|lh:temp-clear|setq|lh-temp
 lisp/lhd/lhd.lsp|lh:temp-drop|setq|lh-temp
 lisp/lincheck/lincheck.lsp|c:lincheck|setq-global|*lin:log*
+lisp/lincheck/lincheck.lsp|lin:ask|setq-global|*lin:prev*
 lisp/lincheck/lincheck.lsp|lin:log|setq-global|*lin:log*
 lisp/lincheck/lincheck.lsp|lin:report|foreach|line
 lisp/lincheck/lincheck.lsp|lin:st-fib|setq|fib
@@ -760,6 +762,7 @@ shared/parts/abhd.lsp|pf:tut-demo|setq|pf-phase
 shared/parts/abhd.lsp|pf:tut-demo|setq|pf-temp
 shared/parts/ccprecheck.lsp|c:ccprecheck|foreach|line
 shared/parts/ccprecheck.lsp|c:ccprecheck|setq-global|*chk:log*
+shared/parts/ccprecheck.lsp|chk:ask|setq-global|*chk:prev*
 shared/parts/ccprecheck.lsp|chk:log|setq-global|*chk:log*
 shared/parts/ccprecheck.lsp|chk:trim|foreach|l
 shared/parts/ccprecheck.lsp|chk:trim|setq-global|*chk:log*
@@ -804,6 +807,7 @@ shared/parts/lhd.lsp|lh:temp-add|setq|lh-temp
 shared/parts/lhd.lsp|lh:temp-clear|setq|lh-temp
 shared/parts/lhd.lsp|lh:temp-drop|setq|lh-temp
 shared/parts/lincheck.lsp|c:lincheck|setq-global|*lin:log*
+shared/parts/lincheck.lsp|lin:ask|setq-global|*lin:prev*
 shared/parts/lincheck.lsp|lin:log|setq-global|*lin:log*
 shared/parts/lincheck.lsp|lin:report|foreach|line
 shared/parts/lincheck.lsp|lin:st-fib|setq|fib

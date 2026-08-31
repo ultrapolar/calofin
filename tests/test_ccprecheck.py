@@ -95,4 +95,28 @@ assert spill == ["Spillway? -> No"], spill
 assert not [l for l in lines if "Pad & dimension" in l], lines
 print("   Undo re-asked the spillway question")
 
+print("== a re-run offers last time's answers as defaults ==")
+# Same VM, run twice: the second run Enters through both keyword
+# questions and only retypes the confirm value (getstring prompts
+# take no defaults).  The two summaries must come out identical.
+vm = VM()
+vm.load(LSP)
+vm.run('c:CCPRECHECK', ["SpaCover", "ThermoLight", "52x52"])
+first = log(vm)
+vm.run('c:CCPRECHECK', [None, None, "52x52"])
+assert log(vm) == first, (first, log(vm))
+assert any(p.endswith(" <SpaCover>: ") for p, _ in vm.prompts), \
+    [p for p, _ in vm.prompts]
+print("   Enter repeated both keyword answers; summaries identical")
+
+print("== the first run of a session stays fully explicit ==")
+vm = VM()
+vm.load(LSP)
+try:
+    vm.run('c:CCPRECHECK', [None])
+    raise AssertionError("Enter was accepted on a first-run question")
+except LispError:
+    pass
+print("   Enter rejected while no previous answer exists")
+
 print("\nALL CCPRECHECK SCENARIOS PASSED")
