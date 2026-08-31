@@ -1,5 +1,5 @@
 ;;; ===================================================================
-;;; WCALST.lsp — straighten a curved constant-width "ladder" band
+;;; WCALST.lsp -- straighten a curved constant-width "ladder" band
 ;;; -------------------------------------------------------------------
 ;;; Command: WCALST
 ;;;
@@ -13,8 +13,8 @@
 ;;;   * the chosen side as one straight line (layer AIR-B, red)
 ;;;   * the opposite side as its rigidly unrolled, slightly wavy chain
 ;;;     (kept on its original layer)
-;;;   * DARTS  — V cutouts where unrolling creates excess material
-;;;   * INSERTS — straight slits plus a loose sliver piece drawn below
+;;;   * DARTS  -- V cutouts where unrolling creates excess material
+;;;   * INSERTS -- straight slits plus a loose sliver piece drawn below
 ;;;     the band where unrolling opens a gap
 ;;;   * band-height dimensions at both ends (layer DIMENSION)
 ;;;
@@ -28,7 +28,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.5")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -674,7 +674,7 @@
   (if (not farlay) (setq farlay (caddr (nth seed segs))))
   ;; layers the band structure itself lives on: bands may be full
   ;; triangulated meshes (interior vertices, doubled edges), so segment
-  ;; bookkeeping cannot tell structure from reference marks — layers can
+  ;; bookkeeping cannot tell structure from reference marks -- layers can
   (setq bandlays (list (caddr (nth seed segs))))
   (if (and farlay (not (member farlay bandlays)))
     (setq bandlays (cons farlay bandlays))
@@ -738,7 +738,7 @@
   (setq devpts (mapcar '(lambda (f) (wc:dev-point f pts s)) ordered)
         ;; drop points projecting far off the chain (past the band ends,
         ;; end blocks, unrelated marks caught in the selection) and points
-        ;; developing at/above the straight edge (end-clamp artifacts —
+        ;; developing at/above the straight edge (end-clamp artifacts --
         ;; the far side always lies below the straightened edge)
         devpts (vl-remove-if
                  '(lambda (dp)

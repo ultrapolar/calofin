@@ -217,6 +217,20 @@ def check_file(path):
     lit, _ = strip(src, keep_strings=True)
 
     problems = balance(clean)
+
+    # STANDARDS 5: sources are ASCII ("--", never em dashes) - comments
+    # included, since the generated tiers carry them verbatim.  The
+    # deprecated acady matcher is exempt (STANDARDS 8) and keeps its em
+    # dashes and plus-minus signs.
+    if "standards_checker" not in pathlib.Path(path).parts:
+        bad = sorted({i + 1 for i, line in enumerate(src.splitlines())
+                      if any(ord(ch) > 127 for ch in line)})
+        for ln in bad[:5]:
+            problems.append("line %d: non-ASCII character "
+                            "(STANDARDS 5: ASCII only, use --)" % ln)
+        if len(bad) > 5:
+            problems.append("... and %d more non-ASCII line(s)"
+                            % (len(bad) - 5))
     if unterminated:
         problems.append("unterminated string literal")
     problems += stray_top_level(lit)

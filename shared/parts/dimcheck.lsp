@@ -1,7 +1,7 @@
 ;;; ------------------------------------------------------------------
-;;;  dimcheck.lsp — DIMCHECK: dims, arcs & overlaps QA review
+;;;  dimcheck.lsp -- DIMCHECK: dims, arcs & overlaps QA review
 ;;;
-;;;  The lean pass — dimension placement, arc-end attachment, and
+;;;  The lean pass -- dimension placement, arc-end attachment, and
 ;;;  overlapping lines, with nothing else touched. For the full
 ;;;  liner-finish review (this plus steps/side views, wall height,
 ;;;  the liner pattern, and the title block border), load
@@ -14,9 +14,9 @@
 ;;;     review stands out.
 ;;;
 ;;;  2. Dimensions are reviewed ONE AT A TIME, in a fixed marching
-;;;     order: grouped by dimension style — "STANDARD", then "SIDE
+;;;     order: grouped by dimension style -- "STANDARD", then "SIDE
 ;;;     STANDARD", then "STANDARD INCHES", then "CROSS DIMENSIONS",
-;;;     then whatever styles are left (tune *dchk-style-order*) —
+;;;     then whatever styles are left (tune *dchk-style-order*) --
 ;;;     and inside each group left to right, top to bottom (row by
 ;;;     row, like reading). Each dimension is zoomed to, shown in
 ;;;     its own colour and highlighted while the rest stays grey.
@@ -24,7 +24,7 @@
 ;;;     audited first: a point that does not sit on any object is
 ;;;     shown where DIMCHECK thinks it belongs, with BOTH spots
 ;;;     marked on screen and spelled out so there is no doubt which
-;;;     is which —
+;;;     is which --
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
@@ -34,7 +34,7 @@
 ;;;         P          ->  PICK the spot yourself
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer DIMCHECK-CONSTRUCTION so you can see
-;;;     where it used to measure — only when a point actually moved.
+;;;     where it used to measure -- only when a point actually moved.
 ;;;     Then the overall question for every dimension:
 ;;;         "Is this dimension correct?"
 ;;;         Enter / Y  ->  correct, the dimension is left alone
@@ -49,7 +49,7 @@
 ;;;     are marked; Keep puts the arc back exactly as you drew it
 ;;;     (its original shape is restored, not re-fitted), Pick re-fits
 ;;;     it through your spot. Arcs whose endpoints actually changed
-;;;     are recoloured MAGENTA — an arc you kept is left alone.
+;;;     are recoloured MAGENTA -- an arc you kept is left alone.
 ;;;
 ;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
 ;;;     (or polyline edges) that are collinear and run on top of each
@@ -65,9 +65,9 @@
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
 ;;;  5. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
+;;;     drawing on layer DIMCHECK-REPORT listing every dimension --
 ;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc, and every overlapping
+;;;     dims show their angle) -- every arc, and every overlapping
 ;;;     line pair (with its overlap length), plus totals. The report
 ;;;     text is sized from the drawing's extents so it sits to scale
 ;;;     next to it. Any line describing something questionable (a
@@ -76,7 +76,7 @@
 ;;;     colour and is drawn at *dchk-green-scale* (3/4) of the red
 ;;;     text's height, so the problems are the big lines on the sheet.
 ;;;
-;;;  All original colours are restored when the review ends — except
+;;;  All original colours are restored when the review ends -- except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
 ;;;  merged/flagged lines, which stay marked on purpose. Everything
 ;;;  (including the report) runs inside one UNDO group, so a single U
@@ -87,14 +87,14 @@
 ;;;    offer to unlock for the run (re-locked afterwards, even on
 ;;;    error); left locked, their items are reported but untouched.
 ;;;  - Object-associative dimensions are warned about before their
-;;;    points are moved — an associative point may re-anchor on its
-;;;    own — and their report line says so in red.
+;;;    points are moved -- an associative point may re-anchor on its
+;;;    own -- and their report line says so in red.
 ;;;  - Rerunning DIMCHECK replaces the previous report and marker
 ;;;    lines instead of stacking a second copy on top.
 ;;;  - Original colours are stashed in xdata before greying. If a
 ;;;    crash or kill ever leaves the drawing grey, DIMCHECKRESCUE
 ;;;    restores every stashed colour and clears DIMCHECK's report
-;;;    and markers (flag colours included — it is the full reset).
+;;;    and markers (flag colours included -- it is the full reset).
 ;;;  - Loading both dimcheck.lsp and linfincheck.lsp in the same
 ;;;    session is safe: distinct dchk:/lfc: function prefixes,
 ;;;    *dchk-/*lfc- globals, layer names and xdata tags mean neither
@@ -108,7 +108,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.8")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.9")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -345,7 +345,7 @@
     (b2 (dchk:zoom-ent e2))))
 
 (defun dchk:stage (ent saved keep)
-  ;; bring an entity back to its own colour for review — unless it
+  ;; bring an entity back to its own colour for review -- unless it
   ;; already wears a DIMCHECK marker colour it must not lose
   (if (and (entget ent) (not (member ent keep)))
     (dchk:set-color ent (cdr (assoc ent saved)))))

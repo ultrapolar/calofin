@@ -34414,7 +34414,7 @@
 ;;; ======================================================================
 
 ;;; ------------------------------------------------------------------
-;;;  check_drawing.lsp — CHECK: attachment QA for AutoCAD drawings
+;;;  check_drawing.lsp -- CHECK: attachment QA for AutoCAD drawings
 ;;;
 ;;;  Adds the CHECK command (alias DIMARCCHECK). After asking you to
 ;;;  highlight the drawing, it runs two audits over the selection:
@@ -34446,7 +34446,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.4")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -41175,7 +41175,7 @@
 ;;; ======================================================================
 
 ;;; ------------------------------------------------------------------
-;;;  covercheck.lsp — COVERCHECK: interactive dimension & arc QA review
+;;;  covercheck.lsp -- COVERCHECK: interactive dimension & arc QA review
 ;;;
 ;;;  Based on dimcheck.lsp (DIMCHECK), reworked into the cover
 ;;;  review: the same guided, one-at-a-time audit of dimensions,
@@ -41208,9 +41208,9 @@
 ;;;     review stands out.
 ;;;
 ;;;  2. Dimensions are reviewed ONE AT A TIME, in a fixed marching
-;;;     order: grouped by dimension style — "STANDARD", then "SIDE
+;;;     order: grouped by dimension style -- "STANDARD", then "SIDE
 ;;;     STANDARD", then "STANDARD INCHES", then "CROSS DIMENSIONS",
-;;;     then whatever styles are left (tune *cchk-style-order*) —
+;;;     then whatever styles are left (tune *cchk-style-order*) --
 ;;;     and inside each group left to right, top to bottom (row by
 ;;;     row, like reading). Each dimension is zoomed to, shown in
 ;;;     its own colour and highlighted while the rest stays grey.
@@ -41218,7 +41218,7 @@
 ;;;     audited first: a point that does not sit on any object is
 ;;;     shown where COVERCHECK thinks it belongs, with BOTH spots
 ;;;     marked on screen and spelled out so there is no doubt which
-;;;     is which —
+;;;     is which --
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
@@ -41228,7 +41228,7 @@
 ;;;         P          ->  PICK the spot yourself
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer COVERCHECK-CONSTRUCTION so you can see
-;;;     where it used to measure — only when a point actually moved.
+;;;     where it used to measure -- only when a point actually moved.
 ;;;     Then the overall question for every dimension:
 ;;;         "Is this dimension correct?"
 ;;;         Enter / Y  ->  correct, the dimension is left alone
@@ -41241,7 +41241,7 @@
 ;;;     are marked; Keep puts the arc back exactly as you drew it
 ;;;     (its original shape is restored, not re-fitted), Pick re-fits
 ;;;     it through your spot. Arcs whose endpoints actually changed
-;;;     are recoloured MAGENTA — an arc you kept is left alone.
+;;;     are recoloured MAGENTA -- an arc you kept is left alone.
 ;;;
 ;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
 ;;;     that are collinear and run on top of each other (a leftover
@@ -41256,7 +41256,7 @@
 ;;;         L          ->  LEAVE them as drawn (intentional)
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
-;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
+;;;  5. COVER CHECKS -- nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
 ;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
 ;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
@@ -41279,14 +41279,14 @@
 ;;;     - POOL OUTLINE & AREA. Everything in the selection on layer
 ;;;       "POOL" (tune *cchk-pool-layer*) whose properties are all
 ;;;       ByLayer is the pool outline: a closed (lw)polyline, a
-;;;       CIRCLE, or the same shape exploded into lines and arcs —
+;;;       CIRCLE, or the same shape exploded into lines and arcs --
 ;;;       touching ends are chained back together and the largest
 ;;;       closed loop wins; leftover open chains or other closed loops
 ;;;       are reported as AMBIGUOUS. Its area (sq ft) and its straight
 ;;;       / arc segment split are given in the report on the side.
 ;;;     - COVER DETAILS. A block named (or containing) "Cover
-;;;       Details" holds an OVERLAP value ("Overlap: 12''" — only
-;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" —
+;;;       Details" holds an OVERLAP value ("Overlap: 12''" -- only
+;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" --
 ;;;       NxN). What they SHOULD say comes from the outline:
 ;;;         more arcs than straights           -> 18" overlap, 3x3
 ;;;         mostly straights, under 1,200 sqft -> 12" overlap, 5x5
@@ -41296,12 +41296,12 @@
 ;;;       SUGGEST line; the block itself is never touched.
 ;;;     - POOL SIZE SHOWN. With nothing drawn on the cover layer
 ;;;       (tune *cchk-cover-layer*) the note "Pool Size Shown" must
-;;;       appear somewhere in the highlighted area — missing is
-;;;       suggested. With a cover drawn the note must NOT be there —
+;;;       appear somewhere in the highlighted area -- missing is
+;;;       suggested. With a cover drawn the note must NOT be there --
 ;;;       present suggests taking it off; absent is all good. If both
 ;;;       "Pool Size Shown" and "Spa Size Shown" (tune
 ;;;       *cchk-spa-note*) turn up in the same selection, that is
-;;;       flagged as an error — ONLY ONE SIZE CAN BE SHOWN.
+;;;       flagged as an error -- ONLY ONE SIZE CAN BE SHOWN.
 ;;;     - COVER LAYER = POLYLINES. Anything drawn on the cover layer
 ;;;       that is not a polyline is called out.
 ;;;     - OVERLAP NA <-> DASHED OUTLINE. Overlap reading NA means no
@@ -41341,9 +41341,9 @@
 ;;;     date and version, a verdict line (ALL CLEAR, or the count of
 ;;;     red lines), the colour legend, a SUMMARY dashboard, then the
 ;;;     COVER CHECKS findings under underlined section headings.
-;;;     The DIMCHECK-style findings — every dimension with its
+;;;     The DIMCHECK-style findings -- every dimension with its
 ;;;     measured distance, every arc, every overlapping line pair
-;;;     with its overlap length — go in a separate DIMENSION AUDIT
+;;;     with its overlap length -- go in a separate DIMENSION AUDIT
 ;;;     column to the RIGHT of the main sheet, so the cover verdicts
 ;;;     lead and the mechanical audit reads alongside.  Any line
 ;;;     describing something questionable or that needs looking over
@@ -41359,7 +41359,7 @@
 ;;;     column - just the cover rules, for a drawing DIMCHECK
 ;;;     already went over.
 ;;;
-;;;  All original colours are restored when the review ends — except
+;;;  All original colours are restored when the review ends -- except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
 ;;;  merged/flagged lines, which stay marked on purpose. Everything
 ;;;  (including the report) runs inside one UNDO group, so a single U
@@ -41370,14 +41370,14 @@
 ;;;    offer to unlock for the run (re-locked afterwards, even on
 ;;;    error); left locked, their items are reported but untouched.
 ;;;  - Object-associative dimensions are warned about before their
-;;;    points are moved — an associative point may re-anchor on its
-;;;    own — and their report line says so in red.
+;;;    points are moved -- an associative point may re-anchor on its
+;;;    own -- and their report line says so in red.
 ;;;  - Rerunning COVERCHECK replaces the previous report and marker
 ;;;    lines instead of stacking a second copy on top.
 ;;;  - Original colours are stashed in xdata before greying. If a
 ;;;    crash or kill ever leaves the drawing grey, COVERCHECKRESCUE
 ;;;    restores every stashed colour and clears COVERCHECK's report
-;;;    and markers (flag colours included — it is the full reset).
+;;;    and markers (flag colours included -- it is the full reset).
 ;;; ------------------------------------------------------------------
 
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -41389,7 +41389,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.5")
+(setq *cchk-version* "v1.6")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -41651,7 +41651,7 @@
     (b2 (cchk:zoom-ent e2))))
 
 (defun cchk:stage (ent saved keep)
-  ;; bring an entity back to its own colour for review — unless it
+  ;; bring an entity back to its own colour for review -- unless it
   ;; already wears a COVERCHECK marker colour it must not lose
   (if (and (entget ent) (not (member ent keep)))
     (cchk:set-color ent (cdr (assoc ent saved)))))
@@ -45010,9 +45010,9 @@
 ;;; ======================================================================
 
 ;;; ------------------------------------------------------------------
-;;;  dimcheck.lsp — DIMCHECK: dims, arcs & overlaps QA review
+;;;  dimcheck.lsp -- DIMCHECK: dims, arcs & overlaps QA review
 ;;;
-;;;  The lean pass — dimension placement, arc-end attachment, and
+;;;  The lean pass -- dimension placement, arc-end attachment, and
 ;;;  overlapping lines, with nothing else touched. For the full
 ;;;  liner-finish review (this plus steps/side views, wall height,
 ;;;  the liner pattern, and the title block border), load
@@ -45025,9 +45025,9 @@
 ;;;     review stands out.
 ;;;
 ;;;  2. Dimensions are reviewed ONE AT A TIME, in a fixed marching
-;;;     order: grouped by dimension style — "STANDARD", then "SIDE
+;;;     order: grouped by dimension style -- "STANDARD", then "SIDE
 ;;;     STANDARD", then "STANDARD INCHES", then "CROSS DIMENSIONS",
-;;;     then whatever styles are left (tune *dchk-style-order*) —
+;;;     then whatever styles are left (tune *dchk-style-order*) --
 ;;;     and inside each group left to right, top to bottom (row by
 ;;;     row, like reading). Each dimension is zoomed to, shown in
 ;;;     its own colour and highlighted while the rest stays grey.
@@ -45035,7 +45035,7 @@
 ;;;     audited first: a point that does not sit on any object is
 ;;;     shown where DIMCHECK thinks it belongs, with BOTH spots
 ;;;     marked on screen and spelled out so there is no doubt which
-;;;     is which —
+;;;     is which --
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
@@ -45045,7 +45045,7 @@
 ;;;         P          ->  PICK the spot yourself
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer DIMCHECK-CONSTRUCTION so you can see
-;;;     where it used to measure — only when a point actually moved.
+;;;     where it used to measure -- only when a point actually moved.
 ;;;     Then the overall question for every dimension:
 ;;;         "Is this dimension correct?"
 ;;;         Enter / Y  ->  correct, the dimension is left alone
@@ -45060,7 +45060,7 @@
 ;;;     are marked; Keep puts the arc back exactly as you drew it
 ;;;     (its original shape is restored, not re-fitted), Pick re-fits
 ;;;     it through your spot. Arcs whose endpoints actually changed
-;;;     are recoloured MAGENTA — an arc you kept is left alone.
+;;;     are recoloured MAGENTA -- an arc you kept is left alone.
 ;;;
 ;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
 ;;;     (or polyline edges) that are collinear and run on top of each
@@ -45076,9 +45076,9 @@
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
 ;;;  5. A DIMCHECK REPORT (MTEXT) is placed to the RIGHT of the
-;;;     drawing on layer DIMCHECK-REPORT listing every dimension —
+;;;     drawing on layer DIMCHECK-REPORT listing every dimension --
 ;;;     with its measured distance (in the drawing's units; angular
-;;;     dims show their angle) — every arc, and every overlapping
+;;;     dims show their angle) -- every arc, and every overlapping
 ;;;     line pair (with its overlap length), plus totals. The report
 ;;;     text is sized from the drawing's extents so it sits to scale
 ;;;     next to it. Any line describing something questionable (a
@@ -45087,7 +45087,7 @@
 ;;;     colour and is drawn at *dchk-green-scale* (3/4) of the red
 ;;;     text's height, so the problems are the big lines on the sheet.
 ;;;
-;;;  All original colours are restored when the review ends — except
+;;;  All original colours are restored when the review ends -- except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
 ;;;  merged/flagged lines, which stay marked on purpose. Everything
 ;;;  (including the report) runs inside one UNDO group, so a single U
@@ -45098,14 +45098,14 @@
 ;;;    offer to unlock for the run (re-locked afterwards, even on
 ;;;    error); left locked, their items are reported but untouched.
 ;;;  - Object-associative dimensions are warned about before their
-;;;    points are moved — an associative point may re-anchor on its
-;;;    own — and their report line says so in red.
+;;;    points are moved -- an associative point may re-anchor on its
+;;;    own -- and their report line says so in red.
 ;;;  - Rerunning DIMCHECK replaces the previous report and marker
 ;;;    lines instead of stacking a second copy on top.
 ;;;  - Original colours are stashed in xdata before greying. If a
 ;;;    crash or kill ever leaves the drawing grey, DIMCHECKRESCUE
 ;;;    restores every stashed colour and clears DIMCHECK's report
-;;;    and markers (flag colours included — it is the full reset).
+;;;    and markers (flag colours included -- it is the full reset).
 ;;;  - Loading both dimcheck.lsp and linfincheck.lsp in the same
 ;;;    session is safe: distinct dchk:/lfc: function prefixes,
 ;;;    *dchk-/*lfc- globals, layer names and xdata tags mean neither
@@ -45119,7 +45119,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.8")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.9")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -45356,7 +45356,7 @@
     (b2 (dchk:zoom-ent e2))))
 
 (defun dchk:stage (ent saved keep)
-  ;; bring an entity back to its own colour for review — unless it
+  ;; bring an entity back to its own colour for review -- unless it
   ;; already wears a DIMCHECK marker colour it must not lose
   (if (and (entget ent) (not (member ent keep)))
     (dchk:set-color ent (cdr (assoc ent saved)))))
@@ -56756,14 +56756,14 @@
 ;;; ======================================================================
 
 ;;; ------------------------------------------------------------------
-;;;  linfincheck.lsp — LINFINCHECK: the full liner-finish drawing QA
+;;;  linfincheck.lsp -- LINFINCHECK: the full liner-finish drawing QA
 ;;;
 ;;;  Grew from a dimension/arc auditor (based on check_drawing.lsp) into
 ;;;  a guided, one-at-a-time review of the whole title block: dims,
 ;;;  arcs, overlapping lines, steps and their side views, wall height,
 ;;;  the liner pattern, and the title block border. For just the first
-;;;  three of those — the quick pass someone wants without going
-;;;  through the whole liner-finish gauntlet — see dimcheck.lsp
+;;;  three of those -- the quick pass someone wants without going
+;;;  through the whole liner-finish gauntlet -- see dimcheck.lsp
 ;;;  instead; it shares this file's Move/Keep/Pick and report machinery
 ;;;  but leaves out steps, wall height, liner and border. Type
 ;;;  LINFINCHECK, then:
@@ -56773,9 +56773,9 @@
 ;;;     review stands out.
 ;;;
 ;;;  2. Dimensions are reviewed ONE AT A TIME, in a fixed marching
-;;;     order: grouped by dimension style — "STANDARD", then "SIDE
+;;;     order: grouped by dimension style -- "STANDARD", then "SIDE
 ;;;     STANDARD", then "STANDARD INCHES", then "CROSS DIMENSIONS",
-;;;     then whatever styles are left (tune *lfc-style-order*) —
+;;;     then whatever styles are left (tune *lfc-style-order*) --
 ;;;     and inside each group left to right, top to bottom (row by
 ;;;     row, like reading). Each dimension is zoomed to, shown in
 ;;;     its own colour and highlighted while the rest stays grey.
@@ -56783,7 +56783,7 @@
 ;;;     audited first: a point that does not sit on any object is
 ;;;     shown where LINFINCHECK thinks it belongs, with BOTH spots
 ;;;     marked on screen and spelled out so there is no doubt which
-;;;     is which —
+;;;     is which --
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
@@ -56793,7 +56793,7 @@
 ;;;         P          ->  PICK the spot yourself
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer LINFINCHECK-CONSTRUCTION so you can see
-;;;     where it used to measure — only when a point actually moved.
+;;;     where it used to measure -- only when a point actually moved.
 ;;;     Then the overall question for every dimension:
 ;;;         "Is this dimension correct?"
 ;;;         Enter / Y  ->  correct, the dimension is left alone
@@ -56806,7 +56806,7 @@
 ;;;     are marked; Keep puts the arc back exactly as you drew it
 ;;;     (its original shape is restored, not re-fitted), Pick re-fits
 ;;;     it through your spot. Arcs whose endpoints actually changed
-;;;     are recoloured MAGENTA — an arc you kept is left alone.
+;;;     are recoloured MAGENTA -- an arc you kept is left alone.
 ;;;
 ;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
 ;;;     that are collinear and run on top of each other (a leftover
@@ -56822,17 +56822,17 @@
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
 ;;;  5. STEP / STAIRCASE check. Groups of 3+ parallel lines stacked
-;;;     less than 18 units apart (18" in inch drawings — tune
+;;;     less than 18 units apart (18" in inch drawings -- tune
 ;;;     *lfc-step-maxgap*) look like steps. When such patterns are
 ;;;     found, LINFINCHECK first looks for a SIDE VIEW in the selection
 ;;;     (a side view reads as two step patterns at right angles to
-;;;     each other — treads + risers — in the same spot, each one
+;;;     each other -- treads + risers -- in the same spot, each one
 ;;;     marching along like a profile rather than sitting stacked).
 ;;;     Benches count: their profile is only two treads deep, so
 ;;;     side-view halves are found down to *lfc-bench-minlines*
 ;;;     while the "are these steps?" prompt still needs a full-size
 ;;;     *lfc-step-minlines* pattern. Whatever the side view belongs
-;;;     to — stairs or a bench — its overall height is confirmed
+;;;     to -- stairs or a bench -- its overall height is confirmed
 ;;;     against the Finished Wall Ht (see below).
 ;;;       - Side view found  -> steps are taken as real; skip ahead.
 ;;;       - No side view     -> each pattern is highlighted and you
@@ -56856,7 +56856,7 @@
 ;;;     plan-view step pattern must also have something drawn on
 ;;;     layer "Bead Track" (tune *lfc-bead-layer*) within
 ;;;     *lfc-bead-dist* of it. The whole drawing is searched, not
-;;;     just the selection. The side view itself is exempt — bead
+;;;     just the selection. The side view itself is exempt -- bead
 ;;;     track is only demanded next to the plan-view steps. Patterns
 ;;;     with nothing nearby are called out in the report.
 ;;;     The OVERALL HEIGHT of the steps is confirmed too: measured
@@ -56879,15 +56879,15 @@
 ;;;       - a single sensible value ("35 3/4''") -> no warning. When the side view carries
 ;;;     its own overall-height dimension (the one whose definition
 ;;;     points span the full rise), that dimension is what gets
-;;;     compared — and if it disagrees with WallHt, or its text was
+;;;     compared -- and if it disagrees with WallHt, or its text was
 ;;;     overridden to disagree with the geometry it spans, it is
 ;;;     MARKED RED AUTOMATICALLY and reported. Any difference beyond
 ;;;     *lfc-height-tol* is reported in red as a MISMATCH.
 ;;;     Two title-block answers give nothing to check against, so
 ;;;     the side view is LEFT ALONE (never marked red) in both:
-;;;       - "Finished Wall Ht = Varies" — the height genuinely
+;;;       - "Finished Wall Ht = Varies" -- the height genuinely
 ;;;         varies; the report just notes it.
-;;;       - several heights at once, e.g. "= 0'', 40'', 45''" — the
+;;;       - several heights at once, e.g. "= 0'', 40'', 45''" -- the
 ;;;         report tells you to CHECK THE WALL HEIGHT in the title
 ;;;         block. A compound height ( 3'-4'' ) is still one value,
 ;;;         not several.
@@ -56895,7 +56895,7 @@
 ;;;  6. TECH TITLE DATE. The "Date" attribute of the Tech Title block
 ;;;     (same block as WallHt; tune *lfc-date-tag*) is checked whenever
 ;;;     a Tech Title exists, steps or not: it must read a real calendar
-;;;     date in MM/DD/YYYY form — two digits, slash, two digits, slash,
+;;;     date in MM/DD/YYYY form -- two digits, slash, two digits, slash,
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
@@ -56922,7 +56922,7 @@
 ;;;     as NEEDS WIPING and changes nothing. The liner pattern must also agree with how the
 ;;;     steps are built:
 ;;;       - a FIBERGLASS STEP anywhere in the highlighted area (as
-;;;         text, a block, or the layer things sit on — see
+;;;         text, a block, or the layer things sit on -- see
 ;;;         *lfc-fgstep-words*) is its own unit, so the liner must
 ;;;         NOT carry a Step. One that does is reported.
 ;;;       - otherwise, when steps are drawn, the liner must cover
@@ -56930,8 +56930,8 @@
 ;;;         "Liner Material with Step" variant) is reported.
 ;;;
 ;;;  8. TITLE BLOCK BORDER. The outer drawing on layer "border"
-;;;     (tune *lfc-border-layer*) must be the nominal sheet —
-;;;     58'-8" wide by 45'-3 5/8" tall — or a scaled-UP multiple of
+;;;     (tune *lfc-border-layer*) must be the nominal sheet --
+;;;     58'-8" wide by 45'-3 5/8" tall -- or a scaled-UP multiple of
 ;;;     it. Anything smaller is reported in red as
 ;;;         "Title block should not be SCALED DOWN for Liners".
 ;;;     A border out of proportion (scaled unevenly) is reported
@@ -56962,8 +56962,8 @@
 ;;;     of red lines), the colour legend, a SUMMARY dashboard, then
 ;;;     the findings under underlined section headings (STEPS & SIDE
 ;;;     VIEWS, WALL HEIGHT, THE LINER, ...).  The DIMCHECK-style
-;;;     findings — every dimension with its measured distance, every
-;;;     arc, every overlapping line pair with its overlap length — go
+;;;     findings -- every dimension with its measured distance, every
+;;;     arc, every overlapping line pair with its overlap length -- go
 ;;;     in a separate DIMENSION AUDIT column to the RIGHT of the main
 ;;;     sheet, so the liner verdicts lead and the mechanical audit
 ;;;     reads alongside.  Any line describing something questionable
@@ -56979,7 +56979,7 @@
 ;;;     column - just the liner-finish rules, for a drawing DIMCHECK
 ;;;     already went over.
 ;;;
-;;;  All original colours are restored when the review ends — except
+;;;  All original colours are restored when the review ends -- except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
 ;;;  merged/flagged lines, which stay marked on purpose. Everything
 ;;;  (including the report) runs inside one UNDO group, so a single U
@@ -56990,14 +56990,14 @@
 ;;;    offer to unlock for the run (re-locked afterwards, even on
 ;;;    error); left locked, their items are reported but untouched.
 ;;;  - Object-associative dimensions are warned about before their
-;;;    points are moved — an associative point may re-anchor on its
-;;;    own — and their report line says so in red.
+;;;    points are moved -- an associative point may re-anchor on its
+;;;    own -- and their report line says so in red.
 ;;;  - Rerunning LINFINCHECK replaces the previous report and marker
 ;;;    lines instead of stacking a second copy on top.
 ;;;  - Original colours are stashed in xdata before greying. If a
 ;;;    crash or kill ever leaves the drawing grey, LINFINCHECKRESCUE
 ;;;    restores every stashed colour and clears LINFINCHECK's report
-;;;    and markers (flag colours included — it is the full reset).
+;;;    and markers (flag colours included -- it is the full reset).
 ;;;  - With several Tech Title blocks on the sheet, the one nearest
 ;;;    the checked area is used; titles disagreeing on WallHt are
 ;;;    called out in red.
@@ -57010,7 +57010,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.3")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.4")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -57280,7 +57280,7 @@
     (b2 (lfc:zoom-ent e2))))
 
 (defun lfc:stage (ent saved keep)
-  ;; bring an entity back to its own colour for review — unless it
+  ;; bring an entity back to its own colour for review -- unless it
   ;; already wears a LINFINCHECK marker colour it must not lose
   (if (and (entget ent) (not (member ent keep)))
     (lfc:set-color ent (cdr (assoc ent saved)))))
@@ -58278,7 +58278,7 @@
 
 (defun lfc:ins-has-word (ent word / found s)
   ;; T when the INSERT's (effective) name or any text it shows
-  ;; contains the given standalone word — "NOT" hits "Not Selected"
+  ;; contains the given standalone word -- "NOT" hits "Not Selected"
   ;; but never "NOTE"; "STEP" hits "with Step" but never "Stepstone"
   (setq word  (strcase word)
         found nil)
@@ -68573,7 +68573,7 @@
 ;;; ======================================================================
 
 ;;; ===================================================================
-;;; WCALST.lsp — straighten a curved constant-width "ladder" band
+;;; WCALST.lsp -- straighten a curved constant-width "ladder" band
 ;;; -------------------------------------------------------------------
 ;;; Command: WCALST
 ;;;
@@ -68587,8 +68587,8 @@
 ;;;   * the chosen side as one straight line (layer AIR-B, red)
 ;;;   * the opposite side as its rigidly unrolled, slightly wavy chain
 ;;;     (kept on its original layer)
-;;;   * DARTS  — V cutouts where unrolling creates excess material
-;;;   * INSERTS — straight slits plus a loose sliver piece drawn below
+;;;   * DARTS  -- V cutouts where unrolling creates excess material
+;;;   * INSERTS -- straight slits plus a loose sliver piece drawn below
 ;;;     the band where unrolling opens a gap
 ;;;   * band-height dimensions at both ends (layer DIMENSION)
 ;;;
@@ -68602,7 +68602,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.5")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -69248,7 +69248,7 @@
   (if (not farlay) (setq farlay (caddr (nth seed segs))))
   ;; layers the band structure itself lives on: bands may be full
   ;; triangulated meshes (interior vertices, doubled edges), so segment
-  ;; bookkeeping cannot tell structure from reference marks — layers can
+  ;; bookkeeping cannot tell structure from reference marks -- layers can
   (setq bandlays (list (caddr (nth seed segs))))
   (if (and farlay (not (member farlay bandlays)))
     (setq bandlays (cons farlay bandlays))
@@ -69312,7 +69312,7 @@
   (setq devpts (mapcar '(lambda (f) (wc:dev-point f pts s)) ordered)
         ;; drop points projecting far off the chain (past the band ends,
         ;; end blocks, unrelated marks caught in the selection) and points
-        ;; developing at/above the straight edge (end-clamp artifacts —
+        ;; developing at/above the straight edge (end-clamp artifacts --
         ;; the far side always lies below the straightened edge)
         devpts (vl-remove-if
                  '(lambda (dp)

@@ -1,5 +1,5 @@
 ;;; ------------------------------------------------------------------
-;;;  check_drawing.lsp — CHECK: attachment QA for AutoCAD drawings
+;;;  check_drawing.lsp -- CHECK: attachment QA for AutoCAD drawings
 ;;;
 ;;;  Adds the CHECK command (alias DIMARCCHECK). After asking you to
 ;;;  highlight the drawing, it runs two audits over the selection:
@@ -27,7 +27,7 @@
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
 
-(setq *checkdrawing-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.4")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)

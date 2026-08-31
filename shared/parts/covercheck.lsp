@@ -1,5 +1,5 @@
 ;;; ------------------------------------------------------------------
-;;;  covercheck.lsp — COVERCHECK: interactive dimension & arc QA review
+;;;  covercheck.lsp -- COVERCHECK: interactive dimension & arc QA review
 ;;;
 ;;;  Based on dimcheck.lsp (DIMCHECK), reworked into the cover
 ;;;  review: the same guided, one-at-a-time audit of dimensions,
@@ -32,9 +32,9 @@
 ;;;     review stands out.
 ;;;
 ;;;  2. Dimensions are reviewed ONE AT A TIME, in a fixed marching
-;;;     order: grouped by dimension style — "STANDARD", then "SIDE
+;;;     order: grouped by dimension style -- "STANDARD", then "SIDE
 ;;;     STANDARD", then "STANDARD INCHES", then "CROSS DIMENSIONS",
-;;;     then whatever styles are left (tune *cchk-style-order*) —
+;;;     then whatever styles are left (tune *cchk-style-order*) --
 ;;;     and inside each group left to right, top to bottom (row by
 ;;;     row, like reading). Each dimension is zoomed to, shown in
 ;;;     its own colour and highlighted while the rest stays grey.
@@ -42,7 +42,7 @@
 ;;;     audited first: a point that does not sit on any object is
 ;;;     shown where COVERCHECK thinks it belongs, with BOTH spots
 ;;;     marked on screen and spelled out so there is no doubt which
-;;;     is which —
+;;;     is which --
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
@@ -52,7 +52,7 @@
 ;;;         P          ->  PICK the spot yourself
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer COVERCHECK-CONSTRUCTION so you can see
-;;;     where it used to measure — only when a point actually moved.
+;;;     where it used to measure -- only when a point actually moved.
 ;;;     Then the overall question for every dimension:
 ;;;         "Is this dimension correct?"
 ;;;         Enter / Y  ->  correct, the dimension is left alone
@@ -65,7 +65,7 @@
 ;;;     are marked; Keep puts the arc back exactly as you drew it
 ;;;     (its original shape is restored, not re-fitted), Pick re-fits
 ;;;     it through your spot. Arcs whose endpoints actually changed
-;;;     are recoloured MAGENTA — an arc you kept is left alone.
+;;;     are recoloured MAGENTA -- an arc you kept is left alone.
 ;;;
 ;;;  4. OVERLAPPING LINES are hunted down: two straight LINE entities
 ;;;     that are collinear and run on top of each other (a leftover
@@ -80,7 +80,7 @@
 ;;;         L          ->  LEAVE them as drawn (intentional)
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
-;;;  5. COVER CHECKS — nothing here rewrites the drawing; every
+;;;  5. COVER CHECKS -- nothing here rewrites the drawing; every
 ;;;     disagreement is only SUGGESTED against, in the report:
 ;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
 ;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
@@ -103,14 +103,14 @@
 ;;;     - POOL OUTLINE & AREA. Everything in the selection on layer
 ;;;       "POOL" (tune *cchk-pool-layer*) whose properties are all
 ;;;       ByLayer is the pool outline: a closed (lw)polyline, a
-;;;       CIRCLE, or the same shape exploded into lines and arcs —
+;;;       CIRCLE, or the same shape exploded into lines and arcs --
 ;;;       touching ends are chained back together and the largest
 ;;;       closed loop wins; leftover open chains or other closed loops
 ;;;       are reported as AMBIGUOUS. Its area (sq ft) and its straight
 ;;;       / arc segment split are given in the report on the side.
 ;;;     - COVER DETAILS. A block named (or containing) "Cover
-;;;       Details" holds an OVERLAP value ("Overlap: 12''" — only
-;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" —
+;;;       Details" holds an OVERLAP value ("Overlap: 12''" -- only
+;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" --
 ;;;       NxN). What they SHOULD say comes from the outline:
 ;;;         more arcs than straights           -> 18" overlap, 3x3
 ;;;         mostly straights, under 1,200 sqft -> 12" overlap, 5x5
@@ -120,12 +120,12 @@
 ;;;       SUGGEST line; the block itself is never touched.
 ;;;     - POOL SIZE SHOWN. With nothing drawn on the cover layer
 ;;;       (tune *cchk-cover-layer*) the note "Pool Size Shown" must
-;;;       appear somewhere in the highlighted area — missing is
-;;;       suggested. With a cover drawn the note must NOT be there —
+;;;       appear somewhere in the highlighted area -- missing is
+;;;       suggested. With a cover drawn the note must NOT be there --
 ;;;       present suggests taking it off; absent is all good. If both
 ;;;       "Pool Size Shown" and "Spa Size Shown" (tune
 ;;;       *cchk-spa-note*) turn up in the same selection, that is
-;;;       flagged as an error — ONLY ONE SIZE CAN BE SHOWN.
+;;;       flagged as an error -- ONLY ONE SIZE CAN BE SHOWN.
 ;;;     - COVER LAYER = POLYLINES. Anything drawn on the cover layer
 ;;;       that is not a polyline is called out.
 ;;;     - OVERLAP NA <-> DASHED OUTLINE. Overlap reading NA means no
@@ -165,9 +165,9 @@
 ;;;     date and version, a verdict line (ALL CLEAR, or the count of
 ;;;     red lines), the colour legend, a SUMMARY dashboard, then the
 ;;;     COVER CHECKS findings under underlined section headings.
-;;;     The DIMCHECK-style findings — every dimension with its
+;;;     The DIMCHECK-style findings -- every dimension with its
 ;;;     measured distance, every arc, every overlapping line pair
-;;;     with its overlap length — go in a separate DIMENSION AUDIT
+;;;     with its overlap length -- go in a separate DIMENSION AUDIT
 ;;;     column to the RIGHT of the main sheet, so the cover verdicts
 ;;;     lead and the mechanical audit reads alongside.  Any line
 ;;;     describing something questionable or that needs looking over
@@ -183,7 +183,7 @@
 ;;;     column - just the cover rules, for a drawing DIMCHECK
 ;;;     already went over.
 ;;;
-;;;  All original colours are restored when the review ends — except
+;;;  All original colours are restored when the review ends -- except
 ;;;  the red "fix me" dimensions, magenta moved arcs and cyan
 ;;;  merged/flagged lines, which stay marked on purpose. Everything
 ;;;  (including the report) runs inside one UNDO group, so a single U
@@ -194,14 +194,14 @@
 ;;;    offer to unlock for the run (re-locked afterwards, even on
 ;;;    error); left locked, their items are reported but untouched.
 ;;;  - Object-associative dimensions are warned about before their
-;;;    points are moved — an associative point may re-anchor on its
-;;;    own — and their report line says so in red.
+;;;    points are moved -- an associative point may re-anchor on its
+;;;    own -- and their report line says so in red.
 ;;;  - Rerunning COVERCHECK replaces the previous report and marker
 ;;;    lines instead of stacking a second copy on top.
 ;;;  - Original colours are stashed in xdata before greying. If a
 ;;;    crash or kill ever leaves the drawing grey, COVERCHECKRESCUE
 ;;;    restores every stashed colour and clears COVERCHECK's report
-;;;    and markers (flag colours included — it is the full reset).
+;;;    and markers (flag colours included -- it is the full reset).
 ;;; ------------------------------------------------------------------
 
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -213,7 +213,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.5")
+(setq *cchk-version* "v1.6")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -475,7 +475,7 @@
     (b2 (cchk:zoom-ent e2))))
 
 (defun cchk:stage (ent saved keep)
-  ;; bring an entity back to its own colour for review — unless it
+  ;; bring an entity back to its own colour for review -- unless it
   ;; already wears a COVERCHECK marker colour it must not lose
   (if (and (entget ent) (not (member ent keep)))
     (cchk:set-color ent (cdr (assoc ent saved)))))
