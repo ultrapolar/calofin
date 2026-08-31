@@ -79,7 +79,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.3")
+(setq cal:*version* "v1.4")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -255,9 +255,12 @@
 ;; Track the open group in a local and close it from *error* too:
 ;;   (setq undo-open (cal:undobegin))
 ;;   ... (if undo-open (cal:undoend)) ...
+;; Opens only while undo is recording - _Begin in a drawing with UNDO
+;; off (bit 1 of UNDOCTL clear) errors out of the command - and returns
+;; nil then, so the idiom above skips the close it does not own.
 (defun cal:undobegin ()
-  (command "_.UNDO" "_Begin")
-  T)
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") T)))
 
 (defun cal:undoend ()
   (command "_.UNDO" "_End")
