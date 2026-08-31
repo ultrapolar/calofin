@@ -958,10 +958,23 @@ def _setvar(vm, a):
 
 @bi('tblsearch')
 def _tblsearch(vm, a):
+    """The symbol-table record as an assoc list, the way AutoLISP hands
+    it back.  A record a test materialized (entmake, or a tblobjname +
+    entmod round trip) is returned live, so a frozen/locked flag shows
+    here too; a name known only by membership gets the same defaults
+    tblobjname would invent for it.  Only LAYER carries the full default
+    record -- routines read 70/62/6 off layers (lock checks, effective
+    linetype), while other tables are only probed for existence."""
     table, name = a[0].upper(), a[1].upper()
-    if name in {x.upper() for x in vm.tables.get(table, set())}:
-        return [[0, table], [2, name]]
-    return NIL
+    if name not in {x.upper() for x in vm.tables.get(table, set())}:
+        return NIL
+    rec = vm.tablerecs.get(table, {}).get(name)
+    if rec is not None:
+        return list(vm.recdata[rec])
+    if table == 'LAYER':
+        return [Dot(0, table), Dot(2, a[1]), Dot(70, 0),
+                Dot(62, 7), Dot(6, 'Continuous')]
+    return [Dot(0, table), Dot(2, a[1])]
 
 
 @bi('tblobjname')
