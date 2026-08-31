@@ -3,10 +3,12 @@ drive c:CDCALLOUT with scripted typing.  AutoLISP cannot run outside
 AutoCAD, so this is where a wrong arity, an unbound function or a nil
 reaching (distance ...) has to die.
 
-Script values answer the interactive calls in order: per round a FROM
-number and a TO number (both getstring) -- the dimension line is placed
-automatically, right inbetween, so nothing is ever picked; None at the
-FROM prompt is the Enter that ends the loop.  Typed 'b'/'undo' answers
+Script values answer the interactive calls in order: a FROM number,
+then TO numbers for as long as the chain runs (each drawn TO becomes
+the next FROM) -- the dimension line is placed automatically, right
+inbetween, so nothing is ever picked.  None at the TO prompt ends the
+chain, None at the FROM prompt is the Enter that ends the command.
+Typed 'b'/'undo' answers
 exercise the shared Back convention.  The "_X" point sweep takes no
 scripted answer: ssget "_X" reads the drawing and never prompts, so the
 points the scenario builds with ab_pt are what it finds.
@@ -93,7 +95,7 @@ def dim_ents(vm):
 def test_one_dim():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 35), ab_pt(vm, 120, 0, 40)]
-    run(vm, ['35', '40', None], 'one dim')
+    run(vm, ['35', '40', None, None], 'one dim')
     ds = dims(vm)
     assert len(ds) == 1, ds
     d = ds[0]
@@ -118,14 +120,14 @@ def test_rinse_repeat():
            ab_pt(vm, 100, 100, 3)]
     run(vm, [
              '1', '2',
-             '2', '3',
-             '3', '1',
-             None], 'rinse repeat')
+             '3',
+             '1',
+             None, None], 'rinse repeat')
     ds = dims(vm)
     assert len(ds) == 3, ds
     assert ds[1][13] == [100.0, 0.0, 0.0] and \
         ds[1][14] == [100.0, 100.0, 0.0], ds[1]
-    print("ok  three rounds -> three dims, ended by Enter")
+    print("ok  one chain    -> three dims from four numbers, ended by Enter")
 
 
 def test_number_spellings():
@@ -133,8 +135,8 @@ def test_number_spellings():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 35), ab_pt(vm, 100, 0, 40)]
     run(vm, [
-             'Pt.35', 'PT40',
-             '#035', '40.0',
+             'Pt.35', 'PT40', None,
+             '#035', '40.0', None,
              None], 'spellings')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  Pt.35 / PT40 / #035 / 40.0 all resolve")
@@ -145,7 +147,7 @@ def test_decimal_point_name():
     genuinely named 40.5 read as 405 and could never be asked for."""
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, '40.5'), ab_pt(vm, 100, 0, 41)]
-    run(vm, ['Pt.40.5', '41', None], 'decimal name')
+    run(vm, ['Pt.40.5', '41', None, None], 'decimal name')
     assert len(dims(vm)) == 1, dims(vm)
     print("ok  Pt.40.5      -> a decimal point name keeps its decimal")
 
@@ -155,7 +157,7 @@ def test_unknown_number():
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
     # '99' names nothing: the round dies at the FROM prompt and nothing
     # is asked for or drawn; the next round still works
-    run(vm, ['99', '1', '2', None], 'unknown')
+    run(vm, ['99', '1', '2', None, None], 'unknown')
     assert len(dims(vm)) == 1, dims(vm)
     print("ok  unknown number -> reported, nothing drawn, loop goes on")
 
@@ -178,7 +180,7 @@ def test_offset_pushes_dim_line():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 120, 0, 2)]
     vm.loads('(setq cdo:*offset* 6.0)')
-    run(vm, ['1', '2', None], 'offset')
+    run(vm, ['1', '2', None, None], 'offset')
     assert dims(vm)[0][10] == [60.0, 6.0, 0.0], dims(vm)
     print("ok  offset 6     -> dim line pushed 6 off the tie")
 
@@ -186,7 +188,7 @@ def test_offset_pushes_dim_line():
 def test_missing_style():
     vm = newvm(styles=())
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
-    run(vm, ['1', '2', None], 'missing style')
+    run(vm, ['1', '2', None, None], 'missing style')
     ds = dims(vm)
     assert len(ds) == 1, ds
     # the style is NOT invented: the dim stays in the current style,
@@ -204,12 +206,13 @@ def test_back_undraws_last_dim():
            ab_pt(vm, 100, 100, 3)]
     run(vm, [
              '1', '2',
-             '2', '3',
+             '3',                      # the chain: 1-2 then 2-3
+             None,                     # Enter ends the chain
              'b',                      # un-draw the 2-3 dim
              'undo',                   # un-draw the 1-2 dim
              'B',                      # nothing left: "Already at..."
              '1', '3',
-             None], 'back at FROM')
+             None, None], 'back at FROM')
     live = [d for d, e in zip(dims(vm), dim_ents(vm))
             if e not in vm.deleted]
     assert len(live) == 1, live
@@ -226,7 +229,7 @@ def test_back_reasks_previous_prompt():
     run(vm, [
              '1', 'back',              # B at TO: back to FROM
              '2', '1',                 # ...and the round runs 2 -> 1
-             None], 'back mid-round')
+             None, None], 'back mid-round')
     ds = [d for d, e in zip(dims(vm), dim_ents(vm))
           if e not in vm.deleted]
     assert len(ds) == 1, ds
@@ -241,6 +244,25 @@ def test_no_points():
     run(vm, [], 'no points')
     assert dims(vm) == []
     print("ok  no named points -> nothing asked, nothing drawn")
+
+
+def test_chain_resumes_across_runs():
+    """The chain's end is session memory: a later run starts at the TO
+    prompt anchored on it, so a job interrupted mid-chain picks back up
+    with one number.  Enter there drops to a fresh FROM point."""
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
+           ab_pt(vm, 100, 100, 3)]
+    run(vm, ['1', '2', None, None], 'first chain')
+    run(vm, ['3', None, None], 'resumed chain')
+    ds = [d for d, e in zip(dims(vm), dim_ents(vm))
+          if e not in vm.deleted]
+    assert len(ds) == 2, ds
+    assert ds[1][13] == [100.0, 0.0, 0.0] and \
+        ds[1][14] == [100.0, 100.0, 0.0], ds[1]
+    assert vm.prompts[0][0].startswith('\nTo point number (from Pt.2)'), \
+        vm.prompts[0]
+    print("ok  session memory -> a later run resumes from the chain's end")
 
 
 def test_no_local_shadows_a_function():
@@ -274,5 +296,6 @@ if __name__ == '__main__':
     test_back_undraws_last_dim()
     test_back_reasks_previous_prompt()
     test_no_points()
+    test_chain_resumes_across_runs()
     test_no_local_shadows_a_function()
     print("all CDCALLOUT tests passed")

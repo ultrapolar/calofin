@@ -5,8 +5,12 @@ clicking points, you **name** them: type the FROM point number and
 the TO point number — and an aligned dimension is drawn between
 those two survey points, the dimension line placed automatically
 **right inbetween**, on the tie itself (CDCREATE's convention;
-nudge `cdo:*offset*` to push it off). Nothing is ever clicked. It
-keeps asking for the next pair until you press **Enter**.
+nudge `cdo:*offset*` to push it off). Nothing is ever clicked. A
+drawn dimension **chains**: its TO point anchors the next tie, so
+consecutive ties cost one number each; **Enter** at the TO prompt
+ends the chain, **Enter** at the FROM prompt finishes. The chain's
+end is remembered for the session, so a later `CDCALLOUT` resumes
+from it (Enter at the TO prompt drops to a fresh FROM point).
 
 Every dimension lands the way `CDCREATE` and `POOL` make cross dims:
 
@@ -59,9 +63,11 @@ The shared Back convention (see the root README) applies:
 2. Type `CDCALLOUT`.
 3. `From point number:` — type it (e.g. `35`).
 4. `To point number:` — type it (e.g. `40`). The dimension draws
-   immediately, its line right inbetween the two points.
-5. Rinse and repeat from 3; press **Enter** at the FROM prompt when
-   done.
+   immediately, its line right inbetween the two points — and `40`
+   becomes the next FROM, so the chain keeps going one number per
+   tie.
+5. Press **Enter** at the TO prompt to end the chain and pick a new
+   FROM point; press **Enter** at the FROM prompt when done.
 
 Each round reports what it drew, and the run ends with a summary:
 
