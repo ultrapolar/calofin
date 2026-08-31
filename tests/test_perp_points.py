@@ -55,7 +55,7 @@ cons list length nth last reverse distance sqrt abs max min float itoa rtos
 strcat princ member equal eq type entsel entget entmake entmod entdel entnext
 entlast tblobjname tblsearch trans getvar setvar getint getdist getpoint
 getkword initget command exit progn logand zerop subst assoc vl-remove quote
-1+ 1- lsh guard getstring vl-catch-all-apply vl-catch-all-error-p
+1+ 1- lsh guard getstring vl-catch-all-apply vl-catch-all-error-p command-s
 vlax-curve-getEndParam vlax-curve-getDistAtParam vlax-curve-getPointAtDist
 vlax-curve-getClosestPointTo vlax-curve-getParamAtPoint
 vlax-curve-getParamAtDist vlax-curve-getDistAtPoint vlax-curve-getFirstDeriv

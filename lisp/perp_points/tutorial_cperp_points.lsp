@@ -24,7 +24,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.4")
+(setq *tutcperp-version* "v0.5")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -109,7 +109,8 @@
     (if plt (setvar "PLINETYPE" plt))
     (if ce  (setvar "CMDECHO"   ce))
     (if undoOpen
-      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (tutc:finish)
@@ -161,7 +162,7 @@
         plt (getvar "PLINETYPE")
         ents '())
   (setvar "CMDECHO" 0)
-  (command "._UNDO" "_Begin")
+  (command "_.UNDO" "_Begin")
   (setq undoOpen T)
 
   (tutc:say '("========================================================="

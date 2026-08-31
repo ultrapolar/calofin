@@ -62434,7 +62434,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.6")
+(setq *perp-version* "v0.7")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -62839,14 +62839,15 @@
     (if celw  (setvar "CELWEIGHT" celw))
     (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
-      (command "._-DIMSTYLE" "_Restore" cdim))
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
     (if clay (setvar "CLAYER"  clay))
     (if pd   (setvar "PDMODE"  pd))
     (if os   (setvar "OSMODE"  os))
     (if plt  (setvar "PLINETYPE" plt))
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
-      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (perp:finish)
@@ -62871,7 +62872,7 @@
   ;; PLINE must produce a lightweight polyline, the only kind an arc
   ;; bulge can be written onto
   (setvar "PLINETYPE" 2)
-  (command "._UNDO" "_Begin")
+  (command "_.UNDO" "_Begin")
   (setq undoOpen T)
   ;; guide points must be visible whatever the drawing's PDMODE is
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
@@ -63355,7 +63356,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.5")
+(setq *cperp-version* "v0.6")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -63563,14 +63564,15 @@
     (if celw  (setvar "CELWEIGHT" celw))
     (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
-      (command "._-DIMSTYLE" "_Restore" cdim))
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
     (if clay (setvar "CLAYER"  clay))
     (if pd   (setvar "PDMODE"  pd))
     (if os   (setvar "OSMODE"  os))
     (if plt  (setvar "PLINETYPE" plt))
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
-      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (cperp:finish)
@@ -63595,7 +63597,7 @@
   ;; PLINE must produce a lightweight polyline so the arc bulges can be
   ;; written into it and the result stays a plain LWPOLYLINE
   (setvar "PLINETYPE" 2)
-  (command "._UNDO" "_Begin")
+  (command "_.UNDO" "_Begin")
   (setq undoOpen T)
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
@@ -63955,7 +63957,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.4")
+(setq *tutperp-version* "v0.5")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -64017,7 +64019,8 @@
     (if os (setvar "OSMODE"  os))
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
-      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (tutp:finish)
@@ -64030,7 +64033,7 @@
         pd (getvar "PDMODE")
         ents '())
   (setvar "CMDECHO" 0)
-  (command "._UNDO" "_Begin")
+  (command "_.UNDO" "_Begin")
   (setq undoOpen T)
 
   (tutp:say '("======================================================="
@@ -64326,7 +64329,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.4")
+(setq *tutcperp-version* "v0.5")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -64411,7 +64414,8 @@
     (if plt (setvar "PLINETYPE" plt))
     (if ce  (setvar "CMDECHO"   ce))
     (if undoOpen
-      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (tutc:finish)
@@ -64463,7 +64467,7 @@
         plt (getvar "PLINETYPE")
         ents '())
   (setvar "CMDECHO" 0)
-  (command "._UNDO" "_Begin")
+  (command "_.UNDO" "_Begin")
   (setq undoOpen T)
 
   (tutc:say '("========================================================="

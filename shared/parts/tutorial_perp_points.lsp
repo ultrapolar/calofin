@@ -28,7 +28,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.4")
+(setq *tutperp-version* "v0.5")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -90,7 +90,8 @@
     (if os (setvar "OSMODE"  os))
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
-      (progn (command "._UNDO" "_End") (setq undoOpen nil))))
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (tutp:finish)
@@ -103,7 +104,7 @@
         pd (getvar "PDMODE")
         ents '())
   (setvar "CMDECHO" 0)
-  (command "._UNDO" "_Begin")
+  (command "_.UNDO" "_Begin")
   (setq undoOpen T)
 
   (tutp:say '("======================================================="
