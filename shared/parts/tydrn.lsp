@@ -38,7 +38,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)

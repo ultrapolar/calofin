@@ -82,7 +82,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.4")
+(setq *abcdef-version* "v5.5")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -821,11 +821,32 @@
 ;;; --------------------------------------------------------------------------
 
 ;; Make sure a layer exists (create it with COLOR if not).
-(defun abcdef:layer (name color)
+(defun abcdef:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord") (cons 2 name)
-                   '(70 . 0) (cons 62 color) '(6 . "Continuous")))))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 (defun abcdef:text (pt hgt str layer)
   (entmake (list '(0 . "TEXT") (cons 8 layer)

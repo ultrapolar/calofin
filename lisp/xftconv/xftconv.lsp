@@ -28,7 +28,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.6") ; printed on load and at command start so a
+(setq *xft-version* "v1.7") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -189,18 +189,32 @@
        (= 4 (logand 4 (cdr (assoc 70 tb)))))
 )
 
-(defun xft:ensure-layer (lname color)
-  (if (not (tblsearch "LAYER" lname))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 lname)
-                   (cons 62 color)
-                   '(70 . 0)
-                   '(6 . "CONTINUOUS")))
-  )
-  (tblsearch "LAYER" lname)
-)
+(defun xft:ensure-layer (name color / rec ed flags col fixed)
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 (defun xft:style ()
   (if (tblsearch "STYLE" *xft-att-style*)

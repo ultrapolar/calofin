@@ -16356,7 +16356,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.4")
+(setq *abcdef-version* "v5.5")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -17083,11 +17083,32 @@
 ;;; --------------------------------------------------------------------------
 
 ;; Make sure a layer exists (create it with COLOR if not).
-(defun abcdef:layer (name color)
+(defun abcdef:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord") (cons 2 name)
-                   '(70 . 0) (cons 62 color) '(6 . "Continuous")))))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 (defun abcdef:text (pt hgt str layer)
   (entmake (list '(0 . "TEXT") (cons 8 layer)
@@ -19330,7 +19351,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.5")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -19642,11 +19663,32 @@
 ;;; --------------------------------------------------------------------------
 
 ;; Make sure a layer exists (create it with COLOR if not).
-(defun altabcdef:layer (name color)
+(defun altabcdef:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord") (cons 2 name)
-                   '(70 . 0) (cons 62 color) '(6 . "Continuous")))))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 (defun altabcdef:point (pt layer)
   (entmake (list '(0 . "POINT") (cons 8 layer)
@@ -30371,7 +30413,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.0"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.1"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -30450,23 +30492,36 @@
   ;; (e.g. OFFSET rejected a pick), feed it Enters until it terminates.
   (while (> (getvar "CMDACTIVE") 0) (command "")))
 
-(defun autobead-ensure-layer (name / def flags)
-  ;; Create the target layer if missing; thaw / unlock it if it exists
-  ;; frozen or locked so the beads are visible and editable.
-  (if (setq def (tblsearch "LAYER" name))
+(defun autobead-ensure-layer (name / rec ed flags col fixed)
+  ;; Create the target layer (red), or - when it already exists -
+  ;; thaw, unlock and switch it back on via entmod (no command echo,
+  ;; and safe from the error handler) and say so, so the beads are
+  ;; always visible and editable.
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) '(62 . 1)
+                    '(6 . "Continuous")))
     (progn
-      (setq flags (cdr (assoc 70 def)))
-      (if (= 1 (logand 1 flags))                 ; frozen
-        (command "._-layer" "_thaw" name ""))
-      (if (= 4 (logand 4 flags))                 ; locked
-        (command "._-layer" "_unlock" name "")))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   (cons 70 0)
-                   (cons 62 1)                   ; color: red
-                   (cons 6 "Continuous")))))
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 ;; ---- side-wall geometry helpers -------------------------------------------
 
@@ -31314,7 +31369,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.4")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -31356,17 +31411,39 @@
   (if (and name (tblsearch "DIMSTYLE" name))
     (progn (command "_.-DIMSTYLE" "_Restore" name) t)))
 
-;; make a layer current, creating it first when the drawing lacks it
-(defun ad:setlayer (name)
+;; create the dim layer, or - when it already exists - un-freeze,
+;; unlock and switch it back on, telling the user when it had to: a
+;; run onto a frozen layer would otherwise look like it did nothing
+(defun ad:ensure-layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   '(70 . 0)
-                   '(62 . 7)
-                   '(6 . "Continuous"))))
-  (setvar "CLAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
+
+;; make that layer current, creating or repairing it on the way
+(defun ad:setlayer (name)
+  (setvar "CLAYER" (ad:ensure-layer name 7)))
 
 ;; ------------------------------------------------ dimension styles
 
@@ -33539,7 +33616,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.6")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -33639,16 +33716,36 @@
         m))))
 
 ;; make a layer current, creating it first when the drawing lacks it
-(defun cdo:setlayer (name)
+(defun cdo:ensure-layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   '(70 . 0)
-                   '(62 . 7)
-                   '(6 . "Continuous"))))
-  (setvar "CLAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
+
+;; make that layer current, creating or repairing it on the way
+(defun cdo:setlayer (name)
+  (setvar "CLAYER" (cdo:ensure-layer name 7)))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -60631,7 +60728,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.7") ; printed on load and at command start
+(setq *paddle-version* "v1.8") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -61008,8 +61105,35 @@
   (vla-Delete tmp)
   d)
 
-(defun paddle--ensure-layer (doc)
-  (vla-Add (vla-get-Layers doc) *paddle-layer*))
+;; Create the pad layer, or - when it already exists - un-freeze,
+;; unlock and switch it back on and say so.  Symbol-table (DXF) level,
+;; so it needs no document object.
+(defun paddle--ensure-layer (name color / rec ed flags col fixed)
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 ;; Insert one pad so that its extents are centered on CTR. Pads stay
 ;; parallel to the X/Y axes unless *paddle-align* is set.
@@ -61094,7 +61218,7 @@
       (progn
         (vla-StartUndoMark doc)
         (paddle--ensure-block doc blkname padsize)
-        (paddle--ensure-layer doc)
+        (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blkname))
         (foreach vts perims
           (if (> (length vts) 1)
@@ -61224,7 +61348,7 @@
                                    *paddle-padsize*)
               blk   *paddle-blkname*)
         (paddle--ensure-block doc blk *paddle-padsize*)
-        (paddle--ensure-layer doc)
+        (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blk)
               ncorner 0 narc 0)
         (princ "\nStep 1 - inside corners: one pad centered on each corner of the slot.")
@@ -67841,7 +67965,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -68143,7 +68267,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -68402,7 +68526,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -69589,7 +69713,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.6") ; printed on load and at command start so a
+(setq *xft-version* "v1.7") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -70095,7 +70219,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.4")
+(setq *xyplot-version* "v1.5")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables

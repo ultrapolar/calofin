@@ -61,7 +61,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.7") ; printed on load and at command start
+(setq *paddle-version* "v1.8") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -438,8 +438,35 @@
   (vla-Delete tmp)
   d)
 
-(defun paddle--ensure-layer (doc)
-  (vla-Add (vla-get-Layers doc) *paddle-layer*))
+;; Create the pad layer, or - when it already exists - un-freeze,
+;; unlock and switch it back on and say so.  Symbol-table (DXF) level,
+;; so it needs no document object.
+(defun paddle--ensure-layer (name color / rec ed flags col fixed)
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 ;; Insert one pad so that its extents are centered on CTR. Pads stay
 ;; parallel to the X/Y axes unless *paddle-align* is set.
@@ -524,7 +551,7 @@
       (progn
         (vla-StartUndoMark doc)
         (paddle--ensure-block doc blkname padsize)
-        (paddle--ensure-layer doc)
+        (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blkname))
         (foreach vts perims
           (if (> (length vts) 1)
@@ -654,7 +681,7 @@
                                    *paddle-padsize*)
               blk   *paddle-blkname*)
         (paddle--ensure-block doc blk *paddle-padsize*)
-        (paddle--ensure-layer doc)
+        (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blk)
               ncorner 0 narc 0)
         (princ "\nStep 1 - inside corners: one pad centered on each corner of the slot.")

@@ -146,7 +146,7 @@
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
 
-(setq *autodim-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.4")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -213,17 +213,39 @@
   (if (and name (tblsearch "DIMSTYLE" name))
     (progn (command "_.-DIMSTYLE" "_Restore" name) t)))
 
-;; make a layer current, creating it first when the drawing lacks it
-(defun ad:setlayer (name)
+;; create the dim layer, or - when it already exists - un-freeze,
+;; unlock and switch it back on, telling the user when it had to: a
+;; run onto a frozen layer would otherwise look like it did nothing
+(defun ad:ensure-layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   '(70 . 0)
-                   '(62 . 7)
-                   '(6 . "Continuous"))))
-  (setvar "CLAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
+
+;; make that layer current, creating or repairing it on the way
+(defun ad:setlayer (name)
+  (setvar "CLAYER" (ad:ensure-layer name 7)))
 
 ;; ------------------------------------------------ dimension styles
 

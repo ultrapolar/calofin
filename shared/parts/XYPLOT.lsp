@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.4")
+(setq *xyplot-version* "v1.5")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables

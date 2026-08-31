@@ -25,7 +25,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -240,18 +240,32 @@
 
 ;;; ---------------------------- drawing -----------------------------
 
-(defun wc:ensure-layer (name color)
+(defun wc:ensure-layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
-    (entmake
-      (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
-            '(100 . "AcDbLayerTableRecord")
-            (cons 2 name) '(70 . 0) (cons 62 color)
-            '(6 . "Continuous")
-      )
-    )
-  )
-  name
-)
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 (defun wc:line (a b lay)
   (entmake

@@ -52,7 +52,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.0"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.1"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -131,23 +131,36 @@
   ;; (e.g. OFFSET rejected a pick), feed it Enters until it terminates.
   (while (> (getvar "CMDACTIVE") 0) (command "")))
 
-(defun autobead-ensure-layer (name / def flags)
-  ;; Create the target layer if missing; thaw / unlock it if it exists
-  ;; frozen or locked so the beads are visible and editable.
-  (if (setq def (tblsearch "LAYER" name))
+(defun autobead-ensure-layer (name / rec ed flags col fixed)
+  ;; Create the target layer (red), or - when it already exists -
+  ;; thaw, unlock and switch it back on via entmod (no command echo,
+  ;; and safe from the error handler) and say so, so the beads are
+  ;; always visible and editable.
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) '(62 . 1)
+                    '(6 . "Continuous")))
     (progn
-      (setq flags (cdr (assoc 70 def)))
-      (if (= 1 (logand 1 flags))                 ; frozen
-        (command "._-layer" "_thaw" name ""))
-      (if (= 4 (logand 4 flags))                 ; locked
-        (command "._-layer" "_unlock" name "")))
-    (entmake (list '(0 . "LAYER")
-                   '(100 . "AcDbSymbolTableRecord")
-                   '(100 . "AcDbLayerTableRecord")
-                   (cons 2 name)
-                   (cons 70 0)
-                   (cons 62 1)                   ; color: red
-                   (cons 6 "Continuous")))))
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 ;; ---- side-wall geometry helpers -------------------------------------------
 

@@ -28,7 +28,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.3")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)

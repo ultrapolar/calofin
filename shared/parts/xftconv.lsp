@@ -31,7 +31,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.6") ; printed on load and at command start so a
+(setq *xft-version* "v1.7") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
