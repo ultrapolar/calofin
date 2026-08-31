@@ -144,8 +144,10 @@ def newvm(fixtures):
 
 
 def run(vm, script, label):
+    # the leading None answers the pickfirst probe (ssget "_I") every
+    # run starts with - no selection made before the command was typed
     try:
-        vm.run('c:POINTRENAMER', list(script))
+        vm.run('c:POINTRENAMER', [None] + list(script))
     except LispError as e:
         raise AssertionError(f"[{label}] POINTRENAMER died: {e}\n"
                              f"printed: {''.join(vm.printed)[-1500:]}"

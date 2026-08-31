@@ -28,7 +28,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -411,7 +411,7 @@
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy dfeats run stairrng stage)
+                 stdy dfeats run stairrng stage wc-pick)
 
   (defun *error* (msg)
     (if inundo (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -428,14 +428,21 @@
   ;; selection, the numeric prompts to the side pick - the trace is
   ;; recomputed from whatever is re-answered.  A trace that fails now
   ;; re-opens the pick it came from instead of ending the command.
+  ;; Lines highlighted before WCALST was typed (pickfirst) are the band -
+  ;; the first pass through stage 1 takes them; a too-small band or Back
+  ;; re-asks interactively.
+  (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
   (setq stage 1)
   (while (< stage 6)
     (cond
 
       ;; ---- 1. selection ----------------------------------------------
       ((= stage 1)
-       (princ "\nSelect the band of lines (two long sides + rungs): ")
-       (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+       (if wc-pick
+         (setq ss wc-pick wc-pick nil)
+         (progn
+           (princ "\nSelect the band of lines (two long sides + rungs): ")
+           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) 6)

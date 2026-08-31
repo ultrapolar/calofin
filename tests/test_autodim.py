@@ -337,7 +337,7 @@ print('== the branch: a plan goes the plan route, a flight does not ==')
 TRACE = """
   (setq ran '())
   (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
-  (defun ad:dimstairs ()  (setq ran (cons "stairs" ran)) 0)
+  (defun ad:dimstairs (ss0)  (setq ran (cons "stairs" ran)) 0)
   (defun ad:getfloor (tag obstacles back) (setq ran (cons "floor" ran)) 0)
   (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
   (defun ad:runsteps (risers) (setq ran (cons "step depths" ran)) (princ))"""
@@ -363,7 +363,7 @@ print('== step 4 asks first, and takes No, Enter and Back for an answer ==')
 FLOW = """
   (setq ran '() backon "")
   (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
-  (defun ad:dimstairs () (setq ran (cons "stairs" ran)) 0)
+  (defun ad:dimstairs (ss0) (setq ran (cons "stairs" ran)) 0)
   (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
   (defun ad:eraseafter (mark) (setq ran (cons "rolled back" ran)) (princ))
   (defun ad:getfloor (tag obstacles back)
@@ -667,6 +667,22 @@ assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
 assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
 assert len(dims(vm)) == 4, dims(vm)
 print('   the probe took it; the step-1 highlight was never asked')
+
+
+print('== pickfirst: STAIRDIM hands its probe selection to ad:dimstairs ==')
+#: The real ad:dimstairs needs ActiveX for its intersections, which the
+#: VM has no stub for, so it is replaced by a recorder of what it was
+#: handed - the probe wiring is what this run checks.
+vm = fresh()
+ents = draw(vm, FLIGHT)
+vm.loads('(setq seen "never called")\n'
+         '(defun ad:dimstairs (ss0) (setq seen ss0) 0)')
+vm.run('c:STAIRDIM', [ents])               # only the "_I" probe answered
+assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+assert isinstance(vm.globals['seen'], list) and vm.globals['seen'], \
+    vm.globals['seen']
+print('   the probe selection reached ad:dimstairs; nothing was asked')
 
 
 print('ALL AUTODIM CHECKS PASSED')

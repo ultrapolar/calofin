@@ -29684,7 +29684,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.1")
+(setq *pointrenamer-version* "v1.2")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -30188,7 +30188,8 @@
 (defun c:POINTRENAMER ( / *error* undo-open step quit go ss got recs
                           nskip cand res perim segs tab len area fwd
                           start s0 dir band first lastn near far order
-                          row q d k n new renamed nhead i dirword clash)
+                          row q d k n new renamed nhead i dirword clash
+                          pick1)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -30199,6 +30200,10 @@
     (princ))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; a highlight made before the command was typed (pickfirst), grabbed
+  ;; before the undo group's command clears it - step 1 takes it once,
+  ;; so coming Back re-asks interactively
+  (setq pick1 (ssget "_I" ptr:*filter*))
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nPOINTRENAMER - hand the point numbers back out in the")
@@ -30208,8 +30213,11 @@
     (cond
       ;; ---- 1. the highlight --------------------------------------
       ((= step 1)
-       (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
-       (setq ss (ssget ptr:*filter*))
+       (if pick1
+         (setq ss pick1 pick1 nil)
+         (progn
+           (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
+           (setq ss (ssget ptr:*filter*))))
        (if (null ss) (setq ss (ssget "_X" ptr:*filter*)))
        (cond
          ((null ss)
@@ -31391,7 +31399,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.5")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -32042,21 +32050,24 @@
 
 ;; --------------------------------------------- part 2: stairs dimensions
 
-;; ask the user to highlight the stairs.  The treads - the largest
+;; dimension the stairs in SS0, or ask the user to highlight them when
+;; SS0 is nil (a pickfirst caller passes the selection already in
+;; hand).  The treads - the largest
 ;; group of parallel straight lines in the selection - get their widths
 ;; dimensioned, and the distances between them chained beside the
 ;; stair.  Both go in the plan style, or in inches when they measure
 ;; under a foot, which the gap between two treads usually does.
 ;; Returns the number of dimensions placed.
-(defun ad:dimstairs (/ ss segs s a hit g out groups best u v off
+(defun ad:dimstairs (ss0 / ss segs s a hit g out groups best u v off
                        tds td w lastw mid loc smax ts prev pts cnt)
-  (prompt (strcat "\nHighlight the stairs (window or pick the tread"
-                  " lines), then press Enter."
-                  "\nStep widths and the distances between steps both"
-                  " get dimensioned - anything under 12\" in"
-                  " \"STANDARD INCHES\"."
-                  "  Press Enter without selecting to skip."))
-  (setq ss  (ssget '((0 . "LINE,LWPOLYLINE")))
+  (if (null ss0)
+    (prompt (strcat "\nHighlight the stairs (window or pick the tread"
+                    " lines), then press Enter."
+                    "\nStep widths and the distances between steps both"
+                    " get dimensioned - anything under 12\" in"
+                    " \"STANDARD INCHES\"."
+                    "  Press Enter without selecting to skip.")))
+  (setq ss  (if ss0 ss0 (ssget '((0 . "LINE,LWPOLYLINE"))))
         cnt 0)
   (if ss
     (progn
@@ -32484,7 +32495,7 @@
       ((= stage 3)
        (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
        (setq mark3  (entlast)
-             nstair (ad:dimstairs))
+             nstair (ad:dimstairs nil))
        (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
        (setq stage 4))
       ((= stage 4)
@@ -32597,7 +32608,7 @@
                       " dimension(s) placed."))))
   (princ))
 
-(defun c:STAIRDIM (/ *error* oldcmd olddim n undo-open)
+(defun c:STAIRDIM (/ *error* oldcmd olddim n ss0 undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -32611,11 +32622,14 @@
     (princ))
   (setq oldcmd (getvar "CMDECHO")
         olddim (getvar "DIMSTYLE"))
+  ;; a pickfirst selection if there is one, grabbed before the undo
+  ;; group's command clears it - nil makes ad:dimstairs ask
+  (setq ss0 (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
   (setvar "CMDECHO" 0)
   (ad:begin)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
-  (setq n (ad:dimstairs))
+  (setq n (ad:dimstairs ss0))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
@@ -47097,7 +47111,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.2")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -47190,7 +47204,11 @@
   ;; The three questions are staged: Back (Undo works too) at the
   ;; height prompts re-opens the previous one, and a bad value re-asks
   ;; instead of aborting the command.
-  (setq stage 1 done nil)
+  ;; Objects highlighted before DDFIX was typed (pickfirst) are the
+  ;; selection - skip straight to the height question; Back from there
+  ;; re-opens an interactive pick.
+  (setq ss (ssget "_I"))
+  (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
 
@@ -67566,7 +67584,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.3") ; printed on load and at command
+(setq *stockcover-version* "v1.4") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -67824,8 +67842,13 @@
   (if files
     (progn
       ;; ---------------------------------------------- what to replace
-      (princ "\nHighlight the perimeter to be replaced: ")
-      (setq ss-old (ssget))
+      ;; a highlight made before the command was typed (pickfirst) is
+      ;; the perimeter - only ask when there is none
+      (setq ss-old (ssget "_I"))
+      (if (null ss-old)
+        (progn
+          (princ "\nHighlight the perimeter to be replaced: ")
+          (setq ss-old (ssget))))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn
@@ -67885,7 +67908,7 @@
                          (setvar "INSUNITS" 0) ; no silent unit rescale
                          (setvar "ATTREQ" 0)
                          (setvar "ATTDIA" 0)
-                         (command "_.UNDO" "_BEgin")
+                         (command "_.UNDO" "_Begin")
                          (setq undone t)
 
                          (setq bname (stock:uniq-block))
@@ -68574,7 +68597,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.4")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -68957,7 +68980,7 @@
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy dfeats run stairrng stage)
+                 stdy dfeats run stairrng stage wc-pick)
 
   (defun *error* (msg)
     (if inundo (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -68974,14 +68997,21 @@
   ;; selection, the numeric prompts to the side pick - the trace is
   ;; recomputed from whatever is re-answered.  A trace that fails now
   ;; re-opens the pick it came from instead of ending the command.
+  ;; Lines highlighted before WCALST was typed (pickfirst) are the band -
+  ;; the first pass through stage 1 takes them; a too-small band or Back
+  ;; re-asks interactively.
+  (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
   (setq stage 1)
   (while (< stage 6)
     (cond
 
       ;; ---- 1. selection ----------------------------------------------
       ((= stage 1)
-       (princ "\nSelect the band of lines (two long sides + rungs): ")
-       (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+       (if wc-pick
+         (setq ss wc-pick wc-pick nil)
+         (progn
+           (princ "\nSelect the band of lines (two long sides + rungs): ")
+           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) 6)
@@ -69761,7 +69791,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.7") ; printed on load and at command start so a
+(setq *xft-version* "v1.8") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -70031,9 +70061,13 @@
   ;; the only prompt there is.  the scale factor and the base point used
   ;; to be asked for, and the staged Back that moved between them went
   ;; with them - it is always x12 about the middle of the selection now,
-  ;; so there is nothing left to step back to.
-  (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-  (setq ss (ssget))
+  ;; so there is nothing left to step back to.  a selection made before
+  ;; the command was typed (pickfirst) skips even that prompt.
+  (setq ss (ssget "_I"))
+  (if (not ss)
+    (progn
+      (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
+      (setq ss (ssget))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )

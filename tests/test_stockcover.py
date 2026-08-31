@@ -226,6 +226,13 @@ def structural():
     check("no bare (command) cancel loops",
           not re.search(r"\(command\s*\)", "".join(code)))
 
+    # the runtime ssget stub ignores modes, so the pickfirst probe is
+    # pinned here: the "_I" ask comes first, the interactive one only
+    # inside its empty branch
+    check("a pre-typed highlight is probed first (pickfirst)",
+          '(ssget "_I")' in SRC
+          and SRC.index('(ssget "_I")') < SRC.index("(ssget))"))
+
 
 # ======================================================= name resolution ====
 
@@ -509,7 +516,7 @@ def runtime():
     check("the old perimeter was erased", "_.ERASE" in names)
     check("the scratch block was purged", fake.purged == ["STOCK$0"],
           fake.purged)
-    check("the run is one undo group", fake.undo == ["_BEgin", "_End"],
+    check("the run is one undo group", fake.undo == ["_Begin", "_End"],
           fake.undo)
     check("erase comes after the new geometry is placed",
           names.index("_.ERASE") > names.index("_.MOVE"))

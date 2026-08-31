@@ -28,7 +28,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.7") ; printed on load and at command start so a
+(setq *xft-version* "v1.8") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -338,9 +338,13 @@
   ;; the only prompt there is.  the scale factor and the base point used
   ;; to be asked for, and the staged Back that moved between them went
   ;; with them - it is always x12 about the middle of the selection now,
-  ;; so there is nothing left to step back to.
-  (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-  (setq ss (ssget))
+  ;; so there is nothing left to step back to.  a selection made before
+  ;; the command was typed (pickfirst) skips even that prompt.
+  (setq ss (ssget "_I"))
+  (if (not ss)
+    (progn
+      (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
+      (setq ss (ssget))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )

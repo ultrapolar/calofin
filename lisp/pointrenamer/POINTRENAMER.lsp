@@ -53,7 +53,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.1")
+(setq *pointrenamer-version* "v1.2")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -638,7 +638,8 @@
 (defun c:POINTRENAMER ( / *error* undo-open step quit go ss got recs
                           nskip cand res perim segs tab len area fwd
                           start s0 dir band first lastn near far order
-                          row q d k n new renamed nhead i dirword clash)
+                          row q d k n new renamed nhead i dirword clash
+                          pick1)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (ptr:sysrestore)
@@ -649,6 +650,10 @@
     (princ))
   (ptr:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; a highlight made before the command was typed (pickfirst), grabbed
+  ;; before the undo group's command clears it - step 1 takes it once,
+  ;; so coming Back re-asks interactively
+  (setq pick1 (ssget "_I" ptr:*filter*))
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nPOINTRENAMER - hand the point numbers back out in the")
@@ -658,8 +663,11 @@
     (cond
       ;; ---- 1. the highlight --------------------------------------
       ((= step 1)
-       (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
-       (setq ss (ssget ptr:*filter*))
+       (if pick1
+         (setq ss pick1 pick1 nil)
+         (progn
+           (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
+           (setq ss (ssget ptr:*filter*))))
        (if (null ss) (setq ss (ssget "_X" ptr:*filter*)))
        (cond
          ((null ss)

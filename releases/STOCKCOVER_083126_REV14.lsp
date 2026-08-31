@@ -48,7 +48,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.3") ; printed on load and at command
+(setq *stockcover-version* "v1.4") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -320,8 +320,13 @@
   (if files
     (progn
       ;; ---------------------------------------------- what to replace
-      (princ "\nHighlight the perimeter to be replaced: ")
-      (setq ss-old (ssget))
+      ;; a highlight made before the command was typed (pickfirst) is
+      ;; the perimeter - only ask when there is none
+      (setq ss-old (ssget "_I"))
+      (if (null ss-old)
+        (progn
+          (princ "\nHighlight the perimeter to be replaced: ")
+          (setq ss-old (ssget))))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn
@@ -381,7 +386,7 @@
                          (setvar "INSUNITS" 0) ; no silent unit rescale
                          (setvar "ATTREQ" 0)
                          (setvar "ATTDIA" 0)
-                         (command "_.UNDO" "_BEgin")
+                         (command "_.UNDO" "_Begin")
                          (setq undone t)
 
                          (setq bname (stock:uniq-block))

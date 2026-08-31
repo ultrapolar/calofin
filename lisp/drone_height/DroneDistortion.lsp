@@ -59,7 +59,7 @@
 ;;;  H is stored in the drawing and survives save/close/reopen.
 ;;; ============================================================================
 
-(setq *dronedistortion-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.2")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -157,7 +157,11 @@
   ;; The three questions are staged: Back (Undo works too) at the
   ;; height prompts re-opens the previous one, and a bad value re-asks
   ;; instead of aborting the command.
-  (setq stage 1 done nil)
+  ;; Objects highlighted before DDFIX was typed (pickfirst) are the
+  ;; selection - skip straight to the height question; Back from there
+  ;; re-opens an interactive pick.
+  (setq ss (ssget "_I"))
+  (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
 

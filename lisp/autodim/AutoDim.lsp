@@ -146,7 +146,7 @@
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
 
-(setq *autodim-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.5")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -838,21 +838,24 @@
 
 ;; --------------------------------------------- part 2: stairs dimensions
 
-;; ask the user to highlight the stairs.  The treads - the largest
+;; dimension the stairs in SS0, or ask the user to highlight them when
+;; SS0 is nil (a pickfirst caller passes the selection already in
+;; hand).  The treads - the largest
 ;; group of parallel straight lines in the selection - get their widths
 ;; dimensioned, and the distances between them chained beside the
 ;; stair.  Both go in the plan style, or in inches when they measure
 ;; under a foot, which the gap between two treads usually does.
 ;; Returns the number of dimensions placed.
-(defun ad:dimstairs (/ ss segs s a hit g out groups best u v off
+(defun ad:dimstairs (ss0 / ss segs s a hit g out groups best u v off
                        tds td w lastw mid loc smax ts prev pts cnt)
-  (prompt (strcat "\nHighlight the stairs (window or pick the tread"
-                  " lines), then press Enter."
-                  "\nStep widths and the distances between steps both"
-                  " get dimensioned - anything under 12\" in"
-                  " \"STANDARD INCHES\"."
-                  "  Press Enter without selecting to skip."))
-  (setq ss  (ssget '((0 . "LINE,LWPOLYLINE")))
+  (if (null ss0)
+    (prompt (strcat "\nHighlight the stairs (window or pick the tread"
+                    " lines), then press Enter."
+                    "\nStep widths and the distances between steps both"
+                    " get dimensioned - anything under 12\" in"
+                    " \"STANDARD INCHES\"."
+                    "  Press Enter without selecting to skip.")))
+  (setq ss  (if ss0 ss0 (ssget '((0 . "LINE,LWPOLYLINE"))))
         cnt 0)
   (if ss
     (progn
@@ -1287,7 +1290,7 @@
       ((= stage 3)
        (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
        (setq mark3  (entlast)
-             nstair (ad:dimstairs))
+             nstair (ad:dimstairs nil))
        (prompt (strcat "\n" (itoa nstair) " stair dimension(s) placed."))
        (setq stage 4))
       ((= stage 4)
@@ -1400,7 +1403,7 @@
                       " dimension(s) placed."))))
   (princ))
 
-(defun c:STAIRDIM (/ *error* oldcmd olddim n undo-open)
+(defun c:STAIRDIM (/ *error* oldcmd olddim n ss0 undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -1414,11 +1417,14 @@
     (princ))
   (setq oldcmd (getvar "CMDECHO")
         olddim (getvar "DIMSTYLE"))
+  ;; a pickfirst selection if there is one, grabbed before the undo
+  ;; group's command clears it - nil makes ad:dimstairs ask
+  (setq ss0 (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
   (setvar "CMDECHO" 0)
   (ad:begin)
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
-  (setq n (ad:dimstairs))
+  (setq n (ad:dimstairs ss0))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
