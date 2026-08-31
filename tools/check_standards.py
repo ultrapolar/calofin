@@ -26,7 +26,6 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import build_drone_edition
 import build_shared_bundle
 import mirror_shared
 import release_lisp
@@ -256,7 +255,6 @@ def check_generated(problems):
     problems.extend(mirror_shared.check())
     problems.extend(release_lisp.check())
     problems.extend(build_shared_bundle.check())
-    problems.extend(build_drone_edition.check())
 
 
 def check_wip(problems):

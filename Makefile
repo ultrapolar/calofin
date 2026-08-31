@@ -26,7 +26,6 @@ verify:
 	$(PY) tools/mirror_shared.py --check
 	$(PY) tools/release_lisp.py --check
 	$(PY) tools/build_shared_bundle.py --check
-	$(PY) tools/build_drone_edition.py --check
 
 lint:
 	$(PY) tools/check_lisp.py

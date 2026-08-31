@@ -193,78 +193,10 @@ LazPanel button is on screen - drag it anywhere, dock it, click it to open the p
 Thirty-two is the ceiling, not a choice: a toolbar bitmap is 16 or 32,
 and `SetBitmaps` takes one of each.
 
-**`TYLERDRONESUITE` has a button of its own**, on its own one-button
-toolbar, because it is one job someone runs all day and it should not
-cost two clicks through a dialog to reach. Its mark is a **triangle**,
-point north, against the panel's hexagon: the two sit on the same strip
-and `lzp:bmp-bytes` paints every pixel the one orange, so shape is the
-only thing that can tell them apart — and being the same orange is what
-makes the pair read as one toolkit rather than two.
-
-Everything a button needs is one spec —
-`(toolbar-name icon-stem tooltip command art16 art32)` — and
-`lzp:tb-specs` is the list of them, so the load, `LAZBUTTON` and
-`LAZICON` all walk the same roster. The icon stem is per button on
-purpose: one shared name and the second write would quietly clobber the
-first, leaving both buttons wearing whichever shape was written last.
-
-**The suite's button belongs to the standalone drone lisp, not to the
-build.** Two things have to be true for it, and they are different
-things:
-
-1. **`TYLERDRONESUITE` has to be loaded.** `LAZPANEL.lsp` APPLOADed on
-   its own has no `tydrn.lsp` beside it, and a button that answers a
-   click with "Unknown command" is worse than no button.
-2. **This must not be the LAZPASS build.** Someone handed `tydrn.lsp`
-   by itself has no panel to reach the suite through, so there the
-   button *is* the surface. Inside LAZPASS the panel is already on
-   screen and carries the suite like every other tool, so a second
-   toolbar is one more thing on the strip earning nothing — **the whole
-   build puts up one external button, and that one is the panel's.**
-
-The test is `cal:*build-loading*`, which both `LAZPASS.lsp` and
-`CALOFIN-LOADER.lsp` raise before they load a thing and neither lowers,
-so it answers for the session. Standalone the symbol is simply unbound,
-and an unbound symbol is nil.
-
-`lzp:*suitebutton*` overrules it: `AUTO` (the default) is the rule
-above, `T` gives it a button anywhere, `nil` never does.
-
-**Set these after the file has loaded, then run `LAZBUTTON`** — not
-before. The load sets each of them itself, so a value put in place first
-is overwritten before it is ever read.
-
-**`AUTO` reads a flag another build may have left standing**, and that
-is a real trap rather than a theoretical one. `cal:*build-loading*` is
-raised by `LAZPASS.lsp` and never lowered, so on a machine where LAZPASS
-had already loaded — a startup suite does it in every drawing — the
-drone edition read somebody else's flag, decided it was inside the
-build, and put up no button at all, having already taken the panel's
-away. An edition knows which button it wants; `editions/TYLERDRONE.lsp`
-now states **both** tunables outright in its footer instead of leaving
-one to be deduced.
-
-**A button the current build does not want is taken off the strip, not
-just skipped.** AutoCAD keeps toolbars in the CUI, so one put up by
-another build is still on screen next time AutoCAD opens — load the
-drone edition on a machine that has ever seen LAZPASS and the panel's
-button would otherwise still be sitting there beside the drone's. It
-works both ways: load LAZPASS after the edition and the drone button
-goes away again, so **whichever build was loaded last is the one whose
-buttons are showing**. The toolbar is hidden rather than deleted, so it
-keeps wherever you docked or dragged it and comes back exactly there. `LAZBUTTON`
-tells the two absences apart, because they have different answers:
-
-```
-  TYLERDRONESUITE is not loaded, so it has no button of its own -
-  APPLOAD tydrn.lsp (or LAZPASS.lsp) and run LAZBUTTON again.
-```
-
-```
-  TYLERDRONESUITE is on the panel rather than on a button of its own:
-  this is the whole build, and the build puts up one external button.
-  (setq lzp:*suitebutton* T) then LAZBUTTON gives it one anyway.
-```
+**Set it after the file has loaded, then run `LAZBUTTON`** — not before.
+The load sets it itself, so a value put in place first is overwritten
+before it is ever read. `nil` then `LAZBUTTON` puts AutoCAD's setting
+back rather than merely declining to set it, so there is a way home.
 
 Two details worth knowing, because both were wrong first time round:
 

@@ -171,11 +171,10 @@ for cmd in ('c:CALVER', 'c:POOLVER', 'c:ABFINDVER'):
 print('  %d commands from one APPLOAD, %d file(s) held back'
       % (len(bundle_cmds), len(HELD)))
 
-# ONE external button from the whole build.  LAZPASS carries both
-# LAZPANEL and tydrn.lsp, so TYLERDRONESUITE is right there -- and it
-# rides the panel like every other tool rather than taking a second
-# toolbar.  A drawer handed tydrn.lsp BY ITSELF has no panel to reach
-# it through and does get the button; that half is test_lazpanel's.
+# ONE external button from the whole build.  The panel's, and only the
+# panel's: every tool it carries is reached THROUGH the panel, which is
+# what a single strip button is for.  A tool that starts adding its own
+# toolbar should fail here.
 COM = """
 (setq stub:*tbs* nil stub:*btns* nil)
 (defun vlax-get-acad-object () "ACAD")
@@ -206,17 +205,9 @@ tvm.loads(COM)                              # the COM surface, then the build
 tvm.load(BUNDLE)
 raised = [str(x) for x in (tvm.get(Sym('stub:*tbs*')) or [])]
 if raised != ['LazPanel']:
-    fail('LAZPASS put up %r -- the whole build should raise ONE external '
-         'button, the panel\'s; TYLERDRONESUITE is on the panel here'
-         % raised)
-if tvm.get(Sym('c:tylerdronesuite')) is None:
-    fail('TYLERDRONESUITE is not in the bundle at all, so the one-button '
-         'check above proved nothing')
-if tvm.get(Sym('cal:*build-loading*')) is None:
-    fail('LAZPASS did not raise cal:*build-loading* -- that flag is what '
-         'tells a tool it arrived inside the build')
-print('  one external button from the build, with TYLERDRONESUITE on the '
-      'panel')
+    fail('LAZPASS put up %r -- the build raises ONE external button, the '
+         "panel's, and everything else is reached through it" % raised)
+print('  one external button from the build, the panel\'s')
 
 # The bundle checks its own claim.  The count used to be baked in at
 # build time, so a build that half loaded still announced every command

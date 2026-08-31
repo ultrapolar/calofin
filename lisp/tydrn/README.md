@@ -83,21 +83,11 @@ TYLERDRONESUITE needs PADDLE and AUTODIM, which are not loaded here.
 the command line, so the stages after it never start. What ran before it
 stays run, which is the other reason the check happens first.
 
-**There is a one-file edition for handing to someone.**
-`editions/TYLERDRONE.lsp` is the whole `LAZPASS` build plus one button:
-the orange hexagon opens the panel as ever, and an orange triangle
-beside it runs the suite on one click. That is what to send — this file
-on its own has no button and refuses to run, correctly, because two of
-its three stages live elsewhere. Rebuild it with
-`python3 tools/build_drone_edition.py`.
-
-**It gets a screen button of its own — but only when this file is
-loaded on its own.** An orange triangle, point north, on its own
-one-button toolbar, drawn by `LAZPANEL.lsp` (which owns the icon
-machinery). Inside the `LAZPASS` build it does not get one: the LazPanel
-button is already on screen and carries the suite like every other tool,
-so the whole build puts up a single external button. See
-`lisp/lazpanel/README.md` for the switch, `lzp:*suitebutton*`.
+**It is on the LazPanel.** `TYLERDRONESUITE` has a button on the panel's
+`Rest` and `Points` pages, captioned *Drone suite: tidy, pad, dim* — so
+the whole job is one click from the panel, and there is nothing to type.
+That is what it is for: `LAZPASS.lsp`, open the panel, click it, answer
+the three stages' own prompts as they come.
 
 The order lives in `*tydrn-suite*`, a list of three command names; the
 `1 of 3` counting in the messages comes off it rather than being written

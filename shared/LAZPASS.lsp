@@ -70713,7 +70713,7 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
 ;;; Commands:  LAZPANEL       open the panel
-;;;            LAZBUTTON      put the screen-button toolbars up
+;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
 ;;;            LAZPANELVER    print the loaded version
@@ -70788,7 +70788,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.4")
+(setq *lazpanel-version* "v3.1")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -71135,38 +71135,7 @@
     ("Or by category" "Layout" "Points" "Dimensions" "Checking")))
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
-(setq lzp:*tbname* "LazPanel")    ; the panel's screen-button toolbar
-(setq lzp:*tbsuite* "TylerDroneSuite")  ; and the suite's own
-
-;; Whether TYLERDRONESUITE gets a screen button of its own.
-;;
-;;   AUTO  (the default) yes when the drone lisp was loaded ON ITS OWN,
-;;         no when it arrived inside LAZPASS
-;;   T     always      nil  never
-;;
-;; Set these AFTER the file has loaded and run LAZBUTTON -- not before.
-;; The load sets each of them itself, so a value put in place first is
-;; overwritten before it is ever read.  (editions/TYLERDRONE.lsp sets
-;; them in its footer, which is after, and states BOTH outright rather
-;; than leaving one to AUTO: AUTO reads a flag another build may have
-;; left standing, which is exactly how that edition once put up no
-;; button at all.)
-;;
-;; The distinction is the point.  A drawer who was handed tydrn.lsp by
-;; itself has no panel to reach the suite through, so the button IS the
-;; surface.  Inside LAZPASS the panel is already on screen and carries
-;; the suite like every other tool, so a second toolbar is one more
-;; thing on the strip earning nothing -- the whole build should put up
-;; ONE external button, and that button is the panel's.
-(setq lzp:*suitebutton* 'AUTO)
-
-;; And whether the PANEL gets one.  Almost always yes -- being on screen
-;; is the panel's whole reason for being.  The exception is a build put
-;; together around ONE tool, where the panel is along for the ride and
-;; its button would be the odd one out: editions/TYLERDRONE.lsp sets
-;; this nil so the only thing on the strip is the drone button.
-;; LAZPANEL still types the same as ever; it is just not on the strip.
-(setq lzp:*panelbutton* T)
+(setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 
 ;; Draw the button at 32 pixels rather than 16.  The small one is easy
 ;; to miss on a crowded screen, and both pictures are already written
@@ -71176,8 +71145,11 @@
 ;; per toolbar.  Asking for it here turns it on for EVERY toolbar in
 ;; the session, which is the same switch as Options > Display > "Use
 ;; large buttons for Toolbars".  That is why it is a tunable and why
-;; LAZBUTTON says what it did: setq it nil and run LAZBUTTON to put the
-;; setting back and return every toolbar to small buttons.
+;; LAZBUTTON says what it did.
+;;
+;; Set it AFTER the file has loaded and run LAZBUTTON -- not before.
+;; The load sets it itself, so a value put in place first is overwritten
+;; before it is ever read.
 (setq lzp:*bigbutton* T)
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
@@ -71521,67 +71493,6 @@
     ".....XXXXXX....."
     "......XXXX......"
     "................"))
-
-;; The second mark: a triangle, point north, for TYLERDRONESUITE's own
-;; button.  A different SHAPE rather than a different colour, because
-;; the two sit side by side on the same strip and both are orange --
-;; lzp:bmp-bytes paints every "X" the one orange, which is what makes
-;; the pair read as one toolkit rather than two.
-(setq lzp:*tri16*
-  '(
-    "................"
-    ".......XX......."
-    ".......XX......."
-    "......XXXX......"
-    "......XXXX......"
-    ".....XXXXXX....."
-    ".....XXXXXX....."
-    "....XXXXXXXX...."
-    "....XXXXXXXX...."
-    "...XXXXXXXXXX..."
-    "...XXXXXXXXXX..."
-    "..XXXXXXXXXXXX.."
-    "..XXXXXXXXXXXX.."
-    ".XXXXXXXXXXXXXX."
-    "XXXXXXXXXXXXXXXX"
-    "................"
-))
-
-(setq lzp:*tri32*
-  '(
-    "................................"
-    "................................"
-    "...............XX..............."
-    "...............XX..............."
-    "..............XXXX.............."
-    "..............XXXX.............."
-    ".............XXXXXX............."
-    ".............XXXXXX............."
-    "............XXXXXXXX............"
-    "............XXXXXXXX............"
-    "...........XXXXXXXXXX..........."
-    "...........XXXXXXXXXX..........."
-    "..........XXXXXXXXXXXX.........."
-    "..........XXXXXXXXXXXX.........."
-    ".........XXXXXXXXXXXXXX........."
-    ".........XXXXXXXXXXXXXX........."
-    "........XXXXXXXXXXXXXXXX........"
-    ".......XXXXXXXXXXXXXXXXXX......."
-    ".......XXXXXXXXXXXXXXXXXX......."
-    "......XXXXXXXXXXXXXXXXXXXX......"
-    "......XXXXXXXXXXXXXXXXXXXX......"
-    ".....XXXXXXXXXXXXXXXXXXXXXX....."
-    ".....XXXXXXXXXXXXXXXXXXXXXX....."
-    "....XXXXXXXXXXXXXXXXXXXXXXXX...."
-    "....XXXXXXXXXXXXXXXXXXXXXXXX...."
-    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
-    "...XXXXXXXXXXXXXXXXXXXXXXXXXX..."
-    "..XXXXXXXXXXXXXXXXXXXXXXXXXXXX.."
-    "..XXXXXXXXXXXXXXXXXXXXXXXXXXXX.."
-    ".XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX."
-    "................................"
-    "................................"
-))
 
 (setq lzp:*icon32*
   '(
@@ -71973,20 +71884,20 @@
 ;; path rather than the image, and AutoCAD re-reads it whenever the
 ;; button is redrawn.  A toolbar that survives into another session
 ;; would otherwise be pointing at a swept temp file for ever.
-(defun lzp:icon-file (dir stem name / d)
+(defun lzp:icon-file (dir name / d)
   (setq d dir)
   ;; a folder is not guaranteed to end in a separator -- glue the name
   ;; straight on and a folder called Temp becomes a file called
   ;; Templazpanel-16.bmp, which fails silently later
   (if (not (member (substr d (strlen d) 1) '("\\" "/")))
       (setq d (strcat d "\\")))
-  (strcat d stem "-" name ".bmp"))
+  (strcat d "lazpanel-" name ".bmp"))
 
-(defun lzp:icon-path (stem name / d)
+(defun lzp:icon-path (name / d)
   (setq d (getvar "TEMPPREFIX"))
   (if (and d (= (type d) 'STR) (/= d ""))
-      (lzp:icon-file d stem name)
-      (vl-filename-mktemp (strcat stem "-" name) nil ".bmp")))
+      (lzp:icon-file d name)
+      (vl-filename-mktemp (strcat "lazpanel-" name) nil ".bmp")))
 
 ;;  WHERE THE FILES GO, AND WHAT SETBITMAPS IS TOLD.  The CUI resolves a
 ;;  toolbar bitmap by NAME along the support file search path -- hand it
@@ -72016,100 +71927,33 @@
 
 ;; Write both sizes into DIR; the paths, or nil when either write fails
 ;; (lzp:bmp-write records why in lzp:*iconerr*).
-(defun lzp:try-icons (dir stem art16 art32 / s l)
+(defun lzp:try-icons (dir / s l)
   (if (and dir (= (type dir) 'STR) (/= dir ""))
       (progn
-        (setq s (lzp:icon-file dir stem "16")
-              l (lzp:icon-file dir stem "32"))
-        (if (and (lzp:bmp-write s 16 art16)
-                 (lzp:bmp-write l 32 art32))
+        (setq s (lzp:icon-file dir "16")
+              l (lzp:icon-file dir "32"))
+        (if (and (lzp:bmp-write s 16 lzp:*icon16*)
+                 (lzp:bmp-write l 32 lzp:*icon32*))
             (progn (setq lzp:*icondir* dir)
                    (list s l))))))
 
 ;; What to hand SetBitmaps: bare names when the files sit on the support
 ;; path, full temp paths as the fallback.
-(defun lzp:write-bmps (stem art16 art32 / d)
+(defun lzp:write-bmps ( / d)
   (setq lzp:*icondir* nil
         lzp:*iconref* nil)
   (cond
-    ((and (setq d (lzp:support-dir)) (lzp:try-icons d stem art16 art32))
+    ((and (setq d (lzp:support-dir)) (lzp:try-icons d))
      (setq lzp:*iconref* "name")
-     (list (strcat stem "-16.bmp") (strcat stem "-32.bmp")))
-    ((lzp:try-icons (getvar "TEMPPREFIX") stem art16 art32)
+     (list "lazpanel-16.bmp" "lazpanel-32.bmp"))
+    ((lzp:try-icons (getvar "TEMPPREFIX"))
      (setq lzp:*iconref* "path")
-     (list (lzp:icon-file (getvar "TEMPPREFIX") stem "16")
-           (lzp:icon-file (getvar "TEMPPREFIX") stem "32")))))
+     (list (lzp:icon-file (getvar "TEMPPREFIX") "16")
+           (lzp:icon-file (getvar "TEMPPREFIX") "32")))))
 
 ;; The LazPanel toolbar, wherever it lives -- one this file made in an
 ;; earlier session may sit in any loaded menu group.
-;;; -------------------- the two screen buttons --------------------------
-;;  Each is one toolbar with one button, and a spec says everything that
-;;  differs between them:
-;;
-;;      (toolbar-name  icon-stem  tooltip  command  art16  art32)
-;;
-;;  There are two because they are two different tools.  The panel is
-;;  the whole roster; the suite is one job someone runs all day, and it
-;;  earns a button of its own rather than two clicks through a dialog.
-;;  A different SHAPE tells them apart -- hexagon and triangle -- since
-;;  both are painted the same orange.
-(defun lzp:tb-name (spec) (nth 0 spec))
-(defun lzp:tb-stem (spec) (nth 1 spec))
-(defun lzp:tb-tip  (spec) (nth 2 spec))
-(defun lzp:tb-cmd  (spec) (nth 3 spec))
-(defun lzp:tb-16   (spec) (nth 4 spec))
-(defun lzp:tb-32   (spec) (nth 5 spec))
-
-(defun lzp:panel-spec ()
-  (list lzp:*tbname* "lazpanel"
-        "Open the LazPanel tool panel" "LAZPANEL"
-        lzp:*icon16* lzp:*icon32*))
-
-(defun lzp:suite-spec ()
-  (list lzp:*tbsuite* "tylerdronesuite"
-        "TYLERDRONESUITE - TYDRN, then PADDLE, then AUTODIM"
-        "TYLERDRONESUITE"
-        lzp:*tri16* lzp:*tri32*))
-
-;; Is this session the LAZPASS build?  Both LAZPASS.lsp and
-;; CALOFIN-LOADER.lsp raise cal:*build-loading* before they load a
-;; thing, and neither lowers it -- so it answers for the session, which
-;; is what is being asked.  Standalone the symbol is simply unbound,
-;; and an unbound symbol is nil.
-(defun lzp:in-build-p () (if cal:*build-loading* T nil))
-
-;; Does the suite want a button of its own here?
-(defun lzp:suite-wanted-p ()
-  (and (lzp:has "TYLERDRONESUITE")
-       (cond ((eq lzp:*suitebutton* 'AUTO) (not (lzp:in-build-p)))
-             (lzp:*suitebutton* T))))
-
-;; The buttons to put up.  Two things have to be true for the suite's:
-;; its command has to be loaded -- LAZPANEL.lsp APPLOADed on its own has
-;; no tydrn.lsp beside it, and a button that answers a click with
-;; "Unknown command" is worse than no button -- and this has to not be
-;; the LAZPASS build, which puts up one external button and that one is
-;; the panel's.
-(defun lzp:tb-specs ( / out)
-  (setq out nil)
-  (if lzp:*panelbutton* (setq out (list (lzp:panel-spec))))
-  (if (lzp:suite-wanted-p)
-    (setq out (append out (list (lzp:suite-spec)))))
-  out)
-
-;; Every button this file knows how to draw, wanted here or not.  What
-;; is NOT wanted still matters: AutoCAD keeps toolbars in the CUI
-;; between sessions, so one put up by another build is still on screen
-;; when this one loads.
-(defun lzp:tb-all ()
-  (list (lzp:panel-spec) (lzp:suite-spec)))
-
-(defun lzp:wanted-name-p (name / spec found)
-  (foreach spec (lzp:tb-specs)
-    (if (= (lzp:tb-name spec) name) (setq found T)))
-  found)
-
-(defun lzp:toolbar-find (name / mgs n i tbs m j tb found)
+(defun lzp:toolbar-find ( / mgs n i tbs m j tb found)
   (setq mgs (vla-get-menugroups (vlax-get-acad-object)))
   (setq n (vla-get-count mgs)
         i 0)
@@ -72119,7 +71963,7 @@
           j 0)
     (while (and (< j m) (not found))
       (setq tb (vla-item tbs j))
-      (if (= (strcase (vla-get-name tb)) (strcase name))
+      (if (= (strcase (vla-get-name tb)) (strcase lzp:*tbname*))
         (setq found tb))
       (setq j (1+ j)))
     (setq i (1+ i)))
@@ -72136,15 +71980,15 @@
 ;; then hand back for ever while LAZBUTTON reported success and put
 ;; nothing on screen.  So a toolbar that fails to get its button does
 ;; not survive the attempt.
-(defun lzp:toolbar-make (spec / tbs tb btn)
+(defun lzp:toolbar-make ( / tbs tb btn)
   (setq tbs (vla-get-toolbars
               (vla-item (vla-get-menugroups (vlax-get-acad-object)) 0)))
-  (setq tb (vla-add tbs (lzp:tb-name spec)))
+  (setq tb (vla-add tbs lzp:*tbname*))
   (setq btn (vl-catch-all-apply
               'vla-addtoolbarbutton
-              (list tb 0 (lzp:tb-name spec)
-                    (lzp:tb-tip spec)
-                    (strcat (chr 3) (chr 3) "_" (lzp:tb-cmd spec) " "))))
+              (list tb 0 lzp:*tbname*
+                    "Open the LazPanel tool panel"
+                    (strcat (chr 3) (chr 3) "_LAZPANEL "))))
   (cond
     ((vl-catch-all-error-p btn)
      (vl-catch-all-apply 'vla-delete (list tb))
@@ -72157,20 +72001,18 @@
 ;; the toolbar is made visible: a toolbar the user closed is still
 ;; found by name, and without this it would never come back.
 ;; Returns the toolbar, or nil when there is none to be had.
-(defun lzp:button-init (spec / tb btn pair paths made)
+(defun lzp:button-init ( / tb btn pair paths made)
   (cond
-    ((setq tb (lzp:toolbar-find (lzp:tb-name spec)))
+    ((setq tb (lzp:toolbar-find))
      (setq btn (vl-catch-all-apply 'vla-item (list tb 0)))
      (if (vl-catch-all-error-p btn) (setq btn nil)))
-    ((setq pair (lzp:toolbar-make spec))
+    ((setq pair (lzp:toolbar-make))
      (setq tb (car pair)
            btn (cadr pair)
            made t)))
   (if tb
     (progn
-      (if (and btn (setq paths (lzp:write-bmps (lzp:tb-stem spec)
-                                               (lzp:tb-16 spec)
-                                               (lzp:tb-32 spec))))
+      (if (and btn (setq paths (lzp:write-bmps)))
         (vl-catch-all-apply 'vla-setbitmaps
                             (list btn (car paths) (cadr paths)))
         ;; one line, not a stack trace: the panel still works without a
@@ -72185,50 +72027,8 @@
                           (list tb (if lzp:*bigbutton*
                                      :vlax-true :vlax-false)))
       (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
-      ;; a new one is floated where it can be seen; the second lands
-      ;; below the first rather than on top of it
-      (if made
-        (vl-catch-all-apply
-          'vla-float
-          (list tb (+ 200 (* 40 (lzp:tb-index spec))) 300 1)))))
+      (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
   tb)
-
-;; Where SPEC sits in the roster, so two new toolbars do not float onto
-;; the same pixel.
-(defun lzp:tb-index (spec / i n found)
-  (setq i 0 found 0)
-  (foreach n (lzp:tb-all)
-    (if (= (lzp:tb-name n) (lzp:tb-name spec)) (setq found i))
-    (setq i (1+ i)))
-  found)
-
-;; Take a button off the strip without destroying it: the toolbar keeps
-;; wherever the operator docked or dragged it, and turning the tunable
-;; back on and running LAZBUTTON brings it back exactly there.
-(defun lzp:button-hide (spec / tb)
-  (if (setq tb (lzp:toolbar-find (lzp:tb-name spec)))
-    (vl-catch-all-apply 'vla-put-visible (list tb :vlax-false))))
-
-;; Put up the buttons this session should have -- AND take down the ones
-;; it should not.
-;;
-;; The second half is not tidiness.  AutoCAD keeps toolbars in the CUI,
-;; so one put up by another build is still on screen the next time
-;; AutoCAD opens: load the drone edition on a machine that has ever seen
-;; LAZPASS and, without this, the panel's button would still be sitting
-;; there beside the drone's.  "One button" has to mean one button on the
-;; machine it actually lands on.  It works both ways round -- load
-;; LAZPASS after the edition and the drone button goes away again -- so
-;; whichever build was loaded last is the one whose buttons are showing.
-;;
-;; Returns the toolbars it put up, newest last.
-(defun lzp:buttons-init ( / out spec tb)
-  (foreach spec (lzp:tb-all)
-    (if (lzp:wanted-name-p (lzp:tb-name spec))
-      (if (setq tb (lzp:button-init spec))
-        (setq out (append out (list tb))))
-      (lzp:button-hide spec)))
-  out)
 
 ;;; -------------------- the dialog run ----------------------------------
 ;;  No sysvar save, no undo group: the panel changes no settings and
@@ -72373,73 +72173,40 @@
                     (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
-(defun c:LAZBUTTON ( / tbs spec tb any)
-  (setq tbs (vl-catch-all-apply 'lzp:buttons-init nil))
+(defun c:LAZBUTTON ( / tb)
+  (setq tb (vl-catch-all-apply 'lzp:button-init nil))
   (cond
-    ((vl-catch-all-error-p tbs)
-     (princ (strcat "\nLAZBUTTON error: " (vl-catch-all-error-message tbs))))
-    (tbs
-     (foreach tb tbs
-       (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true)))
-     (setq any nil)
-     (foreach spec (lzp:tb-specs)
-       (if (lzp:toolbar-find (lzp:tb-name spec))
-         (progn
-           (setq any T)
-           (princ (strcat "\n" (lzp:tb-name spec) " button is on screen -"
-                          " drag it anywhere, dock it,"
-                          "\n  click it to run " (lzp:tb-cmd spec) ".")))))
-     ;; said out loud because it is not a change to THESE toolbars: the
+    ((vl-catch-all-error-p tb)
+     (princ (strcat "\nLAZBUTTON error: " (vl-catch-all-error-message tb))))
+    (tb
+     (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
+     (princ (strcat "\nLazPanel button is on screen - drag it anywhere,"
+                    " dock it, click it to open the panel."))
+     ;; said out loud because it is not a change to THIS toolbar: the
      ;; operator's other toolbars grew too, and they should hear it
      ;; from the command that did it rather than wonder
-     (if (and any lzp:*bigbutton*)
+     (if lzp:*bigbutton*
        (princ (strcat "\n  Drawn at 32 pixels.  AutoCAD sizes every"
                       " toolbar together, so the rest grew"
                       "\n  with it; (setq lzp:*bigbutton* nil) then"
-                      " LAZBUTTON puts them all back.")))
-     (cond
-       ((lzp:suite-wanted-p))
-       ((not (lzp:has "TYLERDRONESUITE"))
-        (princ (strcat "\n  TYLERDRONESUITE is not loaded, so it has no"
-                       " button of its own -"
-                       "\n  APPLOAD tydrn.lsp (or LAZPASS.lsp) and run"
-                       " LAZBUTTON again.")))
-       (t
-        (princ (strcat "\n  TYLERDRONESUITE is on the panel rather than"
-                       " on a button of its own:"
-                       "\n  this is the whole build, and the build puts"
-                       " up one external button."
-                       "\n  (setq lzp:*suitebutton* T) then LAZBUTTON"
-                       " gives it one anyway.")))))
+                      " LAZBUTTON puts them all back."))))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
-(defun c:LAZICON ( / spec)
+(defun c:LAZICON ( / paths tb btn r w)
   ;; The icon path is best effort and fails silently on purpose: a
   ;; missing picture must never stop the panel working.  Silence is the
   ;; right default and a poor answer to "why is my button blank", so
-  ;; this walks the same steps out loud -- once per button, because
-  ;; they are written separately and either can fail on its own.
-  (princ "\nLAZICON: where the button pictures come from.")
+  ;; this walks the same steps out loud.
+  (princ "\nLAZICON: where the button's picture comes from.")
   (princ (strcat "\n  support    : "
                  (cond ((lzp:support-dir))
                        (t "(could not read the support path)"))))
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
-  (foreach spec (lzp:tb-specs) (lzp:icon-report spec))
-  (if (not (lzp:suite-wanted-p))
-    (princ (strcat "\n\n  TYLERDRONESUITE has no button here, so no"
-                   " picture is drawn for it."
-                   "\n  LAZBUTTON says which of the two reasons it is.")))
-  (princ))
-
-;; One button's picture, start to finish.
-(defun lzp:icon-report (spec / paths tb btn r w)
-  (princ (strcat "\n\n  [" (lzp:tb-name spec) "] -> " (lzp:tb-cmd spec)))
-  (setq paths (lzp:write-bmps (lzp:tb-stem spec)
-                              (lzp:tb-16 spec) (lzp:tb-32 spec)))
+  (setq paths (lzp:write-bmps))
   (cond
     (paths
      (princ (strcat "\n  written to : "
@@ -72458,8 +72225,7 @@
                     (cond ((findfile (car paths)))
                           (t "CANNOT RESOLVE - this is the ? placeholder"))))
      (cond
-       ((not (setq tb (vl-catch-all-apply 'lzp:toolbar-find
-                                          (list (lzp:tb-name spec)))))
+       ((not (setq tb (vl-catch-all-apply 'lzp:toolbar-find nil)))
         (princ "\n  toolbar    : not on screen - type LAZBUTTON first."))
        ((vl-catch-all-error-p tb)
         (princ (strcat "\n  toolbar    : " (vl-catch-all-error-message tb))))
@@ -72507,7 +72273,7 @@
 ;; Put the button up as the file loads, quietly: in a session where
 ;; the COM menu API is missing the panel still loads and LAZPANEL
 ;; still runs -- the button is a convenience, never a gate.
-(vl-catch-all-apply 'lzp:buttons-init nil)
+(vl-catch-all-apply 'lzp:button-init nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
 (princ (strcat "\nLAZPANEL " *lazpanel-version*

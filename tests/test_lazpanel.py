@@ -526,8 +526,6 @@ STUB = '''
       stub:*tbs* nil stub:*btns* nil stub:*addargs* nil
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
       stub:*big* nil
-      stub:*allargs* nil stub:*allbmps* nil stub:*allfloat* nil
-      stub:*allvis* nil
       stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
       stub:*nosupport* nil)
 (setq :vlax-true "ON" :vlax-false "OFF")   ; the VM has no vlax
@@ -585,9 +583,7 @@ STUB = '''
   (stub:ev (strcat "add " name))
   name)
 (defun vla-addtoolbarbutton (tb idx name help macro)
-  (setq stub:*addargs* (list idx name help macro)
-        stub:*allargs* (append stub:*allargs*
-                               (list (list tb idx name help macro))))
+  (setq stub:*addargs* (list idx name help macro))
   (if stub:*addfail*
     (exit)
     (progn (setq stub:*btns* (append stub:*btns* (list "BTN")))
@@ -598,19 +594,13 @@ STUB = '''
         stub:*deleted-tb* tb)
   (stub:ev "deletetoolbar") t)
 (defun vla-setbitmaps (btn small large)
-  (setq stub:*bitmaps* (list small large)
-        stub:*allbmps* (append stub:*allbmps* (list (list small large))))
-  (stub:ev "setbitmaps") t)
+  (setq stub:*bitmaps* (list small large)) (stub:ev "setbitmaps") t)
 (defun vla-put-largebuttons (tb v)
   (setq stub:*big* v) (stub:ev "largebuttons") t)
 (defun vla-put-visible (tb v)
-  (setq stub:*visible* v
-        stub:*allvis* (append stub:*allvis* (list (list tb v))))
-  (stub:ev "visible") t)
+  (setq stub:*visible* v) (stub:ev "visible") t)
 (defun vla-float (tb top left rows)
-  (setq stub:*float* (list top left rows)
-        stub:*allfloat* (append stub:*allfloat* (list (list tb top left))))
-  (stub:ev "float") t)
+  (setq stub:*float* (list top left rows)) (stub:ev "float") t)
 ;; The one command this session "has".  It must live on the FIRST page,
 ;; since that is the page the panel opens on and the only one whose
 ;; buttons get bound -- see LIVE / MISSING below, which assert exactly
@@ -1092,7 +1082,7 @@ print("== no support folder: full temp paths, the best that is left ==")
 vmf = stubbed(preload=True)
 vmf.loads('(setq stub:*nosupport* t)'
           '(setvar "TEMPPREFIX" "/tmp/acad/")'
-          '(setq t:*b* (lzp:write-bmps "lazpanel" lzp:*icon16* lzp:*icon32*))')
+          '(setq t:*b* (lzp:write-bmps))')
 fb = [str(x) for x in (vmf.globals.get('t:*b*') or [])]
 assert fb == ['/tmp/acad/lazpanel-16.bmp', '/tmp/acad/lazpanel-32.bmp'], fb
 assert str(vmf.globals.get('lzp:*iconref*')) == 'path', \
@@ -1110,7 +1100,7 @@ for prefix, want in (
         # silently turns a folder called Temp into a file called
         # Templazpanel-16.bmp that SetBitmaps then cannot read
         ('C:\\Temp', 'C:\\Temp\\lazpanel-16.bmp')):
-    vm2.loads('(setvar "TEMPPREFIX" "%s") (setq t:*p* (lzp:icon-path "lazpanel" "16"))'
+    vm2.loads('(setvar "TEMPPREFIX" "%s") (setq t:*p* (lzp:icon-path "16"))'
               % prefix.replace('\\', '\\\\'))
     got = str(vm2.globals['t:*p*'])
     assert got == want, "TEMPPREFIX %r gave %r, expected %r" % (prefix, got, want)
@@ -1121,7 +1111,7 @@ print("== reuse: the toolbar is kept, but re-iced and re-shown ==")
 vm3 = stubbed(preload=True)
 vm3.loads('(setq stub:*events* nil stub:*bitmaps* nil stub:*visible* nil'
           '      stub:*float* nil)'
-          '(setq t:*tb* (lzp:button-init (lzp:panel-spec)))')
+          '(setq t:*tb* (lzp:button-init))')
 tbs = [str(x) for x in vm3.globals.get('stub:*tbs*') or []]
 assert tbs == ['LazPanel'], "a second init duplicated the toolbar: %r" % tbs
 ev = events(vm3)
@@ -1137,7 +1127,7 @@ print("   reused, icons re-applied, made visible, and NOT re-floated")
 
 print("== the button is asked for at 32 pixels, and says that is global ==")
 vm5 = stubbed()
-vm5.loads('(setq t:*tb* (lzp:button-init (lzp:panel-spec)))')
+vm5.loads('(setq t:*tb* (lzp:button-init))')
 assert str(vm5.globals.get('stub:*big*')) == 'ON', (
     "large buttons were never asked for, so AutoCAD keeps showing the 16px "
     "picture and the button stays easy to miss")
@@ -1155,8 +1145,7 @@ assert "every toolbar" in said, (
     "toolbars grew too, and they should hear it from the command that did it")
 # and it has to be possible to decline
 vm6 = stubbed()
-vm6.loads('(setq lzp:*bigbutton* nil)'
-          '(setq t:*tb* (lzp:button-init (lzp:panel-spec)))')
+vm6.loads('(setq lzp:*bigbutton* nil) (setq t:*tb* (lzp:button-init))')
 # nil does not merely SKIP the call -- it puts the setting back.  The
 # advice is "setq it nil and run LAZBUTTON", and skipping would make
 # that advice do nothing in a session already switched over.
@@ -1167,149 +1156,9 @@ print("   32px asked for, the global effect said out loud, and nil")
 print("   puts it back rather than merely declining")
 
 
-print("== TYLERDRONESUITE gets a button of its own ==")
-vm7 = stubbed()
-# tydrn.lsp loaded on its own: no build flag, so the button IS the
-# surface -- there is no panel already on screen to reach it through
-vm7.loads('(defun c:TYLERDRONESUITE () (princ))')
-vm7.loads('(setq t:*tbs* (lzp:buttons-init))')
-tbs7 = [str(x) for x in vm7.globals.get('stub:*tbs*') or []]
-assert tbs7 == ['LazPanel', 'TylerDroneSuite'], (
-    "expected the panel's toolbar and the suite's own, got %r" % tbs7)
-args = [[str(x) for x in a] for a in vm7.globals.get('stub:*allargs*') or []]
-macros = [a[-1] for a in args]
-assert any('_LAZPANEL' in m for m in macros), "no button runs LAZPANEL"
-assert any('_TYLERDRONESUITE' in m for m in macros), (
-    "the second button does not run TYLERDRONESUITE: %r" % macros)
-# the pictures must go to DIFFERENT files.  One shared stem and the
-# second write would quietly clobber the first, leaving both buttons
-# wearing whichever shape was written last.
-bmps = [[str(x) for x in b] for b in vm7.globals.get('stub:*allbmps*') or []]
-assert len(bmps) == 2, "expected a picture per button, got %r" % bmps
-assert bmps[0] != bmps[1], (
-    "both buttons were pointed at the same bitmap: %r" % bmps)
-assert any('tylerdronesuite' in n for n in bmps[1]), (
-    "the suite's picture is not written under its own name: %r" % bmps[1])
-# and they are floated apart, not onto the same pixel
-flt = [[str(x) for x in f] for f in vm7.globals.get('stub:*allfloat*') or []]
-assert len(flt) == 2 and flt[0][1] != flt[1][1], (
-    "the two new toolbars were floated to the same spot: %r" % flt)
-print("   two toolbars, two macros, two pictures, floated apart")
-
-print("== the triangle is a triangle, and not the hexagon ==")
-for nm, size in (('lzp:*tri16*', 16), ('lzp:*tri32*', 32)):
-    art = [str(r) for r in vm7.get(lispvm.Sym(nm))]
-    assert len(art) == size and all(len(r) == size for r in art), (
-        "%s is not %dx%d" % (nm, size, size))
-    widths = [r.count('X') for r in art if 'X' in r]
-    assert widths == sorted(widths), (
-        "%s does not widen all the way down, so it is not a triangle "
-        "point-north: %r" % (nm, widths))
-    assert widths[0] <= 2 and widths[-1] >= size - 2, (
-        "%s does not run from a point to a full-width base: %r"
-        % (nm, widths))
-hexart = [str(r).count('X') for r in vm7.get(lispvm.Sym('lzp:*icon16*'))]
-triart = [str(r).count('X') for r in vm7.get(lispvm.Sym('lzp:*tri16*'))]
-assert hexart != triart, "the two marks are the same shape"
-print("   both sizes widen from a point to a full base, and differ")
-print("   from the hexagon -- the two buttons are told apart by SHAPE,")
-print("   which is the only thing that can tell them apart in one colour")
-
-print("== inside LAZPASS the suite rides the panel, not its own button ==")
-# cal:*build-loading* is what LAZPASS.lsp and CALOFIN-LOADER.lsp both
-# raise before they load anything.  The whole build should put up ONE
-# external button, and that one is the panel's.
-vm9 = stubbed()
-vm9.loads('(defun c:TYLERDRONESUITE () (princ))'
-          '(setq cal:*build-loading* T)'
-          '(setq t:*tbs* (lzp:buttons-init))')
-tbs9 = [str(x) for x in vm9.globals.get('stub:*tbs*') or []]
-assert tbs9 == ['LazPanel'], (
-    "the build put up a second external button: %r -- inside LAZPASS the "
-    "suite is on the panel like every other tool" % tbs9)
-vm9.loads('(c:LAZBUTTON)')
-said9 = "".join(str(x) for x in vm9.printed)
-assert "on the panel rather than on a button of its own" in said9, (
-    "LAZBUTTON must distinguish 'in the build' from 'not loaded' -- they "
-    "are different absences with different answers")
-assert "not loaded" not in said9, (
-    "the build said the command was missing; it is not, it is on the panel")
-# and the operator can overrule it either way
-vm10 = stubbed()
-vm10.loads('(defun c:TYLERDRONESUITE () (princ))'
-           '(setq cal:*build-loading* T lzp:*suitebutton* T)'
-           '(setq t:*tbs* (lzp:buttons-init))')
-assert len([str(x) for x in vm10.globals.get('stub:*tbs*') or []]) == 2, (
-    "lzp:*suitebutton* T must give it a button even inside the build")
-vm11 = stubbed()
-vm11.loads('(defun c:TYLERDRONESUITE () (princ))'
-           '(setq lzp:*suitebutton* nil)'
-           '(setq t:*tbs* (lzp:buttons-init))')
-assert len([str(x) for x in vm11.globals.get('stub:*tbs*') or []]) == 1, (
-    "lzp:*suitebutton* nil must decline the button even standalone")
-print("   one button in the build, and the tunable overrules either way")
-
-
-print("== a button another build left on screen is taken down ==")
-# AutoCAD keeps toolbars in the CUI, so one put up by another build is
-# still there next time.  "One button" has to mean one button on the
-# machine it lands on, not on a clean one.
-vm12 = stubbed()
-vm12.loads('(defun c:TYLERDRONESUITE () (princ))'
-           '(setq stub:*tbs* (list "LazPanel"))'   # left by an earlier load
-           '(setq lzp:*panelbutton* nil)'          # this build wants only ours
-           '(setq t:*tbs* (lzp:buttons-init))')
-def vis(vm):
-    """Toolbar -> the last visibility it was set to."""
-    out = {}
-    for pair in vm.globals.get('stub:*allvis*') or []:
-        out[str(pair[0])] = str(pair[1])
-    return out
-
-
-assert vis(vm12).get('LazPanel') == 'OFF', (
-    "the panel's leftover button was not taken down, so the drone edition "
-    "shows two buttons on any machine that has ever seen LAZPASS: %r"
-    % vis(vm12))
-assert vis(vm12).get('TylerDroneSuite') == 'ON', (
-    "our own button is not on screen: %r" % vis(vm12))
-tbs12 = [str(x) for x in vm12.globals.get('stub:*tbs*') or []]
-assert 'LazPanel' in tbs12, (
-    "the leftover toolbar was DELETED rather than hidden -- that throws away "
-    "wherever the operator had docked it")
-assert 'TylerDroneSuite' in tbs12, "our own button never went up"
-# and it works the other way round: the build takes the drone's down
-vm13 = stubbed()
-vm13.loads('(defun c:TYLERDRONESUITE () (princ))'
-           '(setq stub:*tbs* (list "TylerDroneSuite"))'
-           '(setq cal:*build-loading* T)'          # this is LAZPASS
-           '(setq t:*tbs* (lzp:buttons-init))')
-assert vis(vm13).get('TylerDroneSuite') == 'OFF', (
-    "LAZPASS left the drone edition's button on screen beside its own: %r"
-    % vis(vm13))
-assert vis(vm13).get('LazPanel') == 'ON', (
-    "LAZPASS did not put its own button up: %r" % vis(vm13))
-print("   hidden, not deleted, and it works whichever build loads last")
-
-
-print("== no TYLERDRONESUITE, no second button, and it says so ==")
-vm8 = stubbed()
-vm8.loads('(setq t:*tbs* (lzp:buttons-init))')
-tbs8 = [str(x) for x in vm8.globals.get('stub:*tbs*') or []]
-assert tbs8 == ['LazPanel'], (
-    "a button was made for a command that is not loaded: %r" % tbs8)
-vm8.loads('(c:LAZBUTTON)')
-said8 = "".join(str(x) for x in vm8.printed)
-assert "TYLERDRONESUITE is not loaded" in said8, (
-    "LAZBUTTON must say why the second button is missing, or a blank "
-    "strip is a mystery")
-print("   only the panel's button, and LAZBUTTON explains the absence")
-
-
 print("== a toolbar that cannot get its button does not survive ==")
 vm4 = stubbed()
-vm4.loads('(setq stub:*addfail* t)'
-          '(setq t:*tb* (lzp:button-init (lzp:panel-spec)))')
+vm4.loads('(setq stub:*addfail* t) (setq t:*tb* (lzp:button-init))')
 tbs = [str(x) for x in vm4.globals.get('stub:*tbs*') or []]
 assert tbs == [], (
     "an empty LazPanel toolbar was left behind: lzp:toolbar-find would hand "
