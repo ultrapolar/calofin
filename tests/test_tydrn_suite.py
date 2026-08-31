@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Runtime tests for TYLERDRONESUITE -- TYDRN, PADDLE, AUTODIM, CDIM.
+"""Runtime tests for TYLERDRONESUITE -- TYDRN, PADDLE, CDIM.
 
 The suite adds no drawing logic of its own: every stage is the command
 itself, asking its own questions.  So what is worth testing is the
 ordering and the refusals, which is all it contributes:
 
-  * THE ORDER, and that it is the order the work needs.  The points have
-    to be on the right layer before PADDLE looks for features to pad,
-    the pads have to be in before AUTODIM dimensions what is there, and
-    CDIM tidies the dimensions AUTODIM just made.
+  * THE ORDER, and that it is the order the work needs.  The points
+    have to be on the right layer before PADDLE looks for features to
+    pad, and CDIM finishes, over whatever dimensioning the drawing
+    carries.  (AUTODIM sat between the two once; the operator this
+    suite is for wants it out of the flow.)
 
   * HOW A STAGE IS REACHED.  The command processor does not know
     AutoLISP commands -- typing TYDRN works only through the command
     line's own c: fallback, which (command)/(vl-cmdf) skip -- so pushed
     through those, every stage came back "Unknown command" while the
-    suite reported success.  That shipped once.  The three calofin
-    stages must be their c: functions called directly, and none of the
-    stages may go anywhere near the command processor.
+    suite reported success.  That shipped once.  The calofin stages
+    must be their c: functions called directly, and none of the stages
+    may go anywhere near the command processor.
 
   * CDIM IS NOT OURS, and is treated accordingly: it is not pre-checked
     (boundp sees only what AutoLISP defined, and an in-house command is
@@ -28,18 +29,17 @@ ordering and the refusals, which is all it contributes:
     same direct call as everything else.
 
   * THAT IT CHECKS BEFORE IT STARTS.  Half a suite is worse than none:
-    TYDRN would have moved the points and PADDLE dropped the pads, and
-    the operator would learn only at the end that the dimensioning they
-    ran it for was never going to happen.  A missing stage is named, and
-    nothing runs.
+    TYDRN would have moved the points and the operator would learn only
+    mid-run that the padding they ran it for was never going to happen.
+    A missing stage is named, and nothing runs.
 
-  * THAT ONE HIGHLIGHT REACHES EVERY STAGE.  All three calofin stages
-    want the same trace picked, and AutoCAD clears the pickfirst set the
+  * THAT ONE HIGHLIGHT REACHES EVERY STAGE.  The calofin stages want
+    the same trace picked, and AutoCAD clears the pickfirst set the
     moment a command consumes it -- so run by hand the trace is
-    highlighted three times.  The suite reads it once and puts it back
-    before each stage, grows it by what each stage draws (AUTODIM is
-    meant to dimension the pads PADDLE just dropped), and hands CDIM a
-    cleared one, because the dimensions it tidies are in nobody's
+    highlighted once per stage.  The suite reads it once and puts it
+    back before each stage, grows it by what each stage draws (so a
+    stage always opens with the earlier ones' work), and hands CDIM a
+    cleared one, because the dimensioning it tidies is in nobody's
     original pick.
 
   * THAT IT DOES NOT WRAP THE STAGES IN ONE UNDO GROUP.  One U per
@@ -105,17 +105,16 @@ STUBS = r'''
 STAGES = r'''
 (defun c:TYDRN   () (setq *ran* (cons "TYDRN" *ran*)) (princ))
 (defun c:PADDLE  () (setq *ran* (cons "PADDLE" *ran*)) (princ))
-(defun c:AUTODIM () (setq *ran* (cons "AUTODIM" *ran*)) (princ))
 '''
 
-#: A PADDLE that draws: the pad it drops is the whole point of the
-#: carried set growing -- AUTODIM's filter takes INSERTs so that it
-#: dimensions those pads, and handing it the operator's original pick
-#: alone would hide every one of them.
+#: A TYDRN that draws: what a stage adds to the drawing is what the
+#: NEXT stage must open with on top of the operator's pick -- the whole
+#: point of the carried set growing.  (It is how AUTODIM, when it was in
+#: this list, opened with the pads PADDLE had just dropped.)
 DRAWING_STAGES = r'''
-(defun c:PADDLE ()
-  (setq *ran* (cons "PADDLE" *ran*)
-        *pad* (entmakex '((0 . "INSERT") (2 . "Pad36x36") (10 5.0 4.0))))
+(defun c:TYDRN ()
+  (setq *ran* (cons "TYDRN" *ran*)
+        *drew* (entmakex '((0 . "TEXT") (1 . "B") (10 2.0 2.0))))
   (princ))
 '''
 
@@ -152,19 +151,22 @@ def ran(vm):
 
 
 def test_the_stages_run_in_the_order_the_work_needs():
-    print("\nTYDRN, PADDLE, AUTODIM, then CDIM -- in that order")
+    print("\nTYDRN, PADDLE, then CDIM -- in that order, no AUTODIM")
     vm = run()
-    check("all four ran",
-          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"])
+    check("all three ran",
+          ran(vm) == ["TYDRN", "PADDLE", "CDIM"])
+    # the operator this suite is for wants AUTODIM out of the flow
+    check("AUTODIM is nowhere in it",
+          "AUTODIM" not in ran(vm) and "AUTODIM" not in said(vm))
     # the command processor does not know AutoLISP commands, so ANY use
     # of (command)/(vl-cmdf) here is the "Unknown command" bug back again
     check("and nothing went through the command processor",
           vm.commands == [])
     check("it says which stage is which as it goes",
-          "1 of 4: TYDRN" in said(vm)
-          and "3 of 4: AUTODIM" in said(vm)
-          and "4 of 4: CDIM" in said(vm))
-    check("and says so when it is through", "all 4 stages ran"
+          "1 of 3: TYDRN" in said(vm)
+          and "2 of 3: PADDLE" in said(vm)
+          and "3 of 3: CDIM" in said(vm))
+    check("and says so when it is through", "all 3 stages ran"
           in said(vm))
 
 
@@ -192,53 +194,55 @@ def test_cdim_is_reached_the_way_a_shop_command_has_to_be():
     vm = run(extra_setup=
              '(defun c:CDIM () (setq *ran* (cons "CDIM" *ran*)) (princ))')
     check("an AutoLISP CDIM is called directly instead",
-          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"]
+          ran(vm) == ["TYDRN", "PADDLE", "CDIM"]
           and not vm.get(Sym('*sent*')))
 
 
 def test_the_finisher_can_be_retuned_or_turned_off():
     print("\na shop without CDIM, or with another name for it")
     vm = run(extra_setup='(setq *tydrn-finish-cmd* nil)')
-    check("nil runs the three and stops",
-          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM"])
+    check("nil runs the calofin stages and stops",
+          ran(vm) == ["TYDRN", "PADDLE"])
     check("and queues nothing", not vm.get(Sym('*sent*')))
-    check("and the counting follows it", "1 of 3: TYDRN" in said(vm)
-          and "all 3 stages ran" in said(vm))
+    check("and the counting follows it", "1 of 2: TYDRN" in said(vm)
+          and "all 2 stages ran" in said(vm))
     vm = run(extra_setup='(setq *tydrn-finish-cmd* "DIMFIX")')
     check("another name is run instead",
-          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "DIMFIX"])
+          ran(vm) == ["TYDRN", "PADDLE", "DIMFIX"])
     check("queued verbatim, as the operator would type it",
           ["DIMFIX "] == [str(x) for x in (vm.get(Sym('*sent*')) or [])])
 
 
 def test_a_missing_stage_is_named_and_nothing_runs():
     print("\na stage that is not loaded stops it before it starts")
-    # TYDRN is not in this list: it is defined by the very file the
-    # suite lives in, so it cannot be the missing one.  PADDLE and
-    # AUTODIM are the two that really can be absent.
-    for drop in ("PADDLE", "AUTODIM"):
-        stages = "\n".join(l for l in STAGES.strip().split("\n")
-                           if ("c:" + drop + " ") not in l)
-        vm = run(stages)
-        out = said(vm)
-        check("%s missing: it is named" % drop,
-              ("needs " + drop) in out or (" and " + drop) in out
-              or (", and " + drop) in out)
-        check("%s missing: nothing ran at all" % drop, ran(vm) == [])
-        check("%s missing: it says nothing was changed" % drop,
-              "Nothing has been" in out)
+    # TYDRN is defined by the very file the suite lives in, so PADDLE
+    # is the one stage that can really be absent (a one-file APPLOAD
+    # of tydrn.lsp).
+    vm = run("")          # PADDLE not loaded
+    out = said(vm)
+    check("PADDLE missing: it is named", "needs PADDLE" in out)
+    check("PADDLE missing: and the verb takes the singular",
+          "which is not loaded" in out)
+    check("PADDLE missing: nothing ran at all", ran(vm) == [])
+    check("PADDLE missing: it says nothing was changed",
+          "Nothing has been" in out)
 
 
-def test_two_missing_stages_read_as_a_sentence():
-    print("\ntwo missing stages are named as a list, not a dump")
-    vm = run("")          # neither PADDLE nor AUTODIM loaded
-    check("both named, joined with and",
-          "PADDLE and AUTODIM" in said(vm))
-    check("and the verb agrees", "which are not loaded" in said(vm))
-    # one missing takes the singular
-    check("one missing takes the singular",
-          "which is not loaded"
-          in said(run("(defun c:PADDLE () (princ))")))
+def test_lists_of_names_read_as_a_sentence():
+    print("\nlists of names read as a sentence, not a dump")
+    # tydrn:namelist writes both the refusal and the opening
+    # announcement ("TYDRN, PADDLE, and CDIM."), so the joining still
+    # matters at every length even with only one stage able to go
+    # missing.
+    vm = run()
+    check("three names take the serial comma",
+          "TYDRN, PADDLE, and CDIM." in said(vm))
+    vm2 = VM()
+    vm2.load(LSP)
+    vm2.loads('(setq r2 (tydrn:namelist (list "A" "B"))'
+              '      r1 (tydrn:namelist (list "A")))')
+    check("two names take a bare and", str(vm2.get(Sym('r2'))) == "A and B")
+    check("one name stands alone", str(vm2.get(Sym('r1'))) == "A")
 
 
 def test_the_suite_opens_no_undo_group_of_its_own():
@@ -258,8 +262,8 @@ def test_the_stage_list_is_what_drives_it():
     print("\nthe order lives in one list, not spelled out three times")
     vm = run()
     stages = [str(x) for x in (vm.get(Sym('*tydrn-suite*')) or [])]
-    check("*tydrn-suite* names the three stages in order",
-          stages == ["TYDRN", "PADDLE", "AUTODIM"])
+    check("*tydrn-suite* names the calofin stages in order, AUTODIM out",
+          stages == ["TYDRN", "PADDLE"])
     check("and the count in the messages comes off it, finisher included",
           ("of " + str(len(stages) + 1) + ": TYDRN") in said(vm))
 
@@ -274,45 +278,44 @@ def test_one_highlight_reaches_every_calofin_stage():
     print("\nthe trace is picked once, not once per command")
     vm = run()
     h = handed(vm)
-    check("a set was handed to each of the four stages", len(h) == 4)
+    check("a set was handed to each of the three stages", len(h) == 3)
     pre = vm.get(Sym('*trace*'))
     check("TYDRN opens with the operator's own pick",
           h[0] is not None and all(e in h[0] for e in pre))
     check("so does PADDLE -- not an empty selection it has to re-ask for",
           h[1] is not None and all(e in h[1] for e in pre))
-    check("and so does AUTODIM",
-          h[2] is not None and all(e in h[2] for e in pre))
     check("it says the pick is carried, so the operator knows not to redo it",
           "carried through every stage" in said(vm))
 
 
 def test_cdim_is_handed_a_cleared_selection():
-    print("\nCDIM tidies what AUTODIM just drew, which nobody picked")
+    print("\nCDIM works over the dimensioning, which nobody picked")
     vm = run()
     h = handed(vm)
-    # Typed by hand after AUTODIM there is nothing selected either, so
-    # clearing is what keeps CDIM behaving the way its operator knows it.
-    check("the finisher gets nil, not the trace", h[3] is None)
+    # Typed by hand there is nothing selected either, so clearing is
+    # what keeps CDIM behaving the way its operator knows it.
+    check("the finisher gets nil, not the trace", h[2] is None)
     vm = run(extra_setup='(setq *tydrn-finish-cmd* nil)')
-    check("with no finisher there is no fourth handoff",
-          len(handed(vm)) == 3)
+    check("with no finisher there is no third handoff",
+          len(handed(vm)) == 2)
 
 
 def test_the_carried_set_grows_by_what_a_stage_draws():
-    print("\nAUTODIM is given the pads PADDLE dropped, not just the trace")
+    print("\nPADDLE is given what TYDRN drew, not just the trace")
     vm = run(stages=STAGES + DRAWING_STAGES)
     h = handed(vm)
-    pad = vm.get(Sym('*pad*'))
-    check("PADDLE drew a pad", pad is not None)
-    check("PADDLE itself did not get it - it did not exist yet",
-          pad not in (h[1] or []))
-    # ad:geomfilter takes INSERTs for exactly this reason.  Hand AUTODIM
-    # the operator's original pick alone and every pad is invisible to it.
-    check("AUTODIM opens with the pad in its selection", pad in (h[2] or []))
-    check("and still with the trace", all(e in h[2]
+    drew = vm.get(Sym('*drew*'))
+    check("TYDRN drew something", drew is not None)
+    check("TYDRN itself did not get it - it did not exist yet",
+          drew not in (h[0] or []))
+    # a later stage is meant to see the earlier ones' work; this is
+    # what let AUTODIM, when it was in the list, open with PADDLE's
+    # pads, and any stage put back into *tydrn-suite* gets it for free
+    check("PADDLE opens with it in its selection", drew in (h[1] or []))
+    check("and still with the trace", all(e in h[1]
                                           for e in vm.get(Sym('*trace*'))))
     check("the stages still ran in order",
-          ran(vm) == ["TYDRN", "PADDLE", "AUTODIM", "CDIM"])
+          ran(vm) == ["TYDRN", "PADDLE", "CDIM"])
 
 
 def test_an_erased_entity_is_not_handed_on():
@@ -356,7 +359,7 @@ def test_nothing_highlighted_means_one_prompt_not_three():
     check("what was picked there reaches every calofin stage",
           all(h[i] is not None
               and all(e in h[i] for e in vm.get(Sym('*trace*')))
-              for i in (0, 1, 2)))
+              for i in (0, 1)))
     check("exactly one answer was asked for and used",
           len(vm.prompts) == 1 and not vm.script)
 
@@ -370,10 +373,9 @@ def test_pickfirst_is_forced_on_and_put_back():
 (defun tydrn-spy () (setq *seen* (cons (getvar "PICKFIRST") *seen*)))
 (defun c:TYDRN   () (tydrn-spy) (princ))
 (defun c:PADDLE  () (tydrn-spy) (princ))
-(defun c:AUTODIM () (tydrn-spy) (princ))
 ''')
     check("every direct-call stage ran with it on",
-          [x for x in (vm.get(Sym('*seen*')) or [])] == [1, 1, 1])
+          [x for x in (vm.get(Sym('*seen*')) or [])] == [1, 1])
     check("and it is back to what it was afterwards",
           vm.sysvars.get('PICKFIRST') == 0)
 
@@ -391,7 +393,7 @@ def main():
                test_nothing_highlighted_means_one_prompt_not_three,
                test_pickfirst_is_forced_on_and_put_back,
                test_a_missing_stage_is_named_and_nothing_runs,
-               test_two_missing_stages_read_as_a_sentence,
+               test_lists_of_names_read_as_a_sentence,
                test_the_suite_opens_no_undo_group_of_its_own,
                test_the_stage_list_is_what_drives_it):
         try:

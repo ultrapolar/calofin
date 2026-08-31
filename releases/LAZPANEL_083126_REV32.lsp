@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.1")
+(setq *lazpanel-version* "v3.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -197,7 +197,7 @@
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
-    ("TYLERDRONESUITE"  "Drone suite: tidy, pad, dim")
+    ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Leica import cleanup")
     ("XYPLOT"           "X/Y offset plot")

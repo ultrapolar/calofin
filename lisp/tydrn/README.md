@@ -45,37 +45,39 @@ and a done-line reports the counts.
 | Command | What it does |
 | --- | --- |
 | `TYDRN` | Run the fixes in one pass |
-| `TYLERDRONESUITE` | `TYDRN`, then `PADDLE`, then `AUTODIM`, then `CDIM` |
+| `TYLERDRONESUITE` | `TYDRN`, then `PADDLE`, then `CDIM` |
 
 ## TYLERDRONESUITE — the whole drone trace in one
 
-`TYDRN`, then `PADDLE`, then `AUTODIM`, then `CDIM`, in that order
-because that is the order the work has to happen in: the points have to
-be on the right layer before `PADDLE` can find the perimeter features to
-pad, the pads have to be in before `AUTODIM` dimensions what is there,
-and the dimensions have to exist before `CDIM` cleans them up.
+`TYDRN`, then `PADDLE`, then `CDIM`, in that order because that is the
+order the work has to happen in: the points have to be on the right
+layer before `PADDLE` can find the perimeter features to pad, and
+`CDIM` is the finisher, run over whatever dimensioning the drawing
+carries once everything else is in. (`AUTODIM` sat between `PADDLE`
+and `CDIM` here once; the operator this suite is for does not want it
+in the flow — putting it back is adding its name to `*tydrn-suite*` in
+the tunables below.)
 
-**The trace is highlighted once, not once per command.** All three
-calofin stages want the same thing picked — `TYDRN` the text in it,
-`PADDLE` the perimeter, `AUTODIM` the plan — and AutoCAD clears the
-pickfirst set the moment a command consumes it. Run by hand that means
-selecting the same trace three times. Here the suite reads the highlight
-at the start and puts it back before each stage, so every stage opens
-with exactly what you picked and takes from it whatever its own filter
-takes. Highlight nothing first and the suite asks once, up front; press
+**The trace is highlighted once, not once per command.** The calofin
+stages want the same thing picked — `TYDRN` the text in it, `PADDLE`
+the perimeter — and AutoCAD clears the pickfirst set the moment a
+command consumes it. Run by hand that means selecting the same trace
+once per stage. Here the suite reads the highlight at the start and
+puts it back before each stage, so every stage opens with exactly what
+you picked and takes from it whatever its own filter takes. Highlight nothing first and the suite asks once, up front; press
 `Enter` there and each stage asks on its own, exactly as it does alone.
 
 **The carried selection grows by what each stage draws**, because a
 later stage is meant to see the earlier ones' work — that is the whole
-reason for the order. `AUTODIM`'s filter takes `INSERT`s precisely so it
-dimensions the pads `PADDLE` just dropped; handing it your original
-highlight and nothing else would hide every one of them. Anything a
+reason for the order. (It is what let `AUTODIM`, when it was in the
+list, open with the pads `PADDLE` had just dropped, and it is what any
+stage added to `*tydrn-suite*` after another gets for free.) Anything a
 stage erases drops out of the set the same way, so nothing dead is
 handed on.
 
-`CDIM` is handed a **cleared** selection. It tidies the dimensions
-`AUTODIM` has just made, and those are in nobody's original pick —
-typed by hand after `AUTODIM` it starts with nothing selected too.
+`CDIM` is handed a **cleared** selection. It works over the drawing's
+dimensioning, which is in nobody's original pick — typed by hand it
+starts with nothing selected too.
 
 `PICKFIRST` is forced to `1` for the run and put back afterwards
 (including on `Esc`). At `0`, `sssetfirst` still highlights but
@@ -84,9 +86,9 @@ missing — the one failure mode worth spending a sysvar to rule out.
 
 **Nothing is skipped or reworded.** Each stage is the command itself,
 asking its own questions — so `TYDRN` still offers *"Select text to
-update <Enter = all text in drawing>"*, and `PADDLE` and `AUTODIM` still
+update <Enter = all text in drawing>"*, and `PADDLE` and `CDIM` still
 ask for what they need. The suite supplies the order and the highlight.
-Anything you know about the four commands stays true here.
+Anything you know about the three commands stays true here.
 
 **`CDIM` is not calofin's.** It is the dimension-cleanup command the
 shop has on its own machines, and calofin has always known its name
@@ -130,16 +132,15 @@ one per stage — deliberately, and for `XYPLOT`'s reason about its `ABHD`
 handoff: a stage that went well should not have to be undone to get at
 one that did not.
 
-**The three calofin stages are checked before any of them runs.**
-(`CDIM` is not, for the reason above.) `PADDLE` and
-`AUTODIM` live in other files, so on a one-file `APPLOAD` of `tydrn.lsp`
-they may not be there. Half a suite is worse than none: `TYDRN` would
-have moved the points and `PADDLE` dropped the pads, and you would find
-out only at the end that the dimensioning you ran it for was never going
-to happen. So a missing stage is named and nothing runs at all:
+**The calofin stages are checked before any of them runs.** (`CDIM`
+is not, for the reason above.) `PADDLE` lives in another file, so on a
+one-file `APPLOAD` of `tydrn.lsp` it may not be there. Half a suite is
+worse than none: `TYDRN` would have moved the points and you would find
+out only mid-run that the padding you ran it for was never going to
+happen. So a missing stage is named and nothing runs at all:
 
 ```
-TYLERDRONESUITE needs PADDLE and AUTODIM, which are not loaded here.
+TYLERDRONESUITE needs PADDLE, which is not loaded here.
   APPLOAD the missing file - or LAZPASS.lsp, which is the
   whole build in one - and run it again.  Nothing has been
   changed.
@@ -150,10 +151,10 @@ the command line, so the stages after it never start. What ran before it
 stays run, which is the other reason the check happens first.
 
 **It is on the LazPanel.** `TYLERDRONESUITE` has a button on the panel's
-`Rest` and `Points` pages, captioned *Drone suite: tidy, pad, dim* — so
+`Rest` and `Points` pages, captioned *Drone suite: tidy, pad, CDIM* — so
 the whole job is one click from the panel, and there is nothing to type.
 That is what it is for: `LAZPASS.lsp`, open the panel, click it, answer
-the three stages' own prompts as they come.
+the stages' own prompts as they come.
 
 The order lives in `*tydrn-suite*` (the three calofin stages) plus
 `*tydrn-finish-cmd*` (the finisher); the `1 of 4` counting in the
@@ -174,14 +175,15 @@ At the top of `tydrn.lsp`:
 | `*tydrn-anch-layer*` | `"ANCHORS"` | Layer of the anchor POINTs |
 | `*tydrn-pink*` | `6` (magenta) | Color for anchors and the POINTS layer |
 | `*tydrn-orient-angle*` | `0.0` | Absolute text angle in degrees; set to `nil` to only flip upside-down text instead ("Most readable") |
-| `*tydrn-suite*` | `("TYDRN" "PADDLE" "AUTODIM")` | The calofin stages `TYLERDRONESUITE` runs, in order — also the list the pre-flight check reads |
-| `*tydrn-finish-cmd*` | `"CDIM"` | Shop command run last, after the stages above. Set to another name for a shop that calls it something else, or to `nil` to stop after `AUTODIM` |
+| `*tydrn-suite*` | `("TYDRN" "PADDLE")` | The calofin stages `TYLERDRONESUITE` runs, in order — also the list the pre-flight check reads. Add `"AUTODIM"` back here to put dimensioning back in the flow |
+| `*tydrn-finish-cmd*` | `"CDIM"` | Shop command run last, after the stages above. Set to another name for a shop that calls it something else, or to `nil` to stop after `PADDLE` |
 
-`PADDLE` and `AUTODIM` now use a selection that is already highlighted
+`PADDLE` and `AUTODIM` use a selection that is already highlighted
 when they start, instead of asking for one — the way every native
-AutoCAD command behaves, and what lets the suite hand them the same
-pick. With nothing highlighted they prompt exactly as they always did,
-`Enter` and all, so running either on its own is unchanged.
+AutoCAD command behaves, and what lets the suite hand a stage its pick.
+With nothing highlighted they prompt exactly as they always did,
+`Enter` and all, so running either on its own is unchanged. (`AUTODIM`
+keeps that behaviour even though it is out of the suite's flow.)
 
 ## Notes & limitations
 
@@ -210,8 +212,8 @@ that a missing stage is named and stops it before anything runs, that
 the suite opens no undo group of its own, and that `CDIM` is queued on
 the command line verbatim unless AutoLISP defines it here — plus
 retuning and turning off the finisher, and
-the handoff itself: that one highlight reaches all three calofin stages,
-that it grows to include the pads `PADDLE` drew, that an erased entity
+the handoff itself: that one highlight reaches every calofin stage,
+that it grows to include what an earlier stage drew, that an erased entity
 is not passed on, that `CDIM` gets a cleared selection, and that
 `PICKFIRST` is put back.
 
