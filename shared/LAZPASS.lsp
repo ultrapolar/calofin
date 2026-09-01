@@ -62681,7 +62681,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.8")
+(setq *perp-version* "v0.9")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -63608,7 +63608,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.7")
+(setq *cperp-version* "v0.8")
 
 ;; --- generic helpers -------------------------------------------------
 

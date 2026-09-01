@@ -110,7 +110,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.7")
+(setq *cperp-version* "v0.8")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -127,22 +127,40 @@
            (t (itoa (abs c)))))
     (t "BYLAYER")))
 
-;; make sure a layer exists and is usable (thawed, unlocked, on)
-(defun cperp:layer (nm col / en d)
-  (if (setq en (tblobjname "LAYER" nm))
-    (progn
-      (setq d (entget en))
-      (setq d (subst (cons 70 (logand (cdr (assoc 70 d)) (~ 5)))
-                     (assoc 70 d) d))
-      (if (< (cdr (assoc 62 d)) 0)
-        (setq d (subst (cons 62 (abs (cdr (assoc 62 d)))) (assoc 62 d) d)))
-      (entmod d))
+;; make sure a layer exists and is usable (thawed, unlocked, on).
+;; Repairs through entmod - no command echo, and safe to call from the
+;; error handler - and SAYS so when it had to: a run that quietly
+;; un-freezes a layer leaves the user wondering why their drawing
+;; changed.  (The canonical body of STANDARDS section 5; the grouped
+;; build swaps this whole helper for cal:ensure-layer, which has
+;; announced all along - this is the standalone tier catching up.)
+(defun cperp:layer (name color / rec ed flags col fixed)
+  (if (not (tblsearch "LAYER" name))
     (entmake (list '(0 . "LAYER")
                    '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
-                   (cons 2 nm) '(70 . 0) (cons 62 col)
-                   '(6 . "Continuous"))))
-  nm)
+                   (cons 2 name) '(70 . 0) (cons 62 color)
+                   '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
 
 ;; --- curve helpers ---------------------------------------------------
 ;; vlax-curve-* works on any curve entity and always speaks WCS, so the
