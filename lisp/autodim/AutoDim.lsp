@@ -146,7 +146,7 @@
 ;;;      merged so no zero-length dimensions are created.
 ;;; ======================================================================
 
-(setq *autodim-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.6")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -744,14 +744,17 @@
 
 ;; T if nothing in ss lies between pt and pt + dist along direction ang
 (defun ad:sideclear (pt ang dist eps ss / lin lobj i rtn clear)
-  (entmake (list '(0 . "LINE")
-                 (cons 10 (polar pt ang eps))
-                 (cons 11 (polar pt ang dist))))
-  (setq lin   (entlast)
-        lobj  (vlax-ename->vla-object lin)
-        clear t
-        i     0)
-  (if ss
+  ;; entlast is only OUR line if the entmake actually made one -- on a
+  ;; failure it would name the user's own last-drawn entity, which the
+  ;; entdel at the bottom would then erase
+  (setq clear t
+        i     0
+        lin   (if (entmake (list '(0 . "LINE")
+                                 (cons 10 (polar pt ang eps))
+                                 (cons 11 (polar pt ang dist))))
+                (entlast)))
+  (if lin (setq lobj (vlax-ename->vla-object lin)))
+  (if (and lin ss)
     (while (and clear (< i (sslength ss)))
       (setq rtn (vl-catch-all-apply
                   'vlax-invoke
@@ -760,7 +763,7 @@
       (if (and (not (vl-catch-all-error-p rtn)) rtn)
         (setq clear nil))
       (setq i (1+ i))))
-  (entdel lin)
+  (if lin (entdel lin))
   clear)
 
 ;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
@@ -956,22 +959,31 @@
 ;; Returns the number of dimensions placed.
 (defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir ds d x
                                             starton endon chain prev)
-  (setq ssx (if obstacles obstacles (ad:geomss)))
-  (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
-  (setq lin  (entlast)
-        lobj (vlax-ename->vla-object lin))
-  (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))
+  ;; as in ad:sideclear: entlast is ours only when the entmake worked.
+  ;; Here it matters twice over - the entity is pulled OUT of the
+  ;; caller's selection set below and then erased, so a failed entmake
+  ;; would have quietly taken one of the user's objects with it.
+  (setq ssx (if obstacles obstacles (ad:geomss))
+        lin (if (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
+              (entlast)))
+  (if (null lin)
+    (progn (prompt "\nCould not draw the measuring line - floor dims skipped.")
+           (setq ds nil)))
+  (if lin
+    (progn
+      (setq lobj (vlax-ename->vla-object lin))
+      (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))))
   (setq len (distance p1 p2)
         dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
         ds  '())
   ;; distance of every crossing object along the line, noting crossings
   ;; sitting right on the picked start / end points
-  (foreach x (ad:xpoints lobj ssx)
+  (foreach x (if lin (ad:xpoints lobj ssx))
     (setq d (apply '+ (mapcar '* dir (mapcar '- x p1))))
     (cond ((< (abs d) 1e-4)           (setq starton t))
           ((< (abs (- d len)) 1e-4)   (setq endon t))
           ((and (> d 1e-4) (< d (- len 1e-4))) (setq ds (cons d ds)))))
-  (entdel lin)
+  (if lin (entdel lin))
   ;; sorted break points, near-coincident ones merged
   (setq chain (list p1)
         prev  0.0)

@@ -73,9 +73,20 @@ def test_one_chain():
     assert vm.commands[i_beg] == ['_.UNDO', '_Begin'], vm.commands[i_beg]
     assert vm.commands[i_end] == ['_.UNDO', '_End'], vm.commands[i_end]
     assert i_beg < i_dc < i_end, (i_beg, i_dc, i_end)
-    # both LINE endpoints (beyond the seed) were fed to DIMCONTINUE
+    # both LINE endpoints (beyond the seed) were fed to DIMCONTINUE,
+    # each behind a "_non" -- the points come out of entget in WCS/OCS
+    # but (command pt) reads one in the CURRENT UCS, so the routine
+    # translates them and overrides any snap that survives OSMODE 0.
+    # The VM's world is flat (trans is the identity, lispvm.py:1280), so
+    # what is provable here is the SHAPE of the call; the UCS itself is
+    # what the translate exists for in AutoCAD.
     chain = vm.commands[i_dc + 1:i_end]
-    assert [[20.0, 0.0, 0.0]] in chain and [[30.0, 0.0, 0.0]] in chain, chain
+    assert ['_non', [20.0, 0.0, 0.0]] in chain, chain
+    assert ['_non', [30.0, 0.0, 0.0]] in chain, chain
+    pts = [c for c in chain if any(isinstance(x, list) for x in c)]
+    assert all(c[0] == '_non' for c in pts), pts
+    # the seed's own point went through the same translate
+    assert vm.commands[i_dc][1] == '_Select', vm.commands[i_dc]
     # the chain was drawn in the seed's style, the user's came back
     assert 'SEED STYLE' in vm.dimstyle_log, vm.dimstyle_log
     assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.sysvars['DIMSTYLE']

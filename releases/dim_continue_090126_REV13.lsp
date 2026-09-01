@@ -31,7 +31,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.3")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -165,8 +165,16 @@
                 (setvar "OSMODE"  0)
                 (vl-catch-all-apply
                   'command (list "_.-DIMSTYLE" "_Restore" seedstyle))
-                (command "._DIMCONTINUE" "_Select" (list en p14))
-                (foreach pt kept (command pt))
+                ;; Every point here came out of entget (WCS, or OCS on
+                ;; a polyline) but (command pt) reads one in the CURRENT
+                ;; UCS -- so under any UCS but World the whole chain
+                ;; landed somewhere else, and OSMODE is zeroed just above
+                ;; so no running snap pulled it back.  Translate, and
+                ;; override any snap that survives, as ad:aligned and
+                ;; CDCREATE both do.
+                (command "._DIMCONTINUE" "_Select"
+                         (list en (trans p14 0 1)))
+                (foreach pt kept (command "_non" (trans pt 0 1)))
                 (command "" "")                      ; end + exit DIMCONTINUE
 
                 (setvar "OSMODE"  oos)
