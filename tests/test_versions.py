@@ -36,10 +36,7 @@ from lispvm import VM, LispError  # noqa: E402
 #: the reason.  (prompt) is a no-op in the VM -- it records nothing --
 #: so a VER command written with it prints nothing a test can read.
 #: The command is still RUN here; only the banner assertion is skipped.
-BANNER_EXEMPT = {
-    'AUTOBEAD.lsp': "c:AUTOBEADVER uses (prompt ...), which the VM "
-                    "records nowhere",
-}
+BANNER_EXEMPT = {}
 
 FAILS = []
 

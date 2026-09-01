@@ -30451,7 +30451,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.1"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.2"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -30525,10 +30525,17 @@
     (setq e (entnext e)))
   (reverse res))
 
-(defun autobead-flush ()
+(defun autobead-flush ( / guard)
   ;; Safety valve: if an internal command was left waiting for input
-  ;; (e.g. OFFSET rejected a pick), feed it Enters until it terminates.
-  (while (> (getvar "CMDACTIVE") 0) (command "")))
+  ;; (e.g. OFFSET rejected a pick), CANCEL it - a bare (command) backs
+  ;; out where an Enter only answers the prompt in front of it.
+  ;; CMDACTIVE is a bitfield and one of its bits means "a dialog is up",
+  ;; which no keystroke from here can clear, so the drain is bounded:
+  ;; an unbounded loop against that bit hangs AutoCAD with no Esc out.
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
 
 (defun autobead-ensure-layer (name / rec ed flags col fixed)
   ;; Create the target layer (red), or - when it already exists -
@@ -30718,7 +30725,8 @@
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg)
@@ -30979,7 +30987,7 @@
 ;; ---- AUTOBEADVER -----------------------------------------------------------
 
 (defun c:AUTOBEADVER ()
-  (prompt (strcat "\nAUTOBEAD " *autobead-version*
+  (princ (strcat "\nAUTOBEAD " *autobead-version*
                   "\n  offset : " (rtos *autobead-offset*)
                   "\n  layer  : " *autobead-layer*
                   "\n  filter : " *autobead-filter*))
@@ -31244,7 +31252,7 @@
 
 ;; ---------------------------------------------------------------------------
 
-(prompt (strcat "\nAUTOBEAD " *autobead-version* " loaded."
+(princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
                 "\n  AUTOBEAD          - bead selected pool lines"
                 "\n  TUTORIALAUTOBEAD  - how it works"
                 "\n  AUTOBEADVER       - version check"))
@@ -69799,7 +69807,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.8") ; printed on load and at command start so a
+(setq *xft-version* "v1.9") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -70031,7 +70039,7 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone
+(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
                      ss base i en ed typ
                      markers names g nm e
                      ctr best bestd bestr rank txth d reach num
@@ -70046,9 +70054,17 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
-    (while (> (getvar "CMDACTIVE") 0) (command))   ; back out of SCALE etc.
+    ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
+    ;; "dialog is up" bit no keystroke from here can clear, and an
+    ;; unbounded drain against it would hang with no Esc out.
+    (setq guard 0)
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+      (command)
+      (setq guard (1+ guard)))
     (xft:restore)
-    (if undone (command "_.UNDO" "_End"))
+    ;; through the catch: a throw here would strand the pop below, and
+    ;; error mode would stay pushed for the rest of the session
+    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
     (if *pop-error-mode* (*pop-error-mode*))
     (princ)

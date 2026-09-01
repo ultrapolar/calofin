@@ -49,7 +49,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.1"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.2"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -123,10 +123,17 @@
     (setq e (entnext e)))
   (reverse res))
 
-(defun autobead-flush ()
+(defun autobead-flush ( / guard)
   ;; Safety valve: if an internal command was left waiting for input
-  ;; (e.g. OFFSET rejected a pick), feed it Enters until it terminates.
-  (while (> (getvar "CMDACTIVE") 0) (command "")))
+  ;; (e.g. OFFSET rejected a pick), CANCEL it - a bare (command) backs
+  ;; out where an Enter only answers the prompt in front of it.
+  ;; CMDACTIVE is a bitfield and one of its bits means "a dialog is up",
+  ;; which no keystroke from here can clear, so the drain is bounded:
+  ;; an unbounded loop against that bit hangs AutoCAD with no Esc out.
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
 
 (defun autobead-ensure-layer (name / rec ed flags col fixed)
   ;; Create the target layer (red), or - when it already exists -
@@ -320,7 +327,8 @@
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
-    (if undo-open (command "_.UNDO" "_End"))
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg)
@@ -581,7 +589,7 @@
 ;; ---- AUTOBEADVER -----------------------------------------------------------
 
 (defun c:AUTOBEADVER ()
-  (prompt (strcat "\nAUTOBEAD " *autobead-version*
+  (princ (strcat "\nAUTOBEAD " *autobead-version*
                   "\n  offset : " (rtos *autobead-offset*)
                   "\n  layer  : " *autobead-layer*
                   "\n  filter : " *autobead-filter*))
@@ -846,7 +854,7 @@
 
 ;; ---------------------------------------------------------------------------
 
-(prompt (strcat "\nAUTOBEAD " *autobead-version* " loaded."
+(princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
                 "\n  AUTOBEAD          - bead selected pool lines"
                 "\n  TUTORIALAUTOBEAD  - how it works"
                 "\n  AUTOBEADVER       - version check"))
