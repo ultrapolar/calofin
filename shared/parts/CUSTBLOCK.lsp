@@ -79,7 +79,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.2")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -291,8 +291,12 @@
     ;; -- 3. draw it, all of it inside one undo group
     (setvar "CMDECHO" 0)
     (setvar "OSMODE"  0)
-    (command "_.UNDO" "_Begin")
-    (setq undo-open t)
+    ;; only when undo is recording - _Begin in a drawing with UNDO
+    ;; off (bit 1 of UNDOCTL clear) errors out of the command
+    (if (= 1 (logand 1 (getvar "UNDOCTL")))
+      (progn
+        (command "_.UNDO" "_Begin")
+        (setq undo-open T)))
 
     (cal:ensure-layer cbk:*layer* cbk:*laycolor*)
     ;; the front face, then the two faces the viewpoint shows.  The back

@@ -171,7 +171,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.8") ; printed on load and at command start so a
+(setq *hs-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -990,8 +990,13 @@
                        " current layer.")))))
 
   ;; ---- 4. widths and step treads, chord by chord -----------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T cum 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
         offd  (* 2.0 txth)              ; tread-dim offset off the axis
         oldce (getvar "CMDECHO"))
@@ -1531,8 +1536,13 @@
         u    '(1.0 0.0 0.0)
         dir  '(0.0 1.0 0.0)
         wallw 257.61)
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)

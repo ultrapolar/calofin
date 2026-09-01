@@ -34,7 +34,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.4")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -161,8 +161,12 @@
                 ;; -- 3. draw the continued chain from the seed ------
                 ;; one undo group per chain, so a U takes the whole
                 ;; chain back rather than one dimension at a time
-                (command "_.UNDO" "_Begin")
-                (setq undo-open T)
+                ;; only when undo is recording - _Begin in a drawing with UNDO
+                ;; off (bit 1 of UNDOCTL clear) errors out of the command
+                (if (= 1 (logand 1 (getvar "UNDOCTL")))
+                  (progn
+                    (command "_.UNDO" "_Begin")
+                    (setq undo-open T)))
                 (setvar "CMDECHO" 0)
                 (setvar "CLAYER"  seedlayer)
                 (setvar "OSMODE"  0)

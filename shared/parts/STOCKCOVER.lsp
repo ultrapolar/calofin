@@ -51,7 +51,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.5") ; printed on load and at command
+(setq *stockcover-version* "v1.6") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -375,8 +375,12 @@
                          (setvar "INSUNITS" 0) ; no silent unit rescale
                          (setvar "ATTREQ" 0)
                          (setvar "ATTDIA" 0)
-                         (command "_.UNDO" "_Begin")
-                         (setq undone t)
+                         ;; only when undo is recording - _Begin in a drawing with UNDO
+                         ;; off (bit 1 of UNDOCTL clear) errors out of the command
+                         (if (= 1 (logand 1 (getvar "UNDOCTL")))
+                           (progn
+                             (command "_.UNDO" "_Begin")
+                             (setq undone t)))
 
                          (setq bname (stock:uniq-block))
                          (setq mark (entlast))

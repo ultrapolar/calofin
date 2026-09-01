@@ -51,7 +51,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.7")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -252,8 +252,12 @@
                      " drawing (\"35\" or \"Pt.35\")."))
       (setvar "CMDECHO" 0)
       (setvar "OSMODE"  0)
-      (command "_.UNDO" "_Begin")
-      (setq grouped t)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq grouped t)))
       (cdo:setlayer cdo:*layer*)
       (setq havestyle (cdo:setstyle cdo:*style*))
       (if (not havestyle)

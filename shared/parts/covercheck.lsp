@@ -213,7 +213,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.6")
+(setq *cchk-version* "v1.7")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -2678,8 +2678,12 @@
         (setvar "CMDECHO" 0)
         (setq vc (getvar "VIEWCTR")
               vs (getvar "VIEWSIZE"))
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
         (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
 
@@ -3397,8 +3401,12 @@
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (princ "\n--- Building the demo scene ---")
       (cchk:tut-build bp)
       (command "_.UNDO" "_End")

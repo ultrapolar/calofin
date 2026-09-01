@@ -28,7 +28,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.7")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -992,8 +992,12 @@
   )
 
   ;; ---- 10. draw ----------------------------------------------------------
-  (command "_.UNDO" "_Begin")
-  (setq inundo T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq inundo T)))
   (setq lay2 (cal:ensure-layer "AIR-B" 1))
   (cal:ensure-layer "DIMENSION" 3)
 

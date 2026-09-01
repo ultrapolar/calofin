@@ -117,7 +117,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.9")
+(setq *perp-version* "v0.10")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -560,8 +560,12 @@
   ;; PLINE must produce a lightweight polyline, the only kind an arc
   ;; bulge can be written onto
   (setvar "PLINETYPE" 2)
-  (command "_.UNDO" "_Begin")
-  (setq undoOpen T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoOpen T)))
   ;; guide points must be visible whatever the drawing's PDMODE is
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 

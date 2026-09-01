@@ -150,7 +150,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.7")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1356,8 +1356,12 @@
             olddim (getvar "DIMSTYLE"))
       (setvar "CMDECHO" 0)
       (ad:begin)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (setq n (if (setq risers (ad:stepprofile-p plan))
                 (ad:runsteps risers)
                 (ad:runplan plan)))
@@ -1390,8 +1394,12 @@
   (setq ss0 (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
   (setvar "CMDECHO" 0)
   (ad:begin)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq n (ad:dimstairs ss0))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
@@ -1417,8 +1425,12 @@
         olddim (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
   (ad:begin)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq n (ad:getfloor "Floor dims" nil nil))
   (prompt (strcat "\n" (if (numberp n) (itoa n) "0")
                   " floor dimension(s) placed."))
@@ -1469,8 +1481,12 @@
             oldlay (getvar "CLAYER"))
       (setvar "CMDECHO" 0)
       (ad:begin)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (ad:setlayer "DIMENSION")
       ;; told these are steps, so every vertical is taken as a riser -
       ;; no staircase test here, unlike AUTODIM's own side-view branch

@@ -253,7 +253,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.4")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.5")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2281,8 +2281,12 @@
         (setvar "CMDECHO" 0)
         (setq vc (getvar "VIEWCTR")
               vs (getvar "VIEWSIZE"))
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
         (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
 
@@ -3807,8 +3811,12 @@
   (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (if (member ans '("Checks" "Both"))
     (progn

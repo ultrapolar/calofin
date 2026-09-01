@@ -16362,7 +16362,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.5")
+(setq *abcdef-version* "v5.6")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -17597,8 +17597,12 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nABCDEF error: " msg)))
     (princ))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil method "Auto")
@@ -18135,7 +18139,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.7")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.8")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -18949,8 +18953,12 @@
         (t
          (setvar "CMDECHO" 0)
          (setvar "OSMODE"  0)
-         (command "_.UNDO" "_Begin")
-         (setq undo-open T)
+         ;; only when undo is recording - _Begin in a drawing with UNDO
+         ;; off (bit 1 of UNDOCTL clear) errors out of the command
+         (if (= 1 (logand 1 (getvar "UNDOCTL")))
+           (progn
+             (command "_.UNDO" "_Begin")
+             (setq undo-open T)))
          (abf:setlayer abf:*layer*)
          (setq havestyle (abf:setstyle abf:*style*))
          (if (not havestyle)
@@ -19357,7 +19365,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.6")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -19982,8 +19990,12 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nALTABCDEF error: " msg)))
     (princ))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   ;; ---- the questions, staged: Back (or Undo) at a later prompt
   ;; ---- re-opens the previous one, back to the file dialog itself
   (setq stage 1 done nil)
@@ -20298,7 +20310,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "090126 REV13") ; announced on load.  The
+(setq pf:*version*      "090126 REV14") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -23615,8 +23627,12 @@
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
   ;; purge above stays outside it, so U does not resurrect old junk)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
 
@@ -24095,8 +24111,12 @@
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
   (setq pf-phase "waiting for the selection")
   (if pf-pick
@@ -24633,7 +24653,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.3")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -25637,8 +25657,12 @@
     (princ))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (acc:run T)
   (command "_.UNDO" "_End")
   (setq undo-open nil)
@@ -25655,8 +25679,12 @@
     (princ))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (acc:run nil)
   (command "_.UNDO" "_End")
   (setq undo-open nil)
@@ -25677,8 +25705,12 @@
     (princ))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq ans (acc:ask "Erase which of ABCURCHECK's objects?"
                      "Marks All" "Marks" nil)
         n   (+ (acc:purge acc:*mark-layer* "MARK")
@@ -25774,7 +25806,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.3")
+(setq *abpcheck-version* "v1.4")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -26315,8 +26347,12 @@
   ;; group opens, because that command clears the set (the convention
   ;; FITABHD and abhd already carry)
   (setq ss (ssget "_I" abp:*filter*))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (princ "\n\nABPCHECK - how far every point sits off the nearest line.")
   (if (null ss)
     (progn
@@ -26388,8 +26424,12 @@
     (princ))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq n (+ (abp:purge-mine abp:*miss-layer*)
              (abp:purge-mine abp:*report-layer*)))
   (if (> n 0)
@@ -26615,7 +26655,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.7")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.8")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -29156,8 +29196,12 @@
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
   ;; purge above stays outside it, so U does not resurrect old junk)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (princ "\n\nCABHD - fit a pool perimeter through the surveyed points,")
   (princ "\n        up to the point number where the edge stops.")
@@ -30467,7 +30511,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.2"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.3"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -30758,8 +30802,12 @@
 
   (setq oldcmd (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq oldos (getvar "OSMODE")
         oldpa (getvar "PEDITACCEPT")
         temps '()
@@ -31431,7 +31479,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.7")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -32637,8 +32685,12 @@
             olddim (getvar "DIMSTYLE"))
       (setvar "CMDECHO" 0)
       (ad:begin)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (setq n (if (setq risers (ad:stepprofile-p plan))
                 (ad:runsteps risers)
                 (ad:runplan plan)))
@@ -32671,8 +32723,12 @@
   (setq ss0 (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
   (setvar "CMDECHO" 0)
   (ad:begin)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq n (ad:dimstairs ss0))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
@@ -32698,8 +32754,12 @@
         olddim (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
   (ad:begin)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq n (ad:getfloor "Floor dims" nil nil))
   (prompt (strcat "\n" (if (numberp n) (itoa n) "0")
                   " floor dimension(s) placed."))
@@ -32750,8 +32810,12 @@
             oldlay (getvar "CLAYER"))
       (setvar "CMDECHO" 0)
       (ad:begin)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (ad:setlayer "DIMENSION")
       ;; told these are steps, so every vertical is taken as a riser -
       ;; no staircase test here, unlike AUTODIM's own side-view branch
@@ -32826,7 +32890,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.7")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
@@ -32963,8 +33027,12 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
     (princ))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (setq cands (bp:collect-points))
@@ -33696,7 +33764,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.7")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -33897,8 +33965,12 @@
                      " drawing (\"35\" or \"Pt.35\")."))
       (setvar "CMDECHO" 0)
       (setvar "OSMODE"  0)
-      (command "_.UNDO" "_Begin")
-      (setq grouped t)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq grouped t)))
       (cdo:setlayer cdo:*layer*)
       (setq havestyle (cdo:setstyle cdo:*style*))
       (if (not havestyle)
@@ -34110,7 +34182,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -34354,8 +34426,12 @@
           ;; -- 3. layer and style, all of it inside one undo group
           (setvar "CMDECHO" 0)
           (setvar "OSMODE"  0)
-          (command "_.UNDO" "_Begin")
-          (setq undo-open t)
+          ;; only when undo is recording - _Begin in a drawing with UNDO
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn
+              (command "_.UNDO" "_Begin")
+              (setq undo-open T)))
           (setvar "CLAYER" (cal:ensure-layer cdc:*layer* 7))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
@@ -34485,7 +34561,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.5")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -34727,8 +34803,12 @@
        (t
         (setq oldecho (getvar "CMDECHO"))
         (setvar "CMDECHO" 0)
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *cfchk-constr-layer* *cfchk-constr-color*)
         (foreach e dims
           (setq res (cfchk:check-dim e cands))
@@ -34969,7 +35049,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.7") ; printed on load and at command start so a
+(setq *cs-version* "v3.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -35794,8 +35874,13 @@
                              " run to its front edge."))))))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T dist 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq dist 0.0 n 1 drawn 0
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
@@ -36386,8 +36471,13 @@
         w2   (list org (cs-add org '(0.0 200.0 0.0)))
         bis  (cs-unit '(1.0 1.0 0.0))
         perp (cs-perp90 bis))
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
@@ -36644,7 +36734,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.8") ; printed on load and at command start so a
+(setq *hs-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -37449,8 +37539,13 @@
                        " current layer.")))))
 
   ;; ---- 4. widths and step treads, chord by chord -----------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T cum 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
         offd  (* 2.0 txth)              ; tread-dim offset off the axis
         oldce (getvar "CMDECHO"))
@@ -37990,8 +38085,13 @@
         u    '(1.0 0.0 0.0)
         dir  '(0.0 1.0 0.0)
         wallw 257.61)
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
@@ -38251,7 +38351,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.2") ; printed on load and at command start so a
+(setq *ns-version* "v3.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -39227,8 +39327,13 @@
         dimoff (ns-scl u offd))
 
   ;; ---- 5. step treads, one per step ------------------------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T cum 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq cum 0.0 n 1 drawn 0
         pprev sp
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
@@ -39783,8 +39888,13 @@
         dir  '(0.0 1.0 0.0)
         wid  120.0
         off  9.0)
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
@@ -41440,7 +41550,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.6")
+(setq *cchk-version* "v1.7")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -43905,8 +44015,12 @@
         (setvar "CMDECHO" 0)
         (setq vc (getvar "VIEWCTR")
               vs (getvar "VIEWSIZE"))
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
         (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
 
@@ -44624,8 +44738,12 @@
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (princ "\n--- Building the demo scene ---")
       (cchk:tut-build bp)
       (command "_.UNDO" "_End")
@@ -44761,7 +44879,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.2")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -44973,8 +45091,12 @@
     ;; -- 3. draw it, all of it inside one undo group
     (setvar "CMDECHO" 0)
     (setvar "OSMODE"  0)
-    (command "_.UNDO" "_Begin")
-    (setq undo-open t)
+    ;; only when undo is recording - _Begin in a drawing with UNDO
+    ;; off (bit 1 of UNDOCTL clear) errors out of the command
+    (if (= 1 (logand 1 (getvar "UNDOCTL")))
+      (progn
+        (command "_.UNDO" "_Begin")
+        (setq undo-open T)))
 
     (cal:ensure-layer cbk:*layer* cbk:*laycolor*)
     ;; the front face, then the two faces the viewpoint shows.  The back
@@ -45170,7 +45292,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.9")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.10")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -46189,8 +46311,12 @@
         (setvar "CMDECHO" 0)
         (setq vc (getvar "VIEWCTR")
               vs (getvar "VIEWSIZE"))
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
         (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
 
@@ -46839,8 +46965,12 @@
   (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (if (member ans '("Checks" "Both"))
     (progn
@@ -46923,7 +47053,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.4")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -47050,8 +47180,12 @@
                 ;; -- 3. draw the continued chain from the seed ------
                 ;; one undo group per chain, so a U takes the whole
                 ;; chain back rather than one dimension at a time
-                (command "_.UNDO" "_Begin")
-                (setq undo-open T)
+                ;; only when undo is recording - _Begin in a drawing with UNDO
+                ;; off (bit 1 of UNDOCTL clear) errors out of the command
+                (if (= 1 (logand 1 (getvar "UNDOCTL")))
+                  (progn
+                    (command "_.UNDO" "_Begin")
+                    (setq undo-open T)))
                 (setvar "CMDECHO" 0)
                 (setvar "CLAYER"  seedlayer)
                 (setvar "OSMODE"  0)
@@ -48943,7 +49077,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.3")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.4")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -53574,8 +53708,12 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   ;; a preview a dead run left behind describes nothing - sweep it
   (setq swept (fit:purge-mine fit:*out-layer*))
   (if (> swept 0)
@@ -53761,7 +53899,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.8")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v1.9")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -55989,8 +56127,12 @@
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
   ;; purge above stays outside it, so U does not resurrect old junk)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (princ "\n\nLHD - fit a top-down outline through laser-scanned points.")
 
@@ -57073,7 +57215,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.4")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.5")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -59101,8 +59243,12 @@
         (setvar "CMDECHO" 0)
         (setq vc (getvar "VIEWCTR")
               vs (getvar "VIEWSIZE"))
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
         (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
 
@@ -60627,8 +60773,12 @@
   (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (if (member ans '("Checks" "Both"))
     (progn
@@ -60691,7 +60841,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.4")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
@@ -60753,8 +60903,12 @@
       (setvar "OSMODE" 0)                 ; drop osnaps while placing text
       ;; one undo group around the column - a U after LINTXTCHK takes
       ;; back all 26 lines at once instead of one entity per U
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (setq startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
@@ -61654,7 +61808,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.0")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.1")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -62511,8 +62665,12 @@
         (progn
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_Begin")
-          (setq undo-open t)
+          ;; only when undo is recording - _Begin in a drawing with UNDO
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn
+              (command "_.UNDO" "_Begin")
+              (setq undo-open T)))
           ;; entdel refuses an entity on a locked layer, so open the ones
           ;; this erase has to reach and shut them again afterwards
           (setq locked (lg:unlock (lg:kill-layers kill)))
@@ -62692,7 +62850,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.9")
+(setq *perp-version* "v0.10")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -63135,8 +63293,12 @@
   ;; PLINE must produce a lightweight polyline, the only kind an arc
   ;; bulge can be written onto
   (setvar "PLINETYPE" 2)
-  (command "_.UNDO" "_Begin")
-  (setq undoOpen T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoOpen T)))
   ;; guide points must be visible whatever the drawing's PDMODE is
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
@@ -63619,7 +63781,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.8")
+(setq *cperp-version* "v0.9")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -63865,8 +64027,12 @@
   ;; PLINE must produce a lightweight polyline so the arc bulges can be
   ;; written into it and the result stays a plain LWPOLYLINE
   (setvar "PLINETYPE" 2)
-  (command "_.UNDO" "_Begin")
-  (setq undoOpen T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoOpen T)))
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
   ;; --- 1. select a curve (re-prompts until valid) ----------------------
@@ -64225,7 +64391,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.5")
+(setq *tutperp-version* "v0.6")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -64301,8 +64467,12 @@
         pd (getvar "PDMODE")
         ents '())
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undoOpen T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoOpen T)))
 
   (tutp:say '("======================================================="
               " TUTORIALPERPPTS - a guided tour of the PERPPTS command"
@@ -64597,7 +64767,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.5")
+(setq *tutcperp-version* "v0.6")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -64735,8 +64905,12 @@
         plt (getvar "PLINETYPE")
         ents '())
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undoOpen T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoOpen T)))
 
   (tutc:say '("========================================================="
               " TUTORIALCPERPPTS - a guided tour of the CPERPPTS command"
@@ -65032,7 +65206,7 @@
 ;;;      dimension style are all put back the way they were.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.1")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -65512,8 +65686,13 @@
     (t
      ;; -- 2. one undo group over the previews and everything they lead
      ;;       to, so a single U undoes the lot
-     (command "_.UNDO" "_Begin")
-     (setq undo-open t
+     ;; only when undo is recording - _Begin in a drawing with UNDO
+     ;; off (bit 1 of UNDOCTL clear) errors out of the command
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undo-open t)))
+     (setq 
            rads      (sf:candidates rmax)
            extra     (- (sf:howmany rmax) (length rads)))
      (sf:preview geo rads)
@@ -65703,7 +65882,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.9")
+(setq *spacheck-version* "v1.10")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -67238,8 +67417,12 @@
       (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (setq res   (spachk:audit ss nil)
             rows  (car res)
             drows (cadr res)
@@ -67704,7 +67887,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.5") ; printed on load and at command
+(setq *stockcover-version* "v1.6") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -68028,8 +68211,12 @@
                          (setvar "INSUNITS" 0) ; no silent unit rescale
                          (setvar "ATTREQ" 0)
                          (setvar "ATTDIA" 0)
-                         (command "_.UNDO" "_Begin")
-                         (setq undone t)
+                         ;; only when undo is recording - _Begin in a drawing with UNDO
+                         ;; off (bit 1 of UNDOCTL clear) errors out of the command
+                         (if (= 1 (logand 1 (getvar "UNDOCTL")))
+                           (progn
+                             (command "_.UNDO" "_Begin")
+                             (setq undone t)))
 
                          (setq bname (stock:uniq-block))
                          (setq mark (entlast))
@@ -68723,7 +68910,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.7")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -69687,8 +69874,12 @@
   )
 
   ;; ---- 10. draw ----------------------------------------------------------
-  (command "_.UNDO" "_Begin")
-  (setq inundo T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq inundo T)))
   (setq lay2 (cal:ensure-layer "AIR-B" 1))
   (cal:ensure-layer "DIMENSION" 3)
 
@@ -69931,7 +70122,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.9") ; printed on load and at command start so a
+(setq *xft-version* "v1.10") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -70237,8 +70428,12 @@
 
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_Begin")
-          (setq undone t)
+          ;; only when undo is recording - _Begin in a drawing with UNDO
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn
+              (command "_.UNDO" "_Begin")
+              (setq undone t)))
 
           ;; ---- 0. the layer and the block have to be there --------
           (cal:ensure-layer *xft-block-layer* 6)
@@ -70449,7 +70644,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.5")
+(setq *xyplot-version* "v1.6")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -71167,8 +71362,12 @@
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))
     (progn
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (if base (setq base (trans base 1 0)) (setq base '(0.0 0.0 0.0)))
       (setq bpx (car base) bpy (cadr base))
       (princ "\nReading spreadsheet ... ")

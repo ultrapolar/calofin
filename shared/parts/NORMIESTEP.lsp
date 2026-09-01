@@ -180,7 +180,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.2") ; printed on load and at command start so a
+(setq *ns-version* "v3.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1156,8 +1156,13 @@
         dimoff (ns-scl u offd))
 
   ;; ---- 5. step treads, one per step ------------------------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T cum 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq cum 0.0 n 1 drawn 0
         pprev sp
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
@@ -1712,8 +1717,13 @@
         dir  '(0.0 1.0 0.0)
         wid  120.0
         off  9.0)
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)

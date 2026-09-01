@@ -190,7 +190,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.7") ; printed on load and at command start so a
+(setq *cs-version* "v3.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1015,8 +1015,13 @@
                              " run to its front edge."))))))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T dist 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq dist 0.0 n 1 drawn 0
         oldce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
@@ -1607,8 +1612,13 @@
         w2   (list org (cs-add org '(0.0 200.0 0.0)))
         bis  (cs-unit '(1.0 1.0 0.0))
         perp (cs-perp90 bis))
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)

@@ -77,7 +77,7 @@
 ;;;      dimension style are all put back the way they were.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.1")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -557,8 +557,13 @@
     (t
      ;; -- 2. one undo group over the previews and everything they lead
      ;;       to, so a single U undoes the lot
-     (command "_.UNDO" "_Begin")
-     (setq undo-open t
+     ;; only when undo is recording - _Begin in a drawing with UNDO
+     ;; off (bit 1 of UNDOCTL clear) errors out of the command
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undo-open t)))
+     (setq 
            rads      (sf:candidates rmax)
            extra     (- (sf:howmany rmax) (length rads)))
      (sf:preview geo rads)

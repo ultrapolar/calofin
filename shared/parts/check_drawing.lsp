@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.5")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -273,8 +273,12 @@
        (t
         (setq oldecho (getvar "CMDECHO"))
         (setvar "CMDECHO" 0)
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *cfchk-constr-layer* *cfchk-constr-color*)
         (foreach e dims
           (setq res (cfchk:check-dim e cands))

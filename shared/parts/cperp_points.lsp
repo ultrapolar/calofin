@@ -113,7 +113,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.8")
+(setq *cperp-version* "v0.9")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -359,8 +359,12 @@
   ;; PLINE must produce a lightweight polyline so the arc bulges can be
   ;; written into it and the result stays a plain LWPOLYLINE
   (setvar "PLINETYPE" 2)
-  (command "_.UNDO" "_Begin")
-  (setq undoOpen T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoOpen T)))
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
   ;; --- 1. select a curve (re-prompts until valid) ----------------------

@@ -31,7 +31,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.9") ; printed on load and at command start so a
+(setq *xft-version* "v1.10") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -337,8 +337,12 @@
 
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_Begin")
-          (setq undone t)
+          ;; only when undo is recording - _Begin in a drawing with UNDO
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn
+              (command "_.UNDO" "_Begin")
+              (setq undone t)))
 
           ;; ---- 0. the layer and the block have to be there --------
           (cal:ensure-layer *xft-block-layer* 6)

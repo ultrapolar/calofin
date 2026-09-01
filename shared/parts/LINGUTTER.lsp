@@ -132,7 +132,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.0")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.1")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -989,8 +989,12 @@
         (progn
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_Begin")
-          (setq undo-open t)
+          ;; only when undo is recording - _Begin in a drawing with UNDO
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn
+              (command "_.UNDO" "_Begin")
+              (setq undo-open T)))
           ;; entdel refuses an entity on a locked layer, so open the ones
           ;; this erase has to reach and shut them again afterwards
           (setq locked (lg:unlock (lg:kill-layers kill)))
