@@ -6,6 +6,11 @@ The design decisions it argued for are preserved below because they are
 now load-bearing code, and the next person to touch the form path
 should know why it is shaped the way it is.
 
+**For what is planned next, see `ui/UI-PLAN.md`** -- the roadmap for the
+zero-install DCL surface (`LAZPANEL` and the three chart forms) and for
+the data layer the palette is meant to share with it. This file is the
+record of how the palette got here; that one is where it goes.
+
 ## What is built
 
 | Layer | State |

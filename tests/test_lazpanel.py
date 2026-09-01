@@ -158,13 +158,23 @@ assert all(ROW_LABELS), "a navigation row has no label"
 # the other, or a group would be unreachable (no tab) or a tab would
 # open a page that does not exist.
 flat_rows = [g for r in ROWS for g in r]
-assert flat_rows == GROUPS, \
-    "lzp:*rows* names %r, lzp:*groups* names %r" % (flat_rows, GROUPS)
+# Find is a PAGE but not a GROUP: it has no column layout and no roster
+# of its own, so it must be on the strip and out of lzp:*groups*, which
+# is what "Rest" is computed against and what lzp:commands folds.
+FIND = str(vm.globals['lzp:*findname*'])
+assert FIND not in GROUPS, \
+    "the search page is a group -- Rest and lzp:commands would count it"
+PAGES = [FIND] + GROUPS
+assert flat_rows == PAGES, \
+    "lzp:*rows* names %r, expected %r" % (flat_rows, PAGES)
+vm.loads('(setq test:*pages* (lzp:pages))')
+assert [str(x) for x in vm.globals['test:*pages*']] == flat_rows, \
+    "lzp:pages does not flatten lzp:*rows* in strip order"
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
 # one dialog per page, plus the pin editor
-assert len(opens) == len(GROUPS) + 1, (
-    "%d dialogs for %d groups + the pin editor" % (len(opens), len(GROUPS)))
+assert len(opens) == len(PAGES) + 1, (
+    "%d dialogs for %d pages + the pin editor" % (len(opens), len(PAGES)))
 assert 'lazpanel_pins : dialog {' in opens, \
     "the pin editor dialog is not in the generated file"
 depth = 0
@@ -175,9 +185,9 @@ for line in dcl:
 assert depth == 0, "unbalanced braces across the file"
 
 TILES = {'row', 'boxed_row', 'boxed_column', 'column', 'button',
-         'text', 'toggle'}
+         'text', 'toggle', 'edit_box', 'list_box'}
 ATTRS = {'label', 'key', 'width', 'alignment',
-         'is_default', 'is_cancel', 'fixed_width'}
+         'is_default', 'is_cancel', 'fixed_width', 'edit_width', 'height'}
 CLAUSE = r'[a-z_]+ = (?:"[^"]*"|[a-z0-9]+);'
 OPEN_RE = re.compile(r': ([a-z_]+) \{$')
 INLINE_RE = re.compile(r': ([a-z_]+) \{ ((?:%s )+)\}$' % CLAUSE)
@@ -207,7 +217,7 @@ def page(group):
 # future rename making the panel unopenable.
 TAB_BUDGET = 90
 seen_keys = set()
-for gname in GROUPS:
+for gname in PAGES:
     d = page(gname)
     assert d[0].endswith(' : dialog {'), \
         "%s: page does not open with its dialog line: %r" % (gname, d[0])
@@ -218,8 +228,8 @@ for gname in GROUPS:
     assert len(keys) == len(set(keys)), "%s: duplicate tile keys" % gname
     # a tab for every group, on every page
     tabs = re.findall(r'key = "tab_([^"]+)"; label = "([^"]+)"', text)
-    assert [t[0] for t in tabs] == GROUPS, \
-        "%s: tab strip is %r, expected %r" % (gname, [t[0] for t in tabs], GROUPS)
+    assert [t[0] for t in tabs] == PAGES, \
+        "%s: tab strip is %r, expected %r" % (gname, [t[0] for t in tabs], PAGES)
     # width is per ROW, not per strip: the tabs wrap onto the rows of
     # lzp:*rows*, so what has to fit the screen is the widest single row.
     wide = max(sum(len(g) + 6 for g in r) for r in ROWS)
@@ -237,13 +247,21 @@ for gname in GROUPS:
     # is on Pool, Cover and Spa), so the test is against this group's
     # own list rather than against every other group's.
     vm.loads('(setq test:*g* (lzp:group-commands "%s"))' % gname)
-    mine = [str(x) for x in vm.globals['test:*g*']]
+    mine = [str(x) for x in (vm.globals['test:*g*'] or [])]
+    if gname == FIND:
+        assert not mine, "the search page must not be a group"
+        # it carries the roster in one list box rather than in buttons
+        for k in ('filter', 'hits', 'msg', 'run'):
+            assert 'key = "%s"' % k in text, "%s: no %r tile" % (gname, k)
+        assert 'is_default = true' in text, \
+            "%s: no default button -- Enter would not run anything" % gname
     assert set(mine) <= set(keys), \
         "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
     # pinned buttons carry a pin_ prefix and repeat a tool already on
     # some page; pin_edit opens the editor.  Neither is a page command.
     extra = set(keys) - set(mine) - {'status', 'cancel', 'pin_edit'} \
-            - {'tab_' + g for g in GROUPS} \
+            - {'filter', 'hits', 'msg', 'run'} \
+            - {'tab_' + g for g in PAGES} \
             - {k for k in keys if k.startswith('pin_')}
     assert not extra, \
         "%s: buttons for commands not in its group: %r" % (gname, sorted(extra))
@@ -449,10 +467,10 @@ print("   stale pins dropped against the roster; no registry = no pins")
 pv.loads("(setq lzp:*pins* '(\"POOL\"))")
 pv.loads('(setq test:*d* (lzp:dcl-lines))')
 alld = '\n'.join(str(l) for l in pv.globals['test:*d*'])
-assert alld.count('key = "pin_POOL"') == len(GROUPS), (
+assert alld.count('key = "pin_POOL"') == len(PAGES), (
     "the pinned tool appears on %d pages, expected %d"
-    % (alld.count('key = "pin_POOL"'), len(GROUPS)))
-print("   a pinned tool gets a button on all %d pages" % len(GROUPS))
+    % (alld.count('key = "pin_POOL"'), len(PAGES)))
+print("   a pinned tool gets a button on all %d pages" % len(PAGES))
 
 
 print("== end-to-end with the DCL surface stubbed ==")
@@ -481,7 +499,8 @@ STUB = '''
       stub:*tbs* nil stub:*btns* nil stub:*addargs* nil
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
       stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
-      stub:*nosupport* nil)
+      stub:*nosupport* nil stub:*tiles* nil stub:*list* nil
+      stub:*listing* nil stub:*clickval* nil stub:*clickreason* nil)
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
@@ -500,7 +519,15 @@ STUB = '''
 (defun load_dialog (f) (stub:ev "load") 7)
 (defun term_dialog () nil)
 (defun set_tile (k v)
+  (setq stub:*tiles* (cons (list k v) stub:*tiles*))
   (if (= k "status") (setq stub:*status* v)) v)
+(defun stub:tile (k / p) (if (setq p (assoc k stub:*tiles*)) (cadr p)))
+;; A list box is filled between start_list and end_list, so the stub
+;; keeps the rows in the order they were added rather than the order
+;; the caller consed them.
+(defun start_list (k) (setq stub:*listing* nil) (stub:ev (strcat "list " k)) k)
+(defun add_list (s) (setq stub:*listing* (cons s stub:*listing*)) s)
+(defun end_list () (setq stub:*list* (reverse stub:*listing*)) nil)
 (defun action_tile (k expr)
   (setq stub:*action* (cons (list k expr) stub:*action*)) t)
 (defun mode_tile (k m)
@@ -515,7 +542,9 @@ STUB = '''
   (setq stub:*done* nil)
   (if (setq pair (assoc stub:*click* stub:*action*))
     (progn
-      (setq $key (car pair) $value nil $reason 1)
+      (setq $key   (car pair)
+            $value stub:*clickval*
+            $reason (if stub:*clickreason* stub:*clickreason* 1))
       (eval (read (strcat "(progn " (cadr pair) ")")))
       ;; a click happens ONCE -- left armed it re-fires on the page it
       ;; just opened, and a tab would reopen itself for ever
@@ -1186,6 +1215,178 @@ ev = events(vm7)
 assert ev.count('new') == 2, "the page did not reopen: %r" % ev
 print("   a tab closes this page and opens %s, launching nothing"
       % GROUPS[1])
+
+
+print("== find: the search, name and caption alike ==")
+fv = fresh()
+
+
+def matches(v, text):
+    v.loads('(setq test:*m* (lzp:matches "%s"))' % text)
+    return [str(x) for x in (v.globals['test:*m*'] or [])]
+
+
+def captions(v):
+    return {str(c[0]): str(c[1]) for c in v.globals['lzp:*captions*']}
+
+
+CAPS = captions(fv)
+# an empty box is not a filter: the whole roster, in roster order
+fv.loads('(setq test:*all* (lzp:commands))')
+ALL = [str(x) for x in fv.globals['test:*all*']]
+assert matches(fv, '') == ALL, "an empty search does not list the roster"
+
+# the search reads the caption as well as the name, which is the whole
+# point: half of knowing this toolset is knowing what the names mean
+for needle in ('cover', 'check', 'spa', 'survey', 'dim'):
+    want = [c for c in ALL
+            if needle.upper() in c or needle.upper() in CAPS[c].upper()]
+    assert matches(fv, needle) == want, (
+        "%r matched %r, expected %r" % (needle, matches(fv, needle), want))
+    assert matches(fv, needle.upper()) == want, "%r is case sensitive" % needle
+
+# and it is the CAPTION doing the work for at least one of them, or the
+# feature is just a name search with extra steps
+byname = [c for c in ALL if 'SURVEY' in c]
+assert not byname, "a command is now named *SURVEY*; pick another witness"
+assert matches(fv, 'survey'), "no tool's caption mentions a survey"
+print("   %d tools match \"survey\" on their captions alone, none by name"
+      % len(matches(fv, 'survey')))
+
+# The needle is whatever was typed.  wcmatch would read these as
+# pattern syntax -- "*" would match the whole roster and "." none of it
+# -- so a literal search is the difference between a useful box and a
+# baffling one.
+for wild in ('*', '?', '~', '[A]', '@', '.', '#'):
+    assert matches(fv, wild) == [], \
+        "%r matched %r -- the search is going through wcmatch" \
+        % (wild, matches(fv, wild))
+print("   wildcard characters are searched for, not obeyed")
+
+# a row says what a tool is, and says when the session cannot run it
+fv.loads('(setq test:*a* (lzp:hitline "POOL" \'("POOL")))')
+fv.loads('(setq test:*b* (lzp:hitline "POOL" nil))')
+assert 'POOL' in str(fv.globals['test:*a*'])
+assert CAPS['POOL'] in str(fv.globals['test:*a*']), \
+    "the row does not carry the caption: %r" % fv.globals['test:*a*']
+assert 'not loaded' not in str(fv.globals['test:*a*'])
+assert 'not loaded' in str(fv.globals['test:*b*']), \
+    "an unloaded tool is listed with nothing to say so"
+print("   a row is NAME - caption, plus (not loaded) when it is not")
+
+
+print("== find: filling, picking and running ==")
+fl = stubbed()
+fl.loads('(setq t:*sel* (lzp:fill "cover"))')
+listed = [str(x) for x in (fl.globals.get('stub:*list*') or [])]
+assert len(listed) == len(matches(fv, 'cover')), (
+    "the list box holds %d rows for %d matches"
+    % (len(listed), len(matches(fv, 'cover'))))
+assert all(m in l for m, l in zip(matches(fv, 'cover'), listed)), \
+    "the rows are not the matches, in order: %r" % listed
+# the top hit is selected for you, so Enter runs the obvious thing
+assert str(fl.globals['t:*sel*']) == matches(fv, 'cover')[0]
+fl.loads('(setq t:*h* (stub:tile "hits"))')
+assert str(fl.globals['t:*h*']) == '0', \
+    "the list is filled but nothing is highlighted"
+fl.loads('(setq t:*m* (stub:tile "msg"))')
+assert 'cover' in str(fl.globals['t:*m*']), fl.globals['t:*m*']
+print("   %d rows for \"cover\", top hit selected, message line set"
+      % len(listed))
+
+# a search that matches nothing says so rather than showing an empty box
+fl.loads('(setq t:*none* (lzp:fill "zzzz"))')
+assert fl.globals.get('t:*none*') is None
+fl.loads('(setq t:*m* (stub:tile "msg"))')
+assert 'no tool matches' in str(fl.globals['t:*m*']), fl.globals['t:*m*']
+print("   an empty result says so on the message line")
+
+# picking a row selects it; a double click ($reason 4) is pick-and-run.
+# Only 4: running on the single-click reason would launch a tool every
+# time the mouse moved down the list.
+fl.loads('(lzp:fill "")')
+for quiet in (1, 2, 3):
+    fl.loads('(setq stub:*done* nil lzp:*pick* nil)')
+    fl.loads('(setq t:*p* (lzp:hitpick "1" %d))' % quiet)
+    assert str(fl.globals['t:*p*']) == ALL[1], fl.globals['t:*p*']
+    assert fl.globals.get('stub:*done*') is None, \
+        "$reason %d closed the dialog -- only the double click may run" % quiet
+    assert fl.globals.get('lzp:*pick*') is None, \
+        "$reason %d launched something" % quiet
+idx = ALL.index(LIVE)
+fl.loads('(setq stub:*done* nil)')
+fl.loads('(lzp:hitpick "%d" 4)' % idx)
+assert str(fl.globals.get('lzp:*pick*')) == LIVE, \
+    "a double click did not choose %s: %r" % (LIVE, fl.globals.get('lzp:*pick*'))
+assert str(fl.globals.get('stub:*done*')) == '1', \
+    "a double click did not close the dialog to launch"
+print("   one click selects, two runs -- %s chosen and the dialog closed"
+      % LIVE)
+
+# Run refuses a tool this session has not loaded, and says so WITHOUT
+# closing: the list shows it on purpose, so the refusal has to be here
+fl2 = stubbed()
+fl2.loads('(lzp:fill "")')
+fl2.loads('(setq lzp:*sel* "%s") (lzp:findrun)' % MISSING)
+fl2.loads('(setq t:*m* (stub:tile "msg"))')
+assert 'not loaded' in str(fl2.globals['t:*m*']), fl2.globals['t:*m*']
+assert MISSING in str(fl2.globals['t:*m*'])
+assert fl2.globals.get('stub:*done*') is None, \
+    "%s is not loaded, but Run closed the panel to launch it" % MISSING
+assert fl2.globals.get('lzp:*pick*') is None
+# and nothing highlighted at all is its own message, not a crash
+fl2.loads('(setq lzp:*sel* nil) (lzp:findrun)')
+fl2.loads('(setq t:*m* (stub:tile "msg"))')
+assert 'nothing highlighted' in str(fl2.globals['t:*m*']), fl2.globals['t:*m*']
+print("   Run refuses %s with a reason, and refuses an empty pick" % MISSING)
+
+
+print("== find: the page opens, wires itself and launches ==")
+# End to end through c:LAZPANEL's own loop, so the action_tile strings
+# in the file are the ones evaluated here.
+fp = stubbed()
+fp.loads('(setq lzp:*page* "%s")' % FIND)
+fp.loads('(setq stub:*rcs* \'(0))')
+fp.loads('(setq t:*p* (lzp:show))')
+fp.loads('(setq t:*n* (lzp:dlgname "%s"))' % FIND)
+assert str(fp.globals.get('stub:*dlgname*')) == str(fp.globals['t:*n*']), \
+    "the panel did not open on the search page"
+opened = [str(x) for x in (fp.globals.get('stub:*list*') or [])]
+assert len(opened) == len(ALL), \
+    "the page opened with %d rows, expected the whole roster" % len(opened)
+bound = [str(a[0]) for a in fp.globals.get('stub:*action*') or []]
+for k in ('filter', 'hits', 'run'):
+    assert k in bound, "the %r tile is not wired: %r" % (k, bound)
+# no per-command buttons on this page -- and so nothing to grey
+assert not fp.globals.get('stub:*disabled*'), \
+    "the search page greyed tiles: %r" % fp.globals.get('stub:*disabled*')
+print("   opens with the whole roster listed, three tiles wired, none greyed")
+
+# typing in the box narrows the list through the REAL wiring string
+fs = stubbed()
+fs.loads('(setq lzp:*page* "%s")' % FIND)
+fs.loads('(setq stub:*rcs* \'(0))')
+fs.loads('(setq stub:*click* "filter" stub:*clickval* "cover")')
+fs.loads('(lzp:show)')
+narrowed = [str(x) for x in (fs.globals.get('stub:*list*') or [])]
+assert len(narrowed) == len(matches(fv, 'cover')), (
+    "typing in the box left %d rows, expected %d"
+    % (len(narrowed), len(matches(fv, 'cover'))))
+assert str(fs.globals.get('lzp:*filter*')) == 'cover', \
+    "the search text was not remembered for the reopen"
+print("   a search typed into the box narrows %d rows to %d, and is remembered"
+      % (len(ALL), len(narrowed)))
+
+# Run, wired: the top hit of a search for the one command the stub has
+fr = stubbed()
+fr.loads('(setq lzp:*page* "%s" lzp:*filter* "%s")' % (FIND, LIVE))
+fr.loads('(setq stub:*rcs* \'(0))')
+fr.loads('(setq stub:*click* "run")')
+fr.loads('(setq t:*p* (lzp:show))')
+assert str(fr.globals.get('t:*p*')) == LIVE, (
+    "Run on a search for %s handed back %r" % (LIVE, fr.globals.get('t:*p*')))
+print("   Run launches the highlighted tool (%s), the panel closing first"
+      % LIVE)
 
 
 print("== LAZPANELVER ==")
