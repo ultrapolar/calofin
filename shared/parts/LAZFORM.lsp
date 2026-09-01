@@ -76,7 +76,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.8")
+(setq *lazform-version* "v2.9")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -567,7 +567,8 @@
     ("TL" "ftl" 484 471 469 402 "p" "TL - top-left tangent radius")
     ("RS" "ftr" 780 546 864 542 "p" "RS - right-side tangent radius")
     ("BC" "fbc" 500 824 500 894 "p" "BC - bottom-center tangent radius"))
-   ())
+   (("off"
+     "Top-right bulge off the right bound, left negative (complex only)")))
 
   ;; ---------------- Cloud ----------------
   ;;  Two bulges, joined over the top by a reverse arc.  The LEFT one
@@ -821,8 +822,13 @@
         sub (lzf:pickval c "sub"))
   (if (assoc sub (cadr r))
       (setq out (append out (cdr (assoc sub (cadr r))))))
-  ;; a hump off centre is a Center pool's question and a complex run's
-  (if (and (= (cadr c) "Center") (= (lzf:pickval c "detail") "Complex"))
+  ;; placing the third bulge along X is a complex run's question, and
+  ;; it belongs to the two shapes that have a third bulge to place: the
+  ;; hump off centre on a Center pool, the corner bulge off the right
+  ;; bound on a TopRight one.  Same slot, same signed number, so the
+  ;; two sheets carry the same box under their own wording
+  (if (and (member (cadr c) '("Center" "TopRight"))
+           (= (lzf:pickval c "detail") "Complex"))
       (setq out (cons "off" out)))
   out)
 
