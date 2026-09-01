@@ -27,7 +27,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082726 REV07")
+(setq tut:*version* "090126 REV08")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -227,7 +227,7 @@
 
 ;;; -------------------- the demo ---------------------------------------
 
-(defun tut:demo ( / base w l cut gap corners quad cen doff th arcs
+(defun tut:demo ( / base w l cut gap corners quad cen doff th
                     w2 l2 c2 org2 q2 ip2 sb2 desc n xs res nmin htys
                     k x ch rows stop)
   (setq base (getpoint "\nWhere shall the demo go <0,0>: ")
@@ -269,7 +269,7 @@
                   "corner; the treatment then cuts inward from there.  So"
                   "the cover is 140 x 110 even though the cut takes a"
                   "bite out of the top-right.")
-            '(lambda () (setq arcs (spa:drawrect quad corners)))))))
+            '(lambda () (spa:drawrect quad corners))))))
 
   (if (not stop)
       (setq stop
@@ -326,7 +326,7 @@
                   "A radius corner would get R12\" instead, read from"
                   "outside the arc.  Corner callouts never carry the"
                   "Cover Size note -- they are corners, not overalls.")
-            '(lambda () (spa:dimcorners quad corners arcs cen doff))))))
+            '(lambda () (spa:dimcorners quad corners cen doff))))))
 
   (if (not stop)
       (setq stop

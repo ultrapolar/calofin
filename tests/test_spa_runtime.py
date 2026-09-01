@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, LispError, Dot  # noqa: E402
+from lispvm import VM, Ent, LispError, Dot  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'spa', 'SPA.LSP')
@@ -245,6 +245,76 @@ def test_radius_corner_becomes_an_arc_segment():
     assert len(arcs) == 4, bs
     for b in arcs:
         assert abs(b - 0.41421356) < 1e-6, b
+
+
+def dimcalls(vm, name):
+    """Every logged `command` call for one dimension verb."""
+    return [c for c in vm.commands if c and c[0] == name]
+
+
+def selected(call):
+    """The entity a (list ename point) selection pair names, or None."""
+    for x in call[1:]:
+        if isinstance(x, list) and len(x) == 2 and isinstance(x[0], Ent):
+            return x[0]
+    return None
+
+
+def dxf0(vm, e):
+    for p in vm.entdata.get(e, []):
+        if isinstance(p, Dot) and p.a == 0:
+            return p.b
+        if isinstance(p, list) and p and p[0] == 0:
+            return p[1]
+    return None
+
+
+def test_radius_callout_is_handed_an_arc():
+    """DIMRADIUS answers "Select arc or circle:", and it means it.
+
+    The outline is one closed polyline and a radius corner is a bulge
+    in it, so there is no arc entity to point at.  Handing DIMRADIUS
+    the parent polyline's ename is rejected at the AutoCAD command
+    line -- "Object selected is not a circle or arc" -- and because the
+    Typ. form feeds four arguments, the three that follow are eaten as
+    three more bad selections and the command is left stranded.  The
+    routine builds the arc it asks for instead, and takes it away
+    again, so what is selected must be an ARC and no arc may survive
+    the run.
+    """
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              'Radius', 8.0, None, None, None, None, None, None,
+              'No', 'No'],
+             'radius/callout-selection')
+    calls = dimcalls(vm, '_.DIMRADIUS')
+    assert len(calls) == 1, calls          # four identical corners: one Typ.
+    for c in calls:
+        e = selected(c)
+        assert e is not None, "no (ename point) selection pair: %r" % (c,)
+        assert dxf0(vm, e) == 'ARC', (
+            "DIMRADIUS was handed a %s, which AutoCAD refuses to dimension"
+            % dxf0(vm, e))
+    assert not drawn(vm, 'ARC'), (
+        "the arc built to hang the dimension on was left in the drawing")
+
+
+def test_radius_callout_on_both_outlines():
+    """Radius corners AND a second outline -- the pairing no script in
+    the tree covered, and the one that fires the callout twice."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              'Radius', 8.0, None, None, None, None, None, None,
+              'Yes', 'Offset', 3.0,
+              'No'],
+             'radius/two-outlines')
+    calls = dimcalls(vm, '_.DIMRADIUS')
+    assert len(calls) == 2, calls          # one Typ. callout per outline
+    for c in calls:
+        assert dxf0(vm, selected(c)) == 'ARC', c
+    assert not drawn(vm, 'ARC'), "a temporary arc was left behind"
+    for layer in ('COVER', 'POOL'):
+        assert len(drawn(vm, 'LWPOLYLINE', layer)) == 1, layer
 
 
 def test_diagonal_corner_stays_straight():

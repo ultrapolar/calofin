@@ -9835,7 +9835,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV10")
+(setq spa:*version* "090126 REV11")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -10285,16 +10285,41 @@
 ;; Radius dimension read from OUTSIDE the arc: the arc is picked at its
 ;; far point and the dimension line dragged further out along the same
 ;; direction, so the leader comes in from outside.
-(defun spa:dimrad (ent tip outd doff sfx)
-  (if (and ent (entget ent)
-           (member (cdr (assoc 0 (entget ent))) '("ARC" "LWPOLYLINE")))
-      (if (and sfx (/= sfx ""))
-          (command "_.DIMRADIUS" (list ent (spa:wp tip))
-                   "_T" (strcat "<>" sfx)
-                   (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff)))))
-          (command "_.DIMRADIUS" (list ent (spa:wp tip))
-                   (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff))))))
-      (princ "\n(radius dim skipped -- that corner came out flat, no arc)")))
+;;
+;; The outline is ONE closed polyline and a radius corner is a bulge in
+;; it, not an entity of its own -- and DIMRADIUS will not take a bulge
+;; handed to it as an entity name, however exactly the pick point sits
+;; on it.  It answers "Object selected is not a circle or arc", and
+;; since the Typ. form feeds four arguments the three that follow are
+;; eaten as three more bad selections and the command is left stranded
+;; at a prompt the user never asked for.  So the arc it asks for is
+;; built from the corner's own three points, dimensioned, and taken
+;; away again: the drawing keeps its one bounded outline and gains a
+;; real radius dimension.  ce is the corner's (prev-end next-end mid).
+(defun spa:dimrad (ce outd doff sfx / tip loc was e od)
+  (setq tip (caddr ce)
+        loc (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff))))
+        was (entlast))
+  (spa:arc3p (car ce) tip (cadr ce) (getvar "CLAYER") nil)
+  (setq e (entlast))
+  (if (eq e was) (setq e nil))          ; nothing was made at all
+  (cond
+    ((and e (= "ARC" (cdr (assoc 0 (entget e)))))
+     ;; born non-associative, so erasing the arc out from under the
+     ;; dimension cannot leave it pointing at something that is gone
+     (setq od (getvar "DIMASSOC"))
+     (setvar "DIMASSOC" 0)
+     (if (and sfx (/= sfx ""))
+         (command "_.DIMRADIUS" (list e (spa:wp tip))
+                  "_T" (strcat "<>" sfx) loc)
+         (command "_.DIMRADIUS" (list e (spa:wp tip)) loc))
+     (setvar "DIMASSOC" od)
+     (entdel e))
+    (t
+     ;; three collinear points: spa:arc3p drew a line instead, so take
+     ;; that away too.  The message is now literally true.
+     (if e (entdel e))
+     (princ "\n(radius dim skipped -- that corner came out flat, no arc)"))))
 
 ;;; -------------------- user input -------------------------------------
 ;;;
@@ -11591,12 +11616,11 @@
 ;; corner is tan 22.5 = 0.4142); a diagonal becomes a straight segment
 ;; between its two ends; a 90 corner is a single vertex.
 ;;
-;; Returns a per-corner list holding the polyline's entity name at each
-;; RADIUS corner and nil elsewhere, so the corner callouts still have
-;; something to hang a radius dimension on -- DIMRADIUS takes a polyline
-;; arc segment picked at a point on it just as it takes a bare arc.
-(defun spa:drawrect (q corners / ce i j tyi verts pl p pp pn uprev unext
-                                 dp ang arcs)
+;; Returns the polyline.  The corner callouts do NOT dimension it: a
+;; bulge handed to DIMRADIUS as an entity name is refused, so spa:dimrad
+;; builds an arc of its own to measure -- see there.
+(defun spa:drawrect (q corners / ce i j tyi verts p pp pn uprev unext
+                                 dp ang)
   (setq ce (spa:allends q corners) verts nil)
   (foreach i (list 0 1 2 3)
     (setq tyi (car (nth i corners)))
@@ -11621,10 +11645,7 @@
              verts (cons (cons (cadr (nth i ce)) 0.0)
                          (cons (cons (car (nth i ce)) (spa:bulge (- pi ang)))
                                verts))))))
-  (setq pl (spa:perpoly (reverse verts)) arcs nil)
-  (foreach i (list 0 1 2 3)
-    (setq arcs (cons (if (= (car (nth i corners)) "Radius") pl nil) arcs)))
-  (reverse arcs))
+  (spa:perpoly (reverse verts)))
 
 ;; How far the deepest corner treatment sets back along its walls -- an
 ;; inside dimension has to stand clear of that to land on a straight run.
@@ -11689,8 +11710,8 @@
 ;;
 ;; None of these ever carry the Water's Edge / Cover Size note: they are
 ;; corners, not overalls.  Assumes CLAYER is already DIMENSION.
-(defun spa:dimcorner1 (quad corners arcs cen doff i sfx / cc ce p pp pn ty
-                                                          outd am fm)
+(defun spa:dimcorner1 (quad corners cen doff i sfx / cc ce p pp pn ty
+                                                     outd fm)
   (setq p (nth i quad)
         pp (nth (rem (+ i 3) 4) quad)
         pn (nth (rem (+ i 1) 4) quad)
@@ -11700,8 +11721,7 @@
         outd (spa:unit (cal:v- p cen)))
   (cond
     ((= ty "Radius")
-     (setq am (caddr ce))
-     (spa:dimrad (nth i arcs) am outd doff sfx))
+     (spa:dimrad ce outd doff sfx))
     ((= ty "Cut")
      (setq fm (cal:mid (car ce) (cadr ce)))
      (spa:dimalg (car ce) (cadr ce)
@@ -11712,7 +11732,7 @@
      (spa:dim90 quad i cen doff (strcat "90%%d" sfx))))
   (princ))
 
-(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist i)
+(defun spa:dimcorners (quad corners cen doff / allsame sfx ilist i)
   ;; STANDARDS section 2: four identical corners get ONE callout with a
   ;; Typ. suffix at the reference corner -- all-Square included, which
   ;; used to get no note at all.  Mixed corners are called out one by
@@ -11722,7 +11742,7 @@
         sfx (if allsame " Typ." "")
         ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
   (foreach i ilist
-    (spa:dimcorner1 quad corners arcs cen doff i sfx))
+    (spa:dimcorner1 quad corners cen doff i sfx))
   (princ))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
@@ -11872,9 +11892,9 @@
   pv)
 
 ;; Full guided flow for a rectangular spa.
-(defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
+(defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut quad
                         a b c d cen doff th allsame i j tmp lbls cc back
-                        rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
+                        rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2
                         xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
@@ -11968,7 +11988,7 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
-  (setq arcs (spa:drawrect quad corners))
+  (spa:drawrect quad corners)
 
   ;; ------------------------------------------- and, if wanted, the other
   ;; Resolved BEFORE anything is dimensioned, because every dimension
@@ -12024,7 +12044,7 @@
   (if meth
       (progn
         (spa:setmode (spa:othermode))
-        (setq arcs2 (spa:drawrect q2 c2))
+        (spa:drawrect q2 c2)
         (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions
@@ -12057,7 +12077,7 @@
                         (spa:outoff (nth i quad) (nth j quad) cen spa:*flatoff*)
                         nil))))
   ;; corner callouts (no note -- these are corners, not overalls)
-  (spa:dimcorners quad corners arcs cen doff)
+  (spa:dimcorners quad corners cen doff)
 
   ;; the second outline, in ITS dimension style, plus one Typ. corner
   ;; callout at the top-left when its corners all match
@@ -12074,7 +12094,7 @@
             (spa:dimoveralls t (nth 3 q2) (nth 2 q2) (nth 0 q2) (nth 3 q2)
                              xlo yhi))
         (if (spa:samecorners c2)
-            (spa:dimcorner1 q2 c2 arcs2 cen2 doff 3 " Typ."))
+            (spa:dimcorner1 q2 c2 cen2 doff 3 " Typ."))
         (spa:setmode mode1)
         ;; and how far the cover laps the water's edge, at the bottom
         (spa:dimstyle spa:*ds-cover* th 1.0)
@@ -12796,7 +12816,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "082726 REV07")
+(setq tut:*version* "090126 REV08")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -12996,7 +13016,7 @@
 
 ;;; -------------------- the demo ---------------------------------------
 
-(defun tut:demo ( / base w l cut gap corners quad cen doff th arcs
+(defun tut:demo ( / base w l cut gap corners quad cen doff th
                     w2 l2 c2 org2 q2 ip2 sb2 desc n xs res nmin htys
                     k x ch rows stop)
   (setq base (getpoint "\nWhere shall the demo go <0,0>: ")
@@ -13038,7 +13058,7 @@
                   "corner; the treatment then cuts inward from there.  So"
                   "the cover is 140 x 110 even though the cut takes a"
                   "bite out of the top-right.")
-            '(lambda () (setq arcs (spa:drawrect quad corners)))))))
+            '(lambda () (spa:drawrect quad corners))))))
 
   (if (not stop)
       (setq stop
@@ -13095,7 +13115,7 @@
                   "A radius corner would get R12\" instead, read from"
                   "outside the arc.  Corner callouts never carry the"
                   "Cover Size note -- they are corners, not overalls.")
-            '(lambda () (spa:dimcorners quad corners arcs cen doff))))))
+            '(lambda () (spa:dimcorners quad corners cen doff))))))
 
   (if (not stop)
       (setq stop
