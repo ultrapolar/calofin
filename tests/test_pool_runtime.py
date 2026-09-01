@@ -143,6 +143,54 @@ assert _sugg("K") == 80.0, vm.prompts
 assert reportrow(vm, "HOP K")[1] == "80.00"
 print("   L asked cold; K offered the remainder (80), not M (40)")
 
+print("== R1d. the WIDTH is offered half the length, Enter takes it ==")
+# A pool runs about 2:1, so once the side is in the end question is
+# offered half of it.  36' across -> 18' up, one Enter.
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [432.0,                  # side pair: 36'
+          None,                   # end pair: Enter takes the offered 18'
+          "Square", "No"],        # square corners, no bottom
+         "R1d")
+_end = [p for p, a in vm.prompts if "End length (left & right)" in p]
+assert _end and " <216" in _end[0], _end
+# the offer does NOT loosen the question: a width is still required,
+# so NA is not on the table the way it is on a suggested NA letter
+assert "NA" not in _end[0], _end[0]
+for _lbl, _want in (("TOP SIDE (D-C)", "432.00"), ("LEFT END (A-D)", "216.00")):
+    _row = reportrow(vm, _lbl)
+    assert _row[1] == _want and _row[2] == _want, (_lbl, _row)
+print("   36' side offered an 18' end; one Enter drew a 2:1 pool")
+
+print("== R1e. typing over the offer wins; out of square both ends get it ==")
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [432.0, 430.0,           # TOP, BOTTOM -> half the mean is 215.5
+          240.0,                  # LEFT typed over the offer
+          None,                   # RIGHT: Enter takes the offer
+          "Square", None, None, None,   # corners A..D, Enter reusing A
+          "NA", "NA",             # both cross dims not taped
+          "No"],                  # no bottom
+         "R1e")
+_le = [p for p, a in vm.prompts if "End length LEFT" in p]
+_ri = [p for p, a in vm.prompts if "End length RIGHT" in p]
+assert _le and " <215.5" in _le[0], _le
+assert _ri and " <215.5" in _ri[0], _ri
+assert reportrow(vm, "LEFT END (A-D)")[1] == "240.00"
+assert reportrow(vm, "RIGHT END (B-C)")[1] == "215.50"
+print("   both ends offered half the mean side; a typed answer still wins")
+
+print("== R1f. an OVAL end is not offered half the side ==")
+# an oval spends length on the two end bulges, so half the straight
+# side is not half the pool -- the end is asked cold there
+vm = run(["Insquare", "Oval"] + BASE +
+         [360.0, 180.0,           # side pair, end pair (asked, not offered)
+          480.0, 60.0,            # total length, end radius
+          "No"],                  # no bottom
+         "R1f")
+assert not any("End length (left & right)" in p and " <" in p
+               for p, a in vm.prompts), \
+    [p for p, a in vm.prompts if "End length" in p]
+print("   the oval still asks its end cold")
+
 print("== R2. rectangle, out-of-square, Cut corners, Ends mode, wedge ==")
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,        # TOP BOTTOM LEFT RIGHT

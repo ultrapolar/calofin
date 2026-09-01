@@ -109,6 +109,29 @@ shows `N/A` for its target/delta (the as-drawn value is still listed).
 An **oval's side lengths** take `NA` as well — the overall and the
 width give them back (see *Oval ends*).
 
+### A rectangle's width is offered half its length
+
+A pool runs about **2:1**, so on a **rectangle** the end question —
+the pool's *width* — is offered **half the side** rather than asked
+cold. Answer `36'` to the side and the next prompt reads
+
+```
+End length (left & right) <18'-0">:
+```
+
+**Enter** takes the 18', a typed number overrides it, and `Back` still
+walks out of it. Out of square both ends are offered half the **mean**
+of the two sides, so a `36'` / `35'-10"` pair offers `17'-11"`.
+
+It is a shape hint, not a measurement: the report lists what was
+entered against what was drawn either way, and the offer only appears
+once a side is actually in. Unlike the interior letters below, the
+width is still **required** — the offer opens `Enter`, it does not put
+`NA` on the table, because the pool cannot be drawn without a width.
+
+**Not on an oval.** An oval spends length on its two end bulges, so
+half the straight side is not half the pool; its end is asked cold.
+
 ### Corner treatments (Square / Radius / Cut / NotGiven)
 
 Every corner question in POOL is the same one, in the vocabulary
