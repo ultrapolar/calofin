@@ -8403,7 +8403,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "090126 REV05")
+(setq pooldemo:*version* "090126 REV06")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -8683,11 +8683,16 @@
                    (list 440.0 240.0) (list 0.0 240.0)))
   (pool:line (list 0.0 0.0) (list 390.0 0.0) "POOL")
   (pool:line (list 0.0 240.0) (list 390.0 240.0) "POOL")
+  ;; the two extra points are the END-WALL ends (POOL REV20: a square
+  ;; end's corners can be treated, and the wall then stops short of
+  ;; them); neither of these ends is square, so they are the corners
   (setq lend (pool:muttend (nth 0 quad) (nth 3 quad)
                            (list 0.0 0.0) (list 0.0 240.0)
+                           (nth 0 quad) (nth 3 quad)
                            (list -1.0 0.0) "ROman" 40.0 160.0 40.0 "POOL")
         rend (pool:muttend (nth 1 quad) (nth 2 quad)
                            (list 390.0 0.0) (list 390.0 240.0)
+                           (nth 1 quad) (nth 2 quad)
                            (list 1.0 0.0) "Grecian" 40.0 160.0 0.0 "POOL")
         tipl (car lend) tipr (car rend))
   (setvar "CLAYER" "DIMENSION")
