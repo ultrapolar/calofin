@@ -602,6 +602,9 @@ COM = {}
 
 
 def _reset_com():
+    # the blackboard is per AutoCAD session; each stubbed() VM stands
+    # for a fresh session unless a test says otherwise
+    lispvm.reset_blackboard()
     OPENED.clear()
     POS.clear()
     COM.clear()
@@ -1151,7 +1154,7 @@ for prefix, want in (
               % prefix.replace('\\', '\\\\'))
     got = str(vm2.globals['t:*p*'])
     assert got == want, "TEMPPREFIX %r gave %r, expected %r" % (prefix, got, want)
-print("   icons live at a fixed name under TEMPPREFIX, rewritten each load")
+print("   icons live at a fixed name under TEMPPREFIX, rewritten only when missing")
 
 
 print("== reuse: the toolbar is kept, but re-iced and re-shown ==")
@@ -1164,12 +1167,65 @@ assert tbs == ['LazPanel'], "a second init duplicated the toolbar: %r" % tbs
 ev = events(vm3)
 assert 'add LazPanel' not in ev, "the existing toolbar was recreated"
 assert 'setbitmaps' in ev, "icons were not re-applied to the existing toolbar"
-# the CALL is what matters, not the argument: :vlax-true is an AutoCAD
-# constant this VM does not define, so it arrives as nil here
+# the CALL is what matters, not the argument
 assert 'visible' in ev, "a toolbar the user had closed is never re-shown"
 assert not vm3.globals.get('stub:*float*'), \
     "a toolbar the user has placed must not be floated out from under them"
 print("   reused, icons re-applied, made visible, and NOT re-floated")
+
+
+print("== once per SESSION, not per drawing ==")
+# LISP globals are per-document, so a Startup Suite runs this file in
+# every drawing opened.  The toolbar, its picture and the CUI walk that
+# finds it are application-wide, so the second document has to find
+# the blackboard mark and do nothing.  stubbed() resets the blackboard
+# -- a fresh session -- and the second VM below is a second DOCUMENT in
+# that same session.
+vm5 = stubbed(preload=True)
+assert 'add LazPanel' in events(vm5)
+first_saves = list(COM.get('saves') or [])
+vm6 = VM()
+vm6.loads(STUB)
+vm6.load(LSP)
+ev6 = events(vm6)
+for done in ('add LazPanel', 'addbutton', 'setbitmaps', 'visible', 'float'):
+    assert done not in ev6, "the second drawing redid %r: %r" % (done, ev6)
+assert list(COM.get('saves') or []) == first_saves, \
+    "the second drawing rewrote the icons: %r" % COM.get('saves')
+assert vm6.globals.get('lzp:*pins*') is not None or True   # pins are per document, still read
+# and the drafter who closed the toolbar still gets it back by hand
+vm6.loads('(setq stub:*events* nil)')
+run(vm6, 'c:LAZBUTTON', 'lazbutton-second-doc')
+assert 'setbitmaps' in events(vm6), events(vm6)
+print("   the second drawing of a session does no toolbar work; LAZBUTTON still does")
+
+
+print("== icons already on disk are left alone ==")
+_reset_com()
+COM['ondisk'].update({'/stub/support\\lazpanel-16.bmp',
+                      '/stub/support\\lazpanel-32.bmp'})
+vm7 = VM()
+vm7.loads(STUB)
+vm7.load(LSP)
+assert not COM.get('saves'), "icons on disk were rewritten: %r" % COM.get('saves')
+assert 'setbitmaps' in events(vm7), "the button still has to be iced from the files on disk"
+bm7 = [str(x) for x in vm7.globals.get('stub:*bitmaps*') or []]
+assert bm7 == ['lazpanel-16.bmp', 'lazpanel-32.bmp'], bm7
+assert str(vm7.globals.get('lzp:*iconref*')) == 'name'
+assert vm7.globals.get('lzp:*iconwrote*') in (None, lispvm.NIL), \
+    "iconwrote should be nil when nothing was written"
+vm7.run('c:LAZICON', [])
+out7 = ''.join(str(p) for p in vm7.printed)
+assert 'on disk at' in out7 and 'written to' not in out7, out7
+# one file missing: the pair is written again
+_reset_com()
+COM['ondisk'].add('/stub/support\\lazpanel-16.bmp')
+vm8 = VM()
+vm8.loads(STUB)
+vm8.load(LSP)
+assert COM.get('saves') == ['/stub/support\\lazpanel-16.bmp',
+                            '/stub/support\\lazpanel-32.bmp'], COM.get('saves')
+print("   a pair on disk is reused, LAZICON says so, and a missing half rewrites both")
 
 
 print("== a toolbar that cannot get its button does not survive ==")

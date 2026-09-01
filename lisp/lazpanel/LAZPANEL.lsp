@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.2")
+(setq *lazpanel-version* "v3.3")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -459,6 +459,8 @@
 (setq lzp:*iconstep* nil)         ; the COM call the icon write died on
 (setq lzp:*msxmlwhy* nil)         ; what each MSXML ProgID said, newest first
 (setq lzp:*iconroute* nil)        ; which route actually wrote the file
+(setq lzp:*iconwrote* nil)        ; T when the last lzp:write-bmps wrote,
+                                  ; nil when both files were already there
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
@@ -1396,16 +1398,28 @@
       (progn
         (setq s (lzp:icon-file dir "16")
               l (lzp:icon-file dir "32"))
-        (if (and (lzp:bmp-write s 16 lzp:*icon16*)
-                 (lzp:bmp-write l 32 lzp:*icon32*))
-            (progn (setq lzp:*icondir* dir)
-                   (list s l))))))
+        ;; Both already on disk from an earlier load: nothing to write.
+        ;; The picture never changes, and writing it again on every
+        ;; drawing open (a Startup Suite runs this file per document)
+        ;; put two COM round trips and two file writes -- into a
+        ;; shared network support folder, on some sites -- behind every
+        ;; OPEN.  A missing or half-written pair is still rewritten.
+        (cond
+          ((and (findfile s) (findfile l))
+           (setq lzp:*icondir* dir)
+           (list s l))
+          ((and (lzp:bmp-write s 16 lzp:*icon16*)
+                (lzp:bmp-write l 32 lzp:*icon32*))
+           (setq lzp:*icondir* dir
+                 lzp:*iconwrote* t)
+           (list s l))))))
 
 ;; What to hand SetBitmaps: bare names when the files sit on the support
 ;; path, full temp paths as the fallback.
 (defun lzp:write-bmps ( / d)
   (setq lzp:*icondir* nil
-        lzp:*iconref* nil)
+        lzp:*iconref* nil
+        lzp:*iconwrote* nil)
   (cond
     ((and (setq d (lzp:support-dir)) (lzp:try-icons d))
      (setq lzp:*iconref* "name")
@@ -1716,7 +1730,7 @@
   (setq paths (lzp:write-bmps))
   (cond
     (paths
-     (princ (strcat "\n  written to : "
+     (princ (strcat (if lzp:*iconwrote* "\n  written to : " "\n  on disk at : ")
                     (if lzp:*icondir* lzp:*icondir* "?")))
      (princ (strcat "\n  route      : "
                     (if lzp:*iconroute* lzp:*iconroute* "?")
@@ -1777,10 +1791,25 @@
                  (itoa (length lzp:*pins*)) " pinned."))
   (princ))
 
+;; Once per AutoCAD SESSION, not once per drawing.  LISP globals are
+;; per-document, so a Startup Suite runs this file again in every
+;; drawing opened -- and the toolbar, its picture and the CUI walk that
+;; finds it are all application-wide, so the second and every later
+;; document had nothing to do but do it anyway.  The blackboard
+;; (vl-bb-*) is the one namespace every document shares, so it carries
+;; the "done" mark; LAZBUTTON still calls lzp:button-init unconditionally
+;; for the drafter who closed the toolbar and wants it back.
+(defun lzp:first-load-p ()
+  (if (vl-bb-ref 'lzp:*button-done*)
+      nil
+      (progn (vl-bb-set 'lzp:*button-done* t) t)))
+
 ;; Put the button up as the file loads, quietly: in a session where
-;; the COM menu API is missing the panel still loads and LAZPANEL
-;; still runs -- the button is a convenience, never a gate.
-(vl-catch-all-apply 'lzp:button-init nil)
+;; the COM menu API (or the blackboard) is missing the panel still
+;; loads and LAZPANEL still runs -- the button is a convenience, never
+;; a gate.
+(vl-catch-all-apply
+  '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
 (princ (strcat "\nLAZPANEL " *lazpanel-version*

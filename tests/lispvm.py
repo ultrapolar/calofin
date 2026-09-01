@@ -2218,6 +2218,29 @@ def _vla_getboundingbox(vm, a):
     return NIL
 
 
+# The blackboard: vl-bb-ref / vl-bb-set are the one namespace every
+# document of an AutoCAD session shares (LISP globals are per document).
+# Module-level on purpose, so it survives a fresh VM() the way it
+# survives a second drawing being opened -- a test that stands for a
+# NEW session calls reset_blackboard() first.
+BLACKBOARD = {}
+
+
+def reset_blackboard():
+    BLACKBOARD.clear()
+
+
+@bi('vl-bb-ref')
+def _vl_bb_ref(vm, a):
+    return BLACKBOARD.get(a[0], NIL)
+
+
+@bi('vl-bb-set')
+def _vl_bb_set(vm, a):
+    BLACKBOARD[a[0]] = a[1]
+    return a[1]
+
+
 # The document, its undo marks, the layer collection and the entity
 # properties the cleanup tools drive through ActiveX.  A vla-object is
 # still the ename (or the layer's table record), so a property put

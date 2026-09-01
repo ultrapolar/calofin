@@ -288,11 +288,14 @@ Two details worth knowing, because both were wrong first time round:
   output could produce. COM is not a new dependency: the toolbar the
   icon goes on is built through the same ActiveX API, so a session
   that cannot reach COM has no button to decorate.
-- **The icon files live at a fixed name under `TEMPPREFIX` and are
-  rewritten on every load**, because `SetBitmaps` stores the *path*,
-  not the picture, and AutoCAD re-reads it whenever the button
-  redraws. A toolbar that survives into a later session would
-  otherwise be pointing at a swept temp file.
+- **The icon files live at a fixed name** (first support-path folder,
+  else `TEMPPREFIX`) **and are rewritten only when one is missing**,
+  because `SetBitmaps` stores the *path*, not the picture, and AutoCAD
+  re-reads it whenever the button redraws. A toolbar that survives into
+  a later session would otherwise be pointing at a swept temp file;
+  a pair already on disk is left alone, so a Startup Suite load does
+  not put two file writes behind every OPEN. `LAZICON` says which case
+  it found.
 
 The point of the design is **zero install**: the dialog is plain DCL,
 and LAZPANEL.lsp writes its own `.dcl` into the system temp folder each
@@ -336,10 +339,15 @@ re-summon the button, or `LAZPIN` to choose the pinned tools.
   for that reopen.
 - A toolbar created through the ActiveX API may or may not survive an
   AutoCAD restart, depending on how the main CUI is saved. That is why
-  every load re-creates it when it is missing, and re-ices and re-shows
-  it when it is not: sessions that load LAZPANEL.lsp or LAZPASS.lsp
-  always end up with a visible button carrying a current icon, and one
-  that somehow lost it can type `LAZBUTTON`.
+  the first load of a session re-creates it when it is missing, and
+  re-ices and re-shows it when it is not: sessions that load
+  LAZPANEL.lsp or LAZPASS.lsp always end up with a visible button
+  carrying a current icon, and one that somehow lost it can type
+  `LAZBUTTON`. It is the first load of the *session*, not of every
+  drawing: LISP globals are per-document, so a Startup Suite runs the
+  file again in each drawing opened, and the button work is marked
+  done on the blackboard (`vl-bb-*`, the one namespace every document
+  shares) so the later documents skip it.
 - If the button cannot be added to a freshly created toolbar, that
   toolbar is deleted again rather than left behind. An empty "LazPanel"
   would be found by name for ever afterwards, and `LAZBUTTON` would
