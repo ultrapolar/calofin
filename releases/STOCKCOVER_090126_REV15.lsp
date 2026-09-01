@@ -48,7 +48,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.4") ; printed on load and at command
+(setq *stockcover-version* "v1.5") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -451,6 +451,12 @@
                          (setq undone nil)))))))))))))
 
   (stock:restore)
+  (princ))
+
+;; Which build is loaded - the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:STOCKCOVERVER ()
+  (princ (strcat "\nSTOCKCOVER " *stockcover-version*))
   (princ))
 
 (princ (strcat "\nSTOCKCOVER " *stockcover-version*
