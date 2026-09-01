@@ -1685,6 +1685,32 @@ assert snapshot(ov3) == a, \
     "OFF travelled on a Simple run and moved the hump"
 print("   and a box the run never asks about is withheld, not sent")
 
+# the same box on the TOP-RIGHT sheet, where the third bulge to place is
+# the corner one and the shift brings it in off the right-hand bound,
+# leaving it held by the top wall alone
+TR_TYPE = [('tab_OATopRight', ''), ('detail', '2'), ('off', '-60'),
+           ('x', '443'), ('y', '344'), ('rl', '108'), ('rt', '96'),
+           ('rr', '108'), ('ftl', '84'), ('ftr', '90'), ('fbc', '120')]
+TR_TYPED = [443.0, 344.0, 108.0, 96.0, 108.0, -60.0, 84.0, 90.0, 120.0]
+ov6 = stubbed(with_pool=True, with_oasis=True)
+ov6.loads("(setq stub:*rcs* '(4 1))")
+ov6.loads('(setq stub:*type* \'(%s))'
+          % ' '.join('("%s" "%s")' % (k, v) for k, v in TR_TYPE))
+ov6.run('c:LAZFORM', [(0.0, 0.0, 0.0), None])
+tr = snapshot(ov6)
+assert tr, "the top-right sheet drew nothing"
+assert len(ov6.prompts) == 2, (
+    "the placement was asked for at the command line even though the sheet "
+    "answered it: %r" % [pr for pr, _ in ov6.prompts])
+ov7 = stubbed(with_pool=True, with_oasis=True)
+ov7.run('c:OASIS', ['TopRight', 'Complex', (0.0, 0.0, 0.0)] + TR_TYPED
+        + [None])
+assert tr == snapshot(ov7), (
+    "the placed corner bulge did not come off the sheet: %d entities from "
+    "the chart, %d from the prompts" % (len(tr), len(snapshot(ov7))))
+print("   and a corner bulge 60 in off the right bound, off the top-right"
+      " sheet, %d entities" % len(tr))
+
 # the routing itself: a POOL page reaches POOL and an oasis page OASIS,
 # and neither can reach the other
 ov4 = stubbed(with_pool=True, with_oasis=True)
