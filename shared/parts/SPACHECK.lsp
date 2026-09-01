@@ -109,7 +109,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.8")
+(setq *spacheck-version* "v1.9")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -168,6 +168,12 @@
 ;; Marking and report.
 (setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
 (setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
+;; The demo opens an undo group and switches the dimension style, but
+;; the handler that must undo both lives in c:TUTORIALSPACHECK, a
+;; different defun that cannot see spachk:demo's locals -- so both bits
+;; of state are module globals, like the ent list above.
+(setq spachk:*undo-open*   nil)      ; the demo's undo group, if open
+(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
 (setq spachk:*grey-color*  8)
 (setq spachk:*flag-color*  1)        ; red: what you confirmed is wrong
 (setq spachk:*report-layer* "SPACHECK-REPORT")
@@ -1818,9 +1824,29 @@
 (defun spachk:demo-dim (p1 p2 at note style / e)
   (spachk:dimstyle-set style)
   (setvar "CLAYER" spachk:*lay-dim*)
-  (command "_.DIMALIGNED" p1 p2 "_T" (strcat "<>" note) at)
+  ;; _non on every point: the whole demo turns on a dim that DISAGREES
+  ;; with the geometry under it, and a live osnap would quietly pull it
+  ;; onto the true corner and plant nothing at all
+  (command "_.DIMALIGNED" "_non" p1 "_non" p2 "_T" (strcat "<>" note)
+           "_non" at)
   (if (setq e (entlast)) (spachk:demo-ent e))
   e)
+
+;; The current dimension style is read-only to setvar, so it has its
+;; own snapshot pair and restores through a command.  The demo SAVES a
+;; missing style into the drawing (below), so leaving the style
+;; switched would hand the user a sheet dimensioned in a style the
+;; tutorial invented.  (From cal:dimstysave / cal:dimstyrestore.)
+(defun spachk:dimstysave ()
+  (if (not spachk:*odstyle*) (setq spachk:*odstyle* (getvar "DIMSTYLE"))))
+
+(defun spachk:dimstyrestore ()
+  ;; called from *error* too, where a bare (command ...) can itself
+  ;; fail -- so command-s under vl-catch-all-apply (STANDARDS 5)
+  (if (and spachk:*odstyle* (tblsearch "DIMSTYLE" spachk:*odstyle*))
+    (vl-catch-all-apply 'command-s
+      (list "_.-DIMSTYLE" "_Restore" spachk:*odstyle*)))
+  (setq spachk:*odstyle* nil))
 
 ;; Make a dimension style current.  A drawing that has never held a spa
 ;; sheet has neither spa style in it, and a demo that then dimensioned
@@ -1894,7 +1920,13 @@
     (princ "\nNo spot picked - demo skipped.")
     (progn
       (setq x (car base) y (cadr base))
-      (command "_.UNDO" "_Begin")
+      (spachk:dimstysave)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq spachk:*undo-open* T)))
       ;; the cover, and a water's edge 3 in from it
       (setq cov (spachk:demo-rect (list x y) 84.0 60.0 spachk:*lay-cover*)
             wat (spachk:demo-rect (list (+ x 3.0) (+ y 3.0))
@@ -1963,7 +1995,10 @@
               "This is the easiest one to get wrong, because a border"
               "copied from a liner sheet looks right until it plots."
               "SPACHECK names the factor it actually came out at."))
-      (command "_.UNDO" "_End")
+      (if spachk:*undo-open*
+        (progn (command "_.UNDO" "_End")
+               (setq spachk:*undo-open* nil)))
+      (spachk:dimstyrestore)
       (if (= "Yes" (cal:askkw "Run SPACHECKSCAN on it now"
                                  "Yes No" "Yes/No" "Yes" nil))
         (progn
@@ -1989,6 +2024,13 @@
 
 (defun c:TUTORIALSPACHECK ( / *error* oldecho oldlay ans l)
   (defun *error* (msg)
+    ;; the demo's undo group and dim style are the tutorial's to close:
+    ;; its pauses sit INSIDE the group, so an Esc at one used to leave
+    ;; it open and the user's next U swallowed their own work
+    (if spachk:*undo-open*
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq spachk:*undo-open* nil)))
+    (spachk:dimstyrestore)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if oldlay (setvar "CLAYER" oldlay))
     (if (and msg (not (wcmatch (strcase msg)
