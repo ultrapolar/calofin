@@ -68,10 +68,26 @@ TOOLS = {
         # while every other check still passes.
         'symbols': {'SPA-BACK': 'CAL-BACK'},
     },
+    # Like POOLDEMO: the tutorial defines no state helpers of its own,
+    # it drives SPA's cross-file.  Two of those (syssave/sysrestore)
+    # are swapped away in the SPA entry above, so without the same swap
+    # here the grouped tutorial calls a function the grouped build no
+    # longer defines -- and dies at its first statement.  It did:
+    # nothing ran c:TUTORIALSPA until tests/test_tutorialspa.py.
     'TUTORIALSPA': {
         'src': 'lisp/spa/TUTORIALSPA.LSP',
-        'swap': {},
+        'swap': {
+            'spa:syssave': 'cal:syssave',
+            'spa:sysrestore': 'cal:sysrestore',
+        },
         'drop_globals': [],
+        # the same one-into-two the SPA entry does, and for the same
+        # reason: the library keeps the dimension-style pair separate
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (spa:sysvars))',
+                              '(cal:dimstysave)'],
+            '(cal:sysrestore)': ['(cal:sysrestore)', '(cal:dimstyrestore)'],
+        },
     },
     # CDCREATE keeps its own dim-style pair -- it restores a style only
     # when the style really moved, which cal:dimstyrestore does not
