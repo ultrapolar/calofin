@@ -8,6 +8,50 @@ and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
 
+## Find
+
+The one page that does not need you to know where a tool was filed.
+Type any part of a name **or of its caption** and the list narrows to
+what matches; the top hit is selected as you type, so Enter runs it.
+
+```
+Find  [cover                      ]
++----------------------------------------------------+
+| POOLCOVER    -  Pool layout, no bottom             |
+| LAZFORMCOVER -  Chart to pool, no bottom           |
+| ABHDCOVER    -  Survey perimeter, no bottom        |
+| FITABHDCOVER -  Typed template fit, no bottom      |
+| STOCKCOVER   -  Stock cover placement  (not loaded)|
+| COVERCHECK   -  Cover review                       |
++----------------------------------------------------+
+8 of 67 match "cover"
+```
+
+Searching the captions is the point rather than a bonus. `cover` would
+have worked either way -- all eight of its hits carry the word in their
+names. `survey` is the case that matters: it finds `ABHD`, `ABHDCOVER`
+and `ABPCHECK`, and not one of those three says anything about a survey
+in its name. Half of knowing this toolset is knowing what the names stand
+for, and this is where you stop needing to.
+
+The needle is taken **literally**. `lzp:instr` is a written-out
+substring search rather than a call to `wcmatch`, because the text is
+whatever was typed: `wcmatch` would read `*`, `?`, `~`, `[`, `]`, `@`,
+`.` and `#` as pattern syntax, so a typed `*` would match the whole
+roster and a typed `.` would match none of it.
+
+A tool this session has not loaded is **listed** here, marked `(not
+loaded)`, and `Run` refuses it with that reason on the message line
+instead of launching. That is the opposite of the greyed button on
+every other page, and deliberately: a greyed button in a grid is a dead
+spot you can see, but a search that silently omits what you searched
+for reads as the tool not existing.
+
+Everything else on the page is the furniture every page carries -- the
+status line, the tab strip, the pinned row, `Close` -- so moving onto
+Find and off it does not feel like leaving the panel. The search text
+is remembered across the reopen, like the page and the position.
+
 **The job pages** are what you are actually doing this hour, and each
 is laid out in **columns that follow the work**: lay the shape out, tie
 the points, build the steps, dimension and check. A job is not a flat
@@ -107,17 +151,22 @@ The **Checking** category page still carries them, because that page
 answers what a tool *is* rather than what you are doing this hour.
 
 A **tab strip** across the top switches pages: two labelled boxed rows,
-`Job` (Pool / Cover / Spa / Rest) and `Or by category` (Layout / Points
-/ Dimensions / Checking) -- they are not eight equal things, and the
-labels say so. That is both what they mean and what keeps
-the strip narrow -- eight tabs on one row run about 94 character cells,
-and DCL will not scroll a dialog wider than the screen. Two rows put
-the widest at 54.
+`Find, or by job` (Find / Pool / Cover / Spa / Rest) and `Or by
+category` (Layout / Points / Dimensions / Checking) -- they are not
+nine equal things, and the labels say so. That is both what they mean
+and what keeps the strip narrow -- nine tabs on one row run about 104
+character cells, and DCL will not scroll a dialog wider than the
+screen. Two rows put the widest at 54.
 
 The pages ARE `lzp:*groups*` and the strip layout is `lzp:*rows*` --
 re-ordering the tools, re-grouping them or moving a tab to the other
 row is an edit to those two tables and nothing else, and the test
-asserts they name exactly the same groups so neither can drift. The
+asserts they name exactly the same pages so neither can drift.
+**Find is a page but not a group**: it has no column layout and no
+roster of its own, it searches the whole one, so it stays out of
+`lzp:*groups*` -- which is what `Rest` is computed against and what
+`lzp:commands` folds. `lzp:pages` flattens the strip and is what the
+page loop and the tab wiring both read. The
 status line counts tools rather than buttons (`lzp:commands` folds the
 repeats), so it still reports the whole 57 and not 128. The panel
 reopens where you left it rather than jumping back to the middle of the
@@ -295,6 +344,19 @@ re-summon the button, or `LAZPIN` to choose the pinned tools.
   toolbar is deleted again rather than left behind. An empty "LazPanel"
   would be found by name for ever afterwards, and `LAZBUTTON` would
   report success while putting nothing on screen.
+- **A double click in the list runs the tool** -- DCL reports why a
+  tile fired in `$reason`, and 4 is the double click a list box gives
+  on its own. Only 4 launches: a single click (reason 1) selects and
+  nothing more, because moving down the list with the mouse is how you
+  read it.
+- **The search box reports what you typed when the caret LEAVES it**,
+  or when you press Enter -- DCL gives an edit box no per-keystroke
+  callback, so the list narrows on Enter or Tab rather than as you
+  type. Enter is the flow the page is built around: DCL fires an edit
+  box's action *before* the default button's, so one press narrows the
+  list, selects the top hit and runs that, in that order -- which is
+  what makes Enter safe rather than a way to run the tool that happened
+  to be selected before.
 - The panel changes no system variables and draws nothing, so it takes
   no undo group; whatever it launches manages its own.
 - The availability probe is the same one the VB palette uses (evaluate

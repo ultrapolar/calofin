@@ -74839,7 +74839,14 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 ;;; Every headline calofin routine as a button, on tabbed pages of two
-;;; kinds.  Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
+;;; kinds -- and a FIND page in front of both, which is the one page
+;;; that does not need you to know where a tool was filed: type any part
+;;; of a name or of its caption and the list narrows to what matches,
+;;; Enter runs the top hit.  It searches the captions as well as the
+;;; names, so "survey" finds ABHD, whose name says nothing about
+;;; surveys.
+;;;
+;;; Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
 ;;; reach for while doing that job, in columns that follow the work:
 ;;; lay the shape out, tie the points, build the steps, dimension and
 ;;; check.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
@@ -74882,7 +74889,11 @@
 ;;; rather than left to fail -- the same availability probe the VB
 ;;; palette uses (read the name, evaluate it: an unbound C: symbol is
 ;;; nil).  The status line across the top says how many tools the
-;;; session has.
+;;; session has.  On the Find page an unloaded tool is LISTED instead,
+;;; with "(not loaded)" against it and a refusal from Run: a greyed
+;;; button in a grid is a dead spot you can see, but a search that
+;;; silently omits what you searched for reads as the tool not
+;;; existing.
 ;;;
 ;;; DCL dialogs are modal, so the panel cannot stay open while a tool
 ;;; runs the way a docked palette can -- but it no longer has to be
@@ -74905,7 +74916,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.1")
+(setq *lazpanel-version* "v3.2")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -75250,15 +75261,22 @@
     )))
 
 ;; How the tab strip is laid out: one DCL row per entry, in this order.
-;; The jobs sit on one line and the categories on the next, which is
-;; both what they mean and what keeps the strip narrow -- eight tabs on
-;; a single row run about 94 character cells, and DCL will not scroll a
-;; dialog that is wider than the screen.  This is presentation only; the
-;; pages themselves are still lzp:*groups*.  The test asserts the two
-;; tables name exactly the same groups, so neither can drift.
+;; Find and the jobs sit on one line and the categories on the next,
+;; which is both what they mean and what keeps the strip narrow -- nine
+;; tabs on a single row run about 104 character cells, and DCL will not
+;; scroll a dialog that is wider than the screen.  This is presentation
+;; only; the pages themselves are still lzp:*groups*, plus the one
+;; search page below.  The test asserts the two tables name the same
+;; pages, so neither can drift.
 (setq lzp:*rows*
-  '(("Job"            "Pool" "Cover" "Spa" "Rest")
-    ("Or by category" "Layout" "Points" "Dimensions" "Checking")))
+  '(("Find, or by job" "Find" "Pool" "Cover" "Spa" "Rest")
+    ("Or by category"  "Layout" "Points" "Dimensions" "Checking")))
+
+;; The name of the search page.  It is a PAGE but not a GROUP: it has no
+;; column layout and no roster of its own, it searches the whole one, so
+;; it must stay out of lzp:*groups* -- which is what "Rest" is computed
+;; against, what lzp:commands folds, and what lzp:dcl-one lays out.
+(setq lzp:*findname* "Find")
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
@@ -75303,6 +75321,16 @@
           (setq out (cons c out))))))
   (reverse out))
 
+;; Every page the tab strip links to, in strip order: the eight groups
+;; and the Find page.  lzp:*rows* is the authority, so a page added to
+;; the strip is reachable and wired without a second list to keep.
+(defun lzp:pages ( / out r g)
+  (foreach r lzp:*rows*
+    (foreach g (cdr r) (setq out (cons g out))))
+  (reverse out))
+
+(defun lzp:findpage (g) (= g lzp:*findname*))
+
 ;; Is C:<name> defined in this session?  An unbound symbol evaluates to
 ;; nil in AutoLISP, so reading the name and evaluating it is enough --
 ;; and it stays correct for commands loaded after this file was.
@@ -75315,6 +75343,121 @@
     (if (lzp:has n)
       (setq out (cons n out))))
   (reverse out))
+
+;;; -------------------- the search --------------------------------------
+;;  THE PROBLEM THE FIND PAGE SOLVES.  Sixty-seven commands laid out as
+;;  a hundred and forty-eight buttons over eight pages is a lot to scan
+;;  when you half-remember a name -- and the job pages carry the command
+;;  name alone, so the caption that would tell you what a tool IS is on
+;;  a different page from the button you want to press.  Find is the one
+;;  page where both are in front of you: type any part of a name or of
+;;  its caption, and the list narrows to what matches.
+;;
+;;  It searches the CAPTIONS as well as the names on purpose.  "cover"
+;;  would have worked either way -- all eight of its hits carry the word
+;;  in their names.  "survey" is the case that matters: it finds ABHD,
+;;  ABHDCOVER and ABPCHECK, and not one of those three says anything
+;;  about a survey in its name.  Half of knowing this toolset is knowing
+;;  what the names stand for; the search is where you stop needing to.
+;;
+;;  A tool the session has not loaded is LISTED rather than hidden, with
+;;  "(not loaded)" against it, and Run says so instead of launching.
+;;  That is the opposite of the greyed button on the other pages and is
+;;  the right way round here: a greyed button in a grid is a dead spot,
+;;  but a search that silently omits what you searched for reads as the
+;;  tool not existing.
+
+(setq lzp:*filter* "")            ; the search text, kept across reopens
+(setq lzp:*hits* nil)             ; the commands listed now, in list order
+(setq lzp:*sel* nil)              ; the highlighted command
+
+;; Substring search, written out rather than handed to wcmatch: the
+;; needle is whatever the user typed, and wcmatch would read *, ?, ~,
+;; [, ], @, . and # in it as pattern syntax -- so typing a "*" would
+;; match everything and typing a "." would match nothing.
+(defun lzp:instr (hay ned / i n m)
+  (setq n (strlen hay) m (strlen ned) i 1)
+  (cond
+    ((= m 0) t)
+    ((> m n) nil)
+    (t
+     (while (and (<= i (1+ (- n m))) (/= (substr hay i m) ned))
+       (setq i (1+ i)))
+     (<= i (1+ (- n m))))))
+
+;; The roster narrowed to what matches, in roster order.  Name first,
+;; then caption, so the order the panel is laid out in survives.
+(defun lzp:matches (s / up out n)
+  (setq up (strcase s))
+  (foreach n (lzp:commands)
+    (if (or (lzp:instr n up)
+            (lzp:instr (strcase (lzp:caption n)) up))
+      (setq out (cons n out))))
+  (reverse out))
+
+;; One row of the list.  The name and its caption are joined the way the
+;; category pages join them, and NOT padded into columns: whether the
+;; dialog font is fixed-pitch is exactly what LAZASCII exists to ask, so
+;; nothing here may assume that spaces line up.
+(defun lzp:hitline (n have)
+  (strcat n "  -  " (lzp:caption n)
+          (if (member n have) "" "   (not loaded)")))
+
+;; The message line under the list: how much the search left, or why
+;; the last Run did nothing.
+(defun lzp:findmsg ( )
+  (cond
+    ((= lzp:*filter* "")
+     (strcat (itoa (length lzp:*hits*))
+             " tools - type any part of a name or a caption"))
+    ((not lzp:*hits*)
+     (strcat "no tool matches \"" lzp:*filter* "\""))
+    (t
+     (strcat (itoa (length lzp:*hits*)) " of "
+             (itoa (length (lzp:commands))) " match \""
+             lzp:*filter* "\""))))
+
+;; Re-run the search and repopulate the list.  Called from the edit
+;; box's action, so it runs with the dialog up, which is the only time
+;; start_list is legal.
+(defun lzp:fill (s / have n)
+  (setq lzp:*filter* s
+        lzp:*hits*   (lzp:matches s)
+        have         (lzp:loaded))
+  (start_list "hits")
+  (foreach n lzp:*hits* (add_list (lzp:hitline n have)))
+  (end_list)
+  ;; the top hit is selected for you, so a search and Enter runs the
+  ;; obvious thing without a click in between
+  (setq lzp:*sel* (car lzp:*hits*))
+  (if lzp:*hits* (set_tile "hits" "0"))
+  (set_tile "msg" (lzp:findmsg))
+  lzp:*sel*)
+
+;; A click in the list.  DCL reports WHY a tile fired in $reason, and
+;; 4 is the double click a list box gives on its own (1 is the ordinary
+;; single-click selection) -- a double click means the same here as
+;; picking the row and pressing Run.  Only 4: a single click must never
+;; launch anything, since moving down the list with the mouse is how
+;; you read it.
+(defun lzp:hitpick (v reason)
+  (setq lzp:*sel* (nth (atoi v) lzp:*hits*))
+  (if (and lzp:*sel* (= reason 4)) (lzp:findrun))
+  lzp:*sel*)
+
+;; Run what is highlighted.  Unlike a button on the other pages this can
+;; refuse: the list shows tools this session has not loaded, so the
+;; check that greys a button happens here instead, and says so on the
+;; message line rather than closing the panel.
+(defun lzp:findrun ( / )
+  (cond
+    ((not lzp:*sel*)
+     (set_tile "msg" "nothing highlighted to run"))
+    ((not (lzp:has lzp:*sel*))
+     (set_tile "msg" (strcat lzp:*sel* " is not loaded in this session")))
+    (t
+     (setq lzp:*pick* lzp:*sel*
+           lzp:*pos*  (done_dialog 1)))))
 
 ;;; -------------------- the dialog --------------------------------------
 ;;  The DCL is built here as a list of lines and written to a temp file
@@ -75475,8 +75618,46 @@
                   "is_cancel = true; fixed_width = true; } }")
           "}")))
 
-;; Every page, then the pin editor, in one generated file.
+;; The search page.  It carries the same furniture as every other page
+;; -- status line, tab strip, pinned row, Close -- so moving onto it
+;; and off it does not feel like leaving the panel; what is different
+;; is the middle: a box to type in, the list of what matched, and a
+;; message line under it.
+;;
+;; Run is the default button, so Enter runs the highlighted tool.  DCL
+;; fires an edit box's action BEFORE the default button's, so typing a
+;; search and pressing Enter narrows the list, selects the top hit and
+;; then runs that -- in that order, which is the order that makes Enter
+;; safe: the selection Run reads has already been replaced by one the
+;; new search produced.
+(defun lzp:dcl-find ( / out)
+  (setq out (list (strcat (lzp:dlgname lzp:*findname*) " : dialog {")
+                  (strcat "  label = \"LazPanel " *lazpanel-version*
+                          "  -  Find\";")
+                  (strcat "  : text { key = \"status\"; width = 60; "
+                          "alignment = centered; }")))
+  (setq out (append out (lzp:tabstrip) (lzp:pinrow)))
+  (append out
+    (list (strcat "  : edit_box { key = \"filter\"; "
+                  "label = \"Find\"; edit_width = 30; }")
+          (strcat "  : list_box { key = \"hits\"; width = 60; "
+                  "height = 14; }")
+          "  : text { key = \"msg\"; width = 60; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"Run\"; key = \"run\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Close\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}")))
+
+;; Every page, then the pin editor, in one generated file.  Find leads,
+;; because it is the page that does not need you to know where a tool
+;; was filed.
 (defun lzp:dcl-lines ( / out g)
+  (setq out (append (lzp:dcl-find) (list "")))
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
   (append out (lzp:dcl-pins) (list "")))
@@ -76162,7 +76343,7 @@
   ;; undo the whole point of reopening.  lzp:*page* and lzp:*pos* are
   ;; where the user last had it.
   (setq lzp:*pick* nil)
-  (if (not (and lzp:*page* (assoc lzp:*page* lzp:*groups*)))
+  (if (not (and lzp:*page* (member lzp:*page* (lzp:pages))))
     (setq lzp:*page* (car (car lzp:*groups*))))
   (setq g lzp:*page*)
   (cond
@@ -76185,12 +76366,25 @@
           (set_tile "status"
                     (strcat (itoa (length have)) " of "
                             (itoa (length (lzp:commands)))
-                            " tools loaded - greyed are not in this session"))
-          (foreach n (lzp:group-commands g)
-            (action_tile n
-              "(setq lzp:*pick* $key lzp:*pos* (done_dialog 1))")
-            (if (not (member n have))
-              (mode_tile n 1)))
+                            (if (lzp:findpage g)
+                              " tools loaded - the rest are listed, not run"
+                              " tools loaded - greyed are not in this session")))
+          ;; The search page has no per-command buttons to wire: its
+          ;; three tiles carry the whole roster between them, and the
+          ;; list is filled with the search the panel was last left on.
+          (cond
+            ((lzp:findpage g)
+             (set_tile "filter" lzp:*filter*)
+             (lzp:fill lzp:*filter*)
+             (action_tile "filter" "(lzp:fill $value)")
+             (action_tile "hits" "(lzp:hitpick $value $reason)")
+             (action_tile "run" "(lzp:findrun)"))
+            (t
+             (foreach n (lzp:group-commands g)
+               (action_tile n
+                 "(setq lzp:*pick* $key lzp:*pos* (done_dialog 1))")
+               (if (not (member n have))
+                 (mode_tile n 1)))))
           ;; the pinned row: same launch, its own keys, greyed the same
           ;; way -- $key would read "pin_POOL", so the name is baked in
           (foreach n lzp:*pins*
@@ -76200,9 +76394,9 @@
             (if (not (member n have))
               (mode_tile (strcat "pin_" n) 1)))
           (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
-          (foreach n lzp:*groups*
-            (action_tile (strcat "tab_" (car n))
-              (strcat "(setq lzp:*go* \"" (car n)
+          (foreach n (lzp:pages)
+            (action_tile (strcat "tab_" n)
+              (strcat "(setq lzp:*go* \"" n
                       "\" lzp:*pos* (done_dialog 4))")))
           (action_tile "cancel" "(setq lzp:*pos* (done_dialog 0))")
           (setq rc (start_dialog))
