@@ -80,17 +80,22 @@ It is synchronous and finishes in well under a second, because it has
 nothing to download. Each session it:
 
 1. exports the variables above through `$CLAUDE_ENV_FILE`,
-2. prints the tier map with live file counts, the rules that bite, and
+2. puts the session on the trunk (`claude/lisp-consolidation-strategy-9nrc7a`,
+   the branch CLAUDE.md pins all work to): a clean tree on another
+   branch is switched; a dirty tree, or a branch carrying commits the
+   trunk lacks, stops the session with the commands to land them,
+3. prints the tier map with live file counts, the rules that bite, and
    the `make` targets for checking and testing,
-3. names the tests that fail on a clean checkout (none, at present) -
+4. names the tests that fail on a clean checkout (none, at present) -
    the authoritative list is `EXPECTED_FAILURES` in
    `tools/run_tests.py`, which fails the run the day an entry starts
    passing,
-4. runs `tools/check_standards.py` and, if the tiers have drifted,
+5. runs `tools/check_standards.py` and, if the tiers have drifted,
    says so at the top of the session instead of in review.
 
-It warns but never blocks: a drifted tree still opens, it just opens
-loudly.
+The drift check warns but never blocks: a drifted tree still opens, it
+just opens loudly. The branch step is the one thing that does block,
+and only when switching would lose work.
 
 The hook is not gated on `CLAUDE_CODE_REMOTE`, so local sessions get
 the same guardrail. To make it web-only, uncomment the guard near the

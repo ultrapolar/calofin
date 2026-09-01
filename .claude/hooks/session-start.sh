@@ -39,6 +39,41 @@ python3 --version >/dev/null 2>&1 || {
 TRUNK="claude/lisp-consolidation-strategy-9nrc7a"
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
 
+# ---- the branch guard -----------------------------------------------
+# CLAUDE.md pins every session to the trunk.  A session opened on some
+# other branch is switched there when that loses nothing: the tree is
+# clean and the branch has no commit the trunk lacks.  Otherwise the
+# session stops and says what to do -- switching a dirty tree, or off
+# a branch carrying unmerged work, is how the tree re-fragmented
+# (five branches carried work the trunk never saw, 2026-09-01).
+if [ "$BRANCH" != "$TRUNK" ] && [ "$BRANCH" != "?" ]; then
+  if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    echo "session-start: on '$BRANCH' with uncommitted changes; CLAUDE.md pins work to $TRUNK" >&2
+    echo "  commit or stash them, then: git fetch origin $TRUNK && git checkout -B $TRUNK origin/$TRUNK" >&2
+    exit 1
+  fi
+  git fetch -q origin "$TRUNK" 2>/dev/null || true
+  if git rev-parse -q --verify "origin/$TRUNK" >/dev/null 2>&1; then
+    AHEAD=$(git rev-list --count "origin/$TRUNK..HEAD" 2>/dev/null || echo 0)
+    if [ "$AHEAD" != "0" ]; then
+      echo "session-start: '$BRANCH' carries $AHEAD commit(s) the trunk lacks; not switching" >&2
+      echo "  land them first: git rebase origin/$TRUNK && git push origin HEAD:$TRUNK" >&2
+      echo "  then: git checkout -B $TRUNK origin/$TRUNK" >&2
+      exit 1
+    fi
+    if git checkout -q -B "$TRUNK" "origin/$TRUNK" 2>/dev/null; then
+      echo "session-start: was on '$BRANCH'; checked out $TRUNK (CLAUDE.md pins all work there)"
+      BRANCH="$TRUNK"
+    else
+      echo "session-start: could not check out $TRUNK from '$BRANCH'" >&2
+      exit 1
+    fi
+  else
+    echo "session-start: on '$BRANCH' and origin/$TRUNK is unreachable; CLAUDE.md pins work to $TRUNK" >&2
+    exit 1
+  fi
+fi
+
 echo "calofin -- AutoLISP tools for pool/spa drafting (no deps; stdlib Python only)"
 echo
 echo "Tiers, in the order a tool moves through them:"
@@ -56,9 +91,8 @@ echo "  - only shared/parts/CALOFIN-LIB.lsp defines cal: symbols"
 echo "  - some tools are HELD BACK from LAZPASS.lsp on purpose - the list"
 echo "    and the reasons are cal:*held-back* in parts/CALOFIN-LOADER.lsp"
 echo "  - corner treatments are Square/Radius/Cut/NotGiven, nothing else"
-if [ "$BRANCH" != "$TRUNK" ]; then
-  echo "  - branch is '$BRANCH'; CLAUDE.md pins work to $TRUNK"
-fi
+echo "  - branch is '$BRANCH' - the trunk; push it at the end of the session, and"
+echo "    if the setup named another branch, push that too (same commit)"
 echo
 echo "Checks:  make check      (tiers in step + generated tiers current + lint)"
 echo "Tests:   make test       (full suite, lisp/ tier - tools/run_tests.py)"

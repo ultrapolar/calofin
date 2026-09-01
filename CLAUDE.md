@@ -8,18 +8,28 @@ rulebook for the `.lsp` files themselves.
 
 **All work in this repository goes on `claude/lisp-consolidation-strategy-9nrc7a`.**
 
-This is the consolidated trunk: it merges what used to be ~29 separate
-single-addition branches into one tree where every tool lives side by side.
-Unless told otherwise in a specific request, start from this branch and commit
-back to it — do not open a fresh `claude/<topic>-<id>` branch per task, and do
-not build on any of the older single-tool branches. They are historical; work
-added there is invisible to everything else and re-fragments the tree this
-branch exists to consolidate.
+This is the consolidated trunk: it merges what used to be some sixty
+separate single-addition branches into one tree where every tool lives side
+by side. Unless told otherwise in a specific request, start from this branch
+and commit back to it — do not open a fresh `claude/<topic>-<id>` branch per
+task, and do not build on any of the older single-tool branches. They are
+historical (kept as `archive/<branch>` tags once deleted); work added there
+is invisible to everything else and re-fragments the tree this branch exists
+to consolidate. It happened: on 2026-09-01 five branches carried work the
+trunk had never seen, and each had to be ported by hand.
 
 If a session is handed a different branch name by its setup, that name is
-overridden by this convention — check out
-`claude/lisp-consolidation-strategy-9nrc7a` and work there instead. An explicit
-instruction in the request itself does take precedence.
+overridden by this convention. `.claude/hooks/session-start.sh` enforces it:
+a clean tree on another branch is switched to the trunk at session start; a
+dirty tree, or a branch carrying commits the trunk lacks, stops the session
+and prints the commands to land them first. An explicit instruction in the
+request itself does take precedence.
+
+At the end of a session push the trunk itself
+(`git push -u origin claude/lisp-consolidation-strategy-9nrc7a`). If the
+setup insisted on pushing another branch name, push that too — the two must
+point at the same commit, which is what keeps the next session from opening
+on stale work.
 
 ## Layout
 
