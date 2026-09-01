@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "090126 REV04")
+(setq pooldemo:*version* "090126 REV05")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -176,8 +176,14 @@
   (pool:line (nth 3 q) (nth 2 q) "POOL")
   (pool:lined (nth 1 q) (nth 2 q))
   (pool:lined (nth 3 q) (nth 0 q))
-  (setq lend (pool:romend (nth 0 q) (nth 3 q) (list -1.0 0.0) 45.0 160.0 "POOL")
-        rend (pool:romend (nth 1 q) (nth 2 q) (list 1.0 0.0) 45.0 160.0 "POOL")
+  ;; pool:romend grew a second point pair (the stub feet) after this
+  ;; demo was written; a plain rectangular end has no stub, so both
+  ;; pairs are the same two points - the mapping POOL.LSP's own
+  ;; "ROman" branch uses when it forwards an un-offset end.
+  (setq lend (pool:romend (nth 0 q) (nth 3 q) (nth 0 q) (nth 3 q)
+                          (list -1.0 0.0) 45.0 160.0 "POOL")
+        rend (pool:romend (nth 1 q) (nth 2 q) (nth 1 q) (nth 2 q)
+                          (list 1.0 0.0) 45.0 160.0 "POOL")
         tipl (car lend) tipr (car rend))
   (setvar "CLAYER" "DIMENSION")
   (pool:dimrad (nth 3 lend) tipl (list -1.0 0.0) 30.0)
@@ -329,13 +335,7 @@
 
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-        ;; Which build is loaded - the first thing to check when a run does
-;; something the notes above say it should not.
-(defun c:POOLDEMOVER ()
-  (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
-  (princ))
-
-(princ (strcat "\nPOOLDEMO error: " msg)))
+        (princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
@@ -384,6 +384,12 @@
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))
                  " cells drawn.  If every cell looks right, POOL.LSP is"
                  " working in this drawing."))
+  (princ))
+
+;; Which build is loaded - the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:POOLDEMOVER ()
+  (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
 
 (princ (strcat "\nPOOLDEMO " pooldemo:*version*

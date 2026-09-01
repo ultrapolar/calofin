@@ -92,6 +92,54 @@ for name in ('POOL.LSP', 'POOLDEMO.LSP', 'TUTORIALPOOL.LSP'):
             same = open(os.path.join(RELEASES, twin)).read() == text
             check(f'releases/{twin} is byte-identical', same)
 
+POOLDEMO = os.path.join(REPO_DIR, 'lisp', 'pool', 'POOLDEMO.LSP')
+
+print('pooldemo -- the sample sheet, no questions at all')
+#: POOLDEMO refuses to run unless POOL.LSP is loaded, and it proves that
+#: by looking for pool:hopcalc in (atoms-family 0).  The VM answers that
+#: with an empty list whatever is loaded, so the gate can never pass on
+#: its own -- a per-VM defun shadows it (a user defun resolves ahead of
+#: the builtins), which leaves the REAL gate in place for the negative
+#: case below.
+vm = VM()
+vm.load(POOL)
+vm.load(POOLDEMO)
+vm.loads("(defun atoms-family (n) (list 'pool:hopcalc))")
+before = dict(vm.sysvars)
+try:
+    vm.run('c:POOLDEMO', [])                # takes no input whatsoever
+except LispError as e:
+    raise AssertionError(f'[pooldemo] {e}') from None
+said = ''.join(vm.printed)
+check('it did not refuse to run', 'is not loaded' not in said)
+check('drew the sample pool', len(on_layer(vm, 'POOL')) > 10)
+check('drew its dimensions', len(on_layer(vm, 'DIMENSION')) > 5)
+check('every sysvar is back where it started', vm.sysvars == before)
+check('the run is one undo group',
+      [c for c in vm.commands if c and c[0] == '_.UNDO']
+      == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']])
+
+print('pooldemo -- without POOL.LSP it says so and draws nothing')
+#: the real path for someone who APPLOADs POOLDEMO on its own
+vm = VM()
+vm.load(POOL)
+vm.load(POOLDEMO)
+try:
+    vm.run('c:POOLDEMO', [])
+except LispError as e:
+    raise AssertionError(f'[pooldemo gate] {e}') from None
+check('it names POOL.LSP as the missing piece',
+      'POOL.LSP is not loaded' in ''.join(vm.printed))
+check('and nothing was drawn', not vm.entdata)
+
+print('pooldemo -- POOLDEMOVER reports the banner')
+vm = VM()
+vm.load(POOL)
+vm.load(POOLDEMO)
+vm.run('c:POOLDEMOVER', [])
+check('POOLDEMOVER prints its own version',
+      'POOLDEMO ' in ''.join(vm.printed))
+
 if failures:
     print(f'\n{len(failures)} TUTORIALPOOL check(s) FAILED')
     sys.exit(1)

@@ -412,6 +412,18 @@ def house_rules(path, src, problems):
                 "guard - it errors out of the command when undo is off"
                 % (src[:a + form.find('"_Begin"')].count("\n") + 1))
 
+    # 3b. A c: command must BE a top-level form, not merely start at
+    #     column 0 inside another defun.  The command census is a
+    #     regex over line starts, so a nested one is counted, listed,
+    #     documented -- and uncallable.  (Caught exactly that, once.)
+    tops = {a for a, b in top_level_forms(body)}
+    for m in re.finditer(r"^\(defun\s+[cC]:([^\s()]+)", body, re.MULTILINE):
+        if m.start() not in tops:
+            problems.append(
+                "line %d: c:%s is defined inside another form - it is "
+                "counted as a command everywhere but cannot be run"
+                % (body[:m.start()].count("\n") + 1, m.group(1)))
+
     # 4. A tool announces itself on load, after its last defun, naming
     #    its own banner -- that line is how a user says which build they
     #    are running.

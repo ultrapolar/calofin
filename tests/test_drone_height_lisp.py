@@ -538,6 +538,71 @@ def build_png(with_xmp=True, with_exif=True, element_form=False, meta_at_end=Fal
 def approx(a, b, tol=1e-6):
     return a is not None and abs(a - b) < tol
 
+# ------------------------------------------------------------- DDELEV ------
+# The command that turns a lat/lon into a ground elevation.  Everything
+# under it is pure list-and-string work -- only the HTTP call is not, so
+# the suite shadows ddg-http-get with a canned response (a user defun
+# resolves ahead of the VM's builtins) and the real parsing chain runs.
+# The alert box the failure path raises has no VM builtin, so it gets a
+# recorder.
+
+def ddelev(check):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import lispvm
+    from lispvm import VM, Sym, NIL, T
+
+    alerts = []
+    lispvm.BUILTINS[Sym('alert')] = lambda vm, a: (
+        alerts.append(a[0] if a else ''), NIL)[1]
+
+    def newvm(reply='(list T "{\\"value\\": 512.5}")'):
+        vm = VM()
+        vm.load(LSP)
+        vm.loads('(defun ddg-http-get (url) %s)' % reply)
+        return vm
+
+    print("\n-- DDELEV --")
+
+    vm = newvm()
+    alerts.clear()
+    vm.run('c:DDELEV', [32.7157, -117.1611])
+    said = ''.join(vm.printed)
+    check("DDELEV reports feet, metres and the source",
+          'Ground elevation: 512.5 ft' in said
+          and '(156.2 m)' in said and 'USGS 3DEP' in said)
+    check("and raises no alert on success", not alerts)
+
+    # Back at the longitude re-opens the latitude
+    vm = newvm()
+    vm.run('c:DDELEV', [1.0, "Back", 32.7157, -117.1611])
+    asked = [p for p, _ in vm.prompts if 'Latitude' in p]
+    check("Back at the longitude re-asks the latitude", len(asked) == 2)
+
+    # out of range
+    vm = newvm()
+    vm.run('c:DDELEV', [99.0, -117.0])
+    check("an impossible latitude is refused",
+          'not a valid latitude' in ''.join(vm.printed))
+
+    # Enter at either prompt
+    vm = newvm()
+    vm.run('c:DDELEV', [None, None])
+    check("Enter at either number asks for both",
+          'Need both numbers.' in ''.join(vm.printed))
+
+    # every service failing: the loud dialog names what was tried
+    vm = newvm(reply='(list nil "no network")')
+    alerts.clear()
+    vm.run('c:DDELEV', [32.7157, -117.1611])
+    said = ''.join(vm.printed)
+    check("a total lookup failure is announced",
+          'ELEVATION LOOKUP FAILED' in said)
+    check("it names the services it tried",
+          'USGS' in said and 'no network' in said)
+    check("and it raises the alert box",
+          len(alerts) == 1 and 'ELEVATION LOOKUP FAILED' in alerts[0])
+
+
 def main():
     lint(LSP)
     static_checks(LSP)
@@ -798,6 +863,8 @@ def main():
     oel = '{"results": [{"latitude": 32.7157, "longitude": -117.161, "elevation": 88.0}]}'
     check("json Open-Elevation", approx(json_num(oel, "elevation"), 88.0))
     check("json missing key -> None", json_num(oel, "value") is None)
+
+    ddelev(check)
 
     print()
     if failures:
