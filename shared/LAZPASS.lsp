@@ -9823,7 +9823,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082726 REV09")
+(setq spa:*version* "090126 REV10")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -11275,8 +11275,11 @@
        (while (and stage (< stage 3))
          (cond
            ((= stage 0)
-            (setq loc (cal:askkw "Spillaway location" "Corner Wall"
-                                 "Corner/Wall(centred)" "Wall" t))
+            ;; the bracket carries only what a click may send, so the
+            ;; "(centred)" note lives in the question (STANDARDS 1)
+            (setq loc (cal:askkw
+                        "Spillaway location (a wall one is centred on it)"
+                        "Corner Wall" "Corner/Wall" "Wall" t))
             (setq stage (if (eq loc 'CAL-BACK) nil 1)))
            ((= stage 1)
             (if (= loc "Corner")
@@ -25765,7 +25768,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.2")
+(setq *abpcheck-version* "v1.3")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -26302,11 +26305,13 @@
     (princ))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; a pickfirst selection if there is one - probed BEFORE the undo
+  ;; group opens, because that command clears the set (the convention
+  ;; FITABHD and abhd already carry)
+  (setq ss (ssget "_I" abp:*filter*))
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nABPCHECK - how far every point sits off the nearest line.")
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" abp:*filter*))
   (if (null ss)
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")

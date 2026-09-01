@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.2")
+(setq *abpcheck-version* "v1.3")
 
 ;;; -------------------- tunables ----------------------------------------
 
@@ -603,11 +603,13 @@
     (princ))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; a pickfirst selection if there is one - probed BEFORE the undo
+  ;; group opens, because that command clears the set (the convention
+  ;; FITABHD and abhd already carry)
+  (setq ss (ssget "_I" abp:*filter*))
   (command "_.UNDO" "_Begin")
   (setq undo-open T)
   (princ "\n\nABPCHECK - how far every point sits off the nearest line.")
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" abp:*filter*))
   (if (null ss)
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")

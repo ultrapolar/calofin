@@ -172,7 +172,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082726 REV09")
+(setq spa:*version* "090126 REV10")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1669,8 +1669,11 @@
        (while (and stage (< stage 3))
          (cond
            ((= stage 0)
-            (setq loc (spa:askkw "Spillaway location" "Corner Wall"
-                                 "Corner/Wall(centred)" "Wall" t))
+            ;; the bracket carries only what a click may send, so the
+            ;; "(centred)" note lives in the question (STANDARDS 1)
+            (setq loc (spa:askkw
+                        "Spillaway location (a wall one is centred on it)"
+                        "Corner Wall" "Corner/Wall" "Wall" t))
             (setq stage (if (eq loc 'SPA-BACK) nil 1)))
            ((= stage 1)
             (if (= loc "Corner")
