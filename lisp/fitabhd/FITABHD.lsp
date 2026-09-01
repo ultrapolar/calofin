@@ -108,7 +108,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.2")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.3")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -541,7 +541,9 @@
     (foreach s segs
       (setq d (fit:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (setq out (cons dmin out)))
+    ;; a point with no outline to measure against contributes nothing
+    ;; rather than a nil the caller would compare against
+    (if dmin (setq out (cons dmin out))))
   (reverse out))
 
 ;; (worst rms) distance of the points from an outline.
@@ -550,7 +552,9 @@
   (foreach d ds
     (if (> d worst) (setq worst d))
     (setq ssum (+ ssum (* d d))))
-  (list worst (sqrt (/ ssum (length ds)))))
+  ;; no distances at all means nothing to average -- fit:flat-rms
+  ;; guards its mean the same way
+  (list worst (if ds (sqrt (/ ssum (length ds))) 0.0)))
 
 ;; COUNT elements of LST starting at index K.
 (defun fit:sublist (lst k count / out)

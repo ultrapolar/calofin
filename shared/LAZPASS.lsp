@@ -26604,7 +26604,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.6")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.7")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -28616,9 +28616,14 @@
     (foreach s segs
       (setq d (cab:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (if (> dmin w) (setq w dmin))
-    (setq sum (+ sum dmin) n (1+ n))
-    (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))
+    ;; dmin stays nil when there are no segments to measure against;
+    ;; the returns below already report "nothing measured" correctly,
+    ;; so the accumulators must simply not run
+    (if dmin
+      (progn
+        (if (> dmin w) (setq w dmin))
+        (setq sum (+ sum dmin) n (1+ n))
+        (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))))
   (list w
         (if (> n 0) (/ sum n) 0.0)
         (if (> no 0) (/ sumo no) nil)))
@@ -36616,7 +36621,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.7") ; printed on load and at command start so a
+(setq *hs-version* "v3.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -37007,6 +37012,15 @@
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
+;; The widest tread, for spacing the side profile's dimensions.  The
+;; list is empty when every logged step landed within 1e-6 of the one
+;; before it -- (apply 'max nil) is an error, so a degenerate run
+;; falls back to plain text-height spacing.  CORNERSTP skips its whole
+;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
+(defun hs-maxtread (treads)
+  (if treads (apply 'max treads) 0.0)
+)
+
 (defun hs-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -37659,8 +37673,12 @@
         (progn
           ;; step treads, top step first: sort the logged axis distances
           ;; ascending and take successive differences
+          ;; the first difference is measured from zero and filtered
+          ;; like every other one -- CORNERSTP and NORMIESTEP both drop
+          ;; a sub-1e-6 opener, and an unfiltered seed here let a zero
+          ;; through where they would not
           (setq srt    (vl-sort tlist '<)
-                treads (list (car srt))
+                treads (if (> (car srt) 1e-6) (list (car srt)))
                 pv     (car srt))
           (foreach td (cdr srt)
             (if (> (- td pv) 1e-6)
@@ -37753,8 +37771,8 @@
                   (setq pgap (cond ((numberp *cs-profile-dimgap*)
                                     *cs-profile-dimgap*)
                                    ((max (* 4.0 txth)
-                                         (* 0.75 (apply 'max treads)))))
-                        pfo  (+ (apply 'max treads) pgap)
+                                         (* 0.75 (hs-maxtread treads)))))
+                        pfo  (+ (hs-maxtread treads) pgap)
                         jx   1)
                   (while (< jx (length cnrs))
                     (setq e1 (nth (1- jx) cnrs)
@@ -38210,7 +38228,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.1") ; printed on load and at command start so a
+(setq *ns-version* "v3.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38522,6 +38540,15 @@
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
+;; The widest tread, for spacing the side profile's dimensions.  The
+;; list is empty when every logged step landed within 1e-6 of the one
+;; before it -- (apply 'max nil) is an error, so a degenerate run
+;; falls back to plain text-height spacing.  CORNERSTP skips its whole
+;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
+(defun ns-maxtread (treads)
+  (if treads (apply 'max treads) 0.0)
+)
+
 (defun ns-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -39522,8 +39549,8 @@
                   (setq pgap (cond ((numberp *cs-profile-dimgap*)
                                     *cs-profile-dimgap*)
                                    ((max (* 4.0 txth)
-                                         (* 0.75 (apply 'max treads)))))
-                        pfo  (+ (apply 'max treads) pgap)
+                                         (* 0.75 (ns-maxtread treads)))))
+                        pfo  (+ (ns-maxtread treads) pgap)
                         k    1)
                   (while (< k (length cnrs))
                     (setq ca (nth (1- k) cnrs)
@@ -48885,7 +48912,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.2")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.3")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -49181,7 +49208,9 @@
     (foreach s segs
       (setq d (fit:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (setq out (cons dmin out)))
+    ;; a point with no outline to measure against contributes nothing
+    ;; rather than a nil the caller would compare against
+    (if dmin (setq out (cons dmin out))))
   (reverse out))
 
 ;; (worst rms) distance of the points from an outline.
@@ -49190,7 +49219,9 @@
   (foreach d ds
     (if (> d worst) (setq worst d))
     (setq ssum (+ ssum (* d d))))
-  (list worst (sqrt (/ ssum (length ds)))))
+  ;; no distances at all means nothing to average -- fit:flat-rms
+  ;; guards its mean the same way
+  (list worst (if ds (sqrt (/ ssum (length ds))) 0.0)))
 
 ;; LST without ONE element equal to V.
 (defun fit:drop-one (v lst / out done x)
@@ -68655,7 +68686,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.6")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -69006,6 +69037,15 @@
   )
   (if (cdr run) (setq runs (cons (reverse run) runs)))
   (reverse runs)
+)
+
+;; A length as a percentage of the bottom-before length.  botb is
+;; zero when the trace gave fewer than two distinct bottom points, and
+;; a zero divisor here would throw AFTER the undo group opened, leaving
+;; a half-drawn pair of layouts behind - a degenerate band reports 0%
+;; and the run says so out loud instead.
+(defun wc:pctof (v botb)
+  (if (> botb 1e-9) (* 100.0 (/ (abs v) botb)) 0.0)
 )
 
 (defun wc:vdim (p1 p2 xline lay)
@@ -69531,6 +69571,11 @@
           dp1 dp2
     )
   )
+  (if (<= botb 1e-9)
+    (princ (strcat "\nThe far edge measured no length - fewer than two"
+                   " distinct bottom points came back, so the"
+                   " percentages below read 0%."))
+  )
 
   ;; ---- 8b. feature emission -------------------------------------------
   ;; two variants are produced:
@@ -69760,12 +69805,12 @@
              "DIMENSION")
     (cal:text (list tx (- vy (* 1.65 w))) th
              (strcat "DELTA:         " (rtos (- bota botb) 2 2)
-                     "  (" (rtos (* 100.0 (/ (abs (- bota botb)) botb)) 2 2)
+                     "  (" (rtos (wc:pctof (- bota botb) botb) 2 2)
                      "%" (if (< bota botb) " short)" " long)"))
              "DIMENSION")
     (cal:text (list tx (- vy (* 2.20 w))) th
              (strcat "AFTER CUTS:    " (rtos vresid 2 2)
-                     "  (" (rtos (* 100.0 (/ (abs vresid) botb)) 2 2)
+                     "  (" (rtos (wc:pctof vresid botb) 2 2)
                      "%)  [target <1%]"
                      (if (> (abs vresid) (* 0.01 botb)) "  ** OVER TARGET **" ""))
              "DIMENSION")
@@ -69788,14 +69833,14 @@
     (princ (strcat "\n  " (caddr vr) ": " (itoa dl) " dart(s), "
                    (itoa dr) " insert(s) (max " (itoa maxfeat)
                    "), after cuts " (rtos (cadr vr) 2 2)
-                   " (" (rtos (* 100.0 (/ (abs (cadr vr)) botb)) 2 2) "%)"
+                   " (" (rtos (wc:pctof (cadr vr) botb) 2 2) "%)"
                    (if (> (abs (cadr vr)) (* 0.01 botb)) " OVER TARGET" "")))
   )
   (princ (strcat "\n  top line " (rtos toplen 2 2)
                  ", bottom before " (rtos botb 2 2)
                  ", bottom after " (rtos bota 2 2)
                  ", delta " (rtos (- bota botb) 2 2)
-                 " (" (rtos (* 100.0 (/ (abs (- bota botb)) botb)) 2 2)
+                 " (" (rtos (wc:pctof (- bota botb) botb) 2 2)
                  "%)."))
   (if (> nmk 0)
     (princ (strcat " " (itoa (/ nmk 2)) " reference mark(s) carried along."))

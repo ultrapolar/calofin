@@ -180,7 +180,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.1") ; printed on load and at command start so a
+(setq *ns-version* "v3.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -492,6 +492,15 @@
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
+;; The widest tread, for spacing the side profile's dimensions.  The
+;; list is empty when every logged step landed within 1e-6 of the one
+;; before it -- (apply 'max nil) is an error, so a degenerate run
+;; falls back to plain text-height spacing.  CORNERSTP skips its whole
+;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
+(defun ns-maxtread (treads)
+  (if treads (apply 'max treads) 0.0)
+)
+
 (defun ns-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -1492,8 +1501,8 @@
                   (setq pgap (cond ((numberp *cs-profile-dimgap*)
                                     *cs-profile-dimgap*)
                                    ((max (* 4.0 txth)
-                                         (* 0.75 (apply 'max treads)))))
-                        pfo  (+ (apply 'max treads) pgap)
+                                         (* 0.75 (ns-maxtread treads)))))
+                        pfo  (+ (ns-maxtread treads) pgap)
                         k    1)
                   (while (< k (length cnrs))
                     (setq ca (nth (1- k) cnrs)

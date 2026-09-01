@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.6")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.7")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -2211,9 +2211,14 @@
     (foreach s segs
       (setq d (cab:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (if (> dmin w) (setq w dmin))
-    (setq sum (+ sum dmin) n (1+ n))
-    (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))
+    ;; dmin stays nil when there are no segments to measure against;
+    ;; the returns below already report "nothing measured" correctly,
+    ;; so the accumulators must simply not run
+    (if dmin
+      (progn
+        (if (> dmin w) (setq w dmin))
+        (setq sum (+ sum dmin) n (1+ n))
+        (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))))
   (list w
         (if (> n 0) (/ sum n) 0.0)
         (if (> no 0) (/ sumo no) nil)))

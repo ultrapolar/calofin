@@ -171,7 +171,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.7") ; printed on load and at command start so a
+(setq *hs-version* "v3.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -566,6 +566,15 @@
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
+;; The widest tread, for spacing the side profile's dimensions.  The
+;; list is empty when every logged step landed within 1e-6 of the one
+;; before it -- (apply 'max nil) is an error, so a degenerate run
+;; falls back to plain text-height spacing.  CORNERSTP skips its whole
+;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
+(defun hs-maxtread (treads)
+  (if treads (apply 'max treads) 0.0)
+)
+
 (defun hs-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -1228,8 +1237,12 @@
         (progn
           ;; step treads, top step first: sort the logged axis distances
           ;; ascending and take successive differences
+          ;; the first difference is measured from zero and filtered
+          ;; like every other one -- CORNERSTP and NORMIESTEP both drop
+          ;; a sub-1e-6 opener, and an unfiltered seed here let a zero
+          ;; through where they would not
           (setq srt    (vl-sort tlist '<)
-                treads (list (car srt))
+                treads (if (> (car srt) 1e-6) (list (car srt)))
                 pv     (car srt))
           (foreach td (cdr srt)
             (if (> (- td pv) 1e-6)
@@ -1322,8 +1335,8 @@
                   (setq pgap (cond ((numberp *cs-profile-dimgap*)
                                     *cs-profile-dimgap*)
                                    ((max (* 4.0 txth)
-                                         (* 0.75 (apply 'max treads)))))
-                        pfo  (+ (apply 'max treads) pgap)
+                                         (* 0.75 (hs-maxtread treads)))))
+                        pfo  (+ (hs-maxtread treads) pgap)
                         jx   1)
                   (while (< jx (length cnrs))
                     (setq e1 (nth (1- jx) cnrs)
