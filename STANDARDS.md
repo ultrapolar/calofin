@@ -194,13 +194,20 @@ When Enter means "everything", the prompt says so in parentheses.
 | `NAX` | NA accepted (returns nil)           | ` (or NA if not measured)`    | `7` + `NA` |
 | `ZER` | NA accepted, zero accepted          | ` (or NA if not measured)`    | `5` + `NA` |
 | `SUG` | suggested default, Enter takes it   | ` <n> (or NA)`                | `6` + `NA` |
+| `SUGR`| the same suggestion on a REQUIRED value | ` <n>`                    | `6`     |
 
 Offering Back never loosens what counts as a valid measurement -- a
 `REQ` prompt with Back still rejects null/zero/negative numbers.
-POINTRENAMER's band ask is the sanctioned no-NA variant of `SUG`: the
-measurement is always needed, so there is no `NA` keyword -- Enter
-takes the remembered default (shown feet-and-inches, `rtos` mode 4)
-and `initget 6` still rejects zero and negatives.
+`SUGR` is what a suggestion does to a `REQ`: it opens `Enter`, it does
+not put `NA` on the table, because the answer is still one the drawing
+cannot be made without.  A flow that computes a suggestion for a `REQ`
+question promotes the kind rather than widening it (`pool:askseqb`),
+so the offer never turns a required measurement optional.
+POINTRENAMER's band ask is the same no-NA variant, written out by
+hand before it had a name: the measurement is always needed, so there
+is no `NA` keyword -- Enter takes the remembered default (shown
+feet-and-inches, `rtos` mode 4) and `initget 6` still rejects zero and
+negatives.
 
 ## 4. Reference ask helpers
 
@@ -278,20 +285,22 @@ for the same reason.
 ;; number, nil for NA, or TOOL-BACK.
 (defun tool:askdist (kind msg dflt back / v kw)
   ;; Undo is accepted everywhere Back is, as a hidden synonym
-  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+  (setq kw (cond ((member kind '(REQ SUGR)) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
   ;; REQ always rejects zero - offering Back must not loosen what
   ;; counts as a valid measurement; ZER alone admits 0
   (if kw
       (initget (cond ((eq kind 'ZER) 5)
-                     ((and (eq kind 'SUG) dflt) 6)
+                     ((and (member kind '(SUG SUGR)) dflt) 6)
                      (t 7))
                kw)
       (initget 7))
   (setq v (getdist
             (strcat "\n" msg
                     (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUGR)
+                           (if dflt (strcat " <" (rtos dflt) ">") ""))
                           ((eq kind 'SUG)
                            (if dflt (strcat " <" (rtos dflt) "> (or NA)")
                                " (or NA)"))
@@ -300,7 +309,8 @@ for the same reason.
                     ": ")))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'TOOL-BACK)
         ((= (type v) 'STR) nil)               ; NA
-        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        ;; Enter took the suggestion
+        ((and (null v) (member kind '(SUG SUGR))) dflt)
         (t v)))
 
 ;; Typed prompts cannot take keywords, so Back is typed like a value.

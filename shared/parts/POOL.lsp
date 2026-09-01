@@ -123,7 +123,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV19")
+(setq pool:*version* "090126 REV20")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -613,6 +613,27 @@
         (setq rest (- total (* 2.0 m)))
         (if (> rest 1.0e-6) rest))))
 
+;; A pool is typically about twice as long as it is wide, so the WIDTH
+;; question is offered half the length rather than asked cold: 36'
+;; across suggests 18' up the end, Enter takes it, and a real tape
+;; reading typed over it still wins.  It is a shape hint, not a
+;; measurement -- the report still lists what was entered against what
+;; was drawn either way.
+;;
+;; keys are the length answers to average (both sides out of square,
+;; the one pair in square); a side nobody measured is skipped, and a
+;; question reached with no length at all behind it has nothing to
+;; suggest and is asked cold.
+(defun pool:sughalf (ans keys / n tot v k)
+  (setq n 0 tot 0.0)
+  (foreach k keys
+    (if (setq v (pool:sq ans k))
+        (setq tot (+ tot v) n (1+ n))))
+  (if (> n 0)
+      (progn
+        (setq v (* 0.5 (/ tot n)))
+        (if (> v 1.0e-6) v))))
+
 ;;; -------------------- form answers -----------------------------------
 ;;;
 ;;;  A form -- the LAZFORM dialog, or the VB palette -- can answer some
@@ -723,25 +744,33 @@
 
 ;; One prompt of a sequence.  Returns the value, nil for NA, or the
 ;; symbol CAL-BACK.
+;; Kinds: REQ a measurement that must be given, NAX one that may be
+;; NA, ZER one that may be zero, SUG an NAX with a worked-out value
+;; offered on Enter -- and SUGR the same offer on a REQUIRED question.
+;; SUGR is what a suggestion does to a REQ: Enter takes the number,
+;; but NA is still not on the table, because the answer is still one
+;; the pool cannot be drawn without.
 (defun pool:asks (kind msg ents dflt back / v cols kw)
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
   ;; Undo is accepted everywhere Back is, as a hidden synonym
-  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+  (setq kw (cond ((member kind '(REQ SUGR)) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
   (if kw
       ;; REQ always rejects zero (bit 7) - offering Back must not
       ;; loosen what counts as a valid measurement; ZER alone admits 0
       (initget (cond ((eq kind 'ZER) 5)
-                     ((and (eq kind 'SUG) dflt) 6)
+                     ((and (member kind '(SUG SUGR)) dflt) 6)
                      (t 7))
                kw)
       (initget 7))
   (setq v (getdist
             (strcat "\n" msg
                     (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUGR)
+                           (if dflt (strcat " <" (rtos dflt) ">") ""))
                           ((eq kind 'SUG)
                            (if dflt (strcat " <" (rtos dflt) "> (or NA)")
                                " (or NA)"))
@@ -752,7 +781,8 @@
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((= (type v) 'STR) nil)               ; NA
-        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        ;; Enter took the suggestion
+        ((and (null v) (member kind '(SUG SUGR))) dflt)
         (t v)))
 
 ;; The keyword question a form can answer.  Deliberately a WRAPPER and
@@ -902,7 +932,11 @@
           ;; with Enter
           (if (and (nth 7 it) (setq sg (eval (nth 7 it))))
               (setq dflt sg
-                    kind (if (eq kind 'NAX) 'SUG kind)))
+                    kind (cond ((eq kind 'NAX) 'SUG)
+                               ;; a suggestion on a REQUIRED question
+                               ;; opens Enter, never NA
+                               ((eq kind 'REQ) 'SUGR)
+                               (t kind))))
           ;; the form answers first, and its answer is consumed --
           ;; see "form answers" above for why removing beats marking
           (setq v (if (pool:fhas (car it))
@@ -5785,6 +5819,13 @@
   ;; An OVAL's sides are the one pair that may be NA: the overall and
   ;; the two ends read them back (qf:ovalsides).  The ends themselves
   ;; are always required -- they are the chords the arcs spring from.
+  ;; The END is the pool's WIDTH, and a pool is typically about twice
+  ;; as long as it is wide -- so on a RECTANGLE it is offered half the
+  ;; side rather than asked cold (pool:sughalf).  Enter takes the
+  ;; offer, anything typed wins over it, and the offer only stands
+  ;; once a side is actually in.  Not on an OVAL: its overall spends
+  ;; length on the two end bulges, so half the straight SIDE is not
+  ;; half the pool.
   (defun qf:sides ( / ans sk)
   (setq sk (if (= ptype "Oval") 'NAX 'REQ))
   (if pool:*insq*
@@ -5794,7 +5835,10 @@
                                       (pool:lbl pv '(lA lB lC lD))))
                         (list 'le 'REQ "End length (left & right)"
                               (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))
-                                      (pool:lbl pv '(lA lB lC lD)))))
+                                      (pool:lbl pv '(lA lB lC lD)))
+                              nil nil nil
+                              (if (= ptype "Rectangle")
+                                  '(pool:sughalf ans '(tp)))))
                   nil)
             tp (pool:sq ans 'tp) bo tp
             le (pool:sq ans 'le) ri le)
@@ -5804,9 +5848,15 @@
                         (list 'bo sk "Side length BOTTOM (A-B)"
                               (append (cdr (assoc 'ab pv)) (pool:lbl pv '(lA lB))))
                         (list 'le 'REQ "End length LEFT (A-D)"
-                              (append (cdr (assoc 'da pv)) (pool:lbl pv '(lA lD))))
+                              (append (cdr (assoc 'da pv)) (pool:lbl pv '(lA lD)))
+                              nil nil nil
+                              (if (= ptype "Rectangle")
+                                  '(pool:sughalf ans '(tp bo))))
                         (list 'ri 'REQ "End length RIGHT (B-C)"
-                              (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC)))))
+                              (append (cdr (assoc 'bc pv)) (pool:lbl pv '(lB lC)))
+                              nil nil nil
+                              (if (= ptype "Rectangle")
+                                  '(pool:sughalf ans '(tp bo)))))
                   nil)
             tp (pool:sq ans 'tp) bo (pool:sq ans 'bo)
             le (pool:sq ans 'le) ri (pool:sq ans 'ri)))
