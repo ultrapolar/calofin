@@ -245,6 +245,127 @@ def _form_at(src, i):
     return (i, len(src))
 
 
+#: Every prompt shape that can carry a bracket.
+GETTERS = ("getkword", "getint", "getreal", "getdist", "getstring",
+           "getpoint", "getangle", "getcorner", "entsel", "nentsel")
+#: Back and Undo are accepted wherever either is offered but never
+#: listed in the initget string (STANDARDS 1 rule 3).
+IMPLICIT = {"BACK", "UNDO"}
+
+LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def _literals(text):
+    return LITERAL.findall(text)
+
+
+def _split_args(form):
+    """The call's TOP-LEVEL arguments as source text, nested forms and
+    string literals kept whole.
+
+    Harvesting every nested literal positionally instead would line the
+    wrong arguments up the moment a message is assembled with strcat --
+    which FITABHD's pool-type question does.
+    """
+    inner = form[1:-1]
+    out, buf, depth, instr, i = [], "", 0, False, 0
+    while i < len(inner):
+        c = inner[i]
+        if instr:
+            buf += c
+            if c == "\\" and i + 1 < len(inner):
+                buf += inner[i + 1]
+                i += 2
+                continue
+            if c == '"':
+                instr = False
+            i += 1
+            continue
+        if c == '"':
+            instr = True
+            buf += c
+            i += 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        if depth == 0 and c in " \t\r\n":
+            if buf.strip():
+                out.append(buf.strip())
+            buf = ""
+        else:
+            buf += c
+        i += 1
+    if buf.strip():
+        out.append(buf.strip())
+    return out
+
+
+def _is_literal(a):
+    return len(a) >= 2 and a.startswith('"') and a.endswith('"')
+
+
+def bracket_rule(path, src, problems):
+    """A click sends the bracket text, so every word it shows must be a
+    word the prompt accepts (STANDARDS 1 rule 1).
+
+    Two shapes, and the reason each is read the careful way:
+      * initget paired with the next get* FORM, paren-matched, reading
+        every string literal inside it.  A prompt assembled with strcat
+        is invisible to a `(getkword "` regex (CORNERSTP's step
+        question), and a character window instead of the form's own
+        parens runs out of a bracket-free prompt into the next one's
+        bracket (lhd's curve cap).
+      * an ask-helper call whose keyword list and bracket are both
+        plain literals -- anything else is a variable this cannot read.
+    """
+    src = decomment(src)
+
+    for m in re.finditer(r"\(initget\b([^()]*)\)", src):
+        kws = _literals(m.group(1))
+        if not kws:
+            continue                      # bits only, no keywords
+        allowed = {w.upper() for w in kws[-1].split()} | IMPLICIT
+        nxt = min((src.find("(" + g, m.end()) for g in GETTERS
+                   if src.find("(" + g, m.end()) != -1), default=-1)
+        if nxt == -1:
+            continue
+        a, b = _form_at(src, nxt)
+        prompt = "".join(_literals(src[a:b]))
+        br = re.search(r"\[([^\]]*)\]", prompt)
+        if not br:
+            continue                      # no bracket to disagree with
+        for word in br.group(1).split("/"):
+            w = word.strip()
+            if w and w.upper() not in allowed:
+                problems.append(
+                    "line %d: the bracket shows %r but initget accepts %s "
+                    "- a click sends the bracket text (STANDARDS 1)"
+                    % (src[:a].count("\n") + 1, w,
+                       " ".join(sorted(allowed - IMPLICIT))))
+
+    for m in re.finditer(r"\((?:[a-z]+[:-])?ask(?:kw|treat)\b", src):
+        a, b = _form_at(src, m.start())
+        args = _split_args(src[a:b])
+        if len(args) < 4:
+            continue
+        kws_a, shown_a = args[2], args[3]
+        if not (_is_literal(kws_a) and _is_literal(shown_a)):
+            continue
+        kws, shown = kws_a[1:-1], shown_a[1:-1]
+        if "/" not in shown:
+            continue
+        allowed = {w.upper() for w in kws.split()} | IMPLICIT
+        for word in shown.split("/"):
+            w = word.strip()
+            if w and w.upper() not in allowed:
+                problems.append(
+                    "line %d: the bracket shows %r but the keyword list is "
+                    "%r - a click sends the bracket text (STANDARDS 1)"
+                    % (src[:a].count("\n") + 1, w, kws))
+
+
 def house_rules(path, src, problems):
     """The conventions the tree keeps by hand, kept by construction.
 
@@ -317,6 +438,7 @@ def check_file(path):
 
     problems = balance(clean)
     house_rules(path, src, problems)
+    bracket_rule(path, src, problems)
 
     # STANDARDS 5: sources are ASCII ("--", never em dashes) - comments
     # included, since the generated tiers carry them verbatim.  The

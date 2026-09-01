@@ -824,8 +824,15 @@ explicitly kept open.  What remains, each a deliberate deferral:
 * `cal:askkw`'s signature still takes a hand-written SHOWN bracket
   where section 4's reference derives it from the keyword list.  The
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the
-  signature is a coordinated pass of its own; until then the 8.2
-  class is closed by review, not by construction.
+  signature is a coordinated pass of its own.  The 8.2 class itself is
+  now closed by CONSTRUCTION: `check_lisp` compares every bracket
+  against the keyword list its prompt actually accepts, in both the
+  `initget`/`get*` and the ask-helper shape, so a bracket a click
+  cannot send fails `make check`.  What the signature migration would
+  still buy is that the bracket could not be WRITTEN twice at all --
+  a stricter "derives from the keyword list" rule, deliberately not
+  added here because three of its four current findings are the very
+  hidden-alias sites that migration removes.
 * Demo-cleanup confirms are asked as `Yes/No` with `<Yes>` in
   SPACHECK, dimcheck, linfincheck and AUTOBEAD where section 2's
   vocabulary gives `Keep Erase` with `<Keep>` (LISPLAB and both perp
