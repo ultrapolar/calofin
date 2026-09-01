@@ -123,7 +123,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "082826 REV18")
+(setq pool:*version* "090126 REV19")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -687,6 +687,8 @@
   (setq s (strcase subject t))
   (cond
     ((= s "all four corners") "corners")
+    ((= s "the deep end corners a and d") "deepcorners")
+    ((= s "the shallow end corners b and c") "shalcorners")
     ((= s "the outer corners") "outercorners")
     ((= s "the inner corner e") "innercorner")
     ((= s "the body corners a, b, c and d") "bodycorners")
@@ -6829,6 +6831,10 @@
 ;;;  B is the tip-to-tip overall, A the overall width; each end's
 ;;;  letters close against them exactly like their home sheets, and
 ;;;  the body length is what's left of B after the end bulges.
+;;;  A SQUARE end is a plain rectangle end, so its two corners take
+;;;  the same Square / Radius / Cut / NotGiven treatments the
+;;;  rectangle's do, behind the same gate; the other three styles
+;;;  measure their corners with their own letters and are not asked.
 ;;;  Interior = the standard rectangle bottom pipeline, anchored tip
 ;;;  to tip (no corner ties -- the ends are too varied to tie to).
 
@@ -6884,15 +6890,21 @@
 
 ;; Draw one mutt end onto the fitted body.  pbot/ptop = the body
 ;; corners on this end line, pb2/pt2 = where the sides start (inset
-;; for a grecian end), m = outward unit normal.
+;; for a grecian end), eb/et = where the END WALL starts at pbot/ptop
+;; (the corner-treatment ends on a square end; the true corners
+;; themselves everywhere else), m = outward unit normal.
 ;; Returns (tip springT springB arcent rfit) -- tip is the extreme
 ;; point B is taped to; springs are the wall/stub ends (the body
-;; corners themselves on a square or oval end).
-(defun pool:muttend (pbot ptop pb2 pt2 m style s1 v ext lay / uu wb wt tip o)
+;; corners themselves on a square or oval end).  The tip of a square
+;; end stays the mid of the TRUE end line: a corner treatment eats
+;; into the wall from its ends, never past the middle, so B is taped
+;; to the same point either way.
+(defun pool:muttend (pbot ptop pb2 pt2 eb et m style s1 v ext lay
+                     / uu wb wt tip o)
   (setq uu (pool:unit (cal:v- ptop pbot)))
   (cond
     ((= style "Square")
-     (pool:line pbot ptop lay)
+     (pool:line eb et lay)
      (list (cal:mid pbot ptop) ptop pbot nil nil))
     ((= style "Grecian")
      (setq wb (cal:v+ pbot (cal:v* uu s1))
@@ -6902,12 +6914,59 @@
      (pool:line wt pt2 lay)
      (list (cal:mid pbot ptop) wt wb nil nil))
     ((= style "ROman")
-     (pool:romend pbot ptop pbot ptop m ext v lay))
+     (pool:romend pbot ptop eb et m ext v lay))
     (t                                  ; Oval
      (setq tip (cal:v+ (cal:mid pbot ptop) (cal:v* m ext)))
      (pool:arc3p ptop tip pbot lay)
      (setq o (pool:circum ptop tip pbot))
      (list tip ptop pbot (entlast) (if o (distance o tip) ext)))))
+
+;;;  A mutt's SQUARE end is a plain rectangle end, so its two corners
+;;;  are real corners a builder can round or chamfer -- the field
+;;;  sheet's "rectangle with rounded corners on that end".  They are
+;;;  asked exactly like the rectangle's and the roman's, behind the
+;;;  same gate, and the two questions below are what a treated corner
+;;;  costs the rest of the flow: the drawn wall no longer reaches the
+;;;  true corner, and the dims that read the wall have to follow it
+;;;  down (STANDARDS' "wall dims attach to the pool").
+;;;
+;;;  The other three end styles are not asked and must not be: a
+;;;  grecian end's corner IS its S / S1 / S2 cut, a roman end's is the
+;;;  S1 stub under the arc, and an oval end has no corner at all.
+;;;  Each is already measured by its own letters, so a treatment there
+;;;  would ask the same corner twice, in two vocabularies.
+
+;; The extension-line origin for a mutt body side at quad corner i.
+;; A treated corner is off the pool, so the dim hangs on the point of
+;; the treatment standing at the TRUE corner's station along the wall
+;; -- the number does not move, only the origin (pool:cornerhook).
+;; An untreated corner hands back p, which a grecian end has already
+;; inset to where its wall really starts.
+(defun pool:mutthook (quad corners i p u / hk)
+  (if (pool:cutp (car (nth i corners)))
+      (if (setq hk (pool:cornerhook (nth i quad)
+                                    (nth (rem (+ i 3) 4) quad)
+                                    (nth (rem (+ i 1) 4) quad)
+                                    (car (nth i corners)) (cadr (nth i corners))
+                                    u 0.0))
+          hk
+          p)
+      p))
+
+;; One mutt body-side dim, in SIDE STANDARD like every other sheet
+;; letter: it READS the true side run p -> q and hooks its origins
+;; onto the drawn wall wherever a corner treatment cut an end off it.
+;; Nothing treated -> straight through pool:dimalgs, so an untreated
+;; mutt draws exactly the dim it always did.
+(defun pool:muttside (quad corners i j p q loc / u hp hq od)
+  (setq u (pool:unit (cal:v- q p))
+        hp (pool:mutthook quad corners i p u)
+        hq (pool:mutthook quad corners j q u))
+  (if (and (< (distance p hp) 1.0e-9) (< (distance q hq) 1.0e-9))
+      (pool:dimalgs p q loc)
+      (progn (setq od (pool:dimsdbeg))
+             (pool:dimrot hp hq (angle p q) loc)
+             (pool:dimsdend od))))
 
 ;; The mutt guide is built by mu:geo inside pool:muttflow (a live-guide
 ;; geometry function fed to pool:pvlive): the body and both styled ends
@@ -6918,6 +6977,7 @@
                          dsraw ds1raw dvraw ds2raw drraw
                          ssraw ss1raw svraw ss2raw srraw
                          dres sres extl extr insl insr tv muttbad
+                         mcs mce mcarcs mgrp mrlbl mrcs
                          dac dbd fq quad failed a b c d cen meas notes
                          uab udc ml mr lend rend tipl tipr
                          pab0 pab1 pdc0 pdc1 doff th odim
@@ -7119,20 +7179,126 @@
                            dbd (pool:sq ans 'bd))
                      nil)))))
 
-  (pool:stages (list 'mu:ends 'mu:guide 'mu:letters 'mu:cross))
-  (pool:pvkill)
+  ;; -------- resolve the ends, then the body against B.  Run at the
+  ;; top of mu:corners, because the corner questions have to cap their
+  ;; sizes against the body side the ends leave behind -- and re-run
+  ;; from scratch (valnotes cleared) every time Back comes through, so
+  ;; a re-answered letter does not stack a second copy of its warning.
+  (defun mu:resolve ()
+    (setq pool:*valnotes* nil muttbad nil)
+    (setq dres (pool:muttres dstyle dsraw ds1raw dvraw drraw araw braw "DEEP")
+          sres (pool:muttres sstyle ssraw ss1raw svraw srraw araw braw "SHALLOW")
+          extl (car dres) insl (cadr dres)
+          extr (car sres) insr (cadr sres)
+          muttbad (or (nth 5 dres) (nth 5 sres))
+          tv (- braw extl extr))
+    (if (<= (- tv insl insr) 1.0e-6)
+        (progn
+          (setq tv (+ insl insr (min 12.0 (* 0.25 braw))) muttbad t)
+          (pool:valnote "MUTT ENDS DO NOT FIT B - BODY ADJUSTED")))
+    (princ))
 
-  ;; -------- resolve the ends, then the body against B
-  (setq dres (pool:muttres dstyle dsraw ds1raw dvraw drraw araw braw "DEEP")
-        sres (pool:muttres sstyle ssraw ss1raw svraw srraw araw braw "SHALLOW")
-        extl (car dres) insl (cadr dres)
-        extr (car sres) insr (cadr sres)
-        muttbad (or (nth 5 dres) (nth 5 sres))
-        tv (- braw extl extr))
-  (if (<= (- tv insl insr) 1.0e-6)
-      (progn
-        (setq tv (+ insl insr (min 12.0 (* 0.25 braw))) muttbad t)
-        (pool:valnote "MUTT ENDS DO NOT FIT B - BODY ADJUSTED")))
+  ;; -------- corner treatments on the SQUARE ends.  Quad order: A
+  ;; bottom-left and D top-left are the DEEP end's, B bottom-right and
+  ;; C top-right the SHALLOW end's -- so an end contributes its two
+  ;; corners only when it is Square (see the note above pool:mutthook
+  ;; for why the other three styles are not asked).
+  ;;
+  ;; The grouping is the rectangle's and the roman's: in square one
+  ;; question per family of like corners -- both ends square makes ONE
+  ;; family of four, since a square-ended mutt's four corners are the
+  ;; rectangle's -- and out of square one per corner, Enter reusing
+  ;; the previous.  mgrp carries the groups on to the corner marks and
+  ;; the report so all three tell the same story.
+  ;; the corners to ask, in the order they are asked: A B C D when
+  ;; both ends are square (the rectangle's own order), otherwise the
+  ;; one square end's pair
+  (defun mu:cornerix ()
+    (cond ((and (= dstyle "Square") (= sstyle "Square")) (list 0 1 2 3))
+          ((= dstyle "Square") (list 0 3))
+          ((= sstyle "Square") (list 1 2))))
+
+  ;; the four-corner list the drawing works from: the answer at every
+  ;; index that was asked, a plain square corner everywhere else
+  (defun mu:cornerset (ans / k out)
+    (foreach k (list 0 1 2 3)
+      (setq out (cons (if (assoc k ans) (cdr (assoc k ans)) (list "Square" 0.0))
+                      out)))
+    (reverse out))
+
+  (defun mu:corners ( / ix v cc cap)
+    (mu:resolve)
+    (setq mcs (mu:cornerset nil)
+          mgrp nil mrlbl nil mrcs nil
+          ix (mu:cornerix))
+    (if (null ix)
+        nil                             ; no square end: no corners to ask
+        (progn
+          ;; half the shorter wall the treatment has to fit on: the
+          ;; body side the ends left, or the end wall A
+          (setq cap (* 0.5 (min (- tv insl insr) araw)))
+          (cond
+            ((eq (setq v (pool:askynf 'crec
+                                      "Anything to record about the corners (radius / cut / not given)?"
+                                      "No" t))
+                 'CAL-BACK)
+             'CAL-BACK)
+            ((not v)
+             (mu:cornergroups ix)
+             nil)
+            (pool:*insq*
+             (setq cc (pool:askcorner
+                        (cond ((= (length ix) 4) "all four corners")
+                              ((= dstyle "Square")
+                               "the DEEP end corners A and D")
+                              (t "the SHALLOW end corners B and C"))
+                        nil nil nil cap nil t))
+             (if (eq cc 'CAL-BACK)
+                 'CAL-BACK
+                 (progn
+                   (setq mcs (mu:cornerset
+                               (mapcar '(lambda (k) (cons k cc)) ix)))
+                   (mu:cornergroups ix)
+                   nil)))
+            (t
+             (princ "\n(per-corner treatment; press Enter to reuse the previous corner)")
+             (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
+             (princ "\nOnly a SQUARE end has corners to treat -- the others carry their own letters.")
+             (setq v (pool:askcorners
+                       (mapcar '(lambda (k) (strcat "Corner " (mu:cornerlbl k))) ix)
+                       (mapcar '(lambda (k) cap) ix)
+                       (mapcar '(lambda (k) nil) ix)
+                       (mapcar '(lambda (k) nil) ix)))
+             (if (eq v 'CAL-BACK)
+                 'CAL-BACK
+                 (progn
+                   (setq mcs (mu:cornerset (mapcar 'cons ix v)))
+                   (mu:cornergroups ix)
+                   nil)))))))
+
+  ;; The index groups the answers were given in -- what pool:dimringcorners
+  ;; needs to know which corners may collapse to one "Typ." mark -- and
+  ;; the matching report labels.  In square the treated end(s) answered
+  ;; together are one group led by its reference corner (B when all
+  ;; four, the way the rectangle and the roman lead); out of square
+  ;; every corner stands alone.
+  (defun mu:cornerlbl (k) (nth k (list "A" "B" "C" "D")))
+
+  (defun mu:cornergroups (ix / ord)
+    (setq ord (if (= (length ix) 4) (list 1 0 2 3) ix))
+    (if pool:*insq*
+        (setq mgrp (list ord)
+              mrlbl (list (cond ((= (length ix) 4) "CORNER")
+                                ((= dstyle "Square") "DEEP CORNER")
+                                (t "SHAL CORNER")))
+              mrcs (list (nth (car ord) mcs)))
+        (setq mgrp (mapcar 'list ord)
+              mrlbl (mapcar '(lambda (k) (strcat "CORNER " (mu:cornerlbl k))) ord)
+              mrcs (mapcar '(lambda (k) (nth k mcs)) ord)))
+    (princ))
+
+  (pool:stages (list 'mu:ends 'mu:guide 'mu:letters 'mu:cross 'mu:corners))
+  (pool:pvkill)
 
   ;; -------- fit the body, draw sides and ends
   (princ "\nFitting pool body to the measurements ...")
@@ -7153,16 +7319,29 @@
   (setq mr (pool:unit (cal:perp (cal:v- c b))))
   (if (< (cal:dot (cal:v- (cal:mid b c) cen) mr) 0.0)
       (setq mr (cal:v* mr -1.0)))
-  (setq pab0 (cal:v+ a (cal:v* uab insl))
+  ;; pab0 / pab1 / pdc0 / pdc1 are the TRUE side ends -- the corners
+  ;; themselves, or the setback where a grecian end insets them.  They
+  ;; are what the letters measure and what the mini-model draws.  The
+  ;; WALLS run between the corner-treatment ends, which is the same
+  ;; points again until a square end's corner is rounded or cut (only
+  ;; a square end can be, and it never insets, so the two adjustments
+  ;; can never collide on one corner).
+  (setq mce (pool:ringends quad mcs)
+        pab0 (cal:v+ a (cal:v* uab insl))
         pab1 (cal:v- b (cal:v* uab insr))
         pdc0 (cal:v+ d (cal:v* udc insl))
         pdc1 (cal:v- c (cal:v* udc insr)))
-  (pool:line pab0 pab1 "POOL")
-  (pool:line pdc0 pdc1 "POOL")
-  (setq lend (pool:muttend a d pab0 pdc0 ml dstyle
+  (pool:line (cal:v+ (cadr (nth 0 mce)) (cal:v* uab insl))
+             (cal:v- (car (nth 1 mce)) (cal:v* uab insr)) "POOL")
+  (pool:line (cal:v+ (car (nth 3 mce)) (cal:v* udc insl))
+             (cal:v- (cadr (nth 2 mce)) (cal:v* udc insr)) "POOL")
+  (setq lend (pool:muttend a d pab0 pdc0
+                           (car (nth 0 mce)) (cadr (nth 3 mce)) ml dstyle
                            (caddr dres) (nth 3 dres) extl "POOL")
-        rend (pool:muttend b c pab1 pdc1 mr sstyle
+        rend (pool:muttend b c pab1 pdc1
+                           (cadr (nth 1 mce)) (car (nth 2 mce)) mr sstyle
                            (caddr sres) (nth 3 sres) extr "POOL")
+        mcarcs (pool:ringarcs mce mcs "POOL")
         tipl (car lend) tipr (car rend))
 
   ;; -------- extents / dims
@@ -7184,8 +7363,8 @@
             (pool:dimalgs (list (car tipl) ymax) pdc0
                           (list (* 0.5 (+ (car tipl) (car pdc0)))
                                 (+ ymax doff))))
-        (pool:dimalgs pdc0 pdc1
-                      (list (car (cal:mid pdc0 pdc1)) (+ ymax doff)))
+        (pool:muttside quad mcs 3 2 pdc0 pdc1
+                       (list (car (cal:mid pdc0 pdc1)) (+ ymax doff)))
         (if (or (= sstyle "Grecian") (= sstyle "ROman"))
             (pool:dimalgs pdc1 (list (car tipr) ymax)
                           (list (* 0.5 (+ (car pdc1) (car tipr)))
@@ -7208,7 +7387,9 @@
               (pool:dimalgs (cadr rend) (caddr rend)
                             (list (+ (car tipr) (* 0.9 doff))
                                   (cadr (cal:mid (cadr rend) (caddr rend)))))))
-        (pool:dimalg a d (list xa (cadr (cal:mid a d))))
+        ;; A runs down the deep end line: a drawn wall when that end
+        ;; is square, so it hooks onto the pool like any other wall
+        (pool:dimwall quad mcs 0 3 (list xa (cadr (cal:mid a d))))
         (if (= dstyle "Grecian")
             (pool:dimalg pab0 (caddr lend)
                          (pool:outoffp pab0 (caddr lend)
@@ -7219,12 +7400,14 @@
                                        (list pab0 pab1 pdc1 pdc0) doff))))
       ;; out-of-square: the simple roman-style set + dashed crosses
       (progn
-        (pool:dimalgs pab0 pab1 (pool:outoff pab0 pab1 cen doff))
-        (pool:dimalgs pdc0 pdc1 (pool:outoff pdc0 pdc1 cen doff))
+        (pool:muttside quad mcs 0 1 pab0 pab1
+                       (pool:outoff pab0 pab1 cen doff))
+        (pool:muttside quad mcs 3 2 pdc0 pdc1
+                       (pool:outoff pdc0 pdc1 cen doff))
         (pool:dimalg tipl tipr (list (car (cal:mid tipl tipr))
                                      (- ymin (* 1.5 doff))))
-        (pool:dimalg a d (list (- (car tipl) (* 1.2 doff))
-                               (cadr (cal:mid a d))))))
+        (pool:dimwall quad mcs 0 3 (list (- (car tipl) (* 1.2 doff))
+                                         (cadr (cal:mid a d))))))
   ;; end radii are sheet letters -> SIDE STANDARD, like the roman
   (pool:dimrads (nth 3 lend) tipl ml doff)
   (pool:dimrads (nth 3 rend) tipr mr doff)
@@ -7240,6 +7423,11 @@
                                       (cal:v* (pool:unit (cal:perp (cal:v- d b)))
                                                (* -0.2 doff)))))
         (pool:dimxend odim)))
+  ;; corner treatments on the square end(s): one Typ. per family that
+  ;; answered together, each corner its own dim when they differ.  A
+  ;; mutt with no square end has no corner to mark, and mgrp is nil.
+  (if mgrp
+      (pool:dimringcorners quad mcs mce mcarcs cen doff mgrp))
   (setvar "CLAYER" oldclay)
 
   ;; corner letters live on the mini-model beside the report, not in
@@ -7283,6 +7471,11 @@
       (setq rows (append rows
                          (list (list "CROSS A-C" dac (nth 4 meas))
                                (list "CROSS B-D" dbd (nth 5 meas))))))
+
+  ;; corner treatments: one row per family in square, per corner out
+  ;; of square -- and nothing at all when every corner came back Square
+  (if mrlbl
+      (setq rows (append rows (pool:cornerrows mrlbl mrcs))))
 
   ;; -------- interior: standard bottom pipeline, anchored tip to tip
   (setq rows (append rows (pool:hopmuttdsp quad tipl tipr doff th)))

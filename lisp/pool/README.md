@@ -144,12 +144,14 @@ there are no treatment ends to tape to.
 Side and end lengths are always measured to the **true (sharp)
 corner**; the treatment cuts inward from there.
 
-The same four treatments are offered on **Grecian/Octagon**, **Roman**
-and **L / Lazy L** pools, each behind an `Anything to record about the
-corners (radius / cut / not given)?` gate that defaults to **No** — square is
+The same four treatments are offered on **Grecian/Octagon**, **Roman**,
+**L / Lazy L** pools and a **Mutt's square end(s)**, each behind an
+`Anything to record about the corners (radius / cut / not given)?`
+gate that defaults to **No** — square is
 always the assumption. What differs per shape is only how the corners
 are **grouped**: see [Grecian corner treatments](#grecian-corner-treatments),
-[Roman pools](#roman-pools) and [L / Lazy L pools](#l--lazy-l-pools).
+[Roman pools](#roman-pools), [L / Lazy L pools](#l--lazy-l-pools) and
+[Mutt pools](#mutt-pools-mixed-ends).
 Everywhere, an **out-of-square** pool asks each corner independently
 (Enter reusing the previous one) while an **in-square** pool asks once
 per family of like corners.
@@ -587,6 +589,37 @@ Out-of-square mutts take the Roman route: body cross dims `A-C` /
 onto the fitted body. The report shows `OV B` / `OV A`, the derived
 side length, and one lettered block per end (`DEEP S1`, `SHAL R`, …).
 
+**Corners on a square end.** A `Square` end is a plain rectangle end,
+and a rectangle end in the field is often rounded or chamfered — so
+its two corners are asked the ordinary
+[corner question](#corner-treatments-square--radius--cut--notgiven),
+behind the usual `Anything to record about the corners?` gate, right
+after the cross dims. Only a **`Square`** end contributes corners:
+a Grecian end's corner *is* its `S`/`S1`/`S2` cut, a Roman end's is
+the `S1` stub under the arc, and an Oval end has no corner at all —
+each is already measured by its own letters, so asking a treatment
+there would ask the same corner twice in two vocabularies. A mutt
+with no square end is never asked the question.
+
+Grouping is the rectangle's and the Roman's. **In square** it is one
+question per family of like corners: `all four corners` when both
+ends are square (a square-ended mutt's four corners *are* the
+rectangle's), otherwise `the DEEP end corners A and D` or `the
+SHALLOW end corners B and C` for whichever end is square. **Out of
+square** each corner is asked on its own — `Corner A` … `Corner D`,
+but only the square end's — Enter reusing the previous answer. Sizes
+are capped at half the shorter wall the treatment sits on (the body
+side the ends left, or `A`).
+
+Everything downstream follows the rectangle's rules: the drawn walls
+run between the treatment ends while the letters still read the
+**true** corners ([Wall dims attach to the pool](#wall-dims-attach)),
+the sheet gets one `Typ.` callout when the corners answered together
+match and a dim per corner when they differ, and the report carries
+one `CORNER`/`DEEP CORNER`/`SHAL CORNER` row in square, one per
+corner out of square. The mutt asks no cross-dim reference-mode
+question: its crosses are body-corner to body-corner either way.
+
 **Bottom:** the standard pipeline (`Normal` / `Sport` / `Wedge` /
 `SLope` / `MOdflat` / `SHallow`), anchored **tip to tip** — `H` is
 taped from the deep-end extreme and the chain closes against `B`,
@@ -954,9 +987,11 @@ Corner treatments key off the question's subject as `<stem>-ty` (the
 treatment word) and `<stem>-sz` (the radius or cut-face length):
 `cornera` … `cornerd` (and `cornerlt` etc.) for the per-corner
 questions, `corners` for `all four corners`, `outercorners` and
-`innercorner` for the L's two questions, and `bodycorners` and
+`innercorner` for the L's two questions, `bodycorners` and
 `endcorners` for the in-square Grecian/Octagon families (`the body
-corners A, B, C and D`, `the end-tip corners LT, LB, RT and RB`).
+corners A, B, C and D`, `the end-tip corners LT, LB, RT and RB`), and
+`deepcorners` / `shalcorners` for a mutt's one-square-end families
+(`the DEEP end corners A and D`, `the SHALLOW end corners B and C`).
 
 ### Object snaps stay live while you measure
 

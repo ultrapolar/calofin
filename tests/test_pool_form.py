@@ -328,7 +328,8 @@ print("   gate, both family treatments and the cut size all from the "
 # --------------------------------------------------------------------
 print("== 10. mutt end styles from the form ==")
 
-MUTT_TAIL = [480.0, 240.0, "No"]         # B, A, no pool bottom
+# B, A, nothing to record about the two square ends' corners, no bottom
+MUTT_TAIL = [480.0, 240.0, "No", "No"]
 
 j = by_prompts(["Insquare", "MU"] + BASE + ["Square", "Square"] + MUTT_TAIL)
 k = by_form("""'((dstyle . "Square") (sstyle . "Square"))""",
@@ -344,7 +345,7 @@ print("   DEEP and SHALLOW styles from the form; no style prompt appeared")
 # 11. The two grecian collective subjects key like the other corner
 #     subjects do: case-blind, exact wording only.
 # --------------------------------------------------------------------
-print("== 11. fckey knows the grecian corner families ==")
+print("== 11. fckey knows the grecian and mutt corner families ==")
 
 vm = VM()
 vm.load(LSP)
@@ -354,13 +355,16 @@ for subject, expect in [
         ("THE BODY CORNERS A, B, C AND D", "bodycorners"),
         ("all four corners", "corners"),          # the old subjects hold
         ("Corner A", "cornera"),
+        ("the DEEP end corners A and D", "deepcorners"),
+        ("the SHALLOW end corners B and C", "shalcorners"),
         ("the body corners", None),               # partial wording: prompt
+        ("the deep end corners", None),
         ("the arc springs", None)]:
     got = vm.eval(parse_all('(pool:fckey "%s")' % subject)[0])
     got = None if got is None else str(got)
     assert got == expect, \
         "fckey(%r) gave %r, expected %r" % (subject, got, expect)
-print("   body/tip families key; partial or unknown subjects still prompt")
+print("   body/tip and mutt end families key; partial subjects still prompt")
 
 
 print("\nALL POOL FORM SCENARIOS PASSED")

@@ -567,14 +567,51 @@ vm = run(["Outofsquare", "MU"] + BASE +
           240.0,
           "NA",                     # oval deep R -> half round, ext 120
           "NA", "Back", "NA", "NA",  # Back inside the cross block too
+          "Yes", "Cut", 18.0, None, None,   # B chamfered, Enter reuses it at C
           "No"],
          "R13b")
 assert drawn(vm, 'ARC', 'POOL'), "oval deep end must draw an arc"
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
-assert hasseg((360.0, 0.0), (360.0, 240.0)), "square shallow wall at body end"
-assert hasseg((0.0, 0.0), (360.0, 0.0)), "body is B minus the half-round ext"
 assert any("Cross dim body A-C" in p for p, a in vm.prompts)
-print("   half-round deep end, square shallow end, crosses asked")
+# the square shallow end HAS corners, so out of square they are asked
+# one at a time -- and only its two: B and C, never the oval end's A/D
+_cq = [p for p, a in vm.prompts if "should Corner" in p]
+assert sorted(p.split("Corner ")[1][0] for p in _cq) == ["B", "C"], _cq
+# both chamfer faces drawn, 18" each, and the shallow wall now runs
+# between them instead of corner to corner
+_sb = 18.0 / (2.0 * _m.sin(_m.pi / 4))
+assert hasseg((360.0, _sb), (360.0, 240.0 - _sb)), "shallow wall stops at the cuts"
+assert hasseg((0.0, 0.0), (360.0 - _sb, 0.0)), "bottom side stops at the cut"
+print("   half-round deep end, chamfered square end, corners asked there only")
+
+print("== R13c. MUTT in-square: SQUARE deep end with RADIUS corners ==")
+vm = run(["Insquare", "MU"] + BASE +
+         ["Square", "Grecian",     # deep square / shallow grecian
+          480.0, 240.0,            # B tip to tip, A
+          50.0, 40.0, "NA",        # shallow grecian S S1 S2(check)
+          "Yes", "Radius", 24.0,   # the deep end's two corners, filleted
+          "No"],                   # no bottom
+         "R13c")
+# a square end asks ONE question for its pair in square, and it is
+# asked for the deep end alone -- the grecian end carries its own S/S1
+assert any("the DEEP end corners A and D" in p for p, a in vm.prompts), \
+    [p for p, a in vm.prompts if "corners" in p]
+assert not any("Corner A" in p for p, a in vm.prompts)
+# two fillet arcs on the deep end, both 24" radius
+_r = sorted(round(d[40], 4) for d in drawn(vm, 'ARC', 'POOL'))
+assert _r == [24.0, 24.0], _r
+# the deep end wall no longer reaches the true corners: it runs
+# between the two fillet tangents, 240 - 24 - 24 long
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((0.0, 24.0), (0.0, 216.0)), "deep end wall stops at the fillets"
+assert hasseg((24.0, 0.0), (430.0, 0.0)), "bottom side starts at the fillet"
+# ... but A still READS the true 240: the number does not move, only
+# the extension-line origins
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 240.0) < 0.01 for c in dimcalls(vm))
+# and the report carries the treatment as one row for the pair
+_txt = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert any((t or '') == "DEEP CORNER RAD" for t in _txt), _txt
+print("   square deep end filleted; wall attached, A still reads 240")
 
 print("== R14. lazy L with RADIUS outer corners + CUT inner corner ==")
 vm = run(["Insquare", "LA"] + BASE +
