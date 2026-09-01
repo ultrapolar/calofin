@@ -488,6 +488,15 @@ STUB = '''
 (defun write-line (s fh)
   (setq stub:*written* (cons s stub:*written*)) s)
 (defun close (fh) (stub:ev "close"))
+;; the AutoCAD profile, as a store the scenario can seed and read back
+;; -- a dialog position that outlives a restart is a setenv/getenv
+;; round trip and nothing else
+(setq stub:*env* nil)
+(defun getenv (key / p) (if (setq p (assoc key stub:*env*)) (cdr p)))
+(defun setenv (key v)
+  (setq stub:*env* (cons (cons key v)
+                         (vl-remove (assoc key stub:*env*) stub:*env*)))
+  v)
 (defun load_dialog (f) (stub:ev "load") 7)
 (defun term_dialog () nil)
 (defun set_tile (k v)
@@ -565,6 +574,7 @@ COM = {}
 
 def _reset_com():
     OPENED.clear()
+    POS.clear()
     COM.clear()
     COM.update(created=[], props={}, calls=[], bytes=None, saved=None,
                released=0, fail_at=None, b64=None, wrote=[],
@@ -579,6 +589,7 @@ def _b(name):
 
 
 OPENED = []
+POS = []
 
 
 @_b('new_dialog')
@@ -587,6 +598,8 @@ def _newdlg(vm, a):
     # position threading is provable and a fixed-arity stub cannot
     # express it
     OPENED.append((str(a[0]), len(a)))
+    if len(a) > 3:
+        POS.append([float(v) for v in a[3]])
     vm.globals[lispvm.Sym('stub:*dlgname*')] = str(a[0])
     vm.globals[lispvm.Sym('stub:*action*')] = None
     vm.loads('(stub:ev "new")')
@@ -757,6 +770,63 @@ assert vm.globals.get('lzp:*pick*') is None, "pick survived the run"
 print("   Close: nothing ran, close->load->new->start->unload->delete,")
 print("   only the first page's %d commands bound, only %s enabled"
       % (len(first), LIVE))
+
+print("== where it was left outlives the session, not just the reopen ==")
+# lzp:*pos* is deliberately NOT reset between runs -- the panel reopens
+# after every tool it launches -- but it still dies with the file, so
+# the first panel after an AutoCAD restart used to come back in the
+# middle of the screen.  The profile is what closes that.
+vmp = stubbed()
+vmp.loads('(setq stub:*click* "cancel")')
+run(vmp, 'c:LAZPANEL', 'position saved')
+vmp.loads('(setq t:*saved* (getenv lzp:*poskey*))')
+assert str(vmp.globals.get('t:*saved*')) == '120,340', (
+    "closing the panel did not write its position to the profile: %r"
+    % vmp.globals.get('t:*saved*'))
+
+# a fresh VM is a fresh AutoCAD.  Seed the profile the last one left and
+# the FIRST page opens with four arguments, at that point, rather than
+# centred -- which is the whole of what was asked for.
+vmq = stubbed()
+vmq.loads('(setenv "LazPanel_Pos" "212,84")')
+vmq.loads('(setq stub:*click* "cancel")')
+run(vmq, 'c:LAZPANEL', 'position restored')
+assert OPENED and OPENED[0][1] == 4, (
+    "the first panel of a fresh session ignored the saved position: %r" % OPENED)
+assert POS and POS[0] == [212.0, 84.0], (
+    "the panel opened somewhere other than where it was left: %r" % POS)
+print("   closing writes the point to the profile, and a fresh session")
+print("   opens the panel there instead of in the middle")
+
+# What the profile is allowed to hold, and what it may do about it.
+# pos-read takes a value back only if it round-trips, so a hand-edited
+# or foreign one can do no more than centre the dialog -- which is
+# exactly what happened before there was a profile at all.
+vmr = stubbed()
+for src, want, why in (
+        ('"nonsense"', None, 'a value with no comma'),
+        ('"12,"', None, 'a half-written value'),
+        ('",34"', None, 'a value with no x'),
+        ('"12,34x"', None, 'a value that does not round-trip'),
+        ('"12,34"', [12, 34], 'a value this build wrote')):
+    vmr.loads('(setenv lzp:*poskey* %s) (setq t:*r* (lzp:pos-read))' % src)
+    got = vmr.globals.get('t:*r*')
+    got = [int(v) for v in got] if got else None
+    assert got == want, "%s read back as %r, not %r" % (why, got, want)
+# SCREENSIZE is unknown until it is set, and reads 0 -- the clamp has to
+# sit that out rather than pinning every dialog to the corner
+assert not vmr.sysvars.get('SCREENSIZE'), vmr.sysvars.get('SCREENSIZE')
+# a point saved on a second monitor that has since been unplugged is
+# dragged back onto the drawing area, not left where the mouse cannot go
+vmr.sysvars['SCREENSIZE'] = [1600.0, 900.0]
+vmr.loads('(setenv lzp:*poskey* "4000,2000") (setq t:*r* (lzp:pos-read))')
+assert [int(v) for v in vmr.globals['t:*r*']] == [1500, 800], (
+    "an off-screen point was not clamped back: %r" % vmr.globals['t:*r*'])
+vmr.loads('(setenv lzp:*poskey* "300,200") (setq t:*r* (lzp:pos-read))')
+assert [int(v) for v in vmr.globals['t:*r*']] == [300, 200], (
+    "a point already on screen was moved: %r" % vmr.globals['t:*r*'])
+print("   a profile value this build did not write centres the dialog,")
+print("   and a point off the current screen is dragged back onto it")
 
 vm = stubbed()
 vm.loads('(setq stub:*click* "%s")' % LIVE)

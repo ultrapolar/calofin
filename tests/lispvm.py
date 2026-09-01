@@ -850,8 +850,19 @@ def _strcat(vm, a):
     return ''.join(a)
 BUILTINS[Sym('strlen')] = lambda vm, a: len(a[0]) if a else 0
 BUILTINS[Sym('itoa')] = lambda vm, a: str(int(num(a[0])))
-BUILTINS[Sym('atoi')] = lambda vm, a: int(a[0]) if re.match(r'^[+-]?\d+',
-                                                            a[0]) else 0
+
+
+@bi('atoi')
+def _atoi(vm, a):
+    """AutoLISP reads the leading integer and stops there: (atoi "34x")
+    is 34 and (atoi "x") is 0.  Testing the prefix and then converting
+    the WHOLE string, as this did, raised on every value AutoCAD simply
+    answers -- and a routine parsing a string it did not write is
+    exactly where that shows up."""
+    m = re.match(r'^[+-]?\d+', a[0])
+    return int(m.group()) if m else 0
+
+
 BUILTINS[Sym('atof')] = lambda vm, a: float(re.match(
     r'^[+-]?\d*\.?\d*', a[0]).group() or 0)
 BUILTINS[Sym('chr')] = lambda vm, a: chr(int(a[0]))

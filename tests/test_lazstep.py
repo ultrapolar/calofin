@@ -68,6 +68,7 @@ PREFIX = {'CORNERSTP': 'cs', 'HEMISTEP': 'hs', 'NORMIESTEP': 'ns'}
 DX, DY = 520, 376          # a plausible tile size, in pixels
 DRAW = {'vec': [], 'fill': [], 'list': []}
 OPENED = []
+POS = []
 
 
 def tier(path):
@@ -86,6 +87,7 @@ def tier(path):
 
 def _reset():
     OPENED[:] = []
+    POS[:] = []
     DRAW['vec'] = []
     DRAW['fill'] = []
     DRAW['list'] = []
@@ -116,6 +118,8 @@ def _newdlg(vm, a):
     # 2 args on the first open, 4 once a position is known -- record
     # which, so the position threading is provable
     OPENED.append((str(a[0]), len(a)))
+    if len(a) > 3:
+        POS.append([float(v) for v in a[3]])
     vm.globals[lispvm.Sym('stub:*opened*')] = str(a[0])
     vm.globals[lispvm.Sym('stub:*act*')] = None
     return True
@@ -127,6 +131,15 @@ STUB = '''
 (defun open (f mode) f)
 (defun write-line (s fh) (setq stub:*written* (cons s stub:*written*)) s)
 (defun close (fh) t)
+;; the AutoCAD profile, as a store the scenario can seed and read back
+;; -- a dialog position that outlives a restart is a setenv/getenv
+;; round trip and nothing else
+(setq stub:*env* nil)
+(defun getenv (key / p) (if (setq p (assoc key stub:*env*)) (cdr p)))
+(defun setenv (key v)
+  (setq stub:*env* (cons (cons key v)
+                         (vl-remove (assoc key stub:*env*) stub:*env*)))
+  v)
 (defun load_dialog (f) 7)
 (defun mode_tile (k m) (setq stub:*mode* (cons (list k m) stub:*mode*)) t)
 (defun term_dialog () nil)
@@ -733,6 +746,63 @@ assert not [k for k in wired if k.startswith('chart')], (
     "an action is wired to a chart tile: it would be repainted on hover "
     "and a DCL image tile is not retained")
 print("   page one -> page two, drawn on open, reopened where it was left")
+
+print("== where it was left outlives the session, not just the page ==")
+# lzt:*pos* is cleared at the top of every run and dies with the file,
+# so the second LAZSTEP of the day -- and the first one after an AutoCAD
+# restart -- used to open back in the middle of the screen.  The
+# profile is what closes that.
+vmp = stubbed()
+vmp.loads(typed([('cancel', 'x')]))
+vmp.loads('(setq lzt:*type* "CORNERSTP") (setq t:*f* (lzt:show))')
+vmp.loads('(setq t:*saved* (getenv lzt:*poskey*))')
+assert str(vmp.globals.get('t:*saved*')) == '120,340', (
+    "closing the dialog did not write its position to the profile: %r"
+    % vmp.globals.get('t:*saved*'))
+
+# a fresh VM is a fresh AutoCAD.  Seed the profile the last one left and
+# the FIRST page opens with four arguments, at that point, rather than
+# centred -- which is the whole of what was asked for.
+vmq = stubbed()
+vmq.loads('(setenv "LazStep_Pos" "212,84")')
+vmq.loads(typed([('cancel', 'x')]))
+vmq.loads('(setq lzt:*type* "CORNERSTP") (setq t:*f* (lzt:show))')
+assert OPENED and OPENED[0][1] == 4, (
+    "the first page of a fresh session ignored the saved position: %r" % OPENED)
+assert POS and POS[0] == [212.0, 84.0], (
+    "the first page opened somewhere other than where it was left: %r" % POS)
+print("   closing writes the point to the profile, and a fresh session")
+print("   opens its first page there instead of in the middle")
+
+# What the profile is allowed to hold, and what it may do about it.
+# pos-read takes a value back only if it round-trips, so a hand-edited
+# or foreign one can do no more than centre the dialog -- which is
+# exactly what happened before there was a profile at all.
+vmr = stubbed()
+for src, want, why in (
+        ('"nonsense"', None, 'a value with no comma'),
+        ('"12,"', None, 'a half-written value'),
+        ('",34"', None, 'a value with no x'),
+        ('"12,34x"', None, 'a value that does not round-trip'),
+        ('"12,34"', [12, 34], 'a value this build wrote')):
+    vmr.loads('(setenv lzt:*poskey* %s) (setq t:*r* (lzt:pos-read))' % src)
+    got = vmr.globals.get('t:*r*')
+    got = [int(v) for v in got] if got else None
+    assert got == want, "%s read back as %r, not %r" % (why, got, want)
+# SCREENSIZE is unknown until it is set, and reads 0 -- the clamp has to
+# sit that out rather than pinning every dialog to the corner
+assert not vmr.sysvars.get('SCREENSIZE'), vmr.sysvars.get('SCREENSIZE')
+# a point saved on a second monitor that has since been unplugged is
+# dragged back onto the drawing area, not left where the mouse cannot go
+vmr.sysvars['SCREENSIZE'] = [1600.0, 900.0]
+vmr.loads('(setenv lzt:*poskey* "4000,2000") (setq t:*r* (lzt:pos-read))')
+assert [int(v) for v in vmr.globals['t:*r*']] == [1500, 800], (
+    "an off-screen point was not clamped back: %r" % vmr.globals['t:*r*'])
+vmr.loads('(setenv lzt:*poskey* "300,200") (setq t:*r* (lzt:pos-read))')
+assert [int(v) for v in vmr.globals['t:*r*']] == [300, 200], (
+    "a point already on screen was moved: %r" % vmr.globals['t:*r*'])
+print("   a profile value this build did not write centres the dialog,")
+print("   and a point off the current screen is dragged back onto it")
 
 # a tab switches the routine being filled in, and page one is regenerated
 v = stubbed()

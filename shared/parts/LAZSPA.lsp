@@ -73,7 +73,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.0")
+(setq *lazspa-version* "v1.1")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -463,6 +463,7 @@
 (setq lzs:*focus* nil)          ; the key whose box has the caret
 (setq lzs:*chart* nil)          ; the chart being filled in
 (setq lzs:*pos* nil)            ; where the dialog was last standing
+(setq lzs:*poskey* "LazSpa_Pos") ; ...in the profile, kept over a restart
 (setq lzs:*go* nil)             ; the chart a tab click asked for
 
 (defun lzs:get (key / p)
@@ -1132,17 +1133,62 @@
   (lzs:redraw)
   (princ))
 
-;; Open a page where the user last had the dialog.  done_dialog reports
-;; the position it was closed at and new_dialog takes one back, but only
-;; as a 4-argument call -- and a build that answered done_dialog with
-;; something other than a point would poison every reopen, so the shape
-;; is checked before it is trusted and the plain 2-argument call is the
-;; fallback.
-(defun lzs:newdlg (name dcl)
-  (if (and lzs:*pos* (listp lzs:*pos*) (= (length lzs:*pos*) 2)
-           (numberp (car lzs:*pos*)) (numberp (cadr lzs:*pos*)))
-      (new_dialog name dcl "" lzs:*pos*)
+;; WHERE THE DIALOG COMES BACK UP.  done_dialog reports the position it
+;; closed at, and that is the only chance to find out -- DCL cannot ask
+;; an open dialog where it is.  Held in lzs:*pos* alone that answer lasts
+;; until the file is reloaded, so the point also goes into the AutoCAD
+;; profile as "x,y" and is read back at the next open: come back after a
+;; restart and the dialog is still where it was left.
+(defun lzs:pos-save (p)                 ; answers with what it was given,
+  (if (and p (listp p) (= (length p) 2) ; so it can wrap a done_dialog
+           (numberp (car p)) (numberp (cadr p)))
+    (setenv lzs:*poskey*
+            (strcat (itoa (fix (car p))) "," (itoa (fix (cadr p))))))
+  p)
+
+;; The saved point, or nil when there is nothing worth trusting.  Only a
+;; string this build could have written is taken -- the parse has to
+;; round-trip -- so a hand-edited or foreign profile value can do no
+;; more than centre the dialog, which is what it did before.  The clamp
+;; is a rescue and not a fence: a point saved on a second monitor that
+;; has since been unplugged would otherwise put the dialog where the
+;; mouse cannot reach it.  SCREENSIZE is the drawing area rather than
+;; the desktop, so the clamp can only ever pull one IN.
+(defun lzs:pos-read ( / s i x y scr)
+  (setq s (getenv lzs:*poskey*))
+  (if (and s (setq i (vl-string-search "," s)) (> i 0))
+    (progn
+      (setq x (atoi (substr s 1 i))
+            y (atoi (substr s (+ i 2))))
+      (if (= s (strcat (itoa x) "," (itoa y)))
+        (progn
+          (setq scr (getvar "SCREENSIZE"))
+          (if (and scr (listp scr) (= (length scr) 2)
+                   (numberp (car scr)) (numberp (cadr scr)))
+            (setq x (max 0 (min x (fix (- (car scr) 100.0))))
+                  y (max 0 (min y (fix (- (cadr scr) 100.0))))))
+          (list x y))))))
+
+;; Open a page where the user last had the dialog.  new_dialog takes a
+;; position back, but only in its four-argument form -- and a build
+;; answering done_dialog with something other than a point would poison
+;; every reopen, so the shape is checked before it is trusted and the
+;; plain two-argument call is the fallback.  lzs:*pos* is this session's
+;; answer; the profile is the one the last session left behind.
+(defun lzs:newdlg (name dcl / p)
+  (setq p (if lzs:*pos* lzs:*pos* (lzs:pos-read)))
+  (if (and p (listp p) (= (length p) 2)
+           (numberp (car p)) (numberp (cadr p)))
+      (new_dialog name dcl "" p)
       (new_dialog name dcl)))
+
+;; start_dialog, then keep where the dialog was left.  Saving here
+;; rather than in the three action tiles keeps setenv out of a dialog
+;; callback and gives the profile write one place to go wrong.
+(defun lzs:rundlg ( / rc)
+  (setq rc (start_dialog))
+  (lzs:pos-save lzs:*pos*)
+  rc)
 
 (defun lzs:show (chartkey / *error* f dcl rc c d n go done out)
   (defun *error* (msg)
@@ -1157,7 +1203,8 @@
     (princ))
   (setq lzs:*vals* nil
         lzs:*picks* nil                 ; every dropdown back to (ask)
-        lzs:*pos* nil                   ; where the user last had it
+        lzs:*pos* nil                   ; the profile decides where this
+                                        ; run opens, not the last page
         go chartkey)
   (cond
     ((not (lzs:chart go))
@@ -1236,7 +1283,7 @@
           (action_tile "cancel" "(setq lzs:*pos* (done_dialog 0))")
           (lzs:redraw)
           (lzs:grey c)
-          (setq rc (start_dialog))
+          (setq rc (lzs:rundlg))
           (cond
             ((= rc 4) (setq go lzs:*go*))     ; a tab: go round again
             (t (setq done t
