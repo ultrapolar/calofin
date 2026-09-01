@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.0, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.1, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -79,7 +79,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.4")
+(setq cal:*version* "v1.5")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -211,21 +211,26 @@
   (princ))
 
 ;;; -------------------- system variables --------------------------------
-;;; The snapshot lives in a GLOBAL and is taken only when no snapshot is
-;;; already pending: if a previous run died before restoring, the stale
-;;; snapshot still holds the user's TRUE settings.  Saving again at that
-;;; point would capture the zeroed OSMODE and every later run would
-;;; faithfully "restore" 0.  (From pool:/spa:syssave, POOL.LSP:5504.)
-;;; Restore runs in the saved order, so put OSMODE first in the list --
-;;; object snaps are the setting the user misses most if a run is ever
-;;; cut short partway.
+;;; The snapshot lives in a GLOBAL, and a variable already in it is
+;;; never captured again: if a previous run died before restoring, the
+;;; stale snapshot still holds the user's TRUE settings, and saving them
+;;; again at that point would capture the zeroed OSMODE and every later
+;;; run would faithfully "restore" 0.  (From pool:/spa:syssave,
+;;; POOL.LSP:5504.)  One thing the per-tool originals never faced: here
+;;; EVERY tool shares the one snapshot, and the tools list different
+;;; variables.  So a variable the pending snapshot lacks is ADDED rather
+;;; than the whole save skipped -- otherwise a run after an interrupted
+;;; one would change CLAYER, say, and never put it back, because the run
+;;; that took the snapshot never listed it.  Restore runs in the saved
+;;; order, so put OSMODE first in the list -- object snaps are the
+;;; setting the user misses most if a run is ever cut short partway.
 
 (defun cal:syssave (vars / v)
-  (if (not cal:*sysold*)
-      (foreach v vars
-        (if (/= nil (getvar v))
-            (setq cal:*sysold*
-                  (append cal:*sysold* (list (cons v (getvar v)))))))))
+  (foreach v vars
+    (if (and (not (assoc v cal:*sysold*))
+             (/= nil (getvar v)))
+        (setq cal:*sysold*
+              (append cal:*sysold* (list (cons v (getvar v))))))))
 
 (defun cal:sysrestore ( / p)
   (foreach p cal:*sysold* (setvar (car p) (cdr p)))
@@ -61098,7 +61103,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.8") ; printed on load and at command start
+(setq *paddle-version* "v1.9") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -61552,10 +61557,16 @@
             loops))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space padsize blkname ss perims vts
+(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss perims vts
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
-    (if doc (vla-EndUndoMark doc))
+    ;; close only the mark THIS run opened: an Esc at the perimeter
+    ;; prompt comes before StartUndoMark, and closing a mark nothing
+    ;; opened throws -- from inside the handler, where nothing catches
+    ;; it.  command-s style: the close itself goes through
+    ;; vl-catch-all-apply so it can never be the second error.
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
@@ -61587,6 +61598,7 @@
       (princ "\nPADDLE: no closed perimeter loop found.")
       (progn
         (vla-StartUndoMark doc)
+        (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
         (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blkname))
@@ -61601,6 +61613,7 @@
           (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
         (vla-EndUndoMark doc)
+        (setq mark-open nil)
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
@@ -68431,7 +68444,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -68540,31 +68553,35 @@
   result)
 
 ;; ---------------------------------------------------------------
-;; Error handler - restore locked layers and close the undo group
-;; even if the user hits Esc or something fails mid-run.
-;; ---------------------------------------------------------------
-(defun drone:error (msg)
-  (if *drone-unlocked* (drone:relock-layers *drone-unlocked*))
-  (setq *drone-unlocked* nil)
-  (if *drone-doc* (vla-EndUndoMark *drone-doc*))
-  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-    (princ (strcat "\nDRONE error: " msg)))
-  (if *drone-old-error* (setq *error* *drone-old-error*))
-  (princ))
-
-;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
-(defun c:DRONE (/ ss-text ss-pt ss-perim ss-anch i ent obj
+(defun c:DRONE (/ *error* doc unlocked mark-open
+                  ss-text ss-pt ss-perim ss-anch i ent obj
                   n-text n-pt n-perim n-anch)
 
-  (setq *drone-old-error* *error*
-        *error*           drone:error
-        *drone-doc*       (vla-get-ActiveDocument (vlax-get-acad-object))
-        *drone-unlocked*  nil
+  ;; The handler is LOCAL to this command (STANDARDS 5): it used to be
+  ;; installed by swapping the global *error*, which left this tool's
+  ;; cleanup live for whatever ran next if a run ever ended without the
+  ;; swap back.  It sees doc / unlocked / mark-open through dynamic
+  ;; scope, and closes only the mark this run opened -- the close can
+  ;; itself throw when the failure came before StartUndoMark, and a
+  ;; throw inside *error* is the one error nothing can catch.
+  (defun *error* (msg)
+    ;; locked layers come back FIRST so nothing below can skip them
+    (if unlocked (drone:relock-layers unlocked))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDRONE error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
         n-text 0  n-pt 0  n-perim 0  n-anch 0)
 
-  (vla-StartUndoMark *drone-doc*)
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
 
   ;; Make sure the style and both destination layers are available.
   (drone:ensure-style *drone-text-style* *drone-text-font*)
@@ -68594,7 +68611,7 @@
                                    (cons 8 *drone-anch-layer*))))
 
   ;; Unlock every layer we are about to touch.
-  (setq *drone-unlocked*
+  (setq unlocked
         (drone:unlock-layers
           (append *drone-pt-layers*
                   *drone-perim-src*
@@ -68602,7 +68619,7 @@
                         *drone-anch-layer*
                         *drone-dest-layer*)
                   (drone:sel-layers ss-text))
-          *drone-doc*))
+          doc))
 
   ;; Text -> ROMANC / 4.5 / BYLAYER
   (if ss-text
@@ -68665,10 +68682,10 @@
         (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
-  (drone:relock-layers *drone-unlocked*)
-  (setq *drone-unlocked* nil)
-  (vla-EndUndoMark *drone-doc*)
-  (setq *error* *drone-old-error*)
+  (drone:relock-layers unlocked)
+  (setq unlocked nil)
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
 
   (princ (strcat "\nDRONE done: "
                  (itoa n-text) " text -> " *drone-text-style*
@@ -68733,7 +68750,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -68831,31 +68848,35 @@
   result)
 
 ;; ---------------------------------------------------------------
-;; Error handler - restore locked layers and close the undo group
-;; even if the user hits Esc or something fails mid-run.
-;; ---------------------------------------------------------------
-(defun tydrn:error (msg)
-  (if *tydrn-unlocked* (tydrn:relock-layers *tydrn-unlocked*))
-  (setq *tydrn-unlocked* nil)
-  (if *tydrn-doc* (vla-EndUndoMark *tydrn-doc*))
-  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-    (princ (strcat "\nTYDRN error: " msg)))
-  (if *tydrn-old-error* (setq *error* *tydrn-old-error*))
-  (princ))
-
-;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
-(defun C:TYDRN (/ ss-text ss-pool ss-anch i ent obj
+(defun C:TYDRN (/ *error* doc unlocked mark-open
+                  ss-text ss-pool ss-anch i ent obj
                   n-text n-pool n-anch)
 
-  (setq *tydrn-old-error* *error*
-        *error*           tydrn:error
-        *tydrn-doc*       (vla-get-ActiveDocument (vlax-get-acad-object))
-        *tydrn-unlocked*  nil
+  ;; The handler is LOCAL to this command (STANDARDS 5): it used to be
+  ;; installed by swapping the global *error*, which left this tool's
+  ;; cleanup live for whatever ran next if a run ever ended without the
+  ;; swap back.  It sees doc / unlocked / mark-open through dynamic
+  ;; scope, and closes only the mark this run opened -- the close can
+  ;; itself throw when the failure came before StartUndoMark, and a
+  ;; throw inside *error* is the one error nothing can catch.
+  (defun *error* (msg)
+    ;; locked layers come back FIRST so nothing below can skip them
+    (if unlocked (tydrn:relock-layers unlocked))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTYDRN error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
         n-text 0  n-pool 0  n-anch 0)
 
-  (vla-StartUndoMark *tydrn-doc*)
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
 
   ;; Make sure the style and destination layer are available.
   (tydrn:ensure-style *tydrn-text-style* *tydrn-text-font*)
@@ -68879,13 +68900,13 @@
         ss-anch (ssget "_X" (list '(0 . "POINT") (cons 8 *tydrn-anch-layer*))))
 
   ;; Unlock every layer we are about to touch.
-  (setq *tydrn-unlocked*
+  (setq unlocked
         (tydrn:unlock-layers
           (append (list *tydrn-pool-layer*
                         *tydrn-anch-layer*
                         *tydrn-dest-layer*)
                   (tydrn:sel-layers ss-text))
-          *tydrn-doc*))
+          doc))
 
   ;; Text -> ROMANC / 4.5 / BYLAYER
   (if ss-text
@@ -68936,10 +68957,10 @@
         (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
-  (tydrn:relock-layers *tydrn-unlocked*)
-  (setq *tydrn-unlocked* nil)
-  (vla-EndUndoMark *tydrn-doc*)
-  (setq *error* *tydrn-old-error*)
+  (tydrn:relock-layers unlocked)
+  (setq unlocked nil)
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
 
   (princ (strcat "\nTYDRN done: "
                  (itoa n-text) " text -> " *tydrn-text-style*
@@ -76986,7 +77007,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.0 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.1 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 (princ)

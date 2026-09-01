@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.8") ; printed on load and at command start
+(setq *paddle-version* "v1.9") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -521,10 +521,16 @@
             loops))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space padsize blkname ss perims vts
+(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss perims vts
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
-    (if doc (vla-EndUndoMark doc))
+    ;; close only the mark THIS run opened: an Esc at the perimeter
+    ;; prompt comes before StartUndoMark, and closing a mark nothing
+    ;; opened throws -- from inside the handler, where nothing catches
+    ;; it.  command-s style: the close itself goes through
+    ;; vl-catch-all-apply so it can never be the second error.
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
@@ -556,6 +562,7 @@
       (princ "\nPADDLE: no closed perimeter loop found.")
       (progn
         (vla-StartUndoMark doc)
+        (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
         (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blkname))
@@ -570,6 +577,7 @@
           (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
         (vla-EndUndoMark doc)
+        (setq mark-open nil)
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))

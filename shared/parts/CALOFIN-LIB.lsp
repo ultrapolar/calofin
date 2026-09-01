@@ -23,7 +23,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.4")
+(setq cal:*version* "v1.5")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -155,21 +155,26 @@
   (princ))
 
 ;;; -------------------- system variables --------------------------------
-;;; The snapshot lives in a GLOBAL and is taken only when no snapshot is
-;;; already pending: if a previous run died before restoring, the stale
-;;; snapshot still holds the user's TRUE settings.  Saving again at that
-;;; point would capture the zeroed OSMODE and every later run would
-;;; faithfully "restore" 0.  (From pool:/spa:syssave, POOL.LSP:5504.)
-;;; Restore runs in the saved order, so put OSMODE first in the list --
-;;; object snaps are the setting the user misses most if a run is ever
-;;; cut short partway.
+;;; The snapshot lives in a GLOBAL, and a variable already in it is
+;;; never captured again: if a previous run died before restoring, the
+;;; stale snapshot still holds the user's TRUE settings, and saving them
+;;; again at that point would capture the zeroed OSMODE and every later
+;;; run would faithfully "restore" 0.  (From pool:/spa:syssave,
+;;; POOL.LSP:5504.)  One thing the per-tool originals never faced: here
+;;; EVERY tool shares the one snapshot, and the tools list different
+;;; variables.  So a variable the pending snapshot lacks is ADDED rather
+;;; than the whole save skipped -- otherwise a run after an interrupted
+;;; one would change CLAYER, say, and never put it back, because the run
+;;; that took the snapshot never listed it.  Restore runs in the saved
+;;; order, so put OSMODE first in the list -- object snaps are the
+;;; setting the user misses most if a run is ever cut short partway.
 
 (defun cal:syssave (vars / v)
-  (if (not cal:*sysold*)
-      (foreach v vars
-        (if (/= nil (getvar v))
-            (setq cal:*sysold*
-                  (append cal:*sysold* (list (cons v (getvar v)))))))))
+  (foreach v vars
+    (if (and (not (assoc v cal:*sysold*))
+             (/= nil (getvar v)))
+        (setq cal:*sysold*
+              (append cal:*sysold* (list (cons v (getvar v))))))))
 
 (defun cal:sysrestore ( / p)
   (foreach p cal:*sysold* (setvar (car p) (cdr p)))

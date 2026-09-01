@@ -220,11 +220,34 @@ class VM:
             # asserting on it would pass today and fail tomorrow.
             'CDATE': 20260821.143000, 'DATE': 2461274.5,
         }
+        # *error* dispatch is OPT-IN (vm.handle_errors = True): with it
+        # on, a LispError raised outside vl-catch-all-apply runs the
+        # *error* the failing code can see -- dynamically, with every
+        # frame still live, so a handler reads its command's locals the
+        # way AutoCAD's does -- and then aborts the command, which run()
+        # reports as a normal return.  Off, the error propagates as it
+        # always has, so the suites that assert on a raised LispError
+        # keep their footing.
+        self.handle_errors = False
+        self.handled_errors = []   # the messages *error* was handed
+        self._catch_depth = 0      # inside vl-catch-all-apply: no dispatch
+        self._in_handler = False   # a throw inside *error* is not re-handled
+        self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
+        self.undo_log = []         # 'start' / 'end', in order
+        self.lock_log = []         # (layer name, locked?) per vla-put-Lock
         self.tablerecs = {}      # table -> {NAME: Ent} for tblobjname
         self.recdata = {}        # Ent -> alist for those records; kept
                                  # out of entdata, which is the DRAWING
         self.tables = {'LAYER': set(), 'LTYPE': {'CONTINUOUS'},
-                       'DIMSTYLE': {'STANDARD'}}
+                       'DIMSTYLE': {'STANDARD'}, 'STYLE': {'STANDARD'}}
+        # the ActiveX constants a routine compares against or hands to a
+        # property.  :vlax-true / :vlax-false are two distinct symbols
+        # that are BOTH non-nil, so they self-evaluate here; an unbound
+        # symbol would read as nil and make every lock test succeed.
+        for k in (':vlax-true', ':vlax-false'):
+            self.globals[Sym(k)] = Sym(k)
+        self.globals[Sym('acbylayer')] = 256
+        self.globals[Sym('aclnwtbylayer')] = -1
 
     # ---------------- scripted input
     def pop_script(self, prompt, kind):
@@ -327,6 +350,28 @@ class VM:
             for form in body:
                 r = self.eval(form)
             return r
+        except LispError as e:
+            # AutoCAD runs *error* at the point of failure, before any
+            # frame unwinds -- that is how the handler sees the locals
+            # (undo-open, the doc, the layers it unlocked) it has to
+            # put right.  The innermost defun is that point; the ones
+            # above see the error already handled and just unwind.
+            if (self.handle_errors and not self._catch_depth
+                    and not self._in_handler
+                    and not getattr(e, 'handled', False)):
+                h = self.get(Sym('*error*'))
+                if (isinstance(h, tuple) and h[0] == 'defun') or (
+                        isinstance(h, list) and h and h[0] == 'lambda'):
+                    e.handled = True
+                    msg = str(e).split('\n')[0]
+                    self.handled_errors.append(msg)
+                    self._in_handler = True
+                    try:
+                        self.call_value(h if isinstance(h, list)
+                                        else Sym('*error*'), [msg])
+                    finally:
+                        self._in_handler = False
+            raise
         finally:
             self.stack.pop()
             self.calls.pop()
@@ -509,7 +554,14 @@ class VM:
         fn = self.get(Sym(name.lower()))
         if not (isinstance(fn, tuple) and fn[0] == 'defun'):
             raise LispError(f"{name} is not defined", self)
-        r = self.call_defun(Sym(name.lower()), fn, [])
+        try:
+            r = self.call_defun(Sym(name.lower()), fn, [])
+        except LispError as e:
+            # the command went through its handler and was aborted --
+            # what the user sees is a prompt back, not a crash
+            if self.handle_errors and getattr(e, 'handled', False):
+                return NIL
+            raise
         if self.script:
             raise LispError(
                 f"{len(self.script)} scripted answers left over: "
@@ -1030,6 +1082,9 @@ def _entmake(vm, a):
         return alist
     if etype == 'LTYPE':
         vm.tables['LTYPE'].add(d[2])
+        return alist
+    if etype == 'STYLE':
+        vm.tables.setdefault('STYLE', set()).add(d[2])
         return alist
     # A BLOCK ... ENDBLK run defines a block: everything between the two
     # belongs to the definition in the block table, NOT to the drawing.
@@ -1816,10 +1871,13 @@ def _vl_catch_all_apply(vm, a):
     # the call to vl-catch-all-apply itself that is malformed
     if len(a) < 2:
         raise LispError("vl-catch-all-apply: too few arguments", vm)
+    vm._catch_depth += 1
     try:
         return vm.call_value(a[0], list(a[1] or []))
     except LispError as e:
         return CaughtError(str(e))
+    finally:
+        vm._catch_depth -= 1
 
 
 BUILTINS[Sym('vl-catch-all-error-p')] = lambda vm, a: (
@@ -2158,6 +2216,166 @@ def _vla_getboundingbox(vm, a):
     vm.set(a[1], [min(xs), min(ys), 0.0])
     vm.set(a[2], [max(xs), max(ys), 0.0])
     return NIL
+
+
+# The document, its undo marks, the layer collection and the entity
+# properties the cleanup tools drive through ActiveX.  A vla-object is
+# still the ename (or the layer's table record), so a property put
+# lands in the same alist entget reads.
+ACAD_OBJECT = '<acad-object>'
+ACTIVE_DOCUMENT = '<active-document>'
+LAYER_COLLECTION = '<layers>'
+
+BUILTINS[Sym('vlax-get-acad-object')] = lambda vm, a: ACAD_OBJECT
+
+
+@bi('vla-get-activedocument')
+def _vla_get_activedocument(vm, a):
+    if a[0] != ACAD_OBJECT:
+        raise LispError('vla-get-ActiveDocument: not the application '
+                        f'object: {a[0]!r}', vm)
+    return ACTIVE_DOCUMENT
+
+
+def _doc(vm, a, who):
+    if not a or a[0] != ACTIVE_DOCUMENT:
+        raise LispError(f'{who}: not the active document: '
+                        f'{a[0] if a else None!r}', vm)
+
+
+@bi('vla-startundomark')
+def _vla_startundomark(vm, a):
+    _doc(vm, a, 'vla-StartUndoMark')
+    vm.undo_marks += 1
+    vm.undo_log.append('start')
+    return NIL
+
+
+@bi('vla-endundomark')
+def _vla_endundomark(vm, a):
+    """Closing a mark nothing opened is the ActiveX error a handler
+    trips over when the failure came before StartUndoMark -- so it
+    throws here, and a handler that does not guard the close fails
+    the test instead of the drafter."""
+    _doc(vm, a, 'vla-EndUndoMark')
+    if vm.undo_marks <= 0:
+        raise LispError('vla-EndUndoMark: no undo mark is open', vm)
+    vm.undo_marks -= 1
+    vm.undo_log.append('end')
+    return NIL
+
+
+@bi('vla-get-layers')
+def _vla_get_layers(vm, a):
+    _doc(vm, a, 'vla-get-Layers')
+    return LAYER_COLLECTION
+
+
+@bi('vla-item')
+def _vla_item(vm, a):
+    """(vla-Item layers name) -- the layer's table record, the same one
+    tblobjname hands out, so a Lock put here shows in group 70 there.
+    A name the table does not hold throws, as the real collection's
+    Key-not-found does."""
+    if a[0] != LAYER_COLLECTION:
+        raise LispError(f'vla-Item: unsupported collection {a[0]!r}', vm)
+    rec = _tblobjname(vm, ['LAYER', a[1]])
+    if rec is NIL:
+        raise LispError(f'vla-Item: no layer named {a[1]!r}', vm)
+    return rec
+
+
+def _alist_of(vm, e, who):
+    data = vm.entdata.get(e, vm.recdata.get(e)) if isinstance(e, Ent) \
+        else None
+    if data is None or e in vm.deleted:
+        raise LispError(f'{who}: not an entity: {e!r}', vm)
+    return data
+
+
+def _dxf_put(vm, e, code, val, who):
+    data = _alist_of(vm, e, who)
+    for i, g in enumerate(data):
+        if isinstance(g, Dot) and g.a == code:
+            data[i] = Dot(code, val)
+            return val
+        if isinstance(g, list) and g and g[0] == code:
+            data[i] = Dot(code, val)
+            return val
+    data.append(Dot(code, val))
+    return val
+
+
+def _group(vm, e, code, who):
+    """One DXF group off an entity OR a table record -- _dxf reads the
+    drawing only, and a layer's lock bit lives in its record."""
+    for g in _alist_of(vm, e, who):
+        if isinstance(g, Dot) and g.a == code:
+            return g.b
+        if isinstance(g, list) and g and g[0] == code:
+            return g[1] if len(g) == 2 else g[1:]
+    return NIL
+
+
+def _flags(vm, e, who):
+    v = _group(vm, e, 70, who)
+    return v if isinstance(v, int) else 0
+
+
+@bi('vla-get-lock')
+def _vla_get_lock(vm, a):
+    _alist_of(vm, a[0], 'vla-get-Lock')
+    return Sym(':vlax-true') if _flags(vm, a[0], 'vla-get-Lock') & 4 \
+        else Sym(':vlax-false')
+
+
+@bi('vla-put-lock')
+def _vla_put_lock(vm, a):
+    f = _flags(vm, a[0], 'vla-put-Lock')
+    on = a[1] == Sym(':vlax-true')
+    _dxf_put(vm, a[0], 70, (f | 4) if on else (f & ~4), 'vla-put-Lock')
+    name = _group(vm, a[0], 2, 'vla-put-Lock')
+    vm.lock_log.append((str(name).upper(), on))
+    return NIL
+
+
+#: entity property -> DXF group, for the generic get/put pairs
+VLA_PROPS = {
+    'layer': 8, 'color': 62, 'linetype': 6, 'lineweight': 370,
+    'stylename': 7, 'height': 40, 'rotation': 50, 'textstring': 1,
+}
+
+
+def _vla_getter(prop, code):
+    def get(vm, a):
+        v = _group(vm, a[0], code, 'vla-get-' + prop)
+        if v is NIL or v is None:
+            # the defaults AutoCAD reports for a group the alist omits
+            v = {8: '0', 62: 256, 6: 'ByLayer', 370: -1, 7: 'Standard',
+                 40: 0.0, 50: 0.0, 1: ''}[code]
+        return v
+    return get
+
+
+def _vla_putter(prop, code):
+    def put(vm, a):
+        who = 'vla-put-' + prop
+        val = a[1]
+        if code == 8:
+            if val not in vm.tables['LAYER'] and val != '0':
+                raise LispError(f'{who}: no layer named {val!r}', vm)
+        if code == 7:
+            names = {x.upper() for x in vm.tables.get('STYLE', set())}
+            if str(val).upper() not in names:
+                raise LispError(f'{who}: no text style named {val!r}', vm)
+        _dxf_put(vm, a[0], code, val, who)
+        return NIL
+    return put
+
+
+for _prop, _code in VLA_PROPS.items():
+    BUILTINS[Sym('vla-get-' + _prop)] = _vla_getter(_prop, _code)
+    BUILTINS[Sym('vla-put-' + _prop)] = _vla_putter(_prop, _code)
 
 
 # vl-sort / vl-sort-i live with the other vl- builtins above.  A second

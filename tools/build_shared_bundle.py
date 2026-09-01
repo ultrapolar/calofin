@@ -25,7 +25,7 @@ from callib import (BUNDLE, COMMAND, HELD, LOADER, PARTS_DIR as PARTS, ROOT,
 #: their own REVs -- they say what changed in one file; this says which
 #: set of them shipped together.  Bump it here and nowhere else: the
 #: bundle header and its load announcement are both generated from it.
-RELEASE = "v3.0"
+RELEASE = "v3.1"
 
 
 def held_back():

@@ -45,7 +45,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -182,31 +182,35 @@
   result)
 
 ;; ---------------------------------------------------------------
-;; Error handler - restore locked layers and close the undo group
-;; even if the user hits Esc or something fails mid-run.
-;; ---------------------------------------------------------------
-(defun drone:error (msg)
-  (if *drone-unlocked* (drone:relock-layers *drone-unlocked*))
-  (setq *drone-unlocked* nil)
-  (if *drone-doc* (vla-EndUndoMark *drone-doc*))
-  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-    (princ (strcat "\nDRONE error: " msg)))
-  (if *drone-old-error* (setq *error* *drone-old-error*))
-  (princ))
-
-;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
-(defun c:DRONE (/ ss-text ss-pt ss-perim ss-anch i ent obj
+(defun c:DRONE (/ *error* doc unlocked mark-open
+                  ss-text ss-pt ss-perim ss-anch i ent obj
                   n-text n-pt n-perim n-anch)
 
-  (setq *drone-old-error* *error*
-        *error*           drone:error
-        *drone-doc*       (vla-get-ActiveDocument (vlax-get-acad-object))
-        *drone-unlocked*  nil
+  ;; The handler is LOCAL to this command (STANDARDS 5): it used to be
+  ;; installed by swapping the global *error*, which left this tool's
+  ;; cleanup live for whatever ran next if a run ever ended without the
+  ;; swap back.  It sees doc / unlocked / mark-open through dynamic
+  ;; scope, and closes only the mark this run opened -- the close can
+  ;; itself throw when the failure came before StartUndoMark, and a
+  ;; throw inside *error* is the one error nothing can catch.
+  (defun *error* (msg)
+    ;; locked layers come back FIRST so nothing below can skip them
+    (if unlocked (drone:relock-layers unlocked))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDRONE error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
         n-text 0  n-pt 0  n-perim 0  n-anch 0)
 
-  (vla-StartUndoMark *drone-doc*)
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
 
   ;; Make sure the style and both destination layers are available.
   (drone:ensure-style *drone-text-style* *drone-text-font*)
@@ -236,7 +240,7 @@
                                    (cons 8 *drone-anch-layer*))))
 
   ;; Unlock every layer we are about to touch.
-  (setq *drone-unlocked*
+  (setq unlocked
         (drone:unlock-layers
           (append *drone-pt-layers*
                   *drone-perim-src*
@@ -244,7 +248,7 @@
                         *drone-anch-layer*
                         *drone-dest-layer*)
                   (drone:sel-layers ss-text))
-          *drone-doc*))
+          doc))
 
   ;; Text -> ROMANC / 4.5 / BYLAYER
   (if ss-text
@@ -307,10 +311,10 @@
         (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
-  (drone:relock-layers *drone-unlocked*)
-  (setq *drone-unlocked* nil)
-  (vla-EndUndoMark *drone-doc*)
-  (setq *error* *drone-old-error*)
+  (drone:relock-layers unlocked)
+  (setq unlocked nil)
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
 
   (princ (strcat "\nDRONE done: "
                  (itoa n-text) " text -> " *drone-text-style*

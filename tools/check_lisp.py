@@ -389,6 +389,35 @@ def house_rules(path, src, problems):
                     "use command-s, or declare the push)"
                     % (src[:a].count("\n") + 1))
 
+    # 1b. A handler belongs to its command.  (defun *error* ...) or
+    #     (setq *error* ...) inside a defun that does not list *error*
+    #     among its locals installs the handler GLOBALLY: it outlives
+    #     the command, and in the loaded-together build the next tool's
+    #     Esc runs THIS tool's cleanup -- closing an undo mark it never
+    #     opened, re-locking layers it never touched.  The old swap idiom
+    #     (save the global, set it, put it back on both exits) is the
+    #     same thing with a narrower window (STANDARDS 5: localized
+    #     *error*).  At top level it is global by construction.
+    #     The deprecated acady matcher keeps its swap idiom (STANDARDS 8).
+    spans = top_level_forms(body)
+    deprecated = "standards_checker" in pathlib.Path(path).parts
+    for m in ([] if deprecated else
+              list(ERR_DEFUN.finditer(body)) + list(ERR_SETQ.finditer(body))):
+        line = body[:m.start()].count("\n") + 1
+        outer = [(a, b) for a, b in spans if a <= m.start() < b]
+        if not outer:
+            continue                      # unbalanced; balance() reports it
+        a, b = outer[0]
+        head = re.match(r"\(defun\s+([^\s()]+)\s*\(([^()]*)\)", body[a:b])
+        if head and head.group(1).lower() != "*error*" \
+                and "*error*" in head.group(2).lower().split():
+            continue
+        problems.append(
+            "line %d: *error* is set here but is not a local of the "
+            "enclosing command - the handler outlives the run and fires "
+            "for whatever runs next (STANDARDS 5: declare *error* in the "
+            "command's locals and (defun *error* ...) inside it)" % line)
+
     # 2. A pickfirst probe must come BEFORE the undo group: opening one
     #    is itself a command, and a command clears the pickfirst set.
     for a, b in top_level_forms(body):

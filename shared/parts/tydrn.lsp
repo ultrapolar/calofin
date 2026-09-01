@@ -38,7 +38,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -136,31 +136,35 @@
   result)
 
 ;; ---------------------------------------------------------------
-;; Error handler - restore locked layers and close the undo group
-;; even if the user hits Esc or something fails mid-run.
-;; ---------------------------------------------------------------
-(defun tydrn:error (msg)
-  (if *tydrn-unlocked* (tydrn:relock-layers *tydrn-unlocked*))
-  (setq *tydrn-unlocked* nil)
-  (if *tydrn-doc* (vla-EndUndoMark *tydrn-doc*))
-  (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-    (princ (strcat "\nTYDRN error: " msg)))
-  (if *tydrn-old-error* (setq *error* *tydrn-old-error*))
-  (princ))
-
-;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
-(defun C:TYDRN (/ ss-text ss-pool ss-anch i ent obj
+(defun C:TYDRN (/ *error* doc unlocked mark-open
+                  ss-text ss-pool ss-anch i ent obj
                   n-text n-pool n-anch)
 
-  (setq *tydrn-old-error* *error*
-        *error*           tydrn:error
-        *tydrn-doc*       (vla-get-ActiveDocument (vlax-get-acad-object))
-        *tydrn-unlocked*  nil
+  ;; The handler is LOCAL to this command (STANDARDS 5): it used to be
+  ;; installed by swapping the global *error*, which left this tool's
+  ;; cleanup live for whatever ran next if a run ever ended without the
+  ;; swap back.  It sees doc / unlocked / mark-open through dynamic
+  ;; scope, and closes only the mark this run opened -- the close can
+  ;; itself throw when the failure came before StartUndoMark, and a
+  ;; throw inside *error* is the one error nothing can catch.
+  (defun *error* (msg)
+    ;; locked layers come back FIRST so nothing below can skip them
+    (if unlocked (tydrn:relock-layers unlocked))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTYDRN error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
         n-text 0  n-pool 0  n-anch 0)
 
-  (vla-StartUndoMark *tydrn-doc*)
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
 
   ;; Make sure the style and destination layer are available.
   (tydrn:ensure-style *tydrn-text-style* *tydrn-text-font*)
@@ -184,13 +188,13 @@
         ss-anch (ssget "_X" (list '(0 . "POINT") (cons 8 *tydrn-anch-layer*))))
 
   ;; Unlock every layer we are about to touch.
-  (setq *tydrn-unlocked*
+  (setq unlocked
         (tydrn:unlock-layers
           (append (list *tydrn-pool-layer*
                         *tydrn-anch-layer*
                         *tydrn-dest-layer*)
                   (tydrn:sel-layers ss-text))
-          *tydrn-doc*))
+          doc))
 
   ;; Text -> ROMANC / 4.5 / BYLAYER
   (if ss-text
@@ -241,10 +245,10 @@
         (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
-  (tydrn:relock-layers *tydrn-unlocked*)
-  (setq *tydrn-unlocked* nil)
-  (vla-EndUndoMark *tydrn-doc*)
-  (setq *error* *tydrn-old-error*)
+  (tydrn:relock-layers unlocked)
+  (setq unlocked nil)
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
 
   (princ (strcat "\nTYDRN done: "
                  (itoa n-text) " text -> " *tydrn-text-style*

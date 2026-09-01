@@ -77,7 +77,11 @@ At the top of `tydrn.lsp`:
 
 ## Tests
 
-No dedicated test drives TYDRN yet. `python3 tests/test_shared.py`
-loads it (with everything else) into the repo's AutoLISP VM, so a
-file that no longer parses, or that collides with another tool's
-names, fails there.
+`python3 tests/test_drone.py` runs TYDRN in the repo's AutoLISP VM over
+a survey with locked layers: the happy path (text restyled, points
+moved, every layer the run unlocked locked again, the undo mark
+closed), an error mid-run and an Esc at the selection prompt -- the
+last two reaching the command's own `*error*`, which has to put the
+locks back and close the mark. `CALOFIN_LISP_ROOT=shared` reruns it
+against the grouped twin. `python3 tests/test_shared.py` still loads it
+with everything else, so a name collision fails there.

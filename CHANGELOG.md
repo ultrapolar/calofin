@@ -6,6 +6,53 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.1 -- 2026-09-01
+
+A stability pass over the one-file build. Nothing new to type; what was
+there fails less, and two of the ways it could have failed the NEXT tool
+in the session are closed.
+
+### Fixed
+
+- **`DRONE v1.3` / `TYDRN v1.3` no longer install their error handler by
+  swapping the global `*error*`.** Both saved the global, set their own,
+  and put it back on each exit -- so one exit missed (a throw inside the
+  handler's own `EndUndoMark`, say) left that tool's cleanup live for
+  every command run afterwards in the loaded-together build: closing an
+  undo mark it never opened, re-locking layers it never touched. The
+  handler is local to the command now, as the skeleton in STANDARDS 5
+  has always said, sees the run's state through dynamic scope rather
+  than through `*drone-doc*` / `*drone-unlocked*` globals, and closes
+  only a mark the run actually opened.
+- **`PADDLE v1.9`'s handler closed an undo mark it might never have
+  opened.** An Esc at the perimeter prompt comes before
+  `StartUndoMark`; the handler's unconditional `EndUndoMark` then threw
+  from inside `*error*`, where nothing catches it. It tracks the mark now
+  and closes it through `vl-catch-all-apply`.
+- **`CALOFIN-LIB v1.5`: the shared sysvar snapshot merges instead of
+  skipping.** Every tool in the grouped build shares `cal:*sysold*`, and
+  the tools list different variables. After a run cut short, the next
+  tool's `cal:syssave` used to save NOTHING -- so a variable the dead run
+  never listed (`CLAYER`, `CMDECHO`) was changed and never put back. A
+  variable already pending keeps its true value exactly as before; one
+  the snapshot lacks is added. `tests/test_calofin_lib.py` pins both
+  halves.
+
+### The checks got stricter
+
+- `check_lisp` fails a `(defun *error* ...)` or `(setq *error* ...)`
+  whose enclosing command does not declare `*error*` local, and a
+  handler at top level. Zero findings tree-wide once the two above were
+  fixed; the deprecated acady matcher keeps its swap idiom.
+- The VM can now run `*error*` (`vm.handle_errors = True`): a failure
+  outside `vl-catch-all-apply` reaches the handler the failing code can
+  see, with every frame still live, and the command is then aborted the
+  way AutoCAD aborts it. It also carries just enough ActiveX -- the
+  document, its undo marks, the layer collection with `Lock`, and the
+  entity properties the cleanup tools put -- for `DRONE` and `TYDRN` to
+  run under test for the first time: `tests/test_drone.py` drives the
+  happy path, an error mid-run and an Esc at the prompt, at both tiers.
+
 ## v3.0 -- 2026-08-27
 
 The release that made the whole toolset drivable from a filled-in chart,

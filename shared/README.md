@@ -52,7 +52,7 @@ python3 tools/build_shared_bundle.py
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
-`CALOFIN-LIB v1.3 loaded` -- but not one tool comes with it, so `POOL`,
+`CALOFIN-LIB v1.5 loaded` -- but not one tool comes with it, so `POOL`,
 `SPA` and the rest are all still undefined. It now says so when that
 happens.
 

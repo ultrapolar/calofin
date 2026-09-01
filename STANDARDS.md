@@ -434,7 +434,10 @@ act (see `lisp/pool/POOL.LSP`). `DIMSTYLE` cannot be `setvar`'d back
 
 **Locals.** Every variable a defun sets is a parameter or declared
 after ` / ` (space each side) in the arglist -- `check_scope.py` is
-the referee. `(vl-load-com)` once at the top of the file when ActiveX
+the referee.  `*error*` is one of them: `check_lisp.py` fails a
+`(defun *error* ...)` or `(setq *error* ...)` whose enclosing command
+does not declare it, because a handler that outlives its command is
+the handler of whatever runs next. `(vl-load-com)` once at the top of the file when ActiveX
 is used, not inside command bodies.
 
 **Layers.** Output layers go through the canonical `ensure-layer` --
@@ -767,6 +770,14 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   first tool written against `cal:` from scratch.)
 * ~~XYPLOT's missing handler and undo group~~ (post-standard miss, not
   on the old list) **DONE**.
+* ~~`drone` and `tydrn` installed their handler by swapping the global
+  `*error*`~~ **DONE** (2026-09-01) -- both use the section 5 skeleton
+  now, with the run's state in locals the handler reads through dynamic
+  scope, and `check_lisp` fails any handler that is not a local of its
+  command, so the swap idiom cannot come back.  `paddle`'s handler
+  closed an undo mark it had not necessarily opened (an Esc at the
+  perimeter prompt comes first); it tracks the mark now and closes it
+  through `vl-catch-all-apply`, the one place a second throw is fatal.
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
   reviewed 2026-08-27 and DEFERRED on purpose: zero functional gain
   against churn in tests/tools/startup suites; rename only with a
