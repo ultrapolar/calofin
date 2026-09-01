@@ -419,6 +419,10 @@ python3 tests/test_lazspa.py          # LAZSPA - the spa chart drawn and
                                       # checked, and the spa it draws
 python3 tests/test_lazstep.py         # LAZSTEP - the drawing generated for
                                       # every step count, and the steps it draws
+python3 tests/test_autobead.py        # AUTOBEAD - the run that finds nothing
+                                      # to bead and the run that dies both put
+                                      # the settings, the undo group and the
+                                      # pushed error mode back
 python3 tests/test_drone.py           # DRONE / TYDRN - the cleanup pass on a
                                       # survey with locked layers, an error
                                       # mid-run and an Esc, both handled by

@@ -1038,7 +1038,48 @@ def main():
     test_perppts_says_so_when_the_drawing_refuses_the_resize()
     test_the_width_question_reads_the_same_in_both_routines()
     test_rescale_says_whether_the_drawing_took_it()
+    test_perppts_pops_the_error_mode_on_every_exit()
     print("\nall tests passed")
+
+
+def test_perppts_pops_the_error_mode_on_every_exit():
+    """PERPPTS pushes AutoCAD's error mode so its handler may drain a
+    pending command.  Until v0.11 it popped that mode only from the
+    handler, so every CLEAN run left it stacked for the session -- and a
+    stacked mode refuses command-s inside every later handler.  The pop
+    lives in perp:finish now, which both exits call."""
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", "No", "STandard"])
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1, \
+        vm.sysvars
+    # and the cancel path: Esc at the click
+    install_entity_builtins()
+    install_curve_builtins()
+    vm = VM()
+    install_command(vm)
+    vm.load(PERP_LSP)
+    src = Ent()
+    vm.entities.append(src)
+    vm.entdata[src] = [Dot(0, 'LINE'), Dot(8, 'WALLS'), Dot(62, 3),
+                       [10, 0.0, 0.0, 0.0], [11, 100.0, 0.0, 0.0]]
+    vm.tables['LAYER'].add('WALLS')
+    vm.handle_errors = True
+
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+
+    vm.run('c:PERPPTS', [src, None, esc])
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1, \
+        vm.sysvars
+    # CPERPPTS carries the same finish helper; the pop sits in it too
+    code = open(os.path.join(LISP_DIR, "cperp_points.lsp")).read()
+    fin = code[code.index("(defun cperp:finish"):code.index("(defun *error*")]
+    assert "(*pop-error-mode*)" in fin, "cperp:finish does not pop the mode"
+    print("PERPPTS/CPERPPTS: the error mode is popped on every exit")
 
 
 if __name__ == "__main__":

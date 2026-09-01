@@ -2858,6 +2858,37 @@ def test_version_command():
     print("ok  OASISVER    -> %s" % vm.globals[Sym('*oasis-version*')])
 
 
+def test_the_error_mode_is_popped_on_every_exit():
+    """OASIS pushes AutoCAD's error mode so its handler may drain a
+    pending command.  Until v8.5 it popped that mode only from the
+    handler: every CLEAN run left it stacked for the session, and a
+    stacked mode refuses command-s inside every later handler."""
+    vm = newvm()
+    run(vm, script(), 'pop-happy')
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    # the quiet exit: a tilted UCS refuses the run before the group opens
+    vm = newvm()
+    vm.loads('(defun oasis:ucs-flat-p () nil)')
+    run(vm, [], 'pop-tilted')
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    # and the cancel path, through the handler
+    vm = newvm()
+    vm.handle_errors = True
+
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+
+    vm.run('c:OASIS', ['Center', 'Simple', esc])
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1, \
+        vm.sysvars
+    print("ok  error mode  -> popped on the drawn, the quiet and the cancelled exit")
+
+
 def walk_forms(src):
     """(functions called in head position, defun/lambda local lists).
 
@@ -3031,5 +3062,6 @@ if __name__ == '__main__':
     test_the_overall_dims_hook_whichever_arc_holds_each_bound()
     test_the_check_drawing_counts_a_repeated_circle_once()
     test_version_command()
+    test_the_error_mode_is_popped_on_every_exit()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")

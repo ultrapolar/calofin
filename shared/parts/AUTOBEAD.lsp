@@ -52,7 +52,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.3"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.4"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -529,11 +529,24 @@
   (command "_.UNDO" "_End")
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
+  ;; the mode pushed at the top comes off on this exit too, not only in
+  ;; the handler -- stacked, it refuses command-s inside every later
+  ;; handler (AutoLISP reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   beadcount)
 
 ;; ---- AUTOBEAD --------------------------------------------------------------
 
-(defun c:AUTOBEAD ( / ss dirpt stage done ans sidewalls treadpts p )
+(defun c:AUTOBEAD ( / *error* ss dirpt stage done ans sidewalls treadpts p )
+  ;; Nothing to put back at this level: the questions change no setting
+  ;; and open no group -- autobead-build carries the handler that does
+  ;; that work, and it is the innermost one while the build runs.  This
+  ;; one only keeps an Esc at a question from printing a raw AutoLISP
+  ;; error (STANDARDS 5).
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nAUTOBEAD error: " msg)))
+    (princ))
   (autobead-ensure-layer *autobead-layer*)
   ;; a pickfirst selection skips straight to the direction question;
   ;; the probe sits OUTSIDE the stage loop so Back at that question

@@ -23,7 +23,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Dot  # noqa: E402
+from lispvm import VM, Dot, LispError  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 LSP = os.path.join(HERE, '..', 'lisp', 'xftconv', 'xftconv.lsp')
@@ -198,6 +198,9 @@ check("every marker line and every text is gone",
       all(e in vm.deleted for e in ents), repr(vm.deleted))
 check("system variables restored",
       vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+check("the error mode pushed for the handler is popped on the way out",
+      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0,
+      repr((vm.error_mode_depth, vm.error_mode_underflow)))
 
 # ----------------------------------------------------------------------
 # 3. Enter = everything in this space (the "_X" sweep)
@@ -250,6 +253,40 @@ check("the locked layer is named and nothing runs",
       not [c for c in vm.commands if c] and
       not inserts(vm) and not vm.deleted,
       ''.join(vm.printed)[-200:])
+check("...and that quiet exit pops the error mode too",
+      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0,
+      repr((vm.error_mode_depth, vm.error_mode_underflow)))
+
+# ----------------------------------------------------------------------
+# 6. the quiet "nothing to work on" exit, and an Esc at the highlight
+# ----------------------------------------------------------------------
+print("nothing to work on, and Esc, both leave the session as they found it")
+
+vm = newvm([LAYERS])
+vm.sysvars['CTAB'] = 'Model'
+vm.run('c:XFTCONV', [None, None])      # Enter, and the sweep finds nothing
+check("nothing to work on: said so, mode popped, settings untouched",
+      'Nothing to work on' in ''.join(vm.printed)
+      and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+
+vm = newvm([LAYERS])
+vm.handle_errors = True
+
+
+def esc(vm):
+    raise LispError('Function cancelled', vm)
+
+
+vm.run('c:XFTCONV', [None, esc])
+check("Esc at the highlight went through the handler, once",
+      vm.handled_errors == ['Function cancelled'], repr(vm.handled_errors))
+check("...which popped the mode and restored the settings",
+      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1,
+      repr((vm.error_mode_depth, vm.sysvars)))
+check("a cancel prints no error line", not any(
+    'XFTCONV error' in s for s in vm.printed))
 
 # ----------------------------------------------------------------------
 print()

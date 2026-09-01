@@ -113,7 +113,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.9")
+(setq *cperp-version* "v0.10")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -329,14 +329,19 @@
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq undoOpen nil))))
+             (setq undoOpen nil)))
+    ;; and the error mode pushed below comes off the stack on EVERY way
+    ;; out, since both exits come through here.  Popping only from the
+    ;; handler left a clean run's mode stacked for the whole session,
+    ;; and a stacked mode refuses command-s inside every later handler
+    ;; (AutoLISP reference, *push-error-using-command*).
+    (if *pop-error-mode* (*pop-error-mode*)))
 
   (defun *error* (msg)
     (cperp:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older

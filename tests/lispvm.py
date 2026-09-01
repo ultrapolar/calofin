@@ -232,6 +232,16 @@ class VM:
         self.handled_errors = []   # the messages *error* was handed
         self._catch_depth = 0      # inside vl-catch-all-apply: no dispatch
         self._in_handler = False   # a throw inside *error* is not re-handled
+        # *push-error-using-command* stacks an error-handling mode for
+        # the document; *pop-error-mode* takes it off.  Both are bound
+        # so the (if *push-error-using-command* ...) guards see them,
+        # and the depth is what a test asserts on: a command that pushes
+        # and pops only from its handler leaves 1 behind after a clean
+        # run, which is the defect five tools carried until v3.2.
+        self.error_mode_depth = 0
+        self.error_mode_underflow = 0   # pops with nothing pushed
+        self.globals[Sym('*push-error-using-command*')] = T
+        self.globals[Sym('*pop-error-mode*')] = T
         self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
         self.undo_log = []         # 'start' / 'end', in order
         self.lock_log = []         # (layer name, locked?) per vla-put-Lock
@@ -1001,7 +1011,18 @@ BUILTINS[Sym('princ')] = _princ
 BUILTINS[Sym('prin1')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('print')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('terpri')] = lambda vm, a: NIL
-BUILTINS[Sym('prompt')] = lambda vm, a: NIL
+
+
+@bi('prompt')
+def _prompt(vm, a):
+    """(prompt msg) -- shown to the user like princ, returns nil.  It
+    used to be a silent no-op here, so a tool that reports through
+    prompt (AUTOBEAD, PADDLE) looked mute to every test."""
+    if a and isinstance(a[0], str):
+        vm.printed.append(a[0])
+    return NIL
+
+
 
 
 # sysvars, tables
@@ -2216,6 +2237,21 @@ def _vla_getboundingbox(vm, a):
     vm.set(a[1], [min(xs), min(ys), 0.0])
     vm.set(a[2], [max(xs), max(ys), 0.0])
     return NIL
+
+
+@bi('*push-error-using-command*')
+def _push_error_using_command(vm, a):
+    vm.error_mode_depth += 1
+    return T
+
+
+@bi('*pop-error-mode*')
+def _pop_error_mode(vm, a):
+    if vm.error_mode_depth <= 0:
+        vm.error_mode_underflow += 1
+    else:
+        vm.error_mode_depth -= 1
+    return T
 
 
 # The blackboard: vl-bb-ref / vl-bb-set are the one namespace every

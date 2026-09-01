@@ -225,7 +225,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.4")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.5")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -3243,6 +3243,11 @@
   ;; answer nothing asked for must not be waiting for the next run
   (oasis:fclear)
   (setq oasis:*fkey* nil)
+  ;; ...and so does the error mode pushed at the top: every quiet exit
+  ;; and the drawn one come through here, and a mode left stacked
+  ;; refuses command-s inside every later handler in the session
+  ;; (AutoLISP reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 (defun c:OASISVER ()

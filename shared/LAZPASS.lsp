@@ -13811,7 +13811,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.4")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.5")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -16829,6 +16829,11 @@
   ;; answer nothing asked for must not be waiting for the next run
   (oasis:fclear)
   (setq oasis:*fkey* nil)
+  ;; ...and so does the error mode pushed at the top: every quiet exit
+  ;; and the drawn one come through here, and a mode left stacked
+  ;; refuses command-s inside every later handler in the session
+  ;; (AutoLISP reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 (defun c:OASISVER ()
@@ -31080,7 +31085,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.3"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.4"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -31557,11 +31562,24 @@
   (command "_.UNDO" "_End")
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
+  ;; the mode pushed at the top comes off on this exit too, not only in
+  ;; the handler -- stacked, it refuses command-s inside every later
+  ;; handler (AutoLISP reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   beadcount)
 
 ;; ---- AUTOBEAD --------------------------------------------------------------
 
-(defun c:AUTOBEAD ( / ss dirpt stage done ans sidewalls treadpts p )
+(defun c:AUTOBEAD ( / *error* ss dirpt stage done ans sidewalls treadpts p )
+  ;; Nothing to put back at this level: the questions change no setting
+  ;; and open no group -- autobead-build carries the handler that does
+  ;; that work, and it is the innermost one while the build runs.  This
+  ;; one only keeps an Esc at a question from printing a raw AutoLISP
+  ;; error (STANDARDS 5).
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nAUTOBEAD error: " msg)))
+    (princ))
   (autobead-ensure-layer *autobead-layer*)
   ;; a pickfirst selection skips straight to the direction question;
   ;; the probe sits OUTSIDE the stage loop so Back at that question
@@ -63474,7 +63492,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.10")
+(setq *perp-version* "v0.11")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -63887,14 +63905,19 @@
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq undoOpen nil))))
+             (setq undoOpen nil)))
+    ;; and the error mode pushed below comes off the stack on EVERY way
+    ;; out, since both exits come through here.  Popping only from the
+    ;; handler left a clean run's mode stacked for the whole session,
+    ;; and a stacked mode refuses command-s inside every later handler
+    ;; (AutoLISP reference, *push-error-using-command*).
+    (if *pop-error-mode* (*pop-error-mode*)))
 
   (defun *error* (msg)
     (perp:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain in perp:finish; harmless no-op guard on older
@@ -64405,7 +64428,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.9")
+(setq *cperp-version* "v0.10")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -64621,14 +64644,19 @@
     (if ce   (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq undoOpen nil))))
+             (setq undoOpen nil)))
+    ;; and the error mode pushed below comes off the stack on EVERY way
+    ;; out, since both exits come through here.  Popping only from the
+    ;; handler left a clean run's mode stacked for the whole session,
+    ;; and a stacked mode refuses command-s inside every later handler
+    ;; (AutoLISP reference, *push-error-using-command*).
+    (if *pop-error-mode* (*pop-error-mode*)))
 
   (defun *error* (msg)
     (cperp:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older
@@ -70754,7 +70782,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.10") ; printed on load and at command start so a
+(setq *xft-version* "v1.11") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -70996,6 +71024,14 @@
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
     (if osclay (setvar "CLAYER"  osclay))
+    ;; The error mode pushed below is popped HERE, on every way out --
+    ;; the three quiet exits, the report, and the handler -- not in the
+    ;; handler alone.  A clean run used to leave the mode stacked for
+    ;; the rest of the session, and while it is stacked command-s is
+    ;; refused inside every later handler (AutoLISP reference,
+    ;; *push-error-using-command*), so the next tool's Esc left its
+    ;; undo group open without a word.
+    (if *pop-error-mode* (*pop-error-mode*))
   )
 
   (defun *error* (msg)
@@ -71013,7 +71049,6 @@
     ;; error mode would stay pushed for the rest of the session
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ)
   )
 

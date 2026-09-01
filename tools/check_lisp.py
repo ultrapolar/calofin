@@ -389,6 +389,31 @@ def house_rules(path, src, problems):
                     "use command-s, or declare the push)"
                     % (src[:a].count("\n") + 1))
 
+    # 1c. A pushed error mode is popped on the way OUT, not only in the
+    #     handler.  *push-error-using-command* stacks a mode for the
+    #     document; a clean run that never pops leaves it stacked, and
+    #     while it is stacked command-s is refused inside every later
+    #     handler (AutoLISP reference, *push-error-using-command*) -- so
+    #     the NEXT tool's Esc leaves its undo group open, silently.
+    #     Five tools did exactly this until v3.2.  The pop may sit in a
+    #     helper both exits call (perp:finish, xft:restore); it may not
+    #     sit only inside (defun *error* ...).
+    for a, b in top_level_forms(body):
+        form = body[a:b]
+        if "(*push-error-using-command*)" not in form:
+            continue
+        outside = form
+        for m in sorted(ERR_DEFUN.finditer(form),
+                        key=lambda m: -m.start()):
+            s0, s1 = _form_at(form, m.start())
+            outside = outside[:s0] + outside[s1:]
+        if "(*pop-error-mode*)" not in outside:
+            problems.append(
+                "line %d: *push-error-using-command* with no *pop-error-mode* "
+                "outside the *error* handler - a clean run leaves the error "
+                "mode stacked for the rest of the session (STANDARDS 5: pop "
+                "on every exit)" % (src[:a].count("\n") + 1))
+
     # 1b. A handler belongs to its command.  (defun *error* ...) or
     #     (setq *error* ...) inside a defun that does not list *error*
     #     among its locals installs the handler GLOBALLY: it outlives

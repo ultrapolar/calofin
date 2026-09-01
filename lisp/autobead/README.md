@@ -91,10 +91,18 @@ At the top of `AUTOBEAD.lsp` (the `AUTOBEAD SETTINGS` block):
 
 ## Tests
 
-No dedicated test drives AUTOBEAD itself yet. `python3
-tests/test_shared.py` loads it (with everything else) into the
-repo's AutoLISP VM, so a file that no longer parses or collides with
-another tool fails there. The step routines' hand-off *to* AUTOBEAD --
+`python3 tests/test_autobead.py` runs AUTOBEAD in the repo's AutoLISP
+VM. The VM does not model OFFSET, PEDIT or the in-place copy, so no
+run can bead anything there -- the suite is about the two exits that
+matter for the rest of the session: the run that finds nothing to do
+and the run that dies mid-build both put OSMODE, CMDECHO and
+PEDITACCEPT back, close the one undo group, and take the pushed error
+mode off the stack (until v1.4 a clean run left it stacked, which
+refuses `command-s` inside every later tool's handler). Back at the
+direction click, Esc there, and the tutorial's written route are
+covered too. `CALOFIN_LISP_ROOT=shared` reruns it against the grouped
+twin, and `python3 tests/test_shared.py` still loads it with
+everything else. The step routines' hand-off *to* AUTOBEAD --
 the geometry and clicked treads `CORNERSTP`/`HEMISTEP`/`NORMIESTEP`
 pass it -- is covered from their side by
 `tests/test_cornerstp_geometry.py`.

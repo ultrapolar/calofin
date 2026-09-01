@@ -28,7 +28,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.10") ; printed on load and at command start so a
+(setq *xft-version* "v1.11") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -310,6 +310,14 @@
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
     (if osclay (setvar "CLAYER"  osclay))
+    ;; The error mode pushed below is popped HERE, on every way out --
+    ;; the three quiet exits, the report, and the handler -- not in the
+    ;; handler alone.  A clean run used to leave the mode stacked for
+    ;; the rest of the session, and while it is stacked command-s is
+    ;; refused inside every later handler (AutoLISP reference,
+    ;; *push-error-using-command*), so the next tool's Esc left its
+    ;; undo group open without a word.
+    (if *pop-error-mode* (*pop-error-mode*))
   )
 
   (defun *error* (msg)
@@ -327,7 +335,6 @@
     ;; error mode would stay pushed for the rest of the session
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ)
   )
 

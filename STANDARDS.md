@@ -438,7 +438,12 @@ drive `(command)` itself -- POOL's, which drains a pending command --
 instead declares `(if *push-error-using-command*
 (*push-error-using-command*))` after the handler and pops the mode
 with `(if *pop-error-mode* (*pop-error-mode*))` as the handler's last
-act (see `lisp/pool/POOL.LSP`). `DIMSTYLE` cannot be `setvar`'d back
+act AND on every success exit (see `lisp/pool/POOL.LSP`, which pops on
+both). The mode is stacked for the document, not the command: a clean
+run that pops only from its handler leaves it stacked for the rest of
+the session, and a stacked mode refuses `command-s` inside every later
+handler -- so the next tool's Esc leaves its undo group open.
+`check_lisp.py` fails a push with no pop outside the handler. `DIMSTYLE` cannot be `setvar`'d back
 -- restore it with
 `(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
 
