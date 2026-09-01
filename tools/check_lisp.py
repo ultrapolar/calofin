@@ -30,7 +30,8 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from callib import LISP_DIR, PARTS_DIR, ROOT, lsp_files, read, strip
+from callib import (LISP_DIR, PARTS_DIR, ROOT, decomment, lsp_files,
+                    read, strip, top_level_forms)
 
 
 def parse(text):
@@ -210,6 +211,104 @@ def stray_top_level(lit):
             for line, toks in sorted(by_line.items())]
 
 
+#: Files that carry no tool banner and answer to no command -- the
+#: library and the loader.  Every OTHER .lsp in both tiers is a tool.
+LIBRARY_FILES = {"CALOFIN-LIB.lsp", "CALOFIN-LOADER.lsp"}
+
+VERSION_SYM = re.compile(r"\(setq\s+((?:\*|[a-z]+:\*)[\w:-]*version\*)\s")
+ERR_DEFUN = re.compile(r"\(defun\s+\*error\*\s")
+ERR_SETQ = re.compile(r"\(setq\s+\*error\*\s")
+
+
+def _form_at(src, i):
+    """(start, end) of the parenthesised form opening at or after I."""
+    while i < len(src) and src[i] != "(":
+        i += 1
+    depth, j, instr = 0, i, False
+    while j < len(src):
+        ch = src[j]
+        if instr:
+            if ch == "\\":
+                j += 2
+                continue
+            if ch == '"':
+                instr = False
+        elif ch == '"':
+            instr = True
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return (i, j + 1)
+        j += 1
+    return (i, len(src))
+
+
+def house_rules(path, src, problems):
+    """The conventions the tree keeps by hand, kept by construction.
+
+    Each of these was a real defect somewhere before it was a rule, and
+    each was at zero violations tree-wide when it was written -- a rule
+    is added to hold a line already reached, never to declare a backlog.
+    """
+    body = decomment(src)                 # rules ABOUT strings need them
+    name = pathlib.Path(path).name
+
+    # 1. (command ...) inside *error* needs a push declaration, because
+    #    AutoCAD 2015+ refuses one otherwise.  command-s does not, which
+    #    is why most handlers use it (STANDARDS 5).
+    if "*push-error-using-command*" not in body:
+        for m in list(ERR_DEFUN.finditer(body)) + list(ERR_SETQ.finditer(body)):
+            a, b = _form_at(body, m.start())
+            if re.search(r"\(command[\s)]", body[a:b]):
+                problems.append(
+                    "line %d: *error* calls (command ...) without a "
+                    "*push-error-using-command* declaration (STANDARDS 5: "
+                    "use command-s, or declare the push)"
+                    % (src[:a].count("\n") + 1))
+
+    # 2. A pickfirst probe must come BEFORE the undo group: opening one
+    #    is itself a command, and a command clears the pickfirst set.
+    for a, b in top_level_forms(body):
+        form = body[a:b]
+        if not re.match(r"\(defun\s+[cC]:", form):
+            continue
+        probe = form.find('(ssget "_I"')
+        begin = form.find('"_Begin"')
+        if -1 < probe and -1 < begin < probe:
+            problems.append(
+                "line %d: the pickfirst probe comes after the undo group "
+                "opens, which clears the selection it looks for"
+                % (src[:a + begin].count("\n") + 1))
+
+    # 3. Every undo group asks whether undo is recording first.
+    for a, b in top_level_forms(body):
+        form = body[a:b]
+        if '"_Begin"' in form and "UNDOCTL" not in form:
+            problems.append(
+                "line %d: (command \"_.UNDO\" \"_Begin\") with no UNDOCTL "
+                "guard - it errors out of the command when undo is off"
+                % (src[:a + form.find('"_Begin"')].count("\n") + 1))
+
+    # 4. A tool announces itself on load, after its last defun, naming
+    #    its own banner -- that line is how a user says which build they
+    #    are running.
+    if name not in LIBRARY_FILES:
+        vm = VERSION_SYM.search(body)
+        if vm:
+            spans = top_level_forms(body)
+            last = max((i for i, (a, b) in enumerate(spans)
+                        if body[a:b].startswith("(defun")), default=-1)
+            tail = [body[a:b] for a, b in spans[last + 1:]]
+            if not any(t.startswith("(princ") and vm.group(1) in t
+                       for t in tail):
+                problems.append(
+                    "no load banner: nothing after the last defun princ's "
+                    "%s (a tool says which build it is on load)"
+                    % vm.group(1))
+
+
 def check_file(path):
     """(hard problems, advisories) for one file."""
     src = read(path)
@@ -217,6 +316,7 @@ def check_file(path):
     lit, _ = strip(src, keep_strings=True)
 
     problems = balance(clean)
+    house_rules(path, src, problems)
 
     # STANDARDS 5: sources are ASCII ("--", never em dashes) - comments
     # included, since the generated tiers carry them verbatim.  The

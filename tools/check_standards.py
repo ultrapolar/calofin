@@ -30,7 +30,8 @@ import build_shared_bundle
 import check_registry
 import mirror_shared
 import release_lisp
-from callib import ROOT
+from callib import (COMMAND, NOT_A_TOOL, ROOT, decomment,
+                    headline_commands, lsp_files, read)
 
 #: The tiers, in the order a tool moves through them.  wip/ is the
 #: bench: files being drafted, no version banner, nothing generated
@@ -148,7 +149,11 @@ def check_twins_current(problems):
 
 
 def check_library_owns_cal(problems):
-    """Only the library defines cal: - a tool defining one has forked it."""
+    """Only the library defines cal: - a tool defining one has forked it.
+
+    And no lisp/ file may define OR call one: the standalone tier loads
+    alone, with no library under it, so a cal: call there is a routine
+    that works in the grouped build and dies in the one-file build."""
     for p in shared_members():
         if p.name in LIBRARY_FILES:
             continue
@@ -156,6 +161,41 @@ def check_library_owns_cal(problems):
             problems.append(
                 "shared/parts/%s defines %s - the cal: namespace belongs "
                 "to CALOFIN-LIB.lsp" % (p.name, sym))
+    for p in lsp_files(LISP_DIR):
+        if NOT_A_TOOL in p.parts:
+            continue
+        src = read(p)
+        for sym in set(CAL_SYM.findall(src)):
+            problems.append(
+                "%s defines %s - lisp/ is the standalone tier and carries "
+                "its own helpers" % (p.relative_to(ROOT), sym))
+        # comments name cal: helpers on purpose ("swapped for
+        # cal:ensure-layer"), so only real calls count
+        for sym in set(re.findall(r"\((cal:[^\s()]+)", decomment(src))):
+            problems.append(
+                "%s calls %s - the standalone build has no library under "
+                "it" % (p.relative_to(ROOT), sym))
+
+
+def check_version_reporters(problems):
+    """Every headline command answers to <COMMAND>VER.
+
+    The reporter is how a user says which build is loaded once the
+    drawing is open, and STANDARDS 6 fixes its name.  Satellites
+    (tutorials, DD*, -CFG, the VER commands themselves) are exempt by
+    the same rule callib uses for the panel roster."""
+    head = headline_commands()
+    for p in lsp_files(LISP_DIR):
+        if NOT_A_TOOL in p.parts:
+            continue
+        cmds = {m.upper() for m in COMMAND.findall(read(p))}
+        if not (cmds & head):
+            continue                 # satellites answer through their tool
+        if not any(c.endswith("VER") for c in cmds):
+            problems.append(
+                "%s defines %s but no VER command - a tool must be able to "
+                "say which build is loaded"
+                % (p.relative_to(ROOT), ", ".join(sorted(cmds & head))))
 
 
 def check_no_collisions(problems):
@@ -282,6 +322,7 @@ def main():
     problems = []
     check_twins(problems)
     check_library_owns_cal(problems)
+    check_version_reporters(problems)
     check_no_collisions(problems)
     check_command_parity(problems)
     check_loader_lists_everything(problems)

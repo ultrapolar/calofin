@@ -814,7 +814,8 @@ explicitly kept open.  What remains, each a deliberate deferral:
   (8.4) -- churn without behaviour.
 * `*error*` handlers for `abcdef`, `altabcdef`, `ccprecheck`,
   `lincheck`; restore-nothing handlers in `bpcallout`,
-  `DroneHeightGPS`, `paddle`; AUTOBEAD's unguarded undo end (8.4).
+  `DroneHeightGPS`, `paddle` (8.4).  ~~AUTOBEAD's unguarded undo
+  end~~ **DONE** -- and its drain is bounded now too.
 * ~~NORMIESTEP's Treatment question offers no Back~~ **DONE** --
   `ns-askkw`/`ns-asktreat` take the Back sentinel exactly as the
   library pair do (the last 4-arg `askkw` holdout), Back at the
@@ -825,6 +826,14 @@ explicitly kept open.  What remains, each a deliberate deferral:
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the
   signature is a coordinated pass of its own; until then the 8.2
   class is closed by review, not by construction.
+* Demo-cleanup confirms are asked as `Yes/No` with `<Yes>` in
+  SPACHECK, dimcheck, linfincheck and AUTOBEAD where section 2's
+  vocabulary gives `Keep Erase` with `<Keep>` (LISPLAB and both perp
+  tutorials already use it).  Reviewed 2026-09-01 and DEFERRED: the
+  divergence is the WORDING, not the safety -- what these erase is the
+  practice drawing the tutorial itself drew and tracked, never the
+  user's work -- so a "destructive confirms default No" rule would
+  enforce the wrong axis.  Worth a vocabulary pass of its own.
 * The VB palette's button catalog still lacks the newer tools --
   additions are unverifiable without a machine that can build the
   DLL, so `ui/calofin_ui/calofin.lsp`'s roster (test-pinned) carries

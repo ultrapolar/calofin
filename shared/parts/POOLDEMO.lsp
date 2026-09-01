@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "082726 REV03")
+(setq pooldemo:*version* "090126 REV04")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -329,7 +329,13 @@
 
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-        (princ (strcat "\nPOOLDEMO error: " msg)))
+        ;; Which build is loaded - the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:POOLDEMOVER ()
+  (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
+  (princ))
+
+(princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
     (pool:undoend)
     (if *pop-error-mode* (*pop-error-mode*))
