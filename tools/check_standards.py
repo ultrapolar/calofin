@@ -198,6 +198,44 @@ def check_version_reporters(problems):
                 % (p.relative_to(ROOT), ", ".join(sorted(cmds & head))))
 
 
+def check_grouped_calls_resolve(problems):
+    """Every namespaced call in the grouped build resolves somewhere in
+    it.
+
+    The grouped tier loads as one session, so a tool may call another
+    tool's helper -- and the mirror renames some of those helpers onto
+    the library as it generates each twin.  Miss the rename in ONE
+    entry and that twin calls a function the build no longer defines.
+    Nothing else sees it: check_lisp reads one file at a time and only
+    checks a file's OWN prefix, so a call into another tool's namespace
+    is invisible to it, and the tiers-in-step check compares banners,
+    not bodies.  TUTORIALSPA shipped broken this way -- c:TUTORIALSPA
+    died at its first statement in LAZPASS.lsp until a test ran it.
+
+    Nested defuns count as definitions (a command may define helpers
+    inside itself), and earmuffed names are skipped: a global read as a
+    cond test looks exactly like a call.
+    """
+    members = list(shared_members())
+    defined = set()
+    for p in members:
+        defined |= {m.lower() for m in
+                    re.findall(r"\(defun\s+([^\s()]+)", decomment(read(p)))}
+    for p in members:
+        src = decomment(read(p))
+        seen = set()
+        for m in re.finditer(r"\((([a-z][\w-]*):[\w:+*<>=/-]+)", src):
+            name = m.group(1).lower()
+            if (name.startswith(("vl-", "vla-", "vlax-", "c:"))
+                    or "*" in name or name in seen or name in defined):
+                continue
+            seen.add(name)
+            problems.append(
+                "shared/parts/%s calls %s at line %d, which nothing in the "
+                "grouped build defines - a mirror swap renamed it away"
+                % (p.name, name, src[:m.start()].count("\n") + 1))
+
+
 def check_no_collisions(problems):
     """The grouped tier loads as one session, so no name may repeat."""
     owner = {}
@@ -324,6 +362,7 @@ def main():
     check_library_owns_cal(problems)
     check_version_reporters(problems)
     check_no_collisions(problems)
+    check_grouped_calls_resolve(problems)
     check_command_parity(problems)
     check_loader_lists_everything(problems)
     check_release_twins(problems)
