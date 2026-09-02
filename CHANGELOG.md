@@ -6,6 +6,61 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.3 -- 2026-09-02
+
+Two commands the trunk had never seen, brought over from the one branch
+that shares no history with it. The constellation branch was written
+against a base this tree diverged from 222 commits ago, so nothing here
+was cherry-picked: the files were taken one by one and fitted to the
+trunk's tooling, which is what the mirror map, the loader manifest, the
+panel roster and the derived counts all had to be told about.
+
+### Added
+
+- **`CONSTELLATION`** (`lisp/constellation/`, v1.3) places labelled
+  survey points when the sheet gives only the distances BETWEEN them and
+  never says where any of them is -- the one survey shape no other
+  importer here can read. Stress-majorization sweeps find the answer and
+  damped Gauss-Newton lands on it exactly, so a set of tape readings
+  that cannot all be true still gets the layout that misses by least,
+  and the report names the single dim worth re-measuring instead of
+  starring nine innocent ones. Arcs, a self-crossing warning, and a
+  fix-and-redraw loop, because a number typed wrong is invisible on the
+  chart and obvious on the drawing.
+- **`TYLERDRONESUITE`** (`lisp/tydrn/`, TYDRN v1.5) runs the whole drone
+  trace in one: `TYDRN`, then `PADDLE`, then the shop's own `CDIM`, in
+  the order the work has to happen in. One highlight is carried through
+  every stage and grows by what each stage draws; each stage keeps its
+  own undo group, so a stage that went well is not undone to get at one
+  that did not; the calofin stages are checked before any of them runs.
+
+### Fixed on the way in
+
+- **`CONSTELLATION`'s own copies of two library helpers were behind the
+  library.** `cst:syssave` skipped the whole save when a snapshot was
+  already pending -- the defect v3.1 fixed in `cal:syssave` -- and
+  `cst:undobegin` opened its group without the `UNDOCTL` guard, so a
+  `_Begin` in a drawing with UNDO off would have errored out of the
+  command. Both are the library bodies now, which is what lets the
+  mirror map swap all 28 helpers away and leave the twin a rename.
+- **`TYLERDRONESUITE` installed its handler by swapping the global
+  `*error*`** through a pair of globals, and held PICKFIRST in one of
+  them -- the class rule 1b and `handler-free-var` were added to reject
+  in v3.1 and v3.2. `*error*` and the saved PICKFIRST are locals of the
+  command now. Inside a stage the stage's own handler is still the one
+  AutoCAD calls, which is why each stage cleans up after itself; the
+  README says so where it used to promise more.
+
+### Checks and tests
+
+- `tests/test_constellation.py` (36 assertions) and
+  `tests/test_tydrn_suite.py` run at both tiers; `CONSTELLATION` joins
+  the cancel sweep by construction, and `TYLERDRONESUITE` is named in
+  its `NO_PROMPT` roster with the reason -- its pre-flight check runs
+  before its first question.
+- The VM seeds `PICKFIRST` at AutoCAD's own default of 1, so a test that
+  watches it come back has to turn it off first to prove anything.
+
 ## v3.2 -- 2026-09-02
 
 The second stability pass. It reconciled the branches first, then closed
