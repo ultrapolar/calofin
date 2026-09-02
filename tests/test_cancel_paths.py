@@ -81,6 +81,11 @@ NO_PROMPT = {
     # tests/test_tydrn_suite.py drives its prompt and its handler, Esc
     # included, with the stages stubbed.
     'TYLERDRONESUITE',
+    # an empty drawing carries none of the VS layers, so its layer check
+    # runs before its first question: it says which layers it looked for
+    # and stops.  tests/test_vsconv.py drives the prompt, and the Esc at
+    # it, on a drawing that HAS them.
+    'VSCONV',
 }
 #: the ActiveX surface the VM does not carry
 NEEDS_ACTIVEX = {'PADDLE'}

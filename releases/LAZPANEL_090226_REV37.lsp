@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.6")
+(setq *lazpanel-version* "v3.7")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -214,6 +214,7 @@
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
+    ("VSCONV"           "VS export onto shop layers")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Leica import cleanup")
     ("XYPLOT"           "X/Y offset plot")
@@ -349,6 +350,7 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "VSCONV"
       )
     )
      ("Layout"
@@ -396,6 +398,7 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "VSCONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"

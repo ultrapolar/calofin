@@ -128,7 +128,7 @@
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
                  "SMARTFILLET.lsp" "SPACHECK.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp" "wcalst.lsp"
-                 "xftconv.lsp" "XYPLOT.lsp" "CONSTELLATION.lsp"
+                 "VSCONV.lsp" "xftconv.lsp" "XYPLOT.lsp" "CONSTELLATION.lsp"
                  "LAZSPA.lsp"
                  "LAZFORM.lsp" "LAZPANEL.lsp")
       (cal--load m))
