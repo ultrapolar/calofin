@@ -90,7 +90,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.4")
+(setq *lazpanel-version* "v3.5")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -170,6 +170,7 @@
     ("CDCALLOUT"        "Point-to-point cross dims")
     ("CDCREATE"         "Lines to cross dims")
     ("CHECK"            "Drawing check")
+    ("CONSTELLATION"    "Points from cross dims")
     ("CORNERSTP"        "Corner step")
     ("COVERCHECK"       "Cover review")
     ("COVERSCAN"        "Cover scan")
@@ -348,6 +349,7 @@
       "LINTXTCHK"
       "CCPRECHECK"
       "POINTRENAMER"
+      "CONSTELLATION"
       )
     )
      ("Layout"
@@ -388,6 +390,7 @@
       "ABCDEF"
       "ALTABCDEF"
       "XYPLOT"
+      "CONSTELLATION"
       "ABFIND"
       "ABMOVE"
       "POINTRENAMER"

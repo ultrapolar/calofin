@@ -146,6 +146,44 @@ TOOLS = {
         'askkw_hidden': False,
         'symbols': {'AB-BACK': 'CAL-BACK'},
     },
+    # CONSTELLATION was written against the library from the start
+    # (STANDARDS section 6): its ask layer, sysvar pair, undo pair,
+    # ensure-layer, vector set and text maker are the CALOFIN-LIB bodies
+    # under cst:, checked byte-for-byte against them, so all of it comes
+    # back out here and the twin is a rename and nothing else.  What
+    # stays local is the solver, which is the tool.
+    'CONSTELLATION': {
+        'src': 'lisp/constellation/CONSTELLATION.lsp',
+        'swap': {
+            'cst:askkw': 'cal:askkw', 'cst:askyn': 'cal:askyn',
+            'cst:askdist': 'cal:askdist',
+            'cst:back-word-p': 'cal:back-word-p',
+            'cst:trim': 'cal:trim', 'cst:pad': 'cal:pad',
+            'cst:syssave': 'cal:syssave',
+            'cst:sysrestore': 'cal:sysrestore',
+            'cst:error-cancel-p': 'cal:error-cancel-p',
+            'cst:undobegin': 'cal:undobegin',
+            'cst:undoend': 'cal:undoend',
+            'cst:ensure-layer': 'cal:ensure-layer',
+            'cst:text': 'cal:text',
+            'cst:2d': 'cal:2d', 'cst:v-': 'cal:v-', 'cst:v+': 'cal:v+',
+            'cst:v*': 'cal:v*', 'cst:dot': 'cal:dot',
+            'cst:mid': 'cal:mid', 'cst:vlen': 'cal:vlen',
+            'cst:d2': 'cal:d2', 'cst:unit': 'cal:unit',
+            'cst:angnorm': 'cal:angnorm',
+            'cst:signed-dang': 'cal:signed-dang',
+            'cst:tan': 'cal:tan',
+            'cst:nthcdr': 'cal:nthcdr', 'cst:sublist': 'cal:sublist',
+            'cst:circumcenter': 'cal:circumcenter',
+        },
+        'drop_globals': ['cst:*sysold*'],
+        # cst:askkw already takes the SHOWN bracket third, like the
+        # library's, and cst:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helpers, and
+        # every question in the chain tests for it by name
+        'symbols': {'CST-BACK': 'CAL-BACK'},
+    },
     'XYPLOT': {
         'src': 'lisp/xyplot/XYPLOT.lsp',
         'swap': {
