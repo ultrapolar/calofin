@@ -84,7 +84,11 @@ see each folder's own README for the exact steps.
 Each tool lives under `lisp/<name>/`, with the identically-named,
 dated copy of any versioned file living flat in `releases/` (see
 below) - except the step routines, which release as one bundled file.
-Load a routine with APPLOAD, or add it to your startup suite.
+Load a routine with APPLOAD, or add it to your startup suite. A
+Startup Suite entry runs in every drawing you open: each tool prints
+its one-line banner again (about seventy lines for the whole of
+`LAZPASS.lsp`), and the panel's toolbar work runs once per session,
+not once per drawing.
 Prompt wording, keyword sets and file structure follow the shared
 standard in [STANDARDS.md](STANDARDS.md) - read it before adding or
 changing a routine.
@@ -230,7 +234,7 @@ locate its own folder first. Never APPLOAD `CALOFIN-LIB.lsp` alone: it
 is the helper library and brings no tools with it.) The folder assumes
 everything is loaded together, so a shared tool file is not loadable on
 its own.
-`shared/CALOFIN-LIB.lsp` holds the shared helpers under the `cal:`
+`shared/parts/CALOFIN-LIB.lsp` holds the shared helpers under the `cal:`
 prefix; the per-tool files are twins of their `lisp/` sources minus
 the helpers the library now provides. See `shared/README.md` for the
 helper roster and `STANDARDS.md` section 6 for the rules (including
@@ -419,6 +423,9 @@ python3 tests/test_lazspa.py          # LAZSPA - the spa chart drawn and
                                       # checked, and the spa it draws
 python3 tests/test_lazstep.py         # LAZSTEP - the drawing generated for
                                       # every step count, and the steps it draws
+python3 tests/test_cancel_paths.py    # every headline command cancelled at its
+                                      # first prompt: the handler runs, settings
+                                      # come back, no group or error mode left
 python3 tests/test_autobead.py        # AUTOBEAD - the run that finds nothing
                                       # to bead and the run that dies both put
                                       # the settings, the undo group and the

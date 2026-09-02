@@ -26,7 +26,7 @@ parts/                 what it is built FROM - do not APPLOAD these:
 `parts/` exists so the folder you point AutoCAD at contains exactly one
 loadable file. The members still have to be there: `LAZPASS.lsp` is
 *generated from them*, they are where a `lisp/` change gets mirrored, and
-they are what gives git a per-tool diff instead of one 1.8 MB blob.
+they are what gives git a per-tool diff instead of one 3.4 MB blob.
 
 The acady drawing-standards matcher (`lisp/standards_checker/`) is a
 deprecated project and is not carried here. It still loads the old way,
@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin shared build loaded - 160 commands in one session.
+LAZPASS: calofin v3.2 loaded - 160 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:

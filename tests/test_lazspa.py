@@ -710,9 +710,11 @@ for src, want, why in (
     got = vmr.globals.get('t:*r*')
     got = [int(v) for v in got] if got else None
     assert got == want, "%s read back as %r, not %r" % (why, got, want)
-# SCREENSIZE is unknown until it is set, and reads 0 -- the clamp has to
-# sit that out rather than pinning every dialog to the corner
-assert not vmr.sysvars.get('SCREENSIZE'), vmr.sysvars.get('SCREENSIZE')
+# SCREENSIZE is unknown on a box AutoCAD cannot size (it reads nil), and
+# the clamp has to sit that out rather than pin every dialog to the
+# corner.  The VM seeds it like AutoCAD does, so this scenario takes
+# it away.
+vmr.sysvars.pop('SCREENSIZE', None)
 # a point saved on a second monitor that has since been unplugged is
 # dragged back onto the drawing area, not left where the mouse cannot go
 vmr.sysvars['SCREENSIZE'] = [1600.0, 900.0]

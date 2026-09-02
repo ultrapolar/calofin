@@ -6,6 +6,80 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.2 -- 2026-09-02
+
+The second stability pass. It reconciled the branches first, then closed
+the classes of defect that only show up in the NEXT command a drafter
+runs, and left the tree able to prove every one of them stays closed.
+
+### Branches
+
+- Four branches carried work the trunk had never seen -- LAZPANEL's Find
+  page, OASIS's top-right bulge bound to the top wall, POOL's rectangle
+  corner questions and its grecian taped-face defaults -- and each was
+  ported onto the trunk by cherry-pick with its tiers regenerated. The
+  POOLDEMO sample sheet was found calling `pool:muttend` with ten
+  arguments where the ported commit wanted twelve; only a test noticed.
+- `.claude/hooks/session-start.sh` puts a session on the trunk: a clean
+  tree elsewhere is switched, a dirty one or a branch carrying unmerged
+  commits stops the session with the commands to land them. CLAUDE.md
+  carries the real count of historical branches (some sixty) and the
+  end-of-session push that keeps the trunk in step.
+
+### Fixed
+
+- **`LAZPANEL v3.4` stopped re-installing itself on every drawing
+  open.** With the build in the Startup Suite, every drawing paid two
+  icon writes into the first support-path folder and a walk of the CUI.
+  The button work is marked done on the blackboard, the one namespace
+  every document shares, and icons already on disk are left alone.
+- **Five tools left AutoCAD's error mode stacked after every clean
+  run** -- `XFTCONV`, `PERPPTS`, `CPERPPTS`, `AUTOBEAD` (and so the
+  three step routines that bead) and `OASIS` pushed it for their handler
+  and popped it only from the handler. A stacked mode refuses `command-s`
+  inside every later handler, so the next tool's Esc left its undo group
+  open without a word. Each pops on every exit now, as POOL always did.
+- **Four tools kept their undo-group flag in a global** shared with
+  their demo and tutorial -- `POOL`, `SPA`, `POOLSIDE`, `SPACHECK` -- so
+  a run that died between its last dim and the close had the next
+  command's handler close a group it never opened. The flag is a local
+  of the command that opened the group, and the grouped build swaps the
+  helper pairs for `cal:undobegin` / `cal:undoend`.
+- **Handlers that restored less than the run changed.** The step
+  routines put CLAYER back (an Esc mid-dimension left the drafter on
+  DIMENSION); the check family's entity cleanup goes through the catch so
+  a throw can no longer skip the undo close; the three RESCUE commands,
+  TUTORIALCOVERCHECKCLEAN and TUTORIALPADDLE gained the handler and the
+  one undo group they never had; LAZTXT and LAZPIN unload their dialog
+  from a handler and every dialog file deletes its temp `.dcl` when
+  `load_dialog` refuses it; TUTORIALCOVERCHECK holds ATTDIA, ATTREQ and
+  FILEDIA itself; AUTOBEAD's command gained a cancel-aware handler.
+- **The multi-file loader asked its one-time question on every drawing**
+  on a machine whose HKCU is read-only: `vl-registry-write` answers a
+  denial with nil, not an error. The answer is kept in the profile
+  (`setenv`) as well.
+
+### The checks got stricter
+
+- `check_lisp`: a pushed error mode must be popped outside the handler
+  (rule 1c); an undo group opened in a defun is closed on its success
+  path and from its handler (rule 5).
+- `check_scope`: `handler-free-var` names a variable a handler reads
+  that is neither its own nor a local of its command.
+- `check_registry`: a test census -- every command is invoked by a suite
+  or excused in `UNTESTED` with the reason, and an excused command a
+  suite catches up with fails the check.
+- The bundle verifies every `cal:` helper the tools call against the
+  library at build time and again at load, and clears the build flag it
+  set so a later solo library load still warns. `tests/test_shared.py`
+  pins the loader's order.
+- The VM counts undo groups and the error mode, refuses to return from
+  a command that left either behind, runs `prompt` output through the
+  same log as `princ`, seeds every system variable the tree touches at
+  AutoCAD's default and answers an unknown one with nil. New suites:
+  `test_autobead.py`, `test_cancel_paths.py` (every headline command
+  cancelled at its first prompt), `test_loader.py`.
+
 ## v3.1 -- 2026-09-01
 
 A stability pass over the one-file build. Nothing new to type; what was

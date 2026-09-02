@@ -42,8 +42,8 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from callib import (  # noqa: E402
-    LISP_DIR, PARTS_DIR, ROOT, headline_commands, held_back, loader_members,
-    read,
+    LISP_DIR, PARTS_DIR, ROOT, census, headline_commands, held_back,
+    loader_members, read,
 )
 
 PANEL = LISP_DIR / "lazpanel" / "LAZPANEL.lsp"
@@ -199,9 +199,78 @@ def count_rules(n):
 
 # ----------------------------------------------------------------- checks
 
+#: Commands no suite invokes, and WHY -- the one list that may excuse a
+#: command from tests/.  A name that gains a suite must leave this list
+#: in the same commit (an entry with a suite fails the check), and a
+#: name that is neither here nor in tests/ fails it too.  Version
+#: reporters are excused by construction: tests/test_versions.py runs
+#: every *VER.
+UNTESTED = {
+    "DDALT": "drone-height toolset: needs an EXIF/GPS photo fixture",
+    "DDGPS": "drone-height toolset: needs an EXIF/GPS photo fixture",
+    "DDTEST": "drone-height toolset: needs an EXIF/GPS photo fixture",
+    "LAZASCII": "DCL font probe; the dialog API is stubbed per suite",
+    "LAZPIN": "DCL pin editor; the dialog API is stubbed per suite",
+    "LAZTXT": "DCL text view; the dialog API is stubbed per suite",
+    "TUTORIALCORNERSTP": "tutorial: pauses and a demo drawing, no suite yet",
+    "TUTORIALHEMISTEP": "tutorial: pauses and a demo drawing, no suite yet",
+    "TUTORIALNORMIESTEP": "tutorial: pauses and a demo drawing, no suite yet",
+    "TUTORIALCOVERCHECK": "tutorial: pauses and a demo scene, no suite yet",
+    "TUTORIALDIMCHECK": "tutorial: pauses and a demo drawing, no suite yet",
+    "TUTORIALDIMSCAN": "alias of TUTORIALDIMCHECK",
+    "TUTORIALLINFINCHECK": "tutorial: pauses and a demo drawing, no suite yet",
+    "TUTORIALLINFINSCAN": "alias of TUTORIALLINFINCHECK",
+    "TUTORIALPADDLE": "tutorial: drives the ActiveX block surface the VM lacks",
+}
+
+
+SWEEP = ROOT / "tests" / "test_cancel_paths.py"
+
+
+def sweep_covers():
+    """The commands tests/test_cancel_paths.py drives by construction:
+    every headline command but its NO_PROMPT and NEEDS_ACTIVEX sets,
+    plus its QUIET, FILE_CANCEL and MORE rosters -- read off the file, as
+    test_shared.py reads the loader, so the two cannot drift."""
+    src = read(SWEEP)
+
+    def names(var):
+        m = re.search(r"^%s = [\[{](.*?)[\]}]" % var, src, re.S | re.M)
+        return set(re.findall(r"'([A-Z0-9-]+)'", m.group(1))) if m else set()
+    covered = headline_commands() - names("NO_PROMPT") - names("NEEDS_ACTIVEX")
+    covered -= names("FILE_CANCEL")
+    return covered | names("QUIET") | names("FILE_CANCEL") | names("MORE")
+
+
+def test_census():
+    """Problems: commands no test names and no UNTESTED entry excuses,
+    and UNTESTED entries a suite has caught up with."""
+    problems = []
+    tests = "".join(read(p) for p in (ROOT / "tests").glob("test_*.py")).lower()
+    swept = sweep_covers()
+    named = set()
+    for c in census():
+        if c.endswith("VER") or c.endswith("VERSION"):
+            continue
+        if ("c:" + c.lower()) in tests or c in swept:
+            named.add(c)
+        elif c not in UNTESTED:
+            problems.append(
+                "%s is invoked by no suite under tests/ - drive it, or "
+                "excuse it in UNTESTED in tools/check_registry.py with the "
+                "reason" % c)
+    for c in sorted(set(UNTESTED) & named):
+        problems.append(
+            "%s is in UNTESTED but a suite invokes it - remove the entry"
+            % c)
+    for c in sorted(set(UNTESTED) - set(census())):
+        problems.append("%s is in UNTESTED but is not a command" % c)
+    return problems
+
+
 def check():
     """Problems as a list of strings, empty when the tree is in step."""
-    problems = []
+    problems = test_census()
     src = read(PANEL)
 
     caps = captions(src)

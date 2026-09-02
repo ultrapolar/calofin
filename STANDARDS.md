@@ -785,6 +785,17 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   first tool written against `cal:` from scratch.)
 * ~~XYPLOT's missing handler and undo group~~ (post-standard miss, not
   on the old list) **DONE**.
+* ~~No suite ran a handler~~ **DONE** (2026-09-02) --
+  `tests/test_cancel_paths.py` cancels every headline command at its
+  first prompt (Cancel in the file dialog for the four that open one)
+  and asserts the handler ran once, every setting reads as before,
+  nothing said "error", and -- through the VM's own `run()` -- no undo
+  group or error mode was left behind.  `check_registry` carries a
+  test census: a command no suite invokes and no `UNTESTED` entry
+  excuses fails `make check`, and an excused command that gains a
+  suite fails it too.  The VM seeds every variable the tree touches at
+  AutoCAD's default and answers an unknown one with nil, as AutoCAD
+  does, instead of the 0 that hid a divided-by-DIMSCALE class of bug.
 * ~~Handlers that restore less than the run changed~~ **DONE**
   (2026-09-02) -- the three step routines put CLAYER back (their dim
   helpers swap it onto the dimension layer around DIMALIGNED, and an

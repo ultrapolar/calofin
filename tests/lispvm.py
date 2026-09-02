@@ -219,6 +219,24 @@ class VM:
             # must produce the same output on every run, or the test
             # asserting on it would pass today and fail tomorrow.
             'CDATE': 20260821.143000, 'DATE': 2461274.5,
+            # Every variable the tree reads or writes, at AutoCAD's own
+            # default.  An unseeded name used to read as 0, which hid a
+            # class of bug (a text height scaled by a DIMSCALE of 0) and
+            # made every cancel test see "changed" settings that were
+            # only ever the VM inventing a value; a name not listed here
+            # now reads as nil, exactly as AutoCAD answers an unknown one.
+            'PDMODE': 0, 'VIEWSIZE': 100.0, 'PLINETYPE': 2,
+            'CANNOSCALEVALUE': 1.0, 'DIMSCALE': 1.0, 'FILEDIA': 1,
+            'DIMTXT': 0.18, 'TEMPPREFIX': 'C:\\Temp\\',
+            'CECOLOR': 'BYLAYER', 'CELTYPE': 'BYLAYER', 'CELWEIGHT': -1,
+            'CELTSCALE': 1.0, 'CTAB': 'Model', 'TEXTSTYLE': 'STANDARD',
+            'SCREENSIZE': [1920.0, 1080.0], 'PEDITACCEPT': 0,
+            'VIEWCTR': [0.0, 0.0, 0.0], 'DIMASSOC': 2, 'TEXTSIZE': 0.2,
+            'FILLETRAD': 0.0, 'TRIMMODE': 1, 'DIMTMOVE': 0,
+            'DIMLUNIT': 2, 'DIMFRAC': 0, 'DIMDEC': 4, 'DIMZIN': 0,
+            'DIMPOST': '', 'DIMTAD': 0, 'DIMASZ': 0.18, 'DIMEXE': 0.18,
+            'DIMEXO': 0.0625, 'DIMGAP': 0.09, 'DIMTIX': 0, 'DIMTOFL': 0,
+            'DIMATFIT': 3, 'DIMLAYER': '.', 'CVPORT': 2, 'TILEMODE': 1,
         }
         # *error* dispatch is OPT-IN (vm.handle_errors = True): with it
         # on, a LispError raised outside vl-catch-all-apply runs the
@@ -1043,7 +1061,9 @@ def _prompt(vm, a):
 # sysvars, tables
 @bi('getvar')
 def _getvar(vm, a):
-    return vm.sysvars.get(a[0].upper(), 0)
+    """An unknown variable is nil, as in AutoCAD -- not 0, which this
+    VM used to invent and which no arithmetic ever complained about."""
+    return vm.sysvars.get(a[0].upper(), NIL)
 
 
 @bi('setvar')

@@ -48,7 +48,14 @@ EXPECTED_FAILURES = {}
 SLOW = {
     "test_fitabhd.py", "test_pool_runtime.py", "test_pool_form.py",
     "test_oasis.py", "test_cabhd.py", "test_lazform.py", "test_pool_fit.py",
+    "test_abhd_runtime.py",
 }
+
+#: A slow file gets longer before it is called hung: test_fitabhd.py
+#: alone runs close to five minutes on a quiet box, within a factor of
+#: two of the old 600 s, and a slower runner turned that into a kill.
+TIMEOUT = 600
+SLOW_TIMEOUT = 1200
 
 
 def discover(pattern):
@@ -66,15 +73,16 @@ def run_one(name, tier):
         env["CALOFIN_LISP_ROOT"] = "shared"
     t0 = time.monotonic()
     try:
+        limit = SLOW_TIMEOUT if name in SLOW else TIMEOUT
         proc = subprocess.run(
             [sys.executable, str(TESTS / name)],
-            cwd=str(ROOT), env=env, timeout=600,
+            cwd=str(ROOT), env=env, timeout=limit,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         code, out = proc.returncode, proc.stdout
     except subprocess.TimeoutExpired as e:
         # a hang is a failure with a name, not a stuck runner
         code = 124
-        out = (e.stdout or "") + "\n[run_tests] killed after 600s"
+        out = (e.stdout or "") + "\n[run_tests] killed after %ds" % limit
     return name, tier, code, time.monotonic() - t0, out
 
 
