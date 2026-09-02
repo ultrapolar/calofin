@@ -1,4 +1,4 @@
-# calofin v3.1
+# calofin v3.2
 
 Blender add-ons, AutoLISP routines, and a AutoCAD palette UI for pool/spa
 drafting. This branch consolidates what used to be ~29 separate branches,

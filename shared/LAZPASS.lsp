@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.1, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.2, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -60,7 +60,8 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP + ActiveX for bboxes).
 ;;;
 ;;; Every routine in shared/ calls these helpers instead of embedding its
-;;; own copy, so this file must be loaded FIRST -- APPLOAD LOADER.lsp and
+;;; own copy, so this file must be loaded FIRST -- APPLOAD LAZPASS.lsp (or
+;;; CALOFIN-LOADER.lsp for the multi-file build) and
 ;;; the order is handled for you.  The standalone builds in lisp/ do not
 ;;; use this file; they embed their own copies and load alone.
 ;;;
@@ -77927,7 +77928,38 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.1 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.2 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
+
+;; ...and every library helper the tools above call, checked the
+;; same way: a tool that calls one the library lacks looks fine
+;; until its first click
+(setq lazpass:*helpers* '(
+  cal:2d cal:ang-diff cal:angnorm cal:ask-yn cal:ask-yn-nav
+  cal:askdist cal:askkw cal:asktreat cal:askyn cal:axis-pt
+  cal:back-word-p cal:bbox-ent cal:bbox-ss cal:block-number cal:ceil
+  cal:circumcenter cal:cross cal:d2 cal:datestr cal:dedupe
+  cal:dimstyrestore cal:dimstysave cal:dist cal:dot cal:dotn
+  cal:ensure-layer cal:layer-usable-p cal:mid cal:midn cal:mtext
+  cal:nthcdr cal:osdown cal:osup cal:pad cal:perp
+  cal:proj-param cal:pt-line-dist cal:signed-dang cal:sublist cal:sysrestore
+  cal:syssave cal:tan cal:text cal:trim cal:undobegin
+  cal:undoend cal:unit cal:unitn cal:v* cal:v+
+  cal:v- cal:zeropad2
+))
+(setq lazpass:*nohelper* nil)
+(foreach n lazpass:*helpers*
+  (if (not (eval n))
+    (setq lazpass:*nohelper* (cons n lazpass:*nohelper*))))
+(if lazpass:*nohelper*
+  (progn
+    (princ "\nLAZPASS: library helpers the tools call but the build lacks:")
+    (foreach n (reverse lazpass:*nohelper*)
+      (princ (strcat " " (vl-symbol-name n))))))
+
+;; the flag the header set for the library: cleared, so a later
+;; APPLOAD of CALOFIN-LIB.lsp on its own in this drawing still says
+;; what it is
+(setq cal:*build-loading* nil)
 (princ)

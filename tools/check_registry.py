@@ -190,7 +190,7 @@ def count_rules(n):
         (LISP_DIR / "lazpanel" / "README.md",
          r"-- \d+ of them across (\d+) buttons", n["buttons"]),
         (ROOT / "shared" / "README.md",
-         r"shared build loaded - (\d+) commands in one session",
+         r"loaded - (\d+) commands in one session",
          n["bundle_commands"]),
         (ROOT / "shared" / "README.md",
          r"the build as (\d+) separate files", n["bundle_files"]),

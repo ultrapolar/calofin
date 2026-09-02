@@ -30,11 +30,21 @@
 (defun cal--remembered ( / d)
   (setq d (vl-catch-all-apply 'vl-registry-read
                               (list cal:*regkey* "SharedDir")))
-  (if (vl-catch-all-error-p d) nil d))
+  ;; the registry first, then the profile: on a locked-down machine
+  ;; the registry copy was never written (see cal--remember), and the
+  ;; profile is where the answer survived
+  (if (or (vl-catch-all-error-p d) (null d))
+      (getenv "CalofinSharedDir")
+      d))
 
 (defun cal--remember (dir)
+  ;; vl-registry-write answers a denied HKCU with nil, not an error, so
+  ;; the catch here never noticed -- and the loader asked the same
+  ;; question again on every drawing opened.  The profile (setenv) is
+  ;; always writable, so the answer goes there as well.
   (vl-catch-all-apply 'vl-registry-write
                       (list cal:*regkey* "SharedDir" dir))
+  (setenv "CalofinSharedDir" dir)
   dir)
 
 (defun cal--ask ( / f)

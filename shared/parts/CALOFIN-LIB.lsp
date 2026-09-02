@@ -4,7 +4,8 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP + ActiveX for bboxes).
 ;;;
 ;;; Every routine in shared/ calls these helpers instead of embedding its
-;;; own copy, so this file must be loaded FIRST -- APPLOAD LOADER.lsp and
+;;; own copy, so this file must be loaded FIRST -- APPLOAD LAZPASS.lsp (or
+;;; CALOFIN-LOADER.lsp for the multi-file build) and
 ;;; the order is handled for you.  The standalone builds in lisp/ do not
 ;;; use this file; they embed their own copies and load alone.
 ;;;
