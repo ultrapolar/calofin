@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_090126_REV38-39-33.lsp
+;;; STEPS_090226_REV39-310-34.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v3.8 -> REV38   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.9 -> REV39   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.3 -> REV33   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v3.9 -> REV39   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.10 -> REV310   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.4 -> REV34   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v3.8) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v3.9) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -212,7 +212,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.8") ; printed on load and at command start so a
+(setq *cs-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -673,7 +673,7 @@
                        score best j k tmp w1 w2 corner ang c r a1 a2
                        mid key start d1 d2 bis perp reflen tol txth
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
-                       prevL prevR dimflag w offd oldce oldstyle oldlu
+                       prevL prevR dimflag w offd oldce oldlay oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
                        bsides btreads bnums bside bdir bss pr be
@@ -687,6 +687,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -1056,7 +1057,8 @@
       (command "_.UNDO" "_Begin")
       (setq undoflag T)))
   (setq dist 0.0 n 1 drawn 0
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
   (if outflag
@@ -1471,6 +1473,7 @@
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -1562,13 +1565,14 @@
 ;; Walkthrough for new users: pages of what CORNERSTP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldstyle org w1 w2
+(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldlay oldstyle org w1 w2
                                bis perp txth dist p h1 h2 nat tmp e1 e2
                                prevL prevR w offd n pt lst dep wid)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
@@ -1654,6 +1658,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 
@@ -1728,7 +1733,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.9) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.10) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1903,7 +1908,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.9") ; printed on load and at command start so a
+(setq *hs-version* "v3.10") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2483,7 +2488,7 @@
                       lin lp1 lp2 pieces arcs cmode sp spc dir u
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
-                      oldce oldstyle ea eb crown pts reflen lastdep
+                      oldce oldlay oldstyle ea eb crown pts reflen lastdep
                       dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
@@ -2495,6 +2500,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -2731,7 +2737,8 @@
   (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
         offd  (* 2.0 txth)              ; tread-dim offset off the axis
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
 
   ;; In base-line mode the first width sits AT the wall: it is the top
@@ -3102,6 +3109,7 @@
   (if oldstyle (hs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -3193,13 +3201,14 @@
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses - the numbers are the reference example
 ;; this routine was built against.
-(defun c:TUTORIALHEMISTEP ( / *error* undoflag oldce oldstyle org sp u dir
+(defun c:TUTORIALHEMISTEP ( / *error* undoflag oldce oldlay oldstyle org sp u dir
                               txth pt wallw wallA wallB ea eb pprev p cum
                               e1 e2 offd n lst wid dep crown pts kx)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ HEMISTEP TUTORIAL " *hs-version*
@@ -3276,6 +3285,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 
@@ -3348,7 +3358,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.3) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.4) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3528,7 +3538,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.3") ; printed on load and at command start so a
+(setq *ns-version* "v3.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4168,7 +4178,7 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd treatback
-                        pprev oldce oldstyle oldlu slog mark svcum svp svn
+                        pprev oldce oldlay oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
@@ -4183,6 +4193,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -4560,7 +4571,8 @@
       (setq undoflag T)))
   (setq cum 0.0 n 1 drawn 0
         pprev sp
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
 
   (while
@@ -4935,6 +4947,7 @@
   (if oldstyle (ns-setstyle oldstyle))
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -5025,13 +5038,14 @@
 ;; Walkthrough for new users: pages of what NORMIESTEP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALNORMIESTEP ( / *error* undoflag oldce oldstyle org sp u dir
+(defun c:TUTORIALNORMIESTEP ( / *error* undoflag oldce oldlay oldstyle org sp u dir
                                 txth pt wid off n lst dep cum pprev p e1 e2
                                 offd first1 first2 hw)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ NORMIESTEP TUTORIAL " *ns-version*
@@ -5121,6 +5135,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 

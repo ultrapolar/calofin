@@ -253,7 +253,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.5")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -393,7 +393,20 @@
       (setq found T)))
   found)
 
-(defun c:LINFINCHECKRESCUE ( / ss i e xd n)
+(defun c:LINFINCHECKRESCUE ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLINFINCHECKRESCUE error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour LINFINCHECK stashed (flag colours included) and removes its
   ;; report and marker lines
@@ -414,6 +427,7 @@
   (if (> n 0)
     (princ (strcat "\nLINFINCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nLINFINCHECKRESCUE: nothing to restore - no LINFINCHECK markers in the drawing."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -2227,11 +2241,19 @@
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
-    (foreach pair saved
-      (if (and (not (member (car pair) keep)) (entget (car pair)))
-        (lfc:set-color (car pair) (cdr pair))))
-    (foreach l relock (lfc:set-layer-lock l T))
-    (redraw)
+    ;; The entity work stays INSIDE the group, so one U still takes the
+    ;; whole run back -- but through the catch: an entmod that throws
+    ;; (a colour on a layer the user declined to unlock is in saved
+    ;; too) used to skip the close and the CMDECHO restore below, and
+    ;; a throw inside *error* is the one error nothing catches.
+    (vl-catch-all-apply
+      '(lambda ()
+         (foreach pair saved
+           (if (and (not (member (car pair) keep)) (entget (car pair)))
+             (lfc:set-color (car pair) (cdr pair))))
+         (foreach l relock (lfc:set-layer-lock l T))
+         (redraw))
+      nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))

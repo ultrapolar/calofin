@@ -190,7 +190,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.8") ; printed on load and at command start so a
+(setq *cs-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -639,7 +639,7 @@
                        score best j k tmp w1 w2 corner ang c r a1 a2
                        mid key start d1 d2 bis perp reflen tol txth
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
-                       prevL prevR dimflag w offd oldce oldstyle oldlu
+                       prevL prevR dimflag w offd oldce oldlay oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
                        bsides btreads bnums bside bdir bss pr be
@@ -653,6 +653,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -1022,7 +1023,8 @@
       (command "_.UNDO" "_Begin")
       (setq undoflag T)))
   (setq dist 0.0 n 1 drawn 0
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
   (if outflag
@@ -1437,6 +1439,7 @@
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -1528,13 +1531,14 @@
 ;; Walkthrough for new users: pages of what CORNERSTP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldstyle org w1 w2
+(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldlay oldstyle org w1 w2
                                bis perp txth dist p h1 h2 nat tmp e1 e2
                                prevL prevR w offd n pt lst dep wid)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
@@ -1620,6 +1624,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 

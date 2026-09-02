@@ -180,7 +180,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.3") ; printed on load and at command start so a
+(setq *ns-version* "v3.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -772,7 +772,7 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd treatback
-                        pprev oldce oldstyle oldlu slog mark svcum svp svn
+                        pprev oldce oldlay oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
@@ -787,6 +787,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -1164,7 +1165,8 @@
       (setq undoflag T)))
   (setq cum 0.0 n 1 drawn 0
         pprev sp
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
 
   (while
@@ -1539,6 +1541,7 @@
   (if oldstyle (ns-setstyle oldstyle))
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -1629,13 +1632,14 @@
 ;; Walkthrough for new users: pages of what NORMIESTEP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALNORMIESTEP ( / *error* undoflag oldce oldstyle org sp u dir
+(defun c:TUTORIALNORMIESTEP ( / *error* undoflag oldce oldlay oldstyle org sp u dir
                                 txth pt wid off n lst dep cum pprev p e1 e2
                                 offd first1 first2 hw)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ NORMIESTEP TUTORIAL " *ns-version*
@@ -1725,6 +1729,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 

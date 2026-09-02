@@ -129,7 +129,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.1")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.2")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -1016,20 +1016,18 @@
 
 ;;; -------------------- the commands ------------------------------------
 
-(defun c:LINGUTTER ( / *error* olderr undo-open ss res vts kill
+(defun c:LINGUTTER ( / *error* undo-open ss res vts kill
                        locked en ask perim)
 
   ;; The user's settings come back FIRST so nothing below can skip them,
   ;; then the undo group is closed - or the next U would swallow the
   ;; user's own work along with this run - and any layer this command
   ;; unlocked is locked again.
-  (setq olderr *error*)
   (defun *error* (m)
     (lg:sysrestore)
     (if locked (lg:relock locked))
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTER error: " m)))
@@ -1087,13 +1085,10 @@
           (lg:paddle perim)))))
 
   (lg:sysrestore)
-  (setq *error* olderr)
   (princ))
 
-(defun c:LINGUTTERSCAN ( / *error* olderr ss)
-  (setq olderr *error*)
+(defun c:LINGUTTERSCAN ( / *error* ss)
   (defun *error* (m)
-    (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTERSCAN error: " m)))
@@ -1106,7 +1101,6 @@
     (progn
       (lg:report (lg:analyze ss))
       (princ "\nLINGUTTERSCAN: nothing changed.  Type LINGUTTER to do it.")))
-  (setq *error* olderr)
   (princ))
 
 (defun c:LINGUTTERVER ()

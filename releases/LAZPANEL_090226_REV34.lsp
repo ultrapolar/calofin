@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.3")
+(setq *lazpanel-version* "v3.4")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -1536,7 +1536,8 @@
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZPANEL error: could not load the dialog file."))
+     (princ "\nLAZPANEL error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  One page per group, so the eye lands on a dozen
      ;; buttons rather than all of them; the tab strip is the whole
@@ -1687,13 +1688,22 @@
   (princ))
 
 ;; Open the pin editor on its own, without going through the panel.
-(defun c:LAZPIN ( / f dcl)
+(defun c:LAZPIN ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZPIN error: " msg)))
+    (princ))
   (lzp:pins-read)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPIN error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZPIN error: could not load the dialog file."))
+     (princ "\nLAZPIN error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (lzp:pin-edit dcl)
      (unload_dialog dcl)

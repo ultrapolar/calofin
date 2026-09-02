@@ -209,7 +209,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.7")
+(setq *cchk-version* "v1.8")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -339,7 +339,20 @@
       (setq found T)))
   found)
 
-(defun c:COVERCHECKRESCUE ( / ss i e xd n)
+(defun c:COVERCHECKRESCUE ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCOVERCHECKRESCUE error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour COVERCHECK stashed (flag colours included) and removes its
   ;; report and marker lines
@@ -360,6 +373,7 @@
   (if (> n 0)
     (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -2771,11 +2785,19 @@
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
-    (foreach pair saved
-      (if (and (not (member (car pair) keep)) (entget (car pair)))
-        (cchk:set-color (car pair) (cdr pair))))
-    (foreach l relock (cchk:set-layer-lock l T))
-    (redraw)
+    ;; The entity work stays INSIDE the group, so one U still takes the
+    ;; whole run back -- but through the catch: an entmod that throws
+    ;; (a colour on a layer the user declined to unlock is in saved
+    ;; too) used to skip the close and the CMDECHO restore below, and
+    ;; a throw inside *error* is the one error nothing catches.
+    (vl-catch-all-apply
+      '(lambda ()
+         (foreach pair saved
+           (if (and (not (member (car pair) keep)) (entget (car pair)))
+             (cchk:set-color (car pair) (cdr pair))))
+         (foreach l relock (cchk:set-layer-lock l T))
+         (redraw))
+      nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -3529,10 +3551,17 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho undo-open bp)
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho att0 req0 fil0 undo-open bp)
   (defun *error* (msg)
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
+    ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
+    ;; -INSERT and puts them back inline; a throw inside that window
+    ;; left FILEDIA at 0, which turns every OPEN into a command-line
+    ;; prompt -- so the tutorial holds the three itself
+    (if att0 (setvar "ATTDIA" att0))
+    (if req0 (setvar "ATTREQ" req0))
+    (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
     (princ))
@@ -3543,7 +3572,8 @@
     (progn
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
-      (setq oldecho (getvar "CMDECHO"))
+      (setq oldecho (getvar "CMDECHO")
+            att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -3567,7 +3597,20 @@
       (princ "\nreport and markers COVERCHECK/COVERSCAN left behind on it.")))
   (princ))
 
-(defun c:TUTORIALCOVERCHECKCLEAN ( / ss i e xd n)
+(defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTUTORIALCOVERCHECKCLEAN error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; erases everything TUTORIALCOVERCHECK built (tagged "TUTORIAL"),
   ;; then clears any COVERCHECK/COVERSCAN report and markers left on
   ;; it too, so a demo run leaves nothing behind
@@ -3584,6 +3627,7 @@
     (princ (strcat "\nTUTORIALCOVERCHECKCLEAN: removed " (itoa n)
                    " demo item(s), plus any report/markers left on them."))
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 (defun c:COVERCHECKVER ()

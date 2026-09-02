@@ -35622,7 +35622,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.8") ; printed on load and at command start so a
+(setq *cs-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -36071,7 +36071,7 @@
                        score best j k tmp w1 w2 corner ang c r a1 a2
                        mid key start d1 d2 bis perp reflen tol txth
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
-                       prevL prevR dimflag w offd oldce oldstyle oldlu
+                       prevL prevR dimflag w offd oldce oldlay oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
                        bsides btreads bnums bside bdir bss pr be
@@ -36085,6 +36085,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -36454,7 +36455,8 @@
       (command "_.UNDO" "_Begin")
       (setq undoflag T)))
   (setq dist 0.0 n 1 drawn 0
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
   (if outflag
@@ -36869,6 +36871,7 @@
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -36960,13 +36963,14 @@
 ;; Walkthrough for new users: pages of what CORNERSTP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldstyle org w1 w2
+(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldlay oldstyle org w1 w2
                                bis perp txth dist p h1 h2 nat tmp e1 e2
                                prevL prevR w offd n pt lst dep wid)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
@@ -37052,6 +37056,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 
@@ -37307,7 +37312,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.9") ; printed on load and at command start so a
+(setq *hs-version* "v3.10") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -37873,7 +37878,7 @@
                       lin lp1 lp2 pieces arcs cmode sp spc dir u
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
-                      oldce oldstyle ea eb crown pts reflen lastdep
+                      oldce oldlay oldstyle ea eb crown pts reflen lastdep
                       dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
@@ -37885,6 +37890,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -38121,7 +38127,8 @@
   (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
         offd  (* 2.0 txth)              ; tread-dim offset off the axis
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
 
   ;; In base-line mode the first width sits AT the wall: it is the top
@@ -38492,6 +38499,7 @@
   (if oldstyle (hs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -38583,13 +38591,14 @@
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses - the numbers are the reference example
 ;; this routine was built against.
-(defun c:TUTORIALHEMISTEP ( / *error* undoflag oldce oldstyle org sp u dir
+(defun c:TUTORIALHEMISTEP ( / *error* undoflag oldce oldlay oldstyle org sp u dir
                               txth pt wallw wallA wallB ea eb pprev p cum
                               e1 e2 offd n lst wid dep crown pts kx)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ HEMISTEP TUTORIAL " *hs-version*
@@ -38666,6 +38675,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 
@@ -38924,7 +38934,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.3") ; printed on load and at command start so a
+(setq *ns-version* "v3.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -39516,7 +39526,7 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd treatback
-                        pprev oldce oldstyle oldlu slog mark svcum svp svn
+                        pprev oldce oldlay oldstyle oldlu slog mark svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
@@ -39531,6 +39541,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -39908,7 +39919,8 @@
       (setq undoflag T)))
   (setq cum 0.0 n 1 drawn 0
         pprev sp
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
 
   (while
@@ -40283,6 +40295,7 @@
   (if oldstyle (ns-setstyle oldstyle))
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -40373,13 +40386,14 @@
 ;; Walkthrough for new users: pages of what NORMIESTEP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALNORMIESTEP ( / *error* undoflag oldce oldstyle org sp u dir
+(defun c:TUTORIALNORMIESTEP ( / *error* undoflag oldce oldlay oldstyle org sp u dir
                                 txth pt wid off n lst dep cum pprev p e1 e2
                                 offd first1 first2 hw)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ NORMIESTEP TUTORIAL " *ns-version*
@@ -40469,6 +40483,7 @@
       (setq undoflag T)))
   (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 
@@ -42170,7 +42185,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.7")
+(setq *cchk-version* "v1.8")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -42300,7 +42315,20 @@
       (setq found T)))
   found)
 
-(defun c:COVERCHECKRESCUE ( / ss i e xd n)
+(defun c:COVERCHECKRESCUE ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCOVERCHECKRESCUE error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour COVERCHECK stashed (flag colours included) and removes its
   ;; report and marker lines
@@ -42321,6 +42349,7 @@
   (if (> n 0)
     (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -44583,11 +44612,19 @@
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
-    (foreach pair saved
-      (if (and (not (member (car pair) keep)) (entget (car pair)))
-        (cchk:set-color (car pair) (cdr pair))))
-    (foreach l relock (cchk:set-layer-lock l T))
-    (redraw)
+    ;; The entity work stays INSIDE the group, so one U still takes the
+    ;; whole run back -- but through the catch: an entmod that throws
+    ;; (a colour on a layer the user declined to unlock is in saved
+    ;; too) used to skip the close and the CMDECHO restore below, and
+    ;; a throw inside *error* is the one error nothing catches.
+    (vl-catch-all-apply
+      '(lambda ()
+         (foreach pair saved
+           (if (and (not (member (car pair) keep)) (entget (car pair)))
+             (cchk:set-color (car pair) (cdr pair))))
+         (foreach l relock (cchk:set-layer-lock l T))
+         (redraw))
+      nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -45342,10 +45379,17 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho undo-open bp)
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho att0 req0 fil0 undo-open bp)
   (defun *error* (msg)
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
+    ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
+    ;; -INSERT and puts them back inline; a throw inside that window
+    ;; left FILEDIA at 0, which turns every OPEN into a command-line
+    ;; prompt -- so the tutorial holds the three itself
+    (if att0 (setvar "ATTDIA" att0))
+    (if req0 (setvar "ATTREQ" req0))
+    (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
     (princ))
@@ -45356,7 +45400,8 @@
     (progn
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
-      (setq oldecho (getvar "CMDECHO"))
+      (setq oldecho (getvar "CMDECHO")
+            att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -45380,7 +45425,20 @@
       (princ "\nreport and markers COVERCHECK/COVERSCAN left behind on it.")))
   (princ))
 
-(defun c:TUTORIALCOVERCHECKCLEAN ( / ss i e xd n)
+(defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTUTORIALCOVERCHECKCLEAN error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; erases everything TUTORIALCOVERCHECK built (tagged "TUTORIAL"),
   ;; then clears any COVERCHECK/COVERSCAN report and markers left on
   ;; it too, so a demo run leaves nothing behind
@@ -45397,6 +45455,7 @@
     (princ (strcat "\nTUTORIALCOVERCHECKCLEAN: removed " (itoa n)
                    " demo item(s), plus any report/markers left on them."))
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 (defun c:COVERCHECKVER ()
@@ -45912,7 +45971,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.10")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.11")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -46019,7 +46078,20 @@
       (setq found T)))
   found)
 
-(defun c:DIMCHECKRESCUE ( / ss i e xd n)
+(defun c:DIMCHECKRESCUE ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDIMCHECKRESCUE error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour DIMCHECK stashed (flag colours included) and removes its
   ;; report and marker lines
@@ -46040,6 +46112,7 @@
   (if (> n 0)
     (princ (strcat "\nDIMCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nDIMCHECKRESCUE: nothing to restore - no DIMCHECK markers in the drawing."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -46879,11 +46952,19 @@
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
-    (foreach pair saved
-      (if (and (not (member (car pair) keep)) (entget (car pair)))
-        (dchk:set-color (car pair) (cdr pair))))
-    (foreach l relock (dchk:set-layer-lock l T))
-    (redraw)
+    ;; The entity work stays INSIDE the group, so one U still takes the
+    ;; whole run back -- but through the catch: an entmod that throws
+    ;; (a colour on a layer the user declined to unlock is in saved
+    ;; too) used to skip the close and the CMDECHO restore below, and
+    ;; a throw inside *error* is the one error nothing catches.
+    (vl-catch-all-apply
+      '(lambda ()
+         (foreach pair saved
+           (if (and (not (member (car pair) keep)) (entget (car pair)))
+             (dchk:set-color (car pair) (cdr pair))))
+         (foreach l relock (dchk:set-layer-lock l T))
+         (redraw))
+      nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -57835,7 +57916,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.5")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.6")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -57975,7 +58056,20 @@
       (setq found T)))
   found)
 
-(defun c:LINFINCHECKRESCUE ( / ss i e xd n)
+(defun c:LINFINCHECKRESCUE ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLINFINCHECKRESCUE error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour LINFINCHECK stashed (flag colours included) and removes its
   ;; report and marker lines
@@ -57996,6 +58090,7 @@
   (if (> n 0)
     (princ (strcat "\nLINFINCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nLINFINCHECKRESCUE: nothing to restore - no LINFINCHECK markers in the drawing."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -59809,11 +59904,19 @@
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
-    (foreach pair saved
-      (if (and (not (member (car pair) keep)) (entget (car pair)))
-        (lfc:set-color (car pair) (cdr pair))))
-    (foreach l relock (lfc:set-layer-lock l T))
-    (redraw)
+    ;; The entity work stays INSIDE the group, so one U still takes the
+    ;; whole run back -- but through the catch: an entmod that throws
+    ;; (a colour on a layer the user declined to unlock is in saved
+    ;; too) used to skip the close and the CMDECHO restore below, and
+    ;; a throw inside *error* is the one error nothing catches.
+    (vl-catch-all-apply
+      '(lambda ()
+         (foreach pair saved
+           (if (and (not (member (car pair) keep)) (entget (car pair)))
+             (lfc:set-color (car pair) (cdr pair))))
+         (foreach l relock (lfc:set-layer-lock l T))
+         (redraw))
+      nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -61636,7 +61739,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.9") ; printed on load and at command start
+(setq *paddle-version* "v1.10") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -62196,10 +62299,22 @@
                  '(40 . 6.0) (cons 1 str)))
   (entlast))
 
-(defun c:TUTORIALPADDLE (/ doc space base lay ents pl vts feats blk delta
-                           pad ncorner narc)
+(defun c:TUTORIALPADDLE (/ *error* mark-open doc space base lay ents pl vts
+                           feats blk delta pad ncorner narc)
+  ;; the demo draws a layer, a perimeter, labels and pads with pauses
+  ;; between -- an Esc at a pause used to leave all of it behind, N
+  ;; undos deep, with no handler.  One mark round the whole tour,
+  ;; closed on both exits the way c:PADDLE closes its own.
+  (defun *error* (msg)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nTUTORIALPADDLE error: " msg)))
+    (princ))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
   (princ (strcat "\n=== PADDLE TUTORIAL " *paddle-version* " ==="))
   (princ "\nPADDLE looks at the perimeter of a drawing and inserts pad blocks")
   (princ "\nwherever the perimeter caves inward. Everything it checks:")
@@ -62287,6 +62402,8 @@
         (if (= (getkword "\nErase the demonstration? [Yes/No] <No>: ") "Yes")
             (foreach e ents (entdel e)))))
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
   (princ))
 
 (defun c:PADDLEVER ()
@@ -62436,7 +62553,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.1")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.2")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -63250,20 +63367,18 @@
 
 ;;; -------------------- the commands ------------------------------------
 
-(defun c:LINGUTTER ( / *error* olderr undo-open ss res vts kill
+(defun c:LINGUTTER ( / *error* undo-open ss res vts kill
                        locked en ask perim)
 
   ;; The user's settings come back FIRST so nothing below can skip them,
   ;; then the undo group is closed - or the next U would swallow the
   ;; user's own work along with this run - and any layer this command
   ;; unlocked is locked again.
-  (setq olderr *error*)
   (defun *error* (m)
     (cal:sysrestore)
     (if locked (lg:relock locked))
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTER error: " m)))
@@ -63321,13 +63436,10 @@
           (lg:paddle perim)))))
 
   (cal:sysrestore)
-  (setq *error* olderr)
   (princ))
 
-(defun c:LINGUTTERSCAN ( / *error* olderr ss)
-  (setq olderr *error*)
+(defun c:LINGUTTERSCAN ( / *error* ss)
   (defun *error* (m)
-    (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTERSCAN error: " m)))
@@ -63340,7 +63452,6 @@
     (progn
       (lg:report (lg:analyze ss))
       (princ "\nLINGUTTERSCAN: nothing changed.  Type LINGUTTER to do it.")))
-  (setq *error* olderr)
   (princ))
 
 (defun c:LINGUTTERVER ()
@@ -68991,7 +69102,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -69115,7 +69226,9 @@
   ;; throw inside *error* is the one error nothing can catch.
   (defun *error* (msg)
     ;; locked layers come back FIRST so nothing below can skip them
-    (if unlocked (drone:relock-layers unlocked))
+    ;; through the catch: a Lock put that throws must not skip the
+    ;; mark close below -- a throw inside *error* is uncatchable
+    (if unlocked (vl-catch-all-apply 'drone:relock-layers (list unlocked)))
     (setq unlocked nil)
     (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
     (setq mark-open nil)
@@ -69297,7 +69410,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -69410,7 +69523,9 @@
   ;; throw inside *error* is the one error nothing can catch.
   (defun *error* (msg)
     ;; locked layers come back FIRST so nothing below can skip them
-    (if unlocked (tydrn:relock-layers unlocked))
+    ;; through the catch: a Lock put that throws must not skip the
+    ;; mark close below -- a throw inside *error* is uncatchable
+    (if unlocked (vl-catch-all-apply 'tydrn:relock-layers (list unlocked)))
     (setq unlocked nil)
     (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
     (setq mark-open nil)
@@ -73441,7 +73556,8 @@
     ((not (setq f (lzs:write-dcl)))
      (princ "\nLAZSPA error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZSPA error: could not load the dialog file."))
+     (princ "\nLAZSPA error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  DCL has no tab tile, so a tab is a button that
      ;; closes this page and reopens the next -- and because done_dialog
@@ -73632,7 +73748,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.10")
+(setq *lazform-version* "v2.11")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -75244,7 +75360,8 @@
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZASCII error: could not load the dialog file."))
+     (princ "\nLAZASCII error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (if (new_dialog "lazform_ascii" dcl)
        (progn
@@ -75388,13 +75505,22 @@
           "}")))
 
 ;; Show it, collect it, and hand POOL the same alist LAZFORM would.
-(defun lzf:txt-show (c / f dcl rc k out)
+(defun lzf:txt-show (c / *error* f dcl rc k out)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl (c:LAZASCII's handler is the pattern)
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZTXT error: " msg)))
+    (princ))
   (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c)
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZTXT error: could not load the dialog file."))
+     (princ "\nLAZTXT error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (cond
        ((not (new_dialog "lazform_txt" dcl))
@@ -75694,7 +75820,8 @@
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZFORM error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZFORM error: could not load the dialog file."))
+     (princ "\nLAZFORM error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  DCL has no tab tile, so a tab is a button that
      ;; closes this page and reopens the next -- and because
@@ -76012,7 +76139,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.3")
+(setq *lazpanel-version* "v3.4")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -77461,7 +77588,8 @@
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZPANEL error: could not load the dialog file."))
+     (princ "\nLAZPANEL error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  One page per group, so the eye lands on a dozen
      ;; buttons rather than all of them; the tab strip is the whole
@@ -77612,13 +77740,22 @@
   (princ))
 
 ;; Open the pin editor on its own, without going through the panel.
-(defun c:LAZPIN ( / f dcl)
+(defun c:LAZPIN ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZPIN error: " msg)))
+    (princ))
   (lzp:pins-read)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPIN error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZPIN error: could not load the dialog file."))
+     (princ "\nLAZPIN error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (lzp:pin-edit dcl)
      (unload_dialog dcl)

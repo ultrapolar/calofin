@@ -35,7 +35,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -176,7 +176,9 @@
   ;; throw inside *error* is the one error nothing can catch.
   (defun *error* (msg)
     ;; locked layers come back FIRST so nothing below can skip them
-    (if unlocked (tydrn:relock-layers unlocked))
+    ;; through the catch: a Lock put that throws must not skip the
+    ;; mark close below -- a throw inside *error* is uncatchable
+    (if unlocked (vl-catch-all-apply 'tydrn:relock-layers (list unlocked)))
     (setq unlocked nil)
     (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
     (setq mark-open nil)

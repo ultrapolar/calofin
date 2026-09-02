@@ -785,6 +785,25 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   first tool written against `cal:` from scratch.)
 * ~~XYPLOT's missing handler and undo group~~ (post-standard miss, not
   on the old list) **DONE**.
+* ~~Handlers that restore less than the run changed~~ **DONE**
+  (2026-09-02) -- the three step routines put CLAYER back (their dim
+  helpers swap it onto the dimension layer around DIMALIGNED, and an
+  Esc mid-dimension left the drafter drawing on DIMENSION); the check
+  family's handlers do their entity cleanup through
+  `vl-catch-all-apply` so a throw there can no longer skip the undo
+  close; DRONE/TYDRN relock through the catch; LINGUTTER lost the last
+  `(setq *error* olderr)` residue of the swap idiom; the three RESCUE
+  commands, TUTORIALCOVERCHECKCLEAN and TUTORIALPADDLE gained the
+  handler and the one undo group they never had; LAZTXT and LAZPIN
+  unload and delete their dialog from a handler, and every dialog file
+  deletes its temp `.dcl` when `load_dialog` refuses it;
+  TUTORIALCOVERCHECK holds ATTDIA/ATTREQ/FILEDIA itself.  `check_scope`
+  gained `handler-free-var`: a variable a handler reads that is neither
+  its own nor a local of its command is named, so the DRONE class
+  (`*drone-doc*`) cannot come back unnoticed.  POOL's and POOLSIDE's
+  handlers keep their bare `(command "_.-DIMSTYLE" ...)`: both push the
+  error mode, and under a push it is `command-s` that is refused, not
+  `command` -- the audit's suggestion to swap them was wrong.
 * ~~Undo-group flags held in globals~~ **DONE** (2026-09-02) --
   `pool:*undogrp*` (shared by POOL, POOLDEMO and TUTORIALPOOL),
   `spa:*undogrp*` (SPA, TUTORIALSPA), `psd:*undogrp*` and SPACHECK's

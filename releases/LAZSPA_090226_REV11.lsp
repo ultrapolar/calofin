@@ -1209,7 +1209,8 @@
     ((not (setq f (lzs:write-dcl)))
      (princ "\nLAZSPA error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZSPA error: could not load the dialog file."))
+     (princ "\nLAZSPA error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  DCL has no tab tile, so a tab is a button that
      ;; closes this page and reopens the next -- and because done_dialog

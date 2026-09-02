@@ -14,6 +14,12 @@ Findings, per defun:
   foreach      a foreach variable not in the arglist (it survives the loop)
   case-dup     two spellings of one name declared in one arglist
   case-mix     a declared local also written in another case in the body
+  handler-free-var
+               a variable the (defun *error* ...) inside a command reads
+               that is neither the handler's own nor a local of that
+               command -- the handler runs while the command's frame is
+               live, so anything else it reads is a global it should not
+               be leaning on (DRONE's *drone-doc*, until v1.3)
 
 Much of the ``setq`` class is deliberate module-level state, so known
 findings live in tools/scope_baseline.txt and do not fail the check --
@@ -149,6 +155,43 @@ def check_file(path):
                         and not any(v.startswith(p + ":") for p in prefixes)
                         and v.lower() not in ("nil", "t")):
                     findings.append((ln, name, "setq", v))
+
+        # ---- the handler's free variables ------------------------------
+        # every (defun *error* ...) nested in this defun: a token in a
+        # NON-head position that is not a local of the handler, not a
+        # local of this defun, not a helper this defun defines, not a
+        # prefixed or earmuffed global, and not a constant is a global
+        # the handler leans on -- the class DRONE and TYDRN carried
+        # (*drone-doc*, *drone-unlocked*) until v1.3, and the one a
+        # renamed local silently turns into
+        inner = {n.lower() for n in re.findall(r"\(defun\s+([^\s()]+)", body)}
+        for hm in re.finditer(r"\(defun\s+\*error\*\s*\(([^)]*)\)", body):
+            h0 = hm.start()
+            depth, j = 0, h0
+            while j < len(body):
+                if body[j] == "(":
+                    depth += 1
+                elif body[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            handler = QUOTED.sub(" ", body[hm.end():j])
+            htoks = hm.group(1).replace("/", " ").split()
+            hdecl = {t.lower() for t in htoks}
+            seen = set()
+            for tm in re.finditer(r"(\()?\s*([^\s()\"']+)", handler):
+                tok = tm.group(2)
+                if tm.group(1):
+                    continue                    # head position: a call
+                lv = tok.lower()
+                if (lv in hdecl or lv in declared_low or lv in inner
+                        or ":" in lv or "*" in lv or lv in ("t", "nil", "pi")
+                        or re.match(r"^[-+.\d]", lv) or lv in seen):
+                    continue
+                seen.add(lv)
+                findings.append((line_at(m.end() + h0), name,
+                                 "handler-free-var", tok))
 
         # ---- case collisions -------------------------------------------
         folded = {}

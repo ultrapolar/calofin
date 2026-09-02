@@ -138,8 +138,6 @@ lisp/lincheck/lincheck.lsp|lin:st-fib|setq|fib
 lisp/lincheck/lincheck.lsp|lin:st-vin|setq|vin
 lisp/lincheck/lincheck.lsp|lin:trim|foreach|l
 lisp/lincheck/lincheck.lsp|lin:trim|setq-global|*lin:log*
-lisp/lingutter/LINGUTTER.lsp|c:lingutterscan|setq-global|*error*
-lisp/lingutter/LINGUTTER.lsp|c:lingutter|setq-global|*error*
 lisp/lintxtchk/LINTXTCHK.lsp|c:lintxtchk|foreach|item
 lisp/paddle/PADDLE.lsp|c:paddle|foreach|pad
 lisp/paddle/PADDLE.lsp|c:tutorialpaddle|foreach|e
@@ -485,8 +483,6 @@ shared/parts/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-pts
 shared/parts/FITABHD.lsp|fit:omit-loop|setq|fit-omit
 shared/parts/HEMISTEP.lsp|c:hemistep|foreach|e
-shared/parts/LINGUTTER.lsp|c:lingutterscan|setq-global|*error*
-shared/parts/LINGUTTER.lsp|c:lingutter|setq-global|*error*
 shared/parts/LINTXTCHK.lsp|c:lintxtchk|foreach|item
 shared/parts/PADDLE.lsp|c:paddle|foreach|pad
 shared/parts/PADDLE.lsp|c:tutorialpaddle|foreach|e

@@ -73,7 +73,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.10")
+(setq *lazform-version* "v2.11")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -1685,7 +1685,8 @@
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZASCII error: could not load the dialog file."))
+     (princ "\nLAZASCII error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (if (new_dialog "lazform_ascii" dcl)
        (progn
@@ -1829,13 +1830,22 @@
           "}")))
 
 ;; Show it, collect it, and hand POOL the same alist LAZFORM would.
-(defun lzf:txt-show (c / f dcl rc k out)
+(defun lzf:txt-show (c / *error* f dcl rc k out)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl (c:LAZASCII's handler is the pattern)
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZTXT error: " msg)))
+    (princ))
   (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c)
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZTXT error: could not load the dialog file."))
+     (princ "\nLAZTXT error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (cond
        ((not (new_dialog "lazform_txt" dcl))
@@ -2135,7 +2145,8 @@
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZFORM error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZFORM error: could not load the dialog file."))
+     (princ "\nLAZFORM error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  DCL has no tab tile, so a tab is a button that
      ;; closes this page and reopens the next -- and because
