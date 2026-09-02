@@ -914,6 +914,15 @@ TOOLS = {
         },
         'drop_globals': [],
     },
+    # SOCONV's only generic helper is the layer creator, the same as
+    # its two cleanup siblings above.
+    'SOCONV': {
+        'src': 'lisp/soconv/SOCONV.lsp',
+        'swap': {
+            'soconv:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
     # Layer creator, angle normalizer, and the strict 3-point
     # circumcenter -- the library form, not ABHD's looser 2-element one
     # (which stays out; see shared/README.md).

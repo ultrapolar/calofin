@@ -210,6 +210,7 @@
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
+    ("SOCONV"           "SO survey onto our layers")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -353,6 +354,7 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "SOCONV"
       "VSCONV"
       )
     )
@@ -401,6 +403,7 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "SOCONV"
       "VSCONV"
       "DRONE"
       "TYDRN"

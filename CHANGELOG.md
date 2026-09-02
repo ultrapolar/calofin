@@ -6,6 +6,78 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.5 -- 2026-09-02
+
+`SOCONV`'s sibling, written the same way: from a before/after the shop
+supplied rather than from a description. `vsconv.dxf` holds a VS survey
+export and a by-hand conversion of it side by side in one drawing,
+labelled "before" and "after", and pairing the two halves on geometry is
+what the rules below are.
+
+### Added
+
+- **`VSCONV`** (`lisp/vsconv/`, v1.0) converts a VS survey export onto
+  the shop's layers: `1 Perimeter`, `2 Coping` and `3 Features` onto
+  `POOL`, `3.1 Anchors` onto `POINTS`, `4 Dimensions` onto `DIMENSION`,
+  with color, linetype and lineweight forced BYLAYER so the moved
+  geometry takes the destination layer's appearance rather than carrying
+  the export's over. The map is a table (`*vsconv-map*`), so an export
+  that names its layers differently is retuned in one place.
+
+  **The dimensions need more than the layer move, and that is the half
+  worth having.** The export writes text height, arrow size and decimal
+  places into every dimension as an `ACAD`/`DSTYLE` xdata block, and an
+  override outranks the style it sits on -- so a dimension merely
+  renamed to `STANDARD` would still draw itself in the export's
+  2.5-unit text. The sample's after-half carries no xdata at all, which
+  is what says the overrides go with the rename. Replaying the sample's
+  55 before-entities through the routine reproduces its after-half
+  exactly: layer, dimension style and xdata, entity for entity.
+
+  Scope is the highlight, or Enter for every VS layer in the drawing;
+  only the layers in the table are touched, so a sheet already carrying
+  converted work cannot be converted twice, and a drawing with none of
+  them is told so rather than prompted over. As in `SOCONV`, the
+  emptied source layers are named in the done line rather than purged,
+  so one `U` backs the whole run out.
+
+  Where `SOCONV` is a layer remap and only a layer remap -- because that
+  is all its sample does -- this one restyles as well, because that is
+  what ITS sample does. The two exports are different tools' output and
+  the two routines say so.
+
+## v3.4 -- 2026-09-02
+
+One command, written from a before/after the shop supplied rather than
+from a description: `SOconv.dxf` holds an SO site-survey export and a
+by-hand conversion of it side by side in one drawing, and pairing the
+two halves on geometry is what the rules below are.
+
+### Added
+
+- **`SOCONV`** (`lisp/soconv/`, v1.0) puts an SO site-survey export onto
+  the shop's layers: `Pool Perimeter` and `Obstacles` onto `POOL`, the
+  Leica points and `Existing Anchorss` onto `POINTS`, and the export's
+  one `Dimensions` layer split in two -- its notes onto `TEXT`, its
+  dimensions and anything else left there onto `DIMENSION`. The rules
+  are a table read in order, first match winning, so the split is
+  ordering rather than special-casing and a shop whose export names
+  things differently retunes in one place.
+
+  **It is a layer remap and only a layer remap** -- no restyle, no
+  forced BYLAYER, no rotate, nothing erased and nothing drawn. That is
+  what the sample does: pairing its two halves matches 316 objects and
+  the only DXF group that differs on all of them is group 8. So the 161
+  Leica points keep the explicit magenta they arrive with, and the notes
+  keep their height, style and text. `*soconv-force-bylayer*` is the one
+  line that turns it into the cleanup `DRONE` and `TYDRN` do.
+
+  Two things the sample shows that are deliberately NOT in the tool: its
+  after side is one dimension short (the drafter dropped a linear dim
+  while making it -- an edit, not a rule), and the export's now-empty
+  layers are left in the drawing for `-PURGE` rather than deleted
+  behind the drafter's back. The done-line names them.
+
 ## v3.3 -- 2026-09-02
 
 Two commands the trunk had never seen, brought over from the one branch
