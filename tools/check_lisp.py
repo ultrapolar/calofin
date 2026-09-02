@@ -466,6 +466,49 @@ def house_rules(path, src, problems):
                 "guard - it errors out of the command when undo is off"
                 % (src[:a + form.find('"_Begin"')].count("\n") + 1))
 
+    # 5. An undo group is closed where it is opened.  A top-level defun
+    #    that opens one ("_Begin", or a tool:undobegin call) closes it on
+    #    its success path, and -- when it defines its own *error* -- from
+    #    that handler too.  Four tools kept the flag in a global shared
+    #    with their demo and tutorial until v3.2, so a run that died
+    #    between its last dim and the close left the next command's
+    #    handler closing a group it never opened.
+    #    A handler may close through a helper the command defines for
+    #    both exits (perp:finish); the undobegin/undoend pair itself is
+    #    the helper, not a command, and is skipped.
+    OPEN = re.compile(r'"_Begin"|:undobegin\)')
+    CLOSE = re.compile(r'"_End"|:undoend\)')
+    for a, b in top_level_forms(body):
+        form = body[a:b]
+        if not OPEN.search(form) or re.match(r"\(defun\s+\S*undobegin\s", form):
+            continue
+        spans = [_form_at(form, m.start()) for m in ERR_DEFUN.finditer(form)]
+        outside = form
+        for s0, s1 in sorted(spans, reverse=True):
+            outside = outside[:s0] + outside[s1:]
+        line = src[:a].count("\n") + 1
+        if not CLOSE.search(outside):
+            problems.append(
+                "line %d: opens an undo group and never closes it on its "
+                "success path (STANDARDS 5: one group per command, closed "
+                "where it was opened)" % line)
+        # the nested helpers this command defines, and which of them close
+        inner = {}
+        for m in re.finditer(r"\(defun\s+([^\s()]+)", form):
+            if m.start() == 0:
+                continue
+            i0, i1 = _form_at(form, m.start())
+            inner[m.group(1).lower()] = bool(CLOSE.search(form[i0:i1]))
+        for s0, s1 in spans:
+            handler = form[s0:s1]
+            calls = {c.lower() for c in re.findall(r"\(([^\s()]+)", handler)}
+            if CLOSE.search(handler) or any(inner.get(c) for c in calls):
+                continue
+            problems.append(
+                "line %d: opens an undo group but its *error* never "
+                "closes it (STANDARDS 5: the handler closes the group "
+                "the run opened)" % line)
+
     # 3b. A c: command must BE a top-level form, not merely start at
     #     column 0 inside another defun.  The command census is a
     #     regex over line starts, so a nested one is counted, listed,

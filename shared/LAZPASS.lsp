@@ -735,7 +735,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV21")
+(setq pool:*version* "090126 REV22")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -786,7 +786,6 @@
 ;; corners instead.
 (setq pool:*hookslack* 0.0625)
 (setq pool:*valnotes* nil)            ; validation problems for the report
-(setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
 ;; Measurements under pool:*smalldim* are dimensioned in the drawing's
 ;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
@@ -8261,18 +8260,6 @@
                            (apply 'max (mapcar 'cadr quad))
                            doff th)))))
 
-;; UNDO grouping that copes with drawings where undo is limited or
-;; off, and with an error firing before the group was ever opened.
-(defun pool:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq pool:*undogrp* t))))
-
-(defun pool:undoend ()
-  (if pool:*undogrp* (command "_.UNDO" "_End"))
-  (setq pool:*undogrp* nil))
-
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
 ;;; only when no snapshot is already pending: if a previous run died
@@ -8285,7 +8272,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* ptype base)
+(defun c:POOL ( / *error* undo-open ptype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -8306,7 +8293,7 @@
     ;; next pool with no bottom and never asks why
     (pool:fclear)
     (setq pool:*nobottom* nil)
-    (pool:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -8325,7 +8312,7 @@
         ;; drawing is in feet-inches gets a feet-inches report
         pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4)))
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -8378,7 +8365,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
   (setq pool:*nobottom* nil)
@@ -8455,7 +8442,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "090126 REV06")
+(setq pooldemo:*version* "090126 REV07")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -8760,14 +8747,13 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:POOLDEMO ( / *error* cells k org)
+(defun c:POOLDEMO ( / *error*)
 
+  ;; nothing to put back at this level: the gate below changes nothing,
+  ;; and pooldemo:run carries the handler for what it changes
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
-    (cal:sysrestore)
-    (pool:undoend)
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
   (if (not (member 'pool:hopcalc (atoms-family 0)))
@@ -8775,13 +8761,25 @@
       (pooldemo:run))
   (princ))
 
-(defun pooldemo:run ( / cells k org)
+(defun pooldemo:run ( / *error* undo-open cells k org)
+
+  ;; the handler lives where the group is opened, so the flag it reads
+  ;; is this run's own local -- it used to be pool:*undogrp*, shared
+  ;; with POOL and the tutorial
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nPOOLDEMO error: " msg)))
+    (cal:sysrestore)
+    (if undo-open (setq undo-open (cal:undoend)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (princ))
+
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
 
@@ -8807,7 +8805,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))
@@ -8859,7 +8857,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "082726 REV06")
+(setq tutorial:*version* "090126 REV07")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -9168,13 +9166,12 @@
 
 (defun c:TUTORIALPOOL ( / *error*)
 
+  ;; nothing to put back at this level: the gate below changes nothing,
+  ;; and tutorial:run carries the handler for what it changes
   (defun *error* (msg)
     (if (and msg
              (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
-    (cal:sysrestore)
-    (pool:undoend)
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
   (if (null pool:*version*)
@@ -9185,13 +9182,26 @@
       (tutorial:run))
   (princ))
 
-(defun tutorial:run ( / topics textonly k org going fn)
+(defun tutorial:run ( / *error* undo-open topics textonly k org going fn)
+
+  ;; the handler lives where the group is opened, so the flag it reads
+  ;; is this run's own local -- it used to be pool:*undogrp*, shared
+  ;; with POOL and the demo
+  (defun *error* (msg)
+    (if (and msg
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nTUTORIALPOOL error: " msg)))
+    (cal:sysrestore)
+    (if undo-open (setq undo-open (cal:undoend)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (princ))
+
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
 
@@ -9221,7 +9231,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
@@ -9295,12 +9305,11 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.0")
+(setq *poolside-version* "v1.1")
 
 ;;; -------------------- adjustable constants ---------------------------
 
 (setq psd:*base*       (list 0.0 0.0))  ; insertion base for this run
-(setq psd:*undogrp*    nil)             ; an UNDO group of ours is open
 (setq psd:*pvents*     nil)             ; live guide entities
 (setq psd:*valnotes*   nil)             ; validation problems, for the notes
 (setq psd:*pv-col*     8)               ; guide outline color (dark gray)
@@ -9738,16 +9747,6 @@
 
 ;;; -------------------- undo / sysvars ---------------------------------
 
-(defun psd:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq psd:*undogrp* t))))
-
-(defun psd:undoend ()
-  (if psd:*undogrp* (command "_.UNDO" "_End"))
-  (setq psd:*undogrp* nil))
-
 ;;; The snapshot lives in a GLOBAL and is taken only when no snapshot is
 ;;; already pending: if a previous run died before restoring, the stale
 ;;; snapshot still holds the user's TRUE settings.  Saving again there
@@ -9756,7 +9755,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOLSIDE ( / *error* style base total doff th chain pv ans
+(defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
                       maxd ydim odl xc xd xb y m)
 
@@ -9771,7 +9770,7 @@
     ;; style current in the user's drawing
     (psd:dimsend psd:*dimstyle0*)
     (psd:pvkill)
-    (psd:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -9784,7 +9783,7 @@
         psd:*smallwarned* nil
         psd:*dimstyle0* (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
-  (psd:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -9916,7 +9915,7 @@
   (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
   (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (psd:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
@@ -10140,7 +10139,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV11")
+(setq spa:*version* "090126 REV12")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -10188,7 +10187,6 @@
 (setq spa:*dotlt*    "CONTINUOUS")   ; resolved to SPADOT per run
 (setq spa:*pvents*   nil)            ; live guide-preview entities
 (setq spa:*valnotes* nil)            ; validation problems for the report
-(setq spa:*undogrp*  nil)            ; an UNDO group of ours is open
 
 (setq spa:*perlay*   "POOL")         ; active perimeter layer
 (setq spa:*perdash*  t)              ; draw the perimeter dashed
@@ -12948,18 +12946,6 @@
 
 ;;; -------------------- undo grouping ----------------------------------
 
-;; Copes with drawings where undo is limited or off, and with an error
-;; firing before the group was ever opened.
-(defun spa:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq spa:*undogrp* t))))
-
-(defun spa:undoend ()
-  (if spa:*undogrp* (command "_.UNDO" "_End"))
-  (setq spa:*undogrp* nil))
-
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
 ;;; only when no snapshot is already pending: if a previous run died
@@ -12973,7 +12959,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* stype base)
+(defun c:SPA ( / *error* undo-open stype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -12987,7 +12973,7 @@
     ;; both exits, this one included
     (spa:fclear)
     (spa:pvkill)
-    (spa:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -13004,7 +12990,7 @@
         spa:*grade* nil
         spa:*taper* nil)
   (setvar "CMDECHO" 0)
-  (spa:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -13067,7 +13053,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (spa:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (cal:dimstyrestore)
   (spa:fclear)
@@ -13121,7 +13107,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090126 REV08")
+(setq tut:*version* "090126 REV09")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -13534,7 +13520,7 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:TUTORIALSPA ( / *error* what)
+(defun c:TUTORIALSPA ( / *error* undo-open what)
 
   (defun *error* (msg)
     (if (and msg
@@ -13542,7 +13528,7 @@
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (cal:sysrestore)
     (cal:dimstyrestore)
-    (spa:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -13563,13 +13549,13 @@
         (cal:syssave (spa:sysvars))
         (cal:dimstysave)
         (setvar "CMDECHO" 0)
-        (spa:undobegin)
+        (setq undo-open (cal:undobegin))
         (setvar "LUNITS" 4)
         (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
-        (spa:undoend)
+        (if undo-open (setq undo-open (cal:undoend)))
         (cal:sysrestore)
         (cal:dimstyrestore)
         (if *pop-error-mode* (*pop-error-mode*))
@@ -66534,7 +66520,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.10")
+(setq *spacheck-version* "v1.11")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -66597,7 +66583,6 @@
 ;; the handler that must undo both lives in c:TUTORIALSPACHECK, a
 ;; different defun that cannot see spachk:demo's locals -- so both bits
 ;; of state are module globals, like the ent list above.
-(setq spachk:*undo-open*   nil)      ; the demo's undo group, if open
 (setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
 (setq spachk:*grey-color*  8)
 (setq spachk:*flag-color*  1)        ; red: what you confirmed is wrong
@@ -68352,10 +68337,15 @@
       (spachk:dimstysave)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      ;; undo-open is c:TUTORIALSPACHECK's LOCAL, set here through
+      ;; dynamic scope: the tutorial's handler is the one that closes
+      ;; the group when an Esc lands on a pause inside it, and a local
+      ;; of that run cannot survive into the next the way the global
+      ;; spachk:*undo-open* did
       (if (= 1 (logand 1 (getvar "UNDOCTL")))
         (progn
           (command "_.UNDO" "_Begin")
-          (setq spachk:*undo-open* T)))
+          (setq undo-open T)))
       ;; the cover, and a water's edge 3 in from it
       (setq cov (spachk:demo-rect (list x y) 84.0 60.0 spachk:*lay-cover*)
             wat (spachk:demo-rect (list (+ x 3.0) (+ y 3.0))
@@ -68424,9 +68414,9 @@
               "This is the easiest one to get wrong, because a border"
               "copied from a liner sheet looks right until it plots."
               "SPACHECK names the factor it actually came out at."))
-      (if spachk:*undo-open*
+      (if undo-open
         (progn (command "_.UNDO" "_End")
-               (setq spachk:*undo-open* nil)))
+               (setq undo-open nil)))
       (spachk:dimstyrestore)
       (if (= "Yes" (cal:askkw "Run SPACHECKSCAN on it now"
                                  "Yes No" "Yes/No" "Yes" nil))
@@ -68451,14 +68441,14 @@
       (setq spachk:*demo-ents* nil)))
   (princ))
 
-(defun c:TUTORIALSPACHECK ( / *error* oldecho oldlay ans l)
+(defun c:TUTORIALSPACHECK ( / *error* undo-open oldecho oldlay ans l)
   (defun *error* (msg)
     ;; the demo's undo group and dim style are the tutorial's to close:
     ;; its pauses sit INSIDE the group, so an Esc at one used to leave
     ;; it open and the user's next U swallowed their own work
-    (if spachk:*undo-open*
+    (if undo-open
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq spachk:*undo-open* nil)))
+             (setq undo-open nil)))
     (spachk:dimstyrestore)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if oldlay (setvar "CLAYER" oldlay))

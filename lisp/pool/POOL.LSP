@@ -120,7 +120,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV21")
+(setq pool:*version* "090126 REV22")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -171,7 +171,6 @@
 ;; corners instead.
 (setq pool:*hookslack* 0.0625)
 (setq pool:*valnotes* nil)            ; validation problems for the report
-(setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
 ;; Measurements under pool:*smalldim* are dimensioned in the drawing's
 ;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
@@ -7730,15 +7729,24 @@
 
 ;; UNDO grouping that copes with drawings where undo is limited or
 ;; off, and with an error firing before the group was ever opened.
+;; One undo group per command, tracked in a LOCAL of the command that
+;; opened it (undo-open), never in a global.  The flag used to live in
+;; pool:*undogrp*, shared with POOLDEMO and TUTORIALPOOL -- so a run that died between
+;; its last dim and the close left it set, and the next command's
+;; handler closed a group it never opened.  Same body as cal:undobegin
+;; / cal:undoend, which the grouped build swaps in:
+;;   (setq undo-open (pool:undobegin))
+;;   ... (if undo-open (setq undo-open (pool:undoend))) ...
+;; Opens only while undo is recording -- _Begin in a drawing with UNDO
+;; off (bit 1 of UNDOCTL clear) errors out of the command -- and
+;; returns nil then, so the idiom above skips the close it does not own.
 (defun pool:undobegin ()
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq pool:*undogrp* t))))
+    (progn (command "_.UNDO" "_Begin") T)))
 
 (defun pool:undoend ()
-  (if pool:*undogrp* (command "_.UNDO" "_End"))
-  (setq pool:*undogrp* nil))
+  (command "_.UNDO" "_End")
+  nil)
 
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
@@ -7766,7 +7774,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* ptype base)
+(defun c:POOL ( / *error* undo-open ptype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -7787,7 +7795,7 @@
     ;; next pool with no bottom and never asks why
     (pool:fclear)
     (setq pool:*nobottom* nil)
-    (pool:undoend)
+    (if undo-open (setq undo-open (pool:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -7806,7 +7814,7 @@
         ;; drawing is in feet-inches gets a feet-inches report
         pool:*ftin* (member (cdr (assoc "LUNITS" pool:*sysold*)) '(3 4)))
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (pool:undobegin))
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -7859,7 +7867,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (pool:undoend)))
   (pool:sysrestore)
   (pool:fclear)
   (setq pool:*nobottom* nil)

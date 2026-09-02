@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090126 REV08")
+(setq tut:*version* "090126 REV09")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -437,14 +437,14 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:TUTORIALSPA ( / *error* what)
+(defun c:TUTORIALSPA ( / *error* undo-open what)
 
   (defun *error* (msg)
     (if (and msg
              (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (spa:sysrestore)
-    (spa:undoend)
+    (if undo-open (setq undo-open (spa:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -464,13 +464,13 @@
         (if (null what) (setq what "Both"))
         (spa:syssave)
         (setvar "CMDECHO" 0)
-        (spa:undobegin)
+        (setq undo-open (spa:undobegin))
         (setvar "LUNITS" 4)
         (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
-        (spa:undoend)
+        (if undo-open (setq undo-open (spa:undoend)))
         (spa:sysrestore)
         (if *pop-error-mode* (*pop-error-mode*))
         (princ))))

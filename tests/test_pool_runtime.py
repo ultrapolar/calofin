@@ -1867,4 +1867,40 @@ _pool_x = [p[0] for d in drawn(vm, 'LINE', 'POOL')
 assert _x < min(_pool_x) - 20.0, (_x, min(_pool_x))
 print("   left-hand corners pull the note back by its width")
 
+# ----------------------------------------------------------------------
+# the undo group is the command's own
+# ----------------------------------------------------------------------
+print("== U1. the undo flag is a local of the run, not a global shared with the demo ==")
+from lispvm import Sym  # noqa: E402
+# the last scenario's VM is a clean run: nothing open, nothing pushed
+assert vm.undo_groups == 0 and vm.error_mode_depth == 0, \
+    (vm.undo_groups, vm.error_mode_depth)
+assert Sym('pool:*undogrp*') not in vm.globals, "pool:*undogrp* is back"
+# a POOL cut short at its first question, then POOLDEMO in the same
+# session: the demo's handler used to read the flag POOL's death left
+# set, and close a group it never opened
+vm = VM()
+vm.load(LSP)
+vm.handle_errors = True
+
+
+def esc(vm):
+    raise LispError('Function cancelled', vm)
+
+
+vm.run('c:POOL', [esc])
+assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+assert vm.undo_groups == 0 and vm.error_mode_depth == 0, \
+    (vm.undo_groups, vm.error_mode_depth)
+assert not any('POOL error' in s for s in vm.printed), vm.printed[-3:]
+vm.load(os.path.join(os.path.dirname(LSP), 'POOLDEMO.LSP'))
+vm.loads("(defun atoms-family (n) (list 'pool:hopcalc))")
+vm.run('c:POOLDEMO', [])
+assert vm.undo_groups == 0 and vm.error_mode_depth == 0
+assert not any('POOLDEMO error' in s for s in vm.printed), vm.printed[-3:]
+assert [c[1] for c in vm.commands if c and c[0] == '_.UNDO'] == \
+    ['_Begin', '_End', '_Begin', '_End'], \
+    [c for c in vm.commands if c and c[0] == '_.UNDO']
+print("   POOL cut short closes its own group; POOLDEMO after it opens and closes its own")
+
 print("\nALL RUNTIME SCENARIOS PASSED")

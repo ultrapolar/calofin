@@ -58,12 +58,11 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.0")
+(setq *poolside-version* "v1.1")
 
 ;;; -------------------- adjustable constants ---------------------------
 
 (setq psd:*base*       (list 0.0 0.0))  ; insertion base for this run
-(setq psd:*undogrp*    nil)             ; an UNDO group of ours is open
 (setq psd:*pvents*     nil)             ; live guide entities
 (setq psd:*valnotes*   nil)             ; validation problems, for the notes
 (setq psd:*pv-col*     8)               ; guide outline color (dark gray)
@@ -501,16 +500,6 @@
 
 ;;; -------------------- undo / sysvars ---------------------------------
 
-(defun psd:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq psd:*undogrp* t))))
-
-(defun psd:undoend ()
-  (if psd:*undogrp* (command "_.UNDO" "_End"))
-  (setq psd:*undogrp* nil))
-
 ;;; The snapshot lives in a GLOBAL and is taken only when no snapshot is
 ;;; already pending: if a previous run died before restoring, the stale
 ;;; snapshot still holds the user's TRUE settings.  Saving again there
@@ -519,7 +508,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOLSIDE ( / *error* style base total doff th chain pv ans
+(defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
                       maxd ydim odl xc xd xb y m)
 
@@ -534,7 +523,7 @@
     ;; style current in the user's drawing
     (psd:dimsend psd:*dimstyle0*)
     (psd:pvkill)
-    (psd:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -547,7 +536,7 @@
         psd:*smallwarned* nil
         psd:*dimstyle0* (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
-  (psd:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -679,7 +668,7 @@
   (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
   (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (psd:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))

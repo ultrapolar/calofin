@@ -55,13 +55,12 @@
 ;;;  A self-contained file: it carries its own helpers.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.0")
+(setq *poolside-version* "v1.1")
 
 ;;; -------------------- adjustable constants ---------------------------
 
 (setq psd:*base*       (list 0.0 0.0))  ; insertion base for this run
 (setq psd:*sysold*     nil)             ; the user's sysvars, pending restore
-(setq psd:*undogrp*    nil)             ; an UNDO group of ours is open
 (setq psd:*pvents*     nil)             ; live guide entities
 (setq psd:*valnotes*   nil)             ; validation problems, for the notes
 (setq psd:*pv-col*     8)               ; guide outline color (dark gray)
@@ -561,15 +560,24 @@
 
 ;;; -------------------- undo / sysvars ---------------------------------
 
+;; One undo group per command, tracked in a LOCAL of the command that
+;; opened it (undo-open), never in a global.  The flag used to live in
+;; psd:*undogrp*, shared with nothing else -- but POOL and SPA were, and the shape is theirs -- so a run that died between
+;; its last dim and the close left it set, and the next command's
+;; handler closed a group it never opened.  Same body as cal:undobegin
+;; / cal:undoend, which the grouped build swaps in:
+;;   (setq undo-open (psd:undobegin))
+;;   ... (if undo-open (setq undo-open (psd:undoend))) ...
+;; Opens only while undo is recording -- _Begin in a drawing with UNDO
+;; off (bit 1 of UNDOCTL clear) errors out of the command -- and
+;; returns nil then, so the idiom above skips the close it does not own.
 (defun psd:undobegin ()
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq psd:*undogrp* t))))
+    (progn (command "_.UNDO" "_Begin") T)))
 
 (defun psd:undoend ()
-  (if psd:*undogrp* (command "_.UNDO" "_End"))
-  (setq psd:*undogrp* nil))
+  (command "_.UNDO" "_End")
+  nil)
 
 ;;; The snapshot lives in a GLOBAL and is taken only when no snapshot is
 ;;; already pending: if a previous run died before restoring, the stale
@@ -593,7 +601,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOLSIDE ( / *error* style base total doff th chain pv ans
+(defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
                       maxd ydim odl xc xd xb y m)
 
@@ -608,7 +616,7 @@
     ;; style current in the user's drawing
     (psd:dimsend psd:*dimstyle0*)
     (psd:pvkill)
-    (psd:undoend)
+    (if undo-open (setq undo-open (psd:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -621,7 +629,7 @@
         psd:*smallwarned* nil
         psd:*dimstyle0* (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
-  (psd:undobegin)
+  (setq undo-open (psd:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -753,7 +761,7 @@
   (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
   (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (psd:undoend)
+  (if undo-open (setq undo-open (psd:undoend)))
   (psd:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))

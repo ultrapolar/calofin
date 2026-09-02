@@ -175,7 +175,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV11")
+(setq spa:*version* "090126 REV12")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -223,7 +223,6 @@
 (setq spa:*dotlt*    "CONTINUOUS")   ; resolved to SPADOT per run
 (setq spa:*pvents*   nil)            ; live guide-preview entities
 (setq spa:*valnotes* nil)            ; validation problems for the report
-(setq spa:*undogrp*  nil)            ; an UNDO group of ours is open
 
 (setq spa:*perlay*   "POOL")         ; active perimeter layer
 (setq spa:*perdash*  t)              ; draw the perimeter dashed
@@ -2983,18 +2982,6 @@
 
 ;;; -------------------- undo grouping ----------------------------------
 
-;; Copes with drawings where undo is limited or off, and with an error
-;; firing before the group was ever opened.
-(defun spa:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq spa:*undogrp* t))))
-
-(defun spa:undoend ()
-  (if spa:*undogrp* (command "_.UNDO" "_End"))
-  (setq spa:*undogrp* nil))
-
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
 ;;; only when no snapshot is already pending: if a previous run died
@@ -3008,7 +2995,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* stype base)
+(defun c:SPA ( / *error* undo-open stype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -3022,7 +3009,7 @@
     ;; both exits, this one included
     (spa:fclear)
     (spa:pvkill)
-    (spa:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -3039,7 +3026,7 @@
         spa:*grade* nil
         spa:*taper* nil)
   (setvar "CMDECHO" 0)
-  (spa:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -3102,7 +3089,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (spa:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (cal:dimstyrestore)
   (spa:fclear)

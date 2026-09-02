@@ -384,6 +384,7 @@ lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*base*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*dotlt*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*turned*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*valnotes*
+lisp/spacheck/SPACHECK.lsp|spachk:demo|setq|undo-open
 lisp/standards_checker/src/acady-cache.lsp|acady-parse-standard|setq-global|*acady-scan-err*
 lisp/standards_checker/src/acady-cache.lsp|acady-scan-standards|foreach|f
 lisp/standards_checker/src/acady-cache.lsp|acady-scan-standards|setq-global|*acady-standards*
@@ -718,6 +719,7 @@ shared/parts/POOLDEMO.lsp|pooldemo:run|foreach|fn
 shared/parts/POOLDEMO.lsp|pooldemo:run|setq-global|pool:*dotlt*
 shared/parts/POOLDEMO.lsp|pooldemo:run|setq-global|pool:*smallwarned*
 shared/parts/SMARTFILLET.lsp|c:smartfillet|setq-global|*error*
+shared/parts/SPACHECK.lsp|spachk:demo|setq|undo-open
 shared/parts/TUTORIALPOOL.lsp|tutorial:run|setq-global|pool:*base*
 shared/parts/TUTORIALPOOL.lsp|tutorial:run|setq-global|pool:*dotlt*
 shared/parts/TUTORIALPOOL.lsp|tutorial:run|setq-global|pool:*smallwarned*

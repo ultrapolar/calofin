@@ -27,7 +27,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090126 REV08")
+(setq tut:*version* "090126 REV09")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -440,7 +440,7 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:TUTORIALSPA ( / *error* what)
+(defun c:TUTORIALSPA ( / *error* undo-open what)
 
   (defun *error* (msg)
     (if (and msg
@@ -448,7 +448,7 @@
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (cal:sysrestore)
     (cal:dimstyrestore)
-    (spa:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -469,13 +469,13 @@
         (cal:syssave (spa:sysvars))
         (cal:dimstysave)
         (setvar "CMDECHO" 0)
-        (spa:undobegin)
+        (setq undo-open (cal:undobegin))
         (setvar "LUNITS" 4)
         (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
-        (spa:undoend)
+        (if undo-open (setq undo-open (cal:undoend)))
         (cal:sysrestore)
         (cal:dimstyrestore)
         (if *pop-error-mode* (*pop-error-mode*))

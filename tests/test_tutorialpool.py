@@ -118,6 +118,8 @@ check('every sysvar is back where it started', vm.sysvars == before)
 check('the run is one undo group',
       [c for c in vm.commands if c and c[0] == '_.UNDO']
       == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']])
+check('and the flag it tracked was a local, not pool:*undogrp*',
+      not any(str(k) == 'pool:*undogrp*' for k in vm.globals))
 
 print('pooldemo -- without POOL.LSP it says so and draws nothing')
 #: the real path for someone who APPLOADs POOLDEMO on its own

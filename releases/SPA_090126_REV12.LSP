@@ -172,7 +172,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV11")
+(setq spa:*version* "090126 REV12")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -220,7 +220,6 @@
 (setq spa:*dotlt*    "CONTINUOUS")   ; resolved to SPADOT per run
 (setq spa:*pvents*   nil)            ; live guide-preview entities
 (setq spa:*valnotes* nil)            ; validation problems for the report
-(setq spa:*undogrp*  nil)            ; an UNDO group of ours is open
 (setq spa:*sysold*   nil)            ; saved sysvars
 
 (setq spa:*perlay*   "POOL")         ; active perimeter layer
@@ -3027,15 +3026,24 @@
 
 ;; Copes with drawings where undo is limited or off, and with an error
 ;; firing before the group was ever opened.
+;; One undo group per command, tracked in a LOCAL of the command that
+;; opened it (undo-open), never in a global.  The flag used to live in
+;; spa:*undogrp*, shared with TUTORIALSPA -- so a run that died between
+;; its last dim and the close left it set, and the next command's
+;; handler closed a group it never opened.  Same body as cal:undobegin
+;; / cal:undoend, which the grouped build swaps in:
+;;   (setq undo-open (spa:undobegin))
+;;   ... (if undo-open (setq undo-open (spa:undoend))) ...
+;; Opens only while undo is recording -- _Begin in a drawing with UNDO
+;; off (bit 1 of UNDOCTL clear) errors out of the command -- and
+;; returns nil then, so the idiom above skips the close it does not own.
 (defun spa:undobegin ()
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq spa:*undogrp* t))))
+    (progn (command "_.UNDO" "_Begin") T)))
 
 (defun spa:undoend ()
-  (if spa:*undogrp* (command "_.UNDO" "_End"))
-  (setq spa:*undogrp* nil))
+  (command "_.UNDO" "_End")
+  nil)
 
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
@@ -3070,7 +3078,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* stype base)
+(defun c:SPA ( / *error* undo-open stype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -3083,7 +3091,7 @@
     ;; both exits, this one included
     (spa:fclear)
     (spa:pvkill)
-    (spa:undoend)
+    (if undo-open (setq undo-open (spa:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -3099,7 +3107,7 @@
         spa:*grade* nil
         spa:*taper* nil)
   (setvar "CMDECHO" 0)
-  (spa:undobegin)
+  (setq undo-open (spa:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -3162,7 +3170,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (spa:undoend)
+  (if undo-open (setq undo-open (spa:undoend)))
   (spa:sysrestore)
   (spa:fclear)
   (if *pop-error-mode* (*pop-error-mode*))

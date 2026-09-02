@@ -242,6 +242,7 @@ class VM:
         self.error_mode_underflow = 0   # pops with nothing pushed
         self.globals[Sym('*push-error-using-command*')] = T
         self.globals[Sym('*pop-error-mode*')] = T
+        self.undo_groups = 0       # _.UNDO _Begin / _End balance
         self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
         self.undo_log = []         # 'start' / 'end', in order
         self.lock_log = []         # (layer name, locked?) per vla-put-Lock
@@ -570,13 +571,27 @@ class VM:
             # the command went through its handler and was aborted --
             # what the user sees is a prompt back, not a crash
             if self.handle_errors and getattr(e, 'handled', False):
+                self._check_balanced(name)
                 return NIL
             raise
+        self._check_balanced(name)
         if self.script:
             raise LispError(
                 f"{len(self.script)} scripted answers left over: "
                 f"{self.script[:6]!r}", self)
         return r
+
+    def _check_balanced(self, name):
+        """A command hands the session back the way it found it: no
+        undo group of its own still open, no error mode still pushed.
+        Either leftover is the class of defect that only shows up in
+        the NEXT command a drafter runs, so every run() checks."""
+        if self.undo_groups:
+            raise LispError(f"{name} returned with {self.undo_groups} undo "
+                            f"group(s) still open", self)
+        if self.error_mode_depth:
+            raise LispError(f"{name} returned with the error mode still "
+                            f"pushed ({self.error_mode_depth} deep)", self)
 
     def layer_of(self, e):
         for pair in self.entdata.get(e, []):
@@ -1390,6 +1405,25 @@ def _dimrot_angle(a):
 @bi('command')
 def _command(vm, a):
     vm.commands.append(list(a))
+    # One undo group per command (STANDARDS 5), and the VM keeps the
+    # count: _Begin with undo off errors out of the command in AutoCAD,
+    # and an _End with no group open is the strict reading of the same
+    # mistake -- a handler that closes a group it never opened.  Inside
+    # vl-catch-all-apply the raise is swallowed, so a guarded close in
+    # a handler stays quiet; what shows is a leftover count, which run()
+    # refuses to return with.
+    if a and isinstance(a[0], str) and a[0].upper().lstrip('._') == 'UNDO' \
+            and len(a) >= 2 and isinstance(a[1], str):
+        sub = a[1].upper().lstrip('_')
+        if sub == 'BEGIN':
+            if not (vm.sysvars.get('UNDOCTL', 5) & 1):
+                raise LispError('_.UNDO _Begin with undo off (UNDOCTL bit 1 '
+                                'clear) errors out of the command', vm)
+            vm.undo_groups += 1
+        elif sub == 'END':
+            if vm.undo_groups <= 0:
+                raise LispError('_.UNDO _End with no group open', vm)
+            vm.undo_groups -= 1
     # -DIMSTYLE Restore really does change the current dim style, and
     # code that saves/restores it round-trips through getvar, so the
     # VM has to model it or a wrong-style restore would go unnoticed

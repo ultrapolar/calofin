@@ -47,6 +47,8 @@ TOOLS = {
             'spa:syssave': 'cal:syssave',
             'spa:sysrestore': 'cal:sysrestore',
             'spa:askkw': 'cal:askkw',
+            'spa:undobegin': 'cal:undobegin',
+            'spa:undoend': 'cal:undoend',
         },
         'drop_globals': ['spa:*sysold*', 'spa:*odstyle*'],
         # cal:syssave takes the sysvars as an argument where spa:syssave
@@ -79,6 +81,8 @@ TOOLS = {
         'swap': {
             'spa:syssave': 'cal:syssave',
             'spa:sysrestore': 'cal:sysrestore',
+            'spa:undobegin': 'cal:undobegin',
+            'spa:undoend': 'cal:undoend',
         },
         'drop_globals': [],
         # the same one-into-two the SPA entry does, and for the same
@@ -342,6 +346,8 @@ TOOLS = {
             'pool:sysrestore': 'cal:sysrestore',
             'pool:askkw': 'cal:askkw', 'pool:askyn': 'cal:askyn',
             'pool:asktreat': 'cal:asktreat',
+            'pool:undobegin': 'cal:undobegin',
+            'pool:undoend': 'cal:undoend',
         },
         'drop_globals': ['pool:*sysold*'],
         # pool:askkw already takes the SHOWN bracket third, like the
@@ -377,6 +383,8 @@ TOOLS = {
             'psd:syssave': 'cal:syssave',
             'psd:sysrestore': 'cal:sysrestore',
             'psd:ensure-layer': 'cal:ensure-layer',
+            'psd:undobegin': 'cal:undobegin',
+            'psd:undoend': 'cal:undoend',
         },
         'drop_globals': ['psd:*sysold*'],
         # psd:askkw already takes the SHOWN bracket third, like the
@@ -811,6 +819,8 @@ TOOLS = {
             'pool:syssave': 'cal:syssave', 'pool:v+': 'cal:v+',
             'pool:mid': 'cal:mid', 'pool:v-': 'cal:v-',
             'pool:sysrestore': 'cal:sysrestore', 'pool:v*': 'cal:v*',
+            'pool:undobegin': 'cal:undobegin',
+            'pool:undoend': 'cal:undoend',
         },
         'drop_globals': [],
         'expand': {
@@ -828,6 +838,8 @@ TOOLS = {
             'pool:syssave': 'cal:syssave', 'pool:v+': 'cal:v+',
             'pool:v-': 'cal:v-', 'pool:mid': 'cal:mid',
             'pool:sysrestore': 'cal:sysrestore', 'pool:v*': 'cal:v*',
+            'pool:undobegin': 'cal:undobegin',
+            'pool:undoend': 'cal:undoend',
         },
         'drop_globals': [],
         'expand': {

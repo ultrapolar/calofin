@@ -27,7 +27,7 @@
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq pooldemo:*version* "090126 REV06")
+(setq pooldemo:*version* "090126 REV07")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -332,14 +332,13 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:POOLDEMO ( / *error* cells k org)
+(defun c:POOLDEMO ( / *error*)
 
+  ;; nothing to put back at this level: the gate below changes nothing,
+  ;; and pooldemo:run carries the handler for what it changes
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
-    (pool:sysrestore)
-    (pool:undoend)
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
   (if (not (member 'pool:hopcalc (atoms-family 0)))
@@ -347,13 +346,25 @@
       (pooldemo:run))
   (princ))
 
-(defun pooldemo:run ( / cells k org)
+(defun pooldemo:run ( / *error* undo-open cells k org)
+
+  ;; the handler lives where the group is opened, so the flag it reads
+  ;; is this run's own local -- it used to be pool:*undogrp*, shared
+  ;; with POOL and the tutorial
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nPOOLDEMO error: " msg)))
+    (pool:sysrestore)
+    (if undo-open (setq undo-open (pool:undoend)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (princ))
+
   (if *push-error-using-command* (*push-error-using-command*))
   (pool:syssave)
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (pool:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
 
@@ -379,7 +390,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (pool:undoend)))
   (pool:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))

@@ -785,6 +785,18 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   first tool written against `cal:` from scratch.)
 * ~~XYPLOT's missing handler and undo group~~ (post-standard miss, not
   on the old list) **DONE**.
+* ~~Undo-group flags held in globals~~ **DONE** (2026-09-02) --
+  `pool:*undogrp*` (shared by POOL, POOLDEMO and TUTORIALPOOL),
+  `spa:*undogrp*` (SPA, TUTORIALSPA), `psd:*undogrp*` and SPACHECK's
+  `spachk:*undo-open*` are gone: the flag is a local `undo-open` of
+  the command that opened the group, the helper pairs carry the
+  library's exact body so `mirror_shared.py` swaps them for
+  `cal:undobegin` / `cal:undoend`, `check_lisp` rule 5 wants every
+  group closed on the success path and from the handler, and the VM
+  counts `_.UNDO _Begin`/`_End` and refuses to return from a command
+  that left one open.  The push/pop asymmetry of the same commit --
+  five tools popping the error mode only from their handler -- closed
+  the day before (rule 1c).
 * ~~`drone` and `tydrn` installed their handler by swapping the global
   `*error*`~~ **DONE** (2026-09-01) -- both use the section 5 skeleton
   now, with the run's state in locals the handler reads through dynamic

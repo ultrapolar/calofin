@@ -109,7 +109,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.10")
+(setq *spacheck-version* "v1.11")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -172,7 +172,6 @@
 ;; the handler that must undo both lives in c:TUTORIALSPACHECK, a
 ;; different defun that cannot see spachk:demo's locals -- so both bits
 ;; of state are module globals, like the ent list above.
-(setq spachk:*undo-open*   nil)      ; the demo's undo group, if open
 (setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
 (setq spachk:*grey-color*  8)
 (setq spachk:*flag-color*  1)        ; red: what you confirmed is wrong
@@ -1927,10 +1926,15 @@
       (spachk:dimstysave)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      ;; undo-open is c:TUTORIALSPACHECK's LOCAL, set here through
+      ;; dynamic scope: the tutorial's handler is the one that closes
+      ;; the group when an Esc lands on a pause inside it, and a local
+      ;; of that run cannot survive into the next the way the global
+      ;; spachk:*undo-open* did
       (if (= 1 (logand 1 (getvar "UNDOCTL")))
         (progn
           (command "_.UNDO" "_Begin")
-          (setq spachk:*undo-open* T)))
+          (setq undo-open T)))
       ;; the cover, and a water's edge 3 in from it
       (setq cov (spachk:demo-rect (list x y) 84.0 60.0 spachk:*lay-cover*)
             wat (spachk:demo-rect (list (+ x 3.0) (+ y 3.0))
@@ -1999,9 +2003,9 @@
               "This is the easiest one to get wrong, because a border"
               "copied from a liner sheet looks right until it plots."
               "SPACHECK names the factor it actually came out at."))
-      (if spachk:*undo-open*
+      (if undo-open
         (progn (command "_.UNDO" "_End")
-               (setq spachk:*undo-open* nil)))
+               (setq undo-open nil)))
       (spachk:dimstyrestore)
       (if (= "Yes" (cal:askkw "Run SPACHECKSCAN on it now"
                                  "Yes No" "Yes/No" "Yes" nil))
@@ -2026,14 +2030,14 @@
       (setq spachk:*demo-ents* nil)))
   (princ))
 
-(defun c:TUTORIALSPACHECK ( / *error* oldecho oldlay ans l)
+(defun c:TUTORIALSPACHECK ( / *error* undo-open oldecho oldlay ans l)
   (defun *error* (msg)
     ;; the demo's undo group and dim style are the tutorial's to close:
     ;; its pauses sit INSIDE the group, so an Esc at one used to leave
     ;; it open and the user's next U swallowed their own work
-    (if spachk:*undo-open*
+    (if undo-open
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq spachk:*undo-open* nil)))
+             (setq undo-open nil)))
     (spachk:dimstyrestore)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if oldlay (setvar "CLAYER" oldlay))

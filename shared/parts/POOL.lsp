@@ -123,7 +123,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV21")
+(setq pool:*version* "090126 REV22")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -174,7 +174,6 @@
 ;; corners instead.
 (setq pool:*hookslack* 0.0625)
 (setq pool:*valnotes* nil)            ; validation problems for the report
-(setq pool:*undogrp*  nil)            ; an UNDO group of ours is open
 
 ;; Measurements under pool:*smalldim* are dimensioned in the drawing's
 ;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
@@ -7649,18 +7648,6 @@
                            (apply 'max (mapcar 'cadr quad))
                            doff th)))))
 
-;; UNDO grouping that copes with drawings where undo is limited or
-;; off, and with an error firing before the group was ever opened.
-(defun pool:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq pool:*undogrp* t))))
-
-(defun pool:undoend ()
-  (if pool:*undogrp* (command "_.UNDO" "_End"))
-  (setq pool:*undogrp* nil))
-
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
 ;;; only when no snapshot is already pending: if a previous run died
@@ -7673,7 +7660,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* ptype base)
+(defun c:POOL ( / *error* undo-open ptype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -7694,7 +7681,7 @@
     ;; next pool with no bottom and never asks why
     (pool:fclear)
     (setq pool:*nobottom* nil)
-    (pool:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -7713,7 +7700,7 @@
         ;; drawing is in feet-inches gets a feet-inches report
         pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4)))
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -7766,7 +7753,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
   (setq pool:*nobottom* nil)

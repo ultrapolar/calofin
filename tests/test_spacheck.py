@@ -467,6 +467,26 @@ def test_version_and_tutorial_run():
     vm.run('c:TUTORIALSPACHECK', ['Checks'])
 
 
+def test_the_tutorial_closes_the_demo_group_it_opened_on_an_esc():
+    """The demo's pauses sit INSIDE its undo group; an Esc at one used
+    to read a global flag (spachk:*undo-open*) that a demo dying past
+    its close could leave set for the next run.  The flag is the
+    tutorial's local now, and its handler closes the group."""
+    vm = VM()
+    vm.load(CHK)
+    vm.handle_errors = True
+
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+
+    # Demo, a spot, then Esc at the first pause inside the group
+    vm.run('c:TUTORIALSPACHECK', ['Demo', (0.0, 0.0, 0.0), esc])
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert vm.undo_groups == 0, vm.undo_groups
+    assert not any(str(k) == 'spachk:*undo-open*' for k in vm.globals)
+    assert not any('TUTORIALSPACHECK error' in s for s in vm.printed)
+
+
 def test_the_demo_reports_its_three_planted_faults_and_nothing_else():
     """The whole point of the demo: it plants three faults, explains
     them, and the scan then names those three and only those three.  A
