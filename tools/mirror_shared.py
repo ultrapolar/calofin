@@ -757,6 +757,17 @@ TOOLS = {
     # takes the tag as an argument; abf:*pt-tag* stays and is passed.
     # Regenerating keeps a ;;;-block the hand twin deleted (R2).
     # [verified: matches except banner + listed residue vs the twin on disk]
+    # VSCONV's one generic helper is the output-layer gate; everything
+    # else in it (the unlock/relock pair, the BYLAYER forcing, the
+    # layer-name lookups) is either DRONE's shape or this file's own,
+    # and the library carries neither.
+    'VSCONV': {
+        'src': 'lisp/vsconv/VSCONV.lsp',
+        'swap': {
+            'vsconv:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
     'ABFIND': {
         'src': 'lisp/abfind/ABFIND.lsp',
         'swap': {
@@ -900,6 +911,15 @@ TOOLS = {
         'src': 'lisp/tydrn/tydrn.lsp',
         'swap': {
             'tydrn:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
+    # SOCONV's only generic helper is the layer creator, the same as
+    # its two cleanup siblings above.
+    'SOCONV': {
+        'src': 'lisp/soconv/SOCONV.lsp',
+        'swap': {
+            'soconv:ensure-layer': 'cal:ensure-layer',
         },
         'drop_globals': [],
     },

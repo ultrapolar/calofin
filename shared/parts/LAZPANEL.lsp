@@ -90,7 +90,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.6")
+(setq *lazpanel-version* "v3.7")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -210,6 +210,7 @@
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
+    ("SOCONV"           "SO survey onto our layers")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -217,6 +218,7 @@
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
+    ("VSCONV"           "VS export onto shop layers")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Leica import cleanup")
     ("XYPLOT"           "X/Y offset plot")
@@ -352,6 +354,8 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "SOCONV"
+      "VSCONV"
       )
     )
      ("Layout"
@@ -399,6 +403,8 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "SOCONV"
+      "VSCONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"

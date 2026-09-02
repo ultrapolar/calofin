@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.3, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.5, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 56 files, 163 commands:
+;;; 58 files, 167 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABMOVE
@@ -30,14 +30,14 @@
 ;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  NORMIESTEP  NORMIESTEPVER  OASIS
 ;;;   OASISVER  PADDLE  PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER
 ;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
-;;;   POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER  SPA  SPACHECK
-;;;   SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER
-;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
-;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
-;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
-;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
-;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XYPLOT
-;;;   XYPLOTVER
+;;;   POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
+;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
+;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD
+;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
+;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
+;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
+;;;   TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -69920,6 +69920,668 @@
 
 
 ;;; ======================================================================
+;;; >>> SOCONV.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; SOCONV.lsp  --  put an SO site-survey export onto the shop's layers
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  SOCONV     move the import onto POOL / POINTS / TEXT /
+;;;                       DIMENSION
+;;;            SOCONVVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; The survey arrives on the export's own layer names and has to be on
+;;; the shop's before the rest of the build can work on it: ABHD and
+;;; POINTRENAMER read the survey points off POINTS, LINGUTTER draws its
+;;; perimeter on POOL, and AUTODIM and CUSTBLOCK dimension onto
+;;; DIMENSION.  The whole move is the handful of rules below, read off
+;;; the before/after sample the shop supplied (SOconv.dxf -- 316 objects
+;;; converted by hand, kept beside the original in the one drawing):
+;;;
+;;;   from the export             what is on it     onto
+;;;   -------------------------   ---------------   ---------
+;;;   Pool Perimeter              everything        POOL
+;;;   Obstacles                   everything        POOL
+;;;   LEICA_DISTO_POINT_ENTITY    POINT             POINTS
+;;;   Existing Anchorss           POINT             POINTS
+;;;   Dimensions                  TEXT, MTEXT       TEXT
+;;;   Dimensions                  everything else   DIMENSION
+;;;
+;;; THE OBSTACLES REALLY DO GO ONTO POOL.  They are drawn as part of
+;;; the same outline once the survey is in the shop's drawing, and the
+;;; sample moves all twelve of them there.
+;;;
+;;; NOTHING ELSE ABOUT AN ENTITY CHANGES.  This is a layer remap and
+;;; only a layer remap: the colour, linetype, lineweight, height,
+;;; style, rotation and text an object arrived with are the ones it
+;;; keeps.  That is what the sample shows rather than what a cleanup
+;;; would do -- the 161 Leica points carry an explicit magenta into the
+;;; conversion and still carry it out the other side, and the notes
+;;; (Up 6", Planter, Existing Anchors) land on TEXT at the height and
+;;; style they came in at.  DRONE and TYDRN restyle; SOCONV does not, and
+;;; *soconv-force-bylayer* below is the one line that changes its mind.
+;;;
+;;; NOTHING IS ERASED OR DRAWN either.  (The sample's after side is one
+;;; dimension short of its before side -- the drafter dropped a linear
+;;; dim by hand while making it.  That is an edit, not a rule, and it
+;;; is not in here.)
+;;;
+;;; Locked layers among those touched are unlocked for the run and
+;;; re-locked afterwards, on the error path too; the destination layers
+;;; are created if the drawing does not have them, and thawed and
+;;; switched on if it does.  The whole run is one undo group.
+;;; ======================================================================
+
+(setq *soconv-version* "v1.0")   ; announced on load; release_lisp.py
+                                 ; stamps the dated twin in releases/
+
+(vl-load-com)
+
+;; ---------------------------------------------------------------
+;; Configuration
+;; ---------------------------------------------------------------
+
+;; The conversion itself, one row per rule:
+;;
+;;     (source-layer  entity-types  destination-layer)
+;;
+;; Both patterns are wcmatch patterns -- "," is alternation, "*" is
+;; anything -- and the rows are tried IN ORDER, the first match
+;; winning.  That ordering is what lets the two Dimensions rows split
+;; the export's one layer into two of ours: the notes are caught by the
+;; TEXT,MTEXT row above, so the catch-all below it takes the dimensions
+;; and anything else the export chose to leave there (a leader, a
+;; witness line -- the sample had neither).
+;;
+;; "Existing Anchorss" is spelled the way the export spells it, doubled
+;; s and all.  The correct spelling is listed after it so a fixed
+;; export keeps working.
+(setq *soconv-map*
+  '(("Pool Perimeter"           "*"          "POOL")
+    ("Obstacles"                "*"          "POOL")
+    ("LEICA_DISTO_POINT_ENTITY" "POINT"      "POINTS")
+    ("Existing Anchorss"        "POINT"      "POINTS")
+    ("Existing Anchors"         "POINT"      "POINTS")
+    ("Dimensions"               "TEXT,MTEXT" "TEXT")
+    ("Dimensions"               "*"          "DIMENSION")))
+
+;; What to CREATE a destination layer with when the drawing has not got
+;; it.  An existing layer is never recoloured -- the shop template's
+;; own POOL, POINTS, TEXT and DIMENSION are what a converted drawing
+;; keeps, whatever is listed here -- so these only ever show on a bare
+;; drawing.  POOL is cyan to agree with POOL.LSP and POOLSIDE, which
+;; are the other two places in the build that create it.
+(setq *soconv-colors*
+  '(("POOL"      . 4)      ; cyan, as POOL.LSP creates it
+    ("POINTS"    . 6)      ; magenta - the pink survey points read as
+    ("TEXT"      . 4)
+    ("DIMENSION" . 141)))
+
+(setq *soconv-default-color* 7)   ; a destination not named above
+
+;; nil, and a moved object keeps every property it arrived with, which
+;; is what the sample conversion does.  T instead forces colour,
+;; linetype and lineweight to BYLAYER on the way past, the way DRONE
+;; and TYDRN do -- so the import takes the destination layer's own
+;; appearance and nothing overrides it later.
+(setq *soconv-force-bylayer* nil)
+
+;; ---------------------------------------------------------------
+;; Helpers
+;; ---------------------------------------------------------------
+
+;; Unlock every layer in NAMES that is currently locked and return the
+;; list of layer objects that were unlocked (so they can be re-locked).
+(defun soconv:unlock-layers (names doc / layers obj unlocked name)
+  (setq layers (vla-get-Layers doc))
+  (foreach name names
+    (if (and name (tblsearch "LAYER" name))
+      (progn
+        (setq obj (vla-Item layers name))
+        (if (= :vlax-true (vla-get-Lock obj))
+          (progn
+            (vla-put-Lock obj :vlax-false)
+            (setq unlocked (cons obj unlocked)))))))
+  unlocked)
+
+(defun soconv:relock-layers (objs / obj)
+  (foreach obj objs (vla-put-Lock obj :vlax-true)))
+
+;; Reset color / linetype / lineweight of a vla-object to BYLAYER.
+;; Only reached with *soconv-force-bylayer* on.
+(defun soconv:force-bylayer (obj)
+  (vla-put-Color obj acByLayer)
+  (vla-put-Linetype obj "ByLayer")
+  (vla-put-Lineweight obj acLnWtByLayer))
+
+;; NAME added to LST unless a spelling of it is in there already; the
+;; order is first-seen, which is the order the report reads in.
+(defun soconv:add (name lst)
+  (if (member (strcase name) (mapcar 'strcase lst))
+    lst
+    (append lst (list name))))
+
+;; The destination for an entity of type TYP on layer LAY, or nil when
+;; no rule claims it.  Rows are tried in order and the first wins.
+(defun soconv:dest (typ lay / rule out)
+  (foreach rule *soconv-map*
+    (if (and (null out)
+             (wcmatch (strcase lay) (strcase (car rule)))
+             (wcmatch (strcase typ) (strcase (cadr rule))))
+      (setq out (caddr rule))))
+  out)
+
+;; DEST's count in TALLY, up by one -- appended when it is new, so the
+;; tally stays in the order the destinations were first reached.
+(defun soconv:bump (dest tally / p)
+  (if (setq p (assoc dest tally))
+    (subst (cons dest (1+ (cdr p))) p tally)
+    (append tally (list (cons dest 1)))))
+
+;; The source layers the map names, for the message that gets printed
+;; when a drawing has none of them.
+(defun soconv:sources ( / rule out)
+  (foreach rule *soconv-map*
+    (setq out (soconv:add (car rule) out)))
+  out)
+
+;; The colour to CREATE destination NAME with (see *soconv-colors*).
+(defun soconv:color (name / rule out)
+  (foreach rule *soconv-colors*
+    (if (and (null out) (= (strcase (car rule)) (strcase name)))
+      (setq out (cdr rule))))
+  (if out out *soconv-default-color*))
+
+;; "Dimensions, Obstacles, Pool Perimeter"
+(defun soconv:namelist (names / out name)
+  (foreach name names
+    (setq out (strcat (if out (strcat out ", ") "") name)))
+  out)
+
+;; "69 -> POOL, 232 -> POINTS"
+(defun soconv:tally-line (tally / out p)
+  (foreach p tally
+    (setq out (strcat (if out (strcat out ", ") "")
+                      (itoa (cdr p)) " -> " (car p))))
+  out)
+
+;; Work out what moves where WITHOUT touching anything, so the run can
+;; ask for exactly the layers it needs and can say up front that a
+;; drawing has nothing to convert.  Returns
+;;
+;;     (jobs source-layers destination-layers tally)
+;;
+;; where jobs is a list of (ename . destination) in drawing order.  An
+;; object a rule sends to the layer it is already on is not a job.
+(defun soconv:plan (ss / i ent ed typ lay dest jobs srcs dests tally)
+  (setq i 0)
+  (while (< i (sslength ss))
+    (setq ent  (ssname ss i)
+          ed   (entget ent)
+          typ  (cdr (assoc 0 ed))
+          lay  (cdr (assoc 8 ed))
+          dest (soconv:dest typ lay))
+    (if (and dest (/= (strcase lay) (strcase dest)))
+      (setq jobs  (cons (cons ent dest) jobs)
+            srcs  (soconv:add lay srcs)
+            dests (soconv:add dest dests)
+            tally (soconv:bump dest tally)))
+    (setq i (1+ i)))
+  (list (reverse jobs) srcs dests tally))
+
+;; ---------------------------------------------------------------
+;; Main command
+;; ---------------------------------------------------------------
+(defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
+                   tally job dest obj)
+
+  ;; The handler is LOCAL to this command (STANDARDS 5): a handler
+  ;; installed in the global *error* is the handler of whatever runs
+  ;; next the first time a run ends without putting it back.  It sees
+  ;; doc / unlocked / mark-open through dynamic scope, and closes only
+  ;; the mark this run opened -- the close can itself throw when the
+  ;; failure came before StartUndoMark, and a throw inside *error* is
+  ;; the one error nothing can catch.
+  (defun *error* (msg)
+    ;; locked layers come back FIRST so nothing below can skip them
+    (if unlocked (vl-catch-all-apply 'soconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSOCONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil)
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  ;; What to convert: the highlight if there is one, else what is
+  ;; picked at the prompt, else the whole drawing.  An import usually
+  ;; IS the whole drawing, which is why Enter means that; highlight
+  ;; first when two surveys share one drawing.
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nSelect the survey import to convert <Enter = whole drawing>: ")
+      (setq ss (ssget))
+      (if (null ss)
+        (setq ss (ssget "_X")))))
+
+  (setq plan  (if ss (soconv:plan ss) '(nil nil nil nil))
+        jobs  (car plan)
+        srcs  (cadr plan)
+        dests (caddr plan)
+        tally (cadddr plan))
+
+  (if jobs
+    (progn
+      ;; only the destinations this run actually reaches -- a drawing
+      ;; with no dimensions in its survey does not want an empty
+      ;; DIMENSION layer created for it
+      (foreach dest dests
+        (cal:ensure-layer dest (soconv:color dest)))
+      ;; unlock everything about to be touched, both ends of the move
+      (setq unlocked (soconv:unlock-layers (append srcs dests) doc))
+      (foreach job jobs
+        (setq obj (vlax-ename->vla-object (car job)))
+        (vla-put-Layer obj (cdr job))
+        (if *soconv-force-bylayer*
+          (soconv:force-bylayer obj)))
+      (soconv:relock-layers unlocked)
+      (setq unlocked nil)))
+
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
+
+  (if jobs
+    (progn
+      (princ (strcat "\nSOCONV done: " (itoa (length jobs))
+                     " object(s) moved -- " (soconv:tally-line tally) "."))
+      (princ (strcat "\n  Moved off " (soconv:namelist srcs)
+                     " - PURGE those layers once the result looks right.")))
+    (progn
+      (princ "\nSOCONV: nothing here is on the export's layers - nothing moved.")
+      (princ (strcat "\n  It converts " (soconv:namelist (soconv:sources))
+                     "."))))
+  (princ))
+
+(defun c:SOCONVVER ()
+  (princ (strcat "\nSOCONV " *soconv-version*))
+  (princ))
+
+(princ (strcat "\nSOCONV " *soconv-version* " loaded.  Type SOCONV to run."))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> VSCONV.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; VSCONV.lsp  --  a VS survey export converted onto the calofin layers
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (Visual LISP - ActiveX is used throughout).
+;;;
+;;; Commands:  VSCONV     convert the import - highlight it first, or
+;;;                       press Enter and take every VS layer in the
+;;;                       drawing
+;;;            VSCONVVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; A VS trace arrives on the exporter's own numbered layers, and the
+;;; office draws on POOL / POINTS / DIMENSION.  VSCONV is that rename,
+;;; in one pass:
+;;;
+;;;   1. LAYERS - every object on a source layer moves to the layer
+;;;      *vsconv-map* pairs it with, with color, linetype and lineweight
+;;;      forced to BYLAYER so the moved geometry takes the destination
+;;;      layer's own appearance rather than carrying the exporter's:
+;;;
+;;;        "1 Perimeter"  -> POOL       the outline
+;;;        "2 Coping"     -> POOL       the coping band
+;;;        "3 Features"   -> POOL       steps, benches, the skimmer
+;;;        "3.1 Anchors"  -> POINTS     the survey points (POINTS is
+;;;                                     magenta, so they show pink)
+;;;        "4 Dimensions" -> DIMENSION  the exporter's dimensions
+;;;
+;;;      Three source layers landing on POOL is the point of the table
+;;;      rather than a flaw in it: perimeter, coping and features are
+;;;      one drawing to this office and three to the exporter.
+;;;
+;;;   2. DIMENSIONS - every dimension that came over is put on the shop
+;;;      dimension style (STANDARD) AND has its style OVERRIDES removed.
+;;;      Both halves matter.  The exporter writes text height, arrow
+;;;      size and decimal places into each dimension as an ACAD/DSTYLE
+;;;      xdata block, and an override outranks the style it sits on - so
+;;;      a dimension merely renamed to STANDARD would still draw itself
+;;;      in the exporter's 2.5-unit text.  Strip the block and the style
+;;;      is finally the thing that decides.
+;;;
+;;; WHAT IT DOES NOT DO.  There is no text step: a VS export carries no
+;;; point labels, so there is nothing to restyle.  A drone trace that
+;;; DOES arrive labelled is DRONE's or TYDRN's job (lisp/drone/,
+;;; lisp/tydrn/) - the two are siblings of this file, the same one-pass
+;;; cleanup written for the survey that comes in with text on it.
+;;; The emptied source layers are left in the drawing and named in the
+;;; done line instead of being purged, so the whole run stays one U.
+;;;
+;;; Scope is what you highlight; Enter at the prompt takes every object
+;;; on a source layer, drawing-wide.  Either way only the source layers
+;;; in the table are touched, so a sheet that already carries converted
+;;; work cannot be converted twice.  Locked layers among those touched
+;;; are unlocked for the run and re-locked afterwards, on the error path
+;;; too, and the whole run is one undo group.
+;;; ======================================================================
+
+(setq *vsconv-version* "v1.0")   ; announced on load; release_lisp.py
+                                 ; reads this banner and stamps the
+                                 ; dated twin in releases/ from it
+
+(vl-load-com)
+
+;; ---------------------------------------------------------------
+;; Configuration
+;; ---------------------------------------------------------------
+
+;; source layer -> destination layer.  The conversion IS this table: an
+;; exporter that names its layers differently is retuned here and
+;; nothing else in the file changes.  These are exact layer names, not
+;; patterns: they go into an ssget filter, which reads them as wcmatch
+;; patterns, so a name carrying one of , * ? # @ ~ [ ] or ` would select
+;; layers the rest of the file then does not know what to do with.
+(setq *vsconv-map*
+      '(("1 Perimeter"  . "POOL")
+        ("2 Coping"     . "POOL")
+        ("3 Features"   . "POOL")
+        ("3.1 Anchors"  . "POINTS")
+        ("4 Dimensions" . "DIMENSION")))
+
+;; The color a destination layer is CREATED with, when the drawing does
+;; not carry it yet.  A drawing that has the layer already keeps its own
+;; color: this is a conversion, not a restyling of the office template.
+(setq *vsconv-colors*
+      '(("POOL"      . 4)      ; cyan, as the rest of the tree creates it
+        ("POINTS"    . 6)      ; magenta - the pink the points show in
+        ("DIMENSION" . 141)))  ; as CUSTBLOCK creates it
+
+(setq *vsconv-default-color* 7)      ; a destination the table above
+                                     ; does not name
+
+(setq *vsconv-dim-style* "STANDARD"  ; the style the dimensions land in
+      *vsconv-dim-xdata* "ACAD")     ; the application whose style
+                                     ; overrides are removed with them;
+                                     ; nil leaves the overrides on
+
+;; ---------------------------------------------------------------
+;; Helpers
+;; ---------------------------------------------------------------
+
+;; Unlock every layer in NAMES that is currently locked and return the
+;; list of layer objects that were unlocked (so they can be re-locked).
+(defun vsconv:unlock-layers (names doc / layers obj unlocked name)
+  (setq layers (vla-get-Layers doc))
+  (foreach name names
+    (if (and name (tblsearch "LAYER" name))
+      (progn
+        (setq obj (vla-Item layers name))
+        (if (= :vlax-true (vla-get-Lock obj))
+          (progn
+            (vla-put-Lock obj :vlax-false)
+            (setq unlocked (cons obj unlocked)))))))
+  unlocked)
+
+(defun vsconv:relock-layers (objs / obj)
+  (foreach obj objs (vla-put-Lock obj :vlax-true)))
+
+;; Reset color / linetype / lineweight of a vla-object to BYLAYER.
+(defun vsconv:force-bylayer (obj)
+  (vla-put-Color obj acByLayer)
+  (vla-put-Linetype obj "ByLayer")
+  (vla-put-Lineweight obj acLnWtByLayer))
+
+;; The source layers, the destination layers (once each, in the order
+;; the table names them), and the color one is created with.
+(defun vsconv:sources ()
+  (mapcar 'car *vsconv-map*))
+
+(defun vsconv:dests ( / out p)
+  (foreach p *vsconv-map*
+    (if (not (member (cdr p) out)) (setq out (cons (cdr p) out))))
+  (reverse out))
+
+(defun vsconv:color (name / p)
+  (if (setq p (assoc (strcase name) (mapcar '(lambda (q)
+                                               (cons (strcase (car q))
+                                                     (cdr q)))
+                                            *vsconv-colors*)))
+    (cdr p)
+    *vsconv-default-color*))
+
+;; Where LAY converts to, nil for a layer the table does not name.
+;; Layer names are case-insensitive in AutoCAD, so the lookup is too.
+(defun vsconv:dest (lay / out p)
+  (foreach p *vsconv-map*
+    (if (and (null out) (= (strcase (car p)) (strcase lay)))
+      (setq out (cdr p))))
+  out)
+
+;; Join names into the comma-separated form an ssget layer filter wants,
+;; and into the plain English the report wants.
+(defun vsconv:csv (names / out name)
+  (foreach name names
+    (setq out (if out (strcat out "," name) name)))
+  out)
+
+(defun vsconv:namelist (names / out name)
+  (foreach name names
+    (setq out (if out (strcat out ", " name) name)))
+  out)
+
+;; The source layers this drawing actually carries.
+(defun vsconv:present (names / out name)
+  (foreach name names
+    (if (tblsearch "LAYER" name) (setq out (cons name out))))
+  (reverse out))
+
+;; Is there anything left on LAY?  ("_X" sweeps the database, so a
+;; frozen or switched-off leftover still counts as one.)
+(defun vsconv:empty-p (lay)
+  (null (ssget "_X" (list (cons 8 lay)))))
+
+;; KEY's count in an alist, one higher.
+(defun vsconv:bump (key alist / p)
+  (if (setq p (assoc key alist))
+    (subst (cons key (1+ (cdr p))) p alist)
+    (append alist (list (cons key 1)))))
+
+;; One dimension onto the shop style, overrides and all.  The style name
+;; is DXF group 3 and can simply be written; the overrides are xdata
+;; under the "ACAD" application, and an application name handed to
+;; entmod with NO data after it is how xdata is deleted.  The group has
+;; to be there and empty for that: an entmod list that simply omits it
+;; leaves the xdata exactly where it was.
+(defun vsconv:restyle-dim (ent style app / ed x)
+  (setq ed (if app (entget ent (list app)) (entget ent)))
+  (if (assoc 3 ed)
+    (setq ed (subst (cons 3 style) (assoc 3 ed) ed)))
+  (if (and app (setq x (assoc -3 ed)))
+    (setq ed (subst (list -3 (list app)) x ed)))
+  (entmod ed)
+  (entupd ent))
+
+;; ---------------------------------------------------------------
+;; Main command
+;; ---------------------------------------------------------------
+(defun c:VSCONV (/ *error* doc unlocked mark-open srcs dests here
+                   filter ss i ent ed lay dest obj dims empty p
+                   tally n-moved n-dim)
+
+  ;; The handler is LOCAL to this command (STANDARDS 5), as DRONE's and
+  ;; TYDRN's are: it sees doc / unlocked / mark-open through dynamic
+  ;; scope, and closes only the mark this run opened -- the close can
+  ;; itself throw when the failure came before StartUndoMark, and a
+  ;; throw inside *error* is the one error nothing can catch.
+  (defun *error* (msg)
+    ;; locked layers come back FIRST so nothing below can skip them
+    ;; through the catch: a Lock put that throws must not skip the mark
+    ;; close below -- a throw inside *error* is uncatchable
+    (if unlocked (vl-catch-all-apply 'vsconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nVSCONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
+        srcs     (vsconv:sources)
+        dests    (vsconv:dests)
+        here     (vsconv:present srcs)
+        tally    nil
+        dims     nil
+        n-moved  0
+        n-dim    0)
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  (if (null here)
+    ;; Nothing of the exporter's is in this drawing.  Say which layers
+    ;; were looked for rather than "0 objects converted": the usual
+    ;; cause is a drawing that was converted already, and the second is
+    ;; an exporter whose layer names have changed under the table.
+    (progn
+      (princ (strcat "\nVSCONV: this drawing carries none of the VS"
+                     " layers (" (vsconv:namelist srcs) ")."))
+      (princ "\n  Nothing to convert - either it has been through VSCONV")
+      (princ "\n  already, or the export names its layers differently now")
+      (princ "\n  and *vsconv-map* is what needs editing."))
+    (progn
+      ;; The destinations have to exist, and be usable, before anything
+      ;; is moved onto them.
+      (foreach lay dests (cal:ensure-layer lay (vsconv:color lay)))
+
+      ;; ------------------------------------------------------------
+      ;; What to convert: the highlight, else a prompt, Enter = every
+      ;; object on a source layer anywhere in the drawing.
+      ;; ------------------------------------------------------------
+      (setq filter (list (cons 8 (vsconv:csv srcs)))
+            ss     (ssget "_I" filter))
+      (if (null ss)
+        (progn
+          (prompt (strcat "\nSelect the VS import <Enter = every VS layer"
+                          " in the drawing>: "))
+          (setq ss (ssget filter))
+          (if (null ss) (setq ss (ssget "_X" filter)))))
+
+      ;; Unlock every layer the run is about to touch -- the sources it
+      ;; takes from and the destinations it writes to.
+      (setq unlocked (vsconv:unlock-layers (append here dests) doc))
+
+      ;; ------------------------------------------------------------
+      ;; 1. The layer move, everything BYLAYER
+      ;; ------------------------------------------------------------
+      (if ss
+        (progn
+          (setq i 0)
+          (while (< i (sslength ss))
+            (setq ent  (ssname ss i)
+                  ed   (entget ent)
+                  lay  (cdr (assoc 8 ed))
+                  dest (vsconv:dest lay))
+            (if dest
+              (progn
+                (setq obj (vlax-ename->vla-object ent))
+                (vla-put-Layer obj dest)
+                (vsconv:force-bylayer obj)
+                (setq tally   (vsconv:bump (strcase lay) tally)
+                      n-moved (1+ n-moved))
+                ;; the dimensions are collected rather than restyled
+                ;; here: the style may be missing, which is one message
+                ;; about all of them and not one per dimension
+                (if (= "DIMENSION" (cdr (assoc 0 ed)))
+                  (setq dims (cons ent dims)))))
+            (setq i (1+ i)))))
+
+      ;; ------------------------------------------------------------
+      ;; 2. The dimensions onto the shop style, overrides removed
+      ;; ------------------------------------------------------------
+      (if dims
+        (if (tblsearch "DIMSTYLE" *vsconv-dim-style*)
+          (foreach ent (reverse dims)
+            (vsconv:restyle-dim ent *vsconv-dim-style* *vsconv-dim-xdata*)
+            (setq n-dim (1+ n-dim)))
+          (princ (strcat "\nVSCONV: this drawing has no \""
+                         *vsconv-dim-style* "\" dimension style, so the "
+                         (itoa (length dims)) " dimension(s) moved layer"
+                         " but kept the export's style and overrides."))))
+
+      ;; Re-lock whatever we unlocked and close the undo group.
+      (vsconv:relock-layers unlocked)
+      (setq unlocked nil)
+      (vla-EndUndoMark doc)
+      (setq mark-open nil)
+
+      ;; ------------------------------------------------------------
+      ;; The report, in the table's own order
+      ;; ------------------------------------------------------------
+      (princ (strcat "\nVSCONV done: " (itoa n-moved)
+                     " object(s) converted."))
+      (foreach p *vsconv-map*
+        (if (setq lay (assoc (strcase (car p)) tally))
+          (princ (strcat "\n  " (car p) ": " (itoa (cdr lay))
+                         " -> " (cdr p)))))
+      ;; The VS layers are here but nothing is on them - the selection
+      ;; is everything on them, so an empty selection means empty
+      ;; layers.  That is not the same as the drawing not being an
+      ;; export, so it is not the same message; and nothing was emptied
+      ;; by this run, so the line below is not printed either.
+      (if (= 0 n-moved)
+        (princ (strcat "\n  the VS layers (" (vsconv:namelist here)
+                       ") carry nothing - nothing to convert.")))
+      (if (> n-dim 0)
+        (princ (strcat "\n  " (itoa n-dim) " dimension(s) -> "
+                       *vsconv-dim-style*
+                       (if *vsconv-dim-xdata*
+                         (strcat ", " *vsconv-dim-xdata*
+                                 " style overrides removed")
+                         ""))))
+      (setq empty nil)
+      (if (> n-moved 0)
+        (foreach lay here
+          (if (vsconv:empty-p lay) (setq empty (cons lay empty)))))
+      (if empty
+        (princ (strcat "\n  now empty: " (vsconv:namelist (reverse empty))
+                       " - PURGE them when you are ready; VSCONV leaves"
+                       " them so one U backs the whole run out")))))
+
+  ;; A mark is still open on the "nothing to convert" path above.
+  (if mark-open
+    (progn (vla-EndUndoMark doc) (setq mark-open nil)))
+  (princ))
+
+(defun c:VSCONVVER ()
+  (princ (strcat "\nVSCONV " *vsconv-version*))
+  (princ))
+
+(princ (strcat "\nVSCONV " *vsconv-version*
+               " loaded.  Type VSCONV to run."))
+(princ)
+
+
+;;; ======================================================================
 ;;; >>> wcalst.lsp
 ;;; ======================================================================
 
@@ -78214,7 +78876,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.6")
+(setq *lazpanel-version* "v3.7")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -78334,6 +78996,7 @@
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
+    ("SOCONV"           "SO survey onto our layers")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -78341,6 +79004,7 @@
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
+    ("VSCONV"           "VS export onto shop layers")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Leica import cleanup")
     ("XYPLOT"           "X/Y offset plot")
@@ -78476,6 +79140,8 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "SOCONV"
+      "VSCONV"
       )
     )
      ("Layout"
@@ -78523,6 +79189,8 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "SOCONV"
+      "VSCONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -79988,11 +80656,11 @@
   "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET"
   "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
   "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE"
-  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "WCALST" "WCALSTVER"
-  "XFTCONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
-  "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
-  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON"
-  "LAZPANELVER"
+  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SOCONVVER"
+  "VSCONV" "VSCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTCONV-SETUP"
+  "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
+  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
+  "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -80009,7 +80677,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.3 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.5 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 
