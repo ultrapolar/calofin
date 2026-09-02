@@ -225,7 +225,7 @@ class VM:
             # made every cancel test see "changed" settings that were
             # only ever the VM inventing a value; a name not listed here
             # now reads as nil, exactly as AutoCAD answers an unknown one.
-            'PDMODE': 0, 'VIEWSIZE': 100.0, 'PLINETYPE': 2,
+            'PDMODE': 0, 'VIEWSIZE': 100.0, 'PLINETYPE': 2, 'PICKFIRST': 1,
             'CANNOSCALEVALUE': 1.0, 'DIMSCALE': 1.0, 'FILEDIA': 1,
             'DIMTXT': 0.18, 'TEMPPREFIX': 'C:\\Temp\\',
             'CECOLOR': 'BYLAYER', 'CELTYPE': 'BYLAYER', 'CELWEIGHT': -1,

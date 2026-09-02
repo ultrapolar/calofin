@@ -75,6 +75,12 @@ for _p in lsp_files(LISP_DIR):
 NO_PROMPT = {
     'ABFIND', 'ABMOVE', 'CDCALLOUT', 'POOLDEMO',
     'LAZFORM', 'LAZFORMCOVER', 'LAZSPA', 'LAZSTEP', 'LAZTXT',
+    # its pre-flight check runs before its first question, and PADDLE
+    # is in another file this VM never loads, so it names the missing
+    # stage and stops -- which is the behaviour, not a gap.
+    # tests/test_tydrn_suite.py drives its prompt and its handler, Esc
+    # included, with the stages stubbed.
+    'TYLERDRONESUITE',
 }
 #: the ActiveX surface the VM does not carry
 NEEDS_ACTIVEX = {'PADDLE'}
