@@ -174,6 +174,47 @@ check("the run is one undo group with CMDECHO restored",
       vm.sysvars['CMDECHO'] == 1)
 
 # ----------------------------------------------------------------------
+# 1b. shared anchors: a corner two dims measure to is never shifted
+# ----------------------------------------------------------------------
+print("shared anchors")
+
+vm = newvm()
+ents = made(vm, LINE)
+# the hypotenuse corner: 30 above the line, nothing drawn through it,
+# and TWO dimensions measuring to it
+c1 = made(vm, dim("D3", (10.0, 0.0), (140.0, 30.0)))
+c2 = made(vm, dim("D4", (90.0, 0.0), (140.0, 30.0)))
+stray = made(vm, dim("D5", (20.0, 0.0), (50.0, 12.0)))    # a real stray
+miss = made(vm, dim("D6", (30.0, 0.0), (140.05, 30.02)))  # 0.054 off the
+ents += c1 + c2 + stray + miss                            # corner
+vm.run('c:CHECK', [None, ents])
+
+check("the shared corner is left exactly where it was drawn",
+      near(grp(vm.entdata[c1[0]], 14), (140.0, 30.0)) and
+      near(grp(vm.entdata[c2[0]], 14), (140.0, 30.0)),
+      repr((grp(vm.entdata[c1[0]], 14), grp(vm.entdata[c2[0]], 14))))
+check("neither anchored dimension is recolored",
+      grp(vm.entdata[c1[0]], 62) is None and
+      grp(vm.entdata[c2[0]], 62) is None)
+check("a point only one dim measures to is still shifted onto the line",
+      near(grp(vm.entdata[stray[0]], 14), (50.0, 0.0)) and
+      grp(vm.entdata[stray[0]], 62) == 1,
+      repr(grp(vm.entdata[stray[0]], 14)))
+check("a near miss goes to the anchor, not the 30-away line",
+      near(grp(vm.entdata[miss[0]], 14), (140.0, 30.0)),
+      repr(grp(vm.entdata[miss[0]], 14)))
+check("only the two shifted dims leave a construction line",
+      len(xlines(vm)) == 2, repr(xlines(vm)))
+
+txt = ''.join(vm.printed)
+check("the run says how many points it treated as anchors",
+      '1 point(s) carry more than one dimension - treated as anchors'
+      ' and left alone.' in txt, txt[-500:])
+check("the tally counts 4 checked, 2 shifted",
+      'Dimensions: 4 checked, 2 shifted onto nearest object (red)' in txt,
+      txt[-400:])
+
+# ----------------------------------------------------------------------
 # 2. the arc audit: an end resting mid-line snaps to the line's end
 # ----------------------------------------------------------------------
 print("arc endpoint attachment")

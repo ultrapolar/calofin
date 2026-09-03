@@ -19,6 +19,7 @@ green lines are the all-clear (and render at 3/4 height).
 | `overlap_lines` | exactly **one** overlapping pair (the two collinear lines) | the third, clean line |
 | `overlap_touching_ok` | no overlaps | any overlap |
 | `dim_stray_point` | one dim with a stray definition point | an attached dim |
+| `dim_shared_anchor` | three dims: the third with a stray point, and two **on a shared anchor** | any finding against the two dims meeting at the corner |
 | `arc_unattached` | one arc with an unattached end | endpoints OK |
 | `liner_missing` | Liner Material block **MISSING** | a liner found |
 | `liner_step_without_fg` | steps drawn but liner **MISSING its Step** | the fiberglass warning |

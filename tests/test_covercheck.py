@@ -222,6 +222,13 @@ install_curve_shims()
 # fixture builders and readers
 # ------------------------------------------------------------------
 
+def line(vm, p1, p2, layer='0'):
+    vm.loads('(entmakex (list (cons 0 "LINE") (cons 8 "%s")'
+             ' (list 10 %r %r 0.0) (list 11 %r %r 0.0)))'
+             % (layer, p1[0], p1[1], p2[0], p2[1]))
+    return vm.entities[-1]
+
+
 def dim(vm, p13, p14, p10, layer='DIMENSION', style='STANDARD'):
     vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 8 "%s")'
              ' (cons 3 "%s") (cons 70 0) (cons 50 0.0)'
@@ -501,6 +508,57 @@ assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
 assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
 assert len(report_texts(vm)) == 2
 print("   the probe took it; the Highlight prompt was never asked")
+
+
+# ------------------------------------------------------------------
+print("== shared anchors: a point two dims meet at is not a stray ==")
+# The hypotenuse corner: two runs stopping short of the corner they
+# would meet at, and TWO dimensions measuring to that corner - a point
+# in space with no geometry through it.  The audit must leave it alone
+# WITHOUT asking, and still question a point only one dim measures to.
+vm = VM()
+vm.load(CHK)
+line(vm, (0.0, 0.0), (60.0, 0.0))              # bottom run
+line(vm, (100.0, 40.0), (100.0, 100.0))        # right-hand run
+dim(vm, (0.0, 0.0), (100.0, 0.0), (50.0, -20.0))       # to the corner
+dim(vm, (100.0, 100.0), (100.0, 0.0), (130.0, 50.0))   # and again
+dim(vm, (10.0, 0.0), (40.0, 15.0), (20.0, 30.0))       # a real stray
+
+vm.loads('''
+  (defun t:parts ( / ss i e et)
+    (setq ss (ssget "_X") i 0 t:dims nil t:cands nil)
+    (repeat (sslength ss)
+      (setq e  (ssname ss i)
+            i  (1+ i)
+            et (cdr (assoc 0 (entget e))))
+      (if (= et "DIMENSION") (setq t:dims (cons e t:dims)))
+      (if (member et *cchk-curve-types*) (setq t:cands (cons e t:cands))))
+    (setq t:dims  (reverse t:dims)
+          t:cands (reverse t:cands)
+          t:anchors (cchk:shared-anchors t:dims)))
+  (defun t:anchored ()
+    (t:parts)
+    (list (length t:anchors)
+          (cchk:audit-dim-point (car t:dims) 14 "dimension point 2"
+                             t:cands t:anchors)))
+  (defun t:stray ()
+    (t:parts)
+    (cchk:audit-dim-point (caddr t:dims) 14 "dimension point 2"
+                       t:cands t:anchors))
+''')
+
+res = vm.run('t:anchored', [])           # an empty script: any question raises
+assert res[0] == 1, res                  # one shared spot, the corner
+assert str(res[1][2]).lower() == 'anchor', res
+assert not [p for p in vm.prompts if 'Move/Keep/Pick' in str(p[0])], vm.prompts
+print("   the corner is held as an anchor, with nothing asked")
+
+try:
+    vm.run('t:stray', [])                # this one MUST ask, so it runs dry
+    raise AssertionError("the lone stray point was not questioned")
+except LispError as e:
+    assert 'SCRIPT EXHAUSTED' in str(e), e
+print("   a point only one dim measures to is still questioned")
 
 
 print("\nALL COVERCHECK SCENARIOS PASSED")

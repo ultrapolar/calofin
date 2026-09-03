@@ -19,6 +19,12 @@ for exactly those three checks, standalone.
    bottom inside each group. A definition point off the geometry gets
    a Move (onto the nearest object) / Keep (exactly where you drew it)
    / Pick (your own spot) choice, both candidates marked on screen.
+   A point **two or more dimensions measure to** is an **anchor** and
+   is never questioned, geometry under it or not: dimensioning twice
+   to the same spot — the pair of dims pinning down a hypotenuse
+   corner is the everyday case — is how you say that spot is the
+   object. A stray point nearer an anchor than any line is offered
+   the anchor rather than dragged off to the line.
    Object-associative dims are called out before their points move.
 2. **Arcs**, one endpoint at a time — the same Move / Keep / Pick
    choice for an end not attached to another object's end.
