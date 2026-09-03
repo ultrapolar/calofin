@@ -100,7 +100,7 @@ and the whole page end to end through its own `action_tile` strings.
   left it, so someone who lives on Find stays there without the default
   changing under everyone else.
 
-## Phase 3 -- the forms stop finding out too late *(done)*
+## Phase 3 -- the forms stop finding out too late *(done, all of it)*
 
 All three forms carry a **state line** now, and it holds `Insert` back.
 
@@ -134,14 +134,25 @@ The anti-drift property is the one that matters: the line **reports
 every live box into sent / still-to-ask / unreadable (and NA-demoted, on
 SPA), failing if any box lands in two groups or in none.
 
-Still open from this phase, deliberately:
+Both of this phase's leftovers landed too:
 
-- **`Recall last`, as a button and never as a default.** Per chart, in
-  the registry. Pre-filling silently would put the last pool's numbers
-  on this pool, which is worse than typing them.
-- **Say what a box will take.** `24` and `2'6"` both work and nothing
-  on screen says so. The state line is the obvious place, but it is
-  carrying two jobs already; this may want the static hint instead.
+- **`Recall last`** *(done)* -- a button on every form that puts the
+  last accepted sheet for *this chart* back into the **empty** boxes
+  only, so it can never overwrite a number just typed and pressing it
+  twice is a no-op. Never a default: pre-filling would put the last
+  pool's numbers on this pool, and a wrong number that looks answered
+  is worse than an empty box, because the state line would then call
+  the sheet finished. Nothing stored for a chart simply greys the
+  button. Stored as `key=typed;key=typed` under a per-chart value name
+  -- `LAZSTEP`'s carries the count (`CORNERSTP-3`), since a three-step
+  sheet on a five-step drawing would put numbers against treads they
+  were never measured on -- and a value carrying `;` or `=` is dropped
+  rather than written back wrong.
+- **Say what a box will take** *(done)* -- *"A box takes 24, or a
+  feet-and-inches spelling - both read."* on the static hint, not the
+  state line, which is carrying two jobs already. The inch mark is
+  spelled rather than shown: a bare `"` would end the DCL string it
+  sits in, and these files write their own `.dcl`.
 
 ## Phase 4 -- one form kit, in the library *(done)*
 

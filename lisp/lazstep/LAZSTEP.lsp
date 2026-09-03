@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.3")
+(setq *lazstep-version* "v1.4")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -593,6 +593,82 @@
   (if ok (setq n (atoi s)))
   (if (and n (> n 0)) n))
 
+;;; -------------------- remembering the last sheet -----------------------
+;;;  A sheet you have just drawn is very often the shape of the next one:
+;;;  the same pool from a different survey, or the same one corrected.
+;;;  Recall puts the last accepted answers for THIS chart back into the
+;;;  boxes -- and only into the EMPTY ones, so it can never overwrite a
+;;;  number you have just typed, and pressing it twice does nothing the
+;;;  first press did not.
+;;;
+;;;  It is a BUTTON and never a default.  Pre-filling a sheet on open
+;;;  would put the last pool's numbers on this pool, and a wrong number
+;;;  that looks answered is worse than an empty box: the state line
+;;;  would call the sheet finished, and the routine would never ask.
+;;;
+;;;  The button is greyed when this chart has nothing stored, which is
+;;;  the whole of the "nothing happened" case -- no message needed, and
+;;;  the state line reports the fill by moving on its own.
+
+(setq lzt:*recallkey*
+      "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
+
+;;  A sheet is stored as one string, "key=typed;key=typed".  A value
+;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
+;;  so it is dropped rather than written -- nothing a box legitimately
+;;  holds contains either, so this guards the impossible.
+
+(defun lzt:kvsplit (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (setq out (cons cur out)) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (reverse (cons cur out)))
+
+(defun lzt:kvhas (hay ned / i n m)
+  (setq n (strlen hay) m (strlen ned) i 1)
+  (cond
+    ((> m n) nil)
+    (t (while (and (<= i (1+ (- n m))) (/= (substr hay i m) ned))
+         (setq i (1+ i)))
+       (<= i (1+ (- n m))))))
+
+(defun lzt:kvpack (alist / out p k v)
+  (setq out "")
+  (foreach p alist
+    (setq k (car p) v (cdr p))
+    (if (and (= (type v) 'STR) (/= v "")
+             (not (lzt:kvhas k ";")) (not (lzt:kvhas k "="))
+             (not (lzt:kvhas v ";")) (not (lzt:kvhas v "=")))
+      (setq out (strcat out (if (= out "") "" ";") k "=" v))))
+  out)
+
+(defun lzt:kvunpack (s / out p bits)
+  (if (and s (= (type s) 'STR) (/= s ""))
+    (foreach p (lzt:kvsplit s ";")
+      (setq bits (lzt:kvsplit p "="))
+      (if (and (cdr bits) (/= (car bits) ""))
+        (setq out (cons (cons (car bits) (cadr bits)) out)))))
+  (reverse out))
+
+;; Store this chart's answers under its own value name, so one chart's
+;; sheet can never come back on another's.
+(defun lzt:recall-save (slot / s)
+  (setq s (lzt:kvpack lzt:*vals*))
+  (if (/= s "")
+    (vl-catch-all-apply 'vl-registry-write
+                        (list lzt:*recallkey* slot s)))
+  s)
+
+(defun lzt:recall-read (slot / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read
+                              (list lzt:*recallkey* slot)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR))
+    (lzt:kvunpack s)))
+
 ;;; -------------------- what does not apply ------------------------------
 ;;;  A question a run will never reach is greyed, and a greyed answer
 ;;;  does not travel: a number sitting in the store unread is harder to
@@ -793,6 +869,25 @@
              (lzt:plural n "box" "boxes") " filled - "
              lzt:*type* " will ask for " (lzt:taglist togo)
              ", plus the picks."))))
+
+;; The slot a drawing's answers are stored under.  A drawing is built
+;; for a COUNT, so a three-step sheet must never come back on a five-step
+;; one: the count is part of the name.
+(defun lzt:recall-slot ( )
+  (strcat lzt:*type* "-" (itoa (if lzt:*steps* lzt:*steps* 0))))
+
+;; Fill the EMPTY live boxes from the stored drawing, and repaint.  Only
+;; the empty ones: a recall must never overwrite a number just typed,
+;; and pressing it twice must do nothing the first press did not.
+(defun lzt:recall ( / had n k v)
+  (setq had (lzt:recall-read (lzt:recall-slot)) n 0)
+  (foreach k (lzt:livekeys)
+    (if (and (= (lzt:trim (lzt:get k)) "")
+             (setq v (cdr (assoc k had))))
+      (progn (lzt:put k v) (set_tile k v) (setq n (1+ n)))))
+  (lzt:redraw)
+  (lzt:p2restate)
+  n)
 
 (defun lzt:p2restate ( / )
   (set_tile "state" (lzt:p2state))
@@ -1280,11 +1375,15 @@
                            " the last tread.")
                    (strcat "NA in a width means fit to the walls or the"
                            " curve.  An empty box is asked for at the")
-                   "command line, where the picks and the selections are.")
+                   "command line, where the picks and the selections are."
+                   "A box takes 24, or a feet-and-inches spelling - both read.")
     (setq out (cons (strcat "  : text { width = 66; label = \"" l "\"; }")
                     out)))
   (setq out (cons "  : text { key = \"state\"; width = 66; }" out))
   (setq out (cons "  : row {" out))
+  (setq out (cons (strcat "    : button { key = \"recall\"; "
+                          "label = \"Recall last\"; fixed_width = true; }")
+                  out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\";"
                           " is_default = true; fixed_width = true; }")
                   out))
@@ -1443,6 +1542,10 @@
                    " (mode_tile \"" (cadr d) "\" 2)"
                    " (mode_tile \"" (cadr d) "\" 3)"))))
      ;; the chart takes no action at all -- it is a passive image tile
+     ;; Recall does NOT close the page: it fills the empty boxes where
+     ;; you are standing, and the state line moves to say so
+     (action_tile "recall" "(lzt:recall)")
+     (if (not (lzt:recall-read (lzt:recall-slot))) (mode_tile "recall" 1))
      (action_tile "back" "(setq lzt:*pos* (done_dialog 5))")
      (action_tile "accept" "(setq lzt:*pos* (done_dialog 1))")
      (action_tile "cancel" "(setq lzt:*pos* (done_dialog 0))")
@@ -1548,6 +1651,9 @@
          ((and (= lzt:*page* 2) (= rc 5))
           (setq lzt:*page* 1 lzt:*msg* "" lzt:*focus* nil))
          ((and (= lzt:*page* 2) (= rc 1))
+          ;; an accepted drawing is what gets remembered -- a cancelled
+          ;; one was not a drawing anybody used
+          (lzt:recall-save (lzt:recall-slot))
           (setq out (lzt:form) done T))
          (t (setq done T))))))
   out)

@@ -526,6 +526,11 @@ TOOLS = {
             'lzf:answer': 'cal:formanswer',
             'lzf:plural': 'cal:plural',
             'lzf:join': 'cal:andjoin',
+            # the key=value record a recalled sheet is stored as
+            'lzf:kvsplit': 'cal:kvsplit',
+            'lzf:kvhas': 'cal:kvhas',
+            'lzf:kvpack': 'cal:kvpack',
+            'lzf:kvunpack': 'cal:kvunpack',
         },
         # the font, its metrics and the tile palette are constants, so
         # they move as globals: dropped here, renamed at every mention
@@ -591,6 +596,11 @@ TOOLS = {
             'lzs:answer': 'cal:formanswer',
             'lzs:plural': 'cal:plural',
             'lzs:join': 'cal:andjoin',
+            # the key=value record a recalled sheet is stored as
+            'lzs:kvsplit': 'cal:kvsplit',
+            'lzs:kvhas': 'cal:kvhas',
+            'lzs:kvpack': 'cal:kvpack',
+            'lzs:kvunpack': 'cal:kvunpack',
         },
         # the font, its metrics and the tile palette are constants, so
         # they move as globals: dropped here, renamed at every mention
@@ -643,6 +653,11 @@ TOOLS = {
             'lzt:answer': 'cal:formanswer',
             'lzt:plural': 'cal:plural',
             'lzt:join': 'cal:andjoin',
+            # the key=value record a recalled sheet is stored as
+            'lzt:kvsplit': 'cal:kvsplit',
+            'lzt:kvhas': 'cal:kvhas',
+            'lzt:kvpack': 'cal:kvpack',
+            'lzt:kvunpack': 'cal:kvunpack',
         },
         # the font, its metrics and the tile palette are constants, so
         # they move as globals: dropped here, renamed at every mention

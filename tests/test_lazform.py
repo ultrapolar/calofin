@@ -1282,6 +1282,56 @@ print("   %d callbacks restate; the line is written before the page opens"
       % (len(acts)))
 
 
+print("== Recall last: the sheet you just drew, back in the empty boxes ==")
+rc = stubbed()
+rc.loads('(defun vl-registry-write (k v s) (setq t:*wv* v t:*ws* s) s)')
+rc.loads('(defun vl-registry-read (k v)'
+         ' (if (and t:*ws* (= v t:*wv*)) t:*ws* (exit)))')
+rc.loads('(setq t:*ws* nil t:*wv* nil)')
+rc.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
+rc.loads('(setq lzf:*vals* nil)')
+
+# a sheet is stored under its own slot, as one key=value record
+rc.loads('(lzf:put "tp" "240") (lzf:put "le" "NA")')
+rc.loads('(setq t:*s* (lzf:recall-save "Rectangle"))')
+STORED = str(rc.globals['t:*s*'])
+assert 'tp=240' in STORED and 'le=NA' in STORED, STORED
+assert str(rc.globals['t:*wv*']) == 'Rectangle', \
+    "the sheet went under %r, not its own slot" % str(rc.globals['t:*wv*'])
+print("   stored as %r" % STORED)
+
+# a value carrying the record's own separators is DROPPED, not written
+rc.loads('(setq lzf:*vals* nil) (lzf:put "tp" "1;2") (lzf:put "le" "3=4")')
+rc.loads('(setq t:*bad* (lzf:recall-save "Rectangle"))')
+assert str(rc.globals['t:*bad*']) == '', \
+    "a value with ; or = was written into the record: %r" % rc.globals['t:*bad*']
+print("   a value carrying ; or = is dropped rather than written back wrong")
+
+# recall fills the EMPTY boxes only
+rc.loads('(setq t:*ws* "%s" t:*wv* "Rectangle")' % STORED)
+rc.loads('(setq lzf:*vals* nil) (lzf:put "tp" "999")')
+rc.loads('(setq t:*n* (lzf:recall "Rectangle"))')
+assert int(str(rc.globals['t:*n*'])) == 1, \
+    "recall filled %s boxes, expected 1" % rc.globals['t:*n*']
+rc.loads('(setq t:*a* (lzf:get "tp")) (setq t:*b* (lzf:get "le"))')
+assert str(rc.globals['t:*a*']) == '999', \
+    "recall overwrote a box that was already typed in: %r" % rc.globals['t:*a*']
+assert str(rc.globals['t:*b*']) == 'NA', rc.globals['t:*b*']
+# and a second press does nothing the first did not
+rc.loads('(setq t:*n2* (lzf:recall "Rectangle"))')
+assert int(str(rc.globals['t:*n2*'])) == 0, \
+    "a second Recall filled %s more" % rc.globals['t:*n2*']
+print("   fills the empty boxes, keeps what was typed, idempotent")
+
+# nothing stored for this slot means the button is greyed, not silent
+rc2 = stubbed()
+rc2.loads('(defun vl-registry-read (k v) (exit))')
+rc2.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
+rc2.loads('(setq t:*had* (lzf:recall-read "Rectangle"))')
+assert rc2.globals['t:*had*'] is None, rc2.globals['t:*had*']
+print("   a slot with nothing in it reads as nothing, and greys the button")
+
+
 print("== end to end: the form draws what the questions draw ==")
 
 

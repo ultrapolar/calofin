@@ -1270,4 +1270,47 @@ print("   %d page-one callbacks and %d page-two callbacks, both lines written"
       % (len(acts), len(acts2)))
 
 
+print("== Recall last: the drawing you just filled in, back in it ==")
+rc = stubbed()
+rc.loads('(defun vl-registry-write (k v s) (setq t:*wv* v t:*ws* s) s)')
+rc.loads('(defun vl-registry-read (k v)'
+         ' (if (and t:*ws* (= v t:*wv*)) t:*ws* (exit)))')
+rc.loads('(setq t:*ws* nil t:*wv* nil)')
+rc.loads('(setq lzt:*type* "CORNERSTP" lzt:*steps* 3)')
+rc.loads('(setq lzt:*chart* (lzt:chart "CORNERSTP" 3)) (setq lzt:*vals* nil)')
+rc.loads('(setq t:*l* (lzt:livekeys))')
+LK = [str(x) for x in rc.globals['t:*l*']]
+
+# THE SLOT CARRIES THE COUNT.  A drawing is built for N steps, so a
+# three-step sheet coming back on a five-step one would put numbers
+# against treads that are not the ones they were measured on.
+rc.loads('(setq t:*slot* (lzt:recall-slot))')
+assert str(rc.globals['t:*slot*']) == 'CORNERSTP-3', rc.globals['t:*slot*']
+rc.loads('(setq lzt:*steps* 5) (setq t:*slot5* (lzt:recall-slot))')
+assert str(rc.globals['t:*slot5*']) == 'CORNERSTP-5', rc.globals['t:*slot5*']
+rc.loads('(setq lzt:*steps* 3)')
+print("   the slot is TYPE-COUNT, so a 3-step sheet cannot land on a 5-step one")
+
+rc.loads('(lzt:put "%s" "18") (lzt:put "%s" "NA")' % (LK[0], LK[1]))
+rc.loads('(setq t:*s* (lzt:recall-save (lzt:recall-slot)))')
+STORED = str(rc.globals['t:*s*'])
+assert '%s=18' % LK[0] in STORED and '%s=NA' % LK[1] in STORED, STORED
+
+rc.loads('(setq t:*ws* "%s" t:*wv* "CORNERSTP-3")' % STORED)
+rc.loads('(setq lzt:*vals* nil) (lzt:put "%s" "999")' % LK[0])
+rc.loads('(setq t:*n* (lzt:recall))')
+assert int(str(rc.globals['t:*n*'])) == 1, rc.globals['t:*n*']
+rc.loads('(setq t:*a* (lzt:get "%s"))' % LK[0])
+assert str(rc.globals['t:*a*']) == '999', \
+    "recall overwrote a box that was already typed in: %r" % rc.globals['t:*a*']
+rc.loads('(setq t:*n2* (lzt:recall))')
+assert int(str(rc.globals['t:*n2*'])) == 0, rc.globals['t:*n2*']
+# and a drawing built for a different count finds nothing under its own slot
+rc.loads('(setq lzt:*steps* 5 lzt:*vals* nil)')
+rc.loads('(setq t:*had5* (lzt:recall-read (lzt:recall-slot)))')
+assert rc.globals['t:*had5*'] is None, \
+    "the 3-step sheet came back on a 5-step drawing: %r" % rc.globals['t:*had5*']
+print("   fills the empty boxes, keeps what was typed, idempotent, count-keyed")
+
+
 print("ALL LAZSTEP TESTS PASSED")

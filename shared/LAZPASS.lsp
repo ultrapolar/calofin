@@ -81,7 +81,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.5")
+(setq cal:*version* "v1.6")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -705,6 +705,56 @@
     ((setq n (distof (cal:trim v) 4)) n)
     ((setq n (distof (cal:trim v) 2)) n)
     (t 'SKIP)))
+
+;;  RECALLING THE LAST SHEET.  A form's answers are (key . "typed")
+;;  pairs, and the registry stores strings -- so a sheet is remembered
+;;  as one string, "key=typed;key=typed", and read back the same way.
+;;
+;;  A value carrying ";" or "=" would come back as two pairs or as the
+;;  wrong pair, so cal:kvpack DROPS one rather than writing a record it
+;;  cannot read.  Nothing a box legitimately holds contains either --
+;;  a measurement is digits, feet and inch marks, dashes and slashes,
+;;  and NA is two letters -- so this is a guard against the impossible,
+;;  not a limitation anyone will meet.  Silently losing one entry beats
+;;  a whole sheet that reads back scrambled.
+
+(defun cal:kvsplit (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (setq out (cons cur out)) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (reverse (cons cur out)))
+
+(defun cal:kvpack (alist / out p k v)
+  (setq out "")
+  (foreach p alist
+    (setq k (car p) v (cdr p))
+    (if (and (= (type v) 'STR) (/= v "")
+             (not (cal:kvhas k ";")) (not (cal:kvhas k "="))
+             (not (cal:kvhas v ";")) (not (cal:kvhas v "=")))
+      (setq out (strcat out (if (= out "") "" ";") k "=" v))))
+  out)
+
+;; Is NEEDLE anywhere in HAY?  A written-out search, so a needle of "="
+;; or ";" is looked for rather than obeyed by some pattern reader.
+(defun cal:kvhas (hay ned / i n m)
+  (setq n (strlen hay) m (strlen ned) i 1)
+  (cond
+    ((> m n) nil)
+    (t (while (and (<= i (1+ (- n m))) (/= (substr hay i m) ned))
+         (setq i (1+ i)))
+       (<= i (1+ (- n m))))))
+
+(defun cal:kvunpack (s / out p bits)
+  (if (and s (= (type s) 'STR) (/= s ""))
+    (foreach p (cal:kvsplit s ";")
+      (setq bits (cal:kvsplit p "="))
+      (if (and (cdr bits) (/= (car bits) ""))
+        (setq out (cons (cons (car bits) (cadr bits)) out)))))
+  (reverse out))
 
 ;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
 ;; in the form, whatever it is actually reporting.
@@ -41017,7 +41067,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.3")
+(setq *lazstep-version* "v1.4")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -41434,6 +41484,46 @@
   (if ok (setq n (atoi s)))
   (if (and n (> n 0)) n))
 
+;;; -------------------- remembering the last sheet -----------------------
+;;;  A sheet you have just drawn is very often the shape of the next one:
+;;;  the same pool from a different survey, or the same one corrected.
+;;;  Recall puts the last accepted answers for THIS chart back into the
+;;;  boxes -- and only into the EMPTY ones, so it can never overwrite a
+;;;  number you have just typed, and pressing it twice does nothing the
+;;;  first press did not.
+;;;
+;;;  It is a BUTTON and never a default.  Pre-filling a sheet on open
+;;;  would put the last pool's numbers on this pool, and a wrong number
+;;;  that looks answered is worse than an empty box: the state line
+;;;  would call the sheet finished, and the routine would never ask.
+;;;
+;;;  The button is greyed when this chart has nothing stored, which is
+;;;  the whole of the "nothing happened" case -- no message needed, and
+;;;  the state line reports the fill by moving on its own.
+
+(setq lzt:*recallkey*
+      "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
+
+;;  A sheet is stored as one string, "key=typed;key=typed".  A value
+;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
+;;  so it is dropped rather than written -- nothing a box legitimately
+;;  holds contains either, so this guards the impossible.
+
+;; Store this chart's answers under its own value name, so one chart's
+;; sheet can never come back on another's.
+(defun lzt:recall-save (slot / s)
+  (setq s (cal:kvpack lzt:*vals*))
+  (if (/= s "")
+    (vl-catch-all-apply 'vl-registry-write
+                        (list lzt:*recallkey* slot s)))
+  s)
+
+(defun lzt:recall-read (slot / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read
+                              (list lzt:*recallkey* slot)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR))
+    (cal:kvunpack s)))
+
 ;;; -------------------- what does not apply ------------------------------
 ;;;  A question a run will never reach is greyed, and a greyed answer
 ;;;  does not travel: a number sitting in the store unread is harder to
@@ -41618,6 +41708,25 @@
              (cal:plural n "box" "boxes") " filled - "
              lzt:*type* " will ask for " (lzt:taglist togo)
              ", plus the picks."))))
+
+;; The slot a drawing's answers are stored under.  A drawing is built
+;; for a COUNT, so a three-step sheet must never come back on a five-step
+;; one: the count is part of the name.
+(defun lzt:recall-slot ( )
+  (strcat lzt:*type* "-" (itoa (if lzt:*steps* lzt:*steps* 0))))
+
+;; Fill the EMPTY live boxes from the stored drawing, and repaint.  Only
+;; the empty ones: a recall must never overwrite a number just typed,
+;; and pressing it twice must do nothing the first press did not.
+(defun lzt:recall ( / had n k v)
+  (setq had (lzt:recall-read (lzt:recall-slot)) n 0)
+  (foreach k (lzt:livekeys)
+    (if (and (= (cal:trim (lzt:get k)) "")
+             (setq v (cdr (assoc k had))))
+      (progn (lzt:put k v) (set_tile k v) (setq n (1+ n)))))
+  (lzt:redraw)
+  (lzt:p2restate)
+  n)
 
 (defun lzt:p2restate ( / )
   (set_tile "state" (lzt:p2state))
@@ -42035,11 +42144,15 @@
                            " the last tread.")
                    (strcat "NA in a width means fit to the walls or the"
                            " curve.  An empty box is asked for at the")
-                   "command line, where the picks and the selections are.")
+                   "command line, where the picks and the selections are."
+                   "A box takes 24, or a feet-and-inches spelling - both read.")
     (setq out (cons (strcat "  : text { width = 66; label = \"" l "\"; }")
                     out)))
   (setq out (cons "  : text { key = \"state\"; width = 66; }" out))
   (setq out (cons "  : row {" out))
+  (setq out (cons (strcat "    : button { key = \"recall\"; "
+                          "label = \"Recall last\"; fixed_width = true; }")
+                  out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\";"
                           " is_default = true; fixed_width = true; }")
                   out))
@@ -42198,6 +42311,10 @@
                    " (mode_tile \"" (cadr d) "\" 2)"
                    " (mode_tile \"" (cadr d) "\" 3)"))))
      ;; the chart takes no action at all -- it is a passive image tile
+     ;; Recall does NOT close the page: it fills the empty boxes where
+     ;; you are standing, and the state line moves to say so
+     (action_tile "recall" "(lzt:recall)")
+     (if (not (lzt:recall-read (lzt:recall-slot))) (mode_tile "recall" 1))
      (action_tile "back" "(setq lzt:*pos* (done_dialog 5))")
      (action_tile "accept" "(setq lzt:*pos* (done_dialog 1))")
      (action_tile "cancel" "(setq lzt:*pos* (done_dialog 0))")
@@ -42303,6 +42420,9 @@
          ((and (= lzt:*page* 2) (= rc 5))
           (setq lzt:*page* 1 lzt:*msg* "" lzt:*focus* nil))
          ((and (= lzt:*page* 2) (= rc 1))
+          ;; an accepted drawing is what gets remembered -- a cancelled
+          ;; one was not a drawing anybody used
+          (lzt:recall-save (lzt:recall-slot))
           (setq out (lzt:form) done T))
          (t (setq done T))))))
   out)
@@ -76157,7 +76277,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.3")
+(setq *lazspa-version* "v1.4")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -76723,6 +76843,46 @@
         lzs:*y1* 1000)
   (princ))
 
+;;; -------------------- remembering the last sheet -----------------------
+;;;  A sheet you have just drawn is very often the shape of the next one:
+;;;  the same pool from a different survey, or the same one corrected.
+;;;  Recall puts the last accepted answers for THIS chart back into the
+;;;  boxes -- and only into the EMPTY ones, so it can never overwrite a
+;;;  number you have just typed, and pressing it twice does nothing the
+;;;  first press did not.
+;;;
+;;;  It is a BUTTON and never a default.  Pre-filling a sheet on open
+;;;  would put the last pool's numbers on this pool, and a wrong number
+;;;  that looks answered is worse than an empty box: the state line
+;;;  would call the sheet finished, and SPA would never ask.
+;;;
+;;;  The button is greyed when this chart has nothing stored, which is
+;;;  the whole of the "nothing happened" case -- no message needed, and
+;;;  the state line reports the fill by moving on its own.
+
+(setq lzs:*recallkey*
+      "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
+
+;;  A sheet is stored as one string, "key=typed;key=typed".  A value
+;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
+;;  so it is dropped rather than written -- nothing a box legitimately
+;;  holds contains either, so this guards the impossible.
+
+;; Store this chart's answers under its own value name, so one chart's
+;; sheet can never come back on another's.
+(defun lzs:recall-save (slot / s)
+  (setq s (cal:kvpack lzs:*vals*))
+  (if (/= s "")
+    (vl-catch-all-apply 'vl-registry-write
+                        (list lzs:*recallkey* slot s)))
+  s)
+
+(defun lzs:recall-read (slot / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read
+                              (list lzs:*recallkey* slot)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR))
+    (cal:kvunpack s)))
+
 ;;; -------------------- what SPA will and will not ask -------------------
 ;;;  A page offers every question SPA could ask, and some of them stop
 ;;;  being questions the moment another one is answered.  These are the
@@ -76900,6 +77060,19 @@
              (cal:plural n "box" "boxes") " filled - "
              "SPA will ask for " (lzs:taglist c togo)
              ", plus the base point."))))
+
+;; Fill the EMPTY live boxes from the stored sheet, and repaint.  Only
+;; the empty ones: a recall must never overwrite a number just typed,
+;; and pressing it twice must do nothing the first press did not.
+(defun lzs:recall (slot / c had n k v)
+  (setq c lzs:*chart* had (lzs:recall-read slot) n 0)
+  (foreach k (lzs:livekeys c)
+    (if (and (= (cal:trim (lzs:get k)) "")
+             (setq v (cdr (assoc k had))))
+      (progn (lzs:put k v) (set_tile k v) (setq n (1+ n)))))
+  (lzs:redraw)
+  (lzs:restate)
+  n)
 
 ;; Put the state on the page, and hold Insert back while any box holds
 ;; something that will be dropped.  Greying it IS the feature: pressing
@@ -77109,6 +77282,13 @@
                           "Type NA where nothing was measured; leave a box "
                           "empty and SPA will ask.\"; }")
                   out))
+  ;; What a box will TAKE.  No inch mark in the sentence on purpose:
+  ;; a bare " would end the DCL string it sits in, and this file writes
+  ;; its own .dcl, so the example has to be spelled rather than shown.
+  ;; distof reads the architectural spellings and
+  ;; always has; nothing on screen said so.
+  (setq out (cons (strcat "  : text { width = 62; label = \""
+                          "A box takes 24, or a feet-and-inches spelling - both read.\"; }") out))
   ;; the two things no form can answer, said on the form itself rather
   ;; than discovered at the command line
   (setq out (cons (strcat "  : text { width = 62; label = \""
@@ -77120,6 +77300,9 @@
   ;; only ever be the wrong answer for an instant.
   (setq out (cons "  : text { key = \"state\"; width = 62; }" out))
   (setq out (cons "  : row {" out))
+  (setq out (cons (strcat "    : button { key = \"recall\"; "
+                          "label = \"Recall last\"; fixed_width = true; }")
+                  out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
                           "is_default = true; fixed_width = true; }")
                   out))
@@ -77388,12 +77571,19 @@
                       "\" lzs:*pos* (done_dialog 4))")))
           ;; the chart takes no action at all -- it is a passive image
           ;; tile, and an image_button would be wiped on hover
+          ;; Recall does NOT close the page: it fills the empty boxes
+          ;; where you are standing, and the state line moves to say so
+          (action_tile "recall" (strcat "(lzs:recall \"" (car c) "\")"))
+          (if (not (lzs:recall-read (car c))) (mode_tile "recall" 1))
           (action_tile "accept" "(setq lzs:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzs:*pos* (done_dialog 0))")
           (lzs:redraw)
           (lzs:grey c)
           (lzs:restate)
           (setq rc (lzs:rundlg))
+          ;; an accepted sheet is what gets remembered -- a cancelled
+          ;; one was not a sheet anybody drew
+          (if (= rc 1) (lzs:recall-save (car c)))
           (cond
             ((= rc 4) (setq go lzs:*go*))     ; a tab: go round again
             (t (setq done t
@@ -77524,7 +77714,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.12")
+(setq *lazform-version* "v2.13")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -78864,6 +79054,15 @@
                           (if (lzf:oasis-p c) "OASIS" "POOL")
                           " will ask.\"; }")
                   out))
+  ;; What a box will TAKE.  No inch mark in the sentence on purpose:
+  ;; a bare " would end the DCL string it sits in, and this file writes
+  ;; its own .dcl, so the example has to be spelled rather than shown.
+  ;; distof reads the architectural spellings and
+  ;; always has; nothing on screen said so, so a drafter with a tape in
+  ;; feet and inches had no way to know the form would not just refuse
+  ;; them.
+  (setq out (cons (strcat "  : text { width = 62; label = \""
+                          "A box takes 24, or a feet-and-inches spelling - both read.\"; }") out))
   (if (lzf:hint c)
     (setq out (cons (strcat "  : text { key = \"hint2\"; width = 62; label = \""
                             (lzf:hint c) "\"; }")
@@ -78873,6 +79072,9 @@
   ;; the file would only be the wrong answer for an instant.
   (setq out (cons "  : text { key = \"state\"; width = 62; }" out))
   (setq out (cons "  : row {" out))
+  (setq out (cons (strcat "    : button { key = \"recall\"; "
+                          "label = \"Recall last\"; fixed_width = true; }")
+                  out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
                           "is_default = true; fixed_width = true; }")
                   out))
@@ -79257,6 +79459,46 @@
 ;;;  arrive as the numbers they look like.
 
 ;; The alist POOL reads, built from what was typed.
+;;; -------------------- remembering the last sheet -----------------------
+;;;  A sheet you have just drawn is very often the shape of the next one:
+;;;  the same pool from a different survey, or the same one corrected.
+;;;  Recall puts the last accepted answers for THIS chart back into the
+;;;  boxes -- and only into the EMPTY ones, so it can never overwrite a
+;;;  number you have just typed, and pressing it twice does nothing the
+;;;  first press did not.
+;;;
+;;;  It is a BUTTON and never a default.  Pre-filling a sheet on open
+;;;  would put the last pool's numbers on this pool, and a wrong number
+;;;  that looks answered is worse than an empty box: the state line
+;;;  would call the sheet finished, and POOL would never ask.
+;;;
+;;;  The button is greyed when this chart has nothing stored, which is
+;;;  the whole of the "nothing happened" case -- no message needed, and
+;;;  the state line reports the fill by moving on its own.
+
+(setq lzf:*recallkey*
+      "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
+
+;;  A sheet is stored as one string, "key=typed;key=typed".  A value
+;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
+;;  so it is dropped rather than written -- nothing a box legitimately
+;;  holds contains either, so this guards the impossible.
+
+;; Store this chart's answers under its own value name, so one chart's
+;; sheet can never come back on another's.
+(defun lzf:recall-save (slot / s)
+  (setq s (cal:kvpack lzf:*vals*))
+  (if (/= s "")
+    (vl-catch-all-apply 'vl-registry-write
+                        (list lzf:*recallkey* slot s)))
+  s)
+
+(defun lzf:recall-read (slot / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read
+                              (list lzf:*recallkey* slot)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR))
+    (cal:kvunpack s)))
+
 ;;; -------------------- what this page actually asks ---------------------
 ;;;  A page does not ask for every box on it, and the form used to
 ;;;  offer them all anyway: type a C against a Normal hopper and POOL
@@ -79491,6 +79733,19 @@
              who " will ask for " (lzf:taglist c togo)
              ", plus the base point."))))
 
+;; Fill the EMPTY live boxes from the stored sheet, and repaint.  Only
+;; the empty ones: a recall must never overwrite a number just typed,
+;; and pressing it twice must do nothing the first press did not.
+(defun lzf:recall (slot / c had n k v)
+  (setq c lzf:*chart* had (lzf:recall-read slot) n 0)
+  (foreach k (lzf:livekeys c)
+    (if (and (= (cal:trim (lzf:get k)) "")
+             (setq v (cdr (assoc k had))))
+      (progn (lzf:put k v) (set_tile k v) (setq n (1+ n)))))
+  (lzf:redraw)
+  (lzf:restate)
+  n)
+
 ;; Put the state on the page, and hold Insert back while any box holds
 ;; something that cannot be read.  Greying it IS the feature: pressing
 ;; Insert with an unreadable box in front of you drops that box without
@@ -79704,12 +79959,20 @@
               (action_tile "insq"
                 (strcat "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)"
                         " (lzf:btgrey lzf:*chart*) (lzf:restate)"))))
+          ;; Recall does NOT close the page: it fills the empty boxes
+          ;; where you are standing, and the state line moves to say so
+          (action_tile "recall"
+            (strcat "(lzf:recall \"" (car c) "\")"))
+          (if (not (lzf:recall-read (car c))) (mode_tile "recall" 1))
           (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
           (lzf:btgrey c)
           (lzf:restate)
           (setq rc (lzf:rundlg))
+          ;; an accepted sheet is what gets remembered -- a cancelled
+          ;; one was not a sheet anybody drew
+          (if (= rc 1) (lzf:recall-save (car c)))
           (cond
             ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again
             (t (setq done t
@@ -81844,13 +82107,13 @@
   cal:ceil cal:circumcenter cal:cross cal:d2 cal:datestr
   cal:dedupe cal:dimstyrestore cal:dimstysave cal:dist cal:dot
   cal:dotn cal:ensure-layer cal:error-cancel-p cal:formanswer cal:imgflatten
-  cal:imgpline cal:imgtext cal:imgtexth cal:imgtextw cal:layer-usable-p
-  cal:mid cal:midn cal:mtext cal:nthcdr cal:osdown
-  cal:osup cal:pad cal:perp cal:plural cal:proj-param
-  cal:pt-line-dist cal:signed-dang cal:sublist cal:sysrestore cal:syssave
-  cal:tan cal:text cal:trim cal:undobegin cal:undoend
-  cal:unit cal:unitn cal:v* cal:v+ cal:v-
-  cal:zeropad2
+  cal:imgpline cal:imgtext cal:imgtexth cal:imgtextw cal:kvpack
+  cal:kvunpack cal:layer-usable-p cal:mid cal:midn cal:mtext
+  cal:nthcdr cal:osdown cal:osup cal:pad cal:perp
+  cal:plural cal:proj-param cal:pt-line-dist cal:signed-dang cal:sublist
+  cal:sysrestore cal:syssave cal:tan cal:text cal:trim
+  cal:undobegin cal:undoend cal:unit cal:unitn cal:v*
+  cal:v+ cal:v- cal:zeropad2
 ))
 (setq lazpass:*nohelper* nil)
 (foreach n lazpass:*helpers*

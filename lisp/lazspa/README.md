@@ -214,6 +214,42 @@ is neither complained about nor counted. The test partitions every live
 box into sent, still-to-ask, unreadable and NA-demoted and fails if any
 lands in two groups or in none, so the line and the alist cannot drift.
 
+## Recall last, and what a box takes
+
+Two small things the form used to leave you to work out.
+
+**`Recall last`** puts the answers from the last accepted sheet for
+*this chart* back into the boxes. A sheet you have just drawn is very
+often the shape of the next one -- the same pool from a different
+survey, or the same one corrected -- and re-typing fourteen numbers to
+change two is the kind of work a form is supposed to remove.
+
+It fills the **empty** boxes only. That is what makes it safe to press:
+it can never overwrite a number you have just typed, and pressing it
+twice does nothing the first press did not.
+
+It is a **button and never a default**. Pre-filling a sheet on open
+would put the last pool's numbers on this pool, and a wrong number that
+looks answered is worse than an empty box -- the state line would call
+the sheet finished and the routine would never ask. When this chart has
+nothing stored the button is simply greyed, which is the whole of the
+"nothing happened" case: no message needed, and when it does fill, the
+state line moves on its own to say how much.
+
+A sheet is stored as one string, `key=typed;key=typed`, under its own
+value name in the registry. A value carrying `;` or `=` would read back
+as two pairs or the wrong pair, so it is **dropped rather than
+written** -- nothing a box legitimately holds contains either, so this
+guards the impossible; losing one entry beats a whole sheet that reads
+back scrambled.
+
+**What a box takes** is now on the form: *"A box takes 24, or a
+feet-and-inches spelling - both read."* `distof` has always read the
+architectural spellings and nothing on screen said so, which left a
+drafter with a tape in feet and inches guessing. The inch mark is
+spelled rather than shown on purpose -- a bare `"` would end the DCL
+string it sits in, and these files write their own `.dcl`.
+
 ## Notes & limitations
 
 - **Two prompts stay at the command line, by design**, and the form says

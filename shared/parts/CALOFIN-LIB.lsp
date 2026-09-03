@@ -24,7 +24,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.5")
+(setq cal:*version* "v1.6")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -648,6 +648,56 @@
     ((setq n (distof (cal:trim v) 4)) n)
     ((setq n (distof (cal:trim v) 2)) n)
     (t 'SKIP)))
+
+;;  RECALLING THE LAST SHEET.  A form's answers are (key . "typed")
+;;  pairs, and the registry stores strings -- so a sheet is remembered
+;;  as one string, "key=typed;key=typed", and read back the same way.
+;;
+;;  A value carrying ";" or "=" would come back as two pairs or as the
+;;  wrong pair, so cal:kvpack DROPS one rather than writing a record it
+;;  cannot read.  Nothing a box legitimately holds contains either --
+;;  a measurement is digits, feet and inch marks, dashes and slashes,
+;;  and NA is two letters -- so this is a guard against the impossible,
+;;  not a limitation anyone will meet.  Silently losing one entry beats
+;;  a whole sheet that reads back scrambled.
+
+(defun cal:kvsplit (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (setq out (cons cur out)) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (reverse (cons cur out)))
+
+(defun cal:kvpack (alist / out p k v)
+  (setq out "")
+  (foreach p alist
+    (setq k (car p) v (cdr p))
+    (if (and (= (type v) 'STR) (/= v "")
+             (not (cal:kvhas k ";")) (not (cal:kvhas k "="))
+             (not (cal:kvhas v ";")) (not (cal:kvhas v "=")))
+      (setq out (strcat out (if (= out "") "" ";") k "=" v))))
+  out)
+
+;; Is NEEDLE anywhere in HAY?  A written-out search, so a needle of "="
+;; or ";" is looked for rather than obeyed by some pattern reader.
+(defun cal:kvhas (hay ned / i n m)
+  (setq n (strlen hay) m (strlen ned) i 1)
+  (cond
+    ((> m n) nil)
+    (t (while (and (<= i (1+ (- n m))) (/= (substr hay i m) ned))
+         (setq i (1+ i)))
+       (<= i (1+ (- n m))))))
+
+(defun cal:kvunpack (s / out p bits)
+  (if (and s (= (type s) 'STR) (/= s ""))
+    (foreach p (cal:kvsplit s ";")
+      (setq bits (cal:kvsplit p "="))
+      (if (and (cdr bits) (/= (car bits) ""))
+        (setq out (cons (cons (car bits) (cadr bits)) out)))))
+  (reverse out))
 
 ;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
 ;; in the form, whatever it is actually reporting.
